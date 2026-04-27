@@ -501,6 +501,534 @@
       background: var(--ink);
       color: var(--bg);
     }
+
+    /* ═══════════════ HLD FLOW DIAGRAM ═══════════════ */
+    .flow {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .flow-step {
+      display: grid;
+      grid-template-columns: 56px 1fr 240px;
+      gap: 1.5rem;
+      align-items: stretch;
+      position: relative;
+    }
+    @media (max-width: 720px) {
+      .flow-step {
+        grid-template-columns: 48px 1fr;
+      }
+      .flow-tech { display: none; }
+    }
+    .flow-marker {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      padding-top: 1rem;
+    }
+    .flow-num {
+      width: 40px;
+      height: 40px;
+      border: 1px solid var(--ink);
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      font-weight: 700;
+      background: var(--bg);
+      flex-shrink: 0;
+    }
+    .flow-line {
+      flex: 1;
+      width: 1px;
+      border-left: 1px dashed var(--line-strong);
+      min-height: 28px;
+    }
+    .flow-step:last-of-type .flow-line { display: none; }
+    .flow-card {
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--accent);
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1rem;
+    }
+    .flow-card .flow-stage {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 0.4rem;
+    }
+    .flow-card .flow-name {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: -0.015em;
+      margin-bottom: 0.5rem;
+    }
+    .flow-card p {
+      font-size: 0.875rem;
+      color: var(--ink-2);
+      line-height: 1.55;
+      margin-bottom: 0.5rem;
+    }
+    .flow-card ul {
+      list-style: none;
+      font-size: 0.825rem;
+      color: var(--ink-2);
+      margin-top: 0.625rem;
+    }
+    .flow-card ul li {
+      padding: 0.18rem 0;
+      display: flex;
+      gap: 0.5rem;
+    }
+    .flow-card ul li::before {
+      content: "•";
+      color: var(--muted);
+    }
+    .flow-tech {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      padding: 1rem 0;
+      border-left: 1px dashed var(--line);
+      padding-left: 1.25rem;
+    }
+    .tech-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-weight: 600;
+    }
+    .tech-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--ink);
+      line-height: 1.45;
+    }
+    .tech-tag {
+      display: inline-block;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      padding: 0.18rem 0.45rem;
+      border: 1px solid var(--line);
+      background: var(--bg-soft);
+      color: var(--ink-2);
+      margin-top: 0.25rem;
+      width: fit-content;
+    }
+    .tech-tag.phase-1 { color: #166534; border-color: #bbf7d0; background: #f0fdf4; }
+    .tech-tag.phase-2 { color: #92400e; border-color: #fde68a; background: #fffbeb; }
+    .tech-tag.phase-3 { color: #6b21a8; border-color: #e9d5ff; background: #faf5ff; }
+
+    /* ─── 3-branch confidence router ─── */
+    .flow-branches {
+      display: grid;
+      grid-template-columns: 56px 1fr 240px;
+      gap: 1.5rem;
+    }
+    @media (max-width: 720px) {
+      .flow-branches { grid-template-columns: 48px 1fr; }
+    }
+    .branches-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    @media (max-width: 720px) {
+      .branches-grid { grid-template-columns: 1fr; }
+    }
+    .branch {
+      padding: 1rem 1.125rem;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-top: 3px solid;
+    }
+    .branch.high { border-top-color: #16a34a; }
+    .branch.med { border-top-color: #f59e0b; }
+    .branch.low { border-top-color: #dc2626; }
+    .branch-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-weight: 700;
+      margin-bottom: 0.4rem;
+    }
+    .branch.high .branch-label { color: #16a34a; }
+    .branch.med .branch-label { color: #92400e; }
+    .branch.low .branch-label { color: #b91c1c; }
+    .branch-name {
+      font-size: 0.95rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      margin-bottom: 0.5rem;
+    }
+    .branch ul {
+      list-style: none;
+      font-size: 0.78rem;
+      color: var(--ink-2);
+    }
+    .branch ul li {
+      padding: 0.2rem 0;
+    }
+    .branch ul li.caution { color: #b91c1c; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; }
+    .branch ul li.recommended { color: #16a34a; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600; }
+
+    /* ═══════════════ BUILD OPTIONS ═══════════════ */
+    .options-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.25rem;
+    }
+    @media (max-width: 980px) {
+      .options-grid { grid-template-columns: 1fr; }
+    }
+    .option {
+      padding: 0;
+      border: 1px solid var(--line);
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      transition: all 0.15s ease;
+    }
+    .option.recommended {
+      border-color: var(--ink);
+      box-shadow: 0 4px 0 var(--ink);
+      transform: translateY(-2px);
+    }
+    .option-head {
+      padding: 1.5rem 1.5rem 1rem;
+      border-bottom: 1px solid var(--line);
+    }
+    .option.recommended .option-head {
+      background: var(--ink);
+      color: var(--bg);
+    }
+    .option-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 0.4rem;
+    }
+    .option.recommended .option-tag { color: var(--accent); }
+    .option-name {
+      font-size: 1.15rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+    }
+    .option-meta {
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .option-meta-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.5rem;
+      font-size: 0.78rem;
+    }
+    .option-meta-key {
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+    }
+    .option-meta-val {
+      font-weight: 600;
+      color: var(--ink);
+      text-align: right;
+    }
+    .option-body {
+      padding: 1.25rem 1.5rem;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .option-body h4 {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      font-weight: 600;
+      margin-bottom: 0.4rem;
+    }
+    .option-body ul {
+      list-style: none;
+      font-size: 0.825rem;
+      color: var(--ink-2);
+    }
+    .option-body ul li {
+      padding: 0.25rem 0;
+      display: flex;
+      gap: 0.5rem;
+      line-height: 1.5;
+    }
+    .option-body ul.pros li::before { content: "✓"; color: #16a34a; font-weight: 700; }
+    .option-body ul.cons li::before { content: "×"; color: #dc2626; font-weight: 700; }
+    .option-foot {
+      padding: 1rem 1.5rem;
+      border-top: 1px solid var(--line);
+      background: var(--bg-soft);
+      font-size: 0.78rem;
+      color: var(--ink);
+    }
+    .option.recommended .option-foot {
+      background: var(--accent);
+      color: white;
+      font-weight: 600;
+    }
+
+    /* ═══════════════ PROBLEM & VALUE ═══════════════ */
+    .pv-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+    }
+    @media (max-width: 980px) {
+      .pv-grid { grid-template-columns: 1fr; }
+    }
+    .pv-col {
+      padding: 2rem 1.75rem;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-top: 4px solid;
+      display: flex;
+      flex-direction: column;
+      gap: 0.875rem;
+    }
+    .pv-col.pain { border-top-color: #dc2626; }
+    .pv-col.fix  { border-top-color: var(--accent); }
+    .pv-col.win  { border-top-color: #16a34a; }
+    .pv-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .pv-headline {
+      font-size: 1.4rem;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+      line-height: 1.15;
+    }
+    .pv-body {
+      font-size: 0.9rem;
+      color: var(--ink-2);
+      line-height: 1.6;
+    }
+    .pv-stat {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+      padding-top: 0.875rem;
+      margin-top: auto;
+    }
+    .icp-strip {
+      margin-top: 2.5rem;
+      padding: 1.75rem 1.875rem;
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+      display: grid;
+      grid-template-columns: 200px repeat(3, 1fr);
+      gap: 1.5rem;
+      align-items: start;
+    }
+    @media (max-width: 980px) {
+      .icp-strip { grid-template-columns: 1fr; }
+    }
+    .icp-label { font-size: 0.95rem; font-weight: 700; letter-spacing: -0.015em; }
+    .icp-label-sub {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-top: 0.4rem;
+      line-height: 1.5;
+    }
+    .icp-segment {
+      border-left: 2px solid var(--line-strong);
+      padding-left: 1rem;
+    }
+    .icp-segment.target { border-left-color: var(--accent); }
+    .icp-name {
+      font-size: 0.95rem;
+      font-weight: 700;
+      margin-bottom: 0.4rem;
+      letter-spacing: -0.01em;
+    }
+    .icp-segment.target .icp-name { color: var(--accent-deep); }
+    .icp-detail {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      line-height: 1.65;
+    }
+
+    /* ═══════════════ HARD PARTS ═══════════════ */
+    .hard-parts {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 1.25rem;
+    }
+    .hard-card {
+      background: var(--bg);
+      border: 1px solid var(--line);
+      padding: 1.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.125rem;
+    }
+    .hard-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-weight: 600;
+    }
+    .hard-name {
+      font-size: 1.1rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.25;
+    }
+    .hard-block {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .hard-block-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--accent-deep);
+      font-weight: 600;
+    }
+    .hard-block-text {
+      font-size: 0.85rem;
+      color: var(--ink-2);
+      line-height: 1.55;
+    }
+    .hard-tools {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-top: 0.4rem;
+    }
+    .hard-tool {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      padding: 0.25rem 0.55rem;
+      border: 1px solid var(--line);
+      background: var(--bg-soft);
+      color: var(--ink);
+    }
+
+    /* ═══════════════ RISKS & VERDICT ═══════════════ */
+    .risks-list {
+      display: grid;
+      gap: 0.875rem;
+    }
+    .risk {
+      display: grid;
+      grid-template-columns: 50px 200px 1fr;
+      gap: 1.5rem;
+      align-items: start;
+      padding: 1.25rem 1.5rem;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-left: 3px solid;
+    }
+    @media (max-width: 720px) {
+      .risk { grid-template-columns: 1fr; gap: 0.5rem; }
+    }
+    .risk.severity-high { border-left-color: #dc2626; }
+    .risk.severity-med  { border-left-color: #f59e0b; }
+    .risk.severity-low  { border-left-color: #84cc16; }
+    .risk-rank {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.1rem;
+      font-weight: 800;
+      color: var(--ink);
+      letter-spacing: -0.02em;
+    }
+    .risk-name {
+      font-size: 0.95rem;
+      font-weight: 700;
+      letter-spacing: -0.015em;
+      line-height: 1.3;
+    }
+    .risk-severity {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-top: 0.4rem;
+    }
+    .severity-high .risk-severity { color: #dc2626; }
+    .severity-med .risk-severity  { color: #92400e; }
+    .severity-low .risk-severity  { color: #65a30d; }
+    .risk-mitigation {
+      font-size: 0.85rem;
+      color: var(--ink-2);
+      line-height: 1.6;
+    }
+    .risk-mitigation strong {
+      color: var(--ink);
+      font-weight: 600;
+    }
+    .verdict {
+      margin-top: 2.5rem;
+      padding: 2rem 2.25rem;
+      background: var(--ink);
+      color: var(--bg);
+    }
+    .verdict-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--accent);
+      font-weight: 700;
+      margin-bottom: 0.875rem;
+    }
+    .verdict-headline {
+      font-size: 1.5rem;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+      line-height: 1.2;
+      margin-bottom: 1.25rem;
+    }
+    .verdict-body {
+      font-size: 0.95rem;
+      color: rgba(255,255,255,0.86);
+      line-height: 1.65;
+      max-width: 72ch;
+    }
+    .verdict-body p { margin-bottom: 1rem; }
+    .verdict-body p:last-child { margin-bottom: 0; }
+    .verdict-body strong {
+      color: var(--bg);
+      font-weight: 700;
+    }
   </style>
 </head>
 <body>
@@ -522,39 +1050,429 @@
   <!-- ═══════════════════════ HERO ═══════════════════════ -->
   <div class="hero">
     <div class="container">
-      <div class="eyebrow">Architecture Wireframe — Phase 1</div>
-      <h1>The system behind <em>three quotes before lunch.</em></h1>
+      <div class="eyebrow">High-Level Design · Architecture · Build Options</div>
+      <h1>From a homeowner's call to a <em>booked job.</em></h1>
       <p class="hero-sub">
-        QuoteMate turns a tradie's enquiry into a sendable quote in minutes — not on Sunday night. This page lays out every component in the build, how they connect, and the cloud services and integrations they depend on. Built portal-first for painters in NSW; voice agent and multi-trade are deferred by deliberate decision.
+        This page lays out QuoteMate's full High-Level Design — every stage from the customer's first call to the calendar booking, and the technology that powers each. It also surfaces three build paths so you can decide which slice ships first.
       </p>
 
       <div class="hero-stats">
+        <div class="stat">
+          <div class="stat-num">10<small>stages</small></div>
+          <div class="stat-label">End-to-end journey</div>
+        </div>
         <div class="stat">
           <div class="stat-num">4<small>agents</small></div>
           <div class="stat-label">AI orchestration</div>
         </div>
         <div class="stat">
-          <div class="stat-num">9<small>layers</small></div>
-          <div class="stat-label">System partitions</div>
+          <div class="stat-num">3<small>options</small></div>
+          <div class="stat-label">Build paths</div>
         </div>
         <div class="stat">
-          <div class="stat-num">~$10<small>/mo</small></div>
-          <div class="stat-label">COGS per tradie</div>
-        </div>
-        <div class="stat">
-          <div class="stat-num">95<small>%</small></div>
-          <div class="stat-label">Gross margin (v1)</div>
+          <div class="stat-num">~6<small>weeks</small></div>
+          <div class="stat-label">Lean v1 timeline</div>
         </div>
       </div>
 
       <div class="anchor-jump">
+        <a href="#problem">→ problem &amp; value</a>
+        <a href="#hld">→ high-level design</a>
         <a href="#layers">→ component list</a>
         <a href="#diagram">→ system diagram</a>
-        <a href="#detail">→ key flows</a>
-        <a href="#decisions">→ locked decisions</a>
+        <a href="#options">→ build options</a>
+        <a href="#hard-parts">→ hard parts</a>
+        <a href="#detail">→ reference flows</a>
+        <a href="#risks">→ risks &amp; verdict</a>
       </div>
     </div>
   </div>
+
+  <!-- ═══════════════════════ PROBLEM & VALUE ═══════════════════════ -->
+  <section id="problem">
+    <div class="container">
+      <div class="section-head">
+        <h2 class="section-title">Why this exists.</h2>
+        <p class="section-desc">
+          Tradies don't lose money on jobs — they lose it between jobs. This page is built around relieving exactly that pain, for the customer who actually pays for it.
+        </p>
+      </div>
+
+      <div class="pv-grid">
+
+        <div class="pv-col pain">
+          <div class="pv-tag">The Pain</div>
+          <div class="pv-headline">Quoting eats the evening.</div>
+          <div class="pv-body">
+            Every owner-operator tradie loses 5–10 hours a week to admin: missed calls during jobs, scribbled notes on coffee cups, Sunday-night quote writing in Word, ghosted email threads, and free site visits to jobs that never close. The work is done in their unpaid hours.
+          </div>
+          <div class="pv-stat">~30–50% of quotes never become work · industry average</div>
+        </div>
+
+        <div class="pv-col fix">
+          <div class="pv-tag">The Fix</div>
+          <div class="pv-headline">AI between the call and the contract.</div>
+          <div class="pv-body">
+            QuoteMate answers the phone, asks the right job-specific questions, captures photos via SMS, drafts a structured quote, routes it for review, and presents it to the customer with one-tap accept and deposit. Confidence routing decides whether to auto-send, ask the tradie to validate, or trigger a paid site visit.
+          </div>
+          <div class="pv-stat">10 stages · 4 agents · end-to-end automation</div>
+        </div>
+
+        <div class="pv-col win">
+          <div class="pv-tag">The Win</div>
+          <div class="pv-headline">More jobs, fewer unpaid hours.</div>
+          <div class="pv-body">
+            Tradies reclaim evenings, win more quotes (faster + more professional), stop driving to free site visits (the $199 fee filters tire-kickers), and look like a premium business — which lets them charge accordingly. For most, one extra job a month covers the subscription.
+          </div>
+          <div class="pv-stat">$99/mo + 1% on deposits · ~$199 ARPU · 95% gross margin</div>
+        </div>
+
+      </div>
+
+      <div class="icp-strip">
+        <div>
+          <div class="icp-label">Who buys this.</div>
+          <div class="icp-label-sub">Three ICP segments,<br/>one wedge.</div>
+        </div>
+        <div class="icp-segment">
+          <div class="icp-name">Solo operator</div>
+          <div class="icp-detail">
+            1 person · $80k–$250k/yr<br/>
+            5–15 quotes / week<br/>
+            Low software comfort<br/>
+            <span style="color:var(--muted-2)">→ price-sensitive · churn risk</span>
+          </div>
+        </div>
+        <div class="icp-segment target">
+          <div class="icp-name">Small crew · TARGET</div>
+          <div class="icp-detail">
+            2–5 people · $300k–$1.5M/yr<br/>
+            10–30 quotes / week<br/>
+            Owner still on tools<br/>
+            <span style="color:var(--accent-deep)">→ pain + budget · best fit</span>
+          </div>
+        </div>
+        <div class="icp-segment">
+          <div class="icp-name">Established small business</div>
+          <div class="icp-detail">
+            5+ people · $1.5M+/yr<br/>
+            20–50 quotes / week<br/>
+            Already on ServiceM8 / AroFlo<br/>
+            <span style="color:var(--muted-2)">→ high switching cost</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ HLD FLOW (the journey) ═══════════════════════ -->
+  <section id="hld">
+    <div class="container">
+      <div class="section-head">
+        <h2 class="section-title">The journey, end to end.</h2>
+        <p class="section-desc">
+          Ten stages, drawn the way the customer experiences them. The right column shows the technology you'd use at each stage and the phase tag indicates when it's recommended to ship.
+        </p>
+      </div>
+
+      <div class="flow">
+
+        <!-- 01 Customer -->
+        <div class="flow-step">
+          <div class="flow-marker">
+            <span class="flow-num">01</span>
+            <span class="flow-line"></span>
+          </div>
+          <div>
+            <div class="flow-card">
+              <div class="flow-stage">Origin</div>
+              <div class="flow-name">Customer / Homeowner</div>
+              <p>A homeowner has a real-world job — leaking tap, repaint, fence repair — and reaches for their phone.</p>
+            </div>
+          </div>
+          <div class="flow-tech">
+            <span class="tech-label">Channel</span>
+            <span class="tech-value">External user</span>
+            <span class="tech-tag">all phases</span>
+          </div>
+        </div>
+
+        <!-- 02 Calls dedicated number -->
+        <div class="flow-step">
+          <div class="flow-marker">
+            <span class="flow-num">02</span>
+            <span class="flow-line"></span>
+          </div>
+          <div>
+            <div class="flow-card">
+              <div class="flow-stage">Inbound</div>
+              <div class="flow-name">Calls dedicated AI phone number</div>
+              <p>Dials the tradie's QuoteMate-provisioned number — answered immediately, no voicemail, no hold music.</p>
+              <p style="font-size:0.8rem;color:var(--muted);font-style:italic;margin-top:0.5rem;">Alternative entry path (phase 1): existing-platform enquiry from hipages or Airtasker lands in the Tradie Portal — the rest of the flow continues identically from step 04.</p>
+            </div>
+          </div>
+          <div class="flow-tech">
+            <span class="tech-label">Stack</span>
+            <span class="tech-value">Twilio AU long code · per tradie</span>
+            <span class="tech-tag phase-3">phase 3 — voice tier</span>
+          </div>
+        </div>
+
+        <!-- 03 AI Receptionist -->
+        <div class="flow-step">
+          <div class="flow-marker">
+            <span class="flow-num">03</span>
+            <span class="flow-line"></span>
+          </div>
+          <div>
+            <div class="flow-card">
+              <div class="flow-stage">Voice intake</div>
+              <div class="flow-name">AI Receptionist (Voice Agent)</div>
+              <p>Captures everything needed for a quote, in a natural conversation:</p>
+              <ul>
+                <li>Job type (plumbing, electrical, painting, fencing, etc.)</li>
+                <li>Structured Q&amp;A — job-specific prompts</li>
+                <li>Photos / video via SMS link (optional)</li>
+                <li>Address + access constraints</li>
+                <li>Urgency + budget signals</li>
+              </ul>
+            </div>
+          </div>
+          <div class="flow-tech">
+            <span class="tech-label">Stack</span>
+            <span class="tech-value">Vapi orchestration · Deepgram STT · ElevenLabs TTS · Claude Haiku (routing) · Twilio MMS for photo links</span>
+            <span class="tech-tag phase-3">phase 3 — premium tier</span>
+            <span class="tech-tag phase-1">phase 1 fallback: typed intake form</span>
+          </div>
+        </div>
+
+        <!-- 04 Intake Engine -->
+        <div class="flow-step">
+          <div class="flow-marker">
+            <span class="flow-num">04</span>
+            <span class="flow-line"></span>
+          </div>
+          <div>
+            <div class="flow-card">
+              <div class="flow-stage">Structuring</div>
+              <div class="flow-name">Intake Engine</div>
+              <p>Turns the call (or form) into clean, structured data the Estimation Engine can act on:</p>
+              <ul>
+                <li>Scope assumptions</li>
+                <li>Measurements</li>
+                <li>Risk flags</li>
+                <li>Confidence score: LOW / MEDIUM / HIGH</li>
+              </ul>
+            </div>
+          </div>
+          <div class="flow-tech">
+            <span class="tech-label">Stack</span>
+            <span class="tech-value">Claude Sonnet + vision (photo analysis) · pgvector for similar-job lookup · address geocoding</span>
+            <span class="tech-tag phase-1">phase 1</span>
+          </div>
+        </div>
+
+        <!-- 05 Estimation Engine -->
+        <div class="flow-step">
+          <div class="flow-marker">
+            <span class="flow-num">05</span>
+            <span class="flow-line"></span>
+          </div>
+          <div>
+            <div class="flow-card">
+              <div class="flow-stage">Pricing</div>
+              <div class="flow-name">Estimation Engine</div>
+              <p>Produces a real, sendable quote:</p>
+              <ul>
+                <li>Scope of works</li>
+                <li>Visuals (where applicable)</li>
+                <li>Labour + materials line items</li>
+                <li>Risks / exclusions</li>
+              </ul>
+            </div>
+          </div>
+          <div class="flow-tech">
+            <span class="tech-label">Stack</span>
+            <span class="tech-value">Claude Opus 4.7 · tool-use (lookup_assembly, lookup_material, apply_markup, flag_inspection) · per-tradie pricing book + 5 similar past quotes (RAG) · prompt cache &gt; 90% hit rate</span>
+            <span class="tech-tag phase-1">phase 1 — the heart</span>
+          </div>
+        </div>
+
+        <!-- 06 Workflow Decision -->
+        <div class="flow-step">
+          <div class="flow-marker">
+            <span class="flow-num">06</span>
+            <span class="flow-line" style="min-height:8px;"></span>
+          </div>
+          <div>
+            <div class="flow-card">
+              <div class="flow-stage">Routing</div>
+              <div class="flow-name">Workflow Decision · Confidence-Based Routing</div>
+              <p>Routes the quote based on the confidence score from the Intake Engine. Three paths — and which paths are enabled depends on which build option you pick.</p>
+            </div>
+          </div>
+          <div class="flow-tech">
+            <span class="tech-label">Logic</span>
+            <span class="tech-value">Rule-based + Haiku sanity check</span>
+            <span class="tech-tag phase-1">phase 1</span>
+          </div>
+        </div>
+
+        <!-- 06b Three branches -->
+        <div class="flow-branches">
+          <div class="flow-marker">
+            <span class="flow-line" style="border-left-style:solid;border-left-color:var(--ink);min-height:24px;"></span>
+          </div>
+          <div>
+            <div class="branches-grid">
+              <div class="branch high">
+                <div class="branch-label">High Confidence</div>
+                <div class="branch-name">Auto Quote</div>
+                <ul>
+                  <li>Sent DIRECT to customer</li>
+                  <li>Good / Better / Best options</li>
+                  <li>No tradie review</li>
+                  <li class="caution">caution: AU Consumer Law — auto-sent quotes are binding</li>
+                </ul>
+              </div>
+              <div class="branch med">
+                <div class="branch-label">Medium-High</div>
+                <div class="branch-name">Tradie Validation</div>
+                <ul>
+                  <li>Quick tradie review</li>
+                  <li>Then sent to customer</li>
+                  <li>Target: &lt; 3 min editing</li>
+                  <li class="recommended">v1 default · liability shield</li>
+                </ul>
+              </div>
+              <div class="branch low">
+                <div class="branch-label">Lower / Complex</div>
+                <div class="branch-name">Paid Site Inspection</div>
+                <ul>
+                  <li>Indicative estimate first</li>
+                  <li>$199 inspection fee</li>
+                  <li>Refundable on quote accepted</li>
+                  <li>Tradie attends + completes quote</li>
+                </ul>
+              </div>
+            </div>
+            <div style="height:24px;border-left:1px dashed var(--line-strong);width:1px;margin-left:calc(50% - 0.5px);"></div>
+          </div>
+          <div class="flow-tech">
+            <span class="tech-label">Routing modes</span>
+            <span class="tech-value">3 paths — phase-tagged</span>
+            <span class="tech-tag phase-1">phase 1: MED + LOW</span>
+            <span class="tech-tag phase-3">phase 3: HIGH (auto)</span>
+          </div>
+        </div>
+
+        <!-- 07 Quote Experience -->
+        <div class="flow-step">
+          <div class="flow-marker">
+            <span class="flow-num">07</span>
+            <span class="flow-line"></span>
+          </div>
+          <div>
+            <div class="flow-card">
+              <div class="flow-stage">Customer view</div>
+              <div class="flow-name">Good / Better / Best Quote Experience</div>
+              <p>What the customer actually opens on their phone:</p>
+              <ul>
+                <li>Visual, clean, mobile-first</li>
+                <li>Clear inclusions / exclusions</li>
+                <li>Upsells embedded (Better → Best ladder)</li>
+                <li>Accept + deposit button</li>
+              </ul>
+            </div>
+          </div>
+          <div class="flow-tech">
+            <span class="tech-label">Stack</span>
+            <span class="tech-value">Next.js mobile portal · react-pdf · shadcn/ui · Stripe Element · token-protected URL</span>
+            <span class="tech-tag phase-1">phase 1</span>
+          </div>
+        </div>
+
+        <!-- 08 Availability Nudge -->
+        <div class="flow-step">
+          <div class="flow-marker">
+            <span class="flow-num">08</span>
+            <span class="flow-line"></span>
+          </div>
+          <div>
+            <div class="flow-card">
+              <div class="flow-stage">Conversion · NEW STEP</div>
+              <div class="flow-name">⚡ Availability Nudge</div>
+              <p>Especially for high-confidence jobs — surfaces a real, calendar-backed opportunity to lock in:</p>
+              <ul>
+                <li>"We've had a spot open up this week"</li>
+                <li>"We can fit this in sooner than expected"</li>
+                <li>"If you lock this in today, we can prioritise your job"</li>
+              </ul>
+              <p style="margin-top:0.75rem;font-size:0.8rem;color:var(--muted);">→ Creates real urgency · positions tradie as in-demand but available · encourages fast acceptance.</p>
+            </div>
+          </div>
+          <div class="flow-tech">
+            <span class="tech-label">Stack</span>
+            <span class="tech-value">Vercel Workflow timer · Calendar API read · Haiku for tone · in-portal banner + SMS</span>
+            <span class="tech-tag phase-3">phase 3</span>
+          </div>
+        </div>
+
+        <!-- 09 Follow-Up Engine -->
+        <div class="flow-step">
+          <div class="flow-marker">
+            <span class="flow-num">09</span>
+            <span class="flow-line"></span>
+          </div>
+          <div>
+            <div class="flow-card">
+              <div class="flow-stage">Recovery</div>
+              <div class="flow-name">Follow-Up Engine</div>
+              <p>Catches the quotes that don't accept on day 1:</p>
+              <ul>
+                <li>SMS reminders (Day 1 / Day 3 / Day 7)</li>
+                <li>Objection handling</li>
+                <li>Reinforces availability ("last spot this week")</li>
+                <li>Pauses on customer reply → handoff to tradie</li>
+              </ul>
+            </div>
+          </div>
+          <div class="flow-tech">
+            <span class="tech-label">Stack</span>
+            <span class="tech-value">Twilio SMS · Vercel Workflow (durable timing) · Haiku for personalisation</span>
+            <span class="tech-tag phase-3">phase 3</span>
+          </div>
+        </div>
+
+        <!-- 10 Job Won -->
+        <div class="flow-step">
+          <div class="flow-marker">
+            <span class="flow-num">10</span>
+          </div>
+          <div>
+            <div class="flow-card" style="border-left-color:#16a34a;">
+              <div class="flow-stage">Outcome</div>
+              <div class="flow-name">Job Won</div>
+              <ul>
+                <li>Booked into tradie's calendar (auto-block)</li>
+                <li>Deposit captured (Stripe Connect)</li>
+                <li>CRM updated</li>
+                <li>Tradie push-notified · customer confirmed</li>
+              </ul>
+            </div>
+          </div>
+          <div class="flow-tech">
+            <span class="tech-label">Stack</span>
+            <span class="tech-value">Calendar API write · Stripe webhook · CRM / Xero integration</span>
+            <span class="tech-tag phase-1">phase 1: calendar + deposit</span>
+            <span class="tech-tag phase-3">phase 3+: CRM / Xero</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
 
   <!-- ═══════════════════════ COMPONENT LIST ═══════════════════════ -->
   <section id="layers">
@@ -846,23 +1764,28 @@
         </div>
 
         <div class="diagram-scroll">
-          <svg class="architecture" viewBox="0 0 1280 1080" xmlns="http://www.w3.org/2000/svg">
+          <svg class="architecture" viewBox="0 0 1280 1100" xmlns="http://www.w3.org/2000/svg">
             <defs>
-              <!-- arrow markers per category -->
               <marker id="arrow" markerWidth="9" markerHeight="6" refX="8" refY="3" orient="auto">
                 <polygon points="0 0, 9 3, 0 6" fill="#1f2937"/>
               </marker>
-              <marker id="arrow-teal" markerWidth="9" markerHeight="6" refX="8" refY="3" orient="auto">
-                <polygon points="0 0, 9 3, 0 6" fill="#14b8a6"/>
+              <marker id="arrow-cyan" markerWidth="9" markerHeight="6" refX="8" refY="3" orient="auto">
+                <polygon points="0 0, 9 3, 0 6" fill="#0891b2"/>
               </marker>
-              <marker id="arrow-amber" markerWidth="9" markerHeight="6" refX="8" refY="3" orient="auto">
-                <polygon points="0 0, 9 3, 0 6" fill="#f59e0b"/>
+              <marker id="arrow-blue" markerWidth="9" markerHeight="6" refX="8" refY="3" orient="auto">
+                <polygon points="0 0, 9 3, 0 6" fill="#2563eb"/>
               </marker>
               <marker id="arrow-violet" markerWidth="9" markerHeight="6" refX="8" refY="3" orient="auto">
                 <polygon points="0 0, 9 3, 0 6" fill="#7c3aed"/>
               </marker>
-              <marker id="arrow-grey" markerWidth="9" markerHeight="6" refX="8" refY="3" orient="auto">
-                <polygon points="0 0, 9 3, 0 6" fill="#94a3b8"/>
+              <marker id="arrow-emerald" markerWidth="9" markerHeight="6" refX="8" refY="3" orient="auto">
+                <polygon points="0 0, 9 3, 0 6" fill="#059669"/>
+              </marker>
+              <marker id="arrow-green" markerWidth="9" markerHeight="6" refX="8" refY="3" orient="auto">
+                <polygon points="0 0, 9 3, 0 6" fill="#16a34a"/>
+              </marker>
+              <marker id="arrow-orange" markerWidth="9" markerHeight="6" refX="8" refY="3" orient="auto">
+                <polygon points="0 0, 9 3, 0 6" fill="#ea580c"/>
               </marker>
               <pattern id="dotgrid" width="24" height="24" patternUnits="userSpaceOnUse">
                 <circle cx="1" cy="1" r="0.7" fill="#e5e7eb"/>
@@ -872,275 +1795,284 @@
             <!-- background grid -->
             <rect width="100%" height="100%" fill="url(#dotgrid)"/>
 
-            <!-- ════════════ ROW 1 — PEOPLE ════════════ -->
-            <text x="40" y="48" font-family="JetBrains Mono" font-size="10" fill="#6b7280" letter-spacing="0.1em">01 / ENTRY</text>
+            <!-- ═══════════════════════════════════════════════════════════════
+                 ROW 1 — ENTRY (y=40-180)
+                 ═══════════════════════════════════════════════════════════════ -->
+            <text x="60" y="32" font-family="JetBrains Mono" font-size="10" fill="#6b7280" letter-spacing="0.1em">01 / ENTRY</text>
 
-            <!-- Customer cluster -->
-            <rect x="40" y="60" width="280" height="120" rx="2" fill="#ffffff" stroke="#0891b2" stroke-width="1.5"/>
-            <text x="56" y="84" font-family="Inter" font-size="11" font-weight="700" fill="#0891b2">CUSTOMER</text>
-            <text x="56" y="108" font-family="Inter" font-size="13" font-weight="600" fill="#0a0a0a">Existing-platform enquiry</text>
-            <text x="56" y="124" font-family="JetBrains Mono" font-size="10" fill="#6b7280">hipages · Airtasker · referral</text>
-            <text x="56" y="146" font-family="Inter" font-size="13" font-weight="600" fill="#0a0a0a">Direct quote-link click</text>
-            <text x="56" y="162" font-family="JetBrains Mono" font-size="10" fill="#6b7280">tokenised public URL · no auth</text>
+            <!-- Customer cluster (col 1) -->
+            <rect x="60" y="48" width="280" height="120" rx="2" fill="#ffffff" stroke="#0891b2" stroke-width="1.5"/>
+            <text x="76" y="72" font-family="Inter" font-size="11" font-weight="700" fill="#0891b2">CUSTOMER</text>
+            <text x="76" y="96" font-family="Inter" font-size="13" font-weight="600" fill="#0a0a0a">Existing-platform enquiry</text>
+            <text x="76" y="112" font-family="JetBrains Mono" font-size="10" fill="#6b7280">hipages · Airtasker · referral</text>
+            <text x="76" y="134" font-family="Inter" font-size="13" font-weight="600" fill="#0a0a0a">Direct quote-link click</text>
+            <text x="76" y="150" font-family="JetBrains Mono" font-size="10" fill="#6b7280">tokenised public URL · no auth</text>
 
-            <!-- Tradie cluster -->
-            <rect x="960" y="60" width="280" height="120" rx="2" fill="#ffffff" stroke="#2563eb" stroke-width="1.5"/>
-            <text x="976" y="84" font-family="Inter" font-size="11" font-weight="700" fill="#2563eb">TRADIE</text>
-            <text x="976" y="108" font-family="Inter" font-size="13" font-weight="600" fill="#0a0a0a">Mobile portal (PWA)</text>
-            <text x="976" y="124" font-family="JetBrains Mono" font-size="10" fill="#6b7280">drafts · review · approve · send</text>
-            <text x="976" y="146" font-family="Inter" font-size="13" font-weight="600" fill="#0a0a0a">On-site capture</text>
-            <text x="976" y="162" font-family="JetBrains Mono" font-size="10" fill="#6b7280">voice memo + photo prompts</text>
+            <!-- Tradie cluster (col 4) -->
+            <rect x="960" y="48" width="280" height="120" rx="2" fill="#ffffff" stroke="#2563eb" stroke-width="1.5"/>
+            <text x="976" y="72" font-family="Inter" font-size="11" font-weight="700" fill="#2563eb">TRADIE</text>
+            <text x="976" y="96" font-family="Inter" font-size="13" font-weight="600" fill="#0a0a0a">Mobile portal (PWA)</text>
+            <text x="976" y="112" font-family="JetBrains Mono" font-size="10" fill="#6b7280">drafts · review · approve · send</text>
+            <text x="976" y="134" font-family="Inter" font-size="13" font-weight="600" fill="#0a0a0a">On-site capture</text>
+            <text x="976" y="150" font-family="JetBrains Mono" font-size="10" fill="#6b7280">voice memo + photo prompts</text>
 
-            <!-- ════════════ ROW 2 — APPLICATION (Vercel boundary) ════════════ -->
-            <text x="40" y="220" font-family="JetBrains Mono" font-size="10" fill="#6b7280" letter-spacing="0.1em">02 / APPLICATION · NEXT.JS ON VERCEL</text>
+            <!-- ═══════════════════════════════════════════════════════════════
+                 ROW 2 — VERCEL APPLICATION BOUNDARY (y=200-640)
+                 contains surfaces (240-340) + agents (400-600)
+                 ═══════════════════════════════════════════════════════════════ -->
+            <text x="60" y="194" font-family="JetBrains Mono" font-size="10" fill="#6b7280" letter-spacing="0.1em">02 / APPLICATION · NEXT.JS ON VERCEL</text>
 
-            <!-- Vercel boundary -->
-            <rect x="40" y="232" width="1200" height="380" rx="2" fill="#fef3c7" fill-opacity="0.18" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="6,4"/>
-            <text x="56" y="252" font-family="Inter" font-size="11" font-weight="700" fill="#92400e">VERCEL BOUNDARY · App Router · Server Actions · Edge</text>
+            <rect x="40" y="208" width="1200" height="432" rx="3" fill="#fef3c7" fill-opacity="0.18" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="6,4"/>
+            <text x="56" y="228" font-family="Inter" font-size="11" font-weight="700" fill="#92400e">VERCEL BOUNDARY · App Router · Server Actions · Edge</text>
 
-            <!-- Customer-facing surfaces (top-left of vercel) -->
-            <rect x="60" y="270" width="220" height="70" rx="2" fill="#ffffff" stroke="#0891b2" stroke-width="1.2"/>
-            <text x="74" y="292" font-family="Inter" font-size="12" font-weight="700" fill="#0a0a0a">Customer quote view</text>
-            <text x="74" y="308" font-family="JetBrains Mono" font-size="9" fill="#6b7280">/q/[token] · public · mobile-first</text>
-            <text x="74" y="324" font-family="JetBrains Mono" font-size="9" fill="#0891b2">Good · Better · Best · accept + deposit</text>
+            <!-- ─── SURFACES (y=240-340) ─── -->
 
-            <!-- Tradie portal (top-right of vercel) -->
-            <rect x="1000" y="270" width="220" height="70" rx="2" fill="#ffffff" stroke="#2563eb" stroke-width="1.2"/>
-            <text x="1014" y="292" font-family="Inter" font-size="12" font-weight="700" fill="#0a0a0a">Tradie portal</text>
-            <text x="1014" y="308" font-family="JetBrains Mono" font-size="9" fill="#6b7280">/app · auth required · mobile-first</text>
-            <text x="1014" y="324" font-family="JetBrains Mono" font-size="9" fill="#2563eb">intake · review · send · calendar</text>
+            <!-- Customer Quote View — col 1 -->
+            <rect x="60" y="248" width="280" height="92" rx="2" fill="#ffffff" stroke="#0891b2" stroke-width="1.2"/>
+            <text x="76" y="270" font-family="Inter" font-size="12" font-weight="700" fill="#0a0a0a">Customer quote view</text>
+            <text x="76" y="288" font-family="JetBrains Mono" font-size="9" fill="#6b7280">/q/[token] · public · mobile-first</text>
+            <text x="76" y="308" font-family="Inter" font-size="10" font-weight="600" fill="#0891b2">Good · Better · Best</text>
+            <text x="76" y="324" font-family="JetBrains Mono" font-size="9" fill="#6b7280">accept + deposit (Stripe Element)</text>
 
-            <!-- THE FOUR AGENTS — center band -->
-            <text x="60" y="372" font-family="JetBrains Mono" font-size="10" fill="#92400e" letter-spacing="0.1em">03 / AI AGENT LAYER (THE FOUR)</text>
+            <!-- Tradie Portal — col 4 -->
+            <rect x="960" y="248" width="280" height="92" rx="2" fill="#ffffff" stroke="#2563eb" stroke-width="1.2"/>
+            <text x="976" y="270" font-family="Inter" font-size="12" font-weight="700" fill="#0a0a0a">Tradie portal</text>
+            <text x="976" y="288" font-family="JetBrains Mono" font-size="9" fill="#6b7280">/app · auth · mobile-first</text>
+            <text x="976" y="308" font-family="Inter" font-size="10" font-weight="600" fill="#2563eb">intake · review · send · calendar</text>
+            <text x="976" y="324" font-family="JetBrains Mono" font-size="9" fill="#6b7280">operates all 4 agents below</text>
 
-            <!-- Agent 1 -->
-            <rect x="60" y="384" width="280" height="200" rx="2" fill="#ffffff" stroke="#f59e0b" stroke-width="1.5"/>
-            <text x="78" y="406" font-family="Inter" font-size="11" font-weight="800" fill="#f59e0b">① QUOTE DRAFTER</text>
-            <text x="78" y="424" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Drafts scope, line items, totals,</text>
-            <text x="78" y="438" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">three options, exclusions, risks</text>
-            <line x1="78" y1="450" x2="320" y2="450" stroke="#e5e7eb" stroke-width="1"/>
-            <text x="78" y="468" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Model · Claude Opus 4.7</text>
-            <text x="78" y="482" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Tools · lookup_assembly,</text>
-            <text x="78" y="494" font-family="JetBrains Mono" font-size="9" fill="#6b7280">          lookup_material, markup,</text>
-            <text x="78" y="506" font-family="JetBrains Mono" font-size="9" fill="#6b7280">          flag_inspection</text>
-            <text x="78" y="524" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Reads · pricing book + 5 similar</text>
-            <text x="78" y="536" font-family="JetBrains Mono" font-size="9" fill="#6b7280">          past quotes (RAG)</text>
-            <text x="78" y="554" font-family="Inter" font-size="9" font-weight="600" fill="#f59e0b">~$0.05 / quote (cached)</text>
+            <!-- ─── AGENT LAYER LABEL (y=372) ─── -->
+            <text x="60" y="392" font-family="JetBrains Mono" font-size="10" fill="#92400e" letter-spacing="0.1em">03 / AI AGENT LAYER (THE FOUR) · sequential left → right</text>
 
-            <!-- Agent 2 -->
-            <rect x="360" y="384" width="280" height="200" rx="2" fill="#ffffff" stroke="#f59e0b" stroke-width="1.5"/>
-            <text x="378" y="406" font-family="Inter" font-size="11" font-weight="800" fill="#f59e0b">② QUOTE REVIEWER</text>
-            <text x="378" y="424" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Surfaces draft to tradie with</text>
-            <text x="378" y="438" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">"check this line" annotations</text>
-            <line x1="378" y1="450" x2="620" y2="450" stroke="#e5e7eb" stroke-width="1"/>
-            <text x="378" y="468" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Model · Haiku (annotations)</text>
-            <text x="378" y="482" font-family="JetBrains Mono" font-size="9" fill="#6b7280">          Sonnet (cover note)</text>
-            <text x="378" y="500" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Output · approved quote +</text>
-            <text x="378" y="512" font-family="JetBrains Mono" font-size="9" fill="#6b7280">           customer portal page +</text>
-            <text x="378" y="524" font-family="JetBrains Mono" font-size="9" fill="#6b7280">           react-pdf document</text>
-            <text x="378" y="554" font-family="Inter" font-size="9" font-weight="600" fill="#f59e0b">v1: human-in-loop · no auto-send</text>
+            <!-- ─── AGENTS (y=404-600) ─── -->
 
-            <!-- Agent 3 -->
-            <rect x="660" y="384" width="280" height="200" rx="2" fill="#ffffff" stroke="#f59e0b" stroke-width="1.5"/>
-            <text x="678" y="406" font-family="Inter" font-size="11" font-weight="800" fill="#f59e0b">③ INSPECTION COORD.</text>
-            <text x="678" y="424" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Paid site-visit flow + on-site</text>
-            <text x="678" y="438" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">capture + post-acceptance</text>
-            <line x1="678" y1="450" x2="920" y2="450" stroke="#e5e7eb" stroke-width="1"/>
-            <text x="678" y="468" font-family="JetBrains Mono" font-size="9" fill="#6b7280">State · pending · paid · scheduled</text>
-            <text x="678" y="482" font-family="JetBrains Mono" font-size="9" fill="#6b7280">          on-site · completed · refunded</text>
-            <text x="678" y="500" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Captures · voice memo (transcribed)</text>
-            <text x="678" y="512" font-family="JetBrains Mono" font-size="9" fill="#6b7280">             prompted photos</text>
-            <text x="678" y="524" font-family="JetBrains Mono" font-size="9" fill="#6b7280">             measurements + risks</text>
-            <text x="678" y="554" font-family="Inter" font-size="9" font-weight="600" fill="#f59e0b">$199 fee · refundable on win</text>
+            <!-- ① Drafter — col 1 -->
+            <rect x="60" y="404" width="280" height="196" rx="2" fill="#ffffff" stroke="#f59e0b" stroke-width="1.5"/>
+            <text x="78" y="426" font-family="Inter" font-size="11" font-weight="800" fill="#f59e0b">① QUOTE DRAFTER</text>
+            <text x="78" y="444" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Drafts scope, line items,</text>
+            <text x="78" y="458" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">three options, exclusions</text>
+            <line x1="78" y1="470" x2="320" y2="470" stroke="#e5e7eb"/>
+            <text x="78" y="488" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Model · Claude Opus 4.7</text>
+            <text x="78" y="502" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Tools · lookup_assembly,</text>
+            <text x="78" y="514" font-family="JetBrains Mono" font-size="9" fill="#6b7280">          lookup_material, markup,</text>
+            <text x="78" y="526" font-family="JetBrains Mono" font-size="9" fill="#6b7280">          flag_inspection</text>
+            <text x="78" y="544" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Reads · pricing book + 5</text>
+            <text x="78" y="556" font-family="JetBrains Mono" font-size="9" fill="#6b7280">          similar past quotes (RAG)</text>
+            <text x="78" y="578" font-family="Inter" font-size="9" font-weight="600" fill="#f59e0b">~$0.05 / quote (cached)</text>
 
-            <!-- Agent 4 -->
-            <rect x="960" y="384" width="260" height="200" rx="2" fill="#ffffff" stroke="#f59e0b" stroke-width="1.5"/>
-            <text x="978" y="406" font-family="Inter" font-size="11" font-weight="800" fill="#f59e0b">④ CONVERSION ENGINE</text>
-            <text x="978" y="424" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Availability nudges + SMS</text>
-            <text x="978" y="438" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">follow-up sequence</text>
-            <line x1="978" y1="450" x2="1200" y2="450" stroke="#e5e7eb" stroke-width="1"/>
-            <text x="978" y="468" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Cadence · Day 1 · Day 3 · Day 7</text>
-            <text x="978" y="482" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Triggers · time + state + calendar</text>
-            <text x="978" y="500" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Pause · on customer reply</text>
-            <text x="978" y="512" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Backed by · Vercel Workflow</text>
-            <text x="978" y="554" font-family="Inter" font-size="9" font-weight="600" fill="#f59e0b">durable · survives restarts</text>
+            <!-- ② Reviewer — col 2 -->
+            <rect x="360" y="404" width="280" height="196" rx="2" fill="#ffffff" stroke="#f59e0b" stroke-width="1.5"/>
+            <text x="378" y="426" font-family="Inter" font-size="11" font-weight="800" fill="#f59e0b">② QUOTE REVIEWER</text>
+            <text x="378" y="444" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Surfaces draft to tradie</text>
+            <text x="378" y="458" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">with "check this" annotations</text>
+            <line x1="378" y1="470" x2="620" y2="470" stroke="#e5e7eb"/>
+            <text x="378" y="488" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Model · Haiku (annotations)</text>
+            <text x="378" y="502" font-family="JetBrains Mono" font-size="9" fill="#6b7280">          Sonnet (cover note)</text>
+            <text x="378" y="520" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Output · approved quote +</text>
+            <text x="378" y="532" font-family="JetBrains Mono" font-size="9" fill="#6b7280">           customer portal page +</text>
+            <text x="378" y="544" font-family="JetBrains Mono" font-size="9" fill="#6b7280">           react-pdf document</text>
+            <text x="378" y="578" font-family="Inter" font-size="9" font-weight="600" fill="#f59e0b">v1: human-in-loop · no auto-send</text>
 
-            <!-- ════════════ ROW 3 — DATA + PAYMENTS + COMMS ════════════ -->
-            <text x="40" y="652" font-family="JetBrains Mono" font-size="10" fill="#6b7280" letter-spacing="0.1em">04 / LLM    05 / DATA    06 / PAYMENTS    07 / COMMS</text>
+            <!-- ③ Inspection — col 3 -->
+            <rect x="660" y="404" width="280" height="196" rx="2" fill="#ffffff" stroke="#f59e0b" stroke-width="1.5"/>
+            <text x="678" y="426" font-family="Inter" font-size="11" font-weight="800" fill="#f59e0b">③ INSPECTION COORD.</text>
+            <text x="678" y="444" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Paid site visit + on-site</text>
+            <text x="678" y="458" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">capture + post-acceptance</text>
+            <line x1="678" y1="470" x2="920" y2="470" stroke="#e5e7eb"/>
+            <text x="678" y="488" font-family="JetBrains Mono" font-size="9" fill="#6b7280">State · pending · paid · scheduled</text>
+            <text x="678" y="500" font-family="JetBrains Mono" font-size="9" fill="#6b7280">          on-site · completed · refunded</text>
+            <text x="678" y="518" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Captures · voice memo, photos,</text>
+            <text x="678" y="530" font-family="JetBrains Mono" font-size="9" fill="#6b7280">             measurements + risks</text>
+            <text x="678" y="548" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Conditional · only when complex</text>
+            <text x="678" y="578" font-family="Inter" font-size="9" font-weight="600" fill="#f59e0b">$199 fee · refundable on win</text>
 
-            <!-- LLM stack -->
-            <rect x="40" y="664" width="220" height="180" rx="2" fill="#ffffff" stroke="#7c3aed" stroke-width="1.5"/>
-            <text x="56" y="686" font-family="Inter" font-size="11" font-weight="800" fill="#7c3aed">LLM INFRASTRUCTURE</text>
-            <text x="56" y="708" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Vercel AI Gateway</text>
-            <text x="56" y="722" font-family="JetBrains Mono" font-size="9" fill="#6b7280">failover · cost tracking</text>
-            <line x1="56" y1="734" x2="240" y2="734" stroke="#e5e7eb"/>
-            <text x="56" y="752" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Claude Opus 4.7</text>
-            <text x="56" y="766" font-family="JetBrains Mono" font-size="9" fill="#6b7280">heavy reasoning · vision</text>
-            <text x="56" y="788" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Claude Haiku 4.5</text>
-            <text x="56" y="802" font-family="JetBrains Mono" font-size="9" fill="#6b7280">routing · annotations · SMS</text>
-            <text x="56" y="824" font-family="JetBrains Mono" font-size="9" fill="#7c3aed">prompt cache · &gt; 90% hit rate</text>
+            <!-- ④ Conversion — col 4 -->
+            <rect x="960" y="404" width="280" height="196" rx="2" fill="#ffffff" stroke="#f59e0b" stroke-width="1.5"/>
+            <text x="978" y="426" font-family="Inter" font-size="11" font-weight="800" fill="#f59e0b">④ CONVERSION ENGINE</text>
+            <text x="978" y="444" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Availability nudges +</text>
+            <text x="978" y="458" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">SMS follow-up sequence</text>
+            <line x1="978" y1="470" x2="1220" y2="470" stroke="#e5e7eb"/>
+            <text x="978" y="488" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Cadence · Day 1 · Day 3 · Day 7</text>
+            <text x="978" y="502" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Triggers · time + state + calendar</text>
+            <text x="978" y="520" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Pause · on customer reply</text>
+            <text x="978" y="532" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Backed by · Vercel Workflow</text>
+            <text x="978" y="544" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Output · SMS via Twilio</text>
+            <text x="978" y="578" font-family="Inter" font-size="9" font-weight="600" fill="#f59e0b">durable · survives restarts</text>
 
-            <!-- Supabase / Data -->
-            <rect x="280" y="664" width="280" height="180" rx="2" fill="#ffffff" stroke="#059669" stroke-width="1.5"/>
-            <text x="296" y="686" font-family="Inter" font-size="11" font-weight="800" fill="#059669">DATA PLANE · SUPABASE</text>
-            <text x="296" y="708" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Postgres + RLS</text>
-            <text x="296" y="722" font-family="JetBrains Mono" font-size="9" fill="#6b7280">organizations · pricing_books ·</text>
-            <text x="296" y="734" font-family="JetBrains Mono" font-size="9" fill="#6b7280">quotes · line_items · inspections</text>
-            <text x="296" y="752" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">pgvector</text>
-            <text x="296" y="766" font-family="JetBrains Mono" font-size="9" fill="#6b7280">RAG over similar past quotes</text>
-            <text x="296" y="784" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Storage</text>
-            <text x="296" y="798" font-family="JetBrains Mono" font-size="9" fill="#6b7280">photos · branding · PDF outputs</text>
-            <text x="296" y="816" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Auth · magic link</text>
-            <text x="296" y="830" font-family="JetBrains Mono" font-size="9" fill="#6b7280">tradies only · customers tokenised</text>
+            <!-- ═══════════════════════════════════════════════════════════════
+                 BACKEND SERVICE BUS (y=664)
+                 single horizontal rail — replaces 16 crossing diagonals
+                 ═══════════════════════════════════════════════════════════════ -->
+            <line x1="200" y1="664" x2="1100" y2="664" stroke="#94a3b8" stroke-width="1.5"/>
+            <text x="650" y="658" font-family="JetBrains Mono" font-size="9" fill="#94a3b8" text-anchor="middle">BACKEND SERVICE BUS · routed via App Router server actions</text>
 
-            <!-- Payments -->
-            <rect x="580" y="664" width="280" height="180" rx="2" fill="#ffffff" stroke="#16a34a" stroke-width="1.5"/>
-            <text x="596" y="686" font-family="Inter" font-size="11" font-weight="800" fill="#16a34a">PAYMENTS · STRIPE AU</text>
-            <text x="596" y="708" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Stripe Connect Express</text>
-            <text x="596" y="722" font-family="JetBrains Mono" font-size="9" fill="#6b7280">per-tradie account · platform fee</text>
-            <line x1="596" y1="734" x2="840" y2="734" stroke="#e5e7eb"/>
-            <text x="596" y="752" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Deposit on accept</text>
-            <text x="596" y="766" font-family="JetBrains Mono" font-size="9" fill="#6b7280">~20% · webhook → calendar block</text>
-            <text x="596" y="784" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">$199 inspection fee</text>
-            <text x="596" y="798" font-family="JetBrains Mono" font-size="9" fill="#6b7280">refunded automatically on win</text>
-            <text x="596" y="816" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Stripe Tax (GST)</text>
-            <text x="596" y="830" font-family="JetBrains Mono" font-size="9" fill="#6b7280">10% · per-tradie ABN</text>
+            <!-- ═══════════════════════════════════════════════════════════════
+                 ROW 3 — BACKEND SERVICES (y=688-868)
+                 column-aligned with agents above
+                 ═══════════════════════════════════════════════════════════════ -->
+            <text x="60" y="682" font-family="JetBrains Mono" font-size="10" fill="#6b7280" letter-spacing="0.1em">04 / LLM        05 / DATA       06 / PAYMENTS    07 / COMMS</text>
 
-            <!-- Comms -->
-            <rect x="880" y="664" width="340" height="180" rx="2" fill="#ffffff" stroke="#ea580c" stroke-width="1.5"/>
-            <text x="896" y="686" font-family="Inter" font-size="11" font-weight="800" fill="#ea580c">COMMUNICATIONS</text>
-            <text x="896" y="708" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Twilio (AU long codes)</text>
-            <text x="896" y="722" font-family="JetBrains Mono" font-size="9" fill="#6b7280">photo capture link · follow-ups · status</text>
-            <line x1="896" y1="734" x2="1200" y2="734" stroke="#e5e7eb"/>
-            <text x="896" y="752" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Resend</text>
-            <text x="896" y="766" font-family="JetBrains Mono" font-size="9" fill="#6b7280">quote delivery · receipts · system mail</text>
-            <text x="896" y="784" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Calendar integration</text>
-            <text x="896" y="798" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Google + iCloud · auto-block on accept</text>
-            <text x="896" y="816" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Stripe / webhook delivery</text>
-            <text x="896" y="830" font-family="JetBrains Mono" font-size="9" fill="#6b7280">durable retries via Vercel Workflow</text>
+            <!-- LLM — col 1 -->
+            <rect x="60" y="688" width="280" height="180" rx="2" fill="#ffffff" stroke="#7c3aed" stroke-width="1.5"/>
+            <text x="76" y="710" font-family="Inter" font-size="11" font-weight="800" fill="#7c3aed">LLM INFRASTRUCTURE</text>
+            <text x="76" y="732" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Vercel AI Gateway</text>
+            <text x="76" y="746" font-family="JetBrains Mono" font-size="9" fill="#6b7280">failover · cost tracking</text>
+            <line x1="76" y1="758" x2="320" y2="758" stroke="#e5e7eb"/>
+            <text x="76" y="776" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Claude Opus 4.7</text>
+            <text x="76" y="790" font-family="JetBrains Mono" font-size="9" fill="#6b7280">heavy reasoning · vision</text>
+            <text x="76" y="810" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Claude Haiku 4.5</text>
+            <text x="76" y="824" font-family="JetBrains Mono" font-size="9" fill="#6b7280">routing · annotations · SMS</text>
+            <text x="76" y="850" font-family="JetBrains Mono" font-size="9" fill="#7c3aed">prompt cache · &gt; 90% hit rate</text>
 
-            <!-- ════════════ ROW 4 — OBSERVABILITY + DEFERRED ════════════ -->
+            <!-- Data — col 2 -->
+            <rect x="360" y="688" width="280" height="180" rx="2" fill="#ffffff" stroke="#059669" stroke-width="1.5"/>
+            <text x="376" y="710" font-family="Inter" font-size="11" font-weight="800" fill="#059669">DATA PLANE · SUPABASE</text>
+            <text x="376" y="732" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Postgres + RLS</text>
+            <text x="376" y="746" font-family="JetBrains Mono" font-size="9" fill="#6b7280">organizations · pricing_books</text>
+            <text x="376" y="758" font-family="JetBrains Mono" font-size="9" fill="#6b7280">quotes · line_items · inspections</text>
+            <text x="376" y="776" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">pgvector</text>
+            <text x="376" y="790" font-family="JetBrains Mono" font-size="9" fill="#6b7280">RAG over similar past quotes</text>
+            <text x="376" y="808" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Storage</text>
+            <text x="376" y="822" font-family="JetBrains Mono" font-size="9" fill="#6b7280">photos · branding · PDFs</text>
+            <text x="376" y="842" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Auth · magic link</text>
+            <text x="376" y="856" font-family="JetBrains Mono" font-size="9" fill="#6b7280">tradies only</text>
 
-            <!-- Observability -->
-            <rect x="40" y="880" width="500" height="100" rx="2" fill="#ffffff" stroke="#64748b" stroke-width="1.5"/>
-            <text x="56" y="902" font-family="Inter" font-size="11" font-weight="800" fill="#64748b">08 / OBSERVABILITY &amp; OPS</text>
-            <text x="56" y="924" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">PostHog · Sentry · Eval harness · Vercel Workflow</text>
-            <text x="56" y="942" font-family="JetBrains Mono" font-size="9" fill="#6b7280">PostHog — funnel + session replay (tradie drop-off)</text>
-            <text x="56" y="956" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Sentry — error spikes, Stripe webhook failures</text>
-            <text x="56" y="970" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Eval — 100 hold-out (intake → quote) pairs · 5-dim rubric</text>
+            <!-- Payments — col 3 -->
+            <rect x="660" y="688" width="280" height="180" rx="2" fill="#ffffff" stroke="#16a34a" stroke-width="1.5"/>
+            <text x="676" y="710" font-family="Inter" font-size="11" font-weight="800" fill="#16a34a">PAYMENTS · STRIPE AU</text>
+            <text x="676" y="732" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Stripe Connect Express</text>
+            <text x="676" y="746" font-family="JetBrains Mono" font-size="9" fill="#6b7280">per-tradie account · platform fee</text>
+            <line x1="676" y1="758" x2="920" y2="758" stroke="#e5e7eb"/>
+            <text x="676" y="776" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Deposit on accept</text>
+            <text x="676" y="790" font-family="JetBrains Mono" font-size="9" fill="#6b7280">~20% · webhook → calendar</text>
+            <text x="676" y="808" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">$199 inspection fee</text>
+            <text x="676" y="822" font-family="JetBrains Mono" font-size="9" fill="#6b7280">refunded automatically on win</text>
+            <text x="676" y="842" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Stripe Tax (GST)</text>
+            <text x="676" y="856" font-family="JetBrains Mono" font-size="9" fill="#6b7280">10% · per-tradie ABN</text>
 
-            <!-- Deferred -->
-            <rect x="560" y="880" width="660" height="100" rx="2" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6,4"/>
-            <text x="576" y="902" font-family="Inter" font-size="11" font-weight="800" fill="#94a3b8">09 / DEFERRED · v3+</text>
-            <text x="576" y="924" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Vapi voice agent · Deepgram STT · ElevenLabs TTS · hipages partnership · Xero/MYOB · Bunnings price refresh</text>
-            <text x="576" y="942" font-family="JetBrains Mono" font-size="9" fill="#94a3b8">Voice — premium tier @ $299/mo (per-call cost obliterates SaaS pricing at $99/mo)</text>
-            <text x="576" y="956" font-family="JetBrains Mono" font-size="9" fill="#94a3b8">hipages — direct enquiry-to-quote handoff (Phase 3 partnership conversation)</text>
-            <text x="576" y="970" font-family="JetBrains Mono" font-size="9" fill="#94a3b8">Trade expansion — landscaping + carpentry (Phase 4) · plumbing/electrical (v3 with voice)</text>
+            <!-- Comms — col 4 -->
+            <rect x="960" y="688" width="280" height="180" rx="2" fill="#ffffff" stroke="#ea580c" stroke-width="1.5"/>
+            <text x="976" y="710" font-family="Inter" font-size="11" font-weight="800" fill="#ea580c">COMMUNICATIONS</text>
+            <text x="976" y="732" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Twilio (AU long codes)</text>
+            <text x="976" y="746" font-family="JetBrains Mono" font-size="9" fill="#6b7280">photo links · follow-ups · status</text>
+            <line x1="976" y1="758" x2="1220" y2="758" stroke="#e5e7eb"/>
+            <text x="976" y="776" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Resend</text>
+            <text x="976" y="790" font-family="JetBrains Mono" font-size="9" fill="#6b7280">quote delivery · receipts</text>
+            <text x="976" y="808" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Calendar integration</text>
+            <text x="976" y="822" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Google + iCloud · auto-block</text>
+            <text x="976" y="842" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Stripe webhooks</text>
+            <text x="976" y="856" font-family="JetBrains Mono" font-size="9" fill="#6b7280">durable retries · Vercel Workflow</text>
 
-            <!-- ════════════ ARROWS ════════════ -->
+            <!-- ═══════════════════════════════════════════════════════════════
+                 ROW 4 — OBSERVABILITY + DEFERRED (y=900-1000)
+                 ═══════════════════════════════════════════════════════════════ -->
 
-            <!-- Customer → Customer quote view -->
-            <line x1="180" y1="180" x2="180" y2="265" stroke="#14b8a6" stroke-width="2" marker-end="url(#arrow-teal)"/>
-            <text x="190" y="222" font-family="JetBrains Mono" font-size="9" fill="#14b8a6">view + accept</text>
+            <rect x="60" y="900" width="540" height="100" rx="2" fill="#ffffff" stroke="#64748b" stroke-width="1.5"/>
+            <text x="76" y="922" font-family="Inter" font-size="11" font-weight="800" fill="#64748b">08 / OBSERVABILITY &amp; OPS</text>
+            <text x="76" y="944" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">PostHog · Sentry · Eval harness · Vercel Workflow</text>
+            <text x="76" y="962" font-family="JetBrains Mono" font-size="9" fill="#6b7280">PostHog — funnel + session replay (tradie drop-off)</text>
+            <text x="76" y="976" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Sentry — error spikes · Stripe webhook failures</text>
+            <text x="76" y="990" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Eval — 100 hold-out (intake → quote) pairs · 5-dim rubric</text>
 
-            <!-- Tradie → Tradie portal -->
-            <line x1="1100" y1="180" x2="1100" y2="265" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)"/>
-            <text x="1110" y="222" font-family="JetBrains Mono" font-size="9" fill="#2563eb">login · review</text>
+            <rect x="620" y="900" width="620" height="100" rx="2" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6,4"/>
+            <text x="636" y="922" font-family="Inter" font-size="11" font-weight="800" fill="#94a3b8">09 / DEFERRED · v3+</text>
+            <text x="636" y="944" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Vapi voice agent · Deepgram · ElevenLabs · hipages · Xero/MYOB · Bunnings</text>
+            <text x="636" y="962" font-family="JetBrains Mono" font-size="9" fill="#94a3b8">Voice — premium tier @ $299/mo (per-call cost destroys $99/mo SaaS pricing)</text>
+            <text x="636" y="976" font-family="JetBrains Mono" font-size="9" fill="#94a3b8">hipages — direct enquiry-to-quote handoff (Phase 3 partnership)</text>
+            <text x="636" y="990" font-family="JetBrains Mono" font-size="9" fill="#94a3b8">Trade expansion — landscaping + carpentry (Phase 4) · plumb/elec (v3)</text>
 
-            <!-- Customer view ↔ Reviewer (display + accept) -->
-            <line x1="280" y1="305" x2="498" y2="384" stroke="#0891b2" stroke-width="1.4" marker-end="url(#arrow)"/>
-            <text x="290" y="354" font-family="JetBrains Mono" font-size="9" fill="#0891b2">renders quote</text>
+            <!-- ═══════════════════════════════════════════════════════════════
+                 ARROWS — orthogonal routing only · service bus pattern
+                 ═══════════════════════════════════════════════════════════════ -->
 
-            <!-- Tradie portal → Drafter (manual intake submit) -->
-            <line x1="1000" y1="305" x2="200" y2="384" stroke="#2563eb" stroke-width="1.2" stroke-dasharray="3,3" marker-end="url(#arrow)"/>
+            <!-- 1. Customer → Customer Quote View (col 1, vertical) -->
+            <line x1="200" y1="168" x2="200" y2="246" stroke="#0891b2" stroke-width="1.8" marker-end="url(#arrow-cyan)"/>
+            <text x="208" y="212" font-family="JetBrains Mono" font-size="9" fill="#0891b2">view + accept</text>
 
-            <!-- Tradie portal → Reviewer / Inspection (validate, send) -->
-            <line x1="1100" y1="340" x2="800" y2="384" stroke="#2563eb" stroke-width="1.4" marker-end="url(#arrow)"/>
-            <text x="900" y="354" font-family="JetBrains Mono" font-size="9" fill="#2563eb">approve · send</text>
+            <!-- 2. Tradie → Tradie Portal (col 4, vertical) -->
+            <line x1="1100" y1="168" x2="1100" y2="246" stroke="#2563eb" stroke-width="1.8" marker-end="url(#arrow-blue)"/>
+            <text x="1108" y="212" font-family="JetBrains Mono" font-size="9" fill="#2563eb">login · review</text>
 
-            <!-- Drafter → Reviewer -->
-            <line x1="340" y1="484" x2="358" y2="484" stroke="#1f2937" stroke-width="1.4" marker-end="url(#arrow)"/>
+            <!-- 3. Tradie Portal → Drafter (intake submit) — L-shape via y=358 -->
+            <path d="M 1100 340 V 358 H 200 V 402" fill="none" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+            <rect x="540" y="350" width="200" height="16" fill="#ffffff"/>
+            <text x="640" y="362" font-family="JetBrains Mono" font-size="9" fill="#2563eb" text-anchor="middle">intake submit · server action</text>
 
-            <!-- Reviewer → Inspection (when needs site visit) -->
-            <line x1="640" y1="484" x2="658" y2="484" stroke="#1f2937" stroke-width="1.4" stroke-dasharray="3,3" marker-end="url(#arrow)"/>
+            <!-- 4. Reviewer → Customer Quote View (publish) — L-shape via y=380 (uses Reviewer's left edge) -->
+            <path d="M 380 404 V 380 H 220 V 342" fill="none" stroke="#0891b2" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+            <rect x="244" y="372" width="120" height="16" fill="#ffffff"/>
+            <text x="304" y="384" font-family="JetBrains Mono" font-size="9" fill="#0891b2" text-anchor="middle">publish quote</text>
 
-            <!-- Inspection → Conversion (after re-quote) OR direct from Reviewer -->
-            <line x1="940" y1="484" x2="958" y2="484" stroke="#1f2937" stroke-width="1.4" marker-end="url(#arrow)"/>
+            <!-- 5. Drafter → Reviewer (right) -->
+            <line x1="340" y1="502" x2="358" y2="502" stroke="#1f2937" stroke-width="1.6" marker-end="url(#arrow)"/>
+            <!-- 6. Reviewer → Inspection (right, dashed - conditional) -->
+            <line x1="640" y1="502" x2="658" y2="502" stroke="#1f2937" stroke-width="1.6" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+            <!-- 7. Inspection → Conversion (right) -->
+            <line x1="940" y1="502" x2="958" y2="502" stroke="#1f2937" stroke-width="1.6" marker-end="url(#arrow)"/>
 
-            <!-- Drafter → LLM (Opus call) -->
-            <line x1="200" y1="584" x2="150" y2="664" stroke="#7c3aed" stroke-width="1.4" marker-end="url(#arrow-violet)"/>
-            <text x="46" y="630" font-family="JetBrains Mono" font-size="9" fill="#7c3aed">tool-use → Opus</text>
+            <!-- ═══ Service-bus drops (replaces 16 crossing diagonals) ═══ -->
 
-            <!-- Drafter ↔ Data (pricing book RAG) -->
-            <line x1="220" y1="584" x2="380" y2="664" stroke="#059669" stroke-width="1.4" marker-end="url(#arrow)"/>
-            <text x="240" y="630" font-family="JetBrains Mono" font-size="9" fill="#059669">RAG · pricing book</text>
+            <!-- 4 agent drops to bus (light grey verticals, column-aligned) -->
+            <line x1="200" y1="600" x2="200" y2="664" stroke="#94a3b8" stroke-width="1"/>
+            <line x1="500" y1="600" x2="500" y2="664" stroke="#94a3b8" stroke-width="1"/>
+            <line x1="800" y1="600" x2="800" y2="664" stroke="#94a3b8" stroke-width="1"/>
+            <line x1="1100" y1="600" x2="1100" y2="664" stroke="#94a3b8" stroke-width="1"/>
 
-            <!-- Reviewer → Data (read past quotes for cover note) -->
-            <line x1="500" y1="584" x2="450" y2="664" stroke="#059669" stroke-width="1.2" stroke-dasharray="3,3" marker-end="url(#arrow)"/>
+            <!-- 4 service receives from bus (color-coded verticals with arrows) -->
+            <line x1="200" y1="664" x2="200" y2="686" stroke="#7c3aed" stroke-width="1.6" marker-end="url(#arrow-violet)"/>
+            <line x1="500" y1="664" x2="500" y2="686" stroke="#059669" stroke-width="1.6" marker-end="url(#arrow-emerald)"/>
+            <line x1="800" y1="664" x2="800" y2="686" stroke="#16a34a" stroke-width="1.6" marker-end="url(#arrow-green)"/>
+            <line x1="1100" y1="664" x2="1100" y2="686" stroke="#ea580c" stroke-width="1.6" marker-end="url(#arrow-orange)"/>
 
-            <!-- Reviewer → LLM (Haiku/Sonnet) -->
-            <line x1="450" y1="584" x2="220" y2="664" stroke="#7c3aed" stroke-width="1.2" stroke-dasharray="3,3" marker-end="url(#arrow-violet)"/>
+            <!-- Subtle column labels at bus (which agent calls which service) -->
+            <text x="200" y="678" font-family="JetBrains Mono" font-size="8" fill="#94a3b8" text-anchor="middle">↓ tool-use</text>
+            <text x="500" y="678" font-family="JetBrains Mono" font-size="8" fill="#94a3b8" text-anchor="middle">↓ RAG · CRUD</text>
+            <text x="800" y="678" font-family="JetBrains Mono" font-size="8" fill="#94a3b8" text-anchor="middle">↓ charge · refund</text>
+            <text x="1100" y="678" font-family="JetBrains Mono" font-size="8" fill="#94a3b8" text-anchor="middle">↓ SMS · email</text>
 
-            <!-- Inspection → Payments (charge $199) -->
-            <line x1="800" y1="584" x2="700" y2="664" stroke="#16a34a" stroke-width="1.4" marker-end="url(#arrow)"/>
-            <text x="720" y="630" font-family="JetBrains Mono" font-size="9" fill="#16a34a">$199 charge</text>
+            <!-- ═══════════════════════════════════════════════════════════════
+                 LEGEND (y=1030-1090)
+                 ═══════════════════════════════════════════════════════════════ -->
+            <rect x="60" y="1030" width="1180" height="60" rx="2" fill="#fafafa" stroke="#e5e7eb"/>
+            <text x="76" y="1052" font-family="JetBrains Mono" font-size="10" font-weight="700" fill="#0a0a0a">LEGEND</text>
 
-            <!-- Customer view → Payments (deposit on accept) -->
-            <line x1="170" y1="340" x2="700" y2="664" stroke="#16a34a" stroke-width="1.2" stroke-dasharray="3,3" marker-end="url(#arrow)"/>
+            <line x1="140" y1="1048" x2="168" y2="1048" stroke="#1f2937" stroke-width="1.6" marker-end="url(#arrow)"/>
+            <text x="176" y="1052" font-family="JetBrains Mono" font-size="9" fill="#6b7280">runtime call</text>
 
-            <!-- Conversion → Comms (SMS sequence) -->
-            <line x1="1100" y1="584" x2="1050" y2="664" stroke="#ea580c" stroke-width="1.4" marker-end="url(#arrow)"/>
-            <text x="1062" y="628" font-family="JetBrains Mono" font-size="9" fill="#ea580c">SMS · email</text>
+            <line x1="260" y1="1048" x2="288" y2="1048" stroke="#1f2937" stroke-width="1.6" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+            <text x="296" y="1052" font-family="JetBrains Mono" font-size="9" fill="#6b7280">conditional / async</text>
 
-            <!-- Inspection → Comms (booking confirm) -->
-            <line x1="850" y1="584" x2="990" y2="664" stroke="#ea580c" stroke-width="1.2" stroke-dasharray="3,3" marker-end="url(#arrow)"/>
+            <line x1="408" y1="1048" x2="436" y2="1048" stroke="#94a3b8" stroke-width="1"/>
+            <text x="444" y="1052" font-family="JetBrains Mono" font-size="9" fill="#6b7280">service bus</text>
 
-            <!-- Comms → Customer (back arrow at top — text only for clarity) -->
-            <path d="M 1050 664 Q 700 60 200 60" fill="none" stroke="#ea580c" stroke-width="1" stroke-dasharray="2,4"/>
-            <text x="600" y="50" font-family="JetBrains Mono" font-size="9" fill="#ea580c">SMS link · photo capture · follow-up</text>
+            <rect x="528" y="1043" width="14" height="10" rx="1" fill="#ffffff" stroke="#f59e0b" stroke-width="1.2"/>
+            <text x="548" y="1052" font-family="JetBrains Mono" font-size="9" fill="#6b7280">AI agent</text>
 
-            <!-- Payments → Tradie (deposit landed) -->
-            <path d="M 720 664 Q 1240 460 1100 180" fill="none" stroke="#16a34a" stroke-width="1" stroke-dasharray="2,4"/>
-            <text x="1180" y="468" font-family="JetBrains Mono" font-size="9" fill="#16a34a" transform="rotate(-90 1180 468)">funds + notify</text>
+            <rect x="608" y="1043" width="14" height="10" rx="1" fill="#ffffff" stroke="#7c3aed" stroke-width="1.2"/>
+            <text x="628" y="1052" font-family="JetBrains Mono" font-size="9" fill="#6b7280">LLM</text>
 
-            <!-- ════════════ LEGEND ════════════ -->
-            <rect x="40" y="1010" width="1200" height="60" rx="2" fill="#fafafa" stroke="#e5e7eb"/>
-            <text x="56" y="1032" font-family="JetBrains Mono" font-size="10" font-weight="700" fill="#0a0a0a">LEGEND</text>
+            <rect x="668" y="1043" width="14" height="10" rx="1" fill="#ffffff" stroke="#059669" stroke-width="1.2"/>
+            <text x="688" y="1052" font-family="JetBrains Mono" font-size="9" fill="#6b7280">data</text>
 
-            <line x1="120" y1="1028" x2="148" y2="1028" stroke="#1f2937" stroke-width="1.5" marker-end="url(#arrow)"/>
-            <text x="156" y="1032" font-family="JetBrains Mono" font-size="9" fill="#6b7280">runtime call</text>
+            <rect x="730" y="1043" width="14" height="10" rx="1" fill="#ffffff" stroke="#16a34a" stroke-width="1.2"/>
+            <text x="750" y="1052" font-family="JetBrains Mono" font-size="9" fill="#6b7280">payments</text>
 
-            <line x1="240" y1="1028" x2="268" y2="1028" stroke="#1f2937" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow)"/>
-            <text x="276" y="1032" font-family="JetBrains Mono" font-size="9" fill="#6b7280">async / event</text>
+            <rect x="810" y="1043" width="14" height="10" rx="1" fill="#ffffff" stroke="#ea580c" stroke-width="1.2"/>
+            <text x="830" y="1052" font-family="JetBrains Mono" font-size="9" fill="#6b7280">comms</text>
 
-            <rect x="368" y="1023" width="14" height="10" rx="1" fill="#ffffff" stroke="#f59e0b" stroke-width="1.2"/>
-            <text x="388" y="1032" font-family="JetBrains Mono" font-size="9" fill="#6b7280">AI agent</text>
+            <rect x="888" y="1043" width="14" height="10" rx="1" fill="#ffffff" stroke="#0891b2" stroke-width="1.2"/>
+            <text x="908" y="1052" font-family="JetBrains Mono" font-size="9" fill="#6b7280">customer</text>
 
-            <rect x="448" y="1023" width="14" height="10" rx="1" fill="#ffffff" stroke="#7c3aed" stroke-width="1.2"/>
-            <text x="468" y="1032" font-family="JetBrains Mono" font-size="9" fill="#6b7280">LLM</text>
+            <rect x="968" y="1043" width="14" height="10" rx="1" fill="#ffffff" stroke="#2563eb" stroke-width="1.2"/>
+            <text x="988" y="1052" font-family="JetBrains Mono" font-size="9" fill="#6b7280">tradie</text>
 
-            <rect x="510" y="1023" width="14" height="10" rx="1" fill="#ffffff" stroke="#059669" stroke-width="1.2"/>
-            <text x="530" y="1032" font-family="JetBrains Mono" font-size="9" fill="#6b7280">data</text>
+            <rect x="1040" y="1043" width="14" height="10" rx="1" fill="transparent" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="3,3"/>
+            <text x="1060" y="1052" font-family="JetBrains Mono" font-size="9" fill="#6b7280">deferred (v3)</text>
 
-            <rect x="572" y="1023" width="14" height="10" rx="1" fill="#ffffff" stroke="#16a34a" stroke-width="1.2"/>
-            <text x="592" y="1032" font-family="JetBrains Mono" font-size="9" fill="#6b7280">payments</text>
+            <rect x="1140" y="1043" width="14" height="10" rx="1" fill="transparent" stroke="#f59e0b" stroke-width="1.2" stroke-dasharray="6,4"/>
+            <text x="1160" y="1052" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Vercel</text>
 
-            <rect x="652" y="1023" width="14" height="10" rx="1" fill="#ffffff" stroke="#ea580c" stroke-width="1.2"/>
-            <text x="672" y="1032" font-family="JetBrains Mono" font-size="9" fill="#6b7280">comms</text>
-
-            <rect x="730" y="1023" width="14" height="10" rx="1" fill="#ffffff" stroke="#0891b2" stroke-width="1.2"/>
-            <text x="750" y="1032" font-family="JetBrains Mono" font-size="9" fill="#6b7280">customer</text>
-
-            <rect x="810" y="1023" width="14" height="10" rx="1" fill="#ffffff" stroke="#2563eb" stroke-width="1.2"/>
-            <text x="830" y="1032" font-family="JetBrains Mono" font-size="9" fill="#6b7280">tradie</text>
-
-            <rect x="880" y="1023" width="14" height="10" rx="1" fill="transparent" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="3,3"/>
-            <text x="900" y="1032" font-family="JetBrains Mono" font-size="9" fill="#6b7280">deferred (v3)</text>
-
-            <rect x="970" y="1023" width="14" height="10" rx="1" fill="transparent" stroke="#f59e0b" stroke-width="1.2" stroke-dasharray="6,4"/>
-            <text x="990" y="1032" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Vercel boundary</text>
-
-            <text x="56" y="1054" font-family="JetBrains Mono" font-size="9" fill="#94a3b8">Numbered layers (01–09) match the component list above. Arrow colour matches the destination's category.</text>
+            <text x="76" y="1078" font-family="JetBrains Mono" font-size="9" fill="#94a3b8">Each agent column (1–4) stacks above its primary backend service. The grey bus represents server-action routing — every agent can call every backend service.</text>
           </svg>
         </div>
       </div>
@@ -1223,13 +2155,300 @@
     </div>
   </section>
 
-  <!-- ═══════════════════════ DECISIONS ═══════════════════════ -->
+  <!-- ═══════════════════════ BUILD OPTIONS ═══════════════════════ -->
+  <section id="options">
+    <div class="container">
+      <div class="section-head">
+        <h2 class="section-title">Build options — what to ship first.</h2>
+        <p class="section-desc">
+          The full High-Level Design above is a 12–18 month build. These are three slices that get to revenue, with the tradeoffs of each. Pick the one that matches your runway, risk appetite, and quality bar — then jump to the recommended-path detail below.
+        </p>
+      </div>
+
+      <div class="options-grid">
+
+        <!-- OPTION A — FULL VISION -->
+        <div class="option">
+          <div class="option-head">
+            <div class="option-tag">Option A</div>
+            <div class="option-name">Full vision — voice-first</div>
+          </div>
+          <div class="option-meta">
+            <div class="option-meta-row"><span class="option-meta-key">timeline</span><span class="option-meta-val">12–18 months to v1</span></div>
+            <div class="option-meta-row"><span class="option-meta-key">cogs / tradie</span><span class="option-meta-val">~$1,500 / mo</span></div>
+            <div class="option-meta-row"><span class="option-meta-key">pricing</span><span class="option-meta-val">$299 / mo + per-call</span></div>
+            <div class="option-meta-row"><span class="option-meta-key">risk</span><span class="option-meta-val">HIGH</span></div>
+          </div>
+          <div class="option-body">
+            <div>
+              <h4>Pros</h4>
+              <ul class="pros">
+                <li>Maximum demo wow-factor</li>
+                <li>Voice intake is genuinely differentiating</li>
+                <li>White-glove customer experience from day 1</li>
+                <li>Strongest fundraise pitch story</li>
+              </ul>
+            </div>
+            <div>
+              <h4>Cons</h4>
+              <ul class="cons">
+                <li>12+ months before first paying customer</li>
+                <li>Voice quality on AU accents is hard</li>
+                <li>Auto-quote = AU Consumer Law liability</li>
+                <li>SaaS economics broken at $99 / mo</li>
+              </ul>
+            </div>
+          </div>
+          <div class="option-foot">Best if you have $2M+ runway and need a defensible fundraise demo before revenue.</div>
+        </div>
+
+        <!-- OPTION B — HYBRID -->
+        <div class="option">
+          <div class="option-head">
+            <div class="option-tag">Option B</div>
+            <div class="option-name">Hybrid — typed v1, voice as v3</div>
+          </div>
+          <div class="option-meta">
+            <div class="option-meta-row"><span class="option-meta-key">timeline</span><span class="option-meta-val">6 months to mature v1</span></div>
+            <div class="option-meta-row"><span class="option-meta-key">cogs / tradie</span><span class="option-meta-val">$10 / mo (typed tier)</span></div>
+            <div class="option-meta-row"><span class="option-meta-key">pricing</span><span class="option-meta-val">$99 + $299 voice tier</span></div>
+            <div class="option-meta-row"><span class="option-meta-key">risk</span><span class="option-meta-val">MEDIUM</span></div>
+          </div>
+          <div class="option-body">
+            <div>
+              <h4>Pros</h4>
+              <ul class="pros">
+                <li>Revenue starts in month 6</li>
+                <li>All HLD branches active (incl. inspection + nudge)</li>
+                <li>Eval data informs voice tier engineering</li>
+                <li>Multi-trade supported (paint, landscape, carpentry)</li>
+              </ul>
+            </div>
+            <div>
+              <h4>Cons</h4>
+              <ul class="cons">
+                <li>Less impressive at first demo</li>
+                <li>Multi-trade complexity earlier than necessary</li>
+                <li>Voice tier still demands separate engineering</li>
+              </ul>
+            </div>
+          </div>
+          <div class="option-foot">Best if you want a polished v1 with every HLD branch active before you scale.</div>
+        </div>
+
+        <!-- OPTION C — LEAN WEDGE (RECOMMENDED) -->
+        <div class="option recommended">
+          <div class="option-head">
+            <div class="option-tag">Option C · recommended</div>
+            <div class="option-name">Lean wedge — painting, NSW</div>
+          </div>
+          <div class="option-meta">
+            <div class="option-meta-row"><span class="option-meta-key">timeline</span><span class="option-meta-val">6 weeks to v1</span></div>
+            <div class="option-meta-row"><span class="option-meta-key">cogs / tradie</span><span class="option-meta-val">~$10 / mo</span></div>
+            <div class="option-meta-row"><span class="option-meta-key">pricing</span><span class="option-meta-val">$99 / mo + 1% deposits</span></div>
+            <div class="option-meta-row"><span class="option-meta-key">risk</span><span class="option-meta-val">LOW</span></div>
+          </div>
+          <div class="option-body">
+            <div>
+              <h4>Pros</h4>
+              <ul class="pros">
+                <li>Fastest path to paying customers</li>
+                <li>Painting = no state licensing complexity</li>
+                <li>Eval framework before scaling — measured quality</li>
+                <li>Pricing-book moat compounds from day 1</li>
+                <li>Real customer data informs every later decision</li>
+              </ul>
+            </div>
+            <div>
+              <h4>Cons</h4>
+              <ul class="cons">
+                <li>Smallest demo wow at first</li>
+                <li>Tradie does manual intake (no voice yet)</li>
+                <li>Availability nudge + follow-up come in phase 3</li>
+              </ul>
+            </div>
+          </div>
+          <div class="option-foot">Best if you want paying customers first, then expand from validated learning.</div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ HARD PARTS — SOLVED ═══════════════════════ -->
+  <section id="hard-parts">
+    <div class="container">
+      <div class="section-head">
+        <h2 class="section-title">Hard parts — solved.</h2>
+        <p class="section-desc">
+          Five problems where most "AI quoting" tools fall apart. Each card states the problem, the chosen solution, and the specific tools. These are the wiring decisions that determine whether the system works.
+        </p>
+      </div>
+
+      <div class="hard-parts">
+
+        <!-- 01: AI Quoting Engine -->
+        <div class="hard-card">
+          <div class="hard-num">01 / AI Quoting Engine</div>
+          <div class="hard-name">Drafting a quote a tradie would actually send.</div>
+
+          <div class="hard-block">
+            <div class="hard-block-label">The Problem</div>
+            <div class="hard-block-text">
+              A generic LLM call hallucinates $180 for a $40 mixer tap. Tradies stop trusting the system after one wrong line item — and the demo never recovers.
+            </div>
+          </div>
+
+          <div class="hard-block">
+            <div class="hard-block-label">The Solution</div>
+            <div class="hard-block-text">
+              Force the model to use tools — never let it emit a price from free-form text. RAG over the tradie's own pricing book + the 5 most similar past quotes. Cache the system prompt and pricing book per tradie. Calibrate confidence against a held-out evaluation set so HIGH actually means HIGH.
+            </div>
+          </div>
+
+          <div class="hard-block">
+            <div class="hard-block-label">Tools</div>
+            <div class="hard-tools">
+              <span class="hard-tool">Claude Opus 4.7</span>
+              <span class="hard-tool">tool-use API</span>
+              <span class="hard-tool">prompt cache &gt; 90%</span>
+              <span class="hard-tool">pgvector (RAG)</span>
+              <span class="hard-tool">Vercel AI Gateway</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 02: Pricing Logic -->
+        <div class="hard-card">
+          <div class="hard-num">02 / Pricing Logic</div>
+          <div class="hard-name">Where the numbers come from.</div>
+
+          <div class="hard-block">
+            <div class="hard-block-label">The Problem</div>
+            <div class="hard-block-text">
+              ~70% of owner-operator tradies have no structured price list. Material prices change weekly. Per-trade × per-region × per-tradie variance is huge. There's nothing to "ingest."
+            </div>
+          </div>
+
+          <div class="hard-block">
+            <div class="hard-block-label">The Solution</div>
+            <div class="hard-block-text">
+              Build it WITH the tradie, not from. Ship a base assembly library per trade (built by paid 25-year domain experts). Capture the tradie's overlay during 30-min onboarding. Active learning from the first 10 quote edits. Background commodity-price refresh.
+            </div>
+          </div>
+
+          <div class="hard-block">
+            <div class="hard-block-label">Tools</div>
+            <div class="hard-tools">
+              <span class="hard-tool">Postgres versioned tables</span>
+              <span class="hard-tool">overlay pattern</span>
+              <span class="hard-tool">~$5k / trade consulting</span>
+              <span class="hard-tool">guided onboarding flow</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 03: User Accounts -->
+        <div class="hard-card">
+          <div class="hard-num">03 / User Accounts</div>
+          <div class="hard-name">Multi-tenant isolation, zero-friction customer auth.</div>
+
+          <div class="hard-block">
+            <div class="hard-block-label">The Problem</div>
+            <div class="hard-block-text">
+              Tradies hate passwords. Customers don't want accounts. Every quote must be isolated per tradie organisation without bleeding across tenants. Adding security later is harder than building it in.
+            </div>
+          </div>
+
+          <div class="hard-block">
+            <div class="hard-block-label">The Solution</div>
+            <div class="hard-block-text">
+              Magic-link auth for tradies — no passwords. No customer auth at all — quotes go via tokenised public URLs. Postgres RLS from day 1, never bolted on later. Organisations as the tenant primitive; users belong to orgs with roles (owner / staff).
+            </div>
+          </div>
+
+          <div class="hard-block">
+            <div class="hard-block-label">Tools</div>
+            <div class="hard-tools">
+              <span class="hard-tool">Supabase Auth</span>
+              <span class="hard-tool">Postgres RLS</span>
+              <span class="hard-tool">tokenised quote URLs</span>
+              <span class="hard-tool">org → users → roles</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 04: Payments -->
+        <div class="hard-card">
+          <div class="hard-num">04 / Payments</div>
+          <div class="hard-name">Marketplace flow with AU compliance.</div>
+
+          <div class="hard-block">
+            <div class="hard-block-label">The Problem</div>
+            <div class="hard-block-text">
+              Tradies own the funds, not QuoteMate. AU GST handling. Two charge types (deposit + inspection fee). Refund automation on job-won. Per-tradie ABN + bank verification at onboarding adds friction.
+            </div>
+          </div>
+
+          <div class="hard-block">
+            <div class="hard-block-label">The Solution</div>
+            <div class="hard-block-text">
+              Stripe Connect Express — each tradie owns their account, QuoteMate takes a platform fee. Two charge shapes share the same plumbing. Stripe Tax handles GST. Defer Connect onboarding so tradies can draft quotes immediately and only need it when sending and accepting payment.
+            </div>
+          </div>
+
+          <div class="hard-block">
+            <div class="hard-block-label">Tools</div>
+            <div class="hard-tools">
+              <span class="hard-tool">Stripe Connect Express</span>
+              <span class="hard-tool">Stripe Tax (GST)</span>
+              <span class="hard-tool">Vercel Workflow (webhook retries)</span>
+              <span class="hard-tool">deferred Connect onboarding</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 05: Site-Inspection Flow -->
+        <div class="hard-card">
+          <div class="hard-num">05 / Site-Inspection Flow</div>
+          <div class="hard-name">The differentiator that turns a cost into revenue.</div>
+
+          <div class="hard-block">
+            <div class="hard-block-label">The Problem</div>
+            <div class="hard-block-text">
+              Tradies waste hours driving to free site visits. Customers haven't paid for a quote before. Once on-site, the tradie has one hand free and needs to capture everything fast. Refund flow on job-won must be automatic and clear.
+            </div>
+          </div>
+
+          <div class="hard-block">
+            <div class="hard-block-label">The Solution</div>
+            <div class="hard-block-text">
+              $199 fee filters tire-kickers; refundable on win positions it as low-risk. State machine handles booking → payment → on-site → re-quote → refund. On-site mobile UX is voice-memo + prompted photos (one tap each). Re-runs the Estimation Agent with on-site data.
+            </div>
+          </div>
+
+          <div class="hard-block">
+            <div class="hard-block-label">Tools</div>
+            <div class="hard-tools">
+              <span class="hard-tool">state machine (db-backed)</span>
+              <span class="hard-tool">Stripe Connect refund</span>
+              <span class="hard-tool">Sonnet vision (on-site)</span>
+              <span class="hard-tool">Whisper / Deepgram</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ RECOMMENDED PATH IN DETAIL ═══════════════════════ -->
   <section id="decisions">
     <div class="container">
       <div class="section-head">
-        <h2 class="section-title">Locked decisions.</h2>
+        <h2 class="section-title">If you take Option C — the recommended path in detail.</h2>
         <p class="section-desc">
-          These are settled. Drift requires a new entry in <span class="mono">docs/strategy.md</span> with a written rationale — not a quiet change.
+          These are the resulting decisions baked into the lean v1 wedge. If you choose Option A or B instead, several of these flip — especially auto-send, the voice tier, and the wedge trade. Document any switch in <span class="mono">docs/strategy.md</span> with a written rationale before changing the locked entries below.
         </p>
       </div>
 
@@ -1265,6 +2484,94 @@
           <div class="decision-why">100 hold-out pairs, 5-dim rubric. No prompt change ships without measured delta.</div>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ RISKS & VERDICT ═══════════════════════ -->
+  <section id="risks">
+    <div class="container">
+      <div class="section-head">
+        <h2 class="section-title">Risks &amp; feasibility.</h2>
+        <p class="section-desc">
+          Ranked by what'll actually kill the project — not by what sounds scary. Each risk has a mitigation. The verdict at the bottom is the honest read on whether to build it.
+        </p>
+      </div>
+
+      <div class="risks-list">
+
+        <div class="risk severity-high">
+          <div class="risk-rank">01</div>
+          <div>
+            <div class="risk-name">Price accuracy</div>
+            <div class="risk-severity">severity · existential</div>
+          </div>
+          <div class="risk-mitigation">
+            If quotes are ±30% off, tradies stop trusting them and churn fast. <strong>Mitigation:</strong> domain-expert-built base library per trade, pricing-book overlay built with each tradie at onboarding, active learning from the first 10 quote edits, and a 5-dimension eval rubric on 100 hold-out quotes before any prompt change ships.
+          </div>
+        </div>
+
+        <div class="risk severity-high">
+          <div class="risk-rank">02</div>
+          <div>
+            <div class="risk-name">AU regulatory + Consumer Law liability</div>
+            <div class="risk-severity">severity · high</div>
+          </div>
+          <div class="risk-mitigation">
+            Accepted quotes are binding contracts under Australian Consumer Law. An auto-sent wrong quote is a refund/lawsuit risk. <strong>Mitigation:</strong> human-in-loop in v1 (no auto-send), tradie review on every quote, "subject to inspection" language for inspection-flow quotes, solicitor review before launch.
+          </div>
+        </div>
+
+        <div class="risk severity-med">
+          <div class="risk-rank">03</div>
+          <div>
+            <div class="risk-name">Voice quality on AU accents + noisy backgrounds</div>
+            <div class="risk-severity">severity · medium</div>
+          </div>
+          <div class="risk-mitigation">
+            Customer in a kitchen with screaming kids; tradie answering in a ute on a freeway — STT accuracy collapses. <strong>Mitigation:</strong> defer voice to v3+ premium tier, use Deepgram Nova-3 with custom vocabulary per trade, AU-cloned ElevenLabs voice, SMS handoff for photos to reduce voice complexity.
+          </div>
+        </div>
+
+        <div class="risk severity-med">
+          <div class="risk-rank">04</div>
+          <div>
+            <div class="risk-name">Tradie adoption inertia</div>
+            <div class="risk-severity">severity · medium</div>
+          </div>
+          <div class="risk-mitigation">
+            Tradies trust word-of-mouth, hate signing up, and abandon SaaS within 30 days if it doesn't fit existing habits. <strong>Mitigation:</strong> founder-led sales for first 20 customers, free 60-day trial, hand-onboard each one, integrate with channels they already use (SMS, phone), referral program after pilot success.
+          </div>
+        </div>
+
+        <div class="risk severity-low">
+          <div class="risk-rank">05</div>
+          <div>
+            <div class="risk-name">Cold-start data problem</div>
+            <div class="risk-severity">severity · low (tractable)</div>
+          </div>
+          <div class="risk-mitigation">
+            On day 1, the system has no quotes to learn from. <strong>Mitigation:</strong> ship with a base assembly library per trade (built by paid 25-year domain expert) so the first quote is "generic library + tradie's hourly rate" — not a blank page. By quote 50, the per-tradie overlay has compounded enough to be sticky.
+          </div>
+        </div>
+
+      </div>
+
+      <div class="verdict">
+        <div class="verdict-tag">Feasibility verdict</div>
+        <div class="verdict-headline">Buildable today — the right version of it.</div>
+        <div class="verdict-body">
+          <p>
+            <strong>Yes — Option C (lean wedge) is shippable in 6 weeks of focused engineering.</strong> Every block exists at production grade in 2026: Claude for reasoning, Supabase for tenancy, Stripe Connect for marketplace flow, Vapi for voice (when you're ready). A solo founder + 1 contractor can ship Phase 1.
+          </p>
+          <p>
+            <strong>No — Option A (full voice-first vision) is a 12–18 month build with destroyed unit economics.</strong> Voice agent COGS at moderate volume is ~$1,500/mo per tradie. That's not a SaaS at $99/mo; it's a fundraise pitch. Build the boring portal version, get 80 painters paying, then raise on the data and use the money to build voice.
+          </p>
+          <p>
+            <strong>The single biggest risk to manage:</strong> if you build for the pitch instead of the customer, you'll exhaust runway before you have revenue. The HLD above is the destination; Option C is the path that gets you there with your runway intact.
+          </p>
+        </div>
+      </div>
+
     </div>
   </section>
 
