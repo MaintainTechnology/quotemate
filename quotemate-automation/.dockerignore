@@ -1,0 +1,50 @@
+# Don't ship build artifacts, secrets, or local-dev clutter into the image.
+
+node_modules
+.next
+out
+build
+
+# Local env / secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+keys.txt
+secrets.txt
+*.pem
+*.key
+
+# Git + dev tooling
+.git
+.gitignore
+.gitattributes
+.github
+.vscode
+.idea
+.cursor
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Test + coverage output
+coverage
+.nyc_output
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# Markdown / docs (kept in image only via public/docs/)
+*.md
+!public/**/*.md
+
+# Don't bake the SQL files into the image — they're applied via CLI / scripts at setup time
+sql/
+
+# Don't ship one-off scripts (they aren't needed at runtime)
+scripts/
