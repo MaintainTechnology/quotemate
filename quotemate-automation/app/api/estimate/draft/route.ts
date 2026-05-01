@@ -33,7 +33,7 @@ export async function POST(req: Request) {
     })
 
     log.step('running Opus (Claude 4.7) — typically ~40s, up to 3 attempts')
-    const draft = await withRetry(
+    const estimation = await withRetry(
       () => runEstimation(intake, pricingBook),
       {
         maxAttempts: 3,
@@ -48,6 +48,21 @@ export async function POST(req: Request) {
         },
       }
     )
+    const draft = estimation.draft
+
+    // Surface grounding failures clearly in the Vercel logs.
+    if (estimation.downgradedToInspection) {
+      const failureCount = estimation.groundingFailures?.length ?? 0
+      const firstFailure = estimation.groundingFailures?.[0]
+      log.err('grounding check failed — downgrading quote to inspection-required', null, {
+        total_failures: failureCount,
+        first_failure_tier: firstFailure?.tier ?? 'n/a',
+        first_failure_description: firstFailure?.description ?? 'n/a',
+        first_failure_unit: firstFailure?.unit ?? 'n/a',
+        first_failure_price: firstFailure?.unit_price_ex_gst ?? 'n/a',
+        first_failure_expected: firstFailure?.expected ?? 'n/a',
+      })
+    }
     const tierCount = [draft.good, draft.better, draft.best].filter(Boolean).length
     log.ok('Opus parsed', {
       tiers: tierCount,
@@ -56,19 +71,63 @@ export async function POST(req: Request) {
       needs_inspection: draft.needs_inspection ?? false,
     })
 
-    // Default selected tier for the customer portal is "better".
-    // Falls through to "good" if better is missing (e.g. fault_finding has no best).
-    const defaultTier = draft.better ?? draft.good
-    const selectedSubtotal = defaultTier?.subtotal_ex_gst ?? 0
-    const gst = pricingBook.gst_registered ? +(selectedSubtotal * 0.10).toFixed(2) : 0
-    const total = +(selectedSubtotal + gst).toFixed(2)
+    // Two pricing paths — totals diverge based on the inspection branch.
+    //   AUTO-QUOTE: total = selected (better) tier inc GST, deposit_pct from
+    //               pricing_book, real DB-grounded numbers throughout.
+    //   INSPECTION: total = $199 inc GST (the only chargeable amount); all
+    //               three tiers FORCED to null, even if Opus tried to hand
+    //               us indicative numbers (defence-in-depth against
+    //               LLM hallucination — STRICT GROUNDING #10).
+    const INSPECTION_TOTAL_INC_GST = 199
+    const INSPECTION_GST_AMOUNT = +(INSPECTION_TOTAL_INC_GST / 11).toFixed(2)
+    const INSPECTION_SUBTOTAL_EX_GST = +(INSPECTION_TOTAL_INC_GST - INSPECTION_GST_AMOUNT).toFixed(2)
+
+    const isInspection = draft.needs_inspection === true
+
+    let goodTier: typeof draft.good   | null = null
+    let betterTier: typeof draft.better | null = null
+    let bestTier: typeof draft.best   | null = null
+    let selectedTier: 'good' | 'better' | 'best' | 'inspection' | null
+    let selectedSubtotal: number
+    let gst: number
+    let total: number
+
+    if (isInspection) {
+      // Force null tiers regardless of what Opus emitted — pricing comes
+      // only after the on-site visit.
+      goodTier = null
+      betterTier = null
+      bestTier = null
+      selectedTier = 'inspection'
+      selectedSubtotal = INSPECTION_SUBTOTAL_EX_GST
+      gst = INSPECTION_GST_AMOUNT
+      total = INSPECTION_TOTAL_INC_GST
+      if (draft.good || draft.better || draft.best) {
+        log.err('Opus emitted indicative tier numbers on inspection-required quote — discarding per STRICT GROUNDING #10', null, {
+          had_good:   !!draft.good,
+          had_better: !!draft.better,
+          had_best:   !!draft.best,
+        })
+      }
+    } else {
+      // Default selected tier for the customer portal is "better".
+      // Falls through to "good" if better is missing (e.g. fault_finding has no best).
+      goodTier = draft.good ?? null
+      betterTier = draft.better ?? null
+      bestTier = draft.best ?? null
+      const defaultTier = draft.better ?? draft.good
+      selectedTier = 'better'
+      selectedSubtotal = defaultTier?.subtotal_ex_gst ?? 0
+      gst = pricingBook.gst_registered ? +(selectedSubtotal * 0.10).toFixed(2) : 0
+      total = +(selectedSubtotal + gst).toFixed(2)
+    }
 
     const routing_decision = decideRouting({
       intake: {
         confidence: intake.confidence,
         inspection_required: intake.inspection_required ?? false,
       },
-      quote: { needs_inspection: draft.needs_inspection ?? false },
+      quote: { needs_inspection: isInspection },
     })
     log.ok('routing decided', { routing_decision })
 
@@ -80,22 +139,22 @@ export async function POST(req: Request) {
       scope_of_works:      draft.scope_of_works,
       assumptions:         draft.assumptions      ?? [],
       risk_flags:          draft.risk_flags       ?? [],
-      good:                draft.good             ?? null,
-      better:              draft.better           ?? null,
-      best:                draft.best             ?? null,
+      good:                goodTier,
+      better:              betterTier,
+      best:                bestTier,
       optional_upsells:    draft.optional_upsells ?? [],
       estimated_timeframe: draft.estimated_timeframe,
-      needs_inspection:    draft.needs_inspection,
+      needs_inspection:    isInspection,
       inspection_reason:   draft.inspection_reason,
       gst_note:            draft.gst_note,
-      selected_tier:       'better',
+      selected_tier:       selectedTier,
       subtotal_ex_gst:     selectedSubtotal,
       gst,
       total_inc_gst:       total,
       share_token:         shareToken,
       routing_decision,
     }).select().single()
-    log.ok('quote inserted', { quote_id: quote!.id, total_inc_gst: total, routing: routing_decision, share_token: shareToken.slice(0, 8) + '…' })
+    log.ok('quote inserted', { quote_id: quote!.id, total_inc_gst: total, routing: routing_decision, inspection: isInspection, share_token: shareToken.slice(0, 8) + '…' })
 
     // Create Stripe Checkout Session(s). Two distinct paths:
     //   • auto-quote → 3 Sessions (one per tier, deposit only)

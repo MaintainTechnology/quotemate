@@ -190,27 +190,17 @@ function buildInspectionQuoteSms(intake: Intake, quote: Quote): string {
   const job = jobSummary(intake)
   const inspectionUrl = quote.pay_links?.inspection
 
-  // Build the indicative range string from whichever tiers are present.
-  // Opus produces these as INSPECTION FALLBACK shape — just numbers, no real
-  // line items. We show them as a range to set expectations without committing.
-  const tierPrices: number[] = []
-  for (const key of ['good', 'better', 'best'] as const) {
-    const tier = quote[key]
-    if (tier) tierPrices.push(incGst(tier.subtotal_ex_gst))
-  }
-  const rangeText =
-    tierPrices.length >= 2
-      ? `Indicative range $${Math.min(...tierPrices)}-$${Math.max(...tierPrices)} inc GST (3 tiers, confirmed after the visit)`
-      : tierPrices.length === 1
-        ? `Indicative around $${tierPrices[0]} inc GST (confirmed after the visit)`
-        : 'Indicative pricing confirmed after the visit'
+  // Inspection-required quotes never include fabricated tier numbers.
+  // The $199 site-visit fee is the only honest dollar amount we can
+  // commit to before seeing the work. Customer pays $199, tradie attends,
+  // real fixed-price quote follows.
 
   const lines: string[] = []
   lines.push(`Hi ${firstName},`)
   lines.push('')
-  lines.push(`Your QuoteMate quote for ${job} needs a quick site visit to confirm scope safely.`)
+  lines.push(`Your QuoteMate quote for ${job} needs a quick site visit before we can give you a real price.`)
   lines.push('')
-  lines.push(rangeText + '.')
+  lines.push(`Every site is different — we can't price this safely without seeing the work in person.`)
   lines.push('')
   if (inspectionUrl) {
     lines.push('Tap to lock in your site visit ($199 refundable, credited toward your final quote):')
