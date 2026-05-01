@@ -6,6 +6,7 @@ import { buildQuoteSms } from '@/lib/sms/templates'
 import { pipelineLog } from '@/lib/log/pipeline'
 import { createCheckoutSessionsForQuote, generateShareToken } from '@/lib/stripe/checkout'
 import { withRetry } from '@/lib/util/retry'
+import { decideRouting } from '@/lib/routing/decide'
 
 export const maxDuration = 300
 
@@ -62,6 +63,15 @@ export async function POST(req: Request) {
     const gst = pricingBook.gst_registered ? +(selectedSubtotal * 0.10).toFixed(2) : 0
     const total = +(selectedSubtotal + gst).toFixed(2)
 
+    const routing_decision = decideRouting({
+      intake: {
+        confidence: intake.confidence,
+        inspection_required: intake.inspection_required ?? false,
+      },
+      quote: { needs_inspection: draft.needs_inspection ?? false },
+    })
+    log.ok('routing decided', { routing_decision })
+
     log.step('inserting quotes row')
     const shareToken = generateShareToken()
     const { data: quote } = await supabase.from('quotes').insert({
@@ -83,8 +93,9 @@ export async function POST(req: Request) {
       gst,
       total_inc_gst:       total,
       share_token:         shareToken,
+      routing_decision,
     }).select().single()
-    log.ok('quote inserted', { quote_id: quote!.id, total_inc_gst: total, share_token: shareToken.slice(0, 8) + '…' })
+    log.ok('quote inserted', { quote_id: quote!.id, total_inc_gst: total, routing: routing_decision, share_token: shareToken.slice(0, 8) + '…' })
 
     // Create one Stripe Checkout Session per priced tier (deposit only).
     // If creation fails for any reason we log + continue without links — the
