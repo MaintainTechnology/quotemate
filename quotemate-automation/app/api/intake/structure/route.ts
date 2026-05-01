@@ -3,8 +3,9 @@ import { after } from 'next/server'
 import { structureIntake } from '@/lib/intake/structure'
 import { embedIntake } from '@/lib/intake/embed'
 import { pipelineLog } from '@/lib/log/pipeline'
+import { withRetry } from '@/lib/util/retry'
 
-export const maxDuration = 60
+export const maxDuration = 300
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,8 +28,22 @@ export async function POST(req: Request) {
     photo_count: (call.photo_urls ?? []).length,
   })
 
-  log.step('running Sonnet vision (Claude 4.6) — typically ~25s')
-  const intake = await structureIntake(call.transcript, call.photo_urls)
+  log.step('running Sonnet vision (Claude 4.6) — typically ~25s, up to 3 attempts')
+  const intake = await withRetry(
+    () => structureIntake(call.transcript, call.photo_urls),
+    {
+      maxAttempts: 3,
+      baseDelayMs: 2000,
+      onAttemptFailed: (err, attempt, willRetry) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        if (willRetry) {
+          log.err(`Sonnet attempt ${attempt}/3 failed — retrying`, msg)
+        } else {
+          log.err(`Sonnet attempt ${attempt}/3 failed — giving up`, msg)
+        }
+      },
+    }
+  )
   log.ok('Sonnet structured intake', {
     job_type: intake.job_type,
     confidence: intake.confidence,

@@ -5,8 +5,9 @@ import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { buildQuoteSms } from '@/lib/sms/templates'
 import { pipelineLog } from '@/lib/log/pipeline'
 import { createCheckoutSessionsForQuote, generateShareToken } from '@/lib/stripe/checkout'
+import { withRetry } from '@/lib/util/retry'
 
-export const maxDuration = 60
+export const maxDuration = 300
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,8 +31,22 @@ export async function POST(req: Request) {
       hourly_rate: pricingBook.hourly_rate,
     })
 
-    log.step('running Opus (Claude 4.7) — typically ~40s')
-    const draft = await runEstimation(intake, pricingBook)
+    log.step('running Opus (Claude 4.7) — typically ~40s, up to 3 attempts')
+    const draft = await withRetry(
+      () => runEstimation(intake, pricingBook),
+      {
+        maxAttempts: 3,
+        baseDelayMs: 2000,
+        onAttemptFailed: (err, attempt, willRetry) => {
+          const msg = err instanceof Error ? err.message : String(err)
+          if (willRetry) {
+            log.err(`Opus attempt ${attempt}/3 failed — retrying`, msg)
+          } else {
+            log.err(`Opus attempt ${attempt}/3 failed — giving up`, msg)
+          }
+        },
+      }
+    )
     const tierCount = [draft.good, draft.better, draft.best].filter(Boolean).length
     log.ok('Opus parsed', {
       tiers: tierCount,

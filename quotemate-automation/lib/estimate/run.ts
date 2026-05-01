@@ -10,6 +10,7 @@ export async function runEstimation(intake: any, pricingBook: any) {
     prompt: `Draft a quote for this intake:\n\n${JSON.stringify(intake, null, 2)}`,
     tools,
     stopWhen: stepCountIs(10),  // build-guide says `maxSteps: 10`; AI SDK v5+ renamed it to stopWhen+stepCountIs
+    maxRetries: 0,              // wrapper handles retries with logging — no double-retry
   })
 
   return parseJsonFromText(result.text)
