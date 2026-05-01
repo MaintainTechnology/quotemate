@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { after } from 'next/server'
 import { runEstimation } from '@/lib/estimate/run'
-import { sendSms } from '@/lib/sms/twilio'
+import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { buildQuoteSms } from '@/lib/sms/templates'
 import { pipelineLog } from '@/lib/log/pipeline'
 
@@ -74,28 +74,43 @@ export async function POST(req: Request) {
     log.step(callerNumber ? 'queueing SMS dispatch' : 'skipping SMS — no caller_number')
 
     after(async () => {
-      const sms = pipelineLog('sms', intake.call_id)
+      const dispatch = pipelineLog('dispatch', intake.call_id)
       if (!callerNumber) {
-        sms.err('skipped', null, { quote_id: quote!.id, reason: 'no caller_number on call row' })
+        dispatch.err('skipped', null, { quote_id: quote!.id, reason: 'no caller_number on call row' })
         return
       }
       try {
-        sms.step('building quote SMS body')
+        dispatch.step('building quote message body')
         const quoteForSms = { ...quote!, scope_short: draft.scope_short ?? null }
         const body = buildQuoteSms(intake, quoteForSms)
         const segs = body.length <= 160 ? 1 : Math.ceil(body.length / 153)
-        sms.ok('body built', { chars: body.length, segments: segs })
+        dispatch.ok('body built', { chars: body.length, sms_segments: segs })
 
-        sms.step('sending via Twilio', { to: callerNumber, from: process.env.TWILIO_PHONE_NUMBER })
-        const result = await sendSms({ to: callerNumber, text: body })
+        dispatch.step('attempting SMS first (WhatsApp fallback if SMS rejects)', { to: callerNumber })
+        const result = await dispatchQuoteMessage({ to: callerNumber, text: body })
+
         if (result.ok) {
-          sms.ok('Twilio accepted', { sid: result.sid, status: result.status })
-          sms.done('SMS dispatched to caller', { quote_id: quote!.id, segments: segs })
+          if (result.channel === 'sms') {
+            dispatch.ok('SMS delivered', { sid: result.sid, status: result.status })
+          } else {
+            dispatch.ok('SMS rejected, WhatsApp delivered as fallback', {
+              sid: result.sid,
+              status: result.status,
+              sms_failure_code: result.smsAttempt?.code,
+              sms_failure_reason: result.smsAttempt?.reason,
+            })
+          }
+          dispatch.done('quote dispatched to caller', { quote_id: quote!.id, channel: result.channel })
         } else {
-          sms.err('Twilio rejected', result.reason, { code: result.code })
+          dispatch.err('both SMS and WhatsApp failed', null, {
+            sms_code: result.smsAttempt.code,
+            sms_reason: result.smsAttempt.reason,
+            wa_code: result.waAttempt?.code,
+            wa_reason: result.waAttempt?.reason,
+          })
         }
       } catch (e) {
-        sms.err('SMS dispatch threw', e)
+        dispatch.err('dispatch threw', e)
       }
     })
 

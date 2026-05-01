@@ -22,27 +22,40 @@ type TwilioMessageResponse = {
   date_created: string
 }
 
-export async function sendSms(opts: {
-  to: string                        // E.164, e.g. "+61412345678"
+async function postTwilioMessage(channel: 'sms' | 'whatsapp', opts: {
+  to: string
   text: string
-  from?: string                     // defaults to env TWILIO_PHONE_NUMBER
-  statusCallback?: string           // optional webhook URL for delivery updates
+  from?: string
+  statusCallback?: string
 }): Promise<TwilioSendResult> {
   const sid = process.env.TWILIO_ACCOUNT_SID
   const token = process.env.TWILIO_AUTH_TOKEN
-  const from = opts.from ?? process.env.TWILIO_PHONE_NUMBER
+  const from = opts.from
+    ?? (channel === 'whatsapp' ? process.env.TWILIO_WHATSAPP_FROM : process.env.TWILIO_PHONE_NUMBER)
 
   if (!sid || !token) {
     return { ok: false, code: 'NO_CREDS', reason: 'TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN not set', raw: null }
   }
   if (!from) {
-    return { ok: false, code: 'NO_FROM', reason: 'No sender — set TWILIO_PHONE_NUMBER or pass `from`', raw: null }
+    return {
+      ok: false,
+      code: 'NO_FROM',
+      reason: channel === 'whatsapp'
+        ? 'No WhatsApp sender — set TWILIO_WHATSAPP_FROM (e.g. whatsapp:+14155238886) or pass `from`'
+        : 'No sender — set TWILIO_PHONE_NUMBER or pass `from`',
+      raw: null,
+    }
   }
+
+  // For WhatsApp, both From and To must be prefixed with `whatsapp:`. Accept callers passing
+  // bare E.164 (`+61…`) or already-prefixed values for either; normalise here.
+  const fromAddr = channel === 'whatsapp' && !from.startsWith('whatsapp:') ? `whatsapp:${from}` : from
+  const toAddr = channel === 'whatsapp' && !opts.to.startsWith('whatsapp:') ? `whatsapp:${opts.to}` : opts.to
 
   const auth = 'Basic ' + Buffer.from(sid + ':' + token).toString('base64')
   const body = new URLSearchParams()
-  body.set('To', opts.to)
-  body.set('From', from)
+  body.set('To', toAddr)
+  body.set('From', fromAddr)
   body.set('Body', opts.text)
   if (opts.statusCallback) body.set('StatusCallback', opts.statusCallback)
 
@@ -76,4 +89,22 @@ export async function sendSms(opts: {
 
   const m = parsed as TwilioMessageResponse
   return { ok: true, sid: m.sid, status: m.status, to: m.to, raw: m }
+}
+
+export function sendSms(opts: {
+  to: string
+  text: string
+  from?: string
+  statusCallback?: string
+}): Promise<TwilioSendResult> {
+  return postTwilioMessage('sms', opts)
+}
+
+export function sendWhatsApp(opts: {
+  to: string
+  text: string
+  from?: string
+  statusCallback?: string
+}): Promise<TwilioSendResult> {
+  return postTwilioMessage('whatsapp', opts)
 }
