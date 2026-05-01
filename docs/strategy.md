@@ -464,4 +464,48 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
 
   **Operational reference:** the 9 job-flow question trees and pilot strategy live in `docs/build-guide.html` — they're operational artefacts, not strategy. This entry records the rationale only.
 
+- **v4** (2026-05-01): **photo-capture flow — Pattern 1 (parallel race) chosen for v1.**
+
+  **What's settled:**
+
+  Photos are captured via SMS link sent immediately on call-end, in parallel with the intake → estimate chain. Quote SMS goes out as soon as Sonnet+Opus complete (~70s typical). Photos that arrive after the quote was sent are **stored for tradie review** but do **not** trigger an auto re-quote in v1.
+
+  **Patterns considered:**
+
+  | # | Pattern | Why not |
+  |---|---|---|
+  | 1 | Parallel race (chosen) | Fastest to quote (~70s); matches "(optional)" framing in wireframe Stage 03; matches SOP S2 setting Twilio capabilities to "Voice only" |
+  | 2 | Photos required (gate quote on upload) | 5+ min wait kills conversion; contradicts wireframe's "optional" framing |
+  | 3 | Two-stage quote (initial + revised SMS) | Multiple SMS confuses customers; first SMS's Stripe links go stale on revision; legal liability if customer pays v1 before v2 |
+  | 4 | Photos hard-gated (no quote without photos) | ~50% of customers won't upload; explicit contradiction of "optional" framing |
+
+  **Why parallel works for v1:**
+
+  The auto-quote wedge is scoped to the "easy 5" job types (downlights, GPOs, ceiling fans, smoke alarms, outdoor lighting). Those are deliberately **photo-light** — the transcript carries enough info to quote at MEDIUM confidence. Vision adds nice-to-have detail (asbestos risk on pre-1970 ceilings, switchboard age verification) but is not deal-breaking. The inspection route (Stage 06 LOW path) is where vision is genuinely load-bearing — and that path involves the tradie capturing photos on-site, not the customer over SMS.
+
+  **What this means in practice:**
+
+  - `app/api/vapi/webhook/route.ts` generates a `photo_request_token` and dispatches the photo SMS in `after()` alongside the intake handoff
+  - Customer taps the SMS link → opens `app/upload/[token]/page.tsx` → snaps photos via native camera input (`<input type="file" capture="environment">`) → photos land in Supabase Storage bucket `intake-photos`
+  - Photo URLs are appended to `calls.photo_urls` and `calls.photos_completed_at` is set
+  - Quote draft does **not** wait for photos; runs as soon as the transcript is structured
+  - Photos remain available for the tradie's Stage 06b review and for any future re-quote logic
+
+  **What changes when the mobile app exists (post-v2):**
+
+  Photo capture moves from after-call SMS to during-call in-app camera. The asynchrony question disappears — by the time the call ends, photos are already on the device. The pattern shifts toward "photos before quote" naturally, with no waiting. The current Pattern 1 is a v1 web-only workaround for SMS asynchrony, not a permanent architectural choice.
+
+  **What stays the same:**
+
+  - Photos remain optional in v1 (per the wireframe)
+  - Auto-quote path doesn't gate on photos
+  - Inspection route still demands on-site capture by the tradie
+  - Sonnet vision continues to accept photo URLs in `structureIntake` when present
+
+  **Trigger for revisiting this decision:**
+
+  - Pilot data shows >40% of customers actually upload photos within 5 minutes — then Pattern 3 (two-stage with revision SMS) becomes worth the complexity
+  - Real callers hit asbestos/old-switchboard surprises that photos would have caught — then we either tighten the auto-quote scope or add a confidence-gated "wait briefly for photos" branch in Stage 06 routing
+  - Mobile app development begins — Pattern 1 is replaced wholesale by in-app capture
+
 - *Future iterations:* drill into specific phases (eval rubric details, onboarding flow design, hipages partnership terms, voice tier economics, electrical multi-trade expansion to plumbing/HVAC).
