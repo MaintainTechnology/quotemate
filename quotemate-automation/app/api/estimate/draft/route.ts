@@ -4,6 +4,7 @@ import { runEstimation } from '@/lib/estimate/run'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { buildQuoteSms } from '@/lib/sms/templates'
 import { pipelineLog } from '@/lib/log/pipeline'
+import { createCheckoutSessionsForQuote, generateShareToken } from '@/lib/stripe/checkout'
 
 export const maxDuration = 60
 
@@ -47,6 +48,7 @@ export async function POST(req: Request) {
     const total = +(selectedSubtotal + gst).toFixed(2)
 
     log.step('inserting quotes row')
+    const shareToken = generateShareToken()
     const { data: quote } = await supabase.from('quotes').insert({
       intake_id: intakeId,
       status: 'draft',
@@ -65,8 +67,44 @@ export async function POST(req: Request) {
       subtotal_ex_gst:     selectedSubtotal,
       gst,
       total_inc_gst:       total,
+      share_token:         shareToken,
     }).select().single()
-    log.ok('quote inserted', { quote_id: quote!.id, total_inc_gst: total })
+    log.ok('quote inserted', { quote_id: quote!.id, total_inc_gst: total, share_token: shareToken.slice(0, 8) + '…' })
+
+    // Create one Stripe Checkout Session per priced tier (deposit only).
+    // If creation fails for any reason we log + continue without links — the
+    // quote is still saved; SMS will go without pay buttons rather than failing.
+    let payLinks: Partial<Record<'good' | 'better' | 'best', string>> | undefined
+    let depositPct: number | null = null
+    if (!draft.needs_inspection) {
+      log.step('creating Stripe Checkout Sessions (one per tier, deposit only)')
+      try {
+        const stripeLinks = await createCheckoutSessionsForQuote({
+          quote: { id: quote!.id, good: draft.good ?? null, better: draft.better ?? null, best: draft.best ?? null, deposit_pct: 30 },
+          intake,
+          shareToken,
+          appUrl: process.env.APP_URL!,
+        })
+
+        await supabase.from('quotes').update({ stripe_links: stripeLinks }).eq('id', quote!.id)
+        depositPct = 30
+
+        const appUrl = process.env.APP_URL!
+        payLinks = {
+          good:   stripeLinks.good   ? `${appUrl}/r/${shareToken}/good`   : undefined,
+          better: stripeLinks.better ? `${appUrl}/r/${shareToken}/better` : undefined,
+          best:   stripeLinks.best   ? `${appUrl}/r/${shareToken}/best`   : undefined,
+        }
+
+        log.ok('Stripe sessions created', {
+          tiers_with_links: Object.values(payLinks).filter(Boolean).length,
+        })
+      } catch (e: any) {
+        log.err('Stripe session creation failed — SMS will go without pay links', e?.message ?? e)
+      }
+    } else {
+      log.ok('skipping Stripe sessions — quote needs inspection', { reason: draft.inspection_reason })
+    }
 
     // Auto-send the quote to the caller via SMS (Path B per current product mode).
     // Skip if no caller_number available. Errors are logged but never fail the route.
@@ -81,7 +119,12 @@ export async function POST(req: Request) {
       }
       try {
         dispatch.step('building quote message body')
-        const quoteForSms = { ...quote!, scope_short: draft.scope_short ?? null }
+        const quoteForSms = {
+          ...quote!,
+          scope_short: draft.scope_short ?? null,
+          pay_links: payLinks,
+          deposit_pct: depositPct,
+        }
         const body = buildQuoteSms(intake, quoteForSms)
         const segs = body.length <= 160 ? 1 : Math.ceil(body.length / 153)
         dispatch.ok('body built', { chars: body.length, sms_segments: segs })

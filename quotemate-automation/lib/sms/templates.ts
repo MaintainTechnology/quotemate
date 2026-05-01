@@ -20,6 +20,10 @@ type Quote = {
   scope_short?: string | null
   assumptions: string[] | null
   estimated_timeframe: string | null
+  /** optional per-tier short redirect URLs (e.g. https://app.example.com/r/{token}/{tier}) */
+  pay_links?: Partial<Record<'good' | 'better' | 'best', string>>
+  /** % deposit used in the SMS line (e.g. 30 → "(deposit $209)") */
+  deposit_pct?: number | string | null
 }
 
 const JOB_TYPE_LABEL: Record<string, string> = {
@@ -42,6 +46,7 @@ function gsm7Safe(s: string): string {
     .replace(/[‘’]/g, "'")
     .replace(/[“”]/g, '"')
     .replace(/…/g, '...')
+    .replace(/·/g, '-')
     .replace(/[^\x20-\x7E\n]/g, '')
 }
 
@@ -89,25 +94,39 @@ export function buildQuoteSms(intake: Intake, quote: Quote): string {
   const firstName = (intake.caller?.name ?? '').split(' ')[0] || 'there'
   const job = jobSummary(intake)
   const timeframe = (quote.estimated_timeframe ?? '').toLowerCase().trim()
+  const depositPct = typeof quote.deposit_pct === 'string' ? parseFloat(quote.deposit_pct) : (quote.deposit_pct ?? 0)
+  const hasPayLinks = !!quote.pay_links && Object.values(quote.pay_links).some(Boolean)
 
   const lines: string[] = []
   lines.push(`Hi ${firstName},`)
   lines.push('')
   lines.push(`Your QuoteMate quote for ${job}${timeframe ? ` (${timeframe})` : ''}.`)
   lines.push('')
-  lines.push('3 OPTIONS (inc 10% GST):')
+  if (hasPayLinks && depositPct > 0) {
+    lines.push(`3 OPTIONS (inc 10% GST - ${depositPct}% deposit to confirm):`)
+  } else {
+    lines.push('3 OPTIONS (inc 10% GST):')
+  }
   lines.push('')
 
   for (const key of ['good', 'better', 'best'] as const) {
     const tier = quote[key]
     if (!tier) continue
     const price = incGst(tier.subtotal_ex_gst)
+    const deposit = depositPct > 0 ? Math.round(price * depositPct / 100) : null
     const recommended = quote.selected_tier === key ? ' (recommended)' : ''
-    lines.push(`${key.toUpperCase()}: $${price}${recommended}`)
+
+    const headerSuffix = deposit ? ` (deposit $${deposit})` : ''
+    lines.push(`${key.toUpperCase()}: $${price}${recommended}${headerSuffix}`)
+
     const label = tierLabel(tier)
     if (label) lines.push(`- ${label}`)
     const comps = tierComponents(tier)
     if (comps) lines.push(`- ${comps}`)
+
+    const payUrl = quote.pay_links?.[key]
+    if (payUrl) lines.push(`Tap to pay: ${payUrl}`)
+
     lines.push('')
   }
 
