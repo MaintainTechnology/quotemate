@@ -24,7 +24,7 @@ Existing job-management tools (ServiceM8, Tradify, AroFlo) handle scheduling and
 
 ## What QuoteMate does
 
-1. **Captures the job for you** — a dedicated AI receptionist answers the call, asks the right job-specific questions, and pulls photos via SMS while the customer is still on the line.
+1. **Captures the job for you** — a dedicated AI receptionist answers the call and asks the right job-specific questions. The moment the call ends, the customer gets an SMS with a one-tap link to add photos — optional, races the quote draft, lifts confidence when it arrives.
 2. **Drafts the quote** — an AI engine generates a structured quote (scope, line items, labour, materials, exclusions, risks) using the tradie's own pricing book and prior quote history.
 3. **Routes by confidence** — high-confidence jobs go straight to the customer; medium ones wait for a quick tradie review; complex ones trigger a paid site inspection.
 4. **Sends a polished customer experience** — mobile-first, branded quote with Good / Better / Best options and a one-tap deposit button.

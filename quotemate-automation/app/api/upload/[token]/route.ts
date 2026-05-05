@@ -1,0 +1,103 @@
+import { createClient } from '@supabase/supabase-js'
+import { NextRequest } from 'next/server'
+import { uploadIntakePhoto } from '@/lib/storage/upload'
+import { pipelineLog } from '@/lib/log/pipeline'
+
+export const maxDuration = 60
+
+const MAX_FILES = 5
+const MAX_SIZE = 5 * 1024 * 1024
+const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp'])
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
+
+export async function POST(req: NextRequest, ctx: { params: Promise<{ token: string }> }) {
+  const { token } = await ctx.params
+  const log = pipelineLog('intake', token.slice(0, 8))
+  log.step('photo upload received', { token: token.slice(0, 8) + '…' })
+
+  const { data: call } = await supabase
+    .from('calls')
+    .select('id, photo_request_token, photos_completed_at, photo_urls')
+    .eq('photo_request_token', token)
+    .single()
+
+  if (!call) {
+    log.err('token not found')
+    return Response.json({ ok: false, error: 'Invalid or expired link' }, { status: 404 })
+  }
+  if (call.photos_completed_at) {
+    log.ok('photos already submitted, returning idempotent ok')
+    return Response.json({ ok: true, alreadyDone: true })
+  }
+
+  let formData: FormData
+  try {
+    formData = await req.formData()
+  } catch {
+    log.err('multipart parse failed')
+    return Response.json({ ok: false, error: 'Bad request' }, { status: 400 })
+  }
+
+  const photos = formData.getAll('photos').filter((v): v is File => v instanceof File)
+  if (photos.length === 0) {
+    return Response.json({ ok: false, error: 'No photos in upload' }, { status: 400 })
+  }
+  if (photos.length > MAX_FILES) {
+    return Response.json({ ok: false, error: `Max ${MAX_FILES} photos` }, { status: 400 })
+  }
+
+  for (const f of photos) {
+    if (f.size > MAX_SIZE) return Response.json({ ok: false, error: `${f.name} over 5MB` }, { status: 400 })
+    if (!ALLOWED_MIME.has(f.type)) return Response.json({ ok: false, error: `${f.name} not an allowed image type` }, { status: 400 })
+  }
+
+  log.step(`uploading ${photos.length} photo(s) to storage`)
+  const newSignedUrls: string[] = []
+  for (let i = 0; i < photos.length; i++) {
+    const f = photos[i]
+    const buf = new Uint8Array(await f.arrayBuffer())
+    try {
+      const { signedUrl } = await uploadIntakePhoto({
+        callId: call.id as string,
+        data: buf,
+        contentType: f.type,
+        index: i,
+      })
+      newSignedUrls.push(signedUrl)
+    } catch (e: any) {
+      log.err(`upload failed for photo ${i}`, e?.message ?? e)
+      return Response.json({ ok: false, error: 'Storage write failed' }, { status: 500 })
+    }
+  }
+  log.ok(`uploaded ${newSignedUrls.length} photo(s)`)
+
+  const existingUrls = Array.isArray(call.photo_urls) ? (call.photo_urls as string[]) : []
+  const merged = [...existingUrls, ...newSignedUrls]
+
+  const { error: updateErr } = await supabase
+    .from('calls')
+    .update({
+      photo_urls: merged,
+      photos_completed_at: new Date().toISOString(),
+    })
+    .eq('id', call.id as string)
+
+  if (updateErr) {
+    log.err('calls update failed', updateErr.message)
+    return Response.json({ ok: false, error: 'DB update failed' }, { status: 500 })
+  }
+
+  log.done('photos persisted', { count: newSignedUrls.length, call_id: String(call.id).slice(0, 8) + '…' })
+
+  // We deliberately do NOT re-trigger /api/intake/structure here. The intake/estimate
+  // chain runs in parallel after the call ends, racing to produce a quote within
+  // ~70s. By the time photos arrive, the quote SMS may already have gone out.
+  // Photos are stored for AUDIT and future tradie review. v2: queue a re-quote if
+  // photos reveal risks the transcript missed.
+
+  return Response.json({ ok: true, count: newSignedUrls.length })
+}
