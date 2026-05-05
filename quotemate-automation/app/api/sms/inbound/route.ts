@@ -11,7 +11,7 @@ import {
   validateTwilioSignature,
   parseTwilioForm,
 } from '@/lib/sms/twilio-validator'
-import { sendSms, sendWhatsApp } from '@/lib/sms/send'
+import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -109,51 +109,35 @@ export async function POST(req: Request) {
     twilio_message_sid: messageSid,
   })
 
-  console.log('[sms/inbound] step 5 — sending Twilio reply')
-  // 5. Send the static reply (Phase 2 will replace with dialog agent).
-  // Phase 1 testing: try SMS first; if SMS fails (e.g. international send not
-  // enabled, foreign carrier blocks, etc.), fall back to WhatsApp via the
-  // Twilio Sandbox so the test phone always sees a message land somewhere.
-  // Phase 2 will simplify back to SMS-only — WhatsApp is reserved for
-  // tradie notifications, not customer-facing replies.
+  console.log('[sms/inbound] step 5 — dispatching reply (SMS-first, WhatsApp fallback)')
+  // 5. Send the reply via the shared dispatcher used by the voice agent.
+  // Same SMS-first / WhatsApp-fallback strategy lives in lib/sms/dispatch.ts.
+  // We pass `from: toNumber` so the SMS reply originates from the same number
+  // the customer texted (TWILIO_SMS_NUMBER), keeping the conversation in one
+  // thread on the customer's phone. WhatsApp fallback uses TWILIO_WHATSAPP_FROM
+  // automatically (the dispatcher handles that).
+  const dispatch = await dispatchQuoteMessage({
+    to: fromNumber,
+    from: toNumber,
+    text: STATIC_REPLY,
+  })
+
   let outboundSid: string | null = null
   let outboundChannel: 'sms' | 'whatsapp' | null = null
-  try {
-    const sent = await sendSms({
-      to: fromNumber,
-      from: toNumber,
-      body: STATIC_REPLY,
+
+  if (dispatch.ok) {
+    outboundSid = dispatch.sid
+    outboundChannel = dispatch.channel
+    console.log('[sms/inbound] step 5 — dispatch OK', {
+      channel: outboundChannel,
+      sid: outboundSid,
+      smsFallbackReason: dispatch.smsAttempt?.reason,
     })
-    outboundSid = sent.sid
-    outboundChannel = 'sms'
-    console.log('[sms/inbound] step 5 — SMS send OK', { outboundSid })
-  } catch (smsErr: any) {
-    console.warn('[sms/inbound] SMS send failed — trying WhatsApp fallback', {
-      message: smsErr?.message,
-      code: smsErr?.code,
-      status: smsErr?.status,
+  } else {
+    console.error('[sms/inbound] step 5 — dispatch failed (both channels)', {
+      smsAttempt: dispatch.smsAttempt,
+      waAttempt: dispatch.waAttempt,
     })
-    const whatsappFrom = process.env.TWILIO_WHATSAPP_FROM
-    if (whatsappFrom) {
-      try {
-        const wa = await sendWhatsApp({
-          to: fromNumber,           // sendWhatsApp normalizes to "whatsapp:+..."
-          from: whatsappFrom,
-          body: STATIC_REPLY,
-        })
-        outboundSid = wa.sid
-        outboundChannel = 'whatsapp'
-        console.log('[sms/inbound] step 5 — WhatsApp fallback OK', { outboundSid })
-      } catch (waErr: any) {
-        console.error('[sms/inbound] WhatsApp fallback also failed', {
-          message: waErr?.message,
-          code: waErr?.code,
-          status: waErr?.status,
-        })
-      }
-    } else {
-      console.warn('[sms/inbound] no TWILIO_WHATSAPP_FROM set — skipping fallback')
-    }
   }
 
   console.log('[sms/inbound] step 6 — persisting outbound', { channel: outboundChannel })

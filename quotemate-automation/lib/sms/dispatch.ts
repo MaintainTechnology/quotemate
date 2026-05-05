@@ -29,8 +29,13 @@ export type DispatchResult = DispatchOk | DispatchFail
 export async function dispatchQuoteMessage(opts: {
   to: string
   text: string
+  /** Optional SMS sender override. Defaults to TWILIO_PHONE_NUMBER (voice
+   *  agent's number). The SMS-channel inbound route passes TWILIO_SMS_NUMBER
+   *  here so customer-facing SMS replies originate from the same number the
+   *  customer texted. WhatsApp always uses TWILIO_WHATSAPP_FROM regardless. */
+  from?: string
 }): Promise<DispatchResult> {
-  const smsResult = await sendSms({ to: opts.to, text: opts.text })
+  const smsResult = await sendSms({ to: opts.to, text: opts.text, from: opts.from })
   if (smsResult.ok) {
     return { ok: true, channel: 'sms', sid: smsResult.sid, status: smsResult.status }
   }
