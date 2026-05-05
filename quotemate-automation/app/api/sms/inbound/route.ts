@@ -22,6 +22,8 @@ const STATIC_REPLY =
   "Thanks — we got your message. Our SMS quoting agent goes live shortly. We'll be in touch."
 
 export async function POST(req: Request) {
+ try {
+  console.log('[sms/inbound] step 1 — reading body')
   // 1. Read raw body (needed for both signature check and field parsing).
   const rawBody = await req.text()
   const params = parseTwilioForm(rawBody)
@@ -64,6 +66,7 @@ export async function POST(req: Request) {
     return new Response('Missing required Twilio fields', { status: 400 })
   }
 
+  console.log('[sms/inbound] step 3 — looking up conversation', { fromNumber })
   // 3. Find an open conversation with this customer, or create one.
   const { data: existing, error: lookupErr } = await supabase
     .from('sms_conversations')
@@ -97,6 +100,7 @@ export async function POST(req: Request) {
     conversation = created
   }
 
+  console.log('[sms/inbound] step 4 — persisting inbound', { conversationId: conversation.id })
   // 4. Persist the inbound message.
   await supabase.from('sms_messages').insert({
     conversation_id: conversation.id,
@@ -105,6 +109,7 @@ export async function POST(req: Request) {
     twilio_message_sid: messageSid,
   })
 
+  console.log('[sms/inbound] step 5 — sending Twilio reply')
   // 5. Send the static reply (Phase 2 will replace with dialog agent).
   let outboundSid: string | null = null
   try {
@@ -114,10 +119,17 @@ export async function POST(req: Request) {
       body: STATIC_REPLY,
     })
     outboundSid = sent.sid
-  } catch (err) {
-    console.error('[sms/inbound] Twilio send failed', err)
+    console.log('[sms/inbound] step 5 — Twilio send OK', { outboundSid })
+  } catch (err: any) {
+    console.error('[sms/inbound] Twilio send failed', {
+      message: err?.message,
+      code: err?.code,
+      status: err?.status,
+      moreInfo: err?.moreInfo,
+    })
   }
 
+  console.log('[sms/inbound] step 6 — persisting outbound')
   // 6. Persist the outbound message.
   await supabase.from('sms_messages').insert({
     conversation_id: conversation.id,
@@ -126,6 +138,7 @@ export async function POST(req: Request) {
     twilio_message_sid: outboundSid,
   })
 
+  console.log('[sms/inbound] step 7 — updating conversation')
   // 7. Bump turn count and timestamps.
   await supabase
     .from('sms_conversations')
@@ -136,6 +149,21 @@ export async function POST(req: Request) {
     })
     .eq('id', conversation.id)
 
-  // 8. Twilio is happy with an empty 2xx — we replied via REST in step 5.
-  return new Response('', { status: 204 })
+  console.log('[sms/inbound] step 8 — returning 200 OK')
+  // 8. Twilio is happy with any 2xx — we replied via REST in step 5.
+  return new Response('ok', {
+    status: 200,
+    headers: { 'Content-Type': 'text/plain' },
+  })
+ } catch (err: any) {
+  console.error('[sms/inbound] UNHANDLED error', {
+    message: err?.message,
+    name: err?.name,
+    stack: err?.stack?.split('\n').slice(0, 8).join('\n'),
+  })
+  return new Response(
+    JSON.stringify({ error: err?.message ?? String(err) }),
+    { status: 500, headers: { 'Content-Type': 'application/json' } },
+  )
+ }
 }
