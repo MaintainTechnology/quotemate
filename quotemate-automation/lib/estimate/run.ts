@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import { systemPrompt } from './prompt'
 import * as tools from './tools'
 import { buildCandidatePrices, validateQuoteGrounding, type GroundingFailure, type PricingBookForValidation } from './validate'
+import { fetchSimilarPastQuotesContext } from './rag'
 import { pipelineLog } from '@/lib/log/pipeline'
 
 const supabase = createClient(
@@ -28,6 +29,30 @@ export type EstimationResult = {
 export async function runEstimation(intake: any, pricingBook: any): Promise<EstimationResult> {
   const cacheLog = pipelineLog('estimate', intake?.id ?? null)
 
+  // RAG: anchor Opus to similar past quotes. Returns null on cold-start
+  // (no usable matches), all-inspection results, or if RAG_DISABLED=true.
+  // The block goes in the user message — keeps the system message
+  // fully cacheable while still informing this specific draft.
+  let ragContext: string | null = null
+  let ragMatchCount = 0
+  try {
+    const rag = await fetchSimilarPastQuotesContext(supabase, intake)
+    if (rag) {
+      ragContext = rag.context
+      ragMatchCount = rag.matchCount
+      cacheLog.ok('RAG context attached', { match_count: ragMatchCount, chars: rag.context.length })
+    } else {
+      cacheLog.ok('RAG context skipped', { reason: 'no usable matches or disabled' })
+    }
+  } catch (e: any) {
+    // RAG must never block estimation. Log + carry on.
+    cacheLog.err('RAG fetch failed — continuing without similar-quote context', e?.message ?? String(e))
+  }
+
+  const userPrompt =
+    (ragContext ? `${ragContext}\n` : '') +
+    `Draft a quote for this NEW intake:\n\n${JSON.stringify(intake, null, 2)}`
+
   // Anthropic prompt caching: the system prompt + pricing-book derivation
   // is identical across estimations until pricing_book changes, so we mark
   // it as ephemeral. First call inside the 5-min cache window pays full
@@ -46,7 +71,7 @@ export async function runEstimation(intake: any, pricingBook: any): Promise<Esti
       },
       {
         role: 'user',
-        content: `Draft a quote for this intake:\n\n${JSON.stringify(intake, null, 2)}`,
+        content: userPrompt,
       },
     ],
     tools,
