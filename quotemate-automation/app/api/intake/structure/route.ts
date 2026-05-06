@@ -68,7 +68,7 @@ export async function POST(req: Request) {
 
     const { data: messages } = await supabase
       .from('sms_messages')
-      .select('direction, body, created_at')
+      .select('direction, body, created_at, photo_urls')
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true })
 
@@ -86,13 +86,20 @@ export async function POST(req: Request) {
     }
 
     callerNumber = convo.from_number ?? null
-    photoUrls = []                  // SMS path has no photos until Phase 4 (MMS)
     photoRequestToken = null         // SMS conversations don't issue photo tokens
+
+    // Phase 4 / photos — aggregate every MMS-uploaded photo URL across the
+    // conversation. structureIntake already accepts photo URLs from the
+    // voice flow; SMS just feeds it from a different source.
+    photoUrls = (messages ?? [])
+      .flatMap(m => Array.isArray(m.photo_urls) ? m.photo_urls : [])
+      .filter((u): u is string => typeof u === 'string' && u.length > 0)
 
     log.ok('SMS conversation stitched', {
       messages: messages?.length ?? 0,
       assumptions: (convo.assumptions_made as string[] | null)?.length ?? 0,
       transcript_chars: transcript.length,
+      photos: photoUrls.length,
     })
   } else {
     // ─────────────── VOICE PATH (unchanged) ───────────────
@@ -202,7 +209,12 @@ export async function POST(req: Request) {
       }
       try {
         const text = buildIncompleteCallSms({ firstName: callerFirstName })
-        const result = await dispatchQuoteMessage({ to: callerNumber, text })
+        // SMS-sourced empty intake → reply from TWILIO_SMS_NUMBER so the
+        // callback request lands in the same thread as the dialog turns
+        // (single conversation on the customer's phone). Voice path falls
+        // back to dispatchQuoteMessage's default TWILIO_PHONE_NUMBER.
+        const fromNumber = sourceChannel === 'sms' ? process.env.TWILIO_SMS_NUMBER : undefined
+        const result = await dispatchQuoteMessage({ to: callerNumber, text, from: fromNumber })
         if (result.ok) {
           ds.ok('callback-request SMS sent', { channel: result.channel, sid: result.sid })
         } else {

@@ -1,3 +1,45 @@
+// ════════════════════════════════════════════════════════════════════
+// Tradie-side notifications (Phase 4 / notify) — fire when an SMS-sourced
+// quote drafts. Two flavours:
+//   • buildTradieDraftNotification — for auto-quote drafts (good/better/best)
+//   • buildTradieInspectionNotification — for inspection-required quotes ($199)
+// Both are GSM-7 safe ASCII so they fit in a single SMS segment whenever
+// possible. They go to the tradie's mobile + WhatsApp simultaneously.
+// ════════════════════════════════════════════════════════════════════
+export function buildTradieDraftNotification(opts: {
+  customerName?: string
+  customerPhone?: string
+  jobType: string
+  itemCount?: number
+  totalIncGst: number
+  quoteUrl: string
+}): string {
+  const who = opts.customerName?.split(' ')[0] || opts.customerPhone || 'a customer'
+  const job = JOB_TYPE_LABEL[opts.jobType] ?? opts.jobType.replace(/_/g, ' ')
+  const qty = opts.itemCount ? `${opts.itemCount} ${job}` : job
+  const total = opts.totalIncGst.toFixed(0)
+  const body = `[QuoteMate] New SMS quote drafted - ${qty} for ${who}. Total $${total} inc GST. Review: ${opts.quoteUrl}`
+  return body
+    .replace(/[‐-―−]/g, '-').replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
+    .replace(/…/g, '...').replace(/·/g, '-').replace(/[^\x20-\x7E\n]/g, '')
+}
+
+export function buildTradieInspectionNotification(opts: {
+  customerName?: string
+  customerPhone?: string
+  jobType: string
+  inspectionReason?: string | null
+  quoteUrl: string
+}): string {
+  const who = opts.customerName?.split(' ')[0] || opts.customerPhone || 'a customer'
+  const job = JOB_TYPE_LABEL[opts.jobType] ?? opts.jobType.replace(/_/g, ' ')
+  const reason = opts.inspectionReason ? ` (${opts.inspectionReason})` : ''
+  const body = `[QuoteMate] SMS inspection booking - ${job} for ${who}${reason}. $199 site visit. Details: ${opts.quoteUrl}`
+  return body
+    .replace(/[‐-―−]/g, '-').replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
+    .replace(/…/g, '...').replace(/·/g, '-').replace(/[^\x20-\x7E\n]/g, '')
+}
+
 // Incomplete-call SMS — sent when the intake quality gate fires.
 // Triggered by `evaluateIntakeQuality(intake) === 'empty'`: caller hung up
 // before giving usable info OR the transcript was unintelligible. We send
@@ -116,13 +158,19 @@ function jobSummary(intake: Intake): string {
 }
 
 function pickScopeForSms(quote: Quote): string | null {
+  // Prefer the first full sentence of scope_of_works — that's the
+  // richer, contractual wording the customer expects to see (e.g.
+  // "Replace 6 existing downlights in living/kitchen ceilings with
+  // new LEDs, including disposal of old fittings and circuit testing.").
+  // Fall back to scope_short only when scope_of_works is missing.
+  if (quote.scope_of_works && quote.scope_of_works.trim()) {
+    const firstSentence = quote.scope_of_works.match(/^[^.]+\./)
+    return (firstSentence ? firstSentence[0] : quote.scope_of_works).trim()
+  }
   if (quote.scope_short && quote.scope_short.trim()) {
     return quote.scope_short.trim()
   }
-  if (!quote.scope_of_works) return null
-  // Fallback for old quotes: first full sentence of the contractual scope.
-  const firstSentence = quote.scope_of_works.match(/^[^.]+\./)
-  return (firstSentence ? firstSentence[0] : quote.scope_of_works).trim()
+  return null
 }
 
 export function buildQuoteSms(intake: Intake, quote: Quote): string {

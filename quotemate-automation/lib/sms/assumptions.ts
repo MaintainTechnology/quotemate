@@ -131,6 +131,21 @@ export const ASSUMPTION_RULES: Record<JobType, AssumptionRule> = {
   },
 }
 
+// Universal MUST-ASK fields — required for EVERY job, regardless of
+// job_type. The Intake Agent (lib/intake/structure.ts) drops confidence
+// to LOW when any of these are missing, and the quality gate
+// (lib/intake/quality.ts) then short-circuits the quote and sends a
+// callback-request SMS instead. The dialog agent must therefore ensure
+// all three are present in the transcript before returning 'finish'.
+//
+// Mirrors the voice receptionist's opening sequence
+// (scripts/update-vapi-prompt-confirm.mjs): name → suburb → job_type.
+export const UNIVERSAL_MUST_ASK = [
+  "customer's first name (intake field: caller.name)",
+  "suburb where the job is (intake field: suburb)",
+  "what electrical work they need — must be one of the easy 5 (intake field: job_type)",
+]
+
 // Universal escalation — applies regardless of job type. Any of these in
 // the customer's message immediately routes to inspection mode.
 export const UNIVERSAL_INSPECTION_TRIGGERS = [

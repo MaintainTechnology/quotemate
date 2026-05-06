@@ -16,6 +16,7 @@ import {
 } from '@/lib/sms/twilio-validator'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { decideNextTurn, type ConversationTurn } from '@/lib/sms/dialog'
+import { extractAndStoreMmsPhotos } from '@/lib/sms/mms'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -106,13 +107,51 @@ export async function POST(req: Request) {
     conversation = created
   }
 
-  console.log('[sms/inbound] step 4 — persisting inbound', { conversationId: conversation.id })
-  // 4. Persist the inbound message.
+  // 4a. If this is an MMS, fetch the media from Twilio and upload to our
+  //     intake-photos bucket BEFORE persisting the inbound row, so the
+  //     resulting signed URLs land on the same row.
+  let inboundPhotoUrls: string[] = []
+  const numMedia = parseInt(params.NumMedia ?? '0', 10)
+  if (Number.isFinite(numMedia) && numMedia > 0) {
+    console.log('[sms/inbound] step 4a — extracting MMS attachments', {
+      numMedia,
+      conversationId: conversation.id,
+    })
+    try {
+      const result = await extractAndStoreMmsPhotos({
+        conversationId: conversation.id,
+        params,
+      })
+      inboundPhotoUrls = result.signedUrls
+      const failed = result.attempts.filter(a => !a.ok)
+      if (failed.length) {
+        console.warn('[sms/inbound] step 4a — some MMS attachments failed', {
+          ok: result.signedUrls.length,
+          failed: failed.length,
+          reasons: failed.map(f => 'reason' in f ? f.reason : 'unknown'),
+        })
+      } else {
+        console.log('[sms/inbound] step 4a — MMS attachments stored', {
+          count: result.signedUrls.length,
+        })
+      }
+    } catch (e) {
+      console.error('[sms/inbound] step 4a — MMS extraction threw', e)
+    }
+  }
+
+  console.log('[sms/inbound] step 4 — persisting inbound', {
+    conversationId: conversation.id,
+    photoCount: inboundPhotoUrls.length,
+  })
+  // 4. Persist the inbound message — including any MMS photo URLs we
+  //    just stored.
   await supabase.from('sms_messages').insert({
     conversation_id: conversation.id,
     direction: 'inbound',
     body: inboundBody,
     twilio_message_sid: messageSid,
+    photo_urls: inboundPhotoUrls,
   })
 
   console.log('[sms/inbound] step 5 — loading conversation history')

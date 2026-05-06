@@ -2,7 +2,12 @@ import { createClient } from '@supabase/supabase-js'
 import { after } from 'next/server'
 import { runEstimation } from '@/lib/estimate/run'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
-import { buildQuoteSms } from '@/lib/sms/templates'
+import { sendWhatsApp } from '@/lib/sms/twilio'
+import {
+  buildQuoteSms,
+  buildTradieDraftNotification,
+  buildTradieInspectionNotification,
+} from '@/lib/sms/templates'
 import { pipelineLog } from '@/lib/log/pipeline'
 import { createCheckoutSessionsForQuote, createInspectionCheckoutSession, generateShareToken } from '@/lib/stripe/checkout'
 import { withRetry } from '@/lib/util/retry'
@@ -24,12 +29,42 @@ export async function POST(req: Request) {
     log.step('loading intake, pricing_book, caller_number')
     const { data: intake } = await supabase.from('intakes').select('*').eq('id', intakeId).single()
     const { data: pricingBook } = await supabase.from('pricing_book').select('*').single()
-    const { data: call } = await supabase.from('calls').select('caller_number').eq('id', intake.call_id).single()
+
+    // Channel-aware customer lookup. Voice path: intake.call_id is set -> read
+    // calls.caller_number. SMS path: intake.call_id is null -> look up the
+    // sms_conversations row that points at this intake to recover the
+    // customer's mobile number AND mark this quote as SMS-sourced (drives the
+    // Phase 4 tradie-notify gate further down).
+    const isSmsSource = intake.call_id == null
+    let call: { caller_number: string | null } | null = null
+    let smsConversationId: string | null = null
+
+    if (isSmsSource) {
+      const { data: convo } = await supabase
+        .from('sms_conversations')
+        .select('id, from_number')
+        .eq('intake_id', intakeId)
+        .maybeSingle()
+      if (convo) {
+        smsConversationId = convo.id
+        call = { caller_number: convo.from_number ?? null }
+      }
+    } else {
+      const { data: callRow } = await supabase
+        .from('calls')
+        .select('caller_number')
+        .eq('id', intake.call_id)
+        .single()
+      call = callRow ?? null
+    }
+
     log.ok('inputs loaded', {
+      source: isSmsSource ? 'sms' : 'voice',
       job_type: intake.job_type,
       confidence: intake.confidence,
       caller_number: call?.caller_number ? 'set' : 'null',
       hourly_rate: pricingBook.hourly_rate,
+      sms_conversation_id: smsConversationId ?? 'n/a',
     })
 
     log.step('running Opus (Claude 4.7) — typically ~40s, up to 3 attempts')
@@ -240,8 +275,19 @@ export async function POST(req: Request) {
         const segs = body.length <= 160 ? 1 : Math.ceil(body.length / 153)
         dispatch.ok('body built', { chars: body.length, sms_segments: segs })
 
-        dispatch.step('attempting SMS first (WhatsApp fallback if SMS rejects)', { to: callerNumber })
-        const result = await dispatchQuoteMessage({ to: callerNumber, text: body })
+        // Origin number policy:
+        //   • SMS-sourced quote → reply from TWILIO_SMS_NUMBER so the customer
+        //     sees ONE continuous thread (dialog turns + final quote in the
+        //     same conversation on their phone).
+        //   • Voice-sourced quote → fall through to dispatchQuoteMessage's
+        //     default (TWILIO_PHONE_NUMBER, the voice line) — preserves prior
+        //     behaviour exactly.
+        const fromNumber = isSmsSource ? process.env.TWILIO_SMS_NUMBER : undefined
+        dispatch.step('attempting SMS first (WhatsApp fallback if SMS rejects)', {
+          to: callerNumber,
+          from: fromNumber ?? '(default TWILIO_PHONE_NUMBER)',
+        })
+        const result = await dispatchQuoteMessage({ to: callerNumber, text: body, from: fromNumber })
 
         if (result.ok) {
           if (result.channel === 'sms') {
@@ -265,6 +311,72 @@ export async function POST(req: Request) {
         }
       } catch (e) {
         dispatch.err('dispatch threw', e)
+      }
+
+      // ──────────────── Phase 4 / notify ────────────────
+      // SMS-only tradie ping. Voice quotes intentionally skip this so the
+      // voice path's behaviour stays exactly as it was before Phase 4.
+      // Sends BOTH:
+      //   • SMS+WhatsApp-fallback to TRADIE_NOTIFY_NUMBER (mobile)
+      //   • a standalone WhatsApp to TRADIE_NOTIFY_WHATSAPP (the tradie's
+      //     joined-sandbox or registered-WABA WhatsApp identity)
+      // Errors are logged but never block.
+      if (!isSmsSource) {
+        return
+      }
+
+      const notifyMobile = process.env.TRADIE_NOTIFY_NUMBER
+      const notifyWhatsApp = process.env.TRADIE_NOTIFY_WHATSAPP
+      if (!notifyMobile && !notifyWhatsApp) {
+        dispatch.ok('tradie notify skipped — no TRADIE_NOTIFY_NUMBER / TRADIE_NOTIFY_WHATSAPP env')
+        return
+      }
+
+      try {
+        const customerName = intake.caller?.name ?? undefined
+        const customerPhone = callerNumber ?? undefined
+        const quoteUrl = `${appUrl}/q/${shareToken}`
+        const tradieBody = isInspection
+          ? buildTradieInspectionNotification({
+              customerName,
+              customerPhone,
+              jobType: intake.job_type,
+              inspectionReason: draft.inspection_reason ?? null,
+              quoteUrl,
+            })
+          : buildTradieDraftNotification({
+              customerName,
+              customerPhone,
+              jobType: intake.job_type,
+              itemCount: intake.scope?.item_count ?? undefined,
+              totalIncGst: total,
+              quoteUrl,
+            })
+
+        if (notifyMobile) {
+          dispatch.step('tradie notify — SMS (with WhatsApp fallback)', { to: notifyMobile })
+          const r = await dispatchQuoteMessage({ to: notifyMobile, text: tradieBody })
+          if (r.ok) {
+            dispatch.ok('tradie SMS notify sent', { channel: r.channel, sid: r.sid })
+          } else {
+            dispatch.err('tradie SMS notify failed (both SMS + WA)', null, {
+              sms_code: r.smsAttempt.code,
+              wa_code: r.waAttempt?.code,
+            })
+          }
+        }
+
+        if (notifyWhatsApp) {
+          dispatch.step('tradie notify — explicit WhatsApp', { to: notifyWhatsApp })
+          const r = await sendWhatsApp({ to: notifyWhatsApp, text: tradieBody })
+          if (r.ok) {
+            dispatch.ok('tradie WhatsApp notify sent', { sid: r.sid, status: r.status })
+          } else {
+            dispatch.err('tradie WhatsApp notify failed', null, { code: r.code, reason: r.reason })
+          }
+        }
+      } catch (e) {
+        dispatch.err('tradie notify threw', e)
       }
     })
 
