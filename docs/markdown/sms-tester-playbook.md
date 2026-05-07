@@ -39,29 +39,27 @@ You don't need to actually pay anything. Don't tap the Stripe links unless we as
 
 > **You:** hi mate, need a quote to replace 6 downlights in my lounge
 >
-> **(wait for AI reply — should ask something like ceiling type, single/two-storey, or wattage preference)**
+> **(wait for AI reply — it'll greet you on turn 1 and ask for your first name)**
 >
-> **You:** single storey, plaster ceiling, no roof access issues
+> **You:** sam taylor
 >
-> **(wait)**
+> **(wait — it should ask for your suburb)**
 >
-> **You:** standard warm white LEDs are fine, nothing fancy
+> **You:** bondi 2026
 >
-> **(wait)**
->
-> **You:** bondi 2026, anytime next week works
->
-> **(wait)**
+> **(wait — it'll ask one targeted follow-up. For downlights the only must-asks beyond name/suburb are how many and which room — both already in your opening, so it may go straight to confirming and finishing.)**
 >
 > **You:** *(if the AI asks anything else, answer it — try to keep going until the conversation closes naturally)*
 
 ### What you should see
 
-- Each AI reply is short (one or two sentences)
+- Turn 1 reply opens with a greeting like *"G'day, thanks for messaging QuoteMate — I'm the AI quoting assistant…"*
+- From turn 2 onwards, no re-introduction — straight to the next question
+- Each AI reply is short (one or two sentences, max 320 characters)
 - AI asks **one question at a time** — never two at once
-- AI declares assumptions when it makes them (e.g. *"assuming standard 9W warm white"*)
-- After 3–5 exchanges, the AI says something like *"thanks, I'll get a quote drafted for you shortly"*
-- Within ~2 minutes you receive a separate **3-tier quote SMS** with Good / Better / Best prices and 3 Stripe links
+- AI **declares safe defaults out loud** rather than asking about them. For downlights, ceiling type / wall type / roof access / single-or-two-storey / wattage / colour are all assumed defaults — the AI will say something like *"I'll quote on flat plaster ceiling, existing wiring, indoor, standard 9W warm white — let me know if anything's different"*. It will NOT ask you about those.
+- The conversation closes within roughly 3–5 turns (name + suburb is usually the bulk of it for an easy job)
+- Within ~2 minutes after the closing message you receive a separate **3-tier quote SMS** with Good / Better / Best prices and 3 Stripe links
 
 ### Try these variations
 
@@ -73,7 +71,7 @@ You don't need to actually pay anything. Don't tap the Stripe links unless we as
 
 - AI asks 2+ questions in one message
 - AI gives you a price during the chat (prices should only arrive in the final 3-tier quote SMS)
-- AI keeps asking questions for 8+ turns
+- AI keeps asking questions for 5+ inbound turns (the agent is rule-bound to escalate to inspection after 4 inbound turns of insufficient info — going past that is a fail)
 - No quote ever arrives
 - The quote SMS is missing prices, missing payment links, or shows weird characters
 
@@ -129,11 +127,11 @@ All of these should trigger an inspection booking, **not** a 3-tier quote.
 
 ### What you should see
 
-- AI's first reply should acknowledge the danger and tell you to **switch off the circuit at the switchboard**
-- AI should immediately offer the **$199 site visit** booking
-- No questions about quantity, brand, suburb, etc.
-- One reply, then the conversation closes
-- You receive the inspection-only SMS
+- AI's first reply opens with the standard greeting (*"G'day, thanks for messaging QuoteMate — I'm the AI quoting assistant…"*) and immediately escalates to the **$199 site visit** booking offer — something like *"For that I'll need to send a sparky for a quick look. Want me to text you a $199 inspection booking?"*
+- **Note (deliberate):** the SMS agent does NOT tell you to switch off circuits or give safety instructions — that advice belongs in the voice channel where a real-time conversation can verify it's safe. SMS is text-only, so the agent's job is purely to escalate to a same-day inspection.
+- No follow-up questions about quantity, brand, suburb, etc. on the danger turn
+- Once you reply *"yes"* to the inspection offer, you receive the $199 booking link
+- The conversation closes within 1–2 inbound turns
 
 ### Try these variations
 
@@ -146,8 +144,8 @@ All of these should trigger an inspection booking, **not** a 3-tier quote.
 
 - ⚠️ AI tries to quote downlight replacement when you mention sparks
 - ⚠️ AI asks follow-up questions ("how many power points are affected?") instead of escalating
-- ⚠️ AI doesn't tell you to turn off the circuit
-- ⚠️ AI takes more than one turn to offer the inspection
+- ⚠️ AI doesn't escalate to the $199 inspection on the first reply
+- ⚠️ AI takes more than 2 inbound turns to offer the inspection booking link
 
 ---
 

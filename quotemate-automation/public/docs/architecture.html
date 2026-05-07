@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QuoteMate · Architecture · Stages 01 → 05</title>
+  <title>QuoteMate · Architecture · Stages 01 → 10 · Voice + SMS</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -163,6 +163,13 @@
     .stage-card.s03 { border-top: 2px solid #fb923c; }
     .stage-card.s04 { border-top: 2px solid #22d3ee; }
     .stage-card.s05 { border-top: 2px solid #a78bfa; }
+    .stage-card.s06 { border-top: 2px solid #34d399; }
+    .stage-card.s07 { border-top: 2px solid #38bdf8; }
+    .stage-card.s08 { border-top: 2px solid #f472b6; }
+    .stage-card.s09 { border-top: 2px solid #facc15; }
+    .stage-card.s10 { border-top: 2px solid #64748b; }
+    .stage-card.sms { border-top: 2px solid #2dd4bf; background: rgba(20, 51, 50, 0.4); }
+    .stage-card.cross { border-top: 2px dashed #818cf8; background: rgba(36, 23, 71, 0.4); }
 
     .stage-card-num {
       font-family: 'JetBrains Mono', monospace;
@@ -297,27 +304,29 @@
     <div class="header">
       <div class="header-row">
         <div class="pulse-dot"></div>
-        <h1>QuoteMate <em>Automation Pipeline</em> · Stages 01 → 05</h1>
+        <h1>QuoteMate <em>Automation Pipeline</em> · Stages 01 → 10 · Voice + SMS</h1>
       </div>
-      <p class="subtitle">From dialed number to drafted quote. The system, the wiring, and why no glue layer is needed.</p>
+      <p class="subtitle">From inbound contact to booked job. Two channels (voice + SMS), one shared intake/estimation pipeline, end-to-end shipped in production.</p>
       <div class="tag-row">
         <span class="tag amber">Twilio AU</span>
         <span class="tag emerald">Vapi</span>
         <span class="tag emerald">Deepgram nova-2</span>
         <span class="tag emerald">ElevenLabs</span>
-        <span class="tag emerald">Claude Haiku 4.5 · Sonnet 4.6 · Opus 4.7</span>
-        <span class="tag emerald">Voyage voyage-3</span>
-        <span class="tag amber">Vercel · Next.js</span>
+        <span class="tag emerald">Claude Haiku 4.5 · Opus 4.7</span>
+        <span class="tag emerald">Voyage voyage-3 + Rerank-2.5</span>
+        <span class="tag amber">Vercel · Next.js 16</span>
         <span class="tag violet">Supabase + pgvector</span>
         <span class="tag cyan">Vercel AI SDK</span>
+        <span class="tag amber">Stripe Checkout + Connect</span>
+        <span class="tag cyan">WhatsApp (WABA)</span>
       </div>
     </div>
 
     <!-- ═══════════════ STRATEGY BANNER ═══════════════ -->
     <div class="strategy-banner">
-      <div class="strategy-icon">v3+ scope</div>
+      <div class="strategy-icon">v1 shipped</div>
       <div class="strategy-banner-body">
-        <strong>Heads-up on alignment.</strong> This diagram describes the <strong>voice-first</strong> pipeline from <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">docs/build-guide.html</code>. Per <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">docs/strategy.md</code>, v1 is <strong>portal-first</strong> (typed intake) — the AI receptionist is a v3+ premium tier. The good news: <strong>Stages 04 and 05 are stack-identical</strong> for portal and voice. Only Stage 03 changes (typed form replaces Vapi). Build the engines first; plug Vapi in front later.
+        <strong>Production status as of 2026-05-06.</strong> Both channels are live. <strong>Voice</strong> via Vapi (Jeff) on the Twilio AU number; <strong>SMS</strong> via Twilio direct → Haiku 4.5 dialog agent on +61 481 613 464. Stages 04–07 (intake structuring, embedding, RAG+rerank, estimation) are <strong>identical for both channels</strong> — the routes accept a discriminated-union body and branch only on which source table to read. Stages 08–10 (Stripe Checkout, customer SMS dispatch, HTML quote page, booking, tradie notify) are likewise channel-agnostic. The diagrams below show the voice path; an "SMS parallel" section follows that explains where SMS forks and where it rejoins.
       </div>
     </div>
 
@@ -672,33 +681,218 @@
         <div class="stage-card s04">
           <div class="stage-card-num">Stage · 04</div>
           <h3>Intake Engine structures</h3>
-          <div class="stage-card-meta">Claude Sonnet 4.6 · ~$0.02/call</div>
-          <p>Free-form transcript → structured JSON. The Vercel AI SDK's <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">generateObject</code> enforces a Zod <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">IntakeSchema</code> — Sonnet must produce JSON matching it or the SDK retries. Photos sent via SMS pass through as image content blocks for vision input.</p>
-          <p>A summary string ("downlights count=6 indoor existing-wiring...") is embedded with Voyage <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">voyage-3</code> into a 1536-dim vector and stored in pgvector for similar-job retrieval.</p>
+          <div class="stage-card-meta">Claude Opus 4.7 + vision · ~$0.04/call</div>
+          <p>Free-form transcript → structured JSON. The Vercel AI SDK's <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">generateObject</code> enforces a Zod <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">IntakeSchema</code> — Opus must produce JSON matching it or the SDK retries. Customer-supplied photos (MMS attachments, upload-link uploads, in-call photo SMS uploads) pass through as image content blocks for vision grounding. Channel-agnostic: same handler reads <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">{callId}</code> (voice) or <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">{conversationId, sourceChannel:'sms'}</code>.</p>
+          <p>A summary string ("downlights count=6 indoor existing-wiring...") is embedded with Voyage <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">voyage-3</code> into a 1536-dim vector and stored in pgvector for similar-job retrieval. A <strong>quality gate</strong> fires if name/scope/job_type are missing → empty intake gets a callback-request SMS, no quote drafts.</p>
           <div class="label">tools</div>
           <ul class="stack-list">
             <li>Vercel AI SDK <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">generateObject</code></li>
             <li>Zod schema validation</li>
-            <li>Anthropic (Sonnet 4.6 + vision)</li>
+            <li>Anthropic (Opus 4.7 + vision)</li>
             <li>Voyage AI (voyage-3 embeddings)</li>
             <li>Supabase pgvector extension</li>
+            <li><code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">evaluateIntakeQuality</code> gate</li>
           </ul>
         </div>
 
         <div class="stage-card s05">
           <div class="stage-card-num">Stage · 05</div>
           <h3>Estimation Engine drafts</h3>
-          <div class="stage-card-meta">Claude Opus 4.7 · ~$0.05–0.10/call</div>
-          <p><code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">generateText({ tools, maxSteps: 10 })</code>. Opus reads the structured intake, then <em>chooses</em> which of four tools to call: <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">lookup_assembly</code>, <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">lookup_material</code>, <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">apply_markup</code>, <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">flag_inspection_needed</code>. Tools hit Supabase deterministically; Opus only handles reasoning.</p>
-          <p>Output is three pricing tiers (Good / Better / Best) as JSONB columns plus indicative ranges for inspection-only routes. Status starts as <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">'draft'</code> — never auto-sent.</p>
+          <div class="stage-card-meta">Claude Opus 4.7 + RAG + Rerank · ~$0.05–0.10/call</div>
+          <p><code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">generateText({ tools, maxSteps: 10 })</code>. Before the LLM call, the <strong>RAG context builder</strong> pulls similar past intakes via <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">match_intakes()</code> (job_type pre-filter → pgvector top-20) and <strong>Voyage Rerank-2.5</strong> cross-encodes them down to the top 3, then formats a "here's how you've quoted similar jobs" block into the Opus prompt. This anchors pricing to actual past quotes instead of free-form generation.</p>
+          <p>Opus then chooses which property-aware tools to call: <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">lookup_assembly</code>, <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">lookup_material</code>, <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">apply_markup</code>, <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">flag_inspection_needed</code>. Tools hit Supabase deterministically; Opus only handles reasoning. After generation a <strong>semantic-grounding validator</strong> checks every line item's description matches its source row — ungrounded items auto-downgrade to the $199 inspection route. Output is three pricing tiers (Good/Better/Best) as JSONB columns. Status starts as <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">'draft'</code>.</p>
           <div class="label">tools</div>
           <ul class="stack-list">
             <li>Vercel AI SDK <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">generateText + tools</code></li>
-            <li>4 Zod-typed tool definitions</li>
+            <li>RAG context builder (<code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">lib/estimate/rag.ts</code>)</li>
+            <li>Voyage Rerank-2.5 cross-encoder</li>
+            <li>4 property-aware Zod-typed tools</li>
+            <li>Semantic-grounding validator (4th defence layer)</li>
             <li>Anthropic Opus 4.7</li>
             <li>Supabase lookup tables (read)</li>
             <li>Supabase quotes (write JSONB)</li>
           </ul>
+        </div>
+
+        <!-- ═══════════════ NEW STAGES (06-10) ═══════════════ -->
+        <div class="stage-card s06">
+          <div class="stage-card-num">Stage · 06</div>
+          <h3>Stripe Checkout + dispatch</h3>
+          <div class="stage-card-meta">Stripe Connect Express + Twilio · ~$0.01/quote</div>
+          <p>One Stripe Checkout Session is created per tier (Good/Better/Best) for the deposit (default 30%), each linked through a redirect at <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">/r/[token]/[tier]</code> so expired sessions can be regenerated lazily. For inspection-required quotes, one $199 site-visit Session is created instead.</p>
+          <p>Then the customer-facing quote SMS goes out via the shared <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">dispatchQuoteMessage</code> (SMS-first, WhatsApp-fallback). For SMS-sourced quotes, the dispatch uses <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">TWILIO_SMS_NUMBER</code> as the from-address so the quote lands in the same thread as the dialog.</p>
+          <div class="label">tools</div>
+          <ul class="stack-list">
+            <li>Stripe Checkout Sessions API</li>
+            <li>Twilio REST (SMS + WhatsApp)</li>
+            <li><code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">buildQuoteSms</code> · <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">dispatchQuoteMessage</code></li>
+            <li>Per-tier <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">/r/[token]/[tier]</code> redirect</li>
+          </ul>
+        </div>
+
+        <div class="stage-card s07">
+          <div class="stage-card-num">Stage · 07</div>
+          <h3>HTML quote page</h3>
+          <div class="stage-card-meta">Next.js 16 RSC · <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">/q/[token]</code> · force-dynamic</div>
+          <p>Customer taps "View full quote" → mobile-friendly HTML page renders Good/Better/Best with mocked tier photos, scope of works, assumptions, risk flags, timeframe, GST note, NECA NSW licence footer. Per-tier "Lock in this option · $X deposit" buttons → Stripe Checkout via the redirect.</p>
+          <p>Customer-uploaded photos render via a <strong>render-time union</strong> of <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">intakes.photo_paths</code> (snapshot at intake time) AND the live source-of-truth table (<code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">calls.photo_paths</code> for voice or <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">sms_conversations.photo_paths</code> for SMS) — late uploads appear on refresh without a re-quote. Signed URLs regenerate on every render (24h expiry).</p>
+          <div class="label">tools</div>
+          <ul class="stack-list">
+            <li>Next.js 16 RSC (server components)</li>
+            <li>Tailwind v4 styling</li>
+            <li><code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">refreshSignedUrl</code> on demand</li>
+            <li><code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">getTierPhoto</code> mock images</li>
+          </ul>
+        </div>
+
+        <div class="stage-card s08">
+          <div class="stage-card-num">Stage · 08</div>
+          <h3>Stripe webhook + paid page</h3>
+          <div class="stage-card-meta">Stripe webhook · <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">/api/stripe/webhook</code></div>
+          <p>Customer pays the deposit → Stripe fires <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">checkout.session.completed</code> → webhook sets <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">quotes.paid_at</code> + <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">paid_tier</code>. Stripe redirects the customer to <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">/q/[token]/paid</code> which shows confirmation and a "Pick a time" CTA into the booking flow.</p>
+          <div class="label">tools</div>
+          <ul class="stack-list">
+            <li>Stripe webhooks (signature-verified)</li>
+            <li><code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">/q/[token]/paid</code> · <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">/q/[token]/cancelled</code></li>
+            <li>Supabase quotes (write paid_at, paid_tier)</li>
+          </ul>
+        </div>
+
+        <div class="stage-card s09">
+          <div class="stage-card-num">Stage · 09</div>
+          <h3>Booking — slot picker</h3>
+          <div class="stage-card-meta">Next.js 16 RSC · <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">/q/[token]/book</code></div>
+          <p>Customer chooses an available time slot (slots seeded per-tradie via <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">scripts/seed-tradie-slots.mjs</code>). Locking a slot fires <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">POST /api/q/[token]/book</code> which marks the slot taken and links it to the quote.</p>
+          <div class="label">tools</div>
+          <ul class="stack-list">
+            <li>Next.js 16 RSC + client SlotPicker</li>
+            <li>Supabase tradie_slots + bookings</li>
+          </ul>
+        </div>
+
+        <div class="stage-card s10">
+          <div class="stage-card-num">Stage · 10</div>
+          <h3>Booking confirmations + tradie notify</h3>
+          <div class="stage-card-meta">Twilio (SMS + WhatsApp) · ~$0.02/booking</div>
+          <p>On successful slot lock, two messages fire in parallel: customer gets <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">buildBookingConfirmationSms</code> ("you're locked in for Thu 7 May, 9:00am"); tradie gets <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">buildTradieBookingNotification</code> via SMS-first/WhatsApp-fallback to <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">TRADIE_NOTIFY_NUMBER</code> + WhatsApp to <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">TRADIE_NOTIFY_WHATSAPP</code>.</p>
+          <p>Separate from booking, the tradie also gets a notification on every SMS-sourced quote draft (<code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">buildTradieDraftNotification</code>) so they see new leads in real time.</p>
+          <div class="label">tools</div>
+          <ul class="stack-list">
+            <li>Twilio REST (SMS + WhatsApp)</li>
+            <li><code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">dispatchQuoteMessage</code> shared dispatcher</li>
+            <li>Resend email (optional)</li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ═══════════════ SECTION 2.5 — SMS CHANNEL PARALLEL ═══════════════ -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-num"><strong>02.5</strong> · SMS channel — where it forks, where it rejoins</div>
+        <h2>The same pipeline reachable via SMS instead of voice.</h2>
+        <p class="section-lede">SMS replaces only Stages 02–03. From Stage 04 onward (intake → embed → RAG → estimate → Stripe → quote → booking) every step is identical to voice. The fork happens at the Twilio webhook; the rejoin happens at <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">/api/intake/structure</code>.</p>
+      </div>
+
+      <div class="stage-cards">
+        <div class="stage-card sms">
+          <div class="stage-card-num">SMS · 02</div>
+          <h3>Twilio webhook (SMS direct)</h3>
+          <div class="stage-card-meta">No Vapi · <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">/api/sms/inbound</code></div>
+          <p>Customer texts +61 481 613 464 → Twilio POSTs straight to our route (no Vapi involved for SMS). Signature-validated against <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">TWILIO_AUTH_TOKEN</code>. Idempotency check on <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">MessageSid</code> (route + DB unique index, migration 004) prevents duplicate replies on retry.</p>
+          <p>Inbound row persisted in <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">sms_messages</code>; route returns 200 in &lt;500ms (fast-ack via <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">after()</code>) so Twilio never times out.</p>
+        </div>
+
+        <div class="stage-card sms">
+          <div class="stage-card-num">SMS · 03</div>
+          <h3>Haiku 4.5 dialog turn</h3>
+          <div class="stage-card-meta">Anthropic Haiku 4.5 · ~$0.001/turn</div>
+          <p>One <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">generateObject</code> call per inbound. Returns Zod-validated <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">{action: 'ask' | 'finish' | 'escalate_inspection'}</code> with reply text capped at 320 chars. 8-step decision guide: inspection trigger → off-topic redirect → no job_type → out-of-scope job → name → suburb → per-job mustAsk → finish. Capped at 4 turns.</p>
+          <p>First turn includes greeting + gratitude ("G'day, thanks for messaging QuoteMate — I'm the AI quoting assistant…"); follow-up turns drop the intro and stay direct. On <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">finish</code>, fires the channel-agnostic intake handler with <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">{conversationId, sourceChannel:'sms'}</code>.</p>
+        </div>
+
+        <div class="stage-card sms">
+          <div class="stage-card-num">SMS · ↩</div>
+          <h3>Rejoin point: Stage 04 onward</h3>
+          <div class="stage-card-meta">Channel-agnostic · same pipeline as voice</div>
+          <p><code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">/api/intake/structure</code> accepts a discriminated-union body. SMS branch loads <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">sms_conversations + sms_messages</code>, stitches a transcript, prepends accumulated assumptions, aggregates photos from MMS + upload-link surfaces. Everything downstream — embed, RAG, rerank, estimate, Stripe, dispatch, booking — is identical.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ SECTION 2.6 — PHOTO FLOW (cross-cutting) ═══════════════ -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-num"><strong>02.6</strong> · Photo flow — cross-cutting</div>
+        <h2>How customer photos enter the pipeline (from either channel).</h2>
+        <p class="section-lede">Two surfaces feed the same intake. Vision sees the snapshot at intake time; the customer-facing quote page sees the live union (so late uploads still appear on refresh).</p>
+      </div>
+
+      <div class="stage-cards">
+        <div class="stage-card cross">
+          <div class="stage-card-num">Photo · 01</div>
+          <h3>Photo-request SMS dispatched</h3>
+          <p>Voice path: Vapi tool <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">send_sms_photo_link</code> fires mid-call. SMS path: dialog route fires when easy-5 job_type is identified on turn 1 (single-fire enforced via <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">photo_request_sent_at</code>). Both produce <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">${'${APP_URL}'}/upload/${'${token}'}</code> via <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">buildPhotoRequestSms</code>.</p>
+        </div>
+
+        <div class="stage-card cross">
+          <div class="stage-card-num">Photo · 02</div>
+          <h3>Two upload surfaces</h3>
+          <p><strong>MMS</strong>: customer attaches photos to the SMS thread → <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">lib/sms/mms.ts</code> fetches each <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">MediaUrlN</code> (Basic auth) → uploads via <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">uploadIntakePhoto</code> → <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">sms_messages.photo_paths</code>. <strong>Upload link</strong>: customer taps <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">/upload/[token]</code> → camera/gallery picker → <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">/api/upload/[token]</code> resolves token to either <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">calls.photo_paths</code> or <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">sms_conversations.photo_paths</code> based on which table owns the token.</p>
+        </div>
+
+        <div class="stage-card cross">
+          <div class="stage-card-num">Photo · 03</div>
+          <h3>Snapshot vs live (race-safe)</h3>
+          <p><strong>Snapshot</strong>: <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">/api/intake/structure</code> aggregates both surfaces into <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">intakes.photo_paths</code> at run time — that's what Opus vision sees. <strong>Live union</strong>: <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">/q/[token]</code> reads <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">intakes.photo_paths</code> ∪ live source table on every render and re-signs URLs (24h TTL). Late uploads appear on refresh — vision price stays consistent because the snapshot froze at intake time.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ SECTION 2.7 — HARDENING ═══════════════ -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-num"><strong>02.7</strong> · Production hardening</div>
+        <h2>Reliability layers added beyond the basic flow.</h2>
+        <p class="section-lede">Idempotency, fast-ack, signature validation, race protection, and graceful degradation. Most are invisible when things go right; they're the things that stop you waking up to a bug-bash.</p>
+      </div>
+
+      <div class="stage-cards">
+        <div class="stage-card cross">
+          <div class="stage-card-num">Hardening · 01</div>
+          <h3>Inbound webhook idempotency</h3>
+          <p>Three layers: (1) application-layer SELECT-then-skip on <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">twilio_message_sid</code>; (2) DB-level partial unique index (migration 004) catches concurrent retry races with <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">23505</code> error → 200 ack; (3) fast-ack via <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">after()</code> so Twilio never times out and never retries.</p>
+        </div>
+
+        <div class="stage-card cross">
+          <div class="stage-card-num">Hardening · 02</div>
+          <h3>Twilio signature validation</h3>
+          <p><code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">lib/sms/twilio-validator.ts</code> verifies every inbound webhook against <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">TWILIO_AUTH_TOKEN</code>. Reconstructs the URL from forwarded-host headers so signatures match even when Vercel internal routing rewrites the URL. Forged requests get 403.</p>
+        </div>
+
+        <div class="stage-card cross">
+          <div class="stage-card-num">Hardening · 03</div>
+          <h3>Strict-grounding defence layers</h3>
+          <p>(1) System prompt forbids invented prices; (2) all $ come from tool results, never free-form; (3) RAG anchors to past quotes; (4) post-generation semantic-grounding validator checks line description ↔ price source. Any ungrounded line auto-downgrades to $199 inspection.</p>
+        </div>
+
+        <div class="stage-card cross">
+          <div class="stage-card-num">Hardening · 04</div>
+          <h3>Daily cleanup cron</h3>
+          <p><code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">/api/cron/sms-cleanup</code> runs daily at 17:00 UTC (vercel.json). Sweeps <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">sms_conversations status='open' AND last_message_at &lt; now()-24h</code> → marks them <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">'abandoned'</code>. Bearer-secured via <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">CRON_SECRET</code>.</p>
+        </div>
+
+        <div class="stage-card cross">
+          <div class="stage-card-num">Hardening · 05</div>
+          <h3>WhatsApp fallback dispatcher</h3>
+          <p><code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">dispatchQuoteMessage</code> tries SMS first; on carrier-reject codes (21612, 21408, etc.) falls back to WhatsApp via the registered WABA sender (+1 555 941 5397, "NomanuAI"). Same dispatcher used by voice + SMS + tradie notify + booking confirmation.</p>
+        </div>
+
+        <div class="stage-card cross">
+          <div class="stage-card-num">Hardening · 06</div>
+          <h3>Stripe Session re-issuance</h3>
+          <p>Per-tier redirect (<code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">/r/[token]/[tier]</code>) regenerates a fresh Stripe Checkout Session if the original expired (24h TTL). Customer never lands on a broken pay link.</p>
         </div>
       </div>
     </div>
@@ -850,6 +1044,85 @@
           <text x="805" y="595" fill="#fbbf24" font-size="9" font-family="'JetBrains Mono', monospace" font-style="italic">empty until customer accepts a tier;</text>
           <text x="805" y="608" fill="#fbbf24" font-size="9" font-family="'JetBrains Mono', monospace" font-style="italic">flattens the chosen JSONB for invoicing</text>
         </svg>
+      </div>
+    </div>
+
+    <!-- ═══════════════ SECTION 3.5 — SMS + BOOKING TABLES ═══════════════ -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-num"><strong>03.5</strong> · SMS + booking tables (added since the diagram above)</div>
+        <h2>Tables not shown in the SVG schema.</h2>
+        <p class="section-lede">The diagram above shows the original voice-path tables. Below are the tables added for the SMS channel, the photo flow, and the booking flow — all FK-linked into the same <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">intakes</code> + <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">quotes</code> rows so the rest of the pipeline doesn't care which channel the data came from.</p>
+      </div>
+
+      <div class="stage-cards">
+        <div class="stage-card sms">
+          <div class="stage-card-num">Table · sms_conversations</div>
+          <h3>One row per ongoing dialog</h3>
+          <div class="stage-card-meta">migration 002 · extended by 003, 005</div>
+          <p>Tracks the dialog state for an SMS thread. <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">status</code> ∈ open / structuring / done / abandoned. <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">intake_id</code> FK back to <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">intakes</code> set when dialog finishes. <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">photo_request_token</code> + <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">photo_urls</code> + <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">photo_paths</code> for upload-link photos.</p>
+          <div class="label">columns</div>
+          <ul class="stack-list">
+            <li>id · from_number · to_number · status</li>
+            <li>turn_count · assumptions_made (jsonb)</li>
+            <li>intake_id (FK)</li>
+            <li>photo_request_token · photo_request_sent_at</li>
+            <li>photo_urls · photo_paths · photos_completed_at</li>
+            <li>created_at · updated_at · last_message_at</li>
+          </ul>
+        </div>
+
+        <div class="stage-card sms">
+          <div class="stage-card-num">Table · sms_messages</div>
+          <h3>One row per inbound or outbound</h3>
+          <div class="stage-card-meta">migration 002 · extended by 003, 004</div>
+          <p>Append-only log of every message in the conversation. Inbound rows have <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">twilio_message_sid</code> with a <strong>partial unique index</strong> (migration 004) preventing duplicate persists from webhook retries. <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">photo_urls</code> + <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">photo_paths</code> hold inbound MMS attachments.</p>
+          <div class="label">columns</div>
+          <ul class="stack-list">
+            <li>id · conversation_id (FK) · direction</li>
+            <li>body · twilio_message_sid (unique inbound)</li>
+            <li>photo_urls (jsonb) · photo_paths (jsonb)</li>
+            <li>created_at</li>
+          </ul>
+        </div>
+
+        <div class="stage-card s09">
+          <div class="stage-card-num">Table · tradie_slots</div>
+          <h3>Bookable time slots</h3>
+          <div class="stage-card-meta">f3 booking schema</div>
+          <p>Pre-seeded availability windows per tradie. Read by <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">/q/[token]/book</code>. Slots get marked <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">is_taken=true</code> when a customer locks one in.</p>
+          <div class="label">columns</div>
+          <ul class="stack-list">
+            <li>id · tradie_id · scheduled_at</li>
+            <li>duration_minutes · is_taken</li>
+            <li>created_at</li>
+          </ul>
+        </div>
+
+        <div class="stage-card s09">
+          <div class="stage-card-num">Table · bookings</div>
+          <h3>Confirmed jobs</h3>
+          <div class="stage-card-meta">f3 booking schema</div>
+          <p>One row per locked-in slot. FK to the <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">quotes</code> row and the <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">tradie_slots</code> row chosen. Snapshots <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">scheduled_at</code> directly so the booking remains valid even if the underlying slot row is later edited.</p>
+          <div class="label">columns</div>
+          <ul class="stack-list">
+            <li>id · quote_id (FK) · slot_id (FK)</li>
+            <li>scheduled_at · status</li>
+            <li>created_at</li>
+          </ul>
+        </div>
+
+        <div class="stage-card cross">
+          <div class="stage-card-num">Extension · intakes</div>
+          <h3>Photos + photo paths</h3>
+          <p>The intakes row gained <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">photo_paths</code> (permanent storage paths) alongside <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">photo_urls</code> (24h signed URLs). Paths are persistent; URLs get re-signed on demand at <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">/q/[token]</code> render time. <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">call_id</code> is null for SMS-sourced intakes (the discriminator).</p>
+        </div>
+
+        <div class="stage-card cross">
+          <div class="stage-card-num">Extension · quotes</div>
+          <h3>Stripe + sharing</h3>
+          <p>Quotes gained <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">share_token</code> (unguessable URL slug for <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">/q/[token]</code>), <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">stripe_links</code> (per-tier session URLs as JSONB), <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">paid_at</code> + <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">paid_tier</code> (set by the Stripe webhook), <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">routing_decision</code> (HIGH/MED/LOW from confidence routing), and <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">scope_short</code> + <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">selected_tier</code> for the customer SMS body builder.</p>
+        </div>
       </div>
     </div>
 
