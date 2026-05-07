@@ -71,9 +71,10 @@ hallucination class we are trying to eliminate.
     "you supply" / "can you provide"               → 'tradie'
     not mentioned                                  → omit
 
-  scope.specs.brand_preference — when caller names a brand
-    Quote the brand verbatim ("Clipsal Iconic", "HPM", "Beacon Lucci")
-    not mentioned                                  → omit
+  Brand preferences (e.g. "Clipsal Iconic", "HPM", "Beacon Lucci") and
+  access notes go in scope.description verbatim — they're not separate
+  structured fields but the estimation engine reads scope.description
+  when narrowing the lookup.
 
 CONFIDENCE RUBRIC — apply uncompromisingly
   HIGH:    every required field captured, scope.item_count known,
