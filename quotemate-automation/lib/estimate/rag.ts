@@ -18,27 +18,33 @@
 // back without a deploy if quote outputs degrade.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { getReranker } from './rerank'
+import { pipelineLog } from '@/lib/log/pipeline'
 
-// Number of similar intakes to ask match_intakes for. We over-fetch by 1
-// because the current intake itself is usually the top match (similarity
-// = 1.0) and we filter it out before formatting.
+// Number of candidates to pull from pgvector. The reranker (when active)
+// re-scores all of them and we keep the top FINAL_CONTEXT_COUNT for the
+// Opus prompt. Without the reranker we fall back to the cosine ordering
+// and still keep top FINAL_CONTEXT_COUNT.
 //
-// Tightened 2026-05-06 from 6 → 4. Empirically the 5th and 6th matches
-// were sitting near the similarity floor and introducing noise into the
-// anchoring set — same intake on two calls would sometimes pick up
-// different "borderline" past quotes and shift Opus's pricing slightly.
-// 4 keeps the top-3 stable matches plus 1 in reserve after self-filtering.
-const MATCH_FETCH_COUNT = 4
+// 20 is enough room for the reranker to do meaningful refinement while
+// staying inside Voyage Rerank's batch-size sweet spot for short docs.
+const VECTOR_FETCH_COUNT = 20
 
-// Bottom threshold below which a match is too weak to anchor pricing on.
-// Cosine similarity 0.0 = orthogonal, 1.0 = identical.
-//
-// Tightened 2026-05-06 from 0.55 → 0.65. 0.55 was admitting "same job_type
-// but different scope" matches (e.g. 6 downlights replace + 12 downlights
-// new install would both surface in each other's RAG) which Opus would
-// then anchor to inappropriately. 0.65 corresponds to "same scope shape,
-// not just same trade" — much tighter anchoring.
-const MIN_SIMILARITY = 0.65
+// How many past quotes to actually include in the prompt context block.
+// Empirically 3 is enough to anchor pricing patterns without bloating the
+// prompt or burying the "do NOT copy verbatim" instruction.
+const FINAL_CONTEXT_COUNT = 3
+
+// Floor below which a cosine match is rejected outright (before reranking).
+// Slightly looser than before because the reranker is the real gate now;
+// this floor exists only to prevent obviously-orthogonal junk from going
+// to the reranker (which would waste the API call).
+const MIN_SIMILARITY = 0.40
+
+// Floor on reranker relevance score below which a candidate is dropped
+// even if it made the top-K. Voyage scores roughly 0.0–1.0; below 0.3
+// is "not really related" in practice.
+const MIN_RERANK_SCORE = 0.30
 
 type MatchedIntake = {
   id: string
@@ -61,6 +67,9 @@ type IntakeForRag = {
   id?: string
   embedding?: number[] | string | null
   job_type?: string
+  scope?: any
+  access?: any
+  risks?: string[]
 }
 
 /**
@@ -81,26 +90,29 @@ export async function fetchSimilarPastQuotesContext(
   const queryEmbedding = normaliseEmbedding(intake.embedding)
   if (!queryEmbedding) return null
 
+  const log = pipelineLog('estimate', intake.id ?? undefined)
+
   const { data: matches, error: matchErr } = await supabase.rpc('match_intakes', {
     query_embedding: queryEmbedding,
-    match_count: MATCH_FETCH_COUNT,
+    match_count: VECTOR_FETCH_COUNT,
   })
 
   if (matchErr || !Array.isArray(matches) || matches.length === 0) {
     return null
   }
 
-  // Drop the current intake (it's its own top match by definition) plus
-  // anything below the similarity floor.
-  const usable = (matches as MatchedIntake[])
+  // Drop the current intake itself + anything below the cosine floor.
+  // The reranker is the real relevance gate; this floor only filters
+  // obvious orthogonal noise so we don't waste a rerank API call on it.
+  const cosineSurvivors = (matches as MatchedIntake[])
     .filter((m) => m.id !== intake.id)
     .filter((m) => Number.isFinite(m.similarity) && m.similarity >= MIN_SIMILARITY)
 
-  if (usable.length === 0) return null
+  if (cosineSurvivors.length === 0) return null
 
   // Hydrate matched intakes with their winning quote. We don't include
   // inspection-required quotes (no real pricing) or null-tier drafts.
-  const intakeIds = usable.map((m) => m.id)
+  const intakeIds = cosineSurvivors.map((m) => m.id)
   const { data: quotes } = await supabase
     .from('quotes')
     .select('id, intake_id, scope_of_works, needs_inspection, good, better, best, selected_tier')
@@ -113,29 +125,71 @@ export async function fetchSimilarPastQuotesContext(
     if (q.intake_id) quotesByIntake.set(q.intake_id, q)
   }
 
-  // Assemble in similarity order, dropping unusable ones (inspection or
-  // entirely null tiers).
-  const items: Array<{ match: MatchedIntake; quote: QuoteForRag }> = []
-  for (const m of usable) {
+  // Build the candidate pool — past intakes that have a usable quote.
+  type Candidate = { match: MatchedIntake; quote: QuoteForRag }
+  const candidates: Candidate[] = []
+  for (const m of cosineSurvivors) {
     const q = quotesByIntake.get(m.id)
     if (!q) continue
     if (q.needs_inspection) continue
     if (!q.good && !q.better && !q.best) continue
-    items.push({ match: m, quote: q })
-    if (items.length >= 5) break
+    candidates.push({ match: m, quote: q })
   }
 
-  if (items.length === 0) return null
+  if (candidates.length === 0) return null
 
+  // ─── Re-rank stage ──────────────────────────────────────────────
+  // Run the reranker over the candidate pool. If the reranker is
+  // disabled (or unavailable / fails), fall back to cosine ordering.
+  const reranker = getReranker()
+  let finalItems: Array<Candidate & { rerankScore?: number }>
+
+  if (reranker && candidates.length > 1) {
+    const queryText = buildRerankQuery(intake)
+    const docTexts = candidates.map((c) => buildRerankDoc(c.match, c.quote))
+
+    try {
+      const ranked = await reranker.rerank(queryText, docTexts, FINAL_CONTEXT_COUNT)
+      // Drop low-score reranked candidates so we never anchor to
+      // genuinely-irrelevant past quotes even if they were in top-K.
+      finalItems = ranked
+        .filter((r) => r.score >= MIN_RERANK_SCORE)
+        .map((r) => ({
+          ...candidates[r.index],
+          rerankScore: r.score,
+        }))
+      log.ok('RAG rerank complete', {
+        reranker: reranker.name,
+        candidates_in: candidates.length,
+        kept_after_score_floor: finalItems.length,
+        top_score: ranked[0]?.score?.toFixed(3) ?? 'n/a',
+      })
+    } catch (e: any) {
+      // Rerank API failure → fall back to cosine ordering. Don't block
+      // the estimation just because the rerank service is down.
+      log.err('rerank API failed — falling back to cosine ordering', e?.message ?? String(e))
+      finalItems = candidates.slice(0, FINAL_CONTEXT_COUNT)
+    }
+  } else {
+    finalItems = candidates.slice(0, FINAL_CONTEXT_COUNT)
+    if (!reranker) {
+      log.ok('RAG rerank skipped — provider disabled or unconfigured', { candidates: candidates.length })
+    }
+  }
+
+  if (finalItems.length === 0) return null
+
+  // ─── Format the prompt context block ────────────────────────────
   const lines: string[] = []
   lines.push('SIMILAR PAST QUOTES (anchor to these pricing patterns; do NOT copy verbatim if the new intake differs)')
   lines.push('')
 
-  for (let i = 0; i < items.length; i++) {
-    const { match, quote } = items[i]
+  for (let i = 0; i < finalItems.length; i++) {
+    const { match, quote, rerankScore } = finalItems[i]
     const sim = (match.similarity * 100).toFixed(0)
+    const rs = rerankScore != null ? ` · rerank ${(rerankScore * 100).toFixed(0)}%` : ''
     const scopeBits = describeScope(match.scope)
-    lines.push(`${i + 1}. similarity ${sim}%${scopeBits ? ' — ' + scopeBits : ''}`)
+    lines.push(`${i + 1}. similarity ${sim}%${rs}${scopeBits ? ' — ' + scopeBits : ''}`)
     if (quote.scope_of_works) {
       lines.push(`   scope: ${truncateOneLine(quote.scope_of_works, 140)}`)
     }
@@ -147,7 +201,43 @@ export async function fetchSimilarPastQuotesContext(
   lines.push('END SIMILAR PAST QUOTES')
   lines.push('')
 
-  return { context: lines.join('\n'), matchCount: items.length }
+  return { context: lines.join('\n'), matchCount: finalItems.length }
+}
+
+// ─── Rerank query/document builders ──────────────────────────────
+// The reranker only sees these strings — make them dense with the
+// fields that actually distinguish electrical jobs (job_type, count,
+// new vs replace, indoor/outdoor, key access factors, risks).
+
+function buildRerankQuery(intake: IntakeForRag): string {
+  const bits: string[] = []
+  if (intake.job_type) bits.push(`job_type=${intake.job_type}`)
+  const sc = intake.scope ?? {}
+  if (typeof sc.item_count === 'number') bits.push(`count=${sc.item_count}`)
+  if (typeof sc.is_new_install === 'boolean') {
+    bits.push(sc.is_new_install ? 'new install' : 'replacing existing')
+  }
+  if (sc.indoor_outdoor) bits.push(sc.indoor_outdoor)
+  if (sc.description) bits.push(`scope: ${String(sc.description).slice(0, 200)}`)
+  const ac = intake.access ?? {}
+  if (ac.ceiling_type) bits.push(`ceiling=${ac.ceiling_type}`)
+  if (ac.wall_type) bits.push(`wall=${ac.wall_type}`)
+  if (ac.roof_access != null) bits.push(`roof_access=${ac.roof_access}`)
+  if (Array.isArray(intake.risks) && intake.risks.length) {
+    bits.push(`risks: ${intake.risks.join(', ').slice(0, 120)}`)
+  }
+  return bits.join(' · ')
+}
+
+function buildRerankDoc(match: MatchedIntake, quote: QuoteForRag): string {
+  const bits: string[] = []
+  bits.push(describeScope(match.scope) || 'past quote')
+  if (quote.scope_of_works) {
+    bits.push(`scope: ${truncateOneLine(quote.scope_of_works, 200)}`)
+  }
+  const tierLine = formatTierPrices(quote)
+  if (tierLine) bits.push(tierLine)
+  return bits.join(' · ')
 }
 
 function normaliseEmbedding(v: number[] | string): number[] | null {
