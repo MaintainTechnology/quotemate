@@ -318,21 +318,37 @@ export async function POST(req: Request) {
     }
 
     // Dispatch to /api/estimate/draft (shared for voice + SMS).
+    // Wrapped in withRetry — final hop in the chain. If this drops,
+    // the intake row exists but no quote is ever produced. 3 attempts,
+    // 2s/4s backoff. Inside after() so non-blocking on webhook ack.
     const dispatch = pipelineLog('intake', logId)
-    dispatch.step('dispatching to /api/estimate/draft', { intake_id: intakeRow.id })
+    dispatch.step('dispatching to /api/estimate/draft (with retry)', { intake_id: intakeRow.id })
     try {
-      const res = await fetch(`${process.env.APP_URL}/api/estimate/draft`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ intakeId: intakeRow.id }),
-      })
-      if (res.ok) {
-        dispatch.ok('estimate/draft dispatched', { http: res.status })
-      } else {
-        dispatch.err('estimate/draft rejected', `HTTP ${res.status}`, { body: (await res.text()).slice(0, 200) })
-      }
-    } catch (e) {
-      dispatch.err('estimate dispatch threw', e)
+      await withRetry(
+        async () => {
+          const res = await fetch(`${process.env.APP_URL}/api/estimate/draft`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ intakeId: intakeRow.id }),
+          })
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`)
+          }
+          return res
+        },
+        {
+          maxAttempts: 3,
+          baseDelayMs: 2000,
+          onAttemptFailed: (err, attempt, willRetry) => {
+            const msg = err instanceof Error ? err.message : String(err)
+            const tag = willRetry ? 'retrying' : 'EXHAUSTED'
+            dispatch.err(`estimate handoff attempt ${attempt}/3 — ${tag}`, msg.slice(0, 200))
+          },
+        }
+      )
+      dispatch.ok('estimate/draft dispatched')
+    } catch (e: any) {
+      dispatch.err('estimate handoff EXHAUSTED — quote LOST', e?.message ?? String(e), { intake_id: intakeRow.id })
     }
   })
 

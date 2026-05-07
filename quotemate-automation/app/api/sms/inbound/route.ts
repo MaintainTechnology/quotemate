@@ -20,6 +20,7 @@ import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { decideNextTurn, type ConversationTurn } from '@/lib/sms/dialog'
 import { extractAndStoreMmsPhotos } from '@/lib/sms/mms'
 import { buildPhotoRequestSms } from '@/lib/sms/templates'
+import { withRetry } from '@/lib/util/retry'
 
 // Twilio webhook ack. We send the real customer reply via the REST API
 // inside after() — never as TwiML in the webhook response — so this
@@ -151,14 +152,30 @@ export async function POST(req: Request) {
     }
   }
 
-  console.log('[sms/inbound] step 3 — looking up conversation', { fromNumber })
-  // 3. Find an open conversation with this customer, or create one.
-  const { data: existing, error: lookupErr } = await supabase
+  console.log('[sms/inbound] step 3 — completion-aware conversation lookup', { fromNumber })
+  // 3. Smart conversation re-engagement.
+  //
+  // Find the MOST RECENT conversation for this from_number, regardless of
+  // status, then decide whether to REUSE it (continuation) or CREATE a
+  // new one (fresh request). Rules:
+  //
+  //   - status in ('open','structuring') AND age < 4h:  REUSE (still mid-flow)
+  //   - status in ('open','structuring') AND age >= 4h: NEW (abandoned)
+  //   - status = 'done' AND age < 5min:                 REUSE (add-on grace)
+  //   - status = 'done' AND age >= 5min:                NEW (returning customer)
+  //   - no prior conversation:                          NEW (first-time customer)
+  //
+  // The customerHistoryHint is passed to the dialog agent so it can pick
+  // the right opener: full intro for first-timers, "welcome back" for
+  // returning customers, no greeting for continuations.
+  const REUSE_OPEN_WINDOW_MS = 4 * 60 * 60 * 1000   // 4 hours
+  const REUSE_DONE_GRACE_MS = 5 * 60 * 1000         // 5 minutes
+
+  const { data: prior, error: lookupErr } = await supabase
     .from('sms_conversations')
     .select('*')
     .eq('from_number', fromNumber)
-    .eq('status', 'open')
-    .order('created_at', { ascending: false })
+    .order('last_message_at', { ascending: false, nullsFirst: false })
     .limit(1)
     .maybeSingle()
 
@@ -167,12 +184,42 @@ export async function POST(req: Request) {
     return new Response('DB error', { status: 500 })
   }
 
-  let conversation = existing
-  if (!conversation) {
-    // Generate a photo-upload token at creation time. Voice agent does the
-    // same on the calls row; this keeps the /upload/[token] surface
-    // identical regardless of source. Token is 32 hex chars (128 bits)
-    // — unguessable, partial-unique enforced at the DB level (migration 005).
+  type CustomerHistoryHint = 'first_time' | 'returning' | 'continuing'
+  let customerHistoryHint: CustomerHistoryHint
+  let conversation: typeof prior
+
+  const ageMs = prior?.last_message_at
+    ? Date.now() - new Date(prior.last_message_at as string).getTime()
+    : Infinity
+
+  const shouldReuse = !!prior && (
+    ((prior.status === 'open' || prior.status === 'structuring') && ageMs < REUSE_OPEN_WINDOW_MS)
+    || (prior.status === 'done' && ageMs < REUSE_DONE_GRACE_MS)
+  )
+
+  if (shouldReuse) {
+    conversation = prior!
+    customerHistoryHint = 'continuing'
+    console.log('[sms/inbound] step 3 — REUSE prior conversation', {
+      conversationId: conversation.id,
+      priorStatus: conversation.status,
+      ageSeconds: Math.round(ageMs / 1000),
+    })
+    // If reusing a 'done' conversation in the grace window, flip back to 'open'
+    // so the dialog can append normally. The intake_id stays linked — the
+    // dialog agent treats this as an add-on/clarification turn.
+    if (conversation.status === 'done') {
+      await supabase
+        .from('sms_conversations')
+        .update({ status: 'open', updated_at: new Date().toISOString() })
+        .eq('id', conversation.id)
+      conversation = { ...conversation, status: 'open' }
+      console.log('[sms/inbound] step 3 — reopened done conversation (grace window)', {
+        conversationId: conversation.id,
+      })
+    }
+  } else {
+    // Create new conversation.
     const photoToken = randomBytes(16).toString('hex')
     const { data: created, error: createErr } = await supabase
       .from('sms_conversations')
@@ -189,6 +236,13 @@ export async function POST(req: Request) {
       return new Response('DB error', { status: 500 })
     }
     conversation = created
+    // First-time vs returning: do we have ANY prior conversation row?
+    customerHistoryHint = prior ? 'returning' : 'first_time'
+    console.log('[sms/inbound] step 3 — NEW conversation', {
+      conversationId: conversation.id,
+      customerHistoryHint,
+      priorAgeHours: prior ? Math.round(ageMs / 3600000 * 10) / 10 : null,
+    })
   }
 
   // 4a. If this is an MMS, fetch the media from Twilio and upload to our
@@ -259,11 +313,49 @@ export async function POST(req: Request) {
     return new Response('DB error', { status: 500 })
   }
 
+  // ─────── Per-conversation lock claim ───────
+  // Atomically try to claim "I'm the leader who'll prepare the next reply
+  // for this conversation". If the row's processing_until is NULL or in
+  // the past, we win the lock; otherwise another webhook is already
+  // running Haiku for this customer and we should bail without sending
+  // a duplicate reply. The follower's inbound message is already persisted
+  // (above) so the leader will see it when it loads conversation history.
+  //
+  // Lock auto-expires after 60s in case a function crashes mid-flow —
+  // a customer is never permanently blocked.
+  const LOCK_DURATION_MS = 60 * 1000
+  const lockUntilIso = new Date(Date.now() + LOCK_DURATION_MS).toISOString()
+  const nowIso = new Date().toISOString()
+
+  const { data: lockedRow, error: lockErr } = await supabase
+    .from('sms_conversations')
+    .update({ processing_until: lockUntilIso })
+    .eq('id', conversation.id)
+    .or(`processing_until.is.null,processing_until.lt.${nowIso}`)
+    .select()
+    .maybeSingle()
+
+  if (lockErr) {
+    console.error('[sms/inbound] lock claim threw', lockErr)
+    // Don't fail the whole webhook — fall through and try to process
+    // anyway. Worst case: customer might get a duplicate reply (the bug
+    // we're trying to prevent) but at least they get one.
+  }
+
+  if (!lockedRow) {
+    // Another webhook is already preparing a reply for this conversation.
+    // Our message is persisted; the leader's tail-check will see it and
+    // either fold it into its current reply or trigger a follow-up turn.
+    console.log('[sms/inbound] coalesced — leader holds the lock; bailing without dispatch', {
+      conversationId: conversation.id,
+    })
+    return ackTwiml()
+  }
+
   // ─────── Fast-ack the webhook ───────
   // Everything below — Haiku call, Twilio outbound, conversation update,
   // intake handoff — runs after the 200 is returned. This keeps the
-  // webhook latency under ~500ms regardless of how long Haiku takes,
-  // which eliminates the duplicate-reply class of bug entirely.
+  // webhook latency under ~500ms regardless of how long Haiku takes.
   const conversationId = conversation.id
   const initialAssumptions = (conversation.assumptions_made as string[] | null) ?? []
   const initialTurnCount = conversation.turn_count
@@ -272,13 +364,25 @@ export async function POST(req: Request) {
   // first turn that identifies an easy-5 job_type, never twice).
   const photoRequestToken = conversation.photo_request_token as string | null
   const photoRequestAlreadySent = !!conversation.photo_request_sent_at
+  // Customer-history hint flows into the dialog agent so it picks the
+  // right opener: full intro / welcome-back / no greeting.
+  const customerHistory = customerHistoryHint
 
   after(async () => {
     try {
-      console.log('[sms/inbound:after] step 5 — loading conversation history', { conversationId })
+      // ─────── Debounce window ───────
+      // Wait briefly to let any rapid-fire follow-up messages land before we
+      // read history + run Haiku. Customer firing "Hey there" + "Hi there"
+      // within ~1s lands both in DB; we then call Haiku ONCE with both in
+      // history and reply ONCE. The follow-up webhook fails to claim the
+      // lock and bails (its message is already persisted).
+      const DEBOUNCE_MS = 1500
+      await new Promise(r => setTimeout(r, DEBOUNCE_MS))
+
+      console.log('[sms/inbound:after] step 5 — loading conversation history (post-debounce)', { conversationId })
       // 5. Load the full message history (oldest first) — including the inbound
-      //    we just persisted, so the agent sees the customer's latest message
-      //    as the most recent turn.
+      //    we just persisted AND any rapid-fire messages that landed during
+      //    the debounce window.
       const { data: historyRows } = await supabase
         .from('sms_messages')
         .select('direction, body, created_at')
@@ -294,11 +398,14 @@ export async function POST(req: Request) {
       console.log('[sms/inbound:after] step 6 — calling Haiku dialog agent', {
         turnCount: turns.length,
         inboundCount,
+        customerHistory,
       })
       // 6. Ask Haiku what to do next — ask | finish | escalate_inspection.
+      // customerHistory drives the OPENER LOGIC (Rule 9 in the system prompt):
+      // first_time → full intro, returning → "welcome back", continuing → no greeting.
       let decision: Awaited<ReturnType<typeof decideNextTurn>>
       try {
-        decision = await decideNextTurn({ history: turns, inboundCount })
+        decision = await decideNextTurn({ history: turns, inboundCount, customerHistory })
         console.log('[sms/inbound:after] step 6 — decision', {
           action: decision.action,
           job_type_guess: decision.job_type_guess,
@@ -447,16 +554,42 @@ export async function POST(req: Request) {
         .eq('id', conversationId)
 
       // 10. If the dialog finished, hand off to the existing intake pipeline.
+      // Wrapped in withRetry — the customer already got their dialog reply,
+      // but the quote depends entirely on this POST landing successfully.
+      // Silent failure here = no quote ever drafted = lost customer.
+      // 3 attempts, 2s/4s backoff. Runs inside after() so customer doesn't wait.
       if (decision.action === 'finish') {
         console.log('[sms/inbound:after] step 10 — firing intake/structure handoff', { conversationId })
-        fetch(`${process.env.APP_URL}/api/intake/structure`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        try {
+          await withRetry(
+            async () => {
+              const res = await fetch(`${process.env.APP_URL}/api/intake/structure`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ conversationId, sourceChannel: 'sms' }),
+              })
+              if (!res.ok) {
+                throw new Error(`intake/structure HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`)
+              }
+            },
+            {
+              maxAttempts: 3,
+              baseDelayMs: 2000,
+              onAttemptFailed: (err, attempt, willRetry) => {
+                const msg = err instanceof Error ? err.message : String(err)
+                const tag = willRetry ? 'retrying' : 'EXHAUSTED'
+                console.warn(`[sms/inbound:after] intake handoff attempt ${attempt}/3 failed — ${tag}`, msg.slice(0, 200))
+              },
+            }
+          )
+        } catch (e: any) {
+          // Three attempts failed. This is a critical event — the customer
+          // will never receive a quote unless we ship an alerting hook.
+          console.error('[sms/inbound:after] intake handoff EXHAUSTED — quote LOST', {
             conversationId,
-            sourceChannel: 'sms',
-          }),
-        }).catch(e => console.error('[sms/inbound:after] intake handoff failed', e))
+            error: e?.message ?? String(e),
+          })
+        }
       }
     } catch (e: any) {
       console.error('[sms/inbound:after] UNHANDLED in after()', {
@@ -464,6 +597,24 @@ export async function POST(req: Request) {
         name: e?.name,
         stack: e?.stack?.split('\n').slice(0, 6).join('\n'),
       })
+    } finally {
+      // ─────── Release the per-conversation lock ───────
+      // Always runs — whether the work succeeded, threw, or was downgraded
+      // to the fallback. Clearing processing_until lets the next inbound
+      // SMS (which may be sitting in DB after a failed lock claim) be
+      // processed by the next webhook for this customer.
+      try {
+        await supabase
+          .from('sms_conversations')
+          .update({ processing_until: null })
+          .eq('id', conversationId)
+        console.log('[sms/inbound:after] lock released', { conversationId })
+      } catch (releaseErr: any) {
+        console.error('[sms/inbound:after] lock release failed (will auto-expire in 60s)', {
+          conversationId,
+          error: releaseErr?.message ?? String(releaseErr),
+        })
+      }
     }
   })
 

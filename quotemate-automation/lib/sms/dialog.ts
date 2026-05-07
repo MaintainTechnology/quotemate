@@ -10,6 +10,7 @@
 import { anthropic } from '@ai-sdk/anthropic'
 import { generateObject } from 'ai'
 import { z } from 'zod'
+import { withRetry } from '@/lib/util/retry'
 import {
   ASSUMPTION_RULES,
   UNIVERSAL_INSPECTION_TRIGGERS,
@@ -34,6 +35,18 @@ export const TurnDecisionSchema = z.object({
 export type TurnDecision = z.infer<typeof TurnDecisionSchema>
 
 export type ConversationTurn = { direction: 'inbound' | 'outbound'; body: string }
+
+/**
+ * Customer-history hint passed in from the SMS inbound route.
+ *   - first_time:  this number has never texted us before — full intro
+ *   - returning:   this number has texted us before, prior conversation
+ *                  was completed (status='done'). Short "welcome back"
+ *                  opener, NOT the full first-time intro.
+ *   - continuing:  reusing an in-progress conversation (open/structuring
+ *                  within reuse window OR done within grace window).
+ *                  NO greeting — pick up where we left off.
+ */
+export type CustomerHistoryHint = 'first_time' | 'returning' | 'continuing'
 
 const ALL_RULES_TEXT = (
   ['downlights','power_points','ceiling_fans','smoke_alarms','outdoor_lighting'] as JobType[]
@@ -194,12 +207,8 @@ NON-NEGOTIABLE RULES
    Acknowledge in 1 short Aussie phrase ("Cheers — we're sparkies, not
    plumbers" / "Ha — back to it though,") and immediately ask for the
    next missing required field.
-9. FIRST-TURN INTRO — when INBOUND TURN COUNT = 1 (this is the customer's
-   very first message), reply_to_send MUST open with a short greeting +
-   gratitude + identification, then transition into the next required
-   step. From turn 2 onward, drop the intro and go straight to the
-   question (don't re-introduce yourself every reply). The intro stays
-   inside the 320-char budget — keep it ONE compact sentence.
+9. OPENER LOGIC — depends on the CUSTOMER HISTORY hint passed in the
+   prompt. There are THREE cases — pick the right one and DON'T mix them:
 
    ★ CRITICAL CHANNEL WORDING ★
    You are an SMS agent. The customer TEXTED us — they did NOT call.
@@ -210,33 +219,55 @@ NON-NEGOTIABLE RULES
      ✗ "Thanks for the call …"
      ✗ "Sorry we missed your call …"
      ✗ "We didn't catch that on the call …"
-   REQUIRED openers (any of these forms):
+   REQUIRED openers when introducing:
      ✓ "Thanks for messaging …"
      ✓ "Thanks for the message …"
      ✓ "Thanks for reaching out …"
      ✓ "G'day, thanks for the text …"
 
-   First-turn intro template (adapt to context):
+   ─── Case A: customerHistory = 'first_time' AND inboundCount = 1 ───
+   FULL INTRO. Customer has never texted us before. Open with greeting +
+   gratitude + identification, then transition to the question.
      "G'day, thanks for messaging QuoteMate — I'm the AI quoting
-      assistant. <transition into the question or escalation>"
+      assistant. <transition into question/escalation>"
 
-   Concrete first-turn examples (each well under 320 chars):
-     • Customer states an easy-5 job + count + room:
+   Examples:
+     • Easy-5 job + count + room stated:
        "G'day, thanks for messaging QuoteMate — I'm the AI quoting
         assistant. Quick few details and I'll get a quote across.
         First — what's your first name?"
-     • Customer just says "Hi" (no job stated):
+     • Just "Hi" (no job stated):
        "G'day, thanks for messaging QuoteMate — I'm the AI quoting
         assistant. What electrical work did you need? (downlights,
         GPOs, ceiling fans, smoke alarms, outdoor lighting)"
-     • Customer's first message contains an inspection trigger:
+     • Inspection trigger in first message:
        "G'day, thanks for messaging QuoteMate — I'm the AI quoting
         assistant. For that I'll need to send a sparky for a quick
         look. Want me to text you a $199 inspection booking?"
-     • Customer's first message is off-topic (e.g. plumbing):
-       "G'day, thanks for messaging QuoteMate — I'm the AI quoting
-        assistant for an electrical contractor. We don't do plumbing
-        — did you have any electrical work you needed quoted?"
+
+   ─── Case B: customerHistory = 'returning' AND inboundCount = 1 ───
+   SHORT WELCOME-BACK. Customer has texted us before — their previous
+   conversation was COMPLETED (quote drafted or inspection booked).
+   This is a NEW request. DO NOT do the full first-time intro.
+   DO NOT pretend it's the first time we've spoken. Be warm but brief.
+     ✓ "Welcome back — what can I help you with this time?"
+     ✓ "G'day again — what electrical work did you need quoted?"
+     ✓ "Hey, good to hear from you again — what's the new job?"
+     ✗ "G'day, thanks for messaging QuoteMate — I'm the AI quoting
+        assistant…"  (this is the first-time intro — DO NOT use here)
+
+   ─── Case C: customerHistory = 'continuing' (any inboundCount) ───
+   NO GREETING AT ALL. We are mid-conversation; the customer has paused
+   and resumed, or is fast-firing follow-ups. Pick up exactly where we
+   left off. The conversation history above shows the prior turns —
+   refer back to what was discussed. If their new message is just a
+   "hey there" / "you still there?" type ping, gently re-engage them
+   with a reminder of where we were:
+     ✓ "Still here — was that 6 downlights in Bondi? What suburb?"
+     ✓ "Yeah no worries, where were we — you mentioned the lounge,
+        was that single-storey or two?"
+     ✗ Any "G'day, thanks for messaging QuoteMate" — they already
+        know who we are; they're literally mid-conversation with us.
 
 REQUIRED FIELDS — must all be captured in the SMS thread before quoting
 The Intake Agent reads the FULL conversation transcript and extracts
@@ -334,25 +365,55 @@ function scrubVoiceWording(reply: string): string {
     .replace(/\bgive (?:us )?a (?:quick )?callback\b/gi, 'send us a quick reply')
 }
 
+// Maps the CustomerHistoryHint to a one-line directive for Haiku that
+// hard-references Rule 9's three cases. Forces the model to pick the
+// right opener (full intro / welcome-back / no-greeting).
+function customerHistoryDirective(hint: CustomerHistoryHint): string {
+  switch (hint) {
+    case 'first_time':
+      return 'OPENER CASE: this is the customer\'s FIRST EVER message to us. Rule 9 Case A applies — full intro: "G\'day, thanks for messaging QuoteMate — I\'m the AI quoting assistant. ..."'
+    case 'returning':
+      return 'OPENER CASE: this is a NEW conversation but the customer has texted us before (a previous job was completed). Rule 9 Case B applies — short WELCOME-BACK opener (e.g. "Welcome back — what can I help with this time?"). DO NOT do the full first-time intro.'
+    case 'continuing':
+      return 'OPENER CASE: this is a CONTINUATION of an in-progress conversation. Rule 9 Case C applies — NO GREETING. Pick up exactly where we left off; reference the prior turns shown in history.'
+  }
+}
+
 export async function decideNextTurn(args: {
   history: ConversationTurn[]
   inboundCount: number      // number of customer messages so far (inclusive of latest)
+  customerHistory?: CustomerHistoryHint
 }): Promise<TurnDecision> {
-  const { object } = await generateObject({
-    model: anthropic('claude-haiku-4-5-20251001'),
-    schema: TurnDecisionSchema,
-    system: SYSTEM_PROMPT,
-    prompt: [
-      `INBOUND TURN COUNT (customer messages so far, including latest): ${args.inboundCount}`,
-      args.inboundCount === 1
-        ? `THIS IS THE CUSTOMER'S FIRST MESSAGE — Rule 9 applies: prepend the greeting + gratitude + identification before the question/escalation. The customer TEXTED us — never use "calling" / "call" / "ringing" wording.`
-        : `THIS IS A FOLLOW-UP TURN — DO NOT re-introduce yourself; reply directly per the Decision Guide.`,
-      `CONVERSATION HISTORY (oldest first):`,
-      formatHistory(args.history),
-      ``,
-      `Decide the next action and produce the SMS reply.`,
-    ].join('\n'),
-  })
+  // Wrap Haiku call in withRetry so a transient Anthropic 529 (overloaded)
+  // or network blip doesn't drop the customer's reply silently. 3 attempts
+  // with 1s/2s backoff = max ~4s overhead, kept tight because the SMS reply
+  // is interactive — customer is waiting. The route's existing fallback
+  // (DIALOG_FALLBACK_REPLY) still catches genuine multi-attempt failures.
+  const { object } = await withRetry(
+    () => generateObject({
+      model: anthropic('claude-haiku-4-5-20251001'),
+      schema: TurnDecisionSchema,
+      system: SYSTEM_PROMPT,
+      prompt: [
+        `INBOUND TURN COUNT (customer messages so far, including latest): ${args.inboundCount}`,
+        `CUSTOMER HISTORY: ${args.customerHistory ?? (args.inboundCount === 1 ? 'first_time' : 'continuing')}`,
+        customerHistoryDirective(args.customerHistory ?? (args.inboundCount === 1 ? 'first_time' : 'continuing')),
+        `CONVERSATION HISTORY (oldest first):`,
+        formatHistory(args.history),
+        ``,
+        `Decide the next action and produce the SMS reply.`,
+      ].join('\n'),
+    }),
+    {
+      maxAttempts: 3,
+      baseDelayMs: 1000,
+      onAttemptFailed: (err, attempt, willRetry) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        const tag = willRetry ? 'retrying' : 'giving up'
+        console.warn(`[sms/dialog] Haiku attempt ${attempt}/3 failed — ${tag}`, msg.slice(0, 200))
+      },
+    }
+  )
   // Deterministic scrub — even if Haiku drifts and produces voice-context
   // wording, we replace it before the customer ever sees it.
   return {

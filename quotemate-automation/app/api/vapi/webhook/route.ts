@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { after } from 'next/server'
 import { pipelineLog } from '@/lib/log/pipeline'
 import { generateShareToken } from '@/lib/stripe/checkout'
+import { withRetry } from '@/lib/util/retry'
 
 export const maxDuration = 60
 
@@ -115,20 +116,36 @@ export async function POST(req: Request) {
   // gate centralised — a single decision point per call.
   after(async () => {
     const dispatch = pipelineLog('webhook', callRow.id)
-    dispatch.step('dispatching to /api/intake/structure')
+    dispatch.step('dispatching to /api/intake/structure (with retry)')
+    // Wrapped in withRetry — the entire quote pipeline depends on this
+    // POST landing. Silent failure = customer never gets a quote.
+    // 3 attempts, 2s/4s backoff, runs in after() so doesn't block webhook ack.
     try {
-      const res = await fetch(`${process.env.APP_URL}/api/intake/structure`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ callId: callRow.id }),
-      })
-      if (res.ok) {
-        dispatch.ok('intake/structure dispatched', { http: res.status })
-      } else {
-        dispatch.err('intake/structure rejected', `HTTP ${res.status}`, { body: (await res.text()).slice(0, 200) })
-      }
-    } catch (e) {
-      dispatch.err('intake dispatch threw', e)
+      await withRetry(
+        async () => {
+          const res = await fetch(`${process.env.APP_URL}/api/intake/structure`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ callId: callRow.id }),
+          })
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`)
+          }
+          return res
+        },
+        {
+          maxAttempts: 3,
+          baseDelayMs: 2000,
+          onAttemptFailed: (err, attempt, willRetry) => {
+            const msg = err instanceof Error ? err.message : String(err)
+            const tag = willRetry ? 'retrying' : 'EXHAUSTED'
+            dispatch.err(`intake handoff attempt ${attempt}/3 — ${tag}`, msg.slice(0, 200))
+          },
+        }
+      )
+      dispatch.ok('intake/structure dispatched')
+    } catch (e: any) {
+      dispatch.err('intake handoff EXHAUSTED — quote LOST', e?.message ?? String(e), { call_id: callRow.id })
     }
   })
 
