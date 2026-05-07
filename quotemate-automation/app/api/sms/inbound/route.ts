@@ -19,7 +19,7 @@ import {
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { decideNextTurn, type ConversationTurn } from '@/lib/sms/dialog'
 import { extractAndStoreMmsPhotos } from '@/lib/sms/mms'
-import { buildPhotoRequestSms, buildQuoteInFlightSms } from '@/lib/sms/templates'
+import { buildPhotoRequestSms, buildQuoteInFlightSms, buildQuoteFailureSms } from '@/lib/sms/templates'
 import { withRetry } from '@/lib/util/retry'
 
 // Twilio webhook ack. We send the real customer reply via the REST API
@@ -666,12 +666,53 @@ export async function POST(req: Request) {
             }
           )
         } catch (e: any) {
-          // Three attempts failed. This is a critical event — the customer
-          // will never receive a quote unless we ship an alerting hook.
-          console.error('[sms/inbound:after] intake handoff EXHAUSTED — quote LOST', {
+          // All retry attempts failed. NEVER leave the customer silent —
+          // send a fallback "we hit a snag" SMS so they know to expect a
+          // callback rather than wondering if the AI ignored them. Reopen
+          // the conversation status so any reply they send doesn't fall
+          // into the in-flight short-circuit.
+          console.error('[sms/inbound:after] intake handoff EXHAUSTED — sending failure SMS', {
             conversationId,
             error: e?.message ?? String(e),
           })
+          try {
+            // Best-effort first-name lookup from the dialog turns we already
+            // loaded — Opus would have extracted it later but we don't get
+            // that chance here.
+            const failureFirstName = guessFirstName(turns)
+            const failureBody = buildQuoteFailureSms({ firstName: failureFirstName })
+            const failureDispatch = await dispatchQuoteMessage({
+              to: fromNumber,
+              from: toNumber,
+              text: failureBody,
+            })
+            await supabase.from('sms_messages').insert({
+              conversation_id: conversationId,
+              direction: 'outbound',
+              body: failureDispatch.ok && failureDispatch.channel === 'whatsapp'
+                ? `[WhatsApp fallback] ${failureBody}`
+                : failureBody,
+              twilio_message_sid: failureDispatch.ok ? failureDispatch.sid : null,
+            })
+            // Flip status back to 'open' so the customer can re-engage
+            // without hitting the in-flight canned hold-on rule.
+            await supabase
+              .from('sms_conversations')
+              .update({
+                status: 'open',
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', conversationId)
+            console.log('[sms/inbound:after] failure SMS dispatched + status reopened', {
+              conversationId,
+              dispatchOk: failureDispatch.ok,
+            })
+          } catch (notifyErr: any) {
+            console.error('[sms/inbound:after] failure SMS itself failed — customer will be silent', {
+              conversationId,
+              error: notifyErr?.message ?? String(notifyErr),
+            })
+          }
         }
       }
     } catch (e: any) {

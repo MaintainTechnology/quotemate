@@ -136,6 +136,23 @@ export function buildPhotoRequestSms(opts: {
     .replace(/…/g, '...').replace(/·/g, '-').replace(/[^\x20-\x7E\n]/g, '')
 }
 
+// Quote-failure fallback SMS — sent when the post-dialog chain (intake →
+// estimate → SMS dispatch) exhausts retries and can't produce a quote.
+// Without this the customer sees the AI say "quote in 2 mins" and then
+// nothing. This message keeps the customer informed and gives them a
+// next step (we'll call them back). Aussie tone, GSM-7 safe, single segment.
+//
+// Optional firstName personalises the apology when we have it from
+// the dialog. Falls back to no name when we don't.
+export function buildQuoteFailureSms(opts: { firstName?: string }): string {
+  const first = (opts.firstName ?? '').split(' ')[0] || ''
+  const greeting = first ? `Sorry ${first} - ` : 'Sorry - '
+  const body = `${greeting}we hit a technical snag finalising your quote on our end. The sparky's been pinged and will give you a callback shortly. Apologies for the wait.\n\n- QuoteMate`
+  return body
+    .replace(/[‐-―−]/g, '-').replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
+    .replace(/…/g, '...').replace(/·/g, '-').replace(/[^\x20-\x7E\n]/g, '')
+}
+
 // Quote-in-flight hold-on SMS — sent when the customer texts a NEW message
 // while their previous quote is being drafted (status='structuring') or has
 // just been dispatched (status='done' within last ~60s). Bypasses Haiku

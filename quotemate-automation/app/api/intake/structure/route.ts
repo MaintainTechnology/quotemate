@@ -6,7 +6,7 @@ import { evaluateIntakeQuality } from '@/lib/intake/quality'
 import { pipelineLog } from '@/lib/log/pipeline'
 import { withRetry } from '@/lib/util/retry'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
-import { buildIncompleteCallSms, buildPhotoRequestSms } from '@/lib/sms/templates'
+import { buildIncompleteCallSms, buildPhotoRequestSms, buildQuoteFailureSms } from '@/lib/sms/templates'
 
 export const maxDuration = 300
 
@@ -348,7 +348,32 @@ export async function POST(req: Request) {
       )
       dispatch.ok('estimate/draft dispatched')
     } catch (e: any) {
-      dispatch.err('estimate handoff EXHAUSTED — quote LOST', e?.message ?? String(e), { intake_id: intakeRow.id })
+      dispatch.err('estimate handoff EXHAUSTED — sending failure SMS', e?.message ?? String(e), { intake_id: intakeRow.id })
+      // NEVER leave the customer silent. Send a fallback SMS so they
+      // know to expect a callback. Both voice and SMS paths converge
+      // here; callerNumber works for either (set above when loading
+      // the source row).
+      try {
+        if (!callerNumber) {
+          dispatch.err('cannot send failure SMS — no caller_number / from_number', null, { intake_id: intakeRow.id })
+        } else {
+          const failureBody = buildQuoteFailureSms({ firstName: callerFirstName })
+          const failureDispatch = await dispatchQuoteMessage({ to: callerNumber, text: failureBody })
+          if (failureDispatch.ok) {
+            dispatch.ok('failure SMS dispatched', {
+              channel: failureDispatch.channel,
+              sid: failureDispatch.sid,
+            })
+          } else {
+            dispatch.err('failure SMS FAILED on both channels', null, {
+              sms_code: failureDispatch.smsAttempt.code,
+              wa_code: failureDispatch.waAttempt?.code,
+            })
+          }
+        }
+      } catch (notifyErr) {
+        dispatch.err('failure SMS itself threw', notifyErr, { intake_id: intakeRow.id })
+      }
     }
   })
 

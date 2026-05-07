@@ -3,6 +3,8 @@ import { after } from 'next/server'
 import { pipelineLog } from '@/lib/log/pipeline'
 import { generateShareToken } from '@/lib/stripe/checkout'
 import { withRetry } from '@/lib/util/retry'
+import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
+import { buildQuoteFailureSms } from '@/lib/sms/templates'
 
 export const maxDuration = 60
 
@@ -145,7 +147,31 @@ export async function POST(req: Request) {
       )
       dispatch.ok('intake/structure dispatched')
     } catch (e: any) {
-      dispatch.err('intake handoff EXHAUSTED — quote LOST', e?.message ?? String(e), { call_id: callRow.id })
+      dispatch.err('intake handoff EXHAUSTED — sending failure SMS to caller', e?.message ?? String(e), { call_id: callRow.id })
+      // NEVER leave the caller silent. Send a fallback SMS so they know
+      // to expect a callback rather than wondering if their call vanished.
+      try {
+        const callerNumber = (callRow as { caller_number?: string | null }).caller_number ?? null
+        if (!callerNumber) {
+          dispatch.err('cannot send failure SMS — no caller_number on call row', null, { call_id: callRow.id })
+        } else {
+          const failureBody = buildQuoteFailureSms({})
+          const failureDispatch = await dispatchQuoteMessage({ to: callerNumber, text: failureBody })
+          if (failureDispatch.ok) {
+            dispatch.ok('failure SMS dispatched to caller', {
+              channel: failureDispatch.channel,
+              sid: failureDispatch.sid,
+            })
+          } else {
+            dispatch.err('failure SMS to caller FAILED on both channels', null, {
+              sms_code: failureDispatch.smsAttempt.code,
+              wa_code: failureDispatch.waAttempt?.code,
+            })
+          }
+        }
+      } catch (notifyErr) {
+        dispatch.err('failure SMS to caller threw', notifyErr, { call_id: callRow.id })
+      }
     }
   })
 
