@@ -136,6 +136,22 @@ export function buildPhotoRequestSms(opts: {
     .replace(/…/g, '...').replace(/·/g, '-').replace(/[^\x20-\x7E\n]/g, '')
 }
 
+// Quote-in-flight hold-on SMS — sent when the customer texts a NEW message
+// while their previous quote is being drafted (status='structuring') or has
+// just been dispatched (status='done' within last ~60s). Bypasses Haiku
+// entirely so the customer gets a predictable reply in <1s, and so we
+// don't accidentally Haiku-respond to a "new job" mid-flight as if it
+// were an add-on to the in-flight quote.
+//
+// The customer's new message is preserved in sms_messages — when they
+// re-engage after their quote arrives, the dialog picks up normally.
+export function buildQuoteInFlightSms(): string {
+  const body = `Cheers - just finalising the quote we were working on (under a minute). Once it lands, hit me back with this one and I'll get straight onto it.`
+  return body
+    .replace(/[‐-―−]/g, '-').replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
+    .replace(/…/g, '...').replace(/·/g, '-').replace(/[^\x20-\x7E\n]/g, '')
+}
+
 // SMS body builder for the customer-facing quote dispatch.
 // Output is plain ASCII to stay in GSM-7 encoding (160 chars/segment instead
 // of 70 for UCS-2). Sanitised against em-dashes, smart quotes, ellipsis.

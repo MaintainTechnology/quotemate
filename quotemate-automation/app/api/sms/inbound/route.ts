@@ -19,7 +19,7 @@ import {
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { decideNextTurn, type ConversationTurn } from '@/lib/sms/dialog'
 import { extractAndStoreMmsPhotos } from '@/lib/sms/mms'
-import { buildPhotoRequestSms } from '@/lib/sms/templates'
+import { buildPhotoRequestSms, buildQuoteInFlightSms } from '@/lib/sms/templates'
 import { withRetry } from '@/lib/util/retry'
 
 // Twilio webhook ack. We send the real customer reply via the REST API
@@ -155,21 +155,21 @@ export async function POST(req: Request) {
   console.log('[sms/inbound] step 3 — completion-aware conversation lookup', { fromNumber })
   // 3. Smart conversation re-engagement.
   //
-  // Find the MOST RECENT conversation for this from_number, regardless of
-  // status, then decide whether to REUSE it (continuation) or CREATE a
-  // new one (fresh request). Rules:
+  // Find the MOST RECENT conversation for this from_number (any status).
+  // Then decide one of three modes:
   //
-  //   - status in ('open','structuring') AND age < 4h:  REUSE (still mid-flow)
-  //   - status in ('open','structuring') AND age >= 4h: NEW (abandoned)
-  //   - status = 'done' AND age < 5min:                 REUSE (add-on grace)
-  //   - status = 'done' AND age >= 5min:                NEW (returning customer)
-  //   - no prior conversation:                          NEW (first-time customer)
+  //   INFLIGHT: a previous quote is being drafted/just-sent right now.
+  //             We send a canned hold-on message and skip Haiku entirely.
+  //   REUSE:    the prior conversation is mid-flow OR a recently-done quote
+  //             is in the 5-min add-on grace window. Continue the dialog.
+  //   NEW:      no prior or prior is too old/stale. Create a new row;
+  //             customerHistoryHint = 'first_time' or 'returning'.
   //
-  // The customerHistoryHint is passed to the dialog agent so it can pick
-  // the right opener: full intro for first-timers, "welcome back" for
-  // returning customers, no greeting for continuations.
-  const REUSE_OPEN_WINDOW_MS = 4 * 60 * 60 * 1000   // 4 hours
-  const REUSE_DONE_GRACE_MS = 5 * 60 * 1000         // 5 minutes
+  // Window thresholds (don't change without updating the comment):
+  const STRUCTURING_INFLIGHT_MAX_MS = 5 * 60 * 1000  // structuring beyond 5min = stuck/failed → treat as new
+  const DONE_INFLIGHT_WINDOW_MS     = 60 * 1000      // 60s after done = quote SMS in transit
+  const REUSE_DONE_GRACE_MS         = 5 * 60 * 1000  // 5min after done = add-on grace
+  const REUSE_OPEN_WINDOW_MS        = 4 * 60 * 60 * 1000  // 4h on open = pause-and-resume
 
   const { data: prior, error: lookupErr } = await supabase
     .from('sms_conversations')
@@ -185,30 +185,51 @@ export async function POST(req: Request) {
   }
 
   type CustomerHistoryHint = 'first_time' | 'returning' | 'continuing'
+  type LookupMode = 'inflight' | 'reuse' | 'new'
   let customerHistoryHint: CustomerHistoryHint
   let conversation: typeof prior
+  let mode: LookupMode
 
   const ageMs = prior?.last_message_at
     ? Date.now() - new Date(prior.last_message_at as string).getTime()
     : Infinity
 
-  const shouldReuse = !!prior && (
-    ((prior.status === 'open' || prior.status === 'structuring') && ageMs < REUSE_OPEN_WINDOW_MS)
-    || (prior.status === 'done' && ageMs < REUSE_DONE_GRACE_MS)
+  // ── Mode classification ───────────────────────────────────────────
+  // Order matters — first matching rule wins.
+  const isInflight = !!prior && (
+    (prior.status === 'structuring' && ageMs < STRUCTURING_INFLIGHT_MAX_MS)
+    || (prior.status === 'done' && ageMs < DONE_INFLIGHT_WINDOW_MS)
+  )
+  const isReuseOpenLike = !!prior && !isInflight && (
+    (prior.status === 'open' && ageMs < REUSE_OPEN_WINDOW_MS)
+    || (prior.status === 'structuring' && ageMs < REUSE_OPEN_WINDOW_MS)
+  )
+  const isReuseDoneGrace = !!prior && !isInflight && (
+    prior.status === 'done' && ageMs >= DONE_INFLIGHT_WINDOW_MS && ageMs < REUSE_DONE_GRACE_MS
   )
 
-  if (shouldReuse) {
+  if (isInflight) {
+    mode = 'inflight'
+    conversation = prior!
+    customerHistoryHint = 'continuing'  // unused in inflight path; canned message bypasses Haiku
+    console.log('[sms/inbound] step 3 — INFLIGHT (canned hold-on path)', {
+      conversationId: conversation.id,
+      priorStatus: conversation.status,
+      ageSeconds: Math.round(ageMs / 1000),
+    })
+  } else if (isReuseOpenLike || isReuseDoneGrace) {
+    mode = 'reuse'
     conversation = prior!
     customerHistoryHint = 'continuing'
     console.log('[sms/inbound] step 3 — REUSE prior conversation', {
       conversationId: conversation.id,
       priorStatus: conversation.status,
       ageSeconds: Math.round(ageMs / 1000),
+      reason: isReuseOpenLike ? 'open/structuring within window' : 'done within grace',
     })
-    // If reusing a 'done' conversation in the grace window, flip back to 'open'
-    // so the dialog can append normally. The intake_id stays linked — the
-    // dialog agent treats this as an add-on/clarification turn.
-    if (conversation.status === 'done') {
+    // For done-grace reuse, flip status back to 'open' so the dialog appends
+    // normally. We don't flip 'structuring' (it's mid-flight, leave it).
+    if (conversation.status === 'done' && isReuseDoneGrace) {
       await supabase
         .from('sms_conversations')
         .update({ status: 'open', updated_at: new Date().toISOString() })
@@ -219,7 +240,10 @@ export async function POST(req: Request) {
       })
     }
   } else {
-    // Create new conversation.
+    // Create a new conversation. Either there was no prior, or the prior
+    // is past all reuse windows (abandoned 4h+ open, stuck 5min+ structuring,
+    // or done >5min ago = returning customer for a new request).
+    mode = 'new'
     const photoToken = randomBytes(16).toString('hex')
     const { data: created, error: createErr } = await supabase
       .from('sms_conversations')
@@ -236,12 +260,12 @@ export async function POST(req: Request) {
       return new Response('DB error', { status: 500 })
     }
     conversation = created
-    // First-time vs returning: do we have ANY prior conversation row?
     customerHistoryHint = prior ? 'returning' : 'first_time'
     console.log('[sms/inbound] step 3 — NEW conversation', {
       conversationId: conversation.id,
       customerHistoryHint,
       priorAgeHours: prior ? Math.round(ageMs / 3600000 * 10) / 10 : null,
+      priorStatus: prior?.status ?? null,
     })
   }
 
@@ -367,9 +391,68 @@ export async function POST(req: Request) {
   // Customer-history hint flows into the dialog agent so it picks the
   // right opener: full intro / welcome-back / no greeting.
   const customerHistory = customerHistoryHint
+  // Lookup mode controls the after() flow — when 'inflight', we skip
+  // Haiku/status-update/intake-handoff entirely and just send a canned
+  // hold-on message so the customer doesn't get a bungled "new job"
+  // reply while the previous quote is still being drafted.
+  const lookupMode = mode
 
   after(async () => {
     try {
+      // ─────── In-flight short-circuit ───────
+      // The customer texted while their PREVIOUS quote is being drafted
+      // (status='structuring') or just finished and dispatched (status='done'
+      // < 60s old). Send a canned hold-on message — bypasses Haiku entirely
+      // so we don't accidentally treat new work as an add-on to a quote
+      // that's already locked-in. The customer's new message is preserved
+      // in sms_messages; when they re-engage post-quote, the dialog picks
+      // up normally via the 5-min done-grace REUSE rule.
+      if (lookupMode === 'inflight') {
+        console.log('[sms/inbound:after] INFLIGHT — sending canned hold-on, skipping Haiku', {
+          conversationId,
+        })
+        const holdOnText = buildQuoteInFlightSms()
+        const holdOnDispatch = await dispatchQuoteMessage({
+          to: fromNumber,
+          from: toNumber,
+          text: holdOnText,
+        })
+        if (holdOnDispatch.ok) {
+          console.log('[sms/inbound:after] INFLIGHT — hold-on SMS sent', {
+            channel: holdOnDispatch.channel,
+            sid: holdOnDispatch.sid,
+          })
+        } else {
+          console.error('[sms/inbound:after] INFLIGHT — hold-on SMS failed (both channels)', {
+            smsAttempt: holdOnDispatch.smsAttempt,
+            waAttempt: holdOnDispatch.waAttempt,
+          })
+        }
+        // Persist the canned outbound so it appears in conversation history.
+        // We tag it with the actual Twilio SID when dispatch succeeded.
+        await supabase.from('sms_messages').insert({
+          conversation_id: conversationId,
+          direction: 'outbound',
+          body: holdOnDispatch.ok && holdOnDispatch.channel === 'whatsapp'
+            ? `[WhatsApp fallback] ${holdOnText}`
+            : holdOnText,
+          twilio_message_sid: holdOnDispatch.ok ? holdOnDispatch.sid : null,
+        })
+        // Update only the activity timestamp — DO NOT change status, DO NOT
+        // bump turn_count semantically (this isn't a real dialog turn), and
+        // critically DO NOT fire the intake-handoff (the previous quote is
+        // already running — we don't want a second one).
+        await supabase
+          .from('sms_conversations')
+          .update({
+            last_message_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', conversationId)
+        // Done — finally block will release the lock.
+        return
+      }
+
       // ─────── Debounce window ───────
       // Wait briefly to let any rapid-fire follow-up messages land before we
       // read history + run Haiku. Customer firing "Hey there" + "Hi there"
