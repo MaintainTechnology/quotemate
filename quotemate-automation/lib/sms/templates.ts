@@ -300,10 +300,19 @@ export function buildQuoteSms(intake: Intake, quote: Quote): string {
     lines.push(`View full quote: ${quote.quote_view_url}`)
     lines.push('')
   }
+  // Count actual non-null tiers — don't say "3 OPTIONS" if BEST dropped
+  // because no premium catalogue match for the customer's spec preference
+  // (see migration 008 + assumptions.ts note about catalogue gaps).
+  const tierCount = ([quote.good, quote.better, quote.best].filter(Boolean) as Tier[]).length
+  const heading =
+    tierCount === 1 ? 'YOUR OPTION' :
+    tierCount === 2 ? '2 OPTIONS' :
+    tierCount === 3 ? '3 OPTIONS' :
+    'YOUR OPTIONS'
   if (hasPayLinks && depositPct > 0) {
-    lines.push(`3 OPTIONS (inc 10% GST - ${depositPct}% deposit to confirm):`)
+    lines.push(`${heading} (inc 10% GST - ${depositPct}% deposit to confirm):`)
   } else {
-    lines.push('3 OPTIONS (inc 10% GST):')
+    lines.push(`${heading} (inc 10% GST):`)
   }
   lines.push('')
 
