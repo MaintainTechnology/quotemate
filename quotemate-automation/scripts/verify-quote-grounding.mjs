@@ -65,7 +65,6 @@ console.log(`QUOTE  share_token=${token}`);
 console.log("═".repeat(72));
 console.log(`quote_id:           ${q.id}`);
 console.log(`intake_id:          ${q.intake_id}`);
-console.log(`pricing_book_id:    ${q.pricing_book_id ?? "(null)"}`);
 console.log(`job_type:           ${q.job_type}`);
 console.log(`suburb:             ${q.suburb ?? "(null)"}`);
 console.log(`needs_inspection:   ${q.needs_inspection}`);
@@ -75,28 +74,29 @@ if (q.scope_of_works) {
   console.log(`scope_of_works:     "${q.scope_of_works.slice(0, 120)}${q.scope_of_works.length > 120 ? "…" : ""}"`);
 }
 
-// ─── Pull the pricing book the quote was drafted against ─────────────
+// ─── Pull the (singleton) pricing book ───────────────────────────────
+// The schema uses `pricing_book` (singular) as a single-tenant table —
+// the validator loads "the" row, no per-quote FK.
 const { rows: pbRows } = await client.query(
-  `select id, name, hourly_rate, apprentice_rate, call_out_minimum,
-          default_markup_pct, min_labour_hours
-     from pricing_books
-     where id = $1`,
-  [q.pricing_book_id],
+  `select * from pricing_book limit 1`,
 );
 const pb = pbRows[0] ?? null;
 
 console.log("\n" + "─".repeat(72));
-console.log("PRICING BOOK USED");
+console.log("PRICING BOOK  (singleton, the validator loads this row at draft time)");
 console.log("─".repeat(72));
 if (!pb) {
-  console.log("(no pricing book linked — or row was deleted)");
+  console.log("(no row in pricing_book table — quotes would fall back to defaults)");
 } else {
-  console.log(`name:               ${pb.name}`);
-  console.log(`hourly_rate:        $${pb.hourly_rate}`);
-  console.log(`apprentice_rate:    $${pb.apprentice_rate}`);
+  console.log(`hourly_rate:        $${pb.hourly_rate}/hr`);
+  console.log(`apprentice_rate:    $${pb.apprentice_rate}/hr`);
   console.log(`call_out_minimum:   $${pb.call_out_minimum}`);
   console.log(`default_markup_pct: ${pb.default_markup_pct}%`);
-  console.log(`min_labour_hours:   ${pb.min_labour_hours ?? "(default 2.0)"}`);
+  console.log(`risk_buffer_pct:    ${pb.risk_buffer_pct}%`);
+  console.log(`gst_registered:     ${pb.gst_registered}`);
+  if (pb.licence_type) {
+    console.log(`licence:            ${pb.licence_type} ${pb.licence_number} (${pb.licence_state}, exp ${pb.licence_expiry})`);
+  }
 }
 
 // ─── Catalogue: every shared_material + shared_assembly with their
