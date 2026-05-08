@@ -159,8 +159,12 @@ export async function generatePreviewImage(quoteId: string): Promise<PreviewResu
           },
         ],
         generation_config: {
-          // image-gen models accept these; harmless if ignored.
-          temperature: 0.4,
+          // Low temperature — we want the model to follow the JOB SPEC
+          // (count, colour temp, dimmable, replace-vs-new) tightly,
+          // not improvise. 0.2 gives consistent + accurate output;
+          // higher values produce more "creative" but spec-divergent
+          // edits. Match samples.ts.
+          temperature: 0.2,
           response_modalities: ['IMAGE'],
         },
       }),

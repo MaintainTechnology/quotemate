@@ -1,10 +1,24 @@
 // ═══════════════════════════════════════════════════════════════════
 // AI preview prompts — per job_type templates for Gemini 2.5 Flash Image.
 //
-// The prompt always emphasises that the attached photo is the CUSTOMER'S
-// REAL ROOM and that Gemini should EDIT IT (not generate a new scene
-// from scratch). Same room, same angle, same lighting, same furniture
-// — only the relevant fixtures change.
+// Two surfaces:
+//   1. PREVIEW   — buildPreviewPrompt(intake)
+//      Uses the customer's actual photo as the reference image.
+//      Gemini edits THAT photo to show the proposed work.
+//
+//   2. SAMPLES   — buildSamplePrompts(intake)
+//      Three generic AI renders showing typical examples of similar
+//      work. ALL THREE share the same fictional scene so the customer
+//      sees a coherent "wide / close-up / in use" narrative — not
+//      three random rooms. The orchestration in samples.ts generates
+//      the WIDE shot first, then feeds it as a reference image to the
+//      DETAIL and IN-USE prompts so they keep the same room.
+//
+// Accuracy goals (both surfaces):
+//   - Exact count match — the model must show N fittings, not "some"
+//   - Exact spec match — colour temp, dimmable, replace-vs-new
+//   - Negative constraints — explicit "do not show X" lines
+//   - Lower temperature on the API side (see samples.ts / generate.ts)
 // ═══════════════════════════════════════════════════════════════════
 
 export type PromptIntake = {
@@ -39,195 +53,241 @@ function colorTempHint(temp?: string | null): string {
   return '2700K-3000K (warm white)'
 }
 
-// Universal footer applied to every prompt.
-function footerText(): string {
+// Universal footer applied to every prompt. The label customises one line.
+function footerText(label: 'preview' | 'wide' | 'detail' | 'lit' = 'preview'): string {
+  const watermark =
+    label === 'preview'
+      ? `WATERMARK: small semi-transparent "AI PREVIEW" in bottom-right corner.`
+      : `WATERMARK: small semi-transparent "AI SAMPLE" in bottom-right corner.`
   return [
-    `KEEP UNCHANGED: room layout, walls, floor, furniture, decor, ambient lighting, perspective, camera angle.`,
-    `MODIFY ONLY: the specific fixture area listed above.`,
-    `STYLE: photorealistic, modern Australian residential interior. Match the lighting + colour grading of the input photo.`,
-    `WATERMARK: add a small semi-transparent "AI PREVIEW" watermark in the bottom-right corner.`,
-    `OUTPUT: a single edited image, same aspect ratio + resolution as the input photo.`,
+    watermark,
+    `STYLE: photorealistic, modern Australian residential interior, magazine-quality.`,
+    `OUTPUT: a single image, 4:3 aspect, no text overlays beyond the watermark, no captions, no logos.`,
+    `NEGATIVE: do NOT include people, pets, hands, text labels, ruler-style call-outs, or annotations.`,
   ].join('\n')
 }
 
-// ────────────────────────────────────────────────────────────────────
-// SAMPLE GALLERY PROMPTS
-//
-// 3 generic text-to-image prompts that show typical examples of the
-// proposed work. NOT based on the customer's photo — these are
-// "examples of similar work" to complement the room-specific preview.
-// Each angle is distinct so the customer sees 3 useful perspectives.
-// ────────────────────────────────────────────────────────────────────
-
-export type SamplePromptSet = {
-  wide: string      // wide-angle view of the whole installation
-  detail: string    // close-up of the fitting + light pattern
-  lit: string       // result shown in use (lights on, evening, etc.)
+// ─── SHARED SCENE ANCHOR ─────────────────────────────────────────────
+// Same description used in all 3 sample prompts so all 3 renders share
+// the same fictional room. Combined with the wide → detail/lit reference
+// chain in samples.ts, this gives a visually coherent triptych.
+function sharedSceneAnchor(intake: PromptIntake): string {
+  const room = detectRoom(intake.scope?.description)
+  const ceiling = intake.access?.ceiling_type ?? 'flat plaster'
+  return [
+    `SHARED SCENE — ALL THREE SAMPLE IMAGES MUST SHOW THE SAME ROOM:`,
+    `  Setting: a contemporary Australian residential ${room} interior`,
+    `  Ceiling: ${ceiling}, painted matte white, ~2.7m height`,
+    `  Walls: warm neutral cream / off-white painted plaster`,
+    `  Flooring: blonde oak engineered timber, matte finish`,
+    `  Furniture: minimalist — single sofa or armchair, low coffee table, no clutter`,
+    `  Window: tall, sheer linen curtains, daylight visible outside`,
+    `  Camera: eye-level, slightly off-centre, 35mm prime style, shallow depth-of-field`,
+    `KEEP EVERYTHING ABOVE IDENTICAL across the wide / detail / in-use shots.`,
+    `Same wall colour, same furniture position, same ceiling material, same camera framing.`,
+    `Only the lighting + zoom changes between shots.`,
+  ].join('\n')
 }
 
-const SAMPLE_FOOTER = [
-  ``,
-  `STYLE: photorealistic, modern Australian residential interior.`,
-  `WATERMARK: small semi-transparent "AI SAMPLE" in bottom-right corner.`,
-  `OUTPUT: single image, 4:3 aspect ratio, magazine-quality.`,
-].join('\n')
-
-export function buildSamplePrompts(intake: PromptIntake): SamplePromptSet | null {
+// ─── JOB SPEC BLOCK ──────────────────────────────────────────────────
+// A structured, bullet-style summary of EXACTLY what the customer
+// requested. Surfaced near the top of every prompt so Gemini treats
+// it as the dominant constraint, not a footnote. Returns null when
+// the job_type isn't an easy-5 (no meaningful "after" to render).
+function jobSpec(intake: PromptIntake): string | null {
   const count = intake.scope?.item_count ?? 0
+  const room = detectRoom(intake.scope?.description)
   const ceiling = intake.access?.ceiling_type ?? 'flat plaster'
   const tempK = colorTempHint(intake.scope?.color_temp)
-  const room = detectRoom(intake.scope?.description)
+  const dimmable = intake.scope?.dimmable === true ? 'dimmable' : 'non-dimmable'
+  const desc = (intake.scope?.description ?? '').trim()
 
   switch (intake.job_type) {
     case 'downlights':
-      return {
-        wide:
-          `Photorealistic wide-angle view of a typical Australian ${room} with ${count || 6} ${tempK} LED downlights evenly spaced on a ${ceiling} ceiling. Lights ON, daytime ambient lighting. Modern furniture, clean install, neat trim. No people in frame.${SAMPLE_FOOTER}`,
-        detail:
-          `Photorealistic close-up of a single ${tempK} LED downlight installed neatly in a ${ceiling} ceiling. Showing the trim, beam pattern, and clean cut-out. Crisp focus on the fitting. Slight bokeh background. No people.${SAMPLE_FOOTER}`,
-        lit:
-          `Photorealistic evening view of an Australian ${room} with ${count || 6} ${tempK} LED downlights illuminated. Cosy ambient glow, lights on, dusk through windows. Modern furniture, no people in frame.${SAMPLE_FOOTER}`,
-      }
+      return [
+        `JOB SPEC — RENDER MUST MATCH EXACTLY:`,
+        `  · Job type: downlight installation`,
+        `  · Count: EXACTLY ${count || 6} downlight fittings — count them, no more, no fewer`,
+        `  · Room: ${room}`,
+        `  · Ceiling: ${ceiling}`,
+        `  · Colour temperature: ${tempK}`,
+        `  · Dimming: ${dimmable}`,
+        `  · Layout: evenly spaced grid pattern across the ceiling`,
+        `  · Status: lights ON, beam visible from each fitting`,
+        desc ? `  · Customer description: "${desc.slice(0, 200)}"` : '',
+      ].filter(Boolean).join('\n')
 
     case 'power_points':
-      return {
-        wide:
-          `Photorealistic wide-angle view of a typical Australian ${room} interior wall with ${count || 4} double GPO (Australian power points), AS/NZS 3112 standard, white face plates, mounted at standard height. Clean install. No people.${SAMPLE_FOOTER}`,
-        detail:
-          `Photorealistic close-up of a single Australian double GPO installed in a plaster wall. White face plate, clean cut-out, no scuffs. Slight bokeh background. High detail. No people.${SAMPLE_FOOTER}`,
-        lit:
-          `Photorealistic Australian ${room} with newly-installed double GPOs, an appliance plugged in (lamp or charger), warm interior lighting. Lifestyle context, no people in frame.${SAMPLE_FOOTER}`,
-      }
+      return [
+        `JOB SPEC — RENDER MUST MATCH EXACTLY:`,
+        `  · Job type: GPO (general purpose outlet) installation`,
+        `  · Count: EXACTLY ${count || 4} double GPOs — count them, no more, no fewer`,
+        `  · Room: ${room}`,
+        `  · Faceplate: white, AS/NZS 3112 standard Australian 3-pin double socket`,
+        `  · Mounting height: standard ~30cm above skirting`,
+        `  · Spacing: evenly distributed along the wall(s)`,
+        desc ? `  · Customer description: "${desc.slice(0, 200)}"` : '',
+      ].filter(Boolean).join('\n')
 
     case 'ceiling_fans':
-      return {
-        wide:
-          `Photorealistic wide-angle view of a typical Australian ${room} with a modern ${count > 1 ? `${count} ceiling fans, one per room area` : 'ceiling fan'} centred on the ${ceiling} ceiling. Matte white or brushed nickel finish, 3-blade design. Daytime ambient lighting. No people.${SAMPLE_FOOTER}`,
-        detail:
-          `Photorealistic close-up of a modern ceiling fan installed neatly on a ${ceiling} ceiling. Showing the housing, blades, optional integrated light. Clean install. Slight bokeh background. No people.${SAMPLE_FOOTER}`,
-        lit:
-          `Photorealistic evening view of an Australian ${room} with the ceiling fan running and integrated light on. Subtle motion blur on blades, cosy ambient lighting. No people.${SAMPLE_FOOTER}`,
-      }
+      return [
+        `JOB SPEC — RENDER MUST MATCH EXACTLY:`,
+        `  · Job type: ceiling fan installation`,
+        `  · Count: EXACTLY ${count || 1} ceiling fan${count > 1 ? 's' : ''}`,
+        `  · Room: ${room}`,
+        `  · Ceiling: ${ceiling}`,
+        `  · Style: modern 3-blade, matte white or brushed nickel finish`,
+        `  · Light kit: integrated LED downlight in the centre of the fan`,
+        desc ? `  · Customer description: "${desc.slice(0, 200)}"` : '',
+      ].filter(Boolean).join('\n')
 
     case 'smoke_alarms':
-      return {
-        wide:
-          `Photorealistic wide-angle view of a typical Australian ${room} or hallway ceiling showing ${count || 4} small white photoelectric smoke alarms positioned at standard locations. AS 3786 compliant fittings. Daytime ambient lighting. No people.${SAMPLE_FOOTER}`,
-        detail:
-          `Photorealistic close-up of a single white photoelectric smoke alarm installed on a ${ceiling} ceiling. Low-profile, ~10cm diameter, neat install. High detail. Slight bokeh background. No people.${SAMPLE_FOOTER}`,
-        lit:
-          `Photorealistic Australian residential ceiling at night showing the smoke alarm with its small status LED visible. Subtle ambient light from a nearby room. Reassuring atmosphere. No people.${SAMPLE_FOOTER}`,
-      }
+      return [
+        `JOB SPEC — RENDER MUST MATCH EXACTLY:`,
+        `  · Job type: hardwired photoelectric smoke alarm installation`,
+        `  · Count: EXACTLY ${count || 4} smoke alarms`,
+        `  · Room: ${room} / hallway`,
+        `  · Fitting: small white circular, ~10cm diameter, AS 3786 compliant`,
+        `  · Mounting: ${ceiling} ceiling, central position per Australian standard`,
+        desc ? `  · Customer description: "${desc.slice(0, 200)}"` : '',
+      ].filter(Boolean).join('\n')
 
     case 'outdoor_lighting':
-      return {
-        wide:
-          `Photorealistic wide-angle view of a typical Australian deck, eaves, or backyard showing ${count || 4} ${tempK} IP-rated LED outdoor light fittings. Weatherproof, modern aluminium or matte black finish, evenly spaced. Dusk lighting, lights starting to glow. No people.${SAMPLE_FOOTER}`,
-        detail:
-          `Photorealistic close-up of a single IP-rated outdoor LED light fitting mounted on a wall or eaves. Weatherproof gasket visible, clean install, weathered timber/render around. High detail. No people.${SAMPLE_FOOTER}`,
-        lit:
-          `Photorealistic evening view of an Australian backyard or deck illuminated by ${count || 4} ${tempK} IP-rated outdoor LED lights. Warm welcoming glow, modern Aussie outdoor living. No people.${SAMPLE_FOOTER}`,
-      }
+      return [
+        `JOB SPEC — RENDER MUST MATCH EXACTLY:`,
+        `  · Job type: outdoor LED light installation`,
+        `  · Count: EXACTLY ${count || 4} weatherproof IP-rated fittings`,
+        `  · Mounting area: deck / eaves / outdoor wall`,
+        `  · Colour temperature: ${tempK}`,
+        `  · Status: lights ON, warm welcoming glow at dusk`,
+        desc ? `  · Customer description: "${desc.slice(0, 200)}"` : '',
+      ].filter(Boolean).join('\n')
 
     default:
       return null
   }
 }
 
+// ════════════════════════════════════════════════════════════════════
+// PREVIEW prompt (single image, edits the customer's photo)
+// ════════════════════════════════════════════════════════════════════
+
 export function buildPreviewPrompt(intake: PromptIntake): string {
+  const spec = jobSpec(intake)
   const room = detectRoom(intake.scope?.description)
-  const count = intake.scope?.item_count ?? 0
-  const ceiling = intake.access?.ceiling_type ?? 'flat plaster'
-  const wallType = intake.access?.wall_type ?? 'plaster'
-  const tempK = colorTempHint(intake.scope?.color_temp)
-  const dimmable = intake.scope?.dimmable === true ? 'dimmable' : 'non-dimmable'
 
   const header = [
     `You are an interior visualisation assistant for an Australian electrical contractor's customer preview.`,
     ``,
     `THE ATTACHED IMAGE IS THE CUSTOMER'S ACTUAL ROOM — taken before any electrical work has been done. Your job is to EDIT THAT IMAGE to show what it would look like with the proposed work completed. Treat it as the base scene, not as inspiration. Keep everything else identical.`,
-    ``,
   ].join('\n')
 
-  switch (intake.job_type) {
-    case 'downlights':
-      return [
-        header,
-        `PROPOSED WORK:`,
-        `- Install ${count || 'several'} LED downlights`,
-        `- Evenly spaced across the ${ceiling} ceiling`,
-        `- ${tempK} colour temperature, ${dimmable}`,
-        `- Lights ON in the rendered output (so the new fittings are visible)`,
-        ``,
-        `FIXTURE AREA: the ${ceiling} ceiling. Add the new downlight cut-outs at sensible spacing for the room size shown. If existing fittings are visible in the photo, treat them as being replaced.`,
-        ``,
-        footerText(),
-      ].join('\n')
+  const constraint = [
+    `KEEP UNCHANGED: room layout, walls, floor, furniture, decor, ambient lighting, perspective, camera angle.`,
+    `MODIFY ONLY: the specific fixture area for this job (ceiling for downlights/fans/smoke alarms, wall for GPOs, exterior surface for outdoor lighting).`,
+    `STYLE: photorealistic, match the lighting + colour grading of the input photo.`,
+    `WATERMARK: small semi-transparent "AI PREVIEW" in bottom-right.`,
+    `OUTPUT: same aspect ratio + resolution as the input photo, no text overlays, no captions.`,
+    `NEGATIVE: do NOT include people, pets, hands, text labels, annotations.`,
+  ].join('\n')
 
-    case 'power_points':
-      return [
-        header,
-        `PROPOSED WORK:`,
-        `- Install ${count || 'several'} double GPO (general purpose outlets / power points)`,
-        `- White face plates, standard Australian AS/NZS 3112 style`,
-        `- Mounted on the ${wallType} wall(s) at standard height (~30cm above skirting)`,
-        ``,
-        `FIXTURE AREA: visible wall area in the photo. Place the GPOs at sensible heights and spacing. If existing GPOs are visible, treat them as being replaced/added to.`,
-        ``,
-        footerText(),
-      ].join('\n')
-
-    case 'ceiling_fans':
-      return [
-        header,
-        `PROPOSED WORK:`,
-        `- Install ${count || 'a'} ceiling fan(s)`,
-        `- Centred on the ${ceiling} ceiling`,
-        `- Modern 3-blade or 4-blade design, matte white or brushed nickel finish`,
-        `- Optional integrated light fitting`,
-        ``,
-        `FIXTURE AREA: centre of the ${ceiling} ceiling visible in the photo. Render the fan motionless from a neutral angle.`,
-        ``,
-        footerText(),
-      ].join('\n')
-
-    case 'smoke_alarms':
-      return [
-        header,
-        `PROPOSED WORK:`,
-        `- Install ${count || 'several'} hardwired photoelectric smoke alarms`,
-        `- White, low-profile, ~10cm diameter, AS 3786 compliant`,
-        `- Positioned on the ${ceiling} ceiling at the centre of the room or hallway shown`,
-        ``,
-        `FIXTURE AREA: the ${ceiling} ceiling. Render small, unobtrusive alarms at standard positions.`,
-        ``,
-        footerText(),
-      ].join('\n')
-
-    case 'outdoor_lighting':
-      return [
-        header,
-        `PROPOSED WORK:`,
-        `- Install ${count || 'several'} outdoor LED light fittings`,
-        `- IP-rated, weatherproof, mounted on the eaves / wall / deck area visible in the photo`,
-        `- ${tempK} colour temperature`,
-        `- Lights ON in the rendered output (warm evening glow if the photo is daytime — render as if dusk for visibility)`,
-        ``,
-        `FIXTURE AREA: outdoor wall, eaves, or deck area visible in the photo. Place fittings at standard mounting positions.`,
-        ``,
-        footerText(),
-      ].join('\n')
-
-    default:
-      // Inspection-required jobs and other unknown types — caller should
-      // skip preview generation, but render a generic prompt as fallback
-      // just in case it's invoked.
-      return [
-        header,
-        `PROPOSED WORK:`,
-        `- Electrical work as described: ${intake.scope?.description ?? '(unspecified)'}`,
-        ``,
-        footerText(),
-      ].join('\n')
+  if (!spec) {
+    // Out-of-scope job — caller should normally skip preview, but render
+    // a generic prompt as a defensive fallback.
+    return [
+      header,
+      ``,
+      `PROPOSED WORK: ${intake.scope?.description ?? '(unspecified electrical work)'}`,
+      ``,
+      constraint,
+    ].join('\n')
   }
+
+  return [
+    header,
+    ``,
+    spec,
+    ``,
+    `Modify the customer's ${room} photo so it shows the work above completed cleanly. The customer must be able to recognise their own room while seeing the proposed change.`,
+    ``,
+    constraint,
+  ].join('\n')
+}
+
+// ════════════════════════════════════════════════════════════════════
+// SAMPLE prompts (3 renders sharing one fictional scene)
+// ════════════════════════════════════════════════════════════════════
+
+export type SamplePromptSet = {
+  // Generated FIRST. Text-only prompt, no reference image.
+  // The wide shot becomes the visual anchor for the other two.
+  wide: string
+  // Generated SECOND, with the wide image attached as a reference.
+  // Same room, zoomed in on a single fitting.
+  detail: string
+  // Generated SECOND (parallel with detail), with the wide image as reference.
+  // Same room, dusk lighting, fittings illuminated.
+  lit: string
+}
+
+export function buildSamplePrompts(intake: PromptIntake): SamplePromptSet | null {
+  const spec = jobSpec(intake)
+  if (!spec) return null
+
+  const anchor = sharedSceneAnchor(intake)
+  const room = detectRoom(intake.scope?.description)
+  const tempK = colorTempHint(intake.scope?.color_temp)
+
+  // ─── WIDE — anchor image (text-to-image) ───
+  const wide = [
+    `You are producing a series of three coherent sample images of an electrical install for a customer preview. THIS IS IMAGE 1 OF 3 — the WIDE SHOT.`,
+    ``,
+    spec,
+    ``,
+    anchor,
+    ``,
+    `THIS SHOT (WIDE):`,
+    `  · Wide-angle view of the entire ${room} from ~2 metres back`,
+    `  · All ${intake.scope?.item_count ?? 'requested'} fittings clearly visible in frame`,
+    `  · Daytime ambient lighting through the window, fittings powered ON`,
+    ``,
+    footerText('wide'),
+  ].join('\n')
+
+  // ─── DETAIL — close-up using wide as reference ───
+  const detail = [
+    `THE ATTACHED IMAGE IS THE WIDE SHOT YOU JUST GENERATED. Now produce IMAGE 2 OF 3 — a CLOSE-UP DETAIL of one of the fittings from that exact same scene.`,
+    ``,
+    `KEEP IDENTICAL TO THE REFERENCE IMAGE:`,
+    `  · Same ceiling material + colour`,
+    `  · Same wall colour and texture`,
+    `  · Same general lighting + colour grading`,
+    `  · Same fitting style, same finish`,
+    ``,
+    `THIS SHOT (DETAIL):`,
+    `  · Tight close-up of ONE fitting (one downlight / one GPO / one fan motor / one smoke alarm / one outdoor light)`,
+    `  · Crisp focus on the fitting; rest of the scene falls into shallow bokeh`,
+    `  · Beam pattern or face plate clearly visible`,
+    `  · ${tempK} colour temperature visible in any emitted light`,
+    ``,
+    footerText('detail'),
+  ].join('\n')
+
+  // ─── LIT — same room, dusk, lights on ───
+  const lit = [
+    `THE ATTACHED IMAGE IS THE WIDE SHOT YOU JUST GENERATED. Now produce IMAGE 3 OF 3 — the SAME ROOM AT DUSK with the new fittings illuminating it.`,
+    ``,
+    `KEEP IDENTICAL TO THE REFERENCE IMAGE:`,
+    `  · Exact same room — same furniture position, same wall colour, same ceiling, same camera angle`,
+    `  · Same fittings, same count, same placement`,
+    ``,
+    `CHANGE ONLY:`,
+    `  · Time of day: dusk through the window (deep blue / purple twilight outside)`,
+    `  · Interior lighting: ${tempK} glow from the new fittings, cosy ambient atmosphere`,
+    `  · Subtle warm reflections on the timber floor + furniture`,
+    ``,
+    footerText('lit'),
+  ].join('\n')
+
+  return { wide, detail, lit }
 }

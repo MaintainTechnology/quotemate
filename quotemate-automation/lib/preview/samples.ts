@@ -1,13 +1,20 @@
 // ════════════════════════════════════════════════════════════════════
-// AI sample-gallery generation — 3 generic Gemini text-to-image
-// renders showing typical examples of the proposed work.
+// AI sample-gallery generation — 3 coherent Gemini renders showing the
+// same fictional scene in three views (wide / detail / in-use).
 //
-// Distinct from generate.ts (which edits the customer's actual photo).
-// These samples are generic by design — "examples of similar work" —
-// and complement the room-specific preview above them on the page.
+// Strategy (vs the earlier "3 parallel independent calls" version):
+//   1. Generate WIDE first as text-to-image. This anchor establishes the
+//      room — wall colour, furniture, ceiling, camera angle, fitting
+//      placement.
+//   2. Pass the wide-shot image bytes as a reference to BOTH the DETAIL
+//      and the IN-USE prompts. They share the wide as visual context so
+//      all three images feel like they're set in the same room.
+//   3. Detail + Lit run in parallel after wide finishes — total wall
+//      time ≈ 2× single-call latency (rather than 3× for fully sequential).
 //
-// All 3 generations run in parallel for speed. Partial success is
-// allowed (samples_status='partial') — render whatever succeeded.
+// Partial success allowed:
+//   - wide fails → status='failed' (no anchor → can't render the others)
+//   - wide succeeds, detail or lit fails → status='partial', render survivors
 // ════════════════════════════════════════════════════════════════════
 
 import { createClient } from '@supabase/supabase-js'
@@ -19,10 +26,12 @@ const supabase = createClient(
 )
 
 const BUCKET = 'intake-photos'
+
 // Default: gemini-2.5-flash-image (GA, stable). Override via env to
 // gemini-3.1-flash-image-preview (newer) or gemini-3-pro-image-preview
 // (higher quality). See lib/preview/generate.ts for the full list.
 const GEMINI_MODEL = process.env.GEMINI_IMAGE_MODEL ?? 'gemini-2.5-flash-image'
+
 const GEMINI_ENDPOINT = (model: string) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
 
@@ -35,15 +44,18 @@ export type SamplesResult =
   | { status: 'skipped'; reason: string }
 
 /**
- * Atomically claim and generate up to 3 generic sample images for the
- * given quote. Idempotent. Safe to call from any of the same triggers
- * as the main preview — only one generation actually runs.
+ * Atomically claim and generate a coherent set of 3 sample images
+ * (wide / detail / in-use) for the given quote. All three share the
+ * same fictional scene via the wide-shot reference chain.
  *
- * Skip cases (returns 'skipped'):
- *   - quote has needs_inspection=true
- *   - DISABLE_AI_SAMPLES env truthy (kill switch for cost control)
- *   - claim fails (already generating or ready)
- *   - job_type doesn't have a SamplePromptSet (out-of-scope job)
+ * Idempotent — only one process generates per quote.
+ *
+ * Skips when:
+ *   - GEMINI_API_KEY not set
+ *   - DISABLE_AI_SAMPLES env truthy (cost kill switch)
+ *   - quote needs_inspection=true
+ *   - claim race lost (another worker holds it)
+ *   - job_type has no SamplePromptSet
  */
 export async function generateSampleImages(quoteId: string): Promise<SamplesResult> {
   if (!process.env.GEMINI_API_KEY) {
@@ -95,42 +107,81 @@ export async function generateSampleImages(quoteId: string): Promise<SamplesResu
 
     const prompts = buildSamplePrompts(intake as PromptIntake)
     if (!prompts) {
-      // Out-of-scope job_type — no sample prompts defined.
       await supabase.from('quotes')
         .update({ samples_status: 'failed', samples_error: 'no sample prompts for this job_type' })
         .eq('id', quoteId)
       return { status: 'skipped', reason: 'no sample prompts for job_type' }
     }
 
-    // Fire all 3 in parallel
     const t0 = Date.now()
-    const labels = ['wide', 'detail', 'lit'] as const
-    const results = await Promise.allSettled(
-      labels.map(label => generateOneSample(intake.id as string, prompts[label], label))
-    )
-    const elapsedMs = Date.now() - t0
-
     const succeededPaths: string[] = []
-    let failures = 0
     const failureReasons: string[] = []
 
-    results.forEach((r, i) => {
-      if (r.status === 'fulfilled' && r.value) {
-        succeededPaths.push(r.value)
+    // ─── STEP 1: generate WIDE (anchor, text-to-image) ───
+    let wideBytes: Buffer | null = null
+    let wideMime: string | null = null
+    try {
+      const wideResult = await generateOneSample({
+        intakeId: intake.id as string,
+        prompt: prompts.wide,
+        label: 'wide',
+        referenceImage: null, // text-to-image
+      })
+      succeededPaths.push(wideResult.path)
+      wideBytes = wideResult.imageBytes
+      wideMime = wideResult.mimeType
+      console.log('[samples] wide ok', { path: wideResult.path, bytes: wideResult.imageBytes.length })
+    } catch (e: any) {
+      const reason = e?.message ?? String(e)
+      failureReasons.push(`wide: ${reason}`)
+      console.error('[samples] wide FAILED — anchoring lost, cannot run detail/lit', { quoteId, error: reason })
+      await supabase.from('quotes').update({
+        sample_image_paths: [],
+        samples_status: 'failed',
+        samples_error: failureReasons.join(' | ').slice(0, 500),
+        samples_generated_at: new Date().toISOString(),
+      }).eq('id', quoteId)
+      return { status: 'failed', error: reason }
+    }
+
+    // ─── STEP 2: detail + lit in parallel, both referencing wide ───
+    const wideRef = { mimeType: wideMime!, base64: wideBytes!.toString('base64') }
+    const followUp = await Promise.allSettled([
+      generateOneSample({
+        intakeId: intake.id as string,
+        prompt: prompts.detail,
+        label: 'detail',
+        referenceImage: wideRef,
+      }),
+      generateOneSample({
+        intakeId: intake.id as string,
+        prompt: prompts.lit,
+        label: 'lit',
+        referenceImage: wideRef,
+      }),
+    ])
+
+    const labels = ['detail', 'lit'] as const
+    followUp.forEach((r, i) => {
+      if (r.status === 'fulfilled') {
+        succeededPaths.push(r.value.path)
+        console.log(`[samples] ${labels[i]} ok`, { path: r.value.path })
       } else {
-        failures++
-        const reason = r.status === 'rejected' ? (r.reason?.message ?? String(r.reason)) : 'no result'
+        const reason = r.reason?.message ?? String(r.reason)
         failureReasons.push(`${labels[i]}: ${reason}`)
+        console.error(`[samples] ${labels[i]} failed`, { quoteId, error: reason })
       }
     })
 
+    const elapsedMs = Date.now() - t0
     console.log('[samples] generation finished', {
       quoteId,
       elapsedMs,
       succeeded: succeededPaths.length,
-      failed: failures,
+      failed: failureReasons.length,
     })
 
+    // ─── STEP 3: persist final state ───
     let finalStatus: SamplesStatus
     if (succeededPaths.length === 3) finalStatus = 'ready'
     else if (succeededPaths.length > 0) finalStatus = 'partial'
@@ -144,11 +195,11 @@ export async function generateSampleImages(quoteId: string): Promise<SamplesResu
     }).eq('id', quoteId)
 
     if (finalStatus === 'failed') return { status: 'failed', error: failureReasons.join(' | ') }
-    if (finalStatus === 'partial') return { status: 'partial', paths: succeededPaths, failures }
+    if (finalStatus === 'partial') return { status: 'partial', paths: succeededPaths, failures: failureReasons.length }
     return { status: 'ready', paths: succeededPaths }
   } catch (err: any) {
     const msg = err?.message ?? String(err)
-    console.error('[samples] generation FAILED', { quoteId, error: msg })
+    console.error('[samples] generation FAILED (unhandled)', { quoteId, error: msg })
     await supabase.from('quotes').update({
       samples_status: 'failed',
       samples_error: msg.slice(0, 500),
@@ -158,23 +209,44 @@ export async function generateSampleImages(quoteId: string): Promise<SamplesResu
 }
 
 /**
- * Generate one sample image. Returns the storage path on success,
- * throws on failure (let the parallel orchestrator handle which
- * succeeded vs failed).
+ * Generate one sample image. Returns the storage path + raw bytes
+ * + mime type so the caller can re-use the image as a reference for
+ * subsequent calls (the wide → detail/lit chain).
+ *
+ * Throws on failure — the orchestrator decides which failures are
+ * fatal vs partial.
  */
-async function generateOneSample(intakeId: string, prompt: string, label: string): Promise<string> {
+async function generateOneSample(opts: {
+  intakeId: string
+  prompt: string
+  label: 'wide' | 'detail' | 'lit'
+  referenceImage: { mimeType: string; base64: string } | null
+}): Promise<{ path: string; imageBytes: Buffer; mimeType: string }> {
   const apiUrl = `${GEMINI_ENDPOINT(GEMINI_MODEL)}?key=${encodeURIComponent(process.env.GEMINI_API_KEY!)}`
+
+  // Build content parts: text prompt always first, optional reference
+  // image second. Gemini reads parts in order, and putting the prompt
+  // first orients the model before it processes the reference.
+  const parts: Array<Record<string, unknown>> = [{ text: opts.prompt }]
+  if (opts.referenceImage) {
+    parts.push({
+      inline_data: {
+        mime_type: opts.referenceImage.mimeType,
+        data: opts.referenceImage.base64,
+      },
+    })
+  }
 
   const res = await fetch(apiUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      contents: [{
-        role: 'user',
-        parts: [{ text: prompt }],
-      }],
+      contents: [{ role: 'user', parts }],
       generation_config: {
-        temperature: 0.7,
+        // Lower temperature → more deterministic, less "creative"
+        // variation between runs. We want the model to follow the spec
+        // tightly (count, colours, fitting style) rather than improvise.
+        temperature: 0.2,
         response_modalities: ['IMAGE'],
       },
     }),
@@ -186,11 +258,11 @@ async function generateOneSample(intakeId: string, prompt: string, label: string
   }
 
   const data = await res.json() as GeminiResponse
-  const parts = data.candidates?.[0]?.content?.parts ?? []
-  const imagePart = parts.find(p => p.inline_data?.data || p.inlineData?.data)
+  const responseParts = data.candidates?.[0]?.content?.parts ?? []
+  const imagePart = responseParts.find(p => p.inline_data?.data || p.inlineData?.data)
   const inline = imagePart?.inline_data ?? imagePart?.inlineData
   if (!inline?.data) {
-    const textRefusal = parts.find(p => p.text)?.text
+    const textRefusal = responseParts.find(p => p.text)?.text
     throw new Error(`no image data${textRefusal ? ` — ${textRefusal.slice(0, 150)}` : ''}`)
   }
 
@@ -198,13 +270,13 @@ async function generateOneSample(intakeId: string, prompt: string, label: string
   const outExt = outMime === 'image/jpeg' ? 'jpg' : 'png'
   const imageBytes = Buffer.from(inline.data, 'base64')
 
-  const samplePath = `${intakeId}/sample-${label}-${Date.now()}.${outExt}`
+  const samplePath = `${opts.intakeId}/sample-${opts.label}-${Date.now()}.${outExt}`
   const { error: upErr } = await supabase.storage
     .from(BUCKET)
     .upload(samplePath, imageBytes, { contentType: outMime, upsert: false })
   if (upErr) throw new Error(`storage upload failed: ${upErr.message}`)
 
-  return samplePath
+  return { path: samplePath, imageBytes, mimeType: outMime }
 }
 
 type GeminiInline = {
