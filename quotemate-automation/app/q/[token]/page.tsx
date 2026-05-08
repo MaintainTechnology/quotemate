@@ -4,6 +4,11 @@
 // generateShareToken). RLS policy on quotes is bypassed via the service-role
 // client because this is a public sharing surface — only the columns we render
 // below are exposed.
+//
+// Design system: Maintain Technology brand (dark navy canvas, vibrant orange
+// accents, all-caps Manrope display, JetBrains Mono labels, numbered cards,
+// topographic SVG overlay, orange CTA bar). Source: maintain.com.au + the
+// .claude/skills/maintain-design-system/SKILL.md doc.
 
 import { createClient } from '@supabase/supabase-js'
 import { after } from 'next/server'
@@ -96,29 +101,12 @@ export default async function PublicQuotePage(props: {
   ])
 
   // Photo aggregation — handle the late-upload race condition.
-  //
-  // intakes.photo_paths is a SNAPSHOT taken when /api/intake/structure runs.
-  // Customers often tap the photo-request SMS and upload AFTER the snapshot
-  // was taken (dialog finishes in ~2-4 turns; intake structures in ~35s;
-  // estimate runs in ~40s; meanwhile the customer is still picking photos).
-  // Late uploads land on calls.photo_paths or sms_conversations.photo_paths
-  // but never make it to intakes.photo_paths.
-  //
-  // To make the customer's photos appear on the quote page even when uploaded
-  // late, we render a UNION of:
-  //   1. intakes.photo_paths            (snapshot at intake time — vision sees these)
-  //   2. The source-of-truth table:
-  //      - calls.photo_paths            (voice-sourced quotes; intake.call_id set)
-  //      - sms_conversations.photo_paths (SMS-sourced quotes; intake.call_id null)
-  // Late uploads appear on the next page refresh — no re-quote, no re-render
-  // trigger needed.
   const intakePhotoPaths = Array.isArray(intake?.photo_paths)
     ? (intake.photo_paths as string[]).filter((p): p is string => typeof p === 'string' && p.length > 0)
     : []
 
   let sourcePhotoPaths: string[] = []
   if (intake?.call_id) {
-    // Voice-sourced — fetch the live calls row.
     const { data: callRow } = await supabase
       .from('calls')
       .select('photo_paths')
@@ -128,7 +116,6 @@ export default async function PublicQuotePage(props: {
       ? (callRow.photo_paths as string[]).filter((p): p is string => typeof p === 'string' && p.length > 0)
       : []
   } else if (intake?.id) {
-    // SMS-sourced — fetch the live sms_conversations row that points at this intake.
     const { data: convoRow } = await supabase
       .from('sms_conversations')
       .select('photo_paths')
@@ -141,18 +128,11 @@ export default async function PublicQuotePage(props: {
 
   const photoPaths = Array.from(new Set([...intakePhotoPaths, ...sourcePhotoPaths]))
 
-  // Re-sign on every render — signed URLs expire after 24h, so persisting
-  // them is wrong. Path is permanent; sign-on-demand is cheap. Failures
-  // degrade silently (skip the photo).
   const customerPhotoUrls: string[] = photoPaths.length === 0 ? [] : (
     await Promise.all(photoPaths.map(p => refreshSignedUrl(p).catch(() => null)))
   ).filter((u): u is string => !!u)
 
   // ─── AI preview + sample-gallery state for this render + Trigger 2 ───
-  // Compute the initial state to seed <PreviewSection/>. If either is
-  // still 'idle', fire generation in after() so the customer sees a
-  // loading skeleton on this render and the images land on the next
-  // poll. Idempotent CAS prevents double-runs.
   const previewStatus = (quote.preview_status as
     'idle' | 'no_photos' | 'generating' | 'ready' | 'failed' | null) ?? 'idle'
   let previewImageUrl: string | null = null
@@ -172,8 +152,6 @@ export default async function PublicQuotePage(props: {
         .filter((u): u is string => !!u)
     : []
 
-  // Trigger 2: kick off whichever generations haven't started yet.
-  // Inspection-only quotes get skipped inside the generators.
   const needsPreview = previewStatus === 'idle' && photoPaths.length > 0 && !quote.needs_inspection
   const needsSamples = samplesStatus === 'idle' && !quote.needs_inspection
   if (needsPreview || needsSamples) {
@@ -202,71 +180,85 @@ export default async function PublicQuotePage(props: {
     ? new Date(quote.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
     : null
 
-  // Deposit % is stored on stripe_links via createCheckoutSessionsForQuote;
-  // the SMS path reads it from a sibling field, but for this page we infer
-  // 30% (the only value currently issued). If/when other deposit pcts ship,
-  // promote this to a dedicated column on `quotes`.
   const depositPct = isInspection ? null : 30
 
+  const tierCount = ([quote.good, quote.better, quote.best].filter(Boolean) as Tier[]).length
+
   return (
-    <main className="min-h-screen bg-zinc-50 font-sans text-zinc-900">
+    <main className="min-h-screen bg-ink-deep text-text-pri relative">
+      {/* ─── Topographic SVG overlay (signature brand pattern) ─── */}
+      <TopographicBackground />
+
       {/* ─── Header ──────────────────────────────────────── */}
-      <header className="border-b border-zinc-200 bg-white">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4 sm:px-6">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="grid h-7 w-7 place-items-center rounded-md bg-zinc-900 text-xs font-black text-white">Q</span>
-            <span className="font-bold tracking-tight">QuoteMate</span>
+      <header className="relative z-10 border-b border-ink-line bg-ink-deep/80 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-5 sm:px-6">
+          <Link href="/" className="flex items-center gap-3 group">
+            <MaintainMark className="h-9 w-10 text-accent transition-transform group-hover:-translate-y-0.5" />
+            <div className="leading-none">
+              <div className="font-extrabold uppercase tracking-tight text-base sm:text-lg">Maintain</div>
+              <div className="font-mono text-[0.55rem] tracking-[0.25em] text-text-dim mt-0.5">TECHNOLOGY</div>
+            </div>
           </Link>
           <div className="text-right">
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Quote ref</div>
-            <div className="font-mono text-sm font-semibold">{quoteRef}</div>
+            <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-text-dim">Quote ref</div>
+            <div className="font-mono text-sm font-semibold text-text-pri mt-0.5">{quoteRef}</div>
           </div>
         </div>
       </header>
 
-      <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
-        {/* ─── Hero / status ─────────────────────────────── */}
+      <div className="relative z-10 mx-auto max-w-5xl px-4 py-10 sm:px-6 sm:py-16">
+        {/* ─── Hero ─────────────────────────────────────── */}
         <section>
-          {isPaid ? (
-            <span className="inline-block rounded-md bg-emerald-100 px-3 py-1 text-xs font-bold uppercase tracking-widest text-emerald-700">
-              Deposit received{quote.paid_tier ? ` · ${String(quote.paid_tier).toUpperCase()} option` : ''}
-            </span>
-          ) : isInspection ? (
-            <span className="inline-block rounded-md bg-amber-100 px-3 py-1 text-xs font-bold uppercase tracking-widest text-amber-700">
-              Site visit required
-            </span>
-          ) : (
-            <span className="inline-block rounded-md border border-zinc-200 bg-white px-3 py-1 text-xs font-bold uppercase tracking-widest text-zinc-600">
-              Draft quote · awaiting your choice
-            </span>
-          )}
-          <h1 className="mt-4 text-3xl font-extrabold tracking-tight sm:text-4xl">
-            Hi {firstName}, your quote for {jobSummary}.
+          <StatusChip
+            kind={isPaid ? 'paid' : isInspection ? 'inspection' : 'draft'}
+            paidTier={quote.paid_tier as string | null}
+          />
+
+          <h1 className="mt-6 font-extrabold uppercase tracking-[-0.03em] text-[clamp(2rem,5vw,3.5rem)] leading-[1.0]">
+            G&apos;day <span className="text-accent">{firstName}</span>,
+            <br />
+            your <span className="text-accent">{jobLabel}</span> quote
+            {itemCount && itemCount > 0 ? (
+              <span className="text-text-sec font-mono text-2xl sm:text-3xl ml-2 align-middle">
+                / {itemCount}
+              </span>
+            ) : null}
           </h1>
-          <p className="mt-3 text-sm text-zinc-600 sm:text-base">
+
+          <p className="mt-5 max-w-2xl text-base leading-relaxed text-text-sec sm:text-lg">
             {isInspection ? (
-              <>This job needs a quick on-site visit before a real price can be locked in. The visit is $199 (refundable, credited toward your final quote).</>
+              <>This job needs a quick on-site visit before a real price can be locked in. The visit is <span className="font-semibold text-accent">$199</span> — refundable, credited toward your final quote.</>
+            ) : tierCount === 1 ? (
+              <>One option below — price includes 10% GST. Tap to lock it in with a {depositPct ?? 30}% deposit.</>
             ) : (
-              <>Three options below — all prices include 10% GST. Tap any tier to lock it in with a {depositPct ?? 30}% deposit.</>
+              <>{tierCount === 2 ? 'Two' : 'Three'} options below — all prices include 10% GST. Tap any tier to lock it in with a <span className="font-semibold text-accent">{depositPct ?? 30}%</span> deposit.</>
             )}
           </p>
+
           {issuedDate ? (
-            <p className="mt-2 text-xs text-zinc-500">Issued {issuedDate}</p>
+            <p className="mt-4 font-mono text-[0.7rem] uppercase tracking-[0.15em] text-text-dim">
+              Issued {issuedDate}
+            </p>
           ) : null}
         </section>
 
         {/* ─── Scope of works ────────────────────────────── */}
         {quote.scope_of_works ? (
-          <section className="mt-8 rounded-lg border border-zinc-200 bg-white p-5 sm:p-6">
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-blue-600">Scope of works</h2>
-            <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-zinc-800">{quote.scope_of_works}</p>
-          </section>
+          <NumberedSection
+            number="01"
+            title="Scope of works"
+            className="mt-12"
+          >
+            <p className="whitespace-pre-line text-sm leading-relaxed text-text-sec sm:text-base">
+              {quote.scope_of_works}
+            </p>
+          </NumberedSection>
         ) : null}
 
         {/* ─── Customer-supplied photos ──────────────────── */}
         <CustomerPhotos urls={customerPhotoUrls} />
 
-        {/* ─── AI preview (room-specific) + sample gallery (3 generic) ─── */}
+        {/* ─── AI preview + sample gallery ───────────────── */}
         {!isInspection ? (
           <PreviewSection
             shareToken={token}
@@ -277,7 +269,7 @@ export default async function PublicQuotePage(props: {
           />
         ) : null}
 
-        {/* ─── Inspection-only block OR three tiers ──────── */}
+        {/* ─── Inspection-only block OR tier cards ──────── */}
         {isInspection ? (
           <InspectionBlock
             reason={quote.inspection_reason}
@@ -286,77 +278,90 @@ export default async function PublicQuotePage(props: {
             paid={isPaid}
           />
         ) : (
-          <section className="mt-8 grid gap-5 sm:gap-6">
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-blue-600">Your three options</h2>
-            <TierCard
-              keyName="good"
-              tier={quote.good as Tier}
-              recommended={quote.selected_tier === 'good'}
-              link={stripeLinks.good ? `/r/${token}/good` : null}
-              depositPct={depositPct}
-              paid={isPaid && quote.paid_tier === 'good'}
-              disabled={isPaid && quote.paid_tier !== 'good'}
-              jobType={intake?.job_type ?? null}
-            />
-            <TierCard
-              keyName="better"
-              tier={quote.better as Tier}
-              recommended={quote.selected_tier === 'better'}
-              link={stripeLinks.better ? `/r/${token}/better` : null}
-              depositPct={depositPct}
-              paid={isPaid && quote.paid_tier === 'better'}
-              disabled={isPaid && quote.paid_tier !== 'better'}
-              jobType={intake?.job_type ?? null}
-            />
-            <TierCard
-              keyName="best"
-              tier={quote.best as Tier}
-              recommended={quote.selected_tier === 'best'}
-              link={stripeLinks.best ? `/r/${token}/best` : null}
-              depositPct={depositPct}
-              paid={isPaid && quote.paid_tier === 'best'}
-              disabled={isPaid && quote.paid_tier !== 'best'}
-              jobType={intake?.job_type ?? null}
-            />
+          <section className="mt-12">
+            <h2 className="font-mono text-xs uppercase tracking-[0.15em] text-text-dim mb-6">
+              {tierCount === 1 ? 'Your option' : tierCount === 2 ? 'Your two options' : 'Your three options'}
+            </h2>
+            <div className="grid gap-5 sm:gap-6">
+              {(['good','better','best'] as const).map((key, idx) => {
+                const tier = quote[key] as Tier
+                if (!tier) return null
+                // Compute sequential 01/02/03 against actual non-null tiers.
+                const seqIndex = (['good','better','best'] as const)
+                  .slice(0, idx)
+                  .filter(k => quote[k]).length + 1
+                return (
+                  <TierCard
+                    key={key}
+                    keyName={key}
+                    seq={String(seqIndex).padStart(2, '0')}
+                    tier={tier}
+                    recommended={quote.selected_tier === key}
+                    link={stripeLinks[key] ? `/r/${token}/${key}` : null}
+                    depositPct={depositPct}
+                    paid={isPaid && quote.paid_tier === key}
+                    disabled={isPaid && quote.paid_tier !== key}
+                    jobType={intake?.job_type ?? null}
+                  />
+                )
+              })}
+            </div>
           </section>
         )}
 
         {/* ─── Optional upsells ─────────────────────────── */}
         {Array.isArray(quote.optional_upsells) && quote.optional_upsells.length > 0 ? (
-          <section className="mt-8 rounded-lg border border-zinc-200 bg-white p-5 sm:p-6">
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-blue-600">Optional add-ons</h2>
-            <p className="mt-2 text-xs text-zinc-500">Not included in any tier above. Mention to your tradie if you'd like to add them.</p>
-            <ul className="mt-4 space-y-3">
+          <NumberedSection
+            number="04"
+            title="Optional add-ons"
+            subtitle="Not included in any tier above. Mention to your tradie if you'd like to add them."
+            className="mt-12"
+          >
+            <ul className="mt-2 divide-y divide-ink-line">
               {(quote.optional_upsells as Array<{ description?: string; price_ex_gst?: number | string; total_ex_gst?: number | string }>).map((u, i) => {
                 const price = asNumber(u.total_ex_gst ?? u.price_ex_gst)
                 return (
-                  <li key={i} className="flex items-start justify-between gap-4 border-t border-zinc-100 pt-3 first:border-t-0 first:pt-0">
-                    <span className="text-sm text-zinc-800">{u.description ?? 'Add-on'}</span>
-                    {price > 0 ? <span className="font-mono text-sm text-zinc-700">+${fmt(incGst(price))} inc GST</span> : null}
+                  <li key={i} className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0">
+                    <span className="text-sm text-text-pri">{u.description ?? 'Add-on'}</span>
+                    {price > 0 ? (
+                      <span className="font-mono text-sm text-accent shrink-0">+${fmt(incGst(price))}</span>
+                    ) : null}
                   </li>
                 )
               })}
             </ul>
-          </section>
+          </NumberedSection>
         ) : null}
 
         {/* ─── Assumptions + Risks ──────────────────────── */}
-        <div className="mt-8 grid gap-5 sm:grid-cols-2 sm:gap-6">
+        <div className="mt-12 grid gap-5 sm:grid-cols-2 sm:gap-6">
           {Array.isArray(quote.assumptions) && quote.assumptions.length > 0 ? (
-            <section className="rounded-lg border border-zinc-200 bg-white p-5 sm:p-6">
-              <h2 className="text-xs font-semibold uppercase tracking-widest text-blue-600">What's assumed</h2>
-              <ul className="mt-4 list-inside list-disc space-y-2 text-sm leading-relaxed text-zinc-700">
-                {(quote.assumptions as string[]).map((a, i) => <li key={i}>{a}</li>)}
+            <section className="bg-ink-card border border-ink-line p-6 sm:p-7">
+              <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-text-dim mb-3">
+                What&apos;s assumed
+              </div>
+              <ul className="space-y-2 text-sm leading-relaxed text-text-sec">
+                {(quote.assumptions as string[]).map((a, i) => (
+                  <li key={i} className="flex gap-3">
+                    <span className="text-accent shrink-0">›</span>
+                    <span>{a}</span>
+                  </li>
+                ))}
               </ul>
             </section>
           ) : null}
 
           {Array.isArray(quote.risk_flags) && quote.risk_flags.length > 0 ? (
-            <section className="rounded-lg border border-amber-200 bg-amber-50 p-5 sm:p-6">
-              <h2 className="text-xs font-semibold uppercase tracking-widest text-amber-700">Things to be aware of</h2>
-              <ul className="mt-4 list-inside list-disc space-y-2 text-sm leading-relaxed text-amber-900">
+            <section className="bg-ink-card border-l-2 border-l-warning border-y border-r border-ink-line p-6 sm:p-7">
+              <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-warning mb-3">
+                Things to be aware of
+              </div>
+              <ul className="space-y-2 text-sm leading-relaxed text-text-sec">
                 {(quote.risk_flags as Array<string | { description?: string }>).map((r, i) => (
-                  <li key={i}>{typeof r === 'string' ? r : (r?.description ?? JSON.stringify(r))}</li>
+                  <li key={i} className="flex gap-3">
+                    <span className="text-warning shrink-0">!</span>
+                    <span>{typeof r === 'string' ? r : (r?.description ?? JSON.stringify(r))}</span>
+                  </li>
                 ))}
               </ul>
             </section>
@@ -365,69 +370,217 @@ export default async function PublicQuotePage(props: {
 
         {/* ─── Timeframe + GST note ─────────────────────── */}
         {(quote.estimated_timeframe || quote.gst_note) ? (
-          <section className="mt-8 grid gap-3 rounded-lg border border-zinc-200 bg-white p-5 text-sm sm:p-6">
-            {quote.estimated_timeframe ? (
-              <div className="flex items-baseline justify-between gap-4">
-                <span className="text-zinc-500">Estimated timeframe</span>
-                <span className="text-right font-medium text-zinc-800">{quote.estimated_timeframe}</span>
-              </div>
-            ) : null}
-            {quote.gst_note ? (
-              <div className="flex items-baseline justify-between gap-4 border-t border-zinc-100 pt-3">
-                <span className="text-zinc-500">GST</span>
-                <span className="text-right text-xs text-zinc-600">{quote.gst_note}</span>
-              </div>
-            ) : null}
+          <section className="mt-12 bg-ink-card border border-ink-line p-6 sm:p-7">
+            <div className="grid gap-3 text-sm">
+              {quote.estimated_timeframe ? (
+                <div className="flex items-baseline justify-between gap-4">
+                  <span className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-text-dim">
+                    Estimated timeframe
+                  </span>
+                  <span className="text-right font-medium text-text-pri">{quote.estimated_timeframe}</span>
+                </div>
+              ) : null}
+              {quote.gst_note ? (
+                <div className="flex items-baseline justify-between gap-4 border-t border-ink-line pt-3">
+                  <span className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-text-dim">
+                    GST
+                  </span>
+                  <span className="text-right text-xs text-text-sec">{quote.gst_note}</span>
+                </div>
+              ) : null}
+            </div>
           </section>
         ) : null}
 
         {/* ─── Tradie / licence footer ──────────────────── */}
-        <section className="mt-8 rounded-lg border border-zinc-200 bg-white p-5 text-xs text-zinc-600 sm:p-6">
-          <div className="flex flex-wrap gap-x-6 gap-y-2">
-            {pricingBook?.licence_type && pricingBook?.licence_state ? (
-              <span><strong className="font-semibold text-zinc-800">Licence:</strong> {pricingBook.licence_type} ({pricingBook.licence_state}){pricingBook.licence_number ? ` · ${pricingBook.licence_number}` : ''}</span>
-            ) : null}
-            {pricingBook?.gst_registered ? <span><strong className="font-semibold text-zinc-800">GST:</strong> Registered</span> : null}
-            <span><strong className="font-semibold text-zinc-800">Quote ref:</strong> <span className="font-mono">{quoteRef}</span></span>
+        <section className="mt-12 bg-ink-card border border-ink-line p-6 sm:p-7">
+          <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-text-dim mb-4">
+            Licensed &amp; compliant
           </div>
-          <p className="mt-4 text-zinc-500">
-            This quote is a draft prepared via QuoteMate. Final scope is confirmed by your tradie before any work commences. Australian Consumer Law applies.
+          <dl className="grid gap-3 sm:grid-cols-3 text-xs">
+            {pricingBook?.licence_type && pricingBook?.licence_state ? (
+              <div>
+                <dt className="text-text-dim">Licence</dt>
+                <dd className="font-mono text-text-pri mt-1">
+                  {pricingBook.licence_type} ({pricingBook.licence_state})
+                  {pricingBook.licence_number ? ` · ${pricingBook.licence_number}` : ''}
+                </dd>
+              </div>
+            ) : null}
+            {pricingBook?.gst_registered ? (
+              <div>
+                <dt className="text-text-dim">GST</dt>
+                <dd className="font-mono text-text-pri mt-1">Registered</dd>
+              </div>
+            ) : null}
+            <div>
+              <dt className="text-text-dim">Quote ref</dt>
+              <dd className="font-mono text-text-pri mt-1">{quoteRef}</dd>
+            </div>
+          </dl>
+          <p className="mt-5 text-xs leading-relaxed text-text-dim">
+            This quote is a draft prepared via QuoteMate. Final scope is confirmed by your tradie before any work commences.
+            Australian Consumer Law applies.
           </p>
         </section>
 
-        <p className="mt-10 text-center text-xs text-zinc-400">
-          Powered by <Link href="/" className="underline underline-offset-2 hover:text-zinc-600">QuoteMate</Link> · Built in Australia
+        <p className="mt-12 text-center font-mono text-[0.65rem] uppercase tracking-[0.2em] text-text-dim">
+          Powered by <Link href="/" className="text-text-sec hover:text-accent transition-colors">QuoteMate</Link> · Built in Australia
         </p>
+      </div>
+
+      {/* ─── Closing accent bar (Maintain signature) ─── */}
+      <div className="relative z-10 bg-accent text-white text-center py-4 px-6 mt-8">
+        <span className="font-mono text-xs sm:text-sm uppercase tracking-[0.18em]">
+          {isPaid
+            ? 'Deposit received — your tradie will be in touch'
+            : isInspection
+            ? '$199 site visit · refundable, credited to your final quote'
+            : `Lock in your option · ${depositPct ?? 30}% deposit`}
+        </span>
       </div>
     </main>
   )
 }
 
-/* ─────────────── Components ─────────────── */
+/* ═══════════════════════════════════════════════════════════════
+   Components
+   ═══════════════════════════════════════════════════════════════ */
+
+function MaintainMark({ className }: { className?: string }) {
+  // Stylised three-bar M-mark, derived from the Maintain Technology logo.
+  // currentColor lets us tint via Tailwind (text-accent on dark, etc.).
+  return (
+    <svg
+      viewBox="0 0 96 80"
+      className={className}
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <polygon points="0,80 22,0 32,0 10,80" />
+      <polygon points="32,80 54,0 64,0 42,80" />
+      <polygon points="64,80 86,0 96,0 74,80" />
+    </svg>
+  )
+}
+
+function TopographicBackground() {
+  // Faint topographic line overlay — Maintain brand signature.
+  // Pure SVG, no JS, fixed background that scrolls with content.
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
+      <svg
+        className="absolute inset-0 w-full h-full opacity-[0.07]"
+        viewBox="0 0 1920 2400"
+        preserveAspectRatio="xMidYMid slice"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <defs>
+          <linearGradient id="topo-fade" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--teal-glow)" stopOpacity="0.6" />
+            <stop offset="100%" stopColor="var(--teal-glow)" stopOpacity="0.1" />
+          </linearGradient>
+        </defs>
+        {/* Stylised mountain-ridge contour lines */}
+        <g stroke="url(#topo-fade)" strokeWidth="1" fill="none">
+          <path d="M0,800 Q200,600 400,700 T800,650 T1200,700 T1600,600 T1920,650" />
+          <path d="M0,860 Q200,680 400,760 T800,720 T1200,770 T1600,680 T1920,720" />
+          <path d="M0,920 Q200,760 400,820 T800,790 T1200,830 T1600,760 T1920,790" />
+          <path d="M0,1000 Q220,860 420,900 T820,880 T1220,910 T1620,860 T1920,880" />
+          <path d="M0,1100 Q240,980 440,1000 T840,990 T1240,1010 T1640,980 T1920,990" />
+          <path d="M0,1300 Q260,1160 460,1200 T860,1190 T1260,1210 T1660,1180 T1920,1190" />
+          <path d="M0,1500 Q280,1380 480,1400 T880,1390 T1280,1410 T1680,1380 T1920,1390" />
+          <path d="M0,1700 Q300,1580 500,1600 T900,1590 T1300,1610 T1700,1580 T1920,1590" />
+          <path d="M0,1900 Q320,1780 520,1800 T920,1790 T1320,1810 T1720,1780 T1920,1790" />
+          <path d="M0,2100 Q340,1980 540,2000 T940,1990 T1340,2010 T1740,1980 T1920,1990" />
+        </g>
+      </svg>
+    </div>
+  )
+}
+
+function StatusChip({
+  kind,
+  paidTier,
+}: {
+  kind: 'paid' | 'inspection' | 'draft'
+  paidTier: string | null
+}) {
+  const styles =
+    kind === 'paid'
+      ? 'bg-success/15 text-[#34d399] border-success/40'
+      : kind === 'inspection'
+      ? 'bg-warning/15 text-[#fbbf24] border-warning/40'
+      : 'bg-accent/15 text-accent border-accent/40'
+  const label =
+    kind === 'paid'
+      ? `Deposit received${paidTier ? ` · ${String(paidTier).toUpperCase()} option` : ''}`
+      : kind === 'inspection'
+      ? 'Site visit required'
+      : 'Draft quote · awaiting your choice'
+  return (
+    <span className={`inline-flex items-center font-mono text-[0.7rem] uppercase tracking-[0.12em] px-3 py-1.5 border ${styles}`}>
+      <span className="w-1.5 h-1.5 rounded-full bg-current mr-2 animate-pulse" />
+      {label}
+    </span>
+  )
+}
+
+function NumberedSection({
+  number,
+  title,
+  subtitle,
+  className,
+  children,
+}: {
+  number: string
+  title: string
+  subtitle?: string
+  className?: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className={`bg-ink-card border border-ink-line p-6 sm:p-8 ${className ?? ''}`}>
+      <div className="flex items-start gap-5 sm:gap-6">
+        <span className="font-mono text-3xl sm:text-4xl font-bold text-accent leading-none shrink-0">
+          {number}
+        </span>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-text-pri font-extrabold uppercase tracking-tight text-base sm:text-lg">
+            {title}
+          </h2>
+          {subtitle ? (
+            <p className="mt-1 text-xs text-text-dim">{subtitle}</p>
+          ) : null}
+          <div className="mt-4">{children}</div>
+        </div>
+      </div>
+    </section>
+  )
+}
 
 function CustomerPhotos({ urls }: { urls: string[] }) {
   if (urls.length === 0) return null
-  // Layout adapts to photo count so each photo gets meaningful real estate:
-  //   1 photo  → full width, 4:3 aspect (~768×576 on desktop)
-  //   2 photos → 2-up on desktop, stacked on mobile (~768×576 each on mobile)
-  //   3+ photos → 1-up on mobile, 2-up on tablet, 3-up on desktop
   const cols =
     urls.length === 1 ? 'grid-cols-1' :
     urls.length === 2 ? 'grid-cols-1 sm:grid-cols-2' :
     'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
 
   return (
-    <section className="mt-8 rounded-lg border border-zinc-200 bg-white p-5 sm:p-6">
-      <h2 className="text-xs font-semibold uppercase tracking-widest text-blue-600">Photos you sent</h2>
-      <p className="mt-2 text-xs text-zinc-500">Your tradie reviewed these to draft the quote below. Tap any photo to view full-size.</p>
-      <div className={`mt-4 grid gap-3 sm:gap-4 ${cols}`}>
+    <NumberedSection
+      number="02"
+      title="Photos you sent"
+      subtitle="Your tradie reviewed these to draft the quote below. Tap any photo to view full-size."
+      className="mt-6"
+    >
+      <div className={`grid gap-3 sm:gap-4 ${cols}`}>
         {urls.map((url, i) => (
           <a
             key={i}
             href={url}
             target="_blank"
             rel="noreferrer"
-            className="block aspect-4/3 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50 transition-opacity hover:opacity-90"
+            className="block aspect-4/3 overflow-hidden border border-ink-line bg-ink-deep transition-all hover:border-accent/60 hover:scale-[1.01]"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -439,12 +592,13 @@ function CustomerPhotos({ urls }: { urls: string[] }) {
           </a>
         ))}
       </div>
-    </section>
+    </NumberedSection>
   )
 }
 
 function TierCard({
   keyName,
+  seq,
   tier,
   recommended,
   link,
@@ -454,6 +608,7 @@ function TierCard({
   jobType,
 }: {
   keyName: 'good' | 'better' | 'best'
+  seq: string
   tier: Tier
   recommended: boolean
   link: string | null
@@ -468,86 +623,112 @@ function TierCard({
   const cleanLabel = (tier.label ?? '').replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim()
   const photo = getTierPhoto(jobType, keyName)
 
-  const accent =
-    keyName === 'good' ? { ring: 'border-zinc-200', tag: 'bg-zinc-100 text-zinc-700' } :
-    keyName === 'better' ? { ring: 'border-blue-300', tag: 'bg-blue-100 text-blue-700' } :
-    { ring: 'border-violet-300', tag: 'bg-violet-100 text-violet-700' }
-
   return (
-    <article className={`relative overflow-hidden rounded-lg border-2 ${recommended ? accent.ring : 'border-zinc-200'} bg-white`}>
-      {recommended ? (
-        <span className="absolute top-3 left-5 z-10 rounded-full bg-zinc-900 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-white shadow-sm">
-          Recommended
-        </span>
-      ) : null}
-
-      {/* Indicative product photo (mocked for v1 — see lib/quote/tier-photos.ts) */}
-      <div className="relative aspect-video w-full overflow-hidden border-b border-zinc-100 bg-zinc-50">
+    <article
+      className={`relative overflow-hidden border bg-ink-card transition-colors ${
+        recommended
+          ? 'border-accent shadow-[0_0_0_1px_rgba(255,90,31,0.5)_inset]'
+          : 'border-ink-line hover:border-accent/40'
+      }`}
+    >
+      {/* Tier-photo banner (indicative — see lib/quote/tier-photos.ts) */}
+      <div className="relative aspect-[16/9] w-full overflow-hidden border-b border-ink-line bg-ink-deep">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={photo.url}
           alt={photo.alt}
           loading="lazy"
-          className="h-full w-full object-cover"
+          className="h-full w-full object-cover opacity-90"
         />
-        <span className="absolute bottom-3 left-3 rounded-md bg-white/90 px-2 py-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-700 backdrop-blur-sm">
-          Indicative · {photo.caption}
-        </span>
-      </div>
-
-      <div className="p-5 sm:p-6">
-
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <span className={`inline-block rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-widest ${accent.tag}`}>
-            {keyName}
+        <div className="absolute inset-0 bg-linear-to-t from-ink-card via-ink-deep/40 to-transparent" />
+        <div className="absolute bottom-3 left-4 right-4 flex items-center justify-between gap-3">
+          <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-pri/80 bg-ink-deep/70 backdrop-blur-sm px-2 py-1">
+            Indicative · {photo.caption}
           </span>
-          {cleanLabel ? <h3 className="mt-2 text-lg font-bold tracking-tight">{cleanLabel}</h3> : null}
-        </div>
-        <div className="text-right">
-          <div className="text-2xl font-extrabold tracking-tight sm:text-3xl">${fmt(totalIncGst)}</div>
-          <div className="text-xs text-zinc-500">inc GST</div>
+          {recommended ? (
+            <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] bg-accent text-white px-2.5 py-1 font-bold">
+              Recommended
+            </span>
+          ) : null}
         </div>
       </div>
 
-      {Array.isArray(tier.line_items) && tier.line_items.length > 0 ? (
-        <ul className="mt-5 divide-y divide-zinc-100 border-t border-zinc-100 text-sm">
-          {tier.line_items.map((li, i) => (
-            <li key={i} className="flex items-start justify-between gap-4 py-3">
-              <div className="flex-1">
-                <div className="text-zinc-800">{li.description}</div>
-                <div className="mt-0.5 text-xs text-zinc-500">
-                  {li.quantity} × {li.unit} @ ${fmt(asNumber(li.unit_price_ex_gst))} ex GST
+      <div className="p-6 sm:p-8">
+        {/* Header — sequential number + tier name + price */}
+        <div className="flex items-start justify-between gap-4 sm:gap-6">
+          <div className="flex items-start gap-4 sm:gap-5 min-w-0 flex-1">
+            <span className="font-mono text-3xl sm:text-4xl font-bold text-accent leading-none shrink-0">
+              {seq}
+            </span>
+            <div className="min-w-0 flex-1">
+              <span className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-text-dim">
+                {keyName}
+              </span>
+              {cleanLabel ? (
+                <h3 className="mt-1 text-text-pri font-extrabold uppercase tracking-tight text-lg sm:text-xl">
+                  {cleanLabel}
+                </h3>
+              ) : null}
+            </div>
+          </div>
+          <div className="text-right shrink-0">
+            <div className="text-text-pri font-extrabold tracking-tight text-2xl sm:text-3xl">
+              ${fmt(totalIncGst)}
+            </div>
+            <div className="font-mono text-[0.65rem] uppercase tracking-[0.12em] text-text-dim mt-0.5">
+              inc GST
+            </div>
+          </div>
+        </div>
+
+        {/* Line items */}
+        {Array.isArray(tier.line_items) && tier.line_items.length > 0 ? (
+          <ul className="mt-6 divide-y divide-ink-line border-t border-ink-line text-sm">
+            {tier.line_items.map((li, i) => (
+              <li key={i} className="flex items-start justify-between gap-4 py-3.5">
+                <div className="flex-1 min-w-0">
+                  <div className="text-text-pri">{li.description}</div>
+                  <div className="mt-0.5 font-mono text-[0.7rem] text-text-dim">
+                    {li.quantity} × {li.unit} @ ${fmt(asNumber(li.unit_price_ex_gst))} ex GST
+                  </div>
                 </div>
-              </div>
-              <div className="font-mono text-sm text-zinc-700">${fmt(asNumber(li.total_ex_gst))}</div>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+                <div className="font-mono text-sm text-text-sec shrink-0">
+                  ${fmt(asNumber(li.total_ex_gst))}
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : null}
 
-      <div className="mt-5 border-t border-zinc-100 pt-4">
-        {paid ? (
-          <div className="rounded-md bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-700">
-            Deposit received — your tradie will be in touch.
-          </div>
-        ) : disabled ? (
-          <div className="rounded-md bg-zinc-100 px-4 py-3 text-center text-xs text-zinc-500">
-            A different option has already been confirmed.
-          </div>
-        ) : link ? (
-          <a
-            href={link}
-            className="block rounded-md bg-zinc-900 px-4 py-3 text-center text-sm font-semibold text-white transition-colors hover:bg-zinc-700"
-          >
-            {dep ? `Lock in this option · $${fmt(dep)} deposit` : 'Lock in this option'}
-          </a>
-        ) : (
-          <div className="rounded-md bg-zinc-100 px-4 py-3 text-center text-xs text-zinc-500">
-            Reply to your tradie's SMS to confirm this option.
-          </div>
-        )}
-      </div>
+        {/* CTA */}
+        <div className="mt-6 border-t border-ink-line pt-5">
+          {paid ? (
+            <div className="bg-success/10 border border-success/30 px-5 py-4 text-center">
+              <span className="font-mono text-xs uppercase tracking-[0.12em] font-semibold text-[#4ade80]">
+                Deposit received — tradie will be in touch
+              </span>
+            </div>
+          ) : disabled ? (
+            <div className="bg-ink-deep border border-ink-line px-5 py-4 text-center">
+              <span className="font-mono text-xs uppercase tracking-[0.12em] text-text-dim">
+                Different option already confirmed
+              </span>
+            </div>
+          ) : link ? (
+            <a
+              href={link}
+              className="block bg-accent hover:bg-accent-press text-white px-5 py-4 text-center transition-colors font-mono text-xs sm:text-sm uppercase tracking-[0.15em] font-bold"
+            >
+              {dep ? <>Lock in · ${fmt(dep)} deposit →</> : <>Lock in this option →</>}
+            </a>
+          ) : (
+            <div className="bg-ink-deep border border-ink-line px-5 py-4 text-center">
+              <span className="font-mono text-xs uppercase tracking-[0.12em] text-text-dim">
+                Reply to your tradie&apos;s SMS to confirm
+              </span>
+            </div>
+          )}
+        </div>
       </div>
     </article>
   )
@@ -565,39 +746,53 @@ function InspectionBlock({
   paid: boolean
 }) {
   return (
-    <section className="mt-8 rounded-lg border-2 border-amber-300 bg-amber-50 p-6 sm:p-8">
-      <h2 className="text-xs font-bold uppercase tracking-widest text-amber-700">Site visit required</h2>
-      <p className="mt-3 text-base leading-relaxed text-amber-950">
-        Every site is different — we can't price this one safely without seeing the work in person.
-      </p>
-      {reason ? (
-        <p className="mt-3 rounded-md border border-amber-200 bg-white/50 p-3 text-sm text-amber-900">
-          <strong className="font-semibold">Why a visit:</strong> {reason}
+    <section className="mt-12 bg-ink-card border-2 border-warning/50 p-6 sm:p-8 relative overflow-hidden">
+      {/* Subtle warning gradient corner accent */}
+      <div className="absolute top-0 left-0 w-1.5 h-full bg-warning" aria-hidden />
+
+      <div className="relative">
+        <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-warning mb-3">
+          Site visit required
+        </div>
+        <p className="text-base leading-relaxed text-text-pri sm:text-lg">
+          Every site is different — we can&apos;t price this safely without seeing the work in person.
         </p>
-      ) : null}
 
-      <div className="mt-6 flex items-baseline gap-3">
-        <span className="text-3xl font-extrabold tracking-tight text-amber-950 sm:text-4xl">$199</span>
-        <span className="text-sm text-amber-900">refundable site visit · credited toward your final quote</span>
-      </div>
+        {reason ? (
+          <p className="mt-5 bg-ink-deep border border-ink-line p-4 text-sm text-text-sec">
+            <span className="font-semibold text-text-pri">Why a visit:</span> {reason}
+          </p>
+        ) : null}
 
-      <div className="mt-5">
-        {paid ? (
-          <div className="rounded-md bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-700">
-            Site visit booked — your tradie will be in touch.
-          </div>
-        ) : link ? (
-          <a
-            href={`/r/${shareToken}/inspection`}
-            className="block rounded-md bg-amber-600 px-4 py-3 text-center text-sm font-semibold text-white transition-colors hover:bg-amber-500"
-          >
-            Lock in your site visit · $199
-          </a>
-        ) : (
-          <div className="rounded-md bg-white/60 px-4 py-3 text-center text-xs text-amber-900">
-            Reply to your tradie's SMS to book a site visit.
-          </div>
-        )}
+        <div className="mt-7 flex items-baseline gap-3">
+          <span className="text-text-pri font-extrabold tracking-tight text-4xl sm:text-5xl">$199</span>
+          <span className="text-sm text-text-sec">
+            refundable site visit · credited toward your final quote
+          </span>
+        </div>
+
+        <div className="mt-6">
+          {paid ? (
+            <div className="bg-success/10 border border-success/30 px-5 py-4 text-center">
+              <span className="font-mono text-xs uppercase tracking-[0.12em] font-semibold text-[#4ade80]">
+                Site visit booked — tradie will be in touch
+              </span>
+            </div>
+          ) : link ? (
+            <a
+              href={`/r/${shareToken}/inspection`}
+              className="block bg-accent hover:bg-accent-press text-white px-5 py-4 text-center transition-colors font-mono text-xs sm:text-sm uppercase tracking-[0.15em] font-bold"
+            >
+              Lock in your site visit · $199 →
+            </a>
+          ) : (
+            <div className="bg-ink-deep border border-ink-line px-5 py-4 text-center">
+              <span className="font-mono text-xs uppercase tracking-[0.12em] text-text-dim">
+                Reply to your tradie&apos;s SMS to book
+              </span>
+            </div>
+          )}
+        </div>
       </div>
     </section>
   )

@@ -1,26 +1,58 @@
 @import "tailwindcss";
 
+/* ════════════════════════════════════════════════════════════════════
+   Maintain Technology brand tokens.
+   Source of truth: .claude/skills/maintain-design-system/SKILL.md
+   When editing, update the SKILL doc too so future agents stay aligned.
+   ════════════════════════════════════════════════════════════════════ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* ─── INK / SURFACE (dark canvas) ───────────────────────── */
+  --ink-deep:     #0A1628;
+  --ink:          #131C2D;
+  --ink-card:     #1A2332;
+  --ink-line:     #2A3548;
+
+  /* ─── ACCENT (the Maintain orange) ──────────────────────── */
+  --accent:       #FF5A1F;
+  --accent-press: #E8470F;
+  --accent-soft:  #FF7A45;
+
+  /* ─── TEXT ON DARK ──────────────────────────────────────── */
+  --text-pri:     #FFFFFF;
+  --text-sec:     #B8C2D1;
+  --text-dim:     #7A8699;
+
+  /* ─── TEAL GLOW (topographic edge) ──────────────────────── */
+  --teal-glow:    #14B8A6;
+  --teal-deep:    #0F766E;
+
+  /* ─── STATE COLOURS ─────────────────────────────────────── */
+  --success:      #15803D;
+  --warning:      #B45309;
+  --danger:       #B91C1C;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-ink-deep:     var(--ink-deep);
+  --color-ink:          var(--ink);
+  --color-ink-card:     var(--ink-card);
+  --color-ink-line:     var(--ink-line);
+  --color-accent:       var(--accent);
+  --color-accent-press: var(--accent-press);
+  --color-accent-soft:  var(--accent-soft);
+  --color-text-pri:     var(--text-pri);
+  --color-text-sec:     var(--text-sec);
+  --color-text-dim:     var(--text-dim);
+  --color-teal-glow:    var(--teal-glow);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-manrope);
+  --font-mono: var(--font-jetbrains-mono);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--ink-deep);
+  color: var(--text-pri);
+  font-family: var(--font-manrope), 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-feature-settings: 'ss01', 'cv11'; /* Manrope stylistic alternates */
 }
