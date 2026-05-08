@@ -40,12 +40,58 @@ export function buildTradieInspectionNotification(opts: {
     .replace(/…/g, '...').replace(/·/g, '-').replace(/[^\x20-\x7E\n]/g, '')
 }
 
+// Intake-recovery SMS — used when the quality gate fires 'empty' but we
+// can identify EXACTLY which field is missing (name vs suburb vs scope vs
+// job_type). Instead of the generic "we didn't catch enough" wording, we
+// ask the specific question so the customer can answer in one tap and
+// the conversation continues naturally on their next reply.
+//
+// This is the SMS counterpart to the dialog agent's Rules 5/6 — it's a
+// safety net for the case where Haiku skipped the universal must-asks
+// (e.g. on a returning-but-empty customer record) and reached 'finish'
+// with a transcript that doesn't contain the customer's name/suburb.
+export type MissingIntakeField = 'name' | 'suburb' | 'scope' | 'job_type'
+
+export function buildIntakeRecoverySms(opts: {
+  firstName?: string
+  missing: MissingIntakeField[]
+}): string {
+  const first = (opts.firstName ?? '').split(' ')[0] || ''
+  // Pick the question for the FIRST missing field — keeps the SMS to a
+  // single focused ask. The customer's reply will populate that field;
+  // any remaining gaps get caught on the next pipeline pass.
+  let question: string
+  if (opts.missing.includes('name')) {
+    question = "what's your first name so we can put it on the quote?"
+  } else if (opts.missing.includes('suburb')) {
+    question = "what suburb is the job in?"
+  } else if (opts.missing.includes('scope')) {
+    question = "can you give me a quick description of the work? (count, room, anything specific)"
+  } else if (opts.missing.includes('job_type')) {
+    question = "what kind of work did you need? (downlights, GPOs, ceiling fans, smoke alarms, outdoor lighting)"
+  } else {
+    question = "can you give me a quick description of the work?"
+  }
+  // No "Hi <name>" greeting when the missing field IS the name — would be
+  // weird to address them by name then ask for it.
+  const greeting = first && !opts.missing.includes('name') ? `Hi ${first}, ` : 'Hi, '
+  const body = `${greeting}thanks - just need one more thing to finalise your quote: ${question}\n\n- QuoteMate`
+  return body
+    .replace(/[‐-―−]/g, '-').replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
+    .replace(/…/g, '...').replace(/·/g, '-').replace(/[^\x20-\x7E\n]/g, '')
+}
+
 // Incomplete-intake SMS — sent when the intake quality gate fires.
 // Triggered by `evaluateIntakeQuality(intake) === 'empty'`: caller hung up
 // or texter dropped before giving usable info, OR the transcript was
 // unintelligible. We send a short, apologetic prompt INSTEAD OF the
 // photo-request and quote SMSes — never both. Designed to fit in 1 GSM-7
 // segment. Wording adapts to the channel (voice vs SMS).
+//
+// NOTE: SMS source no longer uses this template directly — the route
+// dispatches buildIntakeRecoverySms() instead so the customer gets a
+// focused question and the conversation can continue. Voice source still
+// uses this template (callback-request wording) because the call is over.
 export function buildIncompleteCallSms(opts: {
   firstName?: string
   source?: 'voice' | 'sms'

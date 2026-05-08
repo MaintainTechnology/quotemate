@@ -6,7 +6,7 @@ import { evaluateIntakeQuality } from '@/lib/intake/quality'
 import { pipelineLog } from '@/lib/log/pipeline'
 import { withRetry } from '@/lib/util/retry'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
-import { buildIncompleteCallSms, buildPhotoRequestSms, buildQuoteFailureSms } from '@/lib/sms/templates'
+import { buildIncompleteCallSms, buildIntakeRecoverySms, buildPhotoRequestSms, buildQuoteFailureSms } from '@/lib/sms/templates'
 import { findOrCreateCustomer, updateCustomerFromIntake } from '@/lib/customers/lookup'
 
 export const maxDuration = 300
@@ -334,45 +334,71 @@ export async function POST(req: Request) {
   const callerFirstName = (intake.caller?.name ?? '').split(' ')[0] || undefined
 
   if (quality === 'empty') {
-    // Empty intake — call/dialog captured nothing usable. Send a brief
-    // callback-request SMS, suppress photo-request and estimation entirely.
+    // Empty intake — but we can do better than a generic "we didn't catch
+    // enough" SMS. Identify EXACTLY which universal must-ask field is
+    // missing and send a focused recovery question. The customer's reply
+    // gets processed normally by the next /api/sms/inbound webhook because
+    // we reopen the conversation status to 'open'. Voice source still
+    // uses the original callback-request template since the call is over.
+    const missing: ('name' | 'suburb' | 'scope' | 'job_type')[] = []
+    if (!intake.caller?.name) missing.push('name')
+    if (!intake.suburb) missing.push('suburb')
+    if (!intake.scope?.description || intake.scope.description.length < 10) missing.push('scope')
+    if (intake.job_type === 'other') missing.push('job_type')
+
     after(async () => {
       const ds = pipelineLog('dispatch', logId)
-      ds.step('intake gated as empty — sending callback-request SMS')
+      ds.step('intake gated as empty — dispatching recovery SMS', { missing })
       if (!callerNumber) {
-        ds.err('no caller_number — cannot send callback request', null, { intake_id: intakeRow.id })
+        ds.err('no caller_number — cannot send recovery SMS', null, { intake_id: intakeRow.id })
         return
       }
       try {
-        const text = buildIncompleteCallSms({ firstName: callerFirstName, source: sourceChannel })
-        // SMS-sourced empty intake → reply from TWILIO_SMS_NUMBER so the
-        // callback request lands in the same thread as the dialog turns
-        // (single conversation on the customer's phone). Voice path falls
-        // back to dispatchQuoteMessage's default TWILIO_PHONE_NUMBER.
+        // SMS source: focused recovery question + reopen the conversation
+        // so the customer's reply continues the same thread instead of
+        // starting a new one.
+        const text = sourceChannel === 'sms'
+          ? buildIntakeRecoverySms({ firstName: callerFirstName, missing })
+          : buildIncompleteCallSms({ firstName: callerFirstName, source: sourceChannel })
+
         const fromNumber = sourceChannel === 'sms' ? process.env.TWILIO_SMS_NUMBER : undefined
         const result = await dispatchQuoteMessage({ to: callerNumber, text, from: fromNumber })
         if (result.ok) {
-          ds.ok('callback-request SMS sent', { channel: result.channel, sid: result.sid })
+          ds.ok('recovery SMS sent', { channel: result.channel, sid: result.sid, missing })
         } else {
-          ds.err('callback-request SMS failed', null, {
+          ds.err('recovery SMS failed', null, {
             sms_code: result.smsAttempt.code,
             wa_code: result.waAttempt?.code,
           })
         }
+
+        // Reopen the SMS conversation so the customer's next reply runs
+        // through the dialog normally. Without this the conversation is
+        // 'done' and the next inbound creates a brand-new conversation,
+        // losing the job context (job_type, scope, etc. already captured).
+        if (sourceChannel === 'sms' && conversationId) {
+          await supabase
+            .from('sms_conversations')
+            .update({ status: 'open', updated_at: new Date().toISOString() })
+            .eq('id', conversationId)
+          ds.ok('conversation reopened for recovery', { conversationId })
+        }
       } catch (e) {
-        ds.err('callback-request SMS threw', e)
+        ds.err('recovery SMS threw', e)
       }
     })
 
-    log.done('intake handler done — quality gate fired (no estimation, no photo SMS)', {
+    log.done('intake handler done — quality gate fired (recovery SMS dispatched)', {
       intake_id: intakeRow.id,
       gated_reason: 'empty_intake',
+      missing,
       sourceChannel,
     })
     return Response.json({
       ok: true,
       intakeId: intakeRow.id,
       gated: 'empty_intake',
+      missing,
     })
   }
 
