@@ -1,3 +1,13 @@
+// Random variant picker — used by templates that have multiple wording
+// options. Picking one at random per send (rather than rotating) keeps
+// the customer-facing thread feeling more human-typed without needing
+// to track conversation state. Each customer typically only sees ONE
+// instance of any given template per conversation, so the variation is
+// noticeable across customers, not within a single thread.
+function pickVariant<T>(variants: readonly T[]): T {
+  return variants[Math.floor(Math.random() * variants.length)]
+}
+
 // ════════════════════════════════════════════════════════════════════
 // Tradie-side notifications (Phase 4 / notify) — fire when an SMS-sourced
 // quote drafts. Two flavours:
@@ -57,28 +67,54 @@ export function buildIntakeRecoverySms(opts: {
   missing: MissingIntakeField[]
 }): string {
   const first = (opts.firstName ?? '').split(' ')[0] || ''
+  // No "Hi <name>" greeting when the missing field IS the name — would
+  // be weird to address them by name and then ask for it.
+  const named = first && !opts.missing.includes('name')
+
   // Pick the question for the FIRST missing field — keeps the SMS to a
   // single focused ask. The customer's reply will populate that field;
   // any remaining gaps get caught on the next pipeline pass.
-  let question: string
+  let variants: string[]
+
   if (opts.missing.includes('name')) {
-    question = "what's your first name so we can put it on the quote?"
+    variants = [
+      `Hi, just need one more thing before the quote lands. What's your first name?`,
+      `Hi, quick one - what's your first name? Just need it for the quote.`,
+      `Hi, can I grab your first name for the quote please?`,
+      `Hi, what's your first name? Just so we can put it on the quote.`,
+    ]
   } else if (opts.missing.includes('suburb')) {
-    question = "what suburb is the job in?"
+    const lead = named ? `${first}, ` : ''
+    variants = [
+      `${lead}quick one - what suburb is the job in? Just need it to finalise.`,
+      `${named ? `Cheers ${first}, ` : 'Cheers, '}where's the job - what suburb?`,
+      `${lead}what suburb's the job at? Last bit and we're done.`,
+      `${named ? `Hi ${first}, ` : 'Hi, '}can I grab the suburb please?`,
+    ]
   } else if (opts.missing.includes('scope')) {
-    question = "can you give me a quick description of the work? (count, room, anything specific)"
+    const lead = named ? `${first}, ` : ''
+    variants = [
+      `${lead}can you give us a quick rundown of the work? Count, room, anything specific.`,
+      `${named ? `Cheers ${first}, ` : 'Cheers, '}quick description of the job please - what's needed and where.`,
+      `${named ? `Hi ${first}, ` : 'Hi, '}can you describe the work briefly? Count + room + any specifics.`,
+    ]
   } else if (opts.missing.includes('job_type')) {
-    question = "what kind of work did you need? (downlights, GPOs, ceiling fans, smoke alarms, outdoor lighting)"
+    const lead = named ? `${first}, ` : ''
+    variants = [
+      `${lead}what kind of work did you need? Downlights, GPOs, ceiling fans, smoke alarms, or outdoor lighting?`,
+      `${named ? `Cheers ${first}, ` : 'Cheers, '}which one are we quoting - downlights, GPOs, ceiling fans, smoke alarms, or outdoor lighting?`,
+      `${named ? `Hi ${first}, ` : 'Hi, '}can I check what type of work? Downlights, GPOs, ceiling fans, smoke alarms, or outdoor lighting.`,
+    ]
   } else {
-    question = "can you give me a quick description of the work?"
+    variants = [
+      `${named ? `Hi ${first}, ` : 'Hi, '}can you give me a quick description of the work?`,
+    ]
   }
-  // No "Hi <name>" greeting when the missing field IS the name — would be
-  // weird to address them by name then ask for it.
-  const greeting = first && !opts.missing.includes('name') ? `Hi ${first}, ` : 'Hi, '
-  const body = `${greeting}thanks - just need one more thing to finalise your quote: ${question}\n\n- QuoteMate`
-  return body
-    .replace(/[‐-―−]/g, '-').replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
-    .replace(/…/g, '...').replace(/·/g, '-').replace(/[^\x20-\x7E\n]/g, '')
+
+  // Footer — no "- QuoteMate" sign-off here; the recovery thread feels
+  // more human-typed without it (and the customer already knows who we
+  // are because they're mid-conversation).
+  return gsm7Safe(pickVariant(variants))
 }
 
 // Incomplete-intake SMS — sent when the intake quality gate fires.
@@ -165,21 +201,38 @@ export function buildTradieBookingNotification(opts: {
 
 // Photo-request SMS — sent during/after the customer's first contact, in
 // parallel with the intake/estimate chain. ASCII-only, GSM-7 safe, single
-// segment. The wording adapts to the channel so an SMS-sourced customer
-// doesn't see "thanks for calling" in their text thread.
+// segment.
+//
+// 4 wording variants picked at random per call. The "Hi <name>, thanks
+// for messaging QuoteMate" lead-in was repetitive when the dialog already
+// said "Welcome back" or "G'day" two messages ago, so the variants ditch
+// the formal preamble and lead with the actual action ("here's a link").
+//
+// Voice path keeps a polite "thanks for calling" opener since the customer
+// hung up before this SMS lands and won't have seen any prior text.
 export function buildPhotoRequestSms(opts: {
   firstName?: string
   uploadUrl: string
   source?: 'voice' | 'sms'
 }): string {
-  const first = (opts.firstName ?? '').split(' ')[0] || 'there'
-  const opener = opts.source === 'sms'
-    ? `Hi ${first}, thanks for messaging QuoteMate.`
-    : `Hi ${first}, thanks for calling QuoteMate.`
-  const body = `${opener} Tap here to add 1-2 photos so we can finalise your quote: ${opts.uploadUrl}\n\n(Optional but helps a lot.)`
-  return body
-    .replace(/[‐-―−]/g, '-').replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
-    .replace(/…/g, '...').replace(/·/g, '-').replace(/[^\x20-\x7E\n]/g, '')
+  const first = (opts.firstName ?? '').split(' ')[0] || ''
+  const named = first ? `${first}, ` : ''
+
+  if (opts.source === 'voice') {
+    // Voice flows always lead with the call-context greeting so the
+    // photo SMS doesn't feel like it came out of nowhere.
+    const body = `Hi ${first || 'there'}, thanks for calling QuoteMate. Here's a quick photo upload to help finalise your quote, tap to add 1-2 pics: ${opts.uploadUrl}\n\nOptional but helps a lot.`
+    return gsm7Safe(body)
+  }
+
+  // SMS variants — keep the link prominent, vary the framing.
+  const variants = [
+    `Hey ${named}here's a quick link to drop 1-2 photos so we can finalise your quote: ${opts.uploadUrl}\n\nOptional, but it really helps.`,
+    `${first ? `Cheers ${first}, ` : 'Cheers, '}when you've got a sec, snap 1-2 photos of the spot here: ${opts.uploadUrl}\n\nNot required, just helps the sparky pin down the quote.`,
+    `${named ? `${first}, ` : ''}photos help us nail the quote. Upload 1-2 here whenever you're ready: ${opts.uploadUrl}\n\nTotally optional.`,
+    `${first ? `Hi ${first}, ` : 'Hi, '}drop us a couple of photos here so the sparky can lock in the right gear: ${opts.uploadUrl}\n\nOptional but a big help.`,
+  ]
+  return gsm7Safe(pickVariant(variants))
 }
 
 // Quote-failure fallback SMS — sent when the post-dialog chain (intake →
@@ -192,11 +245,13 @@ export function buildPhotoRequestSms(opts: {
 // the dialog. Falls back to no name when we don't.
 export function buildQuoteFailureSms(opts: { firstName?: string }): string {
   const first = (opts.firstName ?? '').split(' ')[0] || ''
-  const greeting = first ? `Sorry ${first} - ` : 'Sorry - '
-  const body = `${greeting}we hit a technical snag finalising your quote on our end. The sparky's been pinged and will give you a callback shortly. Apologies for the wait.\n\n- QuoteMate`
-  return body
-    .replace(/[‐-―−]/g, '-').replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
-    .replace(/…/g, '...').replace(/·/g, '-').replace(/[^\x20-\x7E\n]/g, '')
+  const sorry = first ? `Sorry ${first}, ` : 'Sorry, '
+  const variants = [
+    `${sorry}we hit a technical snag finalising your quote on our end. The sparky's been pinged and will give you a callback shortly. Apologies for the wait.`,
+    `${sorry}our system tripped up finalising your quote. The sparky's been notified and will call back soon, apologies for the hassle.`,
+    `${sorry}something glitched on our end while putting your quote together. The sparky's been alerted and will be in touch shortly.`,
+  ]
+  return gsm7Safe(pickVariant(variants))
 }
 
 // Quote-in-flight hold-on SMS — sent when the customer texts a NEW message
@@ -206,13 +261,19 @@ export function buildQuoteFailureSms(opts: { firstName?: string }): string {
 // don't accidentally Haiku-respond to a "new job" mid-flight as if it
 // were an add-on to the in-flight quote.
 //
+// Three wording variants picked at random per call so the customer doesn't
+// see the exact same canned phrase every time the in-flight short-circuit
+// fires — keeps the thread feeling more human-typed.
+//
 // The customer's new message is preserved in sms_messages — when they
 // re-engage after their quote arrives, the dialog picks up normally.
 export function buildQuoteInFlightSms(): string {
-  const body = `Cheers - just finalising the quote we were working on (under a minute). Once it lands, hit me back with this one and I'll get straight onto it.`
-  return body
-    .replace(/[‐-―−]/g, '-').replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
-    .replace(/…/g, '...').replace(/·/g, '-').replace(/[^\x20-\x7E\n]/g, '')
+  const variants = [
+    `Cheers, just finalising the quote we were working on (under a minute). Once it lands, hit me back with this one and I'll get straight onto it.`,
+    `Hold tight, your quote's nearly ready (about a minute away). Once you've got it, give me a shout about this one and I'll handle it.`,
+    `Just wrapping up that quote now, should be with you in a minute. Once it arrives, message me back and I'll sort this one out.`,
+  ]
+  return gsm7Safe(pickVariant(variants))
 }
 
 // SMS body builder for the customer-facing quote dispatch.

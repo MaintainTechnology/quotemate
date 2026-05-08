@@ -157,6 +157,18 @@ DO NOT overdo the slang — this is professional, not parody:
     brief & direct → brief & direct. Chatty → one notch warmer, never
     two. Formal → drop the slang entirely; stay polite and clear.
 
+PUNCTUATION — keep it plain and human-typed:
+  - Use ASCII hyphens (-), commas, or rephrase to break thoughts.
+  - NEVER use em dashes (—), en dashes (–), or horizontal bars (―).
+    They feel "AI-typed" and render as boxes on some Android phones.
+    Hyphen alternatives:
+      "Cheers Sam, what suburb's the job in?"  ← prefer comma
+      "Cheers Sam - what suburb's the job in?"  ← OK if you want a beat
+      "Cheers Sam — what suburb's the job in?"  ← FORBIDDEN
+  - Use straight quotes ' " not curly quotes ' ' " ".
+  - Use three dots ... not the ellipsis character …
+  - Plain English. Phones aren't typewriters.
+
 DO NOT lead with filler:
   - NEVER start a reply with "ok", "okay", "alright", "sure", "got it"
     on its own line or as a standalone acknowledgement. Go straight
@@ -519,16 +531,34 @@ function formatHistory(history: ConversationTurn[]): string {
 
 // Deterministic post-process scrub — defence-in-depth in case Haiku
 // drifts and produces voice-context wording in an SMS reply (e.g.
-// "thanks for calling" instead of "thanks for messaging"). Pure string
-// replacement, runs after the LLM call. Cheap, safe, idempotent.
+// "thanks for calling" instead of "thanks for messaging") OR uses
+// typographic punctuation that renders inconsistently across phones.
+// Pure string replacement, runs after the LLM call. Cheap, safe,
+// idempotent.
 function scrubVoiceWording(reply: string): string {
   return reply
+    // Voice-context wording (we are an SMS agent, not voice).
     .replace(/\bthanks for calling\b/gi, 'thanks for messaging')
     .replace(/\bthanks for ringing\b/gi, 'thanks for messaging')
     .replace(/\bthanks for the call\b/gi, 'thanks for the message')
     .replace(/\bsorry we missed your call\b/gi, 'sorry we missed your message')
     .replace(/\bon (?:that |the |your )?call\b/gi, 'in your message')
     .replace(/\bgive (?:us )?a (?:quick )?callback\b/gi, 'send us a quick reply')
+    // Em dashes / en dashes / horizontal bars → ASCII hyphen with single
+    // spaces. These render fine on iMessage but show up as boxes / weird
+    // characters on some Android skins, and Haiku-generated em dashes
+    // also feel "AI-typed" rather than "human-typed" to most readers.
+    // Match optional surrounding whitespace so we always end up with
+    // " - " (one space each side) regardless of how Haiku spaced it.
+    .replace(/\s*[—–―]\s*/g, ' - ')
+    // Smart quotes → straight quotes for the same reason.
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    // Ellipsis character → three dots.
+    .replace(/…/g, '...')
+    // Collapse any double-spaces from the substitutions above.
+    .replace(/  +/g, ' ')
+    .trim()
 }
 
 // Maps the CustomerHistoryHint to a one-line directive for Haiku that
