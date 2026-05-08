@@ -595,6 +595,13 @@ export async function POST(req: Request) {
         inboundCount,
         customerHistory,
         photoLink: photoLinkHint,
+        // Surface the customer-memory state so we can verify in prod logs
+        // whether the KNOWN CUSTOMER MEMORY block is being injected and
+        // what fields it carries.
+        customerHydrated: !!customer,
+        customerHasName: !!customer?.first_name,
+        customerHasSuburb: !!customer?.suburb,
+        customerTotalQuotes: customer?.total_quotes ?? 0,
       })
       // 6. Ask Haiku what to do next — ask | finish | escalate_inspection.
       // customerHistory drives Rule 9 (opener logic): first_time → full intro,

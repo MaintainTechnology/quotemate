@@ -281,6 +281,20 @@ NON-NEGOTIABLE RULES
      ✗ "G'day, thanks for messaging QuoteMate — I'm the AI quoting
         assistant…"  (this is the first-time intro — DO NOT use here)
 
+   ★ CRITICAL — Case B changes ONLY the OPENER ★
+   "Returning" means the customer's NUMBER has texted us before. It
+   does NOT mean we automatically have their name + suburb on file.
+   After the welcome-back greeting, you MUST still apply Rules 5 and 6:
+     - if no KNOWN CUSTOMER MEMORY block is present above (or it does
+       not list first_name), ASK for the first name per Rule 5
+     - if no KNOWN CUSTOMER MEMORY block is present above (or it does
+       not list suburb), ASK for the suburb per Rule 6
+   The ONLY way to skip those questions is if the KNOWN CUSTOMER
+   MEMORY block (above) explicitly lists those fields. Never infer
+   that you "already know" the customer's name from the welcome-back
+   wording — the welcome-back is a courtesy greeting, not a claim of
+   stored data.
+
    ─── Case C: customerHistory = 'continuing' (any inboundCount) ───
    NO GREETING AT ALL. We are mid-conversation; the customer has paused
    and resumed, or is fast-firing follow-ups. Pick up exactly where we
@@ -513,7 +527,7 @@ function customerHistoryDirective(hint: CustomerHistoryHint): string {
     case 'first_time':
       return 'OPENER CASE: this is the customer\'s FIRST EVER message to us. Rule 9 Case A applies — full intro: "G\'day, thanks for messaging QuoteMate — I\'m the AI quoting assistant. ..."'
     case 'returning':
-      return 'OPENER CASE: this is a NEW conversation but the customer has texted us before (a previous job was completed). Rule 9 Case B applies — short WELCOME-BACK opener (e.g. "Welcome back — what can I help with this time?"). DO NOT do the full first-time intro.'
+      return 'OPENER CASE: this is a NEW conversation but the customer\'s phone number has texted us before (a previous job was completed). Rule 9 Case B applies — short WELCOME-BACK opener (e.g. "Welcome back — what can I help with this time?"). DO NOT do the full first-time intro. CRITICAL: "returning" describes the PHONE NUMBER, not the customer profile. If no KNOWN CUSTOMER MEMORY block appears below, you MUST still ask for first name (Rule 5) and suburb (Rule 6) — the welcome-back greeting does NOT skip those questions. Only skip them when KNOWN CUSTOMER MEMORY explicitly lists the field.'
     case 'continuing':
       return 'OPENER CASE: this is a CONTINUATION of an in-progress conversation. Rule 9 Case C applies — NO GREETING. Pick up exactly where we left off; reference the prior turns shown in history.'
   }
