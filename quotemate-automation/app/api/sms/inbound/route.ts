@@ -616,6 +616,14 @@ export async function POST(req: Request) {
           customerHistory,
           photoLink: photoLinkHint,
           customerContext: formatCustomerContext(customer),
+          // Raw values for the deterministic post-process scrub. If Haiku
+          // ignores the Rule 6 exception and asks for suburb anyway, the
+          // scrub rewrites the reply as an address-confirmation handshake
+          // before the customer ever sees it.
+          knownFields: customer ? {
+            firstName: customer.first_name,
+            suburb: customer.suburb,
+          } : undefined,
         })
         console.log('[sms/inbound:after] step 6 — decision', {
           action: decision.action,
