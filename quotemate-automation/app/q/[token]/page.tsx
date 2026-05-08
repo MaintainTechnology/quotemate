@@ -12,6 +12,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { after } from 'next/server'
+import Image from 'next/image'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getTierPhoto } from '@/lib/quote/tier-photos'
@@ -191,13 +192,19 @@ export default async function PublicQuotePage(props: {
 
       {/* ─── Header ──────────────────────────────────────── */}
       <header className="relative z-10 border-b border-ink-line bg-ink-deep/80 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-5 sm:px-6">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4 sm:px-6">
           <Link href="/" className="flex items-center gap-3 group">
-            <MaintainMark className="h-9 w-10 text-accent transition-transform group-hover:-translate-y-0.5" />
-            <div className="leading-none">
-              <div className="font-extrabold uppercase tracking-tight text-base sm:text-lg">Maintain</div>
-              <div className="font-mono text-[0.55rem] tracking-[0.25em] text-text-dim mt-0.5">TECHNOLOGY</div>
-            </div>
+            {/* Maintain Technology logo — dark-theme variant from
+                public/maintain-logo-dark.jpg (orange M-mark + wordmark
+                pre-composed on navy, matches our --ink-deep canvas). */}
+            <Image
+              src="/maintain-logo-dark.jpg"
+              alt="Maintain Technology"
+              width={56}
+              height={56}
+              priority
+              className="h-12 w-12 sm:h-14 sm:w-14 rounded-sm transition-transform group-hover:-translate-y-0.5"
+            />
           </Link>
           <div className="text-right">
             <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-text-dim">Quote ref</div>
@@ -214,7 +221,7 @@ export default async function PublicQuotePage(props: {
             paidTier={quote.paid_tier as string | null}
           />
 
-          <h1 className="mt-6 font-extrabold uppercase tracking-[-0.03em] text-[clamp(2rem,5vw,3.5rem)] leading-[1.0]">
+          <h1 className="mt-6 font-extrabold uppercase tracking-[-0.03em] text-[clamp(2rem,5vw,3.5rem)] leading-none">
             G&apos;day <span className="text-accent">{firstName}</span>,
             <br />
             your <span className="text-accent">{jobLabel}</span> quote
@@ -447,23 +454,6 @@ export default async function PublicQuotePage(props: {
    Components
    ═══════════════════════════════════════════════════════════════ */
 
-function MaintainMark({ className }: { className?: string }) {
-  // Stylised three-bar M-mark, derived from the Maintain Technology logo.
-  // currentColor lets us tint via Tailwind (text-accent on dark, etc.).
-  return (
-    <svg
-      viewBox="0 0 96 80"
-      className={className}
-      fill="currentColor"
-      aria-hidden="true"
-    >
-      <polygon points="0,80 22,0 32,0 10,80" />
-      <polygon points="32,80 54,0 64,0 42,80" />
-      <polygon points="64,80 86,0 96,0 74,80" />
-    </svg>
-  )
-}
-
 function TopographicBackground() {
   // Faint topographic line overlay — Maintain brand signature.
   // Pure SVG, no JS, fixed background that scrolls with content.
@@ -632,7 +622,7 @@ function TierCard({
       }`}
     >
       {/* Tier-photo banner (indicative — see lib/quote/tier-photos.ts) */}
-      <div className="relative aspect-[16/9] w-full overflow-hidden border-b border-ink-line bg-ink-deep">
+      <div className="relative aspect-video w-full overflow-hidden border-b border-ink-line bg-ink-deep">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={photo.url}
