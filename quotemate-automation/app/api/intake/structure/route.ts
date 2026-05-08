@@ -336,15 +336,33 @@ export async function POST(req: Request) {
   if (quality === 'empty') {
     // Empty intake — but we can do better than a generic "we didn't catch
     // enough" SMS. Identify EXACTLY which universal must-ask field is
-    // missing and send a focused recovery question. The customer's reply
-    // gets processed normally by the next /api/sms/inbound webhook because
-    // we reopen the conversation status to 'open'. Voice source still
+    // missing and send a focused recovery question. Voice source still
     // uses the original callback-request template since the call is over.
     const missing: ('name' | 'suburb' | 'scope' | 'job_type')[] = []
     if (!intake.caller?.name) missing.push('name')
     if (!intake.suburb) missing.push('suburb')
     if (!intake.scope?.description || intake.scope.description.length < 10) missing.push('scope')
     if (intake.job_type === 'other') missing.push('job_type')
+
+    // CRITICAL — reopen the conversation BEFORE we return the response and
+    // before after() runs. The earlier link-back step (above) set status
+    // to 'done', which means a fast customer reply to the recovery SMS
+    // would land in the <60s INFLIGHT window and trigger the canned
+    // "just finalising the quote" hold-on instead of continuing the
+    // dialog. By flipping status back to 'open' synchronously, the next
+    // inbound webhook sees an open conversation and processes the reply
+    // through Haiku normally.
+    if (sourceChannel === 'sms' && conversationId) {
+      const { error: reopenErr } = await supabase
+        .from('sms_conversations')
+        .update({ status: 'open', updated_at: new Date().toISOString() })
+        .eq('id', conversationId)
+      if (reopenErr) {
+        log.err('failed to reopen sms_conversation for recovery', reopenErr)
+      } else {
+        log.ok('sms conversation reopened for recovery flow', { conversationId, missing })
+      }
+    }
 
     after(async () => {
       const ds = pipelineLog('dispatch', logId)
@@ -354,9 +372,9 @@ export async function POST(req: Request) {
         return
       }
       try {
-        // SMS source: focused recovery question + reopen the conversation
-        // so the customer's reply continues the same thread instead of
-        // starting a new one.
+        // SMS source: focused recovery question (the conversation has
+        // already been reopened synchronously above, so the customer's
+        // reply will be processed normally by the inbound webhook).
         const text = sourceChannel === 'sms'
           ? buildIntakeRecoverySms({ firstName: callerFirstName, missing })
           : buildIncompleteCallSms({ firstName: callerFirstName, source: sourceChannel })
@@ -365,23 +383,22 @@ export async function POST(req: Request) {
         const result = await dispatchQuoteMessage({ to: callerNumber, text, from: fromNumber })
         if (result.ok) {
           ds.ok('recovery SMS sent', { channel: result.channel, sid: result.sid, missing })
+          // Persist the recovery SMS as an outbound message so the dialog
+          // agent sees it in the conversation history on the next turn.
+          // Without this, Haiku doesn't know we asked for the name/suburb.
+          if (sourceChannel === 'sms' && conversationId) {
+            await supabase.from('sms_messages').insert({
+              conversation_id: conversationId,
+              direction: 'outbound',
+              body: result.channel === 'whatsapp' ? `[WhatsApp fallback] ${text}` : text,
+              twilio_message_sid: result.sid,
+            })
+          }
         } else {
           ds.err('recovery SMS failed', null, {
             sms_code: result.smsAttempt.code,
             wa_code: result.waAttempt?.code,
           })
-        }
-
-        // Reopen the SMS conversation so the customer's next reply runs
-        // through the dialog normally. Without this the conversation is
-        // 'done' and the next inbound creates a brand-new conversation,
-        // losing the job context (job_type, scope, etc. already captured).
-        if (sourceChannel === 'sms' && conversationId) {
-          await supabase
-            .from('sms_conversations')
-            .update({ status: 'open', updated_at: new Date().toISOString() })
-            .eq('id', conversationId)
-          ds.ok('conversation reopened for recovery', { conversationId })
         }
       } catch (e) {
         ds.err('recovery SMS threw', e)
