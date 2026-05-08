@@ -15,7 +15,7 @@
 // ════════════════════════════════════════════════════════════════════
 
 import { createClient } from '@supabase/supabase-js'
-import { buildPreviewPrompt, type PromptIntake } from './prompts'
+import { buildPreviewPrompt, type PromptIntake, type SystemUserPrompt } from './prompts'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -104,6 +104,7 @@ export async function generatePreviewImage(quoteId: string): Promise<PreviewResu
 
     const prompt = buildPreviewPrompt(intake as PromptIntake)
     const t0 = Date.now()
+    const promptText = `[system]\n${prompt.system}\n\n[user]\n${prompt.user}`
 
     // Generate ONE preview per uploaded customer photo, in parallel.
     // Each gets its own Gemini call with that specific photo as the
@@ -149,7 +150,7 @@ export async function generatePreviewImage(quoteId: string): Promise<PreviewResu
       // Legacy singular column — keep in sync for any old reader.
       preview_image_path: succeededPaths[0] ?? null,
       preview_status: finalStatus,
-      preview_prompt: prompt,
+      preview_prompt: promptText,
       preview_error: failureReasons.length > 0 ? failureReasons.join(' | ').slice(0, 500) : null,
       preview_generated_at: new Date().toISOString(),
     }).eq('id', quoteId)
@@ -172,7 +173,7 @@ async function generateOnePreview(opts: {
   intakeId: string
   sourcePath: string
   index: number
-  prompt: string
+  prompt: SystemUserPrompt
 }): Promise<string> {
   // Download the source photo from storage.
   const { data: blob, error: dlErr } = await supabase.storage
@@ -190,18 +191,23 @@ async function generateOnePreview(opts: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      // Authoritative rules — sent in systemInstruction so Gemini treats
+      // them as command-style instructions, not mixed in with the brief.
+      systemInstruction: {
+        parts: [{ text: opts.prompt.system }],
+      },
       contents: [
         {
           role: 'user',
           parts: [
-            { text: opts.prompt },
+            { text: opts.prompt.user },
             { inline_data: { mime_type: refMime, data: refBase64 } },
           ],
         },
       ],
       generation_config: {
-        // Low temperature — follow the JOB SPEC tightly, no improv.
-        temperature: 0.2,
+        // Low temperature — follow the JOB BRIEF tightly, no improv.
+        temperature: 0.1,
         response_modalities: ['IMAGE'],
       },
     }),

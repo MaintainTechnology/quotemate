@@ -2,29 +2,24 @@
 // AI sample-gallery generation — 3 coherent Gemini renders of the
 // proposed install, framed as wide / close-up / in-use.
 //
-// Two modes (chosen automatically based on whether the customer
-// uploaded any photos):
+// All 3 are TEXT-TO-IMAGE (no customer photo as reference). The reason:
+// using the customer's room as a reference makes count accuracy WORSE
+// because the reference room may not have natural placement slots for
+// N fittings. Text-to-image lets Gemini compose around the spec, and
+// the user has confirmed random/generic backgrounds are acceptable so
+// long as the WORK (count, fitting type) follows the customer brief.
 //
-//   MODE A — edit_customer_photo (preferred when photos exist)
-//     All 3 samples use the customer's first uploaded photo as the
-//     reference image. The model edits that photo for each view-type.
-//     Result: samples are visually consistent with the main preview
-//     and with each other — same room throughout.
-//     Generation: 3 calls in PARALLEL (no chain dependency since they
-//     all share the same input).
+// All 3 calls run in PARALLEL — there's no chain dependency since each
+// has its own self-contained brief.
 //
-//   MODE B — text_to_image (fallback when no photos uploaded)
-//     Wide is text-to-image (anchor). Detail + lit reference the wide
-//     so they share its scene. Samples are generic but coherent.
-//     Generation: wide first, then detail+lit in parallel.
-//
-// Partial success allowed:
-//   - In mode A: any of the 3 fails → status='partial', survivors render
-//   - In mode B: wide fails → 'failed' (no anchor); else 'partial' OK
+// Prompt structure: each prompt has a `system` (rules — sent in the
+// Gemini systemInstruction field) and a `user` (the job brief — sent
+// in contents[0].parts[0].text). Splitting them this way empirically
+// improves rule adherence on Gemini Flash Image.
 // ════════════════════════════════════════════════════════════════════
 
 import { createClient } from '@supabase/supabase-js'
-import { buildSamplePrompts, type PromptIntake, type SampleMode } from './prompts'
+import { buildSamplePrompts, type PromptIntake, type SystemUserPrompt } from './prompts'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -94,11 +89,7 @@ export async function generateSampleImages(quoteId: string): Promise<SamplesResu
       .maybeSingle()
     if (!intake) throw new Error('intake row not found')
 
-    // Decide mode based on whether the customer uploaded any photos.
-    const photoPaths = (Array.isArray(intake.photo_paths) ? intake.photo_paths : []) as string[]
-    const mode: SampleMode = photoPaths.length > 0 ? 'edit_customer_photo' : 'text_to_image'
-
-    const prompts = buildSamplePrompts(intake as PromptIntake, mode)
+    const prompts = buildSamplePrompts(intake as PromptIntake)
     if (!prompts) {
       await supabase.from('quotes')
         .update({ samples_status: 'failed', samples_error: 'no sample prompts for this job_type' })
@@ -108,81 +99,28 @@ export async function generateSampleImages(quoteId: string): Promise<SamplesResu
 
     const t0 = Date.now()
 
-    let succeededPaths: string[] = []
-    let failureReasons: string[] = []
+    const succeededPaths: string[] = []
+    const failureReasons: string[] = []
 
-    if (mode === 'edit_customer_photo') {
-      // Download the customer's first photo once and feed to all 3 calls in parallel.
-      const referencePath = photoPaths[0]
-      const { data: blob, error: dlErr } = await supabase.storage
-        .from(BUCKET)
-        .download(referencePath)
-      if (dlErr || !blob) throw new Error(`could not download reference photo (${referencePath}): ${dlErr?.message ?? 'no blob'}`)
-      const refBuf = Buffer.from(await blob.arrayBuffer())
-      const refMime = blob.type || 'image/jpeg'
-      const customerRef = { mimeType: refMime, base64: refBuf.toString('base64') }
-
-      console.log('[samples] mode=edit_customer_photo — running 3 parallel calls', { referencePath })
-      const results = await Promise.allSettled([
-        generateOneSample({ intakeId: intake.id as string, prompt: prompts.wide, label: 'wide', referenceImage: customerRef }),
-        generateOneSample({ intakeId: intake.id as string, prompt: prompts.detail, label: 'detail', referenceImage: customerRef }),
-        generateOneSample({ intakeId: intake.id as string, prompt: prompts.lit, label: 'lit', referenceImage: customerRef }),
-      ])
-      const labels = ['wide', 'detail', 'lit'] as const
-      results.forEach((r, i) => {
-        if (r.status === 'fulfilled') {
-          succeededPaths.push(r.value.path)
-        } else {
-          failureReasons.push(`${labels[i]}: ${r.reason?.message ?? String(r.reason)}`)
-        }
-      })
-    } else {
-      // text_to_image: wide first, then detail+lit reference the wide.
-      console.log('[samples] mode=text_to_image — wide first, then detail+lit parallel')
-      let wideBytes: Buffer | null = null
-      let wideMime: string | null = null
-      try {
-        const wideResult = await generateOneSample({
-          intakeId: intake.id as string,
-          prompt: prompts.wide,
-          label: 'wide',
-          referenceImage: null,
-        })
-        succeededPaths.push(wideResult.path)
-        wideBytes = wideResult.imageBytes
-        wideMime = wideResult.mimeType
-      } catch (e: any) {
-        const reason = e?.message ?? String(e)
-        failureReasons.push(`wide: ${reason}`)
-        // No anchor → can't continue.
-        await supabase.from('quotes').update({
-          sample_image_paths: [],
-          samples_status: 'failed',
-          samples_error: failureReasons.join(' | ').slice(0, 500),
-          samples_generated_at: new Date().toISOString(),
-        }).eq('id', quoteId)
-        return { status: 'failed', error: reason }
+    // All 3 in parallel — no inter-shot dependency.
+    console.log('[samples] running 3 parallel text-to-image calls')
+    const results = await Promise.allSettled([
+      generateOneSample({ intakeId: intake.id as string, prompt: prompts.wide,   label: 'wide' }),
+      generateOneSample({ intakeId: intake.id as string, prompt: prompts.detail, label: 'detail' }),
+      generateOneSample({ intakeId: intake.id as string, prompt: prompts.lit,    label: 'lit' }),
+    ])
+    const labels = ['wide', 'detail', 'lit'] as const
+    results.forEach((r, i) => {
+      if (r.status === 'fulfilled') {
+        succeededPaths.push(r.value.path)
+      } else {
+        failureReasons.push(`${labels[i]}: ${r.reason?.message ?? String(r.reason)}`)
       }
-
-      const wideRef = { mimeType: wideMime!, base64: wideBytes!.toString('base64') }
-      const followUp = await Promise.allSettled([
-        generateOneSample({ intakeId: intake.id as string, prompt: prompts.detail, label: 'detail', referenceImage: wideRef }),
-        generateOneSample({ intakeId: intake.id as string, prompt: prompts.lit, label: 'lit', referenceImage: wideRef }),
-      ])
-      const labels = ['detail', 'lit'] as const
-      followUp.forEach((r, i) => {
-        if (r.status === 'fulfilled') {
-          succeededPaths.push(r.value.path)
-        } else {
-          failureReasons.push(`${labels[i]}: ${r.reason?.message ?? String(r.reason)}`)
-        }
-      })
-    }
+    })
 
     const elapsedMs = Date.now() - t0
     console.log('[samples] generation finished', {
       quoteId,
-      mode,
       elapsedMs,
       succeeded: succeededPaths.length,
       failed: failureReasons.length,
@@ -216,29 +154,29 @@ export async function generateSampleImages(quoteId: string): Promise<SamplesResu
 
 async function generateOneSample(opts: {
   intakeId: string
-  prompt: string
+  prompt: SystemUserPrompt
   label: 'wide' | 'detail' | 'lit'
-  referenceImage: { mimeType: string; base64: string } | null
 }): Promise<{ path: string; imageBytes: Buffer; mimeType: string }> {
   const apiUrl = `${GEMINI_ENDPOINT(GEMINI_MODEL)}?key=${encodeURIComponent(process.env.GEMINI_API_KEY!)}`
-
-  const parts: Array<Record<string, unknown>> = [{ text: opts.prompt }]
-  if (opts.referenceImage) {
-    parts.push({
-      inline_data: {
-        mime_type: opts.referenceImage.mimeType,
-        data: opts.referenceImage.base64,
-      },
-    })
-  }
 
   const res = await fetch(apiUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      contents: [{ role: 'user', parts }],
+      // Authoritative rules — highest priority. Gemini treats these as
+      // command-style instructions the model must follow.
+      systemInstruction: {
+        parts: [{ text: opts.prompt.system }],
+      },
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: opts.prompt.user }],
+        },
+      ],
       generation_config: {
-        temperature: 0.2,
+        // Low temperature — follow the JOB BRIEF tightly, no improv.
+        temperature: 0.1,
         response_modalities: ['IMAGE'],
       },
     }),
