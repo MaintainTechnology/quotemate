@@ -172,14 +172,21 @@ export async function updateCustomerFromIntake(opts: {
  * Returns null if there's nothing useful to inject (stub customer with no
  * fields populated).
  *
- * Conservative re-engagement design:
- *   - Greeting stays neutral (no name leak — someone else may have the phone).
+ * Personalised re-engagement design:
+ *   - Greeting USES the stored first_name when known ("Welcome back Jeph,
+ *     what can I help you with this time?"). Falls back to neutral wording
+ *     only when first_name is not on file.
  *   - If first_name is known, skip the "what's your first name?" question
- *     silently and use the name in later acknowledgements.
+ *     silently — we already have it.
  *   - If suburb is known, REPLACE the standard "what suburb?" question with
  *     an address-confirmation handshake ("still at the Bondi place, right?").
  *   - On correction ("Coogee now"), the new value flows through to the
  *     post-intake updateCustomerFromIntake() and overwrites the row.
+ *
+ * NOTE on phone sharing: this design assumes the phone number maps to a
+ * single household member. If a flatmate/partner uses the same number,
+ * the welcome-back will address them by the wrong name. That's an
+ * accepted tradeoff for the personalisation per product direction.
  */
 export function formatCustomerContext(c: CustomerProfile | null): string | null {
   if (!c) return null
@@ -207,22 +214,39 @@ export function formatCustomerContext(c: CustomerProfile | null): string | null 
   const suburbExample = c.suburb ?? 'Bondi'
   const nameExample = c.first_name ?? 'Sam'
 
+  // Build the GREETING section conditionally — when first_name is on
+  // file, instruct Haiku to use it in the welcome-back; otherwise keep
+  // the neutral "Welcome back" wording.
+  const greetingSection = c.first_name
+    ? [
+        `GREETING: use the customer's first name in the welcome-back line.`,
+        `  ✓ "Welcome back ${nameExample}, what can I help you with this time?"`,
+        `  ✓ "G'day again ${nameExample}, what electrical work did you need this time?"`,
+        `  ✓ "Hey ${nameExample}, good to hear from you again. What's the new job?"`,
+        `Avoid the formal first-time intro ("thanks for messaging QuoteMate, I'm`,
+        `the AI quoting assistant...") — they already know us. Stay warm and brief.`,
+      ]
+    : [
+        'GREETING: keep it neutral (we have no first_name on file yet).',
+        '  ✓ "Welcome back, what can I help you with this time?"',
+        '  ✓ "G\'day again, what electrical work did you need this time?"',
+        'Do NOT do the full first-time intro.',
+      ]
+
   return [
-    'KNOWN CUSTOMER MEMORY — apply conservative re-engagement.',
+    'KNOWN CUSTOMER MEMORY — apply re-engagement using stored details.',
     '',
-    'GREETING: stay neutral. Do NOT volunteer the name in the welcome',
-    'line. Someone else may be holding the phone. Rule 9 Case B applies',
-    'unchanged ("Welcome back — what can I help you with this time?").',
+    ...greetingSection,
     '',
-    'NAME: if first_name is known, skip the "what\'s your first name?"',
-    'question silently — treat the name as already captured. Use it in',
-    'acknowledgements once the customer has engaged with the new request',
-    `(e.g. "Cheers ${nameExample} — ...").`,
+    'NAME: if first_name is in the KNOWN FIELDS list below, treat it as',
+    'already captured. DO NOT ask "what\'s your first name?" again. Use it',
+    `naturally in acknowledgements (e.g. "Cheers ${nameExample}, ...").`,
     '',
-    'SUBURB: if suburb is known, REPLACE the standard "and what suburb',
-    'is the job in?" question with an address-confirmation handshake:',
-    `  ✓ "Cheers ${nameExample} — still at the ${suburbExample} place, right?"`,
-    `  ✓ "Got it — still at the same ${suburbExample} spot?"`,
+    'SUBURB: if suburb is in the KNOWN FIELDS list below, REPLACE the',
+    'standard "and what suburb is the job in?" question with an address-',
+    'confirmation handshake using the EXACT stored suburb value:',
+    `  ✓ "Cheers ${nameExample}, still at the ${suburbExample} place, right?"`,
+    `  ✓ "Got it. Still at the same ${suburbExample} spot?"`,
     'If the customer affirms ("yep", "still there"), use the stored',
     'suburb and move to the next missing field — do NOT ask again.',
     'If they correct ("Coogee now" / "this job\'s at my mum\'s in Penrith"),',
