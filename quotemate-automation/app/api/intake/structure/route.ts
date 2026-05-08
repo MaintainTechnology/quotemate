@@ -241,8 +241,32 @@ export async function POST(req: Request) {
     }
     if (backfilled.length) {
       log.ok('backfilled intake fields from customer record', { fields: backfilled })
+    } else {
+      // Negative confirmation: we DID look up the customer, but every
+      // critical field was already populated by Opus from the transcript
+      // (no backfill needed) OR the customer record itself is empty for
+      // those fields (no backfill possible). Either way, audit trail.
+      log.ok('no backfill applied', {
+        reason: customer.first_name || customer.suburb || customer.address || customer.email
+          ? 'transcript already had all stored fields'
+          : 'customer record empty for stable fields',
+      })
     }
   }
+
+  // Audit log — exact credentials about to be submitted to the intake row.
+  // Lets you verify in production logs that customer details are bundled
+  // with the request before insert, not just spliced in mid-pipeline.
+  log.ok('credentials attached to intake — submitting to estimation engine', {
+    customer_id: customer?.id ?? null,
+    caller_name: intake.caller?.name ?? null,
+    caller_email: intake.caller?.email ?? null,
+    suburb: intake.suburb ?? null,
+    address: intake.address ?? null,
+    job_type: intake.job_type,
+    confidence: intake.confidence,
+    has_scope: !!(intake.scope?.description && intake.scope.description.length >= 10),
+  })
 
   log.step('inserting intakes row', { photo_paths_count: photoPaths.length })
   const { data: intakeRow, error: insertErr } = await supabase.from('intakes').insert({
