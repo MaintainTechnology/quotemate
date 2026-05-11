@@ -195,6 +195,31 @@ INPUTS PROVIDED:
   - CUSTOMER MESSAGE: the inbound SMS to extract from
 
 EXTRACTION RULES:
+
+  ★ 0. CONTEXT BINDING (MOST IMPORTANT, READ FIRST) ★
+     The LAST AGENT MESSAGE tells you which slot the customer is answering.
+     A short customer reply ALMOST ALWAYS belongs to the slot the agent
+     just asked about. Map the question to the slot like this:
+
+       Agent asked …                                  → slot
+       "what suburb is the job in?"                   → suburb
+       "what's your first name?" / "what's your name?" → first_name
+       "which room…?" / "where in the house…?"        → room
+       "how many…?" / "how many fittings…?"           → count
+       "flat plaster or raked?" / "ceiling type?"     → ceiling_type
+       "warm white / cool white / tri-colour…?"       → colour
+       "replacing existing or new install?"           → replace_or_new
+       "Sound right?" / "just to confirm…?"           → verified (on affirm)
+
+     DO NOT reclassify the customer's reply into a different slot unless
+     their words are EXPLICITLY about a different field (e.g.
+     "Lounge, but actually my name is Mike" → first_name: "Mike", room: "Lounge").
+
+     CRITICAL ANTI-PATTERN: the agent asked "what suburb?" → customer
+     replies "Bondi" → the answer is suburb: "Bondi". DO NOT store "Bondi"
+     as a room. Suburbs are city/town names (Bondi, Coorparoo, Chandler).
+     Rooms are interior spaces (lounge, kitchen, bedroom).
+
   1. Return ONLY slots the customer's message confirms or corrects.
      Do not infer, do not guess, do not pull from prior agent messages.
   2. If the customer is correcting a stored value (e.g. agent said "still at
@@ -232,6 +257,19 @@ EXTRACTION RULES:
        "update my email to sam@example.com", "send it to sam@example.com"
        → email: "sam@example.com"
      - Lowercase the value before storing.
+  5c. ROOM extraction (interior space, NOT a suburb):
+     - Valid room names: lounge, living room, kitchen, bedroom, master bedroom,
+       ensuite, bathroom, dining, dining room, study, office, hallway, garage,
+       deck, patio, courtyard, backyard, laundry, rumpus, theatre.
+     - Common patterns: "in the lounge", "kitchen", "Lounge", "master bedroom".
+     - If the customer says BOTH a room and a ceiling type in one message
+       ("Lounge, flat plaster" / "Kitchen and raked ceiling"), extract BOTH
+       fields: room AND ceiling_type.
+     - DO NOT confuse rooms with suburbs. Suburbs are city/town names
+       (Bondi, Coorparoo, Chandler, Surry Hills). Rooms are interior spaces
+       inside a single home. When in doubt, look at the LAST AGENT MESSAGE
+       (Rule 0): if it asked "what suburb?" → suburb; if it asked
+       "which room?" → room.
   6. JOB_TYPE extraction:
      - downlights / power_points / ceiling_fans / smoke_alarms / outdoor_lighting
      - Anything else (switchboard, EV charger, fault find, ovens, renovation,
