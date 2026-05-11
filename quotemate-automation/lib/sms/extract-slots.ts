@@ -36,11 +36,14 @@ export const SlotsSchema = z.object({
     'downlights', 'power_points', 'ceiling_fans', 'smoke_alarms', 'outdoor_lighting',
     'unknown', 'out_of_scope',
   ]).nullable().optional(),
-  // .min(1) rather than .positive() — Zod emits exclusiveMinimum: 0 for
-  // .positive(), which Anthropic's JSON Schema validator rejects on the
-  // 'integer' type ("For 'integer' type, properties exclusiveMinimum,
-  // maximum are not supported"). .min(1) emits minimum: 1 which is fine.
-  count: z.number().int().min(1).nullable().optional(),
+  // z.number() (NOT .int()) — Anthropic's structured-output validator rejects
+  // EVERY integer-range constraint (minimum, maximum, exclusiveMinimum,
+  // exclusiveMaximum), AND the AI SDK silently adds safe-integer bounds the
+  // moment you call .int(). Net effect: any z.number().int() schema fails
+  // with "For 'integer' type, properties maximum, minimum are not supported".
+  // Plain z.number() compiles to {"type": "number"} with no bounds — accepted.
+  // We Math.trunc the value server-side wherever it's used as an integer.
+  count: z.number().nullable().optional(),
   room: z.string().nullable().optional(),
   ceiling_type: z.enum([
     'flat_plaster', 'raked', 'cathedral', 'sheet_metal', 'unknown',
