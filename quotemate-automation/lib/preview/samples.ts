@@ -24,6 +24,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { buildSamplePrompts, type PromptIntake, type SystemUserPrompt } from './prompts'
+import { loadPromptContext } from './generate'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -92,7 +93,7 @@ export async function generateSampleImages(quoteId: string): Promise<SamplesResu
   try {
     const { data: intake } = await supabase
       .from('intakes')
-      .select('id, job_type, scope, access, caller, photo_paths')
+      .select('id, job_type, scope, access, property, caller, timing, photo_paths')
       .eq('id', locked.intake_id)
       .maybeSingle()
     if (!intake) throw new Error('intake row not found')
@@ -123,7 +124,11 @@ export async function generateSampleImages(quoteId: string): Promise<SamplesResu
       }
     }
 
-    const prompts = buildSamplePrompts(intake as PromptIntake, {
+    // Load the richer prompt context (quote + line items + corrections).
+    // Best-effort — degrades gracefully if any fetch fails.
+    const ctx = await loadPromptContext(quoteId, intake as PromptIntake)
+
+    const prompts = buildSamplePrompts(ctx, {
       usePhotoReference: referencePhoto !== null,
     })
     if (!prompts) {

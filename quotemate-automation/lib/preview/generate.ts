@@ -15,7 +15,15 @@
 // ════════════════════════════════════════════════════════════════════
 
 import { createClient } from '@supabase/supabase-js'
-import { buildPreviewPrompt, type PromptIntake, type SystemUserPrompt } from './prompts'
+import {
+  buildPreviewPrompt,
+  type PromptContext,
+  type PromptIntake,
+  type PromptQuote,
+  type PromptLineItem,
+  type PromptCorrection,
+  type SystemUserPrompt,
+} from './prompts'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -90,7 +98,7 @@ export async function generatePreviewImage(quoteId: string): Promise<PreviewResu
   try {
     const { data: intake } = await supabase
       .from('intakes')
-      .select('id, job_type, scope, access, caller, photo_paths')
+      .select('id, job_type, scope, access, property, caller, timing, photo_paths')
       .eq('id', locked.intake_id)
       .maybeSingle()
 
@@ -106,7 +114,9 @@ export async function generatePreviewImage(quoteId: string): Promise<PreviewResu
       return { status: 'no_photos' }
     }
 
-    const prompt = buildPreviewPrompt(intake as PromptIntake)
+    // ── Load richer context for the prompt builder ──
+    const ctx = await loadPromptContext(quoteId, intake as PromptIntake)
+    const prompt = buildPreviewPrompt(ctx)
     const t0 = Date.now()
     const promptText = `[system]\n${prompt.system}\n\n[user]\n${prompt.user}`
 
@@ -256,4 +266,83 @@ type GeminiResponse = {
     finish_reason?: string
   }>
   error?: { message?: string; code?: number }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Shared prompt-context loader
+//
+// Pulls the additional data the new flexible builder relies on:
+//   · quote     — selected_tier, scope_of_works, assumptions
+//   · lineItems — quote_line_items for the selected tier (specific
+//                 products like "USB double GPO (Clipsal)")
+//   · corrections — slot names the customer corrected mid-SMS, from
+//                 sms_conversations.conversation_state.sources
+//
+// Every fetch is best-effort. Missing data degrades gracefully — the
+// builder skips any section whose data is absent.
+// ════════════════════════════════════════════════════════════════════
+export async function loadPromptContext(
+  quoteId: string,
+  intake: PromptIntake,
+): Promise<PromptContext> {
+  // Fetch quote, line items, and SMS conversation in parallel.
+  const intakeId = (intake as { id?: string }).id ?? null
+
+  const [quoteRes, lineItemsRes, convoRes] = await Promise.all([
+    supabase
+      .from('quotes')
+      .select('selected_tier, scope_of_works, assumptions, needs_inspection')
+      .eq('id', quoteId)
+      .maybeSingle(),
+    supabase
+      .from('quote_line_items')
+      .select('tier, description, quantity, source')
+      .eq('quote_id', quoteId),
+    intakeId
+      ? supabase
+          .from('sms_conversations')
+          .select('conversation_state')
+          .eq('intake_id', intakeId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ])
+
+  const quote: PromptQuote | null = quoteRes?.data ? {
+    selected_tier: (quoteRes.data.selected_tier ?? null) as PromptQuote['selected_tier'],
+    scope_of_works: quoteRes.data.scope_of_works ?? null,
+    assumptions: Array.isArray(quoteRes.data.assumptions)
+      ? (quoteRes.data.assumptions as string[])
+      : null,
+    needs_inspection: quoteRes.data.needs_inspection ?? null,
+  } : null
+
+  const lineItems: PromptLineItem[] = Array.isArray(lineItemsRes?.data)
+    ? lineItemsRes.data.map(li => ({
+        tier: li.tier,
+        description: li.description,
+        quantity: li.quantity ?? null,
+        source: li.source ?? null,
+      }))
+    : []
+
+  // Corrections: pull slots flagged customer_corrected and pair with
+  // their current value.
+  const corrections: PromptCorrection[] = []
+  const state = (convoRes?.data as { conversation_state?: unknown } | null)?.conversation_state
+  if (state && typeof state === 'object') {
+    const s = state as {
+      slots?: Record<string, unknown>
+      sources?: Record<string, string>
+    }
+    const sources = s.sources ?? {}
+    const slots = s.slots ?? {}
+    for (const [slot, src] of Object.entries(sources)) {
+      if (src !== 'customer_corrected') continue
+      const v = slots[slot]
+      if (v === null || v === undefined || v === '') continue
+      corrections.push({ slot, finalValue: String(v) })
+    }
+  }
+
+  return { intake, quote, lineItems, corrections }
 }
