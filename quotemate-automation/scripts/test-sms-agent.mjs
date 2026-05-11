@@ -12,7 +12,10 @@
 //     → runs every scripted scenario against prod
 //
 //   node --env-file=.env.local scripts/test-sms-agent.mjs --scenario=downlights
-//     → runs a single scenario (downlights | switchboard | offtopic | ambiguous | photos)
+//     → runs a single scenario. Available:
+//       electrical: downlights | switchboard | offtopic | ambiguous | photos
+//       plumbing  : blocked_drain | hot_water | tap_repair | toilet_repair
+//                 | gas_fitting | bathroom_renovation
 //
 //   node --env-file=.env.local scripts/test-sms-agent.mjs --mode=chat
 //     → interactive REPL — type a message, see the agent's reply, repeat.

@@ -15,11 +15,19 @@
 // ═════════════════════════════════════════════════════════════════════
 
 export type JobType =
+  // ── Electrical SMS-auto-quoteable (v3) ─────────────
   | 'downlights'
   | 'power_points'
   | 'ceiling_fans'
   | 'smoke_alarms'
   | 'outdoor_lighting'
+  // ── Plumbing SMS-auto-quoteable (v5) ──────────────
+  | 'blocked_drain'
+  | 'hot_water'
+  | 'tap_repair'
+  | 'tap_replace'
+  | 'toilet_repair'
+  | 'toilet_replace'
 
 export type AssumptionRule = {
   safeDefaults: Record<string, string>
@@ -147,6 +155,117 @@ export const ASSUMPTION_RULES: Record<JobType, AssumptionRule> = {
       'pre-1970 house',
     ],
   },
+
+  // ──────────────────────────────────────────────────────────────────
+  // PLUMBING (QLD/QBCC pilot — v5 multi-trade)
+  //
+  // Plumbing rules are deliberately MINIMAL. The plumbing intake schema
+  // doesn't carry structured scope.specs (those fields are electrical-
+  // specific), so most plumbing detail flows via scope.description.
+  // safeDefaults are kept tight; mustAsk focuses on the 1-2 fields that
+  // genuinely change the quote tier; inspectionTriggers cover scenarios
+  // where pricing-without-eyes-on is unsafe (water damage, behind-wall
+  // pipework, gas-line work, pipe-material unknowns).
+  // ──────────────────────────────────────────────────────────────────
+
+  blocked_drain: {
+    safeDefaults: {
+      'scope.indoor_outdoor': 'indoor (most kitchen/bathroom drain blockages)',
+      'property.pre_1970':   'false',
+    },
+    mustAsk: [
+      'which drain is blocked (kitchen sink, bathroom basin, shower, toilet, or external)',
+      'is it slow draining or completely blocked',
+    ],
+    inspectionTriggers: [
+      'sewage backing up', 'multiple fixtures affected', 'tree roots known',
+      'recurring blockage every few months', 'pipe under concrete slab',
+      'pre-1970 house',
+    ],
+  },
+
+  hot_water: {
+    safeDefaults: {
+      'scope.indoor_outdoor': 'unknown (HWS can be indoor or outdoor — confirm in description)',
+      'property.pre_1970':   'false',
+    },
+    mustAsk: [
+      'current system type (electric storage, gas storage, continuous-flow gas, or heat pump)',
+      'roughly what size / capacity (e.g. 250L, 315L, or "not sure")',
+      'where is it located (laundry, outside back wall, roof, garage)',
+    ],
+    inspectionTriggers: [
+      'switchboard upgrade needed', 'gas-line upgrade needed',
+      'no power or gas point at install location', 'roof-mounted',
+      'three-phase electric required', 'asbestos', 'pre-1970 house',
+    ],
+  },
+
+  tap_repair: {
+    safeDefaults: {
+      'scope.indoor_outdoor': 'indoor',
+      'property.pre_1970':   'false',
+      'scope.existing_wiring': 'true (existing supply pipework present — repair only)',
+    },
+    mustAsk: [
+      'which tap (kitchen, basin, laundry, outdoor)',
+      'is it dripping, leaking from body, or stuck',
+    ],
+    inspectionTriggers: [
+      'leak through wall', 'water damage to cabinetry', 'no isolation valve',
+      'pre-1970 house', 'galvanised supply lines',
+    ],
+  },
+
+  tap_replace: {
+    safeDefaults: {
+      'scope.indoor_outdoor': 'indoor',
+      'property.pre_1970':   'false',
+      'scope.existing_wiring': 'true (existing supply present)',
+      'scope.specs.supplied_by': 'tradie (default — plumber supplies tapware)',
+    },
+    mustAsk: [
+      'which tap (kitchen mixer, basin, laundry, outdoor)',
+      'are you supplying the tap or do you want the plumber to supply',
+    ],
+    inspectionTriggers: [
+      'wall-mounted with no existing wall-tap', 'tiles need cutting',
+      'no isolation valve under sink', 'pre-1970 house',
+    ],
+  },
+
+  toilet_repair: {
+    safeDefaults: {
+      'scope.indoor_outdoor': 'indoor',
+      'property.pre_1970':   'false',
+    },
+    mustAsk: [
+      'which toilet (main, ensuite, second bathroom)',
+      'symptom (constantly running, leaking at base, won\'t flush)',
+    ],
+    inspectionTriggers: [
+      'leaking at floor base', 'visible water damage to floor',
+      'cracked porcelain', 'pre-1970 house',
+    ],
+  },
+
+  toilet_replace: {
+    safeDefaults: {
+      'scope.indoor_outdoor': 'indoor',
+      'property.pre_1970':   'false',
+      'scope.specs.supplied_by': 'tradie (default — plumber supplies toilet suite)',
+    },
+    mustAsk: [
+      'which toilet (main, ensuite)',
+      'style preference (standard close-coupled, wall-faced, or in-wall cistern premium)',
+      'are you supplying the suite or do you want the plumber to supply',
+    ],
+    inspectionTriggers: [
+      'in-wall cistern install (higher complexity, framing required)',
+      'concrete slab penetration needed', 'rotted floor at base',
+      'pre-1970 house',
+    ],
+  },
 }
 
 // Universal MUST-ASK fields — required for EVERY job, regardless of
@@ -161,18 +280,30 @@ export const ASSUMPTION_RULES: Record<JobType, AssumptionRule> = {
 export const UNIVERSAL_MUST_ASK = [
   "customer's first name (intake field: caller.name)",
   "suburb where the job is (intake field: suburb)",
-  "what electrical work they need — must be one of the easy 5 (intake field: job_type)",
+  "what work they need — must be one of the trade-specific auto-quoteable list (intake field: job_type)",
 ]
 
 // Universal escalation — applies regardless of job type. Any of these in
 // the customer's message immediately routes to inspection mode.
+// v5: extended with plumbing-specific triggers (gas, burst pipe, sewage,
+// hidden pipework / behind-wall leaks).
 export const UNIVERSAL_INSPECTION_TRIGGERS = [
+  // ── Electrical ──────────────────────────────────────────
   'burning smell', 'smoke', 'sparks', 'sparking', 'electric shock', 'shocked',
   'switchboard', 'fuse box', 'ceramic fuse', 'old fuses',
   'ev charger', 'tesla wall', 'wall connector',
   'tripping breaker', 'breaker keeps tripping', 'fault finding', 'fault find',
-  'rewire', 'renovation', 'extension',
-  'three-phase', 'three phase',
+  'rewire', 'three-phase', 'three phase',
+  // ── Plumbing (v5) ───────────────────────────────────────
+  'smell gas', 'gas leak', 'gas smell', 'leaking gas',
+  'burst pipe', 'pipe burst', 'water everywhere',
+  'water coming through ceiling', 'water through ceiling',
+  'sewage overflow', 'sewage backing up', 'raw sewage',
+  'leak behind wall', 'pipe behind wall', 'pipe under slab',
+  'bathroom reno', 'bathroom renovation', 'kitchen reno',
+  'cctv only', 'just a camera inspection',
+  // ── Cross-trade ─────────────────────────────────────────
+  'renovation', 'extension',
   'water damage', 'flooded',
   'pre-1970', 'asbestos',
 ]

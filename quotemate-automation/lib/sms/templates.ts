@@ -316,6 +316,7 @@ type Quote = {
 }
 
 const JOB_TYPE_LABEL: Record<string, string> = {
+  // ── Electrical ──────────────────────────────
   downlights: 'downlights',
   power_points: 'power points',
   ceiling_fans: 'ceiling fans',
@@ -326,7 +327,20 @@ const JOB_TYPE_LABEL: Record<string, string> = {
   ev_charger: 'EV charger',
   fault_finding: 'fault finding',
   renovation: 'renovation',
-  other: 'electrical work',
+  // ── Plumbing (v5) ───────────────────────────
+  blocked_drain: 'blocked drain',
+  hot_water: 'hot water system',
+  tap_repair: 'tap repair',
+  tap_replace: 'tap replacement',
+  toilet_repair: 'toilet repair',
+  toilet_replace: 'toilet replacement',
+  gas_fitting: 'gas fitting',
+  burst_pipe: 'burst pipe repair',
+  bathroom_renovation: 'bathroom renovation',
+  cctv_inspection: 'CCTV drain inspection',
+  prv_install: 'pressure-reduction valve',
+  // ── Fallback (trade-neutral; was "electrical work" pre-v5) ──
+  other: 'job',
 }
 
 function gsm7Safe(s: string): string {
@@ -364,7 +378,7 @@ function tierLabel(tier: Tier): string {
 
 function jobSummary(intake: Intake): string {
   const count = intake.scope?.item_count
-  const label = JOB_TYPE_LABEL[intake.job_type] ?? 'electrical work'
+  const label = JOB_TYPE_LABEL[intake.job_type] ?? 'job'
   if (count && count > 0) return `${count} ${label}`
   return label
 }
