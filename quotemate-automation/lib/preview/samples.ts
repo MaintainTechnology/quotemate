@@ -175,11 +175,17 @@ export async function generateSampleImages(quoteId: string): Promise<SamplesResu
     else if (succeededPaths.length > 0) finalStatus = 'partial'
     else finalStatus = 'failed'
 
+    // Persist the wide-shot prompt so we can audit what was sent to Gemini.
+    // The 3 sample prompts share the customer-prefs block (only the
+    // shot-specific footer differs), so storing one is sufficient for
+    // verifying that customer choices propagated through.
+    const samplesPrompt = `[system]\n${prompts.wide.system}\n\n[user]\n${prompts.wide.user}`
     await supabase.from('quotes').update({
       sample_image_paths: succeededPaths,
       samples_status: finalStatus,
       samples_error: failureReasons.length > 0 ? failureReasons.join(' | ').slice(0, 500) : null,
       samples_generated_at: new Date().toISOString(),
+      samples_prompt: samplesPrompt,
     }).eq('id', quoteId)
 
     if (finalStatus === 'failed') return { status: 'failed', error: failureReasons.join(' | ') }
