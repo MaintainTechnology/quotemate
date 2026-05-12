@@ -62,6 +62,10 @@ function OnboardWizardInner() {
 
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [showAdvanced, setShowAdvanced] = useState(false)
+  // Licence details collapse — defaults to hidden so tradies see a clean
+  // Step 1 with only the truly required fields (mobile + trade + state).
+  // Anyone with a licence number can click to expand and fill it in.
+  const [showLicence, setShowLicence] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({})
@@ -209,6 +213,8 @@ function OnboardWizardInner() {
                 update={update}
                 fieldErrors={fieldErrors}
                 mobileLocked={mobileLocked}
+                showLicence={showLicence}
+                setShowLicence={setShowLicence}
               />
             )}
             {step === 2 && (
@@ -281,90 +287,136 @@ function Step1({
   update,
   fieldErrors,
   mobileLocked,
+  showLicence,
+  setShowLicence,
 }: {
   form: FormState
   update: <K extends keyof FormState>(k: K, v: FormState[K]) => void
   fieldErrors: Record<string, string[]>
   mobileLocked: boolean
+  showLicence: boolean
+  setShowLicence: (v: boolean) => void
 }) {
   return (
-    <div className="grid gap-5 md:grid-cols-2">
-      <Field
-        label="Mobile"
-        hint={mobileLocked ? 'Verified via your SMS — locked' : 'For your welcome text'}
-        error={fieldErrors.owner_mobile?.[0]}
-      >
-        <input
-          type="tel"
-          value={form.owner_mobile}
-          onChange={(e) => update('owner_mobile', e.target.value)}
-          placeholder="04xx xxx xxx"
-          className={`${INPUT} ${mobileLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
-          autoComplete="tel"
-          required
-          readOnly={mobileLocked}
-        />
-      </Field>
-
-      <Field label="Trade" error={fieldErrors.trade?.[0]}>
-        <div className="grid grid-cols-2 gap-2">
-          <TradePill value="electrical" label="Electrical" current={form.trade} onPick={(v) => update('trade', v)} />
-          <TradePill value="plumbing" label="Plumbing" current={form.trade} onPick={(v) => update('trade', v)} />
-        </div>
-      </Field>
-
-      <Field label="State">
-        <select
-          value={form.state}
-          onChange={(e) => update('state', e.target.value as FormState['state'])}
-          className={INPUT}
-          required
+    <>
+      {/* Required + commonly-asked fields */}
+      <div className="grid gap-5 md:grid-cols-2">
+        <Field
+          label="Mobile"
+          hint={mobileLocked ? 'Verified via your SMS — locked' : 'For your welcome text'}
+          error={fieldErrors.owner_mobile?.[0]}
         >
-          <option value="" className="bg-ink-deep">Choose state</option>
-          {STATES.map((s) => <option key={s} value={s} className="bg-ink-deep">{s}</option>)}
-        </select>
-      </Field>
-
-      <Field label="ABN" hint="Optional — add later">
-        <input
-          type="text"
-          value={form.abn}
-          onChange={(e) => update('abn', e.target.value)}
-          placeholder="11 222 333 444"
-          className={INPUT}
-          maxLength={20}
-        />
-      </Field>
-
-      {form.state && form.trade && (
-        <Field label="Licence body" hint={`Standard for ${form.state}`}>
           <input
-            type="text"
-            value={form.licence_type || LICENCE_BODIES[form.state]?.[form.trade as 'electrical' | 'plumbing'] || ''}
-            onChange={(e) => update('licence_type', e.target.value)}
-            className={INPUT}
+            type="tel"
+            value={form.owner_mobile}
+            onChange={(e) => update('owner_mobile', e.target.value)}
+            placeholder="04xx xxx xxx"
+            className={`${INPUT} ${mobileLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
+            autoComplete="tel"
+            required
+            readOnly={mobileLocked}
           />
         </Field>
-      )}
 
-      <Field label="Licence number" hint="Optional">
-        <input
-          type="text"
-          value={form.licence_number}
-          onChange={(e) => update('licence_number', e.target.value)}
-          className={INPUT}
-        />
-      </Field>
+        <Field label="Trade" error={fieldErrors.trade?.[0]}>
+          <div className="grid grid-cols-2 gap-2">
+            <TradePill value="electrical" label="Electrical" current={form.trade} onPick={(v) => update('trade', v)} />
+            <TradePill value="plumbing" label="Plumbing" current={form.trade} onPick={(v) => update('trade', v)} />
+          </div>
+        </Field>
 
-      <Field label="Licence expiry" hint="Optional">
-        <input
-          type="date"
-          value={form.licence_expiry}
-          onChange={(e) => update('licence_expiry', e.target.value)}
-          className={`${INPUT} [color-scheme:dark]`}
-        />
-      </Field>
-    </div>
+        <Field label="State">
+          <select
+            value={form.state}
+            onChange={(e) => update('state', e.target.value as FormState['state'])}
+            className={INPUT}
+            required
+          >
+            <option value="" className="bg-ink-deep">Choose state</option>
+            {STATES.map((s) => <option key={s} value={s} className="bg-ink-deep">{s}</option>)}
+          </select>
+        </Field>
+
+        <Field label="ABN" hint="Optional — add later">
+          <input
+            type="text"
+            value={form.abn}
+            onChange={(e) => update('abn', e.target.value)}
+            placeholder="11 222 333 444"
+            className={INPUT}
+            maxLength={20}
+          />
+        </Field>
+      </div>
+
+      {/* ─── Licence details — collapsed by default ───────────────── */}
+      {/* Licence is optional in the database AND in Australian Consumer
+          Law for the test phase. Most tradies have one but typing it
+          mid-onboarding is friction — let them skip cleanly and add it
+          later from the dashboard's Account tab. */}
+      <div className="mt-6 pt-6 border-t border-ink-line">
+        {!showLicence ? (
+          <button
+            type="button"
+            onClick={() => setShowLicence(true)}
+            className="inline-flex items-center gap-2 text-sm font-mono uppercase tracking-[0.14em] text-text-sec hover:text-text-pri transition-colors"
+          >
+            <span className="text-accent text-base leading-none">+</span>
+            Add licence details
+            <span className="text-text-dim normal-case font-sans tracking-normal text-xs">(optional, can add later)</span>
+          </button>
+        ) : (
+          <>
+            <div className="flex items-baseline justify-between">
+              <h3 className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-text-pri font-bold">
+                Licence details
+                <span className="ml-2 text-text-dim font-normal normal-case tracking-normal text-xs">
+                  (optional)
+                </span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowLicence(false)}
+                className="text-xs font-mono uppercase tracking-[0.14em] text-text-dim hover:text-text-pri"
+              >
+                Skip
+              </button>
+            </div>
+            <div className="mt-4 grid gap-5 md:grid-cols-2">
+              {form.state && form.trade && (
+                <Field label="Licence body" hint="Optional">
+                  <input
+                    type="text"
+                    value={form.licence_type || LICENCE_BODIES[form.state]?.[form.trade as 'electrical' | 'plumbing'] || ''}
+                    onChange={(e) => update('licence_type', e.target.value)}
+                    className={INPUT}
+                    placeholder={LICENCE_BODIES[form.state]?.[form.trade as 'electrical' | 'plumbing']}
+                  />
+                </Field>
+              )}
+
+              <Field label="Licence number" hint="Optional">
+                <input
+                  type="text"
+                  value={form.licence_number}
+                  onChange={(e) => update('licence_number', e.target.value)}
+                  className={INPUT}
+                />
+              </Field>
+
+              <Field label="Licence expiry" hint="Optional">
+                <input
+                  type="date"
+                  value={form.licence_expiry}
+                  onChange={(e) => update('licence_expiry', e.target.value)}
+                  className={`${INPUT} [color-scheme:dark]`}
+                />
+              </Field>
+            </div>
+          </>
+        )}
+      </div>
+    </>
   )
 }
 
