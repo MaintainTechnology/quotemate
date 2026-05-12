@@ -94,54 +94,53 @@ function SignUpInner() {
         return
       }
 
-      // Test-mode signup: plain email + password. Email confirmation is
-      // OFF in the Supabase dashboard so signUp returns a live session
-      // immediately and we route straight to the wizard. Mobile is
-      // stored as user_metadata so we have it for the tenants row.
-      //
-      // emailRedirectTo is kept for the day email confirmation gets
-      // turned back on — /auth/callback will forward these params to
-      // the wizard transparently.
-      const carryOver = new URLSearchParams({
-        business_name: businessName.trim(),
-        owner_first_name: firstName.trim(),
-        owner_email: cleanEmail,
-        owner_mobile: mobileE164,
+      // Test-mode signup: server-side admin.createUser with
+      // email_confirm: true. This bypasses the Supabase dashboard
+      // "Confirm email" setting entirely — no email link is ever
+      // sent, the user is verified at database level immediately,
+      // and we can sign them in client-side on the next line.
+      const signupRes = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: cleanEmail,
+          password,
+          business_name: businessName.trim(),
+          owner_first_name: firstName.trim(),
+          owner_mobile: mobileE164,
+          intent_token: intentToken || undefined,
+        }),
       })
-      if (intentToken) carryOver.set('intent', intentToken)
-
-      const origin =
-        typeof window !== 'undefined' ? window.location.origin : ''
-      const emailRedirectTo = `${origin}/auth/callback?${carryOver.toString()}`
-
-      const { data, error: authErr } = await supabase.auth.signUp({
-        email: cleanEmail,
-        password,
-        options: {
-          emailRedirectTo,
-          data: {
-            business_name: businessName.trim(),
-            first_name: firstName.trim(),
-            intent_token: intentToken ?? null,
-            owner_mobile: mobileE164,
-          },
-        },
-      })
-      if (authErr) throw authErr
-
-      // If "Confirm email" is somehow toggled back ON later, this
-      // branch catches it — bounce to the check-email page.
-      if (!data.session) {
-        router.push(`/onboard/check-email?email=${encodeURIComponent(cleanEmail)}`)
-        return
+      const signupBody = await signupRes.json()
+      if (!signupRes.ok || !signupBody.ok) {
+        if (signupBody.duplicate) {
+          setError('An account with that email already exists. Sign in instead.')
+          setSubmitting(false)
+          return
+        }
+        throw new Error(signupBody.error ?? `Signup failed (HTTP ${signupRes.status})`)
       }
 
-      // Test mode: signed in immediately → straight to the wizard.
+      // Establish a client-side session by signing in with the
+      // credentials we just used to create the user. Supabase JS
+      // stores the session in localStorage so the wizard + dashboard
+      // can authenticate without a round-trip.
+      const { data: signInData, error: signInErr } =
+        await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password,
+        })
+      if (signInErr) throw signInErr
+      if (!signInData.session) {
+        throw new Error('Account created but sign-in failed — try signing in directly.')
+      }
+
+      // Forward all the identity fields the wizard needs.
       const next = new URLSearchParams({
         business_name: businessName.trim(),
         owner_first_name: firstName.trim(),
         owner_email: cleanEmail,
-        owner_user_id: data.user?.id ?? '',
+        owner_user_id: signInData.user?.id ?? signupBody.user_id ?? '',
         owner_mobile: mobileE164,
       })
       if (intentToken) next.set('intent', intentToken)
