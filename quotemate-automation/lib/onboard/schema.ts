@@ -10,6 +10,27 @@ const auMobile = z
   .trim()
   .regex(/^(\+?61\s?4\d{2}\s?\d{3}\s?\d{3}|0?4\d{2}\s?\d{3}\s?\d{3})$/, 'Enter a valid Australian mobile (04xx xxx xxx)')
 
+/**
+ * Normalise an AU mobile to E.164 (`+614xxxxxxxx`) — the format Supabase
+ * Auth + Twilio both require. Accepts any of:
+ *   "+61 412 345 678"  →  "+61412345678"
+ *   "0412 345 678"     →  "+61412345678"
+ *   "0412345678"       →  "+61412345678"
+ *   "61412345678"      →  "+61412345678"
+ *   "+61412345678"     →  "+61412345678" (no-op)
+ * Throws if the input doesn't match the AU mobile shape.
+ */
+export function normaliseAuMobile(input: string): string {
+  const digits = input.replace(/\s+/g, '').replace(/^\+/, '')
+  // 04xxxxxxxx (10 digits starting with 0)
+  if (/^04\d{8}$/.test(digits)) return `+61${digits.slice(1)}`
+  // 614xxxxxxxx (11 digits starting with 61) — already E.164 minus the +
+  if (/^614\d{8}$/.test(digits)) return `+${digits}`
+  // 4xxxxxxxx (9 digits starting with 4) — missing country & leading 0
+  if (/^4\d{8}$/.test(digits)) return `+61${digits}`
+  throw new Error('Invalid AU mobile: must be 04xx xxx xxx or +61 4xx xxx xxx')
+}
+
 const positiveMoney = z.coerce.number().positive('Must be greater than 0')
 const positivePct = z.coerce.number().min(0).max(100, 'Must be 0–100')
 

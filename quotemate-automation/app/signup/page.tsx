@@ -6,6 +6,7 @@ import { Suspense, useState, useEffect, type FormEvent } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { getBrowserSupabase } from '@/lib/supabase/client'
+import { normaliseAuMobile } from '@/lib/onboard/schema'
 
 // Next.js 16 disallows prerendering pages whose default export reads
 // useSearchParams() without a Suspense boundary. The signup page reads
@@ -25,6 +26,7 @@ function SignUpInner() {
   const [businessName, setBusinessName] = useState('')
   const [firstName, setFirstName] = useState('')
   const [email, setEmail] = useState('')
+  const [mobile, setMobile] = useState('')
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -34,6 +36,20 @@ function SignUpInner() {
   const intentToken = params.get('intent') ?? null
   const [intentMobile, setIntentMobile] = useState<string | null>(null)
   const [intentError, setIntentError] = useState<string | null>(null)
+
+  // When SMS-initiated, the intent-resolved mobile auto-populates the
+  // mobile field AND locks it (read-only). The tradie already proved
+  // possession of the device by texting us — no OTP needed.
+  useEffect(() => {
+    if (intentMobile) setMobile(intentMobile)
+  }, [intentMobile])
+
+  // Path selector — SMS-initiated tradies skip the OTP step because the
+  // mobile was already verified by physical possession of the device
+  // that sent the inbound SMS. Web-initiated tradies enter their mobile
+  // here and verify it via a 6-digit code on /signup/verify.
+  const mobileLocked = !!(intentToken && intentMobile)
+  const needsOtpVerification = !mobileLocked
 
   useEffect(() => {
     if (!intentToken) return
@@ -67,55 +83,102 @@ function SignUpInner() {
       const supabase = getBrowserSupabase()
       const cleanEmail = email.trim().toLowerCase()
 
-      // Carry-over fields the wizard expects when the user comes back
-      // from email verification. Encoded into the redirect URL so Supabase
-      // forwards them to /auth/callback after the link is clicked.
-      const carryOver = new URLSearchParams({
-        business_name: businessName.trim(),
-        owner_first_name: firstName.trim(),
-        owner_email: cleanEmail,
-      })
-      if (intentToken) carryOver.set('intent', intentToken)
-      if (intentMobile) carryOver.set('owner_mobile', intentMobile)
+      // Normalise mobile to E.164 (+614xxxxxxxx) — Supabase Auth + Twilio
+      // both require this exact shape. Throws on invalid AU mobile.
+      let mobileE164: string
+      try {
+        mobileE164 = normaliseAuMobile(mobile)
+      } catch {
+        setError('Enter a valid Australian mobile (04xx xxx xxx)')
+        setSubmitting(false)
+        return
+      }
 
-      const origin =
-        typeof window !== 'undefined' ? window.location.origin : ''
-      const emailRedirectTo = `${origin}/auth/callback?${carryOver.toString()}`
+      // ─── Path A: SMS-initiated (mobile already verified) ──────────
+      // The tradie texted us first, proving they own this mobile. Skip
+      // OTP — sign them up with email + password, mobile saved as
+      // metadata + passed straight to the wizard.
+      if (mobileLocked) {
+        // Carry-over fields the wizard expects when the user comes back
+        // from email verification (if it gets re-enabled later). Encoded
+        // into emailRedirectTo so /auth/callback can forward them.
+        const carryOver = new URLSearchParams({
+          business_name: businessName.trim(),
+          owner_first_name: firstName.trim(),
+          owner_email: cleanEmail,
+          owner_mobile: mobileE164,
+        })
+        if (intentToken) carryOver.set('intent', intentToken)
 
-      const { data, error: authErr } = await supabase.auth.signUp({
+        const origin =
+          typeof window !== 'undefined' ? window.location.origin : ''
+        const emailRedirectTo = `${origin}/auth/callback?${carryOver.toString()}`
+
+        const { data, error: authErr } = await supabase.auth.signUp({
+          email: cleanEmail,
+          password,
+          options: {
+            emailRedirectTo,
+            data: {
+              business_name: businessName.trim(),
+              first_name: firstName.trim(),
+              intent_token: intentToken ?? null,
+              owner_mobile: mobileE164,
+            },
+          },
+        })
+        if (authErr) throw authErr
+
+        // Two sub-paths depending on Supabase "Confirm email" setting:
+        //   (A1) ON  → session is null → route to /onboard/check-email
+        //   (A2) OFF → session present → straight to wizard
+        if (!data.session) {
+          router.push(`/onboard/check-email?email=${encodeURIComponent(cleanEmail)}`)
+          return
+        }
+
+        const next = new URLSearchParams({
+          business_name: businessName.trim(),
+          owner_first_name: firstName.trim(),
+          owner_email: cleanEmail,
+          owner_user_id: data.user?.id ?? '',
+          owner_mobile: mobileE164,
+        })
+        if (intentToken) next.set('intent', intentToken)
+        router.push(`/onboard?${next.toString()}`)
+        return
+      }
+
+      // ─── Path B: Web-initiated (mobile needs OTP verification) ────
+      // signUp with both phone + email + password. Supabase auto-fires
+      // an OTP to the phone via Twilio (Phone provider must be enabled
+      // in the Supabase dashboard). Session stays null until the OTP
+      // is verified on /signup/verify.
+      const { error: authErr } = await supabase.auth.signUp({
         email: cleanEmail,
+        phone: mobileE164,
         password,
         options: {
-          emailRedirectTo,
           data: {
             business_name: businessName.trim(),
             first_name: firstName.trim(),
-            intent_token: intentToken ?? null,
-            owner_mobile: intentMobile ?? null,
+            owner_mobile: mobileE164,
           },
         },
       })
       if (authErr) throw authErr
 
-      // Two paths depending on Supabase project settings:
-      //   (A) "Confirm email" enabled (default): signUp returns user but
-      //       no session. Send the user to /onboard/check-email.
-      //   (B) "Confirm email" disabled: signUp returns user AND session.
-      //       Continue straight to the wizard.
-      if (!data.session) {
-        router.push(`/onboard/check-email?email=${encodeURIComponent(cleanEmail)}`)
-        return
-      }
-
-      const next = new URLSearchParams({
+      // Forward all the carry-over fields the verify page needs.
+      // /signup/verify will call verifyOtp({ phone, token }) on the
+      // tradie's typed code, then push them to /onboard with the same
+      // identity payload.
+      const verifyParams = new URLSearchParams({
+        phone: mobileE164,
         business_name: businessName.trim(),
         owner_first_name: firstName.trim(),
         owner_email: cleanEmail,
-        owner_user_id: data.user?.id ?? '',
       })
-      if (intentToken) next.set('intent', intentToken)
-      if (intentMobile) next.set('owner_mobile', intentMobile)
-      router.push(`/onboard?${next.toString()}`)
+      router.push(`/signup/verify?${verifyParams.toString()}`)
     } catch (err: any) {
       setError(err?.message ?? 'Sign up failed')
       setSubmitting(false)
@@ -142,14 +205,17 @@ function SignUpInner() {
     >
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* SMS-prefill banner — only renders when the URL has ?intent=...
-            and the token resolved to a mobile. */}
+            and the token resolved to a mobile. Confirms to the tradie
+            that we skip the OTP step because they already proved
+            mobile possession by texting us. */}
         {intentMobile && (
           <div className="border border-accent/40 bg-accent/5 px-4 py-3 -mx-2">
             <div className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-accent font-bold">
-              From your SMS
+              Verified via SMS
             </div>
             <div className="mt-1 text-sm text-text-pri">
-              We&rsquo;ve got your mobile: <span className="font-mono">{intentMobile}</span>
+              Mobile <span className="font-mono">{intentMobile}</span> — no
+              code needed.
             </div>
           </div>
         )}
@@ -195,6 +261,32 @@ function SignUpInner() {
           />
         </Field>
 
+        <Field
+          label="Mobile"
+          hint={
+            mobileLocked
+              ? 'Verified via SMS'
+              : "We'll text you a 6-digit code"
+          }
+        >
+          <input
+            type="tel"
+            value={mobile}
+            onChange={(e) => setMobile(e.target.value)}
+            placeholder="04xx xxx xxx"
+            className={
+              mobileLocked
+                ? `${INPUT} bg-ink-card/60 cursor-not-allowed text-text-sec`
+                : INPUT
+            }
+            required
+            readOnly={mobileLocked}
+            inputMode="tel"
+            autoComplete="tel"
+            maxLength={20}
+          />
+        </Field>
+
         <Field label="Password" hint="Minimum 8 characters.">
           <input
             type="password"
@@ -214,7 +306,13 @@ function SignUpInner() {
           disabled={submitting}
           className="w-full inline-flex items-center justify-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-4 text-sm uppercase tracking-wider transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-accent-soft focus:ring-offset-2 focus:ring-offset-ink-deep"
         >
-          {submitting ? 'Creating your account…' : 'Continue'}
+          {submitting
+            ? mobileLocked
+              ? 'Creating your account…'
+              : 'Sending code…'
+            : mobileLocked
+              ? 'Continue'
+              : 'Send verification code'}
           {!submitting && <Arrow />}
         </button>
 

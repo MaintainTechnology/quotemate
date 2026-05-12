@@ -65,13 +65,22 @@ function OnboardWizardInner() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({})
-  // SMS-initiated onboarding: the wizard was reached from a signup
-  // link. If true, owner_mobile is locked (came from the tradie's
-  // verified text), and the intent token is included in the activate
-  // payload so the API can mark it used.
+  // Mobile lock — set when the tradie's mobile has already been
+  // verified before reaching the wizard. Two upstream sources:
+  //
+  //   1. SMS-initiated path: tradie texted the shared QuoteMate
+  //      number, mobile proven by physical possession. intent token
+  //      is present; flipped on activate via markIntentUsed.
+  //
+  //   2. Web-initiated path: tradie entered mobile on /signup, got a
+  //      6-digit OTP via Twilio, typed it into /signup/verify. No
+  //      intent token, but owner_mobile is in the URL — Supabase has
+  //      phone_confirmed_at set, so we know it's real.
+  //
+  // Either case → mobile field is read-only in the wizard.
   const intentToken = params.get('intent') ?? ''
-  const mobileFromSms = params.get('owner_mobile') ?? ''
-  const mobileLocked = !!(intentToken && mobileFromSms)
+  const mobileFromUpstream = params.get('owner_mobile') ?? ''
+  const mobileLocked = !!mobileFromUpstream
 
   const [form, setForm] = useState<FormState>({
     business_name: '',
