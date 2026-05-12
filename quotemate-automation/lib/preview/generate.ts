@@ -285,13 +285,18 @@ export async function loadPromptContext(
   quoteId: string,
   intake: PromptIntake,
 ): Promise<PromptContext> {
-  // Fetch quote, line items, and SMS conversation in parallel.
+  // Fetch quote (with inline tier JSONB), separate line-items table, and
+  // SMS conversation in parallel. The estimator writes tier objects with
+  // an inline `line_items[]` array on the JSONB columns (quotes.good /
+  // .better / .best), and SOMETIMES also writes individual rows to the
+  // `quote_line_items` table. Plumbing quotes today only get the inline
+  // JSONB version, so we read from BOTH sources and merge.
   const intakeId = (intake as { id?: string }).id ?? null
 
   const [quoteRes, lineItemsRes, convoRes] = await Promise.all([
     supabase
       .from('quotes')
-      .select('selected_tier, scope_of_works, assumptions, needs_inspection')
+      .select('selected_tier, scope_of_works, assumptions, needs_inspection, good, better, best')
       .eq('id', quoteId)
       .maybeSingle(),
     supabase
@@ -316,7 +321,10 @@ export async function loadPromptContext(
     needs_inspection: quoteRes.data.needs_inspection ?? null,
   } : null
 
-  const lineItems: PromptLineItem[] = Array.isArray(lineItemsRes?.data)
+  // Prefer the quote_line_items table (richer schema). If it's empty
+  // (plumbing quotes today), fall back to the inline tier JSONB columns
+  // so pickAnchorProduct() can find the headline material.
+  let lineItems: PromptLineItem[] = Array.isArray(lineItemsRes?.data)
     ? lineItemsRes.data.map(li => ({
         tier: li.tier,
         description: li.description,
@@ -324,6 +332,38 @@ export async function loadPromptContext(
         source: li.source ?? null,
       }))
     : []
+
+  if (lineItems.length === 0 && quoteRes?.data) {
+    // Map source mappings from the inline JSONB shape to the
+    // PromptLineItem source vocabulary: 'material:<id>' -> 'material',
+    // 'labour' -> 'labour', 'callout' -> 'call_out'.
+    const flattenSource = (s: unknown): string | null => {
+      if (typeof s !== 'string') return null
+      if (s.startsWith('material')) return 'material'
+      if (s === 'callout' || s === 'call_out') return 'call_out'
+      if (s === 'labour') return 'labour'
+      return s
+    }
+    type InlineLi = { description?: string; quantity?: number; source?: string }
+    type InlineTier = { line_items?: InlineLi[] } | null | undefined
+    const tiers: Array<['good' | 'better' | 'best', InlineTier]> = [
+      ['good',   quoteRes.data.good   as InlineTier],
+      ['better', quoteRes.data.better as InlineTier],
+      ['best',   quoteRes.data.best   as InlineTier],
+    ]
+    for (const [tierName, tier] of tiers) {
+      const items = Array.isArray(tier?.line_items) ? tier!.line_items : []
+      for (const li of items) {
+        if (!li?.description) continue
+        lineItems.push({
+          tier: tierName,
+          description: li.description,
+          quantity: li.quantity ?? null,
+          source: flattenSource(li.source),
+        })
+      }
+    }
+  }
 
   // Corrections: pull slots flagged customer_corrected and pair with
   // their current value.

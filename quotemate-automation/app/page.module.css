@@ -1,0 +1,425 @@
+/* ─── BRAND TOKENS (Maintain design system) ──────────────────── */
+.page {
+  --ink-deep: #0a1628;
+  --ink: #131c2d;
+  --ink-card: #1a2332;
+  --ink-line: #2a3548;
+  --accent: #ff5a1f;
+  --accent-press: #e8470f;
+  --text-pri: #ffffff;
+  --text-sec: #b8c2d1;
+  --text-dim: #7a8699;
+  --teal-glow: #14b8a6;
+
+  background: var(--ink-deep);
+  color: var(--text-pri);
+  font-family: var(--font-manrope), -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-weight: 400;
+  line-height: 1.55;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;        /* belt-and-braces against any rogue horizontal scroll */
+}
+
+.mono { font-family: var(--font-mono), ui-monospace, monospace; }
+
+.container {
+  max-width: 80rem;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+  position: relative;
+  z-index: 1;
+}
+
+.topo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.25;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ─── HERO ─────────────────────────────────────────────────── */
+.hero {
+  position: relative;
+  padding: 5rem 0 4rem;
+  border-bottom: 1px solid var(--ink-line);
+  overflow: hidden;
+}
+
+.eyebrow {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.display {
+  margin-top: 1.25rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: clamp(2.5rem, 6vw, 5rem);
+  letter-spacing: -0.035em;
+  line-height: 0.95;
+}
+
+.hi { color: var(--accent); }
+
+.inlineLink {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-weight: 600;
+}
+.inlineLink:hover { color: var(--accent-press); }
+
+.lede {
+  margin-top: 1.5rem;
+  max-width: 48ch;
+  color: var(--text-sec);
+  font-size: 1.05rem;
+  line-height: 1.55;
+}
+
+/* ─── SECTION ───────────────────────────────────────────────── */
+.block {
+  padding: 4rem 0;
+  border-bottom: 1px solid var(--ink-line);
+}
+
+.sectionTitle {
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: clamp(1.5rem, 2.6vw, 2.25rem);
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+
+.sectionEyebrow {
+  display: inline-block;
+  margin-bottom: 0.85rem;
+}
+
+.sectionLead {
+  margin-top: 1rem;
+  color: var(--text-sec);
+  max-width: 55ch;
+  font-size: 0.98rem;
+}
+
+/* ─── DIAGRAM ───────────────────────────────────────────────── */
+.diagram {
+  margin-top: 2.5rem;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+@media (min-width: 900px) {
+  .diagram {
+    grid-template-columns: repeat(6, 1fr);
+    gap: 0.5rem;
+  }
+}
+
+.node {
+  background: var(--ink-card);
+  border: 1px solid var(--ink-line);
+  padding: 1rem 1.1rem;
+  position: relative;
+  min-height: 6.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.stepNum {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.12em;
+}
+
+.stepLabel {
+  margin-top: 0.4rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 0.92rem;
+  letter-spacing: -0.01em;
+}
+
+.stepDesc {
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+  color: var(--text-sec);
+  line-height: 1.45;
+}
+
+/* Wide-screen forward arrow between nodes */
+@media (min-width: 900px) {
+  .node:not(:last-child)::after {
+    content: "→";
+    color: var(--accent);
+    position: absolute;
+    right: -1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.2rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+}
+
+/* Mobile downward arrow */
+@media (max-width: 899px) {
+  .node:not(:last-child)::before {
+    content: "↓";
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 1rem;
+    position: absolute;
+    left: 50%;
+    bottom: -1rem;
+    transform: translateX(-50%);
+  }
+}
+
+/* ─── NUMBERED CARD LIST ───────────────────────────────────── */
+.cards {
+  margin-top: 2.5rem;
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 720px) {
+  .cards { grid-template-columns: 1fr 1fr; }
+}
+
+.card {
+  background: var(--ink-card);
+  border: 1px solid var(--ink-line);
+  padding: 1.5rem 1.5rem 1.4rem;
+  display: flex;
+  gap: 1.25rem;
+}
+
+.num {
+  font-family: var(--font-mono), monospace;
+  font-size: clamp(2rem, 3.5vw, 3rem);
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+  letter-spacing: 0;
+  flex-shrink: 0;
+  min-width: 3rem;
+}
+
+.cardTitle {
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  color: var(--text-pri);
+}
+
+.cardBody {
+  margin-top: 0.5rem;
+  color: var(--text-sec);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.meta {
+  display: block;
+  margin-top: 0.65rem;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* ─── OUTCOME PANEL ────────────────────────────────────────── */
+.outcome {
+  margin-top: 2.5rem;
+  background: var(--ink-card);
+  border: 1px solid var(--ink-line);
+  padding: 2rem;
+  display: grid;
+  gap: 1.25rem;
+}
+
+@media (min-width: 720px) {
+  .outcome {
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+  }
+}
+
+.outcomeTitle {
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 1.1rem;
+  letter-spacing: -0.01em;
+  color: var(--text-pri);
+}
+
+.outcomeCopy {
+  margin-top: 0.5rem;
+  color: var(--text-sec);
+  font-size: 0.92rem;
+}
+
+.phone {
+  margin-top: 0.5rem;
+  font-family: var(--font-mono), monospace;
+  font-size: clamp(1.6rem, 3.5vw, 2.4rem);
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.04em;
+}
+
+.checklist {
+  margin-top: 0.75rem;
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.checklist li {
+  font-size: 0.85rem;
+  color: var(--text-sec);
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.checklist li::before {
+  content: "✓";
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* ─── CTA BAR ──────────────────────────────────────────────── */
+.ctaBar {
+  background: var(--accent);
+  color: var(--text-pri);
+  text-align: center;
+  padding: 1.1rem 1.5rem;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   MOBILE OVERRIDES — below 720px
+   Tradies onboard on their phones between jobs. Optimise for
+   one-thumb scroll: tighter padding, larger body text for
+   readability, no wasted vertical space on stacked cards.
+   ───────────────────────────────────────────────────────────── */
+@media (max-width: 719px) {
+  .container {
+    padding: 0 1.1rem;
+  }
+  .hero {
+    padding: 3rem 0 2.25rem;
+  }
+  .topo {
+    opacity: 0.18;
+  }
+  .display {
+    font-size: clamp(2rem, 9vw, 2.75rem);
+    letter-spacing: -0.03em;
+    line-height: 1;
+  }
+  .lede {
+    font-size: 0.98rem;
+    margin-top: 1.1rem;
+  }
+  .block {
+    padding: 2.5rem 0;
+  }
+  .sectionTitle {
+    font-size: clamp(1.4rem, 6.5vw, 1.85rem);
+    line-height: 1.1;
+  }
+  .sectionLead {
+    font-size: 0.93rem;
+  }
+
+  /* Diagram nodes: auto-height when stacked, slightly tighter */
+  .diagram {
+    margin-top: 1.75rem;
+    gap: 0.6rem;
+  }
+  .node {
+    min-height: auto;
+    padding: 0.95rem 1rem;
+  }
+  .stepNum {
+    font-size: 0.66rem;
+  }
+  .stepLabel {
+    font-size: 0.88rem;
+  }
+  .stepDesc {
+    font-size: 0.83rem;             /* up from 0.78rem for readability */
+    margin-top: 0.3rem;
+  }
+
+  /* Cards: tighter, smaller leading number to free horizontal space */
+  .cards {
+    margin-top: 1.75rem;
+  }
+  .card {
+    padding: 1.15rem 1.15rem 1.1rem;
+    gap: 0.9rem;
+  }
+  .num {
+    font-size: 2rem;
+    min-width: 2.2rem;
+  }
+  .cardTitle {
+    font-size: 0.98rem;
+  }
+  .cardBody {
+    font-size: 0.9rem;
+  }
+  .meta {
+    font-size: 0.66rem;
+  }
+
+  /* Outcome panel: tighter padding, phone number stays readable */
+  .outcome {
+    margin-top: 1.75rem;
+    padding: 1.5rem 1.25rem;
+    gap: 1rem;
+  }
+  .outcomeTitle {
+    font-size: 1rem;
+  }
+  .outcomeCopy {
+    font-size: 0.9rem;
+  }
+  .phone {
+    font-size: clamp(1.7rem, 8vw, 2.2rem);
+    word-break: break-all;          /* prevent layout break on narrow screens */
+  }
+
+  /* CTA bar: tighter tracking + wrap-friendly */
+  .ctaBar {
+    padding: 1rem 1.1rem;
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    line-height: 1.55;
+  }
+}
