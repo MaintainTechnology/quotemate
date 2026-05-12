@@ -334,31 +334,213 @@ function OverviewTab({ data }: { data: DashboardData }) {
     ['drafted', 'awaiting_review', 'review'].includes(q.status),
   ).length
 
+  const tenant = data.tenant
+  const smsNumber = tenant.twilio_sms_number
+  const voiceNumber = tenant.twilio_voice_number ?? smsNumber
+  const assistantId = tenant.vapi_assistant_id
+
+  // Stub detection — the activate route returns deterministic
+  // placeholders when *_PROVISIONING_ENABLED env flags are off. We
+  // surface this clearly so the tradie (and you, debugging) know
+  // whether a real Twilio purchase happened.
+  const isStubTwilio = !!smsNumber && /^\+614820\d{5}$/.test(smsNumber)
+  const isStubVapi = !!assistantId && assistantId.startsWith('vapi-stub-')
+
   return (
     <div className="space-y-8">
+      {/* HERO — your QuoteMate number, big and proud */}
+      <div className="bg-ink-card border border-ink-line p-6 md:p-8">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-text-dim">
+              Your QuoteMate number
+            </div>
+            {smsNumber ? (
+              <div className="mt-3 font-mono text-[clamp(1.5rem,4vw,2.5rem)] font-bold text-text-pri tracking-tight leading-none">
+                {formatAuMobile(smsNumber)}
+              </div>
+            ) : (
+              <div className="mt-3 text-amber-300">
+                No number assigned yet — finish onboarding from{' '}
+                <Link href="/onboard" className="text-accent hover:text-accent-press underline">
+                  /onboard
+                </Link>
+              </div>
+            )}
+            <p className="mt-3 text-sm text-text-sec max-w-md">
+              Customer SMS lands at <span className="font-mono">/api/sms/inbound</span> →
+              your pricing book. Customer calls land at Vapi → your AI assistant.
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            <Pill
+              tone={isStubTwilio ? 'warn' : 'ok'}
+              label={
+                isStubTwilio
+                  ? 'STUB · Twilio provisioning OFF'
+                  : 'LIVE · Real Twilio number'
+              }
+            />
+            {tenant.activated_at && (
+              <span className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-text-dim">
+                Activated {formatDate(tenant.activated_at)}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Channel breakdown */}
       <Grid cols={3}>
-        <Kpi label="QuoteMate number" value={data.tenant.twilio_sms_number ?? '—'} mono />
-        <Kpi label="AI assistant" value={data.tenant.vapi_assistant_id ? 'Live' : '—'} />
-        <Kpi label="Trade" value={tradeLabel(data.tenant.trade)} />
+        <Kpi
+          label="SMS inbound"
+          value={smsNumber ? formatAuMobile(smsNumber) : '—'}
+          mono
+        />
+        <Kpi
+          label="Voice inbound"
+          value={voiceNumber ? formatAuMobile(voiceNumber) : '—'}
+          mono
+        />
+        <Kpi
+          label="AI assistant"
+          value={
+            assistantId
+              ? isStubVapi
+                ? 'Stub'
+                : 'Live'
+              : 'Not yet'
+          }
+        />
       </Grid>
 
+      {/* Quotes / services KPIs */}
       <Grid cols={3}>
         <Kpi label="Auto-quote services" value={`${enabledServices} / ${totalServices}`} />
         <Kpi label="Quotes recorded" value={String(activeQuotes)} />
         <Kpi label="In review" value={String(draftQuotes)} />
       </Grid>
 
+      {/* AI Receptionist — detailed setup card */}
+      <Card title="AI receptionist setup" subtitle="The technical bits Vapi + Twilio need to route real customers.">
+        <dl className="grid sm:grid-cols-2 gap-x-8 gap-y-4 text-sm">
+          <Row label="Twilio SMS number" value={smsNumber ?? null} mono />
+          <Row label="Twilio Voice number" value={voiceNumber ?? null} mono />
+          <Row label="Vapi assistant ID" value={assistantId ?? null} mono breakAll />
+          <Row label="Voice persona" value={tenant.vapi_voice_persona ?? 'Default'} />
+          <Row label="SMS webhook" value={`${appUrl()}/api/sms/inbound`} mono />
+          <Row label="Voice webhook" value="api.vapi.ai/twilio/inbound_call" mono />
+          <Row label="Status" value={tenant.status === 'active' ? 'Active' : 'Onboarding'} />
+          <Row
+            label="Provisioning mode"
+            value={
+              isStubTwilio && isStubVapi
+                ? 'Stub (test mode)'
+                : isStubTwilio
+                  ? 'Twilio stub · Vapi real'
+                  : isStubVapi
+                    ? 'Twilio real · Vapi stub'
+                    : 'Real (live)'
+            }
+          />
+        </dl>
+        {(isStubTwilio || isStubVapi) && (
+          <div className="mt-6 bg-amber-950/30 border border-amber-700/50 px-4 py-3">
+            <p className="text-sm text-amber-200">
+              <strong>Test mode active.</strong> Fund your Twilio account and flip{' '}
+              <span className="font-mono">TWILIO_PROVISIONING_ENABLED=true</span> +{' '}
+              <span className="font-mono">VAPI_PROVISIONING_ENABLED=true</span> on Vercel,
+              then re-activate to swap in real Twilio + Vapi resources.
+            </p>
+          </div>
+        )}
+      </Card>
+
+      {/* Wired-up checklist (existing) */}
       <Card title="What's wired up">
         <ul className="space-y-2 text-sm text-text-sec">
-          <Tick on={!!data.tenant.business_name}>Business identity saved</Tick>
+          <Tick on={!!tenant.business_name}>Business identity saved</Tick>
           <Tick on={!!data.pricing?.hourly_rate}>Pricing book in place</Tick>
-          <Tick on={enabledServices > 0}>{enabledServices} auto-quote services enabled</Tick>
-          <Tick on={!!data.tenant.twilio_sms_number}>QuoteMate phone number assigned</Tick>
-          <Tick on={!!data.tenant.vapi_assistant_id}>AI receptionist active</Tick>
+          <Tick on={enabledServices > 0}>
+            {enabledServices} of {totalServices} auto-quote services enabled
+          </Tick>
+          <Tick on={!!smsNumber}>
+            QuoteMate phone number assigned
+            {isStubTwilio && <span className="text-amber-300"> (stub)</span>}
+          </Tick>
+          <Tick on={!!assistantId}>
+            AI receptionist active
+            {isStubVapi && <span className="text-amber-300"> (stub)</span>}
+          </Tick>
         </ul>
       </Card>
     </div>
   )
+}
+
+function Pill({ tone, label }: { tone: 'ok' | 'warn' | 'dim'; label: string }) {
+  const cls =
+    tone === 'ok'
+      ? 'text-emerald-300 border-emerald-700/60 bg-emerald-950/30'
+      : tone === 'warn'
+        ? 'text-amber-300 border-amber-700/60 bg-amber-950/30'
+        : 'text-text-dim border-ink-line bg-ink-card'
+  return (
+    <span
+      className={`inline-flex items-center gap-2 font-mono text-[0.65rem] uppercase tracking-[0.16em] font-bold px-3 py-1.5 border ${cls}`}
+    >
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${
+          tone === 'ok'
+            ? 'bg-emerald-300'
+            : tone === 'warn'
+              ? 'bg-amber-300'
+              : 'bg-text-dim'
+        }`}
+      />
+      {label}
+    </span>
+  )
+}
+
+function Row({
+  label,
+  value,
+  mono,
+  breakAll,
+}: {
+  label: string
+  value: string | null
+  mono?: boolean
+  breakAll?: boolean
+}) {
+  return (
+    <div>
+      <dt className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-text-dim">
+        {label}
+      </dt>
+      <dd
+        className={`mt-1 ${mono ? 'font-mono' : ''} ${
+          breakAll ? 'break-all' : ''
+        } text-text-pri text-sm ${value ? '' : 'text-text-dim italic'}`}
+      >
+        {value || '—'}
+      </dd>
+    </div>
+  )
+}
+
+function appUrl(): string {
+  if (typeof window !== 'undefined') return window.location.origin
+  return 'https://quote-mate-rho.vercel.app'
+}
+
+function formatAuMobile(e164: string): string {
+  const cleaned = e164.replace(/[^\d+]/g, '')
+  if (cleaned.startsWith('+61') && cleaned.length === 12) {
+    return `${cleaned.slice(0, 3)} ${cleaned.slice(3, 6)} ${cleaned.slice(6, 9)} ${cleaned.slice(9, 12)}`
+  }
+  return e164
 }
 
 function Kpi({
