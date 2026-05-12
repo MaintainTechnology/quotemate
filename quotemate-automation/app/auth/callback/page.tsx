@@ -1,11 +1,26 @@
 // /auth/callback — handles the redirect after a user clicks the email
 // verification link Supabase sends on sign up.
 //
-// Supabase appends the access_token + refresh_token to the URL hash;
-// the browser-side client picks them up automatically because we set
-// detectSessionInUrl: true in lib/supabase/client.ts. Once the session
-// is live, we resume the onboarding flow with any carry-over params
-// that were passed through redirectTo at signUp time.
+// Supabase has THREE email-link shapes in the wild and this callback
+// MUST handle all three so the tradie is auto-signed-in and routed to
+// the wizard regardless of which one their project uses:
+//
+//   (A) PKCE flow (modern, our default — set in lib/supabase/client.ts):
+//       link → ?code=<short-lived auth code>
+//       → exchangeCodeForSession(code) swaps it for a real session
+//
+//   (B) OTP token-hash flow (Supabase email template default for projects
+//       that haven't been migrated):
+//       link → ?token_hash=<hash>&type=signup
+//       → verifyOtp({ token_hash, type }) creates the session
+//
+//   (C) Legacy implicit/hash-fragment flow (older Supabase versions):
+//       link → #access_token=<jwt>&refresh_token=<jwt>
+//       → detectSessionInUrl picks this up automatically on client init
+//
+// After ANY of these succeeds, the tradie's session is live and the
+// existing carry-over routing (intent + mobile + business_name) takes
+// them to the right place in the wizard.
 
 'use client'
 
@@ -50,17 +65,51 @@ function AuthCallbackInner() {
     ;(async () => {
       const supabase = getBrowserSupabase()
       try {
-        // 1. Wait briefly for the session-from-URL detection to settle
-        //    (Supabase reads the hash on construction; this is mainly a
-        //    safety check for older link formats that need explicit handling).
-        await new Promise((r) => setTimeout(r, 80))
+        // ─── 1. PKCE flow — exchange the `?code=` for a real session ─────
+        // This is our default since lib/supabase/client.ts sets
+        // flowType: 'pkce'. The code is single-use and short-lived;
+        // exchanging it sets the access/refresh tokens in storage.
+        const code = params.get('code')
+        if (code) {
+          const { error: exchErr } = await supabase.auth.exchangeCodeForSession(code)
+          if (exchErr) throw exchErr
+        }
 
+        // ─── 2. OTP token-hash flow — verify the hashed token ────────────
+        // Older Supabase email-confirmation template default. Even if the
+        // project flips to PKCE, an unmigrated email template will still
+        // send these — handle both so we never strand the tradie.
+        const tokenHash = params.get('token_hash')
+        const otpType = params.get('type') // 'signup' | 'recovery' | 'invite' | ...
+        if (!code && tokenHash && otpType) {
+          const { error: otpErr } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: otpType as
+              | 'signup'
+              | 'email'
+              | 'recovery'
+              | 'invite'
+              | 'email_change',
+          })
+          if (otpErr) throw otpErr
+        }
+
+        // ─── 3. Hash fragment flow — handled implicitly by the client ────
+        // If the link came back as #access_token=...&refresh_token=...
+        // (older deployments), detectSessionInUrl: true on the browser
+        // client picks it up during createClient(). Wait briefly so the
+        // listener has time to settle before we read the session.
+        if (!code && !tokenHash) {
+          await new Promise((r) => setTimeout(r, 120))
+        }
+
+        // ─── 4. Sanity-check that one of the above produced a session ────
         const { data, error } = await supabase.auth.getSession()
         if (error) throw error
         if (cancelled) return
 
         if (!data.session) {
-          // Try once more in case the hash fragment is still being parsed.
+          // One last retry — covers a slow hash-fragment parse on iOS Mail.
           await new Promise((r) => setTimeout(r, 250))
           const second = await supabase.auth.getSession()
           if (!second.data.session) {
@@ -70,7 +119,7 @@ function AuthCallbackInner() {
           }
         }
 
-        // 2. Pull the user, decide where to send them next
+        // ─── 5. Pull the user + decide where to send them next ───────────
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) {
           setStatus('error')
@@ -78,7 +127,7 @@ function AuthCallbackInner() {
           return
         }
 
-        // 3. If a tenant already exists for this user, the welcome flow is done.
+        // ─── 6. If a tenant already exists for this user, branch ─────────
         const { data: tenant } = await supabase
           .from('tenants')
           .select('id, status, business_name')
