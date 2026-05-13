@@ -43,7 +43,7 @@ export async function POST(req: Request) {
   const { data: tenant, error: tErr } = await supabase
     .from('tenants')
     .select(
-      'id, business_name, owner_first_name, owner_mobile, trade, twilio_sms_number, vapi_assistant_id, status',
+      'id, business_name, owner_first_name, owner_mobile, trade, trades, twilio_sms_number, vapi_assistant_id, status',
     )
     .eq('owner_user_id', user.id)
     .maybeSingle()
@@ -65,10 +65,18 @@ export async function POST(req: Request) {
     })
   }
 
+  // Resolve trades for the Vapi prompt. Falls back to [trade] for legacy
+  // single-trade tenant rows that pre-date migration 017.
+  const tradesArr: Array<'electrical' | 'plumbing'> =
+    Array.isArray(tenant.trades) && tenant.trades.length > 0
+      ? (tenant.trades as Array<'electrical' | 'plumbing'>)
+      : ([(tenant.trade ?? 'electrical')] as Array<'electrical' | 'plumbing'>)
+
   const result = await runProvisioning(supabase, {
     tenantId: tenant.id,
     businessName: tenant.business_name,
-    trade: (tenant.trade ?? 'electrical') as 'electrical' | 'plumbing',
+    trade: tradesArr[0],
+    trades: tradesArr,
     ownerFirstName: tenant.owner_first_name ?? 'mate',
     ownerMobile: tenant.owner_mobile ?? '',
     existing: {

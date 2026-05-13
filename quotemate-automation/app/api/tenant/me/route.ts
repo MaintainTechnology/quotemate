@@ -40,15 +40,17 @@ export async function GET(req: Request) {
   }
 
   // Tradie's tenant row — primary lookup by owner_user_id.
-  let { data: tenant, error: tenantErr } = await supabase
+  const primary = await supabase
     .from('tenants')
     .select('*')
     .eq('owner_user_id', user.id)
     .maybeSingle()
 
-  if (tenantErr) {
-    return Response.json({ error: tenantErr.message }, { status: 500 })
+  if (primary.error) {
+    return Response.json({ error: primary.error.message }, { status: 500 })
   }
+
+  let tenant = primary.data
 
   // Self-heal: a tenant row CAN exist with owner_user_id = NULL when the
   // activate wizard submitted without the URL carry-through (an earlier
@@ -95,18 +97,35 @@ export async function GET(req: Request) {
   //   • New catalogue items added later show up automatically
   // No offering row → enabled defaults to true (catalogue is opt-out
   // by default, matching the activate route's auto-seed intent).
+  // Resolve the trades this tenant operates in. Multi-trade tenants
+  // have trades=['electrical','plumbing']; legacy single-trade tenants
+  // have trades=['electrical'] (backfilled in migration 017) OR an empty
+  // array if some legacy code path inserted them without the column. In
+  // the empty-array case, fall back to the scalar `trade` so the
+  // dashboard still works.
+  const tenantTrades: string[] =
+    Array.isArray(tenant.trades) && tenant.trades.length > 0
+      ? (tenant.trades as string[])
+      : tenant.trade
+        ? [tenant.trade as string]
+        : []
+
   const [pricingRes, assembliesRes, offeringsRes, quotesRes] = await Promise.all([
+    // Pricing books — one row per trade for multi-trade tenants. Returned
+    // as an array (`pricing_books`) below; the dashboard reads pricing[0]
+    // by default and can show a per-trade picker when length > 1.
     supabase
       .from('pricing_book')
       .select('*')
       .eq('tenant_id', tenant.id)
-      .maybeSingle(),
+      .order('trade'),
     supabase
       .from('shared_assemblies')
       .select(
         'id, name, description, trade, default_unit, default_unit_price_ex_gst, default_labour_hours, default_exclusions',
       )
-      .eq('trade', tenant.trade)
+      .in('trade', tenantTrades.length > 0 ? tenantTrades : ['__never__'])
+      .order('trade')
       .order('name'),
     supabase
       .from('tenant_service_offerings')
@@ -186,9 +205,16 @@ export async function GET(req: Request) {
     }
   })
 
+  // pricing is shaped as an array for multi-trade tenants. To keep the
+  // existing dashboard contract (`pricing` = single object) we surface
+  // pricing[0] as `pricing` AND the full list as `pricing_books`. The
+  // dashboard can pick whichever shape it needs; legacy single-trade
+  // reads of `pricing` keep working unchanged.
+  const pricingBooks = pricingRes.data ?? []
   return Response.json({
     tenant,
-    pricing: pricingRes.data ?? null,
+    pricing: pricingBooks[0] ?? null,
+    pricing_books: pricingBooks,
     services,
     quotes,
   })

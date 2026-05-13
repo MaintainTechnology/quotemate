@@ -8,13 +8,21 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+export type Trade = 'electrical' | 'plumbing'
+
 export type TenantRow = {
   id: string
   business_name: string
   owner_first_name: string | null
   owner_email: string
   owner_mobile: string
-  trade: 'electrical' | 'plumbing'
+  /** Primary trade — kept in sync with trades[0] for back-compat. */
+  trade: Trade
+  /** Every trade this tenant operates in. Length 1 for single-trade
+   *  tenants, length 2 when a tradie holds both an electrical and a
+   *  plumbing licence. Use this in preference to `trade` when routing
+   *  inbound work or rendering catalogues. */
+  trades: Trade[]
   state: string | null
   status: 'onboarding' | 'active' | 'suspended'
   twilio_sms_number: string | null
@@ -25,7 +33,7 @@ export type TenantRow = {
 
 const SELECT_COLS =
   'id, business_name, owner_first_name, owner_email, owner_mobile, ' +
-  'trade, state, status, twilio_sms_number, twilio_voice_number, ' +
+  'trade, trades, state, status, twilio_sms_number, twilio_voice_number, ' +
   'vapi_assistant_id, stripe_connect_account_id'
 
 /** SMS webhooks: find the tenant whose number the customer texted. */

@@ -12,13 +12,18 @@ import Link from 'next/link'
 import { LICENCE_BODIES } from '@/lib/onboard/schema'
 import { Field, INPUT, ErrorBanner, Arrow } from '../signup/page'
 
+type Trade = 'electrical' | 'plumbing'
+
 type FormState = {
   business_name: string
   owner_first_name: string
   owner_email: string
   owner_user_id: string
   owner_mobile: string
-  trade: 'electrical' | 'plumbing' | ''
+  /** Multi-select. At least one trade is required. A tradie who holds
+   *  both an electrical and a plumbing licence can pick both — the
+   *  catalogue, pricing book, and Vapi prompt expand accordingly. */
+  trades: Trade[]
   state: 'NSW' | 'VIC' | 'QLD' | 'WA' | 'SA' | 'TAS' | 'ACT' | 'NT' | ''
   abn: string
   licence_type: string
@@ -92,7 +97,7 @@ function OnboardWizardInner() {
     owner_email: '',
     owner_user_id: '',
     owner_mobile: '',
-    trade: '',
+    trades: [],
     state: '',
     abn: '',
     licence_type: '',
@@ -178,8 +183,21 @@ function OnboardWizardInner() {
     setForm((f) => ({ ...f, [key]: value }))
   }
 
-  const canContinueStep1 = !!(form.owner_mobile && form.trade && form.state)
+  const canContinueStep1 = !!(form.owner_mobile && form.trades.length > 0 && form.state)
   const canContinueStep2 = !!(form.hourly_rate && form.call_out_minimum && form.default_markup_pct)
+
+  // Helper: toggle a trade in/out of form.trades. Two-button design
+  // mirrors the original single-trade pills, but selection is now
+  // additive — tap both to register a multi-trade tenant.
+  function toggleTrade(value: Trade) {
+    setForm((f) => {
+      const has = f.trades.includes(value)
+      const next: Trade[] = has
+        ? f.trades.filter((t) => t !== value)
+        : [...f.trades, value]
+      return { ...f, trades: next }
+    })
+  }
 
   async function handleActivate(e: FormEvent) {
     e.preventDefault()
@@ -189,7 +207,7 @@ function OnboardWizardInner() {
     try {
       const payload = {
         ...form,
-        trade: form.trade as 'electrical' | 'plumbing',
+        trades: form.trades,
         state: form.state as 'NSW',
         // Pass through the SMS intent token so the API marks it used
         // and back-links the originating SMS conversation.
@@ -288,6 +306,7 @@ function OnboardWizardInner() {
               <Step1
                 form={form}
                 update={update}
+                toggleTrade={toggleTrade}
                 fieldErrors={fieldErrors}
                 mobileLocked={mobileLocked}
                 showLicence={showLicence}
@@ -362,6 +381,7 @@ function OnboardWizardInner() {
 function Step1({
   form,
   update,
+  toggleTrade,
   fieldErrors,
   mobileLocked,
   showLicence,
@@ -369,11 +389,17 @@ function Step1({
 }: {
   form: FormState
   update: <K extends keyof FormState>(k: K, v: FormState[K]) => void
+  toggleTrade: (v: Trade) => void
   fieldErrors: Record<string, string[]>
   mobileLocked: boolean
   showLicence: boolean
   setShowLicence: (v: boolean) => void
 }) {
+  // Pick the first selected trade as the "primary" — drives the
+  // licence-body suggestion when the wizard has only enough room to
+  // show one regulator label. Multi-trade tradies can edit the value
+  // freely; nothing here forces a single regulator.
+  const primaryTrade: Trade | '' = form.trades[0] ?? ''
   return (
     <>
       {/* Required + commonly-asked fields */}
@@ -395,10 +421,24 @@ function Step1({
           />
         </Field>
 
-        <Field label="Trade" error={fieldErrors.trade?.[0]}>
+        <Field
+          label="Trade"
+          hint="Pick one or both"
+          error={fieldErrors.trades?.[0]}
+        >
           <div className="grid grid-cols-2 gap-2">
-            <TradePill value="electrical" label="Electrical" current={form.trade} onPick={(v) => update('trade', v)} />
-            <TradePill value="plumbing" label="Plumbing" current={form.trade} onPick={(v) => update('trade', v)} />
+            <TradePill
+              value="electrical"
+              label="Electrical"
+              selected={form.trades.includes('electrical')}
+              onToggle={toggleTrade}
+            />
+            <TradePill
+              value="plumbing"
+              label="Plumbing"
+              selected={form.trades.includes('plumbing')}
+              onToggle={toggleTrade}
+            />
           </div>
         </Field>
 
@@ -460,14 +500,21 @@ function Step1({
               </button>
             </div>
             <div className="mt-4 grid gap-5 md:grid-cols-2">
-              {form.state && form.trade && (
-                <Field label="Licence body" hint="Optional">
+              {form.state && primaryTrade && (
+                <Field
+                  label="Licence body"
+                  hint={
+                    form.trades.length > 1
+                      ? `Optional — defaults to ${primaryTrade} regulator`
+                      : 'Optional'
+                  }
+                >
                   <input
                     type="text"
-                    value={form.licence_type || LICENCE_BODIES[form.state]?.[form.trade as 'electrical' | 'plumbing'] || ''}
+                    value={form.licence_type || LICENCE_BODIES[form.state]?.[primaryTrade] || ''}
                     onChange={(e) => update('licence_type', e.target.value)}
                     className={INPUT}
-                    placeholder={LICENCE_BODIES[form.state]?.[form.trade as 'electrical' | 'plumbing']}
+                    placeholder={LICENCE_BODIES[form.state]?.[primaryTrade]}
                   />
                 </Field>
               )}
@@ -510,7 +557,10 @@ function Step2({
   showAdvanced: boolean
   setShowAdvanced: (v: boolean) => void
 }) {
-  const isPlumbing = form.trade === 'plumbing'
+  // Hint defaults bias to plumbing rates when plumbing is the ONLY
+  // trade picked, else fall back to the electrical-shaped defaults that
+  // also work for mixed-trade tenants.
+  const isPlumbing = form.trades.length === 1 && form.trades[0] === 'plumbing'
   return (
     <div className="space-y-5">
       <div className="grid gap-5 md:grid-cols-2">
@@ -616,7 +666,10 @@ function Step3({ form }: { form: FormState }) {
       </ReviewBlock>
 
       <ReviewBlock label="Trade">
-        <ReviewRow k="Trade" v={titleCase(form.trade)} />
+        <ReviewRow
+          k={form.trades.length > 1 ? 'Trades' : 'Trade'}
+          v={form.trades.map(titleCase).join(' + ')}
+        />
         <ReviewRow k="State" v={form.state} />
         {form.abn && <ReviewRow k="ABN" v={form.abn} />}
         {form.licence_number && (
@@ -671,19 +724,18 @@ function ProgressDots({ current }: { current: 1 | 2 | 3 }) {
 function TradePill({
   value,
   label,
-  current,
-  onPick,
+  selected,
+  onToggle,
 }: {
-  value: 'electrical' | 'plumbing'
+  value: Trade
   label: string
-  current: string
-  onPick: (v: 'electrical' | 'plumbing') => void
+  selected: boolean
+  onToggle: (v: Trade) => void
 }) {
-  const selected = current === value
   return (
     <button
       type="button"
-      onClick={() => onPick(value)}
+      onClick={() => onToggle(value)}
       className={`px-4 py-3.5 text-sm font-semibold uppercase tracking-wider transition-colors border ${
         selected
           ? 'border-accent bg-accent text-white'

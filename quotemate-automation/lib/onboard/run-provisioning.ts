@@ -33,7 +33,12 @@ import { sendWelcomeSms, type WelcomeSmsResult } from '@/lib/twilio/welcome-sms'
 export type ProvisioningInput = {
   tenantId: string
   businessName: string
+  /** Primary trade — used for back-compat fields. */
   trade: 'electrical' | 'plumbing'
+  /** Full set of trades this tenant operates in (length 1 or 2). When
+   *  provided, the Vapi assistant prompt mentions both. Defaults to
+   *  `[trade]` so older callers keep working. */
+  trades?: Array<'electrical' | 'plumbing'>
   ownerFirstName: string
   ownerMobile: string // E.164
   /** Pre-existing values on the tenant row — lets us skip steps we already did. */
@@ -118,6 +123,7 @@ export async function runProvisioning(
       tenantId: input.tenantId,
       businessName: input.businessName,
       trade: input.trade,
+      trades: input.trades ?? [input.trade],
       phoneNumber,
     })
     if (!vapi.ok) {

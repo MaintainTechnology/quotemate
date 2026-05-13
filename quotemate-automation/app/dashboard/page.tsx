@@ -31,6 +31,7 @@ type Tenant = {
   owner_email: string | null
   owner_mobile: string | null
   trade: 'electrical' | 'plumbing'
+  trades: Array<'electrical' | 'plumbing'>
   state: string | null
   abn: string | null
   licence_type: string | null
@@ -217,8 +218,8 @@ export default function DashboardPage() {
             .
           </h1>
           <p className="mt-2 text-text-sec text-sm">
-            {data.tenant.business_name} · {tradeLabel(data.tenant.trade)} ·{' '}
-            {data.tenant.state ?? '—'}
+            {data.tenant.business_name} ·{' '}
+            {tenantTradesLabel(data.tenant)} · {data.tenant.state ?? '—'}
           </p>
         </div>
         <StatusBadge status={data.tenant.status} />
@@ -640,18 +641,34 @@ function AccountTab({
   data: DashboardData
   onSave: (payload: Record<string, unknown>) => Promise<void>
 }) {
+  const initialTrades: Array<'electrical' | 'plumbing'> =
+    Array.isArray(data.tenant.trades) && data.tenant.trades.length > 0
+      ? data.tenant.trades
+      : data.tenant.trade
+        ? [data.tenant.trade]
+        : []
   const [form, setForm] = useState({
     business_name: data.tenant.business_name ?? '',
     owner_first_name: data.tenant.owner_first_name ?? '',
     owner_email: data.tenant.owner_email ?? '',
     owner_mobile: data.tenant.owner_mobile ?? '',
-    trade: data.tenant.trade,
+    trades: initialTrades,
     state: data.tenant.state ?? '',
     abn: data.tenant.abn ?? '',
     licence_type: data.tenant.licence_type ?? '',
     licence_number: data.tenant.licence_number ?? '',
     licence_expiry: data.tenant.licence_expiry ?? '',
   })
+
+  function toggleAccountTrade(value: 'electrical' | 'plumbing') {
+    setForm((f) => {
+      const has = f.trades.includes(value)
+      const next = has ? f.trades.filter((t) => t !== value) : [...f.trades, value]
+      // Don't allow zero-trade state — the wizard guarantees min(1).
+      if (next.length === 0) return f
+      return { ...f, trades: next }
+    })
+  }
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedAt, setSavedAt] = useState<number | null>(null)
@@ -661,7 +678,17 @@ function AccountTab({
     setError(null)
     setSubmitting(true)
     try {
-      await onSave({ tenant: form })
+      // Send `trades` (the new multi-trade array) AND `trade` (legacy
+      // scalar kept in sync with trades[0]) so back-compat reads of
+      // tenant.trade in other code paths continue to work.
+      const { trades, ...rest } = form
+      await onSave({
+        tenant: {
+          ...rest,
+          trades,
+          trade: trades[0],
+        },
+      })
       setSavedAt(Date.now())
     } catch (err: any) {
       setError(err?.message ?? 'Save failed')
@@ -710,15 +737,26 @@ function AccountTab({
               className={INPUT}
             />
           </Field>
-          <Field label="Trade">
-            <select
-              value={form.trade}
-              onChange={(e) => setForm({ ...form, trade: e.target.value as 'electrical' | 'plumbing' })}
-              className={INPUT}
-            >
-              <option value="electrical">Electrical</option>
-              <option value="plumbing">Plumbing</option>
-            </select>
+          <Field label="Trades" hint="Pick one or both — both expand your catalogue + AI greeting.">
+            <div className="grid grid-cols-2 gap-2">
+              {(['electrical', 'plumbing'] as const).map((t) => {
+                const selected = form.trades.includes(t)
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => toggleAccountTrade(t)}
+                    className={`px-4 py-3 text-sm font-semibold uppercase tracking-wider transition-colors border ${
+                      selected
+                        ? 'border-accent bg-accent text-white'
+                        : 'border-ink-line bg-ink-deep text-text-sec hover:border-accent-soft hover:text-text-pri'
+                    }`}
+                  >
+                    {tradeLabel(t)}
+                  </button>
+                )
+              })}
+            </div>
           </Field>
           <Field label="State">
             <select
@@ -1025,6 +1063,23 @@ function ServicesTab({
   }).length
   const totalCount = data.services.length
 
+  // Multi-trade tenants see services grouped by trade so the dashboard
+  // makes it obvious which catalogue half each row belongs to. Single-
+  // trade tenants get the original flat list (no group header).
+  const tenantTrades =
+    Array.isArray(data.tenant.trades) && data.tenant.trades.length > 0
+      ? data.tenant.trades
+      : data.tenant.trade
+        ? [data.tenant.trade]
+        : []
+  const showGrouped = tenantTrades.length > 1
+  const groupedServices: Array<{ trade: string; rows: typeof data.services }> = showGrouped
+    ? tenantTrades.map((t) => ({
+        trade: t,
+        rows: data.services.filter((s) => s.trade === t),
+      }))
+    : [{ trade: tenantTrades[0] ?? '', rows: data.services }]
+
   return (
     <div className="space-y-6">
       <Card
@@ -1036,13 +1091,20 @@ function ServicesTab({
             <div className="bg-amber-950/30 border border-amber-700/50 px-4 py-3">
               <p className="text-sm text-amber-200">
                 No services found in the catalogue for{' '}
-                <span className="font-mono">{data.tenant.trade}</span>. This usually
-                means the seed data hasn&rsquo;t loaded — check the Supabase{' '}
-                <span className="font-mono">shared_assemblies</span> table.
+                <span className="font-mono">{tenantTrades.join(', ') || '—'}</span>.
+                This usually means the seed data hasn&rsquo;t loaded — check the
+                Supabase <span className="font-mono">shared_assemblies</span> table.
               </p>
             </div>
           ) : (
-            data.services.map((svc) => {
+            groupedServices.map(({ trade: groupTrade, rows }) => (
+              <div key={groupTrade || 'all'} className="space-y-2">
+                {showGrouped && (
+                  <div className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent font-bold pt-3 pb-1">
+                    {tradeLabel(groupTrade as 'electrical' | 'plumbing')}
+                  </div>
+                )}
+                {rows.map((svc) => {
               const live =
                 pending[svc.assembly_id] !== undefined
                   ? pending[svc.assembly_id]
@@ -1086,7 +1148,9 @@ function ServicesTab({
                   </span>
                 </button>
               )
-            })
+            })}
+              </div>
+            ))
           )}
         </div>
 
@@ -1288,6 +1352,20 @@ function SaveHint({ savedAt }: { savedAt: number | null }) {
 
 function tradeLabel(t: 'electrical' | 'plumbing'): string {
   return t === 'electrical' ? 'Electrical' : 'Plumbing'
+}
+
+/** Render the tenant's full trade portfolio. Falls back to the legacy
+ *  scalar `trade` when `trades[]` is empty (pre-017 rows that may have
+ *  slipped through). */
+function tenantTradesLabel(tenant: Tenant): string {
+  const trades =
+    Array.isArray(tenant.trades) && tenant.trades.length > 0
+      ? tenant.trades
+      : tenant.trade
+        ? [tenant.trade]
+        : []
+  if (trades.length === 0) return '—'
+  return trades.map(tradeLabel).join(' + ')
 }
 
 function tabLabel(t: Tab): string {

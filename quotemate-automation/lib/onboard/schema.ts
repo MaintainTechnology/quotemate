@@ -54,7 +54,14 @@ export const OnboardActivateSchema = z.object({
   owner_user_id: z.string().uuid().optional().or(z.literal('')),
 
   // ── Page 2: Trade & licence ────────────────────────────────
-  trade: z.enum(['electrical', 'plumbing']),
+  // Multi-trade onboarding: tradies who hold both an electrical and a
+  // plumbing licence can pick both. min(1) so every tenant has at
+  // least one trade; max(2) so we don't accidentally accept stale
+  // strings from a buggy wizard build.
+  trades: z
+    .array(z.enum(['electrical', 'plumbing']))
+    .min(1, 'Pick at least one trade')
+    .max(2, 'Only electrical + plumbing are supported in v1'),
   state: z.enum(['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'ACT', 'NT']),
   abn: z.string().trim().max(20).optional().or(z.literal('')),
   licence_type: z.string().trim().max(20).optional().or(z.literal('')),

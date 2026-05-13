@@ -18,7 +18,11 @@ export type VapiProvisionResult =
 export async function provisionVapiAssistant(opts: {
   tenantId: string
   businessName: string
+  /** Primary trade — used when only one is configured. */
   trade: 'electrical' | 'plumbing'
+  /** All trades this tenant offers. When length > 1 the assistant
+   *  prompt and greeting acknowledge both. Falls back to [trade]. */
+  trades?: Array<'electrical' | 'plumbing'>
   voicePersona?: string                  // default 'jon'
   /** The phone number this assistant will be bound to (for first-message context) */
   phoneNumber?: string
@@ -38,16 +42,21 @@ export async function provisionVapiAssistant(opts: {
 
   const persona = opts.voicePersona ?? 'jon'
 
+  // Multi-trade aware greeting: "electrical or plumbing job" if the
+  // tradie holds both licences, otherwise just the one they offer.
+  const trades = opts.trades && opts.trades.length > 0 ? opts.trades : [opts.trade]
+  const tradeLabel = renderTradeLabel(trades)
+
   const firstMessage =
     `G'day, you've reached ${opts.businessName}. ` +
-    `I'm the AI quoting assistant — I can take down details for your ${opts.trade === 'plumbing' ? 'plumbing' : 'electrical'} job and get a quote across. ` +
+    `I'm the AI quoting assistant — I can take down details for your ${tradeLabel} job and get a quote across. ` +
     `This call may be recorded for quality and quote drafting. Sound good?`
 
-  const systemPrompt = buildSystemPrompt(opts)
+  const systemPrompt = buildSystemPrompt({ ...opts, trades })
 
   const body = {
     name: `${opts.businessName} — QuoteMate`,
-    metadata: { tenant_id: opts.tenantId, trade: opts.trade },
+    metadata: { tenant_id: opts.tenantId, trade: opts.trade, trades },
     firstMessage,
     model: {
       provider: 'anthropic',
@@ -117,18 +126,27 @@ function voiceIdForPersona(persona: string): string {
  *  /lib/estimate router. */
 function buildSystemPrompt(opts: {
   businessName: string
-  trade: 'electrical' | 'plumbing'
+  trades: Array<'electrical' | 'plumbing'>
 }): string {
-  return `You are the AI receptionist for ${opts.businessName}, an Australian ${opts.trade} contractor.
+  const tradeLabel = renderTradeLabel(opts.trades)
+  const contractorDescription =
+    opts.trades.length > 1
+      ? `${opts.trades.join(' and ')} contractor`
+      : `${opts.trades[0]} contractor`
+  const easyFiveContext = opts.trades
+    .map((t) => `recognise the easy-5 job types for ${t}`)
+    .join(' and ')
 
-Your job is to greet the caller, capture the key details for their ${opts.trade} job (location, what they need done, when), and confirm what you heard at the end of the call. Do NOT quote prices on the phone — a structured quote will be drafted automatically after the call and sent via SMS.
+  return `You are the AI receptionist for ${opts.businessName}, an Australian ${contractorDescription}.
+
+Your job is to greet the caller, capture the key details for their ${tradeLabel} job (location, what they need done, when), and confirm what you heard at the end of the call. Do NOT quote prices on the phone — a structured quote will be drafted automatically after the call and sent via SMS.
 
 TONE: Australian, professional, friendly. Plain English. No filler. Match the cadence of a busy suburban tradie's receptionist.
 
 WHAT TO ASK:
 1. First name
 2. Suburb / location of the job
-3. What ${opts.trade} work they need (use plain language; recognise the easy-5 job types for ${opts.trade})
+3. What ${tradeLabel} work they need (use plain language; ${easyFiveContext})
 4. When they need it done (urgent / this week / flexible)
 5. Confirm what you heard before ending
 
@@ -138,4 +156,16 @@ WHAT NOT TO DO:
 - If the job sounds dangerous (smell gas, sparks, burst pipe, water through ceiling), flag it as an emergency and ask if they need urgent attention.
 
 When the caller confirms the summary, thank them and end the call. The quote will arrive by SMS within a couple of minutes.`
+}
+
+/**
+ * Render the call-language trade label for a multi-trade tenant.
+ *   ['electrical']               → "electrical"
+ *   ['plumbing']                 → "plumbing"
+ *   ['electrical','plumbing']    → "electrical or plumbing"
+ *   ['plumbing','electrical']    → "plumbing or electrical"
+ */
+function renderTradeLabel(trades: Array<'electrical' | 'plumbing'>): string {
+  if (trades.length === 1) return trades[0]
+  return trades.join(' or ')
 }

@@ -43,8 +43,12 @@ export async function POST(req: Request) {
       )
     }
     const form = parsed.data
-    const defaults = defaultsForTrade(form.trade)
     const normalisedMobile = normaliseAuMobile(form.owner_mobile)
+    // Primary trade — used to populate the legacy `tenants.trade` scalar
+    // column for back-compat, to seed the Vapi assistant prompt, and as
+    // the first row inserted into pricing_book. Multi-trade tenants get
+    // additional pricing_book rows for each extra trade further down.
+    const primaryTrade = form.trades[0]
 
     // Resolve owner_user_id authoritatively. The wizard CAN drop this
     // value if URL params got lost or the Supabase session backfill
@@ -68,6 +72,8 @@ export async function POST(req: Request) {
     }
 
     // ─── 1. Insert tenants row ─────────────────────────────────
+    // Note: `trade` (singular) is kept in sync with trades[0] so legacy
+    // pipeline code that still reads tenant.trade keeps working.
     const { data: tenant, error: tErr } = await supabase
       .from('tenants')
       .insert({
@@ -77,7 +83,8 @@ export async function POST(req: Request) {
         owner_last_name: form.owner_last_name || null,
         owner_email: form.owner_email.toLowerCase(),
         owner_mobile: normalisedMobile,
-        trade: form.trade,
+        trade: primaryTrade,
+        trades: form.trades,
         state: form.state,
         abn: form.abn || null,
         licence_type: form.licence_type || null,
@@ -98,24 +105,33 @@ export async function POST(req: Request) {
     const id: string = tenant.id
     tenantId = id
 
-    // ─── 2. Insert pricing_book row ───────────────────────────
-    const { error: pbErr } = await supabase.from('pricing_book').insert({
-      tenant_id: id,
-      trade: form.trade,
-      hourly_rate: form.hourly_rate,
-      call_out_minimum: form.call_out_minimum,
-      default_markup_pct: form.default_markup_pct,
-      apprentice_rate: form.apprentice_rate ?? defaults.apprentice_rate,
-      senior_rate: form.senior_rate ?? defaults.senior_rate,
-      after_hours_multiplier: form.after_hours_multiplier ?? defaults.after_hours_multiplier,
-      min_labour_hours: form.min_labour_hours ?? defaults.min_labour_hours,
-      risk_buffer_pct: form.risk_buffer_pct ?? defaults.risk_buffer_pct,
-      gst_registered: form.gst_registered ?? true,
-      licence_type: form.licence_type || null,
-      licence_number: form.licence_number || null,
-      licence_state: form.state,
-      licence_expiry: form.licence_expiry || null,
+    // ─── 2. Insert pricing_book row(s) ────────────────────────
+    // One row per selected trade. The wizard collects a single shared
+    // set of rates (hourly_rate, call_out_minimum, default_markup_pct)
+    // — multi-trade tradies usually price labour the same across their
+    // trades. They can split rates later from the dashboard Pricing tab
+    // by editing each pricing_book individually.
+    const pricingRows = form.trades.map((t) => {
+      const d = defaultsForTrade(t)
+      return {
+        tenant_id: id,
+        trade: t,
+        hourly_rate: form.hourly_rate,
+        call_out_minimum: form.call_out_minimum,
+        default_markup_pct: form.default_markup_pct,
+        apprentice_rate: form.apprentice_rate ?? d.apprentice_rate,
+        senior_rate: form.senior_rate ?? d.senior_rate,
+        after_hours_multiplier: form.after_hours_multiplier ?? d.after_hours_multiplier,
+        min_labour_hours: form.min_labour_hours ?? d.min_labour_hours,
+        risk_buffer_pct: form.risk_buffer_pct ?? d.risk_buffer_pct,
+        gst_registered: form.gst_registered ?? true,
+        licence_type: form.licence_type || null,
+        licence_number: form.licence_number || null,
+        licence_state: form.state,
+        licence_expiry: form.licence_expiry || null,
+      }
     })
+    const { error: pbErr } = await supabase.from('pricing_book').insert(pricingRows)
 
     if (pbErr) {
       // Roll back the tenant row so a retry doesn't trip the unique email constraint.
@@ -126,11 +142,11 @@ export async function POST(req: Request) {
       )
     }
 
-    // ─── 3. Auto-enable the trade's easy-5 services ──────────
+    // ─── 3. Auto-enable the easy-5 services for ALL selected trades ─
     const { data: assemblies } = await supabase
       .from('shared_assemblies')
       .select('id')
-      .eq('trade', form.trade)
+      .in('trade', form.trades)
 
     if (assemblies && assemblies.length > 0) {
       const rows = assemblies.map((a) => ({
@@ -167,10 +183,14 @@ export async function POST(req: Request) {
     }
 
     // ─── 5. Provisioning chain ───────────────────────────────────
+    // Vapi assistant prompt is built from the full trades[] list so a
+    // multi-trade tenant's receptionist greets callers about both
+    // services.
     const result = await runProvisioning(supabase, {
       tenantId: id,
       businessName: form.business_name,
-      trade: form.trade,
+      trade: primaryTrade,
+      trades: form.trades,
       ownerFirstName: form.owner_first_name,
       ownerMobile: normalisedMobile,
     })
