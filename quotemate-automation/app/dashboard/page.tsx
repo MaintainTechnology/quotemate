@@ -1700,19 +1700,21 @@ function QuoteCard({ q, isMultiTrade }: { q: Quote; isMultiTrade: boolean }) {
   const selectedTotal = toNum(q.total_inc_gst)
   const customerLabel = q.customer_full_name || q.customer_first_name || '—'
   const trade = q.trade as 'electrical' | 'plumbing' | null
+  const isInspection = !!(q.needs_inspection || q.inspection_required)
+  const hasTierLadder =
+    goodTotal !== null || betterTotal !== null || bestTotal !== null
 
-  // Badge composition:
-  //   • deposit_paid takes priority — it's the most actionable signal
-  //   • inspection_required tags an inspection-route quote
-  //   • otherwise show the raw quote status
+  // Status badges — composed in priority order:
+  //   • Deposit paid (the most actionable signal — overrides status)
+  //   • Inspection required (parallel context badge)
+  //   • Raw status as a final pill (draft / sent / accepted)
   type Badge = {
     label: string
     tone: 'paid' | 'inspect' | 'draft' | 'sent' | 'accepted'
   }
   const badges: Badge[] = []
   if (q.deposit_paid) badges.push({ label: 'Deposit paid', tone: 'paid' })
-  if (q.needs_inspection || q.inspection_required)
-    badges.push({ label: 'Inspection required', tone: 'inspect' })
+  if (isInspection) badges.push({ label: 'Inspection required', tone: 'inspect' })
   if (!q.deposit_paid) {
     const raw = (q.status ?? 'draft').toLowerCase()
     const tone: Badge['tone'] =
@@ -1722,88 +1724,119 @@ function QuoteCard({ q, isMultiTrade }: { q: Quote; isMultiTrade: boolean }) {
 
   return (
     <div className="border border-ink-line bg-ink-card">
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-start justify-between gap-4 px-5 py-4 text-left hover:bg-ink-deep/40 transition-colors"
-      >
-        <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <span className="font-semibold text-text-pri">{customerLabel}</span>
+      {/* ── Header row: customer + headline price ───────────────────── */}
+      <div className="flex items-start justify-between gap-4 px-5 pt-4">
+        <div className="min-w-0">
+          <div className="flex items-baseline gap-3 flex-wrap">
+            <span className="font-extrabold text-base text-text-pri tracking-tight">
+              {customerLabel}
+            </span>
             {q.suburb && (
-              <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+              <span className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
                 · {q.suburb}
               </span>
             )}
           </div>
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-            <span className="font-mono uppercase tracking-[0.12em] text-text-sec">
-              {formatJobType(q.job_type)}
-              {isMultiTrade && trade ? ` · ${trade}` : ''}
-            </span>
-            <span className="text-text-dim">·</span>
-            <span className="font-mono text-text-dim whitespace-nowrap">
-              {formatDate(q.created_at)}
-            </span>
-            {q.customer_phone && (
-              <>
-                <span className="text-text-dim">·</span>
-                <span className="font-mono text-text-dim">{q.customer_phone}</span>
-              </>
-            )}
-          </div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {badges.map((b, i) => (
-              <span
-                key={i}
-                className={`inline-flex items-center font-mono text-[0.6rem] uppercase tracking-[0.14em] font-bold px-2 py-0.5 border ${
-                  b.tone === 'paid'
-                    ? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-300'
-                    : b.tone === 'inspect'
-                      ? 'border-amber-500/60 bg-amber-500/10 text-amber-300'
-                      : b.tone === 'accepted'
-                        ? 'border-accent/60 bg-accent/10 text-accent'
-                        : b.tone === 'sent'
-                          ? 'border-text-sec/40 bg-text-sec/5 text-text-sec'
-                          : 'border-ink-line bg-ink-deep text-text-dim'
-                }`}
-              >
-                {b.label}
-              </span>
-            ))}
-          </div>
+          {q.customer_phone && (
+            <div className="mt-1 font-mono text-xs text-text-sec">
+              {q.customer_phone}
+            </div>
+          )}
         </div>
         <div className="shrink-0 text-right">
-          <div className="font-mono text-lg font-bold text-text-pri">
+          <div className="font-mono text-2xl font-extrabold text-text-pri leading-none">
             {selectedTotal !== null ? `$${formatMoney(selectedTotal)}` : '—'}
           </div>
           {q.selected_tier && (
-            <div className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
-              {q.selected_tier} tier
+            <div className="mt-1 font-mono text-[0.6rem] uppercase tracking-[0.16em] text-accent font-bold">
+              {q.selected_tier} tier · inc GST
             </div>
           )}
         </div>
-      </button>
+      </div>
 
+      {/* ── Metadata grid: type / service / when / routing ──────────── */}
+      <div className="mt-3 mx-5 grid grid-cols-2 md:grid-cols-4 gap-px bg-ink-line border border-ink-line">
+        <MetaCell
+          label="Work"
+          value={formatJobType(q.job_type)}
+        />
+        <MetaCell
+          label="Service"
+          value={trade ? tradeLabel(trade) : '—'}
+          highlight={isMultiTrade}
+        />
+        <MetaCell
+          label="Drafted"
+          value={formatDate(q.created_at)}
+          sub={formatTime(q.created_at)}
+        />
+        <MetaCell
+          label="Routing"
+          value={q.routing_decision ? formatJobType(q.routing_decision) : '—'}
+        />
+      </div>
+
+      {/* ── Tier ladder: Good / Better / Best always visible ────────── */}
+      {hasTierLadder && (
+        <div className="mt-4 px-5">
+          <div className="grid grid-cols-3 gap-2">
+            <TierCell label="Good" amount={goodTotal} selected={q.selected_tier === 'good'} />
+            <TierCell label="Better" amount={betterTotal} selected={q.selected_tier === 'better'} />
+            <TierCell label="Best" amount={bestTotal} selected={q.selected_tier === 'best'} />
+          </div>
+        </div>
+      )}
+
+      {/* ── Status badges + actions ─────────────────────────────────── */}
+      <div className="mt-4 px-5 pb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2">
+          {badges.map((b, i) => (
+            <span
+              key={i}
+              className={`inline-flex items-center font-mono text-[0.6rem] uppercase tracking-[0.14em] font-bold px-2.5 py-1 border ${
+                b.tone === 'paid'
+                  ? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-300'
+                  : b.tone === 'inspect'
+                    ? 'border-amber-500/60 bg-amber-500/10 text-amber-300'
+                    : b.tone === 'accepted'
+                      ? 'border-accent/60 bg-accent/10 text-accent'
+                      : b.tone === 'sent'
+                        ? 'border-text-sec/40 bg-text-sec/5 text-text-sec'
+                        : 'border-ink-line bg-ink-deep text-text-dim'
+              }`}
+            >
+              {b.label}
+            </span>
+          ))}
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-text-sec hover:text-text-pri transition-colors"
+          >
+            {expanded ? '− Hide scope' : '+ Show scope'}
+          </button>
+          {url && (
+            <Link
+              href={url}
+              target="_blank"
+              className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-4 py-2 text-xs uppercase tracking-wider transition-colors"
+            >
+              View customer page →
+            </Link>
+          )}
+        </div>
+      </div>
+
+      {/* ── Expanded scope/timeframe detail ──────────────────────────── */}
       {expanded && (
         <div className="border-t border-ink-line px-5 py-4 space-y-4 bg-ink-deep/30">
-          {(goodTotal !== null || betterTotal !== null || bestTotal !== null) && (
-            <div>
-              <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-text-dim font-bold mb-2">
-                Tier breakdown (inc. GST)
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-sm">
-                <TierCell label="Good" amount={goodTotal} selected={q.selected_tier === 'good'} />
-                <TierCell label="Better" amount={betterTotal} selected={q.selected_tier === 'better'} />
-                <TierCell label="Best" amount={bestTotal} selected={q.selected_tier === 'best'} />
-              </div>
-            </div>
-          )}
-
           {q.scope_of_works && (
             <div>
               <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-text-dim font-bold mb-2">
-                Scope
+                Scope of works
               </div>
               <p className="text-sm text-text-sec leading-relaxed">
                 {q.scope_of_works}
@@ -1814,30 +1847,42 @@ function QuoteCard({ q, isMultiTrade }: { q: Quote; isMultiTrade: boolean }) {
           {q.estimated_timeframe && (
             <div>
               <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-text-dim font-bold mb-1">
-                Timeframe
+                Estimated timeframe
               </div>
               <p className="text-sm text-text-sec">{q.estimated_timeframe}</p>
             </div>
           )}
-
-          {q.routing_decision && (
-            <div className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
-              Routing: {q.routing_decision}
-            </div>
-          )}
-
-          <div className="flex items-center justify-end gap-3 pt-2 border-t border-ink-line">
-            {url && (
-              <Link
-                href={url}
-                target="_blank"
-                className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-5 py-2.5 text-xs uppercase tracking-wider transition-colors"
-              >
-                View customer page →
-              </Link>
-            )}
-          </div>
         </div>
+      )}
+    </div>
+  )
+}
+
+function MetaCell({
+  label,
+  value,
+  sub,
+  highlight,
+}: {
+  label: string
+  value: string
+  sub?: string
+  highlight?: boolean
+}) {
+  return (
+    <div className="bg-ink-card px-3 py-2">
+      <div className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
+        {label}
+      </div>
+      <div
+        className={`mt-1 font-semibold text-sm ${
+          highlight ? 'text-accent uppercase' : 'text-text-pri'
+        }`}
+      >
+        {value}
+      </div>
+      {sub && (
+        <div className="font-mono text-[0.65rem] text-text-dim mt-0.5">{sub}</div>
       )}
     </div>
   )
@@ -1992,5 +2037,19 @@ function formatDate(iso: string): string {
     })
   } catch {
     return iso
+  }
+}
+
+/** AU 24-hour time component for the quote card timestamp. */
+function formatTime(iso: string): string {
+  try {
+    const d = new Date(iso)
+    return d.toLocaleTimeString('en-AU', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    })
+  } catch {
+    return ''
   }
 }
