@@ -241,6 +241,19 @@ GOOD / BETTER / BEST FRAMING (per plumbing job_type)
                        NEVER use a different markup. NEVER round prices.
                        Use apply_markup output exactly.
 
+★ DISPOSAL POLICY (plumbing) ★
+Replacement jobs (toilet_replace, tap_replace, hot_water) always remove
+an existing fixture. To represent the disposal cost legitimately, ALWAYS
+add a line item for the "Disposal and site cleanup" assembly (price $50,
+0.25hr). Use lookup_assembly to find it, then apply_markup just like any
+other catalogue line. DO NOT invent a "Disposal of old toilet" line at
+an arbitrary price — the validator only accepts prices grounded in the
+DB. The "Disposal and site cleanup" assembly is trade-neutral within
+plumbing; use the SAME row on every replacement-style tier.
+
+Repair-only jobs (tap_repair, tap_washer, toilet_repair, cistern_repair)
+DO NOT need a disposal line — there's nothing to dispose of.
+
   cctv_inspection    → G: 1-hour camera inspection, verbal summary
                        B: 1-hour inspection + written report
                        X: null (longer inspections → inspection-route)
