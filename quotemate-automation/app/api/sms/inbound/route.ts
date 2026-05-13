@@ -103,6 +103,25 @@ const NON_NAME_WORDS = new Set([
   // scope / yes-no answers
   'replacing', 'replace', 'existing', 'new', 'install', 'indoor',
   'outdoor', 'fitted', 'wired', 'wiring', 'flat',
+  // ── Trade-specific terms (plumbing) — added 2026-05-13 ──────────
+  // A customer answering "LPG bottle" to a gas-type question was being
+  // mis-extracted as first_name="LPG" by guessFirstName(), producing
+  // a photo SMS that opened with "LPG, photos help us…" instead of
+  // "James, photos help us…". Block every plumbing fixture / fuel /
+  // location word that could shape-match a one-or-two-word name.
+  'gas', 'lpg', 'electric', 'natural', 'bottle', 'mains',
+  'hot', 'water', 'hws', 'heat', 'pump', 'storage', 'continuous',
+  'flow', 'instant', 'instantaneous', 'tankless',
+  'blocked', 'drain', 'pipe', 'leak', 'leaking', 'dripping',
+  'toilet', 'cistern', 'tap', 'taps', 'mixer', 'faucet', 'spout',
+  'washer', 'kitchen', 'bathroom', 'ensuite', 'laundry', 'garage',
+  'shower', 'basin', 'bath',
+  // ── Trade-specific terms (electrical) ─────────────────────────────
+  'downlight', 'downlights', 'gpo', 'gpos', 'powerpoint', 'powerpoints',
+  'socket', 'sockets', 'outlet', 'outlets', 'fan', 'fans',
+  'alarm', 'alarms', 'smoke', 'switchboard', 'switch', 'board',
+  'rcbo', 'rcd', 'oven', 'cooktop', 'stove', 'rangehood',
+  'wifi', 'wi-fi',
 ])
 
 // Best-effort first-name guess from prior customer turns. We iterate
@@ -1040,7 +1059,19 @@ export async function POST(req: Request) {
           // if the transcript doesn't have one (returning-customer flows skip
           // re-asking the name when we already know it), fall back to the
           // customer record. Last resort: generic greeting.
-          const firstName = guessFirstName(turns) ?? customer?.first_name ?? undefined
+          // Priority order (authoritative → best-effort):
+          //   1. conversation_state.slots.first_name (this turn's
+          //      extracted + merged name — most recent + customer-corrected)
+          //   2. customer.first_name (stable DB record)
+          //   3. guessFirstName(turns) — heuristic walk of inbound turns;
+          //      only trusted when 1 & 2 are empty. Previously this was
+          //      the FIRST source, which caused "LPG bottle" answers to
+          //      get mis-extracted as first_name="LPG".
+          const firstName =
+            (conversationState.slots.first_name as string | undefined) ||
+            (customer?.first_name as string | undefined) ||
+            guessFirstName(turns) ||
+            undefined
           const photoBody = buildPhotoRequestSms({ firstName, uploadUrl, source: 'sms', jobType: decision.job_type_guess })
           const photoDispatch = await dispatchQuoteMessage({
             to: fromNumber,
@@ -1167,7 +1198,14 @@ export async function POST(req: Request) {
             // their name in conversation when we already have it stored).
             // Opus would have extracted it later, but we don't get that
             // chance here — the intake handoff already failed.
-            const failureFirstName = guessFirstName(turns) ?? customer?.first_name ?? undefined
+            // Same authoritative-first priority as the photo SMS above.
+            // Failure SMS must use the customer's REAL name, not a stray
+            // word that shape-matched as a name in an earlier turn.
+            const failureFirstName =
+              (conversationState.slots.first_name as string | undefined) ||
+              (customer?.first_name as string | undefined) ||
+              guessFirstName(turns) ||
+              undefined
             const failureBody = buildQuoteFailureSms({ firstName: failureFirstName, jobType: decision.job_type_guess })
             const failureDispatch = await dispatchQuoteMessage({
               to: fromNumber,
