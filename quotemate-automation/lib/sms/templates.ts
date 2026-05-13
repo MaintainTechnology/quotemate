@@ -13,6 +13,28 @@ function capitaliseFirst(s: string): string {
   return s.length === 0 ? s : s.charAt(0).toUpperCase() + s.slice(1)
 }
 
+/**
+ * Quote-updated SMS — fired when the tradie edits a quote via the
+ * /q/<token> edit overlay. Tells the customer their quote has been
+ * revised and points them at the same /q/<token> URL (the link is
+ * stable; only the underlying tier prices + Stripe Sessions changed).
+ *
+ * Stays short (<160 chars) so it lands as a single SMS segment.
+ */
+export function buildQuoteUpdatedSms(opts: {
+  firstName?: string
+  quoteUrl: string
+}): string {
+  const first = (opts.firstName ?? '').split(' ')[0] || ''
+  const lead = first ? `Hi ${first}, ` : 'Hi, '
+  const variants = [
+    `${lead}your quote was just updated by the tradie. Latest version: ${opts.quoteUrl}\n\n- QuoteMate`,
+    `${lead}tradie tweaked the pricing on your quote. Updated version: ${opts.quoteUrl}\n\n- QuoteMate`,
+    `${lead}quick heads-up - your quote has been revised. Tap for the latest: ${opts.quoteUrl}\n\n- QuoteMate`,
+  ]
+  return gsm7Safe(pickVariant(variants))
+}
+
 // ════════════════════════════════════════════════════════════════════
 // SMS-initiated tradie onboarding templates.
 // ════════════════════════════════════════════════════════════════════

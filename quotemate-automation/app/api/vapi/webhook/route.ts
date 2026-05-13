@@ -48,11 +48,39 @@ export async function POST(req: Request) {
   const transcript = payload.message.transcript ?? null
   const transcriptChars = transcript?.length ?? 0
 
+  // v6 multi-tenant voice routing: identify which tenant owns this call
+  // so the downstream pipeline (intake/structure → estimate/draft) uses
+  // the right pricing book, posts back to the right tradie, and dispatch
+  // SMS from the right number. Two resolution paths in priority order:
+  //
+  //   1. assistant.metadata.tenant_id — set by lib/vapi/provision.ts when
+  //      a fresh tenant's assistant is created. This is the cheapest +
+  //      most reliable path.
+  //   2. Fallback: assistantId → tenants.vapi_assistant_id lookup. Covers
+  //      legacy assistants that pre-date the metadata change.
+  //
+  // null is acceptable (legacy pre-v6 calls route via the pilot pricing
+  // book, same as the SMS-side fallback).
+  let tenantId: string | null = null
+  const metaTenantId = (call.assistant?.metadata as { tenant_id?: string } | null)?.tenant_id
+  if (metaTenantId) {
+    tenantId = metaTenantId
+  } else if (call.assistantId) {
+    const { data: t } = await supabase
+      .from('tenants')
+      .select('id')
+      .eq('vapi_assistant_id', call.assistantId)
+      .maybeSingle()
+    tenantId = (t?.id as string | null) ?? null
+  }
+
   log.step('upserting calls row', {
     vapi_call_id: call.id,
     caller_number: call.customer?.number ?? 'null',
     transcript_chars: transcriptChars,
     duration_s: durationSeconds ?? 'null',
+    tenant_id: tenantId,
+    tenant_resolved_from: metaTenantId ? 'metadata' : tenantId ? 'assistant_lookup' : 'none',
   })
 
   // Upsert (not insert) so Vapi retrying the same end-of-call event is idempotent.
@@ -67,6 +95,9 @@ export async function POST(req: Request) {
         transcript,
         recording_url: payload.message.recordingUrl ?? null,
         ended_at: new Date().toISOString(),
+        // Stamp tenant_id so intake/structure (voice path) picks it up
+        // and propagates it forward to intakes + quotes.
+        tenant_id: tenantId,
       },
       { onConflict: 'vapi_call_id' }
     )

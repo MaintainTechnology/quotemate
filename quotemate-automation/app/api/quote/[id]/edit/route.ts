@@ -24,11 +24,14 @@
 // fetch.
 
 import { createClient } from '@supabase/supabase-js'
+import { after } from 'next/server'
 import { z } from 'zod'
 import {
   expireCheckoutSession,
   createCheckoutSessionForTier,
 } from '@/lib/stripe/checkout'
+import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
+import { buildQuoteUpdatedSms } from '@/lib/sms/templates'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -291,6 +294,78 @@ export async function POST(
       { ok: false, error: `update_failed: ${updErr.message}` },
       { status: 500 },
     )
+  }
+
+  // Notify the customer that their quote was updated. Without this the
+  // customer's prior SMS link still points at /q/<token> (URL is stable)
+  // but they don't know the price changed underneath. We fire AFTER the
+  // response returns so the tradie's UI update isn't blocked on SMS
+  // dispatch, and we only fire when at least one tier's subtotal
+  // actually changed (cosmetic edits like a label change don't need the
+  // customer to be re-pinged).
+  if (changedTiers.length > 0) {
+    after(async () => {
+      try {
+        // Resolve customer phone from the intake.caller JSONB. Voice-
+        // sourced quotes can also fall back to calls.caller_number, but
+        // the tradie edit overlay is only reachable from /q/<token> on
+        // SMS-sourced quotes today so intake.caller.phone is the only
+        // path that lands customers.
+        const callerObj = (intake?.caller as { name?: string; phone?: string } | null) ?? null
+        const callerNumber = callerObj?.phone ?? null
+        const firstName = callerObj?.name?.split(' ')[0] ?? undefined
+        if (!callerNumber) {
+          console.log('[quote/edit] customer notify skipped — no phone resolvable', {
+            quoteId,
+          })
+          return
+        }
+
+        // Pull tenant's outbound number so the SMS lands in the SAME
+        // thread as the original quote. Falls back to the env if the
+        // tenant somehow doesn't have one set yet.
+        let tenantSmsNumber: string | null = null
+        if (quote.tenant_id) {
+          const { data: t } = await supabase
+            .from('tenants')
+            .select('twilio_sms_number')
+            .eq('id', quote.tenant_id)
+            .maybeSingle()
+          tenantSmsNumber = (t?.twilio_sms_number as string | null) ?? null
+        }
+        const fromNumber = tenantSmsNumber ?? process.env.TWILIO_SMS_NUMBER ?? undefined
+
+        const text = buildQuoteUpdatedSms({
+          firstName,
+          quoteUrl: `${appUrl}/q/${quote.share_token as string}`,
+        })
+        const result = await dispatchQuoteMessage({
+          to: callerNumber,
+          text,
+          from: fromNumber,
+        })
+        if (result.ok) {
+          console.log('[quote/edit] customer notify sent', {
+            quoteId,
+            channel: result.channel,
+            sid: result.sid,
+          })
+        } else {
+          console.warn('[quote/edit] customer notify failed (both channels)', {
+            quoteId,
+            sms_code: result.smsAttempt.code,
+            sms_reason: result.smsAttempt.reason,
+            wa_code: result.waAttempt?.code,
+          })
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e)
+        console.error('[quote/edit] customer notify threw — edit IS persisted, only SMS failed', {
+          quoteId,
+          error: msg,
+        })
+      }
+    })
   }
 
   return Response.json({

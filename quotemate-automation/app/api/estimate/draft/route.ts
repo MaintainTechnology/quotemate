@@ -502,14 +502,33 @@ export async function POST(req: Request) {
           }
         }
 
-        if (notifyWhatsApp) {
-          dispatch.step('tradie notify — explicit WhatsApp', { to: notifyWhatsApp })
+        // Multi-tenant guardrail (v6+): the explicit shared
+        // TRADIE_NOTIFY_WHATSAPP env var was designed for the single-
+        // pilot setup. Sending every tenant's customer details to one
+        // shared WhatsApp would leak Plumber A's leads onto a number
+        // that handles Plumber B's leads too. Skip the env-var path
+        // whenever we have a real tenant on the quote. Legacy pre-v6
+        // quotes (intakeTenantId == null) still hit the env var for
+        // back-compat with the pilot flow.
+        //
+        // The customer-facing tradie notify already runs WhatsApp as a
+        // fallback at the tenant's own mobile (via dispatchQuoteMessage)
+        // when SMS gets rejected, so we don't lose WhatsApp delivery —
+        // we just stop using the shared sandbox.
+        if (notifyWhatsApp && !intakeTenantId) {
+          dispatch.step('tradie notify — explicit WhatsApp (legacy pilot only)', {
+            to: notifyWhatsApp,
+          })
           const r = await sendWhatsApp({ to: notifyWhatsApp, text: tradieBody })
           if (r.ok) {
             dispatch.ok('tradie WhatsApp notify sent', { sid: r.sid, status: r.status })
           } else {
             dispatch.err('tradie WhatsApp notify failed', null, { code: r.code, reason: r.reason })
           }
+        } else if (notifyWhatsApp && intakeTenantId) {
+          dispatch.ok('tradie WhatsApp notify skipped — tenant-scoped quote (env var is pilot-only)', {
+            tenant_id: intakeTenantId,
+          })
         }
       } catch (e) {
         dispatch.err('tradie notify threw', e)
