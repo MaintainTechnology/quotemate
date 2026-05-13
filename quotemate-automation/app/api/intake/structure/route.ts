@@ -444,7 +444,26 @@ export async function POST(req: Request) {
           ? buildIntakeRecoverySms({ firstName: callerFirstName, missing })
           : buildIncompleteCallSms({ firstName: callerFirstName, source: sourceChannel })
 
-        const fromNumber = sourceChannel === 'sms' ? process.env.TWILIO_SMS_NUMBER : undefined
+        // v6 multi-tenant: send the recovery SMS from the same tenant
+        // number the customer texted, NOT the shared dev TWILIO_SMS_NUMBER.
+        // Without this the customer sees two different senders in their
+        // SMS thread (the dialog from Number A, the recovery prompt from
+        // Number B), which breaks the illusion of a single conversation
+        // with the tradie. Lazy-load the tenant row only when we know
+        // we're going to dispatch.
+        let tenantSmsNumber: string | null = null
+        if (sourceChannel === 'sms' && tenantId) {
+          const { data: t } = await supabase
+            .from('tenants')
+            .select('twilio_sms_number')
+            .eq('id', tenantId)
+            .maybeSingle()
+          tenantSmsNumber = (t?.twilio_sms_number as string | null) ?? null
+        }
+        const fromNumber =
+          sourceChannel === 'sms'
+            ? (tenantSmsNumber ?? process.env.TWILIO_SMS_NUMBER)
+            : undefined
         const result = await dispatchQuoteMessage({ to: callerNumber, text, from: fromNumber })
         if (result.ok) {
           ds.ok('recovery SMS sent', { channel: result.channel, sid: result.sid, missing })

@@ -81,6 +81,30 @@ export async function POST(req: Request) {
       )
     }
 
+    // v6 multi-tenant: load the tenant's provisioned Twilio number +
+    // owner mobile so outbound SMS (quote to customer, notification to
+    // tradie) goes from / to the right place per the tenant who owns
+    // this quote. Legacy pre-v6 intakes without tenant_id keep the env-
+    // var fallback used through v5.
+    let tenantSmsNumber: string | null = null
+    let tenantOwnerMobile: string | null = null
+    let tenantBusinessName: string | null = null
+    if (intakeTenantId) {
+      const { data: tenantRow } = await supabase
+        .from('tenants')
+        .select('twilio_sms_number, owner_mobile, business_name')
+        .eq('id', intakeTenantId)
+        .maybeSingle()
+      tenantSmsNumber = (tenantRow?.twilio_sms_number as string | null) ?? null
+      tenantOwnerMobile = (tenantRow?.owner_mobile as string | null) ?? null
+      tenantBusinessName = (tenantRow?.business_name as string | null) ?? null
+      log.ok('tenant outbound profile loaded', {
+        tenant_id: intakeTenantId,
+        has_sms_number: !!tenantSmsNumber,
+        has_owner_mobile: !!tenantOwnerMobile,
+      })
+    }
+
     // Channel-aware customer lookup. Voice path: intake.call_id is set -> read
     // calls.caller_number. SMS path: intake.call_id is null -> look up the
     // sms_conversations row that points at this intake to recover the
@@ -365,13 +389,18 @@ export async function POST(req: Request) {
         dispatch.ok('body built', { chars: body.length, sms_segments: segs })
 
         // Origin number policy:
-        //   • SMS-sourced quote → reply from TWILIO_SMS_NUMBER so the customer
-        //     sees ONE continuous thread (dialog turns + final quote in the
-        //     same conversation on their phone).
+        //   • v6 multi-tenant SMS quote → reply from the TENANT'S
+        //     provisioned twilio_sms_number so the customer sees ONE
+        //     continuous thread (dialog turns + final quote in the
+        //     same conversation, from the same `04xx` they texted).
+        //   • Legacy SMS quote (no tenant_id, pre-v6) → fall back to
+        //     TWILIO_SMS_NUMBER env so the pilot pipeline still works.
         //   • Voice-sourced quote → fall through to dispatchQuoteMessage's
-        //     default (TWILIO_PHONE_NUMBER, the voice line) — preserves prior
-        //     behaviour exactly.
-        const fromNumber = isSmsSource ? process.env.TWILIO_SMS_NUMBER : undefined
+        //     default (TWILIO_PHONE_NUMBER, the voice line) — preserves
+        //     prior voice-path behaviour exactly.
+        const fromNumber = isSmsSource
+          ? (tenantSmsNumber ?? process.env.TWILIO_SMS_NUMBER)
+          : undefined
         dispatch.step('attempting SMS first (WhatsApp fallback if SMS rejects)', {
           to: callerNumber,
           from: fromNumber ?? '(default TWILIO_PHONE_NUMBER)',
@@ -414,10 +443,17 @@ export async function POST(req: Request) {
         return
       }
 
-      const notifyMobile = process.env.TRADIE_NOTIFY_NUMBER
+      // v6 multi-tenant: notify the actual TENANT owner, not a shared
+      // env-var mobile. The tradie's personal mobile + the from-number
+      // used for that notify both come from the tenant row so each
+      // tradie sees the message land from their own QuoteMate number
+      // ("Sparky — QuoteMate: new quote drafted for Jon · $820"). Env
+      // fallback (TRADIE_NOTIFY_*) keeps the legacy pilot working.
+      const notifyMobile =
+        tenantOwnerMobile ?? process.env.TRADIE_NOTIFY_NUMBER
       const notifyWhatsApp = process.env.TRADIE_NOTIFY_WHATSAPP
       if (!notifyMobile && !notifyWhatsApp) {
-        dispatch.ok('tradie notify skipped — no TRADIE_NOTIFY_NUMBER / TRADIE_NOTIFY_WHATSAPP env')
+        dispatch.ok('tradie notify skipped — tenant.owner_mobile + env both empty')
         return
       }
 
@@ -443,8 +479,19 @@ export async function POST(req: Request) {
             })
 
         if (notifyMobile) {
-          dispatch.step('tradie notify — SMS (with WhatsApp fallback)', { to: notifyMobile })
-          const r = await dispatchQuoteMessage({ to: notifyMobile, text: tradieBody })
+          // Send the tradie's "new quote drafted" SMS FROM the tenant's
+          // own provisioned number so the message lands in the same
+          // QuoteMate thread on their phone, not the shared dev line.
+          dispatch.step('tradie notify — SMS (with WhatsApp fallback)', {
+            to: notifyMobile,
+            from: tenantSmsNumber ?? '(default TWILIO_PHONE_NUMBER)',
+            tenantBusinessName,
+          })
+          const r = await dispatchQuoteMessage({
+            to: notifyMobile,
+            text: tradieBody,
+            from: tenantSmsNumber ?? undefined,
+          })
           if (r.ok) {
             dispatch.ok('tradie SMS notify sent', { channel: r.channel, sid: r.sid })
           } else {
