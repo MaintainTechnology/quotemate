@@ -142,6 +142,34 @@ export async function POST(req: Request) {
       )
     }
 
+    // ─── 2b. Seed tenant_licences (per-trade licence rows) ────────
+    // Wizard only collects ONE licence triple in v1, so we copy it to
+    // each selected trade. Tradies who hold a different regulator for
+    // each trade can refine these per-trade later from the dashboard
+    // Account tab. Empty licence fields (the common case in the test
+    // phase) still create the row so the dashboard form has a stable
+    // shape — every selected trade is guaranteed a tenant_licences row.
+    const licenceRows = form.trades.map((t) => ({
+      tenant_id: id,
+      trade: t,
+      licence_type: form.licence_type || null,
+      licence_number: form.licence_number || null,
+      licence_state: form.state || null,
+      licence_expiry: form.licence_expiry || null,
+    }))
+    const { error: licErr } = await supabase
+      .from('tenant_licences')
+      .upsert(licenceRows, { onConflict: 'tenant_id,trade' })
+    if (licErr) {
+      // Non-fatal — primary licence still lives on tenants.licence_*.
+      // The dashboard will show the legacy single-licence view until
+      // tenant_licences is reachable.
+      console.warn('[activate] tenant_licences seed failed (non-fatal)', {
+        tenantId: id,
+        message: licErr.message,
+      })
+    }
+
     // ─── 3. Auto-enable the easy-5 services for ALL selected trades ─
     const { data: assemblies } = await supabase
       .from('shared_assemblies')

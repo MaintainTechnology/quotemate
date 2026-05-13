@@ -85,11 +85,25 @@ type Quote = {
   customer_phone: string | null
 }
 
+type PricingBook = NonNullable<Pricing> & { trade: 'electrical' | 'plumbing' }
+
+type LicenceRow = {
+  trade: 'electrical' | 'plumbing'
+  licence_type: string | null
+  licence_number: string | null
+  licence_state: string | null
+  licence_expiry: string | null
+}
+
 type DashboardData = {
   tenant: Tenant
   pricing: Pricing
+  /** One row per trade for multi-trade tenants. Always present (length 1+). */
+  pricing_books: PricingBook[]
   services: ServiceOffering[]
   quotes: Quote[]
+  /** One row per active trade — per-trade licence storage from migration 018. */
+  licences: LicenceRow[]
 }
 
 type Tab = 'overview' | 'account' | 'pricing' | 'services' | 'quotes'
@@ -689,9 +703,9 @@ function AccountTab({
     owner_mobile: data.tenant.owner_mobile ?? '',
     state: data.tenant.state ?? '',
     abn: data.tenant.abn ?? '',
-    licence_type: data.tenant.licence_type ?? '',
-    licence_number: data.tenant.licence_number ?? '',
-    licence_expiry: data.tenant.licence_expiry ?? '',
+    // Note: licence_type / licence_number / licence_expiry intentionally
+    // omitted from this form — they're owned by <LicencesCard> below
+    // so multi-trade tenants can hold one set per trade.
   })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -717,6 +731,12 @@ function AccountTab({
   return (
     <div className="space-y-6">
       <TradesCard tenant={data.tenant} onSaveTrades={onSaveTrades} />
+
+      <LicencesCard
+        licences={data.licences ?? []}
+        onSave={onSave}
+        primaryState={data.tenant.state ?? null}
+      />
 
       <Card
         title="Account details"
@@ -780,33 +800,10 @@ function AccountTab({
               maxLength={20}
             />
           </Field>
-          <Field label="Licence number">
-            <input
-              type="text"
-              value={form.licence_number}
-              onChange={(e) => setForm({ ...form, licence_number: e.target.value })}
-              className={INPUT}
-              maxLength={40}
-            />
-          </Field>
-          <Field label="Licence type">
-            <input
-              type="text"
-              value={form.licence_type}
-              onChange={(e) => setForm({ ...form, licence_type: e.target.value })}
-              className={INPUT}
-              maxLength={20}
-              placeholder="e.g. NECA NSW"
-            />
-          </Field>
-          <Field label="Licence expiry">
-            <input
-              type="date"
-              value={form.licence_expiry}
-              onChange={(e) => setForm({ ...form, licence_expiry: e.target.value })}
-              className={INPUT}
-            />
-          </Field>
+          {/* Licence fields moved to the LicencesCard below so multi-
+              trade tenants can hold one set of regulatory details per
+              trade (a sparky who also plumbs has a NECA NSW number AND
+              a NSW Fair Trading plumber number). */}
         </div>
 
         {error && <ErrorBanner>{error}</ErrorBanner>}
@@ -824,6 +821,167 @@ function AccountTab({
       </form>
       </Card>
     </div>
+  )
+}
+
+// ─── Licences card — one section per trade (Account tab) ─────────
+
+function LicencesCard({
+  licences,
+  onSave,
+  primaryState,
+}: {
+  licences: LicenceRow[]
+  onSave: (payload: Record<string, unknown>) => Promise<void>
+  primaryState: string | null
+}) {
+  // Each trade's licence fields are tracked in a local map keyed by
+  // trade name. Save fires a single PATCH carrying every dirty trade so
+  // a multi-trade tradie can update both licences in one click.
+  type LicenceForm = {
+    licence_type: string
+    licence_number: string
+    licence_state: string
+    licence_expiry: string
+  }
+  const initial: Record<string, LicenceForm> = useMemo(() => {
+    const m: Record<string, LicenceForm> = {}
+    for (const l of licences) {
+      m[l.trade] = {
+        licence_type: l.licence_type ?? '',
+        licence_number: l.licence_number ?? '',
+        licence_state: l.licence_state ?? primaryState ?? '',
+        licence_expiry: l.licence_expiry ?? '',
+      }
+    }
+    return m
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [licences.map((l) => `${l.trade}:${l.licence_number}:${l.licence_expiry}:${l.licence_state}:${l.licence_type}`).join('|'), primaryState])
+
+  const [form, setForm] = useState<Record<string, LicenceForm>>(initial)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [savedAt, setSavedAt] = useState<number | null>(null)
+
+  // Re-sync local state whenever the backing data changes (after save).
+  useEffect(() => {
+    setForm(initial)
+  }, [initial])
+
+  function update(trade: string, field: keyof LicenceForm, value: string) {
+    setForm((f) => ({
+      ...f,
+      [trade]: { ...f[trade], [field]: value },
+    }))
+  }
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setError(null)
+    setSubmitting(true)
+    try {
+      // Build the per-trade licence payload. Empty strings stay in the
+      // payload — the server's emptyToNull() normalises them to null so
+      // a cleared field actually wipes the column.
+      const licences_by_trade: Record<string, LicenceForm> = {}
+      for (const [trade, fields] of Object.entries(form)) {
+        licences_by_trade[trade] = fields
+      }
+      await onSave({ licences_by_trade })
+      setSavedAt(Date.now())
+    } catch (err: any) {
+      setError(err?.message ?? 'Save failed')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (licences.length === 0) {
+    return null
+  }
+
+  const isMulti = licences.length > 1
+  return (
+    <Card
+      title={isMulti ? 'Trade licences' : 'Licence details'}
+      subtitle={
+        isMulti
+          ? 'Each trade carries its own regulator and licence — fill in what applies. Customers see the relevant one on each quote.'
+          : 'What the regulator gave you. Customers see this on quotes.'
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {licences.map((l) => {
+          const f = form[l.trade] ?? initial[l.trade]
+          if (!f) return null
+          return (
+            <div key={l.trade} className="space-y-4">
+              {isMulti && (
+                <h3 className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent font-bold">
+                  {tradeLabel(l.trade)}
+                </h3>
+              )}
+              <div className="grid md:grid-cols-2 gap-5">
+                <Field label="Licence body / type">
+                  <input
+                    type="text"
+                    value={f.licence_type}
+                    onChange={(e) => update(l.trade, 'licence_type', e.target.value)}
+                    className={INPUT}
+                    maxLength={40}
+                    placeholder={l.trade === 'electrical' ? 'e.g. NECA NSW' : 'e.g. NSW Fair Trading'}
+                  />
+                </Field>
+                <Field label="Licence number">
+                  <input
+                    type="text"
+                    value={f.licence_number}
+                    onChange={(e) => update(l.trade, 'licence_number', e.target.value)}
+                    className={INPUT}
+                    maxLength={60}
+                  />
+                </Field>
+                <Field label="Licence state">
+                  <select
+                    value={f.licence_state}
+                    onChange={(e) => update(l.trade, 'licence_state', e.target.value)}
+                    className={INPUT}
+                  >
+                    <option value="">Select state</option>
+                    {['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'ACT', 'NT'].map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Licence expiry">
+                  <input
+                    type="date"
+                    value={f.licence_expiry}
+                    onChange={(e) => update(l.trade, 'licence_expiry', e.target.value)}
+                    className={INPUT}
+                  />
+                </Field>
+              </div>
+            </div>
+          )
+        })}
+
+        {error && <ErrorBanner>{error}</ErrorBanner>}
+
+        <div className="flex items-center justify-between pt-2 border-t border-ink-line">
+          <SaveHint savedAt={savedAt} />
+          <button
+            type="submit"
+            disabled={submitting}
+            className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-50"
+          >
+            {submitting ? 'Saving…' : isMulti ? 'Save licences' : 'Save licence'}
+          </button>
+        </div>
+      </form>
+    </Card>
   )
 }
 
@@ -1044,19 +1202,60 @@ function PricingTab({
   data: DashboardData
   onSave: (payload: Record<string, unknown>) => Promise<void>
 }) {
+  // Multi-trade tenants get one PricingBookCard per trade. Single-trade
+  // tenants get exactly one card — same component, no special UI.
+  const books = data.pricing_books?.length
+    ? data.pricing_books
+    : data.pricing
+      ? [data.pricing as PricingBook]
+      : []
+
+  if (books.length === 0) {
+    return (
+      <Card title="Pricing book">
+        <p className="text-sm text-text-sec">
+          No pricing book yet — finish activation to generate one.
+        </p>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {books.map((book) => (
+        <PricingBookCard
+          key={book.trade ?? 'default'}
+          book={book}
+          isMultiTrade={books.length > 1}
+          onSave={onSave}
+        />
+      ))}
+    </div>
+  )
+}
+
+function PricingBookCard({
+  book,
+  isMultiTrade,
+  onSave,
+}: {
+  book: PricingBook
+  isMultiTrade: boolean
+  onSave: (payload: Record<string, unknown>) => Promise<void>
+}) {
   const initial = useMemo(
     () => ({
-      hourly_rate: numString(data.pricing?.hourly_rate),
-      call_out_minimum: numString(data.pricing?.call_out_minimum),
-      default_markup_pct: numString(data.pricing?.default_markup_pct),
-      apprentice_rate: numString(data.pricing?.apprentice_rate),
-      senior_rate: numString(data.pricing?.senior_rate),
-      after_hours_multiplier: numString(data.pricing?.after_hours_multiplier),
-      min_labour_hours: numString(data.pricing?.min_labour_hours),
-      risk_buffer_pct: numString(data.pricing?.risk_buffer_pct),
-      gst_registered: data.pricing?.gst_registered ?? false,
+      hourly_rate: numString(book.hourly_rate),
+      call_out_minimum: numString(book.call_out_minimum),
+      default_markup_pct: numString(book.default_markup_pct),
+      apprentice_rate: numString(book.apprentice_rate),
+      senior_rate: numString(book.senior_rate),
+      after_hours_multiplier: numString(book.after_hours_multiplier),
+      min_labour_hours: numString(book.min_labour_hours),
+      risk_buffer_pct: numString(book.risk_buffer_pct),
+      gst_registered: book.gst_registered ?? false,
     }),
-    [data.pricing],
+    [book],
   )
   const [form, setForm] = useState(initial)
   const [submitting, setSubmitting] = useState(false)
@@ -1074,7 +1273,12 @@ function PricingTab({
         if (typeof v === 'boolean') payload[k] = v
         else if (v !== '') payload[k] = Number(v)
       }
-      await onSave({ pricing: payload })
+      if (isMultiTrade) {
+        // Scope this save to ONE trade's pricing_book row.
+        await onSave({ pricing_by_trade: { [book.trade]: payload } })
+      } else {
+        await onSave({ pricing: payload })
+      }
       setSavedAt(Date.now())
     } catch (err: any) {
       setError(err?.message ?? 'Save failed')
@@ -1083,11 +1287,15 @@ function PricingTab({
     }
   }
 
+  const title = isMultiTrade
+    ? `${tradeLabel(book.trade)} pricing`
+    : 'Pricing book'
+  const subtitle = isMultiTrade
+    ? `Rates the AI uses when drafting ${tradeLabel(book.trade).toLowerCase()} quotes.`
+    : 'Every quote your AI drafts pulls from these numbers. Update any time.'
+
   return (
-    <Card
-      title="Pricing book"
-      subtitle="Every quote your AI drafts pulls from these numbers. Update any time."
-    >
+    <Card title={title} subtitle={subtitle}>
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="grid md:grid-cols-3 gap-5">
           <Field label="Hourly rate" hint="$AUD ex GST">

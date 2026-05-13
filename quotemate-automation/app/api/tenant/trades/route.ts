@@ -201,6 +201,19 @@ export async function POST(req: Request) {
         .from('tenant_service_offerings')
         .upsert(offeringRows, { onConflict: 'tenant_id,assembly_id' })
     }
+
+    // Seed an empty tenant_licences row for each added trade so the
+    // dashboard form has somewhere to land the licence details once
+    // the tradie fills them in. licence_state defaults to the tenant's
+    // primary state — most tradies operate in one state per trade.
+    const licenceRows = toAdd.map((t) => ({
+      tenant_id: tenant.id,
+      trade: t,
+      licence_state: tenant.state ?? null,
+    }))
+    await supabase
+      .from('tenant_licences')
+      .upsert(licenceRows, { onConflict: 'tenant_id,trade' })
   }
 
   // ── 4. Remove dropped trades ─────────────────────────────────────
@@ -231,6 +244,15 @@ export async function POST(req: Request) {
         .eq('tenant_id', tenant.id)
         .in('assembly_id', ids)
     }
+
+    // Remove the per-trade licence row(s) for the dropped trade. Hard
+    // delete here matches pricing_book: licences are pure config, easy
+    // to re-enter if the trade comes back.
+    await supabase
+      .from('tenant_licences')
+      .delete()
+      .eq('tenant_id', tenant.id)
+      .in('trade', toRemove)
   }
 
   // ── 5. Update tenants row ────────────────────────────────────────
