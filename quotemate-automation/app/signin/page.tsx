@@ -26,21 +26,32 @@ export default function SignInPage() {
         password,
       })
       if (authErr) throw authErr
-      if (!authData.user) throw new Error('Sign in returned no user')
+      if (!authData.user || !authData.session) throw new Error('Sign in returned no user')
 
-      const { data: tenant } = await supabase
-        .from('tenants')
-        .select('id, status, business_name')
-        .eq('owner_user_id', authData.user.id)
-        .maybeSingle()
+      // Look up the tenant via the server-side endpoint so the read uses
+      // the service role (same as the dashboard). A browser-side
+      // `from('tenants').select()` here returns silently-empty when RLS is
+      // enabled on the table — the symptom is that a returning tradie
+      // who finished onboarding still gets bounced to /onboard.
+      const meRes = await fetch('/api/tenant/me', {
+        headers: { Authorization: `Bearer ${authData.session.access_token}` },
+        cache: 'no-store',
+      })
 
       // Routing rules:
-      //   • No tenant row yet         → finish onboarding wizard
-      //   • Tenant in 'onboarding'    → resume wizard
-      //   • Tenant 'active'           → tradie portal / dashboard
-      if (!tenant) {
+      //   • 404 (no tenant row yet)   → start onboarding wizard
+      //   • tenant.status === active  → dashboard
+      //   • tenant exists but not active → resume wizard
+      if (meRes.status === 404) {
         router.push(`/onboard?owner_user_id=${authData.user.id}`)
         return
+      }
+      if (!meRes.ok) {
+        const body = await meRes.json().catch(() => ({}))
+        throw new Error(body?.error ?? `Tenant lookup failed (HTTP ${meRes.status})`)
+      }
+      const { tenant } = (await meRes.json()) as {
+        tenant: { id: string; status: 'onboarding' | 'active' | 'suspended' }
       }
       if (tenant.status === 'active') {
         router.push(`/dashboard`)

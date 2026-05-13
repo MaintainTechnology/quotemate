@@ -34,6 +34,15 @@ export function normaliseAuMobile(input: string): string {
 const positiveMoney = z.coerce.number().positive('Must be greater than 0')
 const positivePct = z.coerce.number().min(0).max(100, 'Must be 0–100')
 
+// Treat empty strings (from blank wizard inputs) as "not provided" so
+// z.coerce.number() doesn't silently turn '' into 0 and trip floors like
+// `.min(1)` on after_hours_multiplier. Applied to every *optional* number
+// field below via `optionalNumber(...)`.
+const emptyToUndef = (val: unknown) =>
+  val === '' || val === null ? undefined : val
+const optionalNumber = (schema: z.ZodTypeAny) =>
+  z.preprocess(emptyToUndef, schema.optional())
+
 export const OnboardActivateSchema = z.object({
   // ── Page 1: Account basics ──────────────────────────────────
   business_name: z.string().trim().min(2, 'Business name required').max(80),
@@ -58,11 +67,11 @@ export const OnboardActivateSchema = z.object({
   default_markup_pct: positivePct,
 
   // ── Page 3: Pricing (advanced — all optional) ──────────────
-  apprentice_rate: z.coerce.number().nonnegative().optional(),
-  senior_rate: z.coerce.number().nonnegative().optional(),
-  after_hours_multiplier: z.coerce.number().min(1).max(3).optional(),
-  min_labour_hours: z.coerce.number().min(0).max(8).optional(),
-  risk_buffer_pct: positivePct.optional(),
+  apprentice_rate: optionalNumber(z.coerce.number().nonnegative()),
+  senior_rate: optionalNumber(z.coerce.number().nonnegative()),
+  after_hours_multiplier: optionalNumber(z.coerce.number().min(1).max(3)),
+  min_labour_hours: optionalNumber(z.coerce.number().min(0).max(8)),
+  risk_buffer_pct: optionalNumber(positivePct),
   gst_registered: z.boolean().optional(),
 
   // ── SMS-initiated onboarding (optional) ────────────────────
