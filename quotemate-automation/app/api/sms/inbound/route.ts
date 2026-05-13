@@ -741,6 +741,11 @@ export async function POST(req: Request) {
           state: conversationState,
           lastAgentMessage: lastOutbound,
           customerMessage: lastInbound,
+          // v6 multi-tenant: tell the extractor what trades this
+          // specific tradie offers so a wrong-trade job_type never
+          // pollutes conversation_state. Empty/undefined falls back
+          // to permissive extraction for legacy pre-v6 traffic.
+          tenantTrades: tenant?.trades,
         })
         const updateKeys = Object.keys(extraction.updates).filter(
           k => extraction.updates[k as keyof typeof extraction.updates] !== null

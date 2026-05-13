@@ -335,6 +335,19 @@ export async function extractSlots(args: {
   state: ConversationState
   lastAgentMessage: string | null
   customerMessage: string
+  /**
+   * Trades the tenant offers (v6 multi-tenant). When provided and the
+   * customer mentions a job that's clearly outside those trades (e.g. a
+   * "blocked drain" inbound on an electrical-only tenant's number), the
+   * extractor classifies job_type='out_of_scope' instead of writing the
+   * wrong-trade value into conversation_state. This keeps the state clean
+   * for the dialog Haiku, which already redirects wrong-trade requests
+   * via the TENANT TRADE SCOPE block in its own prompt.
+   *
+   * Undefined / empty → permissive (extract any trade) for legacy
+   * pre-v6 single-pilot traffic.
+   */
+  tenantTrades?: ReadonlyArray<'electrical' | 'plumbing'>
 }): Promise<SlotExtraction> {
   // Empty/whitespace inbound shouldn't waste a Haiku call.
   if (!args.customerMessage.trim()) {
@@ -349,12 +362,40 @@ export async function extractSlots(args: {
         return `  ${k}: ${JSON.stringify(v)}${src ? `  (source: ${src})` : ''}`
       }).join('\n')
 
+  // Build the per-call tenant trade-scope hint. The slot extractor's
+  // job_type enum still accepts every job from both trades (schema is
+  // shared across tenants), but with this hint Haiku will classify
+  // off-trade jobs as 'out_of_scope' instead of leaking the wrong-trade
+  // job_type into conversation_state.
+  const trades = new Set(args.tenantTrades ?? ['electrical', 'plumbing'])
+  const both = trades.has('electrical') && trades.has('plumbing')
+  const tradeScope = both
+    ? null
+    : trades.has('electrical')
+      ? [
+          `TENANT TRADE SCOPE: this tradie covers ELECTRICAL jobs ONLY.`,
+          `If the customer's message describes a PLUMBING job`,
+          `(blocked drain, hot water / HWS, tap, toilet, leak, pipe, gas,`,
+          `bathroom reno, drain camera), classify job_type='out_of_scope'.`,
+          `Do NOT extract any plumbing-trade job_type for this tenant.`,
+        ].join(' ')
+      : [
+          `TENANT TRADE SCOPE: this tradie covers PLUMBING jobs ONLY.`,
+          `If the customer's message describes an ELECTRICAL job`,
+          `(downlights, GPO, power point, ceiling fan, smoke alarm,`,
+          `outdoor light, switchboard, EV charger), classify`,
+          `job_type='out_of_scope'. Do NOT extract any electrical-trade`,
+          `job_type for this tenant.`,
+        ].join(' ')
+
   const { object } = await withRetry(
     () => generateObject({
       model: anthropic('claude-haiku-4-5-20251001'),
       schema: SlotExtractionSchema,
       system: SYSTEM_PROMPT,
       prompt: [
+        tradeScope, // null for both-trades + legacy fallback — .filter(Boolean) drops it
+        tradeScope ? '' : null,
         `CURRENT STATE (slots we already know):`,
         stateBlock,
         '',
@@ -365,7 +406,7 @@ export async function extractSlots(args: {
         '',
         `CUSTOMER MESSAGE (extract from this):`,
         `  ${args.customerMessage.slice(0, 600)}`,
-      ].join('\n'),
+      ].filter((l) => l !== null).join('\n'),
     }),
     {
       maxAttempts: 3,
