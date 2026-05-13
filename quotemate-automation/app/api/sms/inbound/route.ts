@@ -887,6 +887,40 @@ export async function POST(req: Request) {
         twilio_message_sid: outboundSid,
       })
 
+      // Quote-already-drafted guard.
+      //
+      // When a customer texts back after their quote has been sent
+      // ("Thanks!", "Sounds good", "Can I add a fan?"), the
+      // sms_conversation is reused under the 5-min done-grace window and
+      // Haiku runs fresh. Without this check, Haiku — having no memory
+      // that intake/quote already ran — frequently reasons action='finish'
+      // again on the courtesy reply, which triggers a DUPLICATE intake
+      // and a DUPLICATE quote draft (with slightly different tier picks
+      // since the estimator is non-deterministic). The customer ends up
+      // with two photo links and two different quotes in the same SMS
+      // thread. Same root cause makes photo_request_sent_at-cleared
+      // conversations re-fire the photo link.
+      //
+      // Guard: if the conversation already has intake_id linked, suppress
+      // BOTH the photo-request dispatch AND the intake-handoff fire,
+      // regardless of what Haiku decided. Haiku's reply text still goes
+      // out (already dispatched at step 7) so the customer gets a
+      // courtesy response, but the side effects don't fire twice.
+      // Multi-quote-per-conversation (genuine add-ons) is a future feature
+      // — for v1 the SOP is the tradie handles add-ons manually.
+      const { data: convoState } = await supabase
+        .from('sms_conversations')
+        .select('intake_id')
+        .eq('id', conversationId)
+        .maybeSingle()
+      const hasExistingIntake = !!convoState?.intake_id
+      if (hasExistingIntake) {
+        console.log(
+          '[sms/inbound:after] intake_id already set on conversation — suppressing photo + handoff to avoid duplicate quote',
+          { conversationId, existingIntakeId: convoState!.intake_id },
+        )
+      }
+
       // 8b. Photo-request SMS (parity with voice agent's send_sms_photo_link).
       // Fire ONCE per conversation, the first turn that identifies an
       // easy-5 job_type AND we haven't already sent the link. We send it
@@ -909,6 +943,7 @@ export async function POST(req: Request) {
       const shouldSendPhotoRequest =
         photoRequestToken &&
         !photoRequestAlreadySent &&
+        !hasExistingIntake &&
         decision.action !== 'escalate_inspection' &&
         decision.action !== 'end_conversation' &&
         (haikuRequestedPhoto || finishFallbackTrigger)
@@ -979,8 +1014,14 @@ export async function POST(req: Request) {
       //    end_conversation: customer wrapped up gracefully without booking.
       //    Status='done', NO intake handoff, NO recovery SMS, NO photo SMS.
       //    Flowing through to step 10 below intake fires only on action='finish'.
+      //
+      // hasExistingIntake override: when a quote was already drafted on
+      // this conversation, the customer's follow-up is a courtesy /
+      // thank-you (or an add-on we'll handle manually in v1). Never flip
+      // back to 'structuring' — that's what would re-fire intake/quote.
       const newStatus =
-        decision.action === 'finish' ? 'structuring'
+        hasExistingIntake ? 'done'
+      : decision.action === 'finish' ? 'structuring'
       : decision.action === 'escalate_inspection' ? 'done'
       : decision.action === 'end_conversation' ? 'done'
       : 'open'
@@ -1010,7 +1051,12 @@ export async function POST(req: Request) {
       // but the quote depends entirely on this POST landing successfully.
       // Silent failure here = no quote ever drafted = lost customer.
       // 3 attempts, 2s/4s backoff. Runs inside after() so customer doesn't wait.
-      if (decision.action === 'finish') {
+      //
+      // hasExistingIntake guard: a quote was already drafted on this
+      // conversation — Haiku occasionally re-reasons 'finish' on courtesy
+      // replies ("Thanks!") which would otherwise produce duplicate
+      // quotes. Skip the handoff entirely in that case.
+      if (decision.action === 'finish' && !hasExistingIntake) {
         console.log('[sms/inbound:after] step 10 — firing intake/structure handoff', { conversationId })
         try {
           await withRetry(
