@@ -161,8 +161,43 @@ const supabase = createClient(
 
 // Graceful fallback if the dialog agent throws — the customer still gets
 // a reply rather than silence.
-const DIALOG_FALLBACK_REPLY =
-  "Thanks — we'll get back to you shortly to confirm details."
+/**
+ * Personalised fallback reply for when the dialog Haiku call throws
+ * (Anthropic 5xx, timeout, schema-validation rejection, etc.). Static
+ * "we'll get back to you shortly" was confusing for returning customers
+ * who'd just given their name + scope — they'd say "hi" and get a
+ * bland brush-off. Now we acknowledge whatever we DID extract this
+ * turn (name + job context) so the customer knows we're tracking them
+ * even when the AI brain crashed.
+ */
+function buildDialogFallbackReply(opts: {
+  firstName?: string | null
+  jobType?: string | null
+}): string {
+  const first = (opts.firstName ?? '').split(' ')[0] || ''
+  const jt = opts.jobType ?? null
+  const namePart = first ? ` ${first}` : ''
+  // Map a known job_type into a short customer-facing phrase.
+  const jobPhrase = (() => {
+    if (!jt || jt === 'unknown' || jt === 'other') return null
+    if (jt === 'downlights') return 'the downlights'
+    if (jt === 'power_points') return 'the GPOs / power points'
+    if (jt === 'ceiling_fans') return 'the fans'
+    if (jt === 'smoke_alarms') return 'the smoke alarms'
+    if (jt === 'outdoor_lighting') return 'the outdoor lights'
+    if (jt === 'blocked_drain') return 'the blocked drain'
+    if (jt === 'hot_water') return 'the hot water system'
+    if (jt === 'tap_repair' || jt === 'tap_replace') return 'the tap work'
+    if (jt === 'toilet_repair' || jt === 'toilet_replace') return 'the toilet job'
+    return null
+  })()
+  if (jobPhrase) {
+    return `Cheers${namePart} - we've got ${jobPhrase} noted and our system hit a quick snag on this turn. Give us a minute and we'll be back to confirm.`
+  }
+  return first
+    ? `Cheers ${first} - hit a quick snag on this turn. Give us a moment and we'll be right back.`
+    : "Thanks - we'll be right back to confirm details, just a quick snag on our end."
+}
 
 export async function POST(req: Request) {
  try {
@@ -764,8 +799,37 @@ export async function POST(req: Request) {
       // Fail-open: extraction failure leaves the dialog running on stale state.
       let conversationState: ConversationState = initialConversationState
       try {
-        const lastInbound = turns.filter(t => t.direction === 'inbound').at(-1)?.body ?? ''
+        // Rapid-fire debounce coalescing: when a customer fires multiple
+        // SMS in <1.5s (e.g. "Hi", "I need 6 downlights", "in the lounge"),
+        // the 1.5s debounce window collects ALL of them into the
+        // sms_messages table before this slot-extractor turn runs. The
+        // dialog Haiku already sees them as separate history entries, but
+        // the slot extractor used to receive ONLY the last inbound's body
+        // — so the first two messages' context was silently dropped.
+        //
+        // Concat every inbound that landed AFTER the most recent outbound
+        // (i.e. every message in this batch the agent hasn't responded to
+        // yet) and feed them to the extractor as a single combined turn.
+        const lastOutboundIdx = (() => {
+          for (let i = turns.length - 1; i >= 0; i--) {
+            if (turns[i].direction === 'outbound') return i
+          }
+          return -1
+        })()
+        const pendingInbounds = turns
+          .slice(lastOutboundIdx + 1)
+          .filter(t => t.direction === 'inbound')
+          .map(t => t.body)
+        const lastInbound = pendingInbounds.length > 1
+          ? pendingInbounds.join('\n---\n')
+          : pendingInbounds[0] ?? turns.filter(t => t.direction === 'inbound').at(-1)?.body ?? ''
         const lastOutbound = turns.filter(t => t.direction === 'outbound').at(-1)?.body ?? null
+        if (pendingInbounds.length > 1) {
+          console.log('[sms/inbound:after] coalescing rapid-fire inbounds for slot extraction', {
+            pendingCount: pendingInbounds.length,
+            chars: lastInbound.length,
+          })
+        }
         const extraction = await extractSlots({
           state: conversationState,
           lastAgentMessage: lastOutbound,
@@ -915,10 +979,23 @@ export async function POST(req: Request) {
           message: err?.message,
           name: err?.name,
         })
+        // Use whatever the slot extractor already merged into state
+        // (name from this turn or earlier, job_type if guessed) so the
+        // fallback acknowledges the customer's context rather than
+        // brushing them off with a generic "we'll get back to you".
+        const fallbackFirst =
+          (conversationState.slots.first_name as string | undefined) ||
+          (customer?.first_name as string | undefined) ||
+          null
+        const fallbackJob =
+          (conversationState.slots.job_type as string | undefined) || null
         decision = {
           action: 'escalate_inspection',
           job_type_guess: 'unknown',
-          reply_to_send: DIALOG_FALLBACK_REPLY,
+          reply_to_send: buildDialogFallbackReply({
+            firstName: fallbackFirst,
+            jobType: fallbackJob,
+          }),
           assumptions_made: [],
           ready_for_intake: false,
           request_photo_link: false,
