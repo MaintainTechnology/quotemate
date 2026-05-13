@@ -39,8 +39,8 @@ export async function GET(req: Request) {
     return Response.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  // Tradie's tenant row
-  const { data: tenant, error: tenantErr } = await supabase
+  // Tradie's tenant row — primary lookup by owner_user_id.
+  let { data: tenant, error: tenantErr } = await supabase
     .from('tenants')
     .select('*')
     .eq('owner_user_id', user.id)
@@ -49,6 +49,36 @@ export async function GET(req: Request) {
   if (tenantErr) {
     return Response.json({ error: tenantErr.message }, { status: 500 })
   }
+
+  // Self-heal: a tenant row CAN exist with owner_user_id = NULL when the
+  // activate wizard submitted without the URL carry-through (an earlier
+  // bug). On the next signed-in load we backfill the link via email so
+  // the tradie isn't permanently bounced to onboarding.
+  if (!tenant && user.email) {
+    const { data: byEmail } = await supabase
+      .from('tenants')
+      .select('*')
+      .eq('owner_email', user.email.toLowerCase())
+      .maybeSingle()
+    if (byEmail) {
+      const { error: linkErr } = await supabase
+        .from('tenants')
+        .update({ owner_user_id: user.id })
+        .eq('id', byEmail.id)
+      if (!linkErr) {
+        console.log('[tenant/me] backfilled owner_user_id from email match', {
+          tenantId: byEmail.id,
+          email: user.email,
+          userId: user.id,
+        })
+        tenant = { ...byEmail, owner_user_id: user.id }
+      } else {
+        console.warn('[tenant/me] backfill update failed', linkErr.message)
+        tenant = byEmail
+      }
+    }
+  }
+
   if (!tenant) {
     return Response.json({ error: 'no_tenant' }, { status: 404 })
   }

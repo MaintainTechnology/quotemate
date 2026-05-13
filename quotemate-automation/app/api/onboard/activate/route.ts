@@ -46,11 +46,32 @@ export async function POST(req: Request) {
     const defaults = defaultsForTrade(form.trade)
     const normalisedMobile = normaliseAuMobile(form.owner_mobile)
 
+    // Resolve owner_user_id authoritatively. The wizard CAN drop this
+    // value if URL params got lost or the Supabase session backfill
+    // didn't fire — and a NULL owner_user_id means the tradie can never
+    // sign back in (signin / /api/tenant/me both look up by user_id).
+    // Fall back to admin email lookup when the form didn't send one.
+    let resolvedOwnerUserId: string | null = form.owner_user_id || null
+    if (!resolvedOwnerUserId) {
+      const looked = await lookupUserIdByEmail(form.owner_email)
+      if (looked) {
+        resolvedOwnerUserId = looked
+        console.log('[activate] owner_user_id missing in payload — resolved from email', {
+          email: form.owner_email,
+          userId: looked,
+        })
+      } else {
+        console.warn('[activate] owner_user_id missing AND no auth user matches email', {
+          email: form.owner_email,
+        })
+      }
+    }
+
     // ─── 1. Insert tenants row ─────────────────────────────────
     const { data: tenant, error: tErr } = await supabase
       .from('tenants')
       .insert({
-        owner_user_id: form.owner_user_id || null,
+        owner_user_id: resolvedOwnerUserId,
         business_name: form.business_name,
         owner_first_name: form.owner_first_name,
         owner_last_name: form.owner_last_name || null,
@@ -209,4 +230,32 @@ function normaliseAuMobile(input: string): string {
   if (stripped.startsWith('04')) return `+61${stripped.slice(1)}`
   if (stripped.startsWith('4')) return `+61${stripped}`
   return stripped // fall through — Zod already validated shape
+}
+
+/**
+ * Resolve a Supabase auth user_id from an email via the admin listUsers
+ * API. Used as a fallback when the wizard didn't send owner_user_id, so
+ * the tenant row always lands with a valid user link. Returns null when
+ * no auth.users row matches (legitimate for SMS-only signups that never
+ * created a Supabase auth user yet).
+ */
+async function lookupUserIdByEmail(email: string): Promise<string | null> {
+  const target = email.trim().toLowerCase()
+  try {
+    // listUsers is paginated; tradie volume during pilot is tiny so a
+    // single page is plenty. If we ever grow past ~1000 active auth users
+    // this needs to switch to admin.getUserByEmail (Supabase v2.40+).
+    const { data, error } = await supabase.auth.admin.listUsers({ perPage: 200 })
+    if (error) {
+      console.warn('[activate] admin.listUsers failed', error.message)
+      return null
+    }
+    const match = data.users.find(
+      (u) => (u.email ?? '').trim().toLowerCase() === target,
+    )
+    return match?.id ?? null
+  } catch (e: any) {
+    console.warn('[activate] lookupUserIdByEmail threw', e?.message ?? String(e))
+    return null
+  }
 }
