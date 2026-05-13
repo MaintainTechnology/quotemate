@@ -1,9 +1,15 @@
 // /onboard/success — Maintain design. Dramatic phone number reveal.
 
 import Link from 'next/link'
+import { RetryPanel } from './RetryPanel'
 
 type Props = {
-  searchParams: Promise<{ tenant?: string; phone?: string; name?: string }>
+  searchParams: Promise<{
+    tenant?: string
+    phone?: string
+    name?: string
+    warning?: string
+  }>
 }
 
 export const metadata = {
@@ -12,7 +18,7 @@ export const metadata = {
 }
 
 export default async function OnboardSuccess({ searchParams }: Props) {
-  const { tenant, phone, name } = await searchParams
+  const { tenant, phone, name, warning } = await searchParams
   const firstName = name ?? 'mate'
   const phoneNumber = phone || null
   const smsHref = phoneNumber
@@ -55,19 +61,27 @@ export default async function OnboardSuccess({ searchParams }: Props) {
               Your QuoteMate number
             </span>
             {phoneNumber ? (
-              <div className="mt-4 font-mono text-[clamp(2rem,6vw,4rem)] font-bold text-text-pri tracking-tight leading-none">
+              <div
+                data-testid="success-phone-number"
+                className="mt-4 font-mono text-[clamp(2rem,6vw,4rem)] font-bold text-text-pri tracking-tight leading-none"
+              >
                 {formatAuMobile(phoneNumber)}
               </div>
             ) : (
-              <div className="mt-4 text-amber-300">
-                Number not yet assigned.{' '}
-                <Link href="/onboard" className="underline underline-offset-4">
-                  Retry activation
-                </Link>
-              </div>
+              <>
+                <div
+                  data-testid="success-no-number"
+                  className="mt-4 text-amber-300"
+                >
+                  Number not yet assigned — provisioning didn&rsquo;t finish.
+                </div>
+                <RetryPanel warning={warning ?? null} />
+              </>
             )}
             <p className="mt-4 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
-              Placeholder for now · real Twilio number once your account is funded
+              {phoneNumber
+                ? 'Real Twilio number routed to your AI receptionist'
+                : 'Hit retry above once your Twilio account is funded'}
             </p>
           </div>
 

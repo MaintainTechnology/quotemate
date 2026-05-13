@@ -230,6 +230,11 @@ function OnboardWizardInner() {
         phone: data.phoneNumber ?? '',
         name: form.owner_first_name,
       })
+      // Pass through the underlying provisioning failure reason so the
+      // success page can surface it next to the retry button. The API
+      // returns warning when ok:true,phoneNumber:null (Twilio/Vapi half
+      // didn't run) so the wizard doesn't show a generic confusing state.
+      if (data.warning) sp.set('warning', String(data.warning))
       router.push(`/onboard/success?${sp.toString()}`)
     } catch (err: any) {
       setError(err?.message ?? 'Activation failed')
