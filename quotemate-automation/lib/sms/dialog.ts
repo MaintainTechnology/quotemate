@@ -429,6 +429,63 @@ NON-NEGOTIABLE RULES
     Repeating "I'll send you a link" when they already have one is
     annoying.
 
+★ PIVOT HANDLING — customer changes their mind mid-conversation ★
+
+  A "pivot" is when the customer abandons a previously-confirmed
+  scope and asks for something materially different. Common triggers:
+
+    - "actually, can we change it to X instead"
+    - "switch to X"
+    - "I changed my mind, let's do X"
+    - "no, instead of [previous], I want X"
+    - "scrap that, what about X"
+    - After an inspection escalation: "OK can you change it to [non-
+      inspection variant]" (this is THE most common pivot — the
+      customer hears $199 and pivots to an auto-quoteable scope)
+
+  How to handle a pivot:
+
+  1. ACKNOWLEDGE the change explicitly. The customer needs to know you
+     understood the new request. Examples:
+       ✓ "Got it - switching to electric HWS instead of LPG gas."
+       ✓ "No worries, dropping the LPG path - electric it is."
+     ✗ "Hold tight, your quote's nearly ready" (HALLUCINATION — no
+        quote is in flight; you're still gathering info)
+
+  2. RESET the affected fields in your understanding. If the previous
+     scope had triggered an inspection escalation, the pivot REPLACES
+     that scope. The previous inspection offer is now VOID — do not
+     reference it in the new branch.
+
+  3. RE-EVALUATE the routing decision FROM SCRATCH against the pivoted
+     scope. The new scope might be auto-quoteable even though the old
+     scope wasn't. Common pivot routes:
+
+       LPG bottle HWS install (inspection-required)
+         ↳ pivot to "electric HWS"        → auto-quote (hot_water easy-5)
+         ↳ pivot to "natural gas HWS"     → auto-quote (hot_water easy-5)
+         ↳ pivot to "heat pump HWS"       → auto-quote (hot_water easy-5)
+
+       Switchboard work (inspection-required, electrical)
+         ↳ pivot to "just downlights"     → auto-quote (downlights easy-5)
+         ↳ pivot to "GPO replacement"     → auto-quote (power_points easy-5)
+
+       Bathroom renovation (inspection-required, plumbing)
+         ↳ pivot to "tap replacement"     → auto-quote (tap_replace easy-5)
+         ↳ pivot to "toilet replacement"  → auto-quote (toilet_replace easy-5)
+
+  4. CONTINUE the dialog with the new scope. If the pivoted scope still
+     needs qualifying questions (e.g. electric HWS needs size + location
+     confirmed), ask the next missing field. If the new scope is fully
+     specified, run the standard verification handshake (Rule 11) and
+     finish.
+
+  5. NEVER say "your quote's nearly ready" / "I'll handle it" / "give
+     me a shout" — those are STALLING phrases that imply a draft is
+     in flight when there isn't one. If you're still gathering info,
+     ASK the next question. If everything is captured, run the
+     verification handshake.
+
 11. VERIFICATION HANDSHAKE — required before action='finish'.
     Once you have ALL universal MUST-ASK fields (name, suburb, job_type)
     AND ALL per-job MUST-ASK fields, do NOT immediately set
@@ -775,6 +832,14 @@ function scrubVoiceWording(reply: string): string {
     .replace(/\bsorry we missed your call\b/gi, 'sorry we missed your message')
     .replace(/\bon (?:that |the |your )?call\b/gi, 'in your message')
     .replace(/\bgive (?:us )?a (?:quick )?callback\b/gi, 'send us a quick reply')
+    // Stalling phrases that imply a quote is being drafted when we're
+    // actually still gathering info. These leak when Haiku gets confused
+    // by a mid-conversation pivot (e.g. customer changes from LPG gas
+    // to electric HWS) and panics into "I'll handle it" mode. Better to
+    // not say anything than to lie about a quote being in progress.
+    .replace(/\bhold tight,?\s+your\s+quote'?s\s+nearly\s+ready[^.]*\.?/gi, '')
+    .replace(/\bgive me a shout[^.]*\b(?:i'?ll|i\s+will)\s+handle\s+it[^.]*\.?/gi, '')
+    .replace(/\babout a minute away\b/gi, '')
     // Em dashes / en dashes / horizontal bars → ASCII hyphen with single
     // spaces. These render fine on iMessage but show up as boxes / weird
     // characters on some Android skins, and Haiku-generated em dashes
