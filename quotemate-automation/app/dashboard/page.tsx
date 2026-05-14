@@ -111,9 +111,11 @@ type Quote = {
   trade: string | null
   inspection_required: boolean | null
   deposit_paid: boolean
-  // SMS thread that produced this quote (Phase A — communication
-  // history surfacing). Null for voice-sourced quotes; otherwise an
-  // ordered list of inbound/outbound messages capped at 60.
+  // Communication channel that produced this quote (Phase A + voice).
+  //   'sms'   → conversation_id points at sms_conversations
+  //   'voice' → messages come from parsed calls.transcript
+  //   null    → legacy pre-v6 or unlinked
+  channel: 'sms' | 'voice' | null
   conversation_id: string | null
   messages: ConvoMessage[]
 }
@@ -146,6 +148,7 @@ type Tab = 'overview' | 'account' | 'pricing' | 'services' | 'quotes' | 'chats'
  *  convert to a drafted quote. */
 type ChatRow = {
   id: string
+  channel: 'sms' | 'voice'
   from_number: string | null
   to_number: string | null
   status: string | null
@@ -154,6 +157,7 @@ type ChatRow = {
   turn_count: number
   created_at: string
   last_message_at: string | null
+  duration_seconds: number | null
   first_name: string | null
   job_type: string | null
   suburb: string | null
@@ -1787,6 +1791,7 @@ function QuoteCard({ q, isMultiTrade }: { q: Quote; isMultiTrade: boolean }) {
             <span className="font-extrabold text-base text-text-pri tracking-tight">
               {customerLabel}
             </span>
+            {q.channel && <ChannelBadge channel={q.channel} />}
             {q.suburb && (
               <span className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
                 · {q.suburb}
@@ -1910,7 +1915,7 @@ function QuoteCard({ q, isMultiTrade }: { q: Quote; isMultiTrade: boolean }) {
           )}
 
           {q.messages && q.messages.length > 0 && (
-            <Transcript messages={q.messages} />
+            <Transcript messages={q.messages} channel={q.channel} />
           )}
         </div>
       )}
@@ -1918,15 +1923,44 @@ function QuoteCard({ q, isMultiTrade }: { q: Quote; isMultiTrade: boolean }) {
   )
 }
 
-/** Render an SMS thread as a chat-bubble transcript. Customer messages
- *  align right (mimicking the customer's own phone view); AI/agent
- *  messages align left. Designed for the tradie to scan quickly while
- *  reviewing the quote. */
-function Transcript({ messages }: { messages: ConvoMessage[] }) {
+/** Small pill rendered in card headers to make the channel of origin
+ *  unambiguous: an SMS thread vs. a voice-call transcript look similar
+ *  in the expanded view, so the badge prevents the tradie from
+ *  misreading one for the other. Two-tone palette — emerald for SMS
+ *  (matches the inbound-bubble accent), violet for voice (visually
+ *  distinct so it doesn't blend with the SMS green). */
+function ChannelBadge({ channel }: { channel: 'sms' | 'voice' }) {
+  const tone =
+    channel === 'voice'
+      ? 'border-violet-500/60 bg-violet-500/10 text-violet-300'
+      : 'border-emerald-500/60 bg-emerald-500/10 text-emerald-300'
+  return (
+    <span
+      className={`inline-flex items-center font-mono text-[0.55rem] uppercase tracking-[0.16em] font-bold px-1.5 py-0.5 border ${tone}`}
+    >
+      {channel === 'voice' ? 'Voice' : 'SMS'}
+    </span>
+  )
+}
+
+/** Render an SMS thread or parsed voice transcript as a chat-bubble view.
+ *  Customer messages align right (mimicking the customer's own phone
+ *  view); AI/agent messages align left. Designed for the tradie to scan
+ *  quickly while reviewing the quote. The channel prop just relabels the
+ *  header — bubble rendering is identical for both. */
+function Transcript({
+  messages,
+  channel,
+}: {
+  messages: ConvoMessage[]
+  channel?: 'sms' | 'voice' | null
+}) {
+  const headerLabel =
+    channel === 'voice' ? 'Voice call transcript' : 'SMS conversation'
   return (
     <div>
       <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-text-dim font-bold mb-2 flex items-center justify-between">
-        <span>SMS conversation</span>
+        <span>{headerLabel}</span>
         <span className="text-text-dim font-normal normal-case tracking-normal">
           {messages.length} {messages.length === 1 ? 'message' : 'messages'}
         </span>
@@ -2083,6 +2117,7 @@ function ChatCard({ chat, isMultiTrade }: { chat: ChatRow; isMultiTrade: boolean
             <span className="font-semibold text-text-pri">
               {chat.first_name || chat.from_number || 'Unknown caller'}
             </span>
+            <ChannelBadge channel={chat.channel} />
             {chat.suburb && (
               <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
                 · {chat.suburb}
@@ -2137,7 +2172,7 @@ function ChatCard({ chat, isMultiTrade }: { chat: ChatRow; isMultiTrade: boolean
 
       {expanded && chat.messages.length > 0 && (
         <div className="border-t border-ink-line px-4 py-3 bg-ink-deep/30">
-          <Transcript messages={chat.messages} />
+          <Transcript messages={chat.messages} channel={chat.channel} />
         </div>
       )}
       {expanded && chat.messages.length === 0 && (

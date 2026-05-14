@@ -15,6 +15,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { UpdateSchema } from '@/lib/tenant/update-schema'
+import { parseVapiTranscript } from '@/lib/voice/parse-transcript'
 
 export const dynamic = 'force-dynamic'
 
@@ -197,12 +198,15 @@ export async function GET(req: Request) {
     trade: string | null
     customer_id: string | null
     inspection_required: boolean | null
+    /** When set, this intake came from a Vapi voice call (calls.id).
+     *  Drives the voice-transcript join below. */
+    call_id: string | null
   }
   let intakeMap: Record<string, IntakeJoin> = {}
   if (intakeIds.length > 0) {
     const { data: intakes } = await supabase
       .from('intakes')
-      .select('id, caller, suburb, job_type, trade, customer_id, inspection_required')
+      .select('id, caller, suburb, job_type, trade, customer_id, inspection_required, call_id')
       .in('id', intakeIds)
     intakeMap = Object.fromEntries(
       (intakes ?? []).map((i) => [
@@ -214,6 +218,7 @@ export async function GET(req: Request) {
           trade: (i.trade as string | null) ?? null,
           customer_id: (i.customer_id as string | null) ?? null,
           inspection_required: (i.inspection_required as boolean | null) ?? null,
+          call_id: (i.call_id as string | null) ?? null,
         },
       ]),
     )
@@ -271,6 +276,37 @@ export async function GET(req: Request) {
     }
   }
 
+  // Voice transcripts — for intakes that came from a Vapi call, load the
+  // raw transcript blob from the calls row and parse it into the same
+  // {direction, body, created_at} shape as SMS. The dashboard's existing
+  // <Transcript> component then renders voice calls with chat bubbles
+  // identical to SMS — visual parity, zero new client component.
+  const voiceCallIds: string[] = []
+  const callIdToIntakeId: Record<string, string> = {}
+  for (const [intakeId, info] of Object.entries(intakeMap)) {
+    if (info.call_id) {
+      voiceCallIds.push(info.call_id)
+      callIdToIntakeId[info.call_id] = intakeId
+    }
+  }
+  const voiceByIntake: Record<string, ConvoMessage[]> = {}
+  if (voiceCallIds.length > 0) {
+    const { data: callRows } = await supabase
+      .from('calls')
+      .select('id, transcript, ended_at')
+      .in('id', voiceCallIds)
+    for (const c of callRows ?? []) {
+      const intakeId = callIdToIntakeId[c.id as string]
+      if (!intakeId) continue
+      const parsed = parseVapiTranscript(
+        c.transcript as string | null,
+        c.ended_at as string | null,
+      )
+      // Same 60-turn cap as SMS conversations.
+      voiceByIntake[intakeId] = parsed.slice(0, 60)
+    }
+  }
+
   // Payments — surface whether the customer has paid a deposit /
   // inspection fee on each quote. We pull only succeeded rows so
   // partial/refunded payments don't flip the badge to paid.
@@ -292,6 +328,15 @@ export async function GET(req: Request) {
     const callerName = intake?.caller?.name?.trim() || null
     const callerPhone = intake?.caller?.phone?.trim() || null
     const convo = q.intake_id ? conversationByIntake[q.intake_id] : null
+    const voiceMessages = q.intake_id ? voiceByIntake[q.intake_id] : null
+    // Channel resolution: voice when the intake has a call_id (Vapi-
+    // sourced), SMS when an sms_conversations row joins to it, otherwise
+    // null (legacy pre-v6 or orphan intakes).
+    const channel: 'sms' | 'voice' | null = intake?.call_id
+      ? 'voice'
+      : convo
+        ? 'sms'
+        : null
     return {
       ...q,
       customer_first_name: callerName?.split(' ')[0] ?? null,
@@ -302,10 +347,12 @@ export async function GET(req: Request) {
       trade: intake?.trade ?? null,
       inspection_required: intake?.inspection_required ?? null,
       deposit_paid: paidQuoteIds.has(q.id as string),
-      // SMS thread that produced this quote — null for voice-sourced
-      // or legacy pre-v6 quotes that don't link a conversation.
+      // Channel + transcript: SMS thread for sms-sourced quotes, parsed
+      // Vapi transcript for voice-sourced. Both shapes match
+      // ConvoMessage[] so the dashboard renders them identically.
+      channel,
       conversation_id: convo?.conversationId ?? null,
-      messages: convo?.messages ?? [],
+      messages: voiceMessages ?? convo?.messages ?? [],
     }
   })
 

@@ -16,6 +16,7 @@
 // for reads (no RLS shipped yet).
 
 import { createClient } from '@supabase/supabase-js'
+import { parseVapiTranscript } from '@/lib/voice/parse-transcript'
 
 export const dynamic = 'force-dynamic'
 
@@ -124,14 +125,12 @@ export async function GET(req: Request) {
     }
   }
 
-  // Enrich each conversation row with its message thread + a
-  // surfaced first_name / job_type / suburb pulled from
-  // conversation_state.slots so the Chats tab can render a heading
-  // without doing the lookup client-side.
-  const chats = convos.map((c) => {
+  // SMS chat rows
+  const smsChats = convos.map((c) => {
     const slots = (c.conversation_state?.slots ?? {}) as Record<string, unknown>
     return {
       id: c.id,
+      channel: 'sms' as const,
       from_number: c.from_number,
       to_number: c.to_number,
       status: c.status,
@@ -140,6 +139,7 @@ export async function GET(req: Request) {
       turn_count: c.turn_count ?? 0,
       created_at: c.created_at,
       last_message_at: c.last_message_at,
+      duration_seconds: null as number | null,
       first_name: (slots.first_name as string | null) ?? null,
       job_type: (slots.job_type as string | null) ?? null,
       suburb: (slots.suburb as string | null) ?? null,
@@ -147,5 +147,93 @@ export async function GET(req: Request) {
     }
   })
 
-  return Response.json({ chats })
+  // Voice call rows — Vapi-sourced calls that produced an intake (or
+  // didn't, in the dropoff case). Same row shape as SMS so the Chats
+  // tab can merge + sort by activity time. Pull the most-recent
+  // CHAT_LIMIT calls for this tenant; the merge below sorts by
+  // last_message_at desc so SMS + voice interleave naturally.
+  type CallRow = {
+    id: string
+    caller_number: string | null
+    duration_seconds: number | null
+    transcript: string | null
+    ended_at: string | null
+    created_at: string
+  }
+  const callsRes = await supabase
+    .from('calls')
+    .select('id, caller_number, duration_seconds, transcript, ended_at, created_at')
+    .eq('tenant_id', tenant.id)
+    .order('ended_at', { ascending: false, nullsFirst: false })
+    .limit(CHAT_LIMIT)
+
+  const voiceCalls = (callsRes.data ?? []) as unknown as CallRow[]
+  // Per-call metadata pulled from the joined intake (caller name, suburb,
+  // job_type). Scoped per-request — must NOT live at module scope or it
+  // would leak across customers / tenants on warm Vercel function reuse.
+  const callMeta: Record<
+    string,
+    { first_name?: string | null; suburb?: string | null; job_type?: string | null }
+  > = {}
+  // Look up intake-linked quotes so the row can show the "Quote drafted"
+  // pill consistently with SMS rows. intake.call_id links calls → intakes.
+  const callIds = voiceCalls.map((c) => c.id)
+  let callToIntakeId: Record<string, string | null> = {}
+  if (callIds.length > 0) {
+    const { data: callIntakes } = await supabase
+      .from('intakes')
+      .select('id, call_id, caller, suburb, job_type')
+      .in('call_id', callIds)
+    callToIntakeId = Object.fromEntries(
+      (callIntakes ?? []).map((i) => [
+        i.call_id as string,
+        i.id as string,
+      ]),
+    )
+    // Also collect caller name / suburb / job_type by call_id for the
+    // row heading. SMS uses conversation_state.slots; voice has it on
+    // the intakes JSONB / scalar columns instead.
+    for (const ci of callIntakes ?? []) {
+      const cid = ci.call_id as string
+      const caller = (ci.caller as { name?: string } | null) ?? null
+      callMeta[cid] = {
+        first_name: caller?.name?.split(' ')[0] ?? null,
+        suburb: (ci.suburb as string | null) ?? null,
+        job_type: (ci.job_type as string | null) ?? null,
+      }
+    }
+  }
+
+  const voiceChats = voiceCalls.map((c) => ({
+    id: c.id,
+    channel: 'voice' as const,
+    from_number: c.caller_number,
+    to_number: null,
+    status: c.transcript ? 'done' : 'open',
+    conversation_type: 'customer_quote',
+    intake_id: callToIntakeId[c.id] ?? null,
+    turn_count: 0,
+    created_at: c.created_at,
+    last_message_at: c.ended_at ?? c.created_at,
+    duration_seconds: c.duration_seconds,
+    first_name: callMeta[c.id]?.first_name ?? null,
+    job_type: callMeta[c.id]?.job_type ?? null,
+    suburb: callMeta[c.id]?.suburb ?? null,
+    messages: parseVapiTranscript(c.transcript, c.ended_at).slice(0, MESSAGE_CAP_PER_CONVO),
+  }))
+
+  // Merge + sort by activity time so SMS and voice rows interleave
+  // naturally. The CHAT_LIMIT cap is applied AFTER the merge — we
+  // overfetched each channel to CHAT_LIMIT, so the merged list could
+  // be up to 2× as long; we slice back down to CHAT_LIMIT to keep the
+  // dashboard payload bounded.
+  const merged = [...smsChats, ...voiceChats]
+    .sort((a, b) => {
+      const at = a.last_message_at ? new Date(a.last_message_at).getTime() : 0
+      const bt = b.last_message_at ? new Date(b.last_message_at).getTime() : 0
+      return bt - at
+    })
+    .slice(0, CHAT_LIMIT)
+
+  return Response.json({ chats: merged })
 }
