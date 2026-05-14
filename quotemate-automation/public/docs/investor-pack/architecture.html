@@ -84,6 +84,46 @@
     .legend-mark.solid  { fill: var(--text-pri); }
     .legend-mark.dashed { fill: var(--accent); }
     .legend strong { color: var(--text-pri); }
+
+    /* zone band (used for the onboarding strip) — matches Overview page */
+    .zone-band {
+      fill: rgba(255, 255, 255, 0.02);
+      stroke: var(--ink-line);
+      stroke-width: 1;
+      stroke-dasharray: 3 3;
+    }
+    .zone-label {
+      fill: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    /* milestone box — orange accent for the "Receptionist LIVE" terminus */
+    .box.milestone rect.body {
+      fill: rgba(255, 90, 31, 0.06);
+      stroke: var(--accent);
+      stroke-width: 1.5;
+    }
+    .box.milestone rect.stripe { fill: var(--accent); }
+    .box.milestone .title { fill: var(--accent); }
+
+    /* powers handoff — solid orange line from onboarding strip to runtime */
+    .powers {
+      stroke: var(--accent);
+      stroke-width: 1.6;
+      fill: none;
+    }
+    .powers-label {
+      fill: var(--accent);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
   </style>
 </head>
 <body>
@@ -96,9 +136,11 @@
       </div>
       <h1>System Flow<br>Top to Bottom</h1>
       <p class="subtitle">
-        How a single customer text becomes a paid booking. Every box is a real module
-        running in production today. Solid lines are conversation flow. Dashed orange
-        lines are data lookups (pricing, catalogue, past quotes).
+        Two zones. <strong>Tradie onboarding</strong> runs left-to-right across the top — one
+        time, ends with the receptionist going live. <strong>Runtime</strong> below — how a
+        single customer text becomes a paid booking. Every box is a real module in production.
+        Solid lines are conversation flow. Dashed orange lines are data lookups (pricing,
+        catalogue, past quotes).
       </p>
       <nav class="nav-pills">
         <a href="./index.html">Overview</a>
@@ -116,7 +158,7 @@
       </div>
 
       <div class="diagram-wrap">
-        <svg viewBox="0 0 960 1820" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="QuoteMate system architecture flow diagram">
+        <svg viewBox="0 0 1000 2100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="QuoteMate system architecture flow diagram">
           <defs>
             <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="#7A8699"/>
@@ -124,11 +166,76 @@
             <marker id="arrow-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="#FF5A1F"/>
             </marker>
+            <marker id="arrow-powers" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#FF5A1F"/>
+            </marker>
           </defs>
+
+          <!-- ═════════════════════════════════════════════════════ -->
+          <!-- ZONE A · TRADIE ONBOARDING · ONE TIME                 -->
+          <!-- ═════════════════════════════════════════════════════ -->
+          <rect class="zone-band" x="20" y="20" width="960" height="180"/>
+          <text class="zone-label" x="40" y="44">Tradie Onboarding · One Time</text>
+
+          <!-- T1 Signs up -->
+          <g class="box built" transform="translate(25, 90)">
+            <rect class="body" width="170" height="80" rx="4"/>
+            <rect class="stripe" width="3" height="80"/>
+            <text class="title" x="85" y="42" text-anchor="middle">Signs up</text>
+            <text class="sub"   x="85" y="60" text-anchor="middle">web · or SMS link</text>
+          </g>
+          <path class="flow-line" d="M 195 130 L 220 130" marker-end="url(#arrow)"/>
+
+          <!-- T2 Fills tradie form -->
+          <g class="box built" transform="translate(220, 90)">
+            <rect class="body" width="170" height="80" rx="4"/>
+            <rect class="stripe" width="3" height="80"/>
+            <text class="title" x="85" y="42" text-anchor="middle">Fills form</text>
+            <text class="sub"   x="85" y="60" text-anchor="middle">trades · price · licence</text>
+          </g>
+          <path class="flow-line" d="M 390 130 L 415 130" marker-end="url(#arrow)"/>
+
+          <!-- T3 Hits Activate -->
+          <g class="box built" transform="translate(415, 90)">
+            <rect class="body" width="170" height="80" rx="4"/>
+            <rect class="stripe" width="3" height="80"/>
+            <text class="title" x="85" y="42" text-anchor="middle">Hits Activate</text>
+            <text class="sub"   x="85" y="60" text-anchor="middle">one tap</text>
+          </g>
+          <path class="flow-line" d="M 585 130 L 610 130" marker-end="url(#arrow)"/>
+
+          <!-- T4 Auto-provisions -->
+          <g class="box built" transform="translate(610, 90)">
+            <rect class="body" width="170" height="80" rx="4"/>
+            <rect class="stripe" width="3" height="80"/>
+            <text class="title" x="85" y="42" text-anchor="middle">Auto-provisions</text>
+            <text class="sub"   x="85" y="60" text-anchor="middle">Twilio · Vapi · welcome SMS</text>
+          </g>
+          <path class="flow-line" d="M 780 130 L 805 130" marker-end="url(#arrow)"/>
+
+          <!-- T5 Receptionist LIVE (milestone) -->
+          <g class="box milestone" transform="translate(805, 90)">
+            <rect class="body" width="170" height="80" rx="4"/>
+            <rect class="stripe" width="3" height="80"/>
+            <text class="title" x="85" y="42" text-anchor="middle">Receptionist Live</text>
+            <text class="sub"   x="85" y="60" text-anchor="middle">AU number · AI on 24/7</text>
+          </g>
+
+          <!-- POWERS handoff · T5 LIVE drops down + steps to center to power the runtime flow -->
+          <path class="powers" d="M 890 170 L 890 220 L 500 220 L 500 270" marker-end="url(#arrow-powers)"/>
+          <text class="powers-label" x="510" y="215">powers ↓</text>
+
+          <!-- ═════════════════════════════════════════════════════ -->
+          <!-- ZONE B · RUNTIME · EVERY CUSTOMER MESSAGE             -->
+          <!-- Wrapped in a translate group so all existing y-coords -->
+          <!-- shift down 260px to clear the onboarding strip above. -->
+          <!-- (Closing </g> is just before </svg> at the bottom.)   -->
+          <!-- ═════════════════════════════════════════════════════ -->
+          <g transform="translate(20, 260)">
 
           <!-- ═════════════ STAGE 1 · INBOUND ═════════════ -->
           <text class="stage-label" x="40" y="32">Stage 01 · Customer Reaches In</text>
-          <line class="stage-bar" x1="40" y1="42" x2="920" y2="42"/>
+          <line class="stage-bar" x1="40" y1="42" x2="900" y2="42"/>
 
           <!-- CUSTOMER box (centered) -->
           <g class="box built" transform="translate(380, 60)">
@@ -366,6 +473,8 @@
           <text class="stage-label" x="70" y="1740">Solid line = conversation flow</text>
           <text class="stage-label legend-mark dashed" x="40" y="1770">- - -</text>
           <text class="stage-label" x="70" y="1770">Dashed orange = data lookup feeding the drafter</text>
+
+          </g> <!-- /runtime translate group -->
         </svg>
       </div>
 
@@ -393,6 +502,11 @@
       </div>
       <div class="card">
         <dl class="kv">
+          <dt>Onboard 1</dt><dd>Tradie signs up — via the website OR by texting the shared QuoteMate number and getting a personal link back.</dd>
+          <dt>Onboard 2</dt><dd>Fills the tradie form — business name, trades (electrical / plumbing / both), per-trade hourly rate, markup, callout, licence body, ABN.</dd>
+          <dt>Onboard 3</dt><dd>Hits Activate. One tap — no manual steps after this.</dd>
+          <dt>Onboard 4</dt><dd>System auto-provisions in the background — Twilio buys a real AU number, Vapi spins up a voice assistant, welcome SMS lands on the tradie's phone.</dd>
+          <dt>Onboard 5</dt><dd>Receptionist Live — the AU number on the tradie's site is now answered by the AI 24/7. <em>This is the moment the runtime flow below becomes available.</em></dd>
           <dt>Stage 01</dt><dd>Customer texts, calls, or sends an MMS photo to the tradie's number.</dd>
           <dt>Stage 02</dt><dd>Twilio receives it on the per-tradie AU number and webhooks our app.</dd>
           <dt>Stage 03</dt><dd>SMS goes to the dialog agent (Haiku 4.5). Voice goes to Vapi (Haiku 4.5, parked behind env flag).</dd>
