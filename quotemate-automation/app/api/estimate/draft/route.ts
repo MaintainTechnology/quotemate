@@ -50,21 +50,22 @@ export async function POST(req: Request) {
       pricingBook = tenantBook ?? null
     }
     if (!pricingBook) {
-      // Fallback: pick the OLDEST pricing_book row for this trade.
+      // Fallback: pick a stable pricing_book row for this trade.
       // Bug #10 fix (2026-05-14): the previous `.limit(1)` had no
       // ORDER BY, so Postgres returned whichever row happened to be
       // physically first. With multiple plumbing tenants, this could
       // silently switch books between deploys, producing inconsistent
       // call-out fees and markups for intakes without a tenant_id.
-      // `order by created_at asc` gives a stable, auditable choice:
-      // the first-registered tenant for the trade wins. Used when the
-      // intake has no tenant_id (dev line / legacy) or when the
+      // `order by id asc` gives a stable, deterministic choice
+      // (pricing_book has no created_at column — IDs are UUIDs but
+      // lexicographic order is sufficient for determinism). Used when
+      // the intake has no tenant_id (dev line / legacy) or when the
       // tenant's own row hasn't been inserted yet.
       const { data: anyBook } = await supabase
         .from('pricing_book')
         .select('*')
         .eq('trade', intakeTrade)
-        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
         .limit(1)
         .maybeSingle()
       pricingBook = anyBook ?? null
