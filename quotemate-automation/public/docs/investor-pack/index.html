@@ -198,8 +198,9 @@
         <h2>Two-Sided Flow · Tradie + Customer</h2>
       </div>
       <p>Setup runs left-to-right across the top (one time, tradie only). After the receptionist
-      goes live, every customer text moves both sides through their own column. Orange arrows mark
-      the four moments where the two sides cross over.</p>
+      goes live, every customer text is handled by the AI end-to-end — the quote auto-sends to the
+      customer in ~60 seconds, and the same draft lands on the tradie's dashboard in parallel for
+      optional review and edits.</p>
 
       <div class="journey-wrap">
         <svg viewBox="0 0 1000 1260" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="QuoteMate two-sided process flow — tradie and customer">
@@ -308,9 +309,13 @@
             <text class="sub"   x="16" y="64">Camera · gallery · MMS</text>
           </g>
 
-          <!-- HANDOFF 2 · customer info crosses to tradie -->
+          <!-- HANDOFF 2a · parallel notification: quote also lands on tradie dashboard -->
           <path class="handoff" d="M 670 580 L 500 580 L 500 670 L 330 670" marker-end="url(#arrow-orange)"/>
-          <text class="handoff-label" x="500" y="568" text-anchor="middle">AI drafts quote</text>
+          <text class="handoff-label" x="500" y="568" text-anchor="middle">also on dashboard</text>
+
+          <!-- HANDOFF 2b · the actual AUTO-SEND path · C3 → C4 direct (current pilot behaviour) -->
+          <path class="handoff" d="M 770 610 L 770 830" marker-end="url(#arrow-orange)"/>
+          <text class="handoff-label" x="790" y="715">auto-sent · 60s</text>
 
           <!-- T5 Quote appears -->
           <g class="step built" transform="translate(130, 630)">
@@ -322,18 +327,14 @@
           </g>
           <path class="lane-line" d="M 230 710 L 230 730" marker-end="url(#arrow-grey)"/>
 
-          <!-- T6 Reviews + sends -->
+          <!-- T6 Reviews + edits · OPTIONAL post-send edit (customer already has the link) -->
           <g class="step built" transform="translate(130, 730)">
             <rect class="body" width="200" height="80" rx="4"/>
             <rect class="stripe" width="3" height="80"/>
-            <text class="num"   x="16" y="22">T6</text>
-            <text class="title" x="16" y="46">Reviews + sends</text>
-            <text class="sub"   x="16" y="64">Edits any tier · re-stripes</text>
+            <text class="num"   x="16" y="22">T6 · optional</text>
+            <text class="title" x="16" y="46">Reviews + edits</text>
+            <text class="sub"   x="16" y="64">post-send · re-issue stripe</text>
           </g>
-
-          <!-- HANDOFF 3 · tradie's quote crosses back to customer -->
-          <path class="handoff" d="M 330 780 L 500 780 L 500 870 L 670 870" marker-end="url(#arrow-orange)"/>
-          <text class="handoff-label" x="500" y="768" text-anchor="middle">quote sent</text>
 
           <!-- C4 Gets quote SMS -->
           <g class="step built" transform="translate(670, 830)">
