@@ -1065,22 +1065,27 @@ export async function POST(req: Request) {
       const currentReplyAsksForSuburb =
         /(what suburb|suburb is the job|suburb'?s the job|what suburb's|what'?s the suburb)/i.test(decision.reply_to_send)
 
-      // BUG D fix part 2: scan the latest inbound text for an inline name
-      // statement that the slot extractor may have missed. Customers
-      // packing their first message ("Hot water replacement, Sarah in
-      // Coogee.") expect the agent to capture name + suburb without
-      // re-asking. The slot extractor sometimes misses these when the name
-      // is embedded mid-sentence. Conservative pattern: look for "I'm X"
-      // / "name is X" / "this is X" / "X here" / "X in <suburb>".
-      const latestInbound =
-        [...turns].reverse().find((t) => t.direction === 'inbound')?.body ?? ''
+      // BUG D fix part 2 (extended 2026-05-14): scan EVERY inbound turn
+      // for an inline name / suburb statement that the slot extractor
+      // may have missed. Customers introduce themselves on turn 1
+      // ("Hi I'm Sam from Bondi") and the agent picks the name up
+      // verbatim in its reply, but on later turns the customer's
+      // shorter reply has no name in it. If we only scanned the latest
+      // inbound, the guard would fire on turn 3 and re-ask "what's
+      // your first name?" even though Sam was clearly stated on turn 1.
+      // Scanning the full inbound history fixes the regression
+      // (electric HWS stress test, 2026-05-14).
+      const allInboundText = turns
+        .filter((t) => t.direction === 'inbound')
+        .map((t) => t.body)
+        .join('\n')
       const inlineNameMatch =
-        latestInbound.match(/\b(?:i'?m|name'?s|name is|this is)\s+([A-Z][a-z]+)\b/i) ||
-        latestInbound.match(/\b([A-Z][a-z]{1,30})\s+(?:in|from|at)\s+[A-Z][a-z]+/) ||
-        latestInbound.match(/\b([A-Z][a-z]{1,30})\s+here\b/i)
+        allInboundText.match(/\b(?:i'?m|name'?s|name is|this is)\s+([A-Z][a-z]+)\b/i) ||
+        allInboundText.match(/\b([A-Z][a-z]{1,30})\s+(?:in|from|at)\s+[A-Z][a-z]+/) ||
+        allInboundText.match(/\b([A-Z][a-z]{1,30})\s+here\b/i)
       const inlineNameInTranscript = !!inlineNameMatch
       const inlineSuburbMatch =
-        latestInbound.match(/\b(?:in|from|at)\s+([A-Z][a-z]{2,30})\b/)
+        allInboundText.match(/\b(?:in|from|at)\s+([A-Z][a-z]{2,30})\b/)
       const inlineSuburbInTranscript = !!inlineSuburbMatch
 
       const isDialogSteering =

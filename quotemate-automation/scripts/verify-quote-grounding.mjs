@@ -45,9 +45,14 @@ const client = new Client({
 await client.connect();
 
 // ─── Pull the quote ──────────────────────────────────────────────────
+// Pull the intake's `trade` too — the audit needs to load the
+// pricing_book row + filter shared_materials/assemblies for that trade.
+// Plumbing books use a different hourly_rate ($120) and markup (20%)
+// than electrical ($110, 28%); without the trade filter the candidate
+// table contains cross-trade noise and the markup math is wrong.
 const { rows: quoteRows } = await client.query(
   `select q.*, i.job_type, i.suburb, i.scope, i.caller, i.confidence, i.confidence_reason,
-          i.inspection_required, i.risks
+          i.inspection_required, i.risks, i.trade
      from quotes q
      left join intakes i on i.id = q.intake_id
      where q.share_token = $1`,
@@ -65,6 +70,8 @@ console.log(`QUOTE  share_token=${token}`);
 console.log("═".repeat(72));
 console.log(`quote_id:           ${q.id}`);
 console.log(`intake_id:          ${q.intake_id}`);
+console.log(`trade:              ${q.trade ?? "(null — pre-v5 quote, will audit against full catalogue)"}`);
+console.log(`tenant_id:          ${q.tenant_id ?? "(null — pre-v6)"}`);
 console.log(`job_type:           ${q.job_type}`);
 console.log(`suburb:             ${q.suburb ?? "(null)"}`);
 console.log(`needs_inspection:   ${q.needs_inspection}`);
@@ -74,13 +81,32 @@ if (q.scope_of_works) {
   console.log(`scope_of_works:     "${q.scope_of_works.slice(0, 120)}${q.scope_of_works.length > 120 ? "…" : ""}"`);
 }
 
-// ─── Pull the (singleton) pricing book ───────────────────────────────
-// The schema uses `pricing_book` (singular) as a single-tenant table —
-// the validator loads "the" row, no per-quote FK.
-const { rows: pbRows } = await client.query(
-  `select * from pricing_book limit 1`,
-);
-const pb = pbRows[0] ?? null;
+// ─── Pull the pricing book for this quote's trade + tenant ───────────
+// pricing_book is multi-tenant + multi-trade since v5/v6. When the quote
+// has a tenant_id we use the exact (tenant_id, trade) row. When it
+// doesn't (test / legacy quotes), we collect EVERY row for the trade so
+// the candidate-price builder can try each markup — otherwise picking
+// the wrong tenant's markup makes the audit false-flag material lines.
+let pbCandidateRows = [];
+if (q.tenant_id && q.trade) {
+  const { rows } = await client.query(
+    `select * from pricing_book where tenant_id = $1 and trade = $2`,
+    [q.tenant_id, q.trade],
+  );
+  pbCandidateRows = rows;
+}
+if (pbCandidateRows.length === 0 && q.trade) {
+  const { rows } = await client.query(
+    `select * from pricing_book where trade = $1 order by default_markup_pct desc`,
+    [q.trade],
+  );
+  pbCandidateRows = rows;
+}
+if (pbCandidateRows.length === 0) {
+  const { rows } = await client.query(`select * from pricing_book order by id`);
+  pbCandidateRows = rows;
+}
+const pb = pbCandidateRows[0] ?? null;
 
 console.log("\n" + "─".repeat(72));
 console.log("PRICING BOOK  (singleton, the validator loads this row at draft time)");
@@ -101,47 +127,70 @@ if (!pb) {
 
 // ─── Catalogue: every shared_material + shared_assembly with their
 //      raw + marked-up candidate prices (matching validator logic). ──
+// Trade-filter when we have a trade — otherwise we'd be matching a
+// plumbing line against an electrical row that happens to share a price,
+// producing false MATCHES that hide real grounding gaps.
+const catSql = (table) => q.trade
+  ? `select id, name, default_unit_price_ex_gst, properties from ${table} where trade = $1`
+  : `select id, name, default_unit_price_ex_gst, properties from ${table}`;
+const catParams = q.trade ? [q.trade] : [];
 const [materials, assemblies] = await Promise.all([
-  client.query(`select id, name, default_unit_price_ex_gst, properties from shared_materials`),
-  client.query(`select id, name, default_unit_price_ex_gst, properties from shared_assemblies`),
+  client.query(catSql("shared_materials"), catParams),
+  client.query(catSql("shared_assemblies"), catParams),
 ]);
 
-const markupPct = parseFloat(pb?.default_markup_pct ?? 28);
-const hourlyRate = parseFloat(pb?.hourly_rate ?? 110);
+// Trade-aware defaults: plumbing book is $120/hr × 20%, electrical is
+// $110/hr × 28%. Fall back to defaults only when neither the row nor a
+// trade hint is available.
+const defaultMarkup = q.trade === "plumbing" ? 20 : 28;
+const defaultHourly = q.trade === "plumbing" ? 120 : 110;
+const candidateMarkups = pbCandidateRows.length > 0
+  ? [...new Set(pbCandidateRows.map((r) => parseFloat(r.default_markup_pct)))]
+  : [defaultMarkup];
+const markupPct = parseFloat(pb?.default_markup_pct ?? defaultMarkup);
+const hourlyRate = parseFloat(pb?.hourly_rate ?? defaultHourly);
 const apprenticeRate = parseFloat(pb?.apprentice_rate ?? 55);
 
-function withMarkup(p) {
-  return Math.round(p * (1 + markupPct / 100) * 100) / 100;
+function withMarkup(p, pct = markupPct) {
+  return Math.round(p * (1 + pct / 100) * 100) / 100;
 }
 
 // Build the candidate-price index — same as buildCandidatePrices() in
-// lib/estimate/validate.ts.
+// lib/estimate/validate.ts. For each catalogue row we emit:
+//   - the raw price
+//   - the price under EVERY markup that exists for this trade
+// so a null-tenant or legacy quote drafted at one tenant's markup still
+// audits cleanly even when the script can't pin the exact pricing_book.
 function asCandidates(rows) {
-  return rows.map((r) => ({
-    name: r.name,
-    raw: parseFloat(r.default_unit_price_ex_gst),
-    marked: withMarkup(parseFloat(r.default_unit_price_ex_gst)),
-    properties: r.properties,
-  }));
+  return rows.flatMap((r) => {
+    const raw = parseFloat(r.default_unit_price_ex_gst);
+    const variants = [{ name: r.name, raw, marked: raw, markup: 0 }];
+    for (const pct of candidateMarkups) {
+      variants.push({ name: r.name, raw, marked: withMarkup(raw, pct), markup: pct });
+    }
+    return variants;
+  });
 }
 const matCands = asCandidates(materials.rows);
 const asmCands = asCandidates(assemblies.rows);
 
 // Labour candidates — labour line items can match hourly_rate or
 // apprentice_rate at any quantity, so we match on the unit price.
+// Hourly rates in pricing_book are stored RAW; the plumbing book uses
+// $120/hr raw (already the customer-facing rate) so we don't apply
+// markup on labour candidates here.
+const tradeLabel = q.trade ? `${q.trade} hourly_rate` : "hourly_rate";
 const labourCands = [
-  { name: "hourly_rate (sparky)", raw: hourlyRate, marked: hourlyRate },
+  { name: tradeLabel, raw: hourlyRate, marked: hourlyRate },
   { name: "apprentice_rate", raw: apprenticeRate, marked: apprenticeRate },
 ];
 
 function matchPrice(unit, unitPrice) {
   const candidates = unit === "hr" ? labourCands : [...matCands, ...asmCands];
   for (const c of candidates) {
-    if (Math.abs(c.raw - unitPrice) <= PRICE_TOL) {
-      return { matched: c, basis: "raw" };
-    }
     if (Math.abs(c.marked - unitPrice) <= PRICE_TOL) {
-      return { matched: c, basis: `+${markupPct}% markup` };
+      const basis = (c.markup ?? 0) === 0 ? "raw" : `+${c.markup}% markup`;
+      return { matched: c, basis };
     }
   }
   return null;
@@ -190,7 +239,7 @@ for (const t of tiers) {
       console.log(
         `  #${i + 1}  ✗ UNGROUNDED  qty=${qty} ${li.unit} × $${unitPrice} = $${expectedTotal}\n` +
         `        line: "${li.description}"\n` +
-        `        no DB row in shared_materials, shared_assemblies, or pricing_book labour rates produces $${unitPrice} (raw or marked-up at ${markupPct}%)`,
+        `        no DB row in shared_materials, shared_assemblies, or pricing_book labour rates produces $${unitPrice} (raw or marked-up at ${candidateMarkups.join("%, ")}%)`,
       );
     }
 
@@ -232,26 +281,36 @@ console.log(`RELEVANT CATALOGUE ROWS  (matching "${jobKeyword}" or "fan")`);
 console.log("─".repeat(72));
 
 const matchPattern = `%${jobKeyword.split(" ")[0]}%`;
-const { rows: relevantMats } = await client.query(
-  `select 'material' as kind, name, default_unit_price_ex_gst, properties
-     from shared_materials
-     where name ilike $1 or name ilike '%fan%'
-   union all
-   select 'assembly' as kind, name, default_unit_price_ex_gst, properties
-     from shared_assemblies
-     where name ilike $1 or name ilike '%fan%'
-   order by kind, default_unit_price_ex_gst`,
-  [matchPattern],
-);
+const dumpSql = q.trade
+  ? `select 'material' as kind, name, default_unit_price_ex_gst, properties
+       from shared_materials
+       where trade = $2 and name ilike $1
+     union all
+     select 'assembly' as kind, name, default_unit_price_ex_gst, properties
+       from shared_assemblies
+       where trade = $2 and name ilike $1
+     order by kind, default_unit_price_ex_gst`
+  : `select 'material' as kind, name, default_unit_price_ex_gst, properties
+       from shared_materials
+       where name ilike $1
+     union all
+     select 'assembly' as kind, name, default_unit_price_ex_gst, properties
+       from shared_assemblies
+       where name ilike $1
+     order by kind, default_unit_price_ex_gst`;
+const dumpParams = q.trade ? [matchPattern, q.trade] : [matchPattern];
+const { rows: relevantMats } = await client.query(dumpSql, dumpParams);
 if (relevantMats.length === 0) {
   console.log("(no rows match — broader keyword may be needed)");
 } else {
   for (const r of relevantMats) {
     const raw = parseFloat(r.default_unit_price_ex_gst);
-    const marked = withMarkup(raw);
     const props = r.properties ? JSON.stringify(r.properties).slice(0, 60) : "";
+    const markedVariants = candidateMarkups
+      .map((pct) => `$${withMarkup(raw, pct).toFixed(2)} (+${pct}%)`)
+      .join("  ");
     console.log(
-      `  ${r.kind.padEnd(8)}  $${raw.toFixed(2).padStart(7)} (raw)  →  $${marked.toFixed(2).padStart(7)} (+${markupPct}% markup)  "${r.name}"${props ? "  " + props : ""}`,
+      `  ${r.kind.padEnd(8)}  $${raw.toFixed(2).padStart(7)} (raw)  →  ${markedVariants}  "${r.name}"${props ? "  " + props : ""}`,
     );
   }
 }
