@@ -678,7 +678,19 @@ export async function POST(req: Request) {
   // guard refuse to re-fire intake/quote even if the freshly-queried
   // intake_id is somehow racy or stale.
   const priorIntakeId = (conversation.intake_id as string | null) ?? null
-  const quoteAlreadyDrafted = !!priorIntakeId || prior?.status === 'done' || prior?.status === 'structuring'
+  // CRITICAL: only inherit quote-already-drafted status from `prior` when
+  // we are REUSING the prior conversation row. In mode='new', `prior` is
+  // a DIFFERENT (older) conversation for the same phone number; treating
+  // its status as ours would force every new conversation to status='done'
+  // (via the hasExistingIntake override below) and trigger spurious
+  // INFLIGHT canned hold-ons on subsequent inbound turns. Caught while
+  // stress-testing: a fresh conversation after yesterday's done quote
+  // was getting "just finalising the quote we were working on" canned
+  // replies on every other turn.
+  const quoteAlreadyDrafted =
+    mode !== 'new' && (
+      !!priorIntakeId || prior?.status === 'done' || prior?.status === 'structuring'
+    )
   // Slot state captured at request entry. Inside after() we run the slot
   // extractor against the customer's latest inbound and merge any updates
   // back into this state, then persist + pass into the dialog Haiku call.
