@@ -46,6 +46,39 @@
     /* legend inside the journey wrap — class to replace inline strong styles */
     .journey-wrap + .legend strong,
     .legend strong { color: var(--text-pri); }
+
+    /* AI ON IT status block — fills the empty tradie column space during
+       customer-only steps (C1-C3). Tells the "tradie not interrupted"
+       value story instead of leaving dead space. */
+    .ai-status rect.bg {
+      fill: rgba(255, 90, 31, 0.04);
+      stroke: rgba(255, 90, 31, 0.32);
+      stroke-width: 1;
+      stroke-dasharray: 4 4;
+    }
+    .ai-status .label {
+      fill: var(--accent);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+    .ai-status .line {
+      fill: var(--text-sec);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .ai-status .pulse {
+      fill: var(--accent);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.3em;
+      opacity: 0.55;
+    }
     .zone-label {
       fill: var(--text-dim);
       font-family: 'JetBrains Mono', monospace;
@@ -233,6 +266,18 @@
           <!-- COLUMN HEADERS (recurring zone only) -->
           <text class="lane-header tradie"   x="230" y="305" text-anchor="middle">Tradie</text>
           <text class="lane-header customer" x="770" y="305" text-anchor="middle">Customer</text>
+
+          <!-- AI ON IT · fills the empty tradie space while customer C1-C3 plays out.
+               Turns the dead space into the product's headline value prop: the
+               tradie's phone stays quiet, the AI handles intake autonomously. -->
+          <g class="ai-status" transform="translate(130, 330)">
+            <rect class="bg" width="200" height="280" rx="4"/>
+            <text class="label" x="100" y="118" text-anchor="middle">AI is on it</text>
+            <text class="line"  x="100" y="148" text-anchor="middle">tradie phone</text>
+            <text class="line"  x="100" y="166" text-anchor="middle">stays quiet</text>
+            <text class="line"  x="100" y="194" text-anchor="middle">no interruptions</text>
+            <text class="pulse" x="100" y="232" text-anchor="middle">· · ·</text>
+          </g>
 
           <!-- C1 Texts the number -->
           <g class="step built" transform="translate(670, 330)">
