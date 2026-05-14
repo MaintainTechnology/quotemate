@@ -15,24 +15,115 @@ function capitaliseFirst(s: string): string {
 
 /**
  * Quote-updated SMS — fired when the tradie edits a quote via the
- * /q/<token> edit overlay. Tells the customer their quote has been
- * revised and points them at the same /q/<token> URL (the link is
- * stable; only the underlying tier prices + Stripe Sessions changed).
+ * /q/<token> edit overlay and chooses to notify the customer.
  *
- * Stays short (<160 chars) so it lands as a single SMS segment.
+ * Same shape as buildQuoteSms (full three-tier breakdown with prices,
+ * deposit amounts, and per-tier Stripe pay links) so the customer sees
+ * the latest numbers without having to open the quote page first.
+ *
+ * Lead line differs from the original quote SMS — "Quick update from
+ * your tradie" / "Your tradie revised your quote" — so the customer
+ * understands this is a refresh, not a duplicate of the original send.
+ *
+ * Multi-segment is expected here (the full quote with three tier
+ * breakdowns rarely fits in 160 chars). The trade-off is intentional:
+ * the customer should be able to see the new prices in their notification
+ * preview, not have to tap a link first.
  */
-export function buildQuoteUpdatedSms(opts: {
-  firstName?: string
-  quoteUrl: string
-}): string {
-  const first = (opts.firstName ?? '').split(' ')[0] || ''
-  const lead = first ? `Hi ${first}, ` : 'Hi, '
-  const variants = [
-    `${lead}your quote was just updated by the tradie. Latest version: ${opts.quoteUrl}\n\n- QuoteMate`,
-    `${lead}tradie tweaked the pricing on your quote. Updated version: ${opts.quoteUrl}\n\n- QuoteMate`,
-    `${lead}quick heads-up - your quote has been revised. Tap for the latest: ${opts.quoteUrl}\n\n- QuoteMate`,
+export function buildQuoteUpdatedSms(intake: Intake, quote: Quote): string {
+  // Inspection-required quotes use the dedicated inspection layout but
+  // still get an "updated" preamble so the customer knows the tradie
+  // touched the quote.
+  if (quote.needs_inspection) {
+    return buildInspectionQuoteUpdatedSms(intake, quote)
+  }
+
+  const firstName = (intake.caller?.name ?? '').split(' ')[0] || 'there'
+  const timeframe = (quote.estimated_timeframe ?? '').toLowerCase().trim()
+  const depositPct = typeof quote.deposit_pct === 'string' ? parseFloat(quote.deposit_pct) : (quote.deposit_pct ?? 0)
+  const hasPayLinks = !!quote.pay_links && Object.values(quote.pay_links).some(Boolean)
+
+  const leadVariants = [
+    `Quick update from your tradie — your quote has been revised.`,
+    `Your tradie just tweaked your quote. Here are the latest numbers.`,
+    `Update: your tradie has refreshed your quote.`,
   ]
-  return gsm7Safe(pickVariant(variants))
+
+  const lines: string[] = []
+  lines.push(`Hi ${firstName},`)
+  lines.push('')
+  lines.push(pickVariant(leadVariants))
+  if (timeframe) {
+    lines.push(`Estimated timeframe: ${timeframe}.`)
+  }
+  lines.push('')
+  if (quote.quote_view_url) {
+    lines.push(`View full quote: ${quote.quote_view_url}`)
+    lines.push('')
+  }
+
+  const tierCount = ([quote.good, quote.better, quote.best].filter(Boolean) as Tier[]).length
+  const heading =
+    tierCount === 1 ? 'YOUR OPTION' :
+    tierCount === 2 ? '2 OPTIONS' :
+    tierCount === 3 ? '3 OPTIONS' :
+    'YOUR OPTIONS'
+  if (hasPayLinks && depositPct > 0) {
+    lines.push(`${heading} (inc 10% GST - ${depositPct}% deposit to confirm):`)
+  } else {
+    lines.push(`${heading} (inc 10% GST):`)
+  }
+  lines.push('')
+
+  for (const key of ['good', 'better', 'best'] as const) {
+    const tier = quote[key]
+    if (!tier) continue
+    const price = incGst(tier.subtotal_ex_gst)
+    const deposit = depositPct > 0 ? Math.round(price * depositPct / 100) : null
+    const recommended = quote.selected_tier === key ? ' (recommended)' : ''
+
+    const headerSuffix = deposit ? ` (deposit $${deposit})` : ''
+    lines.push(`${key.toUpperCase()}: $${price}${recommended}${headerSuffix}`)
+
+    const label = tierLabel(tier)
+    if (label) lines.push(`- ${label}`)
+    const comps = tierComponents(tier, intake.job_type)
+    if (comps) lines.push(`- ${comps}`)
+
+    const payUrl = quote.pay_links?.[key]
+    if (payUrl) lines.push(`Tap to pay: ${payUrl}`)
+
+    lines.push('')
+  }
+
+  lines.push('Reply or call back if anything looks off.')
+  lines.push('')
+  lines.push('- QuoteMate')
+
+  return gsm7Safe(lines.join('\n'))
+}
+
+function buildInspectionQuoteUpdatedSms(intake: Intake, quote: Quote): string {
+  const firstName = (intake.caller?.name ?? '').split(' ')[0] || 'there'
+  const inspectionUrl = quote.pay_links?.inspection
+  const lines: string[] = []
+  lines.push(`Hi ${firstName},`)
+  lines.push('')
+  lines.push(`Your tradie has updated your quote. It still needs a quick site visit before a final price.`)
+  lines.push('')
+  if (quote.quote_view_url) {
+    lines.push(`View full quote: ${quote.quote_view_url}`)
+    lines.push('')
+  }
+  if (inspectionUrl) {
+    lines.push('Tap to lock in your site visit ($199 refundable, credited toward your final quote):')
+    lines.push(inspectionUrl)
+  } else {
+    lines.push('Call us back to lock in the site visit.')
+  }
+  lines.push('')
+  lines.push('- QuoteMate')
+  return gsm7Safe(lines.join('\n'))
 }
 
 // ════════════════════════════════════════════════════════════════════

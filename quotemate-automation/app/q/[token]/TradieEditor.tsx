@@ -81,6 +81,11 @@ export default function TradieEditor({ quoteId, initialTiers, gstRegistered }: P
   )
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Confirmation modal — opens when the tradie clicks "Save". They
+  // pick whether the customer gets an updated-quote SMS or the edit
+  // saves silently. Smart-default = notify if any tier headline
+  // subtotal changed, silent if only labels/descriptions moved.
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -115,7 +120,42 @@ export default function TradieEditor({ quoteId, initialTiers, gstRegistered }: P
   // Render nothing until we know, and nothing afterward if not the owner.
   if (!check?.owner) return null
 
-  async function handleSave() {
+  // Compute whether any tier's headline subtotal has actually changed
+  // from the initial state. Used as the smart-default for the customer
+  // notify confirmation modal — if prices moved, default to "send
+  // update"; if only labels/descriptions changed, default to "save
+  // quietly". The tradie can override either way.
+  function anyTierPriceChanged(): boolean {
+    for (const k of TIER_KEYS) {
+      const t = tiers[k]
+      const initial = initialTiers[k]
+      if (!t && !initial) continue
+      if (!t || !initial) return true
+      const newSubtotal = t.lines.reduce(
+        (acc, l) => acc + Number(l.quantity || 0) * Number(l.unit_price_ex_gst || 0),
+        0,
+      )
+      const oldSubtotal = Number(initial.subtotal_ex_gst ?? 0)
+      if (Math.abs(newSubtotal - oldSubtotal) > 0.001) return true
+    }
+    return false
+  }
+
+  // Step 1 — clicked from the main "Save" button. Opens the confirm
+  // modal but doesn't yet POST anything.
+  function openSaveConfirm() {
+    if (!accessToken) {
+      setError('Session expired — refresh and sign in again.')
+      return
+    }
+    setError(null)
+    setConfirmOpen(true)
+  }
+
+  // Step 2 — chosen from the confirm modal. POSTs the edit with
+  // notify_customer flag set to the tradie's pick, then closes
+  // everything and refreshes the server-rendered page.
+  async function handleSave(notifyCustomer: boolean) {
     if (!accessToken) {
       setError('Session expired — refresh and sign in again.')
       return
@@ -123,7 +163,7 @@ export default function TradieEditor({ quoteId, initialTiers, gstRegistered }: P
     setError(null)
     setSubmitting(true)
     try {
-      const payload: Record<TierKey, unknown> = {} as Record<TierKey, unknown>
+      const payload: Record<string, unknown> = {}
       for (const k of TIER_KEYS) {
         const t = tiers[k]
         if (!t) continue
@@ -138,6 +178,8 @@ export default function TradieEditor({ quoteId, initialTiers, gstRegistered }: P
           })),
         }
       }
+      payload.notify_customer = notifyCustomer
+
       const res = await fetch(`/api/quote/${quoteId}/edit`, {
         method: 'POST',
         headers: {
@@ -152,6 +194,7 @@ export default function TradieEditor({ quoteId, initialTiers, gstRegistered }: P
       }
       // Force a server re-render so the page reflects the new tier
       // subtotals, headline total, and Stripe URLs.
+      setConfirmOpen(false)
       setOpen(false)
       router.refresh()
     } catch (e: unknown) {
@@ -397,12 +440,70 @@ export default function TradieEditor({ quoteId, initialTiers, gstRegistered }: P
               </button>
               <button
                 type="button"
-                onClick={handleSave}
+                onClick={openSaveConfirm}
                 disabled={submitting}
                 className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-5 py-2.5 text-xs uppercase tracking-wider transition-colors disabled:opacity-50"
               >
                 {submitting ? 'Saving…' : 'Save · Re-issue links'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Confirm modal · pick whether to notify the customer ─── */}
+      {confirmOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-60 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+        >
+          <div className="w-full max-w-md bg-ink-card border border-ink-line shadow-2xl">
+            <div className="px-6 pt-6 pb-4 border-b border-ink-line">
+              <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-text-dim">
+                Confirm save
+              </div>
+              <h3 className="mt-2 font-extrabold uppercase tracking-tight text-lg text-text-pri">
+                Send the updated quote<br />to the customer?
+              </h3>
+              <p className="mt-3 text-sm text-text-sec leading-relaxed">
+                {anyTierPriceChanged()
+                  ? 'Prices have changed — the customer should get the new numbers as an SMS.'
+                  : 'Only labels or descriptions changed. You can save quietly if you don\'t want to ping the customer.'}
+              </p>
+            </div>
+
+            <div className="px-6 py-5 flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={() => handleSave(true)}
+                disabled={submitting}
+                className="w-full inline-flex items-center justify-center gap-2 bg-accent hover:bg-accent-press text-white font-bold px-4 py-3 text-xs uppercase tracking-[0.14em] transition-colors disabled:opacity-50"
+              >
+                {submitting ? 'Sending…' : 'Send update · full quote SMS'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSave(false)}
+                disabled={submitting}
+                className="w-full inline-flex items-center justify-center bg-transparent border border-ink-line hover:border-text-sec text-text-pri font-mono text-[0.7rem] uppercase tracking-[0.14em] px-4 py-3 transition-colors disabled:opacity-50"
+              >
+                Save quietly · no SMS
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmOpen(false)}
+                disabled={submitting}
+                className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim hover:text-text-sec mt-1 disabled:opacity-50"
+              >
+                Back to edits
+              </button>
+
+              {error && (
+                <div className="mt-2 border border-rose-900/70 bg-rose-950/50 text-rose-200 px-3 py-2 text-xs">
+                  {error}
+                </div>
+              )}
             </div>
           </div>
         </div>

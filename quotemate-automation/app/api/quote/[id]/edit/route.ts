@@ -61,6 +61,17 @@ const BodySchema = z.object({
   good: TierEditSchema.optional(),
   better: TierEditSchema.optional(),
   best: TierEditSchema.optional(),
+  // Controls whether the customer is SMS'd an update after the save.
+  // Tradie picks this from the confirmation modal in TradieEditor:
+  //   true   — send full updated quote SMS (default when any tier price
+  //            changed; tradie can override)
+  //   false  — save silently (default when only labels/descriptions
+  //            changed; tradie can also force a silent save)
+  //   undef  — legacy callers fall back to the prior auto-send behaviour
+  //            (notify whenever any tier subtotal changed). Preserved so
+  //            scripts/integrations that hit this endpoint pre-modal
+  //            keep working.
+  notify_customer: z.boolean().optional(),
 })
 
 type TierEdit = z.infer<typeof TierEditSchema>
@@ -112,7 +123,7 @@ export async function POST(
   const { data: quote } = await supabase
     .from('quotes')
     .select(
-      'id, tenant_id, intake_id, share_token, status, paid_at, selected_tier, good, better, best, stripe_links, total_inc_gst',
+      'id, tenant_id, intake_id, share_token, status, paid_at, selected_tier, good, better, best, stripe_links, total_inc_gst, needs_inspection, inspection_reason, estimated_timeframe',
     )
     .eq('id', quoteId)
     .maybeSingle()
@@ -296,14 +307,26 @@ export async function POST(
     )
   }
 
-  // Notify the customer that their quote was updated. Without this the
-  // customer's prior SMS link still points at /q/<token> (URL is stable)
-  // but they don't know the price changed underneath. We fire AFTER the
-  // response returns so the tradie's UI update isn't blocked on SMS
-  // dispatch, and we only fire when at least one tier's subtotal
-  // actually changed (cosmetic edits like a label change don't need the
-  // customer to be re-pinged).
-  if (changedTiers.length > 0) {
+  // Notify the customer that their quote was updated. Three modes,
+  // driven by the optional `notify_customer` flag on the request body:
+  //
+  //   true       — always send the update SMS, even if only a label
+  //                changed. Tradie explicitly opted in via the
+  //                TradieEditor confirmation modal.
+  //   false      — skip the SMS entirely. Tradie chose "save quietly"
+  //                in the modal, typically because they're mid-edit or
+  //                only fixing typos.
+  //   undefined  — legacy auto-send behaviour: notify whenever any tier
+  //                subtotal changed. Preserved so older clients hitting
+  //                this endpoint pre-modal keep working.
+  //
+  // We always fire AFTER the response returns so the tradie's UI update
+  // isn't blocked on SMS dispatch.
+  const shouldNotify =
+    edits.notify_customer === true ||
+    (edits.notify_customer === undefined && changedTiers.length > 0)
+
+  if (shouldNotify) {
     after(async () => {
       try {
         // Resolve customer phone from the intake.caller JSONB. Voice-
@@ -335,10 +358,44 @@ export async function POST(
         }
         const fromNumber = tenantSmsNumber ?? process.env.TWILIO_SMS_NUMBER ?? undefined
 
-        const text = buildQuoteUpdatedSms({
-          firstName,
-          quoteUrl: `${appUrl}/q/${quote.share_token as string}`,
-        })
+        // Build the full updated-quote SMS — same shape as the original
+        // buildQuoteSms output (three tier breakdown with prices + pay
+        // links) but with an "updated" preamble so the customer sees the
+        // refresh framing. Construct the SMS-shaped quote payload from
+        // the updated tier JSON we just persisted.
+        // Build the full updated-quote SMS — same shape as the original
+        // buildQuoteSms output (three tier breakdown with prices + pay
+        // links) but with an "updated" preamble so the customer sees the
+        // refresh framing. Construct the SMS-shaped quote payload from
+        // the updated tier JSON we just persisted.
+        const text = buildQuoteUpdatedSms(
+          {
+            caller: (intake?.caller as { name?: string } | null) ?? null,
+            job_type: ((intake?.job_type as string | null) ?? 'other') as string,
+            scope: (intake?.scope as { item_count?: number } | null) ?? null,
+          },
+          {
+            // Cast our internal TierJson (optional label) to the SMS
+            // template's stricter Tier shape — at this point every tier
+            // we kept around has a label populated, either from the
+            // edit body or the pre-existing JSON.
+            good: nextTiers.good as unknown as { label: string; subtotal_ex_gst: number } | null,
+            better: nextTiers.better as unknown as { label: string; subtotal_ex_gst: number } | null,
+            best: nextTiers.best as unknown as { label: string; subtotal_ex_gst: number } | null,
+            selected_tier: (quote.selected_tier as 'good' | 'better' | 'best' | null) ?? null,
+            estimated_timeframe: (quote.estimated_timeframe as string | null) ?? null,
+            needs_inspection: !!quote.needs_inspection,
+            inspection_reason: (quote.inspection_reason as string | null) ?? null,
+            pay_links: Object.fromEntries(
+              Object.entries(stripeLinks).filter(([, v]) => !!v),
+            ) as Partial<Record<'good' | 'better' | 'best' | 'inspection', string>>,
+            deposit_pct: 30,
+            quote_view_url: `${appUrl}/q/${quote.share_token as string}`,
+            scope_of_works: null,
+            scope_short: null,
+            assumptions: null,
+          },
+        )
         const result = await dispatchQuoteMessage({
           to: callerNumber,
           text,
