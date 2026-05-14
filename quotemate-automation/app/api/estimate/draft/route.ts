@@ -161,17 +161,26 @@ export async function POST(req: Request) {
     )
     const draft = estimation.draft
 
-    // Surface grounding failures clearly in the Vercel logs.
+    // Surface grounding failures clearly in the Vercel logs. Log EVERY
+    // failure individually (not just the first) — when the validator
+    // rejects 2-3 lines on the same draft, knowing only the first
+    // failure makes diagnosis pointlessly slow. Each line gets its own
+    // structured entry tagged with the same intake_id so a single
+    // Vercel log filter ("grounding check failed") returns the full set.
     if (estimation.downgradedToInspection) {
-      const failureCount = estimation.groundingFailures?.length ?? 0
-      const firstFailure = estimation.groundingFailures?.[0]
+      const failures = estimation.groundingFailures ?? []
       log.err('grounding check failed — downgrading quote to inspection-required', null, {
-        total_failures: failureCount,
-        first_failure_tier: firstFailure?.tier ?? 'n/a',
-        first_failure_description: firstFailure?.description ?? 'n/a',
-        first_failure_unit: firstFailure?.unit ?? 'n/a',
-        first_failure_price: firstFailure?.unit_price_ex_gst ?? 'n/a',
-        first_failure_expected: firstFailure?.expected ?? 'n/a',
+        total_failures: failures.length,
+      })
+      failures.forEach((f, i) => {
+        log.err(`grounding check failed — line ${i + 1}/${failures.length}`, null, {
+          tier: f.tier,
+          line_index: f.lineIndex,
+          description: f.description,
+          unit: f.unit,
+          unit_price_ex_gst: f.unit_price_ex_gst,
+          expected: f.expected,
+        })
       })
     }
     const tierCount = [draft.good, draft.better, draft.best].filter(Boolean).length
@@ -242,6 +251,20 @@ export async function POST(req: Request) {
     })
     log.ok('routing decided', { routing_decision })
 
+    // When the validator downgraded the quote, attach the rejected line
+    // items to risk_flags so they're queryable from the dashboard / SQL
+    // without scrolling Vercel logs. Each entry is structured JSON so
+    // future tooling can parse it; the human-readable description goes
+    // first for at-a-glance debugging.
+    const riskFlags = [...(draft.risk_flags ?? [])]
+    if (estimation.downgradedToInspection) {
+      for (const f of estimation.groundingFailures ?? []) {
+        riskFlags.push(
+          `[grounding] tier=${f.tier} line#${f.lineIndex} ${f.description} — unit=${f.unit} × $${f.unit_price_ex_gst} — expected: ${f.expected}`,
+        )
+      }
+    }
+
     log.step('inserting quotes row', { tenant_id: intakeTenantId })
     const shareToken = generateShareToken()
     const { data: quote } = await supabase.from('quotes').insert({
@@ -253,7 +276,7 @@ export async function POST(req: Request) {
       status: 'draft',
       scope_of_works:      draft.scope_of_works,
       assumptions:         draft.assumptions      ?? [],
-      risk_flags:          draft.risk_flags       ?? [],
+      risk_flags:          riskFlags,
       good:                goodTier,
       better:              betterTier,
       best:                bestTier,
