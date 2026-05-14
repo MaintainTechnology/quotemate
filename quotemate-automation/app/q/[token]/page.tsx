@@ -16,6 +16,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getTierPhoto } from '@/lib/quote/tier-photos'
 import { refreshSignedUrl } from '@/lib/storage/upload'
+import { CustomerPhotosBlock } from './CustomerPhotosBlock'
 import { generatePreviewImage } from '@/lib/preview/generate'
 import { generateSampleImages } from '@/lib/preview/samples'
 import { PreviewSection } from './PreviewSection'
@@ -142,9 +143,67 @@ export default async function PublicQuotePage(props: {
     ? (intake.photo_paths as string[]).filter((p): p is string => typeof p === 'string' && p.length > 0)
     : []
 
-  const customerPhotoUrls: string[] = photoPaths.length === 0 ? [] : (
-    await Promise.all(photoPaths.map(p => refreshSignedUrl(p).catch(() => null)))
-  ).filter((u): u is string => !!u)
+  // ─── photo_request_token + live photo-paths fallback ────────────────
+  //
+  // The intake snapshot above is the canonical "what was attached at
+  // structure time" record. For the new in-page Step 02 upload widget
+  // we ALSO need:
+  //   1. The photo_request_token so the client component can POST to
+  //      /api/upload/<token> (same endpoint the SMS link hits).
+  //   2. A fallback to live calls/sms_conversations.photo_paths so
+  //      that photos uploaded AFTER intake/structure (via the new
+  //      in-page widget OR a late SMS-link click) still render on the
+  //      next page refresh — without needing the upload route to also
+  //      mutate the intake snapshot.
+  //
+  // The "strict per-quote scoping" concern from the original comment
+  // only matters when intake.photo_paths is non-empty; when it's empty
+  // we know the customer hasn't attached anything yet, so falling back
+  // to live can't bleed photos from another quote.
+  let uploadToken: string | null = null
+  let liveSignedUrls: string[] = []
+  const callId = (intake?.call_id ?? null) as string | null
+  if (callId) {
+    const { data: call } = await supabase
+      .from('calls')
+      .select('photo_request_token, photo_paths')
+      .eq('id', callId)
+      .maybeSingle()
+    if (call) {
+      uploadToken = (call.photo_request_token as string | null) ?? null
+      if (photoPaths.length === 0) {
+        const livePaths = Array.isArray(call.photo_paths)
+          ? (call.photo_paths as string[]).filter((p): p is string => typeof p === 'string' && p.length > 0)
+          : []
+        liveSignedUrls = livePaths.length === 0 ? [] : (
+          await Promise.all(livePaths.map(p => refreshSignedUrl(p).catch(() => null)))
+        ).filter((u): u is string => !!u)
+      }
+    } else {
+      const { data: convo } = await supabase
+        .from('sms_conversations')
+        .select('photo_request_token, photo_paths')
+        .eq('id', callId)
+        .maybeSingle()
+      if (convo) {
+        uploadToken = (convo.photo_request_token as string | null) ?? null
+        if (photoPaths.length === 0) {
+          const livePaths = Array.isArray(convo.photo_paths)
+            ? (convo.photo_paths as string[]).filter((p): p is string => typeof p === 'string' && p.length > 0)
+            : []
+          liveSignedUrls = livePaths.length === 0 ? [] : (
+            await Promise.all(livePaths.map(p => refreshSignedUrl(p).catch(() => null)))
+          ).filter((u): u is string => !!u)
+        }
+      }
+    }
+  }
+
+  const customerPhotoUrls: string[] = photoPaths.length === 0
+    ? liveSignedUrls
+    : (
+        await Promise.all(photoPaths.map(p => refreshSignedUrl(p).catch(() => null)))
+      ).filter((u): u is string => !!u)
 
   // ─── AI preview + sample-gallery state for this render + Trigger 2 ───
   const previewStatus = (quote.preview_status as
@@ -314,8 +373,8 @@ export default async function PublicQuotePage(props: {
           </NumberedSection>
         ) : null}
 
-        {/* ─── Customer-supplied photos ──────────────────── */}
-        <CustomerPhotos urls={customerPhotoUrls} />
+        {/* ─── Step 02 · Customer photos (always rendered, three states) ─── */}
+        <CustomerPhotosBlock urls={customerPhotoUrls} uploadToken={uploadToken} />
 
         {/* ─── AI preview + sample gallery ─────────────────
             Renders for BOTH auto-priced and inspection-required quotes.
@@ -651,42 +710,9 @@ function NumberedSection({
   )
 }
 
-function CustomerPhotos({ urls }: { urls: string[] }) {
-  if (urls.length === 0) return null
-  const cols =
-    urls.length === 1 ? 'grid-cols-1' :
-    urls.length === 2 ? 'grid-cols-1 sm:grid-cols-2' :
-    'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
-
-  return (
-    <NumberedSection
-      number="02"
-      title="Photos you sent"
-      subtitle="Your tradie reviewed these to draft the quote below. Tap any photo to view full-size."
-      className="mt-6"
-    >
-      <div className={`grid gap-3 sm:gap-4 ${cols}`}>
-        {urls.map((url, i) => (
-          <a
-            key={i}
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            className="block aspect-4/3 overflow-hidden border border-ink-line bg-ink-deep transition-all hover:border-accent/60 hover:scale-[1.01]"
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={url}
-              alt={`Customer photo ${i + 1}`}
-              loading="lazy"
-              className="h-full w-full object-cover"
-            />
-          </a>
-        ))}
-      </div>
-    </NumberedSection>
-  )
-}
+// Photos rendering moved into CustomerPhotosBlock.tsx — the new
+// client component handles all three states (empty / fulfilled /
+// uploading) so Step 02 is always visible on the page.
 
 function TierCard({
   keyName,
