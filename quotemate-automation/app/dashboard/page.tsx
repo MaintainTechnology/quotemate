@@ -82,6 +82,12 @@ type TierJson = {
   timeframe?: string
 } | null
 
+type ConvoMessage = {
+  direction: 'inbound' | 'outbound'
+  body: string
+  created_at: string
+}
+
 type Quote = {
   id: string
   created_at: string
@@ -105,6 +111,11 @@ type Quote = {
   trade: string | null
   inspection_required: boolean | null
   deposit_paid: boolean
+  // SMS thread that produced this quote (Phase A — communication
+  // history surfacing). Null for voice-sourced quotes; otherwise an
+  // ordered list of inbound/outbound messages capped at 60.
+  conversation_id: string | null
+  messages: ConvoMessage[]
 }
 
 type PricingBook = NonNullable<Pricing> & { trade: 'electrical' | 'plumbing' }
@@ -128,7 +139,26 @@ type DashboardData = {
   licences: LicenceRow[]
 }
 
-type Tab = 'overview' | 'account' | 'pricing' | 'services' | 'quotes'
+type Tab = 'overview' | 'account' | 'pricing' | 'services' | 'quotes' | 'chats'
+
+/** SMS conversation summary returned by /api/tenant/chats. Drives the
+ *  Chats tab — communication history including leads that didn't
+ *  convert to a drafted quote. */
+type ChatRow = {
+  id: string
+  from_number: string | null
+  to_number: string | null
+  status: string | null
+  conversation_type: string | null
+  intake_id: string | null
+  turn_count: number
+  created_at: string
+  last_message_at: string | null
+  first_name: string | null
+  job_type: string | null
+  suburb: string | null
+  messages: ConvoMessage[]
+}
 
 // ─── Page ─────────────────────────────────────────────────────────
 
@@ -293,7 +323,7 @@ export default function DashboardPage() {
 
       {/* Tab nav */}
       <nav className="mt-8 flex flex-wrap gap-1 border-b border-ink-line">
-        {(['overview', 'account', 'pricing', 'services', 'quotes'] as const).map(
+        {(['overview', 'account', 'pricing', 'services', 'quotes', 'chats'] as const).map(
           (t) => (
             <button
               key={t}
@@ -322,6 +352,11 @@ export default function DashboardPage() {
         {tab === 'pricing' && <PricingTab data={data} onSave={patch} />}
         {tab === 'services' && <ServicesTab data={data} onSave={patch} />}
         {tab === 'quotes' && <QuotesTab data={data} />}
+        {tab === 'chats' && (
+          <ChatsTab accessToken={accessToken} isMultiTrade={
+            Array.isArray(data.tenant.trades) && data.tenant.trades.length > 1
+          } />
+        )}
       </section>
     </Shell>
   )
@@ -1873,10 +1908,262 @@ function QuoteCard({ q, isMultiTrade }: { q: Quote; isMultiTrade: boolean }) {
               <p className="text-sm text-text-sec">{q.estimated_timeframe}</p>
             </div>
           )}
+
+          {q.messages && q.messages.length > 0 && (
+            <Transcript messages={q.messages} />
+          )}
         </div>
       )}
     </div>
   )
+}
+
+/** Render an SMS thread as a chat-bubble transcript. Customer messages
+ *  align right (mimicking the customer's own phone view); AI/agent
+ *  messages align left. Designed for the tradie to scan quickly while
+ *  reviewing the quote. */
+function Transcript({ messages }: { messages: ConvoMessage[] }) {
+  return (
+    <div>
+      <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-text-dim font-bold mb-2 flex items-center justify-between">
+        <span>SMS conversation</span>
+        <span className="text-text-dim font-normal normal-case tracking-normal">
+          {messages.length} {messages.length === 1 ? 'message' : 'messages'}
+        </span>
+      </div>
+      <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+        {messages.map((m, i) => {
+          const isInbound = m.direction === 'inbound'
+          return (
+            <div
+              key={i}
+              className={`flex ${isInbound ? 'justify-end' : 'justify-start'}`}
+            >
+              <div
+                className={`max-w-[78%] px-3 py-2 text-sm leading-snug ${
+                  isInbound
+                    ? 'bg-accent/15 text-text-pri border border-accent/30'
+                    : 'bg-ink-card text-text-sec border border-ink-line'
+                }`}
+              >
+                <div className="whitespace-pre-wrap break-words">{m.body}</div>
+                <div className="mt-1 font-mono text-[0.55rem] uppercase tracking-[0.12em] text-text-dim">
+                  {isInbound ? 'Customer' : 'AI'} · {formatTime(m.created_at)}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ─── Chats tab ────────────────────────────────────────────────────
+//
+// Lazy-loaded communication-history view. Lists every SMS conversation
+// for this tenant (capped at 30 most-recent) — including ones that
+// never produced a quote (escalated to inspection, ended without a
+// job, in-progress dialogs, lead drop-offs). Each row is collapsible
+// to reveal the full transcript. Complement to the inline transcript
+// embedded on each Quote card in the Quotes tab.
+
+function ChatsTab({
+  accessToken,
+  isMultiTrade,
+}: {
+  accessToken: string | null
+  isMultiTrade: boolean
+}) {
+  const [chats, setChats] = useState<ChatRow[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    if (!accessToken) {
+      setError('Not signed in')
+      setLoading(false)
+      return
+    }
+    ;(async () => {
+      try {
+        const res = await fetch('/api/tenant/chats', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          cache: 'no-store',
+        })
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          throw new Error(body?.error ?? `HTTP ${res.status}`)
+        }
+        const json = (await res.json()) as { chats: ChatRow[] }
+        if (!cancelled) setChats(json.chats ?? [])
+      } catch (err: unknown) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err))
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken])
+
+  if (loading) {
+    return (
+      <Card title="Chats">
+        <p className="font-mono text-xs uppercase tracking-[0.16em] text-text-dim">
+          Loading conversations…
+        </p>
+      </Card>
+    )
+  }
+  if (error) {
+    return (
+      <Card title="Chats">
+        <ErrorBanner>{error}</ErrorBanner>
+      </Card>
+    )
+  }
+  if (!chats || chats.length === 0) {
+    return (
+      <Card title="Chats">
+        <p className="text-sm text-text-dim">
+          No conversations yet. Customers who text your QuoteMate number
+          will appear here.
+        </p>
+      </Card>
+    )
+  }
+
+  return (
+    <Card
+      title="Chats"
+      subtitle={`Last ${chats.length} SMS ${chats.length === 1 ? 'conversation' : 'conversations'}. Click a row to expand the full thread.`}
+    >
+      <div className="space-y-3">
+        {chats.map((c) => (
+          <ChatCard key={c.id} chat={c} isMultiTrade={isMultiTrade} />
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+function ChatCard({ chat, isMultiTrade }: { chat: ChatRow; isMultiTrade: boolean }) {
+  const [expanded, setExpanded] = useState(false)
+  const trade = chat.job_type
+    ? deriveTradeFromJobType(chat.job_type)
+    : null
+  const inboundCount = chat.messages.filter((m) => m.direction === 'inbound').length
+
+  // Status badge tone:
+  //   done           → green (completed dialog)
+  //   structuring    → amber (quote drafting in progress)
+  //   open           → grey (mid-dialog)
+  //   anything else  → grey (default)
+  const statusTone =
+    chat.status === 'done'
+      ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/60'
+      : chat.status === 'structuring'
+        ? 'bg-amber-500/10 text-amber-300 border-amber-500/60'
+        : 'bg-ink-deep text-text-dim border-ink-line'
+
+  return (
+    <div className="border border-ink-line bg-ink-card">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-start justify-between gap-4 px-4 py-3 text-left hover:bg-ink-deep/40 transition-colors"
+      >
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span className="font-semibold text-text-pri">
+              {chat.first_name || chat.from_number || 'Unknown caller'}
+            </span>
+            {chat.suburb && (
+              <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+                · {chat.suburb}
+              </span>
+            )}
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+            <span className="font-mono uppercase tracking-[0.12em] text-text-sec">
+              {chat.job_type ? formatJobType(chat.job_type) : 'Unclassified'}
+              {isMultiTrade && trade ? ` · ${trade}` : ''}
+            </span>
+            <span className="text-text-dim">·</span>
+            <span className="font-mono text-text-dim whitespace-nowrap">
+              {chat.last_message_at
+                ? `${formatDate(chat.last_message_at)} ${formatTime(chat.last_message_at)}`
+                : formatDate(chat.created_at)}
+            </span>
+            {chat.from_number && (
+              <>
+                <span className="text-text-dim">·</span>
+                <span className="font-mono text-text-dim">{chat.from_number}</span>
+              </>
+            )}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <span
+              className={`inline-flex items-center font-mono text-[0.6rem] uppercase tracking-[0.14em] font-bold px-2 py-0.5 border ${statusTone}`}
+            >
+              {chat.status ?? 'unknown'}
+            </span>
+            {chat.intake_id && (
+              <span className="inline-flex items-center font-mono text-[0.6rem] uppercase tracking-[0.14em] font-bold px-2 py-0.5 border border-accent/60 bg-accent/10 text-accent">
+                Quote drafted
+              </span>
+            )}
+            {chat.conversation_type === 'tradie_registration' && (
+              <span className="inline-flex items-center font-mono text-[0.6rem] uppercase tracking-[0.14em] font-bold px-2 py-0.5 border border-text-sec/40 bg-text-sec/5 text-text-sec">
+                Tradie signup
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="shrink-0 text-right">
+          <div className="font-mono text-xs text-text-dim">
+            {inboundCount} in · {chat.messages.length - inboundCount} out
+          </div>
+          <div className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim mt-0.5">
+            {expanded ? '− Hide' : '+ Open'}
+          </div>
+        </div>
+      </button>
+
+      {expanded && chat.messages.length > 0 && (
+        <div className="border-t border-ink-line px-4 py-3 bg-ink-deep/30">
+          <Transcript messages={chat.messages} />
+        </div>
+      )}
+      {expanded && chat.messages.length === 0 && (
+        <div className="border-t border-ink-line px-4 py-3 bg-ink-deep/30">
+          <p className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+            No messages recorded on this conversation.
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Lightweight job_type → trade map; mirrors lib/intake/schema's
+ *  deriveTradeFromJobType but kept local here so the dashboard doesn't
+ *  need a server-only import. */
+function deriveTradeFromJobType(jobType: string): 'electrical' | 'plumbing' | null {
+  const ELECTRICAL = new Set([
+    'downlights', 'power_points', 'ceiling_fans', 'smoke_alarms', 'outdoor_lighting',
+  ])
+  const PLUMBING = new Set([
+    'blocked_drain', 'hot_water', 'tap_repair', 'tap_replace', 'toilet_repair', 'toilet_replace',
+  ])
+  if (ELECTRICAL.has(jobType)) return 'electrical'
+  if (PLUMBING.has(jobType)) return 'plumbing'
+  return null
 }
 
 function MetaCell({
@@ -2024,6 +2311,8 @@ function tabLabel(t: Tab): string {
       return 'Services'
     case 'quotes':
       return 'Quotes'
+    case 'chats':
+      return 'Chats'
   }
 }
 

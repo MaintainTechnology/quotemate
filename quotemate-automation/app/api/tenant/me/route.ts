@@ -219,6 +219,58 @@ export async function GET(req: Request) {
     )
   }
 
+  // Conversation transcripts — join each quote to the SMS messages
+  // that produced it so the dashboard can render "what the customer
+  // actually said" alongside the AI-drafted quote. Two-hop join via
+  // sms_conversations.intake_id → quotes.intake_id. Capped to the last
+  // 60 messages per conversation to keep the payload bounded (a typical
+  // dialog finishes in <20 messages; 60 is more than enough headroom).
+  type ConvoMessage = {
+    direction: 'inbound' | 'outbound'
+    body: string
+    created_at: string
+  }
+  const conversationByIntake: Record<string, { conversationId: string; messages: ConvoMessage[] }> = {}
+  if (intakeIds.length > 0) {
+    const { data: convos } = await supabase
+      .from('sms_conversations')
+      .select('id, intake_id')
+      .in('intake_id', intakeIds)
+    const convoToIntake: Record<string, string> = {}
+    const conversationIds: string[] = []
+    for (const c of convos ?? []) {
+      if (c.intake_id && c.id) {
+        convoToIntake[c.id as string] = c.intake_id as string
+        conversationIds.push(c.id as string)
+      }
+    }
+    if (conversationIds.length > 0) {
+      const { data: msgs } = await supabase
+        .from('sms_messages')
+        .select('conversation_id, direction, body, created_at')
+        .in('conversation_id', conversationIds)
+        .order('created_at', { ascending: true })
+      for (const m of msgs ?? []) {
+        const intakeId = convoToIntake[m.conversation_id as string]
+        if (!intakeId) continue
+        const bucket = conversationByIntake[intakeId] ?? {
+          conversationId: m.conversation_id as string,
+          messages: [],
+        }
+        // Cap to last 60 per conversation — typical dialog is <20 turns
+        // so this is just a safety bound for outliers / loops.
+        if (bucket.messages.length < 60) {
+          bucket.messages.push({
+            direction: m.direction as 'inbound' | 'outbound',
+            body: m.body as string,
+            created_at: m.created_at as string,
+          })
+        }
+        conversationByIntake[intakeId] = bucket
+      }
+    }
+  }
+
   // Payments — surface whether the customer has paid a deposit /
   // inspection fee on each quote. We pull only succeeded rows so
   // partial/refunded payments don't flip the badge to paid.
@@ -239,6 +291,7 @@ export async function GET(req: Request) {
     const intake = q.intake_id ? intakeMap[q.intake_id] : null
     const callerName = intake?.caller?.name?.trim() || null
     const callerPhone = intake?.caller?.phone?.trim() || null
+    const convo = q.intake_id ? conversationByIntake[q.intake_id] : null
     return {
       ...q,
       customer_first_name: callerName?.split(' ')[0] ?? null,
@@ -249,6 +302,10 @@ export async function GET(req: Request) {
       trade: intake?.trade ?? null,
       inspection_required: intake?.inspection_required ?? null,
       deposit_paid: paidQuoteIds.has(q.id as string),
+      // SMS thread that produced this quote — null for voice-sourced
+      // or legacy pre-v6 quotes that don't link a conversation.
+      conversation_id: convo?.conversationId ?? null,
+      messages: convo?.messages ?? [],
     }
   })
 
