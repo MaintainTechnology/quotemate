@@ -336,20 +336,29 @@ export default function DashboardPage() {
       <div className="mt-6 lg:mt-8 lg:grid lg:grid-cols-[14rem_1fr] lg:gap-8">
         <Sidebar tab={tab} setTab={setTab} quoteCount={data.quotes.length} />
         <section className="mt-6 lg:mt-0 pb-20 min-w-0">
-          {tab === 'overview' && (
-            <OverviewTab data={data} accessToken={accessToken} setTab={setTab} />
-          )}
-          {tab === 'account' && (
-            <AccountTab data={data} onSave={patch} onSaveTrades={saveTrades} />
-          )}
-          {tab === 'pricing' && <PricingTab data={data} onSave={patch} />}
-          {tab === 'services' && <ServicesTab data={data} onSave={patch} />}
-          {tab === 'quotes' && <QuotesTab data={data} />}
-          {tab === 'chats' && (
-            <ChatsTab accessToken={accessToken} isMultiTrade={
-              Array.isArray(data.tenant.trades) && data.tenant.trades.length > 1
-            } />
-          )}
+          {/* `key={tab}` forces a tear-down + remount when the user
+              switches tabs, so the inner fade-in keyframe re-fires.
+              OverviewTab's chat fetch lives behind an effect so the
+              brief loading state on first paint is acceptable. */}
+          <div
+            key={tab}
+            className="motion-safe:animate-[fade-in_220ms_ease-out_both]"
+          >
+            {tab === 'overview' && (
+              <OverviewTab data={data} accessToken={accessToken} setTab={setTab} />
+            )}
+            {tab === 'account' && (
+              <AccountTab data={data} onSave={patch} onSaveTrades={saveTrades} />
+            )}
+            {tab === 'pricing' && <PricingTab data={data} onSave={patch} />}
+            {tab === 'services' && <ServicesTab data={data} onSave={patch} />}
+            {tab === 'quotes' && <QuotesTab data={data} />}
+            {tab === 'chats' && (
+              <ChatsTab accessToken={accessToken} isMultiTrade={
+                Array.isArray(data.tenant.trades) && data.tenant.trades.length > 1
+              } />
+            )}
+          </div>
         </section>
       </div>
     </Shell>
@@ -634,44 +643,40 @@ function OverviewTab({
       : 'Live'
 
   return (
-    <div className="space-y-8">
-      {/* HERO — your QuoteMate number, big and proud */}
-      <div className="bg-ink-card border border-ink-line p-6 md:p-8">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="space-y-6 motion-safe:animate-[fade-in_180ms_ease-out_both]">
+      {/* HERO — compact QuoteMate number. Tighter padding + a single
+          one-line subtitle instead of the prior wordy explainer. */}
+      <div className="bg-ink-card border border-ink-line p-5 md:p-6 motion-safe:animate-[fade-up_240ms_ease-out_both]">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <div className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-text-dim">
+            <div className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-text-dim">
               Your QuoteMate number
             </div>
             {smsNumber ? (
-              <div className="mt-3 font-mono text-[clamp(1.5rem,4vw,2.5rem)] font-bold text-text-pri tracking-tight leading-none">
+              <div className="mt-2 font-mono text-[clamp(1.25rem,3vw,2rem)] font-bold text-text-pri tracking-tight leading-none">
                 {formatAuMobile(smsNumber)}
               </div>
             ) : (
-              <div className="mt-3 text-amber-300">
-                Provisioning didn&rsquo;t finish on activate. Hit retry — your
-                account + pricing book are already saved, only the Twilio +
-                Vapi half needs to re-run.
+              <div className="mt-2 text-amber-300 text-sm max-w-md">
+                Provisioning didn&rsquo;t finish on activate. Hit retry —
+                your account + pricing book are saved.
               </div>
             )}
-            <p className="mt-3 text-sm text-text-sec max-w-md">
-              Customer SMS lands at <span className="font-mono">/api/sms/inbound</span> →
-              your pricing book. Customer calls land at Vapi → your AI assistant.
-            </p>
             {needsProvisioning && <RetryProvisionButton />}
           </div>
-          <div className="flex flex-col items-end gap-2">
+          <div className="flex flex-col items-end gap-1.5">
             <Pill
               tone={needsProvisioning ? 'warn' : isStubTwilio ? 'warn' : 'ok'}
               label={
                 needsProvisioning
-                  ? 'PENDING · Provisioning incomplete'
+                  ? 'Pending'
                   : isStubTwilio
-                    ? 'STUB · Twilio provisioning OFF'
-                    : 'LIVE · Real Twilio number'
+                    ? 'Stub mode'
+                    : 'Live'
               }
             />
             {tenant.activated_at && (
-              <span className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-text-dim">
+              <span className="font-mono text-[0.55rem] uppercase tracking-[0.16em] text-text-dim">
                 Activated {formatDate(tenant.activated_at)}
               </span>
             )}
@@ -680,7 +685,8 @@ function OverviewTab({
       </div>
 
       {/* KPI ROW — at-a-glance triage state. Numbered-card pattern (big
-          orange mono value, uppercase label). */}
+          orange mono value, uppercase label). Each tile carries its
+          own fade-up so the row reveals smoothly on first mount. */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-ink-line border border-ink-line">
         <KpiTile
           label="Quotes total"
@@ -707,7 +713,7 @@ function OverviewTab({
       </div>
 
       {/* TWO-COLUMN GRID — latest quotes hero + latest chats sidebar */}
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-6 lg:grid-cols-3 motion-safe:animate-[fade-up_280ms_ease-out_both]">
         {/* Latest quotes — primary scan target, takes 2/3 of the row */}
         <section className="lg:col-span-2 bg-ink-card border border-ink-line">
           <header className="flex items-center justify-between px-5 py-3 border-b border-ink-line">
@@ -768,7 +774,7 @@ function OverviewTab({
       </div>
 
       {/* LOWER GRID — AI receptionist setup + wired-up checklist */}
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-2 motion-safe:animate-[fade-up_320ms_ease-out_both]">
         <Card title="AI receptionist setup" subtitle="The technical bits Vapi + Twilio need to route real customers.">
           <dl className="grid gap-x-8 gap-y-4 text-sm">
             <Row label="Twilio SMS number" value={smsNumber ?? null} mono />
@@ -960,10 +966,43 @@ function Kpi({
   )
 }
 
+/** Animate an integer from 0 to `target` over `durationMs`. Returns the
+ *  current displayed value. Uses requestAnimationFrame with an
+ *  ease-out-cubic curve so the number lands softly. Honours
+ *  prefers-reduced-motion by snapping immediately to the target. */
+function useCountUp(target: number, durationMs = 700): number {
+  const [n, setN] = useState(0)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !Number.isFinite(target)) {
+      setN(target)
+      return
+    }
+    const reduced =
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (reduced || target <= 0) {
+      setN(target)
+      return
+    }
+    let raf = 0
+    const start = performance.now()
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - start) / durationMs)
+      // ease-out-cubic
+      const eased = 1 - Math.pow(1 - p, 3)
+      setN(Math.round(target * eased))
+      if (p < 1) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [target, durationMs])
+  return n
+}
+
 /** Hero KPI tile — uses the brand's numbered-card pattern (big orange
  *  mono number, white uppercase label, ink-card panel). Used in the
- *  Overview KPI row. The compact `Kpi` above is still used elsewhere
- *  for label/value pairs inside section cards. */
+ *  Overview KPI row. Numeric values tick up from 0 on first mount via
+ *  useCountUp; string values render as-is. */
 function KpiTile({
   label,
   value,
@@ -975,6 +1014,9 @@ function KpiTile({
   hint?: string
   tone?: 'default' | 'warn' | 'ok'
 }) {
+  const isNumber = typeof value === 'number'
+  const animated = useCountUp(isNumber ? value : 0)
+  const display = isNumber ? animated : value
   const valueTone =
     tone === 'warn'
       ? 'text-amber-300'
@@ -982,14 +1024,14 @@ function KpiTile({
         ? 'text-emerald-300'
         : 'text-accent'
   return (
-    <div className="bg-ink-card border border-ink-line p-5 md:p-6">
+    <div className="bg-ink-card border border-ink-line p-5 md:p-6 motion-safe:animate-[fade-up_240ms_ease-out_both]">
       <div className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-text-dim">
         {label}
       </div>
       <div
-        className={`mt-2 font-mono font-extrabold leading-none text-[clamp(1.75rem,3vw,2.5rem)] ${valueTone}`}
+        className={`mt-2 font-mono font-extrabold leading-none text-[clamp(1.75rem,3vw,2.5rem)] tabular-nums ${valueTone}`}
       >
-        {value}
+        {display}
       </div>
       {hint && (
         <div className="mt-2 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-sec">
@@ -2079,11 +2121,21 @@ function toNum(v: number | string | null | undefined): number | null {
 
 // ─── Quotes tab ───────────────────────────────────────────────────
 
+// Page size for the Quotes + Chats lists. Tradies typically scan the
+// last few days at a time; 10 lets the page sit at one screen with
+// collapsed rows. Increase if real-volume usage shows it's too small.
+const LIST_PAGE_SIZE = 10
+
 function QuotesTab({ data }: { data: DashboardData }) {
   const isMultiTrade =
     Array.isArray(data.tenant.trades) && data.tenant.trades.length > 1
 
-  if (data.quotes.length === 0) {
+  const [visible, setVisible] = useState(LIST_PAGE_SIZE)
+  const total = data.quotes.length
+  const visibleQuotes = data.quotes.slice(0, visible)
+  const remaining = Math.max(0, total - visible)
+
+  if (total === 0) {
     return (
       <Card title="Quotes">
         <p className="text-sm text-text-dim">
@@ -2096,13 +2148,24 @@ function QuotesTab({ data }: { data: DashboardData }) {
   return (
     <Card
       title="Quotes"
-      subtitle="Last 20 drafted by your AI. Click a row to expand the scope, tier breakdown, and customer-facing link."
+      subtitle={`${Math.min(visible, total)} of ${total} shown · click a row to see the scope, tier breakdown, and customer page.`}
     >
-      <div className="space-y-4">
-        {data.quotes.map((q) => (
+      <div className="space-y-2">
+        {visibleQuotes.map((q) => (
           <QuoteCard key={q.id} q={q} isMultiTrade={isMultiTrade} />
         ))}
       </div>
+      {remaining > 0 && (
+        <div className="mt-6 flex justify-center">
+          <button
+            type="button"
+            onClick={() => setVisible((v) => v + LIST_PAGE_SIZE)}
+            className="inline-flex items-center gap-2 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-pri font-mono text-[0.7rem] uppercase tracking-[0.16em] font-bold px-5 py-2.5 transition-colors cursor-pointer"
+          >
+            Load {Math.min(LIST_PAGE_SIZE, remaining)} more · {remaining} left
+          </button>
+        </div>
+      )}
     </Card>
   )
 }
@@ -2157,143 +2220,189 @@ function QuoteCard({ q, isMultiTrade }: { q: Quote; isMultiTrade: boolean }) {
     badges.push({ label: raw, tone })
   }
 
+  // Compact badge label for the collapsed summary row. We surface the
+  // single most-actionable badge (paid > inspect > accepted > sent >
+  // draft) so the row stays one line. The full set is shown inside the
+  // expanded body.
+  const primaryBadge = badges[0]
+
   return (
-    <div className="border border-ink-line bg-ink-card">
-      {/* ── Header row: customer + headline price ───────────────────── */}
-      <div className="flex items-start justify-between gap-4 px-5 pt-4">
-        <div className="min-w-0">
+    <div className="border border-ink-line bg-ink-card motion-safe:animate-[fade-up_240ms_ease-out_both]">
+      {/* ── Collapsed summary row (always visible — also the trigger) ─ */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded ? 'true' : 'false'}
+        className="w-full text-left flex items-center justify-between gap-4 px-5 py-3.5 hover:bg-ink-deep/40 transition-colors cursor-pointer"
+      >
+        <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-3 flex-wrap">
-            <span className="font-extrabold text-base text-text-pri tracking-tight">
+            <span className="font-extrabold text-base text-text-pri tracking-tight truncate">
               {customerLabel}
             </span>
             {q.channel && <ChannelBadge channel={q.channel} />}
             {q.suburb && (
-              <span className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
+              <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
                 · {q.suburb}
               </span>
             )}
-          </div>
-          {q.customer_phone && (
-            <div className="mt-1 font-mono text-xs text-text-sec">
-              {q.customer_phone}
-            </div>
-          )}
-        </div>
-        <div className="shrink-0 text-right">
-          <div className="font-mono text-2xl font-extrabold text-text-pri leading-none">
-            {selectedTotal !== null ? `$${formatMoney(selectedTotal)}` : '—'}
-          </div>
-          {q.selected_tier && (
-            <div className="mt-1 font-mono text-[0.6rem] uppercase tracking-[0.16em] text-accent font-bold">
-              {q.selected_tier} tier · inc GST
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── Metadata grid: type / service / when / routing ──────────── */}
-      <div className="mt-3 mx-5 grid grid-cols-2 md:grid-cols-4 gap-px bg-ink-line border border-ink-line">
-        <MetaCell
-          label="Work"
-          value={formatJobType(q.job_type)}
-        />
-        <MetaCell
-          label="Service"
-          value={trade ? tradeLabel(trade) : '—'}
-          highlight={isMultiTrade}
-        />
-        <MetaCell
-          label="Drafted"
-          value={formatDate(q.created_at)}
-          sub={formatTime(q.created_at)}
-        />
-        <MetaCell
-          label="Routing"
-          value={q.routing_decision ? formatJobType(q.routing_decision) : '—'}
-        />
-      </div>
-
-      {/* ── Tier ladder: Good / Better / Best always visible ────────── */}
-      {hasTierLadder && (
-        <div className="mt-4 px-5">
-          <div className="grid grid-cols-3 gap-2">
-            <TierCell label="Good" amount={goodTotal} selected={q.selected_tier === 'good'} />
-            <TierCell label="Better" amount={betterTotal} selected={q.selected_tier === 'better'} />
-            <TierCell label="Best" amount={bestTotal} selected={q.selected_tier === 'best'} />
+            <span className="font-mono text-[0.65rem] uppercase tracking-[0.12em] text-text-sec">
+              · {formatJobType(q.job_type)}
+            </span>
+            {isMultiTrade && trade && (
+              <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-accent font-bold">
+                · {tradeLabel(trade)}
+              </span>
+            )}
           </div>
         </div>
-      )}
-
-      {/* ── Status badges + actions ─────────────────────────────────── */}
-      <div className="mt-4 px-5 pb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
-          {badges.map((b, i) => (
+        <div className="shrink-0 flex items-center gap-3">
+          {primaryBadge && (
             <span
-              key={i}
-              className={`inline-flex items-center font-mono text-[0.6rem] uppercase tracking-[0.14em] font-bold px-2.5 py-1 border ${
-                b.tone === 'paid'
+              className={`inline-flex items-center font-mono text-[0.55rem] uppercase tracking-[0.14em] font-bold px-2 py-0.5 border ${
+                primaryBadge.tone === 'paid'
                   ? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-300'
-                  : b.tone === 'inspect'
+                  : primaryBadge.tone === 'inspect'
                     ? 'border-amber-500/60 bg-amber-500/10 text-amber-300'
-                    : b.tone === 'accepted'
+                    : primaryBadge.tone === 'accepted'
                       ? 'border-accent/60 bg-accent/10 text-accent'
-                      : b.tone === 'sent'
+                      : primaryBadge.tone === 'sent'
                         ? 'border-text-sec/40 bg-text-sec/5 text-text-sec'
                         : 'border-ink-line bg-ink-deep text-text-dim'
               }`}
             >
-              {b.label}
+              {primaryBadge.label}
             </span>
-          ))}
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setExpanded((v) => !v)}
-            className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-text-sec hover:text-text-pri transition-colors"
-          >
-            {expanded ? '− Hide scope' : '+ Show scope'}
-          </button>
-          {url && (
-            <Link
-              href={url}
-              target="_blank"
-              className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-4 py-2 text-xs uppercase tracking-wider transition-colors"
-            >
-              View customer page →
-            </Link>
           )}
+          <div className="text-right">
+            <div className="font-mono text-lg font-extrabold text-text-pri leading-none tabular-nums">
+              {selectedTotal !== null ? `$${formatMoney(selectedTotal)}` : '—'}
+            </div>
+            {q.selected_tier && (
+              <div className="mt-0.5 font-mono text-[0.55rem] uppercase tracking-[0.14em] text-accent font-bold">
+                {q.selected_tier}
+              </div>
+            )}
+          </div>
+          <span
+            className={`font-mono text-[0.7rem] text-text-dim transition-transform duration-200 ${
+              expanded ? 'rotate-90' : ''
+            }`}
+            aria-hidden="true"
+          >
+            ›
+          </span>
+        </div>
+      </button>
+
+      {/* ── Expansion region — grid-row trick gives a CSS-only height
+          transition for variable-height content. The inner wrapper
+          uses overflow-hidden so the children clip during the
+          0fr ↔ 1fr animation. ─────────────────────────────────── */}
+      <div
+        className={`grid transition-[grid-template-rows] duration-300 ease-out ${
+          expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+        }`}
+      >
+        <div className="overflow-hidden">
+          <div className="border-t border-ink-line">
+            {/* Metadata grid */}
+            <div className="mx-5 mt-4 grid grid-cols-2 md:grid-cols-4 gap-px bg-ink-line border border-ink-line">
+              <MetaCell label="Work" value={formatJobType(q.job_type)} />
+              <MetaCell
+                label="Service"
+                value={trade ? tradeLabel(trade) : '—'}
+                highlight={isMultiTrade}
+              />
+              <MetaCell
+                label="Drafted"
+                value={formatDate(q.created_at)}
+                sub={formatTime(q.created_at)}
+              />
+              <MetaCell
+                label="Routing"
+                value={q.routing_decision ? formatJobType(q.routing_decision) : '—'}
+              />
+            </div>
+
+            {/* Tier ladder */}
+            {hasTierLadder && (
+              <div className="mt-4 px-5">
+                <div className="grid grid-cols-3 gap-2">
+                  <TierCell label="Good" amount={goodTotal} selected={q.selected_tier === 'good'} />
+                  <TierCell label="Better" amount={betterTotal} selected={q.selected_tier === 'better'} />
+                  <TierCell label="Best" amount={bestTotal} selected={q.selected_tier === 'best'} />
+                </div>
+              </div>
+            )}
+
+            {/* All status badges + actions */}
+            <div className="mt-4 px-5 pb-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap gap-2">
+                {q.customer_phone && (
+                  <span className="font-mono text-xs text-text-sec">
+                    {q.customer_phone}
+                  </span>
+                )}
+                {badges.map((b, i) => (
+                  <span
+                    key={i}
+                    className={`inline-flex items-center font-mono text-[0.6rem] uppercase tracking-[0.14em] font-bold px-2.5 py-1 border ${
+                      b.tone === 'paid'
+                        ? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-300'
+                        : b.tone === 'inspect'
+                          ? 'border-amber-500/60 bg-amber-500/10 text-amber-300'
+                          : b.tone === 'accepted'
+                            ? 'border-accent/60 bg-accent/10 text-accent'
+                            : b.tone === 'sent'
+                              ? 'border-text-sec/40 bg-text-sec/5 text-text-sec'
+                              : 'border-ink-line bg-ink-deep text-text-dim'
+                    }`}
+                  >
+                    {b.label}
+                  </span>
+                ))}
+              </div>
+              {url && (
+                <Link
+                  href={url}
+                  target="_blank"
+                  className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-4 py-2 text-xs uppercase tracking-wider transition-colors"
+                >
+                  View customer page →
+                </Link>
+              )}
+            </div>
+
+            {/* Scope + timeframe + transcript */}
+            <div className="border-t border-ink-line px-5 py-4 space-y-4 bg-ink-deep/30">
+              {q.scope_of_works && (
+                <div>
+                  <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-text-dim font-bold mb-2">
+                    Scope of works
+                  </div>
+                  <p className="text-sm text-text-sec leading-relaxed">
+                    {q.scope_of_works}
+                  </p>
+                </div>
+              )}
+
+              {q.estimated_timeframe && (
+                <div>
+                  <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-text-dim font-bold mb-1">
+                    Estimated timeframe
+                  </div>
+                  <p className="text-sm text-text-sec">{q.estimated_timeframe}</p>
+                </div>
+              )}
+
+              {q.messages && q.messages.length > 0 && (
+                <Transcript messages={q.messages} channel={q.channel} />
+              )}
+            </div>
+          </div>
         </div>
       </div>
-
-      {/* ── Expanded scope/timeframe detail ──────────────────────────── */}
-      {expanded && (
-        <div className="border-t border-ink-line px-5 py-4 space-y-4 bg-ink-deep/30">
-          {q.scope_of_works && (
-            <div>
-              <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-text-dim font-bold mb-2">
-                Scope of works
-              </div>
-              <p className="text-sm text-text-sec leading-relaxed">
-                {q.scope_of_works}
-              </p>
-            </div>
-          )}
-
-          {q.estimated_timeframe && (
-            <div>
-              <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-text-dim font-bold mb-1">
-                Estimated timeframe
-              </div>
-              <p className="text-sm text-text-sec">{q.estimated_timeframe}</p>
-            </div>
-          )}
-
-          {q.messages && q.messages.length > 0 && (
-            <Transcript messages={q.messages} channel={q.channel} />
-          )}
-        </div>
-      )}
     </div>
   )
 }
@@ -2447,16 +2556,45 @@ function ChatsTab({
     )
   }
 
+  return <ChatsList chats={chats} isMultiTrade={isMultiTrade} />
+}
+
+/** Renders the paginated chat list. Split out from `ChatsTab` so the
+ *  Load-more state is scoped to the rendered list — opening Chats fresh
+ *  always starts at the first page. */
+function ChatsList({
+  chats,
+  isMultiTrade,
+}: {
+  chats: ChatRow[]
+  isMultiTrade: boolean
+}) {
+  const [visible, setVisible] = useState(LIST_PAGE_SIZE)
+  const total = chats.length
+  const visibleChats = chats.slice(0, visible)
+  const remaining = Math.max(0, total - visible)
+
   return (
     <Card
       title="Chats"
-      subtitle={`Last ${chats.length} SMS ${chats.length === 1 ? 'conversation' : 'conversations'}. Click a row to expand the full thread.`}
+      subtitle={`${Math.min(visible, total)} of ${total} shown · click a row to expand the full thread.`}
     >
-      <div className="space-y-3">
-        {chats.map((c) => (
+      <div className="space-y-2">
+        {visibleChats.map((c) => (
           <ChatCard key={c.id} chat={c} isMultiTrade={isMultiTrade} />
         ))}
       </div>
+      {remaining > 0 && (
+        <div className="mt-6 flex justify-center">
+          <button
+            type="button"
+            onClick={() => setVisible((v) => v + LIST_PAGE_SIZE)}
+            className="inline-flex items-center gap-2 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-pri font-mono text-[0.7rem] uppercase tracking-[0.16em] font-bold px-5 py-2.5 transition-colors cursor-pointer"
+          >
+            Load {Math.min(LIST_PAGE_SIZE, remaining)} more · {remaining} left
+          </button>
+        </div>
+      )}
     </Card>
   )
 }
@@ -2481,11 +2619,12 @@ function ChatCard({ chat, isMultiTrade }: { chat: ChatRow; isMultiTrade: boolean
         : 'bg-ink-deep text-text-dim border-ink-line'
 
   return (
-    <div className="border border-ink-line bg-ink-card">
+    <div className="border border-ink-line bg-ink-card motion-safe:animate-[fade-up_240ms_ease-out_both]">
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-start justify-between gap-4 px-4 py-3 text-left hover:bg-ink-deep/40 transition-colors"
+        aria-expanded={expanded ? 'true' : 'false'}
+        className="w-full flex items-start justify-between gap-4 px-4 py-3 text-left hover:bg-ink-deep/40 transition-colors cursor-pointer"
       >
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -2545,18 +2684,26 @@ function ChatCard({ chat, isMultiTrade }: { chat: ChatRow; isMultiTrade: boolean
         </div>
       </button>
 
-      {expanded && chat.messages.length > 0 && (
-        <div className="border-t border-ink-line px-4 py-3 bg-ink-deep/30">
-          <Transcript messages={chat.messages} channel={chat.channel} />
+      {/* Grid-row trick gives a CSS-only height transition. Keeps the
+          markup mounted so the transcript fades in/out smoothly instead
+          of popping when the user toggles. */}
+      <div
+        className={`grid transition-[grid-template-rows] duration-300 ease-out ${
+          expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+        }`}
+      >
+        <div className="overflow-hidden">
+          <div className="border-t border-ink-line px-4 py-3 bg-ink-deep/30">
+            {chat.messages.length > 0 ? (
+              <Transcript messages={chat.messages} channel={chat.channel} />
+            ) : (
+              <p className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+                No messages recorded on this conversation.
+              </p>
+            )}
+          </div>
         </div>
-      )}
-      {expanded && chat.messages.length === 0 && (
-        <div className="border-t border-ink-line px-4 py-3 bg-ink-deep/30">
-          <p className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
-            No messages recorded on this conversation.
-          </p>
-        </div>
-      )}
+      </div>
     </div>
   )
 }

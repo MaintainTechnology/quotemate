@@ -56,3 +56,40 @@ body {
   font-family: var(--font-manrope), 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   font-feature-settings: 'ss01', 'cv11'; /* Manrope stylistic alternates */
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   Motion. CSS-only entrance animations used by the dashboard. Two
+   primitives — fade-up for primary content, fade-in for subordinate
+   panels — that we apply via Tailwind arbitrary-value class names
+   (e.g. motion-safe:animate-[fade-up_220ms_ease-out_both]).
+   prefers-reduced-motion users get no motion via the @media block
+   below, and the `motion-safe:` Tailwind variant keeps the same gate
+   for the few callers that opt in by class.
+   ════════════════════════════════════════════════════════════════════ */
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
