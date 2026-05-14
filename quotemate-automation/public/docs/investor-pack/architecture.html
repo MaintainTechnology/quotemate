@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuoteMate · System Architecture</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./_shared.css">
+  <style>
+    .arch-grid {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: 1fr;
+    }
+    .layer {
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      padding: 1.1rem 1.25rem;
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: 1rem;
+      align-items: stretch;
+    }
+    .layer-label {
+      border-left: 3px solid var(--accent);
+      padding-left: 0.85rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .layer-label .title {
+      font-weight: 800;
+      text-transform: uppercase;
+      font-size: 0.9rem;
+      letter-spacing: 0.01em;
+    }
+    .layer-label .sub {
+      color: var(--text-dim);
+      font-size: 0.72rem;
+      margin-top: 0.2rem;
+    }
+    .modules {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 0.5rem;
+    }
+    .module {
+      background: var(--ink-deep);
+      border: 1px solid var(--ink-line);
+      padding: 0.7rem 0.75rem;
+      font-size: 0.78rem;
+    }
+    .module .label {
+      font-weight: 700;
+      font-size: 0.82rem;
+      margin-bottom: 0.2rem;
+    }
+    .module .what { color: var(--text-dim); font-size: 0.7rem; line-height: 1.3; }
+    .module.built   { border-color: rgba(22, 163, 74, 0.45); }
+    .module.partial { border-color: rgba(217, 119, 6, 0.45); }
+    .module.planned { border-color: var(--ink-line); opacity: 0.55; }
+    .arrow {
+      text-align: center;
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+      padding: 0.15rem 0;
+    }
+    @media (max-width: 720px) {
+      .layer { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand-row">
+        <span class="brand-mark">Q</span>
+        <span class="brand-name">QuoteMate</span>
+        <span class="brand-meta">Architecture · May 2026</span>
+      </div>
+      <h1>How The System Is Wired</h1>
+      <p class="subtitle">
+        Every module that makes up QuoteMate, what it does in one line, and which ones are
+        live today versus in the pipeline.
+      </p>
+      <nav class="nav-pills">
+        <a href="./index.html">Overview</a>
+        <a href="./architecture.html" class="current">Architecture</a>
+        <a href="./agents.html">AI Agents</a>
+        <a href="./demo-script.html">Live Demo Script</a>
+      </nav>
+    </header>
+
+    <section>
+      <div class="section-head">
+        <span class="num">01</span>
+        <h2>Five Layers, Top to Bottom</h2>
+      </div>
+
+      <div class="arch-grid">
+
+        <!-- INBOUND -->
+        <div class="layer">
+          <div class="layer-label">
+            <div class="title">Inbound</div>
+            <div class="sub">How the customer reaches us</div>
+          </div>
+          <div class="modules">
+            <div class="module built">
+              <div class="label">SMS Inbox</div>
+              <div class="what">Twilio AU numbers, every tradie gets their own</div>
+            </div>
+            <div class="module partial">
+              <div class="label">Voice Calls</div>
+              <div class="what">Same number, Vapi answers — parked behind env flag</div>
+            </div>
+            <div class="module built">
+              <div class="label">MMS Photos</div>
+              <div class="what">Customer can text photos straight into the thread</div>
+            </div>
+            <div class="module built">
+              <div class="label">Web Signup</div>
+              <div class="what">Tradie sign-up form on quotemate.com.au</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="arrow">▼</div>
+
+        <!-- AI BRAIN -->
+        <div class="layer">
+          <div class="layer-label">
+            <div class="title">AI Brain</div>
+            <div class="sub">Decides what to do next</div>
+          </div>
+          <div class="modules">
+            <div class="module built">
+              <div class="label">Intent Detection</div>
+              <div class="what">Is this a customer or a tradie signing up? Regex first, Haiku if unclear</div>
+            </div>
+            <div class="module built">
+              <div class="label">SMS Dialog Agent</div>
+              <div class="what">One Haiku call per turn. Asks the next question or finishes.</div>
+            </div>
+            <div class="module built">
+              <div class="label">Intake Structuring</div>
+              <div class="what">Opus reads the transcript + photos, produces a clean job brief</div>
+            </div>
+            <div class="module built">
+              <div class="label">Quote Drafter</div>
+              <div class="what">Opus + tool-calling. Builds Good / Better / Best with real prices.</div>
+            </div>
+            <div class="module built">
+              <div class="label">Image Generator</div>
+              <div class="what">Gemini renders a preview of what each tier looks like installed</div>
+            </div>
+            <div class="module built">
+              <div class="label">Slot Extractor</div>
+              <div class="what">Pulls name, suburb, item count, specs from natural-language replies</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="arrow">▼</div>
+
+        <!-- DATA -->
+        <div class="layer">
+          <div class="layer-label">
+            <div class="title">Data</div>
+            <div class="sub">Source of truth</div>
+          </div>
+          <div class="modules">
+            <div class="module built">
+              <div class="label">Tenants</div>
+              <div class="what">One row per tradie. Owns trades, licences, numbers, status.</div>
+            </div>
+            <div class="module built">
+              <div class="label">Pricing Books</div>
+              <div class="what">Per-tradie, per-trade rates and markup. Quotes only use these.</div>
+            </div>
+            <div class="module built">
+              <div class="label">Shared Catalogue</div>
+              <div class="what">Assemblies + materials for each trade (electrical, plumbing)</div>
+            </div>
+            <div class="module built">
+              <div class="label">Conversations</div>
+              <div class="what">Every SMS exchange, with photos, turn count, state</div>
+            </div>
+            <div class="module built">
+              <div class="label">Intakes</div>
+              <div class="what">Structured job briefs. Vector-embedded for similar-quote lookup.</div>
+            </div>
+            <div class="module built">
+              <div class="label">Quotes</div>
+              <div class="what">Three tiers, scope, deposit links, status (draft → sent → paid)</div>
+            </div>
+            <div class="module built">
+              <div class="label">Customers</div>
+              <div class="what">Persistent memory by phone. Returning customers skip questions.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="arrow">▼</div>
+
+        <!-- DELIVERY -->
+        <div class="layer">
+          <div class="layer-label">
+            <div class="title">Delivery</div>
+            <div class="sub">What the customer + tradie see</div>
+          </div>
+          <div class="modules">
+            <div class="module built">
+              <div class="label">Quote SMS</div>
+              <div class="what">Three tier prices + link. Sent from the tradie's own number.</div>
+            </div>
+            <div class="module built">
+              <div class="label">Mobile Quote Page</div>
+              <div class="what">/q/&lt;token&gt; — scope, photos, tiers, deposit buttons</div>
+            </div>
+            <div class="module built">
+              <div class="label">Photo Upload</div>
+              <div class="what">/upload/&lt;token&gt; — camera or gallery, one tap</div>
+            </div>
+            <div class="module built">
+              <div class="label">Tradie Dashboard</div>
+              <div class="what">Inbox, quotes, edit-in-place, retry provisioning</div>
+            </div>
+            <div class="module built">
+              <div class="label">Tradie Notify SMS</div>
+              <div class="what">Daily SMS + WhatsApp on every draft</div>
+            </div>
+            <div class="module partial">
+              <div class="label">Booking Page</div>
+              <div class="what">Slot picker after deposit. Works, lightly exercised live.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="arrow">▼</div>
+
+        <!-- PAYMENTS + EXTERNAL -->
+        <div class="layer">
+          <div class="layer-label">
+            <div class="title">Payments + External</div>
+            <div class="sub">Money in, infra out</div>
+          </div>
+          <div class="modules">
+            <div class="module built">
+              <div class="label">Stripe Checkout</div>
+              <div class="what">Three deposit links per quote. 30% on auto-quote, $199 inspection.</div>
+            </div>
+            <div class="module partial">
+              <div class="label">Stripe Connect</div>
+              <div class="what">Marketplace flow. Switches on when tradie #2 onboards.</div>
+            </div>
+            <div class="module built">
+              <div class="label">Twilio Provisioning</div>
+              <div class="what">Buys real AU numbers, sets webhooks, address-bundle compliant</div>
+            </div>
+            <div class="module built">
+              <div class="label">Vapi Provisioning</div>
+              <div class="what">Spins up a per-tradie voice assistant + binds the number</div>
+            </div>
+            <div class="module built">
+              <div class="label">Stripe Webhook</div>
+              <div class="what">Idempotent paid-quote marker. Triggers booking step.</div>
+            </div>
+            <div class="module partial">
+              <div class="label">Real Payment Run</div>
+              <div class="what">Test cards verified. Awaiting first real customer payment.</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="legend">
+        <div class="legend-item">
+          <div class="legend-swatch built"></div>
+          <span><strong style="color:var(--text-pri)">Built &amp; live</strong></span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-swatch partial"></div>
+          <span><strong style="color:var(--text-pri)">Partial</strong> — built but parked or lightly exercised</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-swatch planned"></div>
+          <span><strong style="color:var(--text-pri)">Planned</strong></span>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <span class="num">02</span>
+        <h2>Tech Stack</h2>
+      </div>
+      <div class="card">
+        <dl class="kv">
+          <dt>Web + API</dt><dd>Next.js (App Router) on Vercel</dd>
+          <dt>Database</dt><dd>Supabase Postgres (with pgvector for similar-quote lookup)</dd>
+          <dt>Auth</dt><dd>Supabase Auth (email/password + magic links)</dd>
+          <dt>SMS / Voice carrier</dt><dd>Twilio Australia (mobile + local numbers, MMS, WhatsApp fallback)</dd>
+          <dt>Voice AI</dt><dd>Vapi orchestrator · Deepgram speech-to-text · ElevenLabs voice</dd>
+          <dt>LLM</dt><dd>Anthropic Claude — Haiku 4.5 for dialog, Opus 4.7 for intake + drafting</dd>
+          <dt>Image AI</dt><dd>Google Gemini for tier preview renders</dd>
+          <dt>Payments</dt><dd>Stripe Australia · Connect Express ready for marketplace flow</dd>
+          <dt>Hosting</dt><dd>Vercel (web + cron), Supabase (db + storage)</dd>
+          <dt>Tests</dt><dd>Vitest (93 unit specs) + Playwright (E2E activation flow)</dd>
+        </dl>
+      </div>
+    </section>
+
+    <footer>
+      <span>QuoteMate · Australia · 2026</span>
+      <span>Architecture · May 13, 2026</span>
+    </footer>
+  </div>
+</body>
+</html>

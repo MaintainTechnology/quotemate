@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuoteMate · Investor Overview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./_shared.css">
+</head>
+<body>
+  <div class="container">
+    <!-- ─── HEADER ─────────────────────────────────────────── -->
+    <header>
+      <div class="brand-row">
+        <span class="brand-mark">Q</span>
+        <span class="brand-name">QuoteMate</span>
+        <span class="brand-meta">Investor Overview · May 2026</span>
+      </div>
+      <h1>The AI Receptionist<br>That Drafts Quotes While Tradies Work</h1>
+      <p class="subtitle">
+        A customer texts a tradie's number. Sixty seconds later, a three-tier quote with a real
+        Stripe deposit link lands on their phone — and on the tradie's dashboard. Live in
+        production today across electrical and plumbing.
+      </p>
+
+      <nav class="nav-pills">
+        <a href="./index.html" class="current">Overview</a>
+        <a href="./architecture.html">Architecture</a>
+        <a href="./agents.html">AI Agents</a>
+        <a href="./demo-script.html">Live Demo Script</a>
+      </nav>
+    </header>
+
+    <!-- ─── STATS ──────────────────────────────────────────── -->
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-num">2</div>
+        <div class="stat-label">Trades Live</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">~60s</div>
+        <div class="stat-label">Text to Quote</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">94</div>
+        <div class="stat-label">Automated Tests</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">3</div>
+        <div class="stat-label">Tier Quote Output</div>
+      </div>
+    </div>
+
+    <!-- ─── SECTION 01: CUSTOMER JOURNEY ───────────────────── -->
+    <section>
+      <div class="section-head">
+        <span class="num">01</span>
+        <h2>Customer Journey</h2>
+      </div>
+      <p>What a homeowner experiences from first text to paid deposit.</p>
+
+      <div class="swim">
+        <div class="swim-lane">
+          <div class="swim-label">
+            <div class="who">Customer</div>
+            <div class="what">Mobile-first, SMS-driven</div>
+          </div>
+          <div class="swim-flow">
+            <div class="step built">
+              <div class="step-num">01</div>
+              <div class="step-name">Texts the tradie's number</div>
+              <div class="step-desc">Lands at the AU mobile shown on the tradie's site or business card.</div>
+            </div>
+            <div class="step built">
+              <div class="step-num">02</div>
+              <div class="step-name">AI replies in seconds</div>
+              <div class="step-desc">Asks for name, suburb, and what the job is in plain English.</div>
+            </div>
+            <div class="step built">
+              <div class="step-num">03</div>
+              <div class="step-name">Sends photos</div>
+              <div class="step-desc">Camera or gallery via a one-tap link, or MMS straight to the conversation.</div>
+            </div>
+            <div class="step built">
+              <div class="step-num">04</div>
+              <div class="step-name">Gets a quote SMS</div>
+              <div class="step-desc">Three options — Good, Better, Best — with prices and a Stripe deposit link each.</div>
+            </div>
+            <div class="step built">
+              <div class="step-num">05</div>
+              <div class="step-name">Opens the quote page</div>
+              <div class="step-desc">Mobile quote with scope, assumptions, and photos. Picks a tier.</div>
+            </div>
+            <div class="step partial">
+              <div class="step-num">06</div>
+              <div class="step-name">Pays deposit</div>
+              <div class="step-desc">Stripe Checkout. 30% on auto-quote jobs, $199 flat on inspection-only.</div>
+            </div>
+            <div class="step partial">
+              <div class="step-num">07</div>
+              <div class="step-name">Books a slot</div>
+              <div class="step-desc">Picks a time, both sides get a confirmation SMS.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── SECTION 02: TRADIE JOURNEY ─────────────────────── -->
+    <section>
+      <div class="section-head">
+        <span class="num">02</span>
+        <h2>Tradie Journey</h2>
+      </div>
+      <p>What a tradie experiences from sign-up to running their own AI receptionist.</p>
+
+      <div class="swim">
+        <div class="swim-lane">
+          <div class="swim-label">
+            <div class="who">Tradie</div>
+            <div class="what">Web portal + SMS-initiated signup</div>
+          </div>
+          <div class="swim-flow">
+            <div class="step built">
+              <div class="step-num">01</div>
+              <div class="step-name">Signs up</div>
+              <div class="step-desc">Via website OR by texting the QuoteMate shared number — gets a personal link back.</div>
+            </div>
+            <div class="step built">
+              <div class="step-num">02</div>
+              <div class="step-name">Picks trades</div>
+              <div class="step-desc">Electrical, plumbing, or both. Per-trade rate, markup, licence.</div>
+            </div>
+            <div class="step built">
+              <div class="step-num">03</div>
+              <div class="step-name">Hits Activate</div>
+              <div class="step-desc">System buys an AU number, spins up the AI assistant, sends them a welcome SMS.</div>
+            </div>
+            <div class="step built">
+              <div class="step-num">04</div>
+              <div class="step-name">Receptionist live</div>
+              <div class="step-desc">Number on their site is now answered by the AI 24/7.</div>
+            </div>
+            <div class="step built">
+              <div class="step-num">05</div>
+              <div class="step-name">Quotes appear</div>
+              <div class="step-desc">Every customer text becomes a draft quote on the tradie dashboard.</div>
+            </div>
+            <div class="step built">
+              <div class="step-num">06</div>
+              <div class="step-name">Reviews + edits</div>
+              <div class="step-desc">Tweaks any line item across all three tiers. Stripe links rebuild automatically.</div>
+            </div>
+            <div class="step built">
+              <div class="step-num">07</div>
+              <div class="step-name">Sends + gets paid</div>
+              <div class="step-desc">Customer pays the deposit, tradie shows up to a confirmed booking.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="legend">
+        <div class="legend-item">
+          <div class="legend-swatch built"></div>
+          <span><strong style="color:var(--text-pri)">Built &amp; live</strong> — shipped, tested, working today</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-swatch partial"></div>
+          <span><strong style="color:var(--text-pri)">Partial</strong> — code shipped, not yet exercised at volume</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-swatch planned"></div>
+          <span><strong style="color:var(--text-pri)">Planned</strong> — designed, not yet built</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── SECTION 03: WHAT'S BUILT VS WHAT'S NEXT ────────── -->
+    <section>
+      <div class="section-head">
+        <span class="num">03</span>
+        <h2>What's Built · What's Next</h2>
+      </div>
+
+      <div class="card-grid">
+        <div class="card">
+          <span class="pill built"><span class="pill-dot"></span>Built &amp; Live</span>
+          <h3 style="margin-top:1rem">Today, in production</h3>
+          <ul class="clean">
+            <li>SMS AI receptionist (Australian numbers)</li>
+            <li>Quote drafting in three tiers</li>
+            <li>Public mobile quote pages</li>
+            <li>Stripe deposit links per tier</li>
+            <li>Tradie web signup + activation</li>
+            <li>Multi-trade tenants (electrical + plumbing)</li>
+            <li>Tradie dashboard (inbox, quotes, edit-in-place)</li>
+            <li>Customer photo upload</li>
+            <li>Customer memory (returning clients skip questions)</li>
+            <li>AI image generation for tier previews</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <span class="pill partial"><span class="pill-dot"></span>Partial · Built but parked</span>
+          <h3 style="margin-top:1rem">Ready, awaiting pilot signal</h3>
+          <ul class="clean">
+            <li>Voice AI receptionist (Vapi assistant provisioned)</li>
+            <li>Auto-send mode (currently tradie-review for liability)</li>
+            <li>Stripe Connect Express (flips on when tradie #2 onboards)</li>
+            <li>Real payment exercise (test card flow live, not yet a real customer payment)</li>
+            <li>Photo upload at volume (works in code, lightly exercised live)</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <span class="pill planned"><span class="pill-dot"></span>Planned</span>
+          <h3 style="margin-top:1rem">Roadmap · Next 30/60/90</h3>
+          <ul class="clean">
+            <li>Day 1 / Day 3 / Day 7 follow-up SMS engine</li>
+            <li>Availability nudge ("we're free Tuesday morning")</li>
+            <li>Calendar integration for slot picking</li>
+            <li>Voice receptionist as paid premium tier (v3)</li>
+            <li>Email channel beyond welcome message</li>
+            <li>Tenant isolation hardening for scale beyond ~5 tradies</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── SECTION 04: WHY IT WORKS ───────────────────────── -->
+    <section>
+      <div class="section-head">
+        <span class="num">04</span>
+        <h2>Why This Wins</h2>
+      </div>
+      <div class="card-grid">
+        <div class="card">
+          <h3>Narrow wedge, deep moat</h3>
+          <p>Two trades, two cities, five job types each. Every dollar in every quote comes from a
+          real pricing book the tradie helped build — not hallucinated by an LLM.</p>
+        </div>
+        <div class="card">
+          <h3>Tradie in the loop</h3>
+          <p>No auto-send in v1. Australian Consumer Law treats accepted quotes as binding
+          contracts. The tradie reviews every draft before it goes — that's the liability shield
+          and the trust builder.</p>
+        </div>
+        <div class="card">
+          <h3>Portal-first, not voice-first</h3>
+          <p>Voice agents cost ~$1,500/month per tradie at moderate call volume. SMS at SaaS
+          margins works. Voice is a premium upsell when the unit economics make sense.</p>
+        </div>
+        <div class="card">
+          <h3>Real money, real tradies</h3>
+          <p>Live Twilio numbers, live Vapi assistants, live Stripe Checkout. Electrical pilot
+          underway in NSW, plumbing pilot underway in Brisbane.</p>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <span>QuoteMate · Australia · 2026</span>
+      <span>EOD · May 13, 2026</span>
+    </footer>
+  </div>
+</body>
+</html>

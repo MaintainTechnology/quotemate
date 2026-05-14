@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuoteMate · Live Demo Script</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./_shared.css">
+  <style>
+    .scenario {
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      padding: 1.5rem;
+      margin-bottom: 1rem;
+    }
+    .scenario-head {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+      padding-bottom: 0.85rem;
+      border-bottom: 1px solid var(--ink-line);
+    }
+    .scenario-num {
+      width: 32px; height: 32px;
+      background: var(--accent);
+      color: #fff;
+      display: grid; place-items: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      font-size: 0.95rem;
+    }
+    .scenario-title { font-size: 1.15rem; font-weight: 800; text-transform: uppercase; }
+    .scenario-meta { color: var(--text-dim); font-size: 0.78rem; margin-left: auto; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.08em; }
+    .sms-thread {
+      display: grid;
+      gap: 0.5rem;
+      margin: 1rem 0;
+    }
+    .sms-bubble {
+      padding: 0.65rem 0.9rem;
+      max-width: 80%;
+      font-size: 0.88rem;
+      line-height: 1.45;
+    }
+    .sms-bubble.from-customer {
+      background: var(--ink-deep);
+      border: 1px solid var(--ink-line);
+      justify-self: end;
+      border-bottom-right-radius: 4px;
+    }
+    .sms-bubble.from-ai {
+      background: rgba(255, 90, 31, 0.08);
+      border: 1px solid rgba(255, 90, 31, 0.35);
+      justify-self: start;
+      border-bottom-left-radius: 4px;
+    }
+    .sms-meta {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      color: var(--text-dim);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 0.25rem;
+    }
+    .expected {
+      background: var(--ink-deep);
+      border: 1px solid var(--ink-line);
+      border-left: 3px solid var(--success);
+      padding: 0.85rem 1rem;
+      margin-top: 1rem;
+      font-size: 0.85rem;
+    }
+    .expected strong { color: var(--success); display: block; margin-bottom: 0.35rem; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; }
+    .talking-point {
+      padding: 0.85rem 1rem;
+      background: var(--ink-deep);
+      border: 1px solid var(--ink-line);
+      margin-bottom: 0.6rem;
+    }
+    .talking-point .q {
+      font-weight: 700;
+      color: var(--text-pri);
+      margin-bottom: 0.4rem;
+      font-size: 0.9rem;
+    }
+    .talking-point .q::before { content: 'Q: '; color: var(--accent); }
+    .talking-point .a {
+      color: var(--text-sec);
+      font-size: 0.88rem;
+      line-height: 1.55;
+    }
+    .talking-point .a::before { content: 'A: '; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; }
+    .number-card {
+      background: var(--ink-card);
+      border: 2px solid var(--accent);
+      padding: 1.5rem 1.75rem;
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .number-card .big {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.65rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.02em;
+    }
+    .number-card .lbl {
+      color: var(--text-dim);
+      font-size: 0.72rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      margin-bottom: 0.3rem;
+    }
+    @media (max-width: 600px) {
+      .number-card { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand-row">
+        <span class="brand-mark">Q</span>
+        <span class="brand-name">QuoteMate</span>
+        <span class="brand-meta">Demo Script · May 2026</span>
+      </div>
+      <h1>Live Demo Cheat Sheet</h1>
+      <p class="subtitle">
+        Investors trust what they can see work. This is the page Jon takes into the meeting —
+        the phone number, three scenarios that actually run today, and pre-answers to the
+        questions investors always ask.
+      </p>
+      <nav class="nav-pills">
+        <a href="./index.html">Overview</a>
+        <a href="./architecture.html">Architecture</a>
+        <a href="./agents.html">AI Agents</a>
+        <a href="./demo-script.html" class="current">Live Demo Script</a>
+      </nav>
+    </header>
+
+    <!-- ─── THE NUMBER ─────────────────────────────────────── -->
+    <section>
+      <div class="number-card">
+        <div>
+          <div class="lbl">Text this number live</div>
+          <div class="big">+61 481 613 464</div>
+        </div>
+        <div style="color: var(--text-sec); font-size: 0.88rem; max-width: 38ch;">
+          The development SMS line for the pilot tradie. Real AI, real pricing book, real Stripe
+          links — only the payment is in Stripe test mode.
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── SCENARIO 01 ───────────────────────────────────── -->
+    <section>
+      <div class="section-head">
+        <span class="num">01</span>
+        <h2>Three Scenarios To Run</h2>
+      </div>
+
+      <div class="scenario">
+        <div class="scenario-head">
+          <div class="scenario-num">A</div>
+          <div class="scenario-title">Electrical · Downlights</div>
+          <div class="scenario-meta">~60–90 seconds</div>
+        </div>
+        <p>The cleanest demo. Auto-quotes end to end. Shows the SMS conversation, the quote SMS,
+        the customer quote page, the three Stripe links, and the draft appearing on the tradie
+        dashboard.</p>
+
+        <div class="sms-thread">
+          <div>
+            <div class="sms-meta" style="text-align:right">You (as customer)</div>
+            <div class="sms-bubble from-customer">Hi, looking to get 6 downlights replaced in my kitchen ceiling</div>
+          </div>
+          <div>
+            <div class="sms-meta">AI agent</div>
+            <div class="sms-bubble from-ai">G'day! Happy to help. What's your name and what suburb is the job in?</div>
+          </div>
+          <div>
+            <div class="sms-meta" style="text-align:right">You</div>
+            <div class="sms-bubble from-customer">Jeff, in Coogee</div>
+          </div>
+          <div>
+            <div class="sms-meta">AI agent</div>
+            <div class="sms-bubble from-ai">Thanks Jeff. Any colour preference — warm white, cool white, or daylight?</div>
+          </div>
+          <div>
+            <div class="sms-meta" style="text-align:right">You</div>
+            <div class="sms-bubble from-customer">Warm white</div>
+          </div>
+          <div>
+            <div class="sms-meta">AI agent</div>
+            <div class="sms-bubble from-ai">Got it. Drafting your options now — back in a minute.</div>
+          </div>
+        </div>
+
+        <div class="expected">
+          <strong>What lands within ~60 seconds</strong>
+          A second SMS with three tier prices (Good / Better / Best, e.g. ~$527 / $696 / $899) +
+          a link to the mobile quote page. Open the link to show the scope, the photos, and the
+          three deposit buttons. Then open the tradie dashboard in another tab to show the quote
+          card has appeared with status "draft".
+        </div>
+      </div>
+
+      <div class="scenario">
+        <div class="scenario-head">
+          <div class="scenario-num">B</div>
+          <div class="scenario-title">Plumbing · Blocked Drain</div>
+          <div class="scenario-meta">~60–90 seconds</div>
+        </div>
+        <p>Demonstrates the multi-trade brain. Same number, same brain, different playbook —
+        plumbing line-item language ("items" not "fittings"), QBCC licence on the quote.</p>
+
+        <div class="sms-thread">
+          <div>
+            <div class="sms-meta" style="text-align:right">You</div>
+            <div class="sms-bubble from-customer">Hi, my kitchen sink is blocked, water won't drain</div>
+          </div>
+          <div>
+            <div class="sms-meta">AI agent</div>
+            <div class="sms-bubble from-ai">Sorry to hear it. What's your name and what suburb are you in?</div>
+          </div>
+        </div>
+
+        <div class="expected">
+          <strong>What to point out</strong>
+          The AI recognised it as a plumbing job (not electrical) and picked the plumbing
+          playbook — different questions, different prices, plumbing licence body shown on the
+          quote (QBCC for Brisbane).
+        </div>
+      </div>
+
+      <div class="scenario">
+        <div class="scenario-head">
+          <div class="scenario-num">C</div>
+          <div class="scenario-title">Returning Customer · Memory</div>
+          <div class="scenario-meta">~30 seconds</div>
+        </div>
+        <p>Run scenario A first. Then text from the same number with a new job — the AI greets
+        Jeff by name, doesn't re-ask for the suburb, jumps straight to the job specifics. This
+        always lands well.</p>
+
+        <div class="sms-thread">
+          <div>
+            <div class="sms-meta" style="text-align:right">You (later)</div>
+            <div class="sms-bubble from-customer">Need a power point installed in the garage too</div>
+          </div>
+          <div>
+            <div class="sms-meta">AI agent</div>
+            <div class="sms-bubble from-ai">Hey Jeff. For the garage GPO — single or double point?</div>
+          </div>
+        </div>
+
+        <div class="expected">
+          <strong>What to point out</strong>
+          No "what's your name?", no "what suburb?" — the system pulled the customer from memory
+          and skipped straight to the next question. Same effect as a tradie who already knows
+          the customer.
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── DASHBOARD WALK-THROUGH ─────────────────────────── -->
+    <section>
+      <div class="section-head">
+        <span class="num">02</span>
+        <h2>Then Open The Dashboard</h2>
+      </div>
+      <div class="card">
+        <p class="lead" style="margin-bottom:1rem">After the SMS demo, open the tradie dashboard and walk through:</p>
+        <ul class="clean">
+          <li><strong style="color:var(--text-pri)">Quotes tab</strong> — the draft from the demo just appeared, scoped to the right tradie</li>
+          <li><strong style="color:var(--text-pri)">Tier ladder</strong> — Good / Better / Best prices side by side, chosen tier highlighted</li>
+          <li><strong style="color:var(--text-pri)">Edit in place</strong> — click the orange "Edit pricing" banner, show how a tradie tweaks any line item across all three tiers</li>
+          <li><strong style="color:var(--text-pri)">Stripe links rebuild</strong> — after edit, the customer's deposit links automatically point at the new prices</li>
+          <li><strong style="color:var(--text-pri)">Pricing tab</strong> — show per-trade hourly rate, markup, callout fee (electrical + plumbing side by side)</li>
+          <li><strong style="color:var(--text-pri)">Account tab</strong> — show per-trade licences (NECA for electrical, QBCC for plumbing) — stacked, regulator-compliant per trade</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ─── INVESTOR Q&A ────────────────────────────────────── -->
+    <section>
+      <div class="section-head">
+        <span class="num">03</span>
+        <h2>Pre-Answered Investor Questions</h2>
+      </div>
+
+      <div class="talking-point">
+        <div class="q">Why electrical and plumbing first, not painting or carpentry?</div>
+        <div class="a">Electrical was the original pilot — NSW has the toughest licence regime in
+        AU which means we de-risk regulatory complexity early. Plumbing was added because
+        Brisbane has a tradie pilot signed up. Both trades have clear "easy 5" job types where
+        auto-quoting is safe. We avoid trades like painting (too many variables) on purpose.</div>
+      </div>
+
+      <div class="talking-point">
+        <div class="q">Why portal-first, not voice-first?</div>
+        <div class="a">Voice agents cost ~$1,500/month per tradie at moderate call volume — STT,
+        TTS, and minutes don't fit SaaS pricing. Portal/SMS works at SaaS margins today. Voice
+        is built and parked, ready to flip on as a premium tier when a tradie's volume justifies
+        it.</div>
+      </div>
+
+      <div class="talking-point">
+        <div class="q">What stops a tradie just using ServiceM8 or Tradify?</div>
+        <div class="a">Those are calendars and invoicing. We're not. The wedge is the AI quote
+        draft — the bit no incumbent has cracked. Once a tradie is hooked on the receptionist,
+        calendar/CRM/invoicing are easy to add. The other way round is much harder.</div>
+      </div>
+
+      <div class="talking-point">
+        <div class="q">Why no auto-send in v1?</div>
+        <div class="a">Australian Consumer Law treats an accepted quote as a binding contract.
+        The tradie reviewing every draft is the liability shield AND the trust builder. Auto-send
+        is a v2 feature once the AI has earned the tradie's trust on accuracy.</div>
+      </div>
+
+      <div class="talking-point">
+        <div class="q">What's the moat?</div>
+        <div class="a">The pricing book. We don't just sell software — we help each tradie build
+        a structured price list (most owner-operators don't have one). That book gets richer
+        with every quote and is hard for the tradie to take elsewhere. The AI just looks smart;
+        the data is the moat.</div>
+      </div>
+
+      <div class="talking-point">
+        <div class="q">How do you make money?</div>
+        <div class="a">Monthly SaaS subscription per tradie (Twilio + Vapi + Anthropic costs
+        bundled in). Stripe Connect platform fee on every paid deposit going through QuoteMate
+        — switching on once tradie #2 onboards. Voice tier as a premium upsell later.</div>
+      </div>
+    </section>
+
+    <!-- ─── BACKUP PLAN ────────────────────────────────────── -->
+    <section>
+      <div class="section-head">
+        <span class="num">04</span>
+        <h2>If The Live Demo Fails</h2>
+      </div>
+      <div class="card">
+        <p>Don't panic. Real systems hiccup. Three fallbacks in priority order:</p>
+        <ul class="clean">
+          <li>Open <strong style="color:var(--text-pri)">/dashboard</strong> and show a quote that was drafted earlier today — same UI, same data shape</li>
+          <li>Show this page's screenshots of the SMS conversation — visually identical to a live run</li>
+          <li>Walk the architecture page — depth-of-build is the second-best signal after a working demo</li>
+        </ul>
+        <p style="margin-top:1rem">A flaky live demo of something real beats a polished mock of something that doesn't exist. Investors know this.</p>
+      </div>
+    </section>
+
+    <footer>
+      <span>QuoteMate · Australia · 2026</span>
+      <span>Demo Script · May 13, 2026</span>
+    </footer>
+  </div>
+</body>
+</html>
