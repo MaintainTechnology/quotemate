@@ -79,7 +79,57 @@ export const UpdateSchema = z.object({
       z.union([z.string().trim().min(1).max(80), z.null(), z.literal('')]),
     )
     .optional(),
+  // Toggle enabled/disabled for a tenant's custom assembly (migration
+  // 023). Keys are tenant_custom_assemblies.id values. Lets the same
+  // PATCH that flips shared-service toggles also flip custom-service
+  // toggles in one round-trip.
+  custom_services: z.record(z.string().uuid(), z.boolean()).optional(),
 })
+
+// Create/update payload for a single tenant_custom_assemblies row.
+// Used by POST /api/tenant/services and PATCH /api/tenant/services/[id].
+// Mirrors the shared_assemblies shape that real-world tradies expect
+// to fill in plus the two custom-only fields (always_inspection,
+// inspection_triggers — Pass 2 surface).
+export const CustomServiceSchema = z.object({
+  trade: TRADE_ENUM,
+  name: z.string().trim().min(2).max(120),
+  description: z.string().trim().max(500).optional().or(z.literal('')),
+  default_unit: z
+    .string()
+    .trim()
+    .min(1)
+    .max(30)
+    .optional()
+    .or(z.literal('')),
+  default_unit_price_ex_gst: z.coerce.number().min(0).max(100_000),
+  default_labour_hours: z.coerce.number().min(0).max(80).optional(),
+  default_exclusions: z
+    .string()
+    .trim()
+    .max(500)
+    .optional()
+    .or(z.literal('')),
+  always_inspection: z.boolean().optional(),
+  // Pass 2 surface. Empty array is the v1 default. Each entry is a
+  // substring/phrase the SMS dispatcher will eventually scan for in
+  // customer messages.
+  inspection_triggers: z
+    .array(z.string().trim().min(1).max(80))
+    .max(10)
+    .optional(),
+  enabled: z.boolean().optional(),
+})
+
+export type CustomServiceInput = z.input<typeof CustomServiceSchema>
+export type CustomServiceOutput = z.output<typeof CustomServiceSchema>
+
+// PATCH version — every field optional so partial edits work
+// (e.g. just toggling `always_inspection` without resubmitting the
+// whole row).
+export const CustomServicePatchSchema = CustomServiceSchema.partial()
+export type CustomServicePatchInput = z.input<typeof CustomServicePatchSchema>
+export type CustomServicePatchOutput = z.output<typeof CustomServicePatchSchema>
 
 export type UpdateSchemaInput = z.input<typeof UpdateSchema>
 export type UpdateSchemaOutput = z.output<typeof UpdateSchema>

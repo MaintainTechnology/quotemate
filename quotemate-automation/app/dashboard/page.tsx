@@ -82,7 +82,38 @@ type ServiceOffering = {
   default_unit_price_ex_gst: number | string | null
   default_labour_hours: number | string | null
   default_exclusions: string | null
+  /** Migration 023. TRUE for tenant_custom_assemblies rows, FALSE
+   *  for shared_assemblies rows. Drives Edit/Delete affordances
+   *  + which PATCH branch the toggle uses. */
+  is_custom: boolean
+  /** TRUE on custom rows that the tradie has flagged "always
+   *  inspection." The LLM tools skip these rows for pricing so
+   *  customer matches force inspection routing. */
+  always_inspection: boolean
 }
+
+/**
+ * Inline create/edit form state for the Services tab. `null` hides the
+ * form; `{mode: 'create', trade}` opens a blank form locked to a trade;
+ * `{mode: 'edit', id, ...row}` pre-fills the form with an existing
+ * tenant_custom_assemblies row. Discriminated union keeps the edit
+ * branch type-safe (only `mode: 'edit'` carries the id field).
+ */
+type EditingService =
+  | { mode: 'create'; trade: string }
+  | {
+      mode: 'edit'
+      id: string
+      trade: string
+      name: string
+      description: string | null
+      default_unit: string | null
+      default_unit_price_ex_gst: number | string | null
+      default_labour_hours: number | string | null
+      default_exclusions: string | null
+      always_inspection: boolean
+      enabled: boolean
+    }
 
 type TierJson = {
   subtotal_ex_gst?: number | string
@@ -264,6 +295,60 @@ export default function DashboardPage() {
     await refresh(accessToken)
   }
 
+  // ── Custom-service helpers (migration 023) ───────────────────────
+  // POST/PATCH/DELETE against /api/tenant/services. Each helper
+  // re-fetches the dashboard payload on success so the list reflects
+  // the new state. Throws a friendly Error message on failure so the
+  // form can surface it inline.
+  async function createCustomService(payload: Record<string, unknown>) {
+    if (!accessToken) throw new Error('not signed in')
+    const res = await fetch('/api/tenant/services', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      throw new Error(body?.message ?? body?.error ?? `Create failed (HTTP ${res.status})`)
+    }
+    await refresh(accessToken)
+    return body as { ok: true; service: unknown }
+  }
+
+  async function updateCustomService(id: string, payload: Record<string, unknown>) {
+    if (!accessToken) throw new Error('not signed in')
+    const res = await fetch(`/api/tenant/services/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      throw new Error(body?.message ?? body?.error ?? `Update failed (HTTP ${res.status})`)
+    }
+    await refresh(accessToken)
+    return body as { ok: true; service: unknown }
+  }
+
+  async function deleteCustomService(id: string) {
+    if (!accessToken) throw new Error('not signed in')
+    const res = await fetch(`/api/tenant/services/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      throw new Error(body?.error ?? `Delete failed (HTTP ${res.status})`)
+    }
+    await refresh(accessToken)
+  }
+
   /**
    * Reconcile the tenant's trades[] via POST /api/tenant/trades.
    * Triggers the pricing_book + service_offerings + Vapi prompt update
@@ -370,7 +455,15 @@ export default function DashboardPage() {
               <AccountTab data={data} onSave={patch} onSaveTrades={saveTrades} />
             )}
             {tab === 'pricing' && <PricingTab data={data} onSave={patch} />}
-            {tab === 'services' && <ServicesTab data={data} onSave={patch} />}
+            {tab === 'services' && (
+              <ServicesTab
+                data={data}
+                onSave={patch}
+                onCreateCustom={createCustomService}
+                onUpdateCustom={updateCustomService}
+                onDeleteCustom={deleteCustomService}
+              />
+            )}
             {tab === 'quotes' && <QuotesTab data={data} />}
             {tab === 'chats' && (
               <ChatsTab accessToken={accessToken} isMultiTrade={
@@ -2023,14 +2116,23 @@ function PricingBookCard({
 function ServicesTab({
   data,
   onSave,
+  onCreateCustom,
+  onUpdateCustom,
+  onDeleteCustom,
 }: {
   data: DashboardData
   onSave: (payload: Record<string, unknown>) => Promise<void>
+  onCreateCustom: (payload: Record<string, unknown>) => Promise<unknown>
+  onUpdateCustom: (id: string, payload: Record<string, unknown>) => Promise<unknown>
+  onDeleteCustom: (id: string) => Promise<void>
 }) {
   const [pending, setPending] = useState<Record<string, boolean>>({})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedAt, setSavedAt] = useState<number | null>(null)
+  // When non-null → the inline create/edit form is visible. `null` =
+  // hidden; `{}` = empty (creating); `{id, ...row}` = editing.
+  const [formState, setFormState] = useState<EditingService | null>(null)
   // Expansion state per assembly_id. We keep a Set rather than a Map<bool>
   // so a row's row is either present (expanded) or absent (collapsed) — no
   // stale `false` entries to clean up.
@@ -2080,7 +2182,25 @@ function ServicesTab({
     setError(null)
     setBusy(true)
     try {
-      await onSave({ services: pending })
+      // Split pending toggles into shared (services key) vs custom
+      // (custom_services key). The API writes each to a different
+      // table — tenant_service_offerings for shared, the row itself
+      // for custom (migration 023).
+      const shared: Record<string, boolean> = {}
+      const custom: Record<string, boolean> = {}
+      for (const [id, enabled] of Object.entries(pending)) {
+        const svc = data.services.find((s) => s.assembly_id === id)
+        if (svc?.is_custom) custom[id] = enabled
+        else shared[id] = enabled
+      }
+      const payload: Record<string, unknown> = {}
+      if (Object.keys(shared).length > 0) payload.services = shared
+      if (Object.keys(custom).length > 0) payload.custom_services = custom
+      if (Object.keys(payload).length === 0) {
+        // Nothing pending — bail out cleanly instead of sending {}
+        return
+      }
+      await onSave(payload)
       setPending({})
       setSavedAt(Date.now())
     } catch (err: any) {
@@ -2119,6 +2239,49 @@ function ServicesTab({
         title="Auto-quote services"
         subtitle={`Tick the work your AI can auto-quote. Unticked services still get inspections — they just won't auto-draft a price. ${enabledCount} of ${totalCount} enabled.`}
       >
+        {/* Top-of-card actions — add a custom service. The form below
+            handles both create and edit; opening it from here defaults
+            to create-mode (no existing row pre-filled). */}
+        <div className="mb-4 flex items-center justify-between gap-3 flex-wrap">
+          <div className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-text-dim">
+            {data.services.filter((s) => s.is_custom).length} custom service
+            {data.services.filter((s) => s.is_custom).length === 1 ? '' : 's'} ·{' '}
+            {data.services.filter((s) => !s.is_custom).length} catalogue
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              setFormState(
+                formState
+                  ? null
+                  : { mode: 'create', trade: tenantTrades[0] ?? 'electrical' },
+              )
+            }
+            className="inline-flex items-center gap-2 border border-accent/60 text-accent hover:bg-accent/10 font-mono font-bold uppercase tracking-[0.14em] text-[0.7rem] px-3.5 py-2 transition-colors"
+          >
+            {formState ? '× Cancel' : '+ Add custom service'}
+          </button>
+        </div>
+
+        {formState && (
+          <div className="mb-6">
+            <CustomServiceForm
+              key={formState.mode === 'edit' ? `edit-${formState.id}` : 'create'}
+              initial={formState}
+              tenantTrades={tenantTrades}
+              onCancel={() => setFormState(null)}
+              onSubmit={async (payload) => {
+                if (formState.mode === 'edit') {
+                  await onUpdateCustom(formState.id, payload)
+                } else {
+                  await onCreateCustom(payload)
+                }
+                setFormState(null)
+              }}
+            />
+          </div>
+        )}
+
         <div className="space-y-2">
           {data.services.length === 0 ? (
             <div className="bg-amber-950/30 border border-amber-700/50 px-4 py-3">
@@ -2362,16 +2525,79 @@ function ServicesTab({
                             per {svc.default_unit}
                           </span>
                         )}
+                        {svc.is_custom && (
+                          <span className="font-mono text-[0.55rem] uppercase tracking-[0.18em] px-2 py-1 border border-accent/40 text-accent">
+                            custom
+                          </span>
+                        )}
                         <span
                           className={`font-mono text-[0.55rem] uppercase tracking-[0.18em] px-2 py-1 border ${
-                            live
-                              ? 'border-accent/40 text-accent'
-                              : 'border-ink-line text-text-dim'
+                            !live
+                              ? 'border-ink-line text-text-dim'
+                              : svc.always_inspection
+                                ? 'border-warning/40 text-warning'
+                                : 'border-accent/40 text-accent'
                           }`}
                         >
-                          {live ? 'AI will auto-quote' : 'Routes to paid inspection'}
+                          {!live
+                            ? 'Off — not offered'
+                            : svc.always_inspection
+                              ? 'Always routes to paid inspection'
+                              : 'AI will auto-quote'}
                         </span>
                       </div>
+
+                      {/* Edit + Delete affordances for tenant-owned
+                          custom rows. Shared catalogue rows aren't
+                          editable from the dashboard — those are
+                          curated at the platform level. */}
+                      {svc.is_custom && (
+                        <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-ink-line/40 mt-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setFormState({
+                                mode: 'edit',
+                                id: svc.assembly_id,
+                                trade: svc.trade,
+                                name: svc.name,
+                                description: svc.description ?? '',
+                                default_unit: svc.default_unit ?? 'each',
+                                default_unit_price_ex_gst:
+                                  toNum(svc.default_unit_price_ex_gst) ?? 0,
+                                default_labour_hours:
+                                  toNum(svc.default_labour_hours) ?? 0,
+                                default_exclusions: svc.default_exclusions ?? '',
+                                always_inspection: svc.always_inspection,
+                                enabled: svc.enabled,
+                              })
+                            }
+                            className="inline-flex items-center gap-1.5 border border-ink-line text-text-sec hover:border-accent/60 hover:text-accent font-mono font-bold uppercase tracking-[0.14em] text-[0.65rem] px-3 py-1.5 transition-colors"
+                          >
+                            ✎ Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (
+                                !window.confirm(
+                                  `Delete "${svc.name}"? Customers asking about this service will no longer get an auto-quote — they'll fall back to your $199 paid inspection.`,
+                                )
+                              ) {
+                                return
+                              }
+                              try {
+                                await onDeleteCustom(svc.assembly_id)
+                              } catch (err: any) {
+                                setError(err?.message ?? 'Delete failed')
+                              }
+                            }}
+                            className="inline-flex items-center gap-1.5 border border-ink-line text-text-dim hover:border-warning/60 hover:text-warning font-mono font-bold uppercase tracking-[0.14em] text-[0.65rem] px-3 py-1.5 transition-colors"
+                          >
+                            ⌫ Delete
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2619,6 +2845,284 @@ function PreferredBrandsCard({
         </button>
       </div>
     </Card>
+  )
+}
+
+// ─── Custom service form (create + edit) ───────────────────────────
+//
+// Single form component used in two modes:
+//   mode='create' → seeded blank (with the tenant's trade pre-picked)
+//   mode='edit'   → pre-filled from an existing tenant_custom_assemblies row
+// On submit, the parent decides whether to POST (create) or PATCH (edit).
+// The form does its own input validation matching CustomServiceSchema
+// on the server, so the user gets fast feedback before the round-trip.
+
+type EditingService =
+  | {
+      mode: 'create'
+      trade: string
+      name?: string
+      description?: string
+      default_unit?: string
+      default_unit_price_ex_gst?: number
+      default_labour_hours?: number
+      default_exclusions?: string
+      always_inspection?: boolean
+      enabled?: boolean
+    }
+  | {
+      mode: 'edit'
+      id: string
+      trade: string
+      name: string
+      description: string
+      default_unit: string
+      default_unit_price_ex_gst: number
+      default_labour_hours: number
+      default_exclusions: string
+      always_inspection: boolean
+      enabled: boolean
+    }
+
+function CustomServiceForm({
+  initial,
+  tenantTrades,
+  onCancel,
+  onSubmit,
+}: {
+  initial: EditingService
+  tenantTrades: string[]
+  onCancel: () => void
+  onSubmit: (payload: Record<string, unknown>) => Promise<void>
+}) {
+  const [trade, setTrade] = useState(initial.trade)
+  const [name, setName] = useState(initial.mode === 'edit' ? initial.name : '')
+  const [description, setDescription] = useState(
+    initial.mode === 'edit' ? initial.description : '',
+  )
+  const [defaultUnit, setDefaultUnit] = useState(
+    initial.mode === 'edit' ? initial.default_unit : 'each',
+  )
+  const [priceStr, setPriceStr] = useState(
+    initial.mode === 'edit' ? String(initial.default_unit_price_ex_gst) : '',
+  )
+  const [hoursStr, setHoursStr] = useState(
+    initial.mode === 'edit' ? String(initial.default_labour_hours) : '',
+  )
+  const [exclusions, setExclusions] = useState(
+    initial.mode === 'edit' ? initial.default_exclusions : '',
+  )
+  const [alwaysInspection, setAlwaysInspection] = useState(
+    initial.mode === 'edit' ? initial.always_inspection : false,
+  )
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const isEditing = initial.mode === 'edit'
+  const canChangeTrade = tenantTrades.length > 1
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    const trimmedName = name.trim()
+    if (trimmedName.length < 2) {
+      setError('Service name must be at least 2 characters.')
+      return
+    }
+    const price = Number(priceStr)
+    if (!Number.isFinite(price) || price < 0) {
+      setError('Default price must be a positive number.')
+      return
+    }
+    const hours = hoursStr.trim() === '' ? 0 : Number(hoursStr)
+    if (!Number.isFinite(hours) || hours < 0 || hours > 80) {
+      setError('Labour hours must be a number between 0 and 80.')
+      return
+    }
+    setBusy(true)
+    try {
+      const payload: Record<string, unknown> = {
+        trade,
+        name: trimmedName,
+        description: description.trim(),
+        default_unit: defaultUnit.trim() || 'each',
+        default_unit_price_ex_gst: price,
+        default_labour_hours: hours,
+        default_exclusions: exclusions.trim(),
+        always_inspection: alwaysInspection,
+      }
+      await onSubmit(payload)
+    } catch (err: any) {
+      setError(err?.message ?? 'Save failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="border border-accent/40 bg-accent/[0.04] p-5 space-y-4"
+    >
+      <div className="flex items-center justify-between gap-3 border-b border-ink-line/60 pb-3">
+        <div className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-accent font-bold">
+          {isEditing ? 'Edit custom service' : 'New custom service'}
+        </div>
+        {canChangeTrade ? (
+          <select
+            value={trade}
+            onChange={(e) => setTrade(e.target.value)}
+            aria-label="Trade for this service"
+            className="bg-ink-base border border-ink-line text-text-pri text-xs font-mono uppercase tracking-[0.14em] px-2.5 py-1.5 focus:outline-none focus:border-accent"
+          >
+            {tenantTrades.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-text-dim">
+            {trade}
+          </span>
+        )}
+      </div>
+
+      <FormField label="Service name" required>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+          maxLength={120}
+          placeholder="e.g. Install pool light"
+          className="w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent"
+        />
+      </FormField>
+
+      <FormField label="Description" hint="What's included. Shown to customers on quotes.">
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          maxLength={500}
+          rows={2}
+          placeholder="Mount, terminate, test on existing circuit"
+          className="w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent resize-y"
+        />
+      </FormField>
+
+      <div className="grid sm:grid-cols-3 gap-3">
+        <FormField label="Unit" hint="each / metre / lot">
+          <input
+            type="text"
+            value={defaultUnit}
+            onChange={(e) => setDefaultUnit(e.target.value)}
+            maxLength={30}
+            placeholder="each"
+            className="w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent"
+          />
+        </FormField>
+        <FormField label="Sundries / equipment price (ex-GST)" required>
+          <input
+            type="number"
+            value={priceStr}
+            onChange={(e) => setPriceStr(e.target.value)}
+            min={0}
+            max={100000}
+            step="0.01"
+            required
+            placeholder="80.00"
+            className="w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent"
+          />
+        </FormField>
+        <FormField label="Default labour hours">
+          <input
+            type="number"
+            value={hoursStr}
+            onChange={(e) => setHoursStr(e.target.value)}
+            min={0}
+            max={80}
+            step="0.25"
+            placeholder="2.0"
+            className="w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent"
+          />
+        </FormField>
+      </div>
+
+      <FormField label="Excludes" hint="What this price doesn't cover.">
+        <textarea
+          value={exclusions}
+          onChange={(e) => setExclusions(e.target.value)}
+          maxLength={500}
+          rows={2}
+          placeholder="Excludes new wiring runs and ceiling repair"
+          className="w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent resize-y"
+        />
+      </FormField>
+
+      <label className="flex items-start gap-3 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={alwaysInspection}
+          onChange={(e) => setAlwaysInspection(e.target.checked)}
+          className="mt-1 accent-warning"
+        />
+        <span className="text-sm">
+          <span className="text-text-pri font-semibold">Always route to paid inspection</span>
+          <span className="block text-xs text-text-dim mt-0.5">
+            When ticked, the AI will never auto-quote this service. Customers
+            asking about it get the $199 paid inspection instead. Useful for
+            jobs where conditions vary too much for a flat rate.
+          </span>
+        </span>
+      </label>
+
+      {error && <ErrorBanner>{error}</ErrorBanner>}
+
+      <div className="flex items-center justify-end gap-2 border-t border-ink-line/60 pt-4">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="border border-ink-line text-text-sec hover:text-text-pri font-mono font-bold uppercase tracking-[0.14em] text-[0.7rem] px-4 py-2 transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={busy}
+          className="bg-accent hover:bg-accent-press text-white font-semibold px-5 py-2 text-sm uppercase tracking-wider transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {busy ? 'Saving…' : isEditing ? 'Save changes' : 'Add service'}
+        </button>
+      </div>
+    </form>
+  )
+}
+
+function FormField({
+  label,
+  hint,
+  required,
+  children,
+}: {
+  label: string
+  hint?: string
+  required?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <label className="block">
+      <span className="block font-mono text-[0.6rem] uppercase tracking-[0.16em] text-text-dim mb-1.5">
+        {label}
+        {required && <span className="text-accent ml-1">*</span>}
+      </span>
+      {children}
+      {hint && (
+        <span className="block mt-1 text-[0.65rem] text-text-dim/80 leading-snug">
+          {hint}
+        </span>
+      )}
+    </label>
   )
 }
 

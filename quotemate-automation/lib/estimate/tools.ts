@@ -103,42 +103,113 @@ function applyPropertyFilters(query: any, f: PropertyFilters) {
 // include trade in lookup_* calls.
 const TradeEnum = z.enum(['electrical', 'plumbing'])
 
-export const lookupAssembly = tool({
-  description:
-    'Search the assembly library by name plus optional filters. Results are ' +
-    'returned BEST-MATCH-FIRST via cross-encoder reranker — pick the top row ' +
-    'unless property filters point you elsewhere. ' +
-    'ALWAYS pass `trade` ("electrical" or "plumbing") — the DB carries both ' +
-    'and queries without trade may return cross-trade matches. ' +
-    'For electrical jobs, when intake.scope.specs has values (color_temp, ' +
-    'dimmable, smart, weatherproof, supplied_by), PASS THEM THROUGH so only ' +
-    'matching assemblies are returned. ' +
-    'Example: lookupAssembly({ query: "outdoor weatherproof IP-rated light install", trade: "electrical", weatherproof: true }) ' +
-    'returns only outdoor-rated electrical assemblies, ranked by relevance to the query.',
-  inputSchema: z.object({
-    query: z.string(),
-    trade: TradeEnum.optional(),
-    color_temp: z.enum(['warm_white', 'cool_white', 'tri_colour']).optional(),
-    dimmable: z.boolean().optional(),
-    smart: z.boolean().optional(),
-    weatherproof: z.boolean().optional(),
-    supplied_by: z.enum(['tradie', 'customer']).optional(),
-  }),
-  execute: async ({ query, trade, ...filters }) => {
-    let q = supabase.from('shared_assemblies').select('*').ilike('name', `%${query}%`)
-    if (trade) q = q.eq('trade', trade)
-    q = applyPropertyFilters(q, filters)
-    const { data } = await q.limit(FETCH_LIMIT)
-    const rows = data ?? []
-    // Re-rank: pack name + description so the cross-encoder can read both.
-    return rerankRows(
-      query,
-      rows,
-      RETURN_LIMIT,
-      (r: any) => r.description ? `${r.name} — ${r.description}` : r.name,
-    )
-  },
-})
+// ─────────────────────────────────────────────────────────────────
+// Factory variant — makeTools(tenantId) returns a tools object whose
+// lookupAssembly UNIONs shared_assemblies with this tenant's
+// tenant_custom_assemblies (migration 023). Custom rows are scoped
+// strictly to the calling tenant so one tradie's "Install pool light"
+// never leaks into another tradie's quote.
+//
+// always_inspection=true custom rows are EXCLUDED from results so
+// the LLM can't ground a price on them — the grounding validator
+// then forces inspection routing for any service that matches.
+//
+// The static exports below (lookupAssembly, lookupMaterial, etc.)
+// preserve backward compatibility for code paths that haven't been
+// migrated to the factory yet (scripts, tests).
+// ─────────────────────────────────────────────────────────────────
+
+function makeLookupAssembly(tenantId: string | null) {
+  return tool({
+    description:
+      'Search the assembly library by name plus optional filters. Results are ' +
+      'returned BEST-MATCH-FIRST via cross-encoder reranker — pick the top row ' +
+      'unless property filters point you elsewhere. ' +
+      'ALWAYS pass `trade` ("electrical" or "plumbing") — the DB carries both ' +
+      'and queries without trade may return cross-trade matches. ' +
+      'For electrical jobs, when intake.scope.specs has values (color_temp, ' +
+      'dimmable, smart, weatherproof, supplied_by), PASS THEM THROUGH so only ' +
+      'matching assemblies are returned. ' +
+      'Example: lookupAssembly({ query: "outdoor weatherproof IP-rated light install", trade: "electrical", weatherproof: true }) ' +
+      'returns only outdoor-rated electrical assemblies, ranked by relevance to the query.',
+    inputSchema: z.object({
+      query: z.string(),
+      trade: TradeEnum.optional(),
+      color_temp: z.enum(['warm_white', 'cool_white', 'tri_colour']).optional(),
+      dimmable: z.boolean().optional(),
+      smart: z.boolean().optional(),
+      weatherproof: z.boolean().optional(),
+      supplied_by: z.enum(['tradie', 'customer']).optional(),
+    }),
+    execute: async ({ query, trade, ...filters }) => {
+      // Shared catalogue lookup (unchanged behaviour).
+      let sharedQ = supabase
+        .from('shared_assemblies')
+        .select('*')
+        .ilike('name', `%${query}%`)
+      if (trade) sharedQ = sharedQ.eq('trade', trade)
+      sharedQ = applyPropertyFilters(sharedQ, filters)
+      const sharedRes = await sharedQ.limit(FETCH_LIMIT)
+      const sharedRows = (sharedRes.data ?? []).map((r: any) => ({
+        ...r,
+        is_custom: false,
+      }))
+
+      // Tenant-owned custom assemblies (migration 023). Only when the
+      // intake carries a tenant_id AND the row is enabled AND it's NOT
+      // flagged always_inspection (those force inspection routing and
+      // must never produce an auto-quote price).
+      let customRows: any[] = []
+      if (tenantId) {
+        let customQ = supabase
+          .from('tenant_custom_assemblies')
+          .select('*')
+          .ilike('name', `%${query}%`)
+          .eq('tenant_id', tenantId)
+          .eq('enabled', true)
+          .eq('always_inspection', false)
+        if (trade) customQ = customQ.eq('trade', trade)
+        customQ = applyPropertyFilters(customQ, filters)
+        const customRes = await customQ.limit(FETCH_LIMIT)
+        customRows = (customRes.data ?? []).map((r: any) => ({
+          ...r,
+          is_custom: true,
+        }))
+      }
+
+      // Combine — custom rows go first so the reranker can promote
+      // them when they're a tighter match. The reranker decides the
+      // final order regardless.
+      const rows = [...customRows, ...sharedRows]
+      return rerankRows(
+        query,
+        rows,
+        RETURN_LIMIT,
+        (r: any) => (r.description ? `${r.name} — ${r.description}` : r.name),
+      )
+    },
+  })
+}
+
+/**
+ * Build a tools object scoped to one tenant. Pass `tenantId=null` to
+ * preserve the pre-023 behaviour (shared catalogue only). The result
+ * is shaped exactly like the static module exports below so callers
+ * can drop it into `generateText({ tools })`.
+ */
+export function makeTools(tenantId: string | null) {
+  return {
+    lookupAssembly: makeLookupAssembly(tenantId),
+    lookupMaterial,
+    applyMarkup,
+    flagInspectionNeeded,
+  }
+}
+
+// Backward-compat static export — used by any caller that doesn't
+// (yet) thread tenantId through. Behaves like the pre-023 tool:
+// shared catalogue only.
+export const lookupAssembly = makeLookupAssembly(null)
 
 export const lookupMaterial = tool({
   description:

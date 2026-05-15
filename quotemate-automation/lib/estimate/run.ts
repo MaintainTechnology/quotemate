@@ -2,7 +2,7 @@ import { anthropic } from '@ai-sdk/anthropic'
 import { generateText, stepCountIs } from 'ai'
 import { createClient } from '@supabase/supabase-js'
 import { systemPrompt } from './prompt'
-import * as tools from './tools'
+import { makeTools } from './tools'
 import { buildCandidatePrices, validateQuoteGrounding, type GroundingFailure, type PricingBookForValidation } from './validate'
 import { fetchSimilarPastQuotesContext } from './rag'
 import { pipelineLog } from '@/lib/log/pipeline'
@@ -68,6 +68,12 @@ export async function runEstimation(intake: any, pricingBook: any, modelId = 'cl
     (preferencesBlock ? `${preferencesBlock}\n` : '') +
     `Draft a quote for this NEW intake:\n\n${JSON.stringify(intake, null, 2)}`
 
+  // Tenant-scoped tool factory. lookupAssembly now reads BOTH
+  // shared_assemblies AND this tenant's tenant_custom_assemblies
+  // (migration 023). Legacy intakes without tenant_id get the
+  // shared catalogue only — same behaviour as pre-023.
+  const tools = makeTools((intake?.tenant_id as string | null) ?? null)
+
   // Anthropic prompt caching: the system prompt + pricing-book derivation
   // is identical across estimations until pricing_book changes, so we mark
   // it as ephemeral. First call inside the 5-min cache window pays full
@@ -118,11 +124,16 @@ export async function runEstimation(intake: any, pricingBook: any, modelId = 'cl
   }
 
   // Auto-quote path: every line_item.unit_price_ex_gst MUST be derivable
-  // from pricing_book + shared_materials + shared_assemblies. If even one
+  // from pricing_book + shared_materials + shared_assemblies + the
+  // tenant's tenant_custom_assemblies (migration 023). If even one
   // line item fails grounding, downgrade the entire quote to inspection.
   // v5 multi-trade: scope grounding to intake.trade so an electrical quote
   // can never coincidentally validate against a plumbing price (or vice versa).
-  const candidates = await loadCandidatePrices(pricingBook, intake?.trade ?? null)
+  const candidates = await loadCandidatePrices(
+    pricingBook,
+    intake?.trade ?? null,
+    (intake?.tenant_id as string | null) ?? null,
+  )
   const check = validateQuoteGrounding(draft, pricingBook as PricingBookForValidation, candidates)
 
   if (check.valid) {
@@ -174,19 +185,58 @@ export async function runEstimation(intake: any, pricingBook: any, modelId = 'cl
  * Without this filter, an electrical quote could "pass" validation by
  * coincidentally matching a plumbing price — the trade column is now the
  * canonical scope.
+ *
+ * v6+ migration 023: also pulls tenant_custom_assemblies for this tenant
+ * so prices the LLM grounded on a tenant-owned custom assembly pass
+ * validation. always_inspection=true rows are excluded (matching the
+ * tool exclusion) so the validator never accepts a price derived from
+ * a service the tradie wanted to always inspect.
  */
-async function loadCandidatePrices(pricingBook: any, trade: string | null) {
-  const materialsQuery = supabase.from('shared_materials').select('name, default_unit_price_ex_gst, trade')
-  const assembliesQuery = supabase.from('shared_assemblies').select('name, default_unit_price_ex_gst, trade')
+async function loadCandidatePrices(
+  pricingBook: any,
+  trade: string | null,
+  tenantId: string | null,
+) {
+  const materialsQuery = supabase
+    .from('shared_materials')
+    .select('name, default_unit_price_ex_gst, trade')
+  const assembliesQuery = supabase
+    .from('shared_assemblies')
+    .select('name, default_unit_price_ex_gst, trade')
 
-  const [{ data: materials }, { data: assemblies }] = await Promise.all([
+  const customAssembliesPromise = tenantId
+    ? (() => {
+        let q = supabase
+          .from('tenant_custom_assemblies')
+          .select('name, default_unit_price_ex_gst, trade')
+          .eq('tenant_id', tenantId)
+          .eq('enabled', true)
+          .eq('always_inspection', false)
+        if (trade) q = q.eq('trade', trade)
+        return q
+      })()
+    : Promise.resolve({ data: [] as Array<{ name: string; default_unit_price_ex_gst: number | string; trade: string }> })
+
+  const [
+    { data: materials },
+    { data: assemblies },
+    { data: customAssemblies },
+  ] = await Promise.all([
     trade ? materialsQuery.eq('trade', trade) : materialsQuery,
     trade ? assembliesQuery.eq('trade', trade) : assembliesQuery,
+    customAssembliesPromise,
   ])
+
+  // Merge shared + custom assemblies into one candidate set — the
+  // validator treats them identically as a (name, price) pair.
+  const allAssemblies = [
+    ...(assemblies ?? []),
+    ...(customAssemblies ?? []),
+  ]
 
   return buildCandidatePrices(
     (materials ?? []).map((r: any) => ({ name: r.name, price: r.default_unit_price_ex_gst })),
-    (assemblies ?? []).map((r: any) => ({ name: r.name, price: r.default_unit_price_ex_gst })),
+    allAssemblies.map((r: any) => ({ name: r.name, price: r.default_unit_price_ex_gst })),
     pricingBook,
   )
 }

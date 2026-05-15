@@ -112,7 +112,16 @@ export async function GET(req: Request) {
         ? [tenant.trade as string]
         : []
 
-  const [pricingRes, assembliesRes, offeringsRes, quotesRes, licencesRes, materialsRes, prefsRes] =
+  const [
+    pricingRes,
+    assembliesRes,
+    offeringsRes,
+    quotesRes,
+    licencesRes,
+    materialsRes,
+    prefsRes,
+    customAssembliesRes,
+  ] =
     await Promise.all([
       // Pricing books — one row per trade for multi-trade tenants. Returned
       // as an array (`pricing_books`) below; the dashboard reads pricing[0]
@@ -175,6 +184,17 @@ export async function GET(req: Request) {
         .from('tenant_material_preferences')
         .select('category, preferred_brand')
         .eq('tenant_id', tenant.id),
+      // Tenant-owned custom assemblies (migration 023). Returned in
+      // their own array AND merged into `services` below so the
+      // dashboard can render both seeded + custom rows in one list
+      // without the client having to re-merge.
+      supabase
+        .from('tenant_custom_assemblies')
+        .select('*')
+        .eq('tenant_id', tenant.id)
+        .in('trade', tenantTrades.length > 0 ? tenantTrades : ['__never__'])
+        .order('trade')
+        .order('name'),
     ])
 
   // Merge assemblies + offerings into a unified Service[] for the dashboard.
@@ -184,7 +204,7 @@ export async function GET(req: Request) {
       o.enabled as boolean,
     ]),
   )
-  const services = (assembliesRes.data ?? []).map((a) => ({
+  const sharedServices = (assembliesRes.data ?? []).map((a) => ({
     assembly_id: a.id as string,
     name: a.name as string,
     description: (a.description ?? null) as string | null,
@@ -193,6 +213,10 @@ export async function GET(req: Request) {
     default_unit_price_ex_gst: a.default_unit_price_ex_gst as number | string | null,
     default_labour_hours: a.default_labour_hours as number | string | null,
     default_exclusions: (a.default_exclusions ?? null) as string | null,
+    // Custom-only fields default to safe values for shared rows so the
+    // unified service shape stays consistent across the API.
+    is_custom: false,
+    always_inspection: false,
     // Tenant's explicit toggle wins; otherwise fall back to the
     // catalogue's `default_enabled` flag. Migration 021 added that
     // column so opt-in extras (aircon, EV charger, leak detection,
@@ -203,6 +227,28 @@ export async function GET(req: Request) {
       ? (offeringMap.get(a.id as string) as boolean)
       : (a.default_enabled as boolean | null) ?? true,
   }))
+
+  // Merge tenant_custom_assemblies into the same shape. Custom rows
+  // are marked is_custom=true so the dashboard can render edit/delete
+  // affordances on them. Their `enabled` lives directly on the row,
+  // not in a tenant_service_offerings join.
+  const customServices = (customAssembliesRes.data ?? []).map((a) => ({
+    assembly_id: a.id as string,
+    name: a.name as string,
+    description: (a.description ?? null) as string | null,
+    trade: a.trade as string,
+    default_unit: (a.default_unit ?? null) as string | null,
+    default_unit_price_ex_gst: a.default_unit_price_ex_gst as number | string | null,
+    default_labour_hours: a.default_labour_hours as number | string | null,
+    default_exclusions: (a.default_exclusions ?? null) as string | null,
+    is_custom: true,
+    always_inspection: (a.always_inspection as boolean | null) ?? false,
+    enabled: (a.enabled as boolean | null) ?? true,
+  }))
+
+  // Final unified list: shared first (anchors the dashboard at the
+  // curated catalogue), then custom (the tradie's own additions).
+  const services = [...sharedServices, ...customServices]
 
   // Resolve job context by joining quotes → intakes. The intake holds
   // the customer-facing details the dashboard wants to surface for each
@@ -586,6 +632,35 @@ export async function PATCH(req: Request) {
         .from('tenant_service_offerings')
         .upsert(rows, { onConflict: 'tenant_id,assembly_id' })
       if (error) errors.push(`services: ${error.message}`)
+    }
+  }
+
+  // 3b. Custom service toggles — for tenant-owned assemblies (mig 023)
+  //     the enabled flag lives directly on the row, NOT in a join
+  //     table. So we UPDATE tenant_custom_assemblies for each flip. We
+  //     batch by `.in('id', [...])` for ON and again for OFF so two
+  //     SQL round-trips cover an arbitrary number of toggles.
+  if (updates.custom_services) {
+    const enableIds: string[] = []
+    const disableIds: string[] = []
+    for (const [id, enabled] of Object.entries(updates.custom_services)) {
+      ;(enabled ? enableIds : disableIds).push(id)
+    }
+    if (enableIds.length > 0) {
+      const { error } = await supabase
+        .from('tenant_custom_assemblies')
+        .update({ enabled: true })
+        .eq('tenant_id', tenant.id)
+        .in('id', enableIds)
+      if (error) errors.push(`custom_services (enable): ${error.message}`)
+    }
+    if (disableIds.length > 0) {
+      const { error } = await supabase
+        .from('tenant_custom_assemblies')
+        .update({ enabled: false })
+        .eq('tenant_id', tenant.id)
+        .in('id', disableIds)
+      if (error) errors.push(`custom_services (disable): ${error.message}`)
     }
   }
 
