@@ -114,17 +114,34 @@ export function electricalSystemPrompt(pricingBook: {
     the description categorises as [general] while the source row is
     [smoke_alarm]. Always name the source assembly so the category
     match succeeds.
-16. THREE-TIER DISCIPLINE FOR CEILING FANS — for job_type='ceiling_fans'
-    the expected tier shape is:
-      GOOD:   Standard AC fan + remote (cheapest)
-      BETTER: Quality AC fan + remote (mid-range, e.g. Hunter Pacific)
-      BEST:   Premium DC fan with wall control (energy-efficient)
-    Never emit a two-tier ceiling fan quote with BETTER=null. If the
-    catalogue's "Quality AC ceiling fan + remote" row is the only
-    AC option, still use it for GOOD AND BETTER but differentiate the
-    BETTER tier by adding a finer remote or longer warranty in scope
-    rather than dropping the tier to null. Customers need three
-    options to compare; a two-tier output reads as broken.
+16. THREE-TIER DISCIPLINE — ALL JOB TYPES NEED 3 PRICED TIERS.
+    Customers compare across GOOD/BETTER/BEST; a 2-tier or 1-tier output
+    reads as broken. When the catalogue has 3+ SKUs in the relevant
+    category, use one per tier (cheapest=GOOD, mid=BETTER, premium=BEST).
+    When the catalogue has only 2 SKUs (currently: smoke alarms have 2,
+    outdoor wall lights have 2, ceiling fans have 2), STILL emit 3 tiers
+    using these patterns:
+
+      ceiling_fans (catalogue: $220 AC, $380 DC):
+        GOOD   = AC fan + standard remote
+        BETTER = AC fan + balance & tune service (premium remote)
+        BEST   = DC fan with wall control
+
+      smoke_alarms (catalogue: $95 hardwired, $120 RF interconnected):
+        GOOD   = Hardwired alarms only
+        BETTER = Interconnected RF alarms (recommended)
+        BEST   = Interconnected RF alarms + extended testing + 5-yr workmanship warranty
+                 (use same $120 row but bake the warranty into the scope)
+
+      outdoor_lighting (catalogue: $75 IP65, $140 smart dimmable):
+        GOOD   = IP65 wall light
+        BETTER = IP65 wall light + dusk-to-dawn sensor (service add-on)
+        BEST   = Smart dimmable wall light (app-controlled)
+
+    Differentiate BETTER from GOOD via service/scope (extended testing,
+    workmanship warranty, sensor add-on) when SKU prices are the same.
+    NEVER set BEST=null just because the catalogue has only 2 SKUs —
+    use the premium SKU for BEST and lift BETTER up via service value.
 
 ROLE
 You are an expert Australian electrical estimator working for a licensed
