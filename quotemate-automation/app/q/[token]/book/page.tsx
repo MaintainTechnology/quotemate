@@ -1,7 +1,10 @@
-// Customer-facing booking page.
+// Customer-facing booking page — Maintain Technology design system
+// (dark navy canvas, vibrant orange, JetBrains Mono eyebrows, ALL-CAPS
+// display, topographic overlay, square edges, borders not shadows).
+// Visual language matches /q/[token]. Logic is unchanged.
 //
 // WP6 reorder: BOOK FIRST, PAY LAST. The customer lands here from the
-// quote (the pay short-link now routes here when no slot is chosen yet).
+// quote (the pay short-link routes here when no slot is chosen yet).
 // They pick a time → it's reserved on the quote → they're sent to the
 // deposit step → paying CONFIRMS the booking (Stripe webhook).
 //
@@ -43,6 +46,67 @@ function formatSlot(iso: string): string {
   } catch {
     return iso
   }
+}
+
+// Signature Maintain motif — low-opacity topographic ridge lines, teal
+// stroke, behind everything. Pure decoration, pointer-events-none.
+function Topo() {
+  return (
+    <svg
+      className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.12]"
+      viewBox="0 0 1920 1080"
+      preserveAspectRatio="xMidYMid slice"
+      aria-hidden="true"
+    >
+      {[0, 70, 140, 210, 280, 350, 420].map((dy) => (
+        <path
+          key={dy}
+          d={`M0,${760 - dy} Q240,${600 - dy} 480,${690 - dy} T960,${
+            640 - dy
+          } T1440,${700 - dy} T1920,${610 - dy}`}
+          stroke="var(--color-teal-glow, #14B8A6)"
+          strokeWidth="1"
+          fill="none"
+        />
+      ))}
+    </svg>
+  )
+}
+
+// 3-step ops strip — makes the new book → pay → confirmed order legible
+// at a glance. `active` highlights the current step in orange; earlier
+// steps read as done.
+function StepStrip({ active }: { active: 1 | 2 | 3 }) {
+  const steps = [
+    { n: '01', label: 'Choose a time' },
+    { n: '02', label: 'Pay deposit' },
+    { n: '03', label: 'Confirmed' },
+  ]
+  return (
+    <div className="mb-10 flex flex-wrap gap-x-6 gap-y-2 border-b border-ink-line pb-5">
+      {steps.map((s, i) => {
+        const step = i + 1
+        const isActive = step === active
+        const isDone = step < active
+        return (
+          <span
+            key={s.n}
+            className={`font-mono text-[0.7rem] uppercase tracking-[0.16em] ${
+              isActive
+                ? 'text-accent'
+                : isDone
+                  ? 'text-text-sec'
+                  : 'text-text-dim'
+            }`}
+          >
+            <span className="font-bold">{s.n}</span>
+            {isDone ? ' ✓ ' : ' · '}
+            {s.label}
+          </span>
+        )
+      })}
+    </div>
+  )
 }
 
 export default async function BookingPage(props: {
@@ -143,20 +207,37 @@ export default async function BookingPage(props: {
   }
 
   return (
-    <main className="min-h-screen bg-zinc-50 font-sans text-zinc-900">
-      <header className="border-b border-zinc-200 bg-white">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4 sm:px-6">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="grid h-7 w-7 place-items-center rounded-md bg-zinc-900 text-xs font-black text-white">Q</span>
-            <span className="font-bold tracking-tight">QuoteMate</span>
+    <main className="relative min-h-screen overflow-hidden bg-ink-deep text-text-pri">
+      <Topo />
+
+      <header className="relative z-10 border-b border-ink-line">
+        <div className="mx-auto flex max-w-3xl items-center justify-between px-5 py-5 sm:px-6">
+          <Link href="/" className="flex items-center gap-2.5">
+            <span className="grid h-7 w-7 place-items-center bg-accent text-sm font-black text-white">
+              Q
+            </span>
+            <span className="font-extrabold uppercase tracking-tight">
+              QuoteMate
+            </span>
           </Link>
-          <Link href={`/q/${token}`} className="text-xs text-zinc-500 underline-offset-2 hover:underline">
-            Back to quote
+          <Link
+            href={`/q/${token}`}
+            className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-text-dim transition-colors hover:text-accent"
+          >
+            ← Back to quote
           </Link>
         </div>
       </header>
 
-      <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">{content}</div>
+      <div className="relative z-10 mx-auto max-w-3xl px-5 py-12 sm:px-6 sm:py-16">
+        {content}
+      </div>
+
+      <div className="relative z-10 bg-accent px-6 py-4 text-center">
+        <span className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-white">
+          QuoteMate · Book · Pay · Done
+        </span>
+      </div>
     </main>
   )
 }
@@ -169,23 +250,26 @@ function AlreadyScheduledState({
   tradieName: string | null
 }) {
   return (
-    <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-6 sm:p-8">
-      <span className="inline-block rounded-md bg-emerald-100 px-3 py-1 text-xs font-bold uppercase tracking-widest text-emerald-700">
-        Booked
+    <section className="motion-safe:animate-[fade-in_240ms_ease-out_both]">
+      <StepStrip active={3} />
+      <span className="inline-flex items-center bg-teal-glow/15 px-3 py-1 font-mono text-[0.7rem] font-bold uppercase tracking-[0.16em] text-teal-glow">
+        Booked · Confirmed
       </span>
-      <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-emerald-950">
-        You&apos;re locked in for {formatSlot(scheduledAt)}.
+      <h1 className="mt-6 text-[clamp(2rem,5vw,3.25rem)] font-extrabold uppercase leading-[1.02] tracking-[-0.03em]">
+        You&apos;re <span className="text-accent">locked in</span> for{' '}
+        {formatSlot(scheduledAt)}.
       </h1>
-      <p className="mt-3 text-sm text-emerald-900">
+      <p className="mt-5 max-w-[60ch] text-base leading-relaxed text-text-sec">
         Deposit received and your time is confirmed.{' '}
-        {tradieName ? `${tradieName} will` : 'Your tradie will'} confirm by SMS the day before. If anything changes,
-        reply to that SMS and they&apos;ll reschedule.
+        {tradieName ? `${tradieName} will` : 'Your tradie will'} confirm by SMS
+        the day before. If anything changes, reply to that SMS and they&apos;ll
+        reschedule.
       </p>
     </section>
   )
 }
 
-// New: a time is chosen but the deposit (the LAST step) isn't paid yet.
+// A time is chosen but the deposit (the LAST step) isn't paid yet.
 function ReservedPayState({
   token,
   tier,
@@ -196,28 +280,33 @@ function ReservedPayState({
   scheduledAt: string
 }) {
   return (
-    <section className="rounded-lg border border-zinc-200 bg-white p-6 sm:p-8">
-      <span className="inline-block rounded-md bg-amber-100 px-3 py-1 text-xs font-bold uppercase tracking-widest text-amber-700">
+    <section className="motion-safe:animate-[fade-in_240ms_ease-out_both]">
+      <StepStrip active={2} />
+      <span className="inline-flex items-center bg-accent/15 px-3 py-1 font-mono text-[0.7rem] font-bold uppercase tracking-[0.16em] text-accent">
         Time held
       </span>
-      <h1 className="mt-4 text-2xl font-extrabold tracking-tight">
-        {formatSlot(scheduledAt)} is held for you.
+      <h1 className="mt-6 text-[clamp(2rem,5vw,3.25rem)] font-extrabold uppercase leading-[1.02] tracking-[-0.03em]">
+        {formatSlot(scheduledAt)} is <span className="text-accent">held</span>{' '}
+        for you.
       </h1>
-      <p className="mt-3 text-sm text-zinc-700">
-        One last step — pay your deposit to lock it in. Your time isn&apos;t confirmed until the deposit is paid.
+      <p className="mt-5 max-w-[60ch] text-base leading-relaxed text-text-sec">
+        One last step — pay your deposit to lock it in. Your time isn&apos;t
+        confirmed until the deposit is paid.
       </p>
       <a
         href={`/r/${token}/${tier}`}
-        className="mt-5 inline-block rounded-md bg-zinc-900 px-5 py-3 text-sm font-semibold text-white hover:bg-zinc-700"
+        className="mt-8 inline-flex items-center gap-2 bg-accent px-6 py-3.5 text-sm font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press"
       >
         Pay deposit &amp; confirm →
       </a>
-      <p className="mt-3 text-xs text-zinc-500">
+      <p className="mt-5 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
         Picked the wrong time?{' '}
-        <Link href={`/q/${token}/book`} className="underline">
+        <Link
+          href={`/q/${token}/book`}
+          className="text-text-sec underline underline-offset-4 hover:text-accent"
+        >
           Choose another
         </Link>
-        .
       </p>
     </section>
   )
@@ -236,23 +325,26 @@ function GoogleBookingOption({
   tradieName: string | null
 }) {
   if (!googleUrl) return null
+  const who = tradieName ?? 'the tradie'
   return (
-    <div className="mt-6 rounded-lg border border-zinc-200 bg-white p-4 sm:p-5">
-      <p className="text-sm font-semibold text-zinc-900">
-        Prefer to book straight into {tradieName ?? 'the tradie'}&apos;s calendar?
+    <div className="mt-10 border-t border-ink-line pt-8">
+      <span className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-text-dim">
+        Or book direct
+      </span>
+      <p className="mt-3 text-base font-semibold text-text-pri">
+        Prefer to book straight into {who}&apos;s calendar?
       </p>
-      <p className="mt-1 text-xs text-zinc-500">
-        Opens {tradieName ?? 'the tradie'}&apos;s Google booking page. With this option your
-        deposit is sorted with {tradieName ?? 'the tradie'} directly — it won&apos;t go through
-        the screen above.
+      <p className="mt-2 max-w-[58ch] text-sm leading-relaxed text-text-sec">
+        Opens {who}&apos;s Google booking page. With this option your deposit is
+        sorted with {who} directly — it won&apos;t go through the screen above.
       </p>
       <a
         href={googleUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="mt-3 inline-block rounded-md border border-zinc-300 px-4 py-2.5 text-sm font-semibold text-zinc-900 hover:bg-zinc-50"
+        className="mt-4 inline-flex items-center gap-2 border border-ink-line px-5 py-3 text-sm font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
       >
-        Book on {tradieName ?? 'the tradie'}&apos;s calendar ↗
+        Book on {who}&apos;s calendar ↗
       </a>
     </div>
   )
@@ -266,11 +358,17 @@ function NoSlotsState({
   googleUrl: string | null
 }) {
   return (
-    <section className="rounded-lg border border-zinc-200 bg-white p-6 sm:p-8">
-      <h1 className="text-2xl font-extrabold tracking-tight">We&apos;ll be in touch</h1>
-      <p className="mt-3 text-sm text-zinc-700">
-        {tradieName ?? 'Your tradie'} doesn&apos;t have published times right now. They&apos;ll text you within one
-        business day to arrange one.
+    <section className="motion-safe:animate-[fade-in_240ms_ease-out_both]">
+      <StepStrip active={1} />
+      <span className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-text-dim">
+        Scheduling
+      </span>
+      <h1 className="mt-6 text-[clamp(2rem,5vw,3.25rem)] font-extrabold uppercase leading-[1.02] tracking-[-0.03em]">
+        We&apos;ll be <span className="text-accent">in touch</span>
+      </h1>
+      <p className="mt-5 max-w-[60ch] text-base leading-relaxed text-text-sec">
+        {tradieName ?? 'Your tradie'} doesn&apos;t have published times right
+        now. They&apos;ll text you within one business day to arrange one.
       </p>
       <GoogleBookingOption googleUrl={googleUrl} tradieName={tradieName} />
     </section>
@@ -291,15 +389,22 @@ function NoSlotsPayState({
   googleUrl: string | null
 }) {
   return (
-    <section className="rounded-lg border border-zinc-200 bg-white p-6 sm:p-8">
-      <h1 className="text-2xl font-extrabold tracking-tight">No times published yet</h1>
-      <p className="mt-3 text-sm text-zinc-700">
-        {tradieName ?? 'Your tradie'} hasn&apos;t put up bookable times yet. You can still secure the job with your
-        deposit — they&apos;ll text you to lock in a time.
+    <section className="motion-safe:animate-[fade-in_240ms_ease-out_both]">
+      <StepStrip active={1} />
+      <span className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-text-dim">
+        Scheduling
+      </span>
+      <h1 className="mt-6 text-[clamp(2rem,5vw,3.25rem)] font-extrabold uppercase leading-[1.02] tracking-[-0.03em]">
+        No times <span className="text-accent">published</span> yet
+      </h1>
+      <p className="mt-5 max-w-[60ch] text-base leading-relaxed text-text-sec">
+        {tradieName ?? 'Your tradie'} hasn&apos;t put up bookable times yet. You
+        can still secure the job with your deposit — they&apos;ll text you to
+        lock in a time.
       </p>
       <a
         href={`/r/${token}/${tier}`}
-        className="mt-5 inline-block rounded-md bg-zinc-900 px-5 py-3 text-sm font-semibold text-white hover:bg-zinc-700"
+        className="mt-8 inline-flex items-center gap-2 bg-accent px-6 py-3.5 text-sm font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press"
       >
         Pay deposit to secure →
       </a>
@@ -322,13 +427,20 @@ function PickState({
   googleUrl: string | null
 }) {
   return (
-    <section>
-      <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Pick a time that works.</h1>
-      <p className="mt-3 text-sm text-zinc-600 sm:text-base">
-        These are {tradieName ? `${tradieName}'s` : "your tradie's"} next available times. Choose one, then pay your
-        deposit to lock it in — that&apos;s the last step.
+    <section className="motion-safe:animate-[fade-in_240ms_ease-out_both]">
+      <StepStrip active={1} />
+      <span className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-text-dim">
+        Step 01 — Choose a time
+      </span>
+      <h1 className="mt-6 text-[clamp(2.25rem,5.5vw,3.5rem)] font-extrabold uppercase leading-none tracking-[-0.035em]">
+        Pick a time that <span className="text-accent">works</span>.
+      </h1>
+      <p className="mt-5 max-w-[60ch] text-base leading-relaxed text-text-sec">
+        These are {tradieName ? `${tradieName}'s` : "your tradie's"} next
+        available times. Choose one, then pay your deposit to lock it in —
+        that&apos;s the last step.
       </p>
-      <div className="mt-8">
+      <div className="mt-10">
         <SlotPicker token={token} slots={slots} tier={tier} />
       </div>
       <GoogleBookingOption googleUrl={googleUrl} tradieName={tradieName} />

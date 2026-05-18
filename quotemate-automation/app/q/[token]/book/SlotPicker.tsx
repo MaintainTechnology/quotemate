@@ -79,11 +79,13 @@ export function SlotPicker({
 
   if (visible.length === 0) {
     return (
-      <p className="rounded-md border border-zinc-200 bg-white p-4 text-sm text-zinc-600">
+      <p className="border border-ink-line bg-ink-card p-5 font-mono text-[0.8rem] uppercase tracking-[0.12em] text-text-dim">
         No upcoming slots are open. Your tradie will SMS you to arrange a time.
       </p>
     )
   }
+
+  const locked = status === 'submitting' || status === 'done'
 
   return (
     <div>
@@ -96,18 +98,24 @@ export function SlotPicker({
               <button
                 type="button"
                 onClick={() => setPicked(iso)}
-                disabled={status === 'submitting' || status === 'done'}
-                className={`w-full rounded-lg border-2 p-4 text-left transition-colors ${
+                disabled={locked}
+                className={`w-full border p-4 text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                   isPicked
-                    ? 'border-zinc-900 bg-zinc-900 text-white'
-                    : 'border-zinc-200 bg-white text-zinc-900 hover:border-zinc-400'
-                } ${status === 'submitting' || status === 'done' ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    ? 'border-accent bg-accent text-white'
+                    : 'border-ink-line bg-ink-card text-text-pri hover:border-accent/60'
+                } ${locked ? 'cursor-not-allowed opacity-50' : ''}`}
                 aria-pressed={isPicked}
               >
-                <div className={`text-xs font-semibold uppercase tracking-widest ${isPicked ? 'text-zinc-300' : 'text-zinc-500'}`}>
+                <div
+                  className={`font-mono text-[0.65rem] font-semibold uppercase tracking-[0.16em] ${
+                    isPicked ? 'text-white/80' : 'text-text-dim'
+                  }`}
+                >
                   {day}
                 </div>
-                <div className="mt-1 text-lg font-bold">{time}</div>
+                <div className="mt-1.5 text-xl font-extrabold tracking-tight">
+                  {time}
+                </div>
               </button>
             </li>
           )
@@ -117,11 +125,11 @@ export function SlotPicker({
       <button
         type="button"
         onClick={onConfirm}
-        disabled={!picked || status === 'submitting' || status === 'done'}
-        className={`mt-6 w-full rounded-md px-4 py-3 text-center text-sm font-semibold text-white transition-colors ${
-          !picked || status === 'submitting' || status === 'done'
-            ? 'cursor-not-allowed bg-zinc-300'
-            : 'bg-zinc-900 hover:bg-zinc-700'
+        disabled={!picked || locked}
+        className={`mt-8 inline-flex w-full items-center justify-center gap-2 px-5 py-3.5 text-sm font-semibold uppercase tracking-wider transition-colors outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+          !picked || locked
+            ? 'cursor-not-allowed border border-ink-line bg-ink-card text-text-dim'
+            : 'bg-accent text-white hover:bg-accent-press'
         }`}
       >
         {status === 'submitting'
@@ -132,7 +140,9 @@ export function SlotPicker({
       </button>
 
       {errorMessage ? (
-        <p className="mt-4 text-sm text-red-700">{errorMessage}</p>
+        <p className="mt-4 font-mono text-[0.75rem] uppercase tracking-widest text-red-400">
+          {errorMessage}
+        </p>
       ) : null}
     </div>
   )
