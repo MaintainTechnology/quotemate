@@ -2360,7 +2360,7 @@ function ServicesTab({
                           {svc.description}
                         </div>
                       )}
-                      <div className="ml-5 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                      <div className="ml-5 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
                         {price !== null && (
                           <span>
                             ${price.toFixed(2)} {svc.default_unit ? `/ ${svc.default_unit}` : ''}
@@ -2368,6 +2368,18 @@ function ServicesTab({
                         )}
                         {hours !== null && hours > 0 && <span>{hours}h labour</span>}
                         <span className="text-text-dim/70">{svc.trade}</span>
+                        {/* Row-level inspection notice — visible WITHOUT expanding,
+                            so toggling a job like induction-cooktop hardwiring ON
+                            doesn't surprise the tradie. Display-only; reads the
+                            existing always_inspection flag. */}
+                        {svc.always_inspection && (
+                          <span
+                            className="font-mono text-[0.55rem] uppercase tracking-[0.18em] px-2 py-0.5 border border-warning/40 text-warning"
+                            title="Always books a $199 paid inspection. Turning this on does NOT auto-price it — the AI tells the customer a site visit is needed."
+                          >
+                            inspection only
+                          </span>
+                        )}
                       </div>
                     </div>
                     {/* Toggle switch — sharp-cornered to match the
