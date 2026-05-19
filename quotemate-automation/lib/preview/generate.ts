@@ -367,7 +367,9 @@ async function generateOnePreview(opts: {
                       'count/placement guidance about fixture appearance — if the job says ' +
                       '"downlights" but this reference is a different fixture type (bulb, ' +
                       'pendant, batten, panel, etc.), install THIS product’s exact form, ' +
-                      'not a generic downlight. Keep the requested quantity.',
+                      'not a generic downlight. Keep the requested quantity. The ' +
+                      '"product_details" line in the brief describes exactly what this ' +
+                      'product is — use that description together with this photo.',
                   },
                   {
                     inline_data: {
@@ -514,6 +516,9 @@ export async function loadPromptContext(
       // THE EXACT product.
       catalogue_id?: string | null
       image_path?: string | null
+      // Operator's catalogue blurb — extra "what the product is"
+      // context fed alongside the photo.
+      product_description?: string | null
     }
     type InlineTier = { line_items?: InlineLi[] } | null | undefined
     const tiers: Array<['good' | 'better' | 'best', InlineTier]> = [
@@ -532,6 +537,7 @@ export async function loadPromptContext(
           source: flattenSource(li.source),
           catalogue_id: li.catalogue_id ?? null,
           image_path: li.image_path ?? null,
+          product_description: li.product_description ?? null,
         })
       }
     }

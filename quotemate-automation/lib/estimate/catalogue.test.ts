@@ -243,6 +243,22 @@ describe('enrichLinesWithCatalogue (WP4 — link Opus lines to products)', () =>
     // labour line untouched
     expect(r.draft.good.line_items[1].catalogue_id).toBeUndefined()
   })
+  it('carries the catalogue description into product_description (render-only)', () => {
+    const cat = [
+      { id: 'P-1', name: 'Caroma Liano Tap', image_path: 'https://x/liano.jpg', description: 'Caroma Liano II wall mixer, chrome' },
+    ]
+    const draft = {
+      good: { line_items: [{ description: 'Caroma Liano Tap', source: 'material' }] },
+    }
+    const r = enrichLinesWithCatalogue(draft, cat)
+    expect(r.draft.good.line_items[0].product_description).toBe('Caroma Liano II wall mixer, chrome')
+    // does not invent one when the catalogue row has no blurb
+    const r2 = enrichLinesWithCatalogue(
+      { good: { line_items: [{ description: 'Caroma Liano Tap', source: 'material' }] } },
+      catalogue,
+    )
+    expect('product_description' in r2.draft.good.line_items[0]).toBe(false)
+  })
   it('never overwrites an explicit link (deterministic stamping wins)', () => {
     const draft = {
       better: { line_items: [{ description: 'Caroma Liano Tap', source: 'material', catalogue_id: 'KEEP' }] },
@@ -285,6 +301,31 @@ describe('applyChosenProduct (WP9 — chosen product gates the quote)', () => {
     expect(mat.catalogue_id).toBe('P-89')
     expect(mat.image_path).toBe('bf.jpg') // WP4 render uses this
     expect(r.draft.good.subtotal_ex_gst).toBe(754) // 534 + 220 labour
+  })
+
+  it('stamps the catalogue blurb as render-only product_description (WP4 context)', () => {
+    const draft = {
+      good: {
+        line_items: [
+          { description: 'Generic LED downlight', source: 'material', quantity: 6, unit_price_ex_gst: 40, total_ex_gst: 240 },
+          { description: 'Labour', source: 'labour', quantity: 2, unit_price_ex_gst: 110, total_ex_gst: 220 },
+        ],
+      },
+    }
+    const r = applyChosenProduct(draft, {
+      ...chosen,
+      description: 'Firefly Pro Series LED bulb, E27, frosted, warm white',
+    })
+    const mat = r.draft.good.line_items[0]
+    expect(mat.product_description).toBe('Firefly Pro Series LED bulb, E27, frosted, warm white')
+    // never overwrites the line text (that stays the product NAME)
+    expect(mat.description).toBe('Black Fireflies')
+    // absent blurb → no product_description key at all
+    const r2 = applyChosenProduct(
+      { good: { line_items: [{ description: 'x', source: 'material', quantity: 1, unit_price_ex_gst: 1, total_ex_gst: 1 }] } },
+      chosen, // no description
+    )
+    expect('product_description' in r2.draft.good.line_items[0]).toBe(false)
   })
 
   it('skips sundry lines and never touches labour', () => {

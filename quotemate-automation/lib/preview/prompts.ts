@@ -74,6 +74,9 @@ export type PromptLineItem = {
   // "match this EXACT product" reference.
   catalogue_id?: string | null
   image_path?: string | null
+  // Operator's own catalogue blurb for this product — fed to Gemini as
+  // explicit "what the product IS" context alongside the photo.
+  product_description?: string | null
 }
 
 export type PromptCorrection = {
@@ -271,6 +274,16 @@ export function pickAnchorImagePath(ctx: PromptContext): string | null {
   return typeof p === 'string' && p.trim() !== '' ? p.trim() : null
 }
 
+// WP4 — the anchor product's operator-written blurb (e.g. "Firefly Pro
+// Series LED bulb, E27, frosted, warm white"). Surfaced in the render
+// directive + anchor block so Gemini knows WHAT the product is, not
+// just how it looks from the photo. null when there's no blurb.
+export function pickAnchorDescription(ctx: PromptContext): string | null {
+  const a = pickAnchorLine(ctx)
+  const d = a?.product_description
+  return typeof d === 'string' && d.trim() !== '' ? d.trim() : null
+}
+
 // ─── RENDER DIRECTIVE — declarative key/value block ───
 // Sits between MASTER RULES and the narrative context. The whole point
 // is to expose every customer-specific JSON value Gemini needs as a
@@ -302,6 +315,7 @@ function buildRenderDirective(ctx: PromptContext, shot: RenderShot): string {
   const access = intake.access ?? {}
   const trade = (intake as { trade?: string }).trade ?? null
   const anchor = pickAnchorProduct(ctx)
+  const anchorDesc = pickAnchorDescription(ctx)
   const tier = quote?.selected_tier ?? null
 
   // Helper: emit a "key: value" line only when value is meaningful.
@@ -332,6 +346,7 @@ function buildRenderDirective(ctx: PromptContext, shot: RenderShot): string {
     kv('job_type:',              intake.job_type),
     kv('quantity:',              count),
     kv('product_to_render:',     anchor),
+    kv('product_details:',       anchorDesc),
     kv('selected_tier:',         tier),
 
     // ── Where ──
@@ -401,6 +416,7 @@ function buildRenderDirective(ctx: PromptContext, shot: RenderShot): string {
   lines.push(`  Other fields:`)
   lines.push(`    · "quantity" — render EXACTLY this many. No more, no fewer.`)
   lines.push(`    · "product_to_render" — render THIS specific product, brand and style.`)
+  lines.push(`    · "product_details" — the operator's own description of that EXACT product (material, finish, shape, key features). Render the product to match this.`)
   lines.push(`    · "view_type" — frame the shot for THIS view.`)
   lines.push(`    · "verbatim_customer" — what the customer literally typed. Match it.`)
   lines.push(`    · Any value listed as "yes" / "no" — depict that state in the image.`)
@@ -476,11 +492,17 @@ function buildCustomerPrefsBlock(ctx: PromptContext): string {
 
   // ── ANCHOR PRODUCT — visual consistency across all 4 images ──
   const anchor = pickAnchorProduct(ctx)
+  const anchorDesc = pickAnchorDescription(ctx)
   if (anchor) {
     lines.push(`════════════════════════════════════════════════════════════════`)
     lines.push(`ANCHOR PRODUCT — render THIS exact product in this image:`)
     lines.push(``)
     lines.push(`   ▶ ${anchor}`)
+    if (anchorDesc) {
+      lines.push(``)
+      lines.push(`   Operator's description of this exact product (render it to match):`)
+      lines.push(`   "${anchorDesc.slice(0, 400)}"`)
+    }
     lines.push(``)
     lines.push(`This is the SPECIFIC product ${callerName ?? 'the customer'} is being quoted for.`)
     lines.push(`Every image in this 4-image quote set (Preview + Wide sample +`)
@@ -824,6 +846,7 @@ function buildSpecBlock(ctx: PromptContext, shot: RenderShot): string {
   const access = intake.access ?? {}
   const trade = (intake as { trade?: string }).trade ?? null
   const anchor = pickAnchorProduct(ctx)
+  const anchorDesc = pickAnchorDescription(ctx)
   const tier = quote?.selected_tier ?? null
   const installType =
     intake.scope?.is_new_install === true ? 'new install'
@@ -845,6 +868,7 @@ function buildSpecBlock(ctx: PromptContext, shot: RenderShot): string {
     kv('job_type', intake.job_type),
     kv('quantity', count),
     kv('product_to_render', anchor),
+    kv('product_details', anchorDesc),
     kv('selected_tier', tier),
     kv('room', room),
     kv('indoor_outdoor', intake.scope?.indoor_outdoor),
@@ -887,12 +911,14 @@ function buildSystemInstructionV2(ctx: PromptContext, args: {
     ? ctx.intake.scope.item_count
     : null
   const anchor = pickAnchorProduct(ctx)
+  const anchorDesc = pickAnchorDescription(ctx)
   const callerName = ctx.intake.caller?.name?.trim() || 'the customer'
   const { plural: jobLabelPlural } = humaniseJobType(ctx.intake.job_type)
 
   const mustLines = [
     count !== null ? `- Exactly ${count} ${jobLabelPlural}. Not ${count - 1}, not ${count + 1}.` : null,
     anchor ? `- Depict the anchor product: ${anchor}. Match brand + style + finish. Do not substitute.` : null,
+    anchorDesc ? `- The anchor product is specifically: "${anchorDesc.slice(0, 300)}". Render the product to match this description.` : null,
     `- Match every value in <spec> exactly. Use neutral defaults for anything not specified.`,
     `- Render the install as FULLY COMPLETED — day-of-handover state, no tools / packaging / ladders / mid-install pixels.`,
     args.shot.mode === 'edit_customer_photo'

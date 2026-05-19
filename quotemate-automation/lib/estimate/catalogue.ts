@@ -205,6 +205,9 @@ export interface QuoteLine {
    *  validator or any price math, so it cannot affect money/routing. */
   catalogue_id?: string | null
   image_path?: string | null
+  /** Operator's catalogue blurb for this product (render-only, same
+   *  no-money guarantee as catalogue_id/image_path). */
+  product_description?: string | null
 }
 export interface BuildBomInput {
   bom: BomLine[]
@@ -403,6 +406,8 @@ export interface CatalogueProductRef {
   id?: string | null
   name: string
   image_path?: string | null
+  /** Operator's own product blurb — carried to the render prompt. */
+  description?: string | null
 }
 
 export interface EnrichResult {
@@ -447,6 +452,15 @@ export function enrichLinesWithCatalogue(
       if (!hit) continue
       if (hit.id) li.catalogue_id = hit.id
       if (hit.image_path) li.image_path = hit.image_path
+      // Render-only blurb; only fill when the line doesn't already have
+      // one (deterministic / WP9 stamping always wins). Never priced.
+      if (
+        hit.description &&
+        String(hit.description).trim() !== '' &&
+        !li.product_description
+      ) {
+        li.product_description = String(hit.description).trim()
+      }
       if (hit.id || hit.image_path) linked++
     }
   }
@@ -469,6 +483,8 @@ export interface ChosenProductInput {
   name: string
   price_ex_gst: number
   image_path?: string | null
+  /** Operator's own product blurb (render-only context for WP4). */
+  description?: string | null
 }
 export interface ApplyChosenResult {
   draft: any
@@ -514,6 +530,13 @@ export function applyChosenProduct(
     li.source = 'material'
     li.catalogue_id = chosen.catalogue_id
     if (chosen.image_path) li.image_path = chosen.image_path
+    // Render-only product blurb (same guarantee as image_path /
+    // catalogue_id: never read by the validator or any price math).
+    // Fed to the WP4 image prompt so Gemini knows WHAT the product is,
+    // not just its photo.
+    if (chosen.description && String(chosen.description).trim() !== '') {
+      li.product_description = String(chosen.description).trim()
+    }
 
     tier.subtotal_ex_gst = +items
       .reduce((s, x) => s + (Number(x?.total_ex_gst) || 0), 0)

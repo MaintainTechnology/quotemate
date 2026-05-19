@@ -259,13 +259,16 @@ export async function runEstimation(intake: any, pricingBook: any, modelId = 'cl
     // price/total/route, and is best-effort (any failure → today's
     // text-only behaviour, no regression). The deterministic path has
     // already stamped exact links; enrichment is idempotent there.
+    // Loaded once and reused by both WP4 enrichment and the WP9
+    // live-product re-resolve below.
+    let catalogueRefs: CatalogueProductRef[] = []
     try {
-      const refs = await loadCatalogueProductRefs(
+      catalogueRefs = await loadCatalogueProductRefs(
         (intake?.tenant_id as string | null) ?? null,
         (intake?.trade as string | null) ?? null,
       )
-      if (refs.length > 0) {
-        const e = enrichLinesWithCatalogue(draft, refs)
+      if (catalogueRefs.length > 0) {
+        const e = enrichLinesWithCatalogue(draft, catalogueRefs)
         if (e.linked > 0) {
           cacheLog.ok('WP4 — linked quote lines to operator catalogue products', {
             linked: e.linked,
@@ -290,7 +293,29 @@ export async function runEstimation(intake: any, pricingBook: any, modelId = 'cl
       try {
         const chosen = (intake?.scope as { chosen_product?: any } | null)?.chosen_product
         if (chosen) {
-          const r = applyChosenProduct(draft, chosen)
+          // The SMS offer froze a snapshot of the product when it was
+          // sent. If the tradie uploaded/edited the photo or description
+          // AFTER that, the snapshot is stale. Re-resolve the CURRENT
+          // photo + blurb from the live catalogue row by id so the
+          // latest uploaded image + description always win the render.
+          const live = catalogueRefs.find(
+            (rf) =>
+              rf?.id != null &&
+              chosen?.catalogue_id != null &&
+              String(rf.id) === String(chosen.catalogue_id),
+          )
+          const chosenLive = {
+            ...chosen,
+            image_path:
+              live?.image_path && String(live.image_path).trim() !== ''
+                ? live.image_path
+                : chosen.image_path ?? null,
+            description:
+              live?.description && String(live.description).trim() !== ''
+                ? live.description
+                : chosen.description ?? null,
+          }
+          const r = applyChosenProduct(draft, chosenLive)
           if (r.applied.length > 0) {
             // The customer already PICKED one product — Good/Better/Best
             // no longer makes sense (all three now hold the same chosen
@@ -808,7 +833,7 @@ async function loadCatalogueProductRefs(
   try {
     let q = supabase
       .from('tenant_material_catalogue')
-      .select('id, name, image_path')
+      .select('id, name, image_path, description')
       .eq('tenant_id', tenantId)
       .eq('active', true)
     if (trade) q = q.eq('trade', trade)

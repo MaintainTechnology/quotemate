@@ -235,6 +235,30 @@ describe('chosenProductFromChoice', () => {
     expect(p.price_ex_gst).toBe(150) // the catalogue price, not generic
     expect(p.image_path).toBe('b.jpg')
     expect(p.category).toBe('tap')
+    expect(p.description).toBeNull() // no blurb on the fixture row
+  })
+  it('carries the catalogue description through (WP4 render context)', () => {
+    const withDesc: TenantMaterial[] = [
+      { id: 'P-good', category: 'tap', name: 'Clipsal 2000 Tap', unit_price_ex_gst: 120, active: true },
+      {
+        id: 'P-better',
+        category: 'tap',
+        name: 'Caroma Liano Tap',
+        unit_price_ex_gst: 150,
+        image_path: 'b.jpg',
+        description: 'Caroma Liano II wall mixer, chrome, WELS 5-star',
+        active: true,
+      },
+    ]
+    const p = chosenProductFromChoice({
+      category: 'tap',
+      token: 't',
+      status: 'chosen',
+      options: selectProductOptions(withDesc, 'tap')!,
+      chosen_catalogue_id: 'P-better',
+      chosen_name: 'Caroma Liano Tap',
+    })!
+    expect(p.description).toBe('Caroma Liano II wall mixer, chrome, WELS 5-star')
   })
   it('is null when not chosen / no matching option / bad price', () => {
     expect(chosenProductFromChoice(null)).toBeNull()

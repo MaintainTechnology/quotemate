@@ -377,6 +377,9 @@ export interface ChosenProduct {
   name: string
   price_ex_gst: number
   image_path: string | null
+  /** Operator's own product blurb — fed to the WP4 image render as
+   *  extra "this is the exact product" context alongside the photo. */
+  description: string | null
   category: string
 }
 export function chosenProductFromChoice(
@@ -393,6 +396,7 @@ export function chosenProductFromChoice(
     name: o.name,
     price_ex_gst: +price.toFixed(2),
     image_path: o.image_path ?? null,
+    description: o.description ?? null,
     category: choice.category,
   }
 }
