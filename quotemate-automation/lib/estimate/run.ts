@@ -18,6 +18,11 @@ import {
   type CatalogueProductRef,
 } from './catalogue'
 import { applyMinLabourFloor } from './min-labour'
+import {
+  summarisePriceHistory,
+  formatPriceHistoryHint,
+  type PastQuoteTiers,
+} from './price-history'
 import { buildDeterministicTiers, type DeterministicTierInput } from './deterministic-bom'
 import { fetchSimilarPastQuotesContext } from './rag'
 import { pipelineLog } from '@/lib/log/pipeline'
@@ -88,11 +93,26 @@ export async function runEstimation(intake: any, pricingBook: any, modelId = 'cl
   )
   const bomBlock = await buildBomHint(intake, (intake?.trade as string | null) ?? null, cacheLog)
 
+  // WP2 historical-pricing (safe slice). SOFT advisory only — appended
+  // to the user prompt exactly like the catalogue/BOM hints, NEVER fed
+  // to the grounding validator, so it can only nudge and can never
+  // over-reject or change an accepted price. Flag-gated off by default
+  // (PRICE_HISTORY_HINT) and best-effort → fully inert until enabled.
+  const priceHistoryBlock =
+    process.env.PRICE_HISTORY_HINT === '1'
+      ? await buildPriceHistoryHint(
+          (intake?.tenant_id as string | null) ?? null,
+          (intake?.job_type as string | null) ?? null,
+          cacheLog,
+        )
+      : null
+
   const userPrompt =
     (ragContext ? `${ragContext}\n` : '') +
     (preferencesBlock ? `${preferencesBlock}\n` : '') +
     (catalogueBlock ? `${catalogueBlock}\n` : '') +
     (bomBlock ? `${bomBlock}\n` : '') +
+    (priceHistoryBlock ? `${priceHistoryBlock}\n` : '') +
     `Draft a quote for this NEW intake:\n\n${JSON.stringify(intake, null, 2)}`
 
   // Tenant-scoped tool factory. lookupAssembly now reads BOTH
@@ -578,6 +598,46 @@ async function buildBomHint(
     return formatBomHint((bom ?? []) as BomHintRow[])
   } catch (e: any) {
     log.err('BOM hint build failed', e?.message ?? String(e))
+    return null
+  }
+}
+
+/**
+ * WP2 historical-pricing (safe slice). Best-effort: pulls THIS tenant's
+ * own past priced quotes for the same job_type (the same data RAG
+ * already uses — no external import) and summarises them into a SOFT
+ * per-tier $ band hint. Resilient: missing rows / error / too-few
+ * samples → null (no hint, behaviour unchanged). NEVER feeds the
+ * validator — advisory only.
+ */
+async function buildPriceHistoryHint(
+  tenantId: string | null,
+  jobType: string | null,
+  log: ReturnType<typeof pipelineLog>,
+): Promise<string | null> {
+  if (!tenantId || !jobType) return null
+  try {
+    const { data, error } = await supabase
+      .from('quotes')
+      .select('good, better, best, needs_inspection, created_at, intakes!inner(tenant_id, job_type)')
+      .eq('intakes.tenant_id', tenantId)
+      .eq('intakes.job_type', jobType)
+      .order('created_at', { ascending: false })
+      .limit(60)
+    if (error) {
+      log.err('price-history hint fetch failed — continuing without it', error.message)
+      return null
+    }
+    const past: PastQuoteTiers[] = (data ?? [])
+      .filter((r: any) => r?.needs_inspection !== true)
+      .map((r: any) => ({
+        good: r?.good?.subtotal_ex_gst ?? null,
+        better: r?.better?.subtotal_ex_gst ?? null,
+        best: r?.best?.subtotal_ex_gst ?? null,
+      }))
+    return formatPriceHistoryHint(summarisePriceHistory(past, jobType))
+  } catch (e: any) {
+    log.err('price-history hint build failed', e?.message ?? String(e))
     return null
   }
 }

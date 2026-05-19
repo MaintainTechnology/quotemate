@@ -207,22 +207,77 @@ export async function generatePreviewImage(quoteId: string): Promise<PreviewResu
           })
           console.log('[preview] WP4 render verification', { quoteId, verdict })
           if (verdict.match === false) {
-            // Quality gate failed → show the customer the exact product
-            // photo directly, appended after the room render.
-            const refExt = productRef.mime === 'image/png' ? 'png' : 'jpg'
-            const refPath = `${intake.id}/product-ref-${Date.now()}.${refExt}`
-            const { error: upErr } = await supabase.storage
-              .from(BUCKET)
-              .upload(refPath, Buffer.from(productRef.base64, 'base64'), {
-                contentType: productRef.mime,
-                upsert: false,
+            // ── Step 1: ONE bounded stricter re-render ──────────────
+            // Re-render the representative preview (photo 0) with a hard
+            // "match the product reference EXACTLY" instruction, then
+            // re-verify. Strictly one attempt — a second Gemini render
+            // is the cost ceiling. If it now passes (or is inconclusive)
+            // we swap the better image in; only a SECOND confirmed
+            // mismatch falls through to the product-photo fallback.
+            let recovered = false
+            try {
+              const retryPath = await generateOnePreview({
+                intakeId: intake.id as string,
+                sourcePath: photoPaths[0],
+                index: 0,
+                prompt,
+                productRef,
+                extraStrict:
+                  'STRICT RE-RENDER: your previous attempt did NOT match the ' +
+                  'PRODUCT REFERENCE photo. The installed product MUST be the ' +
+                  'exact product in the final attached image — same brand, model, ' +
+                  'shape, colour and finish. Do not substitute or generalise it.',
               })
-            if (!upErr) {
-              succeededPaths.push(refPath)
-              console.warn(
-                '[preview] WP4 product mismatch — appended exact product photo for the customer',
-                { quoteId, reason: verdict.reason },
-              )
+              const { data: r2blob } = await supabase.storage
+                .from(BUCKET)
+                .download(retryPath)
+              if (r2blob) {
+                const r2buf = Buffer.from(await r2blob.arrayBuffer())
+                const verdict2 = await verifyRenderMatchesProduct({
+                  rendered: {
+                    base64: r2buf.toString('base64'),
+                    mime: r2blob.type || 'image/png',
+                  },
+                  product: productRef,
+                })
+                console.log('[preview] WP4 stricter re-render verification', {
+                  quoteId,
+                  verdict2,
+                })
+                if (verdict2.match !== false) {
+                  // Swap the better render in for the rejected one.
+                  succeededPaths[0] = retryPath
+                  recovered = true
+                  console.log(
+                    '[preview] WP4 — stricter re-render recovered the product match',
+                    { quoteId },
+                  )
+                }
+              }
+            } catch (reErr: any) {
+              console.warn('[preview] WP4 stricter re-render failed (non-fatal)', {
+                quoteId,
+                error: reErr?.message ?? String(reErr),
+              })
+            }
+
+            // ── Step 2: still wrong → show the EXACT product photo ──
+            if (!recovered) {
+              const refExt = productRef.mime === 'image/png' ? 'png' : 'jpg'
+              const refPath = `${intake.id}/product-ref-${Date.now()}.${refExt}`
+              const { error: upErr } = await supabase.storage
+                .from(BUCKET)
+                .upload(refPath, Buffer.from(productRef.base64, 'base64'), {
+                  contentType: productRef.mime,
+                  upsert: false,
+                })
+              if (!upErr) {
+                succeededPaths.push(refPath)
+                console.warn(
+                  '[preview] WP4 product mismatch (after re-render) — appended exact product photo',
+                  { quoteId, reason: verdict.reason },
+                )
+              }
             }
           }
         }
@@ -265,6 +320,9 @@ async function generateOnePreview(opts: {
   index: number
   prompt: SystemUserPrompt
   productRef?: ProductImage | null
+  /** WP4 — extra hard wording appended to the user message on a
+   *  stricter re-render attempt (set only by the verify retry path). */
+  extraStrict?: string
 }): Promise<string> {
   // Download the source photo from storage.
   const { data: blob, error: dlErr } = await supabase.storage
@@ -291,7 +349,11 @@ async function generateOnePreview(opts: {
         {
           role: 'user',
           parts: [
-            { text: opts.prompt.user },
+            {
+              text: opts.extraStrict
+                ? `${opts.prompt.user}\n\n${opts.extraStrict}`
+                : opts.prompt.user,
+            },
             { inline_data: { mime_type: refMime, data: refBase64 } },
             // WP4 — the EXACT product photo, attached LAST and clearly
             // labelled so Gemini replicates this specific product (see

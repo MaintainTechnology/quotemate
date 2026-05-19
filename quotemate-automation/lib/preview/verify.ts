@@ -3,10 +3,13 @@
 //
 // After a preview is generated, ask Gemini (vision) to compare the
 // RENDERED image against the real PRODUCT photo and answer YES/NO:
-// "is this the same product?". A NO triggers ONE stricter re-render;
-// if it still fails, the caller shows the product photo to the customer
-// directly ("here's the exact product you'll get") so they always see
-// the truth — the spec's "quality gate".
+// "is this the same product?". On a NO the caller does ONE bounded
+// stricter re-render and re-verifies; if that recovers the match the
+// better image is swapped in. Only a SECOND confirmed mismatch falls
+// back to showing the real product photo to the customer directly
+// ("here's the exact product you'll get") so they always see the
+// truth — the spec's "quality gate". The retry is capped at one
+// attempt (a second Gemini render is the cost ceiling).
 //
 // SAFETY / cost control:
 //   • Flag-gated by WP4_RENDER_VERIFY (default OFF). Off → not a single
