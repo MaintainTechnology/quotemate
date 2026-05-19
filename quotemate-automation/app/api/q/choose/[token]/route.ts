@@ -106,7 +106,7 @@ export async function POST(
       try {
         const { data: conv } = await supabase
           .from('sms_conversations')
-          .select('id, from_number, intake_id, status')
+          .select('id, from_number, to_number, intake_id, status')
           .eq('id', row.id)
           .maybeSingle()
         if (!conv?.from_number) return
@@ -123,7 +123,14 @@ export async function POST(
         const confirmBody =
           `Great choice — ${name}. I'm finalising your quote now; ` +
           `it'll land here in a couple of minutes.`
-        const d = await dispatchQuoteMessage({ to: conv.from_number, text: confirmBody })
+        // MUST send from the SAME tradie number the customer has been
+        // texting (conv.to_number), not dispatch's default voice
+        // number — otherwise the confirmation arrives from a stranger.
+        const d = await dispatchQuoteMessage({
+          to: conv.from_number,
+          from: (conv.to_number as string | null) ?? undefined,
+          text: confirmBody,
+        })
         await supabase.from('sms_messages').insert({
           conversation_id: row.id,
           direction: 'outbound',
