@@ -4468,6 +4468,9 @@ type EstimationJob = {
   name: string
   trade: string
   hourly_rate: number | null
+  // 'tenant' = this is YOUR edited recipe (what actually gets quoted);
+  // 'shared' = the standard baseline (you haven't customised it).
+  recipe_source: 'tenant' | 'shared'
   bom: Array<{
     material_category: string
     quantity: number
@@ -4497,6 +4500,7 @@ function SourceBadge({ source }: { source: 'local' | 'global' }) {
 
 function EstimatingTab({ accessToken }: { accessToken: string | null }) {
   const [jobs, setJobs] = useState<EstimationJob[] | null>(null)
+  const [catalogueCats, setCatalogueCats] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -4517,8 +4521,12 @@ function EstimatingTab({ accessToken }: { accessToken: string | null }) {
         const b = (await res.json().catch(() => ({}))) as { error?: string }
         throw new Error(b.error || `HTTP ${res.status}`)
       }
-      const json = (await res.json()) as { jobs: EstimationJob[] }
+      const json = (await res.json()) as {
+        jobs: EstimationJob[]
+        catalogue_categories?: string[]
+      }
       setJobs(json.jobs)
+      setCatalogueCats(json.catalogue_categories ?? [])
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -4556,9 +4564,10 @@ function EstimatingTab({ accessToken }: { accessToken: string | null }) {
         How each job is estimated
       </h2>
       <p className="mt-1 text-xs text-text-dim leading-snug max-w-xl">
-        For every job with a fixed bill of materials, this shows the parts the AI quotes and the
-        labour &amp; markup it uses — and whether each value is the global default or your own
-        local override. Read‑only.
+        For every job, this shows the exact parts the AI quotes — <strong>your own recipe</strong>{' '}
+        when you&apos;ve set one, otherwise the standard baseline — plus the labour &amp; markup it
+        uses and whether each value is the global default or your override. Each part shows whether
+        your catalogue prices it or it falls back to a generic price. Read‑only.
       </p>
 
       {list.length === 0 ? (
@@ -4572,24 +4581,52 @@ function EstimatingTab({ accessToken }: { accessToken: string | null }) {
             <div key={j.assembly_id} className="border border-ink-line bg-ink-deep p-4">
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="font-semibold text-sm text-text-pri">{j.name}</div>
-                <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim/80">
-                  {j.trade}
-                  {!j.effective.enabled && ' · disabled for you'}
-                </span>
+                <div className="flex items-center gap-2">
+                  {j.recipe_source === 'tenant' ? (
+                    <span className="px-1.5 py-0.5 border border-accent/40 text-accent font-mono text-[0.55rem] uppercase tracking-[0.15em]">
+                      your recipe
+                    </span>
+                  ) : (
+                    <span className="px-1.5 py-0.5 border border-ink-line text-text-dim font-mono text-[0.55rem] uppercase tracking-[0.15em]">
+                      standard recipe
+                    </span>
+                  )}
+                  <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim/80">
+                    {j.trade}
+                    {!j.effective.enabled && ' · disabled for you'}
+                  </span>
+                </div>
               </div>
 
               <div className="mt-3">
                 <div className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim mb-1">
                   Bill of materials
                 </div>
-                <ul className="text-sm text-text-sec space-y-0.5">
-                  {j.bom.map((b, i) => (
-                    <li key={i}>
-                      • {b.quantity} × {b.material_category}
-                      {b.description ? ` ${b.description}` : ''}
-                      {b.required ? '' : ' (optional)'}
-                    </li>
-                  ))}
+                <ul className="text-sm text-text-sec space-y-1">
+                  {j.bom.map((b, i) => {
+                    const priced = categoryHasCatalogueProduct(b.material_category, catalogueCats)
+                    return (
+                      <li key={i} className="flex items-center gap-2 flex-wrap">
+                        <span>
+                          • {b.quantity} × {b.material_category}
+                          {b.description ? ` ${b.description}` : ''}
+                          {b.required ? '' : ' (optional)'}
+                        </span>
+                        {priced ? (
+                          <span className="px-1.5 py-0.5 border border-accent/40 text-accent font-mono text-[0.5rem] uppercase tracking-[0.14em]">
+                            ✓ your catalogue
+                          </span>
+                        ) : (
+                          <span
+                            className="px-1.5 py-0.5 border border-warning/50 text-warning font-mono text-[0.5rem] uppercase tracking-[0.14em]"
+                            title="No active Catalogue product in this category — the AI uses a generic price. Add a Catalogue product with this exact category to use your real product + price."
+                          >
+                            ⚠ generic price
+                          </span>
+                        )}
+                      </li>
+                    )
+                  })}
                 </ul>
               </div>
 

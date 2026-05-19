@@ -76,6 +76,54 @@ export async function GET(req: Request) {
   const overrideByAssembly = new Map<string, any>()
   for (const o of overrides ?? []) overrideByAssembly.set(o.assembly_id as string, o)
 
+  // This tradie's OWN recipe lines (tenant_assembly_bom, migration 031).
+  // The estimator prefers these over the shared baseline (buildBomHint),
+  // so the Estimating tab MUST show the tenant recipe when present —
+  // otherwise it shows a parts list that isn't what actually gets
+  // quoted. Absent table (pre-031) → null → falls back to shared.
+  const tenantBomByAssembly = new Map<
+    string,
+    Array<{ material_category: string; quantity: number; required: boolean; description: string | null }>
+  >()
+  {
+    const { data: ownBom } = await supabase
+      .from('tenant_assembly_bom')
+      .select('assembly_id, material_category, quantity, required, description, sort')
+      .eq('tenant_id', tenant.id)
+      .order('sort', { ascending: true })
+    for (const r of (ownBom ?? []) as any[]) {
+      const arr = tenantBomByAssembly.get(r.assembly_id as string) ?? []
+      arr.push({
+        material_category: r.material_category,
+        quantity: Number(r.quantity),
+        required: !!r.required,
+        description: r.description ?? null,
+      })
+      tenantBomByAssembly.set(r.assembly_id as string, arr)
+    }
+  }
+
+  // Which material categories this tradie actually has a priced, active
+  // catalogue product for (WP2). Drives the per-line "priced from your
+  // catalogue" vs "generic price" badge — same signal as the Recipes
+  // tab, so the two tabs always agree. Resilient: absent table → [].
+  const catalogueCategories: string[] = []
+  {
+    let cq = supabase
+      .from('tenant_material_catalogue')
+      .select('category')
+      .eq('tenant_id', tenant.id)
+      .eq('active', true)
+    if (trades.length > 0) cq = cq.in('trade', trades)
+    const { data: catRows } = await cq
+    const seen = new Set<string>()
+    for (const r of (catRows ?? []) as Array<{ category: string | null }>) {
+      const c = (r.category ?? '').trim().toLowerCase()
+      if (c) seen.add(c)
+    }
+    catalogueCategories.push(...seen)
+  }
+
   // Group BOM rows by assembly.
   type AsmAgg = {
     id: string
@@ -112,12 +160,16 @@ export async function GET(req: Request) {
   const jobs = [...byAssembly.values()].map((a) => {
     const globalMarkup = markupByTrade.get(a.trade) ?? 28
     const eff = effectiveAssembly(a.default_labour_hours, globalMarkup, overrideByAssembly.get(a.id) ?? null)
+    // The estimator prefers the tenant's own recipe; the tab must too.
+    const ownBom = tenantBomByAssembly.get(a.id)
+    const usingTenantRecipe = !!ownBom && ownBom.length > 0
     return {
       assembly_id: a.id,
       name: a.name,
       trade: a.trade,
       hourly_rate: hourlyByTrade.get(a.trade) ?? null,
-      bom: a.bom,
+      bom: usingTenantRecipe ? ownBom! : a.bom,
+      recipe_source: usingTenantRecipe ? ('tenant' as const) : ('shared' as const),
       effective: {
         enabled: eff.enabled,
         labour_hours: eff.labourHours, // { value, source: 'local'|'global' }
@@ -128,5 +180,5 @@ export async function GET(req: Request) {
     }
   })
 
-  return Response.json({ ok: true, jobs })
+  return Response.json({ ok: true, jobs, catalogue_categories: catalogueCategories })
 }
