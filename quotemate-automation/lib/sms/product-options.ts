@@ -162,6 +162,19 @@ export function buildProductOptionsSms(
 }
 
 /**
+ * The short "I'm holding your quote until you pick" nudge. Sent as the
+ * dialog reply while a product choice is pending so the customer is
+ * never told "quote on its way" before they've chosen. Kept brief; the
+ * options + photo link were already sent in the options SMS.
+ */
+export function buildChoiceHoldSms(): string {
+  return (
+    "Take your pick from the 2 options above — reply 1 or 2 (or tap the " +
+    "link) and I'll lock that into your quote."
+  )
+}
+
+/**
  * Interpret a customer reply into the chosen option. Accepts "1"/"2",
  * "one"/"two", "first"/"second", or a clear product/brand-name match.
  * Returns null when it isn't an unambiguous choice (the dialog then

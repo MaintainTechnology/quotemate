@@ -49,6 +49,7 @@ import {
   applyChoiceSelection,
   selectProductOptions,
   buildProductOptionsSms,
+  buildChoiceHoldSms,
   categoryForJobType,
   type ProductChoiceState,
 } from '@/lib/sms/product-options'
@@ -1601,18 +1602,20 @@ export async function POST(req: Request) {
         await new Promise(resolve => setTimeout(resolve, 2000))
       }
 
-      // ─────── WP9 OFFER — send 2 real product options mid-chat ───────
-      // Mirrors the photo-link gate (8b): Haiku decides the natural
-      // moment via decision.offer_product_choice; the route only acts
-      // when the tradie genuinely has 2+ operator-catalogue products
-      // for the job's category. One-shot (skips if a choice already
-      // exists). Sends a separate, tidy options SMS (with the choice
-      // page link) BEFORE the dialog reply, same ordering as the photo
-      // link. Fully flag-gated + best-effort: OFF ⇒ skipped entirely,
-      // any failure never blocks the customer's reply.
+      // ─────── WP9 OFFER + INTERLOCK — 2 real product options mid-chat ──
+      // The model offers via decision.offer_product_choice, OR — the
+      // interlock — we force the offer at the LAST safe moment (the turn
+      // it would finish) so the pick always happens BEFORE the quote is
+      // built. While a choice is pending, wp9HoldingForChoice suppresses
+      // the finish handoff + keeps the conversation open so the reply
+      // ("1"/"2") is captured and actually drives the quote + preview.
+      // One-shot (skips if a choice already exists). Fully flag-gated +
+      // best-effort: OFF ⇒ skipped entirely; no catalogue/<2 options ⇒
+      // no pending choice ⇒ no hold ⇒ normal finish (zero regression).
+      let wp9HoldingForChoice = false
       if (
         WP9_ENABLED &&
-        decision.offer_product_choice === true &&
+        (decision.offer_product_choice === true || decision.action === 'finish') &&
         !hasExistingIntake &&
         decision.action !== 'escalate_inspection' &&
         decision.action !== 'end_conversation' &&
@@ -1627,6 +1630,9 @@ export async function POST(req: Request) {
           const already = (existing?.product_choice ?? null) as ProductChoiceState | null
           const category = categoryForJobType(decision.job_type_guess)
           if (already) {
+            // Pending = customer hasn't picked yet → keep holding the
+            // quote. Chosen = let the normal finish flow proceed.
+            if (already.status === 'pending') wp9HoldingForChoice = true
             console.log('[sms/inbound:after] WP9 OFFER — choice already exists, skipping', {
               conversationId,
               status: already.status,
@@ -1665,6 +1671,8 @@ export async function POST(req: Request) {
                 .from('sms_conversations')
                 .update({ product_choice: choiceState, updated_at: new Date().toISOString() })
                 .eq('id', conversationId)
+              // Just offered → hold the quote until the customer picks.
+              wp9HoldingForChoice = true
               const appUrl = process.env.APP_URL ?? 'https://quote-mate-rho.vercel.app'
               const chooseUrl = `${appUrl}/q/choose/${token}`
               const optionsBody = buildProductOptionsSms(options, chooseUrl, category)
@@ -1704,6 +1712,17 @@ export async function POST(req: Request) {
             error: e?.message ?? String(e),
           })
         }
+      }
+
+      // WP9 INTERLOCK — while a product choice is pending, the customer
+      // must NOT be told "quote on its way" (it isn't — it's held). Swap
+      // the dialog reply for a short pick-prompt. The options SMS (with
+      // the photo link) already went out just above.
+      if (wp9HoldingForChoice) {
+        decision = { ...decision, reply_to_send: buildChoiceHoldSms() }
+        console.log('[sms/inbound:after] WP9 — holding quote for pending product choice', {
+          conversationId,
+        })
       }
 
       // Step 7: quote confirmation (or any dialog reply). Fires after the
@@ -1754,7 +1773,12 @@ export async function POST(req: Request) {
       // thank-you (or an add-on we'll handle manually in v1). Never flip
       // back to 'structuring' — that's what would re-fire intake/quote.
       const newStatus =
-        hasExistingIntake ? 'done'
+        // WP9 INTERLOCK: a pending choice must keep the conversation
+        // OPEN so the customer's "1"/"2" reply is processed next turn
+        // (not swallowed by the done / in-flight guards) and the quote
+        // is NOT marked structuring before they've picked.
+        wp9HoldingForChoice ? 'open'
+      : hasExistingIntake ? 'done'
       : decision.action === 'finish' ? 'structuring'
       : decision.action === 'escalate_inspection' ? 'done'
       : decision.action === 'end_conversation' ? 'done'
@@ -1790,7 +1814,7 @@ export async function POST(req: Request) {
       // conversation — Haiku occasionally re-reasons 'finish' on courtesy
       // replies ("Thanks!") which would otherwise produce duplicate
       // quotes. Skip the handoff entirely in that case.
-      if (decision.action === 'finish' && !hasExistingIntake) {
+      if (decision.action === 'finish' && !hasExistingIntake && !wp9HoldingForChoice) {
         console.log('[sms/inbound:after] step 10 — firing intake/structure handoff', { conversationId })
         try {
           await withRetry(

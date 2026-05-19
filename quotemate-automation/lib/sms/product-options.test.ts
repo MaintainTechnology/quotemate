@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 import {
   selectProductOptions,
   buildProductOptionsSms,
+  buildChoiceHoldSms,
   interpretChoiceReply,
   applyChoiceSelection,
   categoryForJobType,
@@ -79,6 +80,15 @@ describe('buildProductOptionsSms', () => {
     const sms = buildProductOptionsSms(huge, 'https://qm.co/q/choose/abcdefgh', 'tap')
     expect(sms.length).toBeLessThanOrEqual(320)
     expect(sms).toContain('https://qm.co/q/choose/abcdefgh')
+  })
+})
+
+describe('buildChoiceHoldSms', () => {
+  it('is a short pick-prompt, well under the SMS cap, no "quote on its way"', () => {
+    const s = buildChoiceHoldSms()
+    expect(s).toMatch(/reply 1 or 2/i)
+    expect(s.length).toBeLessThanOrEqual(160)
+    expect(s).not.toMatch(/quote (is )?on its way|drafting now/i)
   })
 })
 
