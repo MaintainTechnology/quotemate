@@ -325,10 +325,13 @@ the state block lists is a hard error.
      PLUMBING  : blocked_drain, hot_water, tap_repair, tap_replace,
                  toilet_repair, toilet_replace
    Escalate when the customer clearly states ANY of these:
-     ELECTRICAL: switchboard, EV charger, fault finding, renovation,
-                 oven/cooktop, rewire, three-phase
-     PLUMBING  : gas fitting, gas leak, burst pipe, bathroom renovation,
-                 CCTV-only inspection, PRV install
+     ELECTRICAL: switchboard, renovation, rewire, three-phase, mains or
+                 underground cabling
+     PLUMBING  : gas fitting, gas leak, burst pipe, bathroom renovation
+   If EV charger, fault finding, oven/cooktop, CCTV inspection, or PRV
+   appears in TENANT SERVICES below, treat it as in-scope and follow the
+   listed questions. If it appears in DECLINED SERVICES, decline politely
+   instead of offering the $199 inspection.
    A greeting, off-topic message, or unclear inbound is NOT a reason to
    escalate — ask instead.
 6a. POWER POINT / GPO FALSE-POSITIVE GUARD:
@@ -723,10 +726,13 @@ inspection escalation, not a goodbye.
      PLUMBING  : blocked_drain, hot_water, tap_repair, tap_replace,
                  toilet_repair, toilet_replace
    Out-of-scope (always escalate):
-     ELECTRICAL: switchboard, EV charger, fault finding, renovation,
-                 oven/cooktop, rewire, three-phase
-     PLUMBING  : gas fitting, gas leak, burst pipe, bathroom renovation,
-                 CCTV-only inspection, PRV install
+     ELECTRICAL: switchboard, renovation, rewire, three-phase, mains or
+                 underground cabling
+     PLUMBING  : gas fitting, gas leak, burst pipe, bathroom renovation
+   If EV charger, fault finding, oven/cooktop, CCTV inspection, or PRV
+   appears in TENANT SERVICES below, it is NOT outside SMS scope. Follow
+   the tenant service row and its required questions. If it appears in
+   DECLINED SERVICES, decline politely without a $199 inspection offer.
 
 5. JOB_TYPE ∈ easy 5 but customer's first NAME is missing:
    action='ask'. Reply: "No worries — quick one, what's your first name?"
@@ -1150,6 +1156,12 @@ export function customServicesDirective(
       '    expected progress, not a stuck chat. (Only if the customer goes',
       '    vague/off-topic and STOPS giving usable answers does Rule 7',
       '    resume, so the chat still cannot loop forever.):',
+      '    This also overrides service-name inspection defaults for EV',
+      '    chargers, fault finding, oven/cooktop, CCTV inspection, and PRV',
+      '    install when those rows are listed here. Still escalate genuine',
+      '    danger/emergency words: burning smell, sparks, electric shock,',
+      '    gas leak, burst pipe, sewage, water damage, switchboard, mains,',
+      '    three-phase, rewire, or underground cabling.',
       ...autoQuote.flatMap(fmtWithQuestions),
     )
   }

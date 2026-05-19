@@ -20,6 +20,7 @@ import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { decideNextTurn, type ConversationTurn } from '@/lib/sms/dialog'
 import { formatActiveFollowupContext } from '@/lib/sms/followup-context'
 import { buildGpoInspectionOverride } from '@/lib/sms/gpo-guard'
+import { resolveEnabledSharedAssembliesForDialog } from '@/lib/sms/service-scope'
 import { isQuoteInflight, DONE_INFLIGHT_WINDOW_MS } from '@/lib/sms/inflight'
 import { extractAndStoreMmsPhotos } from '@/lib/sms/mms'
 import { buildPhotoRequestSms, buildQuoteInFlightSms, buildQuoteFailureSms } from '@/lib/sms/templates'
@@ -1101,26 +1102,34 @@ export async function POST(req: Request) {
       // extra OFF removes it here, so the toggle genuinely controls the
       // AI. Fail-soft + merged into the same in-scope list the
       // authoritative dialog directive renders.
+      // 2026-05: now resolves every shared service using the dashboard
+      // enabled rule (tenant offering wins, otherwise default_enabled),
+      // so default-on priced rows with questions do not fall to $199.
       if (tenant?.id) {
         try {
-          const { data: offerings } = await supabase
-            .from('tenant_service_offerings')
-            .select('assembly_id')
-            .eq('tenant_id', tenant.id)
-            .eq('enabled', true)
-          const enabledIds = (offerings ?? [])
-            .map((o) => o.assembly_id as string | null)
-            .filter((id): id is string => !!id)
-          if (enabledIds.length > 0) {
-            const { data: extras } = await supabase
-              .from('shared_assemblies')
-              // select('*') so a pre-032 prod without clarifying_questions
-              // can't error this block out (deploy-order-safe).
-              .select('*')
-              .in('id', enabledIds)
-              .eq('default_enabled', false)
-              .order('trade')
-              .order('name')
+          const tTrades: string[] =
+            Array.isArray(tenant.trades) && tenant.trades.length > 0
+              ? tenant.trades
+              : tenant.trade
+                ? [tenant.trade]
+                : []
+          if (tTrades.length > 0) {
+            const [sharedRes, offeringRes] = await Promise.all([
+              supabase
+                .from('shared_assemblies')
+                .select('*')
+                .in('trade', tTrades)
+                .order('trade')
+                .order('name'),
+              supabase
+                .from('tenant_service_offerings')
+                .select('assembly_id, enabled')
+                .eq('tenant_id', tenant.id),
+            ])
+            const extras = resolveEnabledSharedAssembliesForDialog(
+              (sharedRes.data ?? []) as any[],
+              (offeringRes.data ?? []) as any[],
+            )
             if (extras && extras.length > 0) {
               const seen = new Set(
                 (customAssemblies ?? []).map((c) => c.name.trim().toLowerCase()),
@@ -1142,7 +1151,7 @@ export async function POST(req: Request) {
                 })
               if (mapped.length > 0) {
                 customAssemblies = [...(customAssemblies ?? []), ...mapped]
-                console.log('[sms/inbound:after] enabled catalogue extras in dialog scope', {
+                console.log('[sms/inbound:after] enabled shared services in dialog scope', {
                   tenantId: tenant.id,
                   count: mapped.length,
                   names: mapped.map((m) => m.name),

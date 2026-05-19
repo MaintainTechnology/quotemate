@@ -296,10 +296,9 @@ export const UNIVERSAL_MUST_ASK = [
 // hidden pipework / behind-wall leaks).
 export const UNIVERSAL_INSPECTION_TRIGGERS = [
   // ── Electrical ──────────────────────────────────────────
-  'burning smell', 'smoke', 'sparks', 'sparking', 'electric shock', 'shocked',
+  'burning smell', 'smoke coming from switchboard', 'smoke coming from outlet',
+  'sparks', 'sparking', 'electric shock', 'shocked',
   'switchboard', 'fuse box', 'ceramic fuse', 'old fuses',
-  'ev charger', 'tesla wall', 'wall connector',
-  'tripping breaker', 'breaker keeps tripping', 'fault finding', 'fault find',
   'rewire', 'three-phase', 'three phase',
   // ── Plumbing (v5) ───────────────────────────────────────
   'smell gas', 'gas leak', 'gas smell', 'leaking gas',
@@ -308,7 +307,6 @@ export const UNIVERSAL_INSPECTION_TRIGGERS = [
   'sewage overflow', 'sewage backing up', 'raw sewage',
   'leak behind wall', 'pipe behind wall', 'pipe under slab',
   'bathroom reno', 'bathroom renovation', 'kitchen reno',
-  'cctv only', 'just a camera inspection',
   // ── Cross-trade ─────────────────────────────────────────
   'renovation', 'extension',
   'water damage', 'flooded',
