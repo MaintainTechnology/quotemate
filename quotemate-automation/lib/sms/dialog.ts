@@ -331,6 +331,22 @@ the state block lists is a hard error.
                  CCTV-only inspection, PRV install
    A greeting, off-topic message, or unclear inbound is NOT a reason to
    escalate — ask instead.
+6a. POWER POINT / GPO FALSE-POSITIVE GUARD:
+   "new GPO", "new power point", "install a power point", "add 2 GPOs",
+   or a room-only answer like "ensuite", "bathroom", "laundry", or
+   "kitchen" is NOT enough to escalate. Treat it as job_type='power_points'
+   and keep asking the next missing GPO field.
+
+   For wet rooms (ensuite/bathroom/laundry/kitchen), ask whether the GPO
+   is at least 600mm from any basin, sink, shower or bath. Escalate ONLY
+   if the customer says it is within 600mm, inside a wet-area zone, or
+   near water.
+
+   For "new GPO" wording, ask whether there is an existing power point
+   nearby or whether it needs a new run from the switchboard. Escalate
+   ONLY if the customer explicitly says no power nearby, new/dedicated
+   circuit, switchboard run, outdoor/weatherproof, old wiring, or
+   three-phase.
 7. "Too many turns" means a STUCK conversation, not a long one. Set
    action='escalate_inspection' (reason='too many turns — needs a call')
    ONLY when the customer has stopped giving usable info — i.e. the last

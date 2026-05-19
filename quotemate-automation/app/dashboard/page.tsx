@@ -4914,7 +4914,10 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/tenant/followups', {
+      // includeActioned=1 → contacted leads come back too (CRM style),
+      // so "Mark contacted" moves a row to the Contacted section
+      // instead of vanishing it. Split by followed_up_at below.
+      const res = await fetch('/api/tenant/followups?includeActioned=1', {
         headers: { Authorization: `Bearer ${accessToken}` },
         cache: 'no-store',
       })
@@ -4966,9 +4969,66 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
         }
         throw new Error(body.error || `HTTP ${res.status}`)
       }
-      // Optimistic: a contacted lead drops out of the active queue.
+      // Optimistic: MOVE the lead into the Contacted section (CRM
+      // style) instead of removing it — the VA can still see it,
+      // re-contact it, or reopen it. Mirrors the server's
+      // followupReason() output for an actioned row.
+      const nowIso = new Date().toISOString()
       setRows((prev) =>
-        prev ? prev.filter((r) => r.quote_id !== quoteId) : prev,
+        prev
+          ? prev.map((r) =>
+              r.quote_id === quoteId
+                ? {
+                    ...r,
+                    followed_up_at: nowIso,
+                    followup_reason: 'Contacted - awaiting reply',
+                  }
+                : r,
+            )
+          : prev,
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function reopen(quoteId: string) {
+    if (!accessToken) return
+    setBusyId(quoteId)
+    try {
+      const res = await fetch('/api/tenant/followups', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ quoteId, action: 'reopen' }),
+      })
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: string
+        }
+        throw new Error(body.error || `HTTP ${res.status}`)
+      }
+      // Optimistic: move it back to "To chase". Reason is a sensible
+      // best-guess from status; the next real load reconciles it.
+      setRows((prev) =>
+        prev
+          ? prev.map((r) =>
+              r.quote_id === quoteId
+                ? {
+                    ...r,
+                    followed_up_at: null,
+                    followup_reason:
+                      r.status === 'viewed'
+                        ? 'Opened, not paid'
+                        : 'Sent, not opened',
+                  }
+                : r,
+            )
+          : prev,
       )
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -5063,6 +5123,13 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
   }
 
   const list = rows ?? []
+  // CRM split: active queue first, contacted-but-still-unpaid after.
+  // Server already returns both (includeActioned=1); we group by
+  // followed_up_at and render one ordered list with a divider so a
+  // contacted lead is parked, not lost.
+  const toChase = list.filter((f) => !f.followed_up_at)
+  const done = list.filter((f) => !!f.followed_up_at)
+  const ordered = [...toChase, ...done]
   const thresholdNote =
     minAgeHours !== null
       ? `Quotes sent over ${
@@ -5091,23 +5158,52 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
     <>
     <Card
       title="Follow-ups"
-      subtitle={`${list.length} ${
-        list.length === 1 ? 'customer' : 'customers'
-      } to chase · ${thresholdNote} Oldest first.`}
+      subtitle={`${toChase.length} to chase${
+        done.length ? ` · ${done.length} contacted` : ''
+      } · ${thresholdNote} Oldest first.`}
     >
+      {toChase.length === 0 && done.length > 0 && (
+        <p className="mb-3 text-sm text-text-dim">
+          Nothing left to chase — everyone&apos;s been contacted. Reopen
+          any below if they still need a nudge.
+        </p>
+      )}
       <div className="space-y-3">
-        {list.map((f) => {
+        {ordered.map((f, _idx) => {
           const name = f.customer.full_name || 'Unknown customer'
           const hasPhone =
             !!f.customer.phone &&
             f.customer.phone.replace(/\D/g, '').length >= 6
           const act = actionState[f.quote_id]
           const calling = callBusy === f.quote_id
+          const isDone = !!f.followed_up_at
           const opened = f.followup_reason.startsWith('Opened')
-          return (
+          const showChaseHeader = !isDone && _idx === 0
+          const showContactedHeader =
+            isDone && (_idx === 0 || !ordered[_idx - 1].followed_up_at)
+          return [
+            showChaseHeader ? (
+              <p
+                key={`${f.quote_id}-h`}
+                className="font-mono text-[0.62rem] uppercase tracking-[0.18em] text-text-dim"
+              >
+                To chase ({toChase.length})
+              </p>
+            ) : null,
+            showContactedHeader ? (
+              <p
+                key={`${f.quote_id}-h`}
+                className="mt-6 border-t border-ink-line pt-4 font-mono text-[0.62rem] uppercase tracking-[0.18em] text-text-dim"
+              >
+                Contacted ({done.length}) · still no payment
+              </p>
+            ) : null,
+            (
             <div
               key={f.quote_id}
-              className="border border-ink-line bg-ink p-4"
+              className={`border border-ink-line bg-ink p-4 ${
+                isDone ? 'opacity-70' : ''
+              }`}
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -5117,9 +5213,11 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
                     </span>
                     <span
                       className={`font-mono text-[0.6rem] uppercase tracking-[0.16em] font-bold px-2 py-0.5 border ${
-                        opened
-                          ? 'border-amber-500/60 text-amber-300'
-                          : 'border-accent/60 text-accent'
+                        isDone
+                          ? 'border-emerald-500/50 text-emerald-300'
+                          : opened
+                            ? 'border-amber-500/60 text-amber-300'
+                            : 'border-accent/60 text-accent'
                       }`}
                     >
                       {f.followup_reason}
@@ -5207,14 +5305,25 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
                 >
                   {threadOpen[f.quote_id] ? 'Hide messages ▾' : 'Messages ▸'}
                 </button>
-                <button
-                  type="button"
-                  disabled={busyId === f.quote_id}
-                  onClick={() => void markContacted(f.quote_id)}
-                  className="ml-auto inline-flex items-center gap-2 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  {busyId === f.quote_id ? 'Saving…' : 'Mark contacted'}
-                </button>
+                {isDone ? (
+                  <button
+                    type="button"
+                    disabled={busyId === f.quote_id}
+                    onClick={() => void reopen(f.quote_id)}
+                    className="ml-auto inline-flex items-center gap-2 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {busyId === f.quote_id ? 'Saving…' : 'Reopen ↩'}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={busyId === f.quote_id}
+                    onClick={() => void markContacted(f.quote_id)}
+                    className="ml-auto inline-flex items-center gap-2 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {busyId === f.quote_id ? 'Saving…' : 'Mark contacted'}
+                  </button>
+                )}
               </div>
               {threadOpen[f.quote_id] && (
                 <div className="mt-3 border-t border-ink-line pt-3">
@@ -5225,7 +5334,8 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
                 </div>
               )}
             </div>
-          )
+          ),
+          ]
         })}
       </div>
     </Card>

@@ -77,7 +77,9 @@ export const ASSUMPTION_RULES: Record<JobType, AssumptionRule> = {
 
   power_points: {
     safeDefaults: {
-      'scope.is_new_install':'false (assume replacement of existing GPO)',
+      // "new GPO" is customer shorthand for a new fitting, not proof
+      // that a new switchboard circuit is needed. Ask before escalating.
+      'scope.is_new_install':'false (assume replacement/add-on using existing nearby power unless customer says otherwise)',
       'access.wall_type':    'plaster',
       'scope.indoor_outdoor':'indoor',
       'property.pre_1970':   'false',
@@ -85,11 +87,16 @@ export const ASSUMPTION_RULES: Record<JobType, AssumptionRule> = {
     mustAsk: [
       'how many GPOs',
       'which room',
+      'is it replacing existing GPOs, adding near existing power, or a brand-new run from the switchboard',
+      'if the room is bathroom/ensuite/laundry/kitchen: is the GPO at least 600mm away from any basin, sink, shower or bath',
     ],
     inspectionTriggers: [
-      'new circuit', 'add a circuit', 'no power there now',
+      'customer explicitly asks for a new circuit or dedicated circuit',
+      'brand-new run from the switchboard',
+      'no power there now', 'no existing power nearby',
       'outdoor', 'weatherproof',
-      'kitchen near sink', 'bathroom',
+      'within 600mm of a basin, sink, shower or bath',
+      'inside a wet-area zone',
       'three-phase', 'switchboard',
       'pre-1970 house', 'old wiring', 'ceramic fuse',
     ],

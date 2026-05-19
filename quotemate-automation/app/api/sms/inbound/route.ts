@@ -19,6 +19,7 @@ import {
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { decideNextTurn, type ConversationTurn } from '@/lib/sms/dialog'
 import { formatActiveFollowupContext } from '@/lib/sms/followup-context'
+import { buildGpoInspectionOverride } from '@/lib/sms/gpo-guard'
 import { isQuoteInflight, DONE_INFLIGHT_WINDOW_MS } from '@/lib/sms/inflight'
 import { extractAndStoreMmsPhotos } from '@/lib/sms/mms'
 import { buildPhotoRequestSms, buildQuoteInFlightSms, buildQuoteFailureSms } from '@/lib/sms/templates'
@@ -1357,6 +1358,40 @@ export async function POST(req: Request) {
       //   - The required field isn't already known (transcript slots OR
       //     customer record)
       //   - We haven't asked this question yet (no loop)
+      // GPO false-positive guard.
+      //
+      // Root case from 2026-05-19: "Can I get two Powerpoints" ->
+      // "Ensuite" was escalated to "$199 inspection" because the prompt
+      // listed "bathroom" as a power_points inspection trigger and Haiku
+      // reasonably mapped ensuite -> bathroom. That happens before DB
+      // service toggles or pricing get a say. Keep obvious GPO jobs in
+      // the quote dialog unless the customer explicitly says there is no
+      // nearby power, a new switchboard circuit/run, outdoor/weatherproof
+      // work, old wiring, or a too-close wet-area location.
+      const gpoOverride = buildGpoInspectionOverride({
+        decision,
+        turns,
+        jobTypeFromState: conversationState.slots.job_type as string | undefined,
+      })
+      if (gpoOverride) {
+        console.warn('[sms/inbound:after] GPO inspection false-positive override', {
+          conversationId,
+          reason: gpoOverride.reason,
+          originalReason: decision.reason_for_escalation,
+          originalReplyPreview: decision.reply_to_send.slice(0, 120),
+        })
+        decision = {
+          ...decision,
+          action: 'ask',
+          job_type_guess: 'power_points',
+          reply_to_send: gpoOverride.reply,
+          ready_for_intake: false,
+          request_photo_link: false,
+          offer_product_choice: false,
+          reason_for_escalation: null,
+        }
+      }
+
       const slotFirstName = (conversationState.slots.first_name as string | undefined) ?? undefined
       const slotSuburb = (conversationState.slots.suburb as string | undefined) ?? undefined
       const slotJobType = (conversationState.slots.job_type as string | undefined) ?? undefined
