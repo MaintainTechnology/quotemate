@@ -40,6 +40,7 @@ export function isHardcodedEasyAssembly(row: SharedAssemblyScopeRow): boolean {
 export function resolveEnabledSharedAssembliesForDialog(
   rows: ReadonlyArray<SharedAssemblyScopeRow>,
   offerings: ReadonlyArray<ServiceOfferingScopeRow>,
+  options: { assumeAllEnabled?: boolean } = {},
 ): SharedAssemblyScopeRow[] {
   const offeringMap = new Map<string, boolean>(
     offerings
@@ -48,9 +49,18 @@ export function resolveEnabledSharedAssembliesForDialog(
   )
 
   return rows.filter((row) => {
-    const enabled = offeringMap.has(row.id)
-      ? (offeringMap.get(row.id) as boolean)
-      : row.default_enabled ?? true
+    // No-tenant fallback path (assumeAllEnabled=true): treat every row as
+    // enabled regardless of default_enabled. This is the dev shared SMS
+    // number or any traffic where the destination number doesn't map to a
+    // tenant. Without it, the dialog declines every migration-021 extra
+    // (LED strip, security camera, doorbell, garbage disposal, rainwater
+    // tank, water filter) as out_of_scope because it never sees them in
+    // its in-scope list. Real tenants still gate via tenant_service_offerings.
+    const enabled = options.assumeAllEnabled
+      ? true
+      : offeringMap.has(row.id)
+        ? (offeringMap.get(row.id) as boolean)
+        : row.default_enabled ?? true
 
     return enabled && !isHardcodedEasyAssembly(row)
   })

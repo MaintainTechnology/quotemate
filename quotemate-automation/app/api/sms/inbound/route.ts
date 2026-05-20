@@ -1174,6 +1174,47 @@ export async function POST(req: Request) {
             message: e instanceof Error ? e.message : String(e),
           })
         }
+      } else {
+        // ─── No-tenant fallback (Cluster A fix, 2026-05-20) ───────────
+        // When the destination number doesn't map to a tenant (the dev
+        // shared SMS number, or any unmapped traffic), feed the FULL
+        // shared catalogue to the dialog as in-scope. Without this, every
+        // migration-021 extra (LED strip, security camera, doorbell,
+        // garbage disposal, rainwater tank, water filter) falls through
+        // Rule 4/6 as out_of_scope because the dialog only sees the
+        // hardcoded easy-5 in its system prompt.
+        // resolveEnabledSharedAssembliesForDialog with assumeAllEnabled
+        // still filters out the hardcoded easy-5 (no duplication).
+        try {
+          const { data: sharedRes } = await supabase
+            .from('shared_assemblies')
+            .select('*')
+            .order('trade')
+            .order('name')
+          const extras = resolveEnabledSharedAssembliesForDialog(
+            (sharedRes ?? []) as SharedAssemblyScopeRow[],
+            [],
+            { assumeAllEnabled: true },
+          )
+          if (extras && extras.length > 0) {
+            const mapped = extras.map((r) => ({
+              name: r.name as string,
+              description: (r.description as string | null) ?? null,
+              always_inspection: false,
+              clarifying_questions: normaliseQuestions(
+                (r as Record<string, unknown>).clarifying_questions,
+              ),
+            }))
+            customAssemblies = [...(customAssemblies ?? []), ...mapped]
+            console.log('[sms/inbound:after] no tenant — full catalogue fallback', {
+              count: mapped.length,
+            })
+          }
+        } catch (e) {
+          console.warn('[sms/inbound:after] no-tenant catalogue fetch failed — continuing without it', {
+            message: e instanceof Error ? e.message : String(e),
+          })
+        }
       }
 
       // ─── Tenant DECLINED services (toggle OFF → polite "we don't do

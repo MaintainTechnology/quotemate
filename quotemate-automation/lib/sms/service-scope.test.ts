@@ -66,4 +66,26 @@ describe('resolveEnabledSharedAssembliesForDialog', () => {
       { assembly_id: 'prv', enabled: false },
     ])).toEqual([])
   })
+
+  it('no-tenant fallback (assumeAllEnabled) includes opt-in migration-021 extras', () => {
+    // The dev shared SMS number has no tenant attached. Without this
+    // fallback the dialog declines LED strip, security camera, doorbell,
+    // garbage disposal, rainwater tank, water filter as out_of_scope.
+    const rows = [
+      { id: 'strip', name: 'Install LED strip lighting', default_enabled: false, category: 'strip_light', clarifying_questions: ['How many metres?'] },
+      { id: 'cam', name: 'Install security camera (single)', default_enabled: false, category: 'security_camera', clarifying_questions: ['How many cameras?'] },
+      { id: 'tank', name: 'Install rainwater tank', default_enabled: false, category: 'rainwater_tank', clarifying_questions: ['Tank size?'] },
+      // Hardcoded easy-5 still filtered out even in fallback mode
+      { id: 'downlight', name: 'Install LED downlight', default_enabled: true, category: 'downlight', clarifying_questions: [] },
+    ]
+
+    const fallback = resolveEnabledSharedAssembliesForDialog(rows, [], {
+      assumeAllEnabled: true,
+    })
+    expect(fallback.map((r) => r.name)).toEqual([
+      'Install LED strip lighting',
+      'Install security camera (single)',
+      'Install rainwater tank',
+    ])
+  })
 })

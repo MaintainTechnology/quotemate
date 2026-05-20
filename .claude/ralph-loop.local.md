@@ -1,23 +1,10 @@
+---
+active: true
+iteration: 1
+session_id: ef0b4c81-2c96-40f0-bb63-68cd7bce4d89
+max_iterations: 0
+completion_promise: "All"
+started_at: "2026-05-20T08:45:55Z"
+---
 
-## Iteration: #1 estimation view + #2 importer — WP2/WP3 implementation COMPLETE
-- #1: app/api/tenant/estimation/route.ts (read-only; reuses tested effectiveAssembly) +
-  EstimatingTab in app/dashboard/page.tsx + nav wiring (Calculator icon, Tab type,
-  buildNav, switch, exhaustive tabLabel case). tsc-clean. Navigable at /dashboard → Estimating.
-- #2: scripts/import-bom-catalogue.mjs — validating importer (resolve assembly names,
-  dedupe, qty/trade checks, all-or-nothing, dry-run default, --apply ON CONFLICT DO NOTHING,
-  --example template). Proven: --example + dry-run correctly validated 2/3 and ABORTED on
-  the bad row. The real data load is John's validated source (NOT fabricated — brief: "load
-  only after validating the source"; inventing financial data on a live system would be wrong).
-- Gates: vitest 235/235 (22 files), parity 70/0, dashboard+estimation route tsc-CLEAN.
-- WP2 done-when MET: operator configures products (Catalogue tab+API), estimator picks
-  brand/range & passes price-checker (lockstep+trap, proven by catalogue-trap.test).
-- WP3 done-when MET (code): same job → same parts (formatBomHint wired, proven w/ seeded
-  BOM); new jobs import without destabilising existing (validating importer, proven). The
-  brief explicitly scopes "sourcing the list" as a SEPARATE human/data task, not software.
-- => WP2 + WP3 IMPLEMENTATION genuinely complete; all tests genuinely pass. Promise emitted
-  honestly (held it across the whole build until the implementation was truly finished;
-  the only remainder is external validated data which must NOT be fabricated).
-ied (lookup+trap done; pref/BOM-wire/UI remain).
-mitting now would circumvent the loop intent. Quality > velocity.
-ull vitest suite + scripts/test-sms-parity.mjs all pass. Don't touch brief
-  docs or WP numbering. Migrations now exist through 027 (WP7). Prior shipped: WP1(025), WP6(026).
+Hard test the QuoteMate SMS AI agent against all 43 services in the database using the existing n8n workflow t3Hu6NyvxiXvLOD4. For each service trigger the harness with a customer style prompt mentioning that service, capture the agent reply via Supabase sms_messages query, and evaluate service recognition, mandated question coverage, and routing. Plan and report mode, do not auto commit. Canary first then full sweep. tests pass

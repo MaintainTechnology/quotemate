@@ -279,6 +279,18 @@ EXTRACTION RULES:
                   sink and not going down."
        Extract: job_type="blocked_drain", room="kitchen"
 
+       Customer: "Half the power points in my kitchen stopped working,
+                  need someone to find the fault."
+       Extract: job_type="fault_finding", room="kitchen"
+       (NOT smoke_alarms — "stopped working" + "find the fault" is the
+       textbook fault-finding cue; the count "half" is not a quantity.)
+
+       Customer: "Bathroom exhaust fan needs replacing, ducted to the eave."
+       Extract: job_type="ceiling_fans", room="bathroom",
+                replace_or_new="replace"
+       (Exhaust / extractor / rangehood fans all map to ceiling_fans —
+       the SMS classifier doesn't have a separate exhaust_fan value.)
+
      Buried facts count — "in the laundry as I said" still produces
      room="laundry"; "replacing the old battery ones" still produces
      replace_or_new="replace". Do not require explicit Q/A framing.
@@ -338,9 +350,20 @@ EXTRACTION RULES:
      - downlights / power_points / ceiling_fans / smoke_alarms / outdoor_lighting
      - "GPOs", "power points", "outlets" → power_points
      - "smoke alarms", "smokies", "smoke detectors" → smoke_alarms
+       BUT: a customer saying their power points / lights / circuits
+       "stopped working" or "tripped" is NOT smoke_alarms — that's fault_finding.
+       Only classify smoke_alarms when the message is specifically about
+       smoke alarm installation, replacement, or testing.
      - "oven", "cooktop", "stove hardwire" → oven_cooktop
+     - "exhaust fan", "extractor fan", "bathroom fan", "rangehood fan",
+       "ceiling fan" → ceiling_fans (the SMS enum's ceiling_fans value
+       covers ALL fan installs, including exhaust / extractor variants)
      - "EV charger", "Tesla wall connector", "wall charger" → ev_charger
-     - "fault find", "fault finding", "breaker tripping" → fault_finding
+     - "fault find", "fault finding", "fault find call out", "breaker
+       tripping", "RCD tripping", "safety switch keeps tripping",
+       "stopped working", "half the lights stopped", "half the power
+       points stopped", "lost power to X", "find the fault", "investigate
+       why X stopped" → fault_finding
      - Other electrical (switchboard, renovation, three-phase, rewire,
        mains, underground cabling) → out_of_scope
 

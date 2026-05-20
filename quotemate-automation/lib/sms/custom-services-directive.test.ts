@@ -107,4 +107,25 @@ describe('customServicesDirective — mandated clarifying questions (mig 032)', 
     expect(customServicesDirective(undefined)).toBe('')
     expect(customServicesDirective([])).toBe('')
   })
+
+  it('HARD RULE override forbids escalate_inspection while MUST-ASK is pending (Cluster B fix 2026-05-20)', () => {
+    // The sweep on 2026-05-20 showed the agent jumping straight to $199
+    // inspection for EV charger / oven_cooktop / outdoor GPO / leak
+    // detection / CCTV / PRV / gas appliance — all services that have
+    // mandated questions in DB but were getting bypassed. The HARD RULE
+    // makes the override explicit: MUST-ASK pending → action MUST be 'ask'.
+    const out = customServicesDirective([withQs])
+    expect(out).toMatch(/HARD RULE/i)
+    expect(out).toMatch(/NEVER\s+set action='escalate_inspection' for a matched row/i)
+    // The training-instinct categories the model was leaking on:
+    expect(out).toMatch(/EV charger/i)
+    expect(out).toMatch(/oven\/cooktop/i)
+    expect(out).toMatch(/gas appliance/i)
+    expect(out).toMatch(/CCTV/i)
+    expect(out).toMatch(/PRV/i)
+    expect(out).toMatch(/leak detection/i)
+    // The escape clause — after MUST-ASKs are answered, escalation may
+    // still be valid if the ANSWERS justify it.
+    expect(out).toMatch(/Only AFTER every MUST-ASK is answered/i)
+  })
 })
