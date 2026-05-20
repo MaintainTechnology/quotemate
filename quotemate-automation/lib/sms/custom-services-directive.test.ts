@@ -6,7 +6,7 @@
 // inspection-only rows accidentally inheriting the quote questions.
 
 import { describe, expect, it } from 'vitest'
-import { customServicesDirective, type CustomServiceScope } from './dialog'
+import { TurnDecisionSchema, customServicesDirective, type CustomServiceScope } from './dialog'
 
 const withQs: CustomServiceScope = {
   name: 'Install rainwater tank',
@@ -26,6 +26,19 @@ const noQs: CustomServiceScope = {
 }
 
 describe('customServicesDirective — mandated clarifying questions (mig 032)', () => {
+  it('allows enabled tenant-service job types in the dialog decision schema', () => {
+    for (const jobType of ['oven_cooktop', 'gas_fitting', 'cctv_inspection', 'prv_install']) {
+      expect(() => TurnDecisionSchema.parse({
+        action: 'ask',
+        job_type_guess: jobType,
+        reply_to_send: 'Got it - just checking one more detail.',
+        assumptions_made: [],
+        ready_for_intake: false,
+        reason_for_escalation: null,
+      })).not.toThrow()
+    }
+  })
+
   it('renders the questions + the no-finish-until-answered mandate', () => {
     const out = customServicesDirective([withQs])
     expect(out).toContain('Install rainwater tank')

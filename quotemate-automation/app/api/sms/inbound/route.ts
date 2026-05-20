@@ -310,7 +310,7 @@ export async function POST(req: Request) {
   // returning customers don't get re-asked their name/suburb, and to
   // link the conversation back to a customer for cross-channel history.
   // Fail-soft: returns null on DB error, all downstream code handles null.
-  const customer: CustomerProfile | null = await findOrCreateCustomer(fromNumber, 'sms')
+  const customer: CustomerProfile | null = await findOrCreateCustomer(fromNumber, 'sms', tenant?.id ?? null)
   if (customer) {
     console.log('[sms/inbound] step 2 — customer resolved', {
       customerId: customer.id,
@@ -1337,7 +1337,7 @@ export async function POST(req: Request) {
         const fallbackJob =
           (conversationState.slots.job_type as string | undefined) || null
         decision = {
-          action: 'escalate_inspection',
+          action: 'ask',
           job_type_guess: 'unknown',
           reply_to_send: buildDialogFallbackReply({
             firstName: fallbackFirst,
@@ -1347,7 +1347,7 @@ export async function POST(req: Request) {
           ready_for_intake: false,
           request_photo_link: false,
           offer_product_choice: false,
-          reason_for_escalation: 'dialog agent error',
+          reason_for_escalation: null,
         }
       }
 
@@ -1879,6 +1879,26 @@ export async function POST(req: Request) {
             {
               maxAttempts: 3,
               baseDelayMs: 2000,
+              // 2026-05-19 "bug zapper" fix part 2 — do NOT retry on a
+              // fetch that aborted/timed out on the CLIENT side. When the
+              // outbound fetch is aborted (Vercel terminating a long
+              // in-flight request, undici headersTimeout, etc.), the
+              // intake/structure SERVER may still be running and will
+              // complete the full pipeline (Opus + dispatch + DB writes).
+              // A retry then triggers a second complete pipeline run —
+              // duplicate intake row, duplicate recovery SMS. Belt: the
+              // intake/structure route now also enforces idempotency by
+              // conversation_id, but treating timeouts as non-retriable
+              // here means we don't even attempt the duplicate work.
+              shouldRetry: (err) => {
+                const msg = err instanceof Error ? err.message : String(err)
+                const name = err instanceof Error ? err.name : ''
+                const looksLikeAbort =
+                  name === 'AbortError' ||
+                  name === 'TimeoutError' ||
+                  /aborted|timeout|ETIMEDOUT|UND_ERR_HEADERS_TIMEOUT|fetch failed/i.test(msg)
+                return !looksLikeAbort
+              },
               onAttemptFailed: (err, attempt, willRetry) => {
                 const msg = err instanceof Error ? err.message : String(err)
                 const tag = willRetry ? 'retrying' : 'EXHAUSTED'

@@ -40,6 +40,7 @@ import {
   type BomLine,
   type Tier,
   type QuoteLine,
+  type TierLadderEntry,
 } from './catalogue'
 
 const TIERS: Tier[] = ['good', 'better', 'best']
@@ -62,6 +63,12 @@ export interface DeterministicTierInput {
   /** pricing_book.default_markup_pct — keeps the line inside the
    *  validator's accepted markup band. */
   markupPct: number
+  /** v7 Phase 3 — tenant's explicit Good/Better/Best ladder (tenant_tier_ladder,
+   *  migration 043). When a (category, tier) ladder hit exists,
+   *  chooseMaterial() returns that exact product, beating the
+   *  brand/range/tier inference. Optional — empty ladder = unchanged
+   *  legacy behaviour. */
+  tierLadder?: TierLadderEntry[]
 }
 
 export interface DeterministicTier {
@@ -112,6 +119,7 @@ export function buildDeterministicTiers(
         sharedRows: input.sharedMaterials,
         category,
         tier,
+        tierLadder: input.tierLadder,
       })
       if (!chosen) return null
       // WP4: when the price came from the operator's own catalogue,

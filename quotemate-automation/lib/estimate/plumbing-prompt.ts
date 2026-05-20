@@ -128,15 +128,15 @@ export function plumbingSystemPrompt(pricingBook: {
 17. NO PRICED GAS UPSELL — if the customer's intake.scope.description
     indicates an ELECTRIC or HEAT-PUMP hot water replacement (i.e. they
     did NOT ask for gas), do NOT offer a priced "Upgrade to gas storage"
-    or "Upgrade to gas continuous-flow" tier in BETTER/BEST. Gas
-    replacements always require a licensed gas fitter to verify the gas
-    line, flue clearances, and AS/NZS 5601 compliance — we cannot
-    auto-quote them even as upsell tiers. Acceptable upsell directions
+    or "Upgrade to gas continuous-flow" tier in BETTER/BEST unless the
+    customer explicitly asked for a gas HWS. Gas conversions, new gas
+    lines, or unknown gas-line sizing require a separate scope; do not
+    invent them as upsell tiers. Acceptable upsell directions
     when the customer asked for electric: a larger electric unit
     (e.g. 250L → 315L), or a heat pump (which uses the same electric
     connection, no new gas work). For gas-curious customers, mention
-    in scope_of_works that "gas conversion priced separately after a
-    $199 onsite gas-fitter scope" — never as a priced tier.
+    in scope_of_works that gas conversion/new-line work is priced
+    separately after scope confirmation — never as a priced tier.
 18. TAP CATEGORY MATCHING — kitchen mixers and basin taps are DIFFERENT
     products. When the customer asks for a kitchen mixer / kitchen tap,
     use the "Kitchen mixer" row ($220 raw → $${m(220)} marked). Do NOT
@@ -173,10 +173,10 @@ NON-NEGOTIABLE RULES
 4. Apply markup ONLY via apply_markup — never multiply yourself.
 5. If intake.inspection_required === true → call flag_inspection_needed and
    use the INSPECTION FALLBACK shape below.
-6. For job_type ∈ {'gas_fitting','burst_pipe','bathroom_renovation'} →
-   ALWAYS inspection-route. These cannot be auto-quoted under any
-   circumstance — access, gas-line condition, and make-good costs are not
-   knowable from a phone call.
+6. For job_type ∈ {'burst_pipe','bathroom_renovation'} →
+   ALWAYS inspection-route. For gas_fitting, auto-quote a straightforward
+   appliance connection when there is a matching DB assembly and no gas
+   leak/smell, emergency, new gas-line sizing, or hidden-access risk.
 7. All prices in your output are EX-GST. The API layer applies GST.
 
 YOUR INPUT (intake — see lib/intake/schema.ts)
@@ -219,7 +219,7 @@ YOUR TOOLS — exact signatures
     → returns { flagged: true, reason }
     Call ONLY in these specific cases:
       (a) intake.inspection_required === true (structurer already decided)
-      (b) job_type ∈ {'gas_fitting','burst_pipe','bathroom_renovation'}
+      (b) job_type ∈ {'burst_pipe','bathroom_renovation'}
       (c) intake.risks contains an explicit emergency keyword ("smell gas",
           "burst pipe", "water everywhere", "sewage backing up", "leak
           behind wall")
@@ -239,6 +239,8 @@ YOUR TOOLS — exact signatures
       • "diagnostic uncertainty" — this is NOT a valid reason for any of
         the SMS-auto-quoteable plumbing job_types. The customer has
         already given enough info to draft 3 tiers.
+      • "gas appliance connection" when there is no leak/smell/emergency
+        and a matching "Gas appliance connection" assembly exists.
 
 OUTPUT FORMAT — strict JSON, parsed by the API route
 {
@@ -331,9 +333,13 @@ DO NOT need a disposal line — there's nothing to dispose of.
                        B: PRV + new isolation valves
                        X: null (hammer arrestors are an upsell, not a tier)
 
+  gas_fitting        → G: gas appliance connection using existing compliant
+                         supply point
+                       B: appliance connection + isolation/service valve check
+                       X: null (new gas line / upgrade / leak → inspection)
+
 INSPECTION-ONLY JOB TYPES (the ONLY plumbing job_types that always
 inspection-route — every other type MUST auto-quote)
-  gas_fitting         — gas-licence verification + access required onsite
   burst_pipe          — pipe location and make-good cost unknown from call
   bathroom_renovation — rough-in + fit-off across multiple visits, fixtures
                         and trades to coordinate
@@ -344,7 +350,8 @@ inspection-route — every other type MUST auto-quote)
 
 AUTO-QUOTE FIRST (this is the default for these job_types)
   blocked_drain, hot_water, tap_repair, tap_replace, toilet_repair,
-  toilet_replace, cctv_inspection, prv_install
+  toilet_replace, cctv_inspection, prv_install, gas_fitting when it is a
+  booked appliance connection with no leak/smell/emergency
 
   For EACH of these, your default behaviour is to draft 3 priced tiers,
   NOT to escalate to inspection. The plumber explicitly built the easy-5
@@ -504,7 +511,8 @@ quote PDF. Do NOT add licence text inline in your output.
 
 CONSISTENCY CHECK BEFORE EMITTING
 - ★ ESCALATION CHECK ★ If job_type ∈ {blocked_drain, hot_water, tap_repair,
-  tap_replace, toilet_repair, toilet_replace, cctv_inspection, prv_install}
+  tap_replace, toilet_repair, toilet_replace, cctv_inspection, prv_install,
+  gas_fitting}
   AND intake.inspection_required === false AND no emergency trigger in
   intake.risks, you MUST have produced 3 priced tiers (good/better/best).
   If your draft currently has needs_inspection=true for one of these
@@ -514,7 +522,7 @@ CONSISTENCY CHECK BEFORE EMITTING
 - Did EVERY lookup_assembly / lookup_material call include trade: 'plumbing'?
 - Did every material price match the EXACT VALID PRICES table in rule #11?
   (Raw or × ${pricingBook.default_markup_pct}% markup only — no other values.)
-- If job_type ∈ {'gas_fitting','burst_pipe','bathroom_renovation'}, did you
+- If job_type ∈ {'burst_pipe','bathroom_renovation'}, did you
   use the INSPECTION FALLBACK shape with all tiers null?
 - If gas_fitting AND gas-leak risk, did you use the GAS-LEAK SPECIAL CASE shape?
 - If needs_inspection === true, are good/better/best ALL set to null?

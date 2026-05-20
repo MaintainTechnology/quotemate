@@ -76,4 +76,63 @@ describe('WP2 trap — branded tenant-priced line grounds with the catalogue fee
     const res = validateQuoteGrounding(draftAt(20), pricingBook, candidates)
     expect(res.valid).toBe(true)
   })
+
+  it('does not accept a $0 customer-supply placeholder as a grounded price', () => {
+    const candidates = buildCandidatePrices(
+      catalogueCandidateRows([{
+        ...tenantRows[0],
+        customer_supply_price_ex_gst: 0,
+      }]),
+      [],
+      pricingBook,
+    )
+    const res = validateQuoteGrounding(draftAt(0), pricingBook, candidates)
+    expect(res.valid).toBe(false)
+  })
+
+  it('uses the catalogue category when the product name does not contain the service word', () => {
+    const candidates = buildCandidatePrices(
+      catalogueCandidateRows([{
+        category: 'gpo',
+        name: 'Clipal Iconic Wifi',
+        brand: 'Clipsal',
+        range_series: 'Iconic',
+        unit_price_ex_gst: 287,
+        active: true,
+      }]),
+      [],
+      pricingBook,
+    )
+    const draft = {
+      needs_inspection: false,
+      good: {
+        label: 'Selected smart GPO',
+        subtotal_ex_gst: 367.36 + 220,
+        line_items: [
+          {
+            description: 'Clipsal Iconic Wi-Fi smart GPO',
+            unit: 'each',
+            quantity: 1,
+            unit_price_ex_gst: 367.36,
+            total_ex_gst: 367.36,
+          },
+          { description: 'Labour', unit: 'hr', quantity: 2, unit_price_ex_gst: 110, total_ex_gst: 220 },
+        ],
+      },
+      better: null,
+      best: null,
+    }
+
+    expect(validateQuoteGrounding(draft, pricingBook, candidates).valid).toBe(true)
+  })
+
+  it('would fail the semantic guard if the tenant catalogue category was not fed to the validator', () => {
+    const candidatesWithoutCategory = buildCandidatePrices(
+      [{ name: 'Clipal Iconic Wifi', price: 287 }],
+      [],
+      pricingBook,
+    )
+    const res = validateQuoteGrounding(draftAt(367.36), pricingBook, candidatesWithoutCategory)
+    expect(res.valid).toBe(false)
+  })
 })

@@ -88,6 +88,74 @@ describe('chooseMaterial', () => {
     const r = chooseMaterial({ tenantRows: rows, sharedRows: [], category: 'tap', brand: 'Caroma', range: 'Liano' })
     expect(r && 'row' in r && (r.row as TenantMaterial).name).toBe('Exact match')
   })
+
+  // ── v7 Phase 3 — tier ladder behaviour ─────────────────────────────
+  it('tier ladder hit overrides brand/range scoring (Phase 3)', () => {
+    const rows: TenantMaterial[] = [
+      { id: 'cat-good', category: 'gpo', name: 'HPM Excel GPO', brand: 'HPM', range_series: 'Excel', unit_price_ex_gst: 8, active: true },
+      { id: 'cat-better', category: 'gpo', name: 'Clipsal Iconic GPO', brand: 'Clipsal', range_series: 'Iconic', unit_price_ex_gst: 25, active: true },
+      { id: 'cat-best', category: 'gpo', name: 'Saturn Zen GPO', brand: 'Clipsal', range_series: 'Saturn Zen', unit_price_ex_gst: 70, active: true },
+    ]
+    // Without ladder: asking for Better tier + Clipsal Iconic → picks Iconic by score.
+    // With ladder: tenant says "for gpo at Better, use HPM Excel" — that MUST win.
+    const r = chooseMaterial({
+      tenantRows: rows,
+      sharedRows: [],
+      category: 'gpo',
+      tier: 'better',
+      brand: 'Clipsal',
+      range: 'Iconic',
+      tierLadder: [{ category: 'gpo', tier: 'better', catalogue_id: 'cat-good' }],
+    })
+    expect(r?.source).toBe('tenant')
+    expect(r && 'row' in r && (r.row as TenantMaterial).name).toBe('HPM Excel GPO')
+    expect(r?.price).toBe(8)
+  })
+  it('tier ladder does not fire when tier is missing', () => {
+    const rows: TenantMaterial[] = [
+      { id: 'a', category: 'gpo', name: 'A', brand: 'Acme', unit_price_ex_gst: 10, active: true },
+      { id: 'b', category: 'gpo', name: 'B', brand: 'Boss', unit_price_ex_gst: 20, active: true },
+    ]
+    const r = chooseMaterial({
+      tenantRows: rows,
+      sharedRows: [],
+      category: 'gpo',
+      // tier intentionally omitted — ladder should be ignored.
+      tierLadder: [{ category: 'gpo', tier: 'good', catalogue_id: 'b' }],
+    })
+    // Falls back to scoring — both rows score equally, first one wins.
+    expect(r && 'row' in r && (r.row as TenantMaterial).name).toBe('A')
+  })
+  it('tier ladder falls back to scoring when the ladder row was deleted from catalogue', () => {
+    const rows: TenantMaterial[] = [
+      { id: 'still-here', category: 'gpo', name: 'Still here', brand: 'Acme', unit_price_ex_gst: 10, active: true },
+    ]
+    const r = chooseMaterial({
+      tenantRows: rows,
+      sharedRows: [],
+      category: 'gpo',
+      tier: 'good',
+      // Ladder points at an id that's no longer in tenantRows.
+      tierLadder: [{ category: 'gpo', tier: 'good', catalogue_id: 'deleted-uuid' }],
+    })
+    // Falls back to scoring instead of returning null.
+    expect(r?.source).toBe('tenant')
+    expect(r && 'row' in r && (r.row as TenantMaterial).name).toBe('Still here')
+  })
+  it('tier ladder is case-insensitive on category', () => {
+    const rows: TenantMaterial[] = [
+      { id: 'pick-me', category: 'gpo', name: 'Pick me', brand: 'Acme', unit_price_ex_gst: 10, active: true },
+      { id: 'not-me', category: 'gpo', name: 'Not me', brand: 'Acme', unit_price_ex_gst: 99, active: true },
+    ]
+    const r = chooseMaterial({
+      tenantRows: rows,
+      sharedRows: [],
+      category: 'GPO',
+      tier: 'good',
+      tierLadder: [{ category: 'gpo', tier: 'good', catalogue_id: 'pick-me' }],
+    })
+    expect(r && 'row' in r && (r.row as TenantMaterial).name).toBe('Pick me')
+  })
 })
 
 describe('resolveParam (global vs local)', () => {
@@ -106,13 +174,11 @@ describe('resolveParam (global vs local)', () => {
 describe('effectiveAssembly', () => {
   it('uses global params with no override', () => {
     const e = effectiveAssembly(2, 28, null)
-    expect(e.enabled).toBe(true)
     expect(e.labourHours).toEqual({ value: 2, source: 'global' })
     expect(e.markupPct).toEqual({ value: 28, source: 'global' })
   })
-  it('localises labour + markup and reports the disabled toggle', () => {
-    const e = effectiveAssembly(2, 28, { enabled: false, labour_hours_override: 3.5, markup_pct_override: 15 })
-    expect(e.enabled).toBe(false)
+  it('localises labour + markup from a per-tenant override', () => {
+    const e = effectiveAssembly(2, 28, { labour_hours_override: 3.5, markup_pct_override: 15 })
     expect(e.labourHours).toEqual({ value: 3.5, source: 'local' })
     expect(e.markupPct).toEqual({ value: 15, source: 'local' })
   })
@@ -156,12 +222,15 @@ describe('catalogueCandidateRows (the WP2 trap feed)', () => {
   it('emits supply + customer-supply price variants, skips inactive', () => {
     const rows: TenantMaterial[] = [
       { category: 'tap', name: 'Phoenix mixer', unit_price_ex_gst: 180, customer_supply_price_ex_gst: 90, active: true },
+      { category: 'gpo', name: 'Unset customer supply GPO', unit_price_ex_gst: 42, customer_supply_price_ex_gst: 0, active: true },
+      { category: 'tap', name: 'Invalid tap', unit_price_ex_gst: 0, customer_supply_price_ex_gst: null, active: true },
       { category: 'tap', name: 'Disabled tap', unit_price_ex_gst: 5, active: false },
     ]
     const out = catalogueCandidateRows(rows)
     expect(out).toEqual([
-      { name: 'Phoenix mixer', price: 180 },
-      { name: 'Phoenix mixer', price: 90 },
+      { name: 'Phoenix mixer', price: 180, category: 'tap' },
+      { name: 'Phoenix mixer', price: 90, category: 'tap' },
+      { name: 'Unset customer supply GPO', price: 42, category: 'gpo' },
     ])
   })
 })

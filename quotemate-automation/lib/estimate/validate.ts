@@ -367,7 +367,7 @@ export function buildCandidatePrices(
     const out: CandidatePrice[] = []
     for (const row of rows) {
       const raw = Number(row.price)
-      if (!Number.isFinite(raw)) continue
+      if (!Number.isFinite(raw) || raw <= 0) continue
       const categories = categorise(row.name ?? '')
       // Migration 029: fold in the row's EXPLICIT category (additive —
       // never drops a name-derived tag, so a row that grounds today keeps

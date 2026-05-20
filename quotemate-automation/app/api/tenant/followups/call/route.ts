@@ -131,8 +131,23 @@ export async function POST(req: Request) {
     )
   }
 
+  // Best-effort: drop a row into the CRM touch log so the dashboard
+  // History panel shows the dial attempt. Twilio status callbacks (busy
+  // / answered / etc.) aren't wired yet — when they are, the row's
+  // outcome can be updated. Never fail the call response on log error.
+  try {
+    await supabase.from('quote_followup_events').insert({
+      tenant_id: tenant.id,
+      quote_id: quoteId,
+      kind: 'call',
+      outcome: 'call_dialed',
+      summary: 'Outbound call placed',
+    })
+  } catch (e) {
+    console.error('[followups/call] event log failed (call still placed)', e)
+  }
+
   // The tradie's phone is now ringing; when they answer it bridges to the
-  // customer. Nothing to log yet — call status lands via Twilio later if
-  // we wire status callbacks (out of scope here).
+  // customer.
   return Response.json({ ok: true, callSid: result.sid })
 }

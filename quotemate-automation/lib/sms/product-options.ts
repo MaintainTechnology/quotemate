@@ -44,9 +44,8 @@ export interface ProductOption {
 
 export type ProductChoiceStatus = 'pending' | 'chosen'
 
-/** Lives on sms_conversations.conversation_state.product_choice — the
- *  codebase keeps conversational selections in conversation_state jsonb
- *  (same as slots/sources), so WP9 needs NO new table. */
+/** Lives on sms_conversations.product_choice jsonb — a dedicated column
+ *  keeps product picks out of the slot merge/update path. */
 export interface ProductChoiceState {
   category: string
   token: string

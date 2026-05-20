@@ -2,8 +2,9 @@
 // Customer memory — keyed by phone number across voice + SMS.
 //
 // Two functions:
-//   findOrCreateCustomer(phone, channel)
+//   findOrCreateCustomer(phone, channel, tenantId?)
 //     Looked up at every inbound. Creates a stub if no row exists yet.
+//     Stamps tenant_id on creation; heals NULL tenant_id on existing rows.
 //     Returns the full customer profile.
 //
 //   updateCustomerFromIntake(customerId, intake, channel)
@@ -44,10 +45,19 @@ export type CustomerProfile = {
 /**
  * Look up the customer for this phone number. Create a stub if missing.
  * Returns null only on database error (rare; fail-soft so callers keep working).
+ *
+ * `tenantId` (added 2026-05-20): the tenant the inbound is destined for.
+ * Stamped on the customers row at creation so downstream RLS / tenant-scoped
+ * queries work. When a customer row already exists with tenant_id IS NULL
+ * (pre-fix orphans), it is healed in-place — the first contact that arrives
+ * with a known tenant attributes the customer. Customers with an existing
+ * tenant_id are NEVER reassigned (a customer who calls one tradie shouldn't
+ * be reattributed to another mid-relationship).
  */
 export async function findOrCreateCustomer(
   phoneNumber: string,
   channel: 'voice' | 'sms',
+  tenantId: string | null = null,
 ): Promise<CustomerProfile | null> {
   if (!phoneNumber) return null
 
@@ -65,13 +75,18 @@ export async function findOrCreateCustomer(
 
   if (existing) {
     // Bump last_contacted_at + preferred_channel (latest channel used wins).
+    // Also heal tenant_id if it was NULL on a pre-fix orphan row.
+    const update: Record<string, unknown> = {
+      last_contacted_at: new Date().toISOString(),
+      preferred_channel: channel,
+      updated_at: new Date().toISOString(),
+    }
+    if (tenantId && !(existing as { tenant_id?: string | null }).tenant_id) {
+      update.tenant_id = tenantId
+    }
     const { error: bumpErr } = await supabase
       .from('customers')
-      .update({
-        last_contacted_at: new Date().toISOString(),
-        preferred_channel: channel,
-        updated_at: new Date().toISOString(),
-      })
+      .update(update)
       .eq('id', existing.id)
     if (bumpErr) {
       console.error('[customers] bump last_contacted_at failed', { id: existing.id, err: bumpErr.message })
@@ -85,6 +100,7 @@ export async function findOrCreateCustomer(
     .insert({
       phone_number: phoneNumber,
       preferred_channel: channel,
+      tenant_id: tenantId,
     })
     .select()
     .single()

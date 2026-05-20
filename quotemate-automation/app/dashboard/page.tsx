@@ -2272,6 +2272,20 @@ function ServicesTab({
 
   return (
     <div className="space-y-6">
+      {/* v7 Phase 1 banner — Jon's "everything is pre-populated, toggle on/off"
+         framing made explicit. Always shown (informational, not dismissible);
+         the enabledCount in the Card subtitle already encodes the state. */}
+      <div className="border-l-2 border-l-accent/60 bg-ink-card/60 px-4 py-3">
+        <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-accent mb-1">
+          Catalogue · pre-populated
+        </div>
+        <div className="text-sm text-text-sec">
+          Every standard service for <span className="font-mono">{tenantTrades.join(' + ') || '—'}</span>{' '}
+          is loaded for you, with the easy-5 pre-ticked. Untick anything you don&rsquo;t do —
+          customers can still book it as a $199 inspection, your AI just won&rsquo;t auto-draft a price.
+        </div>
+      </div>
+
       <Card
         title="Auto-quote services"
         subtitle={`Tick the work your AI can auto-quote. Unticked services still get inspections — they just won't auto-draft a price. ${enabledCount} of ${totalCount} enabled.`}
@@ -3663,6 +3677,532 @@ type CatalogueRow = {
   active: boolean
 }
 
+// v7 Phase 2b — supplier_catalogue row shape returned by
+// GET /api/supplier-catalogue (a subset of the table's columns; pricing
+// + tier_hint + image carry through for the browse UI).
+type SupplierCatalogueRow = {
+  id: string
+  trade: string
+  category: string
+  brand: string
+  range_series: string | null
+  name: string
+  supplier_label: string | null
+  default_unit: string
+  default_unit_price_ex_gst: number | string
+  tier_hint: 'good' | 'better' | 'best' | null
+  image_url: string | null
+  description: string | null
+  supplier_revision: number
+}
+
+// v7 Phase 2b — "Browse supplier catalogue" panel rendered inside
+// CatalogueTab when viewMode === 'browse'. Self-contained: own fetch,
+// own filters (trade / category / brand), multi-select state, and a
+// single "Add N selected to my catalogue" action that POSTs to
+// /api/tenant/catalogue/bulk-add and calls onAdded() so the parent
+// can refresh its own list.
+function BrowseSupplierPanel({
+  accessToken,
+  onAdded,
+}: {
+  accessToken: string | null
+  onAdded: () => void
+}) {
+  const [supplierRows, setSupplierRows] = useState<SupplierCatalogueRow[] | null>(null)
+  const [alreadyStocked, setAlreadyStocked] = useState<Set<string>>(new Set())
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [addMsg, setAddMsg] = useState<string | null>(null)
+  const [tradeFilter, setTradeFilter] = useState<string>('all')
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
+  const [brandFilter, setBrandFilter] = useState<string>('all')
+
+  // Load the supplier rows + already-stocked link set once on mount.
+  // Re-runs after a successful bulk-add (parent calls onAdded which
+  // refreshes the My-catalogue list; the browse view re-fetches too so
+  // the "already in your catalogue" badge updates immediately).
+  const load = useCallback(async () => {
+    if (!accessToken) {
+      setErr('Not signed in')
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    setErr(null)
+    try {
+      const res = await fetch('/api/supplier-catalogue', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: 'no-store',
+      })
+      if (!res.ok) {
+        const b = (await res.json().catch(() => ({}))) as { error?: string }
+        throw new Error(b.error || `HTTP ${res.status}`)
+      }
+      const json = (await res.json()) as {
+        supplier_rows: SupplierCatalogueRow[]
+        already_stocked: string[]
+      }
+      setSupplierRows(json.supplier_rows)
+      setAlreadyStocked(new Set(json.already_stocked))
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoading(false)
+    }
+  }, [accessToken])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function addSelected() {
+    if (selected.size === 0 || !accessToken) return
+    setAdding(true)
+    setAddMsg(null)
+    try {
+      const res = await fetch('/api/tenant/catalogue/bulk-add', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ supplier_catalogue_ids: [...selected] }),
+      })
+      const json = (await res.json().catch(() => ({}))) as {
+        ok?: boolean
+        added?: number
+        total?: number
+        results?: Array<{ supplier_catalogue_id: string; status: string; error?: string }>
+        error?: string
+      }
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error || `HTTP ${res.status}`)
+      }
+      const partialFails = (json.results ?? []).filter(
+        (r) => r.status !== 'added' && r.status !== 'already_stocked',
+      )
+      setAddMsg(
+        partialFails.length === 0
+          ? `Added ${json.added} of ${json.total} to your catalogue.`
+          : `Added ${json.added}; ${partialFails.length} failed (${partialFails[0]?.status}).`,
+      )
+      setSelected(new Set())
+      await load()
+      onAdded()
+    } catch (e) {
+      setAddMsg(`Add failed: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  const rows = supplierRows ?? []
+  // Filter chips' option lists. We compute these off the UNFILTERED
+  // rows so the chip labels stay stable as the user narrows the view.
+  const trades = Array.from(new Set(rows.map((r) => r.trade))).sort()
+  const categoriesByTrade = (() => {
+    const visible =
+      tradeFilter === 'all' ? rows : rows.filter((r) => r.trade === tradeFilter)
+    return Array.from(new Set(visible.map((r) => r.category))).sort()
+  })()
+  const brandsByTradeCat = (() => {
+    const visible = rows
+      .filter((r) => tradeFilter === 'all' || r.trade === tradeFilter)
+      .filter((r) => categoryFilter === 'all' || r.category === categoryFilter)
+    return Array.from(new Set(visible.map((r) => r.brand))).sort()
+  })()
+  const filtered = rows
+    .filter((r) => tradeFilter === 'all' || r.trade === tradeFilter)
+    .filter((r) => categoryFilter === 'all' || r.category === categoryFilter)
+    .filter((r) => brandFilter === 'all' || r.brand === brandFilter)
+
+  if (loading) {
+    return (
+      <div className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim py-10">
+        Loading supplier catalogue…
+      </div>
+    )
+  }
+  if (err) {
+    return (
+      <div className="mt-4 bg-ink-card border-l-2 border-l-warning border-y border-r border-ink-line p-6">
+        <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-warning mb-2">
+          Couldn&apos;t load supplier catalogue
+        </div>
+        <p className="text-sm text-text-sec">{err}</p>
+      </div>
+    )
+  }
+  if (rows.length === 0) {
+    return (
+      <div className="mt-4 bg-ink-card/40 border border-dashed border-ink-line p-6">
+        <p className="text-sm text-text-sec">
+          The supplier catalogue is empty for your trade(s). Ask QuoteMate to add a
+          brand or contact your admin.
+        </p>
+      </div>
+    )
+  }
+
+  const fmtMoney = (v: number | string) => {
+    const n = typeof v === 'string' ? parseFloat(v) : v
+    return Number.isFinite(n) ? `$${n.toFixed(2)}` : '—'
+  }
+
+  return (
+    <div className="mt-4 space-y-4">
+      {/* Filter chips. */}
+      <div className="flex flex-wrap items-center gap-2 text-[0.65rem] font-mono uppercase tracking-[0.14em]">
+        {trades.length > 1 && (
+          <>
+            <span className="text-text-dim">Trade:</span>
+            {['all', ...trades].map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => {
+                  setTradeFilter(t)
+                  setCategoryFilter('all')
+                  setBrandFilter('all')
+                }}
+                className={`px-2 py-1 border transition-colors cursor-pointer ${
+                  tradeFilter === t
+                    ? 'border-accent text-accent'
+                    : 'border-ink-line text-text-dim hover:text-text-pri'
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+            <span className="text-text-dim/40">·</span>
+          </>
+        )}
+        <span className="text-text-dim">Category:</span>
+        {['all', ...categoriesByTrade].map((c) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => {
+              setCategoryFilter(c)
+              setBrandFilter('all')
+            }}
+            className={`px-2 py-1 border transition-colors cursor-pointer ${
+              categoryFilter === c
+                ? 'border-accent text-accent'
+                : 'border-ink-line text-text-dim hover:text-text-pri'
+            }`}
+          >
+            {c}
+          </button>
+        ))}
+        {brandsByTradeCat.length > 1 && (
+          <>
+            <span className="text-text-dim/40">·</span>
+            <span className="text-text-dim">Brand:</span>
+            {['all', ...brandsByTradeCat].map((b) => (
+              <button
+                key={b}
+                type="button"
+                onClick={() => setBrandFilter(b)}
+                className={`px-2 py-1 border transition-colors cursor-pointer ${
+                  brandFilter === b
+                    ? 'border-accent text-accent'
+                    : 'border-ink-line text-text-dim hover:text-text-pri'
+                }`}
+              >
+                {b}
+              </button>
+            ))}
+          </>
+        )}
+      </div>
+
+      {/* Action bar — sticky at the top of the list when items are selected. */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border border-ink-line bg-ink-deep px-4 py-3">
+        <div className="text-xs text-text-sec">
+          {filtered.length} matching · <span className="text-text-pri font-semibold">{selected.size} selected</span>
+        </div>
+        <div className="flex items-center gap-3">
+          {addMsg && (
+            <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-accent">
+              {addMsg}
+            </span>
+          )}
+          <button
+            type="button"
+            disabled={selected.size === 0 || adding}
+            onClick={() => void addSelected()}
+            className="font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-3 py-2 border border-accent/60 text-accent hover:bg-accent/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+          >
+            {adding ? 'Adding…' : `+ Add ${selected.size || ''} to my catalogue`}
+          </button>
+        </div>
+      </div>
+
+      {/* Rows. */}
+      <div className="space-y-1">
+        {filtered.map((r) => {
+          const stocked = alreadyStocked.has(r.id)
+          const isSelected = selected.has(r.id)
+          return (
+            <label
+              key={r.id}
+              className={`flex items-start gap-3 border px-3 py-2 cursor-pointer transition-colors ${
+                isSelected
+                  ? 'border-accent bg-accent/5'
+                  : stocked
+                    ? 'border-ink-line bg-ink-card/40 opacity-70'
+                    : 'border-ink-line hover:border-accent/40'
+              }`}
+            >
+              <input
+                type="checkbox"
+                disabled={stocked}
+                checked={isSelected}
+                onChange={() => toggleSelect(r.id)}
+                className="mt-1 cursor-pointer disabled:cursor-not-allowed"
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <span className="text-sm text-text-pri font-medium">{r.name}</span>
+                  {r.tier_hint && (
+                    <span className="font-mono text-[0.55rem] uppercase tracking-[0.15em] text-text-dim border border-ink-line px-1.5 py-0.5">
+                      {r.tier_hint}
+                    </span>
+                  )}
+                  {stocked && (
+                    <span className="font-mono text-[0.55rem] uppercase tracking-[0.15em] text-accent border border-accent/40 px-1.5 py-0.5">
+                      ✓ in your catalogue
+                    </span>
+                  )}
+                </div>
+                <div className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim mt-1">
+                  {r.brand}
+                  {r.range_series ? ` · ${r.range_series}` : ''} · {r.category} ·
+                  {r.supplier_label ? ` ${r.supplier_label} · ` : ' '}
+                  {fmtMoney(r.default_unit_price_ex_gst)} ex GST RRP
+                </div>
+              </div>
+            </label>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// v7 Phase 3 — Per-category Good/Better/Best ladder picker.
+// Sourced from tenant_tier_ladder (migration 043) joined with the
+// tenant's active tenant_material_catalogue rows for label rendering.
+// Self-contained: own fetch, own writes via POST/DELETE
+// /api/tenant/tier-ladder. The estimator path reads the same rows
+// through buildCatalogueHint() (run.ts) and chooseMaterial() (Phase 3
+// wiring), so the picker IS the source of truth.
+type LadderRow = {
+  category: string
+  tier: 'good' | 'better' | 'best'
+  catalogue_id: string
+  updated_at: string
+}
+type LadderCatalogueRow = {
+  id: string
+  trade: string
+  category: string
+  name: string
+  brand: string | null
+  range_series: string | null
+  tier_hint: 'good' | 'better' | 'best' | null
+}
+
+function TierLadderPanel({ accessToken }: { accessToken: string | null }) {
+  const [ladder, setLadder] = useState<LadderRow[] | null>(null)
+  const [catalogueByCategory, setCatalogueByCategory] = useState<
+    Record<string, LadderCatalogueRow[]>
+  >({})
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState<string | null>(null)
+  const [busyKey, setBusyKey] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    if (!accessToken) {
+      setErr('Not signed in')
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    setErr(null)
+    try {
+      const res = await fetch('/api/tenant/tier-ladder', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: 'no-store',
+      })
+      if (!res.ok) {
+        const b = (await res.json().catch(() => ({}))) as { error?: string }
+        throw new Error(b.error || `HTTP ${res.status}`)
+      }
+      const json = (await res.json()) as {
+        ladder: LadderRow[]
+        catalogue_by_category: Record<string, LadderCatalogueRow[]>
+      }
+      setLadder(json.ladder)
+      setCatalogueByCategory(json.catalogue_by_category ?? {})
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoading(false)
+    }
+  }, [accessToken])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  async function setSlot(category: string, tier: 'good' | 'better' | 'best', catalogueId: string) {
+    if (!accessToken) return
+    const key = `${category}::${tier}`
+    setBusyKey(key)
+    try {
+      if (!catalogueId) {
+        // Empty selection = delete the slot.
+        const res = await fetch(
+          `/api/tenant/tier-ladder?category=${encodeURIComponent(category)}&tier=${tier}`,
+          { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } },
+        )
+        if (!res.ok) {
+          const b = (await res.json().catch(() => ({}))) as { error?: string }
+          throw new Error(b.error || `HTTP ${res.status}`)
+        }
+      } else {
+        const res = await fetch('/api/tenant/tier-ladder', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ category, tier, catalogue_id: catalogueId }),
+        })
+        if (!res.ok) {
+          const b = (await res.json().catch(() => ({}))) as { error?: string }
+          throw new Error(b.error || `HTTP ${res.status}`)
+        }
+      }
+      await load()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusyKey(null)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="mt-4 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim py-6">
+        Loading tier ladder…
+      </div>
+    )
+  }
+  if (err) {
+    return (
+      <div className="mt-4 bg-ink-card border-l-2 border-l-warning border-y border-r border-ink-line p-6">
+        <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-warning mb-2">
+          Couldn&apos;t load tier ladder
+        </div>
+        <p className="text-sm text-text-sec">{err}</p>
+      </div>
+    )
+  }
+
+  // Categories with at least one catalogue product. If the tenant has
+  // no stocked products, nothing to pick from — point them at Stock-the-
+  // essentials / Browse instead of showing empty dropdowns.
+  const categoriesWithProducts = Object.keys(catalogueByCategory).sort()
+  if (categoriesWithProducts.length === 0) {
+    return (
+      <div className="mt-4 bg-ink-card/40 border border-dashed border-ink-line p-6">
+        <p className="text-sm text-text-sec">
+          Stock some products first — the G/B/B ladder picks from your own catalogue.
+          Use <span className="font-mono">Stock the essentials</span> or{' '}
+          <span className="font-mono">Browse supplier catalogue</span> on this tab first.
+        </p>
+      </div>
+    )
+  }
+
+  const slotsByKey = new Map<string, LadderRow>()
+  for (const l of ladder ?? []) slotsByKey.set(`${l.category}::${l.tier}`, l)
+
+  const TIERS: Array<'good' | 'better' | 'best'> = ['good', 'better', 'best']
+
+  return (
+    <div className="mt-4 space-y-4">
+      <div className="border-l-2 border-l-accent/60 bg-ink-card/40 px-4 py-3">
+        <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-accent mb-1">
+          Good / Better / Best — your ladder
+        </div>
+        <div className="text-sm text-text-sec">
+          Pin a specific product per category and tier. When the AI quotes a job at a tier
+          you&rsquo;ve set, it uses THIS exact product — overriding brand+range inference.
+          Empty slots fall back to the inference (no regression).
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {categoriesWithProducts.map((cat) => {
+          const products = catalogueByCategory[cat] ?? []
+          return (
+            <div key={cat} className="border border-ink-line p-4">
+              <div className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-text-pri font-bold mb-3">
+                {cat} <span className="text-text-dim font-normal">({products.length} stocked)</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {TIERS.map((tier) => {
+                  const key = `${cat}::${tier}`
+                  const current = slotsByKey.get(key)?.catalogue_id ?? ''
+                  return (
+                    <label key={tier} className="flex flex-col gap-1">
+                      <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">
+                        {tier}
+                      </span>
+                      <select
+                        value={current}
+                        disabled={busyKey === key}
+                        aria-label={`${cat} ${tier} product`}
+                        onChange={(e) => void setSlot(cat, tier, e.target.value)}
+                        className="bg-ink-card border border-ink-line px-3 py-2 text-sm text-text-pri disabled:opacity-50"
+                      >
+                        <option value="">— inference fallback —</option>
+                        {products.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.brand ? `${p.brand} ` : ''}
+                            {p.range_series ? `${p.range_series} ` : ''}
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function CatalogueTab({ accessToken }: { accessToken: string | null }) {
   const [rows, setRows] = useState<CatalogueRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -3672,6 +4212,13 @@ function CatalogueTab({ accessToken }: { accessToken: string | null }) {
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [formErr, setFormErr] = useState<string | null>(null)
+  // v7 Phase 2b/3 — mode toggle: 'mine' shows stocked products;
+  // 'browse' shows the supplier library; 'ladder' shows the per-category
+  // Good/Better/Best ladder picker (tenant_tier_ladder, migration 043).
+  const [viewMode, setViewMode] = useState<'mine' | 'browse' | 'ladder'>('mine')
+  // v7 Phase 2d — Stock-the-essentials 1-click button state.
+  const [essentialsBusy, setEssentialsBusy] = useState(false)
+  const [essentialsMsg, setEssentialsMsg] = useState<string | null>(null)
   const blankForm = {
     trade: 'electrical',
     category: '',
@@ -3692,6 +4239,9 @@ function CatalogueTab({ accessToken }: { accessToken: string | null }) {
   // null = not editing (form is in "add" mode). A row id = editing that
   // row (form is prefilled, submit PATCHes instead of POSTs).
   const [editingId, setEditingId] = useState<string | null>(null)
+  // 'all' or a Category value — narrows the visible list to one category.
+  // Filter chips below the header drive this; persisted only in memory.
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
 
   const load = useCallback(async () => {
     if (!accessToken) {
@@ -3743,6 +4293,44 @@ function CatalogueTab({ accessToken }: { accessToken: string | null }) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setBusyId(null)
+    }
+  }
+
+  // v7 Phase 2d — stock the essentials for the tenant's trade(s).
+  // Posts to /api/tenant/catalogue/stock-essentials which picks one
+  // good-tier SKU per essential category and bulk-adds them with the
+  // granular→grounding mapping. Server-side curation means every tradie
+  // gets the same starter set, deterministic.
+  async function stockEssentials() {
+    if (!accessToken || essentialsBusy) return
+    setEssentialsBusy(true)
+    setEssentialsMsg(null)
+    try {
+      const res = await fetch('/api/tenant/catalogue/stock-essentials', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      const json = (await res.json().catch(() => ({}))) as {
+        ok?: boolean
+        added?: number
+        skipped?: number
+        total?: number
+        error?: string
+        message?: string
+      }
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error || json.message || `HTTP ${res.status}`)
+      }
+      setEssentialsMsg(
+        json.added && json.added > 0
+          ? `Stocked ${json.added} essential${json.added === 1 ? '' : 's'} (skipped ${json.skipped ?? 0} already on file).`
+          : 'No new essentials to stock — your catalogue already has them.',
+      )
+      await load()
+    } catch (e) {
+      setEssentialsMsg(`Couldn't stock essentials: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setEssentialsBusy(false)
     }
   }
 
@@ -3944,13 +4532,47 @@ function CatalogueTab({ accessToken }: { accessToken: string | null }) {
   }
 
   const list = rows ?? []
-  const groups = new Map<string, CatalogueRow[]>()
-  for (const r of list) {
-    const key = `${r.trade} · ${r.category}`
-    const arr = groups.get(key) ?? []
-    arr.push(r)
-    groups.set(key, arr)
+
+  // Per-category counts off the unfiltered list so the chip labels stay
+  // stable as the user clicks between filters (otherwise "All (12)" would
+  // flicker to "All (3)" when narrowed).
+  const counts = new Map<string, number>()
+  for (const r of list) counts.set(r.category, (counts.get(r.category) ?? 0) + 1)
+
+  const filtered =
+    categoryFilter === 'all' ? list : list.filter((r) => r.category === categoryFilter)
+
+  // Group by (trade, category) — same key as before so the visual sections
+  // are unchanged, just sorted deterministically by the canonical category
+  // order and tier-sorted within each section.
+  const TIER_RANK: Record<string, number> = { good: 0, better: 1, best: 2 }
+  const tierSort = (a: CatalogueRow, b: CatalogueRow) => {
+    const ai = a.tier_hint ? TIER_RANK[a.tier_hint] : 3
+    const bi = b.tier_hint ? TIER_RANK[b.tier_hint] : 3
+    if (ai !== bi) return ai - bi
+    if (a.is_preferred !== b.is_preferred) return a.is_preferred ? -1 : 1
+    return a.name.localeCompare(b.name)
   }
+  const CATEGORY_ORDER = new Map(CATEGORIES.map((c, i) => [c.value as string, i]))
+  const categoryLabel = (v: string) =>
+    CATEGORIES.find((c) => c.value === v)?.label ?? v
+
+  const groupMap = new Map<
+    string,
+    { trade: string; category: string; items: CatalogueRow[] }
+  >()
+  for (const r of filtered) {
+    const key = `${r.trade}·${r.category}`
+    const g = groupMap.get(key) ?? { trade: r.trade, category: r.category, items: [] }
+    g.items.push(r)
+    groupMap.set(key, g)
+  }
+  const groups = [...groupMap.values()]
+    .map((g) => ({ ...g, items: [...g.items].sort(tierSort) }))
+    .sort((a, b) => {
+      if (a.trade !== b.trade) return a.trade.localeCompare(b.trade)
+      return (CATEGORY_ORDER.get(a.category) ?? 999) - (CATEGORY_ORDER.get(b.category) ?? 999)
+    })
 
   return (
     <div className="bg-ink-card border border-ink-line p-6 sm:p-7">
@@ -3965,23 +4587,118 @@ function CatalogueTab({ accessToken }: { accessToken: string | null }) {
             Off rows are never offered. {list.length} product{list.length === 1 ? '' : 's'}.
           </p>
         </div>
+        {viewMode === 'mine' && (
+          <button
+            type="button"
+            onClick={() => {
+              if (showForm) {
+                closeForm()
+              } else {
+                setForm({ ...blankForm, trade: form.trade })
+                setEditingId(null)
+                setShowForm(true)
+                setFormErr(null)
+              }
+            }}
+            className="shrink-0 font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-3 py-2 border border-accent/50 text-accent hover:bg-accent/10 transition-colors cursor-pointer"
+          >
+            {showForm ? '× Cancel' : '+ Add product'}
+          </button>
+        )}
+      </div>
+
+      {/* v7 Phase 2b — mode toggle. "Browse supplier catalogue" exposes
+         the seeded master library so the tradie can tick what they stock
+         instead of hand-typing every SKU. */}
+      <div className="mt-4 flex items-center gap-1 border-b border-ink-line">
         <button
           type="button"
-          onClick={() => {
-            if (showForm) {
-              closeForm()
-            } else {
-              setForm({ ...blankForm, trade: form.trade })
-              setEditingId(null)
-              setShowForm(true)
-              setFormErr(null)
-            }
-          }}
-          className="shrink-0 font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-3 py-2 border border-accent/50 text-accent hover:bg-accent/10 transition-colors cursor-pointer"
+          onClick={() => setViewMode('mine')}
+          className={`font-mono text-[0.65rem] uppercase tracking-[0.16em] px-3 py-2 border-b-2 -mb-px transition-colors cursor-pointer ${
+            viewMode === 'mine'
+              ? 'border-accent text-accent'
+              : 'border-transparent text-text-dim hover:text-text-pri'
+          }`}
         >
-          {showForm ? '× Cancel' : '+ Add product'}
+          My catalogue ({list.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setViewMode('browse')}
+          className={`font-mono text-[0.65rem] uppercase tracking-[0.16em] px-3 py-2 border-b-2 -mb-px transition-colors cursor-pointer ${
+            viewMode === 'browse'
+              ? 'border-accent text-accent'
+              : 'border-transparent text-text-dim hover:text-text-pri'
+          }`}
+        >
+          + Browse supplier catalogue
+        </button>
+        <button
+          type="button"
+          onClick={() => setViewMode('ladder')}
+          className={`font-mono text-[0.65rem] uppercase tracking-[0.16em] px-3 py-2 border-b-2 -mb-px transition-colors cursor-pointer ${
+            viewMode === 'ladder'
+              ? 'border-accent text-accent'
+              : 'border-transparent text-text-dim hover:text-text-pri'
+          }`}
+        >
+          G/B/B ladder
         </button>
       </div>
+
+      {viewMode === 'browse' && (
+        <BrowseSupplierPanel
+          accessToken={accessToken}
+          onAdded={() => {
+            // After a successful bulk-add, refresh the tenant's own catalogue
+            // so the "+ N" count + the My catalogue view reflect the new rows.
+            void load()
+          }}
+        />
+      )}
+
+      {viewMode === 'ladder' && <TierLadderPanel accessToken={accessToken} />}
+
+      {viewMode === 'mine' && (
+        <>
+      {/* My-catalogue UI: existing form + filter chips + list of groups. */}
+
+      {/* v7 Phase 2d — Stock-the-essentials prompt. Prominent when the
+         catalogue is empty (the "new tradie, AI ready in 5s" win Jon
+         described). Quieter once they've stocked some items but still
+         available. Hides when they have a meaningful catalogue (≥10
+         products) so it doesn't nag forever. */}
+      {list.length < 10 && (
+        <div
+          className={`mt-4 border-l-2 ${list.length === 0 ? 'border-l-accent bg-accent/5' : 'border-l-accent/40 bg-ink-card/40'} px-4 py-3`}
+        >
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="min-w-0">
+              <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-accent mb-1">
+                {list.length === 0 ? 'Get started in one click' : 'Quick start'}
+              </div>
+              <div className="text-sm text-text-sec">
+                {list.length === 0
+                  ? "Your catalogue is empty. Stock the essentials for your trade and the AI can auto-quote your wedge from the next call."
+                  : 'Stock common products in one click — covers the most-quoted categories with one good-tier SKU each. Already-stocked items are skipped.'}
+              </div>
+              {essentialsMsg && (
+                <div className="mt-1 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
+                  {essentialsMsg}
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => void stockEssentials()}
+              disabled={essentialsBusy}
+              className="shrink-0 font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-3 py-2 border border-accent/60 text-accent hover:bg-accent/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            >
+              {essentialsBusy ? 'Stocking…' : 'Stock the essentials'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {showForm && (
         <form
@@ -4216,19 +4933,68 @@ function CatalogueTab({ accessToken }: { accessToken: string | null }) {
         </form>
       )}
 
+      {list.length > 0 && (
+        <div className="mt-5 flex flex-wrap items-center gap-2">
+          <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim mr-1">
+            Filter
+          </span>
+          <button
+            type="button"
+            onClick={() => setCategoryFilter('all')}
+            className={`font-mono text-[0.65rem] uppercase tracking-[0.14em] px-2.5 py-1 border transition-colors cursor-pointer ${
+              categoryFilter === 'all'
+                ? 'border-accent bg-accent/10 text-accent'
+                : 'border-ink-line text-text-dim hover:border-accent/50 hover:text-text-pri'
+            }`}
+          >
+            All ({list.length})
+          </button>
+          {CATEGORIES.filter((c) => counts.has(c.value)).map((c) => (
+            <button
+              key={c.value}
+              type="button"
+              onClick={() => setCategoryFilter(c.value)}
+              className={`font-mono text-[0.65rem] uppercase tracking-[0.14em] px-2.5 py-1 border transition-colors cursor-pointer ${
+                categoryFilter === c.value
+                  ? 'border-accent bg-accent/10 text-accent'
+                  : 'border-ink-line text-text-dim hover:border-accent/50 hover:text-text-pri'
+              }`}
+            >
+              {c.label} ({counts.get(c.value)})
+            </button>
+          ))}
+        </div>
+      )}
+
       {list.length === 0 ? (
         <p className="mt-6 text-sm text-text-sec">
           No catalogue products yet. Add your first so the AI quotes your real products and prices.
         </p>
+      ) : filtered.length === 0 ? (
+        <p className="mt-6 text-sm text-text-sec">
+          No products in <span className="text-text-pri">{categoryLabel(categoryFilter)}</span>.{' '}
+          <button
+            type="button"
+            onClick={() => setCategoryFilter('all')}
+            className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-accent hover:underline cursor-pointer"
+          >
+            Show all
+          </button>
+        </p>
       ) : (
         <div className="mt-6 space-y-5">
-          {[...groups.entries()].map(([key, items]) => (
-            <div key={key}>
-              <div className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent font-bold pb-1">
-                {key}
+          {groups.map((g) => (
+            <div key={`${g.trade}·${g.category}`}>
+              <div className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent font-bold pb-1 flex items-baseline gap-2">
+                <span>
+                  {g.trade} · {categoryLabel(g.category)}
+                </span>
+                <span className="text-text-dim font-normal tracking-[0.14em]">
+                  {g.items.length}
+                </span>
               </div>
               <div className="space-y-2">
-                {items.map((r) => (
+                {g.items.map((r) => (
                   <div
                     key={r.id}
                     className={`border px-4 py-3 flex items-start justify-between gap-4 ${
@@ -4339,6 +5105,8 @@ function CatalogueTab({ accessToken }: { accessToken: string | null }) {
             </div>
           ))}
         </div>
+      )}
+        </>
       )}
     </div>
   )
@@ -4704,6 +5472,11 @@ type EstimationJob = {
   // 'tenant' = this is YOUR edited recipe (what actually gets quoted);
   // 'shared' = the standard baseline (you haven't customised it).
   recipe_source: 'tenant' | 'shared'
+  // v7 Phase 0: `enabled` is now sourced from tenant_service_offerings
+  // (the Services-tab toggle) instead of the write-orphaned
+  // tenant_assembly_overrides.enabled column. Same field name on the
+  // wire, just promoted out of `effective` (which is labour/markup only).
+  enabled: boolean
   bom: Array<{
     material_category: string
     quantity: number
@@ -4711,7 +5484,6 @@ type EstimationJob = {
     description: string | null
   }>
   effective: {
-    enabled: boolean
     labour_hours: { value: number; source: 'local' | 'global' }
     markup_pct: { value: number; source: 'local' | 'global' }
     global_labour_hours: number
@@ -4736,6 +5508,18 @@ function EstimatingTab({ accessToken }: { accessToken: string | null }) {
   const [catalogueCats, setCatalogueCats] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  // v7 Phase 4 — inline labour/markup override editor.
+  // editingId = the assembly currently being edited (null = closed).
+  // editForm holds the in-progress values; the values are committed
+  // to tenant_assembly_overrides via PATCH /api/tenant/estimation/[id]
+  // or cleared via DELETE.
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<{ labour: string; markup: string }>({
+    labour: '',
+    markup: '',
+  })
+  const [savingId, setSavingId] = useState<string | null>(null)
+  const [saveErr, setSaveErr] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!accessToken) {
@@ -4770,6 +5554,88 @@ function EstimatingTab({ accessToken }: { accessToken: string | null }) {
   useEffect(() => {
     void load()
   }, [load])
+
+  // v7 Phase 4 — open the edit form for one assembly. Pre-fill with the
+  // CURRENT effective values (whether they came from a local override
+  // or the global default — both pre-fill the same way so a tradie
+  // tweaking from the global value as a starting point is one click).
+  function startEdit(j: EstimationJob) {
+    setEditingId(j.assembly_id)
+    setEditForm({
+      labour: String(j.effective.labour_hours.value ?? ''),
+      markup: String(j.effective.markup_pct.value ?? ''),
+    })
+    setSaveErr(null)
+  }
+  function cancelEdit() {
+    setEditingId(null)
+    setSaveErr(null)
+  }
+  async function saveEdit(j: EstimationJob) {
+    if (!accessToken) return
+    const labour = parseFloat(editForm.labour)
+    const markup = parseFloat(editForm.markup)
+    if (!Number.isFinite(labour) || labour <= 0 || labour > 40) {
+      setSaveErr('Labour hours must be > 0 and ≤ 40')
+      return
+    }
+    if (!Number.isFinite(markup) || markup < 0 || markup > 200) {
+      setSaveErr('Markup % must be between 0 and 200')
+      return
+    }
+    setSavingId(j.assembly_id)
+    setSaveErr(null)
+    try {
+      const res = await fetch(
+        `/api/tenant/estimation/${encodeURIComponent(j.assembly_id)}`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          // Always send both fields so a partial edit doesn't leave the
+          // OTHER field stale at its pre-edit override (or NULL).
+          body: JSON.stringify({
+            labour_hours_override: labour,
+            markup_pct_override: markup,
+          }),
+        },
+      )
+      if (!res.ok) {
+        const b = (await res.json().catch(() => ({}))) as { error?: string }
+        throw new Error(b.error || `HTTP ${res.status}`)
+      }
+      setEditingId(null)
+      await load()
+    } catch (e) {
+      setSaveErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSavingId(null)
+    }
+  }
+  async function resetOverride(j: EstimationJob) {
+    if (!accessToken) return
+    if (!window.confirm(`Reset "${j.name}" to the global defaults?`)) return
+    setSavingId(j.assembly_id)
+    setSaveErr(null)
+    try {
+      const res = await fetch(
+        `/api/tenant/estimation/${encodeURIComponent(j.assembly_id)}`,
+        { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } },
+      )
+      if (!res.ok) {
+        const b = (await res.json().catch(() => ({}))) as { error?: string }
+        throw new Error(b.error || `HTTP ${res.status}`)
+      }
+      if (editingId === j.assembly_id) setEditingId(null)
+      await load()
+    } catch (e) {
+      setSaveErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSavingId(null)
+    }
+  }
 
   if (loading) {
     return (
@@ -4826,7 +5692,7 @@ function EstimatingTab({ accessToken }: { accessToken: string | null }) {
                   )}
                   <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim/80">
                     {j.trade}
-                    {!j.effective.enabled && ' · disabled for you'}
+                    {!j.enabled && ' · disabled for you'}
                   </span>
                 </div>
               </div>
@@ -4884,6 +5750,114 @@ function EstimatingTab({ accessToken }: { accessToken: string | null }) {
                   <SourceBadge source={j.effective.markup_pct.source} />
                 </div>
               </div>
+
+              {/* v7 Phase 4 — labour / markup override controls. Edit
+                 opens an inline form pre-filled with the current effective
+                 values; Reset clears the override row entirely. */}
+              <div className="mt-3 flex items-center gap-3 flex-wrap">
+                {editingId !== j.assembly_id && (
+                  <button
+                    type="button"
+                    onClick={() => startEdit(j)}
+                    className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-accent hover:text-accent/80 transition-colors cursor-pointer"
+                  >
+                    Edit overrides
+                  </button>
+                )}
+                {(j.effective.labour_hours.source === 'local' ||
+                  j.effective.markup_pct.source === 'local') && (
+                  <button
+                    type="button"
+                    onClick={() => void resetOverride(j)}
+                    disabled={savingId === j.assembly_id}
+                    className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim hover:text-warning transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    Reset to default
+                  </button>
+                )}
+              </div>
+
+              {editingId === j.assembly_id && (
+                <div className="mt-3 border border-accent/40 bg-accent/5 p-3">
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <label className="flex flex-col gap-1">
+                      <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">
+                        Labour hours (global: {j.effective.global_labour_hours})
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={40}
+                        step={0.25}
+                        value={editForm.labour}
+                        onChange={(e) =>
+                          setEditForm((f) => ({ ...f, labour: e.target.value }))
+                        }
+                        aria-label="Labour hours override"
+                        className="bg-ink-card border border-ink-line px-3 py-2 text-sm text-text-pri"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">
+                        Markup % (global: {j.effective.global_markup_pct}%)
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={200}
+                        step={1}
+                        value={editForm.markup}
+                        onChange={(e) =>
+                          setEditForm((f) => ({ ...f, markup: e.target.value }))
+                        }
+                        aria-label="Markup % override"
+                        className="bg-ink-card border border-ink-line px-3 py-2 text-sm text-text-pri"
+                      />
+                    </label>
+                  </div>
+                  {/* Sanity warning when an override is ≥2× or ≤0.5× the
+                     global value — extreme settings can push quotes
+                     out of the validator's expected band. Doesn't block. */}
+                  {(() => {
+                    const labour = parseFloat(editForm.labour)
+                    const markup = parseFloat(editForm.markup)
+                    const gLab = j.effective.global_labour_hours
+                    const gMu = j.effective.global_markup_pct
+                    const labourWild =
+                      Number.isFinite(labour) && gLab > 0 && (labour >= gLab * 2 || labour <= gLab * 0.5)
+                    const markupWild =
+                      Number.isFinite(markup) && gMu > 0 && (markup >= gMu * 2 || markup <= gMu * 0.5)
+                    if (!labourWild && !markupWild) return null
+                    return (
+                      <div className="mt-2 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-warning">
+                        ⚠ This is a big shift from the global default — double-check before saving.
+                      </div>
+                    )
+                  })()}
+                  {saveErr && (
+                    <div className="mt-2 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-warning">
+                      {saveErr}
+                    </div>
+                  )}
+                  <div className="mt-3 flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={savingId === j.assembly_id}
+                      onClick={() => void saveEdit(j)}
+                      className="font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-3 py-2 border border-accent/60 text-accent hover:bg-accent/10 transition-colors disabled:opacity-40 cursor-pointer"
+                    >
+                      {savingId === j.assembly_id ? 'Saving…' : 'Save overrides'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cancelEdit}
+                      className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim hover:text-text-pri transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -4904,6 +5878,13 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
     Record<string, { kind: 'ok' | 'err'; text: string }>
   >({})
   const [threadOpen, setThreadOpen] = useState<Record<string, boolean>>({})
+  // CRM touch-log UI (migration 039). logFor[id] = the log form is
+  // open on that row; historyOpen[id] = the timeline is expanded;
+  // historyRefresh[id] = bumped after a successful log so the panel
+  // re-fetches without a manual reload.
+  const [logFor, setLogFor] = useState<Record<string, boolean>>({})
+  const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({})
+  const [historyRefresh, setHistoryRefresh] = useState<Record<string, number>>({})
 
   const load = useCallback(async () => {
     if (!accessToken) {
@@ -4951,47 +5932,11 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
     }
   }, [load])
 
-  async function markContacted(quoteId: string) {
-    if (!accessToken) return
-    setBusyId(quoteId)
-    try {
-      const res = await fetch('/api/tenant/followups', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ quoteId, action: 'mark_contacted' }),
-      })
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as {
-          error?: string
-        }
-        throw new Error(body.error || `HTTP ${res.status}`)
-      }
-      // Optimistic: MOVE the lead into the Contacted section (CRM
-      // style) instead of removing it — the VA can still see it,
-      // re-contact it, or reopen it. Mirrors the server's
-      // followupReason() output for an actioned row.
-      const nowIso = new Date().toISOString()
-      setRows((prev) =>
-        prev
-          ? prev.map((r) =>
-              r.quote_id === quoteId
-                ? {
-                    ...r,
-                    followed_up_at: nowIso,
-                    followup_reason: 'Contacted - awaiting reply',
-                  }
-                : r,
-            )
-          : prev,
-      )
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusyId(null)
-    }
+  // Bump the History panel's refresh key for one quote — used after a
+  // call or text auto-logs an event server-side so the open panel
+  // (if any) re-fetches and shows the new row immediately.
+  function bumpHistory(quoteId: string) {
+    setHistoryRefresh((s) => ({ ...s, [quoteId]: (s[quoteId] ?? 0) + 1 }))
   }
 
   async function reopen(quoteId: string) {
@@ -5089,6 +6034,7 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
         'ok',
         'Calling — your phone will ring, then we connect the customer.',
       )
+      bumpHistory(item.quote_id)
     } catch (e) {
       setRowMsg(
         item.quote_id,
@@ -5305,26 +6251,94 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
                 >
                   {threadOpen[f.quote_id] ? 'Hide messages ▾' : 'Messages ▸'}
                 </button>
-                {isDone ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setHistoryOpen((s) => ({
+                      ...s,
+                      [f.quote_id]: !s[f.quote_id],
+                    }))
+                  }
+                  className="inline-flex items-center gap-1.5 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer"
+                >
+                  {historyOpen[f.quote_id] ? 'Hide history ▾' : 'History ▸'}
+                </button>
+                {isDone && (
                   <button
                     type="button"
                     disabled={busyId === f.quote_id}
                     onClick={() => void reopen(f.quote_id)}
-                    className="ml-auto inline-flex items-center gap-2 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-50"
+                    className="inline-flex items-center gap-2 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-50"
                   >
                     {busyId === f.quote_id ? 'Saving…' : 'Reopen ↩'}
                   </button>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={busyId === f.quote_id}
-                    onClick={() => void markContacted(f.quote_id)}
-                    className="ml-auto inline-flex items-center gap-2 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    {busyId === f.quote_id ? 'Saving…' : 'Mark contacted'}
-                  </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLogFor((s) => ({
+                      ...s,
+                      [f.quote_id]: !s[f.quote_id],
+                    }))
+                  }
+                  className={`ml-auto inline-flex items-center gap-2 font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer ${
+                    logFor[f.quote_id]
+                      ? 'border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri'
+                      : 'border border-accent/60 bg-accent/10 text-accent hover:bg-accent/20'
+                  }`}
+                >
+                  {logFor[f.quote_id]
+                    ? '× Cancel'
+                    : isDone
+                      ? '+ Log another'
+                      : '+ Log touch'}
+                </button>
               </div>
+              {logFor[f.quote_id] && (
+                <FollowupLogForm
+                  quoteId={f.quote_id}
+                  accessToken={accessToken}
+                  onCancel={() =>
+                    setLogFor((s) => ({ ...s, [f.quote_id]: false }))
+                  }
+                  onLogged={(evt) => {
+                    const nowIso = new Date().toISOString()
+                    setRows((prev) =>
+                      prev
+                        ? prev.map((r) =>
+                            r.quote_id === f.quote_id
+                              ? {
+                                  ...r,
+                                  followed_up_at: nowIso,
+                                  followup_reason: `Contacted — ${
+                                    (evt.outcome &&
+                                      OUTCOME_LABELS[evt.outcome]) ||
+                                    'logged'
+                                  }`,
+                                  followup_note: evt.note ?? r.followup_note,
+                                }
+                              : r,
+                          )
+                        : prev,
+                    )
+                    setLogFor((s) => ({ ...s, [f.quote_id]: false }))
+                    setHistoryOpen((s) => ({ ...s, [f.quote_id]: true }))
+                    setHistoryRefresh((s) => ({
+                      ...s,
+                      [f.quote_id]: (s[f.quote_id] ?? 0) + 1,
+                    }))
+                  }}
+                />
+              )}
+              {historyOpen[f.quote_id] && (
+                <div className="mt-3 border-t border-ink-line pt-3">
+                  <FollowupHistory
+                    quoteId={f.quote_id}
+                    accessToken={accessToken}
+                    refreshKey={historyRefresh[f.quote_id] ?? 0}
+                  />
+                </div>
+              )}
               {threadOpen[f.quote_id] && (
                 <div className="mt-3 border-t border-ink-line pt-3">
                   <FollowupThread
@@ -5351,11 +6365,285 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
               'ok',
               channel === 'whatsapp' ? 'Sent via WhatsApp ✓' : 'Text sent ✓',
             )
+            bumpHistory(quoteId)
           }}
         />
       )}
     </>
   )
+}
+
+// ─── Follow-up touch log + history (migration 039) ────────────────
+// A touch event is one row in quote_followup_events: a call placed
+// (auto-logged by /followups/call), an SMS sent (auto-logged by
+// /followups/text), or a manual outcome a VA records via the form
+// below. The History panel shows all of them newest-first so a VA
+// can see prior contact attempts before calling again.
+
+const OUTCOME_LABELS: Record<string, string> = {
+  call_dialed: 'Called',
+  text_sent: 'Texted',
+  left_voicemail: 'Left voicemail',
+  spoke: 'Spoke with customer',
+  no_answer: 'No answer',
+  wants_callback: 'Wants callback',
+  not_interested: 'Not interested',
+  other: 'Other',
+}
+const NOTE_OUTCOMES: Array<{ value: string; label: string }> = [
+  { value: 'spoke', label: 'Spoke with customer' },
+  { value: 'left_voicemail', label: 'Left voicemail' },
+  { value: 'no_answer', label: 'No answer' },
+  { value: 'wants_callback', label: 'Wants callback' },
+  { value: 'not_interested', label: 'Not interested' },
+  { value: 'other', label: 'Other' },
+]
+
+type FollowupEvent = {
+  id: string
+  kind: 'call' | 'sms' | 'note'
+  outcome: string | null
+  summary: string | null
+  note: string | null
+  created_at: string
+  actor_user_id: string | null
+}
+
+// Inline form (not a modal) so the card retains context — the VA can
+// glance at the quote summary above while picking an outcome.
+function FollowupLogForm({
+  quoteId,
+  accessToken,
+  onCancel,
+  onLogged,
+}: {
+  quoteId: string
+  accessToken: string | null
+  onCancel: () => void
+  onLogged: (evt: FollowupEvent) => void
+}) {
+  const [outcome, setOutcome] = useState<string>('spoke')
+  const [note, setNote] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function save() {
+    if (!accessToken || saving) return
+    setSaving(true)
+    setErr(null)
+    try {
+      const res = await fetch('/api/tenant/followups/events', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          quoteId,
+          kind: 'note',
+          outcome,
+          note: note.trim() || undefined,
+        }),
+      })
+      const json = (await res.json().catch(() => ({}))) as {
+        ok?: boolean
+        event?: FollowupEvent
+        error?: string
+      }
+      if (!res.ok || !json.event) {
+        throw new Error(json.error || `HTTP ${res.status}`)
+      }
+      onLogged(json.event)
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="mt-3 border-t border-ink-line pt-3">
+      <p className="font-mono text-[0.62rem] uppercase tracking-[0.16em] text-text-dim mb-2">
+        Log touch — what happened?
+      </p>
+      <div className="grid gap-1.5 sm:grid-cols-2">
+        {NOTE_OUTCOMES.map((o) => (
+          <label
+            key={o.value}
+            className={`flex items-center gap-2 border px-3 py-2 cursor-pointer transition-colors ${
+              outcome === o.value
+                ? 'border-accent bg-accent/10 text-text-pri'
+                : 'border-ink-line text-text-sec hover:border-accent/40 hover:text-text-pri'
+            }`}
+          >
+            <input
+              type="radio"
+              name={`outcome-${quoteId}`}
+              value={o.value}
+              checked={outcome === o.value}
+              onChange={() => setOutcome(o.value)}
+              className="accent-accent"
+            />
+            <span className="text-sm">{o.label}</span>
+          </label>
+        ))}
+      </div>
+      <label className="mt-3 flex flex-col gap-1">
+        <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">
+          Note (optional, up to 500 chars)
+        </span>
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value.slice(0, 500))}
+          placeholder="e.g. Wants to decide by Friday — call back after 3pm"
+          rows={2}
+          className="bg-ink-card border border-ink-line px-3 py-2 text-sm text-text-pri resize-none"
+        />
+      </label>
+      {err && <p className="mt-2 text-xs text-amber-300">{err}</p>}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          disabled={saving}
+          onClick={() => void save()}
+          className="bg-accent hover:bg-accent-press text-white font-mono text-[0.62rem] uppercase tracking-[0.14em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-60"
+        >
+          {saving ? 'Saving…' : 'Save touch'}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          className="border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.14em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-60"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function FollowupHistory({
+  quoteId,
+  accessToken,
+  refreshKey,
+}: {
+  quoteId: string
+  accessToken: string | null
+  // Bumping this prop forces a re-fetch — used after logging a new touch
+  // so the History panel reflects the new event without a manual reload.
+  refreshKey: number
+}) {
+  const [events, setEvents] = useState<FollowupEvent[] | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    if (!accessToken) {
+      setErr('Not signed in')
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    setErr(null)
+    ;(async () => {
+      try {
+        const res = await fetch(
+          `/api/tenant/followups/events?quoteId=${encodeURIComponent(quoteId)}`,
+          {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            cache: 'no-store',
+          },
+        )
+        const json = (await res.json().catch(() => ({}))) as {
+          events?: FollowupEvent[]
+          error?: string
+        }
+        if (cancelled) return
+        if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`)
+        setEvents(json.events ?? [])
+      } catch (e) {
+        if (cancelled) return
+        setErr(e instanceof Error ? e.message : String(e))
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [quoteId, accessToken, refreshKey])
+
+  if (loading) {
+    return (
+      <p className="font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
+        Loading history…
+      </p>
+    )
+  }
+  if (err) {
+    return <p className="text-xs text-amber-300">{err}</p>
+  }
+  if (!events || events.length === 0) {
+    return (
+      <p className="font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
+        No touches logged yet. Calls, texts, and notes you log will appear here.
+      </p>
+    )
+  }
+  return (
+    <ol className="space-y-2">
+      {events.map((e) => (
+        <li
+          key={e.id}
+          className="border-l-2 border-ink-line pl-3 py-1 text-sm text-text-sec"
+        >
+          <div className="flex flex-wrap items-baseline gap-2">
+            <span
+              className={`font-mono text-[0.6rem] uppercase tracking-[0.16em] font-bold px-1.5 py-0.5 border ${
+                e.kind === 'note'
+                  ? 'border-accent/60 text-accent'
+                  : 'border-ink-line text-text-dim'
+              }`}
+            >
+              {e.kind}
+            </span>
+            <span className="text-text-pri">
+              {(e.outcome && OUTCOME_LABELS[e.outcome]) ||
+                e.summary ||
+                'Touch logged'}
+            </span>
+            <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim ml-auto">
+              {fmtRelative(e.created_at)}
+            </span>
+          </div>
+          {e.note && (
+            <p className="mt-0.5 text-xs text-text-sec normal-case">
+              {e.note}
+            </p>
+          )}
+          {!e.note && e.kind === 'sms' && e.summary && (
+            <p className="mt-0.5 text-xs text-text-dim normal-case">
+              {e.summary.replace(/^SMS:\s*/, '')}
+            </p>
+          )}
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+function fmtRelative(iso: string): string {
+  const t = Date.parse(iso)
+  if (!Number.isFinite(t)) return iso
+  const h = (Date.now() - t) / 36e5
+  if (h < 1) {
+    const m = Math.max(1, Math.round(h * 60))
+    return `${m}m ago`
+  }
+  if (h < 48) return `${Math.round(h)}h ago`
+  return `${Math.round(h / 24)}d ago`
 }
 
 // ─── Follow-up text modal ─────────────────────────────────────────

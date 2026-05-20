@@ -510,11 +510,22 @@ export function buildQuoteFailureSms(opts: { firstName?: string; jobType?: strin
 //
 // The customer's new message is preserved in sms_messages — when they
 // re-engage after their quote arrives, the dialog picks up normally.
+//
+// 2026-05-19: variants rewritten to drop the "(under a minute)" /
+// "(about a minute away)" time claims and the "nearly ready" promise.
+// The INFLIGHT branch can fire for any conversation that's still
+// status='structuring' or status='done' + intake_id within 60s — which
+// includes recovery-flow leftovers and add-on flows where no quote is
+// genuinely "nearly ready". Telling the customer it's a minute away when
+// it isn't damages trust (the dialog system prompt has its own
+// scrubVoiceWording regex for the same reason — see lib/sms/dialog.ts).
+// New wording acknowledges we're still working but makes no time
+// guarantee, and avoids the specific phrases dialog.ts strips elsewhere.
 export function buildQuoteInFlightSms(): string {
   const variants = [
-    `Cheers, just finalising the quote we were working on (under a minute). Once it lands, hit me back with this one and I'll get straight onto it.`,
-    `Hold tight, your quote's nearly ready (about a minute away). Once you've got it, give me a shout about this one and I'll handle it.`,
-    `Just wrapping up that quote now, should be with you in a minute. Once it arrives, message me back and I'll sort this one out.`,
+    `Cheers, still pulling your quote together. Soon as it lands, hit me back with this one and I'll get onto it.`,
+    `Got you - still working on the quote. Once it's through, send this one again and I'll sort it.`,
+    `Bear with us - quote's still in the works. When it arrives, message me back about this and I'll handle it.`,
   ]
   return gsm7Safe(pickVariant(variants))
 }

@@ -75,7 +75,7 @@ export const IntakeSchema = z.object({
     phase: z.enum(['single', 'three', 'unknown']).optional(),
   }).optional(),
   risks: z.array(z.string()),                                                // burning smell, tripping breakers, water damage, asbestos, old switchboard
-  inspection_required: z.boolean(),                                          // true for switchboard, fault_finding, ev_charger, renovation, anything with mains/underground
+  inspection_required: z.boolean(),                                          // true for switchboard, renovation, mains/underground, emergencies, or explicit access/safety blockers
   caller: z.object({
     name: z.string(),
     phone: z.string(),

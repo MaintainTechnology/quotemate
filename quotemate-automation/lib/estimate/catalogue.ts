@@ -95,6 +95,15 @@ export function resolveTierForBrandRange(
 }
 
 // ── tenant-preferred material selection ─────────────────────────────
+
+/** v7 Phase 3 — one entry in a tenant's explicit Good/Better/Best ladder.
+ *  Sourced from tenant_tier_ladder (migration 043). */
+export interface TierLadderEntry {
+  category: string
+  tier: Tier
+  catalogue_id: string
+}
+
 export interface ChooseMaterialInput {
   tenantRows: TenantMaterial[]
   sharedRows: SharedMaterial[]
@@ -102,6 +111,11 @@ export interface ChooseMaterialInput {
   brand?: string | null
   range?: string | null
   tier?: Tier | null
+  /** v7 Phase 3 — when set AND `tier` is set, a (category, tier) ladder
+   *  hit beats every other signal. Lets a tradie pin "for downlights at
+   *  Better tier, ALWAYS use SAL Anova" even when the model's brand/range
+   *  inference would have picked a different row. */
+  tierLadder?: TierLadderEntry[]
 }
 export type ChosenMaterial =
   | { source: 'tenant'; row: TenantMaterial; price: number }
@@ -116,9 +130,35 @@ const eqi = (a?: string | null, b?: string | null) =>
  * ALWAYS preferred ahead of generic shared rows (WP2), scored by how
  * tightly they match the requested brand/range/tier. Falls back to shared
  * rows so a tenant who hasn't built a catalogue still gets a quote.
+ *
+ * v7 Phase 3 precedence: an explicit tier-ladder hit (when input.tier is
+ * set AND the tenant declared a ladder for this category+tier) beats the
+ * scoring loop. If the ladder row isn't in tenantRows (e.g. recently
+ * deleted), we fall through to scoring — preserving the "zero-config
+ * still works" guarantee.
  */
 export function chooseMaterial(input: ChooseMaterialInput): ChosenMaterial {
   const cat = input.category?.trim().toLowerCase()
+
+  // v7 Phase 3 — explicit ladder hit wins.
+  if (input.tier && input.tierLadder && input.tierLadder.length > 0) {
+    const ladderHit = input.tierLadder.find(
+      (e) => e.tier === input.tier && e.category?.trim().toLowerCase() === cat,
+    )
+    if (ladderHit) {
+      const ladderRow = input.tenantRows.find(
+        (r) =>
+          r.id === ladderHit.catalogue_id &&
+          (r.active ?? true) &&
+          Number.isFinite(num(r.unit_price_ex_gst)),
+      )
+      if (ladderRow) {
+        return { source: 'tenant', row: ladderRow, price: money(num(ladderRow.unit_price_ex_gst)) }
+      }
+      // Ladder row not stocked / inactive → fall through to scoring.
+    }
+  }
+
   const tenant = input.tenantRows
     .filter((r) => (r.active ?? true) && r.category?.trim().toLowerCase() === cat)
     .filter((r) => Number.isFinite(num(r.unit_price_ex_gst)))
@@ -167,17 +207,19 @@ export function resolveParam<T>(globalVal: T, localOverride: T | null | undefine
 }
 
 export interface AssemblyOverride {
-  enabled?: boolean | null
   labour_hours_override?: number | string | null
   markup_pct_override?: number | string | null
 }
 export interface EffectiveAssembly {
-  enabled: boolean
   labourHours: ResolvedParam<number>
   markupPct: ResolvedParam<number>
 }
 /** Fold a global assembly + a per-tenant override into the effective params
- *  the estimator should use AND the dashboard should display. */
+ *  the estimator should use AND the dashboard should display.
+ *  v7 Phase 0: `enabled` was removed — it lived on tenant_assembly_overrides
+ *  but nothing wrote to it. The Services-tab toggle writes
+ *  tenant_service_offerings.enabled instead, and that is now the single
+ *  source of truth (read by /api/tenant/me AND /api/tenant/estimation). */
 export function effectiveAssembly(
   globalLabourHours: number | string,
   globalMarkupPct: number | string,
@@ -186,7 +228,6 @@ export function effectiveAssembly(
   const lhOv = override ? num(override.labour_hours_override) : NaN
   const muOv = override ? num(override.markup_pct_override) : NaN
   return {
-    enabled: override?.enabled ?? true,
     labourHours: resolveParam(num(globalLabourHours), Number.isFinite(lhOv) ? lhOv : null),
     markupPct: resolveParam(num(globalMarkupPct), Number.isFinite(muOv) ? muOv : null),
   }
@@ -293,14 +334,15 @@ export function buildBomQuoteLines(input: BuildBomInput): BuildBomResult {
  */
 export function catalogueCandidateRows(
   tenantRows: TenantMaterial[],
-): Array<{ name: string; price: number }> {
-  const out: Array<{ name: string; price: number }> = []
+): Array<{ name: string; price: number; category: string | null }> {
+  const out: Array<{ name: string; price: number; category: string | null }> = []
   for (const r of tenantRows) {
     if (r.active === false) continue
     const p = num(r.unit_price_ex_gst)
-    if (Number.isFinite(p)) out.push({ name: r.name, price: money(p) })
+    const category = r.category ?? null
+    if (Number.isFinite(p) && p > 0) out.push({ name: r.name, price: money(p), category })
     const cs = num(r.customer_supply_price_ex_gst)
-    if (Number.isFinite(cs)) out.push({ name: r.name, price: money(cs) })
+    if (Number.isFinite(cs) && cs > 0) out.push({ name: r.name, price: money(cs), category })
   }
   return out
 }
@@ -337,6 +379,45 @@ export function formatCatalogueHint(rows: CatalogueHintRow[]): string | null {
     "Tradie operator catalogue (prefer THESE exact products; brand+range maps to the tier shown):",
     ...lines,
     "Pick the catalogue row that fits the customer's tier/spec; grounding validation runs regardless.",
+  ].join('\n')
+}
+
+/** v7 Phase 3 — one row of a tenant's explicit Good/Better/Best ladder
+ *  for prompt-time soft hinting (formatTierLadderHint). The product_name
+ *  + brand are denormalised from the tenant_material_catalogue row that
+ *  catalogue_id points to so the helper stays DB-free. */
+export interface TierLadderHintRow {
+  category: string
+  tier: Tier
+  product_name: string
+  brand?: string | null
+}
+
+/** "MUST use these products for the named tier" — the strongest soft
+ *  hint we surface, designed to be paired with formatCatalogueHint()
+ *  (which lists the wider catalogue) and formatBomHint() (which lists
+ *  the BOM). The grounding validator still has the final say. */
+export function formatTierLadderHint(rows: TierLadderHintRow[]): string | null {
+  const valid = rows.filter((r) => r?.category && r?.tier && r?.product_name)
+  if (valid.length === 0) return null
+  const TIER_ORDER: Record<Tier, number> = { good: 0, better: 1, best: 2 }
+  const byCat = new Map<string, TierLadderHintRow[]>()
+  for (const r of valid) {
+    const arr = byCat.get(r.category) ?? []
+    arr.push(r)
+    byCat.set(r.category, arr)
+  }
+  const lines = [...byCat.entries()].map(([cat, items]) => {
+    const sorted = [...items].sort((a, b) => TIER_ORDER[a.tier] - TIER_ORDER[b.tier])
+    const labels = sorted.map((i) => {
+      const brand = i.brand ? ` (${i.brand})` : ''
+      return `${i.tier}=${i.product_name}${brand}`
+    })
+    return `  • ${cat}: ${labels.join('; ')}`
+  })
+  return [
+    "Tradie's EXPLICIT Good/Better/Best ladder (use these exact products for the named tier):",
+    ...lines,
   ].join('\n')
 }
 

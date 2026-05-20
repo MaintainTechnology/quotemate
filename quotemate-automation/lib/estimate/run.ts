@@ -8,11 +8,13 @@ import {
   catalogueCandidateRows,
   formatCatalogueHint,
   formatBomHint,
+  formatTierLadderHint,
   effectiveAssembly,
   enrichLinesWithCatalogue,
   applyChosenProduct,
   type CatalogueHintRow,
   type BomHintRow,
+  type TierLadderHintRow,
   type TenantMaterial,
   type SharedMaterial,
   type BomLine,
@@ -411,7 +413,7 @@ async function loadCandidatePrices(
 ) {
   const materialsQuery = supabase
     .from('shared_materials')
-    .select('name, default_unit_price_ex_gst, trade')
+    .select('*')
   // select('*') (not an explicit column list) so a pre-029 prod where
   // `category` doesn't exist yet can't turn into a PostgREST
   // missing-column error → null data → ZERO assembly candidates → every
@@ -445,7 +447,7 @@ async function loadCandidatePrices(
     ? (() => {
         let q = supabase
           .from('tenant_material_catalogue')
-          .select('name, unit_price_ex_gst, customer_supply_price_ex_gst, active, trade')
+          .select('name, category, unit_price_ex_gst, customer_supply_price_ex_gst, active, trade')
           .eq('tenant_id', tenantId)
           .eq('active', true)
         if (trade) q = q.eq('trade', trade)
@@ -480,7 +482,11 @@ async function loadCandidatePrices(
 
   return buildCandidatePrices(
     [
-      ...(materials ?? []).map((r: any) => ({ name: r.name, price: r.default_unit_price_ex_gst })),
+      ...(materials ?? []).map((r: any) => ({
+        name: r.name,
+        price: r.default_unit_price_ex_gst,
+        category: r.category ?? null,
+      })),
       ...tenantMaterialCandidates,
     ],
     // Migration 029: pass the explicit row category through. NULL on
@@ -612,7 +618,46 @@ async function buildCatalogueHint(
       log.err('catalogue hint fetch failed — continuing without it', error.message)
       return null
     }
-    return formatCatalogueHint((data ?? []) as CatalogueHintRow[])
+    const baseHint = formatCatalogueHint((data ?? []) as CatalogueHintRow[])
+
+    // v7 Phase 3 — prepend the tenant's explicit Good/Better/Best ladder
+    // (tenant_tier_ladder, migration 043) when present. The ladder hint is
+    // the strongest soft signal we surface; the grounding validator still
+    // governs the money path regardless. Resilient: missing table /
+    // empty ladder → baseHint unchanged.
+    try {
+      let lq = supabase
+        .from('tenant_tier_ladder')
+        .select(
+          'category, tier, ' +
+            'tenant_material_catalogue!inner ( name, brand, trade )',
+        )
+        .eq('tenant_id', tenantId)
+      if (trade) lq = lq.eq('tenant_material_catalogue.trade', trade)
+      const { data: ladderRows } = await lq
+      const hintRows: TierLadderHintRow[] = []
+      for (const r of (ladderRows ?? []) as any[]) {
+        const cat = r.category as string
+        const tier = r.tier as TierLadderHintRow['tier']
+        const tmc = Array.isArray(r.tenant_material_catalogue)
+          ? r.tenant_material_catalogue[0]
+          : r.tenant_material_catalogue
+        if (!tmc) continue
+        hintRows.push({
+          category: cat,
+          tier,
+          product_name: tmc.name as string,
+          brand: (tmc.brand ?? null) as string | null,
+        })
+      }
+      const ladderHint = formatTierLadderHint(hintRows)
+      if (ladderHint && baseHint) return `${ladderHint}\n\n${baseHint}`
+      if (ladderHint) return ladderHint
+    } catch (e: any) {
+      // Pre-043 prod / FK absent → fall through to baseHint quietly.
+      log.err('tier ladder hint fetch failed — continuing without it', e?.message ?? String(e))
+    }
+    return baseHint
   } catch (e: any) {
     log.err('catalogue hint build failed', e?.message ?? String(e))
     return null
@@ -765,11 +810,16 @@ async function loadDeterministicInputs(
     return { input: null, reason: 'no tenant recipe for this job' }
   }
 
-  // Per-tenant override (enabled / labour / markup). A service the
-  // tradie switched OFF in the Services tab must NOT be auto-quoted.
+  // v7 Phase 0: single source of truth per table —
+  //   tenant_service_offerings.enabled    → Services-tab toggle (this read)
+  //   tenant_assembly_overrides.labour|markup → Estimation-tab overrides
+  // (Pre-v7 this block selected labour/markup from tenant_service_offerings,
+  // but those columns never existed on that table — see migration 015 and
+  // 028. The select was a latent error; only the early-return on the
+  // disabled flag was actually doing work.)
   const { data: offerings } = await supabase
     .from('tenant_service_offerings')
-    .select('assembly_id, enabled, labour_hours_override, markup_pct_override')
+    .select('assembly_id, enabled')
     .eq('tenant_id', tenantId)
     .in('assembly_id', ids)
   const primaryOffering =
@@ -778,14 +828,21 @@ async function loadDeterministicInputs(
     return { input: null, reason: 'service disabled in Services tab' }
   }
 
+  const { data: assemblyOverrides } = await supabase
+    .from('tenant_assembly_overrides')
+    .select('assembly_id, labour_hours_override, markup_pct_override')
+    .eq('tenant_id', tenantId)
+    .in('assembly_id', ids)
+  const primaryOverride =
+    (assemblyOverrides ?? []).find((o: any) => o.assembly_id === primary.id) ?? null
+
   const eff = effectiveAssembly(
     primary.default_labour_hours,
     (pricingBook as any)?.default_markup_pct,
-    primaryOffering
+    primaryOverride
       ? {
-          enabled: primaryOffering.enabled,
-          labour_hours_override: primaryOffering.labour_hours_override,
-          markup_pct_override: primaryOffering.markup_pct_override,
+          labour_hours_override: primaryOverride.labour_hours_override,
+          markup_pct_override: primaryOverride.markup_pct_override,
         }
       : null,
   )

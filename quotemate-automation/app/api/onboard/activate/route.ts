@@ -21,6 +21,7 @@ import { createClient } from '@supabase/supabase-js'
 import { OnboardActivateSchema, defaultsForTrade } from '@/lib/onboard/schema'
 import { runProvisioning } from '@/lib/onboard/run-provisioning'
 import { markIntentUsed } from '@/lib/onboard/intent-tokens'
+import { seedTenantServiceOfferings } from '@/lib/onboard/seed-tenant-defaults'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -171,25 +172,18 @@ export async function POST(req: Request) {
     }
 
     // ─── 3. Seed service offerings for ALL selected trades ─────────
-    // Core easy-5 assemblies (default_enabled = true in shared_assemblies)
-    // land enabled so a newly-onboarded tradie sees their wedge live
-    // immediately. Opt-in extras (default_enabled = false — aircon,
-    // EV charger, leak detection, etc. from migration 021) land
-    // disabled; the tradie ticks them on from the Services tab if
-    // they perform that work.
-    const { data: assemblies } = await supabase
-      .from('shared_assemblies')
-      .select('id, default_enabled')
-      .in('trade', form.trades)
-
-    if (assemblies && assemblies.length > 0) {
-      const rows = assemblies.map((a) => ({
-        tenant_id: id,
-        assembly_id: a.id,
-        enabled: (a as { default_enabled: boolean | null }).default_enabled ?? true,
-      }))
-      await supabase.from('tenant_service_offerings').upsert(rows, {
-        onConflict: 'tenant_id,assembly_id',
+    // v7 Phase 1: the seed logic is shared with the backfill script via
+    // seedTenantServiceOfferings() so a backfilled tenant lands with
+    // identical defaults to a fresh activate. The helper preserves the
+    // pre-v7 semantics (default_enabled per assembly, fallback to true).
+    try {
+      await seedTenantServiceOfferings({ supabase, tenantId: id, trades: form.trades })
+    } catch (seedErr: any) {
+      // Non-fatal — the dashboard's safety-net fallback in /api/tenant/me
+      // still resolves enabled per assembly when no offerings rows exist.
+      console.warn('[activate] seedTenantServiceOfferings failed (non-fatal)', {
+        tenantId: id,
+        message: seedErr?.message ?? String(seedErr),
       })
     }
 

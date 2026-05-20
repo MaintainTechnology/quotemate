@@ -6,7 +6,7 @@
 // is byte-identical to before — the hold line is purely additive.
 
 import { describe, expect, it } from 'vitest'
-import { buildQuoteSms } from './templates'
+import { buildQuoteSms, buildQuoteInFlightSms } from './templates'
 
 const intake = {
   job_type: 'downlights',
@@ -62,5 +62,42 @@ describe('buildQuoteSms — WP6 price-hold line', () => {
     const body = buildQuoteSms(intake, { ...baseQuote, price_hold_until: 'not-a-date' })
     expect(body).not.toMatch(/Price held until/)
     expect(body).toMatch(/- QuoteMate$/)
+  })
+})
+
+// 2026-05-19 "bug zapper" fix part 3: the INFLIGHT canned hold-on used to
+// promise "your quote's nearly ready (about a minute away)" — a phrase
+// dialog.ts strips elsewhere because it's frequently a lie (recovery flow
+// leftover intake_ids, add-on flows, etc.). Lock in the no-time-claim and
+// no-stalling-phrase invariants so the regression can't quietly come back.
+describe('buildQuoteInFlightSms — no false time claims', () => {
+  it('never promises a specific time ("nearly ready", "a minute", "under a minute")', () => {
+    // Sample many times since the function picks a variant at random.
+    for (let i = 0; i < 50; i++) {
+      const body = buildQuoteInFlightSms()
+      expect(body).not.toMatch(/nearly ready/i)
+      expect(body).not.toMatch(/a minute/i)
+      expect(body).not.toMatch(/under a minute/i)
+      expect(body).not.toMatch(/about a minute/i)
+      expect(body).not.toMatch(/seconds? away/i)
+      expect(body).not.toMatch(/in a minute/i)
+    }
+  })
+
+  it('stays GSM-7 safe and inside one SMS segment (<=160 chars)', () => {
+    for (let i = 0; i < 50; i++) {
+      const body = buildQuoteInFlightSms()
+      expect(/[^\x20-\x7E\n]/.test(body)).toBe(false)
+      expect(body.length).toBeLessThanOrEqual(160)
+    }
+  })
+
+  it('still acknowledges the quote is in progress (no silent / empty reply)', () => {
+    for (let i = 0; i < 50; i++) {
+      const body = buildQuoteInFlightSms()
+      expect(body.trim().length).toBeGreaterThan(20)
+      // Must signal "we're still working" without claiming completion timing.
+      expect(body).toMatch(/quote|working|pulling|works/i)
+    }
   })
 })

@@ -223,5 +223,21 @@ export async function POST(req: Request) {
     console.error('[followups/text] thread-logging failed (send still OK)', e)
   }
 
+  // CRM touch log — same best-effort posture as the conversation thread
+  // logging above. Summary = first 120 chars of the sent body so a VA
+  // scanning history sees what the customer was told without opening
+  // the conversation.
+  try {
+    await supabase.from('quote_followup_events').insert({
+      tenant_id: tenant.id,
+      quote_id: quoteId,
+      kind: 'sms',
+      outcome: 'text_sent',
+      summary: `SMS: ${text.slice(0, 120)}${text.length > 120 ? '…' : ''}`,
+    })
+  } catch (e) {
+    console.error('[followups/text] event log failed (text still sent)', e)
+  }
+
   return Response.json({ ok: true, channel: result.channel, sid: result.sid })
 }

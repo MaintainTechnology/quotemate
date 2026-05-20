@@ -12,7 +12,6 @@ import { generateObject } from 'ai'
 import { z } from 'zod'
 import { withRetry } from '@/lib/util/retry'
 import {
-  ASSUMPTION_RULES,
   UNIVERSAL_INSPECTION_TRIGGERS,
   UNIVERSAL_MUST_ASK,
   rulesAsText,
@@ -32,15 +31,15 @@ import type { ConversationState, SlotKey } from './extract-slots'
 //                           now", "just chatting", "not interested today", "cancel".
 export const TurnDecisionSchema = z.object({
   action: z.enum(['ask', 'finish', 'escalate_inspection', 'end_conversation']),
-  // v5 multi-trade: enum now covers electrical + plumbing SMS-auto-quoteable
-  // job types. Adding values here lets Haiku classify plumbing intents
-  // without failing Zod validation. The downstream estimator picks the
-  // correct trade-specific pricing book + prompt from intake.trade.
+  // v5/v6 multi-trade: enum covers the easy auto-quote paths plus enabled
+  // tenant-service extensions that the extractor/templates/estimator already
+  // understand. Keeping this in sync stops valid priced services from being
+  // squeezed into "unknown" or failing Zod validation.
   job_type_guess: z.enum([
     // electrical
-    'downlights','power_points','ceiling_fans','smoke_alarms','outdoor_lighting',
+    'downlights','power_points','ceiling_fans','smoke_alarms','outdoor_lighting','oven_cooktop','ev_charger','fault_finding',
     // plumbing (v5)
-    'blocked_drain','hot_water','tap_repair','tap_replace','toilet_repair','toilet_replace',
+    'blocked_drain','hot_water','tap_repair','tap_replace','toilet_repair','toilet_replace','gas_fitting','cctv_inspection','prv_install',
     // fallback
     'unknown',
   ]).default('unknown'),
@@ -327,9 +326,10 @@ the state block lists is a hard error.
    Escalate when the customer clearly states ANY of these:
      ELECTRICAL: switchboard, renovation, rewire, three-phase, mains or
                  underground cabling
-     PLUMBING  : gas fitting, gas leak, burst pipe, bathroom renovation
-   If EV charger, fault finding, oven/cooktop, CCTV inspection, or PRV
-   appears in TENANT SERVICES below, treat it as in-scope and follow the
+     PLUMBING  : gas leak/smell, new gas line, gas conversion, burst pipe,
+                 bathroom renovation
+   If EV charger, fault finding, oven/cooktop, CCTV inspection, PRV, or
+   gas appliance connection appears in TENANT SERVICES below, treat it as in-scope and follow the
    listed questions. If it appears in DECLINED SERVICES, decline politely
    instead of offering the $199 inspection.
    A greeting, off-topic message, or unclear inbound is NOT a reason to
@@ -728,9 +728,10 @@ inspection escalation, not a goodbye.
    Out-of-scope (always escalate):
      ELECTRICAL: switchboard, renovation, rewire, three-phase, mains or
                  underground cabling
-     PLUMBING  : gas fitting, gas leak, burst pipe, bathroom renovation
-   If EV charger, fault finding, oven/cooktop, CCTV inspection, or PRV
-   appears in TENANT SERVICES below, it is NOT outside SMS scope. Follow
+     PLUMBING  : gas leak/smell, new gas line, gas conversion, burst pipe,
+                 bathroom renovation
+   If EV charger, fault finding, oven/cooktop, CCTV inspection, PRV, or
+   gas appliance connection appears in TENANT SERVICES below, it is NOT outside SMS scope. Follow
    the tenant service row and its required questions. If it appears in
    DECLINED SERVICES, decline politely without a $199 inspection offer.
 
@@ -823,7 +824,7 @@ You MUST return JSON matching the TurnDecisionSchema. The schema is
 enforced by the calling code; if your output doesn't match, the call
 fails.
 - action: 'ask' | 'finish' | 'escalate_inspection' | 'end_conversation'
-- job_type_guess: one of the easy 5, or 'unknown' if not yet clear
+- job_type_guess: an SMS-auto-quoteable easy job, an enabled tenant-service job type, or 'unknown' if not yet clear
 - reply_to_send: literal SMS text we'll send back (<= 320 chars, ONE question max)
 - assumptions_made: list of safe-default phrases applied this turn
 - ready_for_intake: true ONLY when action='finish'
@@ -1158,7 +1159,8 @@ export function customServicesDirective(
       '    resume, so the chat still cannot loop forever.):',
       '    This also overrides service-name inspection defaults for EV',
       '    chargers, fault finding, oven/cooktop, CCTV inspection, and PRV',
-      '    install when those rows are listed here. Still escalate genuine',
+      '    install, plus gas appliance connection when those rows are listed',
+      '    here. Still escalate genuine',
       '    danger/emergency words: burning smell, sparks, electric shock,',
       '    gas leak, burst pipe, sewage, water damage, switchboard, mains,',
       '    three-phase, rewire, or underground cabling.',

@@ -66,7 +66,6 @@ This is a plumbing intake. Auto-quoteable plumbing job_types:
   toilet_replace    — new toilet suite install
 
 ALWAYS inspection_required=true for these plumbing job_types:
-  gas_fitting          — gas appliance connection or leak (gas-licence work)
   burst_pipe           — burst/split pipe (access + make-good unknown)
   bathroom_renovation  — rough-in + fit-off, multi-fixture, multi-visit
 
@@ -83,6 +82,8 @@ Map customer language to job_type:
     → toilet_repair
   "new toilet" / "replace toilet"
     → toilet_replace
+  "connect gas appliance" / "gas cooktop connection" / "gas stove connection"
+    → gas_fitting + inspection_required=false unless they mention gas smell/leak
   "smell gas" / "gas leak" / "smells like gas"
     → gas_fitting + inspection_required=true + urgency=emergency
   "burst pipe" / "pipe burst" / "water everywhere"
@@ -158,11 +159,12 @@ ${isPlumbing ? `Surface real risks (only when the caller's own words trigger the
 
 Auto-quote candidates (inspection_required=false) when scope is clear:
 blocked_drain, hot_water, tap_repair, tap_replace, toilet_repair, toilet_replace,
-cctv_inspection (standalone), prv_install (no whole-house re-pipe).
+cctv_inspection (standalone), prv_install (no whole-house re-pipe),
+gas_fitting when it is a booked appliance connection with no gas leak/smell.
 
-Always inspection_required=true: gas_fitting (any), burst_pipe, bathroom_renovation,
-and any plumbing job that mentions hidden pipework, water damage, or access through
-concrete/tile.` : `Surface real risks (only when the caller's own words trigger them):
+Always inspection_required=true: gas leak/smell, burst_pipe, bathroom_renovation,
+and any plumbing job that mentions hidden pipework, water damage, new/unknown gas
+line sizing, or access through concrete/tile.` : `Surface real risks (only when the caller's own words trigger them):
 - burning smell, buzzing, sparks → mark inspection_required=true, urgency=emergency
 - tripping breakers / recurring faults → inspection_required=false when
   the request is for a diagnostic call-out; repairs are quoted after diagnosis

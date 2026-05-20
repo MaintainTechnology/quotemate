@@ -68,13 +68,28 @@ export async function GET(req: Request) {
   const { data: bomRows, error: bomErr } = await bomQ
   if (bomErr) return Response.json({ error: bomErr.message }, { status: 500 })
 
-  // Per-tenant overrides (global-vs-local).
+  // Per-tenant overrides (global-vs-local) — labour hours + markup only.
+  // v7 Phase 0: the `enabled` column was removed from this read; it lived
+  // on tenant_assembly_overrides but no UI ever wrote to it, so the badge
+  // it powered ("disabled for you") always read true even when the tradie
+  // had toggled the service OFF in the Services tab. The Services-tab
+  // toggle writes tenant_service_offerings.enabled — read below — and
+  // that is the single source of truth shared with the estimator path.
   const { data: overrides } = await supabase
     .from('tenant_assembly_overrides')
-    .select('assembly_id, enabled, labour_hours_override, markup_pct_override')
+    .select('assembly_id, labour_hours_override, markup_pct_override')
     .eq('tenant_id', tenant.id)
   const overrideByAssembly = new Map<string, any>()
   for (const o of overrides ?? []) overrideByAssembly.set(o.assembly_id as string, o)
+
+  // Services-tab toggle state. Missing row → enabled=true (matches the
+  // /api/tenant/me convention so both endpoints describe the same world).
+  const { data: offerings } = await supabase
+    .from('tenant_service_offerings')
+    .select('assembly_id, enabled')
+    .eq('tenant_id', tenant.id)
+  const enabledByAssembly = new Map<string, boolean>()
+  for (const o of offerings ?? []) enabledByAssembly.set(o.assembly_id as string, !!o.enabled)
 
   // This tradie's OWN recipe lines (tenant_assembly_bom, migration 031).
   // The estimator prefers these over the shared baseline (buildBomHint),
@@ -168,10 +183,15 @@ export async function GET(req: Request) {
       name: a.name,
       trade: a.trade,
       hourly_rate: hourlyByTrade.get(a.trade) ?? null,
+      // v7 Phase 0: `enabled` moved out of `effective` (which is purely
+      // labour/markup overrides) to the job's top level, sourced from
+      // tenant_service_offerings so the badge agrees with the AI's actual
+      // behaviour. Missing offering row defaults to enabled (matches
+      // /api/tenant/me's opt-out-by-default contract).
+      enabled: enabledByAssembly.get(a.id) ?? true,
       bom: usingTenantRecipe ? ownBom! : a.bom,
       recipe_source: usingTenantRecipe ? ('tenant' as const) : ('shared' as const),
       effective: {
-        enabled: eff.enabled,
         labour_hours: eff.labourHours, // { value, source: 'local'|'global' }
         markup_pct: eff.markupPct,
         global_labour_hours: Number(a.default_labour_hours),

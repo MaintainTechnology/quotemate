@@ -101,6 +101,50 @@ export async function POST(req: Request) {
       return Response.json({ error: 'sms conversation not found' }, { status: 404 })
     }
 
+    // ─────── Idempotency short-circuit (2026-05-19 "bug zapper" fix) ───────
+    // The SMS inbound webhook fires this endpoint inside a withRetry wrapper.
+    // If the fetch from the inbound's after() block aborts mid-flight (Vercel
+    // can terminate in-flight outbound fetches when the parent function nears
+    // its limit, or the platform's edge layer can time out before the server
+    // returns), the inbound retries — even though the server completed the
+    // whole pipeline. Symptom in prod: two intake rows created ~12s apart,
+    // two recovery SMSes ("James, what kind of work…" + "Hi James, can I
+    // check what type of work…"). This guard short-circuits the second
+    // invocation: if the conversation already has an intake_id from a row
+    // created in the last few minutes, return that intakeId and skip the
+    // entire pipeline. The 10-min window is generous on purpose — Opus +
+    // estimator + dispatch is bounded well under that, and the alternative
+    // (running Opus twice + double-dispatching SMS) is what we're protecting
+    // against. Long-window add-on / second-quote flows are NOT yet supported
+    // on a single conversation in v1, so this is safe.
+    const IDEMPOTENCY_WINDOW_MS = 10 * 60 * 1000
+    if (convo.intake_id) {
+      const { data: existingIntake } = await supabase
+        .from('intakes')
+        .select('id, created_at')
+        .eq('id', convo.intake_id as string)
+        .maybeSingle()
+      if (
+        existingIntake &&
+        Date.now() - new Date(existingIntake.created_at as string).getTime() <
+          IDEMPOTENCY_WINDOW_MS
+      ) {
+        log.done('idempotency short-circuit - intake already produced for this conversation', {
+          intakeId: existingIntake.id,
+          age_seconds: Math.round(
+            (Date.now() - new Date(existingIntake.created_at as string).getTime()) / 1000,
+          ),
+          source: 'sms',
+        })
+        return Response.json({
+          ok: true,
+          intakeId: existingIntake.id,
+          idempotent: true,
+          source: 'duplicate-suppressed',
+        })
+      }
+    }
+
     const { data: messages } = await supabase
       .from('sms_messages')
       .select('direction, body, created_at, photo_urls, photo_paths')
@@ -265,7 +309,7 @@ export async function POST(req: Request) {
   // Customer-memory lookup. Fail-soft (returns null on DB error) so the
   // intake pipeline keeps working even if the customer table is unhappy.
   const customer = callerNumber
-    ? await findOrCreateCustomer(callerNumber, sourceChannel)
+    ? await findOrCreateCustomer(callerNumber, sourceChannel, tenantId)
     : null
   if (customer) {
     log.ok('customer resolved', {
@@ -330,7 +374,11 @@ export async function POST(req: Request) {
     }
   }
 
-  // ─── Regulatory override: gas HWS must be inspection-routed ─────────
+  // ─── Optional legacy gas-HWS inspection override ────────────────────
+  //
+  // Legacy safety valve only. Default OFF because gas HWS rows are now
+  // priced in the catalogue and should quote unless the intake itself
+  // contains a true safety/access trigger.
   //
   // Bug #5 (2026-05-14 stress test): Opus's structurer non-deterministically
   // set `inspection_required = false` on gas hot-water replacements,
@@ -341,11 +389,13 @@ export async function POST(req: Request) {
   // flue clearances and compliance before any swap.
   //
   // We trust Opus on most fields, but for this one regulatory
-  // boundary the override is hard-coded. Same pattern as Rule 6 in
-  // plumbing-prompt.ts which always-inspections gas_fitting / burst_pipe
-  // / bathroom_renovation, but those are job_types in their own right;
-  // gas HWS is detected via the scope text on a hot_water intake.
-  if (intake.job_type === 'hot_water' && intake.inspection_required !== true) {
+  // boundary was hard-coded. It is now opt-in only via
+  // FORCE_GAS_HWS_SITE_VISIT=1; normal gas HWS pricing is DB-grounded.
+  if (
+    process.env.FORCE_GAS_HWS_SITE_VISIT === '1' &&
+    intake.job_type === 'hot_water' &&
+    intake.inspection_required !== true
+  ) {
     const haystack = [
       intake.scope?.description ?? '',
       Array.isArray(intake.risks) ? intake.risks.join(' ') : '',

@@ -35,12 +35,14 @@ export const SlotsSchema = z.object({
   job_type: z.enum([
     // ── Electrical SMS auto-classifiable (v3 strategy) ─────────
     'downlights', 'power_points', 'ceiling_fans', 'smoke_alarms', 'outdoor_lighting',
+    'oven_cooktop', 'ev_charger', 'fault_finding',
     // ── Plumbing SMS auto-classifiable (v5 strategy) ───────────
     // Dialog flow stays electrical-centric for now (see strategy.md v5
     // deferral); plumbing SMS leads are classified here so the route
     // handler can route them to the portal for richer intake.
     'blocked_drain', 'hot_water', 'tap_repair', 'tap_replace',
     'toilet_repair', 'toilet_replace',
+    'gas_fitting', 'cctv_inspection', 'prv_install',
     'unknown', 'out_of_scope',
   ]).nullable().optional(),
   // z.number() (NOT .int()) — Anthropic's structured-output validator rejects
@@ -326,8 +328,11 @@ EXTRACTION RULES:
      - downlights / power_points / ceiling_fans / smoke_alarms / outdoor_lighting
      - "GPOs", "power points", "outlets" → power_points
      - "smoke alarms", "smokies", "smoke detectors" → smoke_alarms
-     - Other electrical (switchboard, EV charger, fault find, ovens,
-       renovation, three-phase, rewire) → out_of_scope
+     - "oven", "cooktop", "stove hardwire" → oven_cooktop
+     - "EV charger", "Tesla wall connector", "wall charger" → ev_charger
+     - "fault find", "fault finding", "breaker tripping" → fault_finding
+     - Other electrical (switchboard, renovation, three-phase, rewire,
+       mains, underground cabling) → out_of_scope
 
      PLUMBING (auto-quote subset — v5 multi-trade):
      - "blocked drain", "drain blocked", "slow drain", "gurgling" → blocked_drain
@@ -336,9 +341,12 @@ EXTRACTION RULES:
      - "new tap", "replace tap", "upgrade tapware", "kitchen mixer" → tap_replace
      - "running toilet", "cistern leaking", "toilet won't stop" → toilet_repair
      - "new toilet", "replace toilet suite" → toilet_replace
-     - Other plumbing (gas leak, gas fitting, burst pipe, bathroom reno,
-       CCTV-only, PRV) → out_of_scope (these need portal/voice intake;
-       SMS dialog can't safely scope them)
+     - "connect gas appliance", "gas appliance connection", "connect gas
+       cooktop/stove" → gas_fitting
+     - "CCTV drain inspection", "drain camera", "camera inspection" → cctv_inspection
+     - "PRV", "pressure reduction valve", "pressure reducing valve" → prv_install
+     - Other plumbing (gas leak / smell gas, burst pipe, bathroom reno,
+       sewage emergency, water damage) → out_of_scope
   7. COUNT extraction:
      - "6 downlights" → count: 6
      - "a couple" → 2; "a few" → 3; "half a dozen" → 6

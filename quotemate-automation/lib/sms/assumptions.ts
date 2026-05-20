@@ -287,7 +287,7 @@ export const ASSUMPTION_RULES: Record<JobType, AssumptionRule> = {
 export const UNIVERSAL_MUST_ASK = [
   "customer's first name (intake field: caller.name)",
   "suburb where the job is (intake field: suburb)",
-  "what work they need — must be one of the trade-specific auto-quoteable list (intake field: job_type)",
+  "what work they need — must be one of the trade-specific auto-quoteable list OR an enabled tenant service from the Services catalogue (intake field: job_type/scope)",
 ]
 
 // Universal escalation — applies regardless of job type. Any of these in
