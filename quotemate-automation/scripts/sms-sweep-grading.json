@@ -7,7 +7,7 @@
     "mandated_questions_expected": 3,
     "inbound_matched": true,
     "reply_received": true,
-    "reply_body": "Got it - kitchen. Will the GPO be at least 600mm from any basin, shower, bath or sink?",
+    "reply_body": "Welcome back Sam - half the kitchen GPOs going dead, easy enough to check out. Quick one: is just that kitchen circuit affected, or have other rooms or circuits lost power too?",
     "recognition": "miss",
     "questions": 1,
     "routing": "dialog",
@@ -21,7 +21,7 @@
     "mandated_questions_expected": 0,
     "inbound_matched": true,
     "reply_received": true,
-    "reply_body": "Got it Sam - smoke alarms, not the power point fault. 4 hardwired alarms in Coogee - is this a first-time install (no existing alarms there now) or replacing old ones?",
+    "reply_body": "Welcome back Sam - 4 new hardwired smoke alarms in your Coogee unit, got it. Quick one - is this a first install (no existing alarms anywhere), or replacing old battery or hardwired alarms that are already there?",
     "recognition": "hit",
     "questions": 1,
     "routing": "dialog",
@@ -35,7 +35,7 @@
     "mandated_questions_expected": 3,
     "inbound_matched": true,
     "reply_received": true,
-    "reply_body": "Welcome back Sam - hardwired induction cooktop installs need a sparky on-site to price properly. Want me to text you a $199 inspection booking?",
+    "reply_body": "Welcome back Sam - a 90cm induction cooktop hardwire in Coogee, easy done. Quick one: is the cooktop already on-site, or do you need us to supply it?",
     "recognition": "hit",
     "questions": 1,
     "routing": "inspection",
@@ -49,7 +49,7 @@
     "mandated_questions_expected": 3,
     "inbound_matched": true,
     "reply_received": true,
-    "reply_body": "Welcome back Sam - hardwiring a wall oven needs a sparky on-site to price properly, too much variation to quote blind. Want me to text you a $199 inspection booking?",
+    "reply_body": "Welcome back Sam - happy to help with that. Is the oven already on-site, or supplied by us?",
     "recognition": "hit",
     "questions": 1,
     "routing": "inspection",
@@ -63,11 +63,11 @@
     "mandated_questions_expected": 3,
     "inbound_matched": true,
     "reply_received": true,
-    "reply_body": "Got it. Is this replacing existing GPOs, or adding new ones near existing power?",
-    "recognition": "miss",
+    "reply_body": "Welcome back Sam - a dedicated 15A or 20A point for a split-system, easy. Quick one: how many split-system head units need a power point?",
+    "recognition": "hit",
     "questions": 1,
     "routing": "dialog",
-    "matched_keyword": null
+    "matched_keyword": "power point"
   },
   {
     "test_id": "T006",
@@ -77,11 +77,11 @@
     "mandated_questions_expected": 3,
     "inbound_matched": true,
     "reply_received": true,
-    "reply_body": "Welcome back Sam - got it, replacing the bathroom exhaust fan at your Coogee place. Do you already have the new fan, or do you want us to supply one?",
-    "recognition": "hit",
-    "questions": 1,
+    "reply_body": "Hey Sam - is this a like-for-like fan swap, or a new install? And do you have the fan already, or want us to supply one?",
+    "recognition": "miss",
+    "questions": 2,
     "routing": "dialog",
-    "matched_keyword": "exhaust"
+    "matched_keyword": null
   },
   {
     "test_id": "T007",
@@ -91,7 +91,7 @@
     "mandated_questions_expected": 3,
     "inbound_matched": true,
     "reply_received": true,
-    "reply_body": "Welcome back Sam - a cooktop swap needs a sparky on-site to check the existing circuit and connections before pricing. Want me to text you a $199 inspection booking?",
+    "reply_body": "Welcome back Sam - cooktop swap in Coogee, got it. Quick one: is the cooktop already on-site, or do you want us to supply it?",
     "recognition": "hit",
     "questions": 1,
     "routing": "inspection",
@@ -105,10 +105,10 @@
     "mandated_questions_expected": 0,
     "inbound_matched": true,
     "reply_received": true,
-    "reply_body": "Welcome back Sam - good to hear from you. Three fans you've already got, installed in Coogee - easy. Which rooms are they going in?",
+    "reply_body": "Welcome back Sam - nice, 3 new fans in Coogee, happy to sort that out. Which rooms are they going in?",
     "recognition": "hit",
     "questions": 1,
-    "routing": "quote",
+    "routing": "dialog",
     "matched_keyword": "fan"
   },
   {
@@ -119,11 +119,11 @@
     "mandated_questions_expected": 3,
     "inbound_matched": true,
     "reply_received": true,
-    "reply_body": "Hey Sam, welcome back. EV charger installs need a sparky on-site to price properly - too many variables to quote blind. Want me to text you a $199 inspection booking?",
+    "reply_body": "Welcome back Sam - Tesla Wall Connector, nice. Just a few quick questions. Is the Wall Connector already on-site, or do you need us to supply it?",
     "recognition": "hit",
     "questions": 1,
     "routing": "inspection",
-    "matched_keyword": "ev"
+    "matched_keyword": "tesla"
   },
   {
     "test_id": "T010",
@@ -133,7 +133,7 @@
     "mandated_questions_expected": 0,
     "inbound_matched": true,
     "reply_received": true,
-    "reply_body": "Welcome back Sam - 6 LED downlights in the Coogee kitchen, got it. What's the ceiling like - flat plaster, raked, cathedral, or not sure?",
+    "reply_body": "Welcome back Sam - 6 new downlights in your Coogee kitchen, got it. What's the ceiling like - flat plaster, raked, cathedral, or not sure?",
     "recognition": "hit",
     "questions": 1,
     "routing": "dialog",
@@ -147,10 +147,10 @@
     "mandated_questions_expected": 3,
     "inbound_matched": true,
     "reply_received": true,
-    "reply_body": "Hey Sam - LED strip lighting installs sit outside what we can quote over SMS, so I'd need to send a sparky out for a quick look. Want me to text you a $199 inspection booking?",
+    "reply_body": "Welcome back Sam - 8 metres of LED strip under the kitchen overheads, got it. Is the strip and driver supplied by you, or do you want us to supply it?",
     "recognition": "hit",
     "questions": 1,
-    "routing": "inspection",
+    "routing": "dialog",
     "matched_keyword": "strip"
   },
   {
@@ -161,7 +161,7 @@
     "mandated_questions_expected": 3,
     "inbound_matched": true,
     "reply_received": true,
-    "reply_body": "Welcome back Sam - nice one. How many floodlights did you need over the garage?",
+    "reply_body": "Welcome back Sam - nice one, motion sensor floodlight over the garage in Coogee. Is the light supplied by you, or do you want us to supply it?",
     "recognition": "hit",
     "questions": 1,
     "routing": "dialog",
@@ -175,7 +175,7 @@
     "mandated_questions_expected": 3,
     "inbound_matched": true,
     "reply_received": true,
-    "reply_body": "Hey Sam - outdoor weatherproof GPOs need a sparky on-site to quote properly (new outdoor circuit required). Want me to text you a $199 inspection booking?",
+    "reply_body": "Hey Sam - outdoor weatherproof GPOs need a sparky on-site to assess the circuit and mounting properly. Want me to text you a $199 inspection booking?",
     "recognition": "hit",
     "questions": 1,
     "routing": "inspection",
@@ -189,11 +189,11 @@
     "mandated_questions_expected": 0,
     "inbound_matched": true,
     "reply_received": true,
-    "reply_body": "Hey Sam - outdoor lights where there's no existing power outside needs a sparky on-site to price properly. Want me to text you a $199 inspection booking?",
+    "reply_body": "Welcome back Sam - 2 new weatherproof LED wall lights on the Coogee deck, got it. Quick one - do you want them sensor-activated or always-on?",
     "recognition": "hit",
     "questions": 1,
-    "routing": "inspection",
-    "matched_keyword": "outdoor light"
+    "routing": "dialog",
+    "matched_keyword": "wall light"
   },
   {
     "test_id": "T015",
@@ -203,7 +203,7 @@
     "mandated_questions_expected": 3,
     "inbound_matched": true,
     "reply_received": true,
-    "reply_body": "Hey Sam - oven hard-wiring needs a sparky on-site to price properly, too many variables to quote blind. Want me to text you a $199 inspection booking?",
+    "reply_body": "Welcome back Sam - got it, hardwire oven with an existing circuit. Is the oven already on-site, or supplied by us?",
     "recognition": "hit",
     "questions": 1,
     "routing": "inspection",
@@ -217,10 +217,10 @@
     "mandated_questions_expected": 0,
     "inbound_matched": true,
     "reply_received": true,
-    "reply_body": "Welcome back Sam - good to hear from you. Got it, new DC ceiling fan in the Coogee lounge. Are you supplying the fan yourself, or do you want us to supply it?",
+    "reply_body": "Welcome back Sam - nice one on the DC fan. How many fans going in the lounge?",
     "recognition": "hit",
     "questions": 1,
-    "routing": "quote",
+    "routing": "dialog",
     "matched_keyword": "fan"
   },
   {
@@ -229,12 +229,13 @@
     "service_name": "Install security camera (single)",
     "default_enabled": false,
     "mandated_questions_expected": 3,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "Hey Sam - a single PoE camera at the front entry, got it. Quick few questions and I'll get a quote across. Is there an existing NVR or PoE point to run the cable back to?",
+    "recognition": "hit",
+    "questions": 1,
+    "routing": "quote",
+    "matched_keyword": "camera"
   },
   {
     "test_id": "T018",
@@ -242,12 +243,13 @@
     "service_name": "Install wired doorbell or intercom",
     "default_enabled": false,
     "mandated_questions_expected": 3,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "Welcome back Sam - no worries, we can sort that. Quick one: is the doorbell or intercom unit supplied by you, or do you want us to supply it?",
+    "recognition": "hit",
+    "questions": 1,
+    "routing": "dialog",
+    "matched_keyword": "doorbell"
   },
   {
     "test_id": "T019",
@@ -255,12 +257,13 @@
     "service_name": "Replace double GPO",
     "default_enabled": true,
     "mandated_questions_expected": 0,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "Welcome back Sam - no worries, like-for-like GPO swap in the Coogee bedroom, got it. Just one quick one: is the bedroom at least 600mm from any basin, sink, shower or bath, or is it a standard dry-area bedroom?",
+    "recognition": "hit",
+    "questions": 1,
+    "routing": "dialog",
+    "matched_keyword": "gpo"
   },
   {
     "test_id": "T020",
@@ -268,12 +271,13 @@
     "service_name": "Supply + install AC ceiling fan",
     "default_enabled": true,
     "mandated_questions_expected": 0,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "Welcome back Sam - easy done. How many fans are we putting in?",
+    "recognition": "hit",
+    "questions": 1,
+    "routing": "dialog",
+    "matched_keyword": "fan"
   },
   {
     "test_id": "T021",
@@ -281,12 +285,13 @@
     "service_name": "CCTV drain inspection",
     "default_enabled": true,
     "mandated_questions_expected": 3,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "Welcome back Sam - no worries, we can sort a CCTV drain inspection for you. Quick one: is this for a pre-purchase inspection, or an existing drainage problem?",
+    "recognition": "hit",
+    "questions": 1,
+    "routing": "inspection",
+    "matched_keyword": "cctv"
   },
   {
     "test_id": "T022",
@@ -294,12 +299,13 @@
     "service_name": "Disposal and site cleanup",
     "default_enabled": true,
     "mandated_questions_expected": 1,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "Welcome back Sam - no worries, we can take the old one away. Quick one: which toilet is it - main bathroom, ensuite, or second bathroom?",
+    "recognition": "hit",
+    "questions": 1,
+    "routing": "dialog",
+    "matched_keyword": "old"
   },
   {
     "test_id": "T023",
@@ -307,12 +313,13 @@
     "service_name": "Gas appliance connection",
     "default_enabled": true,
     "mandated_questions_expected": 3,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "Welcome back Sam - no dramas. Quick one: is there an existing gas point or bayonet near the cooktop, or does a new gas line need running?",
+    "recognition": "hit",
+    "questions": 1,
+    "routing": "dialog",
+    "matched_keyword": "gas"
   },
   {
     "test_id": "T024",
@@ -320,12 +327,13 @@
     "service_name": "Hand rod blocked drain",
     "default_enabled": true,
     "mandated_questions_expected": 0,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "Welcome back Sam - got it, kitchen sink in Coogee completely blocked. Is it just the kitchen sink affected, or are other drains in the house slow or blocked too?",
+    "recognition": "hit",
+    "questions": 1,
+    "routing": "dialog",
+    "matched_keyword": "blocked"
   },
   {
     "test_id": "T025",
@@ -333,12 +341,13 @@
     "service_name": "Install dishwasher",
     "default_enabled": false,
     "mandated_questions_expected": 3,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "Welcome back Sam - dishwasher install, no worries. Quick one: is the dishwasher supplied by you, or do you want us to supply it?",
+    "recognition": "hit",
+    "questions": 1,
+    "routing": "dialog",
+    "matched_keyword": "dishwasher"
   },
   {
     "test_id": "T026",
@@ -346,12 +355,13 @@
     "service_name": "Install electric HWS",
     "default_enabled": true,
     "mandated_questions_expected": 0,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "Welcome back Sam - a 250L electric HWS replacement, easy done. Quick one - where's the unit located (outside back wall, laundry, garage, etc.)?",
+    "recognition": "hit",
+    "questions": 1,
+    "routing": "dialog",
+    "matched_keyword": "hws"
   },
   {
     "test_id": "T027",
@@ -359,12 +369,13 @@
     "service_name": "Install external garden tap",
     "default_enabled": false,
     "mandated_questions_expected": 3,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "Hey Sam - easy done. Is there an existing water line nearby on that side wall, or will it need a longer run to get there?",
+    "recognition": "miss",
+    "questions": 1,
+    "routing": "dialog",
+    "matched_keyword": null
   },
   {
     "test_id": "T028",
@@ -372,12 +383,13 @@
     "service_name": "Install garbage disposal",
     "default_enabled": false,
     "mandated_questions_expected": 3,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "Welcome back Sam - good to hear from you. Installing a garbage disposal under the kitchen sink, no dramas. Is the disposal unit supplied by you, or would you like us to supply it?",
+    "recognition": "hit",
+    "questions": 1,
+    "routing": "quote",
+    "matched_keyword": "garbage disposal"
   },
   {
     "test_id": "T029",
@@ -385,12 +397,13 @@
     "service_name": "Install gas HWS",
     "default_enabled": true,
     "mandated_questions_expected": 0,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "Welcome back Sam - no dramas, we can get that sorted. Quick one: is it electric storage, gas storage, continuous-flow gas, or a heat pump unit?",
+    "recognition": "hit",
+    "questions": 1,
+    "routing": "dialog",
+    "matched_keyword": "gas"
   },
   {
     "test_id": "T030",
@@ -398,12 +411,13 @@
     "service_name": "Install heat pump HWS",
     "default_enabled": true,
     "mandated_questions_expected": 0,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "Welcome back Sam - heat pump HWS, nice choice. What size are you after, roughly - 250L, 315L, or not sure?",
+    "recognition": "hit",
+    "questions": 1,
+    "routing": "dialog",
+    "matched_keyword": "heat pump"
   },
   {
     "test_id": "T031",
@@ -411,12 +425,13 @@
     "service_name": "Install rainwater tank",
     "default_enabled": false,
     "mandated_questions_expected": 3,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "Welcome back Sam - no worries, happy to help with that. Is the tank already on a prepared base, and are we just connecting the downpipe and overflow, or also running it into the house plumbing?",
+    "recognition": "hit",
+    "questions": 1,
+    "routing": "dialog",
+    "matched_keyword": "tank"
   },
   {
     "test_id": "T032",
@@ -424,12 +439,13 @@
     "service_name": "Install washing machine taps",
     "default_enabled": false,
     "mandated_questions_expected": 3,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "Welcome back Sam - washing machine taps in Coogee, got it. Quick one: is the new shower head supplied by you, or by us?\n\nActually - wrong service. For the washing machine taps: is this replacing existing hot and cold taps, or a first-time install?",
+    "recognition": "hit",
+    "questions": 2,
+    "routing": "dialog",
+    "matched_keyword": "washing machine"
   },
   {
     "test_id": "T033",
@@ -437,12 +453,13 @@
     "service_name": "Install whole-house water filter",
     "default_enabled": false,
     "mandated_questions_expected": 3,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "Welcome back Sam - good to hear from you. Whole-house water filter at the mains, no dramas. Is the filter unit supplied by you, or would you like us to supply it?",
+    "recognition": "hit",
+    "questions": 1,
+    "routing": "quote",
+    "matched_keyword": "water filter"
   },
   {
     "test_id": "T034",
@@ -450,12 +467,13 @@
     "service_name": "Jet blast blocked drain",
     "default_enabled": true,
     "mandated_questions_expected": 0,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "Cheers Sam - a recurring blockage with suspected tree roots needs a plumber on-site to sort properly. Want me to text you a $199 inspection booking?",
+    "recognition": "miss",
+    "questions": 1,
+    "routing": "inspection",
+    "matched_keyword": null
   },
   {
     "test_id": "T035",
@@ -463,12 +481,13 @@
     "service_name": "Leak detection",
     "default_enabled": false,
     "mandated_questions_expected": 3,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "Welcome back Sam - sounds like a possible hidden leak. Quick one: are you seeing a wet patch on the floor, a high water bill, or can you hear running water when everything's off?",
+    "recognition": "hit",
+    "questions": 1,
+    "routing": "dialog",
+    "matched_keyword": "leak"
   },
   {
     "test_id": "T036",
@@ -476,12 +495,13 @@
     "service_name": "Pressure reduction valve install",
     "default_enabled": true,
     "mandated_questions_expected": 3,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "Welcome back Sam - sounds like a PRV is the right call for that. Quick one: are you noticing the high pressure and hammer at all taps and showers, or just specific fixtures?",
+    "recognition": "hit",
+    "questions": 1,
+    "routing": "dialog",
+    "matched_keyword": "pressure"
   },
   {
     "test_id": "T037",
@@ -489,12 +509,13 @@
     "service_name": "Replace shower head",
     "default_enabled": false,
     "mandated_questions_expected": 2,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "Hey Sam, welcome back. Easy job - is the new shower head supplied by you, or do you want us to supply one?",
+    "recognition": "hit",
+    "questions": 1,
+    "routing": "dialog",
+    "matched_keyword": "shower head"
   },
   {
     "test_id": "T038",
@@ -502,12 +523,13 @@
     "service_name": "Replace toilet seat",
     "default_enabled": false,
     "mandated_questions_expected": 2,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "Welcome back Sam - noted on the cracked seat. Is the replacement seat supplied by you, or would you like us to supply it?",
+    "recognition": "hit",
+    "questions": 1,
+    "routing": "dialog",
+    "matched_keyword": "seat"
   },
   {
     "test_id": "T039",
@@ -515,12 +537,13 @@
     "service_name": "Stormwater drain unblock",
     "default_enabled": false,
     "mandated_questions_expected": 3,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "Welcome back Sam - sounds like the stormwater in Coogee is giving you grief again. Is this a recurring problem, or would you say this is the first time it's properly blocked up?",
+    "recognition": "hit",
+    "questions": 1,
+    "routing": "dialog",
+    "matched_keyword": "stormwater"
   },
   {
     "test_id": "T040",
@@ -528,12 +551,13 @@
     "service_name": "Tap replacement",
     "default_enabled": true,
     "mandated_questions_expected": 0,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "Welcome back Sam - no dramas on the basin mixer. Are you supplying the new tap, or do you want the plumber to supply it?",
+    "recognition": "hit",
+    "questions": 1,
+    "routing": "dialog",
+    "matched_keyword": "tap"
   },
   {
     "test_id": "T041",
@@ -541,12 +565,13 @@
     "service_name": "Tap washer replacement",
     "default_enabled": true,
     "mandated_questions_expected": 0,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "G'day again Sam - dripping kitchen tap in Coogee, no dramas. Is it dripping from the spout, leaking from the body of the tap, or is it stuck/hard to turn?",
+    "recognition": "hit",
+    "questions": 1,
+    "routing": "dialog",
+    "matched_keyword": "tap"
   },
   {
     "test_id": "T042",
@@ -554,12 +579,13 @@
     "service_name": "Toilet cistern repair",
     "default_enabled": true,
     "mandated_questions_expected": 0,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "Welcome back Sam - no dramas, we can sort that out. Quick one - which toilet is it, main bathroom, ensuite, or a second bathroom?",
+    "recognition": "hit",
+    "questions": 1,
+    "routing": "dialog",
+    "matched_keyword": "toilet"
   },
   {
     "test_id": "T043",
@@ -567,11 +593,12 @@
     "service_name": "Toilet suite install",
     "default_enabled": true,
     "mandated_questions_expected": 0,
-    "inbound_matched": false,
-    "reply_received": false,
-    "reply_body": null,
-    "recognition": "no_reply",
-    "questions": 0,
-    "routing": "no_reply"
+    "inbound_matched": true,
+    "reply_received": true,
+    "reply_body": "Welcome back Sam - got it, new toilet suite in Coogee, you're supplying it. Quick one - which toilet is it (main bathroom, ensuite, or second bathroom)?",
+    "recognition": "hit",
+    "questions": 1,
+    "routing": "dialog",
+    "matched_keyword": "toilet"
   }
 ]

@@ -108,6 +108,28 @@ describe('customServicesDirective — mandated clarifying questions (mig 032)', 
     expect(customServicesDirective([])).toBe('')
   })
 
+  it('Rule 6a exempts matched customAssemblies from outdoor/weatherproof auto-escalation (T013 fix 2026-05-21)', async () => {
+    // The 21 May n8n sweep caught Rule 6a auto-escalating on "outdoor
+    // weatherproof power point" before the customAssembly's MUST-ASK
+    // questions could be asked. The exemption now lives in the static
+    // SYSTEM_PROMPT (Rule 6a), not the per-call customServicesDirective.
+    const { SYSTEM_PROMPT } = await import('./dialog')
+    expect(SYSTEM_PROMPT).toMatch(/MATCHED-CUSTOMASSEMBLY EXEMPTION/i)
+    // The whole point of the exemption:
+    expect(SYSTEM_PROMPT).toMatch(/is NOT an escalation trigger/i)
+    expect(SYSTEM_PROMPT).toContain('"Outdoor / weatherproof"')
+    // Concrete example named so the model can pattern-match:
+    expect(SYSTEM_PROMPT).toMatch(/Install outdoor IP-rated GPO/i)
+    // The exemption must defer to the MATCHED row's questions, not bypass
+    // them entirely — the answer to those questions may still justify
+    // escalation.
+    expect(SYSTEM_PROMPT).toMatch(/Only the answer to those[\s\S]+mandated questions can justify the escalation/i)
+    // The pre-existing Rule 6a escalation triggers must still apply to
+    // generic GPO requests (no matched customAssembly).
+    expect(SYSTEM_PROMPT).toMatch(/no power nearby/i)
+    expect(SYSTEM_PROMPT).toMatch(/new\/dedicated[\s\S]*?circuit/i)
+  })
+
   it('HARD RULE override forbids escalate_inspection while MUST-ASK is pending (Cluster B fix 2026-05-20)', () => {
     // The sweep on 2026-05-20 showed the agent jumping straight to $199
     // inspection for EV charger / oven_cooktop / outdoor GPO / leak

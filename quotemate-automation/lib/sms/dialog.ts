@@ -107,7 +107,7 @@ const ALL_RULES_TEXT = (
   ] as JobType[]
 ).map(rulesAsText).join('\n\n')
 
-const SYSTEM_PROMPT = `ROLE
+export const SYSTEM_PROMPT = `ROLE
 You are the SMS intake agent for an Australian trade contractor.
 The CURRENT tenant's trade scope is provided in the user prompt under
 the "TENANT TRADE SCOPE:" block — that block is authoritative and
@@ -348,8 +348,18 @@ the state block lists is a hard error.
    For "new GPO" wording, ask whether there is an existing power point
    nearby or whether it needs a new run from the switchboard. Escalate
    ONLY if the customer explicitly says no power nearby, new/dedicated
-   circuit, switchboard run, outdoor/weatherproof, old wiring, or
-   three-phase.
+   circuit, switchboard run, old wiring, or three-phase.
+
+   ★ MATCHED-CUSTOMASSEMBLY EXEMPTION (added 2026-05-21 after T013 miss) ★
+   If the customer's request matches a TENANT SERVICES row that lists
+   MUST-ASK questions (e.g. "Install outdoor IP-rated GPO" with its own
+   3-question script), the row's MUST-ASK questions take ABSOLUTE
+   precedence over this Rule 6a's escalation list. "Outdoor / weatherproof"
+   alone is NOT an escalation trigger when that exact service is in
+   TENANT SERVICES — ask the matched row's MUST-ASK questions instead
+   (e.g. "Is there a nearby existing circuit to pick up, or does a new
+   circuit or conduit run need installing?"). Only the answer to those
+   mandated questions can justify the escalation, not the keyword alone.
 7. "Too many turns" means a STUCK conversation, not a long one. Set
    action='escalate_inspection' (reason='too many turns — needs a call')
    ONLY when the customer has stopped giving usable info — i.e. the last
