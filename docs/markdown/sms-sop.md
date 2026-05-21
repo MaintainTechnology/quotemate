@@ -698,7 +698,7 @@ The agent reads the full conversation history and decides one of: `ask`, `finish
     - action = 'escalate_inspection' when any inspection trigger fires OR
       job type is outside the easy 5 OR turn cap exceeded. Reply with:
       "Thanks — for that I'll need to send a sparky for a quick look. Want me
-       to text you a $199 inspection booking?" Set ready_for_intake = false.
+       to text you a $99 inspection booking?" Set ready_for_intake = false.
 
     OUTPUT FORMAT
     You MUST return JSON matching the TurnDecisionSchema. The schema is enforced
@@ -1346,7 +1346,7 @@ Text again (a fresh conversation — wait until the previous one shows `status: 
 
 Expected within ~5 seconds:
 
--   You receive a reply like _"Thanks — for that I'll need to send a sparky for a quick look. Want me to text you a $199 inspection booking?"_
+-   You receive a reply like _"Thanks — for that I'll need to send a sparky for a quick look. Want me to text you a $99 inspection booking?"_
 -   `sms_conversations` row has `status: done`, no `intake_id`
 -   **No** new row in `intakes` or `quotes` — the agent escalated rather than auto-quoting
 

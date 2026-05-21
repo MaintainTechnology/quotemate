@@ -4,7 +4,7 @@
 **Save as:** *QuoteMate Voice Test*.
 **Wait for the AI ("Jon") to greet you, then read your line.**
 
-After every call you'll get an SMS — either a 3-tier quote with payment links, or a $199 site-visit booking. Don't tap the Stripe links.
+After every call you'll get an SMS — either a 3-tier quote with payment links, or a $99 site-visit booking. Don't tap the Stripe links.
 
 ---
 
@@ -40,16 +40,16 @@ After every call you'll get an SMS — either a 3-tier quote with payment links,
 
 **Should happen:**
 - Jon says something like *"switchboard work needs a sparky on-site to price safely"*
-- After hangup → SMS with **one $199 site-visit link** (NOT 3 prices)
+- After hangup → SMS with **one $99 site-visit link** (NOT 3 prices)
 
-**FAIL if:** Jon gives a price · Jon offers Good/Better/Best · No $199 link arrives
+**FAIL if:** Jon gives a price · Jon offers Good/Better/Best · No $99 link arrives
 
 **Other versions to try (one per call):**
 - *"Need an EV charger installed at home"*
 - *"My breakers keep tripping, can you give me a price?"*
 - *"My house needs rewiring"*
 
-All should result in the $199 inspection SMS, not a 3-tier quote.
+All should result in the $99 inspection SMS, not a 3-tier quote.
 
 ---
 
@@ -69,7 +69,7 @@ All should result in the $199 inspection SMS, not a 3-tier quote.
 - After that he only asks for name + suburb (phone is from caller ID — he won't ask for it)
 - He doesn't ask about brand, model, quantity, etc.
 - Call ends in under 90 seconds with a line like *"[tradie] will call you back within 15 minutes"*
-- After hangup → SMS with $199 inspection link
+- After hangup → SMS with $99 inspection link
 
 **FAIL if:** Jon tries to scope a quote · Jon asks brand/model/quantity questions · Jon never tells you to switch off the main switch · Call drags past 2 minutes
 

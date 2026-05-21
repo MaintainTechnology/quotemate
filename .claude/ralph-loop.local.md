@@ -1,10 +1,10 @@
 ---
 active: true
 iteration: 1
-session_id: ef0b4c81-2c96-40f0-bb63-68cd7bce4d89
+session_id: f3ccae63-e257-42a7-99ca-42454f7ed0de
 max_iterations: 0
-completion_promise: "All"
-started_at: "2026-05-20T08:45:55Z"
+completion_promise: "All tests pass"
+started_at: "2026-05-21T03:45:32Z"
 ---
 
-Hard test the QuoteMate SMS AI agent against all 43 services in the database using the existing n8n workflow t3Hu6NyvxiXvLOD4. For each service trigger the harness with a customer style prompt mentioning that service, capture the agent reply via Supabase sms_messages query, and evaluate service recognition, mandated question coverage, and routing. Plan and report mode, do not auto commit. Canary first then full sweep. tests pass
+Build Phase A per-tenant early-booking discount for QuoteMate whole-job discount with per-tenant config. Steps: strategy.md v7 entry, pricing_book.overlays early_bird config, pure early-bird module plus tests, migration 041 plus runner, stamp offer at quote creation, apply discount server-side in the book API, re-issue discounted Stripe Session, adjust displayed whole-job total and balance and tradie notification, countdown prompt on quote page, dashboard config UI. Grounding validator untouched.

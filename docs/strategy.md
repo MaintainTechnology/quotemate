@@ -691,4 +691,118 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
 
   - RLS Phase 1 has now SHIPPED as migration 040 between v6 and v7 — v6 line 597 says "Phase 1 plan written this iteration" but the apply followed. Phase 2 tenant-scoped policies still outstanding (v7 is out of scope for them).
 
+- **v8** (2026-05-21): **dynamic pricing — per-tenant early-booking discount (Phase A).**
+
+  **Why this entry exists:**
+
+  Jon asked, reviewing the booking flow, for an Uber-style pricing lever:
+
+  > "How do you bring up a prompt a bit earlier to say, hey, if you book it in today, you'll get a discount. Or if you book it in today, I can honor this price."
+  > "Some type of concept of dynamic pricing. Like Uber — if I'm free and available on a couple of these prices, these areas, maybe you could apply a 10% discount."
+
+  This introduces a **new pricing concept** not in the §"decisions" table — a promotional discount applied to a drafted quote. Per CLAUDE.md, a money-touching concept change requires an iteration entry before code. This records the decision, the deliberate scope split, and the guardrails.
+
+  **The split — what ships now (Phase A) vs later (Phase B):**
+
+  - **Phase A — early-booking discount (this iteration).** A deterministic, per-tenant % discount with a deadline. The tradie configures `{ enabled, discount_pct, window_hours }`; every drafted quote is stamped with an offer (`quotes.early_bird_discount_pct` + `early_bird_expires_at`). The quote page advertises a countdown ("book by <time> → save X%"); the discount is *realised* server-side at the booking choke-point (`POST /api/q/[token]/book`) when the customer commits a time before expiry, and a fresh discounted Stripe Checkout Session is re-issued for the deposit.
+  - **Phase B — availability-derived dynamic pricing (deferred).** The true Uber-surge model ("if I'm free in these areas") needs two things QuoteMate does not have: a real two-way calendar integration (today `tradies.available_slots` is a flat ISO-timestamp array; `GOOGLE_BOOKING_URL` is an off-platform link with no callback) and geographic zones. Deferred until calendar sync exists. A crude per-day proxy (discount days with many open slots) is possible earlier but is explicitly **not** in Phase A.
+
+  **Decisions locked with the operator (Anant), 2026-05-21:**
+
+  | Decision | Choice |
+  |---|---|
+  | What the discount reduces | **The whole job total** (deposit + balance both drop) — a real incentive, not just a cashflow nudge. Consequence: it eats tradie margin, so it is capped (below). |
+  | First-build scope | **Phase A only.** No per-slot/availability pricing. |
+  | Who configures it | **Per-tenant.** Config lives in `pricing_book.overlays.early_bird` jsonb (no schema change for config); editable in the dashboard Pricing tab. |
+
+  **Guardrails (non-negotiable):**
+
+  - **Margin cap.** `discount_pct` is clamped to a hard platform maximum of **15%** in the pure module (`MAX_EARLY_BIRD_DISCOUNT_PCT`). Plumbing books run 15–20% markup ([[project_plumbing_routing_rules]]); an uncapped discount could sell below cost. A misconfigured overlay can never exceed the cap.
+  - **Grounding validator untouched.** The `good/better/best` jsonb line items stay catalogue-derived. The discount is a **separate quote-level field** (`applied_discount_pct`), applied only at the display + Stripe layer. `lib/estimate/validate.ts` is not modified and never sees a discounted line item — the strict-grounding rule is preserved.
+  - **Server-side evaluation.** The discount is decided from the DB-stamped `early_bird_expires_at`, never from a client-passed value. The book route is the single apply point.
+  - **Graceful degradation.** New `quotes` columns land via migration 044; until applied, the offer is stamped via a best-effort post-insert update (same pattern as `booking_state`) so quote creation never fails on a missing column. Zero-config tenants (no `early_bird` overlay, or `enabled:false`) behave exactly as v7 — no banner, no discount.
+
+  **Schema:** migration 044 — `quotes.early_bird_discount_pct`, `quotes.early_bird_expires_at`, `quotes.applied_discount_pct` (default 0), `quotes.applied_discount_at`. Config (`pricing_book.overlays.early_bird`) needs no migration — `overlays` jsonb already exists.
+
+  **What's confirmed unchanged from v7:**
+
+  - 4-agent architecture, strict-grounding rule, G/B/B framing, paid-inspection fallback.
+  - Electrical + plumbing remain the boundary — no third trade.
+  - Book-first / pay-last funnel order (WP6) is unchanged; the discount is applied within it, not by reordering it.
+
+  **Trigger for the next iteration:**
+
+  - Google Calendar two-way sync ships → Phase B (availability-derived pricing + geographic zones) becomes buildable; record it as its own entry.
+  - A tradie sets a discount that needs to exceed 15% → revisit the cap with a cost-floor check against assembly cost rather than a flat ceiling.
+  - Stripe Connect Express ships → record how the discount interacts with the platform-fee split (the discount reduces the charge and should reduce the fee proportionally).
+
+- **v9** (2026-05-21): **trades-as-data — admin bulk loader, no-code industry expansion.**
+
+  **Why this entry exists:**
+
+  Every iteration v5→v8 repeated the same line: "electrical + plumbing are the boundary — a third trade requires a new entry." v5's own trigger list spelled out the exit condition: *"Third trade gets pitched → stop bolting trades on per-pilot and refactor to a trade-registry pattern."* That trigger has now fired. The operator wants QuoteMate to expand into carpentry, garden cleaning, swimming-pool cleaning and more — **added in bulk, by a non-developer, through an admin dashboard, not hand-wired in code per trade.**
+
+  This entry **is** the authorization to cross the electrical+plumbing boundary. It supersedes that boundary line in v5/v6/v7/v8, and it supersedes v7's deferral of "Phase 5 — bulk CSV import" (v7 "out of scope" list): bulk loading is now the *mechanism* for growth, not a nice-to-have.
+
+  **The decision: trades become data, not code.**
+
+  Today `trade` is a hardcoded `'electrical' | 'plumbing'` string — enforced by ~5 DB CHECK constraints (migrations 028/031/041) and assumed in ~10 code locations: the estimator prompt router (`lib/estimate/prompt.ts`), `deriveTradeFromJobType()`, the SMS `job_type` enum, the grounding validator's `Category` set, the Vapi assistant prompt, `defaultsForTrade()`, `LICENCE_BODIES`. v9 makes `trade` a row in a new `trades` registry table. Adding a trade becomes a data operation; the boundary moves from "2 hardcoded trades" to "N admin-loaded trades."
+
+  **The two-capability split (non-negotiable):**
+
+  - **Capability 1 — bulk-add services to an EXISTING trade.** Low risk. Services are already data (`clarifying_questions`, `category`, pricing columns); the SMS/Voice agents read them straight from the row. Proven safe in the 2026-05-21 n8n adversarial sweep — a service the `job_type` classifier doesn't recognise still works via the `customAssemblies` path.
+  - **Capability 2 — add a NEW trade.** High risk. Needs the Phase 0 foundation first; a CSV alone cannot do it (the DB CHECK constraints reject the row). Building these two as one feature is how the system gets destroyed — they ship as separate phases.
+
+  **The feature:** an admin-only dashboard that ingests a Services CSV + a Supplier Catalogue CSV (+ a trade-defaults block for a new trade), runs structural-then-row validation, shows a preview diff, allows manual single-row adds (CTA buttons) for anything missed, then a single **Approve** wires it in behind a grounding smoke-test. A detailed build spec (exact CSV→column maps, validation rules) is to be filed under `docs/` before Phase 0 starts.
+
+  **Decisions locked with the operator, 2026-05-21:**
+
+  | Decision | Choice |
+  |---|---|
+  | Who adds trades/services | A non-developer admin, via CSV + Approve. No code, no re-wire. |
+  | Capability ordering | Existing-trade bulk-add first (safe), new-trade second (after foundation). |
+  | Manual add | A single-service "Add" CTA on the review screen, for anything missed in the CSV; joins the same batch + validation. |
+  | Access | Admin-only, behind a real server-side admin role. |
+
+  **Guardrails (non-negotiable — this is the "without destroying the system" requirement):**
+
+  - **Opt-in by default.** Every bulk-uploaded service lands `default_enabled = false`. Approve can never silently change a live tradie's SMS/Voice behaviour; default-on is a separate deliberate per-service action.
+  - **Grounding-category guard.** Every service's `category` is validated against the controlled vocabulary (v7 already shipped `lib/estimate/categories.ts` as the single source of truth, drift-guarded by `categories.test.ts`). A new trade's new categories must be registered first. An unknown category silently drops quotes to the paid-inspection fallback — so it is rejected at upload, never at quote time.
+  - **Pricing-semantics guard.** The service-fee CSV column is the sundries portion ex-GST only (not product, not labour). The preview shows a **computed sample quote** per row so a wrong-but-groundable price is caught by a human, not by a customer.
+  - **Smoke-test gate.** Each new service is drafted into a sample quote on Approve; it must ground (not fall to inspection) and render its mandated questions before going live. Failures are held back, not shipped.
+  - **Strict-grounding rule untouched.** `lib/estimate/validate.ts` is not modified; money still flows only through catalogue-derived line items.
+  - **Audit + one-click rollback** via an `import_batches` record holding the before-values of every updated row.
+  - **Vapi re-provision is tenant-triggered** (at trade activation on the Account tab), never by Approve.
+
+  **Phased delivery plan** (foundation migrations nominal 045+; backfill actual numbers on apply, per the v7 lesson):
+
+  | # | Phase | New schema | Money-path | Exit gate |
+  |---|---|---|---|---|
+  | 0 | Foundation: `trades`, `categories`, `trade_pricing_defaults`, `import_batches` tables; swap the `trade` CHECK constraints for FKs; backfill electrical/plumbing + existing categories; add a server-side admin role | yes (schema) | no | existing electrical/plumbing quotes byte-identical; SMS parity sweep green |
+  | 1 | Capability 1 — admin loader scoped to existing trades: upload, structural+row validation, preview diff, manual-add CTA, Approve, smoke-test, audit/rollback | none | indirect | bulk-add 5 test services, verify via SMS sweep, roll the batch back cleanly |
+  | 2 | Capability 2 — new trades: data-composable estimator prompt, trade-defaults wiring, new-trade activation + tenant Vapi re-provision | none | yes | a real new trade quotes correctly end-to-end and the Voice agent speaks it |
+  | 3 | Supplier Catalogue CSV loader — extends v7 Phase 2a (`supplier_catalogue`, migrations 041/042) | none | no (browse-only) | can run parallel to Phase 1 |
+
+  Each phase is independently shippable; abandoning v9 mid-delivery never leaves the system worse than v8. Never start Phase 1 before Phase 0's exit gate is green.
+
+  **What's confirmed unchanged from v8:**
+
+  - 4-agent architecture, strict-grounding rule, G/B/B framing, paid-inspection fallback.
+  - Auto-send Path B (v6), book-first funnel (WP6), early-booking discount (v8) — all unchanged.
+  - Tenant-owned data stays physically partitioned in `tenant_*` tables; the `trades` registry and `categories` are new *global* tables.
+
+  **What's OUT of scope for v9:**
+
+  - **Trade-specific structured intake fields.** A new trade reuses the generic intake schema; richer per-trade structured fields (the kind plumbing still lacks per v5) are a later iteration.
+  - **Self-serve trade creation by tradies.** v9 is admin-only — tradies *activate* a trade and toggle its services, they do not create trades. Tradie-created trades are a different security model and need their own entry.
+  - **Licensed supplier feeds** — supplier catalogue stays hand-curated per v7.
+  - **Stripe Connect Express, RLS Phase 2, the eval framework** — still owed from prior iterations; v9 does not touch them.
+
+  **Trigger for the next iteration:**
+
+  - First real new trade ships end-to-end → backfill the actual migration numbers and note any scope deviation in this entry.
+  - A new trade needs trade-specific structured intake fields → record an intake-schema-per-trade entry.
+  - Tradies ask to self-create trades → that is a different security model; its own entry.
+  - Phase 0 changes how `category` is stored → reconcile with v7's `lib/estimate/categories.ts` single-source-of-truth note so the two don't drift.
+
 - *Future iterations:* drill into specific phases (eval rubric details, onboarding flow design, hipages partnership terms, voice tier economics, full multi-tenancy refactor).

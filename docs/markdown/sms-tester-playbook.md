@@ -1,6 +1,6 @@
 # QuoteMate SMS AI Receptionist — Tester Playbook
 
-> **What you're testing:** an AI text-message receptionist for an Australian electrical contractor. You text in like a real customer wanting a quote. The AI replies, asks follow-up questions, and either drafts a 3-tier quote or books you in for a $199 site inspection.
+> **What you're testing:** an AI text-message receptionist for an Australian electrical contractor. You text in like a real customer wanting a quote. The AI replies, asks follow-up questions, and either drafts a 3-tier quote or books you in for a $99 site inspection.
 >
 > **Your job:** play 5 different customer scenarios end-to-end, then send us a short report on each.
 
@@ -23,7 +23,7 @@
 **You'll receive 1–3 SMSes per scenario:**
 1. Reply messages from the AI as you chat back and forth
 2. (Sometimes) a separate "send us a photo" link
-3. The final outcome — either a **quote** with 3 prices and Stripe payment links, OR an **inspection booking** with a $199 link
+3. The final outcome — either a **quote** with 3 prices and Stripe payment links, OR an **inspection booking** with a $99 link
 
 You don't need to actually pay anything. Don't tap the Stripe links unless we ask you to.
 
@@ -92,7 +92,7 @@ You don't need to actually pay anything. Don't tap the Stripe links unless we as
 ### What you should see
 
 - The AI's **very first reply** should explain that switchboard work needs an electrician on-site to price safely
-- It should offer a **$199 site visit** booking
+- It should offer a **$99 site visit** booking
 - It should send you a **single SMS with one Stripe link** — not 3 prices
 - The conversation should close after that one reply (the AI shouldn't keep asking you questions)
 
@@ -110,7 +110,7 @@ All of these should trigger an inspection booking, **not** a 3-tier quote.
 - AI tries to give you a price for any of these
 - AI asks lots of follow-up questions before offering the site visit
 - AI offers the 3-tier Good/Better/Best format
-- The $199 inspection link doesn't arrive
+- The $99 inspection link doesn't arrive
 - AI says "I can't help" without offering the inspection alternative
 
 ---
@@ -127,10 +127,10 @@ All of these should trigger an inspection booking, **not** a 3-tier quote.
 
 ### What you should see
 
-- AI's first reply opens with the standard greeting (*"G'day, thanks for messaging QuoteMate — I'm the AI quoting assistant…"*) and immediately escalates to the **$199 site visit** booking offer — something like *"For that I'll need to send a sparky for a quick look. Want me to text you a $199 inspection booking?"*
+- AI's first reply opens with the standard greeting (*"G'day, thanks for messaging QuoteMate — I'm the AI quoting assistant…"*) and immediately escalates to the **$99 site visit** booking offer — something like *"For that I'll need to send a sparky for a quick look. Want me to text you a $99 inspection booking?"*
 - **Note (deliberate):** the SMS agent does NOT tell you to switch off circuits or give safety instructions — that advice belongs in the voice channel where a real-time conversation can verify it's safe. SMS is text-only, so the agent's job is purely to escalate to a same-day inspection.
 - No follow-up questions about quantity, brand, suburb, etc. on the danger turn
-- Once you reply *"yes"* to the inspection offer, you receive the $199 booking link
+- Once you reply *"yes"* to the inspection offer, you receive the $99 booking link
 - The conversation closes within 1–2 inbound turns
 
 ### Try these variations
@@ -144,7 +144,7 @@ All of these should trigger an inspection booking, **not** a 3-tier quote.
 
 - ⚠️ AI tries to quote downlight replacement when you mention sparks
 - ⚠️ AI asks follow-up questions ("how many power points are affected?") instead of escalating
-- ⚠️ AI doesn't escalate to the $199 inspection on the first reply
+- ⚠️ AI doesn't escalate to the $99 inspection on the first reply
 - ⚠️ AI takes more than 2 inbound turns to offer the inspection booking link
 
 ---
@@ -208,7 +208,7 @@ Once the AI redirects you, pretend you actually do need something — pick any o
 - AI plays along with off-topic chat for multiple turns
 - AI promises *"mates rates"*, *"discount for cash"*, etc.
 - AI quotes its own rules back at you
-- AI gives up and just says *"book a $199 inspection"* when you have a normal easy job
+- AI gives up and just says *"book a $99 inspection"* when you have a normal easy job
 - AI gives an actual price during the chat instead of in the final quote SMS
 
 ---

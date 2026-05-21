@@ -533,7 +533,7 @@ This is what the tradie's review dashboard will call when they approve a quote. 
 
           {quote.needs_inspection && (
             <div className="mb-8 p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-sm">
-              <strong>These prices are indicative.</strong> A $199 site inspection is required to confirm scope and lock in a fixed price. The site fee is fully refunded automatically when you accept the resulting quote.
+              <strong>These prices are indicative.</strong> A $99 site inspection is required to confirm scope and lock in a fixed price. The site fee is fully refunded automatically when you accept the resulting quote.
             </div>
           )}
 
@@ -1127,7 +1127,7 @@ Re-run the V.3 simulator from Stages 01–05 SOP (burning smell + EV charger). T
 -   Have `routing_decision = 'inspection_required'`
 -   Have `needs_inspection = true`
 -   Show indicative ranges (no fixed line items) on the customer portal
--   Display the amber "$199 inspection fee" callout above the accept form
+-   Display the amber "$99 inspection fee" callout above the accept form
 
 Done check — Pipeline complete
 

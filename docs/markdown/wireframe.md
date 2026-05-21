@@ -60,7 +60,7 @@ The Win
 
 More jobs, fewer unpaid hours.
 
-Tradies reclaim evenings, win more quotes (faster + more professional), stop driving to free site visits (the $199 fee filters tire-kickers), and look like a premium business — which lets them charge accordingly. For most, one extra job a month covers the subscription.
+Tradies reclaim evenings, win more quotes (faster + more professional), stop driving to free site visits (the $99 fee filters tire-kickers), and look like a premium business — which lets them charge accordingly. For most, one extra job a month covers the subscription.
 
 $99/mo + 1% on deposits · ~$199 ARPU · 95% gross margin
 
@@ -195,7 +195,7 @@ Lower / Complex
 Paid Site Inspection
 
 -   Indicative estimate first
--   $199 inspection fee
+-   $99 inspection fee
 -   Refundable on quote accepted
 -   Tradie attends + completes quote
 
@@ -364,7 +364,7 @@ Deposit on accept
 
 PaymentIntent → tradie account → calendar block
 
-$199 inspection fee
+$99 inspection fee
 
 Refunded automatically on job-won
 
@@ -436,7 +436,7 @@ Same nine layers, rendered as a connected diagram. Solid arrows are runtime call
 
 quotemate / v1 / portal-first / electrical-nsw 1280 × 1080
 
-01 / ENTRY CUSTOMER Existing-platform enquiry hipages · Airtasker · referral Direct quote-link click tokenised public URL · no auth TRADIE Mobile portal (PWA) drafts · review · approve · send On-site capture voice memo + photo prompts 02 / APPLICATION · NEXT.JS ON VERCEL VERCEL BOUNDARY · App Router · Server Actions · Edge Customer quote view /q/\[token\] · public · mobile-first Good · Better · Best accept + deposit (Stripe Element) Tradie portal /app · auth · mobile-first intake · review · send · calendar operates all 4 agents below 03 / AI AGENT LAYER (THE FOUR) · sequential left → right ① QUOTE DRAFTER Drafts scope, line items, three options, exclusions Model · Claude Opus 4.7 Tools · lookup\_assembly, lookup\_material, markup, flag\_inspection Reads · pricing book + 5 similar past quotes (RAG) ~$0.05 / quote (cached) ② QUOTE REVIEWER Surfaces draft to tradie with "check this" annotations Model · Haiku (annotations) Sonnet (cover note) Output · approved quote + customer portal page + react-pdf document v1: human-in-loop · no auto-send ③ INSPECTION COORD. Paid site visit + on-site capture + post-acceptance State · pending · paid · scheduled on-site · completed · refunded Captures · voice memo, photos, measurements + risks Conditional · only when complex $199 fee · refundable on win ④ CONVERSION ENGINE Availability nudges + SMS follow-up sequence Cadence · Day 1 · Day 3 · Day 7 Triggers · time + state + calendar Pause · on customer reply Backed by · Vercel Workflow Output · SMS via Twilio durable · survives restarts BACKEND SERVICE BUS · routed via App Router server actions 04 / LLM 05 / DATA 06 / PAYMENTS 07 / COMMS LLM INFRASTRUCTURE Vercel AI Gateway failover · cost tracking Claude Opus 4.7 heavy reasoning · vision Claude Haiku 4.5 routing · annotations · SMS prompt cache · > 90% hit rate DATA PLANE · SUPABASE Postgres + RLS organizations · pricing\_books quotes · line\_items · inspections pgvector RAG over similar past quotes Storage photos · branding · PDFs Auth · magic link tradies only PAYMENTS · STRIPE AU Stripe Connect Express per-tradie account · platform fee Deposit on accept ~20% · webhook → calendar $199 inspection fee refunded automatically on win Stripe Tax (GST) 10% · per-tradie ABN COMMUNICATIONS Twilio (AU long codes) photo links · follow-ups · status Resend quote delivery · receipts Calendar integration Google + iCloud · auto-block Stripe webhooks durable retries · Vercel Workflow 08 / OBSERVABILITY & OPS PostHog · Sentry · Eval harness · Vercel Workflow PostHog — funnel + session replay (tradie drop-off) Sentry — error spikes · Stripe webhook failures Eval — 100 hold-out (intake → quote) pairs · 5-dim rubric 09 / DEFERRED · v3+ Vapi voice agent · Deepgram · ElevenLabs · hipages · Xero/MYOB · Bunnings Voice — premium tier @ $299/mo (per-call cost destroys $99/mo SaaS pricing) hipages — direct enquiry-to-quote handoff (v3 partnership) Trade expansion — landscaping + carpentry (Phase 4) · plumb/elec (v3) view + accept login · review intake submit · server action publish quote ↓ tool-use ↓ RAG · CRUD ↓ charge · refund ↓ SMS · email LEGEND runtime call conditional / async service bus AI agent LLM data payments comms customer tradie deferred (v3) Vercel Each agent column (1–4) stacks above its primary backend service. The grey bus represents server-action routing — every agent can call every backend service.
+01 / ENTRY CUSTOMER Existing-platform enquiry hipages · Airtasker · referral Direct quote-link click tokenised public URL · no auth TRADIE Mobile portal (PWA) drafts · review · approve · send On-site capture voice memo + photo prompts 02 / APPLICATION · NEXT.JS ON VERCEL VERCEL BOUNDARY · App Router · Server Actions · Edge Customer quote view /q/\[token\] · public · mobile-first Good · Better · Best accept + deposit (Stripe Element) Tradie portal /app · auth · mobile-first intake · review · send · calendar operates all 4 agents below 03 / AI AGENT LAYER (THE FOUR) · sequential left → right ① QUOTE DRAFTER Drafts scope, line items, three options, exclusions Model · Claude Opus 4.7 Tools · lookup\_assembly, lookup\_material, markup, flag\_inspection Reads · pricing book + 5 similar past quotes (RAG) ~$0.05 / quote (cached) ② QUOTE REVIEWER Surfaces draft to tradie with "check this" annotations Model · Haiku (annotations) Sonnet (cover note) Output · approved quote + customer portal page + react-pdf document v1: human-in-loop · no auto-send ③ INSPECTION COORD. Paid site visit + on-site capture + post-acceptance State · pending · paid · scheduled on-site · completed · refunded Captures · voice memo, photos, measurements + risks Conditional · only when complex $99 fee · refundable on win ④ CONVERSION ENGINE Availability nudges + SMS follow-up sequence Cadence · Day 1 · Day 3 · Day 7 Triggers · time + state + calendar Pause · on customer reply Backed by · Vercel Workflow Output · SMS via Twilio durable · survives restarts BACKEND SERVICE BUS · routed via App Router server actions 04 / LLM 05 / DATA 06 / PAYMENTS 07 / COMMS LLM INFRASTRUCTURE Vercel AI Gateway failover · cost tracking Claude Opus 4.7 heavy reasoning · vision Claude Haiku 4.5 routing · annotations · SMS prompt cache · > 90% hit rate DATA PLANE · SUPABASE Postgres + RLS organizations · pricing\_books quotes · line\_items · inspections pgvector RAG over similar past quotes Storage photos · branding · PDFs Auth · magic link tradies only PAYMENTS · STRIPE AU Stripe Connect Express per-tradie account · platform fee Deposit on accept ~20% · webhook → calendar $99 inspection fee refunded automatically on win Stripe Tax (GST) 10% · per-tradie ABN COMMUNICATIONS Twilio (AU long codes) photo links · follow-ups · status Resend quote delivery · receipts Calendar integration Google + iCloud · auto-block Stripe webhooks durable retries · Vercel Workflow 08 / OBSERVABILITY & OPS PostHog · Sentry · Eval harness · Vercel Workflow PostHog — funnel + session replay (tradie drop-off) Sentry — error spikes · Stripe webhook failures Eval — 100 hold-out (intake → quote) pairs · 5-dim rubric 09 / DEFERRED · v3+ Vapi voice agent · Deepgram · ElevenLabs · hipages · Xero/MYOB · Bunnings Voice — premium tier @ $299/mo (per-call cost destroys $99/mo SaaS pricing) hipages — direct enquiry-to-quote handoff (v3 partnership) Trade expansion — landscaping + carpentry (Phase 4) · plumb/elec (v3) view + accept login · review intake submit · server action publish quote ↓ tool-use ↓ RAG · CRUD ↓ charge · refund ↓ SMS · email LEGEND runtime call conditional / async service bus AI agent LLM data payments comms customer tradie deferred (v3) Vercel Each agent column (1–4) stacks above its primary backend service. The grey bus represents server-action routing — every agent can call every backend service.
 
 ## Key flows, called out.
 
@@ -457,10 +457,10 @@ Tradie → AI draft → customer accept
 Complex job → paid site visit → re-draft
 
 -   Drafter calls flag\_inspection → routes to Coordinator
--   Customer pays $199 (Stripe Connect) → slot booked
+-   Customer pays $99 (Stripe Connect) → slot booked
 -   On-site: tradie speaks notes, snaps prompted photos
 -   Sonnet vision structures the capture → re-runs Drafter
--   On accept: $199 auto-refunded, deposit replaces it
+-   On accept: $99 auto-refunded, deposit replaces it
 
 03 / FOLLOW-UP SEQUENCE
 
@@ -647,7 +647,7 @@ Tradies waste hours driving to free site visits. Customers haven't paid for a qu
 
 The Solution
 
-$199 fee filters tire-kickers; refundable on win positions it as low-risk. State machine handles booking → payment → on-site → re-quote → refund. On-site mobile UX is voice-memo + prompted photos (one tap each). Re-runs the Estimation Agent with on-site data.
+$99 fee filters tire-kickers; refundable on win positions it as low-risk. State machine handles booking → payment → on-site → re-quote → refund. On-site mobile UX is voice-memo + prompted photos (one tap each). Re-runs the Estimation Agent with on-site data.
 
 Tools
 

@@ -82,7 +82,7 @@
 | Skill | Used for |
 |---|---|
 | `anthropic-skills:xlsx` | Parsing tradies' uploaded pricing CSVs/XLSX (Xero/MYOB exports) for the pricing-book overlay |
-| `vercel:workflow` | Durable workflows for inspection coordination — booking, $199 payment, on-site capture, refund-on-accept |
+| `vercel:workflow` | Durable workflows for inspection coordination — booking, $99 payment, on-site capture, refund-on-accept |
 | `vercel:runtime-cache` | Caching assembly library lookups (per-trade base library + per-tradie overlays) |
 | `vercel:next-cache-components` | Cache strategy for the customer-facing quote portal (PPR + `use cache`) |
 | `vercel:vercel-storage` | Blob storage for intake + inspection photos |

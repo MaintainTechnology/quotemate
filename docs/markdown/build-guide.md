@@ -85,14 +85,14 @@ Inspection-only routes · hard 5
 4.  Underground cabling _(classified as `renovation` in the schema)_
 5.  Complex renovations (multi-trade / mains)
 
-Hidden state can't be photographed. Surface as indicative range only and trigger the $199 paid site visit. Note: the `job_type` Zod enum has 11 values; underground cabling is folded into `renovation` at classification time, then surfaces with its own risk flag at intake.
+Hidden state can't be photographed. Surface as indicative range only and trigger the $99 paid site visit. Note: the `job_type` Zod enum has 11 values; underground cabling is folded into `renovation` at classification time, then surfaces with its own risk flag at intake.
 
 Why split this way
 
 -   **Photos plus structured Q&A are sufficient** for the easy 5 — the customer can show "the area" and the AI can ask the 6–8 questions that bound the job
 -   **Hidden state can't be photographed** for the hard 5 — switchboard internals, cable runs in walls, fault root cause, EV load on existing supply
 -   **Australian Consumer Law** treats accepted quotes as binding contracts. Auto-quoting safety-critical work that turns out wrong creates personal liability for the licensed electrician
--   **The $199 inspection fee** filters tire-kickers AND pays for the trip when the job doesn't convert — turns a cost into a revenue line
+-   **The $99 inspection fee** filters tire-kickers AND pays for the trip when the job doesn't convert — turns a cost into a revenue line
 
 The 9 detailed job-flow question trees and Good / Better / Best logic are at the bottom of this page — see [Job Flow Library](#job-flow-library). They feed directly into the Vapi system prompt's question routing (Step 6) and the Estimator's lookup logic (Step 8).
 
@@ -1267,7 +1267,7 @@ Tools used
       best   = { label: "Indicative · full scope",    line_items: [],
                  subtotal_ex_gst: <range_high>, timeframe: "Subject to inspection" }
       needs_inspection: true
-      inspection_reason: customer-friendly explanation referencing the $199 site fee
+      inspection_reason: customer-friendly explanation referencing the $99 site fee
       assumptions: list what we'd verify on-site
       scope_of_works: high-level description; mark as INDICATIVE
 
@@ -1789,7 +1789,7 @@ You now have the full automation backbone — phone rings, AI converses, intake 
 
 -   Stage 06
 
-    Workflow Decision · Confidence-Based Routing A rule layer that decides what happens to the draft: auto-send to customer (HIGH confidence), tradie review then send (MEDIUM), or trigger a paid $199 site inspection (LOW).
+    Workflow Decision · Confidence-Based Routing A rule layer that decides what happens to the draft: auto-send to customer (HIGH confidence), tradie review then send (MEDIUM), or trigger a paid $99 site inspection (LOW).
 
 -   Stage 07
 

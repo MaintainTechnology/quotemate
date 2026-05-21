@@ -40,7 +40,7 @@ QuoteMate routes every job into one of two paths based on whether the tradie can
 
 **Standard flow** — the AI drafts the quote and sends it to the customer the moment it's ready; the tradie is notified and can edit before acceptance. The customer accepts and pays a deposit through the portal. The flow ends with the job confirmed and on the calendar.
 
-**Inspection flow** — when remote scoping isn't enough, the tradie creates a paid site-visit request. The customer pays a $199 inspection fee (refundable on accepted quote), the tradie attends in person, then completes the full quote in QuoteMate before rejoining the standard send/accept/deposit path.
+**Inspection flow** — when remote scoping isn't enough, the tradie creates a paid site-visit request. The customer pays a $99 inspection fee (refundable on accepted quote), the tradie attends in person, then completes the full quote in QuoteMate before rejoining the standard send/accept/deposit path.
 
 The full flow is mapped here:
 
@@ -65,7 +65,7 @@ Estimation Engine    → scope of works + labour + materials + risks
    ↓
 Confidence-based routing
    ├─ HIGH/MED: quote auto-sent to customer; tradie notified to review
-   └─ LOW:      paid $199 site-visit triggered instead
+   └─ LOW:      paid $99 site-visit triggered instead
    ↓
 Mobile customer portal (Good / Better / Best + deposit)
    ↓
@@ -81,7 +81,7 @@ Availability nudge → Follow-up engine → Job won → Calendar + CRM
 | **AI receptionist** | Always-answered phone line per tradie; structured job-specific Q&A; SMS photo capture mid-call |
 | **AI quote engine** | Drafts scope, line items, labour, materials, risks from the intake; uses the tradie's own pricing book |
 | **Confidence routing** | Automatically decides whether to auto-quote, ask for tradie review, or trigger a paid inspection |
-| **Paid site-inspection** | $199 refundable fee filters tire-kickers and pays for trips that don't convert |
+| **Paid site-inspection** | $99 refundable fee filters tire-kickers and pays for trips that don't convert |
 | **Mobile customer portal** | Branded, mobile-first quote view with Good / Better / Best and one-tap deposit |
 | **Availability nudge** | "We've had a spot open up this week" — creates urgency on high-intent quotes |
 | **Follow-up engine** | SMS sequence with objection handling on quotes that haven't converted |
@@ -102,7 +102,7 @@ What's actually wired today:
 | Image gen | Google Gemini (quote preview + per-tier sample images) |
 | Voice agent | Vapi (Deepgram STT, ElevenLabs TTS) — **live** |
 | SMS / WhatsApp | Twilio (AU long codes), SMS-first with WhatsApp fallback |
-| Payments | Stripe (test mode); per-tier deposit + $199 inspection. Connect Express: planned |
+| Payments | Stripe (test mode); per-tier deposit + $99 inspection. Connect Express: planned |
 | Email | Resend |
 | Quote document | Mobile HTML page at `/q/[token]` (no PDF in v1) |
 
@@ -114,7 +114,7 @@ Planned but not yet wired: Stripe Connect Express (marketplace fund-split), Post
 
 **Built and running** (as of 2026-05-18). The application lives in [`quotemate-automation/`](quotemate-automation/); the repo root holds planning docs and design assets.
 
-- **Voice and SMS intake are both live end-to-end** — a customer calls or texts a tradie's QuoteMate number, the AI captures the job, Opus drafts a Good/Better/Best quote grounded strictly in that trade's pricing book, and the customer gets a mobile quote page with a Stripe deposit (or a $199 inspection for complex jobs).
+- **Voice and SMS intake are both live end-to-end** — a customer calls or texts a tradie's QuoteMate number, the AI captures the job, Opus drafts a Good/Better/Best quote grounded strictly in that trade's pricing book, and the customer gets a mobile quote page with a Stripe deposit (or a $99 inspection for complex jobs).
 - **Multi-trade is live**: electrical (NSW) and plumbing (QLD) run on the same platform, with 4 pilot tenants active.
 - Current work: self-serve tradie onboarding (auto-provisioned number, pricing book, and AI brand voice per tradie).
 - Production: `quote-mate-rho.vercel.app`. Payments run in Stripe test mode.
@@ -133,7 +133,7 @@ Originally planned as five phases to a paid pilot launch. Where the build actual
 
 | Phase | Focus | Status |
 |---|---|---|
-| **0 — Validate** | Customer interviews, $199 inspection-fee pricing test, pre-sell pilots | Done |
+| **0 — Validate** | Customer interviews, $99 inspection-fee pricing test, pre-sell pilots | Done |
 | **1 — Tradie portal MVP** | Intake, AI quote draft, customer portal, Stripe deposit | Done |
 | **2 — Pricing intelligence + inspection** | Per-trade pricing book, RAG, confidence routing, paid site-visit, Good/Better/Best | Done |
 | **3 — Voice intake** | Vapi receptionist, per-trade prompts, SMS photo capture, post-call draft | Done (shipped earlier than planned) |

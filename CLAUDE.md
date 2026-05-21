@@ -13,7 +13,7 @@ The app is built and the two pilot channels (voice + SMS) are live end-to-end ag
 - **v5 multi-trade is live**: electrical (NSW/NECA) + plumbing (QLD/QBCC) share one DB, routed by `intake.trade`. **4 tenants currently active** (2 electrical-only, 1 plumbing-only, 1 cross-trade — incl. "Pilot Sparky"/"Pilot Plumber" seed tenants). A stub Sparky tenant (no Vapi, zero traffic) was hard-deleted 2026-05-20 via migration 038.
 - **v6 self-serve tradie onboarding is the current work**: `/signup`, `/onboard/*`, `/api/onboard/*`, Twilio/Vapi auto-provisioning (`lib/twilio/provision.ts`, `lib/vapi/provision.ts`), tenant-owned custom assemblies (migration 023). Provisioning flags (`TWILIO_PROVISIONING_ENABLED`, `VAPI_PROVISIONING_ENABLED`) are currently `false` in dev.
 - **Production**: `https://quote-mate-rho.vercel.app` (Vercel, with the SMS-cleanup cron). Repo is also Railway-deployable (`Dockerfile` + `railway.json`, `output: 'standalone'`). Vapi dev webhook runs via ngrok.
-- **Money path is test-mode only**: Stripe test keys; per-tier deposit Checkout + $199 inspection link work, but **Stripe Connect Express is not wired** (`tenants.stripe_connect_account_id` is null for every tenant; `payments` table has 0 rows). Funds-split is still TODO.
+- **Money path is test-mode only**: Stripe test keys; per-tier deposit Checkout + $99 inspection link work, but **Stripe Connect Express is not wired** (`tenants.stripe_connect_account_id` is null for every tenant; `payments` table has 0 rows). Funds-split is still TODO.
 
 ## The decisions that shape the work
 
@@ -22,7 +22,7 @@ Settled after substantive re-evaluation (see iteration history at the end of `do
 | Decision | What it means in practice | Status in the running system |
 |---|---|---|
 | **Portal + SMS + voice intake** | Tradie-typed portal was the v1 wedge; voice and SMS intake were added. | Voice **and** SMS both live. The v3-deferral was contradicted in practice; drift logged in `docs/strategy.md` v6 (2026-05-20). |
-| **Electrical (NSW) + plumbing (QLD)** | Two parallel single-trade pilots. No third trade without a new iteration entry. | Live. `trade` column on `pricing_book`/`shared_assemblies`/`shared_materials`/`intakes`. |
+| **Electrical (NSW) + plumbing (QLD)** | Two parallel single-trade pilots. | Live. `trade` column on `pricing_book`/`shared_assemblies`/`shared_materials`/`intakes`. ⚠ The "no third trade" boundary is **superseded** by `docs/strategy.md` v9 (2026-05-21), which authorizes trades-as-data expansion (carpentry, etc.) via a `trades` registry table + admin CSV loader. v9 is **not yet built** — electrical + plumbing remain the only **live** trades. |
 | **Four agents, not ten** | Quote Drafter, Quote Reviewer, Inspection Coordinator, Conversion Engine. | Drafter (Opus) + grounding validator + confidence router shipped. Reviewer/Conversion partial (tradie-notify, booking); no follow-up sequence yet. |
 | **Build the pricing book WITH the tradie** | Ship base assembly library per trade; capture tradie overlay via onboarding. | `shared_assemblies`/`shared_materials` seeded; per-tenant overlay via `pricing_book.overlays`, `tenant_material_preferences`, `tenant_custom_assemblies`, `tenant_service_offerings`. |
 | **Eval framework before prompt iteration** | 100 hold-out (intake → quote) pairs, 5-dim rubric. | ⚠ **Not built yet.** Prompts iterate without delta measurement. A parity harness (`scripts/test-sms-parity.mjs`, 70 assertions) exists but is not the eval rubric. |
@@ -102,7 +102,7 @@ Key API routes: `/api/vapi/webhook`, `/api/vapi/tools/send-sms-photo-link`, `/ap
 
 ## How the quote pipeline works
 
-`intake (voice/SMS)` → `lib/intake/structure.ts` (Opus 4.7 vision + Zod schema) → embedding → `lib/estimate/run.ts`: RAG context + brand-preference hint → Opus 4.7 with **tool-calling only** for prices (`lib/estimate/tools.ts` reads shared + tenant_custom assemblies) → JSON draft → **`lib/estimate/validate.ts` grounding check**: every line-item price must derive from `pricing_book` + `shared_*` + `tenant_custom_assemblies` *scoped to `intake.trade`*; **any failure downgrades the whole quote to the $199 inspection route**. Then `lib/routing/decide.ts` → `quotes` row + Stripe sessions + customer SMS + tradie notify (SMS+WhatsApp). Trade prompt selected in `lib/estimate/prompt.ts` (`electrical-prompt.ts` / `plumbing-prompt.ts`).
+`intake (voice/SMS)` → `lib/intake/structure.ts` (Opus 4.7 vision + Zod schema) → embedding → `lib/estimate/run.ts`: RAG context + brand-preference hint → Opus 4.7 with **tool-calling only** for prices (`lib/estimate/tools.ts` reads shared + tenant_custom assemblies) → JSON draft → **`lib/estimate/validate.ts` grounding check**: every line-item price must derive from `pricing_book` + `shared_*` + `tenant_custom_assemblies` *scoped to `intake.trade`*; **any failure downgrades the whole quote to the $99 inspection route**. Then `lib/routing/decide.ts` → `quotes` row + Stripe sessions + customer SMS + tradie notify (SMS+WhatsApp). Trade prompt selected in `lib/estimate/prompt.ts` (`electrical-prompt.ts` / `plumbing-prompt.ts`).
 
 ## Conventions
 
@@ -110,7 +110,7 @@ Key API routes: `/api/vapi/webhook`, `/api/vapi/tools/send-sms-photo-link`, `/ap
 - AU/NZ-first formatting, language, dates, addresses.
 - **Money-touching LLM steps use tool-calling only** — never free-form prices. The grounding validator is the hard backstop; inspection-fallback is the safe failure mode.
 - Multi-trade scoping is by the `trade` column everywhere (assemblies, materials, pricing_book, intakes, prompts, validator candidates).
-- New trade ⇒ 5-component bundle (assemblies, intake rules, pricing defaults, G/B/B framing, licence schema) — see `public/docs/onboarding-bundle.html`. **No third trade without a `docs/strategy.md` iteration entry.**
+- New trade ⇒ 5-component bundle (assemblies, intake rules, pricing defaults, G/B/B framing, licence schema) — see `public/docs/onboarding-bundle.html`. ⚠ This hand-wired per-trade model is **superseded by `docs/strategy.md` v9** (2026-05-21): a third trade is now authorized via the `trades` registry table + admin CSV loader, not by hand-wiring in code. v9 is not yet built; until Phase 0 ships, electrical + plumbing remain the only live trades.
 - Webhook routes fast-ack (<500ms) then run heavy work in `next/server` `after()`; idempotency on Twilio `MessageSid`. `maxDuration` raised on Sonnet/Opus routes (Vercel Hobby's 10s times out — needs Pro or Railway).
 - Scripts run with `node --env-file=.env.local scripts/X.mjs`. Don't commit `.env.local` or paste its secrets anywhere (this file included).
 
@@ -118,7 +118,7 @@ Key API routes: `/api/vapi/webhook`, `/api/vapi/tools/send-sms-photo-link`, `/ap
 
 - **Before writing any Next.js code**, read `quotemate-automation/AGENTS.md` and the relevant `node_modules/next/dist/docs/` guide — Next 16 has breaking changes vs training-data knowledge.
 - **Strategy/product questions** — `docs/strategy.md` first, but cross-check against this file; the doc lags reality on voice, auto-send, and the eval framework.
-- **Don't propose a THIRD trade** without a fresh `docs/strategy.md` entry. Electrical + plumbing is the boundary.
+- **Third trade is authorized** by `docs/strategy.md` v9 (2026-05-21) via the `trades` registry — not by hand-wiring a new trade in code. The boundary moved from "electrical + plumbing only" to "N admin-loaded trades", but v9 is **not yet built**: electrical + plumbing are still the only live trades, and any new-trade work must follow the v9 phased plan (Phase 0 foundation first).
 - **Don't rebuild ServiceM8/Tradify features** (calendar/CRM/invoicing) — the wedge is the AI quote draft + paid inspection flow.
 - **After editing `docs/strategy.md`**, invoke the `strategy-reviewer` agent (catches drift across README/CLAUDE/assets). The voice + auto-send + eval-framework drifts above are overdue for a new iteration entry.
 - **DB changes** = a new `sql/migrations/NNN_*.sql` + a `scripts/run-migration-NNN.mjs`, applied to prod Supabase; keep `sql/init.sql` representative.

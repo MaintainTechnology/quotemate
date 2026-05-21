@@ -38,7 +38,7 @@ All five priorities Jon set on 2026-05-05 are now resolved.
 
     #### 2\. Ensuring the electrical agent is consistent in its outcomes
 
-    Strict grounding wired into both the intake and estimation prompts. A 4th defence layer (DB-grounding validator) automatically downgrades any ungrounded line item to the $199 inspection route. [See Voice Agent section ↓](#voice)
+    Strict grounding wired into both the intake and estimation prompts. A 4th defence layer (DB-grounding validator) automatically downgrades any ungrounded line item to the $99 inspection route. [See Voice Agent section ↓](#voice)
 
 -   DONE
 
@@ -56,7 +56,7 @@ All five priorities Jon set on 2026-05-05 are now resolved.
 
     #### 5\. Quote output — webform / agentic creation, with mocked photos
 
-    Customer-facing HTML quote page live at `/q/[token]` with per-tier mocked photos (`lib/quote/tier-photos.ts`). Per-tier Stripe Checkout deposit links. Photo upload supports both camera and gallery. Inspection-route jobs show a $199 pay-link variant. [See Output section ↓](#output)
+    Customer-facing HTML quote page live at `/q/[token]` with per-tier mocked photos (`lib/quote/tier-photos.ts`). Per-tier Stripe Checkout deposit links. Photo upload supports both camera and gallery. Inspection-route jobs show a $99 pay-link variant. [See Output section ↓](#output)
 
 SMS channel — overall Phases 1–5 ALL DONE · 100% shipped
 
@@ -160,7 +160,7 @@ Tradie notification on draft, daily abandoned-conversation sweep, and inbound MM
 
     **Tradie SMS + WhatsApp ping on SMS-sourced draft completion**
 
-    End of `/api/estimate/draft` — gated on `isSmsSource` (so voice path is unchanged). Sends both an SMS (with WhatsApp fallback) to `TRADIE_NOTIFY_NUMBER` AND an explicit WhatsApp message to `TRADIE_NOTIFY_WHATSAPP`. Two flavours: `buildTradieDraftNotification` for auto-quotes, `buildTradieInspectionNotification` for $199 site-visit jobs.
+    End of `/api/estimate/draft` — gated on `isSmsSource` (so voice path is unchanged). Sends both an SMS (with WhatsApp fallback) to `TRADIE_NOTIFY_NUMBER` AND an explicit WhatsApp message to `TRADIE_NOTIFY_WHATSAPP`. Two flavours: `buildTradieDraftNotification` for auto-quotes, `buildTradieInspectionNotification` for $99 site-visit jobs.
 
 -   cleanup DONE
 
@@ -206,7 +206,7 @@ Dialog agent enforces these three fields are captured before `finish`. Mirrors t
 
 #### Off-topic / unrelated chat handling
 
-Customer sends "hey" or "do you do plumbing?" — agent acknowledges in one phrase and pivots to the next missing required field. Never engages with weather, jokes, other-trade questions. Greeting alone no longer escalates to a $199 site visit.
+Customer sends "hey" or "do you do plumbing?" — agent acknowledges in one phrase and pivots to the next missing required field. Never engages with weather, jokes, other-trade questions. Greeting alone no longer escalates to a $99 site visit.
 
 ✓
 
@@ -284,7 +284,7 @@ Every line item must trace back to a row in **shared\_assemblies** or **shared\_
 
 #### DB-grounding validator (4th defence layer)
 
-A runtime validator checks every line item's `source` field against the database. Anything ungrounded is auto-downgraded to the $199 inspection route — no faulty quote reaches the customer.
+A runtime validator checks every line item's `source` field against the database. Anything ungrounded is auto-downgraded to the $99 inspection route — no faulty quote reaches the customer.
 
 ✓
 
@@ -330,9 +330,9 @@ Each tier has its own "Lock in this option · $X deposit" button → tier-specif
 
 ✓
 
-#### Inspection route — $199 pay link
+#### Inspection route — $99 pay link
 
-For jobs flagged inspection-only (switchboard, EV charger, fault finding, complex renovations), the page shows a single $199 deposit option to book the inspection. SMS variant suppresses fabricated tier numbers entirely.
+For jobs flagged inspection-only (switchboard, EV charger, fault finding, complex renovations), the page shows a single $99 deposit option to book the inspection. SMS variant suppresses fabricated tier numbers entirely.
 
 ✓
 
@@ -461,8 +461,8 @@ Timeline · **This week**
 
 ### Pre-existing · Voice agent + output (still live)
 
--   earlierDB-grounding validator (4th defence layer) — ungrounded prices auto-downgrade to $199 inspection
--   earlierInspection-route $199 pay link wired through Stripe Checkout
+-   earlierDB-grounding validator (4th defence layer) — ungrounded prices auto-downgrade to $99 inspection
+-   earlierInspection-route $99 pay link wired through Stripe Checkout
 -   earlierStrict grounding on intake + estimation prompts
 -   earlierPhoto upload supports camera + gallery picker
 -   earlierQuality gate on intake — empty calls no longer trigger downstream SMS
