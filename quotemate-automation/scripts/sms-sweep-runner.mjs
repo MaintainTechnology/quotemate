@@ -20,6 +20,14 @@ const DELAY_MS = (() => {
   const i = process.argv.indexOf("--delay-ms");
   return i > -1 ? Number(process.argv[i + 1]) : 22000;
 })();
+const MANIFEST = (() => {
+  const i = process.argv.indexOf("--manifest");
+  return i > -1 ? process.argv[i + 1] : "scripts/sms-sweep-manifest.json";
+})();
+const RESULTS_PATH = (() => {
+  const i = process.argv.indexOf("--results");
+  return i > -1 ? process.argv[i + 1] : "scripts/sms-sweep-results.json";
+})();
 
 const N8N_WEBHOOK = "https://n8n.nomanuai.com/webhook/sms-test-send";
 const TEST_FROM = "+61489083371";
@@ -50,7 +58,7 @@ async function fireOne(prompt, testId) {
 
 try {
   await c.connect();
-  const manifest = JSON.parse(readFileSync("scripts/sms-sweep-manifest.json", "utf8"));
+  const manifest = JSON.parse(readFileSync(MANIFEST, "utf8"));
   const limited = manifest.slice(0, MAX);
 
   console.log(`Sweep plan: ${limited.length} prompts, ${DELAY_MS}ms between each.`);
@@ -82,7 +90,7 @@ try {
       `  [${i + 1}/${limited.length}] ${m.test_id} ${m.trade.padEnd(10)} ${m.service_name.padEnd(42)}  status=${send?.status ?? "ERR"}  t=${elapsedM}m`,
     );
     // Persist incrementally so a crash mid-sweep still gives us partials.
-    writeFileSync("scripts/sms-sweep-results.json", JSON.stringify(results, null, 2));
+    writeFileSync(RESULTS_PATH, JSON.stringify(results, null, 2));
 
     // Hold for reply, then close the conversation so the next test starts fresh.
     if (i < limited.length - 1) {

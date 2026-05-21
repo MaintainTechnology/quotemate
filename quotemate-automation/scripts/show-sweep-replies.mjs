@@ -28,7 +28,7 @@ try {
   for (const [cid, list] of byConvo) {
     const inbound = list.find((m) => m.direction === "inbound");
     if (!inbound) continue;
-    const id = inbound.body?.match(/\[T(\d{3})\]|CANARY/)?.[0] ?? "(?)";
+    const id = inbound.body?.match(/\[[TA]\d{3}\]|CANARY/)?.[0] ?? "(?)";
     const reply = list.find((m) => m.direction === "outbound");
     const state = list[0]?.conversation_state ?? {};
     const slots = state.persistent_slots ?? state.slots ?? {};

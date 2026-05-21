@@ -24,7 +24,7 @@ import type { ConversationState, SlotKey } from './extract-slots'
 // Actions:
 //   ask                   — gather more info; stay in dialog
 //   finish                — all required info captured + verified; fire intake/structure
-//   escalate_inspection   — out-of-scope job or universal trigger; offer $199 booking
+//   escalate_inspection   — out-of-scope job or universal trigger; offer $99 booking
 //   end_conversation      — customer signaled goodbye / no work needed; close cleanly
 //                           (status='done', NO intake handoff, NO recovery SMS, NO
 //                           inspection booking offer). Use for "bye", "nothing for
@@ -265,10 +265,10 @@ CONCRETE GOOD vs BAD examples:
 
   Inspection escalation (out-of-scope job)
     GOOD: "Switchboard work needs a sparky on-site to price properly
-           — too risky to quote blind. Want me to send a $199
+           — too risky to quote blind. Want me to send a $99
            inspection booking?"
     BAD:  "Unfortunately I'm unable to quote that over text. However,
-           we offer a $199 inspection service that we'd love to book
+           we offer a $99 inspection service that we'd love to book
            you in for!"
 
   Off-topic redirect
@@ -331,7 +331,7 @@ the state block lists is a hard error.
    If EV charger, fault finding, oven/cooktop, CCTV inspection, PRV, or
    gas appliance connection appears in TENANT SERVICES below, treat it as in-scope and follow the
    listed questions. If it appears in DECLINED SERVICES, decline politely
-   instead of offering the $199 inspection.
+   instead of offering the $99 inspection.
    A greeting, off-topic message, or unclear inbound is NOT a reason to
    escalate — ask instead.
 6a. POWER POINT / GPO FALSE-POSITIVE GUARD:
@@ -413,7 +413,7 @@ the state block lists is a hard error.
      • Inspection trigger in first message (job_type still unknown):
        "G'day, thanks for messaging QuoteMate — I'm the AI quoting
         assistant. For that I'll need to send someone out for a
-        quick look. Want me to text you a $199 inspection booking?"
+        quick look. Want me to text you a $99 inspection booking?"
        (use "send a sparky" / "send a plumber" ONLY once the
         job_type is clear — electrical → sparky, plumbing → plumber)
 
@@ -547,7 +547,7 @@ the state block lists is a hard error.
     - "scrap that, what about X"
     - After an inspection escalation: "OK can you change it to [non-
       inspection variant]" (this is THE most common pivot — the
-      customer hears $199 and pivots to an auto-quoteable scope)
+      customer hears $99 and pivots to an auto-quoteable scope)
 
   How to handle a pivot:
 
@@ -681,7 +681,7 @@ conversation — phrases like 'bye', 'goodbye', 'see ya', 'no thanks',
 'nothing for now', 'not interested', 'not today', 'maybe later', 'cancel',
 'never mind', 'just chatting', 'leave it for now', "I'll get back to you",
 'all good cheers' (as a sign-off) — set action='end_conversation' with a
-polite short closeout reply. Do NOT offer the $199 inspection (they did
+polite short closeout reply. Do NOT offer the $99 inspection (they did
 not ask for one). Do NOT ask any follow-up questions (they are leaving).
 Do NOT continue gathering job details. Examples:
   ✓ "No worries Sam - cheers for reaching out. Give us a ring whenever
@@ -704,13 +704,13 @@ inspection escalation, not a goodbye.
    based on job_type_guess — see the ★ TRADIE NOUN ★ rule above):
      If job_type is electrical (or any electrical trigger fired):
        "Thanks — for that I'll need to send a sparky for a quick look.
-        Want me to text you a $199 inspection booking?"
+        Want me to text you a $99 inspection booking?"
      If job_type is plumbing (or any plumbing trigger fired):
        "Thanks — for that I'll need to send a plumber for a quick look.
-        Want me to text you a $199 inspection booking?"
+        Want me to text you a $99 inspection booking?"
      If job_type unknown:
        "Thanks — for that I'll need to send someone out for a quick
-        look. Want me to text you a $199 inspection booking?"
+        look. Want me to text you a $99 inspection booking?"
 
 2. UNRELATED / OFF-TOPIC inbound (greeting only, weather, jokes,
    non-trade questions, "do you guys also do X" for trades we don't do):
@@ -743,7 +743,7 @@ inspection escalation, not a goodbye.
    If EV charger, fault finding, oven/cooktop, CCTV inspection, PRV, or
    gas appliance connection appears in TENANT SERVICES below, it is NOT outside SMS scope. Follow
    the tenant service row and its required questions. If it appears in
-   DECLINED SERVICES, decline politely without a $199 inspection offer.
+   DECLINED SERVICES, decline politely without a $99 inspection offer.
 
 5. JOB_TYPE ∈ easy 5 but customer's first NAME is missing:
    action='ask'. Reply: "No worries — quick one, what's your first name?"
@@ -835,7 +835,15 @@ enforced by the calling code; if your output doesn't match, the call
 fails.
 - action: 'ask' | 'finish' | 'escalate_inspection' | 'end_conversation'
 - job_type_guess: an SMS-auto-quoteable easy job, an enabled tenant-service job type, or 'unknown' if not yet clear
-- reply_to_send: literal SMS text we'll send back (<= 320 chars, ONE question max)
+- reply_to_send: literal SMS text we'll send back (<= 320 chars, ONE question max).
+  ★ CLEAN FINAL MESSAGE ONLY ★ — this string is sent VERBATIM to the
+  customer. It must read as one clean, finished SMS. NEVER include
+  self-corrections, false starts, or meta-commentary. Forbidden inside
+  reply_to_send: "wait", "wrong job", "wrong service", "actually -",
+  "scratch that", "let me re-read", "oops", "my mistake", or any phrase
+  where you catch yourself mid-sentence. If you start composing about
+  the wrong service, DISCARD that draft and write the correct reply
+  fresh — the customer must only ever see the final clean version.
 - assumptions_made: list of safe-default phrases applied this turn
 - ready_for_intake: true ONLY when action='finish'
 - reason_for_escalation: short string when escalating; null otherwise.
@@ -952,8 +960,29 @@ function scrubAskingForKnownSuburb(args: {
 // typographic punctuation that renders inconsistently across phones.
 // Pure string replacement, runs after the LLM call. Cheap, safe,
 // idempotent.
-function scrubVoiceWording(reply: string): string {
+// Deterministic safety net for the mid-message self-correction the model
+// occasionally emits — e.g. the washing-machine-taps reply seen in both
+// the 2026-05-20 and 2026-05-21 sweeps: "Is the new shower head... wait,
+// wrong job. For the washing machine taps: <correct question>". The
+// prompt now forbids this (see reply_to_send rule), but if the model
+// slips, salvage the clean text AFTER the correction marker so the
+// customer never sees the stumble.
+//
+// Deliberately NARROW: only fires on the literal "wrong job" / "wrong
+// service" self-correction phrasing, and only when there is substantial
+// (>20 char) text after it to salvage. Legitimate uses of "actually"
+// ("that's actually our aircon service") are untouched. Idempotent.
+export function scrubSelfCorrection(reply: string): string {
+  const m = reply.match(/\bwrong (?:job|service)\b[.:!–—\-\s]+([\s\S]+)/i)
+  if (m && m[1].trim().length > 20) {
+    const salvaged = m[1].trim()
+    return salvaged.replace(/^[a-z]/, (c) => c.toUpperCase())
+  }
   return reply
+}
+
+function scrubVoiceWording(reply: string): string {
+  return scrubSelfCorrection(reply)
     // Voice-context wording (we are an SMS agent, not voice).
     .replace(/\bthanks for calling\b/gi, 'thanks for messaging')
     .replace(/\bthanks for ringing\b/gi, 'thanks for messaging')
@@ -1039,7 +1068,7 @@ function tradeScopeDirective(trades: ReadonlyArray<'electrical' | 'plumbing'> | 
       '    that makes it clear we only do electrical. Example:',
       '      "Apologies <name>, we\'re sparkies - we don\'t do plumbing work.',
       '       You\'ll need a plumber for that one. All the best!"',
-      '  - DO NOT escalate plumbing jobs to a $199 inspection. That\'s for out-of-scope ELECTRICAL',
+      '  - DO NOT escalate plumbing jobs to a $99 inspection. That\'s for out-of-scope ELECTRICAL',
       '    work (switchboards, EV chargers, etc.), not for the wrong trade entirely.',
     ].join('\n')
   }
@@ -1055,7 +1084,7 @@ function tradeScopeDirective(trades: ReadonlyArray<'electrical' | 'plumbing'> | 
       '    that makes it clear we only do plumbing. Example:',
       '      "Apologies <name>, we\'re plumbers - we don\'t do electrical work.',
       '       You\'ll need a sparky for that one. All the best!"',
-      '  - DO NOT escalate electrical jobs to a $199 inspection. That\'s for out-of-scope PLUMBING',
+      '  - DO NOT escalate electrical jobs to a $99 inspection. That\'s for out-of-scope PLUMBING',
       '    work (gas fitting, bathroom reno, etc.), not for the wrong trade entirely.',
     ].join('\n')
   }
@@ -1065,7 +1094,7 @@ function tradeScopeDirective(trades: ReadonlyArray<'electrical' | 'plumbing'> | 
 
 /** One enabled tenant-owned custom assembly (migration 023), passed in
  *  from the SMS inbound route. `always_inspection=true` means the tradie
- *  wants this service routed to the $199 paid inspection rather than
+ *  wants this service routed to the $99 paid inspection rather than
  *  auto-quoted. Disabled rows are filtered out by the caller and never
  *  reach this directive. */
 export type CustomServiceScope = {
@@ -1196,7 +1225,7 @@ export function customServicesDirective(
     lines.push(
       '  ★ INSPECTION-ONLY custom services — the tradie does these but wants',
       '    a site visit first. If the customer asks for one, this is IN',
-      '    scope: set action=\'escalate_inspection\' and offer the $199',
+      '    scope: set action=\'escalate_inspection\' and offer the $99',
       '    booking. Do NOT end the conversation as "we don\'t do that":',
       ...inspectionOnly.map(fmt),
     )
@@ -1217,9 +1246,9 @@ export function customServicesDirective(
 // Catalogue/custom services the tradie switched OFF in their Services tab.
 // Inverse of customServicesDirective: instead of making ENABLED services
 // in-scope, this makes DISABLED ones an explicit, polite "we don't offer
-// that" — NOT the $199 inspection fallback. Without it an OFF electrical
+// that" — NOT the $99 inspection fallback. Without it an OFF electrical
 // extra like "Hardwire oven" falls through to the hardcoded Rule 4/6
-// ("oven/cooktop -> $199 inspection"), so the customer gets sold a paid
+// ("oven/cooktop -> $99 inspection"), so the customer gets sold a paid
 // inspection for work the tradie doesn't even do. Names only — matching is
 // by meaning; the AI needs no prices/descriptions to decline. Bounded so a
 // big OFF list can't blow the prompt budget.
@@ -1234,9 +1263,9 @@ function declinedServicesDirective(
     'DECLINED SERVICES (this tradie does NOT offer these — authoritative,',
     'like the TENANT TRADE SCOPE block this OVERRIDES the system prompt',
     'defaults). The tradie switched these OFF in their Services tab. They',
-    'are OUT of scope: do NOT auto-quote them, and do NOT offer the $199',
+    'are OUT of scope: do NOT auto-quote them, and do NOT offer the $99',
     'inspection for them. This OVERRIDES Rule 4/6 ("out-of-scope electrical',
-    'work -> $199 inspection") AND the easy-5 auto-quote for any customer',
+    'work -> $99 inspection") AND the easy-5 auto-quote for any customer',
     'request that matches one of these:',
     ...listed.map((n) => `      - ${n}`),
     "When the customer's request CLEARLY matches a declined service and",
@@ -1328,7 +1357,7 @@ export async function decideNextTurn(args: {
    * tenant_service_offerings row wins, else shared_assemblies.default_enabled;
    * disabled tenant_custom_assemblies included). Names only. Drives the
    * DECLINED SERVICES block so an OFF service produces a polite "we don't
-   * offer that" instead of the hardcoded $199-inspection fallback. The
+   * offer that" instead of the hardcoded $99-inspection fallback. The
    * route excludes any name already in `customAssemblies` (enabled wins).
    * Empty / undefined → no declined block (legacy behaviour).
    */
@@ -1381,7 +1410,7 @@ export async function decideNextTurn(args: {
         customServicesDirective(args.customAssemblies),
         // Services the tradie switched OFF. Placed AFTER the enabled
         // custom-services block so the enabled list wins any name
-        // collision; overrides Rule 4/6's $199 fallback for OFF services
+        // collision; overrides Rule 4/6's $99 fallback for OFF services
         // so the customer gets a polite "we don't do that" + pivot.
         declinedServicesDirective(args.declinedServices),
         `PHOTO LINK STATE: ${args.photoLink ?? 'not_applicable'}`,
