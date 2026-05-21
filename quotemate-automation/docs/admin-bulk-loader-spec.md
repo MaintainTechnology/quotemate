@@ -1,236 +1,381 @@
-# Admin Bulk Service & Catalogue Loader — Build Spec
+# Admin Bulk Service & Catalogue Loader — Build Spec (v3)
 
 > Companion to `docs/strategy.md` **v9** (2026-05-21, "trades-as-data").
-> The strategy entry holds the *decision*; this file holds the *build detail*.
-> **Read §3 before writing any code.** Phase 0 must complete before Phase 1.
-> Status: spec only, nothing built. Created 2026-05-21.
+> Strategy holds the *decision*; this holds the *build detail*.
+> **v3 (2026-05-21)** — scopes the loader to install/job-based trades, and
+> closes 8 design findings from the v2 review: the smoke-test moves OUT of the
+> DB transaction (staging model), Phase 0 now states the prompt-router refactor
+> it implies, the exit gates are made testable, plus idempotency, rollback
+> guards, and conditional-aware prompt templates.
+> **Read §2.1 and §3 before any code. Phase 0 before Phase 1.** Status: spec only.
 
 ---
 
 ## 1. Goal
 
-Let an internal admin expand QuoteMate into new trades (carpentry, garden
-cleaning, pool cleaning, …) and bulk-add services by uploading CSVs from an
-admin-only dashboard — with **no code change to wire new work in**, and **no
-path that can silently corrupt a live quote**.
+Let an internal admin expand QuoteMate into new trades and bulk-add services
+from an admin-only dashboard — with **no per-trade code change**, and **no path
+that can touch a live quote until an atomic, validated, smoke-tested commit.**
+
+"No code" is true for *data* (services, prices, categories, supplier SKUs). It
+is **not** true for a new trade's **prompt pack** (§6): a trade still needs
+trade-tuned LLM prompt text authored by a human — the loader makes that text
+*data the system loads*, not something hand-wired into TypeScript per trade.
 
 ---
 
 ## 2. The one rule that prevents disaster
 
-This is **two capabilities with very different risk**. Never build them as one:
+Two capabilities, very different risk. Never build them as one:
 
-- **Capability 1 — bulk-add services to a trade that already exists**
-  (electrical / plumbing). Safe. Services are pure data; the SMS and Voice
-  agents already read them from the row. Ship this first.
-- **Capability 2 — add a brand-new trade/industry.** Hits hardcoded
-  `electrical | plumbing` assumptions. Requires the §4 foundation work
-  *first*. A CSV alone cannot do it.
+- **Capability 1 — bulk-add services to an existing trade** (electrical /
+  plumbing). Safe; services are pure data the agents already read. Ship first.
+- **Capability 2 — add a brand-new trade.** Hits hardcoded `electrical |
+  plumbing` assumptions; needs the §5 foundation **and** a §6 prompt pack first.
 
-Treating "add carpentry" as the same as "add another electrical service"
-is how the system breaks. The split is non-negotiable.
+## 2.1 Scope — install/job-based trades ONLY
+
+This loader serves trades that fit QuoteMate's existing engine: a trade that
+**quotes a discrete job** built from assemblies (service fee + labour hours) +
+materials, presented as **Good / Better / Best**. Electrical, plumbing,
+carpentry, handyman, tiling, and similar install trades fit.
+
+**Out of scope: recurring-service / subscription trades** (pool cleaning, lawn
+& garden maintenance, regular cleaning). Their pricing is per-visit or
+subscription, often has no "materials," and does not map to Good/Better/Best.
+They need a different pricing model and are a **separate future project** —
+not this loader.
+
+**Hard gate:** at trade-creation the admin must confirm the trade is
+install/job-based. The §8 smoke-test is the backstop — a recurring-service
+trade forced through this model produces sample quotes that do not make sense,
+and the trade is held back.
 
 ---
 
-## 3. Codebase reality — what currently blocks a new trade
-
-Verified 2026-05-21. A new-trade row does **not** just flow in:
+## 3. Codebase reality — what blocks a new trade (verified 2026-05-21)
 
 | Blocker | Location | Effect if ignored |
 |---|---|---|
-| `check (trade in ('electrical','plumbing'))` | migrations 028, 031, 041 | DB **rejects** a `carpentry` row at INSERT |
-| Estimator prompt router is binary | `lib/estimate/prompt.ts` | new trade silently gets the **electrical** prompt |
+| `check (trade in ('electrical','plumbing'))` | migrations 028, 031, 041 | DB rejects a new-trade row at INSERT |
+| Estimator prompt router is binary | `lib/estimate/prompt.ts` | new trade silently gets the electrical prompt |
+| `electrical-prompt.ts` / `plumbing-prompt.ts` hand-written | `lib/estimate/` | no prompt exists for a new trade |
+| SMS dialog `SYSTEM_PROMPT` trade-scope hardcoded | `lib/sms/dialog.ts` | "We do electrical (…) and plumbing (…)", easy-5 lists, Rule 4/6/6a — new trade invisible to SMS |
 | `deriveTradeFromJobType()` returns only `electrical\|plumbing` | `lib/intake/schema.ts` | new job types default to electrical |
-| SMS `job_type` Zod enum hardcoded | `lib/sms/extract-slots.ts`, `dialog.ts` | new services classify `out_of_scope` |
-| Grounding validator `Category` set | `lib/estimate/validate.ts` + `lib/estimate/categories.ts` | unknown category → quote silently drops to inspection |
-| Voice assistant prompt baked at provision | `lib/vapi/provision.ts` (`buildSystemPrompt`) | new trade not spoken by existing assistants |
-| `defaultsForTrade()` hardcoded | `lib/onboard/schema.ts` | new trade has no pricing_book seed values |
-| `LICENCE_BODIES` electrical/plumbing only | `lib/onboard/schema.ts` | new trade has no licence-body mapping |
-
-`shared_assemblies` itself has **no** trade CHECK — so *services for an
-existing trade insert fine*. It is the `tenant_*` / `supplier_catalogue`
-tables, the prompts, and the enums that block a *new trade*.
-
-`lib/estimate/categories.ts` is already the single-source-of-truth controlled
-vocabulary (drift-guarded by `categories.test.ts`, per strategy v7). Phase 0
-moves it to a `categories` table; the upload validates against that table.
+| SMS `job_type` Zod enum (×2) | `lib/sms/extract-slots.ts`, `dialog.ts` | new services classify `out_of_scope` — **acceptable, see §6.4** |
+| Grounding validator `Category` set | `lib/estimate/validate.ts`, `categories.ts` | unknown category → quote silently drops to inspection |
+| Voice assistant prompt baked at provision | `lib/vapi/provision.ts` | new trade not spoken by existing assistants |
+| `defaultsForTrade()`, `LICENCE_BODIES` | `lib/onboard/schema.ts` | new trade has no pricing seed / licence mapping |
 
 ---
 
-## 4. Data model changes (Phase 0)
+## 4. What a new trade actually requires (the "trade bundle")
+
+A complete trade bundle is 8 parts: (1) `trades` row, (2) categories
+(Categories CSV), (3) prompt pack (§6 — authored, not CSV), (4) pricing
+defaults (trade-defaults block), (5) services (Services CSV), (6) materials
+(Materials CSV → `shared_materials`, money-path), (7) supplier catalogue
+(Supplier Catalogue CSV — browse-only), (8) licence mapping (in the
+trade-defaults block; may be "none").
+
+Capability 1 uses only items 5–7. Capability 2 needs all 8.
+
+---
+
+## 5. Data model changes (Phase 0)
 
 **New tables** (foundation migrations — next free number is **046+**;
-041-045 are already taken):
+041-045 are taken):
 
-- `trades` — `id, name, display_name, active, created_at`. Single source of
-  truth for what a trade is. Backfill `electrical` + `plumbing` on creation.
-- `categories` — `id, name, trade_id (FK trades), grounding_tag`. Replaces the
-  hardcoded `Category` set; the grounding validator and the upload both read it.
-  Backfill every existing category value before any constraint is dropped.
+- `trades` — `id, name, display_name, active, is_job_based (bool), created_at`.
+  Backfill `electrical` + `plumbing`. `is_job_based` enforces §2.1.
+- `categories` — `id, name, trade_id (FK), grounding_tag, created_at`. Replaces
+  the hardcoded `Category` set. Backfill existing categories **before**
+  dropping any constraint.
+- `trade_prompts` — `trade_id (FK), estimator_system_prompt text,
+  sms_scope_blurb text, sms_trade_rules text, voice_greeting text,
+  voice_system_prompt text, updated_at`. The §6 prompt pack.
 - `trade_pricing_defaults` — `trade_id (FK), hourly_rate, call_out_minimum,
   apprentice_rate, senior_rate, default_markup_pct, risk_buffer_pct,
-  min_labour_hours, gst_registered`. Replaces hardcoded `defaultsForTrade()`.
-- `import_batches` — `id, admin_user_id, created_at, source, status, changes
-  jsonb`. The `changes` payload stores the **before-values of every updated
-  row** — without this, rollback of an UPDATE is impossible.
+  min_labour_hours, gst_registered, licence_label (nullable)`.
+- `import_batches` — `id, idempotency_key (unique), admin_user_id, created_at,
+  source, status, changes jsonb`. `idempotency_key` makes Approve safe against
+  double-click / retry (Finding 6). `changes` stores **before-values of every
+  updated row** — rollback needs it.
+- `import_staged_rows` — `id, batch_id (FK), target_table, row_class
+  (NEW/UPDATE), payload jsonb, validation_status, smoke_status`. **The staging
+  area (Finding 1).** Uploaded rows land here first; the live tables are not
+  touched until the §8 commit.
 
-**Constraint migration:** drop the `trade in ('electrical','plumbing')` CHECKs
-on `tenant_material_catalogue`, `shared_assembly_bom`, `tenant_assembly_overrides`,
-`supplier_catalogue`; replace with FK to `trades`. `shared_assemblies.category`
-→ FK to `categories`. Backfill `trades` + `categories` **before** dropping
-constraints so existing data never violates the new FKs.
+**Schema alterations:**
+- Drop `trade in ('electrical','plumbing')` CHECKs on `tenant_material_catalogue`,
+  `shared_assembly_bom`, `tenant_assembly_overrides`, `supplier_catalogue`;
+  replace with FK to `trades`.
+- `shared_assemblies.category` → FK to `categories`.
+- `shared_assemblies` ADD `retired_at timestamptz` (soft-delete; §11).
+- Backfill `trades` + `categories` before dropping any constraint.
 
-**Auth:** add `is_admin` boolean to the user identity; checked server-side on
-every admin route + API. Not an unlisted URL.
+**Code refactor in Phase 0 (Finding 2 — this is NOT just schema):**
+- `lib/estimate/prompt.ts` — from `if plumbing … else electrical` to: load the
+  trade's `trade_prompts.estimator_system_prompt`, interpolate, return.
+- `lib/sms/dialog.ts` — the hardcoded trade-scope text becomes composed from
+  active `trades` + each trade's `sms_scope_blurb` / `sms_trade_rules`.
+- `lib/vapi/provision.ts` — `buildSystemPrompt()` reads `trade_prompts`.
+- electrical + plumbing prompt text is migrated into `trade_prompts` rows
+  **string-identical** to today's output.
+
+**Auth:** add `is_admin` boolean to the user identity; server-checked on every
+admin route + API.
 
 ---
 
-## 5. CSV formats
+## 6. Prompt pack per trade (the part a CSV cannot do)
 
-### 5.1 Services CSV → `shared_assemblies`
+`electrical-prompt.ts` / `plumbing-prompt.ts` are large hand-crafted prompts. A
+new trade needs the same — authored once, stored as data in `trade_prompts`,
+loaded at runtime.
+
+**6.1 Estimator prompt.** `trade_prompts.estimator_system_prompt` is a
+template. **It must support conditional blocks, not just value substitution
+(Finding 5)** — the current prompts branch on GST-registered, licence display,
+etc. The template syntax (chosen in §14) supports `{{value}}` placeholders AND
+`{{#if gst_registered}}…{{/if}}` conditionals, so electrical/plumbing migrate
+string-identical.
+
+**6.2 SMS dialog scope.** `sms_scope_blurb` + optional `sms_trade_rules`
+(electrical's Rule 6a wet-area GPO guard is the model). The hardcoded
+"We do electrical (…)" line becomes composed from data.
+
+**6.3 Voice pack.** `voice_greeting` + `voice_system_prompt`, read by
+`buildSystemPrompt()`.
+
+**6.4 The `job_type` enum is deliberately NOT changed.** New-trade services
+classify as `out_of_scope`/`unknown` in the SMS extractor — that is fine: the
+dialog handles them via the `customAssemblies` path (proven in the 2026-05-21
+sweep). The enum stays a fixed Zod schema; new trades never touch it.
+
+**6.5 Authoring + safety.** The pack is authored by someone who understands
+grounding (AI-assisted is fine), reviewed, stored via the admin dashboard. The
+§8 smoke-test is the backstop: a bad prompt produces sample quotes that fail to
+ground, and the trade is held back.
+
+---
+
+## 7. CSV formats
+
+Every CSV has a downloadable **template** with exact headers — admins never
+guess column names. Number parsing strips currency symbols + thousand
+separators (`$1,050.00` → `1050.00`), `.` decimal only, anything else is a
+row-validation error.
+
+**7.1 Categories CSV → `categories`** (new-trade only): `trade, name,
+grounding_tag`. Unique per `(trade, name)`.
+
+**7.2 Services CSV → `shared_assemblies`:**
 
 | CSV column | DB column | Validation |
 |---|---|---|
 | `trade` | `trade` | must exist in `trades` |
-| `name` | `name` | non-empty; unique per `(trade, name)` |
+| `name` | `name` | non-empty; unique per `(trade, name)`, **incl. intra-batch** |
 | `description` | `description` | text |
 | `unit` | `default_unit` | `each` or `metre` |
-| `service_fee_ex_gst` | `default_unit_price_ex_gst` | numeric > 0. **Sundries/consumables portion only, ex-GST — NOT product cost, NOT labour.** Labour = `labour_hours × pricing_book.hourly_rate` |
+| `service_fee_ex_gst` | `default_unit_price_ex_gst` | numeric > 0. **Sundries/consumables portion only, ex-GST — NOT product, NOT labour.** Labour = `labour_hours × hourly_rate` |
 | `labour_hours` | `default_labour_hours` | numeric ≥ 0 |
 | `exclusions` | `default_exclusions` | text |
-| `category` | `category` | must exist in `categories` for that trade |
-| `clarifying_question_1`…`_5` | `clarifying_questions` (jsonb) | 5 fixed plain-text columns; assembled server-side into the array, blanks dropped, ≤5 enforced (matches the dialog's `MAX_MUSTASK_PER_SERVICE`) |
+| `category` | `category` | must exist in `categories` **OR appear in the same batch's Categories CSV** (Finding 9) |
+| `clarifying_question_1..5` | `clarifying_questions` (jsonb) | 5 plain-text columns; assembled server-side; blanks dropped; zero is valid |
+| `default_enabled` | `default_enabled` | **Existing trade: forced `false`.** New trade (no live tenants): admin-settable. See Safety Rule 3 |
 
-`default_enabled` is **not** a CSV column — always forced `false` (Safety Rule 3).
+**7.3 Materials CSV → `shared_materials`:** `trade, name, brand, unit,
+price_ex_gst`. The estimator's generic fallback library — money-path.
 
-### 5.2 Supplier Catalogue CSV → `supplier_catalogue` (migration 041)
+**7.4 Supplier Catalogue CSV → `supplier_catalogue`** (migration 041): `trade,
+category, brand, range_series, name, supplier_label, unit, rrp_ex_gst,
+tier_hint, image_url, description`. Browse-only; not money-path.
 
-| CSV column | DB column | Validation |
-|---|---|---|
-| `trade` | `trade` | must exist in `trades` |
-| `category` | `category` | must exist in `categories` for that trade |
-| `brand` | `brand` | non-empty |
-| `range_series` | `range_series` | optional (e.g. "Iconic", "2000") |
-| `name` | `name` | non-empty; unique per `(trade, brand, lower(name))` for active rows |
-| `supplier_label` | `supplier_label` | optional free text (Reece, Bunnings, …) |
-| `unit` | `default_unit` | defaults `each` |
-| `rrp_ex_gst` | `default_unit_price_ex_gst` | numeric > 0. **Vendor RRP — never a sell price**; the estimator never reads `supplier_catalogue` |
-| `tier_hint` | `tier_hint` | optional; `good` / `better` / `best` |
-| `image_url` | `image_url` | optional URL |
-| `description` | `description` | optional text |
-
-`supplier_revision`, `retired_at`, timestamps are system-managed — not in the CSV.
-Lower risk than the Services CSV: `supplier_catalogue` is a browse-only library;
-the grounding validator never reads it.
-
-### 5.3 Trade-defaults block (new-trade only) → `trade_pricing_defaults`
-
-A small form or third CSV: `hourly_rate, call_out_minimum, apprentice_rate,
-senior_rate, default_markup_pct, risk_buffer_pct, min_labour_hours,
-gst_registered`. Seeds a new tenant's `pricing_book` row when they activate
-the trade.
+**7.5 Trade-defaults block** (new-trade only) → `trade_pricing_defaults`:
+the 8 rate fields + `licence_label` (nullable).
 
 ---
 
-## 6. The upload → approve flow
+## 8. The upload → approve flow
 
-1. **Auth gate** — admin only, server-checked (Safety Rule 4).
-2. Admin uploads the Services CSV + Supplier Catalogue CSV (+ trade-defaults
-   block for a new trade).
-3. **Structural validation** — header names match the schema exactly, column
-   count, UTF-8, row cap (≤1000), no blank rows. A structurally-bad file is
-   rejected whole, before any row content is read (Safety Rule 10).
-4. **Row validation** — per §5 + Safety Rules 1, 2, 5.
-5. **Preview diff** — every row classified **NEW / UPDATE / REJECT**, each
-   rejection with a reason. UPDATE rows that change a price or labour column
-   are listed separately as **"WILL BE RE-PRICED"** (Safety Rule 6). Each row
-   shows a **computed sample quote** so a wrong-but-groundable price is caught
-   by a human (Safety Rule 2).
-6. **Manual add (CTA buttons)** — "Add service" / "Add supplier product" let
-   the admin type in anything missed. Manual rows join the same pending batch
-   and go through the same validation.
-7. **Approve** — single button. Re-pricing live services requires a second
-   explicit confirmation distinct from Approve (Safety Rule 6).
-8. **Smoke-test gate** — before going live, each NEW service is drafted into a
-   sample quote through the real estimator; the system confirms it **grounds**
-   (does not fall to the inspection fallback) and the dialog renders its
-   mandated questions. Services that fail are held back and listed; the batch
-   ships "approved with N held back" (Safety Rule 7).
-9. **Wire-in** — trade registered, services in the catalogue, supplier
-   catalogue loaded; estimator / SMS / Voice pick it up via data. The
-   `import_batches` row is written (Safety Rule 9).
-10. The new trade becomes available on the **Account tab → Trades**. When a
-    tradie activates it, its services appear on their **Services page** to
-    toggle on/off, and *that activation* triggers the per-tenant Voice (Vapi)
-    re-provision (Safety Rule 11). Approve itself never touches a Vapi assistant.
-11. The trade's supplier catalogue appears as a new trade-specific catalogue
-    under the **Supplier Catalogue**.
+**Core principle (the non-destruction guarantee): between upload and the final
+commit, ZERO writes touch any live table.** Everything stages in
+`import_staged_rows`. The commit is INSERT/UPDATE only — no LLM calls — in one
+short transaction.
+
+1. **Auth gate** — admin only, server-checked.
+2. Admin uploads the bundle CSVs. New trade: also authors the prompt pack and
+   confirms the §2.1 install/job-based gate.
+3. **Structural validation** — headers match the template, column count, UTF-8,
+   row cap (≤1000), no blank rows. A bad file is rejected whole, before any row
+   content is read.
+4. **Row validation** — per §7. Rows land in `import_staged_rows` with a
+   `validation_status`. Includes intra-batch duplicate + in-batch category
+   checks.
+5. **Preview diff** — every staged row **NEW / UPDATE / REJECT**, each rejection
+   with a reason. UPDATE rows changing a price/labour column listed separately
+   as **"WILL BE RE-PRICED"**. Each row shows a **computed sample quote** so a
+   wrong-but-groundable price is caught by a human.
+6. **Manual add (CTA buttons)** — "Add service" / "Add material" / "Add
+   supplier product" — manual rows join `import_staged_rows`, same validation.
+7. **Smoke-test (outside any transaction — Finding 1).** For each NEW service
+   the smoke-test harness drafts a sample quote through the estimator, with the
+   staged rows supplied as candidates (the live tables are untouched). It
+   confirms the quote **grounds** (does not fall to inspection) and the dialog
+   renders the mandated questions. Each staged row gets a `smoke_status`. This
+   step is N sequential LLM calls and may take minutes — it must NOT hold a DB
+   transaction.
+8. **Approve = commit.** A single button, carrying the batch `idempotency_key`.
+   It runs **one short all-or-nothing transaction** that copies staged rows
+   whose `validation_status` AND `smoke_status` both passed into the live
+   tables; writes the `import_batches` record with before-values; registers the
+   trade / stores the prompt pack. Rows that failed smoke-test are **left in
+   staging, not committed** — the admin gets a report, fixes them, re-uploads.
+   Re-pricing live services requires a second explicit confirmation.
+9. **Wire-in** — on commit, estimator / SMS / Voice pick the trade up via data.
+10. The new trade becomes available on **Account tab → Trades**; tradie
+    activation is §10.
 
 ---
 
-## 7. Safety rules (non-negotiable)
+## 9. Safety rules (non-negotiable)
 
-1. **Category guard** — every row's `category` validated against the
-   `categories` table; entered via dropdown, never free text. A genuinely new
-   category for a new trade must be registered first.
+1. **Category guard** — `category` validated against `categories` (or the
+   in-batch Categories CSV); dropdown entry, never free text.
 2. **Pricing-semantics guard** — `service_fee_ex_gst` labelled "sundries only,
-   ex-GST, not product/labour"; preview shows a computed sample quote per row.
-3. **Opt-in by default** — every bulk-uploaded service forced
-   `default_enabled = false`. Approve can never silently change a live tradie's
-   agent. Default-on is a separate, deliberate per-service admin action.
-4. **Admin auth** — real server-side `is_admin` check on the dashboard route
-   and every upload/approve API. Not an unlisted URL, not a client-only check.
-5. **Clarifying-questions encoding** — 5 fixed numbered plain-text columns,
-   assembled server-side into the jsonb array. No JSON-in-a-cell.
-6. **Re-pricing confirmation** — UPDATE rows touching a price/labour column are
-   separated and require a second explicit confirmation.
-7. **Smoke-test before live** — draft + ground + mandated-question check per
-   new service; failures held back, not shipped.
-8. **Trade-defaults from data** — a new trade's `pricing_book` seed values come
-   from the uploaded trade-defaults block, not hardcoded `defaultsForTrade()`.
-9. **Audit + rollback** — every Approve writes an `import_batches` record with
-   before-values; one-click rollback reverts the batch from that record.
-10. **Structural-then-row validation** — a structurally-bad CSV is rejected
-    whole before any row content is examined.
-11. **Vapi re-provision is tenant-triggered** — Approve makes the trade
-    available; the Voice assistant is re-provisioned per-tenant only when that
-    tenant activates the trade.
+   ex-GST"; preview shows a computed sample quote per row.
+3. **Opt-in by default for existing trades** — adding services to a trade with
+   live tenants forces `default_enabled = false`; Approve can never silently
+   change a live agent. A brand-new trade (no live tenants) may set it.
+4. **Admin auth** — real server-side `is_admin` check on every admin route/API.
+5. **Clarifying-questions encoding** — 5 numbered plain-text columns, assembled
+   server-side. No JSON-in-a-cell. Zero questions is valid.
+6. **Re-pricing confirmation** — money-column UPDATEs separated, second
+   confirmation required.
+7. **Smoke-test before commit, outside the transaction** — draft + ground +
+   mandated-question check per new service against staged rows. Failures stay
+   in staging, never committed.
+8. **Trade-defaults from data** — new-trade pricing seeds from
+   `trade_pricing_defaults`, not hardcoded `defaultsForTrade()`.
+9. **Audit + rollback** — every commit writes an `import_batches` record with
+   before-values; one-click rollback reverts the batch from it.
+10. **Structural-then-row validation** — a structurally-bad CSV rejected whole
+    before any row content is read.
+11. **Commit is one short transaction** — INSERT/UPDATE only, no LLM calls
+    inside it. All-or-nothing. The live tables are untouched until it runs.
+12. **Idempotent Approve** — every batch carries a unique `idempotency_key`; a
+    double-click or retry cannot apply a batch twice.
+13. **Bulk updates never clobber tenant overrides** — a re-price updates only
+    the `shared_assemblies` row; `tenant_assembly_overrides` is untouched and
+    still wins per-tenant.
+14. **Vapi re-provision is tenant-triggered** — never done by Approve.
+15. **`import_batches` / `import_staged_rows` are not anon-readable** — admin
+    audit data; RLS or service-role-only.
+16. **Grounding validator stays the backstop** — `validate.ts` is refactored
+    only to read categories from the `categories` table; the strict-grounding
+    rule and money-path are otherwise untouched.
+17. **Rollback guard (Finding 7)** — a batch can be rolled back freely until any
+    of its rows has downstream usage (a `tenant_service_offerings` row, or a
+    quote drafted off it). After that, rollback is **blocked**; the admin must
+    retire the service instead (§11). The rollback UI shows the reason.
 
 ---
 
-## 8. Build phases (the order that avoids destroying the system)
+## 10. Trade activation by a tradie (Account tab → Trades)
 
-| # | Phase | New schema | Money-path | Exit gate |
+When an existing tenant activates a new trade, the system MUST, atomically:
+
+1. Append the trade to `tenants.trades[]` (keep the legacy scalar `trade`
+   consistent).
+2. **Create a `pricing_book` row for `(tenant, new_trade)`**, seeded from
+   `trade_pricing_defaults`. **Without this row every quote for that trade
+   fails** — the known WP1 failure class. Non-negotiable.
+3. Seed `tenant_service_offerings`: services with `default_enabled = true` land
+   enabled; opt-in extras disabled. Services page shows a "turn on what you do"
+   banner.
+4. Trigger the per-tenant **Vapi assistant re-provision** (existing
+   `retry-provision` path) so the Voice agent speaks the new trade.
+
+If any step fails the activation rolls back — a tenant is never left with a
+trade in `trades[]` but no `pricing_book` row.
+
+---
+
+## 11. Service lifecycle after approval
+
+- **Update** — re-uploading an existing `(trade, name)` is an UPDATE; money-
+  column updates follow Safety Rule 6.
+- **Retire** — set `shared_assemblies.retired_at` (soft-delete, mirroring
+  `supplier_catalogue`). Retired services stop being offered; existing quotes
+  that referenced them keep working (quotes embed their numbers in
+  `good/better/best` jsonb — no FK to the assembly). A whole trade is retired
+  via `trades.active = false`.
+- **Never hard-delete** a service that quotes/offerings reference.
+- **Rollback** reverts inserts + restores update before-values from
+  `import_batches` — subject to the Safety Rule 17 guard.
+
+---
+
+## 12. Build phases
+
+| # | Phase | Scope | Money-path | Exit gate |
 |---|---|---|---|---|
-| 0 | Foundation: `trades`, `categories`, `trade_pricing_defaults`, `import_batches`; swap `trade` CHECKs for FKs; backfill electrical/plumbing + existing categories; add admin role | yes (migrations 046+) | no | every existing electrical/plumbing quote byte-identical; SMS parity sweep green |
-| 1 | Capability 1 — admin loader scoped to existing trades: upload, structural+row validation, preview diff, manual-add CTAs, Approve, smoke-test, audit/rollback | none | indirect | bulk-add 5 test electrical services, verify via SMS sweep, roll the batch back cleanly |
-| 2 | Capability 2 — new trades: data-composable estimator prompt, trade-defaults wiring, new-trade activation + tenant-triggered Vapi re-provision | none | yes | a real new trade quotes correctly end-to-end and the Voice agent speaks it |
-| 3 | Supplier Catalogue CSV loader + the trade-specific catalogue UI | none (041/042 shipped) | no (browse-only) | can run parallel to Phase 1 |
+| 0 | Foundation: 6 new tables + `retired_at`; swap CHECKs for FKs; backfill; admin role; **AND the prompt-router refactor** of `lib/estimate/prompt.ts`, `lib/sms/dialog.ts`, `lib/vapi/provision.ts` to read `trade_prompts`; migrate electrical/plumbing prompt text into rows | schema + 3-path code refactor (migrations 046+) | no | the estimator / SMS / Voice **system-prompt strings are byte-identical** before vs after (string-equality test); §13 suites green |
+| 1 | Capability 1 — admin loader for existing trades: upload, staging, validation, preview, manual-add, smoke-test, commit transaction, audit/rollback | none | indirect | bulk-add 5 test services, verify, roll the batch back cleanly |
+| 2 | Capability 2 — new trades: prompt-pack authoring UI, Categories + Materials CSVs, trade-defaults, §10 activation flow, §2.1 gate | none | yes | a real install-type new trade quotes correctly end-to-end and the Voice agent speaks it |
+| 3 | Supplier Catalogue CSV loader + trade-specific catalogue UI | none (041/042 shipped) | no | parallel to Phase 1 OK |
 
-Each phase is independently shippable; abandoning mid-delivery never leaves the
-system worse than strategy v8. **Never start Phase 1 before Phase 0's exit gate
-is green.**
-
----
-
-## 9. Open items
-
-- Phase 2 design decision: is the data-composable estimator prompt a single
-  template + per-trade data rows, or one prompt row per trade? Decide before
-  Phase 2 starts.
-- `categories` table must reconcile with `lib/estimate/categories.ts` and the
-  granular-vs-grounding vocabulary mismatch noted in strategy v7 Phase 6.
-- Licence-body mapping for new trades (`LICENCE_BODIES`) — some trades need no
-  licence; the data model must allow "no licence required".
-- RLS: `trades` / `categories` are global tables — add to the RLS apply list
-  (currently RLS-off + service-role read is acceptable, matching `supplier_catalogue`).
+Each phase is independently shippable. **Never start Phase 1 before Phase 0's
+exit gate is green.** Phase 0 is the only phase that touches shared live code;
+its byte-identical-prompt gate is what guarantees it does not change behaviour.
+The loader itself (Phases 1-3) never touches a live table until §8 step 8.
 
 ---
 
-## 10. Definition of done
+## 13. Testing & migration discipline
 
-Adding a service to an existing trade, or a whole new trade, is: upload →
-preview → approve. No code change, no re-wire. The Approve button never ships
-unvalidated data, never re-prices a live service without explicit confirmation,
-never flips a service on without a tradie opting in, runs a grounding
-smoke-test first, and is always reversible via the `import_batches` record.
+- **Per-phase suites that must stay green:** `npx vitest run` (full unit
+  suite), `scripts/test-sms-parity.mjs`, `lib/estimate/catalogue-trap.test.ts`,
+  `lib/estimate/catalogue-hints.test.ts`, `lib/estimate/categories.test.ts`,
+  `npx tsc --noEmit`.
+- Phase 0 adds a **prompt-string-equality test**: assert the assembled
+  electrical + plumbing system prompts (estimator, SMS, Voice) are identical
+  byte-for-byte to the pre-refactor output.
+- The Twilio n8n sweep is an end-of-phase acceptance check, not the per-commit
+  gate.
+- **Every DB change** = a numbered `sql/migrations/NNN_*.sql` + a matching
+  `scripts/run-migration-NNN.mjs`, applied to prod **only with explicit human
+  approval, one migration at a time** (per CLAUDE.md). Keep `sql/init.sql`
+  representative after Phase 0.
+
+---
+
+## 14. Open items (settle before Phase 0 freezes the schema)
+
+- **Prompt-template engine** — choose the syntax for
+  `trade_prompts.estimator_system_prompt`. It MUST support `{{value}}`
+  substitution AND `{{#if …}}` conditionals (Finding 5), or the electrical
+  prompt cannot migrate string-identical.
+- **`categories.grounding_tag`** must reconcile with `lib/estimate/categories.ts`
+  and the granular-vs-grounding vocab mismatch noted in strategy v7 Phase 6.
+- **Validator category cache (Finding 8)** — the validator reads `categories`
+  on the hot path. Categories change rarely, so a per-cold-start in-memory read
+  (or a short TTL) is sufficient; pick one and state it.
+- **Supplier-catalogue `image_url`** — hot-link vs download into Supabase
+  storage (hot-links rot).
+- **Concurrency** — lock or queue if two admins upload at once.
+
+## 15. Definition of done
+
+Adding a service to an existing trade, or a whole new install-type trade, is:
+upload bundle → preview → smoke-test → approve. No per-trade code change. The
+live tables are untouched until one short commit transaction. That commit never
+ships unvalidated or un-smoke-tested data, never re-prices a live service
+without explicit confirmation, never flips a service on without a tradie opting
+in, never clobbers a tradie's override, cannot be applied twice, and is
+reversible (subject to the downstream-usage guard). A tradie activating a new
+trade always gets a `pricing_book` row, seeded offerings, and a re-provisioned
+Voice agent — atomically. Phase 0 is the only code that touches the live
+system, and its byte-identical-prompt gate proves it changed nothing.
