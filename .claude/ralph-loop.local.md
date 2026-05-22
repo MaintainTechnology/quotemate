@@ -1,10 +1,10 @@
 ---
 active: true
 iteration: 1
-session_id: ef0b4c81-2c96-40f0-bb63-68cd7bce4d89
-max_iterations: 0
-completion_promise: "All"
-started_at: "2026-05-21T06:37:10Z"
+session_id: 0b7f7b5b-aff3-4087-a117-58f9612e47fa
+max_iterations: 40
+completion_promise: "All-tests-pass"
+started_at: "2026-05-22T05:06:32Z"
 ---
 
-Build the admin bulk service and catalogue loader per the spec at quotemate-automation/docs/admin-bulk-loader-spec.md. Start with Phase 0 the foundation schema plus the prompt-router refactor, then Phase 1, following every spec safety rule. DB migrations are numbered SQL files plus runner scripts, applied to prod one at a time with human approval. Keep the vitest suite, the catalogue-trap tests and tsc green at every step. tests pass
+Improve QuoteMate AI image-generation accuracy in the quotemate-automation lib preview folder. Five work items. One, promote and prune the V2 Gemini prompt to a tight 400 to 600 word instruction set removing text-LLM cargo-culting. Two, build an expanded verify-to-retry loop with a structured JSON judge checking count, product, positioning and existing-fixture removal. Three, add two-pass editing for replacement jobs. Four, pass imageConfig aspect ratio derived from the source photo. Five, audit product-photo data coverage. Keep all changes in-repo and async. All vitest tests must pass before completion.

@@ -23,11 +23,11 @@ Think: a strikeforce ops dashboard, not a SaaS marketing site. The aesthetic com
 
 ```css
 :root {
-  /* ─── INK / SURFACE (dark canvas) ───────────────────────── */
-  --ink-deep:     #0A1628;   /* page background — primary canvas */
-  --ink:          #131C2D;   /* secondary surface */
-  --ink-card:     #1A2332;   /* card / panel */
-  --ink-line:     #2A3548;   /* subtle border on dark */
+  /* ─── INK / SURFACE (dark canvas — 2026 deep slate-navy) ──── */
+  --ink-deep:     #0E1622;   /* page background — primary canvas */
+  --ink:          #141C29;   /* secondary surface */
+  --ink-card:     #1B2433;   /* card / panel */
+  --ink-line:     #2D3A4F;   /* subtle border on dark */
 
   /* ─── ACCENT (the Maintain orange) ──────────────────────── */
   --accent:       #FF5A1F;   /* primary brand accent — buttons, numbers, key words */
@@ -55,10 +55,10 @@ Think: a strikeforce ops dashboard, not a SaaS marketing site. The aesthetic com
 
 ```css
 @theme {
-  --color-ink-deep:    #0A1628;
-  --color-ink:         #131C2D;
-  --color-ink-card:    #1A2332;
-  --color-ink-line:    #2A3548;
+  --color-ink-deep:    #0E1622;
+  --color-ink:         #141C29;
+  --color-ink-card:    #1B2433;
+  --color-ink-line:    #2D3A4F;
   --color-accent:      #FF5A1F;
   --color-accent-press:#E8470F;
   --color-text-pri:    #FFFFFF;
@@ -328,7 +328,7 @@ Only ever use horizontal lines. Never vertical separators. Never decorative bord
 
 ### DO
 
-- ✅ Deep navy `#0A1628` background with white type
+- ✅ Deep slate-navy `#0E1622` background with white type
 - ✅ ALL-CAPS bold headlines, left-aligned
 - ✅ Orange highlight on 1-2 key words per headline
 - ✅ Numbered cards with big mono numbers in orange
