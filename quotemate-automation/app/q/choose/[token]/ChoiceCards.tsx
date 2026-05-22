@@ -25,9 +25,12 @@ export function ChoiceCards({
 }: {
   token: string
   options: Opt[]
-  initialStatus: 'pending' | 'chosen'
+  initialStatus: 'pending' | 'chosen' | 'declined'
   initialChosenId: string | null
 }) {
+  // 'declined' — the customer opted out of catalogue options over SMS
+  // (conventional Good/Better/Best quote). The picker is inert.
+  const declined = initialStatus === 'declined'
   const [chosenId, setChosenId] = useState<string | null>(
     initialStatus === 'chosen' ? initialChosenId : null,
   )
@@ -84,6 +87,12 @@ export function ChoiceCards({
 
   return (
     <div>
+      {declined && !chosenId && (
+        <div className="mb-6 bg-ink-card border border-ink-line px-4 py-3 text-sm text-text-sec">
+          You asked for a standard quote over text — these catalogue options
+          aren&apos;t needed. You can close this page.
+        </div>
+      )}
       {chosenId && (
         <div className="mb-6 bg-accent/10 border border-accent/40 px-4 py-3 text-sm text-text-pri">
           ✓ Choice recorded. We&apos;ve added{' '}
@@ -99,7 +108,7 @@ export function ChoiceCards({
             <button
               key={o.catalogue_id}
               type="button"
-              disabled={!!chosenId || busy === o.catalogue_id}
+              disabled={declined || !!chosenId || busy === o.catalogue_id}
               onClick={() => choose(o.catalogue_id)}
               className={`text-left border p-4 transition-colors cursor-pointer disabled:cursor-default ${
                 isChosen

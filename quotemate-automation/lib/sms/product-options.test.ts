@@ -13,6 +13,7 @@ import {
   categoryForJobType,
   describeChosenProductDirective,
   chosenProductFromChoice,
+  isDeclineReply,
   type ProductOption,
   type ProductChoiceState,
 } from './product-options'
@@ -292,5 +293,58 @@ describe('single-option offer (tradie stocks ONE product)', () => {
     }
     expect(applyChoiceSelection(choice, { reply: 'yes' }, 'NOW')?.chosen_catalogue_id).toBe('P-good')
     expect(applyChoiceSelection(choice, { defer: true }, 'NOW')?.chosen_catalogue_id).toBe('P-good')
+  })
+})
+
+// #3 — the customer can opt OUT of catalogue options and get a plain
+// conventional Good/Better/Best quote instead of a forced product pick.
+describe('conventional-GBB opt-out (decline)', () => {
+  const opts = selectProductOptions(taps, 'tap')!
+  const pending: ProductChoiceState = {
+    category: 'tap', token: 't', status: 'pending', options: opts,
+  }
+
+  it('isDeclineReply recognises "just quote it normally" intents', () => {
+    for (const r of [
+      'just a standard quote please',
+      'I want a normal quote',
+      'skip the options',
+      'no catalogue products thanks',
+      "don't want those",
+      'none of those',
+      'neither',
+      'just give me good better best',
+    ]) {
+      expect(isDeclineReply(r)).toBe(true)
+    }
+  })
+
+  it('isDeclineReply does NOT fire on a real pick, a defer, or a tier word', () => {
+    for (const r of ['1', '2', 'the second one', 'Clipsal', 'you pick', 'better', 'good one thanks', 'yes']) {
+      expect(isDeclineReply(r)).toBe(false)
+    }
+  })
+
+  it('applyChoiceSelection resolves a decline to status=declined with NO product', () => {
+    const next = applyChoiceSelection(pending, { reply: 'just a standard quote' }, 'NOW')
+    expect(next?.status).toBe('declined')
+    expect(next?.chosen_catalogue_id).toBeUndefined()
+    expect(next?.chosen_name).toBeUndefined()
+  })
+
+  it('a declined choice yields no chosen product (estimator does conventional GBB)', () => {
+    const declined = applyChoiceSelection(pending, { reply: 'no catalogue thanks' }, 'NOW')!
+    expect(chosenProductFromChoice(declined)).toBeNull()
+    expect(describeChosenProductDirective(declined)).toBeNull()
+  })
+
+  it('a declined choice is idempotent (re-replies do not flip it)', () => {
+    const declined = applyChoiceSelection(pending, { reply: 'standard quote' }, 'NOW')!
+    expect(applyChoiceSelection(declined, { reply: '1' }, 'LATER')).toBe(declined)
+  })
+
+  it('a normal pick still works — decline does not hijack it', () => {
+    expect(applyChoiceSelection(pending, { reply: '2' }, 'NOW')?.status).toBe('chosen')
+    expect(applyChoiceSelection(pending, { reply: 'you pick' }, 'NOW')?.status).toBe('chosen')
   })
 })

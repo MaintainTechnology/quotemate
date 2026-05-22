@@ -42,7 +42,11 @@ export interface ProductOption {
   tier: 'good' | 'better'
 }
 
-export type ProductChoiceStatus = 'pending' | 'chosen'
+// 'declined' — the customer was offered catalogue options but asked for
+// a plain quote instead. Resolves the choice (releases the interlock)
+// WITHOUT a chosen product, so the estimator does a conventional
+// Good/Better/Best from the base assemblies.
+export type ProductChoiceStatus = 'pending' | 'chosen' | 'declined'
 
 /** Lives on sms_conversations.product_choice jsonb — a dedicated column
  *  keeps product picks out of the slot merge/update path. */
@@ -178,10 +182,12 @@ export function buildProductOptionsSms(
  * options + photo link were already sent in the options SMS.
  */
 export function buildChoiceHoldSms(): string {
+  // Kept to one SMS segment (<=160 chars). Surfaces all three paths:
+  // pick (1/2), defer ("you pick"), and the conventional-GBB opt-out
+  // ("standard quote").
   return (
-    "Take your pick from the 2 options above — reply 1 or 2 (or tap the " +
-    "link). No preference? Just say \"you pick\" and I'll go with our " +
-    "recommended one."
+    "Take your pick — reply 1 or 2 (or tap the link). No preference? " +
+    "Say \"you pick\". Or \"standard quote\" for our regular pricing."
   )
 }
 
@@ -281,14 +287,35 @@ export function interpretChoiceReply(
   return null
 }
 
+// "Don't show me catalogue products — just do me a normal quote." This
+// is DIFFERENT from DEFER ("you pick" still picks a real catalogue
+// product); a decline drops the catalogue path entirely and the
+// estimator does a conventional Good/Better/Best. Curated narrowly so
+// it can't swallow a real pick or a tier word.
+export function isDeclineReply(body: string): boolean {
+  const t = (body ?? '').trim().toLowerCase()
+  if (!t) return false
+  return (
+    /\b(standard|normal|regular|conventional|usual)\s+(quote|quoting|option|options|pricing|price)\b/.test(t) ||
+    /\bquote\s+it\s+(normal(ly)?|standard|the usual way)\b/.test(t) ||
+    /\b(do(n'?| not)|don'?t)\s+(want|need|like)\s+(those|these|them|the\s+(options?|catalogue|products?))\b/.test(t) ||
+    /\bno\s+(catalogue|options?|products?)\b/.test(t) ||
+    /\bskip\s+(the\s+)?(options?|catalogue|products?|choices?)\b/.test(t) ||
+    /\bnone\s+of\s+(those|them|these)\b/.test(t) ||
+    /^neither\b/.test(t) ||
+    /\bgood\s*[,/]?\s*better\s*[,/]?\s*best\b/.test(t)
+  )
+}
+
 /**
  * Resolve a pending choice from EITHER a page tap (catalogueId) or an
  * SMS reply text, and return the updated state. Idempotent: a choice
- * that's already 'chosen' is returned unchanged (re-taps / repeated
- * replies are safe). Returns null when the input doesn't resolve to one
- * of the two offered options and nothing was previously chosen — the
- * caller then lets the normal dialog handle the message. Pure (the
- * timestamp is injectable for tests).
+ * that's already 'chosen' / 'declined' is returned unchanged (re-taps /
+ * repeated replies are safe). A decline reply ("just a standard quote")
+ * resolves to status='declined' WITH NO chosen product — the estimator
+ * then does a conventional Good/Better/Best. Returns null when the input
+ * doesn't resolve to a pick OR a decline — the caller then lets the
+ * normal dialog handle the message. Pure (the timestamp is injectable).
  */
 export function applyChoiceSelection(
   choice: ProductChoiceState | null | undefined,
@@ -296,7 +323,7 @@ export function applyChoiceSelection(
   nowIso: string = new Date().toISOString(),
 ): ProductChoiceState | null {
   if (!choice) return null
-  if (choice.status === 'chosen') return choice // idempotent success
+  if (choice.status === 'chosen' || choice.status === 'declined') return choice
   const opts = choice.options
   if (!Array.isArray(opts) || opts.length < 1) return null
 
@@ -308,6 +335,12 @@ export function applyChoiceSelection(
   } else if (id) {
     picked = opts.find((o) => o.catalogue_id === id) ?? null
   } else if (input.reply != null) {
+    // Decline → resolve WITHOUT a product (conventional GBB). Checked
+    // before interpretChoiceReply so "no thanks, standard quote" isn't
+    // mistaken for a rejected single-option offer.
+    if (isDeclineReply(input.reply)) {
+      return { ...choice, status: 'declined', chosen_at: nowIso }
+    }
     picked = interpretChoiceReply(input.reply, opts)
   }
   if (!picked) return null

@@ -854,6 +854,23 @@ export async function POST(req: Request) {
                 chosen: next.chosen_name,
                 catalogueId: next.chosen_catalogue_id,
               })
+            } else if (next && next.status === 'declined') {
+              // Customer opted OUT of catalogue options. Resolve the
+              // choice with no chosen product and rewrite the turn so
+              // the dialog reads a clear "standard quote" intent and
+              // proceeds to finish — the estimator then does a
+              // conventional Good/Better/Best from the base assemblies.
+              await supabase
+                .from('sms_conversations')
+                .update({ product_choice: next, updated_at: new Date().toISOString() })
+                .eq('id', conversationId)
+              if (lastInbound) {
+                lastInbound.body =
+                  'No catalogue options for me thanks — just do me a standard quote.'
+              }
+              console.log('[sms/inbound:after] WP9 CAPTURE — customer declined catalogue options (conventional GBB)', {
+                conversationId,
+              })
             }
           }
         } catch (e: any) {

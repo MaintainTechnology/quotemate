@@ -603,10 +603,17 @@ the state block lists is a hard error.
        right?"
 
     Then on the NEXT customer turn:
-      - Customer affirms ("yep", "yes", "correct", "that's right",
-        "perfect", "all good", "spot on", "sounds good") → set
-        action='finish' with a short wrap line ("All good <name> —
-        quote on its way shortly.").
+      - Customer affirms → set action='finish' with a short wrap line
+        ("All good <name> — quote on its way shortly."). An affirmation
+        is ANY reply that agrees with the summary and corrects nothing.
+        That includes the obvious words ("yep", "yes", "correct",
+        "that's right", "perfect", "all good", "spot on", "sounds
+        good") AND a reply that simply RESTATES a summarised fact as
+        true in the customer's own words — e.g. you asked "...away from
+        wet areas. Sound right?" and they reply "it is away from any
+        wet area", or "yeah it's a flat ceiling". A restatement that
+        matches the summary is a YES — treat it as a finish, do NOT
+        re-ask the same confirmation.
       - Customer corrects something ("actually make it cool white",
         "5 not 6", "raked actually") → set action='ask', update the
         relevant field in your understanding, and re-confirm the
