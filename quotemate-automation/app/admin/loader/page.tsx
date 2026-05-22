@@ -175,6 +175,77 @@ function Stat({
   )
 }
 
+// ── 3-step progress rail ─────────────────────────────────────────────
+// Orients the admin in the Upload → Preview → Commit flow. Only the
+// active step's StepCard renders below, so without this the admin loses
+// the sense of "where am I, what's left".
+function StepRail({ current }: { current: 1 | 2 | 3 }) {
+  const steps = [
+    { n: '01', label: 'Upload' },
+    { n: '02', label: 'Preview' },
+    { n: '03', label: 'Commit' },
+  ] as const
+  return (
+    <ol className="mt-10 grid grid-cols-3 gap-px border border-ink-line bg-ink-line">
+      {steps.map((s, i) => {
+        const idx = i + 1
+        const state =
+          idx < current ? 'done' : idx === current ? 'current' : 'upcoming'
+        return (
+          <li
+            key={s.n}
+            className={`border-b-2 bg-ink-card px-4 py-4 ${
+              state === 'current' ? 'border-accent' : 'border-transparent'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <span
+                className={`font-mono text-xl font-bold leading-none ${
+                  state === 'upcoming' ? 'text-text-dim' : 'text-accent'
+                }`}
+              >
+                {s.n}
+              </span>
+              <span
+                className={`font-mono text-[0.7rem] font-bold uppercase tracking-[0.14em] ${
+                  state === 'upcoming' ? 'text-text-dim' : 'text-text-pri'
+                }`}
+              >
+                {s.label}
+              </span>
+            </div>
+            <div className="mt-1.5 font-mono text-[0.56rem] uppercase tracking-[0.16em] text-text-dim">
+              {state === 'done'
+                ? '✓ Complete'
+                : state === 'current'
+                  ? 'In progress'
+                  : 'Waiting'}
+            </div>
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+// ── Download glyph for the CSV template chips ────────────────────────
+function DownloadIcon() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="square"
+      aria-hidden="true"
+    >
+      <path d="M12 3v12M7 11l5 5 5-5M4 21h16" />
+    </svg>
+  )
+}
+
 export default function AdminLoaderPage() {
   const [servicesFile, setServicesFile] = useState<File | null>(null)
   const [materialsFile, setMaterialsFile] = useState<File | null>(null)
@@ -453,6 +524,13 @@ export default function AdminLoaderPage() {
   }
 
   const totalStaged = preview?.reduce((n, p) => n + p.stagedRows.length, 0) ?? 0
+  // Drives the StepRail: 1 before a batch exists, 2 while staged and
+  // under review, 3 once committed or rolled back.
+  const currentStep: 1 | 2 | 3 = !batchId
+    ? 1
+    : batchStatus === 'staged'
+      ? 2
+      : 3
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-ink-deep text-text-pri">
@@ -469,7 +547,31 @@ export default function AdminLoaderPage() {
         <path d="M0,830 Q280,750 560,790 T1120,780 T1440,800" fill="none" stroke="var(--teal-glow)" strokeWidth="1" />
       </svg>
 
-      <div className="relative z-10 mx-auto max-w-5xl px-6 py-16 md:py-20">
+      {/* ── Slim admin nav — keeps the page from feeling orphaned ── */}
+      <nav className="relative z-10 border-b border-ink-line bg-ink-deep/85 backdrop-blur-md">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-4">
+          <a href="/dashboard" className="flex min-w-0 items-center gap-2.5">
+            <span className="grid h-7 w-7 shrink-0 place-items-center bg-accent text-xs font-black text-white">
+              Q
+            </span>
+            <span className="font-extrabold uppercase tracking-tight">
+              QuoteMate
+            </span>
+            <span className="text-text-dim">/</span>
+            <span className="font-mono text-xs uppercase tracking-[0.14em] text-text-sec">
+              Admin
+            </span>
+          </a>
+          <a
+            href="/dashboard"
+            className="shrink-0 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-sec transition-colors hover:text-text-pri"
+          >
+            ← Dashboard
+          </a>
+        </div>
+      </nav>
+
+      <div className="relative z-10 mx-auto max-w-5xl px-6 py-14 md:py-16">
         {/* ── Header ──────────────────────────────────────────────── */}
         <header>
           <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-text-dim">
@@ -484,6 +586,8 @@ export default function AdminLoaderPage() {
             commit can be rolled back.
           </p>
         </header>
+
+        <StepRail current={currentStep} />
 
         {error && <Banner tone="danger">{error}</Banner>}
         {info && <Banner tone="info">{info}</Banner>}
@@ -676,29 +780,23 @@ export default function AdminLoaderPage() {
               )}
             </div>
 
-            <p className="mb-5 text-sm text-text-sec">
-              Need the format? Templates with the exact headers —{' '}
-              <a
-                className="text-accent underline underline-offset-4 hover:text-accent-soft"
-                href="/api/admin/loader/template?csv=services"
-              >
-                Services
-              </a>
-              {' · '}
-              <a
-                className="text-accent underline underline-offset-4 hover:text-accent-soft"
-                href="/api/admin/loader/template?csv=materials"
-              >
-                Materials
-              </a>
-              {' · '}
-              <a
-                className="text-accent underline underline-offset-4 hover:text-accent-soft"
-                href="/api/admin/loader/template?csv=categories"
-              >
-                Categories
-              </a>
-            </p>
+            <div className="mb-5">
+              <p className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+                Need the format? Download a template with the exact headers
+              </p>
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                {(['services', 'materials', 'categories'] as const).map((t) => (
+                  <a
+                    key={t}
+                    href={`/api/admin/loader/template?csv=${t}`}
+                    className="inline-flex items-center gap-2 border border-ink-line bg-ink-deep px-3 py-2 font-mono text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-text-sec transition-colors hover:border-accent/50 hover:text-text-pri"
+                  >
+                    <DownloadIcon />
+                    {t}
+                  </a>
+                ))}
+              </div>
+            </div>
 
             <div className="grid gap-4 sm:grid-cols-3">
               {(
