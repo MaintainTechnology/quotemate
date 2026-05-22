@@ -1,7 +1,15 @@
 import { describe, it, expect } from 'vitest'
-import { planServicesUpload, planMaterialsUpload } from './batch'
+import {
+  planServicesUpload,
+  planMaterialsUpload,
+  planCategoriesUpload,
+} from './batch'
 import { SERVICES_CSV_COLUMNS, serviceKey, type ServicesRowContext } from './services-csv'
 import { MATERIALS_CSV_COLUMNS, type MaterialsRowContext } from './materials-csv'
+import {
+  CATEGORIES_CSV_COLUMNS,
+  type CategoriesRowContext,
+} from './categories-csv'
 import { tradeNameKey } from './csv'
 
 const SVC_HEADER = SERVICES_CSV_COLUMNS.join(',')
@@ -114,5 +122,45 @@ describe('planMaterialsUpload', () => {
       expect(plan.summary.rejectedCount).toBe(1)
       expect(plan.stagedRows).toHaveLength(0)
     }
+  })
+})
+
+const CAT_HEADER = CATEGORIES_CSV_COLUMNS.join(',') // trade,name,grounding_tag
+
+function catCtx(over: Partial<CategoriesRowContext> = {}): CategoriesRowContext {
+  return {
+    knownTrades: new Set(['electrical', 'plumbing', 'carpentry']),
+    existingCategoryKeys: new Set<string>(),
+    ...over,
+  }
+}
+
+describe('planCategoriesUpload', () => {
+  it('classifies NEW category rows for a new trade', () => {
+    const csv = [
+      CAT_HEADER,
+      'carpentry,decking,general',
+      'carpentry,framing,general',
+    ].join('\n')
+    const plan = planCategoriesUpload(csv, catCtx())
+    expect(plan.ok).toBe(true)
+    if (plan.ok) {
+      expect(plan.summary).toEqual({ newCount: 2, updateCount: 0, rejectedCount: 0 })
+      expect(plan.target_table).toBe('categories')
+      expect(plan.stagedRows.every((r) => r.target_table === 'categories')).toBe(true)
+    }
+  })
+
+  it('rejects a category on an unregistered trade', () => {
+    const plan = planCategoriesUpload(`${CAT_HEADER}\nwizardry,spells,general`, catCtx())
+    if (plan.ok) {
+      expect(plan.summary.rejectedCount).toBe(1)
+      expect(plan.stagedRows).toHaveLength(0)
+    }
+  })
+
+  it('returns a structural failure for a bad header', () => {
+    const plan = planCategoriesUpload('trade,name\ncarpentry,decking', catCtx())
+    expect(plan.ok).toBe(false)
   })
 })

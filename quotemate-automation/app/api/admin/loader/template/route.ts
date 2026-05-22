@@ -9,12 +9,14 @@
 
 import { SERVICES_CSV_COLUMNS } from '@/lib/admin-loader/services-csv'
 import { MATERIALS_CSV_COLUMNS } from '@/lib/admin-loader/materials-csv'
+import { CATEGORIES_CSV_COLUMNS } from '@/lib/admin-loader/categories-csv'
 
 export const dynamic = 'force-dynamic'
 
 const TEMPLATES: Record<string, readonly string[]> = {
   services: SERVICES_CSV_COLUMNS,
   materials: MATERIALS_CSV_COLUMNS,
+  categories: CATEGORIES_CSV_COLUMNS,
 }
 
 export async function GET(req: Request) {
@@ -22,7 +24,7 @@ export async function GET(req: Request) {
   const columns = TEMPLATES[csv]
   if (!columns) {
     return Response.json(
-      { error: 'unknown template — use ?csv=services or ?csv=materials' },
+      { error: 'unknown template — use ?csv=services|materials|categories' },
       { status: 400 },
     )
   }

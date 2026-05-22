@@ -34,6 +34,8 @@ import {
   ClipboardList,
   LogOut,
   PhoneCall,
+  Copy,
+  Check,
   type LucideProps,
 } from 'lucide-react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
@@ -383,6 +385,52 @@ export default function DashboardPage() {
     }
   }
 
+  /**
+   * §10 — list the trades this tradie can turn on: loader-created trades
+   * that are active, install/job-based, carry pricing defaults, and are
+   * not already on the account. Read-only GET.
+   */
+  async function listAvailableTrades() {
+    if (!accessToken) throw new Error('not signed in')
+    const res = await fetch('/api/tenant/trades/available', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok || body?.ok === false) {
+      throw new Error(body?.error ?? `Could not load trades (HTTP ${res.status})`)
+    }
+    return body as {
+      ok: true
+      available: Array<{ name: string; displayName: string }>
+    }
+  }
+
+  /**
+   * §10 — activate a new trade. The server runs the atomic activation
+   * (append trades[], seed pricing_book from trade_pricing_defaults, seed
+   * tenant_service_offerings) then refreshes the Vapi assistant. Reloads
+   * the dashboard so the new trade's services appear.
+   */
+  async function activateTrade(trade: string) {
+    if (!accessToken) throw new Error('not signed in')
+    const res = await fetch('/api/tenant/trades/activate', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ trade }),
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok || body?.ok === false) {
+      throw new Error(
+        body?.message ?? body?.error ?? `Activation failed (HTTP ${res.status})`,
+      )
+    }
+    await refresh(accessToken)
+    return body as { ok: true; trade: string; warning?: string }
+  }
+
   async function signOut() {
     const supabase = getBrowserSupabase()
     await supabase.auth.signOut()
@@ -441,7 +489,7 @@ export default function DashboardPage() {
           switching above. The grid starts immediately under the top
           nav — no big greeting block above so the sidebar aligns flush
           with the KPI row. */}
-      <div className="mt-4 lg:mt-6 lg:grid lg:grid-cols-[14rem_1fr] lg:gap-8">
+      <div className="mt-4 lg:mt-6 lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-8">
         <Sidebar tab={tab} setTab={setTab} quoteCount={data.quotes.length} />
         <section className="mt-6 lg:mt-0 pb-20 min-w-0">
           {/* `key={tab}` forces a tear-down + remount when the user
@@ -452,11 +500,18 @@ export default function DashboardPage() {
             key={tab}
             className="motion-safe:animate-[fade-in_220ms_ease-out_both]"
           >
+            {tab !== 'overview' && <TabHeader tab={tab} />}
             {tab === 'overview' && (
               <OverviewTab data={data} accessToken={accessToken} setTab={setTab} />
             )}
             {tab === 'account' && (
-              <AccountTab data={data} onSave={patch} onSaveTrades={saveTrades} />
+              <AccountTab
+                data={data}
+                onSave={patch}
+                onSaveTrades={saveTrades}
+                onListAvailableTrades={listAvailableTrades}
+                onActivateTrade={activateTrade}
+              />
             )}
             {tab === 'pricing' && <PricingTab data={data} onSave={patch} />}
             {tab === 'services' && (
@@ -518,7 +573,7 @@ function Shell({
   const showProfile = !!ownerFirstName
   return (
     <main className="min-h-screen bg-ink-deep text-text-pri flex flex-col">
-      <nav className="border-b border-ink-line bg-ink-deep sticky top-0 z-20">
+      <nav className="border-b border-ink-line bg-ink-deep/90 backdrop-blur-md sticky top-0 z-20">
         <div
           className={`mx-auto flex items-center justify-between gap-2 sm:gap-4 px-4 sm:px-6 py-3 ${
             wide ? 'max-w-[88rem]' : 'max-w-7xl'
@@ -676,6 +731,17 @@ function buildNav(quoteCount: number): NavItem[] {
   ]
 }
 
+// Sidebar nav grouped into "Daily work" (what a tradie checks every
+// day) and "Setup" (config touched occasionally). Tab order matches
+// buildNav so MobileTabBar's flat scroll stays consistent.
+const SIDEBAR_GROUPS: { label: string; tabs: Tab[] }[] = [
+  { label: 'Daily work', tabs: ['overview', 'quotes', 'followups', 'chats'] },
+  {
+    label: 'Setup',
+    tabs: ['account', 'pricing', 'services', 'catalogue', 'estimating', 'recipes'],
+  },
+]
+
 function Sidebar({
   tab,
   setTab,
@@ -686,58 +752,68 @@ function Sidebar({
   quoteCount: number
 }) {
   const items = buildNav(quoteCount)
+  const byTab = new Map(items.map((i) => [i.tab, i]))
   return (
     <aside className="hidden lg:block">
       <nav
         className="sticky top-20 bg-ink border border-ink-line"
         aria-label="Dashboard sections"
       >
-        <div className="px-4 py-3 border-b border-ink-line">
-          <span className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-text-dim">
-            Sections
-          </span>
-        </div>
-        <ul className="py-2">
-          {items.map((item) => {
-            const active = item.tab === tab
-            const Icon = item.icon
-            return (
-              <li key={item.tab}>
-                <button
-                  type="button"
-                  onClick={() => setTab(item.tab)}
-                  className={`w-full text-left flex items-center justify-between gap-3 pl-4 pr-3 py-2.5 font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold transition-colors border-l-2 cursor-pointer ${
-                    active
-                      ? 'border-accent text-accent bg-ink-card'
-                      : 'border-transparent text-text-dim hover:text-text-pri hover:bg-ink-card/60'
-                  }`}
-                  aria-current={active ? 'page' : undefined}
-                >
-                  <span className="flex items-center gap-2.5 min-w-0">
-                    <Icon
-                      size={16}
-                      strokeWidth={1.75}
-                      aria-hidden="true"
-                      className="shrink-0"
-                    />
-                    <span className="truncate">{item.label}</span>
-                  </span>
-                  {typeof item.count === 'number' && item.count > 0 && (
-                    <span
-                      className={`font-mono text-[0.6rem] px-1.5 py-0.5 border shrink-0 ${
+        {SIDEBAR_GROUPS.map((group, gi) => (
+          <div
+            key={group.label}
+            className={gi > 0 ? 'border-t border-ink-line' : ''}
+          >
+            <div className="px-4 pt-3.5 pb-1.5">
+              <span className="font-mono text-[0.58rem] uppercase tracking-[0.18em] text-text-dim">
+                {group.label}
+              </span>
+            </div>
+            <ul className="pb-2">
+              {group.tabs.map((t) => {
+                const item = byTab.get(t)
+                if (!item) return null
+                const active = item.tab === tab
+                const Icon = item.icon
+                return (
+                  <li key={item.tab}>
+                    <button
+                      type="button"
+                      onClick={() => setTab(item.tab)}
+                      className={`w-full text-left flex items-center justify-between gap-3 pl-4 pr-3 py-2.5 font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold transition-colors border-l-2 cursor-pointer ${
                         active
-                          ? 'border-accent/60 text-accent'
-                          : 'border-ink-line text-text-sec'
+                          ? 'border-accent text-accent bg-ink-card'
+                          : 'border-transparent text-text-dim hover:text-text-pri hover:bg-ink-card/60'
                       }`}
+                      aria-current={active ? 'page' : undefined}
                     >
-                      {item.count}
-                    </span>
-                  )}
-                </button>
-              </li>
-            )
-          })}
-        </ul>
+                      <span className="flex items-center gap-2.5 min-w-0">
+                        <Icon
+                          size={16}
+                          strokeWidth={1.75}
+                          aria-hidden="true"
+                          className="shrink-0"
+                        />
+                        <span className="truncate">{item.label}</span>
+                      </span>
+                      {typeof item.count === 'number' && item.count > 0 && (
+                        <span
+                          className={`font-mono text-[0.6rem] px-1.5 py-0.5 border shrink-0 ${
+                            active
+                              ? 'border-accent/60 text-accent'
+                              : 'border-ink-line text-text-sec'
+                          }`}
+                        >
+                          {item.count}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        ))}
       </nav>
     </aside>
   )
@@ -788,6 +864,72 @@ function MobileTabBar({
         )
       })}
     </nav>
+  )
+}
+
+// ─── Tab page header ──────────────────────────────────────────────
+//
+// Every non-overview tab opens with this header so the dashboard reads
+// as a designed product, not a stack of cards. One title + one-line
+// description per tab; rendered centrally from DashboardPage so all
+// nine tabs stay consistent. Overview keeps its own greeting header.
+
+const TAB_META: Record<
+  Exclude<Tab, 'overview'>,
+  { title: string; desc: string }
+> = {
+  quotes: {
+    title: 'Quotes',
+    desc: 'Every quote your AI receptionist has drafted — review the numbers, send, and track what converts.',
+  },
+  followups: {
+    title: 'Follow-ups',
+    desc: 'Chase the quotes that haven’t landed yet. Log every call and text so nothing slips.',
+  },
+  chats: {
+    title: 'Chats',
+    desc: 'Customer conversations across SMS and voice — including the leads that never became a quote.',
+  },
+  account: {
+    title: 'Account',
+    desc: 'Your business identity, trades, and licences — exactly as customers and the regulator see them.',
+  },
+  pricing: {
+    title: 'Pricing book',
+    desc: 'The hourly rates, markups, and early-bird discount that drive every quote the AI drafts.',
+  },
+  services: {
+    title: 'Services',
+    desc: 'Decide which jobs your AI auto-quotes — and which always book a paid site visit instead.',
+  },
+  catalogue: {
+    title: 'Catalogue',
+    desc: 'The supplier materials and prices your estimator draws on when it builds a quote.',
+  },
+  estimating: {
+    title: 'Estimating',
+    desc: 'Run a job through the AI and see how it prices — before a real customer ever does.',
+  },
+  recipes: {
+    title: 'Recipes',
+    desc: 'Reusable job templates that bundle the materials and labour for a common job.',
+  },
+}
+
+function TabHeader({ tab }: { tab: Exclude<Tab, 'overview'> }) {
+  const meta = TAB_META[tab]
+  return (
+    <header className="mb-6">
+      <div className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-text-dim">
+        QuoteMate · Dashboard
+      </div>
+      <h1 className="mt-1.5 font-extrabold uppercase tracking-tight text-text-pri text-[clamp(1.5rem,3vw,2rem)]">
+        {meta.title}
+      </h1>
+      <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-sec">
+        {meta.desc}
+      </p>
+    </header>
   )
 }
 
@@ -890,18 +1032,36 @@ function OverviewTab({
 
   return (
     <div className="space-y-6 motion-safe:animate-[fade-in_180ms_ease-out_both]">
-      {/* HERO — compact QuoteMate number. Padding scales up from
-          mobile so the card doesn't dominate small screens. */}
+      {/* PAGE HEADER — orients the tradie: who they are, what day it is. */}
+      <OverviewHeader firstName={tenant.owner_first_name ?? 'Tradie'} />
+
+      {/* HERO — your QuoteMate number, the tradie's lifeline. Copy
+          action + voice line make it the one card to hand a customer. */}
       <div className="bg-ink-card border border-ink-line p-4 sm:p-5 md:p-6 motion-safe:animate-[fade-up_240ms_ease-out_both]">
-        <div className="flex flex-wrap items-start sm:items-center justify-between gap-3 sm:gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-3 sm:gap-4">
           <div className="min-w-0">
             <div className="font-mono text-[0.6rem] sm:text-[0.65rem] uppercase tracking-[0.18em] text-text-dim">
               Your QuoteMate number
             </div>
             {smsNumber ? (
-              <div className="mt-1.5 sm:mt-2 font-mono text-[clamp(1.25rem,5vw,2rem)] font-bold text-text-pri tracking-tight leading-none break-all">
-                {formatAuMobile(smsNumber)}
-              </div>
+              <>
+                <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center gap-3">
+                  <span className="font-mono text-[clamp(1.25rem,5vw,2rem)] font-bold text-text-pri tracking-tight leading-none break-all">
+                    {formatAuMobile(smsNumber)}
+                  </span>
+                  <CopyNumberButton value={smsNumber} />
+                </div>
+                {tenant.twilio_voice_number &&
+                  tenant.twilio_voice_number !== smsNumber && (
+                    <div className="mt-2 font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
+                      Voice · {formatAuMobile(tenant.twilio_voice_number)}
+                    </div>
+                  )}
+                <p className="mt-2 text-xs text-text-dim max-w-sm">
+                  Hand this to customers — every SMS or call lands as a
+                  drafted quote in your dashboard.
+                </p>
+              </>
             ) : (
               <div className="mt-2 text-amber-300 text-sm">
                 Provisioning didn&rsquo;t finish on activate. Hit retry —
@@ -1058,6 +1218,71 @@ function OverviewTab({
       </div>
 
     </div>
+  )
+}
+
+/** Slim Overview page header — time-of-day greeting + today's date.
+ *  Sits inside the content column so the sidebar still aligns flush
+ *  with the QuoteMate-number hero below it. */
+function OverviewHeader({ firstName }: { firstName: string }) {
+  const now = new Date()
+  const hour = now.getHours()
+  const greeting =
+    hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
+  const dateStr = now.toLocaleDateString('en-AU', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  })
+  return (
+    <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
+      <div className="min-w-0">
+        <div className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-text-dim">
+          QuoteMate · Dashboard
+        </div>
+        <h1 className="mt-1.5 font-extrabold uppercase tracking-tight text-text-pri text-[clamp(1.5rem,3vw,2rem)]">
+          {greeting}, <span className="text-accent">{firstName}</span>
+        </h1>
+      </div>
+      <span className="font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
+        {dateStr}
+      </span>
+    </header>
+  )
+}
+
+/** Copy-to-clipboard control for the QuoteMate number. Silent success —
+ *  the label flips to "Copied" for ~1.6s, no toast. */
+function CopyNumberButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false)
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1600)
+    } catch {
+      /* clipboard blocked — no-op, the number is still visible */
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      className="inline-flex items-center gap-1.5 border border-ink-line px-2.5 py-1.5 font-mono text-[0.58rem] font-bold uppercase tracking-[0.14em] text-text-sec transition-colors hover:border-accent/50 hover:text-text-pri cursor-pointer"
+      aria-label={copied ? 'Number copied' : 'Copy number'}
+    >
+      {copied ? (
+        <>
+          <Check size={12} strokeWidth={2.5} aria-hidden="true" />
+          Copied
+        </>
+      ) : (
+        <>
+          <Copy size={12} strokeWidth={2} aria-hidden="true" />
+          Copy
+        </>
+      )}
+    </button>
   )
 }
 
@@ -1383,6 +1608,8 @@ function AccountTab({
   data,
   onSave,
   onSaveTrades,
+  onListAvailableTrades,
+  onActivateTrade,
 }: {
   data: DashboardData
   onSave: (payload: Record<string, unknown>) => Promise<void>
@@ -1394,6 +1621,13 @@ function AccountTab({
     warning?: string
     noop?: boolean
   }>
+  onListAvailableTrades: () => Promise<{
+    ok: true
+    available: Array<{ name: string; displayName: string }>
+  }>
+  onActivateTrade: (
+    trade: string,
+  ) => Promise<{ ok: true; trade: string; warning?: string }>
 }) {
   const [form, setForm] = useState({
     business_name: data.tenant.business_name ?? '',
@@ -1430,6 +1664,11 @@ function AccountTab({
   return (
     <div className="space-y-6">
       <TradesCard tenant={data.tenant} onSaveTrades={onSaveTrades} />
+
+      <ActivateTradeCard
+        onListAvailableTrades={onListAvailableTrades}
+        onActivateTrade={onActivateTrade}
+      />
 
       <LicencesCard
         licences={data.licences ?? []}
@@ -1892,6 +2131,136 @@ function ConfirmRemoveTrade({
   )
 }
 
+// ─── Activate-a-new-trade card (Account tab, spec §10) ───────────
+//
+// Lists loader-created trades the tradie can switch on. Activating one
+// runs the atomic server-side activation (pricing_book seeded from
+// trade_pricing_defaults + service offerings + Vapi prompt refresh).
+// Separate from <TradesCard> — that one is the v1 electrical/plumbing
+// toggle; this one handles trades-as-data trades and never removes.
+
+function ActivateTradeCard({
+  onListAvailableTrades,
+  onActivateTrade,
+}: {
+  onListAvailableTrades: () => Promise<{
+    ok: true
+    available: Array<{ name: string; displayName: string }>
+  }>
+  onActivateTrade: (
+    trade: string,
+  ) => Promise<{ ok: true; trade: string; warning?: string }>
+}) {
+  const [available, setAvailable] = useState<
+    Array<{ name: string; displayName: string }> | null
+  >(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [busyTrade, setBusyTrade] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+
+  // Fetch the available-trades list once on mount. onListAvailableTrades
+  // is a fresh closure each parent render, so it is intentionally NOT a
+  // dependency — that would re-fetch on every dashboard re-render.
+  useEffect(() => {
+    let cancelled = false
+    onListAvailableTrades()
+      .then((r) => {
+        if (!cancelled) setAvailable(r.available)
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setLoadError(e instanceof Error ? e.message : String(e))
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function activate(trade: { name: string; displayName: string }) {
+    const ok = window.confirm(
+      `Turn on ${trade.displayName}? This adds it to your account, seeds your pricing book and catalogue, and refreshes your AI receptionist. You can fine-tune which ${trade.displayName.toLowerCase()} services you offer afterwards.`,
+    )
+    if (!ok) return
+    setBusyTrade(trade.name)
+    setError(null)
+    setSuccess(null)
+    try {
+      const res = await onActivateTrade(trade.name)
+      setSuccess(
+        res.warning
+          ? `${trade.displayName} is on. ${res.warning}`
+          : `${trade.displayName} is on — pricing book seeded and catalogue ready. Turn on the services you offer in the Services tab.`,
+      )
+      // Drop the just-activated trade from the list (the dashboard
+      // refetch will also reconcile, but this keeps the UI immediate).
+      setAvailable((cur) => (cur ?? []).filter((t) => t.name !== trade.name))
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusyTrade(null)
+    }
+  }
+
+  return (
+    <Card
+      title="Add a specialist trade"
+      subtitle="Switch on a trade QuoteMate now supports. Activating seeds your pricing book and catalogue automatically — nothing else to set up."
+    >
+      {loadError && <ErrorBanner>{loadError}</ErrorBanner>}
+
+      {!loadError && available === null && (
+        <p className="font-mono text-xs uppercase tracking-[0.14em] text-text-dim">
+          Loading available trades…
+        </p>
+      )}
+
+      {!loadError && available !== null && available.length === 0 && (
+        <p className="text-sm text-text-sec">
+          No additional trades are available right now. New trades appear
+          here as soon as QuoteMate adds them.
+        </p>
+      )}
+
+      {available !== null && available.length > 0 && (
+        <div className="space-y-2">
+          {available.map((t) => (
+            <div
+              key={t.name}
+              className="flex items-center justify-between gap-4 border border-ink-line bg-ink-deep px-4 py-3"
+            >
+              <span className="text-sm font-semibold uppercase tracking-wider text-text-pri">
+                {t.displayName}
+              </span>
+              <button
+                type="button"
+                onClick={() => activate(t)}
+                disabled={busyTrade !== null}
+                className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-5 py-2.5 text-xs uppercase tracking-wider transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {busyTrade === t.name ? 'Activating…' : 'Activate'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {error && (
+        <div className="mt-4">
+          <ErrorBanner>{error}</ErrorBanner>
+        </div>
+      )}
+      {success && !error && (
+        <div className="mt-4 border border-accent/40 bg-accent/5 px-4 py-3 text-sm text-text-pri">
+          {success}
+        </div>
+      )}
+    </Card>
+  )
+}
+
 // ─── Pricing tab ──────────────────────────────────────────────────
 
 function PricingTab({
@@ -1911,7 +2280,7 @@ function PricingTab({
 
   if (books.length === 0) {
     return (
-      <Card title="Pricing book">
+      <Card>
         <p className="text-sm text-text-sec">
           No pricing book yet — finish activation to generate one.
         </p>
@@ -3398,7 +3767,7 @@ function QuotesTab({ data }: { data: DashboardData }) {
 
   if (total === 0) {
     return (
-      <Card title="Quotes">
+      <Card>
         <p className="text-sm text-text-dim">
           No quotes drafted yet. Customers texting your QuoteMate number will
           appear here once their first quote is drafted.
@@ -3408,7 +3777,6 @@ function QuotesTab({ data }: { data: DashboardData }) {
   }
   return (
     <Card
-      title="Quotes"
       subtitle={`${Math.min(visible, total)} of ${total} shown · click a row to see the scope, tier breakdown, and customer page.`}
     >
       <div className="space-y-2">
@@ -6675,14 +7043,14 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
 
   if (loading) {
     return (
-      <Card title="Follow-ups">
+      <Card>
         <p className="text-sm text-text-dim">Loading the follow-up queue…</p>
       </Card>
     )
   }
   if (error) {
     return (
-      <Card title="Follow-ups">
+      <Card>
         <p className="text-sm text-amber-300">{error}</p>
         <button
           type="button"
@@ -6714,10 +7082,7 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
 
   if (list.length === 0) {
     return (
-      <Card
-        title="Follow-ups"
-        subtitle={`${thresholdNote} Nothing to chase right now.`}
-      >
+      <Card subtitle={`${thresholdNote} Nothing to chase right now.`}>
         <p className="text-sm text-text-dim">
           No follow-ups. Every quote is either too recent, already paid, or
           accepted — or you have contacted them all. Newly sent quotes will
@@ -6730,7 +7095,6 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
   return (
     <>
     <Card
-      title="Follow-ups"
       subtitle={`${toChase.length} to chase${
         done.length ? ` · ${done.length} contacted` : ''
       } · ${thresholdNote} Oldest first.`}
@@ -7626,7 +7990,7 @@ function ChatsTab({
 
   if (loading) {
     return (
-      <Card title="Chats">
+      <Card>
         <p className="font-mono text-xs uppercase tracking-[0.16em] text-text-dim">
           Loading conversations…
         </p>
@@ -7635,14 +7999,14 @@ function ChatsTab({
   }
   if (error) {
     return (
-      <Card title="Chats">
+      <Card>
         <ErrorBanner>{error}</ErrorBanner>
       </Card>
     )
   }
   if (!chats || chats.length === 0) {
     return (
-      <Card title="Chats">
+      <Card>
         <p className="text-sm text-text-dim">
           No conversations yet. Customers who text your QuoteMate number
           will appear here.
@@ -7671,7 +8035,6 @@ function ChatsList({
 
   return (
     <Card
-      title="Chats"
       subtitle={`${Math.min(visible, total)} of ${total} shown · click a row to expand the full thread.`}
     >
       <div className="space-y-2">
@@ -7888,20 +8251,29 @@ function Card({
   subtitle,
   children,
 }: {
-  title: string
+  /** Optional — when the page-level TabHeader already names the section,
+   *  a top-level Card omits the title to avoid repeating it. */
+  title?: string
   subtitle?: string
   children: ReactNode
 }) {
+  const hasHeader = !!title || !!subtitle
   return (
     <div className="bg-ink-card border border-ink-line">
-      <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-ink-line">
-        <h2 className="font-extrabold uppercase text-base tracking-[-0.01em] text-text-pri">
-          {title}
-        </h2>
-        {subtitle && (
-          <p className="mt-1.5 text-text-sec text-sm">{subtitle}</p>
-        )}
-      </div>
+      {hasHeader && (
+        <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-ink-line">
+          {title && (
+            <h2 className="font-extrabold uppercase text-base tracking-[-0.01em] text-text-pri">
+              {title}
+            </h2>
+          )}
+          {subtitle && (
+            <p className={`text-text-sec text-sm${title ? ' mt-1.5' : ''}`}>
+              {subtitle}
+            </p>
+          )}
+        </div>
+      )}
       <div className="px-4 sm:px-6 py-5 sm:py-6">{children}</div>
     </div>
   )

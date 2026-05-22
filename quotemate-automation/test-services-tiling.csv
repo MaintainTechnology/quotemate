@@ -1,0 +1,4 @@
+trade,name,description,unit,service_fee_ex_gst,labour_hours,exclusions,category,clarifying_question_1,clarifying_question_2,clarifying_question_3,clarifying_question_4,clarifying_question_5,default_enabled
+tiling,ZZZ Tiling floor lay,Lay floor tiles,each,55,3,Excludes tile supply,floor_tiling,Floor area in m2?,Tile size?,,,,false
+tiling,ZZZ Tiling wall splashback,Tile a kitchen splashback,each,280,4,Excludes tile supply,wall_tiling,Splashback dimensions?,,,,,false
+tiling,ZZZ Tiling wet-area waterproof,Waterproof a bathroom wet area,each,450,5,Excludes tiling,waterproofing,Wet area size?,,,,,false

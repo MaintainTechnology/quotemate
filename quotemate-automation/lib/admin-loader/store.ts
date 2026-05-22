@@ -77,11 +77,12 @@ export type StageRowsResult =
  * staged; REJECT rows are reported in the preview but never persisted
  * (migration 049's row_class CHECK is NEW|UPDATE only).
  *
- * smoke_status='skipped': the §8-step-7 smoke-test harness is a later
- * increment. commit_import_batch commits rows whose smoke_status is
- * 'passed' OR 'skipped', so staging 'skipped' lets a validated batch
- * commit today. When the harness ships it will stage 'pending', run the
- * sample-quote drafts, and move each row to 'passed' / 'failed'.
+ * smoke_status: the §8-step-7 smoke-test harness (lib/admin-loader/smoke.ts)
+ * stamps each NEW service row 'passed' / 'failed' on the StagedRow before
+ * it reaches here. Rows the harness does not cover (materials, categories,
+ * trade rows, UPDATEs) carry no smoke_status and are persisted 'skipped'.
+ * commit_import_batch commits rows whose smoke_status is 'passed' OR
+ * 'skipped' — a 'failed' row stays in staging, never committed (§9 rule 7).
  */
 export async function stageRows(
   client: SupabaseClient,
@@ -96,7 +97,8 @@ export async function stageRows(
       row_class: r.row_class,
       payload: r.payload,
       validation_status: 'passed',
-      smoke_status: 'skipped',
+      smoke_status: r.smoke_status ?? 'skipped',
+      smoke_reason: r.smoke_reason ?? null,
     })),
   )
   if (error) return { ok: false, error: error.message }

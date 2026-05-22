@@ -14,11 +14,18 @@
 > it implies, the exit gates are made testable, plus idempotency, rollback
 > guards, and conditional-aware prompt templates.
 > **Read §2.1 and §3 before any code. Phase 0 before Phase 1.**
-> Status: **Phase 0 COMPLETE (2026-05-21)** — migrations 046-051 applied to
-> prod; the prompt-router is data-driven (estimator / voice / SMS) with
-> byte-identical parity tests; `trade_prompts` backfilled. §13 gate green
-> (`tsc` 0, vitest 518, sms-parity 70). Phase 1 is next. See §12.1 for the
-> honest as-built notes.
+> Status: **Phases 0-3 COMPLETE (2026-05-22).**
+> - Phase 0 — migrations 046-051 on prod; data-driven prompt-router with
+>   byte-identical parity tests.
+> - Phase 1 — loader (upload→stage→preview→approve→rollback) for existing
+>   trades; migration 052 on prod.
+> - Phase 2 — new-trade bundles (trade + categories + trade-defaults +
+>   prompt pack), the §10 tenant-activation flow, the §2.1 gate; migrations
+>   053-055 **applied to prod 2026-05-22** (verified).
+> - Smoke-test (§8 step 7) — deterministic groundability gate; see §12.2.
+> - Phase 3 (Supplier Catalogue) — shipped standalone 2026-05-21; see §12.3.
+> §13 gate green (`tsc` 0, vitest 593, sms-parity 70). See §12.1-12.3 for
+> the honest as-built notes.
 
 ---
 
@@ -392,6 +399,59 @@ vitest 518, `test-sms-parity` 70.
   was **not** done — a byte-identical general-composer rewrite on the live
   SMS agent was higher risk than value, and the pilot text is not the system
   prompt. Those columns stay empty until a Phase 2 reader needs them.
+
+### 12.2 Smoke-test — as built (2026-05-22)
+
+Honest record of the §8-step-7 / §9-rule-7 smoke-test as shipped.
+
+- **What shipped** — `lib/admin-loader/smoke.ts`: a **deterministic
+  groundability gate**. For each NEW service the harness builds the minimal
+  quote the estimator would draft for it (service-fee line marked up at the
+  trade default + a labour line meeting the trade's min-hours) and runs it
+  through `validateQuoteGrounding` — the *same* validator that decides
+  inspection-fallback on every live quote — using a per-trade candidate pool
+  of the live `shared_*` rows PLUS the batch's NEW staged rows. It also
+  asserts the mandated clarifying questions are well-formed (§9 rule 5).
+  Each NEW service row gets `smoke_status` `passed`/`failed`;
+  `commit_import_batch` commits only `passed`/`skipped`, so a failed row
+  stays in staging (§9 rule 7). Runs in the upload route — fast,
+  deterministic, no DB transaction. 9 unit tests.
+- **Deliberate deviation from §8 step 7's "N sequential LLM draft calls."**
+  An LLM call gating an atomic commit is non-deterministic — a model hiccup
+  would flakily block a valid batch, and a flaky commit gate is worse than
+  no gate. `validate.ts` is, by its own header, "the only deterministic,
+  machine-checkable layer"; the commit gate uses exactly that. The
+  human-eyeball LLM draft pass (catching prompt/category interactions a
+  deterministic check cannot) remains a future enhancement — it belongs in
+  the preview UI as advisory, NOT as the commit gate.
+
+### 12.3 Phase 3 (Supplier Catalogue) — as built (2026-05-22)
+
+Phase 3's deliverable — a Supplier Catalogue CSV loader — **shipped as a
+standalone feature (2026-05-21)**, before this spec's loader phases, and is
+NOT rebuilt inside the `import_staged_rows` staging shell. The honest
+reasoning:
+
+- **Already built.** `lib/catalogue/csv-import.ts` (`parseSupplierCsv`,
+  shared parser + validator), `POST /api/supplier-catalogue/import` (tradie
+  self-serve, insert-only, two-phase `dryRun` preview → commit),
+  `scripts/import-supplier-catalogue-csv.mjs` (operator CLI, with
+  refresh/update), and the dashboard "Browse supplier catalogue" UI.
+  Migrations 041 / 042 / 045 (provenance) are on prod.
+- **Browse-only, not money-path (§7.4).** `supplier_catalogue` never feeds
+  the grounding validator or a quote price. The `import_staged_rows`
+  staging shell + atomic `commit_import_batch` exist because Services /
+  Materials ARE money-path and a bad row there can fabricate a live price.
+  Supplier rows carry none of that risk, so the importer's own two-phase
+  `dryRun` preview is the proportionate safety model — re-staging
+  browse-only data through the money-path commit shell would be ceremony,
+  not safety, and would duplicate a working validated importer.
+- **Open item — new-trade supplier catalogues.** `parseSupplierCsv`'s trade
+  list and `category-mapping.ts`'s granular catalogue vocabulary are still
+  electrical/plumbing-shaped, so a loader-created trade cannot yet get a
+  supplier catalogue. Closing that needs a per-trade granular
+  catalogue-category vocabulary — a distinct design item (it is NOT the
+  loader's `categories` grounding table), tracked here rather than hidden.
 
 ---
 

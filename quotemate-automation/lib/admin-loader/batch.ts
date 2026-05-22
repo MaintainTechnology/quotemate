@@ -27,11 +27,28 @@ import {
   validateMaterialsRow,
   type MaterialsRowContext,
 } from './materials-csv'
+import {
+  parseCategoriesCsv,
+  validateCategoriesRow,
+  type CategoriesRowContext,
+} from './categories-csv'
 
 export type StagedRow = {
-  target_table: 'shared_assemblies' | 'shared_materials'
+  target_table:
+    | 'shared_assemblies'
+    | 'shared_materials'
+    | 'categories'
+    | 'trades'
+    | 'trade_pricing_defaults'
+    | 'trade_prompts'
   row_class: 'NEW' | 'UPDATE'
   payload: Record<string, unknown>
+  /** Smoke-test outcome (spec §8 step 7). Set by the upload route for NEW
+   *  service rows; left undefined for everything the harness does not
+   *  cover (materials/categories/trade rows, UPDATEs) — stageRows then
+   *  persists 'skipped', which commit_import_batch treats as committable. */
+  smoke_status?: 'passed' | 'failed' | 'skipped'
+  smoke_reason?: string | null
 }
 
 export type RejectedRow = {
@@ -45,7 +62,7 @@ export type UploadPlan =
   | {
       ok: true
       csv: string
-      target_table: 'shared_assemblies' | 'shared_materials'
+      target_table: 'shared_assemblies' | 'shared_materials' | 'categories'
       stagedRows: StagedRow[]
       rejected: RejectedRow[]
       summary: { newCount: number; updateCount: number; rejectedCount: number }
@@ -137,5 +154,50 @@ export function planMaterialsUpload(
     rejected,
     summary: { newCount, updateCount, rejectedCount: rejected.length },
     forcedDisabledCount: 0, // materials have no default_enabled flag
+  }
+}
+
+/** Plan a Categories CSV upload into categories staged rows. Part of a
+ *  new-trade bundle (spec §7.1) — defines a trade's category vocabulary.
+ *  Wired into the upload route only once migration 053 teaches the commit
+ *  function the `categories` target table. */
+export function planCategoriesUpload(
+  csvText: string,
+  ctx: CategoriesRowContext,
+): UploadPlan {
+  const parsed = parseCategoriesCsv(csvText)
+  if (!parsed.ok) {
+    return { ok: false, csv: 'categories', structuralErrors: parsed.errors }
+  }
+
+  const seen = new Set<string>()
+  const stagedRows: StagedRow[] = []
+  const rejected: RejectedRow[] = []
+  let newCount = 0
+  let updateCount = 0
+
+  parsed.records.forEach((rec, i) => {
+    const result = validateCategoriesRow(rec, ctx, seen)
+    if (result.rowClass === 'REJECT') {
+      rejected.push({ line: i + 2, errors: result.errors })
+      return
+    }
+    stagedRows.push({
+      target_table: 'categories',
+      row_class: result.rowClass,
+      payload: result.parsed as unknown as Record<string, unknown>,
+    })
+    if (result.rowClass === 'NEW') newCount++
+    else updateCount++
+  })
+
+  return {
+    ok: true,
+    csv: 'categories',
+    target_table: 'categories',
+    stagedRows,
+    rejected,
+    summary: { newCount, updateCount, rejectedCount: rejected.length },
+    forcedDisabledCount: 0, // categories have no default_enabled flag
   }
 }
