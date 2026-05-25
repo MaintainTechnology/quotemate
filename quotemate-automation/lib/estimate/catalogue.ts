@@ -326,23 +326,35 @@ export function buildBomQuoteLines(input: BuildBomInput): BuildBomResult {
 
 // ── validator-acceptance feed (the WP2 "trap") ──────────────────────
 /**
- * Flatten a tenant's catalogue into the {name, price} rows that
+ * Flatten a tenant's catalogue into the {id, name, price} rows that
  * run.ts loadCandidatePrices feeds to buildCandidatePrices(), so a
  * branded tenant-priced line grounds instead of being dumped to
  * inspection. Includes the customer-supply price variant when set.
  * Pure so the acceptance logic is tested here, ahead of the wiring.
+ *
+ * R-2 (2026-05-25) — emits `id` so the validator's strict UUID path
+ * can index candidates by row id. Both the regular-price and the
+ * customer-supply-price variant share the SAME id (same DB row).
+ *
+ * M-6 follow-up (2026-05-25) — the `r.active === false` filter is
+ * GONE. SQL-side filter was already dropped to close the deactivation
+ * race; the JS-side filter here was undoing that. A row a tradie
+ * deactivates seconds after Opus grounded on it now still validates,
+ * so the otherwise-correct draft doesn't dump to a $99 inspection.
+ * (The lookup tool keeps active=true at draft time, so no new quote
+ * can REACH a deactivated row — only the validator forgives.)
  */
 export function catalogueCandidateRows(
   tenantRows: TenantMaterial[],
-): Array<{ name: string; price: number; category: string | null }> {
-  const out: Array<{ name: string; price: number; category: string | null }> = []
+): Array<{ id: string | null; name: string; price: number; category: string | null }> {
+  const out: Array<{ id: string | null; name: string; price: number; category: string | null }> = []
   for (const r of tenantRows) {
-    if (r.active === false) continue
     const p = num(r.unit_price_ex_gst)
     const category = r.category ?? null
-    if (Number.isFinite(p) && p > 0) out.push({ name: r.name, price: money(p), category })
+    const id = r.id ?? null
+    if (Number.isFinite(p) && p > 0) out.push({ id, name: r.name, price: money(p), category })
     const cs = num(r.customer_supply_price_ex_gst)
-    if (Number.isFinite(cs) && cs > 0) out.push({ name: r.name, price: money(cs), category })
+    if (Number.isFinite(cs) && cs > 0) out.push({ id, name: r.name, price: money(cs), category })
   }
   return out
 }

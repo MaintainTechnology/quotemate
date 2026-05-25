@@ -468,17 +468,21 @@ export async function loadCandidatePrices(
   // tradie-facing UX action; it shouldn't retroactively invalidate a
   // draft Opus has already grounded on. The lookup tool still filters
   // active=true so no NEW draft will reach for the deactivated row.
+  //
+  // R-3 (2026-05-25) — `id` is now in the SELECT so the validator's
+  // strict UUID path can resolve `source: "material:<id>"` lines back
+  // to the exact catalogue row.
   const tenantCataloguePromise = tenantId
     ? (() => {
         let q = supabase
           .from('tenant_material_catalogue')
-          .select('name, category, unit_price_ex_gst, customer_supply_price_ex_gst, active, trade')
+          .select('id, name, category, unit_price_ex_gst, customer_supply_price_ex_gst, active, trade')
           .eq('tenant_id', tenantId)
           // .eq('active', true) ← REMOVED (M-6). See block comment above.
         if (trade) q = q.eq('trade', trade)
         return q
       })()
-    : Promise.resolve({ data: [] as Array<{ name: string; unit_price_ex_gst: number | string; customer_supply_price_ex_gst: number | string | null; active: boolean; trade: string }> })
+    : Promise.resolve({ data: [] as Array<{ id?: string; name: string; unit_price_ex_gst: number | string; customer_supply_price_ex_gst: number | string | null; active: boolean; trade: string }> })
 
   const [
     { data: materials },
@@ -505,9 +509,15 @@ export async function loadCandidatePrices(
     (tenantCatalogue ?? []) as any[],
   )
 
+  // R-3 (2026-05-25) — propagate the DB row `id` through the candidate
+  // builder so the validator's strict path can match by UUID. Shared
+  // rows (shared_materials, shared_assemblies) carry an id since they
+  // were created with `gen_random_uuid()` (sql/init.sql). Tenant rows
+  // (tenant_material_catalogue, tenant_custom_assemblies) likewise.
   return buildCandidatePrices(
     [
       ...(materials ?? []).map((r: any) => ({
+        id: r.id ?? null,
         name: r.name,
         price: r.default_unit_price_ex_gst,
         category: r.category ?? null,
@@ -518,6 +528,7 @@ export async function loadCandidatePrices(
     // pre-029 prod or un-backfilled rows → buildCandidatePrices falls
     // back to name-regex categorisation (identical to old behaviour).
     allAssemblies.map((r: any) => ({
+      id: r.id ?? null,
       name: r.name,
       price: r.default_unit_price_ex_gst,
       category: r.category ?? null,

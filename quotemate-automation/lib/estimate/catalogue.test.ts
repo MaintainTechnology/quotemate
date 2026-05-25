@@ -219,18 +219,40 @@ describe('buildBomQuoteLines (WP3 determinism)', () => {
 })
 
 describe('catalogueCandidateRows (the WP2 trap feed)', () => {
-  it('emits supply + customer-supply price variants, skips inactive', () => {
+  it('emits supply + customer-supply price variants, INCLUDES inactive (M-6 race fix), carries id', () => {
+    // R-2 + M-6 (2026-05-25) — the function now:
+    //   1. Carries the row `id` through (enables strict UUID grounding in
+    //      validateQuoteGrounding's R-4 path).
+    //   2. NO LONGER filters out inactive rows. The SQL filter was already
+    //      dropped to close the deactivation race (tradie deactivates a
+    //      product seconds after Opus grounded on it → otherwise-valid
+    //      quote dumps to a $99 inspection). The JS filter was undoing
+    //      that; gone now too.
     const rows: TenantMaterial[] = [
-      { category: 'tap', name: 'Phoenix mixer', unit_price_ex_gst: 180, customer_supply_price_ex_gst: 90, active: true },
-      { category: 'gpo', name: 'Unset customer supply GPO', unit_price_ex_gst: 42, customer_supply_price_ex_gst: 0, active: true },
-      { category: 'tap', name: 'Invalid tap', unit_price_ex_gst: 0, customer_supply_price_ex_gst: null, active: true },
-      { category: 'tap', name: 'Disabled tap', unit_price_ex_gst: 5, active: false },
+      { id: 'phoenix-1', category: 'tap', name: 'Phoenix mixer', unit_price_ex_gst: 180, customer_supply_price_ex_gst: 90, active: true },
+      { id: 'gpo-1',     category: 'gpo', name: 'Unset customer supply GPO', unit_price_ex_gst: 42, customer_supply_price_ex_gst: 0, active: true },
+      { id: 'invalid',   category: 'tap', name: 'Invalid tap', unit_price_ex_gst: 0, customer_supply_price_ex_gst: null, active: true },
+      // Inactive row — now KEPT so the validator can still ground a quote
+      // that already chose it before the tradie disabled it.
+      { id: 'disabled',  category: 'tap', name: 'Disabled tap', unit_price_ex_gst: 5, active: false },
     ]
     const out = catalogueCandidateRows(rows)
     expect(out).toEqual([
-      { name: 'Phoenix mixer', price: 180, category: 'tap' },
-      { name: 'Phoenix mixer', price: 90, category: 'tap' },
-      { name: 'Unset customer supply GPO', price: 42, category: 'gpo' },
+      { id: 'phoenix-1', name: 'Phoenix mixer', price: 180, category: 'tap' },
+      { id: 'phoenix-1', name: 'Phoenix mixer', price: 90, category: 'tap' },
+      { id: 'gpo-1',     name: 'Unset customer supply GPO', price: 42, category: 'gpo' },
+      // Disabled tap is now here too (M-6).
+      { id: 'disabled',  name: 'Disabled tap', price: 5, category: 'tap' },
+    ])
+  })
+
+  it('emits id: null when the row has no id (back-compat with callers that don\'t thread ids)', () => {
+    const rows: TenantMaterial[] = [
+      { category: 'tap', name: 'Legacy row', unit_price_ex_gst: 120, active: true },
+    ]
+    const out = catalogueCandidateRows(rows)
+    expect(out).toEqual([
+      { id: null, name: 'Legacy row', price: 120, category: 'tap' },
     ])
   })
 })

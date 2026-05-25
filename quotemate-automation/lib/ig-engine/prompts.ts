@@ -126,6 +126,63 @@ const SINGLE_ITEM_DEFAULT_COUNT: Record<string, number> = {
   ev_charger: 1,
 }
 
+// ── Per-job-type display nouns (singular / plural agreement) ────────
+// job_type names mix "thing installed" (downlights) with "action" (tap_repair).
+// For the count enforcement line we want the THING noun, agreeing with count.
+const JOB_NOUN: Record<string, { singular: string; plural: string }> = {
+  // electrical
+  downlights:        { singular: 'downlight',                    plural: 'downlights' },
+  smoke_alarms:      { singular: 'smoke alarm',                  plural: 'smoke alarms' },
+  power_points:      { singular: 'power point',                  plural: 'power points' },
+  ceiling_fans:      { singular: 'ceiling fan',                  plural: 'ceiling fans' },
+  outdoor_lighting:  { singular: 'outdoor light',                plural: 'outdoor lights' },
+  ev_charger:        { singular: 'EV charger',                   plural: 'EV chargers' },
+  switchboard:       { singular: 'switchboard',                  plural: 'switchboards' },
+  oven_cooktop:      { singular: 'oven / cooktop',               plural: 'ovens / cooktops' },
+  fault_finding:     { singular: 'circuit / repair area',        plural: 'circuits / repair areas' },
+  renovation:        { singular: 'space',                        plural: 'spaces' },
+  // plumbing — render the THING after the action, not the action
+  hot_water:         { singular: 'hot water system',             plural: 'hot water systems' },
+  blocked_drain:     { singular: 'drain',                        plural: 'drains' },
+  tap_repair:        { singular: 'tap',                          plural: 'taps' },
+  tap_replace:       { singular: 'tap',                          plural: 'taps' },
+  toilet_repair:     { singular: 'toilet',                       plural: 'toilets' },
+  toilet_replace:    { singular: 'toilet',                       plural: 'toilets' },
+  burst_pipe:        { singular: 'repaired pipe section',        plural: 'repaired pipe sections' },
+  gas_fitting:       { singular: 'gas appliance / fitting',      plural: 'gas appliances / fittings' },
+  prv_install:       { singular: 'PRV (pressure-reducing valve)', plural: 'PRVs (pressure-reducing valves)' },
+  bathroom_renovation: { singular: 'bathroom',                   plural: 'bathrooms' },
+  cctv_inspection:   { singular: 'drain section',                plural: 'drain sections' },
+}
+
+/** PURE — customer-noun for the job type, agreeing with count. */
+export function displayJobNoun(jobType: string, count: number): string {
+  const m = JOB_NOUN[jobType]
+  if (m) return count === 1 ? m.singular : m.plural
+  const h = humaniseJobType(jobType)
+  return count === 1 ? h.singular : h.plural
+}
+
+// ── Per-job-type room fallback ──────────────────────────────────────
+// When detectRoom() finds nothing in the customer's description (common
+// for "fix my hot water" / "blocked drain" intakes), pick a sensible
+// location word per job type instead of falling back to "space". Keeps
+// scene / subject phrasing concrete.
+const DEFAULT_ROOM_BY_JOB: Record<string, string> = {
+  hot_water:    'utility area (laundry / garage / external wall)',
+  ev_charger:   'garage or driveway',
+  switchboard:  'switchboard location',
+  burst_pipe:   'leak location',
+  blocked_drain: 'drain location',
+  gas_fitting:  'gas connection point',
+  prv_install:  'water mains inlet',
+}
+
+/** PURE — sensible room word for the job type when none was detected. */
+export function defaultRoomForJobType(jobType: string): string {
+  return DEFAULT_ROOM_BY_JOB[jobType] ?? 'space'
+}
+
 /**
  * PURE — the count the IG prompt should enforce for a given intake.
  * Order of preference:
@@ -224,15 +281,18 @@ export function ordinalPositions(jobType: string, count: number | null): string[
 
   // ── Generic fallback — covers small counts AND every unlisted job type.
   // Replaces the previous "return null" which left the prompt with no
-  // spatial guidance for 11 of 16 job types.
-  const label = humaniseJobType(jobType).singular || 'fitting'
+  // spatial guidance for 11 of 16 job types. displayJobNoun gives a
+  // grammatically correct count-aware noun ("hot water system" not "hot
+  // water", "tap" not "tap repair"). Each ordinal item is a single
+  // fitting → always use the singular form for the per-item label.
+  const singular = displayJobNoun(jobType, 1)
   if (n === 1) {
     return [
-      `The ${label}: installed at the existing connection / mounting point shown in the source photo if replacing, or the obvious mounting location if a new install. The fitting must be clearly visible and centred in frame.`,
+      `The ${singular}: installed at the existing connection / mounting point shown in the source photo if replacing, or the obvious mounting location if a new install. The fitting must be clearly visible and centred in frame.`,
     ]
   }
   return Array.from({ length: n }, (_, i) =>
-    `${ord(i)} ${label}: position ${i + 1} of ${n}, evenly spaced and clearly visible in frame.`,
+    `${ord(i)} ${singular}: position ${i + 1} of ${n}, evenly spaced and clearly visible in frame.`,
   )
 }
 
@@ -888,7 +948,10 @@ function buildSpecBlock(ctx: PromptContext, shot: RenderShot): string {
   const { intake, quote } = ctx
   const desc = (intake.scope?.description ?? '').trim()
   const callerName = intake.caller?.name?.trim() || null
-  const room = detectRoom(desc)
+  // Use the detected room from the customer's words; if none, fall
+  // back to a sensible per-job-type location ("utility area" for HWS,
+  // "garage or driveway" for EV chargers etc.) instead of dropping it.
+  const room = detectRoom(desc) ?? defaultRoomForJobType(intake.job_type)
   // Fix #2 — sensible single-item defaults so plumbing-style intakes
   // (hot_water etc.) still emit a count enforcement line.
   const count = effectiveItemCount(ctx)
@@ -959,8 +1022,16 @@ function buildSystemInstructionV2(ctx: PromptContext, args: {
   const count = effectiveItemCount(ctx)
   const anchor = pickAnchorProduct(ctx)
   const anchorDesc = pickAnchorDescription(ctx)
-  const { plural: jobLabelPlural } = humaniseJobType(ctx.intake.job_type)
   const isEdit = args.shot.mode === 'edit_customer_photo'
+  // Singular/plural-aware noun for the job's THING (e.g. "1 hot water
+  // system" vs "6 smoke alarms"). Falls back to count=1 form when there
+  // is no count, only for the fallback "wrong number" wording below.
+  const jobNoun = displayJobNoun(ctx.intake.job_type, count ?? 1)
+  const fittingWord = count === 1 ? 'fitting' : 'fittings'
+  // No reference photo will be attached when the line item has no
+  // image_path. In that case, the renderer leans entirely on the
+  // textual JSON cues — name it explicitly so Gemini knows to use them.
+  const hasProductPhoto = pickAnchorImagePath(ctx) !== null
 
   // ── <must> — only high-signal, concrete instructions. No "count out
   //    loud", no "self-verify", no "redraft": an image model renders in
@@ -968,7 +1039,7 @@ function buildSystemInstructionV2(ctx: PromptContext, args: {
   //    text-LLM prompting only dilutes attention. The real verification
   //    is the judge→retry loop in generate.ts (lib/ig-engine/judge.ts).
   const mustLines = [
-    count !== null ? `Render exactly ${count} ${jobLabelPlural} — no more, no fewer.` : null,
+    count !== null ? `Render exactly ${count} ${jobNoun} — no more, no fewer.` : null,
     anchor ? `Install the anchor product: ${anchor}. Match its brand, style, shape and finish exactly — never substitute a generic fitting.` : null,
     anchorDesc ? `The anchor product is specifically: "${anchorDesc.slice(0, 240)}".` : null,
     isEdit
@@ -976,13 +1047,15 @@ function buildSystemInstructionV2(ctx: PromptContext, args: {
       : `Generate a photoreal contemporary Australian residential scene: neutral walls, blonde-oak flooring, minimal furniture.`,
     `Render the install fully completed — day-of-handover state, tidied up.`,
     `Photoreal, magazine-quality interior photography.`,
-    `If a labelled PRODUCT REFERENCE photo is attached (the final image), replicate that exact product — it is the literal product quoted, not a style hint, and it overrides the generic job-type label.`,
+    hasProductPhoto
+      ? `If a labelled PRODUCT REFERENCE photo is attached (the final image), replicate that exact product — it is the literal product quoted, not a style hint, and it overrides the generic job-type label.`
+      : `NO REFERENCE PHOTO IS ATTACHED for this product — render strictly from product_to_render, product_details, and verbatim_customer in <spec>. Do not invent features the customer did not mention.`,
     args.style ?? null,
     ...(args.extraMust ?? []),
   ].filter((l): l is string => l !== null)
 
   const mustNotLines = [
-    count !== null ? `More or fewer than ${count} fittings.` : `The wrong number of fittings.`,
+    count !== null ? `More or fewer than ${count} ${fittingWord}.` : `The wrong number of fittings.`,
     `People, hands, pets, tradies, tools, ladders, packaging, or any mid-install state.`,
     `Text, captions, annotations or brand logos — except the small watermark named in <scene>.`,
     `Features not listed in <spec> — no smart/Wi-Fi, dimmable, IP-rated or premium finishes unless specified.`,
@@ -1015,16 +1088,18 @@ function buildSystemInstructionV2(ctx: PromptContext, args: {
 }
 
 export function buildPreviewPromptV2(ctx: PromptContext): SystemUserPrompt {
-  const room = detectRoom(ctx.intake.scope?.description) ?? 'space'
-  const { plural: jobLabelPlural } = humaniseJobType(ctx.intake.job_type)
+  const room = detectRoom(ctx.intake.scope?.description)
+    ?? defaultRoomForJobType(ctx.intake.job_type)
   const callerName = ctx.intake.caller?.name?.trim() || 'the customer'
   const isReplacement = ctx.intake.scope?.is_new_install === false
   const anchor = pickAnchorProduct(ctx)
   const count = effectiveItemCount(ctx)
+  // Singular/plural-aware noun for the count line in <subject>.
+  const jobNoun = displayJobNoun(ctx.intake.job_type, count ?? 1)
 
   const subject = anchor
     ? `${count ?? ''} ${anchor} installed in ${callerName}'s ${room}. Match the anchor product's exact brand, style and finish.`.trim()
-    : `${count ?? ''} ${jobLabelPlural} installed in ${callerName}'s ${room}.`.trim()
+    : `${count ?? ''} ${jobNoun} installed in ${callerName}'s ${room}.`.trim()
 
   const scene = isReplacement
     ? `${callerName}'s actual ${room}, edited from the attached photo. The existing fittings are removed and the new anchor product installed in their place; every other pixel preserved exactly. Watermark: small "AI PREVIEW" bottom-right.`
@@ -1082,14 +1157,20 @@ export function isReplacementJob(ctx: PromptContext): boolean {
  * single-purpose — one instruction, no count, no product, no install.
  */
 export function buildRemovalPrompt(ctx: PromptContext): SystemUserPrompt {
-  const room = detectRoom(ctx.intake.scope?.description) ?? 'space'
-  const { plural: jobLabelPlural } = humaniseJobType(ctx.intake.job_type)
+  const room = detectRoom(ctx.intake.scope?.description)
+    ?? defaultRoomForJobType(ctx.intake.job_type)
+  // Use the intake's count (or sensible default) to pick singular vs
+  // plural noun — "the existing tap" reads better than "the existing
+  // tap repairs" when count=1.
+  const count = effectiveItemCount(ctx) ?? 1
+  const jobNoun = displayJobNoun(ctx.intake.job_type, count)
+  const noun = count === 1 ? `the existing ${jobNoun}` : `the existing ${jobNoun}`
 
   const system = [
-    `<task>Edit the attached photo of a ${room}: remove the existing ${jobLabelPlural} so the mounting surface is clean and bare, ready for a new fitting to be installed later.</task>`,
+    `<task>Edit the attached photo of a ${room}: remove ${noun} so the mounting surface is clean and bare, ready for a new fitting to be installed later.</task>`,
     ``,
     `<must>`,
-    `- Remove every existing ${jobLabelPlural} visible in the photo.`,
+    `- Remove ${count === 1 ? 'the' : 'every'} existing ${jobNoun} visible in the photo.`,
     `- Leave the mounting surface clean, bare and undamaged — no holes, no scorch marks, no leftover brackets or hardware.`,
     `- Keep everything else pixel-identical: walls, floor, cabinetry, furniture, decor, perspective, camera angle and lighting.`,
     `- Photoreal result — it must look like a real photograph of the room with nothing installed in that spot.`,
@@ -1103,7 +1184,7 @@ export function buildRemovalPrompt(ctx: PromptContext): SystemUserPrompt {
   ].join('\n')
 
   const user = [
-    `Remove the existing ${jobLabelPlural} from the attached photo and leave a clean, bare surface.`,
+    `Remove ${noun} from the attached photo and leave a clean, bare surface.`,
     `Do not install anything new — removal only.`,
   ].join('\n')
 
@@ -1125,8 +1206,8 @@ export type SamplePromptOpts = {
 }
 
 export function buildSamplePrompts(ctx: PromptContext, opts: SamplePromptOpts = {}): SamplePromptSet | null {
-  const room = detectRoom(ctx.intake.scope?.description) ?? 'room'
-  const { plural: jobLabelPlural } = humaniseJobType(ctx.intake.job_type)
+  const room = detectRoom(ctx.intake.scope?.description)
+    ?? defaultRoomForJobType(ctx.intake.job_type)
   const callerName = ctx.intake.caller?.name?.trim() || null
   const callerLabel = callerName ?? 'the customer'
   const callerPossessive = callerName ? `${callerName}'s` : `the customer's`
@@ -1136,9 +1217,12 @@ export function buildSamplePrompts(ctx: PromptContext, opts: SamplePromptOpts = 
   // Subject is shared across all 3 shots — that's the cross-shot
   // consistency guarantee, expressed as data rather than prose.
   const anchor = pickAnchorProduct(ctx)
+  const jobNoun = displayJobNoun(ctx.intake.job_type, effectiveItemCount(ctx) ?? 1)
+  // Plural form for "no other ${nounPlural} visible" in the close-up.
+  const jobNounPlural = displayJobNoun(ctx.intake.job_type, 2)
   const subject = anchor
     ? `${anchor} installed in ${callerLabel}'s ${room}.`
-    : `${jobLabelPlural} installed in ${callerLabel}'s ${room}.`
+    : `${jobNoun} installed in ${callerLabel}'s ${room}.`
 
   const consistencyMust =
     'This is ONE of THREE coordinated sample images (WIDE / CLOSE-UP / IN-USE). All three MUST depict the SAME anchor product — same brand, style, finish — customers view them side by side.'
@@ -1149,8 +1233,8 @@ export function buildSamplePrompts(ctx: PromptContext, opts: SamplePromptOpts = 
     : `A contemporary Australian ${room}, install fully completed — day-of-handover. Camera ~3–4 m back, eye-level, daylight ambient. Watermark: small "AI SAMPLE" bottom-right.`
 
   const detailScene = usingPhoto
-    ? `Macro close-up of ONE instance of the anchor product, fully installed; fills 60–80% of the frame. Background: heavily-blurred bokeh sampled from ${callerPossessive} attached photo, no other ${jobLabelPlural} visible. Watermark: small "AI SAMPLE" bottom-right.`
-    : `Macro close-up of ONE instance of the anchor product, fully installed; fills 60–80% of the frame. Background: blurred ${room} bokeh, no other ${jobLabelPlural} visible. Watermark: small "AI SAMPLE" bottom-right.`
+    ? `Macro close-up of ONE instance of the anchor product, fully installed; fills 60–80% of the frame. Background: heavily-blurred bokeh sampled from ${callerPossessive} attached photo, no other ${jobNounPlural} visible. Watermark: small "AI SAMPLE" bottom-right.`
+    : `Macro close-up of ONE instance of the anchor product, fully installed; fills 60–80% of the frame. Background: blurred ${room} bokeh, no other ${jobNounPlural} visible. Watermark: small "AI SAMPLE" bottom-right.`
 
   const litScene = usingPhoto
     ? `${callerPossessive} ${room} at dusk (reference photo attached) — install fully completed, the product visibly doing its job (lit / running). Twilight outside. Watermark: small "AI SAMPLE" bottom-right.`

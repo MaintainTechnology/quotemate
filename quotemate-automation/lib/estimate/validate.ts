@@ -70,6 +70,13 @@ export type CandidatePrice = {
   sourceName: string
   /** Category tags extracted from the source name. */
   categories: Set<Category>
+  /** R-1 (2026-05-25) — optional DB row id. When set, a line whose
+   *  `source` field is `"material:<id>"` or `"assembly:<id>"` triggers
+   *  STRICT row-id grounding: the validator looks up the row by id and
+   *  requires the line price to match THAT row's price (raw or × default
+   *  markup) — no category fallback, no markup drift band. Lines without
+   *  a UUID in source fall back to the loose price + category match. */
+  sourceId?: string | null
 }
 
 export type CandidatePrices = {
@@ -250,6 +257,44 @@ export function validateQuoteGrounding(
   const findMatches = (target: number, list: CandidatePrice[]) =>
     list.filter((c) => within(c.price, target))
 
+  // R-4 (2026-05-25) — STRICT UUID GROUNDING.
+  // Index candidates by row id once per validation so per-line lookups
+  // are O(1). Each id maps to ALL its markup variants (raw + ±5pp + default)
+  // — buildCandidatePrices stamps the same sourceId on every variant of a
+  // given row. The strict path matches against this full set, so the line
+  // can use any valid markup of THE EXACT ROW Opus picked.
+  const materialById = new Map<string, CandidatePrice[]>()
+  const assemblyById = new Map<string, CandidatePrice[]>()
+  for (const c of candidates.material) {
+    if (c.sourceId) {
+      const list = materialById.get(c.sourceId) ?? []
+      list.push(c)
+      materialById.set(c.sourceId, list)
+    }
+  }
+  for (const c of candidates.assembly) {
+    if (c.sourceId) {
+      const list = assemblyById.get(c.sourceId) ?? []
+      list.push(c)
+      assemblyById.set(c.sourceId, list)
+    }
+  }
+
+  /** Parse `"material:<id>"` / `"assembly:<id>"` out of a line's source.
+   *  Returns null for anything that isn't a typed UUID reference (labour,
+   *  callout, tradie_edit, plain "material" without a colon, etc.) so
+   *  those lines fall through to the loose grounding path unchanged. */
+  const extractRowRef = (source: unknown): { type: 'material' | 'assembly'; id: string } | null => {
+    const s = String(source ?? '').trim()
+    const m = s.match(/^(material|assembly):([A-Za-z0-9_-]+)$/)
+    if (!m) return null
+    const id = m[2]
+    // Empty / placeholder ids (e.g. literal "UUID" from a prompt example
+    // Opus copy-pasted) → no strict path; fall through to loose.
+    if (!id || id.length < 4 || id.toLowerCase() === 'uuid') return null
+    return { type: m[1] as 'material' | 'assembly', id }
+  }
+
   const failures: GroundingFailure[] = []
   const TIERS = ['good', 'better', 'best'] as const
 
@@ -357,29 +402,68 @@ export function validateQuoteGrounding(
         // side of the candidate set carries no unit, so matching is
         // unaffected; this just stops the allowlist failing loudly for
         // a legitimate unit Opus might emit.
-        // Materials or assemblies — price match AND category match required.
-        const lineCats = categorise(description)
-        const priceMatches = [
-          ...findMatches(price, candidates.material),
-          ...findMatches(price, candidates.assembly),
-        ]
-
-        if (priceMatches.length === 0) {
-          valid = false
-          expected = `shared_materials/shared_assemblies (raw or × ${markupPct}% markup)`
-        } else {
-          // Of the rows that match by price, do any also match by category?
-          const semanticMatch = priceMatches.find((c) => categoriesMatch(lineCats, c.categories))
-          if (semanticMatch) {
-            valid = true
-          } else {
+        //
+        // R-4 (2026-05-25) — STRICT UUID PATH (when `source` carries one).
+        // If the line says `source: "material:<id>"` or `"assembly:<id>"`
+        // we look up THAT exact row and only accept a price that matches
+        // its raw or markup-expanded variants (±$0.50). The loose price
+        // + category fallback below is bypassed — UUID is the link, no
+        // need for the "right price + plausible category" heuristic.
+        // Lines without a UUID in source (legacy, tradie_edit, ambiguous)
+        // continue to use the loose path so no quote ever-grounded today
+        // suddenly breaks.
+        const ref = extractRowRef(li?.source)
+        if (ref) {
+          const candidateList = ref.type === 'material'
+            ? materialById.get(ref.id)
+            : assemblyById.get(ref.id)
+          if (!candidateList || candidateList.length === 0) {
             valid = false
-            const lineCatList = Array.from(lineCats).join(',')
-            const sourceList = priceMatches
-              .map((c) => `"${c.sourceName}" [${Array.from(c.categories).join(',')}]`)
-              .slice(0, 3)
-              .join(' | ')
-            expected = `price $${price} only exists in DB rows of a different category. Line categorised as [${lineCatList}], but matching rows are: ${sourceList}`
+            expected =
+              `${ref.type}:${ref.id} not found in this tenant+trade candidate set ` +
+              `(row may have been deleted, fabricated by the model, or the id ` +
+              `belongs to another trade/tenant). Strict UUID grounding requires ` +
+              `the row Opus picked to be in the loaded candidate set.`
+          } else {
+            const match = candidateList.find((c) => within(c.price, price))
+            if (match) {
+              valid = true
+            } else {
+              valid = false
+              const allowed = Array.from(new Set(candidateList.map((c) => `$${c.price.toFixed(2)}`))).join(', ')
+              expected =
+                `${ref.type}:${ref.id} ("${candidateList[0].sourceName}") allows ` +
+                `prices [${allowed}] (raw + markup variants); got $${price}. ` +
+                `Either Opus emitted a price that doesn't match the row it picked, ` +
+                `or it stamped the wrong row id.`
+            }
+          }
+        } else {
+          // Materials or assemblies — price match AND category match required
+          // (the original loose path, unchanged).
+          const lineCats = categorise(description)
+          const priceMatches = [
+            ...findMatches(price, candidates.material),
+            ...findMatches(price, candidates.assembly),
+          ]
+
+          if (priceMatches.length === 0) {
+            valid = false
+            expected = `shared_materials/shared_assemblies (raw or × ${markupPct}% markup)`
+          } else {
+            // Of the rows that match by price, do any also match by category?
+            const semanticMatch = priceMatches.find((c) => categoriesMatch(lineCats, c.categories))
+            if (semanticMatch) {
+              valid = true
+            } else {
+              valid = false
+              const lineCatList = Array.from(lineCats).join(',')
+              const sourceList = priceMatches
+                .map((c) => `"${c.sourceName}" [${Array.from(c.categories).join(',')}]`)
+                .slice(0, 3)
+                .join(' | ')
+              expected = `price $${price} only exists in DB rows of a different category. Line categorised as [${lineCatList}], but matching rows are: ${sourceList}`
+            }
           }
         }
       } else {
@@ -406,8 +490,14 @@ export function validateQuoteGrounding(
  *  migration 029). It is ADDED to the name-derived tags, never replaces
  *  them — so the column can only ever make grounding recognise the
  *  CORRECT category for a row whose name the regex misses; it can never
- *  remove a tag and regress a row that already grounds today. */
+ *  remove a tag and regress a row that already grounds today.
+ *
+ *  R-1 (2026-05-25) — `id` is the DB row's primary key. When passed
+ *  through, it enables the strict UUID grounding path in
+ *  validateQuoteGrounding. Optional for backward compat with callers
+ *  that don't yet thread row IDs through. */
 export type RawCandidateRow = {
+  id?: string | null
   name: string
   price: number | string | null | undefined
   category?: string | null
@@ -464,11 +554,15 @@ export function buildCandidatePrices(
       // grounding; this only ADDS the correct tag for names the regex
       // misses, e.g. "Install whole-house water filter").
       if (isCategory(row.category)) categories.add(row.category)
+      // R-1 — preserve the row id through every markup variant so the
+      // validator's strict path can index candidates by id.
+      const sourceId = row.id ?? null
       for (const m of multipliers) {
         out.push({
           price: +(raw * m).toFixed(2),
           sourceName: row.name ?? '(unnamed)',
           categories,
+          sourceId,
         })
       }
     }

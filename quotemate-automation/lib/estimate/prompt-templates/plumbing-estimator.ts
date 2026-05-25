@@ -274,7 +274,21 @@ LINE_ITEM SHAPE (each entry inside good/better/best.line_items)
   "unit":              "each" | "hr" | "lm",
   "unit_price_ex_gst": N,
   "total_ex_gst":      N,
-  "source":            "assembly:UUID" | "material:UUID" | "labour" | "callout",
+  "source":            REQUIRED — one of:
+                         • "material:<id>"  ← THE EXACT id from the lookup_material result row.
+                                              Strict UUID grounding (R-4): the validator looks
+                                              up THIS row and accepts ONLY its raw price or its
+                                              raw × default_markup_pct price (±$0.50). Mis-stamp
+                                              the id and the WHOLE quote downgrades to a $99
+                                              inspection. Copy the id field verbatim — do not
+                                              paraphrase, abbreviate, or substitute "UUID".
+                         • "assembly:<id>"  ← same rule, for lookup_assembly result rows.
+                         • "labour" / "after_hours"  ← for unit="hr" lines at the standard
+                                              or after-hours hourly rate.
+                         • "callout" / "after_hours_callout"  ← for the call-out fee line.
+                         • "risk_buffer"    ← for an explicit "Risk allowance" labour line.
+                         • "tradie_edit"    ← never emitted by you; the tradie edit route
+                                              stamps this on hand-edited lines (loose grounding).
   "supplied_by":       "tradie" | "customer"  // OPTIONAL — set only when customer supplies the product (WP5)
   "safety_note":       "string"               // OPTIONAL — required when supplied_by="customer" (see WP5 rule)
 }

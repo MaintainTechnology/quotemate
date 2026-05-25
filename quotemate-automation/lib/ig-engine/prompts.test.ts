@@ -10,6 +10,8 @@ import {
   buildPreviewPromptV2,
   buildRemovalPrompt,
   buildSamplePrompts,
+  defaultRoomForJobType,
+  displayJobNoun,
   effectiveItemCount,
   isReplacementJob,
   ordinalPositions,
@@ -264,6 +266,142 @@ describe('buildSamplePrompts — Fix #6 (V2 prune)', () => {
     const p = buildSamplePrompts(ctx(), { usePhotoReference: false })!
     expect(p.wide.system).toBeTruthy()
     expect(p.wide.system).toContain('Australian') // generic-room language fires
+  })
+})
+
+// ── Grammar polish — singular/plural agreement ─────────────────────
+describe('displayJobNoun — singular/plural', () => {
+  it('returns the singular noun when count is 1', () => {
+    expect(displayJobNoun('smoke_alarms', 1)).toBe('smoke alarm')
+    expect(displayJobNoun('downlights', 1)).toBe('downlight')
+    expect(displayJobNoun('power_points', 1)).toBe('power point')
+    expect(displayJobNoun('hot_water', 1)).toBe('hot water system')
+    expect(displayJobNoun('tap_repair', 1)).toBe('tap')
+    expect(displayJobNoun('toilet_replace', 1)).toBe('toilet')
+    expect(displayJobNoun('ev_charger', 1)).toBe('EV charger')
+  })
+
+  it('returns the plural noun when count is > 1', () => {
+    expect(displayJobNoun('smoke_alarms', 6)).toBe('smoke alarms')
+    expect(displayJobNoun('hot_water', 2)).toBe('hot water systems')
+    expect(displayJobNoun('tap_replace', 3)).toBe('taps')
+  })
+
+  it('falls back gracefully for unknown job types', () => {
+    expect(displayJobNoun('weird_unknown_job', 1)).toBeTruthy()
+    expect(displayJobNoun('weird_unknown_job', 2)).toBeTruthy()
+  })
+})
+
+// ── Per-job-type room fallback ─────────────────────────────────────
+describe('defaultRoomForJobType', () => {
+  it('returns a sensible location for jobs with implicit rooms', () => {
+    expect(defaultRoomForJobType('hot_water')).toMatch(/utility|laundry|garage/i)
+    expect(defaultRoomForJobType('ev_charger')).toMatch(/garage|driveway/i)
+    expect(defaultRoomForJobType('switchboard')).toMatch(/switchboard/i)
+    expect(defaultRoomForJobType('burst_pipe')).toMatch(/leak/i)
+  })
+
+  it('falls back to "space" for unmapped job types', () => {
+    expect(defaultRoomForJobType('downlights')).toBe('space')
+    expect(defaultRoomForJobType('made_up_job')).toBe('space')
+  })
+})
+
+// ── Prompt grammar — count agreement + room fallback + no-photo ────
+describe('buildPreviewPromptV2 — grammar polish', () => {
+  it('uses singular noun and "fitting" (singular) when count is 1', () => {
+    const c = ctx({
+      intake: {
+        job_type: 'hot_water',
+        scope: { is_new_install: false, description: 'hot water died' },
+        caller: { name: 'Sarah' },
+      },
+      lineItems: [{
+        tier: 'better',
+        description: 'Rheem Stellar 360L HWS',
+        quantity: 1,
+        source: 'material',
+        image_path: 'catalogue/rheem.jpg',
+      }],
+    })
+    const p = buildPreviewPromptV2(c)
+    expect(p.system).toContain('Render exactly 1 hot water system')
+    expect(p.system).not.toContain('Render exactly 1 hot water —')
+    expect(p.system).toContain('More or fewer than 1 fitting.')
+    expect(p.system).not.toContain('1 fittings.')
+  })
+
+  it('uses plural noun and "fittings" (plural) when count > 1', () => {
+    const p = buildPreviewPromptV2(ctx()) // default ctx has count=6 downlights
+    expect(p.system).toContain('Render exactly 6 downlights')
+    expect(p.system).toContain('More or fewer than 6 fittings.')
+  })
+
+  it('fills the room from the per-job-type default when none was detected', () => {
+    const c = ctx({
+      intake: {
+        job_type: 'hot_water',
+        scope: { description: 'hot water has died, family of 4' },
+        caller: { name: 'Sarah' },
+      },
+      lineItems: [{
+        tier: 'better',
+        description: 'Rheem HWS',
+        quantity: 1,
+        source: 'material',
+        image_path: 'x.jpg',
+      }],
+    })
+    const p = buildPreviewPromptV2(c)
+    expect(p.system).toMatch(/utility|laundry|garage/i)
+    expect(p.system).not.toContain("in Sarah's space")
+  })
+
+  it('keeps a detected room from the description when one is present', () => {
+    const c = ctx({
+      intake: {
+        job_type: 'tap_repair',
+        scope: { description: 'dripping tap in the kitchen' },
+        caller: { name: 'Joe' },
+      },
+      lineItems: [],
+    })
+    const p = buildPreviewPromptV2(c)
+    expect(p.system).toContain('room=kitchen')
+  })
+})
+
+describe('buildPreviewPromptV2 — no-reference-photo fallback', () => {
+  it('adds the "NO REFERENCE PHOTO" instruction when the catalogue line has no image_path', () => {
+    const c = ctx({
+      lineItems: [{
+        tier: 'better',
+        description: 'Generic LED downlight (no photo on file)',
+        quantity: 6,
+        source: 'material',
+        // NO image_path
+      }],
+    })
+    const p = buildPreviewPromptV2(c)
+    expect(p.system).toContain('NO REFERENCE PHOTO IS ATTACHED')
+    expect(p.system).toContain('product_to_render')
+    expect(p.system).toContain('verbatim_customer')
+  })
+
+  it('keeps the "if attached" instruction when image_path IS present', () => {
+    const c = ctx({
+      lineItems: [{
+        tier: 'better',
+        description: 'Brilliant LED downlight',
+        quantity: 6,
+        source: 'material',
+        image_path: 'catalogue/brilliant.jpg',
+      }],
+    })
+    const p = buildPreviewPromptV2(c)
+    expect(p.system).not.toContain('NO REFERENCE PHOTO IS ATTACHED')
+    expect(p.system).toContain('PRODUCT REFERENCE photo')
   })
 })
 
