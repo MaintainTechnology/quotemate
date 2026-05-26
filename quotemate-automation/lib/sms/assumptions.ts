@@ -68,9 +68,14 @@ export const ASSUMPTION_RULES: Record<JobType, AssumptionRule> = {
       'colour or feature preference (warm white, cool white, tri-colour, dimmable, smart Wi-Fi, or no preference / standard)',
     ],
     inspectionTriggers: [
-      'raked ceiling', 'high ceiling', 'cathedral ceiling',
+      // Trimmed 2026-05-26 — removed:
+      //   - 'high ceiling' (ambiguous; raked/cathedral cover the real cases)
+      //   - 'first time installing downlights in this room (no existing wiring)'
+      //     (now covered by shared_assemblies row "Install LED downlight
+      //      (new install, single-storey)" added in mig 069, which carries
+      //      its own narrower inspection_triggers)
+      'raked ceiling', 'cathedral ceiling',
       'no roof access', 'no manhole',
-      'first time installing downlights in this room (no existing wiring)',
       'pre-1970 house', 'asbestos', 'old wiring',
     ],
   },
@@ -91,13 +96,25 @@ export const ASSUMPTION_RULES: Record<JobType, AssumptionRule> = {
       'if the room is bathroom/ensuite/laundry/kitchen: is the GPO at least 600mm away from any basin, sink, shower or bath',
     ],
     inspectionTriggers: [
-      'customer explicitly asks for a new circuit or dedicated circuit',
+      // Trimmed + tightened 2026-05-26:
+      //   - 'customer explicitly asks for a new circuit or dedicated circuit'
+      //       → narrowed to 'dedicated 20A+ circuit' (a short new circuit run
+      //         can be quoted with a premium; only specialty / sub-circuit
+      //         work genuinely needs eyes-on)
+      //   - 'no power there now' → 'no power within 5 metres of the GPO
+      //         location' (short runs are quotable, long ones aren't)
+      //   - 'no existing power nearby' removed (duplicate of above)
+      //   - 'outdoor' + 'weatherproof' removed (we have the "Install outdoor
+      //         IP-rated GPO" row in shared_assemblies — auto-quote works)
+      //   - 'switchboard' (bare word) removed (universal triggers below carry
+      //         the tightened 'switchboard upgrade / damaged / at capacity')
+      'dedicated 20A+ circuit',
+      'new sub-circuit from switchboard requiring a spare way',
       'brand-new run from the switchboard',
-      'no power there now', 'no existing power nearby',
-      'outdoor', 'weatherproof',
+      'no power within 5 metres of the GPO location',
       'within 600mm of a basin, sink, shower or bath',
       'inside a wet-area zone',
-      'three-phase', 'switchboard',
+      'three-phase',
       'pre-1970 house', 'old wiring', 'ceramic fuse',
     ],
   },
@@ -116,8 +133,11 @@ export const ASSUMPTION_RULES: Record<JobType, AssumptionRule> = {
       'do you already have the fan, or do you want us to supply it',
     ],
     inspectionTriggers: [
-      'no existing fan or light at that spot',
-      'raked ceiling', 'high ceiling',
+      // Trimmed 2026-05-26 — removed:
+      //   - 'no existing fan or light at that spot' (now covered by mig 069's
+      //     "Install ceiling fan (new wiring, no existing rose)" row)
+      //   - 'high ceiling' (ambiguous; raked covers the real case)
+      'raked ceiling',
       'no roof access',
       'pre-1970 house',
     ],
@@ -135,7 +155,9 @@ export const ASSUMPTION_RULES: Record<JobType, AssumptionRule> = {
       'replacing existing alarms, or first installation',
     ],
     inspectionTriggers: [
-      'no existing alarms anywhere',
+      // Trimmed 2026-05-26 — removed 'no existing alarms anywhere' (now
+      // covered by mig 069's "Hardwire 240V smoke alarm (whole-house
+      // compliance install)" row).
       'pre-1970 house', 'asbestos', 'asbestos ceiling',
       'ceramic fuse', 'old switchboard',
       'rental compliance certificate required',
@@ -155,9 +177,14 @@ export const ASSUMPTION_RULES: Record<JobType, AssumptionRule> = {
       'do you want a sensor or always-on',
     ],
     inspectionTriggers: [
-      'no power outside currently',
+      // Trimmed + tightened 2026-05-26:
+      //   - 'no power outside currently' removed (now covered by mig 069's
+      //     "Install outdoor light (new circuit from indoor power)" row)
+      //   - 'garden lights along path' → '(5 or more fittings)' qualifier:
+      //     2-3 path lights are quotable; a designed lighting scheme isn't
       'underground cabling', 'bury cable',
-      'garden lights along path', 'string lights across yard',
+      'garden lights along path (5 or more fittings)',
+      'string lights across yard',
       'three-phase',
       'pre-1970 house',
     ],
@@ -202,8 +229,20 @@ export const ASSUMPTION_RULES: Record<JobType, AssumptionRule> = {
       'where is it located (laundry, outside back wall, roof, garage)',
     ],
     inspectionTriggers: [
+      // Tightened 2026-05-26 (Jon's "we'll need to run a new circuit"
+      // chat exposed that 'no power or gas point at install location'
+      // was too broad). First pass split it into 'no gas connection at
+      // install location' + 'requires new dedicated circuit run over 15
+      // metres'; both removed in a follow-up the same day — gas HWS
+      // already routes to inspection via the row-level
+      // always_inspection=true flag on the "Install gas HWS" row
+      // (migration 068, per AS/NZS 5601), so the dialog-level phrase is
+      // duplicative; and the >15m circuit case is rare enough to let
+      // through to the validator/router. Kept here are the genuine
+      // eyes-on cases (switchboard work, gas-line upgrade, roof, three-
+      // phase, asbestos, pre-1970).
       'switchboard upgrade needed', 'gas-line upgrade needed',
-      'no power or gas point at install location', 'roof-mounted',
+      'roof-mounted',
       'three-phase electric required', 'asbestos', 'pre-1970 house',
     ],
   },
@@ -219,7 +258,11 @@ export const ASSUMPTION_RULES: Record<JobType, AssumptionRule> = {
       'is it dripping, leaking from body, or stuck',
     ],
     inspectionTriggers: [
-      'leak through wall', 'water damage to cabinetry', 'no isolation valve',
+      // Tightened 2026-05-26 — 'no isolation valve' on its own is fine
+      // (plumbers can install one as part of the job); only escalate
+      // when no isolation AND old galvanised supply (= retrofit risk).
+      'leak through wall', 'water damage to cabinetry',
+      'no isolation valve and old galvanised supply',
       'pre-1970 house', 'galvanised supply lines',
     ],
   },
@@ -236,8 +279,11 @@ export const ASSUMPTION_RULES: Record<JobType, AssumptionRule> = {
       'are you supplying the tap or do you want the plumber to supply',
     ],
     inspectionTriggers: [
+      // Tightened 2026-05-26 — removed 'no isolation valve under sink'.
+      // Plumbers fit an isolation valve as part of a normal tap replace
+      // (typical 0.25hr extra labour); not a $99 site-visit case.
       'wall-mounted with no existing wall-tap', 'tiles need cutting',
-      'no isolation valve under sink', 'pre-1970 house',
+      'pre-1970 house',
     ],
   },
 
@@ -298,7 +344,13 @@ export const UNIVERSAL_INSPECTION_TRIGGERS = [
   // ── Electrical ──────────────────────────────────────────
   'burning smell', 'smoke coming from switchboard', 'smoke coming from outlet',
   'sparks', 'sparking', 'electric shock', 'shocked',
-  'switchboard', 'fuse box', 'ceramic fuse', 'old fuses',
+  // 'switchboard' alone was too broad (lots of casual mentions —
+  // "near the switchboard", "switchboard is in the garage") wrongly
+  // escalated. Tightened 2026-05-26 to the four cases that genuinely
+  // require switchboard-level intervention:
+  'switchboard upgrade', 'switchboard damaged', 'switchboard at capacity',
+  'no spare ways on switchboard',
+  'fuse box', 'ceramic fuse', 'old fuses',
   'rewire', 'three-phase', 'three phase',
   // EV chargers are explicit inspection-only per strategy.md v3 (mains
   // current, load calcs, switchboard interaction, dedicated circuit
@@ -313,7 +365,9 @@ export const UNIVERSAL_INSPECTION_TRIGGERS = [
   'leak behind wall', 'pipe behind wall', 'pipe under slab',
   'bathroom reno', 'bathroom renovation', 'kitchen reno',
   // ── Cross-trade ─────────────────────────────────────────
-  'renovation', 'extension',
+  // 'renovation' alone was too broad (a tap renovation = a tap_replace,
+  // not a $99 visit). Tightened 2026-05-26 to the whole-scope cases.
+  'full renovation', 'whole-house renovation', 'extension',
   'water damage', 'flooded',
   'pre-1970', 'asbestos',
 ]
