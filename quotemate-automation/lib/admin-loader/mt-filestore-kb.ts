@@ -1,0 +1,229 @@
+// mt-filestore-kb · HTTP client (pure functions over fetch).
+//
+// Thin wrapper over the Railway-hosted mt-filestore-kb service
+// (https://mt-filestore-kb-production.up.railway.app, source at
+// C:/Users/dalig/Downloads/QuoteMate/mt-filestore-kb). All requests
+// authenticate with the x-api-key header (KB_API_KEY env var). The
+// fetch implementation is injected so tests can mock the network.
+//
+// Only the endpoints QuoteMate's trade-book extraction needs are
+// exposed here:
+//   • listStores  — GET  /v1/stores         (sanity / config check)
+//   • listDocs    — GET  /v1/stores/:id/documents
+//   • search      — POST /v1/search          (the workhorse)
+//
+// Future endpoints (upload, drive sync) can be added when the admin
+// loader's UI grows a "upload trade book" button; for now uploads
+// happen via the mt-filestore-kb dashboard and we just point at the
+// resulting store_id.
+
+export type KbConfig = {
+  url: string       // e.g. "https://mt-filestore-kb-production.up.railway.app"
+  apiKey: string    // KB_API_KEY env var
+}
+
+export type KbFetch = typeof fetch
+
+// ─────────────────────────────────────────────────────────────────────
+// Response shapes (mirrors mt-filestore-kb's GeminiService output)
+// ─────────────────────────────────────────────────────────────────────
+
+export type KbStoreSummary = {
+  name: string                // "fileSearchStores/abc123…"
+  displayName?: string
+  state?: string
+  createTime?: string
+  updateTime?: string
+}
+
+export type KbDocumentSummary = {
+  name: string                // "fileSearchStores/.../documents/..."
+  displayName?: string
+  mimeType?: string
+  createTime?: string
+  state?: string
+  customMetadata?: Record<string, string>
+}
+
+/** A single grounding passage Gemini cited when answering. */
+export type KbGroundingPassage = {
+  text?: string
+  page?: number
+  documentTitle?: string
+  /** Raw underlying citation payload — varies by Gemini SDK version. */
+  raw?: unknown
+}
+
+export type KbSearchResult = {
+  answer: string
+  passages: KbGroundingPassage[]
+  modelUsed?: string
+  /** Whole raw response — kept for audit / debugging. */
+  raw: unknown
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Error shape — never throws on 4xx/5xx; returns structured error.
+// ─────────────────────────────────────────────────────────────────────
+
+export class KbHttpError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly url: string,
+    public readonly body: string,
+  ) {
+    super(`KbHttpError ${status} on ${url}: ${body.slice(0, 200)}`)
+    this.name = 'KbHttpError'
+  }
+}
+
+function ensureConfig(config: KbConfig): asserts config is KbConfig {
+  if (!config?.url) throw new Error('KbConfig.url is required')
+  if (!config?.apiKey) throw new Error('KbConfig.apiKey is required')
+}
+
+async function kbFetch(
+  config: KbConfig,
+  path: string,
+  init: RequestInit,
+  fetchImpl: KbFetch = fetch,
+): Promise<Response> {
+  ensureConfig(config)
+  const url = `${config.url.replace(/\/+$/, '')}${path}`
+  const headers = new Headers(init.headers ?? {})
+  headers.set('x-api-key', config.apiKey)
+  headers.set('Accept', 'application/json')
+  if (init.body && !headers.has('content-type')) {
+    headers.set('content-type', 'application/json')
+  }
+  return fetchImpl(url, { ...init, headers })
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// listStores — sanity check / dropdown population
+// ─────────────────────────────────────────────────────────────────────
+
+export async function kbListStores(
+  config: KbConfig,
+  fetchImpl: KbFetch = fetch,
+): Promise<KbStoreSummary[]> {
+  const res = await kbFetch(config, '/v1/stores', { method: 'GET' }, fetchImpl)
+  if (!res.ok) {
+    throw new KbHttpError(res.status, '/v1/stores', await res.text())
+  }
+  const data = (await res.json()) as { stores?: KbStoreSummary[] }
+  return Array.isArray(data.stores) ? data.stores : []
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// listDocs — see which PDFs are in a store
+// ─────────────────────────────────────────────────────────────────────
+
+export async function kbListDocuments(
+  config: KbConfig,
+  storeId: string,
+  fetchImpl: KbFetch = fetch,
+): Promise<KbDocumentSummary[]> {
+  if (!storeId) throw new Error('storeId is required')
+  const safe = encodeURIComponent(storeId)
+  const res = await kbFetch(
+    config,
+    `/v1/stores/${safe}/documents`,
+    { method: 'GET' },
+    fetchImpl,
+  )
+  if (!res.ok) {
+    throw new KbHttpError(res.status, `/v1/stores/${storeId}/documents`, await res.text())
+  }
+  const data = (await res.json()) as { documents?: KbDocumentSummary[] }
+  return Array.isArray(data.documents) ? data.documents : []
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// search — the workhorse
+// ─────────────────────────────────────────────────────────────────────
+
+export type KbSearchInput = {
+  store: string           // store id OR full "fileSearchStores/..." name
+  query: string           // the prompt
+  model?: string          // optional Gemini model override
+  metadataFilter?: string // e.g. 'author="Dr Deepti"' — scope to one doc
+}
+
+/** Parse mt-filestore-kb's search response into a clean shape. The raw
+ *  envelope from Gemini's generateContent API varies a bit between SDK
+ *  versions, so this is defensive. */
+export function parseSearchResponse(raw: unknown): KbSearchResult {
+  const r = raw as Record<string, unknown> | null
+  const answer = (() => {
+    if (!r) return ''
+    if (typeof r.answer === 'string') return r.answer
+    if (typeof r.text === 'string') return r.text
+    // Some shapes wrap in candidates[0].content.parts[0].text
+    const candidates = (r.candidates as any[]) ?? []
+    const first = candidates[0]
+    const parts = first?.content?.parts ?? []
+    const partText = parts.map((p: any) => p?.text ?? '').filter(Boolean).join('\n')
+    return partText
+  })()
+  const passages: KbGroundingPassage[] = (() => {
+    if (!r) return []
+    const cited = (r.passages as any[]) ?? (r.citations as any[]) ?? (r.groundingPassages as any[]) ?? []
+    return cited.map((p: any) => ({
+      text: p?.text ?? p?.snippet ?? undefined,
+      page: typeof p?.page === 'number' ? p.page : undefined,
+      documentTitle: p?.documentTitle ?? p?.title ?? undefined,
+      raw: p,
+    }))
+  })()
+  const modelUsed = typeof r?.modelUsed === 'string'
+    ? r.modelUsed
+    : typeof r?.model === 'string'
+      ? (r.model as string)
+      : undefined
+  return { answer, passages, modelUsed, raw }
+}
+
+export async function kbSearch(
+  config: KbConfig,
+  input: KbSearchInput,
+  fetchImpl: KbFetch = fetch,
+): Promise<KbSearchResult> {
+  if (!input?.store) throw new Error('search input.store is required')
+  if (!input?.query) throw new Error('search input.query is required')
+  const body: Record<string, unknown> = {
+    store: input.store,
+    query: input.query,
+  }
+  if (input.model) body.model = input.model
+  if (input.metadataFilter) body.metadataFilter = input.metadataFilter
+  const res = await kbFetch(
+    config,
+    '/v1/search',
+    { method: 'POST', body: JSON.stringify(body) },
+    fetchImpl,
+  )
+  if (!res.ok) {
+    throw new KbHttpError(res.status, '/v1/search', await res.text())
+  }
+  const raw = await res.json()
+  return parseSearchResponse(raw)
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Config loader — reads KB_API_URL + KB_API_KEY env vars at call-time
+// so importing this module never throws when those aren't set (matches
+// how `lib/estimate/tools.ts` lazy-loads its Supabase client).
+// ─────────────────────────────────────────────────────────────────────
+
+export function loadKbConfigFromEnv(env: NodeJS.ProcessEnv = process.env): KbConfig {
+  const url = env.KB_API_URL ?? env.MT_FILESTORE_KB_URL
+  const apiKey = env.KB_API_KEY ?? env.MT_FILESTORE_KB_API_KEY
+  if (!url) {
+    throw new Error('KB_API_URL (or MT_FILESTORE_KB_URL) env var is required')
+  }
+  if (!apiKey) {
+    throw new Error('KB_API_KEY (or MT_FILESTORE_KB_API_KEY) env var is required')
+  }
+  return { url, apiKey }
+}
