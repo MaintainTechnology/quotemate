@@ -180,11 +180,24 @@ export function buildProductOptionsSms(
  * dialog reply while a product choice is pending so the customer is
  * never told "quote on its way" before they've chosen. Kept brief; the
  * options + photo link were already sent in the options SMS.
+ *
+ * When the tradie's catalogue has only ONE product for the category
+ * (selectProductOptions returns a length-1 array), the prompt must
+ * match the options SMS — which says 'reply "yes" (or 1) to lock it in'.
+ * The 2-option phrasing ("reply 1 or 2") contradicts that and confuses
+ * the customer. Default arg = 2 preserves the original behaviour for
+ * any older callers that don't pass a count.
  */
-export function buildChoiceHoldSms(): string {
-  // Kept to one SMS segment (<=160 chars). Surfaces all three paths:
-  // pick (1/2), defer ("you pick"), and the conventional-GBB opt-out
-  // ("standard quote").
+export function buildChoiceHoldSms(optionCount: number = 2): string {
+  // Kept to one SMS segment (<=160 chars). Single-option flow surfaces
+  // the confirm + opt-out paths; two-option flow adds pick (1/2) and
+  // defer ("you pick").
+  if (optionCount <= 1) {
+    return (
+      'Reply "yes" to confirm (or tap the link). ' +
+      'Or "standard quote" for our regular pricing.'
+    )
+  }
   return (
     "Take your pick — reply 1 or 2 (or tap the link). No preference? " +
     "Say \"you pick\". Or \"standard quote\" for our regular pricing."

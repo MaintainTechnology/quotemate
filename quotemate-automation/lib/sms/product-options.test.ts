@@ -92,11 +92,31 @@ describe('buildProductOptionsSms', () => {
 })
 
 describe('buildChoiceHoldSms', () => {
-  it('is a short pick-prompt, well under the SMS cap, no "quote on its way"', () => {
-    const s = buildChoiceHoldSms()
+  it('two-option phrasing — "reply 1 or 2", no "quote on its way", under the SMS cap', () => {
+    const s = buildChoiceHoldSms(2)
     expect(s).toMatch(/reply 1 or 2/i)
     expect(s.length).toBeLessThanOrEqual(160)
     expect(s).not.toMatch(/quote (is )?on its way|drafting now/i)
+  })
+
+  it('default arg behaves as 2-option (backwards compat)', () => {
+    const s = buildChoiceHoldSms()
+    expect(s).toMatch(/reply 1 or 2/i)
+  })
+
+  it('single-option phrasing — confirm-only, no "reply 1 or 2"', () => {
+    const s = buildChoiceHoldSms(1)
+    expect(s).toMatch(/reply "yes"/i)
+    expect(s).not.toMatch(/reply 1 or 2/i)
+    expect(s).not.toMatch(/you pick/i)
+    expect(s.length).toBeLessThanOrEqual(160)
+    expect(s).not.toMatch(/quote (is )?on its way|drafting now/i)
+  })
+
+  it('zero-option (defensive) — falls through to single-option phrasing', () => {
+    const s = buildChoiceHoldSms(0)
+    expect(s).toMatch(/reply "yes"/i)
+    expect(s).not.toMatch(/reply 1 or 2/i)
   })
 })
 

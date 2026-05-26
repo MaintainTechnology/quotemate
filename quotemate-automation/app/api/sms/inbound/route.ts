@@ -1701,6 +1701,9 @@ export async function POST(req: Request) {
       // best-effort: OFF ⇒ skipped entirely; no catalogue/<2 options ⇒
       // no pending choice ⇒ no hold ⇒ normal finish (zero regression).
       let wp9HoldingForChoice = false
+      // How many options were offered (1 or 2). Threads through to the
+      // hold-SMS phrasing so single-product flows don't say "reply 1 or 2".
+      let wp9HoldingOptionCount = 0
       if (
         WP9_ENABLED &&
         (decision.offer_product_choice === true || decision.action === 'finish') &&
@@ -1723,7 +1726,10 @@ export async function POST(req: Request) {
           if (already) {
             // Pending = customer hasn't picked yet → keep holding the
             // quote. Chosen = let the normal finish flow proceed.
-            if (already.status === 'pending') wp9HoldingForChoice = true
+            if (already.status === 'pending') {
+              wp9HoldingForChoice = true
+              wp9HoldingOptionCount = Array.isArray(already.options) ? already.options.length : 0
+            }
             console.log('[sms/inbound:after] WP9 OFFER — choice already exists, skipping', {
               conversationId,
               status: already.status,
@@ -1764,6 +1770,7 @@ export async function POST(req: Request) {
                 .eq('id', conversationId)
               // Just offered → hold the quote until the customer picks.
               wp9HoldingForChoice = true
+              wp9HoldingOptionCount = options.length
               const appUrl = process.env.APP_URL ?? 'https://quote-mate-rho.vercel.app'
               const chooseUrl = `${appUrl}/q/choose/${token}`
               const optionsBody = buildProductOptionsSms(options, chooseUrl, category)
@@ -1810,9 +1817,13 @@ export async function POST(req: Request) {
       // the dialog reply for a short pick-prompt. The options SMS (with
       // the photo link) already went out just above.
       if (wp9HoldingForChoice) {
-        decision = { ...decision, reply_to_send: buildChoiceHoldSms() }
+        decision = {
+          ...decision,
+          reply_to_send: buildChoiceHoldSms(wp9HoldingOptionCount),
+        }
         console.log('[sms/inbound:after] WP9 — holding quote for pending product choice', {
           conversationId,
+          optionCount: wp9HoldingOptionCount,
         })
       }
 
