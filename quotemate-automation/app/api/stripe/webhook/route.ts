@@ -131,29 +131,35 @@ export async function POST(req: Request) {
 
     if (finalise && scheduledAt) {
       // Slot-hold model = "confirm slot on payment": the slot was NOT
-      // removed when the customer picked it, so free it now that it's
+      // removed when the customer picked it, so prune it now that it's
       // paid + booked (idempotent — only filters if still present).
-      try {
-        const { data: tr } = await supabase
-          .from('tradies')
-          .select('id, available_slots')
-          .limit(1)
-          .maybeSingle()
-        if (tr) {
-          const slots = Array.isArray(tr.available_slots)
-            ? (tr.available_slots as string[])
-            : []
-          if (slots.includes(scheduledAt)) {
-            await supabase
-              .from('tradies')
-              .update({ available_slots: slots.filter((s) => s !== scheduledAt) })
-              .eq('id', tr.id)
+      // Mig 062 moved available_slots off the legacy `tradies` table and
+      // onto `tenants`, so the prune now targets the tenant that owns
+      // this quote.
+      const tenantId = (existing.tenant_id as string | null) ?? null
+      if (tenantId) {
+        try {
+          const { data: tr } = await supabase
+            .from('tenants')
+            .select('id, available_slots')
+            .eq('id', tenantId)
+            .maybeSingle()
+          if (tr) {
+            const slots = Array.isArray(tr.available_slots)
+              ? (tr.available_slots as string[])
+              : []
+            if (slots.includes(scheduledAt)) {
+              await supabase
+                .from('tenants')
+                .update({ available_slots: slots.filter((s) => s !== scheduledAt) })
+                .eq('id', tr.id)
+            }
           }
+        } catch (e: any) {
+          log.err('slot prune failed (non-fatal — booking IS confirmed)', e?.message ?? String(e), {
+            quote_id: quoteId,
+          })
         }
-      } catch (e: any) {
-        log.err('slot prune failed (non-fatal — booking IS confirmed)', e?.message ?? String(e), {
-          quote_id: quoteId,
-        })
       }
 
       // Confirmation SMS to customer + tradie. Deferred via after() so

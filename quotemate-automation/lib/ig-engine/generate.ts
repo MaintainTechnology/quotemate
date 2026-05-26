@@ -572,22 +572,19 @@ export async function loadPromptContext(
 ): Promise<PromptContext> {
   // Fetch quote (with inline tier JSONB), separate line-items table, and
   // SMS conversation in parallel. The estimator writes tier objects with
-  // an inline `line_items[]` array on the JSONB columns (quotes.good /
-  // .better / .best), and SOMETIMES also writes individual rows to the
-  // `quote_line_items` table. Plumbing quotes today only get the inline
-  // JSONB version, so we read from BOTH sources and merge.
+  // Line items live in the inline JSONB columns (quotes.good / .better /
+  // .best). The normalised `quote_line_items` table was dropped in
+  // migration 058 — it was never populated by the estimator in practice,
+  // only declared in init.sql. pickAnchorProduct() reads from the
+  // inline shape below.
   const intakeId = (intake as { id?: string }).id ?? null
 
-  const [quoteRes, lineItemsRes, convoRes] = await Promise.all([
+  const [quoteRes, convoRes] = await Promise.all([
     supabase
       .from('quotes')
       .select('selected_tier, scope_of_works, assumptions, needs_inspection, good, better, best')
       .eq('id', quoteId)
       .maybeSingle(),
-    supabase
-      .from('quote_line_items')
-      .select('tier, description, quantity, source')
-      .eq('quote_id', quoteId),
     intakeId
       ? supabase
           .from('sms_conversations')
@@ -606,17 +603,7 @@ export async function loadPromptContext(
     needs_inspection: quoteRes.data.needs_inspection ?? null,
   } : null
 
-  // Prefer the quote_line_items table (richer schema). If it's empty
-  // (plumbing quotes today), fall back to the inline tier JSONB columns
-  // so pickAnchorProduct() can find the headline material.
-  let lineItems: PromptLineItem[] = Array.isArray(lineItemsRes?.data)
-    ? lineItemsRes.data.map(li => ({
-        tier: li.tier,
-        description: li.description,
-        quantity: li.quantity ?? null,
-        source: li.source ?? null,
-      }))
-    : []
+  let lineItems: PromptLineItem[] = []
 
   if (lineItems.length === 0 && quoteRes?.data) {
     // Map source mappings from the inline JSONB shape to the

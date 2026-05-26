@@ -88,22 +88,31 @@ export async function POST(
     )
   }
 
-  const { data: tradie, error: tradieErr } = await supabase
-    .from('tradies')
+  // Read the owning tenant's slot list. Mig 062 moved `available_slots`
+  // off the legacy `tradies` table and onto `tenants` so each tradie has
+  // their own slots; the orphan-tenant case (quote.tenant_id IS NULL) is
+  // a Phase-3 cleanup target — those quotes were never sent, so this
+  // path never fires for them in production.
+  if (!quote.tenant_id) {
+    log.err('quote has no tenant_id', null, { quote_id: quote.id })
+    return Response.json({ ok: false, error: 'No tradie configured' }, { status: 409 })
+  }
+  const { data: tenantSlots, error: slotsErr } = await supabase
+    .from('tenants')
     .select('id, available_slots')
-    .limit(1)
+    .eq('id', quote.tenant_id)
     .maybeSingle()
 
-  if (tradieErr) {
-    log.err('tradie lookup failed', tradieErr.message)
+  if (slotsErr) {
+    log.err('tenant slot lookup failed', slotsErr.message)
     return Response.json({ ok: false, error: 'Lookup failed' }, { status: 500 })
   }
-  if (!tradie) {
+  if (!tenantSlots) {
     return Response.json({ ok: false, error: 'No tradie configured' }, { status: 409 })
   }
 
-  const currentSlots: string[] = Array.isArray(tradie.available_slots)
-    ? (tradie.available_slots as string[])
+  const currentSlots: string[] = Array.isArray(tenantSlots.available_slots)
+    ? (tenantSlots.available_slots as string[])
     : []
 
   if (!currentSlots.includes(slot)) {

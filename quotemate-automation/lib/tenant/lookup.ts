@@ -105,21 +105,6 @@ export async function tenantByOwnerUser(
   return (data as TenantRow | null) ?? null
 }
 
-/** Find the pilot tenant for a given trade — fallback when no per-tenant
- *  number match exists (legacy pre-v6 conversations). */
-export async function tenantByLegacyPilotTrade(
-  supabase: SupabaseClient,
-  trade: 'electrical' | 'plumbing',
-): Promise<TenantRow | null> {
-  const expectedName = trade === 'plumbing' ? 'Pilot Plumber' : 'Pilot Sparky'
-  const { data } = await supabase
-    .from('tenants')
-    .select(SELECT_COLS)
-    .eq('business_name', expectedName)
-    .maybeSingle()
-  return (data as TenantRow | null) ?? null
-}
-
 /** Normalise AU mobiles to E.164 (+614xxxxxxxx). Idempotent. */
 function normaliseAuMobile(input: string): string {
   const stripped = input.replace(/\s+/g, '')

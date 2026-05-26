@@ -118,7 +118,7 @@ export default async function BookingPage(props: {
 
   const { data: quote } = await supabase
     .from('quotes')
-    .select('id, paid_at, paid_tier, selected_tier, scheduled_at, share_token, intake_id')
+    .select('id, paid_at, paid_tier, selected_tier, scheduled_at, share_token, intake_id, tenant_id')
     .eq('share_token', token)
     .maybeSingle()
 
@@ -136,15 +136,19 @@ export default async function BookingPage(props: {
     if (eb) appliedDiscountPct = Number(eb.applied_discount_pct ?? 0)
   }
 
-  // Single-tradie v0.5 model — when tradie #2 onboards, key on intake.tradie_id.
-  const { data: tradie } = await supabase
-    .from('tradies')
-    .select('id, business_name, available_slots')
-    .limit(1)
-    .maybeSingle()
+  // Slots live on the owning tenant since mig 062. The legacy `tradies`
+  // table was a single-tradie pre-multi-tenant remnant; each tenant now
+  // carries their own available_slots jsonb.
+  const { data: tenantRow } = quote.tenant_id
+    ? await supabase
+        .from('tenants')
+        .select('id, business_name, available_slots')
+        .eq('id', quote.tenant_id)
+        .maybeSingle()
+    : { data: null }
 
-  const slots: string[] = Array.isArray(tradie?.available_slots)
-    ? (tradie!.available_slots as string[])
+  const slots: string[] = Array.isArray(tenantRow?.available_slots)
+    ? (tenantRow!.available_slots as string[])
     : []
 
   const isPaid = !!quote.paid_at
@@ -164,7 +168,7 @@ export default async function BookingPage(props: {
   // Google = off-platform, tradie handles that deposit. Null when unset
   // or not a valid https URL → the option simply doesn't render.
   const googleUrl = resolveGoogleBookingUrl(process.env.GOOGLE_BOOKING_URL)
-  const tradieName = tradie?.business_name ?? null
+  const tradieName = tenantRow?.business_name ?? null
 
   let content: ReactNode
   if (isPaid && isScheduled) {

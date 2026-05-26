@@ -381,21 +381,12 @@ export async function GET(req: Request) {
     }
   }
 
-  // Payments — surface whether the customer has paid a deposit /
-  // inspection fee on each quote. We pull only succeeded rows so
-  // partial/refunded payments don't flip the badge to paid.
-  const quoteIds = (quotesRes.data ?? []).map((q) => q.id)
+  // Payments are tracked on quotes.status / quotes.accepted_at today;
+  // the standalone payments table was dropped in migration 058 because
+  // Stripe Connect Express isn't wired yet (0 rows in prod). Keep the
+  // empty set so the deposit_paid flag below stays false-by-default
+  // until the Connect flow lands and we re-introduce a payments source.
   const paidQuoteIds = new Set<string>()
-  if (quoteIds.length > 0) {
-    const { data: paid } = await supabase
-      .from('payments')
-      .select('quote_id')
-      .in('quote_id', quoteIds)
-      .eq('status', 'succeeded')
-    for (const p of paid ?? []) {
-      if (p.quote_id) paidQuoteIds.add(p.quote_id as string)
-    }
-  }
 
   const quotes = (quotesRes.data ?? []).map((q) => {
     const intake = q.intake_id ? intakeMap[q.intake_id] : null
