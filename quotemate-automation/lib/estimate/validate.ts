@@ -479,6 +479,83 @@ export function validateQuoteGrounding(
         })
       }
     }
+
+    // D-1 (2026-05-26) — DUPLICATE-LINE GUARD.
+    // Catches the bug where Opus emits the SAME catalogue product as two
+    // separate line items: one at raw cost ("source": "material"), one at
+    // marked-up cost ("source": "material:<id>"). The original per-line
+    // validation accepts both individually (the raw price is a valid
+    // candidate via the loose path; the marked-up price is a valid
+    // candidate via the strict UUID path) — so the customer ends up paying
+    // for the product twice. Real example: quote 3669a680... charged James
+    // for a Dux Proflo 315L at both $1645 (raw) AND $2237.20 (×1.36),
+    // inflating the total by ~$1810 inc GST.
+    //
+    // Each line resolves to an "anchor" — the catalogue row id it maps to.
+    // Lines with explicit UUID in source anchor directly. Lines without
+    // UUID try a reverse lookup by description + price match against the
+    // candidate set (stripping common parenthetical suffixes like
+    // "(supplied)" first so Opus's invented decorations don't dodge the
+    // check). Two lines with the same anchor in the same tier → flag the
+    // later one as a duplicate.
+    if (tier.line_items.length > 1) {
+      const resolveAnchor = (li: any): string | null => {
+        const ref = extractRowRef(li?.source)
+        if (ref) return `${ref.type}:${ref.id}`
+        const desc = String(li?.description ?? '').toLowerCase().trim()
+        const price = Number(li?.unit_price_ex_gst)
+        if (!Number.isFinite(price) || desc.length < 4) return null
+        const descBase = desc.split(/\s*\(/)[0].trim()
+        for (const [type, byId] of (
+          [
+            ['material', materialById],
+            ['assembly', assemblyById],
+          ] as const
+        )) {
+          for (const [id, variants] of byId) {
+            const cName = variants[0]?.sourceName?.toLowerCase()
+            if (!cName || cName.length < 4) continue
+            // Match the line text against the catalogue row name in either
+            // direction so we catch both "Catalogue name (supplied)" and
+            // "Catalogue name + extra prose" shapes.
+            const nameAligned =
+              desc.includes(cName) ||
+              descBase.includes(cName) ||
+              cName.includes(descBase)
+            if (!nameAligned) continue
+            if (variants.some((v) => within(v.price, price))) {
+              return `${type}:${id}`
+            }
+          }
+        }
+        return null
+      }
+      const anchorToIndices = new Map<string, number[]>()
+      for (let i = 0; i < tier.line_items.length; i++) {
+        const anchor = resolveAnchor(tier.line_items[i])
+        if (!anchor) continue
+        const arr = anchorToIndices.get(anchor) ?? []
+        arr.push(i)
+        anchorToIndices.set(anchor, arr)
+      }
+      for (const [anchor, indices] of anchorToIndices) {
+        if (indices.length <= 1) continue
+        for (const dupIdx of indices.slice(1)) {
+          const li = tier.line_items[dupIdx]
+          failures.push({
+            tier: tierKey,
+            lineIndex: dupIdx,
+            description: String(li?.description ?? '(no description)'),
+            unit: String(li?.unit ?? '?'),
+            unit_price_ex_gst: Number(li?.unit_price_ex_gst),
+            expected:
+              `duplicate ${anchor} — same catalogue row already used at line ${indices[0]}. ` +
+              `Each catalogue row may appear at most once per tier (D-1 dedup). ` +
+              `If the customer needs two of this product, set quantity=2 on a single line.`,
+          })
+        }
+      }
+    }
   }
 
   return failures.length === 0 ? { valid: true } : { valid: false, failures }
