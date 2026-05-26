@@ -319,7 +319,15 @@ export const UNIVERSAL_INSPECTION_TRIGGERS = [
 ]
 
 // Helper used by the dialog system prompt — produces a compact, readable
-// summary of the rules for a given job type.
+// summary of the rules for a given job type. As of migration 065
+// (2026-05-26), the MUST ASK section is NOT emitted here — those
+// questions now live per-row on shared_assemblies.clarifying_questions
+// and are injected by customServicesDirective() in dialog.ts. We keep
+// safeDefaults + inspectionTriggers here because they are genuinely
+// job-type-level policy (assumption-fill + keyword routing) and don't
+// fit the per-row clarifying_questions shape. The `mustAsk` arrays on
+// ASSUMPTION_RULES are kept for now as a fallback / documentation but
+// are no longer surfaced to the AI through this function.
 export function rulesAsText(jobType: JobType): string {
   const r = ASSUMPTION_RULES[jobType]
   const defaults = Object.entries(r.safeDefaults)
@@ -328,8 +336,6 @@ export function rulesAsText(jobType: JobType): string {
     `JOB TYPE: ${jobType}`,
     `SAFE DEFAULTS (apply silently if customer didn't state otherwise):`,
     defaults,
-    `MUST ASK (no safe default — short SMS question):`,
-    `  - ${r.mustAsk.join('\n  - ')}`,
     `INSPECTION TRIGGERS (force inspection_required=true if any of these match):`,
     `  - ${r.inspectionTriggers.join('\n  - ')}`,
   ].join('\n')

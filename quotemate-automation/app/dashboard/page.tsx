@@ -3680,9 +3680,11 @@ function PreferredBrandsCard({
                         onChange={(e) => change(row.category, e.target.value)}
                         className="bg-ink-base border border-ink-line text-text-pri text-sm px-3 py-2 focus:outline-none focus:border-accent"
                       >
-                        <option value="">Any (use catalogue default)</option>
+                        <option value="" className="bg-white text-black">
+                          Any (use catalogue default)
+                        </option>
                         {row.brands.map((brand) => (
-                          <option key={brand} value={brand}>
+                          <option key={brand} value={brand} className="bg-white text-black">
                             {brand}
                           </option>
                         ))}
