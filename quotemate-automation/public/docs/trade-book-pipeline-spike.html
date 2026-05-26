@@ -1,0 +1,622 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QuoteMate · Trade-book to cookbook pipeline · 1-pager spike</title>
+  <meta name="description" content="One-page proposal for the trade-book-to-cookbook extraction pipeline. Target document format, extraction prompt schema, sample CSV output, review UI tweaks, time + cost estimate." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800;900&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink-deep:#0E1622; --ink:#141C29; --ink-card:#1B2433; --ink-line:#2D3A4F;
+      --accent:#FF5A1F; --accent-soft:#FF7A45;
+      --text-pri:#FFFFFF; --text-sec:#C8D2E1; --text-dim:#8995A8;
+      --green:#34D399; --rose:#F87171; --amber:#FBBF24; --sky:#38BDF8; --violet:#A78BFA; --teal:#14B8A6;
+    }
+    *,*::before,*::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--ink-deep);
+      color: var(--text-pri);
+      font-family: 'Manrope', system-ui, -apple-system, sans-serif;
+      font-weight: 400;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 78rem; margin: 0 auto; padding: 0 1.25rem; }
+
+    .eyebrow {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.72rem; font-weight: 600;
+      letter-spacing: 0.16em; text-transform: uppercase;
+      color: var(--text-dim);
+    }
+    h1.title {
+      font-weight: 900; text-transform: uppercase;
+      font-size: clamp(2.25rem, 6vw, 4.5rem);
+      line-height: 0.96; letter-spacing: -0.035em;
+      margin: 0.75rem 0 0;
+    }
+    h2.section-title {
+      font-weight: 800; text-transform: uppercase;
+      font-size: clamp(1.5rem, 2.8vw, 2.1rem);
+      line-height: 1.05; letter-spacing: -0.025em;
+      margin: 0 0 0.25rem;
+    }
+    h2.section-title .num {
+      color: var(--accent);
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.8em; margin-right: 0.4em;
+    }
+    h3.sub {
+      font-size: 0.95rem; font-weight: 800;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--text-pri);
+      margin: 1.5rem 0 0.5rem;
+    }
+    .lead { font-size: 1.05rem; color: var(--text-sec); max-width: 60rem; line-height: 1.7; }
+    .lead b { color: var(--text-pri); font-weight: 700; }
+    .caption { font-size: 1rem; color: var(--text-sec); max-width: 62rem; line-height: 1.65; margin: 0.5rem 0 1.25rem; }
+    .caption b { color: var(--text-pri); font-weight: 700; }
+    .body-text { font-size: 0.97rem; color: var(--text-sec); max-width: 62rem; line-height: 1.7; margin: 0.7rem 0 0; }
+    .body-text b { color: var(--text-pri); font-weight: 700; }
+    .accent { color: var(--accent); }
+    p { margin: 0; color: var(--text-sec); }
+    a { color: var(--accent-soft); text-decoration: none; border-bottom: 1px dotted currentColor; }
+    a:hover { color: var(--accent); }
+
+    .tbl {
+      display: inline-block;
+      margin-left: 0.35rem;
+      padding: 0.1rem 0.45rem;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: var(--accent);
+      background: rgba(255,90,31,0.1);
+      border: 1px solid rgba(255,90,31,0.32);
+      border-radius: 3px;
+      vertical-align: baseline;
+      line-height: 1.3;
+    }
+
+    .hero { padding: 4rem 0 2.5rem; border-bottom: 1px solid var(--ink-line); }
+    .section { padding: 3.25rem 0; border-top: 1px solid var(--ink-line); }
+
+    .diag {
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      padding: 1.75rem 1.5rem;
+      margin-top: 1rem;
+    }
+    @media (min-width: 720px) { .diag { padding: 2.25rem 2.25rem; } }
+
+    .code-block {
+      background: var(--ink);
+      border: 1px solid var(--ink-line);
+      border-radius: 6px;
+      padding: 1rem 1.2rem;
+      margin-top: 1rem;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.82rem;
+      line-height: 1.55;
+      color: var(--text-sec);
+      overflow-x: auto;
+      white-space: pre;
+    }
+    .code-block .com { color: var(--text-dim); }
+    .code-block .key { color: var(--accent-soft); }
+    .code-block .str { color: var(--green); }
+    .code-block .num { color: var(--amber); }
+
+    .verdict {
+      background: var(--ink);
+      border-left: 4px solid var(--verdict-color, var(--accent));
+      padding: 0.9rem 1.2rem;
+      margin: 1.25rem 0 0;
+      border-radius: 0 6px 6px 0;
+    }
+    .verdict-label {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.72rem; font-weight: 700;
+      letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--verdict-color, var(--accent));
+    }
+    .verdict p { margin-top: 0.3rem; color: var(--text-pri); font-size: 0.95rem; line-height: 1.55; }
+    .verdict.green { --verdict-color: var(--green); }
+    .verdict.amber { --verdict-color: var(--amber); }
+    .verdict.sky { --verdict-color: var(--sky); }
+    .verdict.violet { --verdict-color: var(--violet); }
+
+    .pair { display: grid; gap: 1rem; grid-template-columns: 1fr; }
+    @media (min-width: 720px) { .pair { grid-template-columns: 1fr 1fr; } }
+
+    .box {
+      background: var(--ink);
+      border: 2px solid var(--ink-line);
+      border-radius: 6px;
+      padding: 1rem 1.15rem;
+    }
+    .box-lbl { font-weight: 800; font-size: 0.92rem; color: var(--text-pri); line-height: 1.3; text-transform: uppercase; letter-spacing: 0.04em; }
+    .box-sub { font-size: 0.9rem; color: var(--text-sec); margin-top: 0.55rem; line-height: 1.5; }
+    .box.green   { border-color: var(--green); }
+    .box.amber   { border-color: var(--amber); }
+    .box.sky     { border-color: var(--sky); }
+    .box.violet  { border-color: var(--violet); }
+    .box.rose    { border-color: var(--rose); }
+
+    .data-table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.92rem; }
+    .data-table th, .data-table td {
+      padding: 0.7rem 0.85rem;
+      border-bottom: 1px solid var(--ink-line);
+      text-align: left;
+      vertical-align: top;
+    }
+    .data-table th {
+      background: var(--ink);
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.7rem; font-weight: 700;
+      letter-spacing: 0.12em; text-transform: uppercase;
+    }
+    .data-table td { background: var(--ink-card); color: var(--text-sec); }
+    .data-table td.strong { color: var(--text-pri); font-weight: 700; }
+    .data-table td.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 0.84rem; }
+
+    .steps { display: grid; gap: 0.85rem; margin-top: 1rem; }
+    .step {
+      display: grid;
+      grid-template-columns: 3rem 1fr;
+      background: var(--ink);
+      border: 2px solid var(--ink-line);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .step-num {
+      background: var(--accent);
+      color: #000;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 1.25rem;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+    }
+    .step-body { padding: 0.85rem 1.1rem; }
+    .step-title { font-weight: 800; color: var(--text-pri); font-size: 1rem; margin-bottom: 0.25rem; }
+    .step-text { color: var(--text-sec); font-size: 0.92rem; line-height: 1.55; }
+    .step-tag {
+      display: inline-block;
+      margin-top: 0.55rem;
+      padding: 0.2rem 0.6rem;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: var(--accent);
+      background: rgba(255,90,31,0.1);
+      border: 1px solid rgba(255,90,31,0.35);
+      border-radius: 3px;
+    }
+    .step-tag.new { color: var(--amber); background: rgba(251,191,36,0.1); border-color: rgba(251,191,36,0.35); }
+
+    .cost-card {
+      background: var(--ink);
+      border: 2px solid var(--ink-line);
+      border-radius: 6px;
+      padding: 1.1rem 1.25rem;
+    }
+    .cost-card h4 {
+      margin: 0 0 0.5rem;
+      font-weight: 800; font-size: 0.95rem;
+      text-transform: uppercase; letter-spacing: 0.04em;
+      color: var(--text-pri);
+    }
+    .cost-card .figure {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-weight: 700;
+      font-size: 1.4rem;
+      color: var(--accent);
+    }
+    .cost-card .sub {
+      font-size: 0.85rem; color: var(--text-dim);
+      margin-top: 0.3rem;
+    }
+
+    footer {
+      border-top: 1px solid var(--ink-line);
+      padding: 2.5rem 0;
+      color: var(--text-dim);
+      font-size: 0.88rem;
+    }
+    footer strong { color: var(--text-sec); }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- HERO                                                              -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="hero">
+  <div class="wrap">
+    <div class="eyebrow">QuoteMate · Spike proposal · For Jon's sign-off</div>
+    <h1 class="title">Trade book<br/>→ <span class="accent">cookbook</span></h1>
+    <p class="lead" style="margin-top:1.5rem">
+      One page proposal for the document-extraction step that turns a
+      tradie's existing work-instruction manual into a draft of catalogue
+      rows we can review and import. Five of six pipeline steps are already
+      shipped; this is the missing piece.
+    </p>
+    <p class="lead" style="margin-top:0.85rem">
+      <b>What needs sign-off before any code lands:</b> the target document
+      format, the extraction schema, the sample output shape, and the
+      time + cost estimate below.
+    </p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SECTION 1 — TARGET DOCUMENT FORMAT                                -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="section">
+  <div class="wrap">
+    <h2 class="section-title"><span class="num">01</span>Target document format</h2>
+    <p class="caption">
+      The pipeline works only on documents with the right shape. Trying to
+      extract from invoices ("replaced 6 LED downlights, $300") gives us
+      nothing useful. The right input is the document a tradie hands to a
+      new apprentice — usually called a <b>work-instruction manual</b>, an
+      <b>internal pricing guide</b>, or a <b>standard operating procedure
+      (SOP) book</b>.
+    </p>
+
+    <div class="diag">
+      <div class="pair">
+        <div class="box green">
+          <div class="box-lbl">Good input — what we want</div>
+          <div class="box-sub">
+            • Work-instruction manuals (per-job procedure + timing)<br/>
+            • Internal pricing guides (per-service labour breakdowns)<br/>
+            • Apprentice training docs (assumptions + escalation rules)<br/>
+            • Supplier price catalogues (parts + brands)<br/>
+            • SOPs ("how we price a downlight install")
+          </div>
+        </div>
+        <div class="box rose">
+          <div class="box-lbl">Bad input — won't work</div>
+          <div class="box-sub">
+            • Customer-facing invoices ("replaced 6 LED downlights $300")<br/>
+            • Quotes already sent (output, not source)<br/>
+            • Photos of completed work (no pricing data)<br/>
+            • Generic compliance docs (standards, not pricing)
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sub">Accepted formats</h3>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Format</th>
+            <th>Supported by scanner</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="strong">PDF (text-native)</td><td>✓ Best</td><td>Cleanest extraction. Most modern work-instruction manuals.</td></tr>
+          <tr><td class="strong">PDF (scanned image)</td><td>✓ Via OCR</td><td>Older books — Gemini handles OCR transparently but accuracy depends on scan quality.</td></tr>
+          <tr><td class="strong">DOCX / DOC</td><td>✓ Convert to PDF first</td><td>Easy pre-processing step in the upload flow.</td></tr>
+          <tr><td class="strong">XLSX (spreadsheet)</td><td>~ Limited</td><td>Tables extract OK; structured rows can be parsed directly without Gemini if the layout is consistent.</td></tr>
+          <tr><td class="strong">Image (JPG/PNG)</td><td>~ Page-by-page only</td><td>Single-page snapshots OK; multi-page books are clumsier than PDF.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="verdict sky">
+      <div class="verdict-label">Decision needed from Jon</div>
+      <p>Do we limit the initial pilot to PDF-only? Recommendation: yes — covers 80% of trade books, no upload-flow complexity. Add DOCX/XLSX in v2 once we know the extraction prompt is stable.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SECTION 2 — EXTRACTION PROMPT SCHEMA                              -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="section">
+  <div class="wrap">
+    <h2 class="section-title"><span class="num">02</span>Extraction prompt schema</h2>
+    <p class="caption">
+      The prompt we send to <span class="tbl">mt-filestore-kb</span> against the
+      indexed document. Returns structured JSON that maps 1:1 to a row in
+      <span class="tbl">shared_assemblies</span> (or
+      <span class="tbl">tenant_custom_assemblies</span> for tenant-specific
+      uploads). The shape includes all the columns we've added through
+      migration 067 — so the extracted output can populate
+      <span class="tbl">row_assumptions</span>,
+      <span class="tbl">clarifying_questions</span>, and
+      <span class="tbl">inspection_triggers</span> directly.
+    </p>
+
+    <h3 class="sub">The prompt we send</h3>
+    <div class="code-block"><span class="com">// Sent to mt-filestore-kb POST /v1/search against the indexed document</span>
+<span class="key">"For every install or repair service described in this document,</span>
+<span class="key">extract the following structured fields. Return a JSON array, one</span>
+<span class="key">object per service. Cite the page/section where you found each one."</span>
+
+<span class="com">// Required schema per service:</span>
+{
+  <span class="key">"trade"</span>: <span class="str">"electrical | plumbing | carpentry | ..."</span>,
+  <span class="key">"name"</span>: <span class="str">"Short descriptive name, e.g. 'Install LED downlight (new install)'"</span>,
+  <span class="key">"description"</span>: <span class="str">"1-2 sentence summary of the work performed"</span>,
+  <span class="key">"category"</span>: <span class="str">"downlight | gpo | smoke_alarm | hot_water | ..."</span>,
+  <span class="key">"default_unit"</span>: <span class="str">"each | hr | lm"</span>,
+  <span class="key">"default_unit_price_ex_gst"</span>: <span class="num">35.00</span>,
+  <span class="key">"default_labour_hours"</span>: <span class="num">1.75</span>,
+  <span class="key">"default_exclusions"</span>: <span class="str">"What's explicitly NOT included"</span>,
+  <span class="key">"clarifying_questions"</span>: [
+    <span class="str">"Question 1 that affects the price"</span>,
+    <span class="str">"Question 2..."</span>
+  ],
+  <span class="key">"row_assumptions"</span>: {
+    <span class="key">"switch_within_metres"</span>: <span class="num">5</span>,
+    <span class="key">"max_storeys"</span>: <span class="num">1</span>,
+    <span class="key">"roof_access_required"</span>: <span class="num">true</span>
+  },
+  <span class="key">"inspection_triggers"</span>: [
+    <span class="str">"raked ceiling"</span>, <span class="str">"multi-storey"</span>, <span class="str">"asbestos"</span>
+  ],
+  <span class="key">"properties"</span>: {
+    <span class="key">"weatherproof"</span>: <span class="num">false</span>, <span class="key">"new_install"</span>: <span class="num">true</span>
+  },
+  <span class="key">"always_inspection"</span>: <span class="num">false</span>,
+  <span class="key">"materials"</span>: [
+    { <span class="key">"name"</span>: <span class="str">"LED downlight 9W warm white"</span>, <span class="key">"brand"</span>: <span class="str">"Clipsal"</span>, <span class="key">"unit"</span>: <span class="str">"each"</span>, <span class="key">"unit_price_ex_gst"</span>: <span class="num">28.00</span> }
+  ],
+  <span class="key">"source_citation"</span>: <span class="str">"Page 12, 'Standard Downlight Procedure'"</span>
+}</div>
+
+    <h3 class="sub">Why each field matters</h3>
+    <table class="data-table">
+      <thead><tr><th>Field</th><th>Why we need it</th><th>Destination</th></tr></thead>
+      <tbody>
+        <tr><td class="strong mono">trade · name · category</td><td>Identifies the row uniquely + lets the AI find it via the Smart Sorter</td><td><span class="tbl">shared_assemblies.trade/name/category</span></td></tr>
+        <tr><td class="strong mono">default_labour_hours · price</td><td>The actual pricing inputs the estimator uses</td><td><span class="tbl">default_labour_hours · default_unit_price_ex_gst</span></td></tr>
+        <tr><td class="strong mono">clarifying_questions</td><td>Forces the SMS dialog to ask before quoting (mig 065)</td><td><span class="tbl">shared_assemblies.clarifying_questions</span></td></tr>
+        <tr><td class="strong mono">row_assumptions</td><td>Structured rules — switch_within_metres, max_storeys, etc. (mig 067)</td><td><span class="tbl">shared_assemblies.row_assumptions</span></td></tr>
+        <tr><td class="strong mono">inspection_triggers</td><td>Phrases that escalate THIS row to a site visit (mig 067)</td><td><span class="tbl">shared_assemblies.inspection_triggers</span></td></tr>
+        <tr><td class="strong mono">always_inspection</td><td>Marks rows like gas HWS that must always escalate (mig 067/068)</td><td><span class="tbl">shared_assemblies.always_inspection</span></td></tr>
+        <tr><td class="strong mono">materials</td><td>Specific parts referenced — populates <span class="tbl">shared_materials</span> or <span class="tbl">tenant_material_catalogue</span></td><td>Linked rows in materials tables</td></tr>
+        <tr><td class="strong mono">source_citation</td><td>Audit trail: operator can verify each extracted row against the original PDF</td><td>Stored in <span class="tbl">import_staged_rows.source_ref</span> column (new — small mig)</td></tr>
+      </tbody>
+    </table>
+
+    <div class="verdict violet">
+      <div class="verdict-label">Schema aligns with what we already have</div>
+      <p>Every field maps to an existing column in <span class="tbl">shared_assemblies</span> + <span class="tbl">shared_materials</span> (after migrations 029, 032/033, 041, 065, 067). The only NEW DB change needed for this pipeline is adding a <span class="tbl">source_ref</span> column on <span class="tbl">import_staged_rows</span> so the operator review UI can show citations alongside each extracted row.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SECTION 3 — SAMPLE EXTRACTED OUTPUT                               -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="section">
+  <div class="wrap">
+    <h2 class="section-title"><span class="num">03</span>Sample extracted output</h2>
+    <p class="caption">
+      What we'd expect back from the AI on a real trade book. Two example
+      services pulled from a hypothetical electrician's manual. Each carries
+      the full schema plus a source citation back to the PDF.
+    </p>
+
+    <div class="code-block"><span class="com">// Sample output from one PDF upload — first 2 of N services extracted</span>
+[
+  {
+    <span class="key">"trade"</span>: <span class="str">"electrical"</span>,
+    <span class="key">"name"</span>: <span class="str">"Install LED downlight (new install, single-storey)"</span>,
+    <span class="key">"description"</span>: <span class="str">"New downlight install where no fitting exists. Run cable from switch within 5m, cut hole, terminate, fit, test."</span>,
+    <span class="key">"category"</span>: <span class="str">"downlight"</span>,
+    <span class="key">"default_unit"</span>: <span class="str">"each"</span>,
+    <span class="key">"default_unit_price_ex_gst"</span>: <span class="num">35.00</span>,
+    <span class="key">"default_labour_hours"</span>: <span class="num">1.75</span>,
+    <span class="key">"default_exclusions"</span>: <span class="str">"Excludes new circuit work, switchboard upgrades, ceiling repair beyond standard 90mm core"</span>,
+    <span class="key">"clarifying_questions"</span>: [
+      <span class="str">"How many downlights, and in which room?"</span>,
+      <span class="str">"Is there an existing light switch within 5 metres?"</span>,
+      <span class="str">"Ceiling type - flat plaster, raked, cathedral?"</span>,
+      <span class="str">"Colour preference - warm white, cool white, tri-colour, dimmable?"</span>
+    ],
+    <span class="key">"row_assumptions"</span>: {
+      <span class="key">"switch_within_metres"</span>: <span class="num">5</span>,
+      <span class="key">"max_storeys"</span>: <span class="num">1</span>,
+      <span class="key">"roof_access_required"</span>: <span class="num">true</span>,
+      <span class="key">"ceiling_type_required"</span>: <span class="str">"flat_plaster"</span>
+    },
+    <span class="key">"inspection_triggers"</span>: [<span class="str">"raked ceiling"</span>, <span class="str">"multi-storey"</span>, <span class="str">"no roof access"</span>],
+    <span class="key">"properties"</span>: { <span class="key">"weatherproof"</span>: <span class="num">false</span>, <span class="key">"new_install"</span>: <span class="num">true</span> },
+    <span class="key">"always_inspection"</span>: <span class="num">false</span>,
+    <span class="key">"materials"</span>: [
+      { <span class="key">"name"</span>: <span class="str">"LED downlight 9W warm white"</span>, <span class="key">"brand"</span>: <span class="str">"Clipsal"</span>, <span class="key">"unit_price_ex_gst"</span>: <span class="num">28.00</span> }
+    ],
+    <span class="key">"source_citation"</span>: <span class="str">"Page 12, Section 4.2 'Standard Downlight Procedure (New Install)'"</span>
+  },
+  {
+    <span class="key">"trade"</span>: <span class="str">"electrical"</span>,
+    <span class="key">"name"</span>: <span class="str">"Install gas appliance connection"</span>,
+    <span class="key">"description"</span>: <span class="str">"Connect new gas appliance to existing supply with bayonet fitting and certification."</span>,
+    <span class="key">"category"</span>: <span class="str">"gas"</span>,
+    <span class="key">"always_inspection"</span>: <span class="num">true</span>,
+    <span class="key">"row_assumptions"</span>: {
+      <span class="key">"always_inspection_reason"</span>: <span class="str">"AS/NZS 5601 requires certified gas-fitter on site"</span>
+    },
+    <span class="key">"source_citation"</span>: <span class="str">"Page 28, Section 7.1 'Gas Connection Procedure'"</span>
+  }
+]</div>
+
+    <div class="verdict green">
+      <div class="verdict-label">Operator review then becomes a quick scan</div>
+      <p>The operator (you, or someone on the team) opens <span class="tbl">/admin/loader</span>, sees the extracted rows in a table with the source citation linked, and approves the batch in one click. Anything wrong gets edited inline before approval. Already-built UI handles all of this; the new bit is just the column to show citations.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SECTION 4 — UI TWEAKS NEEDED                                      -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="section">
+  <div class="wrap">
+    <h2 class="section-title"><span class="num">04</span>UI tweaks needed</h2>
+    <p class="caption">
+      The admin loader review tool at <span class="tbl">/admin/loader</span>
+      already handles staging + edit + approve. Three small additions to
+      make it work cleanly for trade-book uploads:
+    </p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="step-title">"Upload trade book PDF" button + source-document selector</div>
+          <div class="step-text">Replaces the existing "Upload CSV" button with a dropdown: <em>"Upload CSV"</em> or <em>"Upload trade book PDF"</em>. PDF path triggers the scanner + extraction prompt instead of CSV parsing.</div>
+          <div class="step-tag new">~2 hours frontend work</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="step-title">Source-citation column in the staging table</div>
+          <div class="step-text">Each row in the review list shows the citation back to the PDF page + section. Click → opens the original PDF at that location for verification. Requires a new <span class="tbl">source_ref</span> column on <span class="tbl">import_staged_rows</span> (one-line migration).</div>
+          <div class="step-tag new">~3 hours full-stack work</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">"Bulk approve" with per-row override</div>
+          <div class="step-text">Right now the loader is one-row-at-a-time. For a trade book with 50+ extracted rows, a "select all → approve" with inline edit beats clicking 50 times. The data-model already supports it; just the UI control to add.</div>
+          <div class="step-tag new">~2 hours frontend</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SECTION 5 — TIME + COST ESTIMATE                                  -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="section">
+  <div class="wrap">
+    <h2 class="section-title"><span class="num">05</span>Time + cost estimate</h2>
+    <p class="caption">
+      Honest estimate broken down by chunk. Most of the work is the
+      extraction prompt + light frontend; the heavy infrastructure
+      (<span class="tbl">mt-filestore-kb</span>, admin loader pipeline,
+      schema) is already shipped.
+    </p>
+
+    <div class="diag">
+      <div class="pair" style="grid-template-columns: 1fr 1fr">
+        <div class="cost-card">
+          <h4>Build effort</h4>
+          <div class="figure">~5 days</div>
+          <div class="sub">One focused dev week. Breakdown below.</div>
+        </div>
+        <div class="cost-card">
+          <h4>Runtime cost per book</h4>
+          <div class="figure">~$0.30-1.00</div>
+          <div class="sub">Gemini File Search indexing + extraction calls. Cheap.</div>
+        </div>
+      </div>
+
+      <h3 class="sub">Build breakdown</h3>
+      <table class="data-table">
+        <thead><tr><th>Task</th><th>Effort</th><th>Risk</th></tr></thead>
+        <tbody>
+          <tr><td class="strong">Draft + iterate the extraction prompt against 3 sample trade books</td><td class="mono">1.5 days</td><td>Medium — needs real PDFs to test against</td></tr>
+          <tr><td class="strong">Wire the prompt to <span class="tbl">mt-filestore-kb</span> + capture output to <span class="tbl">import_staged_rows</span></td><td class="mono">1 day</td><td>Low — both APIs exist</td></tr>
+          <tr><td class="strong">Add <span class="tbl">source_ref</span> column to <span class="tbl">import_staged_rows</span> (migration)</td><td class="mono">0.25 day</td><td>Low</td></tr>
+          <tr><td class="strong">Frontend: upload PDF button + format selector</td><td class="mono">0.5 day</td><td>Low</td></tr>
+          <tr><td class="strong">Frontend: citation column + bulk approve</td><td class="mono">0.75 day</td><td>Low</td></tr>
+          <tr><td class="strong">End-to-end test with 1 real tradie's pricing guide</td><td class="mono">1 day</td><td>Medium — depends on tradie availability</td></tr>
+          <tr><td class="strong">Total</td><td class="strong mono">~5 days</td><td>—</td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="sub">Runtime cost breakdown (per trade book upload)</h3>
+      <table class="data-table">
+        <thead><tr><th>Step</th><th>Cost</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td class="strong">Upload + index PDF (Gemini File Search)</td><td class="mono">~$0.05-0.20</td><td>One-off per document; depends on page count</td></tr>
+          <tr><td class="strong">Extraction query (Gemini answer + citations)</td><td class="mono">~$0.20-0.80</td><td>Depends on number of services found</td></tr>
+          <tr><td class="strong">Storage (indexed doc retained)</td><td class="mono">~$0.01/mo</td><td>Negligible</td></tr>
+          <tr><td class="strong">Estimated total per book</td><td class="strong mono">~$0.30-1.00</td><td>Order-of-magnitude — exact depends on book size</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="verdict amber">
+      <div class="verdict-label">Risks worth flagging</div>
+      <p><b>1. Extraction quality depends heavily on PDF structure.</b> A well-organised trade book with clear sections extracts cleanly; a messy mix of notes might need prompt iteration. <b>2. We need 3 real sample trade books</b> to tune the prompt — can Jon source one or two from his network? <b>3. Operator review time</b> is still required for the first few extractions while we calibrate the prompt; assume 30-60 min per book initially, dropping to 5-10 min once the prompt is stable.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SECTION 6 — WHY THIS UNLOCKS THE NEXT 10 TRADES                   -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="section">
+  <div class="wrap">
+    <h2 class="section-title"><span class="num">06</span>Why this is the right next bet</h2>
+    <p class="caption">
+      Bigger picture context — why this pays back across every future
+      trade we add to QuoteMate.
+    </p>
+
+    <div class="diag">
+      <div class="pair">
+        <div class="box amber">
+          <div class="box-lbl">Without this pipeline</div>
+          <div class="box-sub">
+            Every new trade = 2 weeks of hand-authoring catalogue entries.<br/>
+            Carpentry, solar, painting, HVAC, locksmithing → 10 weeks total to onboard 5 more trades.<br/>
+            Tradie's existing knowledge stays locked in their PDFs and Word docs.
+          </div>
+        </div>
+        <div class="box green">
+          <div class="box-lbl">With this pipeline</div>
+          <div class="box-sub">
+            Tradie hands over their pricing guide. We process + review + commit in 1-2 days per book.<br/>
+            5 new trades onboard in ~2 weeks total.<br/>
+            Tradie's actual knowledge becomes the catalogue — better data than we'd write ourselves.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="verdict green">
+      <div class="verdict-label">Verdict — fund the 5-day spike</div>
+      <p>The work itself is one focused dev week. The payoff is durable: every future trade onboards via the same pipeline. Asking Jon: <b>greenlight to start?</b> If yes, the next step is sourcing 2-3 sample trade books to tune the prompt against — I can start drafting the prompt immediately and iterate against the samples as they come in.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- FOOTER                                                            -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<footer>
+  <div class="wrap">
+    <p>
+      <strong>Generated 2026-05-26</strong> · 1-pager spike proposal for Jon's review.
+      All schema references reflect production after migrations 067-069.
+    </p>
+    <p>
+      <strong>Related pages:</strong>
+      <a href="./pricing-data-accuracy.html">Pricing data accuracy (Jon's questions)</a> ·
+      <a href="./database-visual.html">How the data flows</a> ·
+      <a href="./pricing-flow.html">How a quote gets priced</a>.
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

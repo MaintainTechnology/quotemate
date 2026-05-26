@@ -195,10 +195,16 @@ function makeLookupAssembly(tenantId: string | null) {
       // expanded (buildAssemblyOrFilter) so a customer-worded query
       // ("power point") still finds a trade-named assembly ("Replace
       // double GPO") — the reranker below picks the best of the pool.
+      //
+      // always_inspection=true rows are EXCLUDED so the LLM can't
+      // ground a price on them (migration 067 added the column; mig 068
+      // sets it true on "Install gas HWS" per AS/NZS 5601). Same gate
+      // pattern that already exists for tenant_custom_assemblies below.
       let sharedQ = supa()
         .from('shared_assemblies')
         .select('*')
         .or(buildAssemblyOrFilter(query))
+        .eq('always_inspection', false)
       if (trade) sharedQ = sharedQ.eq('trade', trade)
       sharedQ = applyPropertyFilters(sharedQ, filters)
       const sharedRes = await sharedQ.limit(FETCH_LIMIT)
