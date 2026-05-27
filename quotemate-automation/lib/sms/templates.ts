@@ -5,6 +5,16 @@
 // instance of any given template per conversation, so the variation is
 // noticeable across customers, not within a single thread.
 import { priceHoldStatus, fmtHoldUntilAU } from '@/lib/quote/hold'
+import { asQuoteDisplayMode, type QuoteDisplayMode } from '@/lib/quote/display'
+
+/** Phase A — caller-supplied display mode flag. 'summary' suppresses the
+ *  per-tier "X items + Yhr labour" component line so the SMS reads as a
+ *  cleaner lump-sum option list. Defaults to 'itemised' (today's
+ *  behaviour) when no value is passed — back-compat for any caller that
+ *  doesn't yet thread this through. */
+export interface QuoteSmsOptions {
+  displayMode?: QuoteDisplayMode
+}
 
 function pickVariant<T>(variants: readonly T[]): T {
   return variants[Math.floor(Math.random() * variants.length)]
@@ -48,13 +58,14 @@ function capitaliseFirst(s: string): string {
  * the customer should be able to see the new prices in their notification
  * preview, not have to tap a link first.
  */
-export function buildQuoteUpdatedSms(intake: Intake, quote: Quote): string {
+export function buildQuoteUpdatedSms(intake: Intake, quote: Quote, options?: QuoteSmsOptions): string {
   // Inspection-required quotes use the dedicated inspection layout but
   // still get an "updated" preamble so the customer knows the tradie
   // touched the quote.
   if (quote.needs_inspection) {
     return buildInspectionQuoteUpdatedSms(intake, quote)
   }
+  const displayMode = asQuoteDisplayMode(options?.displayMode, 'itemised')
 
   const firstName = (intake.caller?.name ?? '').split(' ')[0] || 'there'
   const timeframe = (quote.estimated_timeframe ?? '').toLowerCase().trim()
@@ -105,8 +116,10 @@ export function buildQuoteUpdatedSms(intake: Intake, quote: Quote): string {
 
     const label = tierLabel(tier)
     if (label) lines.push(`- ${label}`)
-    const comps = tierComponents(tier, intake.job_type, intake.scope?.item_count)
-    if (comps) lines.push(`- ${comps}`)
+    if (displayMode !== 'summary') {
+      const comps = tierComponents(tier, intake.job_type, intake.scope?.item_count)
+      if (comps) lines.push(`- ${comps}`)
+    }
 
     const payUrl = quote.pay_links?.[key]
     if (payUrl) lines.push(`Tap to pay: ${payUrl}`)
@@ -741,12 +754,13 @@ function pickScopeForSms(quote: Quote): string | null {
   return null
 }
 
-export function buildQuoteSms(intake: Intake, quote: Quote): string {
+export function buildQuoteSms(intake: Intake, quote: Quote, options?: QuoteSmsOptions): string {
   // Inspection-required quotes get a distinct SMS layout — indicative ranges
   // for context, ONE prominent $99 site-visit link, no per-tier pay buttons.
   if (quote.needs_inspection) {
     return buildInspectionQuoteSms(intake, quote)
   }
+  const displayMode = asQuoteDisplayMode(options?.displayMode, 'itemised')
 
   const firstName = (intake.caller?.name ?? '').split(' ')[0] || 'there'
   const job = jobSummary(intake)
@@ -791,8 +805,10 @@ export function buildQuoteSms(intake: Intake, quote: Quote): string {
 
     const label = tierLabel(tier)
     if (label) lines.push(`- ${label}`)
-    const comps = tierComponents(tier, intake.job_type, intake.scope?.item_count)
-    if (comps) lines.push(`- ${comps}`)
+    if (displayMode !== 'summary') {
+      const comps = tierComponents(tier, intake.job_type, intake.scope?.item_count)
+      if (comps) lines.push(`- ${comps}`)
+    }
 
     const payUrl = quote.pay_links?.[key]
     if (payUrl) lines.push(`Tap to pay: ${payUrl}`)

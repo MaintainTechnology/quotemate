@@ -151,7 +151,7 @@ export async function GET(req: Request) {
       supabase
         .from('quotes')
         .select(
-          'id, created_at, status, selected_tier, total_inc_gst, scope_of_works, share_token, intake_id, needs_inspection, routing_decision, good, better, best, estimated_timeframe',
+          'id, created_at, status, selected_tier, total_inc_gst, scope_of_works, share_token, intake_id, needs_inspection, routing_decision, good, better, best, estimated_timeframe, display_mode',
         )
         .eq('tenant_id', tenant.id)
         .order('created_at', { ascending: false })
@@ -579,6 +579,19 @@ export async function PATCH(req: Request) {
         .eq('trade', trade)
       if (error) errors.push(`pricing[${trade}]: ${error.message}`)
     }
+  }
+
+  // 2bc. Phase A — customer-quote display preference (migration 071).
+  //     Tenant-level setting fanned out to every pricing_book row this
+  //     tenant owns so multi-trade tradies don't see drift between their
+  //     trades. The customer-quote page + the SMS template both read
+  //     from this column.
+  if (updates.quote_display) {
+    const { error } = await supabase
+      .from('pricing_book')
+      .update({ quote_display: updates.quote_display })
+      .eq('tenant_id', tenant.id)
+    if (error) errors.push(`quote_display: ${error.message}`)
   }
 
   // 2bb. v8 Phase A — early-booking discount config. Stored in

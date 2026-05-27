@@ -99,6 +99,12 @@ export const UpdateSchema = z.object({
       window_hours: z.coerce.number().min(1).max(336),
     })
     .optional(),
+  // Phase A (mig 071) — customer quote layout preference. Trade-agnostic;
+  // route fans the same value out to every pricing_book row this tenant
+  // owns so multi-trade tradies don't see drift between their trades.
+  // 'itemised' = today's per-line breakdown (default). 'summary' = single
+  // scope paragraph + total (lump-sum read).
+  quote_display: z.enum(['itemised', 'summary']).optional(),
 })
 
 // Create/update payload for a single tenant_custom_assemblies row.

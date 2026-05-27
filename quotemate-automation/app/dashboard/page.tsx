@@ -90,6 +90,10 @@ type Pricing = {
   /** Per-tenant overlay jsonb — carries the v8 early_bird discount
    *  config ({ enabled, discount_pct, window_hours }) among other keys. */
   overlays?: Record<string, unknown> | null
+  /** Migration 071 — customer-quote display preference. 'itemised' shows
+   *  the full per-line breakdown (today's default); 'summary' rolls the
+   *  line items up into a single scope paragraph + hours/items hint. */
+  quote_display?: 'itemised' | 'summary' | null
 } | null
 
 type ServiceOffering = {
@@ -150,6 +154,10 @@ type Quote = {
   good: TierJson
   better: TierJson
   best: TierJson
+  /** Migration 073 — per-quote override of the customer-facing display
+   *  mode. NULL = inherit pricing_book.quote_display (Phase A default).
+   *  'itemised' / 'summary' = explicit override applied to THIS quote. */
+  display_mode: 'itemised' | 'summary' | null
   // Joined from intakes/payments
   customer_first_name: string | null
   customer_full_name: string | null
@@ -538,7 +546,7 @@ export default function DashboardPage() {
             {tab === 'catalogue' && <CatalogueTab accessToken={accessToken} />}
             {tab === 'estimating' && <EstimatingTab accessToken={accessToken} />}
             {tab === 'recipes' && <RecipesTab accessToken={accessToken} />}
-            {tab === 'quotes' && <QuotesTab data={data} />}
+            {tab === 'quotes' && <QuotesTab data={data} accessToken={accessToken} />}
             {tab === 'followups' && (
               <FollowupsTab accessToken={accessToken} />
             )}
@@ -2518,7 +2526,123 @@ function PricingTab({
       {/* v8 — early-booking discount. One card per tenant (the offer is
           trade-agnostic, written to every pricing_book row). */}
       <EarlyBirdCard books={books} onSave={onSave} />
+      {/* Phase A — customer-quote display preference (itemised vs summary).
+          Trade-agnostic, written to every pricing_book row by /api/tenant/me. */}
+      <QuoteDisplayCard books={books} onSave={onSave} />
     </div>
+  )
+}
+
+/**
+ * Phase A — tenant-level quote display preference.
+ *
+ * Tradies pick ONE preference (itemised line-item table OR rolled-up
+ * summary paragraph) and it applies to every quote going out from then
+ * on. Reads from row 0 (preference is identical across the tenant's
+ * trade rows after the /api/tenant/me PATCH fan-out). Saves via
+ * PATCH { quote_display: 'itemised' | 'summary' }.
+ *
+ * Phase B will add a per-quote override on the quote-detail page; this
+ * card sets the DEFAULT every new quote inherits.
+ */
+function QuoteDisplayCard({
+  books,
+  onSave,
+}: {
+  books: PricingBook[]
+  onSave: (payload: Record<string, unknown>) => Promise<void>
+}) {
+  const current = useMemo<'itemised' | 'summary'>(() => {
+    const v = books[0]?.quote_display
+    return v === 'summary' ? 'summary' : 'itemised'
+  }, [books])
+
+  const [mode, setMode] = useState<'itemised' | 'summary'>(current)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [savedAt, setSavedAt] = useState<number | null>(null)
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setError(null)
+    setSubmitting(true)
+    try {
+      await onSave({ quote_display: mode })
+      setSavedAt(Date.now())
+    } catch (err: any) {
+      setError(err?.message ?? 'Save failed')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (books.length === 0) return null
+
+  return (
+    <Card
+      title="Customer quote layout"
+      subtitle="How the customer sees your quote on the share link + in the SMS. Itemised shows every line; summary rolls it into a lump sum + scope blurb."
+    >
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <Field label="Layout">
+          <div className="mt-2 space-y-3">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="radio"
+                name="quote_display"
+                value="itemised"
+                checked={mode === 'itemised'}
+                onChange={() => setMode('itemised')}
+                className="mt-1 h-4 w-4 accent-accent"
+              />
+              <span className="text-sm">
+                <span className="font-semibold text-text-pri">Itemised</span>
+                <span className="block text-xs text-text-dim mt-0.5">
+                  Per-line breakdown — material, labour hours, sundries. Maximises perceived transparency. (Default.)
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="radio"
+                name="quote_display"
+                value="summary"
+                checked={mode === 'summary'}
+                onChange={() => setMode('summary')}
+                className="mt-1 h-4 w-4 accent-accent"
+              />
+              <span className="text-sm">
+                <span className="font-semibold text-text-pri">Summary</span>
+                <span className="block text-xs text-text-dim mt-0.5">
+                  Single scope paragraph + total. Clean lump-sum read; the customer still sees a rough hours/items hint.
+                </span>
+              </span>
+            </label>
+          </div>
+        </Field>
+
+        {error ? (
+          <div className="bg-warning/10 border border-warning/40 px-3 py-2 text-xs text-warning">
+            {error}
+          </div>
+        ) : null}
+
+        <div className="flex items-center gap-3">
+          <button
+            type="submit"
+            disabled={submitting || mode === current}
+            className="font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-4 py-2 border border-accent text-accent hover:bg-accent/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {submitting ? 'Saving…' : 'Save layout'}
+          </button>
+          {savedAt && Date.now() - savedAt < 4000 && (
+            <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-accent">
+              ✓ Saved
+            </span>
+          )}
+        </div>
+      </form>
+    </Card>
   )
 }
 
@@ -4083,7 +4207,7 @@ function quoteMatchesFilter(q: Quote, f: QuoteFilter): boolean {
   return ['drafted', 'awaiting_review', 'review', 'draft'].includes(s)
 }
 
-function QuotesTab({ data }: { data: DashboardData }) {
+function QuotesTab({ data, accessToken }: { data: DashboardData; accessToken: string | null }) {
   const isMultiTrade =
     Array.isArray(data.tenant.trades) && data.tenant.trades.length > 1
 
@@ -4159,7 +4283,7 @@ function QuotesTab({ data }: { data: DashboardData }) {
           <>
             <div className="space-y-2">
               {visibleQuotes.map((q) => (
-                <QuoteCard key={q.id} q={q} isMultiTrade={isMultiTrade} />
+                <QuoteCard key={q.id} q={q} isMultiTrade={isMultiTrade} accessToken={accessToken} />
               ))}
             </div>
             {remaining > 0 && (
@@ -4180,7 +4304,7 @@ function QuotesTab({ data }: { data: DashboardData }) {
   )
 }
 
-function QuoteCard({ q, isMultiTrade }: { q: Quote; isMultiTrade: boolean }) {
+function QuoteCard({ q, isMultiTrade, accessToken }: { q: Quote; isMultiTrade: boolean; accessToken: string | null }) {
   const [expanded, setExpanded] = useState(false)
   const url = q.share_token ? `/q/${q.share_token}` : null
 
@@ -4398,6 +4522,18 @@ function QuoteCard({ q, isMultiTrade }: { q: Quote; isMultiTrade: boolean }) {
               )}
             </div>
 
+            {/* Phase B — per-quote display-mode override. Lets the tradie
+                flip THIS quote between itemised and summary even when the
+                tenant-level default is set to the other. NULL = inherit
+                the tenant preference. */}
+            <div className="px-5 pb-4">
+              <QuoteDisplayModeToggle
+                quoteId={q.id}
+                initial={q.display_mode}
+                accessToken={accessToken}
+              />
+            </div>
+
             {/* Scope + timeframe + transcript */}
             <div className="border-t border-ink-line px-5 py-4 space-y-4 bg-ink-deep/30">
               {q.scope_of_works && (
@@ -4427,6 +4563,132 @@ function QuoteCard({ q, isMultiTrade }: { q: Quote; isMultiTrade: boolean }) {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Phase B — per-quote display-mode override toggle.
+ *
+ * Rendered inside the expanded QuoteCard body. Three states the tradie
+ * can pick:
+ *   • Inherit (null) — use the tenant-level pricing_book.quote_display
+ *     (Phase A default). Reads naturally to most tradies — "I set my
+ *     default once; this quote follows it."
+ *   • Itemised — force the per-line breakdown for THIS quote.
+ *   • Summary — force the rolled-up summary for THIS quote.
+ *
+ * Saves via PATCH /api/quote/[id]/display-mode (lightweight; no Stripe
+ * regen, no grounding revalidation). The customer page reads the value
+ * on next refresh — no notify SMS goes out (this is a presentation
+ * change, not a price change).
+ */
+function QuoteDisplayModeToggle({
+  quoteId,
+  initial,
+  accessToken,
+}: {
+  quoteId: string
+  initial: 'itemised' | 'summary' | null
+  accessToken: string | null
+}) {
+  type Mode = 'itemised' | 'summary' | null
+  const [value, setValue] = useState<Mode>(initial)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [savedAt, setSavedAt] = useState<number | null>(null)
+
+  async function save(next: Mode) {
+    if (!accessToken) {
+      setError('Not signed in')
+      return
+    }
+    if (next === value) return
+    setError(null)
+    setSubmitting(true)
+    const previous = value
+    setValue(next) // optimistic
+    try {
+      const res = await fetch(`/api/quote/${encodeURIComponent(quoteId)}/display-mode`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ display_mode: next }),
+      })
+      const json = (await res.json().catch(() => ({}))) as {
+        ok?: boolean
+        display_mode?: Mode
+        error?: string
+      }
+      if (!res.ok || !json.ok) {
+        setValue(previous) // rollback on failure
+        setError(json.error || `HTTP ${res.status}`)
+      } else {
+        setValue((json.display_mode as Mode) ?? null)
+        setSavedAt(Date.now())
+      }
+    } catch (e: any) {
+      setValue(previous)
+      setError(e?.message ?? 'Save failed')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const Btn = ({
+    label,
+    mode,
+    title,
+  }: {
+    label: string
+    mode: Mode
+    title: string
+  }) => {
+    const selected = value === mode
+    return (
+      <button
+        type="button"
+        title={title}
+        disabled={submitting}
+        onClick={() => void save(mode)}
+        className={`font-mono text-[0.6rem] uppercase tracking-[0.14em] font-bold px-2.5 py-1.5 border transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+          selected
+            ? 'border-accent bg-accent/15 text-accent'
+            : 'border-ink-line text-text-dim hover:border-accent/40 hover:text-text-pri'
+        }`}
+      >
+        {label}
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">
+        Layout for this quote:
+      </span>
+      <div className="flex flex-wrap items-center gap-1">
+        <Btn label="Inherit default" mode={null} title="Use the tenant-level layout preference (Pricing → Customer quote layout)." />
+        <Btn label="Itemised" mode="itemised" title="Force the per-line breakdown for this quote only." />
+        <Btn label="Summary" mode="summary" title="Force the rolled-up summary for this quote only." />
+      </div>
+      {submitting && (
+        <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
+          Saving…
+        </span>
+      )}
+      {!submitting && savedAt && Date.now() - savedAt < 3000 && (
+        <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-accent">
+          ✓ Saved
+        </span>
+      )}
+      {error && (
+        <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-warning">
+          {error}
+        </span>
+      )}
     </div>
   )
 }

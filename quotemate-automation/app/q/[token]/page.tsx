@@ -17,6 +17,7 @@ import { notFound } from 'next/navigation'
 import { getTierPhoto } from '@/lib/quote/tier-photos'
 import { refreshSignedUrl } from '@/lib/storage/upload'
 import { CustomerPhotosBlock } from './CustomerPhotosBlock'
+import { TierBreakdownToggle } from './TierBreakdownToggle'
 import { generatePreviewImage } from '@/lib/ig-engine/generate'
 import { generateSampleImages } from '@/lib/ig-engine/samples'
 import { PreviewSection } from './PreviewSection'
@@ -29,6 +30,12 @@ import {
   fmtEarlyBirdDeadlineAU,
   fmtEarlyBirdRemaining,
 } from '@/lib/quote/early-bird'
+import {
+  resolveQuoteDisplayMode,
+  sumLabourHours,
+  countMaterialItems,
+  type QuoteDisplayMode,
+} from '@/lib/quote/display'
 
 export const dynamic = 'force-dynamic'
 
@@ -106,7 +113,7 @@ export default async function PublicQuotePage(props: {
 
   const { data: quote } = await supabase
     .from('quotes')
-    .select('id, intake_id, tenant_id, status, scope_of_works, assumptions, risk_flags, good, better, best, optional_upsells, estimated_timeframe, needs_inspection, inspection_reason, gst_note, selected_tier, share_token, stripe_links, paid_at, paid_tier, created_at, price_hold_until, booking_state, preview_status, preview_image_path, preview_image_paths, samples_status, sample_image_paths')
+    .select('id, intake_id, tenant_id, status, scope_of_works, assumptions, risk_flags, good, better, best, optional_upsells, estimated_timeframe, needs_inspection, inspection_reason, gst_note, selected_tier, share_token, stripe_links, paid_at, paid_tier, created_at, price_hold_until, booking_state, preview_status, preview_image_path, preview_image_paths, samples_status, sample_image_paths, display_mode')
     .eq('share_token', token)
     .maybeSingle()
 
@@ -153,12 +160,20 @@ export default async function PublicQuotePage(props: {
   const quoteTenantId = (quote as { tenant_id?: string | null }).tenant_id ?? null
   let pricingBookQuery = supabase
     .from('pricing_book')
-    .select('licence_type, licence_number, licence_state, gst_registered')
+    .select('licence_type, licence_number, licence_state, gst_registered, quote_display')
     .eq('trade', intakeTrade)
   pricingBookQuery = quoteTenantId
     ? pricingBookQuery.eq('tenant_id', quoteTenantId)
     : pricingBookQuery.order('id', { ascending: true }).limit(1)
   const { data: pricingBook } = await pricingBookQuery.maybeSingle()
+
+  // Phase A: tenant-level itemised-vs-summary preference. Phase B will add
+  // a per-quote override on quotes.display_mode; the resolver already
+  // accepts that arg so we just have to start passing it through later.
+  const quoteDisplayMode: QuoteDisplayMode = resolveQuoteDisplayMode({
+    perQuoteOverride: (quote as { display_mode?: string | null }).display_mode ?? null,
+    tenantPreference: (pricingBook as { quote_display?: string | null } | null)?.quote_display ?? null,
+  })
 
   // Photo rendering — STRICT per-quote scoping.
   //
@@ -528,6 +543,8 @@ export default async function PublicQuotePage(props: {
                     paid={isPaid && quote.paid_tier === key}
                     disabled={isPaid && quote.paid_tier !== key}
                     jobType={intake?.job_type ?? null}
+                    displayMode={quoteDisplayMode}
+                    scopeOfWorks={(quote.scope_of_works as string | null) ?? null}
                   />
                 )
               })}
@@ -914,6 +931,8 @@ function TierCard({
   paid,
   disabled,
   jobType,
+  displayMode,
+  scopeOfWorks,
 }: {
   keyName: 'good' | 'better' | 'best'
   seq: string
@@ -928,6 +947,16 @@ function TierCard({
   paid: boolean
   disabled: boolean
   jobType: string | null
+  /** Phase A — tenant-level itemised/summary preference resolved at the
+   *  page level (pricing_book.quote_display + Phase B per-quote override
+   *  via lib/quote/display.resolveQuoteDisplayMode). 'itemised' renders the
+   *  full line-items table (today's behaviour); 'summary' rolls the lines
+   *  up into a scope paragraph + hours/items hint. */
+  displayMode: QuoteDisplayMode
+  /** quotes.scope_of_works — used as the body text of the summary view so
+   *  the customer sees WHAT the lump sum covers without the line-by-line
+   *  breakdown. Null falls through to a generic "Full scope as discussed". */
+  scopeOfWorks: string | null
 }) {
   if (!tier) return null
   const fullIncGst = incGst(tier.subtotal_ex_gst)
@@ -1002,51 +1031,58 @@ function TierCard({
           </div>
         </div>
 
-        {/* Line items */}
-        {Array.isArray(tier.line_items) && tier.line_items.length > 0 ? (
-          <ul className="mt-6 divide-y divide-ink-line border-t border-ink-line text-sm">
-            {tier.line_items.map((li, i) => {
-              // WP5 — customer-supply badge + safety note. Fields are
-              // optional in the JSONB; cast extracts them without
-              // narrowing the page's existing types.
-              const wp5 = li as unknown as {
-                supplied_by?: 'tradie' | 'customer' | null
-                safety_note?: string | null
-              }
-              const youSupply = wp5.supplied_by === 'customer'
-              const safetyNote = (wp5.safety_note ?? '').trim()
-              return (
-                <li key={i} className="flex items-start justify-between gap-4 py-3.5">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-text-pri flex flex-wrap items-center gap-2">
-                      <span>{li.description}</span>
-                      {youSupply && (
-                        <span
-                          className="font-mono text-[0.6rem] uppercase tracking-[0.15em] font-bold px-1.5 py-0.5 border border-accent/60 text-accent shrink-0"
-                          title="You're supplying this item yourself — we install only."
-                        >
-                          You supply
-                        </span>
+        {/* Body — Phase A: itemised line-items table OR rolled-up summary.
+            Both views share the same tier total above + CTA below; only the
+            middle block changes. Both branches still expose enough scope info
+            that the customer can tell what they're paying for. */}
+        {displayMode === 'summary' ? (
+          <TierSummary tier={tier} scopeOfWorks={scopeOfWorks} />
+        ) : (
+          Array.isArray(tier.line_items) && tier.line_items.length > 0 ? (
+            <ul className="mt-6 divide-y divide-ink-line border-t border-ink-line text-sm">
+              {tier.line_items.map((li, i) => {
+                // WP5 — customer-supply badge + safety note. Fields are
+                // optional in the JSONB; cast extracts them without
+                // narrowing the page's existing types.
+                const wp5 = li as unknown as {
+                  supplied_by?: 'tradie' | 'customer' | null
+                  safety_note?: string | null
+                }
+                const youSupply = wp5.supplied_by === 'customer'
+                const safetyNote = (wp5.safety_note ?? '').trim()
+                return (
+                  <li key={i} className="flex items-start justify-between gap-4 py-3.5">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-text-pri flex flex-wrap items-center gap-2">
+                        <span>{li.description}</span>
+                        {youSupply && (
+                          <span
+                            className="font-mono text-[0.6rem] uppercase tracking-[0.15em] font-bold px-1.5 py-0.5 border border-accent/60 text-accent shrink-0"
+                            title="You're supplying this item yourself — we install only."
+                          >
+                            You supply
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-0.5 font-mono text-[0.7rem] text-text-dim">
+                        {li.quantity} × {li.unit} @ ${fmt(asNumber(li.unit_price_ex_gst))} ex GST
+                        {youSupply ? ' · install only' : ''}
+                      </div>
+                      {youSupply && safetyNote && (
+                        <p className="mt-1 text-[0.75rem] leading-snug text-text-dim normal-case">
+                          {safetyNote}
+                        </p>
                       )}
                     </div>
-                    <div className="mt-0.5 font-mono text-[0.7rem] text-text-dim">
-                      {li.quantity} × {li.unit} @ ${fmt(asNumber(li.unit_price_ex_gst))} ex GST
-                      {youSupply ? ' · install only' : ''}
+                    <div className="font-mono text-sm text-text-sec shrink-0">
+                      ${fmt(asNumber(li.total_ex_gst))}
                     </div>
-                    {youSupply && safetyNote && (
-                      <p className="mt-1 text-[0.75rem] leading-snug text-text-dim normal-case">
-                        {safetyNote}
-                      </p>
-                    )}
-                  </div>
-                  <div className="font-mono text-sm text-text-sec shrink-0">
-                    ${fmt(asNumber(li.total_ex_gst))}
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
-        ) : null}
+                  </li>
+                )
+              })}
+            </ul>
+          ) : null
+        )}
 
         {/* CTA */}
         <div className="mt-6 border-t border-ink-line pt-5">
@@ -1079,6 +1115,63 @@ function TierCard({
         </div>
       </div>
     </article>
+  )
+}
+
+/**
+ * Phase A — rolled-up summary view. Replaces the itemised line-items table
+ * when pricing_book.quote_display = 'summary'. Pulls the labour hours +
+ * material-item count from the line items so the customer still sees a
+ * rough scope hint, but never the per-line prices that invite line-by-line
+ * negotiation. The scope_of_works paragraph is the canonical "what the
+ * customer is paying for"; it's already grounded + reviewed by the tradie
+ * before the quote goes out.
+ */
+function TierSummary({
+  tier,
+  scopeOfWorks,
+}: {
+  tier: Tier
+  scopeOfWorks: string | null
+}) {
+  // Tier is `{...} | null` in this file. Narrow here so the rest of the
+  // body can deref `tier.line_items` etc. without `!` everywhere.
+  if (!tier) return null
+  const labourHours = sumLabourHours(tier.line_items as unknown as { source?: string | null; quantity?: number | string | null }[])
+  const itemCount = countMaterialItems(tier.line_items as unknown as { source?: string | null }[])
+  const scope = (scopeOfWorks ?? '').trim()
+  return (
+    <div className="mt-6 border-t border-ink-line pt-5">
+      <div className="font-mono text-[0.62rem] uppercase tracking-[0.16em] text-text-dim mb-3">
+        Scope summary
+      </div>
+      <p className="text-sm leading-relaxed text-text-sec">
+        {scope || 'Supply, install, and commission as discussed during your enquiry.'}
+      </p>
+      {(itemCount > 0 || labourHours > 0) && (
+        <div className="mt-4 flex flex-wrap items-center gap-3 font-mono text-[0.65rem] uppercase tracking-[0.15em] text-text-dim">
+          {itemCount > 0 && (
+            <span className="border border-ink-line px-2 py-1">
+              {itemCount} {itemCount === 1 ? 'item' : 'items'}
+            </span>
+          )}
+          {labourHours > 0 && (
+            <span className="border border-ink-line px-2 py-1">
+              {labourHours} hr labour
+            </span>
+          )}
+        </div>
+      )}
+      {/* Phase C — customer can opt-in to the full line-item breakdown
+          even in summary mode. Default state is collapsed; expanding is
+          an explicit customer action, so the tradie's chosen lump-sum
+          read is never bypassed without intent. */}
+      {Array.isArray(tier.line_items) && tier.line_items.length > 0 && (
+        <TierBreakdownToggle
+          lineItems={tier.line_items as unknown as Parameters<typeof TierBreakdownToggle>[0]['lineItems']}
+        />
+      )}
+    </div>
   )
 }
 

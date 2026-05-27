@@ -111,6 +111,72 @@ describe('buildQuoteSms — fixture count never double-counts', () => {
   })
 })
 
+// Phase A — customer-quote display mode. Default ('itemised') keeps the
+// per-tier "X fittings + Yhr labour" components line; 'summary' suppresses
+// it so the customer gets a cleaner lump-sum read. The tier total + label +
+// pay link are unchanged regardless of mode.
+describe('buildQuoteSms — displayMode (Phase A)', () => {
+  const sixDownlights = {
+    job_type: 'downlights',
+    caller: { name: 'Jon' },
+    scope: { item_count: 6, description: '6 warm white downlights' },
+  }
+  const productQuote = {
+    ...baseQuote,
+    good: {
+      label: 'Black Fireflies',
+      subtotal_ex_gst: 996.48,
+      line_items: [
+        { description: 'Black Fireflies', unit: 'each', quantity: 6, unit_price_ex_gst: 69, total_ex_gst: 414 },
+        { description: 'Electrician labour', unit: 'hr', quantity: 2.4, unit_price_ex_gst: 118, total_ex_gst: 283.2 },
+      ],
+    },
+    better: null,
+    best: null,
+    selected_tier: 'good' as const,
+  }
+
+  it('default (no displayMode) keeps the components line (back-compat)', () => {
+    const body = buildQuoteSms(sixDownlights, productQuote)
+    expect(body).toMatch(/6 fittings/)
+    expect(body).toMatch(/labour/)
+  })
+
+  it('explicit displayMode=itemised matches the default — adds the components line', () => {
+    const body = buildQuoteSms(sixDownlights, productQuote, { displayMode: 'itemised' })
+    expect(body).toMatch(/6 fittings/)
+    expect(body).toMatch(/labour/)
+  })
+
+  it('displayMode=summary suppresses the per-tier "X fittings + Yhr labour" line', () => {
+    const body = buildQuoteSms(sixDownlights, productQuote, { displayMode: 'summary' })
+    expect(body).not.toMatch(/6 fittings/)
+    expect(body).not.toMatch(/hr labour/)
+  })
+
+  it('displayMode=summary still includes the tier label + total + pay link', () => {
+    const body = buildQuoteSms(sixDownlights, productQuote, { displayMode: 'summary' })
+    expect(body).toMatch(/GOOD:/)
+    expect(body).toMatch(/Black Fireflies/)
+    expect(body).toMatch(/Tap to pay:/)
+  })
+
+  it('displayMode=summary preserves the SCOPE line + sign-off + GST framing', () => {
+    const body = buildQuoteSms(sixDownlights, productQuote, { displayMode: 'summary' })
+    expect(body).toMatch(/SCOPE:/)
+    expect(body).toMatch(/- QuoteMate$/)
+    expect(body).toMatch(/inc 10% GST/)
+  })
+
+  it('invalid displayMode string falls back to itemised (defensive)', () => {
+    // The asQuoteDisplayMode guard treats anything unknown as 'itemised'
+    // so a stale DB row or a hand-rolled API call can never accidentally
+    // strip detail from the customer's SMS.
+    const body = buildQuoteSms(sixDownlights, productQuote, { displayMode: 'compact' as unknown as 'summary' })
+    expect(body).toMatch(/6 fittings/)
+  })
+})
+
 // 2026-05-19 "bug zapper" fix part 3: the INFLIGHT canned hold-on used to
 // promise "your quote's nearly ready (about a minute away)" — a phrase
 // dialog.ts strips elsewhere because it's frequently a lie (recovery flow

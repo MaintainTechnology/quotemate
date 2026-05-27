@@ -184,3 +184,32 @@ describe('UpdateSchema — combined payloads', () => {
     expect(result.success).toBe(true)
   })
 })
+
+describe('UpdateSchema — quote_display (Phase A, mig 071)', () => {
+  it('accepts quote_display=itemised', () => {
+    const r = UpdateSchema.safeParse({ quote_display: 'itemised' })
+    expect(r.success).toBe(true)
+  })
+
+  it('accepts quote_display=summary', () => {
+    const r = UpdateSchema.safeParse({ quote_display: 'summary' })
+    expect(r.success).toBe(true)
+  })
+
+  it('rejects an unknown display mode — never silently coerces', () => {
+    const r = UpdateSchema.safeParse({ quote_display: 'compact' })
+    expect(r.success).toBe(false)
+  })
+
+  it('rejects empty string — caller must send a real mode', () => {
+    const r = UpdateSchema.safeParse({ quote_display: '' })
+    expect(r.success).toBe(false)
+  })
+
+  it('is optional — omitting it is fine (other fields may still be present)', () => {
+    const r = UpdateSchema.safeParse({
+      pricing: { hourly_rate: 120 },
+    })
+    expect(r.success).toBe(true)
+  })
+})

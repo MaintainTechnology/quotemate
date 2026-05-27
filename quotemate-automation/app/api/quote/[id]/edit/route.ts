@@ -32,6 +32,7 @@ import {
 } from '@/lib/stripe/checkout'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { buildQuoteUpdatedSms } from '@/lib/sms/templates'
+import { resolveQuoteDisplayMode } from '@/lib/quote/display'
 import { loadCandidatePrices } from '@/lib/estimate/run'
 import {
   validateQuoteGrounding,
@@ -182,7 +183,7 @@ export async function POST(
   const { data: pricingBook } = await supabase
     .from('pricing_book')
     .select(
-      'gst_registered, trade, hourly_rate, apprentice_rate, senior_rate, call_out_minimum, default_markup_pct, min_labour_hours, after_hours_multiplier',
+      'gst_registered, trade, hourly_rate, apprentice_rate, senior_rate, call_out_minimum, default_markup_pct, min_labour_hours, after_hours_multiplier, quote_display',
     )
     .eq('tenant_id', quote.tenant_id)
     .limit(1)
@@ -559,6 +560,17 @@ export async function POST(
             scope_of_works: null,
             scope_short: null,
             assumptions: null,
+          },
+          {
+            // Phase A/B — honour the per-quote override (if present) over
+            // the tenant preference. The resolver tolerates both being
+            // null and defaults to 'itemised', preserving current
+            // behaviour for any tenant that hasn't opted in.
+            displayMode: resolveQuoteDisplayMode({
+              perQuoteOverride: (quote as { display_mode?: string | null }).display_mode ?? null,
+              tenantPreference:
+                (pricingBook as { quote_display?: string | null } | null)?.quote_display ?? null,
+            }),
           },
         )
         const result = await dispatchQuoteMessage({

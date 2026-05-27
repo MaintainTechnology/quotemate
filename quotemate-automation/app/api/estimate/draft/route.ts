@@ -21,6 +21,7 @@ import {
   earlyBirdConfigFromOverlays,
   computeEarlyBirdOffer,
 } from '@/lib/quote/early-bird'
+import { asQuoteDisplayMode } from '@/lib/quote/display'
 
 export const maxDuration = 300
 
@@ -520,7 +521,14 @@ export async function POST(req: Request) {
           inspection_reason: draft.inspection_reason ?? null,
           quote_view_url: `${appUrl}/q/${shareToken}`,
         }
-        const body = buildQuoteSms(intake, quoteForSms)
+        // Phase A — thread the tenant's display preference through to the
+        // SMS so summary-mode tradies don't get "- N items + Yhr labour"
+        // bullets in the customer's text.
+        const displayMode = asQuoteDisplayMode(
+          (pricingBook as { quote_display?: string | null } | null)?.quote_display ?? null,
+          'itemised',
+        )
+        const body = buildQuoteSms(intake, quoteForSms, { displayMode })
         const segs = body.length <= 160 ? 1 : Math.ceil(body.length / 153)
         dispatch.ok('body built', { chars: body.length, sms_segments: segs })
 
