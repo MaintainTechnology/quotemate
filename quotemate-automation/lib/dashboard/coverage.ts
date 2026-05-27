@@ -13,10 +13,35 @@
 // and the See-gaps expander deep-links into the Browse Supplier Catalogue
 // tab pre-filtered to a specific (trade, category) pair.
 //
+// ─── Dual-vocab fix (2026-05-27) ──────────────────────────────────────
+// shared_materials.category uses the GRANULAR vocab ('ceiling_fan',
+// 'hws_electric', 'hws_gas', 'safety_switch', 'tapware_basin', etc.).
+// tenant_material_catalogue.category uses the GROUNDING vocab ('fan',
+// 'hot_water', 'rcbo', 'tap', etc.) because that's what the Catalogue-tab
+// dropdown writes + what the grounding validator matches against.
+//
+// Before this fix, computeCoverage was bucketing the two sides by raw
+// category, so a tenant with a 'fan' row legitimately stocked from the
+// supplier catalogue (whose granular category was 'ceiling_fan') was
+// reported as 0-of-2 missing — even though the row was right there.
+// Same for hot_water vs hws_electric/hws_gas/hws_heat_pump, rcbo vs
+// safety_switch, etc.
+//
+// The fix: normalise BOTH sides to the grounding vocab via
+// granularToGroundingCategory() before bucketing. Tenant rows already
+// use grounding so they pass through unchanged; shared rows get
+// collapsed (e.g. ceiling_fan → fan, hws_electric/gas/heat_pump → all
+// fold to hot_water). The displayed category in the report is the
+// grounding form (matches how the rest of the dashboard talks about
+// categories).
+// ──────────────────────────────────────────────────────────────────────
+//
 // This module is intentionally pure — no DB, no fetch, no React. The
 // caller queries shared_materials + tenant_material_catalogue, hands the
 // rows to computeCoverage(), and gets back the report. Easy to test
 // without mocking Supabase.
+
+import { granularToGroundingCategory } from '@/lib/catalogue/category-mapping'
 
 // ─────────────────────────────────────────────────────────────────────
 // Row shapes — only the columns coverage cares about.
@@ -97,6 +122,30 @@ function normCategory(c: string | null | undefined): string | null {
 }
 
 /**
+ * Normalise either a granular or grounding category to its grounding
+ * form so both sides of the coverage diff use the same vocabulary.
+ *
+ * - 'ceiling_fan' (granular, shared_materials)        → 'fan'
+ * - 'hws_electric' / 'hws_gas' / 'hws_heat_pump'      → 'hot_water'
+ * - 'tapware_basin' / 'tapware_kitchen' / etc.        → 'tap'
+ * - 'safety_switch'                                   → 'rcbo'
+ * - 'sundries'                                        → 'sundry'
+ * - 'toilet_repair'                                   → 'toilet'
+ * - Already-grounding categories ('fan', 'hot_water') → unchanged
+ * - Unmapped strings ('cctv', custom slugs)           → returned as-is
+ *
+ * The fallback to the raw lowercased input is intentional: tenant rows
+ * may legitimately carry one-off custom categories the shared catalogue
+ * doesn't stock (e.g. Peppers' 'cctv' rental row). Coverage should
+ * surface those as "tenant has a category outside the shared library"
+ * rather than dropping them.
+ */
+function toGrounding(raw: string): string {
+  const grounded = granularToGroundingCategory(raw)
+  return grounded ?? raw
+}
+
+/**
  * Compute the coverage report from raw rows.
  *
  * @param tradesActive  Trades the tenant operates in (e.g. ["electrical","plumbing"]).
@@ -116,18 +165,25 @@ export function computeCoverage(
     .map(normTrade)
     .filter((t): t is string => t !== null)
 
-  // Group shared rows by trade -> category -> count
+  // Group shared rows by trade -> grounding-category -> count.
+  // Multiple granular categories collapse into the same grounding bucket
+  // (e.g. hws_electric + hws_gas + hws_heat_pump all add to 'hot_water').
   const sharedByTrade = new Map<string, Map<string, number>>()
   for (const row of sharedRows) {
     const trade = normTrade(row.trade)
-    const category = normCategory(row.category)
-    if (!trade || !category) continue
+    const rawCategory = normCategory(row.category)
+    if (!trade || !rawCategory) continue
+    const category = toGrounding(rawCategory)
     if (!sharedByTrade.has(trade)) sharedByTrade.set(trade, new Map())
     const cats = sharedByTrade.get(trade)!
     cats.set(category, (cats.get(category) ?? 0) + 1)
   }
 
-  // Group active tenant rows by trade -> category -> count
+  // Group active tenant rows by trade -> grounding-category -> count.
+  // Tenant rows already use grounding vocab but we run them through the
+  // same mapper defensively — handles legacy rows that may have been
+  // stored with granular categories before the dropdown enforced
+  // grounding values.
   const tenantByTrade = new Map<string, Map<string, number>>()
   for (const row of tenantRows) {
     // Default active to true when the column is missing/undefined — matches
@@ -135,8 +191,9 @@ export function computeCoverage(
     // active=false rows but treats missing as active).
     if (row.active === false) continue
     const trade = normTrade(row.trade)
-    const category = normCategory(row.category)
-    if (!trade || !category) continue
+    const rawCategory = normCategory(row.category)
+    if (!trade || !rawCategory) continue
+    const category = toGrounding(rawCategory)
     if (!tenantByTrade.has(trade)) tenantByTrade.set(trade, new Map())
     const cats = tenantByTrade.get(trade)!
     cats.set(category, (cats.get(category) ?? 0) + 1)

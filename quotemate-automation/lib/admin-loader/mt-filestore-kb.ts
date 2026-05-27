@@ -227,3 +227,105 @@ export function loadKbConfigFromEnv(env: NodeJS.ProcessEnv = process.env): KbCon
   }
   return { url, apiKey }
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// kbCreateStore — POST /v1/stores
+//
+// Lets the /admin/loader UI spin up a new File Search store inline (the
+// "+ New store" button on the 01·b card) instead of forcing the admin
+// to open the mt-filestore-kb console first. Returns the freshly-created
+// store with its `name` (full "fileSearchStores/..." path) so the UI can
+// flip the picker to the new store and then call kbUploadDocument.
+// ─────────────────────────────────────────────────────────────────────
+
+export type KbCreateStoreInput = {
+  displayName: string
+  /** Optional embedding-model override; mt-filestore-kb defaults if null. */
+  embeddingModel?: string | null
+}
+
+export async function kbCreateStore(
+  config: KbConfig,
+  input: KbCreateStoreInput,
+  fetchImpl: KbFetch = fetch,
+): Promise<KbStoreSummary> {
+  const dn = (input?.displayName ?? '').trim()
+  if (!dn) throw new Error('displayName is required to create a store')
+  const body: Record<string, unknown> = { displayName: dn }
+  if (input.embeddingModel) body.embeddingModel = input.embeddingModel
+  const res = await kbFetch(
+    config,
+    '/v1/stores',
+    { method: 'POST', body: JSON.stringify(body) },
+    fetchImpl,
+  )
+  if (!res.ok) {
+    throw new KbHttpError(res.status, '/v1/stores', await res.text())
+  }
+  return (await res.json()) as KbStoreSummary
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// kbUploadDocument — POST /v1/stores/:storeId/upload (multipart)
+//
+// Streams a PDF up to mt-filestore-kb so the admin doesn't need to leave
+// QuoteMate. The service performs the Gemini File Search upload + chunk
+// + embed + index pipeline; the indexed document is returned with its
+// state ('processing' | 'active' | 'failed'). Document indexing can take
+// 10-60s for a real trade book — callers should poll kbListDocuments
+// until the state flips off 'processing'.
+//
+// File size cap matches the mt-filestore-kb side: 100MB.
+// ─────────────────────────────────────────────────────────────────────
+
+export type KbUploadDocumentInput = {
+  storeId: string
+  /** Browser File OR Node.js-compatible Blob. The server reads .name + .type. */
+  file: Blob & { name?: string }
+  /** Friendly label shown in the document picker. Defaults to file.name. */
+  displayName?: string
+}
+
+export const KB_UPLOAD_MAX_BYTES = 100 * 1024 * 1024
+
+export async function kbUploadDocument(
+  config: KbConfig,
+  input: KbUploadDocumentInput,
+  fetchImpl: KbFetch = fetch,
+): Promise<KbDocumentSummary> {
+  if (!input?.storeId) throw new Error('storeId is required')
+  if (!input?.file) throw new Error('file is required')
+  if (typeof (input.file as Blob).size !== 'number') {
+    throw new Error('file must be a Blob/File-like object with a size')
+  }
+  if ((input.file as Blob).size > KB_UPLOAD_MAX_BYTES) {
+    throw new Error(
+      `file is ${(input.file as Blob).size} bytes; max is ${KB_UPLOAD_MAX_BYTES}`,
+    )
+  }
+  const safe = encodeURIComponent(input.storeId)
+  const form = new FormData()
+  const fileName = input.file.name ?? input.displayName ?? 'upload.pdf'
+  form.append('file', input.file as Blob, fileName)
+  if (input.displayName) form.append('displayName', input.displayName)
+
+  // NOTE: do NOT set content-type — fetch sets multipart boundary itself.
+  const url = `${config.url.replace(/\/+$/, '')}/v1/stores/${safe}/upload`
+  const headers = new Headers()
+  headers.set('x-api-key', config.apiKey)
+  headers.set('Accept', 'application/json')
+
+  const res = await fetchImpl(url, {
+    method: 'POST',
+    body: form,
+    headers,
+  })
+  if (!res.ok) {
+    throw new KbHttpError(res.status, `/v1/stores/${input.storeId}/upload`, await res.text())
+  }
+  // mt-filestore-kb returns the document directly OR wrapped in { document }.
+  // Be defensive about the shape.
+  const json = (await res.json()) as KbDocumentSummary | { document?: KbDocumentSummary }
+  const doc = (json as { document?: KbDocumentSummary }).document ?? (json as KbDocumentSummary)
+  return doc
+}

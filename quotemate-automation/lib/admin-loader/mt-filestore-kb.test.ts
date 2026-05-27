@@ -9,6 +9,9 @@ import {
   kbSearch,
   loadKbConfigFromEnv,
   parseSearchResponse,
+  kbCreateStore,
+  kbUploadDocument,
+  KB_UPLOAD_MAX_BYTES,
   type KbConfig,
   type KbFetch,
 } from './mt-filestore-kb'
@@ -219,5 +222,130 @@ describe('loadKbConfigFromEnv', () => {
 
   it('throws a clear error when KB_API_KEY is missing', () => {
     expect(() => loadKbConfigFromEnv({ KB_API_URL: 'https://x' } as any)).toThrow(/KB_API_KEY/)
+  })
+})
+
+// ──────────────────────────────────────────────────────────────────────
+// kbCreateStore — POST /v1/stores
+// ──────────────────────────────────────────────────────────────────────
+
+describe('kbCreateStore', () => {
+  it('POSTs /v1/stores with the api-key header + displayName in the body', async () => {
+    const f = mockOk({ name: 'fileSearchStores/new', displayName: 'Plumber books' })
+    const store = await kbCreateStore(config, { displayName: 'Plumber books' }, f)
+    expect(store.name).toBe('fileSearchStores/new')
+    const [url, init] = (f as any).mock.calls[0]
+    expect(url).toBe('https://kb.example.com/v1/stores')
+    expect(init.method).toBe('POST')
+    expect((init.headers as Headers).get('x-api-key')).toBe('test-api-key')
+    expect((init.headers as Headers).get('content-type')).toBe('application/json')
+    expect(JSON.parse(init.body)).toEqual({ displayName: 'Plumber books' })
+  })
+
+  it('forwards optional embeddingModel when set', async () => {
+    const f = mockOk({ name: 'x' })
+    await kbCreateStore(
+      config,
+      { displayName: 'd', embeddingModel: 'gemini-embedding-001' },
+      f,
+    )
+    const [, init] = (f as any).mock.calls[0]
+    expect(JSON.parse(init.body)).toEqual({
+      displayName: 'd',
+      embeddingModel: 'gemini-embedding-001',
+    })
+  })
+
+  it('throws when displayName is empty/whitespace', async () => {
+    const f = mockOk({})
+    await expect(kbCreateStore(config, { displayName: '' }, f)).rejects.toThrow(
+      /displayName/,
+    )
+    await expect(kbCreateStore(config, { displayName: '   ' }, f)).rejects.toThrow(
+      /displayName/,
+    )
+    expect(f).not.toHaveBeenCalled()
+  })
+
+  it('throws KbHttpError on a non-2xx', async () => {
+    const f = mockStatus(409, 'duplicate')
+    await expect(
+      kbCreateStore(config, { displayName: 'dup' }, f),
+    ).rejects.toThrow(KbHttpError)
+  })
+})
+
+// ──────────────────────────────────────────────────────────────────────
+// kbUploadDocument — POST /v1/stores/:storeId/upload (multipart)
+// ──────────────────────────────────────────────────────────────────────
+
+describe('kbUploadDocument', () => {
+  function mkFile(bytes = 1024, name = 'book.pdf', type = 'application/pdf') {
+    const data = new Uint8Array(bytes)
+    return new File([data], name, { type })
+  }
+
+  it('POSTs multipart to /v1/stores/{id}/upload with the api-key header', async () => {
+    const f = mockOk({ name: 'fileSearchStores/abc/documents/xyz' })
+    const file = mkFile()
+    const doc = await kbUploadDocument(
+      config,
+      { storeId: 'fileSearchStores/abc', file, displayName: 'Trade book 2024' },
+      f,
+    )
+    expect(doc.name).toBe('fileSearchStores/abc/documents/xyz')
+    const [url, init] = (f as any).mock.calls[0]
+    expect(url).toBe('https://kb.example.com/v1/stores/fileSearchStores%2Fabc/upload')
+    expect(init.method).toBe('POST')
+    expect((init.headers as Headers).get('x-api-key')).toBe('test-api-key')
+    // The fetch impl sets the multipart boundary itself — we must NOT pre-set content-type.
+    expect((init.headers as Headers).has('content-type')).toBe(false)
+    // Body is a FormData with `file` (and optionally `displayName`).
+    expect(init.body).toBeInstanceOf(FormData)
+    const form = init.body as FormData
+    expect(form.get('file')).toBeInstanceOf(File)
+    expect(form.get('displayName')).toBe('Trade book 2024')
+  })
+
+  it('omits displayName when not provided', async () => {
+    const f = mockOk({ name: 'd' })
+    await kbUploadDocument(config, { storeId: 'fileSearchStores/abc', file: mkFile() }, f)
+    const [, init] = (f as any).mock.calls[0]
+    const form = init.body as FormData
+    expect(form.has('displayName')).toBe(false)
+  })
+
+  it('throws when storeId is missing', async () => {
+    const f = mockOk({})
+    await expect(
+      kbUploadDocument(config, { storeId: '', file: mkFile() }, f),
+    ).rejects.toThrow(/storeId/)
+    expect(f).not.toHaveBeenCalled()
+  })
+
+  it('throws when file exceeds the size cap', async () => {
+    const f = mockOk({})
+    const big = mkFile(KB_UPLOAD_MAX_BYTES + 1)
+    await expect(
+      kbUploadDocument(config, { storeId: 'x', file: big }, f),
+    ).rejects.toThrow(/max is/)
+    expect(f).not.toHaveBeenCalled()
+  })
+
+  it('unwraps a { document: ... } envelope from the server', async () => {
+    const f = mockOk({ document: { name: 'wrapped-doc' } })
+    const doc = await kbUploadDocument(
+      config,
+      { storeId: 'x', file: mkFile() },
+      f,
+    )
+    expect(doc.name).toBe('wrapped-doc')
+  })
+
+  it('throws KbHttpError on non-2xx', async () => {
+    const f = mockStatus(413, 'too large')
+    await expect(
+      kbUploadDocument(config, { storeId: 'x', file: mkFile() }, f),
+    ).rejects.toThrow(KbHttpError)
   })
 })

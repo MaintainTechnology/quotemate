@@ -331,6 +331,13 @@ export default function AdminLoaderPage() {
   const [tbLoadingDocs, setTbLoadingDocs] = useState(false)
   const [tbExtracting, setTbExtracting] = useState(false)
   const [tbResult, setTbResult] = useState<ExtractResult | null>(null)
+  // In-app PDF upload — closes the mt-filestore-kb console gap.
+  const [tbUploading, setTbUploading] = useState(false)
+  const [tbUploadInfo, setTbUploadInfo] = useState<string | null>(null)
+  // Inline "create new store" state.
+  const [tbCreatingStore, setTbCreatingStore] = useState(false)
+  const [tbNewStoreOpen, setTbNewStoreOpen] = useState(false)
+  const [tbNewStoreName, setTbNewStoreName] = useState('')
 
   const token = useCallback(async () => {
     const { data } = await getBrowserSupabase().auth.getSession()
@@ -387,6 +394,93 @@ export default function AdminLoaderPage() {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setTbLoadingDocs(false)
+    }
+  }
+
+  async function handleCreateStore() {
+    const name = tbNewStoreName.trim()
+    if (!name) {
+      setError('Give the new store a name.')
+      return
+    }
+    setError(null)
+    setTbUploadInfo(null)
+    setTbCreatingStore(true)
+    try {
+      const t = await token()
+      if (!t) { setError('Session expired — sign in again.'); return }
+      const res = await fetch('/api/admin/loader/trade-book/stores', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${t}` },
+        body: JSON.stringify({ displayName: name }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data?.ok) {
+        setError(data?.error ?? `Could not create store (${res.status})`)
+        return
+      }
+      const created = data.store as KbStore
+      // Optimistic: drop the new store into the list + select it; clear
+      // the form. A follow-up Refresh will reconcile the canonical state.
+      setTbStores((prev) => (prev ? [...prev, created] : [created]))
+      setTbStoreId(created.id)
+      setTbDocuments([])
+      setTbDocumentName('')
+      setTbNewStoreName('')
+      setTbNewStoreOpen(false)
+      setTbUploadInfo(`Store "${created.displayName ?? created.id}" created. Upload a PDF below.`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setTbCreatingStore(false)
+    }
+  }
+
+  async function handleUploadPdf(file: File) {
+    setError(null)
+    setTbUploadInfo(null)
+    if (!tbStoreId) {
+      setError('Pick or create a store first.')
+      return
+    }
+    if (file.type !== 'application/pdf') {
+      setError(`Only PDFs are accepted; got "${file.type || 'unknown'}".`)
+      return
+    }
+    // 100MB cap mirrors the server-side limit.
+    if (file.size > 100 * 1024 * 1024) {
+      setError(`File is ${(file.size / (1024 * 1024)).toFixed(1)}MB; max is 100MB.`)
+      return
+    }
+    setTbUploading(true)
+    try {
+      const t = await token()
+      if (!t) { setError('Session expired — sign in again.'); return }
+      const form = new FormData()
+      form.append('file', file)
+      form.append('storeId', tbStoreId)
+      form.append('displayName', file.name)
+      const res = await fetch('/api/admin/loader/trade-book/upload', {
+        method: 'POST',
+        headers: { authorization: `Bearer ${t}` },
+        body: form,
+      })
+      const data = await res.json()
+      if (!res.ok || !data?.ok) {
+        setError(data?.error ?? `Upload failed (${res.status})`)
+        return
+      }
+      const doc = data.document as KbDocument
+      const label = (doc.displayName ?? file.name)
+      setTbUploadInfo(`Uploaded "${label}". Indexing on mt-filestore-kb may take 10-60s.`)
+      // Refresh the document list to surface the newly-uploaded doc, then
+      // auto-select it by displayName (matches what the picker uses below).
+      await loadTbDocs(tbStoreId)
+      setTbDocumentName(label)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setTbUploading(false)
     }
   }
 
@@ -1063,41 +1157,64 @@ export default function AdminLoaderPage() {
             </p>
             <div className="mt-3 text-xs text-text-dim">
               <span className="font-mono uppercase tracking-[0.14em]">
-                Upload the PDF first via
-              </span>{' '}
-              <a
-                href="https://mt-filestore-kb-production.up.railway.app/console"
-                target="_blank"
-                rel="noreferrer noopener"
-                className="font-mono text-accent-soft underline-offset-2 hover:underline"
-              >
-                the mt-filestore-kb console
-              </a>
-              <span className="font-mono uppercase tracking-[0.14em]">
-                {' '}— then come back here.
+                Upload a PDF directly below — no need to leave QuoteMate.
               </span>
             </div>
 
             <div className="mt-5 grid gap-4 lg:grid-cols-2">
               {/* Store picker */}
               <div className="border border-ink-line bg-ink-deep px-4 py-4">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <p className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
                     Knowledge-base store
                   </p>
-                  <button
-                    type="button"
-                    onClick={loadTbStores}
-                    disabled={tbLoadingStores || tbExtracting}
-                    className="font-mono text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-accent-soft disabled:opacity-40 hover:underline"
-                  >
-                    {tbLoadingStores
-                      ? 'Loading…'
-                      : tbStores
-                        ? '↻ Refresh'
-                        : 'Load stores'}
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTbNewStoreOpen((v) => !v)
+                        setError(null)
+                      }}
+                      disabled={tbCreatingStore || tbExtracting || tbUploading}
+                      className="font-mono text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-accent disabled:opacity-40 hover:underline"
+                    >
+                      {tbNewStoreOpen ? '× Cancel' : '+ New store'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={loadTbStores}
+                      disabled={tbLoadingStores || tbExtracting || tbUploading}
+                      className="font-mono text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-accent-soft disabled:opacity-40 hover:underline"
+                    >
+                      {tbLoadingStores
+                        ? 'Loading…'
+                        : tbStores
+                          ? '↻ Refresh'
+                          : 'Load stores'}
+                    </button>
+                  </div>
                 </div>
+                {tbNewStoreOpen && (
+                  <div className="mt-3 flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={tbNewStoreName}
+                      onChange={(e) => setTbNewStoreName(e.target.value)}
+                      placeholder="e.g. Sparky trade books 2024"
+                      disabled={tbCreatingStore}
+                      aria-label="New store display name"
+                      className="flex-1 border border-ink-line bg-ink-card px-3 py-2 text-sm text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCreateStore}
+                      disabled={tbCreatingStore || !tbNewStoreName.trim()}
+                      className="font-mono text-[0.65rem] font-semibold uppercase tracking-[0.14em] px-3 py-2 border border-accent/60 text-accent hover:bg-accent/10 disabled:opacity-40 cursor-pointer"
+                    >
+                      {tbCreatingStore ? 'Creating…' : 'Create'}
+                    </button>
+                  </div>
+                )}
                 {tbStores === null ? (
                   <p className="mt-3 text-xs text-text-dim">
                     Click <strong>Load stores</strong> to pull the list from mt-filestore-kb.
@@ -1137,7 +1254,7 @@ export default function AdminLoaderPage() {
                 </p>
                 {!tbStoreId ? (
                   <p className="mt-3 text-xs text-text-dim">
-                    Pick a store first.
+                    Pick or create a store first.
                   </p>
                 ) : tbLoadingDocs ? (
                   <p className="mt-3 text-xs text-text-dim">Loading documents…</p>
@@ -1145,7 +1262,7 @@ export default function AdminLoaderPage() {
                   <p className="mt-3 text-xs text-text-dim">—</p>
                 ) : tbDocuments.length === 0 ? (
                   <p className="mt-3 text-xs text-[#FCA5A5]">
-                    No documents in this store yet — upload one via the console first.
+                    No documents in this store yet — upload one below.
                   </p>
                 ) : (
                   <select
@@ -1167,6 +1284,49 @@ export default function AdminLoaderPage() {
                 )}
               </div>
             </div>
+
+            {/* Upload PDF — surfaces only when a store is picked. Closes
+                the loop on the mt-filestore-kb console dependency. */}
+            {tbStoreId && (
+              <div className="mt-4 border border-dashed border-ink-line bg-ink-deep px-4 py-4">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div>
+                    <p className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
+                      Upload a trade-book PDF
+                    </p>
+                    <p className="mt-1 text-xs text-text-dim">
+                      PDF only · max 100MB · Gemini indexing runs server-side and
+                      may take 10-60s to finish before the doc shows in the picker.
+                    </p>
+                  </div>
+                  <label
+                    className={`shrink-0 font-mono text-[0.65rem] font-semibold uppercase tracking-[0.14em] px-3 py-2 border ${
+                      tbUploading
+                        ? 'border-ink-line text-text-dim opacity-50 cursor-default'
+                        : 'border-accent/60 text-accent hover:bg-accent/10 cursor-pointer'
+                    }`}
+                  >
+                    {tbUploading ? 'Uploading…' : 'Choose PDF'}
+                    <input
+                      type="file"
+                      accept="application/pdf"
+                      disabled={tbUploading || tbExtracting}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0]
+                        if (f) void handleUploadPdf(f)
+                        e.target.value = ''
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+                {tbUploadInfo && (
+                  <p className="mt-3 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-accent">
+                    {tbUploadInfo}
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <label className="block">

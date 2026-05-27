@@ -36,6 +36,7 @@ import {
 import { buildDeterministicTiers, type DeterministicTierInput } from './deterministic-bom'
 import { fetchSimilarPastQuotesContext } from './rag'
 import { pipelineLog } from '@/lib/log/pipeline'
+import { createTracer, stopwatch } from '@/lib/log/trace'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -79,6 +80,34 @@ export async function runEstimation(
   conversationState: RecipeConversationState = null,
 ): Promise<EstimationResult> {
   const cacheLog = pipelineLog('estimate', intake?.id ?? null)
+  // Phase 7 — structured tracer. Fires fire-and-forget DB writes to
+  // pipeline_traces (mig 076) at every key transition so the dashboard
+  // Pipeline tab can render a step-by-step timeline. console.log lines
+  // via `cacheLog` still go to Vercel logs — these are additive, never
+  // replacing the existing scannable lines.
+  const trace = createTracer(supabase, {
+    tenant_id: (intake?.tenant_id as string | null) ?? null,
+    intake_id: (intake?.id as string | null) ?? null,
+  })
+  const totalSw = stopwatch()
+  trace('estimate', 'ok', {
+    substep: 'start',
+    message: `runEstimation invoked (model=${modelId})`,
+    inputs: {
+      intake_id: intake?.id ?? null,
+      job_type: intake?.job_type ?? null,
+      trade: intake?.trade ?? null,
+      confidence: intake?.confidence ?? null,
+      tenant_id: intake?.tenant_id ?? null,
+      hourly_rate: (pricingBook as { hourly_rate?: unknown })?.hourly_rate ?? null,
+      markup_pct:
+        (pricingBook as { default_markup_pct?: unknown })?.default_markup_pct ?? null,
+      conversation_state_slot_count:
+        conversationState && typeof conversationState === 'object' && conversationState.slots
+          ? Object.keys(conversationState.slots).length
+          : 0,
+    },
+  })
 
   // RAG: anchor Opus to similar past quotes. Returns null on cold-start
   // (no usable matches), all-inspection results, or if RAG_DISABLED=true.
@@ -158,6 +187,7 @@ export async function runEstimation(
   // price (cacheCreationInputTokens > 0); subsequent calls read at ~10%
   // cost (cacheReadInputTokens > 0). Cache invalidates automatically when
   // any pricing_book field changes (different prompt content → different key).
+  const llmSw = stopwatch()
   const result = await generateText({
     model: anthropic(modelId),
     messages: [
@@ -195,10 +225,42 @@ export async function runEstimation(
 
   const draft = parseJsonFromText(result.text)
 
+  // Phase 7 — record the LLM-call outcome.
+  trace('estimate', 'ok', {
+    substep: 'llm_draft',
+    message: `${modelId} produced draft (needs_inspection=${!!draft?.needs_inspection})`,
+    inputs: {
+      // The full prompt is too large to store; record what shaped it.
+      model: modelId,
+      rag_match_count: ragMatchCount,
+    },
+    outputs: {
+      needs_inspection: !!draft?.needs_inspection,
+      job_type: intake?.job_type ?? null,
+      good_subtotal: draft?.good?.subtotal_ex_gst ?? null,
+      better_subtotal: draft?.better?.subtotal_ex_gst ?? null,
+      best_subtotal: draft?.best?.subtotal_ex_gst ?? null,
+      inspection_reason: draft?.inspection_reason ?? null,
+      assumptions_count: Array.isArray(draft?.assumptions) ? draft.assumptions.length : 0,
+      risk_flags_count: Array.isArray(draft?.risk_flags) ? draft.risk_flags.length : 0,
+    },
+    decisions: {
+      cache_read_input_tokens: cacheMeta?.cacheReadInputTokens ?? 0,
+      cache_creation_input_tokens: cacheMeta?.cacheCreationInputTokens ?? 0,
+    },
+    duration_ms: llmSw.elapsed(),
+  })
+
   // Inspection-required quotes don't carry line items, so there's nothing
   // to validate — accept as-is. The route handler will force tier nulls and
   // the $99 inspection total.
   if (draft?.needs_inspection === true) {
+    trace('estimate', 'warn', {
+      substep: 'route_to_inspection',
+      message: 'draft self-reported needs_inspection=true; skipping validation',
+      decisions: { route: 'inspection', cause: 'llm_self_reported' },
+      duration_ms: totalSw.elapsed(),
+    })
     return { draft }
   }
 
@@ -261,11 +323,21 @@ export async function runEstimation(
   // Deterministic + grounded (tops labour up at pricing_book.hourly_rate);
   // never undercharges, never fabricates; no-ops when already compliant.
   // This mutates `draft` in place, so validation below sees the floor.
+  const floorSw = stopwatch()
   const floored = applyMinLabourFloor(draft, pricingBook)
   if (floored.adjustedTiers.length > 0) {
     cacheLog.ok('min-labour floor applied (small-job minimum charge — not bounced to inspection)', {
       tiers: floored.adjustedTiers,
       min_labour_hours: (pricingBook as any)?.min_labour_hours ?? 2.0,
+    })
+    trace('estimate', 'ok', {
+      substep: 'min_labour_floor',
+      message: `floor applied to ${floored.adjustedTiers.length} tier(s)`,
+      decisions: {
+        adjusted_tiers: floored.adjustedTiers,
+        min_labour_hours: (pricingBook as any)?.min_labour_hours ?? 2.0,
+      },
+      duration_ms: floorSw.elapsed(),
     })
   }
 
@@ -311,6 +383,18 @@ export async function runEstimation(
         // them. mergeRecipesIntoDraft is purely functional; we apply
         // its result onto the live draft here.
         Object.assign(draft, postMerge)
+        trace('estimate', 'ok', {
+          substep: 'recipe_merge',
+          message: 'price-bands recipe modifiers applied',
+          decisions: {
+            good_recipes_fired: outcome.good.recipes_fired,
+            good_swapped_to: outcome.good.swapped_to,
+            good_added_line_items: outcome.good.added_line_items,
+            better_recipes_fired: outcome.better.recipes_fired,
+            best_recipes_fired: outcome.best.recipes_fired,
+            good_subtotal_after: draft?.good?.subtotal_ex_gst ?? null,
+          },
+        })
         cacheLog.ok('price-bands recipe merge applied', {
           good: outcome.good.changed
             ? {
@@ -358,9 +442,21 @@ export async function runEstimation(
     intake?.trade ?? null,
     (intake?.tenant_id as string | null) ?? null,
   )
+  const validateSw = stopwatch()
   const check = validateQuoteGrounding(draft, pricingBook as PricingBookForValidation, candidates)
 
   if (check.valid) {
+    trace('estimate', 'ok', {
+      substep: 'validate_grounding',
+      message: 'all line items grounded',
+      decisions: {
+        good_subtotal: draft?.good?.subtotal_ex_gst ?? null,
+        better_subtotal: draft?.better?.subtotal_ex_gst ?? null,
+        best_subtotal: draft?.best?.subtotal_ex_gst ?? null,
+        route: 'auto_quote',
+      },
+      duration_ms: validateSw.elapsed(),
+    })
     // WP4 — link each grounded material line back to the operator
     // catalogue product that priced it (catalogue_id + image_path) so
     // the render can show THE EXACT product. STRICTLY render-only: this
@@ -457,6 +553,15 @@ export async function runEstimation(
       }
     }
 
+    trace('estimate', 'ok', {
+      substep: 'done',
+      message: 'auto-quote returned (grounded, enriched)',
+      decisions: {
+        route: 'auto_quote',
+        tier_count: ['good', 'better', 'best'].filter((k) => draft?.[k]).length,
+      },
+      duration_ms: totalSw.elapsed(),
+    })
     return { draft }
   }
 
@@ -475,6 +580,26 @@ export async function runEstimation(
       expected: f.expected,
     })),
   })
+  trace('estimate', 'err', {
+    substep: 'validate_grounding',
+    message: `grounding validation failed — ${check.failures.length} line(s) ungrounded`,
+    outputs: {
+      failure_count: check.failures.length,
+      failures: check.failures.slice(0, 10).map((f) => ({
+        tier: f.tier,
+        line_index: f.lineIndex,
+        description: f.description?.slice(0, 80),
+        unit: f.unit,
+        price: f.unit_price_ex_gst,
+        expected: f.expected,
+      })),
+    },
+    decisions: {
+      route: 'inspection',
+      cause: 'grounding_failed',
+    },
+    duration_ms: validateSw.elapsed(),
+  })
 
   const reason = `Pricing not yet available — ${check.failures.length} line item(s) failed grounding check against the database. A site visit is needed before we can quote accurately.`
 
@@ -489,6 +614,13 @@ export async function runEstimation(
     // Preserve scope_short for the SMS, but null the assumptions if they
     // referenced fabricated prices/inclusions.
   }
+
+  trace('estimate', 'warn', {
+    substep: 'done',
+    message: 'returned inspection-downgrade (grounding failed)',
+    decisions: { route: 'inspection', cause: 'grounding_failed' },
+    duration_ms: totalSw.elapsed(),
+  })
 
   return {
     draft: downgraded,
