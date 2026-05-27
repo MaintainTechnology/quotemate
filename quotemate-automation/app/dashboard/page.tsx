@@ -37,6 +37,7 @@ import {
   Copy,
   Check,
   Banknote,
+  Shield,
   type LucideProps,
 } from 'lucide-react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
@@ -250,6 +251,10 @@ export default function DashboardPage() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('overview')
+  // is_admin gates the "Admin loader" sidebar entry. Probe lazily off the
+  // access token — non-admin users never see the link. Server still
+  // enforces admin on every /admin/* route (the link is just UX).
+  const [isAdmin, setIsAdmin] = useState(false)
 
   // On mount: confirm we have a session, then load the dashboard payload.
   useEffect(() => {
@@ -272,6 +277,29 @@ export default function DashboardPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Lazily probe is_admin once the access token lands. Fails CLOSED — any
+  // network/server hiccup leaves isAdmin false so the link stays hidden.
+  useEffect(() => {
+    if (!accessToken) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch('/api/admin/whoami', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          cache: 'no-store',
+        })
+        if (!res.ok) return
+        const json = (await res.json()) as { ok?: boolean; is_admin?: boolean }
+        if (!cancelled && json?.is_admin === true) setIsAdmin(true)
+      } catch {
+        // swallow — keep isAdmin=false
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken])
 
   async function refresh(token: string) {
     setLoadError(null)
@@ -507,7 +535,7 @@ export default function DashboardPage() {
           nav — no big greeting block above so the sidebar aligns flush
           with the KPI row. */}
       <div className="mt-4 lg:mt-6 lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-8">
-        <Sidebar tab={tab} setTab={setTab} quoteCount={data.quotes.length} />
+        <Sidebar tab={tab} setTab={setTab} quoteCount={data.quotes.length} isAdmin={isAdmin} />
         <section className="mt-6 lg:mt-0 pb-20 min-w-0">
           {/* `key={tab}` forces a tear-down + remount when the user
               switches tabs, so the inner fade-in keyframe re-fires.
@@ -789,10 +817,12 @@ function Sidebar({
   tab,
   setTab,
   quoteCount,
+  isAdmin,
 }: {
   tab: Tab
   setTab: (t: Tab) => void
   quoteCount: number
+  isAdmin: boolean
 }) {
   const items = buildNav(quoteCount)
   const byTab = new Map(items.map((i) => [i.tab, i]))
@@ -857,6 +887,36 @@ function Sidebar({
             </ul>
           </div>
         ))}
+        {/* Admin-only nav island. Hidden for non-admin users; the link
+            navigates to a different Next route (not a tab switch) so we
+            render it as a plain anchor rather than a setTab button. */}
+        {isAdmin && (
+          <div className="border-t border-ink-line">
+            <div className="px-4 pt-3.5 pb-1.5">
+              <span className="font-mono text-[0.58rem] uppercase tracking-[0.18em] text-accent">
+                Admin
+              </span>
+            </div>
+            <ul className="pb-2">
+              <li>
+                <a
+                  href="/admin/loader"
+                  className="w-full text-left flex items-center justify-between gap-3 pl-4 pr-3 py-2.5 font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold transition-colors border-l-2 border-transparent text-text-dim hover:text-accent hover:bg-ink-card/60"
+                >
+                  <span className="flex items-center gap-2.5 min-w-0">
+                    <Shield
+                      size={16}
+                      strokeWidth={1.75}
+                      aria-hidden="true"
+                      className="shrink-0"
+                    />
+                    <span className="truncate">Admin loader</span>
+                  </span>
+                </a>
+              </li>
+            </ul>
+          </div>
+        )}
       </nav>
     </aside>
   )
