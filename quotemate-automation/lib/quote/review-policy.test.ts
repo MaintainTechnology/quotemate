@@ -216,20 +216,36 @@ describe('shouldHoldForReview — bypass rules', () => {
     expect(r.reason).toBe('customer_already_chose_product')
   })
 
-  it('WP9 bypass takes priority over review_over_threshold', () => {
-    expect(
-      shouldHoldForReview({
-        policy: 'review_over_threshold',
-        threshold: 500,
-        totalIncGst: 1941,
-        customerAlreadyEngaged: true,
-      }).hold,
-    ).toBe(false)
+  it('threshold wins over WP9 bypass when policy is review_over_threshold', () => {
+    // The tradie set $500 as a deliberate risk floor. A picker-driven
+    // $1,941 quote still has to wait for approval — picker engagement
+    // is not a get-out-of-review card when the threshold rule applies.
+    const r = shouldHoldForReview({
+      policy: 'review_over_threshold',
+      threshold: 500,
+      totalIncGst: 1941,
+      customerAlreadyEngaged: true,
+    })
+    expect(r.hold).toBe(true)
+    expect(r.reason).toBe('total_1941_at_or_over_threshold_500')
   })
 
-  it('inspection bypass takes priority over WP9 bypass (both result in send)', () => {
-    // Both bypass — the first one wins on reason text, both end up
-    // sending. Verify the order so audit logs are predictable.
+  it('WP9 bypass still auto-sends under-threshold picker quotes', () => {
+    // Sanity: when the threshold rule says "send" anyway, the engaged
+    // flag is irrelevant — same outcome, threshold reason wins.
+    const r = shouldHoldForReview({
+      policy: 'review_over_threshold',
+      threshold: 500,
+      totalIncGst: 200,
+      customerAlreadyEngaged: true,
+    })
+    expect(r.hold).toBe(false)
+    expect(r.reason).toBe('total_200_under_threshold_500')
+  })
+
+  it('inspection bypass still takes priority over WP9 bypass (both result in send)', () => {
+    // Both bypass — verify inspection wins on reason text so audit logs
+    // stay predictable.
     const r = shouldHoldForReview({
       policy: 'always_review',
       totalIncGst: 99,

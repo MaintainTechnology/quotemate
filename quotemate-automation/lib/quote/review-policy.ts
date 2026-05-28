@@ -51,10 +51,15 @@ export interface ShouldHoldInput {
   /**
    * Customer has already engaged with a product choice via the WP9
    * mid-conversation product picker (intake.scope.chosen_product is
-   * set). When true, the gate is bypassed even under `always_review`
-   * because (a) the price IS the catalogue price the customer literally
-   * tapped, and (b) holding now would feel weird after they've already
-   * said "yes, that one".
+   * set). When true and policy is `always_review`, the gate is bypassed
+   * — holding feels weird after the customer literally tapped "this one".
+   *
+   * Important: this flag does NOT bypass `review_over_threshold`. A
+   * configured dollar threshold is an explicit tradie risk floor —
+   * the picker doesn't override it. A $3,500 picker-driven quote with
+   * a $500 threshold STILL waits for tradie approval. Earlier behaviour
+   * (bypass-wins) was reverted because tradies set the number
+   * specifically to vet jobs over that number, irrespective of channel.
    *
    * Set this flag explicitly at the call site so the policy decision
    * stays inspectable. Default false — never auto-bypass without a
@@ -96,18 +101,19 @@ export function shouldHoldForReview(
     return { hold: false, reason: 'inspection_route_bypasses_gate' };
   }
 
-  // WP9 chosen-product flow bypasses the gate — see ShouldHoldInput docs.
-  if (input.customerAlreadyEngaged === true) {
-    return { hold: false, reason: 'customer_already_chose_product' };
-  }
-
   if (policy === 'auto_send') {
     return { hold: false, reason: 'tenant_policy_auto_send' };
   }
   if (policy === 'always_review') {
+    // WP9 chosen-product flow bypasses ONLY always_review — see
+    // ShouldHoldInput docs. The threshold case below ignores this flag
+    // on purpose so a configured dollar floor stays inviolable.
+    if (input.customerAlreadyEngaged === true) {
+      return { hold: false, reason: 'customer_already_chose_product' };
+    }
     return { hold: true, reason: 'tenant_policy_always_review' };
   }
-  // review_over_threshold
+  // review_over_threshold — the threshold wins, picker or not.
   const total = toFiniteNumber(input.totalIncGst);
   const threshold = toFiniteNumber(input.threshold);
   if (total === null) {
