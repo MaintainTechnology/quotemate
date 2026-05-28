@@ -4,6 +4,18 @@
     {
       "path": "/api/cron/sms-cleanup",
       "schedule": "0 17 * * *"
+    },
+    {
+      "path": "/api/cron/agents/catalogue",
+      "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/cron/agents/tradie-learn",
+      "schedule": "0 19 * * 1"
+    },
+    {
+      "path": "/api/cron/agents/eval",
+      "schedule": "0 20 * * 0"
     }
   ]
 }
