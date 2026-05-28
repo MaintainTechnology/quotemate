@@ -130,7 +130,7 @@ export default async function ApprovePage(props: {
             <>
               <ApproveAction quoteId={quote.id as string} shareToken={token} />
               <Link
-                href={`/q/${token}`}
+                href={`/q/${token}?edit=1`}
                 className="inline-flex items-center justify-center gap-2 border border-ink-line text-text-pri font-mono text-xs uppercase tracking-[0.15em] font-bold px-4 py-3 hover:border-accent/50 hover:text-accent transition-colors"
               >
                 Edit first →

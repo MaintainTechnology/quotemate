@@ -3,13 +3,26 @@
 'use client'
 
 import { useState, type FormEvent } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 import { AuthShell, Field, INPUT, ErrorBanner, Arrow } from '../signup/page'
 
 export default function SignInPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  // ?redirectTo= lets deep-links (e.g. the "Sign in to edit" CTA on a
+  // held quote's /q/<token>?edit=1 page) round-trip the user back to
+  // where they came from after auth. Whitelist same-origin paths only
+  // — never honour a fully-qualified URL or a protocol-relative one,
+  // both of which would be open-redirect vectors.
+  const redirectTo = (() => {
+    const raw = searchParams?.get('redirectTo')
+    if (!raw) return null
+    // Must start with a single slash AND not be protocol-relative ("//…").
+    if (!raw.startsWith('/') || raw.startsWith('//')) return null
+    return raw
+  })()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -56,7 +69,9 @@ export default function SignInPage() {
         const body = await meRes.json().catch(() => ({}))
         throw new Error(body?.error ?? `Tenant lookup failed (HTTP ${meRes.status})`)
       }
-      router.push('/dashboard')
+      // Honour redirectTo for deep-link round-trips (e.g. the "Edit
+      // first" SMS → /q/<token>?edit=1 → sign in → back to the editor).
+      router.push(redirectTo ?? '/dashboard')
     } catch (err: any) {
       setError(err?.message ?? 'Sign in failed')
       setSubmitting(false)

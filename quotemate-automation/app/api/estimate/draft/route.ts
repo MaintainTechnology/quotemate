@@ -742,7 +742,12 @@ export async function POST(req: Request) {
                 itemCount: intake.scope?.item_count ?? undefined,
                 totalIncGst: total,
                 approveUrl: `${appUrl}/q/${shareToken}/approve`,
-                editUrl: quoteUrl,
+                // ?edit=1 is the auto-open hint the TradieEditor reads
+                // on mount — without it, the customer-facing quote page
+                // shows the edit affordance as a small floating button
+                // that's easy to miss on mobile. With it, the editor
+                // modal opens immediately on arrival.
+                editUrl: `${quoteUrl}?edit=1`,
                 policyReason: reviewDecision.reason,
               })
             : buildTradieDraftNotification({

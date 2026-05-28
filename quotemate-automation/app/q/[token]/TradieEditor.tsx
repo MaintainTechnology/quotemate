@@ -18,7 +18,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 
 type LineItem = {
@@ -83,6 +84,14 @@ type TierKey = (typeof TIER_KEYS)[number]
 
 export default function TradieEditor({ quoteId, initialTiers, gstRegistered }: Props) {
   const router = useRouter()
+  // ?edit=1 is the auto-open hint set by the "Edit first" SMS link
+  // (buildTradieReviewNotification) and the approve-page Edit button.
+  // When it's present we want the editor modal open the moment the
+  // tradie lands, instead of forcing them to spot the small floating
+  // "Edit pricing" button at the top-right.
+  const searchParams = useSearchParams()
+  const pathname = usePathname()
+  const wantsEdit = searchParams?.get('edit') === '1'
   const [check, setCheck] = useState<OwnerCheck | null>(null)
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
@@ -127,7 +136,45 @@ export default function TradieEditor({ quoteId, initialTiers, gstRegistered }: P
     }
   }, [quoteId])
 
-  // Render nothing until we know, and nothing afterward if not the owner.
+  // ?edit=1 auto-open: pop the editor modal the moment the owner check
+  // resolves positively. Tracked with a one-shot flag so the modal
+  // doesn't re-open after the tradie closes it.
+  const [autoOpened, setAutoOpened] = useState(false)
+  useEffect(() => {
+    if (!autoOpened && wantsEdit && check?.owner === true && !check.paid) {
+      setOpen(true)
+      setAutoOpened(true)
+    }
+  }, [check, wantsEdit, autoOpened])
+
+  // Visitor came with explicit edit intent but isn't signed in (or is
+  // signed in to a different tenant) — instead of rendering nothing
+  // (which left the user staring at the customer page wondering where
+  // "edit" went), surface a clear sign-in CTA. The redirect param
+  // preserves the edit intent across the round-trip; /signin will
+  // honour it after the sign-in flow lands (see /signin redirect note).
+  if (wantsEdit && check && !check.owner) {
+    const returnTo =
+      (pathname ?? `/q/${quoteId}`) + (wantsEdit ? '?edit=1' : '')
+    return (
+      <div className="fixed top-3 right-3 z-40 max-w-[95vw]">
+        <div className="flex flex-wrap items-center gap-3 bg-accent text-white px-4 py-2.5 shadow-lg">
+          <span className="font-mono text-[0.6rem] uppercase tracking-[0.18em] font-bold">
+            Sign in to edit
+          </span>
+          <Link
+            href={`/signin?redirectTo=${encodeURIComponent(returnTo)}`}
+            className="font-mono text-[0.65rem] uppercase tracking-[0.14em] font-bold bg-white text-accent px-3 py-1 hover:bg-white/90 transition-colors"
+          >
+            Sign in →
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  // Render nothing until we know, and nothing afterward if not the owner
+  // (and there's no explicit edit intent that we should surface).
   if (!check?.owner) return null
 
   // Compute whether any tier's headline subtotal has actually changed
