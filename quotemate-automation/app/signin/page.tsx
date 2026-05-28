@@ -1,14 +1,22 @@
 // /signin — Maintain design system. Returning-tradie login.
+//
+// Why the Suspense boundary: `useSearchParams()` forces a CSR bailout
+// during prerender (Next 16, see
+// node_modules/next/dist/docs/01-app/03-api-reference/04-functions/use-search-params.md
+// §Prerendering — production builds fail with
+// "missing-suspense-with-csr-bailout" otherwise). We wrap ONLY the inner
+// SignInForm (the bit that needs `redirectTo`) so the AuthShell, title,
+// subtitle, and footer can still be statically prerendered.
 
 'use client'
 
-import { useState, type FormEvent } from 'react'
+import { Suspense, useState, type FormEvent } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 import { AuthShell, Field, INPUT, ErrorBanner, Arrow } from '../signup/page'
 
-export default function SignInPage() {
+function SignInForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   // ?redirectTo= lets deep-links (e.g. the "Sign in to edit" CTA on a
@@ -19,7 +27,6 @@ export default function SignInPage() {
   const redirectTo = (() => {
     const raw = searchParams?.get('redirectTo')
     if (!raw) return null
-    // Must start with a single slash AND not be protocol-relative ("//…").
     if (!raw.startsWith('/') || raw.startsWith('//')) return null
     return raw
   })()
@@ -79,6 +86,58 @@ export default function SignInPage() {
   }
 
   return (
+    <form onSubmit={handleSubmit} className="space-y-5">
+      <Field label="Email">
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@business.com.au"
+          className={INPUT}
+          required
+          autoComplete="email"
+        />
+      </Field>
+
+      <Field label="Password">
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className={INPUT}
+          required
+          autoComplete="current-password"
+        />
+      </Field>
+
+      {error && <ErrorBanner>{error}</ErrorBanner>}
+
+      <button
+        type="submit"
+        disabled={submitting}
+        className="w-full inline-flex items-center justify-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-4 text-sm uppercase tracking-wider transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-accent-soft focus:ring-offset-2 focus:ring-offset-ink-deep"
+      >
+        {submitting ? 'Signing in…' : 'Sign in'}
+        {!submitting && <Arrow />}
+      </button>
+    </form>
+  )
+}
+
+// Static skeleton shown while the form's CSR bundle hydrates. Same
+// visual footprint as the real form so the layout doesn't shift.
+function SignInFormSkeleton() {
+  return (
+    <div className="space-y-5" aria-busy="true">
+      <div className="h-[3.25rem] border border-ink-line bg-ink-deep/40" />
+      <div className="h-[3.25rem] border border-ink-line bg-ink-deep/40" />
+      <div className="h-[3.25rem] bg-accent/40" />
+    </div>
+  )
+}
+
+export default function SignInPage() {
+  return (
     <AuthShell
       title={<>Welcome <span className="text-accent">back</span></>}
       subtitle="Sign in to manage your pricing, view quotes, and check on your AI receptionist."
@@ -91,41 +150,9 @@ export default function SignInPage() {
         </>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-5">
-        <Field label="Email">
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@business.com.au"
-            className={INPUT}
-            required
-            autoComplete="email"
-          />
-        </Field>
-
-        <Field label="Password">
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className={INPUT}
-            required
-            autoComplete="current-password"
-          />
-        </Field>
-
-        {error && <ErrorBanner>{error}</ErrorBanner>}
-
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full inline-flex items-center justify-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-4 text-sm uppercase tracking-wider transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-accent-soft focus:ring-offset-2 focus:ring-offset-ink-deep"
-        >
-          {submitting ? 'Signing in…' : 'Sign in'}
-          {!submitting && <Arrow />}
-        </button>
-      </form>
+      <Suspense fallback={<SignInFormSkeleton />}>
+        <SignInForm />
+      </Suspense>
     </AuthShell>
   )
 }
