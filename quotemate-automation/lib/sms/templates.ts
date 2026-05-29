@@ -418,6 +418,41 @@ export function buildIncompleteCallSms(opts: {
     .replace(/…/g, '...').replace(/·/g, '-').replace(/[^\x20-\x7E\n]/g, '')
 }
 
+// ════════════════════════════════════════════════════════════════════
+// Migration 079 — automated 2-hour customer follow-up check-in.
+//
+// Fired by /api/cron/followup-2h on quotes that have been sent or viewed
+// 2h+ ago, where the customer hasn't replied and the tradie has opted in.
+// One SMS per quote, ever (idempotency stamped on quotes.followup_2h_sent_at).
+//
+// Body is intentionally short — sits inside a single GSM-7 segment (160
+// chars) for typical name + business pairs so it lands as one notification,
+// not a multipart split. Wording is the exact body in the design brief:
+// no emoji, no markdown, plain AU tone, signed off with the tradie's
+// business name (so the customer recognises the sender immediately).
+//
+// Defensive fallbacks:
+//   • firstName missing → 'there'   (matches buildQuoteSms convention)
+//   • businessName missing → 'your tradie'   (shouldn't happen — toggle
+//     can't be enabled without a tenant row — but safer than emitting
+//     '— ' with a trailing dash and no name).
+// ════════════════════════════════════════════════════════════════════
+export function buildFollowup2hSms(opts: {
+  firstName?: string | null
+  businessName?: string | null
+}): string {
+  const first = (opts.firstName ?? '').trim().split(' ')[0] || 'there'
+  const business = (opts.businessName ?? '').trim() || 'your tradie'
+  const body = `Hi ${first}, just checking in on the quote we sent through - did we answer everything, or anything else we can help with? - ${business}`
+  return body
+    .replace(/[‐-―−]/g, '-')
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/…/g, '...')
+    .replace(/·/g, '-')
+    .replace(/[^\x20-\x7E\n]/g, '')
+}
+
 // Format an ISO timestamp as a short AU Eastern label, e.g. "Thu 7 May, 9:00am".
 // ASCII output for GSM-7 SMS.
 function fmtSlotShort(iso: string): string {

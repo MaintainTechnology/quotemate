@@ -614,6 +614,16 @@ export async function PATCH(req: Request) {
     if (error) errors.push(`review_policy: ${error.message}`)
   }
 
+  // 2bf. Migration 079 — 2-hour customer follow-up check-in toggle.
+  //      Same fan-out pattern as quote_display + review_policy.
+  if (updates.followup_2h_enabled !== undefined) {
+    const { error } = await supabase
+      .from('pricing_book')
+      .update({ followup_2h_enabled: updates.followup_2h_enabled })
+      .eq('tenant_id', tenant.id)
+    if (error) errors.push(`followup_2h_enabled: ${error.message}`)
+  }
+
   // 2bb. v8 Phase A — early-booking discount config. Stored in
   //     pricing_book.overlays.early_bird jsonb (no schema migration for
   //     config). The discount is per-TENANT, so it is written uniformly

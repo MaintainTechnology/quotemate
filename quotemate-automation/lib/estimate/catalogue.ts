@@ -597,6 +597,29 @@ export function applyChosenProduct(
   const unitPrice = +price.toFixed(2)
   const applied: string[] = []
 
+  // Helper: does this line already reference the chosen catalogue product?
+  // Same key (catalogue_id OR a "material:<uuid>" source ending in the
+  // chosen id) used for both pre-rewrite "pick the right line to overwrite"
+  // AND post-rewrite "purge any sibling lines that point at the SAME
+  // product". The dedup key is `catalogue_id` (a stable SKU id) — never
+  // description text — so it cannot collapse legitimately-different lines.
+  // (NB: if a tradie ever splits one SKU across two intentional line items
+  //  e.g. "5 downlights — kitchen" + "5 downlights — bathroom", this would
+  //  merge them. Today's policy — declared by the D-1 dedup guard's own
+  //  failure message — is one row per SKU per tier, qty=N on a single
+  //  line; this fix is in keeping with that.)
+  const refsChosenProduct = (li: any): boolean => {
+    if (!li || !chosen.catalogue_id) return false
+    if (li.catalogue_id != null && String(li.catalogue_id) === String(chosen.catalogue_id)) {
+      return true
+    }
+    const src = String(li.source ?? '')
+    if (src.startsWith('material:') && src.endsWith(String(chosen.catalogue_id))) {
+      return true
+    }
+    return false
+  }
+
   for (const tierKey of ['good', 'better', 'best'] as const) {
     const tier = draft[tierKey] as
       | { line_items?: Array<Record<string, any>>; subtotal_ex_gst?: number | string; label?: string }
@@ -605,11 +628,22 @@ export function applyChosenProduct(
     if (!tier || !Array.isArray(tier.line_items) || tier.line_items.length === 0) continue
     const items = tier.line_items
     const notLabour = (li: any) => li && li.source !== 'labour' && li.source !== 'call_out'
-    // Prefer the headline (non-sundry) material line; else any material line.
-    let idx = items.findIndex(
-      (li) => notLabour(li) && !SUNDRY_RE.test(String(li?.description ?? '')),
-    )
-    if (idx < 0) idx = items.findIndex((li) => notLabour(li))
+    // IDEMPOTENCY (2026-05-29) — if Opus has already emitted the chosen
+    // product (typical happy path now that the tool returns the UUID-
+    // anchored source), overwrite THAT line in place. Otherwise the
+    // headline-overwrite below would rewrite an UNRELATED non-sundry line
+    // (e.g. cable runs, ceiling cuts) into the chosen product, leaving
+    // the original chosen-product line untouched → two lines for the
+    // same product in the same tier (the Atomic 5ad1ca16 / ca7ded23
+    // incident, 2026-05-28).
+    let idx = items.findIndex(refsChosenProduct)
+    if (idx < 0) {
+      // Prefer the headline (non-sundry) material line; else any material line.
+      idx = items.findIndex(
+        (li) => notLabour(li) && !SUNDRY_RE.test(String(li?.description ?? '')),
+      )
+      if (idx < 0) idx = items.findIndex((li) => notLabour(li))
+    }
     if (idx < 0) continue
 
     const li = items[idx]
@@ -620,7 +654,10 @@ export function applyChosenProduct(
     li.quantity = q
     li.unit_price_ex_gst = unitPrice
     li.total_ex_gst = +(unitPrice * q).toFixed(2)
-    li.source = 'material'
+    // Emit the SAME UUID-anchored source shape the validator's strict path
+    // expects, so a future regression that reintroduces a duplicate would
+    // be caught by D-1 on the first validate pass (defense in depth).
+    li.source = chosen.catalogue_id ? `material:${chosen.catalogue_id}` : 'material'
     li.catalogue_id = chosen.catalogue_id
     if (chosen.image_path) li.image_path = chosen.image_path
     // Render-only product blurb (same guarantee as image_path /
@@ -638,6 +675,19 @@ export function applyChosenProduct(
     // customer SMS and /q page would show the wrong product name. The
     // label must always match the chosen product.
     tier.label = chosen.name
+
+    // POST-REWRITE DEDUP (2026-05-29) — purge any OTHER line that points
+    // at the same catalogue product. Trust the chosen-product price
+    // (it's the operator's own catalogue price the customer literally
+    // selected, WP2-guaranteed legitimate) and drop the strays. Keeps
+    // order stable; runs in-place; never touches non-material lines.
+    for (let j = items.length - 1; j >= 0; j--) {
+      if (j === idx) continue
+      if (refsChosenProduct(items[j])) {
+        items.splice(j, 1)
+        if (j < idx) idx-- // keep the rewritten line's index valid
+      }
+    }
 
     tier.subtotal_ex_gst = +items
       .reduce((s, x) => s + (Number(x?.total_ex_gst) || 0), 0)

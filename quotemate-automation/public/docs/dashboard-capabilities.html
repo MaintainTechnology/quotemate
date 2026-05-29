@@ -1,0 +1,3364 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuoteMate — Investor Brief — 29 May 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --ink-deep: #0E1622;
+  --ink: #141C29;
+  --ink-card: #1B2433;
+  --ink-card-lift: #202B3D;
+  --ink-line: #2D3A4F;
+  --accent: #FF5A1F;
+  --accent-press: #E8470F;
+  --accent-soft: #FF7A45;
+  --text-primary: #FFFFFF;
+  --text-secondary: #B8C2D1;
+  --text-dim: #8A95A8;
+  --teal-glow: #14B8A6;
+  --teal-deep: #0F766E;
+  --success: #15803D;
+  --warning: #B45309;
+  --danger: #B91C1C;
+  --font-display: 'Manrope', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-display);
+  background-color: var(--ink-deep);
+  color: var(--text-primary);
+  font-size: 20px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 48px;
+}
+
+/* ==================== TOPOGRAPHIC BACKGROUND ==================== */
+.topo-bg {
+  position: absolute;
+  inset: 0;
+  opacity: 0.10;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.topo-bg svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ==================== HERO ==================== */
+.hero {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 120px 0 80px;
+  border-bottom: 1px solid var(--ink-line);
+  overflow: hidden;
+}
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 96px;
+  align-items: end;
+  position: relative;
+  z-index: 2;
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--text-secondary);
+  font-weight: 600;
+  margin-bottom: 40px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.eyebrow-bar {
+  display: inline-block;
+  width: 56px;
+  height: 2px;
+  background-color: var(--accent);
+}
+
+.hero h1 {
+  font-size: clamp(72px, 11vw, 152px);
+  font-weight: 900;
+  letter-spacing: -0.045em;
+  line-height: 0.88;
+  text-transform: uppercase;
+  margin-bottom: 40px;
+}
+
+.hero h1 .accent-text {
+  color: var(--accent);
+}
+
+.hero h1 .line-break { display: block; }
+
+.hero-tagline {
+  font-size: clamp(26px, 2.6vw, 36px);
+  font-weight: 400;
+  line-height: 1.3;
+  color: var(--text-secondary);
+  max-width: 28ch;
+  letter-spacing: -0.015em;
+}
+
+.hero-aside {
+  border-left: 2px solid var(--accent);
+  padding-left: 40px;
+  padding-bottom: 8px;
+}
+
+.hero-aside-label {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--text-secondary);
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+
+.hero-aside-date {
+  font-family: var(--font-mono);
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.1;
+  margin-bottom: 28px;
+  letter-spacing: -0.01em;
+}
+
+.hero-aside-meta {
+  font-size: 20px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.hero-aside-meta div {
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hero-aside-meta span {
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 18px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* ==================== EXECUTIVE SUMMARY ==================== */
+.exec-summary {
+  background-color: var(--ink);
+  padding: 128px 0;
+  border-bottom: 1px solid var(--ink-line);
+  position: relative;
+}
+
+.exec-summary-header {
+  margin-bottom: 80px;
+  max-width: 80ch;
+}
+
+.exec-summary-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--accent);
+  font-weight: 700;
+  margin-bottom: 32px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.exec-summary-title {
+  font-size: clamp(48px, 6vw, 80px);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 0.95;
+  text-transform: uppercase;
+  margin-bottom: 32px;
+}
+
+.exec-summary-title .accent-text { color: var(--accent); }
+
+.exec-summary-lede {
+  font-size: clamp(22px, 1.8vw, 28px);
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  max-width: 65ch;
+}
+
+.exec-three-up {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  margin-top: 64px;
+}
+
+.exec-pillar {
+  background-color: var(--ink-card);
+  border: 1px solid var(--ink-line);
+  border-top: 4px solid var(--accent);
+  padding: 48px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.exec-pillar-num {
+  font-family: var(--font-mono);
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+}
+
+.exec-pillar-title {
+  font-size: 28px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+
+.exec-pillar-body {
+  font-size: 19px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+/* ==================== FLOW DIAGRAM (PIPELINE) ==================== */
+.flow-section {
+  background-color: var(--ink-deep);
+  padding: 128px 0;
+  border-bottom: 1px solid var(--ink-line);
+  position: relative;
+}
+
+.flow-header {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 64px;
+  align-items: end;
+  margin-bottom: 80px;
+  padding-bottom: 48px;
+  border-bottom: 1px solid var(--ink-line);
+}
+
+.flow-title {
+  font-size: clamp(40px, 5vw, 64px);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.0;
+  text-transform: uppercase;
+  margin-bottom: 24px;
+}
+
+.flow-title .accent-text { color: var(--accent); }
+
+.flow-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--accent);
+  font-weight: 700;
+  margin-bottom: 24px;
+}
+
+.flow-blurb {
+  font-size: 20px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.flow-diagram {
+  background-color: var(--ink-card);
+  border: 1px solid var(--ink-line);
+  padding: 56px 48px;
+  position: relative;
+  overflow: hidden;
+}
+
+.flow-diagram svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.flow-legend {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+  margin-top: 40px;
+}
+
+.flow-legend-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px;
+  background-color: var(--ink-deep);
+  border-left: 3px solid var(--accent);
+}
+
+.flow-legend-num {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.05em;
+}
+
+.flow-legend-label {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+}
+
+.flow-legend-detail {
+  font-size: 18px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* ==================== STATS STRIP ==================== */
+.stats-strip {
+  background-color: var(--ink);
+  border-bottom: 1px solid var(--ink-line);
+  padding: 96px 0;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+}
+
+.stat-tile {
+  border: 1px solid var(--ink-line);
+  background-color: var(--ink-card);
+  padding: 48px 32px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 220px;
+}
+
+.stat-tile::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  background-color: var(--accent);
+}
+
+.stat-number {
+  font-size: clamp(64px, 6vw, 96px);
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 0.95;
+  color: var(--text-primary);
+  margin-bottom: 28px;
+  font-family: var(--font-display);
+}
+
+.stat-label {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-secondary);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* ==================== SECTIONS ==================== */
+.section {
+  padding: 144px 0;
+  position: relative;
+}
+
+.section.alt {
+  background-color: var(--ink);
+}
+
+.section-header {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 64px;
+  align-items: start;
+  margin-bottom: 96px;
+  padding-bottom: 56px;
+  border-bottom: 1px solid var(--ink-line);
+}
+
+.section-number {
+  font-family: var(--font-mono);
+  font-size: clamp(96px, 9vw, 140px);
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 0.85;
+  letter-spacing: -0.04em;
+  width: 220px;
+}
+
+.section-title-wrap {
+  padding-top: 12px;
+  max-width: 60ch;
+}
+
+.section-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--accent);
+  font-weight: 700;
+  margin-bottom: 28px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.section-eyebrow-bar {
+  display: inline-block;
+  width: 48px;
+  height: 2px;
+  background-color: var(--accent);
+}
+
+.section-title {
+  font-size: clamp(48px, 6vw, 80px);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.0;
+  text-transform: uppercase;
+  margin-bottom: 32px;
+  color: var(--text-primary);
+}
+
+.section-title .accent-text { color: var(--accent); }
+
+.section-subtitle {
+  font-size: clamp(22px, 1.8vw, 28px);
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  max-width: 60ch;
+  letter-spacing: -0.01em;
+}
+
+/* ==================== FLAGSHIP HERO CARD ==================== */
+.flagship-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 32px;
+  margin-bottom: 32px;
+}
+
+.flagship-card {
+  background-color: var(--ink-card);
+  border: 1px solid var(--accent);
+  border-left: 6px solid var(--accent);
+  padding: 56px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  position: relative;
+  min-height: 100%;
+}
+
+.section.alt .flagship-card {
+  background-color: var(--ink-card-lift);
+}
+
+.flagship-banner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--accent);
+}
+
+.flagship-banner::before {
+  content: '';
+  display: inline-block;
+  width: 40px;
+  height: 2px;
+  background-color: var(--accent);
+}
+
+.flagship-name {
+  font-size: clamp(36px, 3.5vw, 52px);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  color: var(--text-primary);
+}
+
+.flagship-name .accent-text { color: var(--accent); }
+
+.flagship-description {
+  font-size: 22px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  font-weight: 400;
+  max-width: 60ch;
+}
+
+.flagship-meta {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.flagship-aside {
+  background-color: var(--ink-deep);
+  border: 1px solid var(--ink-line);
+  padding: 40px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.section.alt .flagship-aside {
+  background-color: var(--ink-deep);
+}
+
+.flagship-aside-label {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.flagship-aside-num {
+  font-family: var(--font-mono);
+  font-size: 56px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: -0.03em;
+  line-height: 0.9;
+}
+
+.flagship-aside-text {
+  font-size: 19px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* ==================== FEATURE GRID ==================== */
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 28px;
+}
+
+.feature-grid.three-col {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.feature-card {
+  background-color: var(--ink-card);
+  border: 1px solid var(--ink-line);
+  padding: 36px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  position: relative;
+}
+
+.section.alt .feature-card {
+  background-color: var(--ink-card-lift);
+}
+
+.feature-card.differentiator {
+  border-left: 4px solid var(--accent);
+  background-color: var(--ink-card-lift);
+}
+
+.section.alt .feature-card.differentiator {
+  background-color: var(--ink-card);
+}
+
+.feature-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.feature-card-status-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.status-pill {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  padding: 6px 14px;
+  display: inline-block;
+}
+
+.status-pill.live {
+  background-color: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--ink-line);
+}
+
+.status-pill.partial {
+  background-color: transparent;
+  color: var(--warning);
+  border: 1px solid var(--warning);
+}
+
+.status-pill.planned {
+  background-color: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--text-dim);
+}
+
+.status-pill.flagship {
+  background-color: var(--accent);
+  color: var(--text-primary);
+  border: 1px solid var(--accent);
+}
+
+.metric-pill {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 6px 14px;
+  color: var(--text-primary);
+  border: 1px solid var(--ink-line);
+  background-color: transparent;
+}
+
+.feature-name {
+  font-size: clamp(26px, 1.8vw, 30px);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+
+.feature-description {
+  font-size: 19px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+/* ==================== FOOTER ==================== */
+.footer-block {
+  background-color: var(--ink-deep);
+  padding: 160px 0 0;
+  border-top: 1px solid var(--ink-line);
+  position: relative;
+  overflow: hidden;
+}
+
+.footer-content {
+  position: relative;
+  z-index: 2;
+  text-align: left;
+  padding-bottom: 120px;
+}
+
+.footer-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--accent);
+  font-weight: 700;
+  margin-bottom: 40px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.footer-eyebrow-bar {
+  display: inline-block;
+  width: 64px;
+  height: 2px;
+  background-color: var(--accent);
+}
+
+.footer-headline {
+  font-size: clamp(64px, 9vw, 128px);
+  font-weight: 900;
+  letter-spacing: -0.045em;
+  line-height: 0.92;
+  text-transform: uppercase;
+  margin-bottom: 48px;
+  max-width: 22ch;
+}
+
+.footer-headline .accent-text {
+  color: var(--accent);
+}
+
+.footer-closing-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 80px;
+  align-items: end;
+  margin-top: 64px;
+}
+
+.footer-ask {
+  font-size: clamp(24px, 2vw, 30px);
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  max-width: 50ch;
+}
+
+.footer-ask strong {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.footer-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 48px;
+  border-top: 1px solid var(--ink-line);
+  padding-top: 56px;
+  margin-top: 80px;
+}
+
+.footer-meta-item-label {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--text-dim);
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.footer-meta-item-value {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  word-break: break-all;
+}
+
+.cta-bar {
+  background-color: var(--accent);
+  padding: 32px 48px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+
+.cta-bar-text {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+}
+
+.cta-bar-url {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ==================== INTERSTITIAL CALLOUT ==================== */
+.interstitial {
+  background-color: var(--ink-deep);
+  padding: 144px 0;
+  border-top: 1px solid var(--ink-line);
+  border-bottom: 1px solid var(--ink-line);
+  position: relative;
+  overflow: hidden;
+}
+
+.interstitial-inner {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 80px;
+  align-items: center;
+}
+
+.interstitial-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--accent);
+  font-weight: 700;
+  margin-bottom: 28px;
+}
+
+.interstitial-label {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.interstitial-headline {
+  font-size: clamp(44px, 5vw, 72px);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.0;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.interstitial-headline .accent-text { color: var(--accent); }
+
+/* ==================== RESPONSIVE ==================== */
+@media (max-width: 1200px) {
+  .stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .feature-grid.three-col {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .exec-three-up {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .flow-legend {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .container {
+    padding: 0 24px;
+  }
+  .hero-grid {
+    grid-template-columns: 1fr;
+    gap: 48px;
+  }
+  .section-header {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .section-number {
+    width: auto;
+  }
+  .feature-grid,
+  .feature-grid.three-col {
+    grid-template-columns: 1fr;
+  }
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .footer-meta-grid {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+  .exec-three-up {
+    grid-template-columns: 1fr;
+  }
+  .flow-header {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+  .flow-legend {
+    grid-template-columns: 1fr;
+  }
+  .flagship-row {
+    grid-template-columns: 1fr;
+  }
+  .interstitial-inner {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+  .footer-closing-grid {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+}
+
+@media (max-width: 600px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  .section {
+    padding: 96px 0;
+  }
+  .section-header {
+    margin-bottom: 64px;
+  }
+}
+
+/* ==================== PRINT ==================== */
+@media print {
+  body {
+    background-color: var(--ink-deep);
+    color: var(--text-primary);
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .hero { min-height: auto; page-break-after: always; padding: 60px 0; }
+  .exec-summary, .flow-section, .stats-strip, .interstitial { page-break-after: always; }
+  .section { page-break-after: always; padding: 60px 0; }
+  .feature-card, .flagship-card, .exec-pillar { page-break-inside: avoid; }
+  .footer-block { page-break-before: always; }
+  .topo-bg { opacity: 0.06; }
+}
+
+/* ── 2026-05-29 type-scale dial-back ────────────────────────────────
+   Original sizes were tuned for projector display; this override
+   brings the whole document down to comfortable on-screen reading.
+   Hierarchy preserved — every block scales proportionally. */
+body { font-size: 16px; }
+.hero h1 { font-size: clamp(40px, 6vw, 64px) !important; }
+.hero p, .hero .subtitle, .hero h2 { font-size: clamp(18px, 1.8vw, 22px) !important; }
+h2, .section-title, .section h2 { font-size: clamp(28px, 4vw, 40px) !important; }
+h3, .section-subtitle, .subtitle-large { font-size: clamp(15px, 1.3vw, 18px) !important; }
+.stat-number, .stat .number, [class*="stat-number"] { font-size: clamp(36px, 4.5vw, 56px) !important; }
+.feature-card h3, .feature-card .name, .feature-name, .flagship-card h3 { font-size: 18px !important; }
+.feature-card p, .feature-card .description, .feature-desc { font-size: 15px !important; line-height: 1.55 !important; }
+.metric, .metric-pill, .feature-card .metric { font-size: 13px !important; }
+.status-pill, .pill, .badge { font-size: 11px !important; letter-spacing: 0.08em; }
+.eyebrow, .section-number, .number-prefix { font-size: 13px !important; }
+.cta-bar, .cta-bar-text, .cta-bar-url, .footer-block { font-size: 14px !important; }
+/* Tighten section vertical rhythm to match the smaller type */
+section, .section { padding-top: 56px !important; padding-bottom: 56px !important; }
+.feature-card, .flagship-card { padding: 22px !important; }
+/* Closing block (was clamp(64-96)) */
+.footer-block h2, .closing h2 { font-size: clamp(32px, 4vw, 52px) !important; }
+
+/* ── Diagram figure styling ─────────────────────────────────────── */
+.diagram-figure {
+  margin: 32px 0 48px 0;
+  background-color: var(--ink-card);
+  border: 1px solid var(--ink-line);
+  border-radius: 0;
+  padding: 32px 24px 20px 24px;
+}
+.diagram-figure svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 380px;
+}
+.diagram-caption {
+  margin-top: 16px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 12px !important;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* ── Round-2 font dial-back (2026-05-29) ────────────────────────── */
+body { font-size: 14.5px !important; line-height: 1.55 !important; }
+.hero h1 { font-size: clamp(36px, 5vw, 56px) !important; }
+.hero p, .hero .subtitle, .hero h2 { font-size: clamp(15px, 1.5vw, 19px) !important; }
+h2, .section-title, .section h2 { font-size: clamp(24px, 3.4vw, 34px) !important; }
+h3, .section-subtitle, .subtitle-large { font-size: clamp(14px, 1.2vw, 16px) !important; }
+.stat-number, .stat .number, [class*="stat-number"] { font-size: clamp(32px, 4vw, 48px) !important; }
+.feature-card h3, .feature-card .name, .feature-name, .flagship-card h3 { font-size: 16px !important; }
+.feature-card p, .feature-card .description, .feature-desc { font-size: 13.5px !important; line-height: 1.55 !important; }
+.metric, .metric-pill, .feature-card .metric { font-size: 12px !important; }
+.status-pill, .pill, .badge { font-size: 10px !important; letter-spacing: 0.08em; }
+.eyebrow, .section-number, .number-prefix { font-size: 12px !important; }
+.cta-bar, .cta-bar-text, .cta-bar-url, .footer-block { font-size: 13px !important; }
+section, .section { padding-top: 48px !important; padding-bottom: 48px !important; }
+.feature-card, .flagship-card { padding: 20px !important; }
+.footer-block h2, .closing h2 { font-size: clamp(28px, 3.5vw, 44px) !important; }
+.exec-pillar-title, .flow-title, .interstitial-headline { font-size: clamp(22px, 2.8vw, 30px) !important; }
+</style>
+</head>
+<body>
+
+<!-- ==================== HERO ==================== -->
+<section class="hero">
+  <div class="topo-bg" aria-hidden="true">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 900" preserveAspectRatio="xMidYMid slice">
+      <g fill="none" stroke="#14B8A6" stroke-width="1" opacity="0.55">
+        <path d="M0,200 Q200,150 400,180 T800,160 T1200,190 L1400,170"/>
+        <path d="M0,260 Q200,220 400,240 T800,230 T1200,250 L1400,240"/>
+        <path d="M0,330 Q200,290 400,310 T800,300 T1200,320 L1400,310"/>
+        <path d="M0,400 Q200,370 400,380 T800,375 T1200,395 L1400,385"/>
+        <path d="M0,470 Q200,440 400,455 T800,450 T1200,470 L1400,460"/>
+        <path d="M0,540 Q200,510 400,525 T800,520 T1200,540 L1400,530"/>
+        <path d="M0,610 Q200,580 400,595 T800,590 T1200,610 L1400,600"/>
+        <path d="M0,680 Q200,650 400,665 T800,660 T1200,680 L1400,670"/>
+        <path d="M0,750 Q200,720 400,735 T800,730 T1200,750 L1400,740"/>
+      </g>
+    </svg>
+  </div>
+
+  <div class="container">
+    <div class="hero-grid">
+      <div>
+        <div class="eyebrow">
+          <span class="eyebrow-bar"></span>
+          INVESTOR BRIEF / PRODUCT REVIEW
+        </div>
+        <h1>
+          <span class="line-break">QUOTING,</span>
+          <span class="line-break"><span class="accent-text">GROUNDED.</span></span>
+        </h1>
+        <p class="hero-tagline">AI quoting for Australian tradies. Voice and SMS in. Tiered, grounded quotes out in under a minute.</p>
+      </div>
+
+      <aside class="hero-aside">
+        <div class="hero-aside-label">LIVE BRIEF</div>
+        <div class="hero-aside-date">29 MAY 2026</div>
+        <div class="hero-aside-meta">
+          <div><span>BUILD</span>Shipping &amp; live in prod</div>
+          <div><span>TRADES</span>Electrical NSW + Plumbing QLD</div>
+          <div><span>TENANTS</span>4 active</div>
+          <div><span>STACK</span>Next.js 16 / Claude / Vapi</div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== EXECUTIVE SUMMARY ==================== -->
+<section class="exec-summary">
+  <div class="container">
+    <div class="exec-summary-header">
+      <div class="exec-summary-eyebrow">
+        <span style="display:inline-block;width:48px;height:2px;background:var(--accent);"></span>
+        THREE THINGS TO REMEMBER
+      </div>
+      <h2 class="exec-summary-title">The Wedge Is <span class="accent-text">A Quote That Cannot Lie.</span></h2>
+      <p class="exec-summary-lede">A homeowner texts or rings. Inside a minute, they have a tiered, photo-illustrated quote, a booked slot, and a deposit pending. The tradie barely lifted a finger and the AI cannot quote a price it cannot trace to a real catalogue line.</p>
+    </div>
+
+    <div class="exec-three-up">
+      <article class="exec-pillar">
+        <div class="exec-pillar-num">01</div>
+        <h3 class="exec-pillar-title">The Moat Is The Grounding Validator</h3>
+        <p class="exec-pillar-body">Every line-item price must derive from the tenant's own pricing book and assemblies, scoped to the correct trade. Any failure downgrades the whole quote to a $99 refundable inspection. The safe failure mode is the moat — competitors guess; we route.</p>
+      </article>
+
+      <article class="exec-pillar">
+        <div class="exec-pillar-num">02</div>
+        <h3 class="exec-pillar-title">Two Live Channels, One Pipeline</h3>
+        <p class="exec-pillar-body">SMS and voice both feed the same intake structurer, embedding lookup, estimator and grounding gate. New channels become product features, not engineering rebuilds. The result: 49 voice calls, 1,038 SMS messages, 157 intakes already processed.</p>
+      </article>
+
+      <article class="exec-pillar">
+        <div class="exec-pillar-num">03</div>
+        <h3 class="exec-pillar-title">Trades-As-Data, Not Hand-Coded</h3>
+        <p class="exec-pillar-body">A third trade is now a CSV upload and an admin click — not a sprint. Trade-book PDFs are extracted line-by-line with citation back to source pages. The same operator can onboard carpentry in an afternoon.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== FLOW DIAGRAM ==================== -->
+<section class="flow-section">
+  <div class="topo-bg" aria-hidden="true">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 600" preserveAspectRatio="xMidYMid slice">
+      <g fill="none" stroke="#14B8A6" stroke-width="1" opacity="0.4">
+        <path d="M0,150 Q300,100 600,130 T1200,120 L1400,110"/>
+        <path d="M0,250 Q300,220 600,235 T1200,230 L1400,225"/>
+        <path d="M0,360 Q300,330 600,345 T1200,340 L1400,335"/>
+        <path d="M0,470 Q300,440 600,455 T1200,450 L1400,445"/>
+      </g>
+    </svg>
+  </div>
+  <div class="container" style="position:relative;z-index:2;">
+    <header class="flow-header">
+      <div>
+        <div class="flow-eyebrow">PIPELINE / INTAKE → QUOTE</div>
+        <h2 class="flow-title">From <span class="accent-text">"Hi"</span> To Paid Deposit In Under A Minute.</h2>
+      </div>
+      <p class="flow-blurb">One pipeline. Two channels in. Three outcomes out: auto-send, tradie review, or refundable inspection. No free-form prices.</p>
+    </header>
+
+    <div class="flow-diagram">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 360" role="img" aria-label="QuoteMate intake-to-quote pipeline diagram">
+        <defs>
+          <marker id="arrowHead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#FF5A1F"/>
+          </marker>
+          <marker id="arrowHeadDim" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#8A95A8"/>
+          </marker>
+        </defs>
+
+        <!-- INPUT CHANNELS -->
+        <g>
+          <rect x="20" y="40" width="180" height="80" fill="#0E1622" stroke="#FF5A1F" stroke-width="2"/>
+          <text x="110" y="72" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" font-weight="700" fill="#FF5A1F">SMS IN</text>
+          <text x="110" y="98" text-anchor="middle" font-family="Manrope, sans-serif" font-size="13" fill="#B8C2D1">Twilio AU long code</text>
+        </g>
+        <g>
+          <rect x="20" y="240" width="180" height="80" fill="#0E1622" stroke="#FF5A1F" stroke-width="2"/>
+          <text x="110" y="272" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" font-weight="700" fill="#FF5A1F">VOICE IN</text>
+          <text x="110" y="298" text-anchor="middle" font-family="Manrope, sans-serif" font-size="13" fill="#B8C2D1">Vapi · Deepgram · ElevenLabs</text>
+        </g>
+
+        <!-- ARROWS TO PIPELINE -->
+        <path d="M 200 80 L 280 170" stroke="#FF5A1F" stroke-width="2" fill="none" marker-end="url(#arrowHead)"/>
+        <path d="M 200 280 L 280 190" stroke="#FF5A1F" stroke-width="2" fill="none" marker-end="url(#arrowHead)"/>
+
+        <!-- INTAKE STRUCTURE -->
+        <g>
+          <rect x="280" y="140" width="200" height="80" fill="#1B2433" stroke="#2D3A4F" stroke-width="1"/>
+          <text x="380" y="172" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" font-weight="700" fill="#FFFFFF">INTAKE STRUCTURE</text>
+          <text x="380" y="194" text-anchor="middle" font-family="Manrope, sans-serif" font-size="12" fill="#B8C2D1">Claude Opus 4.7 + Zod</text>
+        </g>
+        <path d="M 480 180 L 540 180" stroke="#FF5A1F" stroke-width="2" fill="none" marker-end="url(#arrowHead)"/>
+
+        <!-- RAG -->
+        <g>
+          <rect x="540" y="140" width="180" height="80" fill="#1B2433" stroke="#2D3A4F" stroke-width="1"/>
+          <text x="630" y="172" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" font-weight="700" fill="#FFFFFF">RAG LOOKUP</text>
+          <text x="630" y="194" text-anchor="middle" font-family="Manrope, sans-serif" font-size="12" fill="#B8C2D1">Voyage / pgvector</text>
+        </g>
+        <path d="M 720 180 L 780 180" stroke="#FF5A1F" stroke-width="2" fill="none" marker-end="url(#arrowHead)"/>
+
+        <!-- ESTIMATOR -->
+        <g>
+          <rect x="780" y="140" width="200" height="80" fill="#1B2433" stroke="#2D3A4F" stroke-width="1"/>
+          <text x="880" y="172" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="13" font-weight="700" fill="#FFFFFF">ESTIMATOR</text>
+          <text x="880" y="194" text-anchor="middle" font-family="Manrope, sans-serif" font-size="12" fill="#B8C2D1">Tool-calls only · no free prices</text>
+        </g>
+        <path d="M 980 180 L 1040 180" stroke="#FF5A1F" stroke-width="2" fill="none" marker-end="url(#arrowHead)"/>
+
+        <!-- GROUNDING -->
+        <g>
+          <rect x="1040" y="140" width="220" height="80" fill="#0E1622" stroke="#FF5A1F" stroke-width="3"/>
+          <text x="1150" y="172" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="14" font-weight="700" fill="#FF5A1F">GROUNDING GATE</text>
+          <text x="1150" y="194" text-anchor="middle" font-family="Manrope, sans-serif" font-size="12" fill="#B8C2D1">The moat</text>
+        </g>
+
+        <!-- OUTPUT LANES -->
+        <path d="M 1150 220 L 1150 270 L 280 270 L 280 330" stroke="#FF5A1F" stroke-width="2" fill="none"/>
+        <g>
+          <rect x="200" y="330" width="160" height="30" fill="#FF5A1F"/>
+          <text x="280" y="350" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12" font-weight="700" fill="#FFFFFF">AUTO-SEND</text>
+        </g>
+
+        <path d="M 1150 220 L 1150 270 L 660 270 L 660 330" stroke="#FF5A1F" stroke-width="2" fill="none"/>
+        <g>
+          <rect x="580" y="330" width="160" height="30" fill="#1B2433" stroke="#FF5A1F" stroke-width="2"/>
+          <text x="660" y="350" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12" font-weight="700" fill="#FF5A1F">TRADIE REVIEW</text>
+        </g>
+
+        <path d="M 1150 220 L 1150 330" stroke="#FF5A1F" stroke-width="2" fill="none"/>
+        <g>
+          <rect x="1060" y="330" width="180" height="30" fill="#0E1622" stroke="#8A95A8" stroke-width="1"/>
+          <text x="1150" y="350" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12" font-weight="700" fill="#B8C2D1">$99 INSPECTION</text>
+        </g>
+
+        <!-- DECORATIVE LABELS -->
+        <text x="40" y="20" font-family="JetBrains Mono, monospace" font-size="11" fill="#8A95A8" letter-spacing="2">// CHANNELS</text>
+        <text x="300" y="125" font-family="JetBrains Mono, monospace" font-size="11" fill="#8A95A8" letter-spacing="2">// ONE PIPELINE</text>
+        <text x="1060" y="125" font-family="JetBrains Mono, monospace" font-size="11" fill="#FF5A1F" letter-spacing="2">// SAFETY GATE</text>
+        <text x="200" y="315" font-family="JetBrains Mono, monospace" font-size="11" fill="#8A95A8" letter-spacing="2">// THREE OUTCOMES</text>
+      </svg>
+
+      <div class="flow-legend">
+        <div class="flow-legend-item">
+          <div class="flow-legend-num">01</div>
+          <div class="flow-legend-label">Channels</div>
+          <div class="flow-legend-detail">SMS via Twilio long codes; voice via Vapi + Deepgram + ElevenLabs.</div>
+        </div>
+        <div class="flow-legend-item">
+          <div class="flow-legend-num">02</div>
+          <div class="flow-legend-label">Structure</div>
+          <div class="flow-legend-detail">Claude Opus 4.7 with Anthropic prompt caching turns text or transcript into Zod-validated JSON.</div>
+        </div>
+        <div class="flow-legend-item">
+          <div class="flow-legend-num">03</div>
+          <div class="flow-legend-label">Ground</div>
+          <div class="flow-legend-detail">Estimator tool-calls only. Validator scopes every price to the tenant's catalogue.</div>
+        </div>
+        <div class="flow-legend-item">
+          <div class="flow-legend-num">04</div>
+          <div class="flow-legend-label">Route</div>
+          <div class="flow-legend-detail">Auto-send, tradie review, or $99 refundable inspection. Deterministic.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== STATS STRIP ==================== -->
+<section class="stats-strip">
+  <div class="container">
+    <div class="stats-grid">
+      <div class="stat-tile">
+        <div class="stat-number">43</div>
+        <div class="stat-label">Prebuilt Job Assemblies</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-number">2</div>
+        <div class="stat-label">AI Intake Channels (SMS + Voice)</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-number">3</div>
+        <div class="stat-label">Quality Agents on Cron</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-number">5-DIM</div>
+        <div class="stat-label">Estimator Eval Rubric</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-number">15%</div>
+        <div class="stat-label">Early-Bird Discount Cap</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-number">$99</div>
+        <div class="stat-label">Refundable Site-Visit Fallback</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== SECTION 01: CUSTOMER EXPERIENCE ==================== -->
+<section class="section">
+  <div class="container">
+    <header class="section-header">
+      <div class="section-number">01</div>
+      <div class="section-title-wrap">
+        <div class="section-eyebrow">
+          <span class="section-eyebrow-bar"></span>
+          WHAT THE HOMEOWNER SEES
+        </div>
+        <h2 class="section-title">Customer <span class="accent-text">Experience</span></h2>
+        <p class="section-subtitle">From the first text to the moment a tradie is booked. Mobile-first, no login, photoreal preview.</p>
+      </div>
+    </header>
+
+<figure class="diagram-figure">
+  <svg viewBox="0 0 880 400" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Customer journey from inbound SMS through AI dialog to Good Better Best quote page and Stripe deposit">
+    <defs>
+      <marker id="arrow01" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#B8C2D1"/>
+      </marker>
+      <marker id="arrow01-orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#FF5A1F"/>
+      </marker>
+    </defs>
+
+    <rect x="0" y="0" width="880" height="400" fill="#0E1622"/>
+
+    <text x="24" y="28" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8" letter-spacing="2">01 / CUSTOMER EXPERIENCE</text>
+
+    <g>
+      <rect x="30" y="50" width="200" height="330" rx="2" fill="#141C29" stroke="#2D3A4F" stroke-width="2"/>
+      <rect x="30" y="50" width="200" height="26" rx="0" fill="#1B2433" stroke="#2D3A4F" stroke-width="1"/>
+      <text x="46" y="68" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#B8C2D1" letter-spacing="1">SMS  /  +61 481 613 464</text>
+
+      <rect x="46" y="90" width="148" height="34" rx="2" fill="#1B2433" stroke="#2D3A4F" stroke-width="1"/>
+      <text x="54" y="104" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#FFFFFF">Hi — need 6 downlights</text>
+      <text x="54" y="118" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#FFFFFF">in the kitchen.</text>
+
+      <rect x="66" y="134" width="148" height="34" rx="2" fill="#FF5A1F" stroke="#FF5A1F" stroke-width="1"/>
+      <text x="74" y="148" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#FFFFFF">Got it. Ceiling type?</text>
+      <text x="74" y="162" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#FFFFFF">A few photos please.</text>
+
+      <rect x="46" y="178" width="148" height="22" rx="2" fill="#1B2433" stroke="#2D3A4F" stroke-width="1"/>
+      <text x="54" y="193" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#FFFFFF">Plasterboard. [3 pics]</text>
+
+      <rect x="66" y="210" width="148" height="34" rx="2" fill="#FF5A1F" stroke="#FF5A1F" stroke-width="1"/>
+      <text x="74" y="224" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#FFFFFF">Drafting your quote —</text>
+      <text x="74" y="238" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#FFFFFF">link in 60 sec.</text>
+
+      <rect x="46" y="254" width="160" height="34" rx="2" fill="#1B2433" stroke="#14B8A6" stroke-width="1"/>
+      <text x="54" y="268" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#14B8A6">Quote ready</text>
+      <text x="54" y="282" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#FFFFFF">quote-mate.app/q/8Fz4</text>
+
+      <text x="46" y="318" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">SMS DIALOG  /  Sonnet 4.6</text>
+      <text x="46" y="334" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">3–6 turns  ·  median 90 sec</text>
+      <text x="46" y="350" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">Photo link  ·  WhatsApp fallback</text>
+    </g>
+
+    <line x1="232" y1="215" x2="288" y2="215" stroke="#FF5A1F" stroke-width="2" marker-end="url(#arrow01-orange)"/>
+    <text x="240" y="208" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#FF7A45">tap</text>
+
+    <g>
+      <rect x="290" y="50" width="560" height="330" rx="2" fill="#141C29" stroke="#2D3A4F" stroke-width="2"/>
+      <rect x="290" y="50" width="560" height="28" rx="0" fill="#1B2433" stroke="#2D3A4F" stroke-width="1"/>
+      <text x="306" y="69" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#B8C2D1" letter-spacing="1">QUOTE  /  /q/[token]   ·   MOBILE-FIRST HTML  ·   NO LOGIN</text>
+
+      <rect x="306" y="92" width="160" height="120" rx="2" fill="#1B2433" stroke="#2D3A4F" stroke-width="1"/>
+      <text x="314" y="108" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8" letter-spacing="1">AI PREVIEW</text>
+      <text x="314" y="124" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#B8C2D1">Gemini render of</text>
+      <text x="314" y="138" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#B8C2D1">the finished job</text>
+      <line x1="320" y1="160" x2="450" y2="160" stroke="#2D3A4F" stroke-width="1"/>
+      <rect x="320" y="170" width="36" height="32" rx="0" fill="#0E1622" stroke="#2D3A4F" stroke-width="1"/>
+      <rect x="362" y="170" width="36" height="32" rx="0" fill="#0E1622" stroke="#2D3A4F" stroke-width="1"/>
+      <rect x="404" y="170" width="36" height="32" rx="0" fill="#0E1622" stroke="#2D3A4F" stroke-width="1"/>
+      <text x="320" y="222" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">Sample gallery</text>
+
+      <rect x="486" y="92" width="346" height="36" rx="2" fill="#1B2433" stroke="#2D3A4F" stroke-width="1"/>
+      <text x="498" y="108" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#B8C2D1" letter-spacing="1">GOOD</text>
+      <text x="498" y="122" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">Compliant install · standard fittings</text>
+      <text x="780" y="116" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" fill="#FFFFFF" text-anchor="end">$840</text>
+
+      <rect x="486" y="136" width="346" height="40" rx="2" fill="#1B2433" stroke="#FF5A1F" stroke-width="2"/>
+      <rect x="486" y="136" width="4" height="40" fill="#FF5A1F"/>
+      <text x="498" y="152" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#FF7A45" letter-spacing="1">BETTER  ·  RECOMMENDED</text>
+      <text x="498" y="167" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#B8C2D1">Dimmable · brand-preferred fittings</text>
+      <text x="780" y="160" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" fill="#FFFFFF" text-anchor="end">$1,180</text>
+
+      <rect x="486" y="184" width="346" height="36" rx="2" fill="#1B2433" stroke="#2D3A4F" stroke-width="1"/>
+      <text x="498" y="200" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#B8C2D1" letter-spacing="1">BEST</text>
+      <text x="498" y="214" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">Smart control · 7-yr warranty</text>
+      <text x="780" y="208" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" fill="#FFFFFF" text-anchor="end">$1,640</text>
+
+      <rect x="306" y="244" width="526" height="48" rx="2" fill="#FF5A1F" stroke="#FF5A1F" stroke-width="2"/>
+      <text x="569" y="266" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" fill="#FFFFFF" text-anchor="middle" letter-spacing="2">PAY $99 DEPOSIT  ·  BETTER TIER</text>
+      <text x="569" y="282" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#FFFFFF" text-anchor="middle">Refunded against the job  ·  Apple Pay  ·  Google Pay</text>
+
+      <rect x="306" y="308" width="250" height="60" rx="2" fill="#0E1622" stroke="#2D3A4F" stroke-width="1"/>
+      <text x="318" y="326" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8" letter-spacing="1">STRIPE CHECKOUT</text>
+      <text x="318" y="342" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#B8C2D1">Per-tier session  ·  webhook</text>
+      <text x="318" y="358" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#B8C2D1">marks quote paid</text>
+
+      <rect x="572" y="308" width="260" height="60" rx="2" fill="#0E1622" stroke="#14B8A6" stroke-width="1"/>
+      <text x="584" y="326" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#14B8A6" letter-spacing="1">BOOKING  /  /q/[token]/book</text>
+      <text x="584" y="342" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#B8C2D1">Slot picker  ·  tradie notified</text>
+      <text x="584" y="358" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#B8C2D1">SMS + WhatsApp confirmation</text>
+
+      <line x1="431" y1="292" x2="431" y2="308" stroke="#B8C2D1" stroke-width="1" marker-end="url(#arrow01)"/>
+      <line x1="556" y1="338" x2="572" y2="338" stroke="#B8C2D1" stroke-width="1" marker-end="url(#arrow01)"/>
+    </g>
+  </svg>
+  <figcaption class="diagram-caption">A homeowner texts, answers three questions, and pays a deposit on a Good/Better/Best quote — all before a tradie picks up the phone.</figcaption>
+</figure>
+
+    <!-- FLAGSHIP CARD -->
+    <div class="flagship-row">
+      <article class="flagship-card">
+        <div class="flagship-banner">FLAGSHIP DIFFERENTIATOR · 01</div>
+        <h3 class="flagship-name">AI-Generated Preview Of Your Job, <span class="accent-text">Installed.</span></h3>
+        <p class="flagship-description">Customers upload a photo of their kitchen, bathroom or fuse box and within seconds see a photorealistic render of the finished install in their actual room. Powered by Google Gemini, this turns an abstract quote into a visual decision the homeowner can show their partner.</p>
+        <div class="flagship-meta">
+          <span class="status-pill flagship">Live</span>
+          <span class="metric-pill">1 photo → 1 tailored preview</span>
+          <span class="metric-pill">+ 3-view sample gallery</span>
+        </div>
+      </article>
+      <aside class="flagship-aside">
+        <div class="flagship-aside-label">// WHY IT MATTERS</div>
+        <div class="flagship-aside-num">~60s</div>
+        <div class="flagship-aside-text">From the customer's first SMS to a photo-illustrated, tiered, deposit-ready quote landing on their phone.</div>
+      </aside>
+    </div>
+
+    <div class="feature-grid">
+      <article class="feature-card differentiator">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill flagship">Live</span></div>
+        </div>
+        <h3 class="feature-name">AI Sample Gallery (Wide / Close-Up / In-Use)</h3>
+        <p class="feature-description">Every quote ships with three contextual renders showing the completed install from different angles, tailored to the customer's room when photos exist or to a generic Aussie home otherwise. Renders generate in parallel and click-to-enlarge for full-size inspection.</p>
+      </article>
+
+      <article class="feature-card differentiator">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill flagship">Live</span></div>
+          <span class="metric-pill">3 tiers per quote</span>
+        </div>
+        <h3 class="feature-name">Good / Better / Best Tier Cards</h3>
+        <p class="feature-description">Three sequentially numbered pricing tiers with tier-indicative photos, line-item breakdowns, AUD inc-GST totals, and deposit amounts. Already-paid tiers disable automatically so the customer can never double-pay.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Mobile Quote Page</h3>
+        <p class="feature-description">The customer-facing quote at /q/[token] is designed mobile-first with responsive grids, clamp-based fluid typography, and touch-friendly CTAs. Accessed via an unguessable share token sent by SMS, with no login required.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Early-Booking Discount Countdown</h3>
+        <p class="feature-description">Quotes can display a live countdown banner offering a time-limited discount (capped at 15%) if the customer books before the deadline. Booking a slot in time locks in the discount, with the deposit charged at the discounted amount and a green confirmation banner replacing the timer.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+          <span class="metric-pill">7-day default</span>
+        </div>
+        <h3 class="feature-name">Price-Hold Urgency Banner (WP6)</h3>
+        <p class="feature-description">A pre-deposit countdown shows how many days remain before today's quoted price expires (default 7 days), nudging the customer to lock in before pricing refreshes. Auto-hides after deposit and shows an expired state if revisited late.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+          <span class="metric-pill">Up to 5 photos</span>
+        </div>
+        <h3 class="feature-name">In-Page Photo Upload Widget</h3>
+        <p class="feature-description">Customers can snap or pick up to 5 photos directly inside the quote page without leaving for a separate flow. File type and size are validated, upload progress is shown, and preview/sample regeneration kicks off in the background.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Photo Upload Retry &amp; Error Handling</h3>
+        <p class="feature-description">Failed uploads surface a clear retry CTA with the original file preserved client-side; invalid file types, oversize files, and network drops each carry their own actionable error copy. The user never loses their selection to a flaky connection.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+          <span class="metric-pill">2 product options inline</span>
+        </div>
+        <h3 class="feature-name">Mid-Chat Product Picker</h3>
+        <p class="feature-description">Mid-conversation, customers can pick between two real products the tradie stocks (with photos, brands, ranges, and ex-GST pricing) either via numbered SMS reply or a dedicated /q/choose page. The selection flows straight into the quote and the AI preview imagery.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Customer-Supply (You Supply) Badges</h3>
+        <p class="feature-description">When the customer is providing the material themselves, line items display a 'You supply' badge and the quote drops to install-only pricing. Optional safety notes attach to customer-supplied items to flag any caveats.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Itemised vs Summary Display Modes</h3>
+        <p class="feature-description">Tradies choose whether each quote shows full per-line detail with unit prices or a summary lump-sum with labour hours and a material-item count. Both modes share the same totals and CTAs for a consistent customer feel.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Print-Friendly Quote Layout</h3>
+        <p class="feature-description">The /q/[token] page ships with print-mode CSS so the customer can save a clean, branded PDF straight from the browser — line items, totals, scope, assumptions and licence footer included. No separate PDF service required.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Booking Page With Slot Picker</h3>
+        <p class="feature-description">Customers pick a time before paying the deposit, with available slots pulled from the tradie's calendar. The chosen slot is reserved on the quote, the tier selection is carried through, and a three-step progress strip walks them from time to deposit to confirmation.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Dedicated Photo Upload Page</h3>
+        <p class="feature-description">A lightweight /upload/[token] landing page reached via SMS link lets customers add photos with guided tips for good shots. Handles invalid-link, already-received, and live-upload states with the same Maintain visual language as the main quote.</p>
+      </article>
+
+      <article class="feature-card differentiator">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill flagship">Live</span></div>
+          <span class="metric-pill">$99 refundable</span>
+        </div>
+        <h3 class="feature-name">Inspection-Required Flow</h3>
+        <p class="feature-description">When a job is too complex or safety-sensitive to auto-quote, the customer sees a dedicated 'Site visit required' block with a $99 refundable site-visit price (credited toward the final quote). AI previews and samples still render so the customer keeps a visual anchor.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Scope, Assumptions, and Risk Flags</h3>
+        <p class="feature-description">Every quote shows the AI-drafted scope of works, the assumptions it made (e.g. 'roof access easy'), and any risk flags surfaced during intake. This sets clear expectations before the customer pays a cent.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Tradie Licence Footer</h3>
+        <p class="feature-description">Every customer quote shows the issuing tradie's licence type, number, state, GST status, quote ref, and an Australian Consumer Law disclaimer. The licence shown is always the actual tenant's — never auto-picked — for compliance integrity.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Payment Success &amp; Cancelled Pages</h3>
+        <p class="feature-description">After Stripe checkout the customer lands on a confirmation page showing quote ref, paid tier, total, and booked slot if applicable. If they abandon checkout, a friendly cancellation page reassures them no charge was made and the quote is still valid.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Click-To-Enlarge Image Gallery</h3>
+        <p class="feature-description">Every AI-generated preview and sample opens full-size in a new browser tab on click, letting the customer zoom in on details of the proposed work. The original quote session stays intact in the background.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+          <span class="metric-pill">5s poll · 90s window</span>
+        </div>
+        <h3 class="feature-name">Live Polling For AI-Generated Images</h3>
+        <p class="feature-description">While Gemini is rendering, the quote page polls every 5 seconds for up to 90 seconds, swapping in finished images automatically with no page refresh. The flow degrades gracefully if generation fails.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Lifecycle View State</h3>
+        <p class="feature-description">The quote page tracks where the customer is (draft → viewed → paid/booked → complete) and adapts status chips, tier card states, and messaging accordingly. State is monotonic — once a quote advances it never visually downgrades.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Status Chip With Pulse</h3>
+        <p class="feature-description">A pulsing badge at the top of every quote tells the customer at a glance whether the quote is awaiting their choice, requires a site visit, or has been paid (with the chosen tier called out). Colour-coded orange/amber/green for instant comprehension.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">SMS Short-Link Redirector</h3>
+        <p class="feature-description">Outbound SMS pay links use a short /r/[token]/[tier] redirector that keeps message bodies small and routes intelligently — booking page if not booked, paid page if already paid, Stripe Checkout otherwise. This enforces the 'book first, pay last' funnel across every SMS in the thread.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Marketing Landing Page With Live SMS Demo</h3>
+        <p class="feature-description">Public homepage at quote-mate-rho.vercel.app showcases the under-a-minute Good/Better/Best promise, trade scope (electrical NSW, plumbing QLD), an embedded live SMS demo so prospects can text in and see the receptionist work, and sign-up CTAs. Built in the Maintain Technology design system.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== INTERSTITIAL CALLOUT 1 ==================== -->
+<section class="interstitial">
+  <div class="topo-bg" aria-hidden="true">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 400" preserveAspectRatio="xMidYMid slice">
+      <g fill="none" stroke="#14B8A6" stroke-width="1" opacity="0.5">
+        <path d="M0,80 Q300,40 600,60 T1200,50 L1400,40"/>
+        <path d="M0,160 Q300,130 600,145 T1200,140 L1400,135"/>
+        <path d="M0,250 Q300,220 600,235 T1200,230 L1400,225"/>
+        <path d="M0,340 Q300,310 600,325 T1200,320 L1400,315"/>
+      </g>
+    </svg>
+  </div>
+  <div class="container" style="position:relative;z-index:2;">
+    <div class="interstitial-inner">
+      <div>
+        <div class="interstitial-eyebrow">THE MOAT</div>
+        <div class="interstitial-label">// HALF-TIME MARK</div>
+      </div>
+      <h2 class="interstitial-headline">If the AI can't trace the price, the AI <span class="accent-text">cannot quote.</span></h2>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== SECTION 02: AI INTAKE & QUOTING ==================== -->
+<section class="section alt">
+  <div class="container">
+    <header class="section-header">
+      <div class="section-number">02</div>
+      <div class="section-title-wrap">
+        <div class="section-eyebrow">
+          <span class="section-eyebrow-bar"></span>
+          THE AI BRAIN
+        </div>
+        <h2 class="section-title">AI Intake <span class="accent-text">&amp; Quoting</span></h2>
+        <p class="section-subtitle">Two-channel AI receptionist that captures the job, structures it, and turns it into a tiered quote — without ever inventing a price.</p>
+      </div>
+    </header>
+
+<figure class="diagram-figure">
+  <svg viewBox="0 0 880 400" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Two-channel intake pipeline: SMS and Voice feed an Opus structurer, RAG context, tool-calling estimator, and a grounding validator that either auto-quotes or routes to a paid inspection.">
+    <defs>
+      <marker id="arr02" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#8A95A8"/>
+      </marker>
+      <marker id="arr02g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#15803D"/>
+      </marker>
+      <marker id="arr02r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#B91C1C"/>
+      </marker>
+      <marker id="arr02o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#FF5A1F"/>
+      </marker>
+    </defs>
+
+    <rect x="0" y="0" width="880" height="400" fill="#0E1622"/>
+
+    <g font-family="Manrope, Inter, system-ui, sans-serif">
+
+      <!-- ── TIER 1: Two parallel inputs ── -->
+      <rect x="30" y="40" width="160" height="60" fill="#1B2433" stroke="#2D3A4F" stroke-width="2" rx="2"/>
+      <text x="110" y="66" text-anchor="middle" fill="#FFFFFF" font-size="14" font-weight="700">SMS INBOUND</text>
+      <text x="110" y="86" text-anchor="middle" fill="#B8C2D1" font-size="12">Twilio · AU long code</text>
+
+      <rect x="30" y="120" width="160" height="60" fill="#1B2433" stroke="#2D3A4F" stroke-width="2" rx="2"/>
+      <text x="110" y="146" text-anchor="middle" fill="#FFFFFF" font-size="14" font-weight="700">VOICE</text>
+      <text x="110" y="166" text-anchor="middle" fill="#B8C2D1" font-size="12">Vapi · Deepgram · 11Labs</text>
+
+      <!-- merge arrows into structurer -->
+      <line x1="190" y1="70" x2="265" y2="100" stroke="#8A95A8" stroke-width="1" marker-end="url(#arr02)"/>
+      <line x1="190" y1="150" x2="265" y2="120" stroke="#8A95A8" stroke-width="1" marker-end="url(#arr02)"/>
+
+      <!-- ── TIER 2: Structurer ── -->
+      <rect x="265" y="80" width="170" height="80" fill="#1B2433" stroke="#2D3A4F" stroke-width="2" rx="2"/>
+      <text x="350" y="106" text-anchor="middle" fill="#FFFFFF" font-size="14" font-weight="700">INTAKE STRUCTURER</text>
+      <text x="350" y="126" text-anchor="middle" fill="#B8C2D1" font-size="12">Claude Opus 4.7</text>
+      <text x="350" y="144" text-anchor="middle" fill="#8A95A8" font-size="11">Zod schema · vision</text>
+
+      <!-- ── TIER 3: RAG context ── -->
+      <line x1="435" y1="120" x2="495" y2="120" stroke="#8A95A8" stroke-width="1" marker-end="url(#arr02)"/>
+
+      <rect x="495" y="80" width="170" height="80" fill="#1B2433" stroke="#2D3A4F" stroke-width="2" rx="2"/>
+      <text x="580" y="106" text-anchor="middle" fill="#FFFFFF" font-size="14" font-weight="700">RAG CONTEXT</text>
+      <text x="580" y="126" text-anchor="middle" fill="#B8C2D1" font-size="12">Voyage embed + reranker</text>
+      <text x="580" y="144" text-anchor="middle" fill="#8A95A8" font-size="11">pgvector · 1024 dim</text>
+
+      <!-- ── TIER 4: Estimator (HERO) ── -->
+      <line x1="665" y1="120" x2="720" y2="120" stroke="#8A95A8" stroke-width="1" marker-end="url(#arr02)"/>
+      <rect x="720" y="80" width="140" height="80" fill="#1B2433" stroke="#FF5A1F" stroke-width="2" rx="2"/>
+      <text x="790" y="106" text-anchor="middle" fill="#FFFFFF" font-size="14" font-weight="700">ESTIMATOR</text>
+      <text x="790" y="126" text-anchor="middle" fill="#FF7A45" font-size="12">Tool-calling ONLY</text>
+      <text x="790" y="144" text-anchor="middle" fill="#8A95A8" font-size="11">no free-form prices</text>
+
+      <!-- estimator -> validator (down then left) -->
+      <path d="M 790 160 L 790 200 L 440 200 L 440 220" fill="none" stroke="#8A95A8" stroke-width="1" marker-end="url(#arr02)"/>
+
+      <!-- ── TIER 5: Grounding Validator (the moat) ── -->
+      <rect x="270" y="220" width="340" height="70" fill="#1B2433" stroke="#FF5A1F" stroke-width="2" rx="2"/>
+      <text x="440" y="246" text-anchor="middle" fill="#FFFFFF" font-size="14" font-weight="700">GROUNDING VALIDATOR</text>
+      <text x="440" y="266" text-anchor="middle" fill="#FF7A45" font-size="12">Every line item must trace to pricing_book + assemblies</text>
+      <text x="440" y="282" text-anchor="middle" fill="#8A95A8" font-size="11">scoped by trade · GST · licence</text>
+
+      <!-- moat callout -->
+      <text x="660" y="240" fill="#FF5A1F" font-size="11" font-weight="700">THE MOAT</text>
+      <text x="660" y="256" fill="#B8C2D1" font-size="11">If the AI can't trace</text>
+      <text x="660" y="270" fill="#B8C2D1" font-size="11">the price, it cannot quote.</text>
+
+      <!-- ── TIER 6: Two branches ── -->
+      <!-- green: auto-quote -->
+      <path d="M 360 290 L 360 330" fill="none" stroke="#15803D" stroke-width="2" marker-end="url(#arr02g)"/>
+      <text x="310" y="315" fill="#15803D" font-size="11" font-weight="700">TRACED</text>
+
+      <rect x="200" y="332" width="280" height="50" fill="#1B2433" stroke="#15803D" stroke-width="2" rx="2"/>
+      <text x="340" y="356" text-anchor="middle" fill="#FFFFFF" font-size="14" font-weight="700">AUTO-QUOTE — GOOD / BETTER / BEST</text>
+      <text x="340" y="372" text-anchor="middle" fill="#B8C2D1" font-size="11">SMS link · per-tier Stripe deposit</text>
+
+      <!-- orange/red: inspection fallback -->
+      <path d="M 520 290 L 520 330" fill="none" stroke="#B91C1C" stroke-width="2" marker-end="url(#arr02r)"/>
+      <text x="540" y="315" fill="#B91C1C" font-size="11" font-weight="700">UNTRACED</text>
+
+      <rect x="500" y="332" width="350" height="50" fill="#1B2433" stroke="#B91C1C" stroke-width="2" rx="2"/>
+      <text x="675" y="356" text-anchor="middle" fill="#FFFFFF" font-size="14" font-weight="700">$99 INSPECTION FALLBACK</text>
+      <text x="675" y="372" text-anchor="middle" fill="#B8C2D1" font-size="11">safe failure mode · paid lead to tradie</text>
+
+    </g>
+  </svg>
+  <figcaption class="diagram-caption">Two channels in, one validator out — the model never invents a price; if it can't cite the book, it sells an inspection instead.</figcaption>
+</figure>
+
+    <!-- FLAGSHIP CARD -->
+    <div class="flagship-row">
+      <article class="flagship-card">
+        <div class="flagship-banner">FLAGSHIP DIFFERENTIATOR · 02</div>
+        <h3 class="flagship-name">Grounding Validator: The <span class="accent-text">Safe Failure Mode.</span></h3>
+        <p class="flagship-description">Before any quote ships, every line-item price must derive from the tenant's pricing book and assembly catalogue scoped to the correct trade. Any line that cannot be grounded downgrades the entire quote to the $99 inspection route. The competition guesses; QuoteMate routes. This is the moat.</p>
+        <div class="flagship-meta">
+          <span class="status-pill flagship">Live</span>
+          <span class="metric-pill">Zero free-form prices</span>
+          <span class="metric-pill">Deterministic routing</span>
+        </div>
+      </article>
+      <aside class="flagship-aside">
+        <div class="flagship-aside-label">// PIPELINE NUMBERS</div>
+        <div class="flagship-aside-num">157</div>
+        <div class="flagship-aside-text">Intakes processed end-to-end across SMS (1,038 messages) and voice (49 calls) since the channels went live.</div>
+      </aside>
+    </div>
+
+    <div class="feature-grid">
+      <article class="feature-card differentiator">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill flagship">Live</span></div>
+        </div>
+        <h3 class="feature-name">SMS Intake Channel (End-To-End)</h3>
+        <p class="feature-description">Homeowners text a dedicated number and an AI dialog gathers the full job in roughly four turns — including a photo link — before drafting and delivering a complete quote by SMS plus an HTML quote page. All five SMS phases shipped and live, with Twilio signature validation, per-conversation locking, and rapid-fire debouncing.</p>
+      </article>
+
+      <article class="feature-card differentiator">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill flagship">Live</span></div>
+        </div>
+        <h3 class="feature-name">Voice Intake (Vapi · Deepgram · ElevenLabs)</h3>
+        <p class="feature-description">Customers call a dedicated number and an AI receptionist named 'jon' captures the job by voice using Vapi orchestration, Deepgram speech-to-text, and ElevenLabs text-to-speech. The end-of-call webhook lands transcripts in the same intake pipeline that powers SMS, so quoting logic is identical across channels.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Vapi Voice Tool: Send Photo Link Mid-Call</h3>
+        <p class="feature-description">During an active voice call, the in-call agent can fire a Vapi tool (/api/vapi/tools/send-sms-photo-link) that texts the customer a one-tap photo upload link without breaking conversation. The customer can snap a picture while still on the line and the estimator sees the photo before they hang up.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+          <span class="metric-pill">Voyage · 1024-dim</span>
+        </div>
+        <h3 class="feature-name">RAG Context: Vector Search Over Past Quotes</h3>
+        <p class="feature-description">Every intake is embedded with Voyage embeddings and matched against prior jobs using Supabase pgvector's match_intakes function. The top-k similar past quotes are fed back to Claude as in-context examples for sharper pricing on the new job — a learned-from-experience effect with no fine-tuning required.</p>
+      </article>
+
+      <article class="feature-card differentiator">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill flagship">Live</span></div>
+        </div>
+        <h3 class="feature-name">Grounding Gate (Safety Check)</h3>
+        <p class="feature-description">Before any quote ships, a grounding gate verifies that every line-item price derives from the tenant's pricing book and assembly catalogue scoped to the correct trade. Any line that can't be grounded downgrades the entire quote to the $99 inspection route — the safe failure mode.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Claude-Drafted Quotes (Anthropic Flagship)</h3>
+        <p class="feature-description">Quotes are drafted by Claude Opus 4.7 with the SMS dialog, slot extraction, and intent classification on Sonnet 4.6 for higher accuracy on conversational nuance. The system prompt is loaded server-side with deterministic tool definitions for material/labour lookups.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Anthropic Prompt Caching</h3>
+        <p class="feature-description">The estimator system prompt — pricing book, assembly catalogue, trade rules, examples — is cached server-side using Anthropic's prompt caching, so per-quote latency and token spend drop dramatically after the first hit. Critical for unit economics at scale.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+          <span class="metric-pill">All 43 services</span>
+        </div>
+        <h3 class="feature-name">Mandated Clarifying Questions Per Service</h3>
+        <p class="feature-description">Each service in the catalogue carries its own list of must-ask clarifying questions stored on the assembly row, replacing fragile hardcoded job-type lists. The SMS dialog will not draft a quote until every mandated question is answered, ensuring scope completeness.</p>
+      </article>
+
+      <article class="feature-card differentiator">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill flagship">Live</span></div>
+          <span class="metric-pill">3 routing lanes</span>
+        </div>
+        <h3 class="feature-name">Confidence-Based Quote Routing</h3>
+        <p class="feature-description">After estimation, each quote is automatically routed to one of three lanes: auto-send to customer (high confidence), hold for tradie review (medium), or escalate to a $99 inspection visit (low or ungroundable). Routing is deterministic and based on the grounding validator's output.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Channel-Agnostic Intake Pipeline</h3>
+        <p class="feature-description">SMS and voice both feed into a single /api/intake/structure handler that loads conversation history, structures the intake with Claude, embeds it, scores quality, and either drafts the quote or routes to inspection. Photo-request and failure SMS dispatch from the same path.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Mid-Chat Product Capture (WP9)</h3>
+        <p class="feature-description">When the customer picks one of the two product options mid-SMS, the choice is recorded on the conversation, fed back into the estimator as a directive, and overrides default product attributes before quote generation. The picked product also drives the visual preview generation.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Intake Quality Gate</h3>
+        <p class="feature-description">After structuring the intake, the pipeline evaluates completeness and confidence before drafting a quote. Low-quality intakes are sent a polite failure SMS or routed to the $99 inspection path rather than producing a guess.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Per-Tenant Service Scoping In Dialog</h3>
+        <p class="feature-description">The SMS dialog only quotes services the tradie has actually switched on in their dashboard. Toggled-off services trigger a polite decline rather than the old generic $199 fallback, preserving tradie credibility.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== SECTION 03: PRICING ENGINE ==================== -->
+<section class="section">
+  <div class="container">
+    <header class="section-header">
+      <div class="section-number">03</div>
+      <div class="section-title-wrap">
+        <div class="section-eyebrow">
+          <span class="section-eyebrow-bar"></span>
+          THE TRUTH LAYER
+        </div>
+        <h2 class="section-title">Pricing <span class="accent-text">Engine</span></h2>
+        <p class="section-subtitle">Per-trade pricing books, 43 prebuilt assemblies, and a per-tenant materials catalogue that the AI must ground every dollar against.</p>
+      </div>
+    </header>
+
+<figure class="diagram-figure">
+  <svg viewBox="0 0 880 400" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Pricing engine layers: reference data plus tenant overlay compose Good Better Best quote tiers">
+    <defs>
+      <marker id="arrow03" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#B8C2D1"/>
+      </marker>
+      <marker id="arrow03Orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#FF5A1F"/>
+      </marker>
+    </defs>
+
+    <rect x="0" y="0" width="880" height="400" fill="#0E1622"/>
+
+    <!-- TIER 1: REFERENCE LAYER -->
+    <text x="24" y="32" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8" letter-spacing="2">TIER 1  —  REFERENCE LAYER  (SHARED, READ-ONLY)</text>
+    <rect x="20" y="44" width="840" height="92" fill="#141C29" stroke="#2D3A4F" stroke-width="1" rx="2"/>
+
+    <rect x="40" y="60" width="250" height="62" fill="#1B2433" stroke="#2D3A4F" stroke-width="2" rx="2"/>
+    <text x="52" y="82" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">SHARED_ASSEMBLIES</text>
+    <text x="52" y="100" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" fill="#B8C2D1">43 prebuilt jobs (electrical + plumbing)</text>
+    <text x="52" y="116" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">Downlights, GPOs, hot water, drains...</text>
+
+    <rect x="315" y="60" width="250" height="62" fill="#1B2433" stroke="#2D3A4F" stroke-width="2" rx="2"/>
+    <text x="327" y="82" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">SHARED_MATERIALS</text>
+    <text x="327" y="100" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" fill="#B8C2D1">37 catalogue items, categorised</text>
+    <text x="327" y="116" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">Default brand + ex-GST unit price</text>
+
+    <rect x="590" y="60" width="250" height="62" fill="#1B2433" stroke="#2D3A4F" stroke-width="2" rx="2"/>
+    <text x="602" y="82" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">PRICING_BOOK (BASE)</text>
+    <text x="602" y="100" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" fill="#B8C2D1">Hourly rate, markup %, call-out min</text>
+    <text x="602" y="116" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">Per trade — NSW elec / QLD plumb</text>
+
+    <!-- TIER 2: TENANT OVERLAY (orange accent) -->
+    <text x="24" y="172" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#FF7A45" letter-spacing="2">TIER 2  —  TENANT OVERLAY  (PER-TRADIE, WRITES WIN)</text>
+    <rect x="20" y="184" width="840" height="92" fill="#141C29" stroke="#FF5A1F" stroke-width="2" rx="2"/>
+
+    <rect x="40" y="200" width="195" height="62" fill="#1B2433" stroke="#FF5A1F" stroke-width="2" rx="2"/>
+    <text x="52" y="222" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">PRICING_BOOK.OVERLAYS</text>
+    <text x="52" y="240" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" fill="#B8C2D1">Own rate, markup, early-bird %</text>
+    <text x="52" y="256" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">jsonb — replaces base where set</text>
+
+    <rect x="245" y="200" width="195" height="62" fill="#1B2433" stroke="#FF5A1F" stroke-width="2" rx="2"/>
+    <text x="257" y="222" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">CUSTOM_ASSEMBLIES</text>
+    <text x="257" y="240" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" fill="#B8C2D1">Tradie-owned jobs not in shared</text>
+    <text x="257" y="256" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">Same grounding rules apply</text>
+
+    <rect x="450" y="200" width="195" height="62" fill="#1B2433" stroke="#FF5A1F" stroke-width="2" rx="2"/>
+    <text x="462" y="222" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">MATERIAL_PREFERENCES</text>
+    <text x="462" y="240" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" fill="#B8C2D1">Brand hints — Clipsal, Rheem...</text>
+    <text x="462" y="256" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">Soft preference, not hard swap</text>
+
+    <rect x="655" y="200" width="185" height="62" fill="#1B2433" stroke="#FF5A1F" stroke-width="2" rx="2"/>
+    <text x="667" y="222" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">SERVICE_OFFERINGS</text>
+    <text x="667" y="240" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" fill="#B8C2D1">On/off toggle per assembly</text>
+    <text x="667" y="256" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">OFF = polite SMS decline</text>
+
+    <!-- Merge arrows down to compose stage -->
+    <line x1="160" y1="276" x2="160" y2="308" stroke="#B8C2D1" stroke-width="1" marker-end="url(#arrow03)"/>
+    <line x1="340" y1="276" x2="340" y2="308" stroke="#FF5A1F" stroke-width="2" marker-end="url(#arrow03Orange)"/>
+    <line x1="540" y1="276" x2="540" y2="308" stroke="#FF5A1F" stroke-width="2" marker-end="url(#arrow03Orange)"/>
+    <line x1="720" y1="276" x2="720" y2="308" stroke="#FF5A1F" stroke-width="2" marker-end="url(#arrow03Orange)"/>
+
+    <!-- Compose bar -->
+    <rect x="20" y="308" width="840" height="26" fill="#141C29" stroke="#2D3A4F" stroke-width="1" rx="2"/>
+    <text x="440" y="325" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" font-weight="700" fill="#FF7A45" text-anchor="middle" letter-spacing="2">COMPOSE  →  GROUNDING VALIDATOR  →  G / B / B TIERS</text>
+
+    <!-- TIER 3: OUTPUT -->
+    <text x="24" y="356" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8" letter-spacing="2">TIER 3  —  OUTPUT  (PER-TIER CUSTOMER QUOTE, INC. GST)</text>
+
+    <rect x="40" y="364" width="255" height="30" fill="#1B2433" stroke="#2D3A4F" stroke-width="2" rx="2"/>
+    <text x="55" y="384" font-family="Manrope, Inter, system-ui, sans-serif" font-size="13" font-weight="700" fill="#B8C2D1">GOOD</text>
+    <text x="120" y="384" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" fill="#8A95A8">Baseline spec, lowest price</text>
+
+    <rect x="305" y="364" width="270" height="30" fill="#1B2433" stroke="#FF5A1F" stroke-width="2" rx="2"/>
+    <text x="320" y="384" font-family="Manrope, Inter, system-ui, sans-serif" font-size="13" font-weight="700" fill="#FF7A45">BETTER</text>
+    <text x="390" y="384" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" fill="#FFFFFF">Recommended — branded materials</text>
+
+    <rect x="585" y="364" width="255" height="30" fill="#1B2433" stroke="#2D3A4F" stroke-width="2" rx="2"/>
+    <text x="600" y="384" font-family="Manrope, Inter, system-ui, sans-serif" font-size="13" font-weight="700" fill="#B8C2D1">BEST</text>
+    <text x="660" y="384" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" fill="#8A95A8">Premium kit + extended warranty</text>
+  </svg>
+  <figcaption class="diagram-caption">Every quote is the tradie's own overlay laid on a shared, validated base — the LLM never invents a price.</figcaption>
+</figure>
+
+    <!-- FLAGSHIP CARD -->
+    <div class="flagship-row">
+      <article class="flagship-card">
+        <div class="flagship-banner">FLAGSHIP DIFFERENTIATOR · 03</div>
+        <h3 class="flagship-name">Per-Tenant Pricing Book Resolver — <span class="accent-text">No Silent Fallbacks.</span></h3>
+        <p class="flagship-description">Every tenant owns their own pricing book — hourly rate, call-out minimum, markup, risk buffer. The estimator hard-fails to a $99 inspection if it cannot resolve the correct book for the intake's tenant. This eliminates silent fallback to another tradie's pricing — the most expensive bug in any multi-tenant SaaS.</p>
+        <div class="flagship-meta">
+          <span class="status-pill flagship">Live</span>
+          <span class="metric-pill">1 book per tenant per trade</span>
+        </div>
+      </article>
+      <aside class="flagship-aside">
+        <div class="flagship-aside-label">// CATALOGUE</div>
+        <div class="flagship-aside-num">43 · 37</div>
+        <div class="flagship-aside-text">Prebuilt assemblies (20 electrical, 23 plumbing) plus 37 seed materials, both extensible per-tenant.</div>
+      </aside>
+    </div>
+
+    <div class="feature-grid">
+      <article class="feature-card differentiator">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill flagship">Live</span></div>
+          <span class="metric-pill">43 assemblies</span>
+        </div>
+        <h3 class="feature-name">Prebuilt Assembly Library</h3>
+        <p class="feature-description">Ships with 43 ready-to-use job assemblies (20 electrical, 23 plumbing) seeded across the platform, each with clarifying questions, pricing assumptions, and grounding categories. Tenants enable the ones they offer and add their own custom assemblies on top.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+          <span class="metric-pill">37 seed materials</span>
+        </div>
+        <h3 class="feature-name">Shared Material Catalogue</h3>
+        <p class="feature-description">37 categorised materials seed the platform, with brand-aware lookups feeding both the estimator and the customer-supply pricing path. Tradies layer their own brand preferences and supplier catalogue on top.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Tenant-Owned Materials Catalogue (WP2)</h3>
+        <p class="feature-description">Each tradie can add their own brand, range, supplier, unit, cost, and markup metadata into a tenant-scoped materials database. Trade ownership is enforced — tradies can only add rows for the trades they actually operate.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Catalogue Gaps Detection</h3>
+        <p class="feature-description">The /api/tenant/catalogue/gaps endpoint surfaces every category where the tradie has zero product picks, so the dashboard can prompt them to stock the essentials before a customer chooses an unfillable tier. Closes the loop between catalogue editing and live quote quality.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Recipe (Bill-Of-Materials) Builder</h3>
+        <p class="feature-description">Editable per-tenant recipe book lets tradies customise the exact materials list for any job template, with a one-click fork-from-baseline starting point. Per-line price lookups and category badges show how each line connects to the catalogue.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Per-Service Labour &amp; Markup Overrides</h3>
+        <p class="feature-description">Tradies can override the global labour-hour and markup-percentage defaults on any individual service, with an inline edit form showing effective vs global values. PATCH and DELETE operations save or reset overrides without touching the shared catalogue.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+          <span class="metric-pill">15% margin cap</span>
+        </div>
+        <h3 class="feature-name">Early-Bird Discount Configuration (v8)</h3>
+        <p class="feature-description">Tradies set a promotional discount percentage and booking window that automatically stamps every drafted quote with a time-limited offer. The discount applies to the whole job, is realised when the customer books in time, and is hard-capped at 15% to protect plumbing margins.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Customer Supply Mode (WP5)</h3>
+        <p class="feature-description">When the customer is supplying the material, the estimator reads a separate customer-supply price column, line items are stamped with the supply mode and an optional safety note, and the customer quote page renders a 'You Supply' badge. Both trades and the SMS slot-extractor cover this path.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Outdoor / Weatherproof Property Filtering</h3>
+        <p class="feature-description">Outdoor electrical assemblies (IP-rated GPOs, motion flood lights) carry a weatherproof flag so estimator lookups can strictly filter to weatherproof-only candidates. Closes a silent exclusion bug where outdoor items were being missed.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Row-Level Inspection Overrides</h3>
+        <p class="feature-description">Any assembly can be flagged 'always inspection' (e.g. gas hot water systems per AS/NZS 5601) to force the $99 site-visit route regardless of price grounding. Per-row inspection trigger phrases also escalate quotes that mention safety-critical conditions.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Tightened Inspection Trigger Phrases</h3>
+        <p class="feature-description">Eleven over-broad escalation phrases were softened or removed (bare 'switchboard' became specific variants, 'high ceiling' on downlights dropped) so legitimate jobs stop getting unnecessarily bumped to inspection. The grounding validator remains the safety net for anything genuinely risky.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Row Assumptions &amp; Grounding Category</h3>
+        <p class="feature-description">All 43 shared assemblies plus tenant custom assemblies carry explicit pricing/regulatory assumptions and a strict trade category for semantic grounding. A single CATEGORIES enum is the source of truth, preventing silent $99 escalations from categorisation gaps.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">GST Registration Toggle</h3>
+        <p class="feature-description">Tradies mark whether their business is GST-registered, which controls whether GST is rolled into displayed totals on customer quotes. Currency is stored ex-GST and rendered inc-GST per AU convention.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Quote Display Mode Toggle</h3>
+        <p class="feature-description">Tenant-level preference switches every customer quote between itemised (full line-item table) and summary (lump-sum with labour hours plus a material-item count). Trade-agnostic — applied to all pricing book rows for the tenant.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Calibrate From Past Invoices</h3>
+        <p class="feature-description">Tradies upload past invoices and the system extracts pricing to compare against QuoteMate estimates, surfacing calibration drift. Helps the tradie fine-tune hourly-rate and markup overlays based on what they actually charge.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Per-Trade Pricing Book Cards</h3>
+        <p class="feature-description">Multi-trade tradies see one pricing card per trade (e.g. one for electrical, one for plumbing) with that trade's hourly rate, call-out, markup, and advanced settings. Single-trade tradies see one shared card.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== SECTION 04: TRADIE WORKFLOW ==================== -->
+<section class="section alt">
+  <div class="container">
+    <header class="section-header">
+      <div class="section-number">04</div>
+      <div class="section-title-wrap">
+        <div class="section-eyebrow">
+          <span class="section-eyebrow-bar"></span>
+          THE OPERATOR CONSOLE
+        </div>
+        <h2 class="section-title">Tradie <span class="accent-text">Workflow</span></h2>
+        <p class="section-subtitle">The CRM, dashboard, and review tooling that keeps the tradie in control without slowing the customer down.</p>
+      </div>
+    </header>
+
+<figure class="diagram-figure">
+  <svg viewBox="0 0 880 400" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Tradie workflow showing three review policy modes: auto-send, always-review, and review over threshold">
+    <defs>
+      <marker id="arrow04" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#8A95A8"/>
+      </marker>
+      <marker id="arrow04orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#FF5A1F"/>
+      </marker>
+    </defs>
+
+    <rect x="0" y="0" width="880" height="400" fill="#0E1622"/>
+
+    <!-- Source: Quote Drafted -->
+    <rect x="24" y="160" width="170" height="80" fill="#1B2433" stroke="#2D3A4F" stroke-width="2" rx="2"/>
+    <text x="109" y="190" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">QUOTE DRAFTED</text>
+    <text x="109" y="210" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" fill="#B8C2D1">Opus 4.7 + RAG</text>
+    <text x="109" y="226" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">Good / Better / Best</text>
+
+    <!-- Decision diamond -->
+    <polygon points="270,200 340,160 410,200 340,240" fill="#1B2433" stroke="#2D3A4F" stroke-width="2"/>
+    <text x="340" y="196" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF">REVIEW</text>
+    <text x="340" y="212" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF">POLICY</text>
+
+    <!-- Connector: Source -> Decision -->
+    <line x1="194" y1="200" x2="266" y2="200" stroke="#8A95A8" stroke-width="1" marker-end="url(#arrow04)"/>
+
+    <!-- Lane 1: AUTO-SEND (top) -->
+    <line x1="340" y1="160" x2="340" y2="80" stroke="#8A95A8" stroke-width="1"/>
+    <line x1="340" y1="80" x2="496" y2="80" stroke="#8A95A8" stroke-width="1" marker-end="url(#arrow04)"/>
+    <text x="360" y="74" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">Mode A</text>
+
+    <rect x="500" y="48" width="180" height="64" fill="#1B2433" stroke="#2D3A4F" stroke-width="2" rx="2"/>
+    <text x="590" y="74" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">AUTO-SEND</text>
+    <text x="590" y="92" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#B8C2D1">No tradie gate</text>
+
+    <line x1="680" y1="80" x2="720" y2="80" stroke="#8A95A8" stroke-width="1" marker-end="url(#arrow04)"/>
+    <rect x="724" y="48" width="132" height="64" fill="#1B2433" stroke="#2D3A4F" stroke-width="2" rx="2"/>
+    <text x="790" y="74" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF">CUSTOMER</text>
+    <text x="790" y="92" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#B8C2D1">SMS + quote link</text>
+
+    <!-- Lane 2: ALWAYS-REVIEW (middle, HERO - orange) -->
+    <line x1="410" y1="200" x2="450" y2="200" stroke="#FF5A1F" stroke-width="2" marker-end="url(#arrow04orange)"/>
+    <text x="416" y="192" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" font-weight="700" fill="#FF5A1F">Mode B · Default</text>
+
+    <rect x="454" y="168" width="180" height="64" fill="#1B2433" stroke="#FF5A1F" stroke-width="2" rx="2"/>
+    <text x="544" y="194" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FF5A1F">ALWAYS-REVIEW</text>
+    <text x="544" y="212" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#B8C2D1">Tradie SMS · Approve / Edit</text>
+
+    <line x1="634" y1="200" x2="670" y2="200" stroke="#FF5A1F" stroke-width="2" marker-end="url(#arrow04orange)"/>
+    <rect x="674" y="168" width="182" height="64" fill="#1B2433" stroke="#FF5A1F" stroke-width="2" rx="2"/>
+    <text x="765" y="194" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF">CUSTOMER</text>
+    <text x="765" y="212" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#B8C2D1">After tradie approval</text>
+
+    <!-- Lane 3: REVIEW > $X (bottom) -->
+    <line x1="340" y1="240" x2="340" y2="320" stroke="#8A95A8" stroke-width="1"/>
+    <line x1="340" y1="320" x2="496" y2="320" stroke="#8A95A8" stroke-width="1" marker-end="url(#arrow04)"/>
+    <text x="360" y="314" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">Mode C</text>
+
+    <rect x="500" y="288" width="180" height="64" fill="#1B2433" stroke="#2D3A4F" stroke-width="2" rx="2"/>
+    <text x="590" y="312" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">REVIEW IF &gt; $X</text>
+    <text x="590" y="330" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#B8C2D1">Threshold gate</text>
+    <text x="590" y="346" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">e.g. $1,500+</text>
+
+    <line x1="680" y1="320" x2="720" y2="320" stroke="#8A95A8" stroke-width="1" marker-end="url(#arrow04)"/>
+    <rect x="724" y="288" width="132" height="64" fill="#1B2433" stroke="#2D3A4F" stroke-width="2" rx="2"/>
+    <text x="790" y="314" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF">CUSTOMER</text>
+    <text x="790" y="332" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#B8C2D1">Auto OR after review</text>
+
+    <!-- Footer caption strip -->
+    <line x1="24" y1="378" x2="856" y2="378" stroke="#2D3A4F" stroke-width="1"/>
+    <text x="24" y="394" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">Tradie picks one policy at onboarding · Editable per-job · Orange path is the new safer default</text>
+  </svg>
+  <figcaption class="diagram-caption">Every drafted quote now passes through a tradie-controlled review gate before it reaches the customer.</figcaption>
+</figure>
+
+    <div class="feature-grid">
+      <article class="feature-card differentiator">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill flagship">Live</span></div>
+        </div>
+        <h3 class="feature-name">Quote Editor With Grounding &amp; Safe Fallback</h3>
+        <p class="feature-description">Tradies inline-edit line items, tier labels, and timeframes; the server recomputes subtotals, re-validates against the pricing book and catalogue, re-issues Stripe Sessions for changed tiers, and applies any locked early-bird discount. Ungrounded edits are rejected with a 422 unless the tradie explicitly forces them with an audit flag.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+          <span class="metric-pill">3 policy modes</span>
+        </div>
+        <h3 class="feature-name">Review-Before-Send Approval Gate</h3>
+        <p class="feature-description">Tradies choose a policy: auto-send (default), always-review, or review-over-threshold (with a configurable dollar trigger). Held quotes wait in an 'awaiting tradie approval' state until a one-tap approve link from SMS releases them to the customer.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Tradie Draft Notification (SMS + WhatsApp)</h3>
+        <p class="feature-description">The moment a draft quote lands in 'tradie review' state, the system fires an SMS to the tradie's mobile with the customer's first name, job type, total, and a deep link to approve. Twilio's SMS-first dispatcher falls back to WhatsApp on send-failure so the notify never silently drops.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">CRM Touch Log Per Quote</h3>
+        <p class="feature-description">Replaces the old binary 'Mark Contacted' with a timeline of every interaction: calls, SMS, manual notes, quote reviews — each with timestamp, outcome (spoke, voicemail, no-answer), and a 500-char note. History expander on every follow-up card with auto-logging from call and text actions.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Follow-Ups Tab (To Chase + Contacted)</h3>
+        <p class="feature-description">Dashboard surfaces unactioned quotes older than a minimum-age threshold in a 'To chase' bucket, with a separate 'Contacted' list. Per-row actions: compose SMS inline, one-tap call, log a touch, mark contacted, reopen.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Inline SMS Compose For Follow-Ups</h3>
+        <p class="feature-description">Tradies fire off a quick SMS reply straight from a follow-up row, with every message auto-logged to the CRM touch history. Keeps communication inside the dashboard rather than scattered across personal phone threads.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">One-Tap Call From Follow-Ups</h3>
+        <p class="feature-description">Click-to-call buttons initiate voice calls via Vapi and auto-log call metadata (duration, timestamp) to the CRM on completion. No more forgetting which customer you rang yesterday.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Quotes List With Status Filters</h3>
+        <p class="feature-description">Filterable table of every drafted quote with status badges (draft, sent, accepted, deposit-paid, inspection), totals, tier breakdown, and one-click view. Filters: All, In Review, Sent, Deposit Paid, Inspection — with load-more pagination.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Quote Card With Expandable Details</h3>
+        <p class="feature-description">Each quote row expands to reveal full scope, the customer conversation transcript (SMS or voice), all tier prices, customer phone, job type, suburb, inspection requirement, and one-tap send/copy buttons. Status badges flag what needs attention.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Chats List With Full SMS Thread Visibility</h3>
+        <p class="feature-description">Every SMS and voice conversation appears as an expandable thread on the tradie's dashboard with customer first name, job type, suburb, message count, last-message timestamp, and channel indicator. Lets the tradie audit exactly what the AI said in their name — every message, every turn.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Overview Dashboard With KPI Tiles</h3>
+        <p class="feature-description">Time-of-day greeting, click-to-copy QuoteMate phone number, and four KPI tiles (total quotes, in review, services on, AI receptionist status) plus status pills for SMS/voice/AI readiness. The tradie's first screen every morning.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Pipeline Revenue Metrics</h3>
+        <p class="feature-description">Four-column stat grid covering quoted value, converted value, conversion percentage, and average quote value. All-time aggregation with colour-coded tone indicators so the tradie sees momentum at a glance.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Services Toggle Editor With Search</h3>
+        <p class="feature-description">Master list of every standard electrical and plumbing service with per-row toggle switches, free-text search, 10-per-page pagination, and trade grouping for multi-trade tenants. Write-through persistence — no save button needed.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Custom Service Creation &amp; Editing</h3>
+        <p class="feature-description">Tradies add their own services inline with name, description, trade, unit, unit price, labour hours, exclusions, and an optional 'always inspection' flag. Full add/edit/delete affordances with form validation.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+          <span class="metric-pill">3 view modes</span>
+        </div>
+        <h3 class="feature-name">Catalogue Product Library</h3>
+        <p class="feature-description">Three view modes (Browse / Mine / Ladder) for managing the material catalogue with per-product active/inactive toggle, a one-click 'stock the essentials' button, category filtering, search, and pagination. Ladder view defines Good/Better/Best product picks per category for the AI to draft against.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+          <span class="metric-pill">3 steps · 34 tests</span>
+        </div>
+        <h3 class="feature-name">Pricing Wizard (Fast-Track Onboarding)</h3>
+        <p class="feature-description">Three-step guided onboarding for tradies without a formal trade-book PDF. Collects rate card, service toggles, and brand preferences in one flow, with 34 unit tests guarding the state module and zero new API routes (reuses existing endpoints).</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Trade Multi-Select &amp; Activation</h3>
+        <p class="feature-description">Tradies toggle electrical and/or plumbing on their account; multi-trade tenants automatically get separate pricing books, service catalogues, and AI prompts per trade. An activation card surfaces available trades to add (e.g. a sparky adding plumbing).</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Per-Trade Licence Management</h3>
+        <p class="feature-description">Multi-trade tenants store one set of licence details (type, number, state, expiry, issuing body) per trade — separate NECA and Fair Trading registrations live side by side. Required for the compliance footer on every customer quote.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Mobile-Responsive Tab Bar</h3>
+        <p class="feature-description">Bottom-of-screen scrollable tab bar replaces the sidebar on smaller screens, mirroring the same navigation in a touch-friendly horizontal layout. Tradie can run the business from a phone on a worksite.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Quote Owner Check (Edit Affordance Gating)</h3>
+        <p class="feature-description">Lightweight read-only auth probe on every customer quote page returns owner status, tenant name, and paid status — used to conditionally render the tradie edit panel without exposing private data to non-owners. Same share-token trust model as the customer view but stricter on writes.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Approve &amp; Send Link (Tradie SMS)</h3>
+        <p class="feature-description">Deep-linked /q/[token]/approve page reached via SMS shows the quote summary with a single 'Send' CTA, or the tradie can hop to the dashboard editor first. Same share-token model as customer pages, with a bearer-token check for the approve action.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Account Details Form</h3>
+        <p class="feature-description">Editable identity section capturing business name, owner first name, email, mobile, state, and ABN — required for regulatory display on customer quotes. Save button with timestamp feedback.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Service Enabled Indicators &amp; Unsaved Badge</h3>
+        <p class="feature-description">Enabled services are colour-coded with an orange accent border and lighter background while disabled rows stay default grey. An '· unsaved' micro-badge appears on rows with in-flight changes for clarity during write-through saves.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Trade-Grouped Service List (Multi-Trade)</h3>
+        <p class="feature-description">Multi-trade tenants see services grouped by trade with section headers; single-trade tenants see a flat list. Eliminates confusion about which catalogue half a row belongs to.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Save Timestamp Feedback</h3>
+        <p class="feature-description">After every successful save the UI shows 'Saved just now' for a few seconds to confirm persistence without a page reload. Tiny touch — but the difference between a tradie trusting the dashboard and not.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Latest Quotes &amp; Chats Preview On Overview</h3>
+        <p class="feature-description">Top five most recent quotes and chats are surfaced on the Overview tab with expandable cards showing scope, tier breakdown, and a click-through to the full tab. Lazy-loaded so the dashboard opens fast.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== INTERSTITIAL CALLOUT 2 ==================== -->
+<section class="interstitial">
+  <div class="topo-bg" aria-hidden="true">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 400" preserveAspectRatio="xMidYMid slice">
+      <g fill="none" stroke="#14B8A6" stroke-width="1" opacity="0.5">
+        <path d="M0,100 Q300,60 600,80 T1200,70 L1400,60"/>
+        <path d="M0,200 Q300,170 600,185 T1200,180 L1400,175"/>
+        <path d="M0,300 Q300,270 600,285 T1200,280 L1400,275"/>
+      </g>
+    </svg>
+  </div>
+  <div class="container" style="position:relative;z-index:2;">
+    <div class="interstitial-inner">
+      <div>
+        <div class="interstitial-eyebrow">THE FUNNEL</div>
+        <div class="interstitial-label">// MONEY PATH</div>
+      </div>
+      <h2 class="interstitial-headline">Book first. <span class="accent-text">Pay last.</span> Tradie's calendar locks in before the deposit hits Stripe.</h2>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== SECTION 05: PAYMENTS & BOOKING ==================== -->
+<section class="section">
+  <div class="container">
+    <header class="section-header">
+      <div class="section-number">05</div>
+      <div class="section-title-wrap">
+        <div class="section-eyebrow">
+          <span class="section-eyebrow-bar"></span>
+          THE MONEY PATH
+        </div>
+        <h2 class="section-title">Payments <span class="accent-text">&amp; Booking</span></h2>
+        <p class="section-subtitle">Stripe-powered deposits, refundable site-visit pricing, and a book-first-pay-last funnel that maximises conversion.</p>
+      </div>
+    </header>
+
+<figure class="diagram-figure">
+  <svg viewBox="0 0 880 400" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Per-tier Stripe checkout and post-payment booking flow, with a parallel ninety-nine dollar inspection sub-flow reusing the same payment infrastructure.">
+    <defs>
+      <marker id="arr05" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 Z" fill="#B8C2D1"/>
+      </marker>
+      <marker id="arr05o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 Z" fill="#FF5A1F"/>
+      </marker>
+    </defs>
+
+    <rect x="0" y="0" width="880" height="400" fill="#0E1622"/>
+
+    <!-- Swim lane labels -->
+    <text x="20" y="34" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8" letter-spacing="1.5">CUSTOMER ACTIONS</text>
+    <line x1="20" y1="195" x2="860" y2="195" stroke="#2D3A4F" stroke-width="1" stroke-dasharray="3 4"/>
+    <text x="20" y="216" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8" letter-spacing="1.5">SYSTEM RESPONSE</text>
+
+    <!-- TOP ROW: Customer actions -->
+    <!-- Node 1: Pick tier (HERO) -->
+    <rect x="40" y="56" width="170" height="84" fill="#1B2433" stroke="#FF5A1F" stroke-width="2" rx="2"/>
+    <text x="125" y="84" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">PICK TIER</text>
+    <text x="125" y="106" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" fill="#B8C2D1">Good / Better / Best</text>
+    <text x="125" y="124" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">on /q/[token]</text>
+
+    <!-- Node 2: Pay deposit -->
+    <rect x="290" y="56" width="170" height="84" fill="#1B2433" stroke="#2D3A4F" stroke-width="2" rx="2"/>
+    <text x="375" y="84" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">PAY DEPOSIT</text>
+    <text x="375" y="106" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" fill="#B8C2D1">Card on file</text>
+    <text x="375" y="124" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">Per-tier deposit %</text>
+
+    <!-- Node 3: Pick slot -->
+    <rect x="540" y="56" width="170" height="84" fill="#1B2433" stroke="#2D3A4F" stroke-width="2" rx="2"/>
+    <text x="625" y="84" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">PICK SLOT</text>
+    <text x="625" y="106" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" fill="#B8C2D1">Tradie calendar</text>
+    <text x="625" y="124" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">/q/[token]/book</text>
+
+    <!-- Node 4: Status (right edge) -->
+    <rect x="740" y="56" width="120" height="84" fill="#1B2433" stroke="#14B8A6" stroke-width="2" rx="2"/>
+    <text x="800" y="84" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">STATUS</text>
+    <text x="800" y="106" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" fill="#14B8A6">paid + booked</text>
+    <text x="800" y="124" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">quotes row</text>
+
+    <!-- Top row connectors -->
+    <line x1="210" y1="98" x2="288" y2="98" stroke="#FF5A1F" stroke-width="2" marker-end="url(#arr05o)"/>
+    <line x1="460" y1="98" x2="538" y2="98" stroke="#B8C2D1" stroke-width="1.5" marker-end="url(#arr05)"/>
+    <line x1="710" y1="98" x2="738" y2="98" stroke="#B8C2D1" stroke-width="1.5" marker-end="url(#arr05)"/>
+
+    <!-- BOTTOM ROW: System responses -->
+    <!-- Sys A: Stripe session -->
+    <rect x="290" y="232" width="170" height="84" fill="#141C29" stroke="#2D3A4F" stroke-width="2" rx="2"/>
+    <text x="375" y="260" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">STRIPE SESSION</text>
+    <text x="375" y="282" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" fill="#B8C2D1">Checkout per tier</text>
+    <text x="375" y="300" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">/r/[token]/[tier]</text>
+
+    <!-- Sys B: Webhook -->
+    <rect x="480" y="232" width="140" height="84" fill="#141C29" stroke="#2D3A4F" stroke-width="2" rx="2"/>
+    <text x="550" y="260" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">WEBHOOK</text>
+    <text x="550" y="282" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" fill="#B8C2D1">checkout.completed</text>
+    <text x="550" y="300" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">/api/stripe/webhook</text>
+
+    <!-- Sys C: Calendar -->
+    <rect x="640" y="232" width="170" height="84" fill="#141C29" stroke="#2D3A4F" stroke-width="2" rx="2"/>
+    <text x="725" y="260" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">CALENDAR WRITE</text>
+    <text x="725" y="282" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" fill="#B8C2D1">Slot reserved</text>
+    <text x="725" y="300" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">/api/q/[token]/book</text>
+
+    <!-- Vertical action-to-system connectors -->
+    <line x1="375" y1="142" x2="375" y2="230" stroke="#FF5A1F" stroke-width="2" marker-end="url(#arr05o)"/>
+    <line x1="550" y1="232" x2="550" y2="195" stroke="#B8C2D1" stroke-width="1.5"/>
+    <line x1="550" y1="195" x2="550" y2="142" stroke="#B8C2D1" stroke-width="1.5" marker-end="url(#arr05)"/>
+    <line x1="625" y1="142" x2="725" y2="230" stroke="#B8C2D1" stroke-width="1.5" marker-end="url(#arr05)"/>
+
+    <!-- Bottom system-to-system connector -->
+    <line x1="460" y1="274" x2="478" y2="274" stroke="#B8C2D1" stroke-width="1.5" marker-end="url(#arr05)"/>
+    <line x1="620" y1="274" x2="638" y2="274" stroke="#B8C2D1" stroke-width="1.5" marker-end="url(#arr05)"/>
+
+    <!-- Status feedback line from calendar back up to STATUS -->
+    <path d="M810 274 L840 274 L840 140" fill="none" stroke="#14B8A6" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr05)"/>
+
+    <!-- $99 INSPECTION SUB-FLOW (parallel band, bottom) -->
+    <rect x="40" y="340" width="170" height="46" fill="#1B2433" stroke="#FF7A45" stroke-width="2" rx="2"/>
+    <text x="125" y="361" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF">$99 INSPECTION</text>
+    <text x="125" y="378" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#B8C2D1">Fallback / unclear scope</text>
+
+    <text x="230" y="358" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">Parallel sub-flow</text>
+    <text x="230" y="374" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">reuses same Stripe + Webhook</text>
+
+    <line x1="210" y1="363" x2="370" y2="316" stroke="#FF7A45" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr05)"/>
+    <line x1="125" y1="340" x2="125" y2="140" stroke="#FF7A45" stroke-width="1" stroke-dasharray="3 4"/>
+  </svg>
+  <figcaption class="diagram-caption">One Stripe checkout + webhook pipeline serves both the per-tier deposit-to-booking flow and the $99 inspection fallback.</figcaption>
+</figure>
+
+    <div class="feature-grid">
+      <article class="feature-card differentiator">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill flagship">Live</span></div>
+        </div>
+        <h3 class="feature-name">Per-Tier Stripe Checkout Deposits</h3>
+        <p class="feature-description">Each Good/Better/Best tier on the customer quote has its own Stripe Checkout link with a per-tier deposit amount, all generated at quote draft time. Inspection-only jobs show a single $99 site-visit pay link instead.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Book-First-Pay-Last Funnel (WP6)</h3>
+        <p class="feature-description">Customers pick a time slot before paying the deposit so the tradie's calendar is reserved up-front. The SMS short-link redirector enforces this funnel globally — every pay link in the thread routes through booking first.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Stripe Webhook With Idempotency</h3>
+        <p class="feature-description">Stripe's checkout.session.completed event marks the quote paid, stamps the paid tier and session ID, applies booking-state logic (confirm if scheduled, reserve if not), prunes the booked slot, and sends confirmation SMS to both customer and tradie. Idempotent via session-ID dedup so duplicate events can't double-process.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Booking Slot Reservation With Early-Bird</h3>
+        <p class="feature-description">Booking endpoint reserves the time on the quote, applies the early-bird discount if still live and not already used, re-issues a discounted Stripe Session, and expires the stale full-price link. The customer is then routed to the deposit step.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill partial">Partial</span></div>
+        </div>
+        <h3 class="feature-name">Payouts (Stripe Connect) Setup Card</h3>
+        <p class="feature-description">Step-by-step payout onboarding shows four status levels — not started, incomplete, verifying, ready — with a one-tap button to open Stripe's hosted Connect onboarding. Surfaces bank verification status and a plain-English explanation of how payouts flow.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill partial">Partial</span></div>
+        </div>
+        <h3 class="feature-name">Stripe Connect Return &amp; Refresh Pages</h3>
+        <p class="feature-description">Dedicated /onboard/stripe/return and /onboard/stripe/refresh landing pages handle the round-trip from Stripe's hosted Connect onboarding — surfacing success, incomplete-verification, and link-expired states with a one-tap retry that re-mints a fresh Connect link.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+          <span class="metric-pill">$99 refundable</span>
+        </div>
+        <h3 class="feature-name">$99 Refundable Inspection Pay Link</h3>
+        <p class="feature-description">Jobs routed to the inspection lane get a single $99 pay link that's refunded against the final quote if the customer proceeds. Replaces the unsafe failure mode of guessing on complex jobs.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== SECTION 06: ADMIN & SCALE ==================== -->
+<section class="section alt">
+  <div class="container">
+    <header class="section-header">
+      <div class="section-number">06</div>
+      <div class="section-title-wrap">
+        <div class="section-eyebrow">
+          <span class="section-eyebrow-bar"></span>
+          THE COMMAND CENTRE
+        </div>
+        <h2 class="section-title">Admin <span class="accent-text">&amp; Scale</span></h2>
+        <p class="section-subtitle">The operator command centre that turns hand-coded trade onboarding into a CSV/PDF upload and a click.</p>
+      </div>
+    </header>
+
+<figure class="diagram-figure">
+  <svg viewBox="0 0 880 400" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Trade book extraction pipeline turning a PDF into a live tenant-ready trade with no code changes.">
+    <defs>
+      <marker id="arr06" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#B8C2D1"/>
+      </marker>
+      <marker id="arr06-orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#FF5A1F"/>
+      </marker>
+    </defs>
+
+    <rect x="0" y="0" width="880" height="400" fill="#0E1622"/>
+
+    <text x="40" y="34" fill="#FFFFFF" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" letter-spacing="1.5">TRADES-AS-DATA PIPELINE</text>
+    <text x="40" y="52" fill="#8A95A8" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11">PDF in. Live trade out. Zero deploys.</text>
+
+    <!-- Stage 1: PDF -->
+    <rect x="30" y="100" width="130" height="110" fill="#1B2433" stroke="#2D3A4F" stroke-width="2" rx="2"/>
+    <text x="95" y="128" fill="#FFFFFF" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" text-anchor="middle">TRADE BOOK</text>
+    <text x="95" y="146" fill="#FFFFFF" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" text-anchor="middle">PDF</text>
+    <text x="95" y="172" fill="#B8C2D1" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" text-anchor="middle">Tradie Supplies</text>
+    <text x="95" y="190" fill="#8A95A8" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" text-anchor="middle">Rates · Scopes</text>
+
+    <!-- Stage 2: mt-filestore-kb -->
+    <rect x="180" y="100" width="130" height="110" fill="#1B2433" stroke="#2D3A4F" stroke-width="2" rx="2"/>
+    <text x="245" y="128" fill="#FFFFFF" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" text-anchor="middle">MT-FILESTORE</text>
+    <text x="245" y="146" fill="#FFFFFF" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" text-anchor="middle">KB</text>
+    <text x="245" y="172" fill="#B8C2D1" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" text-anchor="middle">Chunk + Embed</text>
+    <text x="245" y="190" fill="#8A95A8" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" text-anchor="middle">Citations Kept</text>
+
+    <!-- Stage 3: Admin Loader -->
+    <rect x="330" y="100" width="130" height="110" fill="#1B2433" stroke="#2D3A4F" stroke-width="2" rx="2"/>
+    <text x="395" y="128" fill="#FFFFFF" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" text-anchor="middle">ADMIN</text>
+    <text x="395" y="146" fill="#FFFFFF" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" text-anchor="middle">LOADER</text>
+    <text x="395" y="172" fill="#B8C2D1" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" text-anchor="middle">Extract Rows</text>
+    <text x="395" y="190" fill="#8A95A8" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" text-anchor="middle">Structured JSON</text>
+
+    <!-- Stage 4: Staged Rows — HUMAN REVIEW (teal) -->
+    <rect x="480" y="100" width="130" height="110" fill="#1B2433" stroke="#14B8A6" stroke-width="2" rx="2"/>
+    <text x="545" y="128" fill="#FFFFFF" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" text-anchor="middle">STAGED ROWS</text>
+    <text x="545" y="148" fill="#14B8A6" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" font-weight="700" text-anchor="middle" letter-spacing="1">HUMAN REVIEW</text>
+    <text x="545" y="172" fill="#B8C2D1" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" text-anchor="middle">Approve · Edit</text>
+    <text x="545" y="190" fill="#8A95A8" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" text-anchor="middle">Citation Check</text>
+
+    <!-- Stage 5: Approved tables (orange HERO) -->
+    <rect x="630" y="100" width="140" height="110" fill="#1B2433" stroke="#FF5A1F" stroke-width="2" rx="2"/>
+    <text x="700" y="128" fill="#FFFFFF" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" text-anchor="middle">APPROVED</text>
+    <text x="700" y="146" fill="#FF7A45" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" font-weight="700" text-anchor="middle" letter-spacing="1">CATALOGUE</text>
+    <text x="700" y="170" fill="#B8C2D1" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" text-anchor="middle">shared_assemblies</text>
+    <text x="700" y="184" fill="#B8C2D1" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" text-anchor="middle">shared_materials</text>
+    <text x="700" y="198" fill="#B8C2D1" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" text-anchor="middle">pricing_book</text>
+
+    <!-- Stage 6: New trade live -->
+    <rect x="320" y="290" width="240" height="74" fill="#1B2433" stroke="#FF5A1F" stroke-width="2" rx="2"/>
+    <text x="440" y="318" fill="#FFFFFF" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" text-anchor="middle">NEW TRADE LIVE</text>
+    <text x="440" y="340" fill="#B8C2D1" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" text-anchor="middle">Voice · SMS · Quote Pipeline</text>
+    <text x="440" y="356" fill="#8A95A8" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" text-anchor="middle">Routed by trade column</text>
+
+    <!-- Arrows between stages 1-5 -->
+    <line x1="162" y1="155" x2="178" y2="155" stroke="#B8C2D1" stroke-width="1.5" marker-end="url(#arr06)"/>
+    <line x1="312" y1="155" x2="328" y2="155" stroke="#B8C2D1" stroke-width="1.5" marker-end="url(#arr06)"/>
+    <line x1="462" y1="155" x2="478" y2="155" stroke="#B8C2D1" stroke-width="1.5" marker-end="url(#arr06)"/>
+    <line x1="612" y1="155" x2="628" y2="155" stroke="#14B8A6" stroke-width="1.5" marker-end="url(#arr06)"/>
+
+    <!-- Path from Approved down to New trade live (orange hero flow) -->
+    <path d="M 700 212 L 700 260 L 440 260 L 440 288" fill="none" stroke="#FF5A1F" stroke-width="2" marker-end="url(#arr06-orange)"/>
+
+    <!-- Annotation banner: No code change -->
+    <rect x="40" y="290" width="250" height="74" fill="#141C29" stroke="#FF5A1F" stroke-width="2" rx="2"/>
+    <text x="56" y="316" fill="#FF7A45" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" font-weight="700" letter-spacing="1.5">TRADES-AS-DATA</text>
+    <text x="56" y="338" fill="#FFFFFF" font-family="Manrope, Inter, system-ui, sans-serif" font-size="13" font-weight="700">No code change</text>
+    <text x="56" y="354" fill="#B8C2D1" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12">to add a third trade.</text>
+
+    <!-- Annotation: human gate -->
+    <rect x="600" y="290" width="220" height="74" fill="#141C29" stroke="#14B8A6" stroke-width="1.5" rx="2"/>
+    <text x="612" y="316" fill="#14B8A6" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" font-weight="700" letter-spacing="1.5">REVIEW GATE</text>
+    <text x="612" y="338" fill="#FFFFFF" font-family="Manrope, Inter, system-ui, sans-serif" font-size="13" font-weight="700">One operator approves</text>
+    <text x="612" y="354" fill="#B8C2D1" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12">before catalogue goes live.</text>
+
+    <!-- Stage numbers -->
+    <text x="45" y="92" fill="#8A95A8" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" font-weight="700">01</text>
+    <text x="195" y="92" fill="#8A95A8" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" font-weight="700">02</text>
+    <text x="345" y="92" fill="#8A95A8" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" font-weight="700">03</text>
+    <text x="495" y="92" fill="#8A95A8" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" font-weight="700">04</text>
+    <text x="645" y="92" fill="#8A95A8" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" font-weight="700">05</text>
+  </svg>
+  <figcaption class="diagram-caption">A new trade ships as data — PDF, extract, one human approval, live — never as a deploy.</figcaption>
+</figure>
+
+    <!-- FLAGSHIP CARD -->
+    <div class="flagship-row">
+      <article class="flagship-card">
+        <div class="flagship-banner">FLAGSHIP DIFFERENTIATOR · 06</div>
+        <h3 class="flagship-name">Trade-Book PDF Extraction With <span class="accent-text">Citation-Back.</span></h3>
+        <p class="flagship-description">Admins extract structured services and materials straight from supplier trade-book PDFs indexed in a knowledge-base store, with Gemini-powered structured extraction and Zod validation. Every extracted row carries a citation back to the source PDF page so operators can verify accuracy line-by-line. A third trade becomes an afternoon, not a sprint.</p>
+        <div class="flagship-meta">
+          <span class="status-pill flagship">Live</span>
+          <span class="metric-pill">PDF → Catalogue · cited</span>
+        </div>
+      </article>
+      <aside class="flagship-aside">
+        <div class="flagship-aside-label">// TENANCY</div>
+        <div class="flagship-aside-num">4</div>
+        <div class="flagship-aside-text">Live tenants today: 2 electrical-only, 1 plumbing-only, 1 cross-trade — all on the same shared infrastructure.</div>
+      </aside>
+    </div>
+
+    <div class="feature-grid">
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill partial">Partial</span></div>
+        </div>
+        <h3 class="feature-name">Admin Bulk Loader (Trades-As-Data)</h3>
+        <p class="feature-description">Multi-phase framework for loading new trades, categories, pricing defaults, and prompts via CSV or PDF without writing code. Phases 0-3 complete: foundation, prompt router, loader UI for existing trades, new-trade activation with stage/rollback, and supplier-catalogue loader. Smoke tests gate every commit.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">3-Step Bulk Upload Workflow</h3>
+        <p class="feature-description">Upload Services/Materials/Categories CSVs or extract from PDFs, preview the diff (NEW/UPDATE/REJECTED counts), then commit or rollback in one click. Smoke-test validation flags rows that would produce non-grounding quotes and excludes them from commit.</p>
+      </article>
+
+      <article class="feature-card differentiator">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill flagship">Live</span></div>
+          <span class="metric-pill">3 agents · 5-dim rubric</span>
+        </div>
+        <h3 class="feature-name">Quality Agents (Eval / Catalogue QA / Tradie-Learn)</h3>
+        <p class="feature-description">Three offline quality agents run on cron via a Railway proxy: Eval scores the live estimator against a hold-out fixture set on a 5-dimension rubric (price, material, tier, scope, routing), Catalogue QA sweeps for price drift and contradictions, Tradie-Learn clusters tradie corrections into actionable patterns. Each agent has a 'Run now' button and a findings queue.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Finding Status Workflow</h3>
+        <p class="feature-description">Every catalogue issue and tradie pattern moves through pending → approved/rejected → applied, with status tabs organising the operator review queue. Closes the loop between detection and the catalogue/prompt change actually shipping.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">CSV Supplier Catalogue Import</h3>
+        <p class="feature-description">Bulk CSV upload into the shared supplier catalogue with two-phase dry-run then commit. Tradie uploads are insert-only (no overwrites) and become visible immediately to all tenants; operator CLI handles internal imports with update behaviour.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Knowledge-Base Store &amp; Document Management</h3>
+        <p class="feature-description">Admins create knowledge-base stores on the fly, upload PDFs directly inside QuoteMate (no console-hopping), and optionally scope extraction to a single document. Automatic document indexing via Gemini.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+          <span class="metric-pill">4 active tenants</span>
+        </div>
+        <h3 class="feature-name">Multi-Trade Tenants (Electrical + Plumbing)</h3>
+        <p class="feature-description">A single database supports tenants operating across multiple trades, routed by an intake.trade column with trade-specific pricing books, prompts, and assemblies scoped throughout. Currently 4 active tenants: 2 electrical-only, 1 plumbing-only, 1 cross-trade.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill partial">Partial</span></div>
+        </div>
+        <h3 class="feature-name">Tradie Self-Serve Onboarding</h3>
+        <p class="feature-description">Tradies sign up at /signup, verify email, complete the pricing-and-services flow at /onboard, and trigger automatic Twilio number purchase plus Vapi assistant creation. Provisioning flags toggle the live cutover when ready.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Onboarding Wizard (3 Steps)</h3>
+        <p class="feature-description">Trade &amp; licence → pricing essentials → review &amp; activate, with a one-tap activate button that provisions the Twilio SMS/voice line and Vapi assistant. Collapsible advanced sections keep the default path fast.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Tenant Activation Endpoint</h3>
+        <p class="feature-description">/api/onboard/activate validates the form, inserts the tenant row, seeds pricing book and service offerings, runs the Twilio + Vapi provisioning chain, stamps status active, and sends a welcome SMS. Non-recoverable failures leave the row for retry-provision so no tradie gets stranded.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Retry Provisioning Button</h3>
+        <p class="feature-description">Recovery affordance on the Overview tab for tenants whose Twilio/Vapi provisioning failed. One tap re-runs the chain with a clear error message if no SMS or voice number was provisioned.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">SMS-Initiated Onboarding Intent Tokens</h3>
+        <p class="feature-description">Tradie signups that start via SMS pass through an intent token that prefills mobile on the /signup page and degrades gracefully (404) on invalid, expired, or used tokens. Lets a single inbound text spawn the full self-serve flow.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Admin Command Centre Landing</h3>
+        <p class="feature-description">Central admin hub with tiles for Bulk Loader, Quality Agents, Eval runs, Catalogue QA, and Tradie-Learn patterns. Admin status badge confirms authentication with gated server access on every action.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Supabase PKCE Auth With Deep-Link Round-Trips</h3>
+        <p class="feature-description">Returning tradie login at /signin uses Supabase's PKCE auth flow with a /auth/callback handler that exchanges the code for a session, then honours an optional redirectTo parameter for deep-link round-trips (e.g. back to quote editing after auth). Validates the session and routes to dashboard or onboarding.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Admin Authentication Gate</h3>
+        <p class="feature-description">Every /api/admin/* route runs a server-side check against an admin_users table; non-admins receive 403. A /api/admin/whoami probe confirms admin status on page load so the UI never renders gated controls to the wrong user.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">CSV Template Downloads</h3>
+        <p class="feature-description">Downloadable CSV templates for Services, Materials, and Categories with the exact headers required, so operators (and tradies) don't have to guess at the format.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Batch Idempotency &amp; Deduplication</h3>
+        <p class="feature-description">Every upload and extraction operation requires an idempotency key, so accidental resubmits never produce duplicate batches and replayed uploads return the existing batch reference. Protects the catalogue from operator mistakes.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill partial">Partial</span></div>
+        </div>
+        <h3 class="feature-name">New Trade Creation With Defaults &amp; Prompts</h3>
+        <p class="feature-description">Adding a new trade at upload time requires hourly rate, call-out, markup, risk buffer, labour hours, and GST registration, with optional estimator system prompt, SMS scope blurb, and voice greeting captured in the same flow. No code change required to onboard a third trade.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Approve / Rollback With Conflict Check</h3>
+        <p class="feature-description">One-click commit or rollback on any staged batch. The approve route detects repricing conflicts on live services and prompts confirmation before applying — both operations are fully auditable and reversible.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== SECTION 07: AUTOMATION & RELIABILITY ==================== -->
+<section class="section">
+  <div class="container">
+    <header class="section-header">
+      <div class="section-number">07</div>
+      <div class="section-title-wrap">
+        <div class="section-eyebrow">
+          <span class="section-eyebrow-bar"></span>
+          THE SAFETY NET
+        </div>
+        <h2 class="section-title">Automation <span class="accent-text">&amp; Reliability</span></h2>
+        <p class="section-subtitle">The cron jobs, fallbacks, and safety guards that keep the system honest when no human is watching.</p>
+      </div>
+    </header>
+
+<figure class="diagram-figure">
+  <svg viewBox="0 0 880 400" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Three-tier AI provider failover chain: Voyage primary, Cohere fallback, cosine similarity built-in fallback — quote always drafts.">
+    <defs>
+      <marker id="arrow07" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#B8C2D1"/>
+      </marker>
+      <marker id="arrow07-orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#FF5A1F"/>
+      </marker>
+    </defs>
+
+    <!-- Backdrop panel -->
+    <rect x="0" y="0" width="880" height="400" fill="#0E1622"/>
+    <rect x="16" y="16" width="848" height="368" fill="#141C29" stroke="#2D3A4F" stroke-width="1" rx="2"/>
+
+    <!-- Title strip -->
+    <text x="40" y="46" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8" letter-spacing="2">SECTION 07 · FAILOVER CHAIN</text>
+    <text x="40" y="68" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">RERANK PROVIDER DEGRADATION PATH</text>
+
+    <!-- Incoming request node -->
+    <rect x="40" y="92" width="170" height="56" fill="#1B2433" stroke="#B8C2D1" stroke-width="2" rx="2"/>
+    <text x="125" y="118" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">QUOTE REQUEST</text>
+    <text x="125" y="136" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">Intake → Rerank stage</text>
+
+    <!-- Connector down to lanes -->
+    <line x1="125" y1="148" x2="125" y2="180" stroke="#B8C2D1" stroke-width="1"/>
+    <line x1="125" y1="180" x2="260" y2="180" stroke="#B8C2D1" stroke-width="1"/>
+    <line x1="260" y1="180" x2="260" y2="195" stroke="#FF5A1F" stroke-width="2" marker-end="url(#arrow07-orange)"/>
+
+    <!-- LANE 1 — PRIMARY (Voyage / Orange) -->
+    <rect x="240" y="200" width="600" height="48" fill="#1B2433" stroke="#FF5A1F" stroke-width="2" rx="2"/>
+    <rect x="240" y="200" width="6" height="48" fill="#FF5A1F"/>
+    <text x="260" y="220" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#FF7A45" letter-spacing="1.5">TIER 1 · PRIMARY</text>
+    <text x="260" y="238" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">VOYAGE RERANKER</text>
+    <text x="540" y="220" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8" letter-spacing="1.5">TRIGGER</text>
+    <text x="540" y="238" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" fill="#B8C2D1">Default route — highest relevance scoring</text>
+    <text x="820" y="232" text-anchor="end" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" font-weight="700" fill="#FF5A1F">ACTIVE</text>
+
+    <!-- Fail arrow lane1 → lane2 -->
+    <line x1="270" y1="248" x2="270" y2="275" stroke="#B91C1C" stroke-width="1" stroke-dasharray="3,3" marker-end="url(#arrow07)"/>
+    <text x="282" y="266" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#B91C1C">on timeout / 5xx / quota</text>
+
+    <!-- LANE 2 — SECONDARY (Cohere / Teal) -->
+    <rect x="240" y="280" width="600" height="48" fill="#1B2433" stroke="#14B8A6" stroke-width="2" rx="2"/>
+    <rect x="240" y="280" width="6" height="48" fill="#14B8A6"/>
+    <text x="260" y="300" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#14B8A6" letter-spacing="1.5">TIER 2 · SECONDARY</text>
+    <text x="260" y="318" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">COHERE RERANKER</text>
+    <text x="540" y="300" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8" letter-spacing="1.5">TRIGGER</text>
+    <text x="540" y="318" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" fill="#B8C2D1">Voyage unreachable or rate-limited</text>
+    <text x="820" y="312" text-anchor="end" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" font-weight="700" fill="#14B8A6">WARM</text>
+
+    <!-- Fail arrow lane2 → lane3 -->
+    <line x1="270" y1="328" x2="270" y2="345" stroke="#B91C1C" stroke-width="1" stroke-dasharray="3,3" marker-end="url(#arrow07)"/>
+
+    <!-- LANE 3 — FINAL FALLBACK (Cosine / Grey) -->
+    <rect x="240" y="350" width="430" height="40" fill="#1B2433" stroke="#2D3A4F" stroke-width="2" rx="2"/>
+    <rect x="240" y="350" width="6" height="40" fill="#8A95A8"/>
+    <text x="260" y="367" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8" letter-spacing="1.5">TIER 3 · BUILT-IN</text>
+    <text x="260" y="382" font-family="Manrope, Inter, system-ui, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF">COSINE SIMILARITY (PGVECTOR)</text>
+    <text x="660" y="375" text-anchor="end" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#B8C2D1">In-database · zero external deps</text>
+
+    <!-- Outcome rail (right side, spans all three lanes) -->
+    <line x1="700" y1="370" x2="755" y2="370" stroke="#15803D" stroke-width="2" marker-end="url(#arrow07)"/>
+    <rect x="755" y="350" width="85" height="40" fill="#1B2433" stroke="#15803D" stroke-width="2" rx="2"/>
+    <text x="797" y="368" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF">QUOTE</text>
+    <text x="797" y="382" text-anchor="middle" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#15803D">drafts ok</text>
+
+  </svg>
+  <figcaption class="diagram-caption">No single provider can take quoting offline.</figcaption>
+</figure>
+
+    <div class="feature-grid three-col">
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Cron-Triggered Quality Agents</h3>
+        <p class="feature-description">Vercel Cron triggers the Eval, Catalogue QA, and Tradie-Learn agents on a schedule, proxying to the Railway quality-agents service with Authorization-header validation. Tradie-Learn supports an optional lookback-hours query param for ad-hoc deep dives.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">SMS Cleanup Cron Job</h3>
+        <p class="feature-description">A Vercel-scheduled /api/cron/sms-cleanup job sweeps abandoned or stale SMS conversations and prunes them on a recurring schedule, keeping sms_conversations / sms_messages from growing unboundedly and protecting per-tenant chat visibility from noise.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Health &amp; Deep-Health Endpoints</h3>
+        <p class="feature-description">/api/health gives Vercel and uptime monitors a sub-100ms liveness probe; /api/health/deep validates Supabase, Anthropic, Twilio, Stripe, Vapi, Voyage and Gemini reachability in one call so deploys can pre-flight every external dependency before traffic flips over.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Pipeline Observability Logger</h3>
+        <p class="feature-description">A structured pipeline logger (lib/log/pipeline.ts) emits stage-by-stage events for every intake → estimate → quote run — channel, tenant, latency, grounding result, routing decision — feeding platform log search and replacing ad-hoc console noise. Drop-in path to PostHog/Sentry when wired.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+          <span class="metric-pill">2-provider failover</span>
+        </div>
+        <h3 class="feature-name">Voyage → Cohere Reranker Failover</h3>
+        <p class="feature-description">Semantic search over prior intakes runs primarily on Voyage embeddings with automatic failover to Cohere reranking if Voyage is unavailable or rate-limited. Stubs cleanly if both API keys are unset so dev environments never block.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Resend Email Integration</h3>
+        <p class="feature-description">Transactional email (signup verification, quote delivery, payment receipts, tradie notifications) routes through Resend with templated bodies and the tenant's branding. Per-template retry and bounce handling so a deliverability blip doesn't lose a customer.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">AI Preview &amp; Sample Generation Pipeline</h3>
+        <p class="feature-description">Google Gemini renders per-photo previews and three contextual sample views for every quote, kicked off automatically when photos exist and re-triggered when the customer uploads more. Generation runs in the background; the quote page polls for completion.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Photo Upload &amp; Storage</h3>
+        <p class="feature-description">Customer photos land in a Supabase storage bucket via either the dedicated /upload/[token] page or the in-page widget, with file-type and size validation. Photos are referenced from quotes and surfaced to the tradie alongside the conversation.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+          <span class="metric-pill">Sub-500ms ack</span>
+        </div>
+        <h3 class="feature-name">Webhook Fast-Ack Pattern</h3>
+        <p class="feature-description">Webhook routes acknowledge in under 500ms then run heavy AI work in deferred after() handlers, with idempotency keyed on Twilio's MessageSid. Keeps Twilio and Vapi happy while Claude/Opus do their work without timing out.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Customer Tenant_ID Self-Heal</h3>
+        <p class="feature-description">findOrCreateCustomer() accepts a tenantId on every inbound SMS/voice path and stamps it on insert, with heal-in-place on any pre-existing NULL row. Closes the recurring orphan source that previously caused multi-tenant routing bugs (memory: project_vapi_legacy_reroute).</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Multi-Channel Intake Quality Gate</h3>
+        <p class="feature-description">After structuring an intake, the pipeline scores quality and confidence, routing low-quality intakes either to the $99 inspection lane or a polite failure SMS instead of producing a guess. Same gate runs for SMS and voice.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Quote Hold &amp; Booking State</h3>
+        <p class="feature-description">Quotes can be held pending tradie approval before customer dispatch, with booking state persisted on the quote so reservations, payments, and confirmations all reconcile cleanly. Migration 026 introduced the hold support.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Conversation Transcript Parity (SMS + Voice)</h3>
+        <p class="feature-description">SMS conversations (stored in sms_conversations/sms_messages) and voice calls (via Vapi webhooks) produce identical transcripts that the same intake pipeline consumes. Normalised across channels so quoting logic doesn't fork.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+          <span class="metric-pill">11 job types covered</span>
+        </div>
+        <h3 class="feature-name">Photo-Link Plumbing Fix (Trade-Aware)</h3>
+        <p class="feature-description">Fixed a regression where SMS dialog only sent photo links for electrical jobs — plumbing customers never got asked. Now all 11 auto-quoteable job types across both trades trigger the photo request directive.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== SECTION 08: AUSTRALIAN-BUILT FOUNDATIONS ==================== -->
+<section class="section alt">
+  <div class="container">
+    <header class="section-header">
+      <div class="section-number">08</div>
+      <div class="section-title-wrap">
+        <div class="section-eyebrow">
+          <span class="section-eyebrow-bar"></span>
+          BUILT FOR THE PADDOCK
+        </div>
+        <h2 class="section-title">Australian-Built <span class="accent-text">Foundations</span></h2>
+        <p class="section-subtitle">Compliance, formatting, and regulatory plumbing tuned for AU/NZ tradies — not an American app with a flag swapped.</p>
+      </div>
+    </header>
+
+<figure class="diagram-figure">
+  <svg viewBox="0 0 880 400" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Australian compliance and infrastructure foundations baked into QuoteMate, mapping NSW and QLD regulatory surfaces to per-trade enforcement.">
+    <defs>
+      <marker id="arrow-08" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#FF5A1F"/>
+      </marker>
+      <marker id="arrow-08-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#2D3A4F"/>
+      </marker>
+    </defs>
+
+    <!-- Panel background -->
+    <rect x="0" y="0" width="880" height="400" fill="#141C29"/>
+
+    <!-- ===================== LEFT: Australia map ===================== -->
+    <rect x="20" y="20" width="360" height="360" fill="#0E1622" stroke="#2D3A4F" stroke-width="2" rx="2"/>
+    <text x="40" y="48" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" font-weight="700" fill="#8A95A8" letter-spacing="1.2">REGULATORY FOOTPRINT</text>
+
+    <!-- Simplified Australia silhouette -->
+    <path d="M 80 180
+             L 95 150
+             L 130 130
+             L 175 118
+             L 225 115
+             L 270 122
+             L 310 140
+             L 335 175
+             L 345 215
+             L 335 255
+             L 305 290
+             L 260 310
+             L 210 318
+             L 160 312
+             L 115 295
+             L 88 265
+             L 75 225
+             Z"
+          fill="#1B2433" stroke="#2D3A4F" stroke-width="2"/>
+
+    <!-- Tasmania -->
+    <path d="M 235 340 L 255 335 L 260 350 L 245 358 Z" fill="#1B2433" stroke="#2D3A4F" stroke-width="1.5"/>
+
+    <!-- NSW state outline highlight -->
+    <path d="M 245 215 L 295 210 L 320 230 L 335 255 L 305 275 L 260 270 L 245 245 Z"
+          fill="none" stroke="#FF5A1F" stroke-width="1.5" stroke-dasharray="3 2" opacity="0.85"/>
+
+    <!-- QLD state outline highlight -->
+    <path d="M 220 120 L 285 122 L 320 145 L 330 180 L 305 195 L 250 195 L 220 175 Z"
+          fill="none" stroke="#14B8A6" stroke-width="1.5" stroke-dasharray="3 2" opacity="0.85"/>
+
+    <!-- NSW pin (Sydney) -->
+    <circle cx="300" cy="248" r="7" fill="#FF5A1F" stroke="#141C29" stroke-width="2"/>
+    <circle cx="300" cy="248" r="13" fill="none" stroke="#FF5A1F" stroke-width="1" opacity="0.5"/>
+    <text x="312" y="244" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF">NSW</text>
+    <text x="312" y="258" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#B8C2D1">Sydney — Electrical</text>
+
+    <!-- QLD pin (Brisbane) -->
+    <circle cx="295" cy="172" r="7" fill="#14B8A6" stroke="#141C29" stroke-width="2"/>
+    <circle cx="295" cy="172" r="13" fill="none" stroke="#14B8A6" stroke-width="1" opacity="0.5"/>
+    <text x="307" y="168" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF">QLD</text>
+    <text x="307" y="182" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#B8C2D1">Brisbane — Plumbing</text>
+
+    <!-- Map legend -->
+    <text x="40" y="360" font-family="Manrope, Inter, system-ui, sans-serif" font-size="11" fill="#8A95A8">Twilio AU Long Code · +61 4xx · GST Inclusive</text>
+
+    <!-- ===================== RIGHT: Compliance badge stack ===================== -->
+    <text x="430" y="48" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" font-weight="700" fill="#8A95A8" letter-spacing="1.2">COMPLIANCE SURFACES BAKED IN</text>
+
+    <!-- Badge 1: NECA (NSW) -->
+    <rect x="430" y="70" width="380" height="58" fill="#1B2433" stroke="#FF5A1F" stroke-width="2" rx="2"/>
+    <rect x="430" y="70" width="6" height="58" fill="#FF5A1F"/>
+    <text x="450" y="92" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF" letter-spacing="0.5">NSW NECA · ELECTRICAL LICENCE</text>
+    <text x="450" y="112" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" fill="#B8C2D1">Licence number stamped on every quote · footer-rendered</text>
+
+    <!-- Badge 2: QBCC (QLD) -->
+    <rect x="430" y="138" width="380" height="58" fill="#1B2433" stroke="#14B8A6" stroke-width="2" rx="2"/>
+    <rect x="430" y="138" width="6" height="58" fill="#14B8A6"/>
+    <text x="450" y="160" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF" letter-spacing="0.5">QLD QBCC · PLUMBING LICENCE</text>
+    <text x="450" y="180" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" fill="#B8C2D1">Class-2 gas work scoped per tenant · tenant_licences table</text>
+
+    <!-- Badge 3: GST -->
+    <rect x="430" y="206" width="380" height="58" fill="#1B2433" stroke="#2D3A4F" stroke-width="2" rx="2"/>
+    <rect x="430" y="206" width="6" height="58" fill="#B8C2D1"/>
+    <text x="450" y="228" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF" letter-spacing="0.5">AU GST · 10% INCLUSIVE DISPLAY</text>
+    <text x="450" y="248" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" fill="#B8C2D1">Stored ex-GST · rendered inc-GST on Good / Better / Best</text>
+
+    <!-- Badge 4: AS/NZS standards -->
+    <rect x="430" y="274" width="380" height="58" fill="#1B2433" stroke="#2D3A4F" stroke-width="2" rx="2"/>
+    <rect x="430" y="274" width="6" height="58" fill="#B8C2D1"/>
+    <text x="450" y="296" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF" letter-spacing="0.5">AS/NZS 3000 · AS/NZS 5601</text>
+    <text x="450" y="316" font-family="Manrope, Inter, system-ui, sans-serif" font-size="12" fill="#B8C2D1">Per-assembly rules encoded in shared_assemblies</text>
+
+    <!-- Badge 5: Auto-route to inspection (HERO) -->
+    <rect x="430" y="342" width="380" height="40" fill="#FF5A1F" stroke="#FF5A1F" stroke-width="2" rx="2"/>
+    <text x="450" y="368" font-family="Manrope, Inter, system-ui, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF" letter-spacing="0.5">⟶ AUTO-ROUTE TO $99 INSPECTION ON REGULATED WORK</text>
+
+    <!-- Connector lines from map pins to badges -->
+    <!-- NSW pin (300,248) → NECA badge (430,99) -->
+    <path d="M 307 248 Q 380 180 430 99" fill="none" stroke="#FF5A1F" stroke-width="1.5" marker-end="url(#arrow-08)"/>
+
+    <!-- QLD pin (295,172) → QBCC badge (430,167) -->
+    <path d="M 302 172 Q 365 170 430 167" fill="none" stroke="#14B8A6" stroke-width="1.5" marker-end="url(#arrow-08-muted)"/>
+
+    <!-- Both → GST + AS/NZS (shared) -->
+    <line x1="345" y1="220" x2="430" y2="235" stroke="#2D3A4F" stroke-width="1" marker-end="url(#arrow-08-muted)"/>
+    <line x1="345" y1="240" x2="430" y2="303" stroke="#2D3A4F" stroke-width="1" marker-end="url(#arrow-08-muted)"/>
+
+    <!-- AS/NZS → Auto-route arrow -->
+    <line x1="620" y1="332" x2="620" y2="342" stroke="#FF5A1F" stroke-width="2" marker-end="url(#arrow-08)"/>
+  </svg>
+  <figcaption class="diagram-caption">State-specific licence, GST, and AS/NZS rules are first-class data — regulated work routes to a paid inspection instead of an unsafe auto-quote.</figcaption>
+</figure>
+
+    <div class="feature-grid">
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Per-Trade Licence Compliance Display</h3>
+        <p class="feature-description">Every customer quote footer shows the issuing tradie's licence type, number, state, GST status, quote ref, and an Australian Consumer Law disclaimer — pulled from the tenant's own licence record, never auto-picked. Multi-trade tenants store separate NECA (electrical) and Fair Trading / QBCC (plumbing) registrations.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Electrical NSW + Plumbing QLD Routing</h3>
+        <p class="feature-description">Two parallel single-trade pilots cover electrical under NSW/NECA rules and plumbing under QLD/QBCC rules, routed automatically by the trade column on every intake. Trade-specific prompts and assemblies are scoped throughout the stack.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Gas Hot Water → Always Inspection (AS/NZS 5601)</h3>
+        <p class="feature-description">Gas HWS installs are flagged always-inspection per Australian Standard AS/NZS 5601, forcing the $99 site-visit route regardless of pricing grounding. Electric and heat-pump HWS continue to auto-quote normally.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">GST Pricing Convention (Stored Ex, Displayed Inc)</h3>
+        <p class="feature-description">Currency is stored ex-GST internally and rendered inc-GST on customer-facing surfaces per Australian convention, with a per-tenant GST registration toggle controlling whether GST is rolled into displayed totals. The right number always lands in front of the homeowner.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Twilio AU Long-Code SMS</h3>
+        <p class="feature-description">SMS runs on Twilio Australian mobile long codes with a SMS-first / WhatsApp-fallback dispatcher. Dev runs on +61 481 613 464; tenant numbers are provisioned per tradie on activation.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill partial">Partial</span></div>
+        </div>
+        <h3 class="feature-name">AU Number Provisioning On Activation</h3>
+        <p class="feature-description">Tradie activation automatically purchases an Australian Twilio number and creates a per-tenant Vapi voice assistant bound to that number. The whole chain is one click from the onboarding wizard.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">AU/NZ Formatting Conventions</h3>
+        <p class="feature-description">Dates, addresses, language, and currency follow Australian and New Zealand conventions throughout the customer-facing surfaces. No accidental MM/DD/YYYY or $-without-context.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill live">Live</span></div>
+        </div>
+        <h3 class="feature-name">Plumbing Pricing Margin Model</h3>
+        <p class="feature-description">Plumbing uses a distinct $120/hr × 15-20% markup model (vs electrical's $110/hr × 28-36%) reflecting actual trade economics. The 15% early-bird discount cap exists specifically to protect plumbing margins.</p>
+      </article>
+
+      <article class="feature-card">
+        <div class="feature-card-header">
+          <div class="feature-card-status-row"><span class="status-pill partial">Partial</span></div>
+          <span class="metric-pill">23 tables locked down</span>
+        </div>
+        <h3 class="feature-name">Row-Level Security (Deny-By-Default)</h3>
+        <p class="feature-description">Phase 1 row-level security is enabled across 23 public database tables with deny-by-default policies, closing data-leak surfaces on tenants, customers, SMS conversations, and signup intents. Anon-key smoke tests confirm zero rows visible; per-tenant positive policies are phase 2.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== FOOTER ==================== -->
+<footer class="footer-block">
+  <div class="topo-bg" aria-hidden="true">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 600" preserveAspectRatio="xMidYMid slice">
+      <g fill="none" stroke="#14B8A6" stroke-width="1" opacity="0.45">
+        <path d="M0,120 Q200,80 400,100 T800,90 T1200,110 L1400,100"/>
+        <path d="M0,180 Q200,150 400,165 T800,160 T1200,180 L1400,170"/>
+        <path d="M0,250 Q200,220 400,235 T800,230 T1200,250 L1400,240"/>
+        <path d="M0,330 Q200,300 400,315 T800,310 T1200,330 L1400,320"/>
+        <path d="M0,420 Q200,390 400,405 T800,400 T1200,420 L1400,410"/>
+        <path d="M0,500 Q200,470 400,485 T800,480 T1200,500 L1400,490"/>
+      </g>
+    </svg>
+  </div>
+
+  <div class="container">
+    <div class="footer-content">
+      <div class="footer-eyebrow">
+        <span class="footer-eyebrow-bar"></span>
+        THE ASK
+      </div>
+      <h2 class="footer-headline">BUILT FOR <span class="accent-text">AUSTRALIAN TRADES.</span></h2>
+
+      <div class="footer-closing-grid">
+        <p class="footer-ask">Two channels live. Four tenants paying attention. The grounding validator is the moat, the $99 inspection is the safe failure mode, and trades-as-data is the path to <strong>twenty trades by the end of FY27.</strong> The product is live. The next conversation is yours.</p>
+      </div>
+
+      <div class="footer-meta-grid">
+        <div>
+          <div class="footer-meta-item-label">PRODUCTION URL</div>
+          <div class="footer-meta-item-value">quote-mate-rho.vercel.app</div>
+        </div>
+        <div>
+          <div class="footer-meta-item-label">BRIEF DATE</div>
+          <div class="footer-meta-item-value">29 MAY 2026</div>
+        </div>
+        <div>
+          <div class="footer-meta-item-label">STATUS</div>
+          <div class="footer-meta-item-value">LIVE IN PRODUCTION</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cta-bar">
+    <div class="cta-bar-text">QUOTEMATE / AI QUOTING FOR AUSTRALIAN TRADIES</div>
+    <div class="cta-bar-url">QUOTE-MATE-RHO.VERCEL.APP</div>
+  </div>
+</footer>
+
+</body>
+</html>

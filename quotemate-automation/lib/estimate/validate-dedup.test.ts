@@ -234,3 +234,83 @@ describe('D-1: duplicate-line guard', () => {
     expect(r.valid).toBe(false)
   })
 })
+
+// 2026-05-29 regression — Atomic Electrical quotes 5ad1ca16 / ca7ded23
+// shipped with the Brilliant Halo downlight appearing as both raw $19.50
+// (source: "material") and marked-up $22.23 (source: "material:<id>"). D-1
+// SHOULD have caught the dup but the loose-source row's reverse-anchor
+// failed to resolve to the catalogue UUID. This test pins the reverse-
+// anchor: when the candidate set carries BOTH the raw and the marked-up
+// variant for a tenant_material_catalogue row (which buildCandidatePrices
+// already emits via the 0% + default-markup multipliers), a loose-source
+// raw-price row must resolve to the same UUID anchor as the strict-source
+// marked-up row in the same tier — and thus be flagged as a duplicate.
+describe('D-1 reverse-anchor resolves loose-source raw-price tenant catalogue rows', () => {
+  // Atomic Electrical: 14% markup. Raw $19.50 × 1.14 = $22.23 exactly.
+  const atomicBook: PricingBookForValidation = {
+    hourly_rate: 110,
+    apprentice_rate: 80,
+    call_out_minimum: 150,
+    default_markup_pct: 14,
+    min_labour_hours: 2,
+  }
+  const atomicCandidates = buildCandidatePrices(
+    [
+      {
+        id: '7cae921a-fa42-4755-a915-c6eb6e951088',
+        name: 'Brilliant Halo 90 9W LED downlight',
+        price: 19.50,
+        category: 'downlight',
+      },
+    ],
+    [],
+    atomicBook,
+  )
+
+  it('flags loose-source raw-price row as duplicate of UUID-anchored marked-up row', () => {
+    const r = validateQuoteGrounding(
+      {
+        needs_inspection: false,
+        good: {
+          line_items: [
+            // Strict UUID anchor at the marked-up price (the legitimate line).
+            {
+              description: 'Brilliant Halo 90 9W LED downlight',
+              quantity: 10,
+              unit: 'each',
+              unit_price_ex_gst: 22.23,
+              source: 'material:7cae921a-fa42-4755-a915-c6eb6e951088',
+            },
+            // Loose source at the RAW catalogue price — this is the dup that
+            // shipped on Atomic 5ad1ca16 / ca7ded23. D-1 must catch it.
+            {
+              description: 'Brilliant Halo 90 9W LED downlight',
+              quantity: 10,
+              unit: 'each',
+              unit_price_ex_gst: 19.50,
+              source: 'material',
+            },
+            {
+              description: 'Electrician labour',
+              quantity: 3,
+              unit: 'hr',
+              unit_price_ex_gst: 110,
+              source: 'labour',
+            },
+          ],
+        },
+        better: null,
+        best: null,
+      },
+      atomicBook,
+      atomicCandidates,
+    )
+    expect(r.valid).toBe(false)
+    if (!r.valid) {
+      const dup = r.failures.find((f) => f.expected.includes('D-1 dedup'))
+      expect(dup).toBeDefined()
+      // The LOOSE-source line is the second one (index 1) — that's the dup.
+      expect(dup?.lineIndex).toBe(1)
+    }
+  })
+})

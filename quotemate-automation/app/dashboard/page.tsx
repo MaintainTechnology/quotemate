@@ -38,9 +38,11 @@ import {
   Check,
   Banknote,
   Shield,
+  Home,
   type LucideProps,
 } from 'lucide-react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
+import { tenantHasRoofingTrade } from '@/lib/roofing/tenant'
 import { ErrorBanner, Field, INPUT } from '../signup/page'
 
 type NavIcon = ComponentType<LucideProps>
@@ -102,6 +104,11 @@ type Pricing = {
   /** Migration 078 — dollar threshold (inc-GST) used only when
    *  review_policy === 'review_over_threshold'. */
   review_threshold_inc_gst?: number | string | null
+  /** Migration 079 — opt-in toggle for the 2-hour customer follow-up
+   *  check-in cron. Fanned out across every pricing_book row this tenant
+   *  owns by /api/tenant/me PATCH (same shape as quote_display +
+   *  review_policy). Default false. */
+  followup_2h_enabled?: boolean | null
 } | null
 
 type ServiceOffering = {
@@ -228,6 +235,8 @@ type Tab =
   | 'quotes'
   | 'chats'
   | 'followups'
+  /** v10 — only rendered when tenant.trades includes 'roofing'. */
+  | 'roofing'
 
 /** SMS conversation summary returned by /api/tenant/chats. Drives the
  *  Chats tab — communication history including leads that didn't
@@ -534,7 +543,12 @@ export default function DashboardPage() {
       tenantSubtitle={profileSubtitle || null}
     >
       {/* Mobile tab strip (< lg). Hidden on desktop — sidebar takes over. */}
-      <MobileTabBar tab={tab} setTab={setTab} quoteCount={data.quotes.length} />
+      <MobileTabBar
+        tab={tab}
+        setTab={setTab}
+        quoteCount={data.quotes.length}
+        hasRoofingTrade={tenantHasRoofingTrade(data.tenant.trades as unknown as string[])}
+      />
 
       {/* Desktop two-column grid: sidebar | content. On mobile this
           collapses to single-column with MobileTabBar handling section
@@ -542,7 +556,13 @@ export default function DashboardPage() {
           nav — no big greeting block above so the sidebar aligns flush
           with the KPI row. */}
       <div className="mt-4 lg:mt-6 lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-8">
-        <Sidebar tab={tab} setTab={setTab} quoteCount={data.quotes.length} isAdmin={isAdmin} />
+        <Sidebar
+          tab={tab}
+          setTab={setTab}
+          quoteCount={data.quotes.length}
+          isAdmin={isAdmin}
+          hasRoofingTrade={tenantHasRoofingTrade(data.tenant.trades as unknown as string[])}
+        />
         <section className="mt-6 lg:mt-0 pb-20 min-w-0">
           {/* `key={tab}` forces a tear-down + remount when the user
               switches tabs, so the inner fade-in keyframe re-fires.
@@ -592,6 +612,7 @@ export default function DashboardPage() {
                 Array.isArray(data.tenant.trades) && data.tenant.trades.length > 1
               } />
             )}
+            {tab === 'roofing' && <RoofingHubTab />}
           </div>
         </section>
       </div>
@@ -793,12 +814,17 @@ type NavItem = {
   count?: number | null
 }
 
-function buildNav(quoteCount: number): NavItem[] {
-  return [
+function buildNav(quoteCount: number, hasRoofingTrade = false): NavItem[] {
+  const items: NavItem[] = [
     { tab: 'overview', label: 'Overview', icon: LayoutDashboard },
     { tab: 'quotes', label: 'Quotes', icon: FileText, count: quoteCount },
     { tab: 'followups', label: 'Follow-ups', icon: PhoneCall },
     { tab: 'chats', label: 'Chats', icon: MessageSquare },
+  ]
+  if (hasRoofingTrade) {
+    items.push({ tab: 'roofing', label: 'Roof', icon: Home })
+  }
+  items.push(
     { tab: 'account', label: 'Account', icon: User },
     { tab: 'payouts', label: 'Payouts', icon: Banknote },
     { tab: 'pricing', label: 'Pricing', icon: DollarSign },
@@ -806,14 +832,24 @@ function buildNav(quoteCount: number): NavItem[] {
     { tab: 'catalogue', label: 'Catalogue', icon: Package },
     { tab: 'estimating', label: 'Estimating', icon: Calculator },
     { tab: 'recipes', label: 'Recipes', icon: ClipboardList },
-  ]
+  )
+  return items
 }
+
+// tenantHasRoofingTrade lives in @/lib/roofing/tenant — imported above
+// so it stays unit-testable (vitest can't import this file directly
+// because it's a React 'use client' module).
 
 // Sidebar nav grouped into "Daily work" (what a tradie checks every
 // day) and "Setup" (config touched occasionally). Tab order matches
 // buildNav so MobileTabBar's flat scroll stays consistent.
 const SIDEBAR_GROUPS: { label: string; tabs: Tab[] }[] = [
-  { label: 'Daily work', tabs: ['overview', 'quotes', 'followups', 'chats'] },
+  // 'roofing' is listed here but the buildNav filter only emits a tab
+  // entry when the tenant has roofing in trades[], so on non-roofing
+  // tenants the byTab.get('roofing') lookup returns undefined and the
+  // sidebar quietly skips the row. No tenant-specific filtering needed
+  // in this layout list.
+  { label: 'Daily work', tabs: ['overview', 'quotes', 'followups', 'chats', 'roofing'] },
   {
     label: 'Setup',
     tabs: ['account', 'payouts', 'pricing', 'services', 'catalogue', 'estimating', 'recipes'],
@@ -825,13 +861,15 @@ function Sidebar({
   setTab,
   quoteCount,
   isAdmin,
+  hasRoofingTrade = false,
 }: {
   tab: Tab
   setTab: (t: Tab) => void
   quoteCount: number
   isAdmin: boolean
+  hasRoofingTrade?: boolean
 }) {
-  const items = buildNav(quoteCount)
+  const items = buildNav(quoteCount, hasRoofingTrade)
   const byTab = new Map(items.map((i) => [i.tab, i]))
   return (
     <aside className="hidden lg:block">
@@ -936,12 +974,14 @@ function MobileTabBar({
   tab,
   setTab,
   quoteCount,
+  hasRoofingTrade = false,
 }: {
   tab: Tab
   setTab: (t: Tab) => void
   quoteCount: number
+  hasRoofingTrade?: boolean
 }) {
-  const items = buildNav(quoteCount)
+  const items = buildNav(quoteCount, hasRoofingTrade)
   return (
     <nav
       // Horizontal-scroll bar keeps all six tabs on one line on
@@ -1030,6 +1070,10 @@ const TAB_META: Record<
   recipes: {
     title: 'Recipes',
     desc: 'Reusable job templates that bundle the materials and labour for a common job.',
+  },
+  roofing: {
+    title: 'Roof tools',
+    desc: 'Measure any address, apply your $/m² rate, get a three-tier price band ready to send.',
   },
 }
 
@@ -2607,6 +2651,10 @@ function PricingTab({
           display card because they're the two "how quotes leave the
           system" controls; tradies tend to set them together. */}
       <ReviewPolicyCard books={books} onSave={onSave} />
+      {/* Mig 079 — customer 2-hour follow-up check-in. Toggle sits on the
+          Pricing tab alongside the other "how quotes leave the system"
+          controls (review_policy, quote_display) — same scope, same UX. */}
+      <Followup2hCard books={books} onSave={onSave} />
       {/* A5 — invoice-history calibration. Upload past invoices, see how
           our recipe lines up with what you actually charged, accept a
           suggested hourly-rate adjustment. */}
@@ -2772,6 +2820,104 @@ function ReviewPolicyCard({
             className="font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-4 py-2 border border-accent text-accent hover:bg-accent/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {submitting ? 'Saving…' : 'Save policy'}
+          </button>
+          {savedAt && Date.now() - savedAt < 4000 && (
+            <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-accent">
+              ✓ Saved
+            </span>
+          )}
+        </div>
+      </form>
+    </Card>
+  )
+}
+
+/**
+ * Migration 079 — customer 2-hour follow-up check-in.
+ *
+ * When ON: any quote sent to a customer that hasn't been replied to
+ * within 2 hours receives ONE automated friendly check-in SMS. Per-quote
+ * keyed (a customer with 5 quotes gets 5 separate check-ins). Driven by
+ * /api/cron/followup-2h (every 15 minutes).
+ *
+ * Reads from row 0 (the flag is fanned out identically across the
+ * tenant's pricing_book rows by /api/tenant/me PATCH). Saves via
+ * PATCH { followup_2h_enabled: boolean }. Default OFF so existing
+ * tradies opt in deliberately.
+ */
+function Followup2hCard({
+  books,
+  onSave,
+}: {
+  books: PricingBook[]
+  onSave: (payload: Record<string, unknown>) => Promise<void>
+}) {
+  const current = useMemo<boolean>(() => {
+    return Boolean(books[0]?.followup_2h_enabled)
+  }, [books])
+
+  const [enabled, setEnabled] = useState<boolean>(current)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [savedAt, setSavedAt] = useState<number | null>(null)
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setError(null)
+    setSubmitting(true)
+    try {
+      await onSave({ followup_2h_enabled: enabled })
+      setSavedAt(Date.now())
+    } catch (err: any) {
+      setError(err?.message ?? 'Save failed')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (books.length === 0) return null
+  const dirty = enabled !== current
+
+  return (
+    <Card
+      title="2-hour follow-up check-in"
+      subtitle="Auto-send a friendly 'just checking in' SMS to customers who haven't replied within 2 hours of receiving their quote."
+    >
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <Field label="Auto check-in">
+          <label className="inline-flex items-start gap-3 cursor-pointer mt-2">
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={(e) => setEnabled(e.target.checked)}
+              className="mt-1 h-5 w-5 accent-accent"
+            />
+            <span className="text-sm">
+              <span className="font-semibold text-text-pri">
+                Send a 2-hour check-in SMS automatically
+              </span>
+              <span className="block text-xs text-text-dim mt-0.5">
+                One nudge per quote, only if the customer hasn't replied.
+                Won't fire for inspection-route quotes or quotes already booked/paid.
+                If the same person has 5 quotes, they get 5 separate check-ins.
+              </span>
+            </span>
+          </label>
+        </Field>
+
+        {error ? (
+          <div className="bg-warning/10 border border-warning/40 px-3 py-2 text-xs text-warning">
+            {error}
+          </div>
+        ) : null}
+
+        <div className="flex items-center gap-3">
+          <button
+            type="submit"
+            disabled={submitting || !dirty}
+            className="font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-4 py-2 border border-accent text-accent hover:bg-accent/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {submitting ? 'Saving…' : 'Save'}
           </button>
           {savedAt && Date.now() - savedAt < 4000 && (
             <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-accent">
@@ -9990,6 +10136,8 @@ function tabLabel(t: Tab): string {
       return 'Estimating'
     case 'recipes':
       return 'Recipes'
+    case 'roofing':
+      return 'Roof'
   }
 }
 
@@ -10039,4 +10187,84 @@ function formatTime(iso: string): string {
   } catch {
     return ''
   }
+}
+
+// ─── Roofing hub tab (v10) ─────────────────────────────────────────
+// Only rendered when tenant.trades includes 'roofing'. The hub itself
+// is intentionally minimal — the heavy lifting lives at
+// /dashboard/roofing/measure, kept as a separate route so it gets its
+// own URL + full-screen real estate. Future hub additions: recent
+// measurement history, coverage indicator, "Generate quote from
+// measurement" CTAs.
+
+function RoofingHubTab() {
+  return (
+    <div className="space-y-7">
+      <div>
+        <h2 className="font-extrabold uppercase tracking-[-0.025em] text-[clamp(1.5rem,2.6vw,2.25rem)] leading-[1.1] text-text-pri">
+          Roof tools
+        </h2>
+        <p className="mt-3 max-w-2xl text-base leading-relaxed text-text-sec">
+          Type any address, get a Geoscape-derived sloped area plus a
+          three-tier price band at your current rates. Phase 1 — every
+          roofing quote needs your sign-off before send.
+        </p>
+      </div>
+
+      <Link
+        href="/dashboard/roofing/measure"
+        className="group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
+      >
+        <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">
+          01
+        </span>
+        <div className="flex-1">
+          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
+            Address measurement
+          </div>
+          <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+            Measure a roof
+          </h3>
+          <p className="mt-4 text-base leading-relaxed text-text-sec">
+            Address → Geoscape lookup → sloped m², roof form, hip / valley
+            count, storeys. Apply your $/m² rate and stack multi-storey +
+            asbestos loadings. Returns Good / Better / Best price tiers
+            ready to turn into a customer quote.
+          </p>
+          <div className="mt-6 inline-flex items-center gap-2 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-accent transition-transform group-hover:translate-x-1">
+            Open measurement tool <span aria-hidden="true">&rarr;</span>
+          </div>
+        </div>
+      </Link>
+
+      <div className="border border-ink-line bg-ink-card p-7 sm:p-9">
+        <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
+          What's live in Phase 1
+        </div>
+        <ul className="mt-4 space-y-2 text-base leading-relaxed text-text-sec">
+          <li className="flex items-baseline gap-3">
+            <span className="text-accent">·</span>
+            <span>Geoscape Buildings precomputed footprint + roof form lookup</span>
+          </li>
+          <li className="flex items-baseline gap-3">
+            <span className="text-accent">·</span>
+            <span>Customer-declared pitch (shallow / standard / steep)</span>
+          </li>
+          <li className="flex items-baseline gap-3">
+            <span className="text-accent">·</span>
+            <span>Deterministic $/m² × area × loadings — no Opus on the money path</span>
+          </li>
+          <li className="flex items-baseline gap-3">
+            <span className="text-accent">·</span>
+            <span>Auto-routes to inspection on cement-sheet / pre-1990 / complex form / 3+ storeys</span>
+          </li>
+        </ul>
+        <p className="mt-5 text-sm text-text-dim">
+          Phase 2 — open Australian LiDAR (ELVIS + PDAL + Open3D) replaces
+          Geoscape behind the same interface for true 3D area + accurate
+          hip / valley counts. See <code className="font-mono">docs/strategy.md</code> v10.
+        </p>
+      </div>
+    </div>
+  )
 }

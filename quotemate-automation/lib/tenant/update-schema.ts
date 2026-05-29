@@ -118,6 +118,12 @@ export const UpdateSchema = z.object({
     .enum(['auto_send', 'always_review', 'review_over_threshold'])
     .optional(),
   review_threshold_inc_gst: z.coerce.number().min(0).max(1_000_000).optional(),
+  // Migration 079 — 2-hour customer follow-up check-in toggle.
+  // Trade-agnostic; fanned out to every pricing_book row this tenant
+  // owns by /api/tenant/me PATCH (same pattern as review_policy and
+  // quote_display). Default-off per the migration so existing tenants
+  // don't start auto-texting customers without explicit opt-in.
+  followup_2h_enabled: z.boolean().optional(),
 })
 
 // Create/update payload for a single tenant_custom_assemblies row.

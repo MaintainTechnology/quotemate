@@ -511,3 +511,241 @@ describe('applyChosenProduct — Jon\'s scenario (6 downlights, GST maths)', () 
     expect(incGst(t.subtotal_ex_gst)).toBe(818.4) // ≈ $820
   })
 })
+
+// 2026-05-29 regression — Atomic Electrical quotes 5ad1ca16 / ca7ded23
+// shipped with the chosen Brilliant Halo downlight appearing TWICE in the
+// `good` tier: once at raw $19.50 (source: "material") and once at
+// marked-up $22.23 (source: "material:7cae921a-..."). Opus emitted the
+// strict UUID-anchored line at the marked-up price (correct). WP9's
+// applyChosenProduct then walked the items list, found a DIFFERENT
+// non-sundry material line (cable / mount accessory), and rewrote THAT
+// line with the chosen product fields — producing the duplicate. The
+// validator's D-1 dedup ran BEFORE WP9, so it never saw the dup.
+//
+// These tests pin the fix: applyChosenProduct must (a) overwrite the
+// line that already references the chosen catalogue_id when one exists
+// (idempotent), (b) post-rewrite, purge any sibling line that points at
+// the same catalogue_id, and (c) emit the same UUID-anchored source
+// shape D-1 understands so any future regression is caught.
+//
+// All three tests FAIL on the pre-fix code (the headline-overwrite logic
+// always picks the first non-sundry line, never reads catalogue_id off
+// existing lines, and never dedups after rewrite). They PASS with the fix.
+describe('applyChosenProduct — idempotent / dedup-aware (Atomic 5ad1ca16/ca7ded23 regression)', () => {
+  it('does not duplicate when Opus already emitted the chosen product at marked-up price', () => {
+    // Exact shape of the Atomic 5ad1ca16 / ca7ded23 incident:
+    //   line 0: chosen downlight at the MARKED-UP price (UUID-anchored)
+    //   line 1: unrelated TPS cable (non-sundry — would be the headline
+    //           pick if we used the old "first non-sundry" heuristic)
+    //   line 2: labour
+    const draft = {
+      good: {
+        subtotal_ex_gst: 3217.30,
+        line_items: [
+          {
+            description: 'Brilliant Halo 90 9W LED downlight',
+            source: 'material:7cae921a-fa42-4755-a915-c6eb6e951088',
+            unit: 'each',
+            quantity: 10,
+            unit_price_ex_gst: 22.23,
+            total_ex_gst: 222.30,
+            catalogue_id: '7cae921a-fa42-4755-a915-c6eb6e951088',
+          },
+          {
+            description: 'TPS cable, 100m',
+            source: 'material',
+            unit: 'each',
+            quantity: 1,
+            unit_price_ex_gst: 150,
+            total_ex_gst: 150,
+          },
+          {
+            description: 'Electrician labour',
+            source: 'labour',
+            unit: 'hr',
+            quantity: 25.45,
+            unit_price_ex_gst: 110,
+            total_ex_gst: 2800,
+          },
+        ],
+      },
+    }
+    const r = applyChosenProduct(draft, {
+      catalogue_id: '7cae921a-fa42-4755-a915-c6eb6e951088',
+      name: 'Brilliant Halo 90 9W LED downlight',
+      price_ex_gst: 19.50,
+    })
+    expect(r.applied).toEqual(['good'])
+    const items = r.draft.good.line_items
+    // Critical: still THREE lines, not four. No dup.
+    expect(items.length).toBe(3)
+    // The downlight line is updated IN PLACE to the chosen catalogue price.
+    const dl = items[0]
+    expect(dl.description).toBe('Brilliant Halo 90 9W LED downlight')
+    expect(dl.unit_price_ex_gst).toBe(19.50)
+    expect(dl.quantity).toBe(10)
+    expect(dl.total_ex_gst).toBe(195)
+    expect(dl.catalogue_id).toBe('7cae921a-fa42-4755-a915-c6eb6e951088')
+    // UUID-anchored source — D-1 catches future regressions on first pass.
+    expect(dl.source).toBe('material:7cae921a-fa42-4755-a915-c6eb6e951088')
+    // The cable line is preserved untouched.
+    expect(items[1].description).toBe('TPS cable, 100m')
+    expect(items[1].unit_price_ex_gst).toBe(150)
+    expect(items[1].total_ex_gst).toBe(150)
+    // Labour preserved untouched.
+    expect(items[2].source).toBe('labour')
+    expect(items[2].total_ex_gst).toBe(2800)
+    // Subtotal recomputed cleanly from the deduplicated items.
+    expect(r.draft.good.subtotal_ex_gst).toBe(195 + 150 + 2800)
+  })
+
+  it('still rewrites the headline line when the chosen product is NOT yet in the tier', () => {
+    // Today's behaviour — proves we did not break the no-dup case.
+    const draft = {
+      good: {
+        line_items: [
+          {
+            description: 'TPS cable, 100m',
+            source: 'material',
+            unit: 'each',
+            quantity: 1,
+            unit_price_ex_gst: 150,
+            total_ex_gst: 150,
+          },
+          {
+            description: 'Electrician labour',
+            source: 'labour',
+            unit: 'hr',
+            quantity: 3,
+            unit_price_ex_gst: 110,
+            total_ex_gst: 330,
+          },
+        ],
+      },
+    }
+    const r = applyChosenProduct(draft, {
+      catalogue_id: '7cae921a-fa42-4755-a915-c6eb6e951088',
+      name: 'Brilliant Halo 90 9W LED downlight',
+      price_ex_gst: 19.50,
+    })
+    expect(r.applied).toEqual(['good'])
+    const items = r.draft.good.line_items
+    expect(items.length).toBe(2)
+    // The cable (headline non-sundry) line is rewritten to the downlight.
+    expect(items[0].description).toBe('Brilliant Halo 90 9W LED downlight')
+    expect(items[0].unit_price_ex_gst).toBe(19.50)
+    expect(items[0].catalogue_id).toBe('7cae921a-fa42-4755-a915-c6eb6e951088')
+    expect(items[0].source).toBe('material:7cae921a-fa42-4755-a915-c6eb6e951088')
+    // Labour untouched.
+    expect(items[1].source).toBe('labour')
+  })
+
+  it('removes any third line that also references the chosen catalogue_id', () => {
+    // Three lines all keyed to the same catalogue product (one strict
+    // UUID, one loose raw, one decorated "(supplied)"). Post-apply, only
+    // the one rewritten line survives.
+    const id = '7cae921a-fa42-4755-a915-c6eb6e951088'
+    const draft = {
+      good: {
+        line_items: [
+          {
+            description: 'Brilliant Halo 90 9W LED downlight',
+            source: `material:${id}`,
+            unit: 'each',
+            quantity: 10,
+            unit_price_ex_gst: 22.23,
+            total_ex_gst: 222.30,
+            catalogue_id: id,
+          },
+          {
+            description: 'Brilliant Halo 90 9W LED downlight',
+            source: 'material',
+            unit: 'each',
+            quantity: 10,
+            unit_price_ex_gst: 19.50,
+            total_ex_gst: 195,
+            catalogue_id: id,
+          },
+          {
+            description: 'Brilliant Halo 90 9W LED downlight (supplied)',
+            source: `material:${id}`,
+            unit: 'each',
+            quantity: 10,
+            unit_price_ex_gst: 22.23,
+            total_ex_gst: 222.30,
+          },
+          {
+            description: 'Electrician labour',
+            source: 'labour',
+            unit: 'hr',
+            quantity: 3,
+            unit_price_ex_gst: 110,
+            total_ex_gst: 330,
+          },
+        ],
+      },
+    }
+    const r = applyChosenProduct(draft, {
+      catalogue_id: id,
+      name: 'Brilliant Halo 90 9W LED downlight',
+      price_ex_gst: 19.50,
+    })
+    expect(r.applied).toEqual(['good'])
+    const items = r.draft.good.line_items
+    // Two lines remain: the rewritten downlight + labour.
+    expect(items.length).toBe(2)
+    const dlMatches = items.filter(
+      (li: any) => li.catalogue_id === id || String(li.source).endsWith(id),
+    )
+    expect(dlMatches.length).toBe(1)
+    expect(dlMatches[0].unit_price_ex_gst).toBe(19.50)
+    expect(dlMatches[0].total_ex_gst).toBe(195)
+    expect(items[items.length - 1].source).toBe('labour')
+    expect(r.draft.good.subtotal_ex_gst).toBe(195 + 330)
+  })
+
+  it('preserves the existing sundries-skip behaviour when the chosen product is NOT yet in the tier', () => {
+    // The original "headline = non-sundry preferred" heuristic must still
+    // apply when no existing line references the chosen product, so a
+    // sundries line isn't accidentally rewritten into the chosen product.
+    const draft = {
+      better: {
+        line_items: [
+          {
+            description: 'Plumbing sundries, seals + clips',
+            source: 'material',
+            quantity: 1,
+            unit_price_ex_gst: 12,
+            total_ex_gst: 12,
+          },
+          {
+            description: 'Generic downlight',
+            source: 'material',
+            quantity: 2,
+            unit_price_ex_gst: 30,
+            total_ex_gst: 60,
+          },
+          {
+            description: 'Labour',
+            source: 'labour',
+            quantity: 1,
+            unit_price_ex_gst: 110,
+            total_ex_gst: 110,
+          },
+        ],
+      },
+    }
+    const r = applyChosenProduct(draft, {
+      catalogue_id: 'P-89',
+      name: 'Black Fireflies',
+      price_ex_gst: 89,
+    })
+    expect(r.applied).toEqual(['better'])
+    const items = r.draft.better.line_items
+    // Sundries kept; the non-sundry downlight line is rewritten in place.
+    expect(items[0].description).toBe('Plumbing sundries, seals + clips')
+    expect(items[1].description).toBe('Black Fireflies')
+    expect(items[1].unit_price_ex_gst).toBe(89)
+    expect(items[2].source).toBe('labour')
+  })
+})
