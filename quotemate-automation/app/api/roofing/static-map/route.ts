@@ -114,8 +114,27 @@ export async function GET(req: Request) {
     )
   }
   if (!res.ok) {
+    // Google's 403 / 400 responses carry the actual reason in the body
+    // (e.g. "API key not valid", "API project not authorized for the
+    // Maps Static API", "Billing has not been enabled"). Surface it.
+    let body = ''
+    try {
+      body = (await res.text()).slice(0, 500)
+    } catch {
+      /* ignore */
+    }
     return Response.json(
-      { ok: false, error: `Google Maps Static returned ${res.status}` },
+      {
+        ok: false,
+        error: `Google Maps Static returned ${res.status}`,
+        upstreamBody: body,
+        hint:
+          res.status === 403
+            ? "Google 403 typically means: (a) the Maps Static API isn't enabled on your Google Cloud project, (b) billing isn't enabled (required even for free tier), or (c) the key has an HTTP-referer / IP restriction blocking server-to-server calls. Enable Maps Static API in console.cloud.google.com → APIs & Services → Library, attach a billing account, and ensure the key has 'No restrictions' or 'IP addresses' that include your dev/server IP."
+            : res.status === 400
+              ? 'Bad request — usually a malformed query (address too long, invalid markers, etc.).'
+              : 'Check Google Cloud Console for the project status.',
+      },
       { status: 502 },
     )
   }
