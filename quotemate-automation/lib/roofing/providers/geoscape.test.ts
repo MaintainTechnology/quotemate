@@ -8,9 +8,12 @@ import {
   buildingResponseToMetrics,
   estimateHipsFromForm,
   estimateValleysFromForm,
+  friendlyFetchError,
   isGeoscapeBuildingBody,
+  normaliseBuildingBody,
   normaliseGeoscapeRoofForm,
   pickAddressId,
+  pickPolygon,
   polygonAreaM2,
 } from './geoscape'
 import type { GeoJSONPolygon } from '../types'
@@ -43,10 +46,100 @@ describe('pickAddressId — envelope variations', () => {
   it('reads { results: [ { addressId } ] }', () => {
     expect(pickAddressId({ results: [{ addressId: 'r1' }] })).toBe('r1')
   })
+  it('reads GeoJSON FeatureCollection { features: [{ properties: { addressId } }] }', () => {
+    expect(
+      pickAddressId({
+        type: 'FeatureCollection',
+        features: [{ type: 'Feature', properties: { addressId: 'g1' } }],
+      }),
+    ).toBe('g1')
+  })
+  it('reads { data: [{ pid }] } — PSMA legacy field', () => {
+    expect(pickAddressId({ data: [{ pid: 'p1' }] })).toBe('p1')
+  })
   it('returns null on empty / unparsable shapes', () => {
     expect(pickAddressId({})).toBeNull()
     expect(pickAddressId(null)).toBeNull()
     expect(pickAddressId({ data: [] })).toBeNull()
+  })
+})
+
+describe('pickPolygon — lenient field lookup', () => {
+  it('finds a polygon under `footprint`', () => {
+    expect(pickPolygon({ footprint: SQUARE_10M })).toEqual(SQUARE_10M)
+  })
+  it('finds a polygon under `geometry` (GeoJSON Feature shape)', () => {
+    expect(pickPolygon({ geometry: SQUARE_10M })).toEqual(SQUARE_10M)
+  })
+  it('finds a polygon under `polygon` (PSMA legacy)', () => {
+    expect(pickPolygon({ polygon: SQUARE_10M })).toEqual(SQUARE_10M)
+  })
+  it('finds a polygon under `roofOutline` (Roof Insight Pack)', () => {
+    expect(pickPolygon({ roofOutline: SQUARE_10M })).toEqual(SQUARE_10M)
+  })
+  it('returns null when none present', () => {
+    expect(pickPolygon({})).toBeNull()
+    expect(pickPolygon({ footprint: { type: 'Point', coordinates: [1, 2] } })).toBeNull()
+  })
+})
+
+describe('normaliseBuildingBody — envelope variations', () => {
+  it('unwraps { data: [{...}] }', () => {
+    const n = normaliseBuildingBody({
+      data: [{ footprint: SQUARE_10M, roofShape: 'gable', storeys: 1 }],
+    })
+    expect(n).not.toBeNull()
+    expect(n!.roofForm).toBe('gable')
+    expect(n!.storeys).toBe(1)
+  })
+
+  it('accepts a GeoJSON Feature with properties + geometry', () => {
+    const n = normaliseBuildingBody({
+      type: 'Feature',
+      geometry: SQUARE_10M,
+      properties: { roofShape: 'hip', numberOfStoreys: 2, planarArea: 175 },
+    })
+    expect(n).not.toBeNull()
+    expect(n!.footprint).toEqual(SQUARE_10M)
+    expect(n!.roofForm).toBe('hip')
+    expect(n!.storeys).toBe(2)
+    expect(n!.buildingArea).toBe(175)
+  })
+
+  it('accepts a GeoJSON FeatureCollection — uses first feature', () => {
+    const n = normaliseBuildingBody({
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          geometry: SQUARE_10M,
+          properties: { roof_shape: 'skillion', floors: 1 },
+        },
+      ],
+    })
+    expect(n).not.toBeNull()
+    expect(n!.roofForm).toBe('skillion')
+    expect(n!.storeys).toBe(1)
+  })
+
+  it('tolerates snake_case field names', () => {
+    const n = normaliseBuildingBody({
+      footprint: SQUARE_10M,
+      roof_shape: 'gable',
+      number_of_storeys: 2,
+      planar_area: 220,
+      capture_date: '2024-03-01',
+    })
+    expect(n).not.toBeNull()
+    expect(n!.roofForm).toBe('gable')
+    expect(n!.storeys).toBe(2)
+    expect(n!.buildingArea).toBe(220)
+    expect(n!.captureDate).toBe('2024-03-01')
+  })
+
+  it('returns null when no polygon can be found', () => {
+    expect(normaliseBuildingBody({})).toBeNull()
+    expect(normaliseBuildingBody({ data: [{ roofShape: 'hip' }] })).toBeNull()
   })
 })
 
@@ -162,6 +255,24 @@ describe('estimate{Hips,Valleys}FromForm', () => {
     expect(estimateHipsFromForm('complex')).toBeNull()
     expect(estimateHipsFromForm('unknown')).toBeNull()
     expect(estimateValleysFromForm('complex')).toBeNull()
+  })
+})
+
+describe('friendlyFetchError — DNS / connection failures', () => {
+  it('detects the typical undici "fetch failed" string and points at the env var', () => {
+    const e = new Error('fetch failed')
+    const msg = friendlyFetchError(e, 'https://api.geoscape.com.au/v1')
+    expect(msg).toMatch(/api\.psma\.com\.au/)
+    expect(msg).toMatch(/GEOSCAPE_API_BASE_URL/)
+  })
+  it('detects an ECONNREFUSED root cause', () => {
+    const cause = new Error('connect ECONNREFUSED 127.0.0.1:443')
+    const e = Object.assign(new Error('fetch failed'), { cause })
+    expect(friendlyFetchError(e, 'https://api.example.com')).toMatch(/not reachable/i)
+  })
+  it('falls back to the raw error message for unknown errors', () => {
+    const e = new Error('socket: SSL handshake failed')
+    expect(friendlyFetchError(e, 'https://api.example.com')).toMatch(/SSL handshake/)
   })
 })
 

@@ -15,6 +15,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 import type { RoofMetrics, RoofingQuotePrice } from '@/lib/roofing/types'
 import { RoofMap } from '../_components/RoofMap'
+import { AddressAutocomplete } from '../_components/AddressAutocomplete'
+import { GoogleStaticMap } from '../_components/GoogleStaticMap'
+import { PhotoVerify } from '../_components/PhotoVerify'
 
 type MeasureResponse =
   | {
@@ -212,12 +215,21 @@ export default function RoofingMeasurePage() {
         >
           <div className="md:col-span-2">
             <Label>Property address</Label>
-            <input
-              required
+            <AddressAutocomplete
+              accessToken={token}
               value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="e.g. 27 Smith Street, Penrith"
-              className={INPUT}
+              onChange={setAddress}
+              onSelect={(s) => {
+                // Picking a Geoscape suggestion fills the address +
+                // postcode + state in one go, so the tradie can press
+                // Measure immediately.
+                setAddress(s.address)
+                if (s.postcode) setPostcode(s.postcode)
+                if (s.state && (STATES as readonly string[]).includes(s.state)) {
+                  setState(s.state as (typeof STATES)[number])
+                }
+              }}
+              state={state}
             />
           </div>
 
@@ -362,6 +374,16 @@ export default function RoofingMeasurePage() {
           provider={resp.provider}
           warnings={resp.warnings}
           onMapRecenter={onMapRecenter}
+          address={address}
+          accessToken={token}
+          onMaterialDetected={(m) => {
+            // Only adopt Claude's call when it matches a value the
+            // dropdown supports — otherwise the select renders blank.
+            const supported = MATERIALS.map(([v]) => v)
+            if ((supported as readonly string[]).includes(m)) {
+              setMaterial(m as (typeof MATERIALS)[number][0])
+            }
+          }}
         />
       )}
 
@@ -382,13 +404,21 @@ function ResultBlock({
   provider,
   warnings,
   onMapRecenter,
+  address,
+  accessToken,
+  onMaterialDetected,
 }: {
   metrics: RoofMetrics
   price: RoofingQuotePrice
   provider: 'geoscape' | 'lidar' | 'mock' | 'manual'
   warnings: string[]
   onMapRecenter: (lng: number, lat: number) => void | Promise<void>
+  address: string
+  accessToken: string | null
+  onMaterialDetected: (material: string) => void
 }) {
+  // Confirmation state — "Is this your roof?" UX.
+  const [confirmation, setConfirmation] = useState<'pending' | 'yes' | 'no'>('pending')
   const routing = price.routing
   const routingTone =
     routing.decision === 'inspection_required' ? 'warn' :
@@ -401,26 +431,109 @@ function ResultBlock({
         title="Roof metrics + price band"
       />
 
-      {/* Map — Esri satellite + Geoscape polygon overlay */}
+      {/* Two-source verification — Google + Geoscape side by side */}
       <div className="mt-8">
-        <RoofMap
-          polygon={metrics.polygon_geojson}
-          form={metrics.form}
-          stats={{
-            sloped_area_m2: metrics.sloped_area_m2,
-            hips: metrics.hips,
-            valleys: metrics.valleys,
-            storeys: metrics.storeys,
-          }}
-          onRecenter={onMapRecenter}
-        />
+        <div className="grid gap-5 lg:grid-cols-2">
+          <GoogleStaticMap
+            accessToken={accessToken}
+            address={address}
+            marker={
+              metrics.polygon_geojson
+                ? {
+                    lat: metrics.polygon_geojson.coordinates[0][0][1],
+                    lng: metrics.polygon_geojson.coordinates[0][0][0],
+                  }
+                : undefined
+            }
+          />
+          <RoofMap
+            polygon={metrics.polygon_geojson}
+            form={metrics.form}
+            stats={{
+              sloped_area_m2: metrics.sloped_area_m2,
+              hips: metrics.hips,
+              valleys: metrics.valleys,
+              storeys: metrics.storeys,
+            }}
+            onRecenter={onMapRecenter}
+          />
+        </div>
         {!metrics.polygon_geojson && (
           <p className="mt-3 text-sm text-text-dim">
             No polygon attached to this measurement — switch off the mock
             provider once Geoscape is wired to see the building outline on
-            the map.
+            the Esri view.
           </p>
         )}
+      </div>
+
+      {/* "Is this your roof?" — the trust-builder step. */}
+      <div className="mt-6 border border-ink-line bg-ink-card p-6 sm:p-7">
+        {confirmation === 'pending' && (
+          <div className="grid gap-5 sm:grid-cols-[1fr_auto] sm:items-center">
+            <div>
+              <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
+                Confirm the building
+              </div>
+              <p className="mt-2 text-base leading-relaxed text-text-sec">
+                Compare the two satellite views. Is the orange polygon on the
+                Geoscape map drawn around <strong className="text-text-pri">{address || 'your customer\'s property'}</strong>? If something looks off (wrong house, granny flat picked instead of main, etc.), hit
+                <span className="font-mono text-text-pri"> Not my roof</span>.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3 sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setConfirmation('yes')}
+                className="inline-flex items-center gap-2 bg-accent px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press"
+              >
+                Yes, that&apos;s the roof <span aria-hidden="true">&rarr;</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmation('no')}
+                className="inline-flex items-center gap-2 border border-ink-line px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-sec transition-colors hover:border-accent hover:text-text-pri"
+              >
+                Not my roof
+              </button>
+            </div>
+          </div>
+        )}
+        {confirmation === 'yes' && (
+          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-teal-glow">
+            ✓ Roof confirmed · Pricing below is from the right building
+          </div>
+        )}
+        {confirmation === 'no' && (
+          <div>
+            <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-warning">
+              Wrong building — re-measure recommended
+            </div>
+            <p className="mt-2 text-base text-text-sec">
+              Click any point on the Geoscape map (right side) — we&apos;ll
+              reverse-geocode that location and re-run the measurement. If
+              that still doesn&apos;t land on the right building, upload a
+              photo below and Claude vision will help us track it down.
+            </p>
+            <button
+              type="button"
+              onClick={() => setConfirmation('pending')}
+              className="mt-4 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-accent hover:underline"
+            >
+              Reset
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* AI photo verification — upload a photo to cross-check the
+          measurement + auto-detect the roof material. */}
+      <div className="mt-6">
+        <PhotoVerify
+          accessToken={accessToken}
+          address={address}
+          onMaterialDetected={onMaterialDetected}
+        />
       </div>
 
       {/* Routing strip */}
