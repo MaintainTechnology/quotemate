@@ -14,6 +14,8 @@ import {
   friendlyFetchError,
   isEmptyDataEnvelope,
   isGeoscapeBuildingBody,
+  isMultiPolygonCoords,
+  isPolygonCoords,
   normaliseBuildingBody,
   normaliseGeoscapeRoofForm,
   pickAddressId,
@@ -22,6 +24,7 @@ import {
   pickBuildingSummaries,
   pickPolygon,
   polygonAreaM2,
+  reduceMultiPolygon,
 } from './geoscape'
 import type { GeoJSONPolygon } from '../types'
 
@@ -87,6 +90,142 @@ describe('pickPolygon — lenient field lookup', () => {
   it('returns null when none present', () => {
     expect(pickPolygon({})).toBeNull()
     expect(pickPolygon({ footprint: { type: 'Point', coordinates: [1, 2] } })).toBeNull()
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────
+// CRITICAL — these tests lock in the four shapes Geoscape's /footprint2d
+// sub-resource actually returns. The "no polygon" error the dashboard
+// surfaced on 2026-05-30 came from shape (4): MultiPolygon without
+// explicit `type` field. Do NOT delete these tests.
+// ─────────────────────────────────────────────────────────────────────
+
+const POLY_3LEVEL: number[][][] = [[
+  [153.16209, -27.50290],
+  [153.16220, -27.50292],
+  [153.16219, -27.50299],
+  [153.16210, -27.50298],
+  [153.16209, -27.50290],
+]]
+const MULTI_4LEVEL: number[][][][] = [POLY_3LEVEL]
+
+describe('polygon shape detection (real Geoscape responses)', () => {
+  it('accepts shape 1 — canonical Polygon { type, coordinates }', () => {
+    expect(pickPolygon({ type: 'Polygon', coordinates: POLY_3LEVEL })).toEqual({
+      type: 'Polygon',
+      coordinates: POLY_3LEVEL,
+    })
+  })
+
+  it('accepts shape 2 — canonical MultiPolygon { type, coordinates } (4-deep)', () => {
+    const r = pickPolygon({ type: 'MultiPolygon', coordinates: MULTI_4LEVEL })
+    expect(r).not.toBeNull()
+    expect(r!.type).toBe('Polygon')
+    expect(r!.coordinates).toEqual(POLY_3LEVEL)
+  })
+
+  it('accepts shape 3 — Polygon WITHOUT type field', () => {
+    expect(pickPolygon({ coordinates: POLY_3LEVEL })).toEqual({
+      type: 'Polygon',
+      coordinates: POLY_3LEVEL,
+    })
+  })
+
+  it('accepts shape 4 — MultiPolygon WITHOUT type field (the real Geoscape /footprint2d response)', () => {
+    const r = pickPolygon({ coordinates: MULTI_4LEVEL })
+    expect(r).not.toBeNull()
+    expect(r!.type).toBe('Polygon')
+    expect(r!.coordinates).toEqual(POLY_3LEVEL)
+  })
+
+  it('reproduces the live bug verbatim: { buildingId, footprint2d: { coordinates:[[[[lng,lat],…]]] } }', () => {
+    // Verbatim shape from CHANDLER QLD probe 2026-05-30.
+    const live = {
+      buildingId: 'bldd85251e0da3a',
+      footprint2d: {
+        coordinates: [[
+          [
+            [153.162090545, -27.502902199],
+            [153.162199728, -27.502916445],
+            [153.162187054, -27.502993684],
+            [153.162242922, -27.503000977],
+            [153.162241025, -27.503012571],
+            [153.162284427, -27.503018235],
+            [153.162286083, -27.503008149],
+            [153.162090545, -27.502902199],
+          ],
+        ]],
+      },
+    }
+    const r = pickPolygon(live)
+    expect(r).not.toBeNull()
+    expect(r!.type).toBe('Polygon')
+    expect(r!.coordinates[0]).toHaveLength(8)
+    expect(r!.coordinates[0][0]).toEqual([153.162090545, -27.502902199])
+  })
+
+  it('still finds the polygon when wrapped in { data: {…} }', () => {
+    const r = pickPolygon({ data: { coordinates: MULTI_4LEVEL } })
+    expect(r).not.toBeNull()
+    expect(r!.type).toBe('Polygon')
+  })
+
+  it('still finds the polygon when nested under `footprint2d`', () => {
+    const r = pickPolygon({ footprint2d: { coordinates: MULTI_4LEVEL } })
+    expect(r).not.toBeNull()
+  })
+})
+
+describe('isPolygonCoords / isMultiPolygonCoords (PURE depth check)', () => {
+  it('isPolygonCoords accepts 3-deep nesting', () => {
+    expect(isPolygonCoords(POLY_3LEVEL)).toBe(true)
+  })
+  it('isPolygonCoords rejects 4-deep (that is a MultiPolygon)', () => {
+    expect(isPolygonCoords(MULTI_4LEVEL)).toBe(false)
+  })
+  it('isMultiPolygonCoords accepts 4-deep', () => {
+    expect(isMultiPolygonCoords(MULTI_4LEVEL)).toBe(true)
+  })
+  it('isMultiPolygonCoords rejects 3-deep', () => {
+    expect(isMultiPolygonCoords(POLY_3LEVEL)).toBe(false)
+  })
+  it('both reject empty / malformed', () => {
+    expect(isPolygonCoords([])).toBe(false)
+    expect(isMultiPolygonCoords([])).toBe(false)
+    expect(isPolygonCoords(null)).toBe(false)
+    expect(isMultiPolygonCoords(undefined)).toBe(false)
+  })
+})
+
+describe('reduceMultiPolygon — pick the largest sub-polygon', () => {
+  // A small ~100 m² polygon and a huge ~10,000 m² one at the same Sydney lat.
+  const SMALL: number[][][] = [[
+    [151.2, -33.8],
+    [151.2001, -33.8],
+    [151.2001, -33.8001],
+    [151.2, -33.8001],
+    [151.2, -33.8],
+  ]]
+  const HUGE: number[][][] = [[
+    [151.21, -33.81],
+    [151.22, -33.81],
+    [151.22, -33.82],
+    [151.21, -33.82],
+    [151.21, -33.81],
+  ]]
+  it('returns the only sub-polygon when there is one', () => {
+    expect(reduceMultiPolygon([SMALL])?.coordinates).toEqual(SMALL)
+  })
+  it('picks the larger of two sub-polygons (main building vs shed)', () => {
+    const r = reduceMultiPolygon([SMALL, HUGE])
+    expect(r?.coordinates).toEqual(HUGE)
+  })
+  it('still works with the larger one listed first', () => {
+    const r = reduceMultiPolygon([HUGE, SMALL])
+    expect(r?.coordinates).toEqual(HUGE)
+  })
+  it('returns null for empty input', () => {
+    expect(reduceMultiPolygon([])).toBeNull()
   })
 })
 

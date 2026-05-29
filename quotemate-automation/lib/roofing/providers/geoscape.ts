@@ -421,38 +421,106 @@ export function pickBestSummary(summaries: BuildingSummary[]): BuildingSummary |
   )
 }
 
-/** PURE — find a GeoJSON Polygon nested under any documented field. */
+/**
+ * PURE — find a GeoJSON Polygon nested under any documented field.
+ *
+ * Tolerates THE FOUR shapes Geoscape actually returns:
+ *
+ *   1. { type: "Polygon",  coordinates: [[ [lng,lat],… ]] }       (canonical Polygon)
+ *   2. { type: "MultiPolygon", coordinates: [[[ [lng,lat],… ]]] } (canonical MultiPolygon)
+ *   3. {                       coordinates: [[ [lng,lat],… ]] }   (Polygon — `type` field omitted)
+ *   4. {                       coordinates: [[[ [lng,lat],… ]]] } (MultiPolygon — `type` field omitted)
+ *
+ * Geoscape's /footprint2d sub-resource returns shape (4) — confirmed
+ * 2026-05-30 from a real probe on 670 LONDON RD, CHANDLER QLD 4155.
+ *
+ * For MultiPolygon, we pick the LARGEST sub-polygon by planar area —
+ * the main building footprint. The smaller sub-polygons are typically
+ * outbuildings, sheds or carports we don't price separately in Phase 1.
+ */
 export function pickPolygon(b: unknown): GeoJSONPolygon | null {
   if (!b || typeof b !== 'object') return null
-  // Bare polygon at the top level
   const top = b as Record<string, unknown>
-  if (top.type === 'Polygon' && Array.isArray(top.coordinates)) {
-    return { type: 'Polygon', coordinates: top.coordinates as number[][][] }
-  }
-  // GeoJSON Feature shape
+
+  // 1. Direct on this object — try BOTH explicit type and coordinate-shape inference.
+  const direct = polygonFromShape(top)
+  if (direct) return direct
+
+  // 2. GeoJSON Feature wrapper — { type:"Feature", geometry:{...} }
   if (top.type === 'Feature' && top.geometry && typeof top.geometry === 'object') {
-    const g = top.geometry as Record<string, unknown>
-    if (g.type === 'Polygon' && Array.isArray(g.coordinates)) {
-      return { type: 'Polygon', coordinates: g.coordinates as number[][][] }
-    }
+    const fromFeature = polygonFromShape(top.geometry as Record<string, unknown>)
+    if (fromFeature) return fromFeature
   }
-  // Various named keys
+
+  // 3. Nested under any documented field name.
   const tryPaths = ['footprint', 'footprint2d', 'geometry', 'polygon', 'roofOutline', 'roof_outline']
   for (const key of tryPaths) {
     const v = top[key]
     if (v && typeof v === 'object') {
-      const g = v as Record<string, unknown>
-      if (g.type === 'Polygon' && Array.isArray(g.coordinates)) {
-        return { type: 'Polygon', coordinates: g.coordinates as number[][][] }
-      }
+      const fromField = polygonFromShape(v as Record<string, unknown>)
+      if (fromField) return fromField
     }
   }
-  // Wrapped in { data: {...} }
+
+  // 4. Wrapped in { data: {...} }.
   const data = top.data
   if (data && typeof data === 'object') {
     return pickPolygon(data)
   }
   return null
+}
+
+/** PURE — try to read a Polygon out of an object that may or may not
+ *  have a `type` field. Detects MultiPolygon by coordinate depth and
+ *  reduces it to its largest sub-polygon. */
+function polygonFromShape(obj: Record<string, unknown>): GeoJSONPolygon | null {
+  const coords = obj.coordinates
+  if (!Array.isArray(coords) || coords.length === 0) return null
+  const type = typeof obj.type === 'string' ? obj.type : null
+
+  // Explicit type wins when present.
+  if (type === 'Polygon' || (type === null && isPolygonCoords(coords))) {
+    return { type: 'Polygon', coordinates: coords as number[][][] }
+  }
+  if (type === 'MultiPolygon' || (type === null && isMultiPolygonCoords(coords))) {
+    return reduceMultiPolygon(coords as number[][][][])
+  }
+  return null
+}
+
+/** PURE — true when coords look like a Polygon ring set: [[[lng,lat],…], …] */
+export function isPolygonCoords(coords: unknown): boolean {
+  if (!Array.isArray(coords) || coords.length === 0) return false
+  const ring = coords[0]
+  if (!Array.isArray(ring) || ring.length === 0) return false
+  const pt = ring[0]
+  return Array.isArray(pt) && typeof pt[0] === 'number' && typeof pt[1] === 'number'
+}
+
+/** PURE — true when coords look like MultiPolygon nesting: [[[[lng,lat],…]]] */
+export function isMultiPolygonCoords(coords: unknown): boolean {
+  if (!Array.isArray(coords) || coords.length === 0) return false
+  const poly = coords[0]
+  if (!Array.isArray(poly) || poly.length === 0) return false
+  return isPolygonCoords(poly)
+}
+
+/** PURE — collapse a MultiPolygon into its largest sub-polygon. */
+export function reduceMultiPolygon(coords: number[][][][]): GeoJSONPolygon | null {
+  if (!Array.isArray(coords) || coords.length === 0) return null
+  if (coords.length === 1) {
+    return { type: 'Polygon', coordinates: coords[0] }
+  }
+  let best = coords[0]
+  let bestArea = polygonAreaM2({ type: 'Polygon', coordinates: best })
+  for (let i = 1; i < coords.length; i++) {
+    const a = polygonAreaM2({ type: 'Polygon', coordinates: coords[i] })
+    if (a > bestArea) {
+      best = coords[i]
+      bestArea = a
+    }
+  }
+  return { type: 'Polygon', coordinates: best }
 }
 
 /** PURE — extract the roof shape value from a /roofShape sub-resource
