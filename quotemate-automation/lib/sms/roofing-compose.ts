@@ -90,3 +90,50 @@ export function buildRoofingReplyMessage(ctx: RoofingReplyContext): string {
   }
   return composeEstimateMessage(ctx)
 }
+
+/**
+ * PURE — the "is this your roof?" confirmation message, sent with the
+ * satellite photo (MMS) BEFORE the price. Single building → a simple
+ * yes/no; multiple buildings → a numbered list so the customer can pick
+ * one, with "none" handled by a NO reply. Always links the page so they
+ * can see the roof(s).
+ */
+export function composeConfirmMessage(ctx: RoofingReplyContext): string {
+  const structures = ctx.quote.structures
+  if (structures.length <= 1) {
+    return [
+      `${greeting(ctx.firstName)}is this your roof at ${ctx.address}?`,
+      `Reply YES and I'll send your quote, or NO if it's the wrong building.`,
+      `See it here: ${ctx.quoteUrl}`,
+    ].join('\n')
+  }
+  const list = structures.map((s, i) => {
+    const area = s.metrics?.sloped_area_m2 != null ? ` (~${Math.round(s.metrics.sloped_area_m2)} m²)` : ''
+    return `${i + 1}) ${s.label}${area}`
+  })
+  return [
+    `${greeting(ctx.firstName)}I found ${structures.length} buildings at ${ctx.address}:`,
+    ...list,
+    `Reply YES to quote all of them, the number for just one, or NO if none are right.`,
+    `See them here: ${ctx.quoteUrl}`,
+  ].join('\n')
+}
+
+/**
+ * PURE — narrow a multi-structure quote down to a single chosen structure
+ * (1-based index), recomputing the "combined" block as just that
+ * structure's numbers. Returns the original quote when the index is out
+ * of range. Used when the customer picks one building from the list.
+ */
+export function narrowQuoteToStructure(quote: MultiRoofQuote, index1Based: number): MultiRoofQuote {
+  const i = index1Based - 1
+  if (i < 0 || i >= quote.structures.length) return quote
+  const picked = quote.structures[i]
+  const inspection = picked.price.routing.decision === 'inspection_required'
+  return {
+    structures: [picked],
+    combined: { area_m2: picked.price.area_m2, tiers: picked.price.tiers },
+    routing: picked.price.routing,
+    inspection_structures: inspection ? [picked.label] : [],
+  }
+}

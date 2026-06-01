@@ -21,11 +21,15 @@ import { decideNextTurn, type ConversationTurn } from '@/lib/sms/dialog'
 import { looksLikeRoofingEnquiry, toRoofingRequest } from '@/lib/sms/roofing-intake'
 import {
   advanceRoofing,
-  nextRoofingConversationState,
   type RoofingConversationState,
 } from '@/lib/sms/roofing-receptionist'
-import { buildRoofingReplyMessage } from '@/lib/sms/roofing-compose'
+import {
+  buildRoofingReplyMessage,
+  composeConfirmMessage,
+  narrowQuoteToStructure,
+} from '@/lib/sms/roofing-compose'
 import { measureAndPriceRoofs } from '@/lib/roofing/measure'
+import type { MultiRoofQuote } from '@/lib/roofing/types'
 import { formatActiveFollowupContext } from '@/lib/sms/followup-context'
 import { buildGpoInspectionOverride } from '@/lib/sms/gpo-guard'
 import {
@@ -299,17 +303,6 @@ async function handleRoofingTurn(args: {
   if (!looksRoofing) return false
 
   const decision = advanceRoofing(prevState, latestInbound)
-  const nextState = nextRoofingConversationState(decision)
-
-  // Persist the roofing state (needs migration 085; best-effort).
-  try {
-    await supabase
-      .from('sms_conversations')
-      .update({ roofing_state: nextState, updated_at: new Date().toISOString() })
-      .eq('id', conversationId)
-  } catch (e) {
-    console.warn('[sms/inbound:roofing] roofing_state persist failed (migration 085?)', e)
-  }
 
   // Reply FROM the number the customer texted (the tradie's own
   // provisioned number) — same as every other reply in this route. Never
@@ -324,26 +317,75 @@ async function handleRoofingTurn(args: {
     })
     return res
   }
+  const persist = async (state: RoofingConversationState, status: 'open' | 'done') => {
+    try {
+      await supabase
+        .from('sms_conversations')
+        .update({ roofing_state: state, status, last_message_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq('id', conversationId)
+    } catch (e) {
+      console.warn('[sms/inbound:roofing] roofing_state persist failed (migration 085?)', e)
+    }
+  }
+  const baseUrl = ROOFING_APP_BASE_URL
+  const loadPending = async (token: string | null) => {
+    if (!token) return null
+    const { data } = await supabase
+      .from('roofing_measurements')
+      .select('address, quote')
+      .eq('public_token', token)
+      .maybeSingle()
+    const quote = (data?.quote ?? null) as MultiRoofQuote | null
+    if (!data || !quote) return null
+    return { address: (data.address as string) ?? '', quote, token }
+  }
 
-  // Still gathering inputs — ask the next question.
+  // ── Still gathering inputs — ask the next question. ──
   if (decision.action === 'ask') {
+    await persist({ slots: decision.slots, last_step: decision.step, pending_quote_token: null, pending_structure_count: null }, 'open')
     await sendReply(decision.reply)
-    await supabase
-      .from('sms_conversations')
-      .update({ status: 'open', last_message_at: new Date().toISOString() })
-      .eq('id', conversationId)
     return true
   }
 
-  // Ready to price / inspection — run the same roofing pipeline as the
-  // dashboard tab, persist the job, and reply with the MMS + link.
+  // ── Customer is replying to "is this your roof?" ──
+  if (decision.action === 'reconfirm' || decision.action === 'send_saved') {
+    const pending = await loadPending(prevState?.pending_quote_token ?? null)
+    if (pending) {
+      const quoteUrl = `${baseUrl}/q/roof/${pending.token}`
+      const imageUrl = `${baseUrl}/api/roofing/q/${pending.token}/static-map`
+      if (decision.action === 'reconfirm') {
+        await sendReply(composeConfirmMessage({ quote: pending.quote, address: pending.address, quoteUrl, firstName }), imageUrl)
+        await persist({ slots: decision.slots, last_step: 'confirm_roof', pending_quote_token: pending.token, pending_structure_count: prevState?.pending_structure_count ?? pending.quote.structures.length }, 'open')
+        return true
+      }
+      // send_saved — confirmed; send the (optionally narrowed) estimate.
+      const finalQuote = decision.structureChoice != null
+        ? narrowQuoteToStructure(pending.quote, decision.structureChoice)
+        : pending.quote
+      await sendReply(buildRoofingReplyMessage({ quote: finalQuote, address: pending.address, quoteUrl, firstName }), imageUrl)
+      await persist({ slots: decision.slots, last_step: null, pending_quote_token: null, pending_structure_count: null }, 'done')
+      return true
+    }
+    // Lost the pending quote — restart gathering.
+    await sendReply("Sorry, I lost track of that one — what's the property address (with suburb & postcode)?")
+    await persist({ slots: {}, last_step: 'address' }, 'open')
+    return true
+  }
+
+  // ── measure / inspection — run the roofing pipeline, save the job. ──
   const reqInput = toRoofingRequest(decision.slots)
   if (reqInput) {
     try {
       const result = await measureAndPriceRoofs(reqInput.address, reqInput.inputs, {})
       if (result.ok) {
         const token = randomBytes(16).toString('hex')
-        const quote = result.quote
+        const isInspection = decision.action === 'inspection'
+        // For an inspection routed by the gathered inputs (e.g. unknown
+        // material), force the routing onto the saved quote so the page +
+        // message show the inspection path, not a $0 estimate.
+        const quote: MultiRoofQuote = isInspection
+          ? { ...result.quote, routing: { decision: 'inspection_required', reason: decision.reason } }
+          : result.quote
         await supabase.from('roofing_measurements').insert({
           tenant_id: tenantId,
           address: reqInput.address.address,
@@ -359,19 +401,18 @@ async function handleRoofingTurn(args: {
           quote,
           public_token: token,
         })
-        const quoteUrl = `${ROOFING_APP_BASE_URL}/q/roof/${token}`
-        const imageUrl = `${ROOFING_APP_BASE_URL}/api/roofing/q/${token}/static-map`
-        const body = buildRoofingReplyMessage({
-          quote,
-          address: reqInput.address.address,
-          quoteUrl,
-          firstName,
-        })
-        await sendReply(body, imageUrl)
-        await supabase
-          .from('sms_conversations')
-          .update({ status: 'done', last_message_at: new Date().toISOString() })
-          .eq('id', conversationId)
+        const quoteUrl = `${baseUrl}/q/roof/${token}`
+        const imageUrl = `${baseUrl}/api/roofing/q/${token}/static-map`
+        if (isInspection) {
+          // Inspection — terminal: send the inspection message + photo.
+          await sendReply(buildRoofingReplyMessage({ quote, address: reqInput.address.address, quoteUrl, firstName }), imageUrl)
+          await persist({ slots: decision.slots, last_step: null, pending_quote_token: null, pending_structure_count: null }, 'done')
+          return true
+        }
+        // Quotable — send the roof photo + "is this your roof?" and PARK
+        // at confirm_roof; the price goes out only after they confirm.
+        await sendReply(composeConfirmMessage({ quote, address: reqInput.address.address, quoteUrl, firstName }), imageUrl)
+        await persist({ slots: decision.slots, last_step: 'confirm_roof', pending_quote_token: token, pending_structure_count: quote.structures.length }, 'open')
         return true
       }
     } catch (e) {
@@ -379,14 +420,9 @@ async function handleRoofingTurn(args: {
     }
   }
 
-  // Fallback — we couldn't price (provider down or missing fields).
-  await sendReply(
-    "Thanks — we've got your roof details. Our team will confirm your quote shortly.",
-  )
-  await supabase
-    .from('sms_conversations')
-    .update({ status: 'done', last_message_at: new Date().toISOString() })
-    .eq('id', conversationId)
+  // Fallback — we couldn't measure (provider down or missing fields).
+  await sendReply("Thanks — we've got your roof details. Our team will confirm your quote shortly.")
+  await persist({ slots: decision.slots, last_step: null }, 'done')
   return true
 }
 

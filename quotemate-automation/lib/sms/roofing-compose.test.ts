@@ -7,9 +7,11 @@ import { priceMultiRoof, type RoofStructureInput } from '@/lib/roofing/pricing'
 import type { RoofMetrics, RoofUserInputs } from '@/lib/roofing/types'
 import {
   buildRoofingReplyMessage,
+  composeConfirmMessage,
   composeEstimateMessage,
   composeInspectionMessage,
   fmtAud,
+  narrowQuoteToStructure,
 } from './roofing-compose'
 
 function metrics(o: Partial<RoofMetrics> = {}): RoofMetrics {
@@ -89,5 +91,41 @@ describe('composeInspectionMessage + routing', () => {
     const clean = priceMultiRoof({ structures: [house, shed] })
     expect(buildRoofingReplyMessage({ ...CTX, quote: clean })).toMatch(/here's your roofing estimate/)
     expect(buildRoofingReplyMessage({ ...CTX, quote })).toMatch(/on-site inspection/i)
+  })
+})
+
+describe('composeConfirmMessage', () => {
+  it('single building → simple yes/no + link, no price', () => {
+    const quote = priceMultiRoof({ structures: [house] })
+    const msg = composeConfirmMessage({ ...CTX, quote })
+    expect(msg).toMatch(/is this your roof/i)
+    expect(msg).toMatch(/reply yes/i)
+    expect(msg).toContain(CTX.quoteUrl)
+    // No dollar amounts in the confirm step.
+    expect(msg).not.toMatch(/\$\d/)
+  })
+
+  it('multiple buildings → numbered list + pick instructions', () => {
+    const quote = priceMultiRoof({ structures: [house, shed] })
+    const msg = composeConfirmMessage({ ...CTX, quote })
+    expect(msg).toMatch(/2 buildings/)
+    expect(msg).toMatch(/1\)/)
+    expect(msg).toMatch(/2\)/)
+    expect(msg).toMatch(/number for just one/i)
+    expect(msg).not.toMatch(/\$\d/)
+  })
+})
+
+describe('narrowQuoteToStructure', () => {
+  it('narrows to the picked structure and recomputes combined', () => {
+    const quote = priceMultiRoof({ structures: [house, shed] })
+    const narrowed = narrowQuoteToStructure(quote, 2) // the shed
+    expect(narrowed.structures).toHaveLength(1)
+    expect(narrowed.structures[0].buildingId).toBe('shed')
+    expect(narrowed.combined.tiers[1].ex_gst).toBe(quote.structures[1].price.tiers[1].ex_gst)
+  })
+  it('returns the original quote for an out-of-range index', () => {
+    const quote = priceMultiRoof({ structures: [house, shed] })
+    expect(narrowQuoteToStructure(quote, 9).structures).toHaveLength(2)
   })
 })

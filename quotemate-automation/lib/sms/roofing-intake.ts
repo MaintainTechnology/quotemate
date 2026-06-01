@@ -51,6 +51,9 @@ export type RoofingStep =
   | 'pitch'
   | 'ready'
   | 'inspection'
+  // After measuring we send the roof photo and wait for the customer to
+  // confirm it's the right building (or pick among several / say none).
+  | 'confirm_roof'
 
 const AU_STATES: readonly AuState[] = ['NSW', 'VIC', 'QLD', 'SA', 'WA', 'TAS', 'ACT', 'NT']
 
@@ -265,7 +268,7 @@ export function roofingReadiness(slots: RoofingSlots): 'ready' | 'need_more' | '
   return 'ready'
 }
 
-const QUESTIONS: Record<Exclude<RoofingStep, 'ready' | 'inspection'>, string> = {
+const QUESTIONS: Record<Exclude<RoofingStep, 'ready' | 'inspection' | 'confirm_roof'>, string> = {
   address: "Happy to sort a roofing quote for you. What's the property address (including suburb & postcode)?",
   confirm_address: '', // filled dynamically with the address read-back
   intent: 'What do you need done — a full re-roof, a repair/patch, a leak traced, or gutters/downpipes?',
