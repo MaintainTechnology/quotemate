@@ -64,8 +64,13 @@ export function canonicalise(
       return null
     }
     case 'litres': {
-      const m = raw.match(/(\d{1,4})/)
-      return m ? `${parseInt(m[1], 10)}` : null
+      // Prefer a number directly before L / litre(s) ("250L", "260 litre") so
+      // an unrelated number in the name ("5-star") isn't mistaken for volume.
+      const m = raw.match(/(\d{1,4})\s*(?:l\b|lt\b|litre|liter)/)
+      if (m) return `${parseInt(m[1], 10)}`
+      // A bare integer (e.g. properties.litres stored as 250 or "250").
+      if (/^\d{1,4}$/.test(raw)) return `${parseInt(raw, 10)}`
+      return null
     }
     case 'poles': {
       if (raw === '1' || raw.includes('single')) return 'single'

@@ -51,6 +51,13 @@ describe('canonicalise — ip_rating / energy_source / litres', () => {
     expect(canonicalise('litres', 315)).toBe('315')
     expect(canonicalise('litres', 'big')).toBeNull()
   })
+
+  it('litres ignores unrelated numbers and reads the one before L', () => {
+    // Regression: "Rheem 5-star 260L gas storage HWS" must be 260, not 5.
+    expect(canonicalise('litres', 'Rheem 5-star 260L gas storage HWS')).toBe('260')
+    expect(canonicalise('litres', 'Dux Proflo 315L electric storage HWS')).toBe('315')
+    expect(canonicalise('litres', 'Rheem 5-star gas HWS')).toBeNull()
+  })
 })
 
 describe('canonicalise — phase / poles / unknown key', () => {
