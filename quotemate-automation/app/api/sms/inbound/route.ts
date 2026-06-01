@@ -311,7 +311,10 @@ async function handleRoofingTurn(args: {
     console.warn('[sms/inbound:roofing] roofing_state persist failed (migration 085?)', e)
   }
 
-  const replyFrom = process.env.TWILIO_SMS_NUMBER ?? toNumber
+  // Reply FROM the number the customer texted (the tradie's own
+  // provisioned number) — same as every other reply in this route. Never
+  // the shared/office number, or the customer sees a stranger's number.
+  const replyFrom = toNumber
   const sendReply = async (text: string, mediaUrl?: string) => {
     const res = await dispatchQuoteMessage({ to: fromNumber, text, from: replyFrom, mediaUrl })
     await supabase.from('sms_messages').insert({
