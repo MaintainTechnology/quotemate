@@ -16,7 +16,9 @@ import type {
   PitchBucket,
   RoofAddressInput,
   RoofForm,
+  RoofMetrics,
   RoofingMeasurementResult,
+  RoofingMultiMeasurementResult,
 } from '../types'
 import { slopedAreaFromFootprint } from '../pricing'
 
@@ -55,7 +57,40 @@ export class MockRoofingProvider implements RoofingMeasurementProvider {
         ridge_lm: null,
         polygon_geojson: synthesisePolygon(h, footprint),
         capture_date: '2025-06-01',
+        buildingId: `mock-${h}-primary`,
       },
+    }
+  }
+
+  /** Deterministic house + shed so the multi-structure UI / demo has two
+   *  buildings to work with without a live Geoscape account. */
+  async measureAll(input: RoofAddressInput): Promise<RoofingMultiMeasurementResult> {
+    const primary = await this.measure(input)
+    if (!primary.ok) return primary
+
+    const h = hash(input.address.toLowerCase() + '|' + input.postcode)
+    const shedFootprint = 30 + (h % 40) // 30–69 m²
+    const shedMetrics: RoofMetrics = {
+      footprint_m2: shedFootprint,
+      sloped_area_m2: slopedAreaFromFootprint(shedFootprint, this.defaultPitch),
+      storeys: 1,
+      form: 'gable',
+      hips: 0,
+      valleys: 0,
+      ridge_lm: null,
+      polygon_geojson: synthesisePolygon(h * 7 + 13, shedFootprint),
+      capture_date: '2025-06-01',
+      buildingId: `mock-${h}-shed`,
+    }
+
+    return {
+      ok: true,
+      provider: 'mock',
+      warnings: ['Mock provider returned a synthetic house + shed for the multi-structure demo.'],
+      buildings: [
+        { buildingId: `mock-${h}-primary`, role: 'primary', metrics: primary.metrics },
+        { buildingId: `mock-${h}-shed`, role: 'secondary', metrics: shedMetrics },
+      ],
     }
   }
 }

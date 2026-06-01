@@ -2,67 +2,76 @@
 
 // /dashboard/roofing/measure — standalone roofing-measurement tool.
 //
-// Tradie types an address + picks material/pitch/intent → hits the
-// /api/roofing/measure route → sees the structured measurement +
-// 3-tier price band on screen. No customer involvement; this is the
-// tradie's own discovery surface for cold-lead estimates.
-//
-// Maintain Technology design system — dark navy command-centre, orange
-// accent, generous typography, numbered cards.
+// Multi-structure flow: the tradie types an address + declares material /
+// pitch / intent, and we measure EVERY structure at the property (the
+// dwelling plus detached sheds / garages). Each structure is shown as its
+// own card — priced independently with its own material — and the tradie
+// can include / exclude each one, override a structure's material, pick a
+// single secondary structure on its own, then save the job. A combined
+// total sums only the included structures. Maintain Technology design.
 
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
-import type { RoofMetrics, RoofingQuotePrice } from '@/lib/roofing/types'
-import { RoofMap } from '../_components/RoofMap'
+import type {
+  MultiRoofQuote,
+  RoofMaterial,
+  RoofMetrics,
+  RoofStructurePrice,
+  RoofingRoutingDecision,
+} from '@/lib/roofing/types'
+import { RoofMap, type RoofMapBuilding } from '../_components/RoofMap'
 import { AddressAutocomplete } from '../_components/AddressAutocomplete'
 import { GoogleStaticMap } from '../_components/GoogleStaticMap'
 import { PhotoVerify } from '../_components/PhotoVerify'
 
-type MeasureResponse =
+type MultiResponse =
   | {
       ok: true
       provider: 'geoscape' | 'lidar' | 'mock' | 'manual'
-      metrics: RoofMetrics
-      price: RoofingQuotePrice
+      quote: MultiRoofQuote
       warnings: string[]
     }
   | { ok: false; code: string; detail: string }
   | { ok: false; error: string }
 
 const MATERIALS = [
-  ['colorbond_trimdek',  'Colorbond Trimdek'],
-  ['colorbond_kliplok',  'Colorbond Klip-Lok 700'],
-  ['concrete_tile',      'Concrete tile'],
-  ['terracotta_tile',    'Terracotta tile'],
-  ['cement_sheet',       'Cement sheet (asbestos-suspect)'],
-  ['unknown',            'Unknown — confirm on-site'],
+  ['colorbond_trimdek', 'Colorbond Trimdek'],
+  ['colorbond_kliplok', 'Colorbond Klip-Lok 700'],
+  ['concrete_tile', 'Concrete tile'],
+  ['terracotta_tile', 'Terracotta tile'],
+  ['cement_sheet', 'Cement sheet (asbestos-suspect)'],
+  ['unknown', 'Unknown — confirm on-site'],
 ] as const
 
 const PITCHES = [
-  ['shallow',     'Shallow (under 20°)'],
-  ['standard',    'Standard (20–25°, the AU norm)'],
-  ['steep',       'Steep (26–35°)'],
-  ['very_steep',  'Very steep (over 35°) — forces inspection'],
-  ['unknown',     'Unknown — forces inspection'],
+  ['shallow', 'Shallow (under 20°)'],
+  ['standard', 'Standard (20–25°, the AU norm)'],
+  ['steep', 'Steep (26–35°)'],
+  ['very_steep', 'Very steep (over 35°) — forces inspection'],
+  ['unknown', 'Unknown — forces inspection'],
 ] as const
 
 const INTENTS = [
-  ['full_reroof',     'Full re-roof'],
-  ['patch_repair',    'Patch / spot repair'],
-  ['leak_trace',      'Leak trace + minor repair'],
-  ['gutter_replace',  'Gutter + downpipe replace'],
-  ['ridge_cap',       'Ridge / hip cap rebed'],
+  ['full_reroof', 'Full re-roof'],
+  ['patch_repair', 'Patch / spot repair'],
+  ['leak_trace', 'Leak trace + minor repair'],
+  ['gutter_replace', 'Gutter + downpipe replace'],
+  ['ridge_cap', 'Ridge / hip cap rebed'],
   ['flashing_repair', 'Flashing repair'],
 ] as const
 
 const STATES = ['NSW', 'VIC', 'QLD', 'SA', 'WA', 'TAS', 'ACT', 'NT'] as const
 
+/** Stable per-structure key (buildingId is normally set; sub-polygon /
+ *  manual entries may be null — fall back to the list index). */
+function structureKey(s: RoofStructurePrice, i: number): string {
+  return s.buildingId ?? `__idx_${i}`
+}
+
 export default function RoofingMeasurePage() {
   const [token, setToken] = useState<string | null>(null)
-  const [authState, setAuthState] = useState<'loading' | 'signed-out' | 'ready'>(
-    'loading',
-  )
+  const [authState, setAuthState] = useState<'loading' | 'signed-out' | 'ready'>('loading')
 
   const [address, setAddress] = useState('')
   const [postcode, setPostcode] = useState('')
@@ -74,8 +83,14 @@ export default function RoofingMeasurePage() {
   const [useMock, setUseMock] = useState(false)
 
   const [busy, setBusy] = useState(false)
-  const [resp, setResp] = useState<MeasureResponse | null>(null)
+  const [resp, setResp] = useState<MultiResponse | null>(null)
   const [errMsg, setErrMsg] = useState<string | null>(null)
+
+  // Per-structure UI state — keyed by structureKey, survives re-measures.
+  const [included, setIncluded] = useState<Record<string, boolean>>({})
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [savedId, setSavedId] = useState<string | null>(null)
 
   useEffect(() => {
     const sb = getBrowserSupabase()
@@ -86,14 +101,15 @@ export default function RoofingMeasurePage() {
     })
   }, [])
 
-  /** Single-source measure runner — both the form submit path and the
-   *  click-on-map-to-recenter path call this with their own address
-   *  triple. Keeps the request shape in one place. */
+  /** Measure every structure. `overrides` lets the map-click path pass a
+   *  new address triple and lets the material editor pass per-building
+   *  overrides without threading through component state. */
   const runMeasure = useCallback(
     async (overrides?: {
       address?: string
       postcode?: string
       state?: (typeof STATES)[number]
+      perBuilding?: Record<string, { material?: RoofMaterial }>
     }) => {
       if (!token) {
         setErrMsg('Sign in to use the measurement tool.')
@@ -104,30 +120,39 @@ export default function RoofingMeasurePage() {
       const st = overrides?.state ?? state
       setBusy(true)
       setErrMsg(null)
-      setResp(null)
+      setSaveState('idle')
+      setSavedId(null)
       try {
-        const res = await fetch('/api/roofing/measure', {
+        const res = await fetch('/api/roofing/measure-all', {
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             address: { address: a, postcode: pc, state: st },
-            inputs: {
-              material,
-              pitch,
-              intent,
-              building_year_built: yearBuilt ? Number(yearBuilt) : null,
-            },
+            inputs: { material, pitch, intent, building_year_built: yearBuilt ? Number(yearBuilt) : null },
+            perBuilding: overrides?.perBuilding,
             use_mock_provider: useMock,
           }),
         })
-        const json = (await res.json()) as MeasureResponse
+        const json = (await res.json()) as MultiResponse
         setResp(json)
-        if (!('ok' in json) || json.ok !== true) {
-          if ('detail' in json) setErrMsg(json.detail)
-          else if ('error' in json) setErrMsg(json.error)
+        if (json.ok === true) {
+          // Initialise / preserve include + selection state by key.
+          setIncluded((prev) => {
+            const next: Record<string, boolean> = {}
+            json.quote.structures.forEach((s, i) => {
+              const k = structureKey(s, i)
+              next[k] = prev[k] ?? true
+            })
+            return next
+          })
+          setSelectedId((prev) => {
+            const keys = json.quote.structures.map((s, i) => structureKey(s, i))
+            return prev && keys.includes(prev) ? prev : keys[0] ?? null
+          })
+        } else if ('detail' in json) {
+          setErrMsg(json.detail)
+        } else if ('error' in json) {
+          setErrMsg(json.error)
         }
       } catch (e) {
         setErrMsg(e instanceof Error ? e.message : String(e))
@@ -146,8 +171,6 @@ export default function RoofingMeasurePage() {
     [runMeasure],
   )
 
-  /** Click on the map → reverse-geocode → re-run measure with the new
-   *  address. Failures fall back to a polite error message. */
   const onMapRecenter = useCallback(
     async (lng: number, lat: number) => {
       if (!token) {
@@ -157,14 +180,11 @@ export default function RoofingMeasurePage() {
       try {
         const res = await fetch('/api/roofing/reverse-geocode', {
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ lng, lat }),
         })
         const json = (await res.json()) as
-          | { ok: true; address: string; postcode: string | null; state: typeof STATES[number] | null }
+          | { ok: true; address: string; postcode: string | null; state: (typeof STATES)[number] | null }
           | { ok: false; code: string; detail: string }
         if (!json.ok) {
           setErrMsg(json.detail)
@@ -184,35 +204,86 @@ export default function RoofingMeasurePage() {
     [token, postcode, state, runMeasure],
   )
 
+  const quote = resp && resp.ok === true ? resp.quote : null
+
+  /** Override one structure's material and re-price the whole property
+   *  (Geoscape building set is stable for the same address). */
+  const onStructureMaterial = useCallback(
+    async (mat: RoofMaterial) => {
+      if (!quote) return
+      const perBuilding: Record<string, { material?: RoofMaterial }> = {}
+      quote.structures.forEach((s, i) => {
+        const k = structureKey(s, i)
+        if (s.buildingId == null) return
+        perBuilding[s.buildingId] = { material: k === selectedId ? mat : s.inputs.material }
+      })
+      await runMeasure({ perBuilding })
+    },
+    [quote, selectedId, runMeasure],
+  )
+
+  const onSave = useCallback(async () => {
+    if (!token || !resp || resp.ok !== true) return
+    const includedStructures = resp.quote.structures.filter((s, i) => included[structureKey(s, i)] !== false)
+    if (includedStructures.length === 0) {
+      setErrMsg('Include at least one structure before saving.')
+      return
+    }
+    setSaveState('saving')
+    setErrMsg(null)
+    try {
+      const res = await fetch('/api/roofing/save', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          address: { address, postcode, state },
+          provider: resp.provider,
+          structures: includedStructures.map((s) => ({
+            buildingId: s.buildingId,
+            role: s.role,
+            label: s.label,
+            inputs: s.inputs,
+          })),
+          quote: resp.quote,
+        }),
+      })
+      const json = (await res.json()) as { ok: true; id: string } | { ok: false; error: string; detail?: string }
+      if (json.ok) {
+        setSavedId(json.id)
+        setSaveState('saved')
+      } else {
+        setSaveState('error')
+        setErrMsg(json.detail ?? json.error)
+      }
+    } catch (e) {
+      setSaveState('error')
+      setErrMsg(e instanceof Error ? e.message : String(e))
+    }
+  }, [token, resp, included, address, postcode, state])
+
   return (
     <main className="min-h-screen bg-ink-deep text-text-pri">
       <TopographicBackdrop />
 
-      {/* ── Header ─────────────────────────────────────────────── */}
       <section className="relative z-10 mx-auto max-w-6xl px-6 pt-14 pb-10 sm:px-10 md:pt-20">
         <Breadcrumb />
-
         <div className="mt-8 grid gap-10 md:grid-cols-[1.5fr_1fr] md:items-end md:gap-16">
           <h1 className="font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2.5rem,5.5vw,4.5rem)]">
             Roof <span className="text-accent">measure</span>
           </h1>
           <p className="max-w-md text-base leading-relaxed text-text-sec md:text-lg">
-            Type an address, declare the material and pitch, get back a
-            Geoscape-derived sloped area plus a three-tier price band at your
-            current rates. Phase 1 — every roofing quote needs your sign-off
-            before send.
+            Type an address and we measure every structure on the property —
+            the house plus any sheds or garages. Price each one its own way,
+            include or drop structures, and get a combined total. Every
+            roofing quote needs your sign-off before send.
           </p>
         </div>
-
         <AuthBadge state={authState} />
       </section>
 
       {/* ── Measurement form ───────────────────────────────────── */}
       <section className="relative z-10 mx-auto max-w-6xl px-6 sm:px-10">
-        <form
-          onSubmit={onMeasure}
-          className="grid gap-7 border border-ink-line bg-ink-card p-7 sm:p-9 md:grid-cols-2"
-        >
+        <form onSubmit={onMeasure} className="grid gap-7 border border-ink-line bg-ink-card p-7 sm:p-9 md:grid-cols-2">
           <div className="md:col-span-2">
             <Label>Property address</Label>
             <AddressAutocomplete
@@ -220,9 +291,6 @@ export default function RoofingMeasurePage() {
               value={address}
               onChange={setAddress}
               onSelect={(s) => {
-                // Picking a Geoscape suggestion fills the address +
-                // postcode + state in one go, so the tradie can press
-                // Measure immediately.
                 setAddress(s.address)
                 if (s.postcode) setPostcode(s.postcode)
                 if (s.state && (STATES as readonly string[]).includes(s.state)) {
@@ -248,97 +316,50 @@ export default function RoofingMeasurePage() {
 
           <div>
             <Label>State</Label>
-            <select
-              aria-label="State"
-              value={state}
-              onChange={(e) => setState(e.target.value as (typeof STATES)[number])}
-              className={INPUT}
-            >
+            <select aria-label="State" value={state} onChange={(e) => setState(e.target.value as (typeof STATES)[number])} className={INPUT}>
               {STATES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
+                <option key={s} value={s}>{s}</option>
               ))}
             </select>
           </div>
 
           <div>
-            <Label>Roof material</Label>
-            <select
-              aria-label="Roof material"
-              value={material}
-              onChange={(e) =>
-                setMaterial(e.target.value as (typeof MATERIALS)[number][0])
-              }
-              className={INPUT}
-            >
+            <Label>Default roof material</Label>
+            <select aria-label="Roof material" value={material} onChange={(e) => setMaterial(e.target.value as (typeof MATERIALS)[number][0])} className={INPUT}>
               {MATERIALS.map(([v, label]) => (
-                <option key={v} value={v}>
-                  {label}
-                </option>
+                <option key={v} value={v}>{label}</option>
               ))}
             </select>
           </div>
 
           <div>
             <Label>Roof pitch</Label>
-            <select
-              aria-label="Roof pitch"
-              value={pitch}
-              onChange={(e) =>
-                setPitch(e.target.value as (typeof PITCHES)[number][0])
-              }
-              className={INPUT}
-            >
+            <select aria-label="Roof pitch" value={pitch} onChange={(e) => setPitch(e.target.value as (typeof PITCHES)[number][0])} className={INPUT}>
               {PITCHES.map(([v, label]) => (
-                <option key={v} value={v}>
-                  {label}
-                </option>
+                <option key={v} value={v}>{label}</option>
               ))}
             </select>
           </div>
 
           <div>
             <Label>Job intent</Label>
-            <select
-              aria-label="Job intent"
-              value={intent}
-              onChange={(e) =>
-                setIntent(e.target.value as (typeof INTENTS)[number][0])
-              }
-              className={INPUT}
-            >
+            <select aria-label="Job intent" value={intent} onChange={(e) => setIntent(e.target.value as (typeof INTENTS)[number][0])} className={INPUT}>
               {INTENTS.map(([v, label]) => (
-                <option key={v} value={v}>
-                  {label}
-                </option>
+                <option key={v} value={v}>{label}</option>
               ))}
             </select>
           </div>
 
           <div>
             <Label>Year built (optional)</Label>
-            <input
-              type="number"
-              min={1850}
-              max={2100}
-              value={yearBuilt}
-              onChange={(e) => setYearBuilt(e.target.value)}
-              placeholder="1985"
-              className={INPUT}
-            />
+            <input type="number" min={1850} max={2100} value={yearBuilt} onChange={(e) => setYearBuilt(e.target.value)} placeholder="1985" className={INPUT} />
           </div>
 
           <div className="md:col-span-2 flex flex-wrap items-center justify-between gap-5 pt-2">
             <label className="inline-flex cursor-pointer items-center gap-3 text-text-sec">
-              <input
-                type="checkbox"
-                checked={useMock}
-                onChange={(e) => setUseMock(e.target.checked)}
-                className="h-4 w-4 accent-accent"
-              />
+              <input type="checkbox" checked={useMock} onChange={(e) => setUseMock(e.target.checked)} className="h-4 w-4 accent-accent" />
               <span className="font-mono text-sm font-semibold uppercase tracking-[0.14em]">
-                Use mock provider (demo / no live Geoscape call)
+                Use mock provider (demo · returns a house + shed)
               </span>
             </label>
             <button
@@ -346,296 +367,352 @@ export default function RoofingMeasurePage() {
               disabled={busy || authState !== 'ready'}
               className="inline-flex items-center gap-2 bg-accent px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {busy ? (
-                <>
-                  <Spinner /> Measuring…
-                </>
-              ) : (
-                <>
-                  Measure roof <span aria-hidden="true">&rarr;</span>
-                </>
-              )}
+              {busy ? (<><Spinner /> Measuring…</>) : (<>Measure all structures <span aria-hidden="true">&rarr;</span></>)}
             </button>
           </div>
         </form>
 
-        {errMsg && (
-          <Notice tone="warn" label="Measurement could not complete">
-            {errMsg}
-          </Notice>
-        )}
+        {errMsg && <Notice tone="warn" label="Measurement could not complete">{errMsg}</Notice>}
       </section>
 
       {/* ── Results ────────────────────────────────────────────── */}
-      {resp && resp.ok === true && (
-        <ResultBlock
-          metrics={resp.metrics}
-          price={resp.price}
+      {quote && resp && resp.ok === true && (
+        <MultiResultBlock
+          quote={quote}
           provider={resp.provider}
           warnings={resp.warnings}
-          onMapRecenter={onMapRecenter}
           address={address}
           accessToken={token}
-          onMaterialDetected={(m) => {
-            // Only adopt Claude's call when it matches a value the
-            // dropdown supports — otherwise the select renders blank.
-            const supported = MATERIALS.map(([v]) => v)
-            if ((supported as readonly string[]).includes(m)) {
-              setMaterial(m as (typeof MATERIALS)[number][0])
-            }
-          }}
+          busy={busy}
+          included={included}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+          onToggleInclude={(k) => setIncluded((prev) => ({ ...prev, [k]: prev[k] === false }))}
+          onStructureMaterial={onStructureMaterial}
+          onMapRecenter={onMapRecenter}
+          onSave={onSave}
+          saveState={saveState}
+          savedId={savedId}
+          onMaterialDetected={setMaterial}
         />
       )}
 
       <div className="relative z-10 bg-accent px-6 py-5 text-center text-white">
         <span className="font-mono text-sm font-semibold uppercase tracking-[0.16em]">
-          QuoteMate · Roof measure · Phase 1
+          QuoteMate · Roof measure · multi-structure
         </span>
       </div>
     </main>
   )
 }
 
-// ─── Result panel ───────────────────────────────────────────────────
+// ─── Multi-structure result panel ────────────────────────────────────
 
-function ResultBlock({
-  metrics,
-  price,
+function MultiResultBlock({
+  quote,
   provider,
   warnings,
-  onMapRecenter,
   address,
   accessToken,
+  busy,
+  included,
+  selectedId,
+  onSelect,
+  onToggleInclude,
+  onStructureMaterial,
+  onMapRecenter,
+  onSave,
+  saveState,
+  savedId,
   onMaterialDetected,
 }: {
-  metrics: RoofMetrics
-  price: RoofingQuotePrice
+  quote: MultiRoofQuote
   provider: 'geoscape' | 'lidar' | 'mock' | 'manual'
   warnings: string[]
-  onMapRecenter: (lng: number, lat: number) => void | Promise<void>
   address: string
   accessToken: string | null
-  onMaterialDetected: (material: string) => void
+  busy: boolean
+  included: Record<string, boolean>
+  selectedId: string | null
+  onSelect: (key: string) => void
+  onToggleInclude: (key: string) => void
+  onStructureMaterial: (m: RoofMaterial) => void | Promise<void>
+  onMapRecenter: (lng: number, lat: number) => void | Promise<void>
+  onSave: () => void | Promise<void>
+  saveState: 'idle' | 'saving' | 'saved' | 'error'
+  savedId: string | null
+  onMaterialDetected: (m: RoofMaterial) => void
 }) {
-  // Confirmation state — "Is this your roof?" UX.
-  const [confirmation, setConfirmation] = useState<'pending' | 'yes' | 'no'>('pending')
-  const routing = price.routing
-  const routingTone =
-    routing.decision === 'inspection_required' ? 'warn' :
-    routing.decision === 'auto_quote' ? 'good' : 'accent'
+  const keyOf = (i: number) => structureKey(quote.structures[i], i)
+  const selectedIndex = quote.structures.findIndex((_s, i) => keyOf(i) === selectedId)
+  const selected = selectedIndex >= 0 ? quote.structures[selectedIndex] : quote.structures[0]
+  const selectedMetrics: RoofMetrics | null = selected?.metrics ?? null
+
+  const mapBuildings: RoofMapBuilding[] = quote.structures.map((s, i) => ({
+    id: keyOf(i),
+    polygon: s.metrics.polygon_geojson,
+    role: s.role,
+    included: included[keyOf(i)] !== false,
+  }))
+
+  const combined = combinedIncludedTotals(quote, included)
 
   return (
     <section className="relative z-10 mx-auto mt-12 max-w-6xl px-6 pb-20 sm:px-10 md:pb-24">
       <SectionHeading
         eyebrow={`Measurement from ${provider}`}
-        title="Roof metrics + price band"
+        title={`${quote.structures.length} structure${quote.structures.length === 1 ? '' : 's'} at this property`}
       />
 
-      {/* Two-source verification — Google + Geoscape side by side */}
-      <div className="mt-8">
-        <div className="grid gap-5 lg:grid-cols-2">
-          <GoogleStaticMap
-            accessToken={accessToken}
-            address={address}
-            marker={
-              metrics.polygon_geojson
-                ? {
-                    lat: metrics.polygon_geojson.coordinates[0][0][1],
-                    lng: metrics.polygon_geojson.coordinates[0][0][0],
-                  }
-                : undefined
-            }
-          />
-          <RoofMap
-            polygon={metrics.polygon_geojson}
-            form={metrics.form}
-            stats={{
-              sloped_area_m2: metrics.sloped_area_m2,
-              hips: metrics.hips,
-              valleys: metrics.valleys,
-              storeys: metrics.storeys,
-            }}
-            onRecenter={onMapRecenter}
-          />
-        </div>
-        {!metrics.polygon_geojson && (
-          <p className="mt-3 text-sm text-text-dim">
-            No polygon attached to this measurement — switch off the mock
-            provider once Geoscape is wired to see the building outline on
-            the Esri view.
-          </p>
-        )}
-      </div>
-
-      {/* "Is this your roof?" — the trust-builder step. */}
-      <div className="mt-6 border border-ink-line bg-ink-card p-6 sm:p-7">
-        {confirmation === 'pending' && (
-          <div className="grid gap-5 sm:grid-cols-[1fr_auto] sm:items-center">
-            <div>
-              <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
-                Confirm the building
-              </div>
-              <p className="mt-2 text-base leading-relaxed text-text-sec">
-                Compare the two satellite views. Is the orange polygon on the
-                Geoscape map drawn around <strong className="text-text-pri">{address || 'your customer\'s property'}</strong>? If something looks off (wrong house, granny flat picked instead of main, etc.), hit
-                <span className="font-mono text-text-pri"> Not my roof</span>.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-3 sm:justify-end">
-              <button
-                type="button"
-                onClick={() => setConfirmation('yes')}
-                className="inline-flex items-center gap-2 bg-accent px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press"
-              >
-                Yes, that&apos;s the roof <span aria-hidden="true">&rarr;</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirmation('no')}
-                className="inline-flex items-center gap-2 border border-ink-line px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-sec transition-colors hover:border-accent hover:text-text-pri"
-              >
-                Not my roof
-              </button>
-            </div>
-          </div>
-        )}
-        {confirmation === 'yes' && (
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-teal-glow">
-            ✓ Roof confirmed · Pricing below is from the right building
-          </div>
-        )}
-        {confirmation === 'no' && (
-          <div>
-            <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-warning">
-              Wrong building — re-measure recommended
-            </div>
-            <p className="mt-2 text-base text-text-sec">
-              Click any point on the Geoscape map (right side) — we&apos;ll
-              reverse-geocode that location and re-run the measurement. If
-              that still doesn&apos;t land on the right building, upload a
-              photo below and Claude vision will help us track it down.
-            </p>
-            <button
-              type="button"
-              onClick={() => setConfirmation('pending')}
-              className="mt-4 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-accent hover:underline"
-            >
-              Reset
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* AI photo verification — upload a photo to cross-check the
-          measurement + auto-detect the roof material. */}
-      <div className="mt-6">
-        <PhotoVerify
+      {/* Two-source verification — Google + Geoscape multi-building map */}
+      <div className="mt-8 grid gap-5 lg:grid-cols-2">
+        <GoogleStaticMap
           accessToken={accessToken}
           address={address}
-          onMaterialDetected={onMaterialDetected}
+          marker={
+            selectedMetrics?.polygon_geojson
+              ? {
+                  lat: selectedMetrics.polygon_geojson.coordinates[0][0][1],
+                  lng: selectedMetrics.polygon_geojson.coordinates[0][0][0],
+                }
+              : undefined
+          }
+        />
+        <RoofMap
+          polygon={null}
+          form={selectedMetrics?.form ?? 'unknown'}
+          stats={
+            selectedMetrics
+              ? {
+                  sloped_area_m2: selectedMetrics.sloped_area_m2,
+                  hips: selectedMetrics.hips,
+                  valleys: selectedMetrics.valleys,
+                  storeys: selectedMetrics.storeys,
+                }
+              : null
+          }
+          buildings={mapBuildings}
+          selectedId={selectedId}
+          onRecenter={onMapRecenter}
         />
       </div>
 
-      {/* Routing strip */}
-      <div className={`mt-8 border border-ink-line border-l-4 ${routingBorder(routingTone)} bg-ink-card px-6 py-5 sm:px-8`}>
-        <div className={`font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] ${routingLabelColour(routingTone)}`}>
-          Routing decision · {routing.decision.replace('_', ' ')}
+      {/* Job-level routing strip */}
+      <RoutingStrip routing={quote.routing} />
+
+      {/* Per-structure cards */}
+      <div className="mt-8 grid gap-6">
+        {quote.structures.map((s, i) => {
+          const k = keyOf(i)
+          return (
+            <StructureCard
+              key={k}
+              structure={s}
+              index={i}
+              isSelected={k === selectedId}
+              isIncluded={included[k] !== false}
+              busy={busy}
+              onSelect={() => onSelect(k)}
+              onToggleInclude={() => onToggleInclude(k)}
+              onMaterialChange={onStructureMaterial}
+            />
+          )
+        })}
+      </div>
+
+      {/* Combined total */}
+      <div className="mt-10 border border-ink-line border-l-4 border-l-accent bg-ink-card p-7 sm:p-9">
+        <div>
+          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
+            Combined total · {combined.count} structure{combined.count === 1 ? '' : 's'} included
+          </div>
+          <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri">
+            {combined.area.toFixed(0)} m² across the job
+          </h3>
         </div>
-        <p className="mt-1 text-base text-text-sec">{routing.reason}</p>
-      </div>
+        <div className="mt-6 grid gap-6 md:grid-cols-3">
+          {(['good', 'better', 'best'] as const).map((tier, i) => (
+            <div key={tier} className="border border-ink-line bg-ink-deep p-6">
+              <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-text-dim">{tier} · combined</div>
+              <div className="mt-3 font-mono text-3xl font-bold tabular-nums text-accent sm:text-4xl">
+                ${formatMoney(combined.incGst[i])}
+              </div>
+              <div className="mt-2 font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim">
+                inc GST · ${formatMoney(combined.exGst[i])} ex GST
+              </div>
+            </div>
+          ))}
+        </div>
 
-      {/* Metric grid */}
-      <div className="mt-8 grid gap-6 sm:grid-cols-2 md:grid-cols-3">
-        <Stat
-          eyebrow="Sloped area"
-          value={metrics.sloped_area_m2 !== null ? `${metrics.sloped_area_m2.toFixed(0)} m²` : '—'}
-          hint={metrics.footprint_m2 ? `Footprint ${metrics.footprint_m2.toFixed(0)} m²` : ''}
-        />
-        <Stat eyebrow="Roof form" value={metrics.form} hint={metrics.capture_date ? `Captured ${metrics.capture_date}` : ''} />
-        <Stat
-          eyebrow="Hips · valleys"
-          value={`${metrics.hips ?? '?'} · ${metrics.valleys ?? '?'}`}
-          hint={metrics.storeys !== null ? `${metrics.storeys}-storey` : ''}
-        />
-      </div>
-
-      {/* Tier price grid */}
-      <div className="mt-10 grid gap-6 md:grid-cols-3">
-        {price.tiers.map((t, i) => (
-          <article
-            key={t.tier}
-            className="flex h-full flex-col border border-ink-line bg-ink-card p-7 sm:p-8"
+        <div className="mt-7 flex flex-wrap items-center gap-4">
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={saveState === 'saving' || combined.count === 0}
+            className="inline-flex items-center gap-2 bg-accent px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <span className="font-mono text-5xl font-bold leading-none text-accent">
-              {['01', '02', '03'][i]}
+            {saveState === 'saving' ? (<><Spinner /> Saving…</>) : (<>Save job ({combined.count})</>)}
+          </button>
+          {saveState === 'saved' && savedId && (
+            <span className="font-mono text-sm font-semibold uppercase tracking-[0.14em] text-teal-glow">
+              ✓ Saved · {savedId.slice(0, 8)}
             </span>
-            <div className="mt-5 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
-              {t.tier} tier
-            </div>
-            <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri">
-              {t.label}
-            </h3>
-            <div className="mt-6 border-t border-ink-line pt-5">
-              <div className="font-mono text-4xl font-bold tabular-nums leading-none text-accent sm:text-5xl">
-                ${formatMoney(t.inc_gst)}
-              </div>
-              <div className="mt-3 font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim">
-                inc GST · ${formatMoney(t.ex_gst)} ex GST
-              </div>
-            </div>
-            <p className="mt-6 text-base leading-relaxed text-text-sec">{t.scope}</p>
-          </article>
+          )}
+        </div>
+      </div>
+
+      {/* AI photo verification — for the selected structure */}
+      <div className="mt-6">
+        <PhotoVerify accessToken={accessToken} address={address} onMaterialDetected={onMaterialDetected} />
+      </div>
+
+      {/* Provider warnings */}
+      {warnings.length > 0 && (
+        <div className="mt-8 border border-ink-line bg-ink-card p-7 sm:p-8">
+          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">Provider warnings</div>
+          <ul className="mt-3 space-y-2 text-base text-text-sec">
+            {warnings.map((w, i) => (
+              <li key={i} className="flex items-baseline gap-3">
+                <span className="text-accent">·</span>
+                <span>{w}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function StructureCard({
+  structure,
+  index,
+  isSelected,
+  isIncluded,
+  busy,
+  onSelect,
+  onToggleInclude,
+  onMaterialChange,
+}: {
+  structure: RoofStructurePrice
+  index: number
+  isSelected: boolean
+  isIncluded: boolean
+  busy: boolean
+  onSelect: () => void
+  onToggleInclude: () => void
+  onMaterialChange: (m: RoofMaterial) => void | Promise<void>
+}) {
+  const m = structure.metrics
+  const p = structure.price
+  const inspection = p.routing.decision === 'inspection_required'
+  return (
+    <article
+      onClick={onSelect}
+      className={`cursor-pointer border bg-ink-card p-6 transition-colors sm:p-7 ${
+        isSelected ? 'border-accent' : 'border-ink-line hover:border-accent/50'
+      } ${isIncluded ? '' : 'opacity-55'}`}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
+            {structure.role === 'primary' ? 'Main dwelling' : 'Secondary structure'} · {String(index + 1).padStart(2, '0')}
+          </div>
+          <h3 className="mt-1.5 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri">{structure.label}</h3>
+        </div>
+        <label className="inline-flex cursor-pointer items-center gap-2 text-text-sec" onClick={(e) => e.stopPropagation()}>
+          <input type="checkbox" checked={isIncluded} onChange={onToggleInclude} className="h-4 w-4 accent-accent" />
+          <span className="font-mono text-xs font-semibold uppercase tracking-[0.14em]">In job</span>
+        </label>
+      </div>
+
+      <div className="mt-5 grid gap-4 sm:grid-cols-3">
+        <MiniStat label="Sloped area" value={m.sloped_area_m2 !== null ? `${m.sloped_area_m2.toFixed(0)} m²` : '—'} hint={m.footprint_m2 ? `Footprint ${m.footprint_m2.toFixed(0)} m²` : ''} />
+        <MiniStat label="Roof form" value={m.form} hint={m.storeys !== null ? `${m.storeys}-storey` : ''} />
+        <MiniStat label="Hips · valleys" value={`${m.hips ?? '?'} · ${m.valleys ?? '?'}`} hint={m.buildingId ? `ID ${String(m.buildingId).slice(0, 10)}` : ''} />
+      </div>
+
+      {/* Per-structure material override */}
+      <div className="mt-5" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-2 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+          Material for this structure
+        </div>
+        <select
+          aria-label={`Material for ${structure.label}`}
+          value={structure.inputs.material}
+          disabled={busy || structure.buildingId == null}
+          onChange={(e) => void onMaterialChange(e.target.value as RoofMaterial)}
+          className={`${INPUT} max-w-sm disabled:opacity-50`}
+        >
+          {MATERIALS.map(([v, label]) => (
+            <option key={v} value={v}>{label}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Tier prices for this structure */}
+      <div className="mt-6 grid gap-4 md:grid-cols-3">
+        {p.tiers.map((t) => (
+          <div key={t.tier} className="border border-ink-line bg-ink-deep p-5">
+            <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">{t.tier} · {t.label}</div>
+            <div className="mt-2 font-mono text-2xl font-bold tabular-nums text-accent">${formatMoney(t.inc_gst)}</div>
+            <div className="mt-1 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">inc GST</div>
+          </div>
         ))}
       </div>
 
-      {/* Loadings + warnings */}
-      <div className="mt-10 grid gap-6 md:grid-cols-2">
-        <div className="border border-ink-line bg-ink-card p-7 sm:p-8">
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
-            Effective rate
-          </div>
-          <div className="mt-3 font-mono text-3xl font-bold tabular-nums text-text-pri sm:text-4xl">
-            ${formatMoney(price.effective_rate_per_m2)} <span className="text-base text-text-dim">/ m²</span>
-          </div>
-          <p className="mt-4 text-base text-text-sec">
-            Applied to {price.area_m2.toFixed(0)} m² of sloped roof area.
-          </p>
-          {price.loadings_applied.length > 0 ? (
-            <ul className="mt-5 space-y-2 text-base text-text-sec">
-              {price.loadings_applied.map((l) => (
-                <li key={l.code} className="flex items-baseline gap-3">
-                  <span className="text-accent">+</span>
-                  <span>{l.detail}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-5 text-base text-text-dim">No loadings applied.</p>
-          )}
+      {(inspection || p.call_out_minimum_applied || p.loadings_applied.length > 0) && (
+        <div className="mt-5 space-y-1.5 text-sm text-text-sec">
+          {inspection && <p className="text-warning">⚠ {p.routing.reason}</p>}
+          {p.call_out_minimum_applied && <p>Call-out minimum applied — small structure floored to the minimum job charge.</p>}
+          {p.loadings_applied.map((l) => (
+            <p key={l.code}>+ {l.detail}</p>
+          ))}
         </div>
-
-        <div className="border border-ink-line bg-ink-card p-7 sm:p-8">
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
-            Provider warnings
-          </div>
-          {warnings.length === 0 ? (
-            <p className="mt-3 text-base text-text-dim">
-              No warnings — measurement looks clean.
-            </p>
-          ) : (
-            <ul className="mt-3 space-y-2 text-base text-text-sec">
-              {warnings.map((w, i) => (
-                <li key={i} className="flex items-baseline gap-3">
-                  <span className="text-accent">·</span>
-                  <span>{w}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
-    </section>
+      )}
+    </article>
   )
+}
+
+function RoutingStrip({ routing }: { routing: RoofingRoutingDecision }) {
+  const tone =
+    routing.decision === 'inspection_required' ? 'warn' :
+    routing.decision === 'auto_quote' ? 'good' : 'accent'
+  return (
+    <div className={`mt-8 border border-ink-line border-l-4 ${routingBorder(tone)} bg-ink-card px-6 py-5 sm:px-8`}>
+      <div className={`font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] ${routingLabelColour(tone)}`}>
+        Job routing · {routing.decision.replace('_', ' ')}
+      </div>
+      <p className="mt-1 text-base text-text-sec">{routing.reason}</p>
+    </div>
+  )
+}
+
+/** PURE — sum the included structures' tiers for the combined total. */
+function combinedIncludedTotals(
+  quote: MultiRoofQuote,
+  included: Record<string, boolean>,
+): { count: number; area: number; exGst: [number, number, number]; incGst: [number, number, number] } {
+  const exGst: [number, number, number] = [0, 0, 0]
+  const incGst: [number, number, number] = [0, 0, 0]
+  let area = 0
+  let count = 0
+  quote.structures.forEach((s, i) => {
+    if (included[structureKey(s, i)] === false) return
+    count += 1
+    area += s.price.area_m2
+    for (let t = 0; t < 3; t++) {
+      exGst[t] += s.price.tiers[t].ex_gst
+      incGst[t] += s.price.tiers[t].inc_gst
+    }
+  })
+  const round2 = (n: number) => Math.round(n * 100) / 100
+  return {
+    count,
+    area: Math.round(area * 10) / 10,
+    exGst: [round2(exGst[0]), round2(exGst[1]), round2(exGst[2])],
+    incGst: [round2(incGst[0]), round2(incGst[1]), round2(incGst[2])],
+  }
 }
 
 // ─── Small UI bits ──────────────────────────────────────────────────
@@ -643,13 +720,9 @@ function ResultBlock({
 function Breadcrumb() {
   return (
     <div className="flex flex-wrap items-center gap-3 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
-      <Link href="/dashboard" className="transition-colors hover:text-text-pri">
-        Dashboard
-      </Link>
+      <Link href="/dashboard" className="transition-colors hover:text-text-pri">Dashboard</Link>
       <span className="text-ink-line">/</span>
-      <Link href="/dashboard?tab=roofing" className="transition-colors hover:text-text-pri">
-        Roof
-      </Link>
+      <Link href="/dashboard?tab=roofing" className="transition-colors hover:text-text-pri">Roof</Link>
       <span className="text-ink-line">/</span>
       <span className="text-text-pri">Measure</span>
     </div>
@@ -659,110 +732,65 @@ function Breadcrumb() {
 function SectionHeading({ eyebrow, title }: { eyebrow: string; title: string }) {
   return (
     <div>
-      <div className="font-mono text-[0.8rem] font-semibold uppercase tracking-[0.18em] text-accent">
-        {eyebrow}
-      </div>
-      <h2 className="mt-3 font-extrabold uppercase tracking-[-0.025em] text-[clamp(1.5rem,2.6vw,2.25rem)] leading-[1.1]">
-        {title}
-      </h2>
+      <div className="font-mono text-[0.8rem] font-semibold uppercase tracking-[0.18em] text-accent">{eyebrow}</div>
+      <h2 className="mt-3 font-extrabold uppercase tracking-[-0.025em] text-[clamp(1.5rem,2.6vw,2.25rem)] leading-[1.1]">{title}</h2>
     </div>
   )
 }
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mb-2 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
-      {children}
-    </div>
+    <div className="mb-2 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-text-dim">{children}</div>
   )
 }
 
-function Stat({
-  eyebrow,
-  value,
-  hint,
-}: {
-  eyebrow: string
-  value: string
-  hint?: string
-}) {
+function MiniStat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="border border-ink-line bg-ink-card p-6">
-      <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
-        {eyebrow}
-      </div>
-      <div className="mt-3 font-mono text-3xl font-bold tabular-nums text-text-pri">
-        {value}
-      </div>
-      {hint && (
-        <div className="mt-2 text-sm text-text-dim">
-          {hint}
-        </div>
-      )}
+    <div className="border border-ink-line bg-ink-deep p-4">
+      <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">{label}</div>
+      <div className="mt-2 font-mono text-xl font-bold tabular-nums text-text-pri">{value}</div>
+      {hint && <div className="mt-1 text-xs text-text-dim">{hint}</div>}
     </div>
   )
 }
 
-function Notice({
-  tone,
-  label,
-  children,
-}: {
-  tone: 'warn' | 'accent'
-  label: string
-  children: React.ReactNode
-}) {
+function Notice({ tone, label, children }: { tone: 'warn' | 'accent'; label: string; children: React.ReactNode }) {
   const border = tone === 'warn' ? 'border-l-warning' : 'border-l-accent'
   const labelColour = tone === 'warn' ? 'text-warning' : 'text-accent'
   return (
     <div className={`mt-6 border border-ink-line ${border} border-l-4 bg-ink-card px-5 py-4`}>
-      <div className={`font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] ${labelColour}`}>
-        {label}
-      </div>
+      <div className={`font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] ${labelColour}`}>{label}</div>
       <p className="mt-1 text-base text-text-sec">{children}</p>
     </div>
   )
 }
 
-function AuthBadge({
-  state,
-}: {
-  state: 'loading' | 'signed-out' | 'ready'
-}) {
+function AuthBadge({ state }: { state: 'loading' | 'signed-out' | 'ready' }) {
   const label =
     state === 'loading' ? 'Checking session…' :
     state === 'signed-out' ? 'Not signed in — sign in to measure' :
     'Signed in — ready to measure'
-  const dot =
-    state === 'ready' ? 'bg-teal-glow' :
-    state === 'signed-out' ? 'bg-accent' : 'bg-text-dim'
+  const dot = state === 'ready' ? 'bg-teal-glow' : state === 'signed-out' ? 'bg-accent' : 'bg-text-dim'
   return (
     <div className="mt-10 inline-flex items-center gap-3 border border-ink-line bg-ink-card px-5 py-3">
       <span className={`h-2.5 w-2.5 ${dot}`} aria-hidden="true" />
-      <span className="font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-sec">
-        {label}
-      </span>
+      <span className="font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-sec">{label}</span>
     </div>
   )
 }
 
 function Spinner() {
-  return (
-    <span
-      className="inline-block h-3.5 w-3.5 animate-spin border-2 border-white/40 border-t-white"
-      aria-hidden="true"
-    />
-  )
+  return <span className="inline-block h-3.5 w-3.5 animate-spin border-2 border-white/40 border-t-white" aria-hidden="true" />
 }
 
 function routingBorder(t: 'warn' | 'good' | 'accent'): string {
-  if (t === 'warn')   return 'border-l-warning'
-  if (t === 'good')   return 'border-l-teal-glow'
+  if (t === 'warn') return 'border-l-warning'
+  if (t === 'good') return 'border-l-teal-glow'
   return 'border-l-accent'
 }
 function routingLabelColour(t: 'warn' | 'good' | 'accent'): string {
-  if (t === 'warn')   return 'text-warning'
-  if (t === 'good')   return 'text-teal-glow'
+  if (t === 'warn') return 'text-warning'
+  if (t === 'good') return 'text-teal-glow'
   return 'text-accent'
 }
 
@@ -775,12 +803,7 @@ const INPUT =
 
 function TopographicBackdrop() {
   return (
-    <svg
-      className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.16]"
-      viewBox="0 0 1920 1080"
-      preserveAspectRatio="xMidYMid slice"
-      aria-hidden="true"
-    >
+    <svg className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.16]" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
       <defs>
         <linearGradient id="roof-topo-fade" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#14B8A6" stopOpacity="0.9" />

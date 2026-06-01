@@ -43,6 +43,7 @@ import {
 } from 'lucide-react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 import { tenantHasRoofingTrade } from '@/lib/roofing/tenant'
+import { RoofRatesEditor } from './_components/RoofRatesEditor'
 import { ErrorBanner, Field, INPUT } from '../signup/page'
 
 type NavIcon = ComponentType<LucideProps>
@@ -2659,6 +2660,13 @@ function PricingTab({
           our recipe lines up with what you actually charged, accept a
           suggested hourly-rate adjustment. */}
       <CalibrationCard accessToken={accessToken} />
+      {/* v10 / Phase 1.5 — per-tenant Roof rates editor. Only rendered when
+          'roofing' is in tenants.trades; otherwise the whole card is
+          hidden. Writes to pricing_book.overlays.roofing_rate_card; read
+          back by /api/roofing/measure before pricing. */}
+      {tenantHasRoofingTrade(data.tenant.trades as unknown as string[]) && (
+        <RoofRatesEditor accessToken={accessToken} />
+      )}
     </div>
   )
 }

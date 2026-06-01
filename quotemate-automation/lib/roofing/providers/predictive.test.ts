@@ -2,16 +2,28 @@ import { describe, expect, it, vi } from 'vitest'
 import { PredictiveProvider, parseSuggestions } from './predictive'
 
 describe('parseSuggestions — envelope variations', () => {
-  it('reads { suggest: [...] }', () => {
+  it('reads { suggest: [...] } and DERIVES state + postcode from the display string', () => {
+    // The Predictive type-ahead returns only id + display string, no
+    // structured state/postcode. We parse them back out so the form can
+    // auto-fill the State/Postcode inputs (fixes the QLD-but-NSW/2750 bug).
     expect(
       parseSuggestions({
         suggest: [{ id: 'a1', address: '27 SMITH ST, PENRITH NSW 2750' }],
       }),
     ).toEqual([
-      { id: 'a1', address: '27 SMITH ST, PENRITH NSW 2750', state: null, postcode: null },
+      { id: 'a1', address: '27 SMITH ST, PENRITH NSW 2750', state: 'NSW', postcode: '2750' },
     ])
   })
-  it('reads { data: [{ addressId, formattedAddress, state, postcode }] }', () => {
+  it('derives QLD + 4155 for the Chandler screenshot case', () => {
+    expect(
+      parseSuggestions({
+        suggest: [{ id: 'c1', address: '670 LONDON RD, CHANDLER QLD 4155' }],
+      }),
+    ).toEqual([
+      { id: 'c1', address: '670 LONDON RD, CHANDLER QLD 4155', state: 'QLD', postcode: '4155' },
+    ])
+  })
+  it('prefers structured state + postcode when Geoscape supplies them', () => {
     expect(
       parseSuggestions({
         data: [
@@ -25,6 +37,23 @@ describe('parseSuggestions — envelope variations', () => {
       }),
     ).toEqual([
       { id: 'a2', address: '15 GEORGE ST, SYDNEY NSW 2000', state: 'NSW', postcode: '2000' },
+    ])
+  })
+  it('backfills only the missing half when the structured field is partial', () => {
+    // Structured postcode present, structured state absent → derive the
+    // state from the display string, keep the structured postcode.
+    expect(
+      parseSuggestions({
+        data: [
+          {
+            addressId: 'a3',
+            formattedAddress: '8 QUEEN ST, BRISBANE QLD 4000',
+            postcode: '4000',
+          },
+        ],
+      }),
+    ).toEqual([
+      { id: 'a3', address: '8 QUEEN ST, BRISBANE QLD 4000', state: 'QLD', postcode: '4000' },
     ])
   })
   it('skips entries missing id or address', () => {

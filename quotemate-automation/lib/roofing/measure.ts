@@ -14,17 +14,24 @@
 // ════════════════════════════════════════════════════════════════════
 
 import type {
+  MultiRoofQuote,
   RoofAddressInput,
   RoofMetrics,
   RoofUserInputs,
   RoofingMeasurementResult,
+  RoofingMultiMeasurementResult,
   RoofingQuotePrice,
   RoofingRateCard,
 } from './types'
 import type { RoofingMeasurementProvider } from './providers/base'
 import { GeoscapeProvider } from './providers/geoscape'
 import { MockRoofingProvider } from './providers/mock'
-import { calculateRoofingPrice, slopedAreaFromFootprint } from './pricing'
+import {
+  calculateRoofingPrice,
+  priceMultiRoof,
+  slopedAreaFromFootprint,
+  type RoofStructureInput,
+} from './pricing'
 
 export type MeasureRoofOpts = {
   /** Explicit provider override — tests and the dashboard demo path use this. */
@@ -112,4 +119,88 @@ export async function measureAndPriceRoof(
     provider: raw.provider,
     warnings: raw.warnings,
   }
+}
+
+// ── Multi-structure pipeline ──────────────────────────────────────────
+
+export type MeasureRoofsOpts = MeasureRoofOpts & {
+  /**
+   * Per-building input overrides keyed by buildingId — a shed is often a
+   * different material/pitch/intent than the main house. Any field left
+   * out falls back to the shared `inputs` argument.
+   */
+  perBuilding?: Record<string, Partial<RoofUserInputs>>
+}
+
+export type MeasureRoofsResult =
+  | {
+      ok: true
+      quote: MultiRoofQuote
+      provider: RoofingMeasurementProvider['name']
+      warnings: string[]
+    }
+  | {
+      ok: false
+      code: string
+      detail: string
+    }
+
+/**
+ * Full multi-structure pipeline: address → every structure at the
+ * property → per-structure pricing → aggregated MultiRoofQuote. Uses the
+ * provider's measureAll() when available, else wraps a single measure()
+ * into a one-building result so any provider works. Each structure is
+ * priced with its own (optionally overridden) inputs — areas are never
+ * summed onto a single material rate.
+ */
+export async function measureAndPriceRoofs(
+  address: RoofAddressInput,
+  inputs: RoofUserInputs,
+  opts: MeasureRoofsOpts = {},
+): Promise<MeasureRoofsResult> {
+  const provider = pickProvider(opts)
+
+  let multi: RoofingMultiMeasurementResult
+  try {
+    if (typeof provider.measureAll === 'function') {
+      multi = await provider.measureAll(address)
+    } else {
+      const single = await provider.measure(address)
+      multi = single.ok
+        ? {
+            ok: true,
+            provider: single.provider,
+            warnings: single.warnings,
+            buildings: [
+              {
+                buildingId: single.metrics.buildingId ?? null,
+                role: 'primary',
+                metrics: single.metrics,
+              },
+            ],
+          }
+        : single
+    }
+  } catch (e) {
+    return {
+      ok: false,
+      code: 'provider_unavailable',
+      detail: e instanceof Error ? e.message : String(e),
+    }
+  }
+
+  if (!multi.ok) {
+    return { ok: false, code: multi.code, detail: multi.detail }
+  }
+
+  const structures: RoofStructureInput[] = multi.buildings.map((b) => {
+    const override = (b.buildingId ? opts.perBuilding?.[b.buildingId] : undefined) ?? {}
+    const merged: RoofUserInputs = { ...inputs, ...override }
+    const metrics = reapplyPitchToMetrics(b.metrics, merged)
+    return { buildingId: b.buildingId, role: b.role, metrics, inputs: merged }
+  })
+
+  const quote = priceMultiRoof({ structures, rateCard: opts.rateCard })
+
+  return { ok: true, quote, provider: multi.provider, warnings: multi.warnings }
 }

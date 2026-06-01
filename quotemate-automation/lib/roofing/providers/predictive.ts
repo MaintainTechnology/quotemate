@@ -11,6 +11,8 @@
 // geoscape.ts — same API key, same Authorization header.
 // ════════════════════════════════════════════════════════════════════
 
+import { extractStatePostcode } from '../address-parse'
+
 // Same as geoscape.ts — see that file for the host-verification note.
 const DEFAULT_BASE_URL =
   process.env.GEOSCAPE_API_BASE_URL ?? 'https://api.psma.com.au/v1'
@@ -151,11 +153,23 @@ export function parseSuggestions(body: unknown): AddressSuggestion[] {
     const address =
       pickString(r, ['address', 'formattedAddress', 'formatted_address', 'displayName', 'display_name', 'text']) ?? null
     if (!id || !address) continue
+    // Prefer structured fields when Geoscape supplies them. The
+    // Predictive type-ahead usually does NOT — it returns only the
+    // display string (e.g. "670 LONDON RD, CHANDLER QLD 4155") — so we
+    // derive state + postcode back out of it. Without this the form
+    // could not auto-fill those inputs and they sat at the defaults
+    // (the QLD-address-but-NSW/2750 mismatch).
+    const structuredState = pickString(r, ['state', 'stateAbbrev', 'state_abbrev', 'stateName'])
+    const structuredPostcode = pickString(r, ['postcode', 'postCode', 'postal_code'])
+    const derived =
+      structuredState && structuredPostcode
+        ? { state: null, postcode: null }
+        : extractStatePostcode(address)
     out.push({
       id,
       address,
-      state: pickString(r, ['state', 'stateAbbrev', 'state_abbrev', 'stateName']),
-      postcode: pickString(r, ['postcode', 'postCode', 'postal_code']),
+      state: structuredState ?? derived.state,
+      postcode: structuredPostcode ?? derived.postcode,
     })
   }
   return out

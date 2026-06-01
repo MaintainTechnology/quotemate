@@ -51,11 +51,22 @@ import type {
   PitchBucket,
   RoofAddressInput,
   RoofForm,
+  RoofMeasuredBuilding,
   RoofMetrics,
   RoofingMeasurementFailureCode,
   RoofingMeasurementResult,
+  RoofingMultiMeasurementResult,
 } from '../types'
 import { slopedAreaFromFootprint } from '../pricing'
+
+/** Max buildings fetched per address — bounds Geoscape credit cost
+ *  (each building = a 4-call sub-resource fan-out). */
+export const MAX_BUILDINGS = 6
+
+/** Smallest footprint sub-polygon (m²) treated as a measurable
+ *  secondary structure. Below this it's a carport sliver / projection
+ *  artefact, not a roof worth quoting. */
+export const SECONDARY_MIN_AREA_M2 = 10
 
 const DEFAULT_BASE_URL =
   process.env.GEOSCAPE_API_BASE_URL ?? 'https://api.psma.com.au/v1'
@@ -213,11 +224,11 @@ export class GeoscapeProvider implements RoofingMeasurementProvider {
     return { ok: true, addressId }
   }
 
-  // ── Step 2 — addressId → building summary → sub-resources ─────────
-  private async fetchBuildingDetails(
+  // ── Step 2a — addressId → building summary list ───────────────────
+  private async fetchBuildingSummaries(
     addressId: string,
   ): Promise<
-    | { ok: true; details: BuildingDetails }
+    | { ok: true; summaries: BuildingSummary[] }
     | (RoofingMeasurementResult & { ok: false })
   > {
     const listUrl = `${this.baseUrl}/buildings?addressId=${encodeURIComponent(addressId)}`
@@ -249,26 +260,46 @@ export class GeoscapeProvider implements RoofingMeasurementProvider {
         `Geoscape buildings list returned an unexpected shape. Sample: ${JSON.stringify(listRes.body).slice(0, 280)}`,
       )
     }
-    const best = pickBestSummary(summaries)
+    return { ok: true, summaries }
+  }
+
+  // ── Step 2b — pick the single most-specific building (legacy path) ─
+  private async fetchBuildingDetails(
+    addressId: string,
+  ): Promise<
+    | { ok: true; details: BuildingDetails }
+    | (RoofingMeasurementResult & { ok: false })
+  > {
+    const listRes = await this.fetchBuildingSummaries(addressId)
+    if (!listRes.ok) return listRes
+    const best = pickBestSummary(listRes.summaries)
     if (!best) {
       return failure('provider_invalid_response', 'Geoscape buildings list had no usable summary.')
     }
+    return this.fetchDetailsForSummary(best)
+  }
 
-    // Step 3 — parallel sub-resource fetches.
-    // Missing links fall back to canonical paths derived from buildingId.
-    const links = best.links
+  // ── Step 3 — one building summary → 4 parallel sub-resource fetches ─
+  // Missing links fall back to canonical paths derived from buildingId.
+  private async fetchDetailsForSummary(
+    summary: BuildingSummary,
+  ): Promise<
+    | { ok: true; details: BuildingDetails }
+    | (RoofingMeasurementResult & { ok: false })
+  > {
+    const links = summary.links
     const footprintLink =
       links.footprint2d ??
-      `/v1/buildings/${encodeURIComponent(best.buildingId)}/footprint2d`
+      `/v1/buildings/${encodeURIComponent(summary.buildingId)}/footprint2d`
     const roofShapeLink =
       links.roofShape ??
-      `/v1/buildings/${encodeURIComponent(best.buildingId)}/roofShape`
+      `/v1/buildings/${encodeURIComponent(summary.buildingId)}/roofShape`
     const levelsLink =
       links.estimatedLevels ??
-      `/v1/buildings/${encodeURIComponent(best.buildingId)}/estimatedLevels`
+      `/v1/buildings/${encodeURIComponent(summary.buildingId)}/estimatedLevels`
     const areaLink =
       links.area ??
-      `/v1/buildings/${encodeURIComponent(best.buildingId)}/area`
+      `/v1/buildings/${encodeURIComponent(summary.buildingId)}/area`
 
     const [footRes, roofRes, levelsRes, areaRes] = await Promise.all([
       this.tryGet(this.absoluteLink(footprintLink)),
@@ -278,6 +309,10 @@ export class GeoscapeProvider implements RoofingMeasurementProvider {
     ])
 
     const footprint = footRes.ok ? pickPolygon(footRes.body) : null
+    // Retain EVERY footprint sub-polygon (not just the largest) so the
+    // multi-structure path can surface detached sheds/garages that
+    // Geoscape packs into one MultiPolygon footprint.
+    const allFootprints = footRes.ok ? pickAllPolygons(footRes.body) : []
     const roofShape = roofRes.ok ? extractRoofShape(roofRes.body) : null
     const storeys = levelsRes.ok ? extractStoreys(levelsRes.body) : null
     const planarArea = areaRes.ok ? extractArea(areaRes.body) : null
@@ -297,13 +332,122 @@ export class GeoscapeProvider implements RoofingMeasurementProvider {
     return {
       ok: true,
       details: {
-        buildingId: best.buildingId,
+        buildingId: summary.buildingId,
         footprint,
         roofShape,
         storeys,
         planarArea,
+        allFootprints,
       },
     }
+  }
+
+  // ── Multi-structure measurement ───────────────────────────────────
+  // Returns EVERY measurable structure at the address — the primary
+  // dwelling plus detached sheds/garages/granny flats — instead of
+  // collapsing to one building like measure(). Two sources of secondary
+  // structures are merged:
+  //   1. separate buildings in the Buildings list (own buildingId), and
+  //   2. extra sub-polygons in the primary building's MultiPolygon
+  //      footprint above SECONDARY_MIN_AREA_M2.
+  // Credit cost scales with building count, so the summary list is capped
+  // at MAX_BUILDINGS.
+  async measureAll(input: RoofAddressInput): Promise<RoofingMultiMeasurementResult> {
+    if (!input || !input.address?.trim()) {
+      throw new Error('GeoscapeProvider.measureAll: address is required')
+    }
+    if (!this.apiKey) {
+      return {
+        ok: false,
+        code: 'provider_unavailable',
+        detail:
+          'GEOSCAPE_API_KEY is not set — Geoscape adapter cannot make requests. Set the env var or use the mock provider for local development.',
+      }
+    }
+
+    const addressIdRes = await this.resolveAddressId(input)
+    if (!addressIdRes.ok) return addressIdRes
+
+    const listRes = await this.fetchBuildingSummaries(addressIdRes.addressId)
+    if (!listRes.ok) return listRes
+
+    const ranked = rankBuildingSummaries(listRes.summaries).slice(0, MAX_BUILDINGS)
+
+    const buildings: RoofMeasuredBuilding[] = []
+    const warnings: string[] = []
+
+    for (let i = 0; i < ranked.length; i++) {
+      const summary = ranked[i]
+      const detailsRes = await this.fetchDetailsForSummary(summary)
+      if (!detailsRes.ok) {
+        // Skip an individual building that fails to resolve rather than
+        // failing the whole measurement — note it in warnings.
+        warnings.push(
+          `Building ${summary.buildingId} could not be measured (${detailsRes.detail}); skipped.`,
+        )
+        continue
+      }
+      const d = detailsRes.details
+      const isPrimaryBuilding = i === 0
+      const footprints =
+        d.allFootprints && d.allFootprints.length > 0 ? d.allFootprints : [d.footprint]
+
+      // Largest sub-polygon is this building's main metric.
+      const mainMetrics = buildingDetailsToMetrics(d, this.defaultPitch)
+      if (mainMetrics) {
+        buildings.push({
+          buildingId: d.buildingId,
+          role: isPrimaryBuilding ? 'primary' : 'secondary',
+          metrics: mainMetrics,
+        })
+        if (mainMetrics.form === 'complex') {
+          warnings.push(`Structure ${d.buildingId} has a complex roof form — will route to inspection.`)
+        }
+        if ((mainMetrics.storeys ?? 1) >= 2) {
+          warnings.push(`Structure ${d.buildingId} is ${mainMetrics.storeys}-storey — multi-storey loading applies.`)
+        }
+      }
+
+      // Only split the PRIMARY building's footprint into extra secondary
+      // structures — non-primary summaries already cover their own sheds.
+      if (isPrimaryBuilding && footprints.length > 1) {
+        let sub = 0
+        for (let k = 1; k < footprints.length; k++) {
+          const poly = footprints[k]
+          if (polygonAreaM2(poly) < SECONDARY_MIN_AREA_M2) continue
+          sub += 1
+          const subMetrics = buildingDetailsToMetrics(
+            {
+              buildingId: `${d.buildingId}#${sub}`,
+              footprint: poly,
+              roofShape: d.roofShape,
+              storeys: d.storeys,
+              planarArea: null,
+            },
+            this.defaultPitch,
+          )
+          if (subMetrics) {
+            buildings.push({ buildingId: subMetrics.buildingId ?? null, role: 'secondary', metrics: subMetrics })
+          }
+        }
+      }
+    }
+
+    if (buildings.length === 0) {
+      return failure('provider_invalid_response', 'No measurable structures resolved at this address.')
+    }
+    // Guarantee exactly one primary — the first building is primary even
+    // if ranking edge-cases left none flagged.
+    if (!buildings.some((b) => b.role === 'primary')) {
+      buildings[0] = { ...buildings[0], role: 'primary' }
+    }
+    if (buildings.length > 1) {
+      warnings.push(
+        `Measured ${buildings.length} structures at this address — confirm which are in scope before quoting.`,
+      )
+    }
+
+    return { ok: true, buildings, provider: 'geoscape', warnings }
   }
 }
 
@@ -322,6 +466,10 @@ export type BuildingDetails = {
    *  inline-polygon response that carried a capture date. The live
    *  link-based flow does not expose one. */
   captureDate?: string | null
+  /** Every footprint sub-polygon (largest first). Populated by the
+   *  multi-structure path; the single-building path ignores it and uses
+   *  `footprint` (the largest). */
+  allFootprints?: GeoJSONPolygon[]
 }
 
 /** Summary returned by /buildings?addressId=. */
@@ -419,6 +567,23 @@ export function pickBestSummary(summaries: BuildingSummary[]): BuildingSummary |
   return summaries.reduce((best, s) =>
     s.relatedAddressCount < best.relatedAddressCount ? s : best,
   )
+}
+
+/**
+ * PURE — order summaries most-specific first (fewest related addresses).
+ * The multi-structure path treats index 0 as the primary dwelling and
+ * the rest as secondary structures. Stable: equal counts keep input
+ * order. Does not mutate the input.
+ */
+export function rankBuildingSummaries(summaries: BuildingSummary[]): BuildingSummary[] {
+  return summaries
+    .map((s, i) => ({ s, i }))
+    .sort((a, b) =>
+      a.s.relatedAddressCount !== b.s.relatedAddressCount
+        ? a.s.relatedAddressCount - b.s.relatedAddressCount
+        : a.i - b.i,
+    )
+    .map((x) => x.s)
 }
 
 /**
@@ -521,6 +686,75 @@ export function reduceMultiPolygon(coords: number[][][][]): GeoJSONPolygon | nul
     }
   }
   return { type: 'Polygon', coordinates: best }
+}
+
+/**
+ * PURE — split a MultiPolygon into ALL its sub-polygons, largest first.
+ * The complement of reduceMultiPolygon: where that keeps only the main
+ * building, this retains the sheds/garages too. Optionally drops
+ * sub-polygons below `minAreaM2` (but always keeps at least the largest).
+ */
+export function splitMultiPolygon(
+  coords: number[][][][],
+  opts: { minAreaM2?: number } = {},
+): GeoJSONPolygon[] {
+  if (!Array.isArray(coords) || coords.length === 0) return []
+  const ranked = coords
+    .filter((c) => Array.isArray(c) && c.length > 0)
+    .map((c) => ({ poly: { type: 'Polygon' as const, coordinates: c }, area: polygonAreaM2({ type: 'Polygon', coordinates: c }) }))
+    .sort((a, b) => b.area - a.area)
+  if (ranked.length === 0) return []
+  const min = opts.minAreaM2 ?? 0
+  const kept = ranked.filter((r, i) => i === 0 || r.area >= min)
+  return kept.map((r) => r.poly)
+}
+
+/** PURE — like polygonFromShape but returns EVERY sub-polygon of a
+ *  MultiPolygon (largest first) rather than reducing to one. */
+function polygonsFromShape(obj: Record<string, unknown>): GeoJSONPolygon[] {
+  const coords = obj.coordinates
+  if (!Array.isArray(coords) || coords.length === 0) return []
+  const type = typeof obj.type === 'string' ? obj.type : null
+  if (type === 'Polygon' || (type === null && isPolygonCoords(coords))) {
+    return [{ type: 'Polygon', coordinates: coords as number[][][] }]
+  }
+  if (type === 'MultiPolygon' || (type === null && isMultiPolygonCoords(coords))) {
+    return splitMultiPolygon(coords as number[][][][])
+  }
+  return []
+}
+
+/**
+ * PURE — find ALL GeoJSON polygons in a footprint response, largest
+ * first. Mirrors pickPolygon's lenient field traversal but, for a
+ * MultiPolygon, returns every sub-polygon instead of just the biggest.
+ */
+export function pickAllPolygons(b: unknown): GeoJSONPolygon[] {
+  if (!b || typeof b !== 'object') return []
+  const top = b as Record<string, unknown>
+
+  const direct = polygonsFromShape(top)
+  if (direct.length > 0) return direct
+
+  if (top.type === 'Feature' && top.geometry && typeof top.geometry === 'object') {
+    const fromFeature = polygonsFromShape(top.geometry as Record<string, unknown>)
+    if (fromFeature.length > 0) return fromFeature
+  }
+
+  const tryPaths = ['footprint', 'footprint2d', 'geometry', 'polygon', 'roofOutline', 'roof_outline']
+  for (const key of tryPaths) {
+    const v = top[key]
+    if (v && typeof v === 'object') {
+      const fromField = polygonsFromShape(v as Record<string, unknown>)
+      if (fromField.length > 0) return fromField
+    }
+  }
+
+  const data = top.data
+  if (data && typeof data === 'object') {
+    return pickAllPolygons(data)
+  }
+  return []
 }
 
 /** PURE — extract the roof shape value from a /roofShape sub-resource
@@ -640,6 +874,7 @@ export function buildingDetailsToMetrics(
     ridge_lm: null,
     polygon_geojson: polygon,
     capture_date: d.captureDate ?? null,
+    buildingId: d.buildingId,
   }
 }
 

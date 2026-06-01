@@ -17,11 +17,14 @@
 // ════════════════════════════════════════════════════════════════════
 
 import type {
+  MultiRoofQuote,
   PitchBucket,
   RoofForm,
   RoofJobIntent,
   RoofMaterial,
   RoofMetrics,
+  RoofStructurePrice,
+  RoofStructureRole,
   RoofUserInputs,
   RoofingPriceTier,
   RoofingQuotePrice,
@@ -134,6 +137,11 @@ export const DEFAULT_ROOFING_RATE_CARD: RoofingRateCard = {
   asbestos_loading_pct: 0.35,
   upgrade_material: 'colorbond_kliplok',
   gst_registered: true,
+  // A half-day minimum mobilisation charge. Stops a tiny secondary
+  // structure (e.g. a 12 m² shed → ~$228 patch) computing a number no
+  // roofer would attend for. Well below any whole-house tier, so it
+  // only binds on small structures.
+  call_out_minimum_ex_gst: 550,
 }
 
 // ── Loadings ────────────────────────────────────────────────────────
@@ -279,9 +287,24 @@ export function calculateRoofingPrice(args: {
   const loadings = applicableLoadings(metrics, inputs, rateCard)
   const loadingMultiplier = loadings.reduce((acc, l) => acc * (1 + l.pct), 1)
 
-  const betterEx = area_m2 * baseRate * loadingMultiplier
-  const bestEx = area_m2 * upgradeRate * loadingMultiplier
-  const goodEx = betterEx * GOOD_TIER_SCOPE_FRACTION
+  const betterRaw = area_m2 * baseRate * loadingMultiplier
+  const bestRaw = area_m2 * upgradeRate * loadingMultiplier
+  const goodRaw = betterRaw * GOOD_TIER_SCOPE_FRACTION
+
+  // Per-structure call-out floor — raise any positive tier to at least
+  // the minimum job charge. Zero-rate tiers (unknown / cement_sheet,
+  // which route to inspection anyway) are left at 0 rather than fabricating
+  // a number. See call_out_minimum_ex_gst on the rate card.
+  const floor = rateCard.call_out_minimum_ex_gst ?? 0
+  const applyFloor = (n: number) => (floor > 0 && n > 0 ? Math.max(n, floor) : n)
+  const goodEx = applyFloor(goodRaw)
+  const betterEx = applyFloor(betterRaw)
+  const bestEx = applyFloor(bestRaw)
+  const callOutMinimumApplied =
+    floor > 0 &&
+    ((goodRaw > 0 && goodRaw < floor) ||
+      (betterRaw > 0 && betterRaw < floor) ||
+      (bestRaw > 0 && bestRaw < floor))
 
   const gstFactor = rateCard.gst_registered ? 1.10 : 1.0
   const toIncGst = (n: number) => roundTo(n * gstFactor, 2)
@@ -336,6 +359,113 @@ export function calculateRoofingPrice(args: {
     tiers,
     loadings_applied: loadings,
     routing,
+    call_out_minimum_applied: callOutMinimumApplied,
+  }
+}
+
+// ── Multi-structure pricing ──────────────────────────────────────────
+
+/** One structure handed to the multi-roof pricer (pre-pricing). */
+export type RoofStructureInput = {
+  buildingId: string | null
+  role: RoofStructureRole
+  /** Optional explicit label; auto-derived from role + index when absent. */
+  label?: string
+  metrics: RoofMetrics
+  inputs: RoofUserInputs
+  outsideCoverage?: boolean
+}
+
+/** PURE — default per-structure label from its role + secondary index. */
+function defaultStructureLabel(role: RoofStructureRole, secondaryIndex: number): string {
+  if (role === 'primary') return 'Main dwelling'
+  return `Secondary structure ${secondaryIndex}`
+}
+
+/**
+ * PURE — price N structures and aggregate into one MultiRoofQuote.
+ *
+ * Each structure is priced INDEPENDENTLY with its own material, area and
+ * loadings via calculateRoofingPrice — areas are never summed onto a
+ * single material rate (a tile house + Colorbond shed would mis-price).
+ * The combined tiers sum the per-structure tier amounts (GST is linear,
+ * so summing inc-GST per structure is exact). Routing escalates to
+ * inspection_required if ANY structure individually requires it; each
+ * structure keeps its own line-level routing flag.
+ */
+export function priceMultiRoof(args: {
+  structures: RoofStructureInput[]
+  rateCard?: RoofingRateCard
+}): MultiRoofQuote {
+  const rateCard = args.rateCard ?? DEFAULT_ROOFING_RATE_CARD
+
+  let secondaryCounter = 0
+  const structures: RoofStructurePrice[] = args.structures.map((s) => {
+    const label =
+      s.label ??
+      defaultStructureLabel(
+        s.role,
+        s.role === 'secondary' ? ++secondaryCounter : 0,
+      )
+    const price = calculateRoofingPrice({
+      metrics: s.metrics,
+      inputs: s.inputs,
+      rateCard,
+      outsideCoverage: s.outsideCoverage,
+    })
+    return {
+      buildingId: s.buildingId,
+      role: s.role,
+      label,
+      metrics: s.metrics,
+      inputs: s.inputs,
+      price,
+    }
+  })
+
+  // Combined per-tier totals — sum across structures at the SAME tier index.
+  const combinedTiers = ([0, 1, 2] as const).map((i): RoofingPriceTier => {
+    const tierName = (['good', 'better', 'best'] as const)[i]
+    const exSum = structures.reduce((acc, st) => acc + st.price.tiers[i].ex_gst, 0)
+    const incSum = structures.reduce((acc, st) => acc + st.price.tiers[i].inc_gst, 0)
+    const labelWord = tierName === 'good' ? 'Patch / repair' : tierName === 'better' ? 'Re-roof' : 'Upgrade'
+    return {
+      tier: tierName,
+      label: `${labelWord} — all structures`,
+      ex_gst: roundTo(exSum, 2),
+      inc_gst: roundTo(incSum, 2),
+      scope: `${labelWord} priced across ${structures.length} structure${structures.length === 1 ? '' : 's'}.`,
+    }
+  }) as [RoofingPriceTier, RoofingPriceTier, RoofingPriceTier]
+
+  const combinedArea = roundTo(
+    structures.reduce((acc, st) => acc + st.price.area_m2, 0),
+    1,
+  )
+
+  const inspection_structures = structures
+    .filter((st) => st.price.routing.decision === 'inspection_required')
+    .map((st) => st.label)
+
+  const routing: RoofingRoutingDecision =
+    inspection_structures.length > 0
+      ? {
+          decision: 'inspection_required',
+          reason:
+            `${inspection_structures.join(', ')} require${inspection_structures.length === 1 ? 's' : ''} an on-site inspection — ` +
+            'a tradie must attend the property, so the whole job is routed to inspection.',
+        }
+      : {
+          decision: 'tradie_review',
+          reason:
+            'All structures auto-calculated from measurement — every roofing quote requires tradie sign-off before customer send.',
+        }
+
+  return {
+    structures,
+    combined: { area_m2: combinedArea, tiers: combinedTiers },
+    routing,
+    inspection_structures,
   }
 }
 

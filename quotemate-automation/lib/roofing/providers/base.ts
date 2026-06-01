@@ -12,6 +12,7 @@
 import type {
   RoofAddressInput,
   RoofingMeasurementResult,
+  RoofingMultiMeasurementResult,
 } from '../types'
 
 export interface RoofingMeasurementProvider {
@@ -24,4 +25,11 @@ export interface RoofingMeasurementProvider {
    * (missing env, malformed inputs) may throw.
    */
   measure(input: RoofAddressInput): Promise<RoofingMeasurementResult>
+  /**
+   * Optional — measure EVERY structure at the address (primary dwelling
+   * + detached sheds/garages). Providers that can't enumerate buildings
+   * omit this; the orchestrator falls back to wrapping measure() into a
+   * single-building result. Same throw/no-throw contract as measure().
+   */
+  measureAll?(input: RoofAddressInput): Promise<RoofingMultiMeasurementResult>
 }

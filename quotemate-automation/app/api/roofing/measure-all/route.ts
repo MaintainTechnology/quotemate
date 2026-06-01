@@ -1,15 +1,14 @@
-// POST /api/roofing/measure — runs the address through the orchestrator
-// and returns { ok, metrics, price, provider, warnings } for the
-// dashboard's measurement page.
+// POST /api/roofing/measure-all — measures EVERY structure at the
+// address (primary dwelling + detached sheds/garages) and returns an
+// aggregated MultiRoofQuote for the dashboard's multi-structure flow.
 //
-// Auth: same bearer-token pattern as /api/tenant/me — the dashboard
-// passes the Supabase access token. No tenant-data write happens here
-// (Phase 1: read-only measurement). The route is gated to authed users
-// so the Geoscape calls only fire for tradies with a session.
+// Same auth + per-tenant rate-card overlay as /api/roofing/measure. No
+// data is persisted here — saving a confirmed job goes through
+// /api/roofing/save. Read-only measurement, gated to authed tradies.
 
 import { createClient } from '@supabase/supabase-js'
-import { MeasureRequestSchema } from '@/lib/roofing/request-schema'
-import { measureAndPriceRoof } from '@/lib/roofing/measure'
+import { MeasureAllRequestSchema } from '@/lib/roofing/request-schema'
+import { measureAndPriceRoofs } from '@/lib/roofing/measure'
 import { MockRoofingProvider } from '@/lib/roofing/providers/mock'
 import { effectiveRateCardFromOverlay } from '@/lib/roofing/rate-card-overlay'
 
@@ -29,9 +28,6 @@ async function userAndTenantFromBearer(
   if (!token) return null
   const { data, error } = await supabase.auth.getUser(token)
   if (error || !data.user) return null
-  // Resolve the tenant — used to fetch the per-tenant roofing rate-card
-  // overlay before pricing. Missing tenant just means no overrides,
-  // not an auth failure.
   const { data: tenant } = await supabase
     .from('tenants')
     .select('id, trade')
@@ -44,18 +40,12 @@ async function userAndTenantFromBearer(
   }
 }
 
-/** Best-effort — fetch the per-tenant roofing rate-card overlay from
- *  pricing_book.overlays.roofing_rate_card. Returns null on any miss so
- *  the caller falls back to DEFAULT_ROOFING_RATE_CARD. */
 async function loadRoofingOverlay(
   tenantId: string,
   primaryTrade: string | null,
 ): Promise<unknown> {
   try {
-    let q = supabase
-      .from('pricing_book')
-      .select('overlays')
-      .eq('tenant_id', tenantId)
+    let q = supabase.from('pricing_book').select('overlays').eq('tenant_id', tenantId)
     if (primaryTrade) q = q.eq('trade', primaryTrade)
     const { data } = await q.limit(1).maybeSingle()
     const overlays = (data?.overlays as Record<string, unknown> | null | undefined) ?? null
@@ -78,7 +68,7 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, error: 'invalid_json' }, { status: 400 })
   }
 
-  const parsed = MeasureRequestSchema.safeParse(body)
+  const parsed = MeasureAllRequestSchema.safeParse(body)
   if (!parsed.success) {
     return Response.json(
       { ok: false, error: 'invalid_request', issues: parsed.error.issues },
@@ -86,12 +76,8 @@ export async function POST(req: Request) {
     )
   }
 
-  const { address, inputs, use_mock_provider } = parsed.data
+  const { address, inputs, perBuilding, use_mock_provider } = parsed.data
 
-  // Phase 1 rate-card override — load the per-tenant overlay from
-  // pricing_book.overlays.roofing_rate_card and merge it onto the
-  // DEFAULT_ROOFING_RATE_CARD. Forward-only: this rate is used for the
-  // current measurement only; existing quotes are not re-priced.
   let rateCard
   if (auth.tenantId) {
     const overlayJson = await loadRoofingOverlay(auth.tenantId, auth.primaryTrade)
@@ -100,9 +86,10 @@ export async function POST(req: Request) {
     }
   }
 
-  const result = await measureAndPriceRoof(address, inputs, {
+  const result = await measureAndPriceRoofs(address, inputs, {
     provider: use_mock_provider ? new MockRoofingProvider() : undefined,
     rateCard,
+    perBuilding,
   })
 
   if (!result.ok) {
@@ -113,8 +100,7 @@ export async function POST(req: Request) {
     {
       ok: true,
       provider: result.provider,
-      metrics: result.metrics,
-      price: result.price,
+      quote: result.quote,
       warnings: result.warnings,
     },
     { status: 200 },

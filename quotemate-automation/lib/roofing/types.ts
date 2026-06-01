@@ -95,7 +95,41 @@ export type RoofMetrics = {
   polygon_geojson: GeoJSONPolygon | null
   /** ISO date of the source-data capture (LiDAR survey, Geoscape refresh). */
   capture_date: string | null
+  /**
+   * Stable provider-side identity for this structure. Surfaced so the
+   * multi-structure UI / persistence can key per-building state on a
+   * durable id. Optional for back-compat — the single-building path and
+   * the mock provider may leave it null. Sub-polygons split out of a
+   * MultiPolygon footprint are suffixed (e.g. `${buildingId}#1`).
+   */
+  buildingId?: string | null
 }
+
+/** Which structure on the parcel a measurement represents. */
+export type RoofStructureRole = 'primary' | 'secondary'
+
+/**
+ * One measured structure in a multi-building result. The `primary` is
+ * the dwelling Geoscape resolves most specifically to the queried
+ * address; `secondary` structures are detached buildings (sheds,
+ * garages, granny flats) or extra footprint polygons at the same parcel.
+ */
+export type RoofMeasuredBuilding = {
+  buildingId: string | null
+  role: RoofStructureRole
+  metrics: RoofMetrics
+}
+
+export type RoofingMultiMeasurementSuccess = {
+  ok: true
+  buildings: RoofMeasuredBuilding[]
+  provider: 'geoscape' | 'lidar' | 'mock' | 'manual'
+  warnings: string[]
+}
+
+export type RoofingMultiMeasurementResult =
+  | RoofingMultiMeasurementSuccess
+  | RoofingMeasurementFailure
 
 /** Minimal GeoJSON polygon for the building outline. */
 export type GeoJSONPolygon = {
@@ -150,6 +184,13 @@ export type RoofingRateCard = {
   upgrade_material: RoofMaterial
   /** Tenant's GST registration status. */
   gst_registered: boolean
+  /**
+   * Minimum job charge (ex-GST). A per-structure floor so a tiny
+   * structure (e.g. a 12 m² shed) never computes an unrealistic price
+   * no roofer would honour — each tier's ex-GST amount is raised to at
+   * least this value. Optional; absent/0 means no floor.
+   */
+  call_out_minimum_ex_gst?: number
 }
 
 /** A single price tier on the customer quote. */
@@ -178,4 +219,43 @@ export type RoofingQuotePrice = {
   }>
   /** Routing decision derived from the measurement + inputs. */
   routing: RoofingRoutingDecision
+  /** True when the call-out minimum raised one or more tiers. */
+  call_out_minimum_applied?: boolean
+}
+
+// ── Multi-structure pricing ──────────────────────────────────────────
+// A roofing job can span several structures on the one property (the
+// dwelling plus a shed / garage / granny flat). Each structure is priced
+// independently with its OWN material, area and loadings — areas are
+// never summed onto a single material rate — then aggregated.
+
+/** One priced structure inside a multi-roof quote. */
+export type RoofStructurePrice = {
+  buildingId: string | null
+  role: RoofStructureRole
+  /** Human label for the line, e.g. "Main dwelling" / "Secondary structure 1". */
+  label: string
+  metrics: RoofMetrics
+  inputs: RoofUserInputs
+  price: RoofingQuotePrice
+}
+
+/** The aggregated multi-structure quote returned to the dashboard. */
+export type MultiRoofQuote = {
+  structures: RoofStructurePrice[]
+  combined: {
+    /** Sum of the sloped areas priced across all structures. */
+    area_m2: number
+    /** Per-tier totals summed across every structure (good / better / best). */
+    tiers: [RoofingPriceTier, RoofingPriceTier, RoofingPriceTier]
+  }
+  /**
+   * Job-level routing. If ANY structure individually requires
+   * inspection, the whole job is inspection_required (a tradie must
+   * attend the property regardless); otherwise tradie_review. Each
+   * structure keeps its own routing flag for line-level transparency.
+   */
+  routing: RoofingRoutingDecision
+  /** buildingIds (or labels) of the structures that triggered inspection. */
+  inspection_structures: string[]
 }
