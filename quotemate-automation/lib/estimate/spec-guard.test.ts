@@ -5,6 +5,7 @@ import {
   specGuardMode,
   effectiveProductProps,
   evaluateSpecGuard,
+  evaluateDraftSpecGuard,
   coverageGapConflicts,
 } from './spec-guard'
 
@@ -243,5 +244,59 @@ describe('coverageGapConflicts (Phase 5 — catalogue-gap rule)', () => {
     })
     expect(d.verdict).toBe('unknown')
     expect(d.block).toBe(false)
+  })
+})
+
+describe('evaluateDraftSpecGuard — main-path (per-tier) guard', () => {
+  const ROWS = [
+    { id: 'p10', name: 'Clipsal 2000 GPO', properties: { amperage: '10A' } },
+    { id: 'p15', name: 'Clipsal 15Amp', properties: { amperage: '15A' } },
+  ]
+  const tier = (description: string, extra: Record<string, unknown> = {}) => ({
+    line_items: [
+      { description, unit: 'each', quantity: 1, unit_price_ex_gst: 30, source: 'material', ...extra },
+      { description: 'Labour', unit: 'hr', quantity: 2, unit_price_ex_gst: 110, source: 'labour' },
+    ],
+  })
+
+  it('flags a tier whose headline product contradicts the requested amperage (by catalogue_id)', () => {
+    const draft = { good: tier('Double GPO', { catalogue_id: 'p10' }) }
+    const res = evaluateDraftSpecGuard({
+      draft, requested: { amperage: '15A' }, trade: 'electrical', category: 'gpo', productRows: ROWS, mode: 'shadow',
+    })
+    expect(res).toHaveLength(1)
+    expect(res[0].tier).toBe('good')
+    expect(res[0].decision.verdict).toBe('mismatch')
+    expect(res[0].decision.block).toBe(false) // shadow never blocks
+  })
+
+  it('resolves the product by NAME when no catalogue_id, and matches when correct', () => {
+    const draft = { better: tier('Clipsal 15Amp') }
+    const res = evaluateDraftSpecGuard({
+      draft, requested: { amperage: '15A' }, trade: 'electrical', category: 'gpo', productRows: ROWS, mode: 'shadow',
+    })
+    expect(res[0].decision.verdict).toBe('match')
+  })
+
+  it('catches the contradiction via the line description name-parse when no rows resolve', () => {
+    const draft = { good: tier('Clipsal 2000 series double GPO 10A') }
+    const res = evaluateDraftSpecGuard({
+      draft, requested: { amperage: '15A' }, trade: 'electrical', category: 'gpo', productRows: [], mode: 'enforce',
+    })
+    expect(res[0].decision.verdict).toBe('mismatch')
+  })
+
+  it('returns nothing for an inspection-style draft (null tiers)', () => {
+    expect(
+      evaluateDraftSpecGuard({ draft: { good: null, better: null, best: null }, requested: { amperage: '15A' } }),
+    ).toEqual([])
+  })
+
+  it('reconciles only the headline material line, never the labour line', () => {
+    const draft = { good: tier('Double GPO', { catalogue_id: 'p10' }) }
+    const res = evaluateDraftSpecGuard({
+      draft, requested: { amperage: '15A' }, trade: 'electrical', category: 'gpo', productRows: ROWS, mode: 'shadow',
+    })
+    expect(res).toHaveLength(1)
   })
 })

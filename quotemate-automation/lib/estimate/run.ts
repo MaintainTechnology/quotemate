@@ -22,7 +22,8 @@ import {
 } from './catalogue'
 import { applyMinLabourFloor } from './min-labour'
 import { reconcileTierMath, collapseDuplicateTiers, checkQuantityVsItemCount } from './reconcile'
-import { specGuardMode, evaluateSpecGuard } from './spec-guard'
+import { specGuardMode, evaluateSpecGuard, evaluateDraftSpecGuard } from './spec-guard'
+import { categoryForJobType } from '@/lib/sms/product-options'
 import {
   mergeRecipesIntoDraft,
   buildRecipeSlots,
@@ -615,6 +616,61 @@ export async function runEstimation(
     } catch (err: any) {
       cacheLog.err(
         'reconcile backstops failed (non-fatal — quote unaffected)',
+        err?.message ?? String(err),
+      )
+    }
+
+    // Main-path spec guard (shadow-observe by default). The WP9 block above
+    // already guards a customer-CHOSEN product; this covers the ~95% of quotes
+    // where the model picked the product. It reconciles each tier's headline
+    // product against the customer's agreed specs (intake.scope.specs.
+    // requested_specs) — e.g. agreed 15A GPO vs a quoted 10A, using the
+    // backfilled catalogue amperage. SHADOW (default) only logs the rate;
+    // ENFORCE appends a [spec-guard] risk flag for tradie review (it does NOT
+    // re-pick or downgrade — that stronger action is a deliberate follow-up).
+    // Best-effort — never breaks an already-grounded quote.
+    try {
+      const guardMode = specGuardMode()
+      const requested =
+        (intake?.scope as { specs?: { requested_specs?: unknown } } | null)?.specs
+          ?.requested_specs ?? null
+      const wp9Handled =
+        process.env.WP9_PRODUCT_OPTIONS === '1' &&
+        !!(intake?.scope as { chosen_product?: unknown } | null)?.chosen_product
+      if (guardMode !== 'off' && requested && !wp9Handled) {
+        const category = categoryForJobType((intake?.job_type as string | null) ?? null)
+        if (category) {
+          const productRows = await loadCategorySpecRows(
+            (intake?.tenant_id as string | null) ?? null,
+            (intake?.trade as string | null) ?? null,
+            category,
+          )
+          const results = evaluateDraftSpecGuard({
+            draft,
+            requested: requested as Record<string, string> | null,
+            trade: (intake?.trade as string | null) ?? null,
+            category,
+            productRows,
+            mode: guardMode,
+          })
+          const mismatches = results.filter((r) => r.decision.verdict === 'mismatch')
+          if (mismatches.length > 0) {
+            cacheLog.err(
+              `spec guard [${guardMode}] main-path — ${mismatches.length} tier(s) contradict the requested spec (${guardMode === 'enforce' ? 'flagged for review' : 'shadow — observe only'})`,
+              mismatches.map((m) => `${m.tier}: ${m.decision.reason}`).join(' | '),
+            )
+            if (guardMode === 'enforce') {
+              draft.risk_flags = [
+                ...(Array.isArray(draft.risk_flags) ? draft.risk_flags : []),
+                ...mismatches.map((m) => `[spec-guard] ${m.tier}: ${m.decision.reason}`),
+              ]
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      cacheLog.err(
+        'main-path spec guard failed (non-fatal — quote unaffected)',
         err?.message ?? String(err),
       )
     }
@@ -1335,6 +1391,43 @@ async function loadCatalogueProductRefs(
   } catch {
     return []
   }
+}
+
+// Load id/name/properties for the (tenant, trade, category) products the
+// main-path spec guard reconciles a quoted product against. Covers BOTH the
+// shared catalogue and the operator catalogue (a line can be priced from
+// either). Best-effort: any failure → [] (the guard simply sees no rows and
+// degrades to name-parsing the line description).
+async function loadCategorySpecRows(
+  tenantId: string | null,
+  trade: string | null,
+  category: string | null,
+): Promise<Array<{ id: string | null; name: string | null; properties: any }>> {
+  if (!category) return []
+  const rows: Array<{ id: string | null; name: string | null; properties: any }> = []
+  try {
+    let sq = supabase.from('shared_materials').select('id, name, properties').eq('category', category)
+    if (trade) sq = sq.eq('trade', trade)
+    const { data } = await sq
+    for (const r of data ?? []) rows.push({ id: r.id ?? null, name: r.name ?? null, properties: r.properties ?? null })
+  } catch {
+    /* shared lookup is best-effort */
+  }
+  if (tenantId) {
+    try {
+      let tq = supabase
+        .from('tenant_material_catalogue')
+        .select('id, name, properties')
+        .eq('tenant_id', tenantId)
+        .eq('category', category)
+      if (trade) tq = tq.eq('trade', trade)
+      const { data } = await tq
+      for (const r of data ?? []) rows.push({ id: r.id ?? null, name: r.name ?? null, properties: r.properties ?? null })
+    } catch {
+      /* tenant lookup is best-effort */
+    }
+  }
+  return rows
 }
 
 // Opus often prefixes its response with reasoning ("Calculation: ...", "Here is the quote:")

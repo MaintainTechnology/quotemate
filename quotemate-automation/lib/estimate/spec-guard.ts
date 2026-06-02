@@ -28,6 +28,7 @@ import {
   type SpecConflict,
 } from './spec-reconcile'
 import { weatherproofConflict } from './weatherproof'
+import { findHeadlineMaterialIndex } from './catalogue'
 
 export type SpecGuardMode = 'off' | 'shadow' | 'enforce'
 
@@ -242,4 +243,82 @@ export function evaluateSpecGuard(args: {
           .join('; ')
       : null
   return { verdict, conflicts, block, reason }
+}
+
+export interface DraftSpecGuardResult {
+  tier: string
+  /** the headline product name reconciled (the line description) */
+  product: string | null
+  decision: SpecGuardDecision
+}
+
+/** Canonical product-name comparison form (trim + lowercase + collapse space). */
+function normName(s: string | null | undefined): string {
+  return (s ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+/**
+ * Main-path spec guard. For each priced tier of an auto-quote draft, take the
+ * headline material line, resolve its product's structured `properties` — by
+ * catalogue_id, else by normalised name, against the injected productRows
+ * (e.g. the backfilled GPO amperage) — and reconcile it against the customer's
+ * requested specs. When properties can't be resolved, evaluateSpecGuard still
+ * name-parses the line description (so "…GPO 10A" is caught). Pure: the caller
+ * injects the rows and the mode. Returns one result per priced tier that has a
+ * headline line. Companion to the WP9 chosen-product guard above, covering the
+ * ~95% of quotes where the model picked the product rather than the customer.
+ */
+export function evaluateDraftSpecGuard(args: {
+  draft: Record<string, any>
+  requested: RequestedSpecs
+  trade?: string | null
+  category?: string | null
+  productRows?: Array<{ id?: string | null; name?: string | null; properties?: ProductProperties }>
+  mode?: SpecGuardMode
+}): DraftSpecGuardResult[] {
+  const out: DraftSpecGuardResult[] = []
+  const draft = args.draft
+  if (!draft) return out
+  const rows = args.productRows ?? []
+  const byId = new Map<string, ProductProperties>()
+  const byName = new Map<string, ProductProperties>()
+  for (const r of rows) {
+    if (r?.id != null) byId.set(String(r.id), r.properties ?? null)
+    const nm = normName(r?.name)
+    if (nm && !byName.has(nm)) byName.set(nm, r.properties ?? null)
+  }
+  const categoryRows: CategoryRow[] = rows.map((r) => ({
+    properties: r.properties ?? null,
+    name: r.name,
+  }))
+  for (const tier of ['good', 'better', 'best'] as const) {
+    const t = draft[tier] as { line_items?: Array<Record<string, any>> } | null | undefined
+    if (!t || !Array.isArray(t.line_items)) continue
+    const idx = findHeadlineMaterialIndex(t.line_items)
+    if (idx < 0) continue
+    const li = t.line_items[idx]
+    const name = (li?.description as string | null) ?? null
+    // Resolve the product's structured properties: catalogue_id first (stamped
+    // by WP4 enrichment), then a normalised-name match; else null so
+    // evaluateSpecGuard name-parses the description itself.
+    let properties: ProductProperties = null
+    const cid = li?.catalogue_id != null ? String(li.catalogue_id) : null
+    if (cid && byId.has(cid)) {
+      properties = byId.get(cid) ?? null
+    } else {
+      const nm = normName(name)
+      if (nm && byName.has(nm)) properties = byName.get(nm) ?? null
+    }
+    const decision = evaluateSpecGuard({
+      requested: args.requested,
+      properties,
+      name,
+      trade: args.trade,
+      category: args.category,
+      mode: args.mode,
+      categoryRows,
+    })
+    out.push({ tier, product: name, decision })
+  }
+  return out
 }
