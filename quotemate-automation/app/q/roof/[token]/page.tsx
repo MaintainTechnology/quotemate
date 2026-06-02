@@ -199,22 +199,6 @@ export default async function RoofingQuotePage({
           </div>
         </div>
 
-        {/* AI "after re-roof" preview — generated FROM the satellite aerial.
-            Only on the confirmed view (and not a pure inspection job). */}
-        {showPrices && (
-          <div className="mt-5 overflow-hidden border border-ink-line bg-ink-card">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={`/api/roofing/q/${row.public_token}/after-image`}
-              alt={`AI preview of the property with a new ${primaryMaterialLabel ?? ''} roof`}
-              className="h-112 w-full object-cover sm:h-144"
-            />
-            <div className="px-5 py-3 font-mono text-xs uppercase tracking-[0.16em] text-text-dim">
-              Preview · your roof in {primaryMaterialLabel ?? 'a new roof'} (AI generated from the satellite image)
-            </div>
-          </div>
-        )}
-
         {isInspection && (
           <div className="mt-8 border border-ink-line border-l-4 border-l-warning bg-ink-card px-6 py-5">
             <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-warning">
@@ -261,6 +245,24 @@ export default async function RoofingQuotePage({
             <StructureBreakdown key={s.buildingId ?? i} structure={s} index={i} flagged={flagged.has(s.label)} showPrices={showPrices} />
           ))}
         </div>
+
+        {/* AI "after re-roof" preview — generated FROM the satellite aerial.
+            Shown LAST (after the price breakdown) so a slow first-load render
+            can never hide the quote. Pre-warmed at confirm time, so it's
+            usually cached by the time the customer opens this page. */}
+        {showPrices && (
+          <div className="mt-10 overflow-hidden border border-ink-line bg-ink-card">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`/api/roofing/q/${row.public_token}/after-image`}
+              alt={`AI preview of the property with a new ${primaryMaterialLabel ?? ''} roof`}
+              className="h-112 w-full object-cover sm:h-144"
+            />
+            <div className="px-5 py-3 font-mono text-xs uppercase tracking-[0.16em] text-text-dim">
+              Preview · your roof in {primaryMaterialLabel ?? 'a new roof'} (AI generated from the satellite image)
+            </div>
+          </div>
+        )}
 
         <p className="mt-8 text-sm text-text-dim">
           {showPrices

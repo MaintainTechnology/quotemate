@@ -33,6 +33,7 @@ import {
   narrowQuoteToStructures,
 } from '@/lib/sms/roofing-compose'
 import { measureAndPriceRoofs } from '@/lib/roofing/measure'
+import { generateRoofAfterImage } from '@/lib/roofing/roof-after'
 import type { MultiRoofQuote } from '@/lib/roofing/types'
 import { formatActiveFollowupContext } from '@/lib/sms/followup-context'
 import { buildGpoInspectionOverride } from '@/lib/sms/gpo-guard'
@@ -452,6 +453,14 @@ async function handleRoofingTurn(args: {
         pending_structure_count: totalStructures,
         last_served_structures: indices ?? Array.from({ length: totalStructures }, (_, i) => i + 1),
       }, 'open')
+      // Pre-warm the AI "after re-roof" preview now (best-effort) so it's
+      // cached by the time the customer opens the link. We're inside the
+      // webhook's after() with a 300s budget and the SMS is already sent,
+      // so this never delays the customer. Skipped for inspection-routed
+      // quotes (the page doesn't show the preview there).
+      if (finalQuote.routing.decision !== 'inspection_required') {
+        try { await generateRoofAfterImage(pending.token) } catch { /* non-fatal */ }
+      }
       return true
     }
     // Lost the pending quote — restart gathering.
