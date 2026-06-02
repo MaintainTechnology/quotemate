@@ -29,7 +29,7 @@ import {
   composeBookingMessage,
   composeCancelMessage,
   composeConfirmMessage,
-  narrowQuoteToStructure,
+  narrowQuoteToStructures,
 } from '@/lib/sms/roofing-compose'
 import { measureAndPriceRoofs } from '@/lib/roofing/measure'
 import type { MultiRoofQuote } from '@/lib/roofing/types'
@@ -343,6 +343,18 @@ async function handleRoofingTurn(args: {
     return { address: (data.address as string) ?? '', quote, token }
   }
 
+  // ── Warm 'quoted' thread got a non-structure, non-roofing message ──
+  // Hand it back to the general dialog (return false, no reply), AND close
+  // the roofing thread so the warm window ends here. Without the close, a
+  // later number in an interleaved electrical conversation (e.g. answering
+  // "how many?" with "2") would be hijacked as a roofing structure pick.
+  // The route's isActiveRoofingFlow + looksLikeRoofingEnquiry guard keeps
+  // subsequent messages out of roofing once it's closed.
+  if (decision.action === 'passthrough') {
+    await persist({ slots: {}, last_step: 'closed', pending_quote_token: null, pending_structure_count: null }, 'open')
+    return false
+  }
+
   // ── Customer asked to stop / cancel — close politely; no re-quote. ──
   if (decision.action === 'cancel') {
     await sendReply(composeCancelMessage(firstName))
@@ -377,12 +389,38 @@ async function handleRoofingTurn(args: {
         return true
       }
       // send_saved — confirmed; send the (optionally narrowed) estimate.
-      const finalQuote = decision.structureChoice != null
-        ? narrowQuoteToStructure(pending.quote, decision.structureChoice)
-        : pending.quote
-      await sendReply(buildRoofingReplyMessage({ quote: finalQuote, address: pending.address, quoteUrl, firstName }))
-      // Quote delivered → closed. A later "thanks" won't trigger a re-quote.
-      await persist({ slots: decision.slots, last_step: 'closed', pending_quote_token: null, pending_structure_count: null }, 'done')
+      // null choices = all structures; otherwise narrow to the picks.
+      const indices = decision.structureChoices
+      const totalStructures = prevState?.pending_structure_count ?? pending.quote.structures.length
+      const finalQuote = narrowQuoteToStructures(pending.quote, indices)
+      // Append ?s= so the page shows exactly the structures we quoted; the
+      // bare URL (all) needs no param.
+      const servedUrl = indices && indices.length > 0
+        ? `${quoteUrl}?s=${indices.join(',')}`
+        : quoteUrl
+      // Stamp the customer's confirmation so the page flips from the
+      // price-free picker to the priced view. A single pick narrows the
+      // page; a multi-pick / "all" leaves confirmed_structure null (the
+      // ?s= link drives the narrowing for those).
+      await supabase
+        .from('roofing_measurements')
+        .update({
+          confirmed_at: new Date().toISOString(),
+          confirmed_structure: indices && indices.length === 1 ? indices[0] : null,
+        })
+        .eq('public_token', pending.token)
+      await sendReply(buildRoofingReplyMessage({ quote: finalQuote, address: pending.address, quoteUrl: servedUrl, firstName }))
+      // Quote delivered → WARM 'quoted' state (status stays 'open', token
+      // preserved): a follow-up like "give me 2 and 3" / "the others" re-
+      // serves the SAVED measurement instead of falling to the electrical
+      // dialog. An unrelated message passes through to the general dialog.
+      await persist({
+        slots: decision.slots,
+        last_step: 'quoted',
+        pending_quote_token: pending.token,
+        pending_structure_count: totalStructures,
+        last_served_structures: indices ?? Array.from({ length: totalStructures }, (_, i) => i + 1),
+      }, 'open')
       return true
     }
     // Lost the pending quote — restart gathering.

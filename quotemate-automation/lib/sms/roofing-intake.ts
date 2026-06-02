@@ -57,8 +57,13 @@ export type RoofingStep =
   // After an inspection route, waiting for the customer to confirm they
   // want the on-site visit booked.
   | 'await_booking'
-  // Conversation finished (quote sent, cancelled, or booked). Only a fresh
-  // roofing enquiry reopens it; an unrelated message never re-quotes.
+  // Quote sent + confirmed, but the thread stays WARM: a structure
+  // follow-up ("give me 2 and 3", "the shed", "all of them") re-serves the
+  // SAVED measurement without re-measuring, and an unrelated message is
+  // handed back to the general dialog (never trapped, never re-quoted).
+  | 'quoted'
+  // Conversation finished (cancelled or booked). Only a fresh roofing
+  // enquiry reopens it; an unrelated message never re-quotes.
   | 'closed'
 
 const AU_STATES: readonly AuState[] = ['NSW', 'VIC', 'QLD', 'SA', 'WA', 'TAS', 'ACT', 'NT']
@@ -292,7 +297,7 @@ export function roofingReadiness(slots: RoofingSlots): 'ready' | 'need_more' | '
 }
 
 const QUESTIONS: Record<
-  Exclude<RoofingStep, 'ready' | 'inspection' | 'confirm_roof' | 'await_booking' | 'closed'>,
+  Exclude<RoofingStep, 'ready' | 'inspection' | 'confirm_roof' | 'await_booking' | 'quoted' | 'closed'>,
   string
 > = {
   address: "Happy to sort a roofing quote for you. What's the property address, including suburb and postcode?",

@@ -13,7 +13,7 @@
 // PURE — no I/O. Fully unit-tested.
 // ════════════════════════════════════════════════════════════════════
 
-import type { MultiRoofQuote } from '@/lib/roofing/types'
+import type { MultiRoofQuote, RoofingPriceTier, RoofStructurePrice } from '@/lib/roofing/types'
 
 export type RoofingReplyContext = {
   quote: MultiRoofQuote
@@ -141,21 +141,79 @@ export function composeBookingMessage(firstName: string | null | undefined, conf
     : `No worries${nameSuffix(firstName)}. Just text us whenever you're ready and we'll sort the inspection.`
 }
 
+/** Local 2-dp round — mirrors lib/roofing/pricing.ts roundTo. */
+function round2(n: number): number {
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0
+}
+
 /**
- * PURE — narrow a multi-structure quote down to a single chosen structure
- * (1-based index), recomputing the "combined" block as just that
- * structure's numbers. Returns the original quote when the index is out
- * of range. Used when the customer picks one building from the list.
+ * PURE — narrow a multi-structure quote down to a chosen SUBSET of
+ * structures (1-based indices), re-aggregating EXACTLY as priceMultiRoof
+ * does: combined tiers + area sum over the QUOTABLE structures only, and
+ * the job routes to inspection only when the PRIMARY in the subset needs
+ * it or nothing in the subset is quotable — otherwise we quote what we can
+ * and flag the rest. null => the quote unchanged (all). Out-of-range /
+ * empty selection => the original quote unchanged. Used at confirm time
+ * ("just number 1") and for warm follow-ups ("2 and 3").
+ */
+export function narrowQuoteToStructures(
+  quote: MultiRoofQuote,
+  indices1Based: number[] | null,
+): MultiRoofQuote {
+  if (indices1Based == null) return quote
+  const chosen = indices1Based
+    .map((i) => quote.structures[i - 1])
+    .filter((s): s is RoofStructurePrice => Boolean(s))
+  if (chosen.length === 0) return quote
+
+  const isInspection = (s: RoofStructurePrice) => s.price.routing.decision === 'inspection_required'
+  const quotable = chosen.filter((s) => !isInspection(s))
+  const inspection_structures = chosen.filter(isInspection).map((s) => s.label)
+
+  // Combined per-tier totals over the QUOTABLE structures only.
+  const tiers = ([0, 1, 2] as const).map((i): RoofingPriceTier => {
+    const tierName = (['good', 'better', 'best'] as const)[i]
+    const labelWord = tierName === 'good' ? 'Patch / repair' : tierName === 'better' ? 'Re-roof' : 'Upgrade'
+    return {
+      tier: tierName,
+      label: `${labelWord}, all structures`,
+      ex_gst: round2(quotable.reduce((a, s) => a + s.price.tiers[i].ex_gst, 0)),
+      inc_gst: round2(quotable.reduce((a, s) => a + s.price.tiers[i].inc_gst, 0)),
+      scope: `${labelWord} priced across ${quotable.length} structure${quotable.length === 1 ? '' : 's'}.`,
+    }
+  }) as [RoofingPriceTier, RoofingPriceTier, RoofingPriceTier]
+
+  const area_m2 = round2(quotable.reduce((a, s) => a + s.price.area_m2, 0))
+
+  // Job routing — primary-in-subset needs inspection, or nothing quotable.
+  const primary = chosen.find((s) => s.role === 'primary') ?? chosen[0]
+  let routing
+  if (primary && isInspection(primary)) {
+    routing = { decision: 'inspection_required' as const, reason: primary.price.routing.reason }
+  } else if (quotable.length === 0) {
+    routing = {
+      decision: 'inspection_required' as const,
+      reason: `${inspection_structures.join(', ')} require${inspection_structures.length === 1 ? 's' : ''} an on-site inspection before we can quote.`,
+    }
+  } else {
+    routing = {
+      decision: 'tradie_review' as const,
+      reason: 'Quotable structures auto-calculated from measurement. Every roofing quote requires tradie sign-off before customer send.',
+    }
+  }
+
+  return {
+    structures: chosen,
+    combined: { area_m2, tiers },
+    routing,
+    inspection_structures,
+  }
+}
+
+/**
+ * PURE — back-compat single-structure narrow (1-based). Thin wrapper over
+ * narrowQuoteToStructures so there is one source of truth.
  */
 export function narrowQuoteToStructure(quote: MultiRoofQuote, index1Based: number): MultiRoofQuote {
-  const i = index1Based - 1
-  if (i < 0 || i >= quote.structures.length) return quote
-  const picked = quote.structures[i]
-  const inspection = picked.price.routing.decision === 'inspection_required'
-  return {
-    structures: [picked],
-    combined: { area_m2: picked.price.area_m2, tiers: picked.price.tiers },
-    routing: picked.price.routing,
-    inspection_structures: inspection ? [picked.label] : [],
-  }
+  return narrowQuoteToStructures(quote, [index1Based])
 }

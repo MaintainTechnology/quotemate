@@ -4,6 +4,15 @@
 // the service-role client is used because this is a public sharing
 // surface — only the columns rendered below are exposed.
 //
+// CONFIRM GATE: prices are hidden until the customer confirms over SMS
+// (roofing_measurements.confirmed_at is set). Before that the page is a
+// price-free "which building is yours?" picker — the satellite + the
+// measured outlines + per-structure metrics, no dollar figures. After
+// confirmation it shows the full priced breakdown, narrowed to the
+// structure(s) they picked (confirmed_structure, or the ?s= link from a
+// follow-up like "give me 2 and 3"), plus an AI "after re-roof" preview
+// rendered from the satellite aerial.
+//
 // This mirrors the dashboard /dashboard/roofing/measure result: the
 // Geoscape roof outline on satellite (RoofMap, free Esri tiles), the
 // Google satellite "second eye", and a full per-structure pricing
@@ -20,6 +29,7 @@ import type {
   RoofMetrics,
   RoofStructurePrice,
 } from '@/lib/roofing/types'
+import { narrowQuoteToStructures } from '@/lib/sms/roofing-compose'
 import { RoofMap, type RoofMapBuilding } from '@/app/dashboard/roofing/_components/RoofMap'
 
 export const dynamic = 'force-dynamic'
@@ -37,6 +47,8 @@ type Row = {
   combined_area_m2: number | null
   quote: MultiRoofQuote | null
   public_token: string
+  confirmed_at: string | null
+  confirmed_structure: number | null
 }
 
 function money(n: number | null | undefined): string {
@@ -70,26 +82,58 @@ const TIER_NAME: Record<'good' | 'better' | 'best', string> = {
   best: 'Upgrade',
 }
 
+/** Parse a `?s=2,3` query value into validated 1-based indices (or null). */
+function parseIndices(s: string | string[] | undefined, max: number): number[] | null {
+  const raw = Array.isArray(s) ? s.join(',') : s
+  if (!raw) return null
+  const nums = raw
+    .split(',')
+    .map((x) => parseInt(x.trim(), 10))
+    .filter((n) => Number.isInteger(n) && n >= 1 && n <= max)
+  const uniq = [...new Set(nums)].sort((a, b) => a - b)
+  return uniq.length > 0 ? uniq : null
+}
+
 export default async function RoofingQuotePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ token: string }>
+  searchParams: Promise<{ s?: string | string[] }>
 }) {
   const { token } = await params
   if (!token || token.length < 8) notFound()
 
   const { data, error } = await supabase
     .from('roofing_measurements')
-    .select('address, state, provider, routing, combined_area_m2, quote, public_token')
+    .select('address, state, provider, routing, combined_area_m2, quote, public_token, confirmed_at, confirmed_structure')
     .eq('public_token', token)
     .maybeSingle()
 
   if (error || !data) notFound()
   const row = data as Row
-  const quote = row.quote
-  const structures: RoofStructurePrice[] = Array.isArray(quote?.structures) ? quote!.structures : []
+  const fullQuote = row.quote
+  const allStructures: RoofStructurePrice[] = Array.isArray(fullQuote?.structures) ? fullQuote!.structures : []
+
+  // Confirm gate — prices show only after the customer confirms over SMS.
+  const confirmed = row.confirmed_at != null
+
+  // Which structures to show on the priced view: ?s= link wins, else the
+  // single pick stamped at confirm time, else all.
+  const paramIndices = parseIndices((await searchParams).s, allStructures.length)
+  const effectiveIndices = paramIndices ?? (row.confirmed_structure != null ? [row.confirmed_structure] : null)
+
+  // On the priced view, narrow to the chosen structures; the picker view
+  // always shows every measured building so the customer can pick.
+  const quote: MultiRoofQuote | null =
+    confirmed && fullQuote ? narrowQuoteToStructures(fullQuote, effectiveIndices) : fullQuote
+  const structures: RoofStructurePrice[] = confirmed
+    ? (Array.isArray(quote?.structures) ? quote!.structures : [])
+    : allStructures
+
   const isInspection = row.routing === 'inspection_required' || quote?.routing?.decision === 'inspection_required'
   const flagged = new Set(quote?.inspection_structures ?? [])
+  const showPrices = confirmed && !isInspection
 
   const mapBuildings: RoofMapBuilding[] = structures.map((s, i) => ({
     id: s.buildingId ?? `s-${i}`,
@@ -106,6 +150,7 @@ export default async function RoofingQuotePage({
         storeys: primary.metrics.storeys,
       }
     : null
+  const primaryMaterialLabel = primary ? MATERIAL_LABEL[primary.inputs.material] : null
 
   return (
     <main className="min-h-screen bg-ink-deep text-text-pri">
@@ -114,11 +159,25 @@ export default async function RoofingQuotePage({
           QuoteMate · Roofing
         </div>
         <h1 className="mt-3 font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2rem,5vw,3.5rem)]">
-          Your roof <span className="text-accent">quote</span>
+          Your roof <span className="text-accent">{confirmed ? 'quote' : 'measurement'}</span>
         </h1>
         {row.address && <p className="mt-4 text-lg text-text-sec">{row.address}</p>}
 
-        {/* Two-source view — Geoscape roof outline (Esri) + Google satellite */}
+        {/* Pre-confirmation notice — explain why there's no price yet. */}
+        {!confirmed && (
+          <div className="mt-8 border border-ink-line border-l-4 border-l-accent bg-ink-card px-6 py-5">
+            <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
+              {structures.length > 1 ? 'Which building is yours?' : 'Is this your roof?'}
+            </div>
+            <p className="mt-2 text-base text-text-sec">
+              {structures.length > 1
+                ? "We found more than one building at this address. Reply to our text with YES for all of them, the building number for just one, or NO, and we'll send your full priced quote."
+                : "Reply YES to our text and we'll send your full priced quote for this roof."}
+            </p>
+          </div>
+        )}
+
+        {/* Satellite views — Geoscape roof outline (Esri) + Google satellite */}
         <div className="mt-8 grid gap-5 lg:grid-cols-2">
           <RoofMap
             polygon={null}
@@ -140,6 +199,22 @@ export default async function RoofingQuotePage({
           </div>
         </div>
 
+        {/* AI "after re-roof" preview — generated FROM the satellite aerial.
+            Only on the confirmed view (and not a pure inspection job). */}
+        {showPrices && (
+          <div className="mt-5 overflow-hidden border border-ink-line bg-ink-card">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`/api/roofing/q/${row.public_token}/after-image`}
+              alt={`AI preview of the property with a new ${primaryMaterialLabel ?? ''} roof`}
+              className="h-112 w-full object-cover sm:h-144"
+            />
+            <div className="px-5 py-3 font-mono text-xs uppercase tracking-[0.16em] text-text-dim">
+              Preview · your roof in {primaryMaterialLabel ?? 'a new roof'} (AI generated from the satellite image)
+            </div>
+          </div>
+        )}
+
         {isInspection && (
           <div className="mt-8 border border-ink-line border-l-4 border-l-warning bg-ink-card px-6 py-5">
             <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-warning">
@@ -152,12 +227,12 @@ export default async function RoofingQuotePage({
           </div>
         )}
 
-        {/* Combined total (only when there's something quotable) */}
-        {!isInspection && quote?.combined?.tiers && (
+        {/* Combined total (only on the confirmed, quotable view) */}
+        {showPrices && quote?.combined?.tiers && (
           <div className="mt-8 border border-ink-line border-l-4 border-l-accent bg-ink-card p-6 sm:p-8">
             <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
               Combined estimate
-              {row.combined_area_m2 ? ` · ${Math.round(row.combined_area_m2)} m²` : ''}
+              {quote.combined.area_m2 ? ` · ${Math.round(quote.combined.area_m2)} m²` : ''}
             </div>
             <div className="mt-5 grid gap-5 sm:grid-cols-3">
               {quote.combined.tiers.map((t, i) => (
@@ -177,19 +252,20 @@ export default async function RoofingQuotePage({
           </div>
         )}
 
-        {/* Per-structure detailed breakdown */}
+        {/* Per-structure breakdown — metrics always; prices only when confirmed. */}
         <div className="mt-10 space-y-6">
           <div className="font-mono text-[0.8rem] font-semibold uppercase tracking-[0.18em] text-accent">
-            Detailed breakdown · {structures.length} structure{structures.length === 1 ? '' : 's'}
+            {showPrices ? 'Detailed breakdown' : 'Measured buildings'} · {structures.length} structure{structures.length === 1 ? '' : 's'}
           </div>
           {structures.map((s, i) => (
-            <StructureBreakdown key={s.buildingId ?? i} structure={s} index={i} flagged={flagged.has(s.label)} />
+            <StructureBreakdown key={s.buildingId ?? i} structure={s} index={i} flagged={flagged.has(s.label)} showPrices={showPrices} />
           ))}
         </div>
 
         <p className="mt-8 text-sm text-text-dim">
-          Prices include GST and are indicative from a satellite measurement. A
-          licensed roofer reviews every quote before any work is booked.
+          {showPrices
+            ? 'Prices include GST and are indicative from a satellite measurement. A licensed roofer reviews every quote before any work is booked.'
+            : 'Measurements are indicative from satellite imagery. Confirm your building over text and a licensed roofer reviews every quote before any work is booked.'}
         </p>
       </section>
 
@@ -206,10 +282,12 @@ function StructureBreakdown({
   structure,
   index,
   flagged,
+  showPrices,
 }: {
   structure: RoofStructurePrice
   index: number
   flagged: boolean
+  showPrices: boolean
 }) {
   const m = structure.metrics
   const p = structure.price
@@ -231,12 +309,20 @@ function StructureBreakdown({
         <MiniStat label="Sloped area" value={m.sloped_area_m2 != null ? `${Math.round(m.sloped_area_m2)} m²` : '-'} hint={m.footprint_m2 ? `Footprint ${Math.round(m.footprint_m2)} m²` : ''} />
         <MiniStat label="Roof form" value={formLabel(m.form)} hint={m.storeys != null ? `${m.storeys}-storey` : ''} />
         <MiniStat label="Hips · valleys" value={`${m.hips ?? '?'} · ${m.valleys ?? '?'}`} />
-        <MiniStat label="Rate" value={p.effective_rate_per_m2 ? `$${money(p.effective_rate_per_m2)}/m²` : '-'} hint={p.area_m2 ? `over ${Math.round(p.area_m2)} m²` : ''} />
+        {showPrices
+          ? <MiniStat label="Rate" value={p.effective_rate_per_m2 ? `$${money(p.effective_rate_per_m2)}/m²` : '-'} hint={p.area_m2 ? `over ${Math.round(p.area_m2)} m²` : ''} />
+          : <MiniStat label="Area" value={p.area_m2 ? `${Math.round(p.area_m2)} m²` : '-'} hint="sloped" />}
       </div>
 
-      {inspection ? (
+      {!showPrices ? (
+        inspection ? (
+          <div className="mt-5 border border-ink-line border-l-4 border-l-warning bg-ink-deep px-4 py-3 text-sm text-text-sec">
+            This structure needs a quick look on site before we can price it.
+          </div>
+        ) : null
+      ) : inspection ? (
         <div className="mt-5 border border-ink-line border-l-4 border-l-warning bg-ink-deep px-4 py-3 text-sm text-text-sec">
-          ⚠ {p.routing?.reason ?? 'This structure needs a quick look on site before we can price it.'}
+          {p.routing?.reason ?? 'This structure needs a quick look on site before we can price it.'}
         </div>
       ) : (
         <>

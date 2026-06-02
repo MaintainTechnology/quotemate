@@ -26,6 +26,7 @@ import {
   isAffirmative,
   isNegative,
   isStopRequest,
+  looksLikeRoofingEnquiry,
   mapIntent,
   nextRoofingStep,
   parseYearBuilt,
@@ -42,6 +43,9 @@ export type RoofingConversationState = {
   pending_quote_token?: string | null
   /** How many structures were measured (so a numbered pick can be validated). */
   pending_structure_count?: number | null
+  /** 1-based indices already sent to the customer (so "the others" can
+   *  compute the complement on a warm 'quoted' thread). */
+  last_served_structures?: number[] | null
 }
 
 const ANSWERABLE_STEPS: ReadonlySet<RoofingStep> = new Set<RoofingStep>([
@@ -56,10 +60,16 @@ export type RoofingTurnDecision =
   | { action: 'ask'; slots: RoofingSlots; step: RoofingStep; reply: string }
   | { action: 'measure'; slots: RoofingSlots }
   | { action: 'inspection'; slots: RoofingSlots; reason: string }
-  | { action: 'send_saved'; slots: RoofingSlots; structureChoice: number | null }
+  // Serve the SAVED measurement for these 1-based structures (null = all).
+  | { action: 'send_saved'; slots: RoofingSlots; structureChoices: number[] | null }
   | { action: 'reconfirm'; slots: RoofingSlots }
   | { action: 'cancel'; slots: RoofingSlots }
   | { action: 'booking'; slots: RoofingSlots; confirmed: boolean }
+  // A warm 'quoted' thread got a message that is NOT a structure follow-up,
+  // a stop, or a fresh roofing enquiry — hand it back to the general dialog
+  // (the route returns false) so a new electrical/plumbing question is
+  // handled normally instead of being trapped in roofing.
+  | { action: 'passthrough'; slots: RoofingSlots }
 
 const WRONG_BUILDING_REPROMPT =
   "No worries. What's the correct property address, with suburb and postcode?"
@@ -84,6 +94,88 @@ export function parseStructureChoice(inbound: string, count: number): number | n
     const n = Number(m[1])
     if (n >= 1 && n <= count) return n
   }
+  return null
+}
+
+// Words that, after the pick tokens are removed, are "filler" — their
+// presence doesn't make a message anything other than a structure pick.
+const FOLLOWUP_FILLER =
+  /\b(and|the|a|an|number|numbers|no|nos|just|only|please|pls|thanks|thx|ta|too|one|ones|of|me|my|give|send|do|it|its|yes|yep|ok|okay|okey|sure|for|i|id|want|wanna|need|can|could|would|you|get|us|actually|quote|quotes|breakdown|breakdowns|estimate|estimates|pricing|price|prices|about|what|hey|hi|see|show|them|those|these|also)\b/g
+// Tokens that ARE a structure pick (numbers, ordinals, building words).
+const PICK_TOKENS =
+  /#?\d{1,2}|\b(first|second|third|fourth|fifth|all|both|everything|every|others?|rest|remaining|lot|buildings?|structures?|shed|garage|granny|flat|carport|outbuilding|dwelling)\b/g
+// A clear structure/roof cue — makes any number a roofing pick even in a
+// longer sentence ("give me breakdown for building 2 and 3").
+const STRUCTURE_CUE =
+  /\b(building|buildings|structure|structures|shed|garage|granny|carport|outbuilding|dwelling|breakdown|re-?roof|roofs?)\b/
+
+/**
+ * PURE — parse a MULTI-structure follow-up on a warm 'quoted' thread.
+ * Returns 'all' (every structure), an array of 1-based indices, or null
+ * when the message isn't a structure ask. `alreadyServed` lets "the
+ * others / the rest" compute the complement of what was already sent.
+ *
+ * CONSERVATIVE on purpose: a bare number / quantifier is only treated as a
+ * pick when the message is EITHER a "pure pick" (only pick tokens + filler
+ * remain) OR carries an explicit structure cue. So "2 and 3" / "the others"
+ * / "both" are picks, but "call me at 2" / "I have 2 dogs" / "both lights
+ * please" are NOT — they pass through to the general dialog. This is what
+ * stops a warm roofing thread from hijacking an unrelated reply.
+ *   • "all" / "all of them" / "everything" / "both" → 'all'
+ *   • "the others" / "the rest" / "remaining"       → complement
+ *   • "2 and 3" / "2, 3" / "#2 #3" / "second and third" → [2,3]
+ *   • "the shed" / "garage" (when >1 structure)     → secondary indices
+ */
+export function parseStructureFollowup(
+  inbound: string,
+  count: number,
+  alreadyServed?: number[] | null,
+): number[] | 'all' | null {
+  const t = (inbound ?? '').toLowerCase().trim()
+  if (!t || count < 1) return null
+
+  // Gate: a clear structure cue, OR the message is essentially JUST a pick
+  // (nothing left after removing pick tokens + filler + punctuation).
+  const hasCue = STRUCTURE_CUE.test(t)
+  const residue = t
+    .replace(PICK_TOKENS, ' ')
+    .replace(FOLLOWUP_FILLER, ' ')
+    .replace(/[^a-z]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const isPurePick = residue.length === 0
+  if (!hasCue && !isPurePick) return null
+
+  // "all" — bare "all"/"everything"/"both" are safe here because the gate
+  // already rejected sentences with other content ("all good thanks").
+  if (/\b(all|all of them|all of it|all of the|everything|all the buildings|all structures|both of them|both buildings|both)\b/.test(t)) {
+    return 'all'
+  }
+
+  if (/\b(the others?|the rest|remaining|other ones?|other buildings?)\b/.test(t)) {
+    const served = new Set(alreadyServed ?? [])
+    const rest: number[] = []
+    for (let i = 1; i <= count; i++) if (!served.has(i)) rest.push(i)
+    return rest.length > 0 ? rest : null
+  }
+
+  const nums = new Set<number>()
+  for (const mm of t.matchAll(/#?(\d{1,2})/g)) {
+    const n = Number(mm[1])
+    if (n >= 1 && n <= count) nums.add(n)
+  }
+  for (const [word, n] of Object.entries(ORDINALS)) {
+    if (new RegExp(`\\b${word}\\b`).test(t) && n <= count) nums.add(n)
+  }
+  if (nums.size > 0) return [...nums].sort((a, b) => a - b)
+
+  // A bare "shed" / "garage" maps to the secondary structures (2..count).
+  if (count > 1 && /\b(shed|garage|granny flat|secondary|outbuilding|carport)\b/.test(t)) {
+    const secondary: number[] = []
+    for (let i = 2; i <= count; i++) secondary.push(i)
+    return secondary
+  }
+
   return null
 }
 
@@ -122,17 +214,36 @@ export function advanceRoofing(
     }
     const choice = parseStructureChoice(inbound, count)
     if (choice != null && count > 1) {
-      return { action: 'send_saved', slots, structureChoice: choice }
+      return { action: 'send_saved', slots, structureChoices: [choice] }
+    }
+    // The confirm prompt offers "all" (and the page says so) — accept it.
+    if (count > 1 && parseStructureFollowup(inbound, count) === 'all') {
+      return { action: 'send_saved', slots, structureChoices: null }
     }
     if (isAffirmative(inbound)) {
-      return { action: 'send_saved', slots, structureChoice: null }
+      return { action: 'send_saved', slots, structureChoices: null }
     }
     return { action: 'reconfirm', slots }
   }
 
-  // (4) Closed flow — a fresh enquiry restarts from scratch.
+  // (3.5) Warm 'quoted' thread — a quote was already sent. A structure
+  // follow-up ("give me 2 and 3", "the others", "all of them") re-serves
+  // the SAVED measurement; a fresh roofing enquiry reopens; anything else
+  // is handed back to the general dialog (never trapped, never re-quoted).
+  if (rawLastStep === 'quoted') {
+    const count = prev?.pending_structure_count ?? 1
+    const picks = parseStructureFollowup(inbound, count, prev?.last_served_structures ?? null)
+    if (picks === 'all') return { action: 'send_saved', slots, structureChoices: null }
+    if (picks && picks.length > 0) return { action: 'send_saved', slots, structureChoices: picks }
+    // Not a structure ask. Only a clear NEW roofing enquiry reopens the
+    // flow; everything else goes back to the general dialog.
+    if (!looksLikeRoofingEnquiry(inbound)) return { action: 'passthrough', slots }
+    // falls through to the reset below → gather a fresh roofing quote.
+  }
+
+  // (4) Closed/quoted flow — a fresh enquiry restarts from scratch.
   let lastStep: RoofingStep | null = rawLastStep
-  if (rawLastStep === 'closed') {
+  if (rawLastStep === 'closed' || rawLastStep === 'quoted') {
     slots = {}
     lastStep = null
   }
@@ -173,7 +284,10 @@ export function advanceRoofing(
  *   measure    → park at confirm_roof
  *   reconfirm  → stay at confirm_roof
  *   inspection → park at await_booking (waiting for "yes book it")
- *   send_saved → closed (quote delivered)
+ *   send_saved → quoted (WARM — a structure follow-up re-serves the saved
+ *                measurement; the route preserves pending_quote_token +
+ *                pending_structure_count, which this pure fn doesn't own)
+ *   passthrough→ stays quoted (route returns false; no persist)
  *   cancel     → closed
  *   booking    → closed
  */
@@ -189,6 +303,9 @@ export function nextRoofingConversationState(
     case 'inspection':
       return { slots: decision.slots, last_step: 'await_booking', pending_quote_token: null, pending_structure_count: null }
     case 'send_saved':
+      return { slots: decision.slots, last_step: 'quoted', last_served_structures: decision.structureChoices }
+    case 'passthrough':
+      return { slots: decision.slots, last_step: 'quoted' }
     case 'cancel':
     case 'booking':
       return { slots: decision.slots, last_step: 'closed', pending_quote_token: null, pending_structure_count: null }

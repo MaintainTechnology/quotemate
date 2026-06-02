@@ -14,6 +14,7 @@ import {
   composeInspectionMessage,
   fmtAud,
   narrowQuoteToStructure,
+  narrowQuoteToStructures,
 } from './roofing-compose'
 
 function metrics(o: Partial<RoofMetrics> = {}): RoofMetrics {
@@ -163,5 +164,43 @@ describe('narrowQuoteToStructure', () => {
   it('returns the original quote for an out-of-range index', () => {
     const quote = priceMultiRoof({ structures: [house, shed] })
     expect(narrowQuoteToStructure(quote, 9).structures).toHaveLength(2)
+  })
+})
+
+describe('narrowQuoteToStructures (multi-pick follow-ups)', () => {
+  it('null → the quote unchanged (all structures)', () => {
+    const quote = priceMultiRoof({ structures: [house, shed] })
+    expect(narrowQuoteToStructures(quote, null)).toBe(quote)
+  })
+  it('a subset sums the combined tiers over the picked structures', () => {
+    const quote = priceMultiRoof({ structures: [house, shed] })
+    const n = narrowQuoteToStructures(quote, [1, 2])
+    expect(n.structures).toHaveLength(2)
+    expect(n.combined.tiers[1].inc_gst).toBeCloseTo(
+      quote.structures[0].price.tiers[1].inc_gst + quote.structures[1].price.tiers[1].inc_gst,
+      1,
+    )
+  })
+  it('quotes the quotable picks and flags an inspection-needed secondary (does not block)', () => {
+    const asbestosShed: RoofStructureInput = { ...shed, inputs: inputs({ material: 'cement_sheet' }) }
+    const quote = priceMultiRoof({ structures: [house, asbestosShed] })
+    const n = narrowQuoteToStructures(quote, [1, 2])
+    expect(n.routing.decision).toBe('tradie_review') // primary house is quotable
+    expect(n.inspection_structures).toHaveLength(1)
+    // combined sums quotable-only — just the house.
+    expect(n.combined.tiers[1].inc_gst).toBeCloseTo(quote.structures[0].price.tiers[1].inc_gst, 1)
+    const msg = buildRoofingReplyMessage({ ...CTX, quote: n })
+    expect(msg).toMatch(/here's your roofing estimate/)
+    expect(msg).toMatch(/note:/i)
+  })
+  it('a subset where every pick needs inspection → inspection_required', () => {
+    const asbestosShed: RoofStructureInput = { ...shed, inputs: inputs({ material: 'cement_sheet' }) }
+    const quote = priceMultiRoof({ structures: [house, asbestosShed] })
+    const n = narrowQuoteToStructures(quote, [2]) // only the asbestos shed
+    expect(n.routing.decision).toBe('inspection_required')
+  })
+  it('out-of-range / empty selection → unchanged', () => {
+    const quote = priceMultiRoof({ structures: [house, shed] })
+    expect(narrowQuoteToStructures(quote, [9]).structures).toHaveLength(2)
   })
 })

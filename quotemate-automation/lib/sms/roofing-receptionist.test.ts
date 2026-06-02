@@ -8,6 +8,7 @@ import {
   isActiveRoofingFlow,
   nextRoofingConversationState,
   parseStructureChoice,
+  parseStructureFollowup,
   type RoofingConversationState,
 } from './roofing-receptionist'
 
@@ -89,12 +90,17 @@ describe('advanceRoofing — confirm_roof gate', () => {
   it('YES → send_saved (all structures)', () => {
     const d = advanceRoofing(measured, 'yes thats my roof')
     expect(d.action).toBe('send_saved')
-    if (d.action === 'send_saved') expect(d.structureChoice).toBeNull()
+    if (d.action === 'send_saved') expect(d.structureChoices).toBeNull()
   })
   it('a number → send_saved for that structure', () => {
     const d = advanceRoofing(measured, '2')
     expect(d.action).toBe('send_saved')
-    if (d.action === 'send_saved') expect(d.structureChoice).toBe(2)
+    if (d.action === 'send_saved') expect(d.structureChoices).toEqual([2])
+  })
+  it('"all of them" (the prompt offers it) → send_saved all', () => {
+    const d = advanceRoofing(measured, 'all of them please')
+    expect(d.action).toBe('send_saved')
+    if (d.action === 'send_saved') expect(d.structureChoices).toBeNull()
   })
   it('NO → re-ask the address and reset it', () => {
     const d = advanceRoofing(measured, 'no thats the wrong building')
@@ -183,8 +189,93 @@ describe('nextRoofingConversationState', () => {
     expect(nextRoofingConversationState(ask).last_step).toBe('address')
     expect(nextRoofingConversationState({ action: 'measure', slots: {} }).last_step).toBe('confirm_roof')
     expect(nextRoofingConversationState({ action: 'inspection', slots: {}, reason: 'x' }).last_step).toBe('await_booking')
-    expect(nextRoofingConversationState({ action: 'send_saved', slots: {}, structureChoice: null }).last_step).toBe('closed')
+    // send_saved parks at the WARM 'quoted' state (not closed) so a
+    // structure follow-up can re-serve the saved measurement.
+    expect(nextRoofingConversationState({ action: 'send_saved', slots: {}, structureChoices: null }).last_step).toBe('quoted')
     expect(nextRoofingConversationState({ action: 'cancel', slots: {} }).last_step).toBe('closed')
     expect(nextRoofingConversationState({ action: 'booking', slots: {}, confirmed: true }).last_step).toBe('closed')
+  })
+})
+
+describe('parseStructureFollowup', () => {
+  it('"all of them" / "everything" / "both" → all', () => {
+    expect(parseStructureFollowup('quote all of them', 3)).toBe('all')
+    expect(parseStructureFollowup('give me everything', 3)).toBe('all')
+    expect(parseStructureFollowup('both please', 2)).toBe('all')
+  })
+  it('a list of numbers / ordinals → sorted unique indices', () => {
+    expect(parseStructureFollowup('give me breakdown for 2 and 3 too', 3)).toEqual([2, 3])
+    expect(parseStructureFollowup('2, 3', 3)).toEqual([2, 3])
+    expect(parseStructureFollowup('#3 #2', 3)).toEqual([2, 3])
+    expect(parseStructureFollowup('the second and third', 3)).toEqual([2, 3])
+  })
+  it('"the others" → complement of what was already served', () => {
+    expect(parseStructureFollowup('give me the others too', 3, [1])).toEqual([2, 3])
+    expect(parseStructureFollowup('the rest please', 3, [1, 2])).toEqual([3])
+  })
+  it('a bare shed/garage maps to the secondary structures', () => {
+    expect(parseStructureFollowup('what about the shed', 3)).toEqual([2, 3])
+    expect(parseStructureFollowup('the garage too', 2)).toEqual([2])
+  })
+  it('out-of-range numbers are dropped; nothing valid → null', () => {
+    expect(parseStructureFollowup('9', 3)).toBeNull()
+    expect(parseStructureFollowup('thanks heaps', 3)).toBeNull()
+    expect(parseStructureFollowup('', 3)).toBeNull()
+  })
+  it('does NOT hijack a number that is part of a non-structure sentence', () => {
+    // These would re-fire the roofing quote under a naive "any digit" scan.
+    expect(parseStructureFollowup('call me at 2', 3)).toBeNull()
+    expect(parseStructureFollowup('I have 2 dogs', 3)).toBeNull()
+    expect(parseStructureFollowup('both lights please', 2)).toBeNull()
+    expect(parseStructureFollowup('can you also quote me 6 downlights', 3)).toBeNull()
+    expect(parseStructureFollowup('all good thanks', 3)).toBeNull()
+  })
+  it('still fires on a clear structure cue even in a longer sentence', () => {
+    expect(parseStructureFollowup('can you do building 2 and 3 as well', 3)).toEqual([2, 3])
+    expect(parseStructureFollowup('what about that shed out the back', 3)).toEqual([2, 3])
+  })
+})
+
+describe('advanceRoofing — warm "quoted" thread (no fall-through to electrical)', () => {
+  const quoted: RoofingConversationState = {
+    slots: { address: '670 London Rd, Chandler QLD 4155', address_confirmed: true, intent: 'full_reroof', material: 'colorbond_trimdek', pitch: 'standard' },
+    last_step: 'quoted',
+    pending_quote_token: 'tok123',
+    pending_structure_count: 3,
+    last_served_structures: [1],
+  }
+
+  it('"give me breakdown for 2 and 3 too" → send_saved for [2,3] (served from the saved measurement)', () => {
+    const d = advanceRoofing(quoted, 'give me breakdown for 2 and 3 too')
+    expect(d.action).toBe('send_saved')
+    if (d.action === 'send_saved') expect(d.structureChoices).toEqual([2, 3])
+  })
+  it('"the others" → the complement of what was already served', () => {
+    const d = advanceRoofing(quoted, 'and the others please')
+    expect(d.action).toBe('send_saved')
+    if (d.action === 'send_saved') expect(d.structureChoices).toEqual([2, 3])
+  })
+  it('"all of them" → send_saved all (null)', () => {
+    const d = advanceRoofing(quoted, 'actually quote all of them')
+    expect(d.action).toBe('send_saved')
+    if (d.action === 'send_saved') expect(d.structureChoices).toBeNull()
+  })
+  it('a NON-structure, NON-roofing message → passthrough (general dialog handles it)', () => {
+    expect(advanceRoofing(quoted, 'can you also quote me 6 downlights?').action).toBe('passthrough')
+    expect(advanceRoofing(quoted, 'thanks mate').action).toBe('passthrough')
+  })
+  it('a stop request while quoted still cancels', () => {
+    expect(advanceRoofing(quoted, 'STOP').action).toBe('cancel')
+  })
+  it('a fresh roofing enquiry while quoted reopens the gather (resets slots)', () => {
+    const d = advanceRoofing(quoted, 'I need a re-roof quote at a new place')
+    expect(d.action).toBe('ask')
+    if (d.action === 'ask') {
+      expect(d.step).toBe('address')
+      expect(d.slots.address).toBeFalsy()
+    }
+  })
+  it('"quoted" counts as an ACTIVE flow', () => {
+    expect(isActiveRoofingFlow(quoted)).toBe(true)
   })
 })
