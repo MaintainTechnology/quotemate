@@ -73,6 +73,10 @@ export default function PaintingEstimatePage() {
   const [resp, setResp] = useState<EstimateResponse | null>(null)
   const [errMsg, setErrMsg] = useState<string | null>(null)
 
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [savedId, setSavedId] = useState<string | null>(null)
+  const [saveErr, setSaveErr] = useState<string | null>(null)
+
   useEffect(() => {
     const sb = getBrowserSupabase()
     sb.auth.getSession().then(({ data: { session } }) => {
@@ -99,6 +103,9 @@ export default function PaintingEstimatePage() {
       }
       setBusy(true)
       setErrMsg(null)
+      setSaveState('idle')
+      setSavedId(null)
+      setSaveErr(null)
       try {
         const res = await fetch('/api/painting/estimate', {
           method: 'POST',
@@ -134,6 +141,45 @@ export default function PaintingEstimatePage() {
   )
 
   const estimate = resp && resp.ok === true ? resp.estimate : null
+
+  const onSave = useCallback(async () => {
+    if (!token || !estimate) return
+    setSaveState('saving')
+    setSaveErr(null)
+    try {
+      const res = await fetch('/api/painting/save', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          address: { address, postcode, state: stateCode },
+          source: estimate.provider,
+          inputs: {
+            scopes,
+            coats,
+            condition,
+            ceiling_height: ceiling,
+            storeys,
+            colour_change: colourChange,
+            manual_floor_area_m2: manualArea ? Number(manualArea) : null,
+          },
+          estimate,
+        }),
+      })
+      const json = (await res.json()) as
+        | { ok: true; id: string }
+        | { ok: false; error?: string; detail?: string }
+      if (json.ok) {
+        setSavedId(json.id)
+        setSaveState('saved')
+      } else {
+        setSaveState('error')
+        setSaveErr(json.detail ?? json.error ?? 'Could not save the job.')
+      }
+    } catch (e) {
+      setSaveState('error')
+      setSaveErr(e instanceof Error ? e.message : String(e))
+    }
+  }, [token, estimate, address, postcode, stateCode, scopes, coats, condition, ceiling, storeys, colourChange, manualArea])
 
   return (
     <main className="min-h-screen bg-ink-deep text-text-pri">
@@ -270,6 +316,33 @@ export default function PaintingEstimatePage() {
 
       {/* ── Result ────────────────────────────────────────────────── */}
       {estimate && <ResultBlock estimate={estimate} />}
+
+      {/* ── Save job ──────────────────────────────────────────────── */}
+      {estimate && (
+        <section className="relative z-10 mx-auto mt-6 max-w-6xl px-6 sm:px-10">
+          <div className="flex flex-wrap items-center gap-4 border border-ink-line border-l-4 border-l-accent bg-ink-card px-6 py-5">
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={saveState === 'saving'}
+              className="inline-flex items-center gap-2 bg-accent px-6 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {saveState === 'saving' ? (<><Spinner /> Saving…</>) : (<>Save job</>)}
+            </button>
+            {saveState === 'saved' && savedId && (
+              <span className="font-mono text-sm font-semibold uppercase tracking-[0.14em] text-teal-glow">
+                ✓ Saved · find it in the Paint tab history
+              </span>
+            )}
+            {saveState === 'error' && saveErr && (
+              <span className="text-sm text-warning">{saveErr}</span>
+            )}
+            {saveState !== 'saved' && saveState !== 'error' && (
+              <span className="text-sm text-text-dim">Saves this estimate to your Paint tab history.</span>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* ── Visual repaint preview ────────────────────────────────── */}
       {estimate && (

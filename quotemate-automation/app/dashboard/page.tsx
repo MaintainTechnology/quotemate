@@ -620,8 +620,8 @@ export default function DashboardPage() {
               } />
             )}
             {tab === 'roofing' && <RoofingHubTab accessToken={accessToken} />}
-            {tab === 'signage' && <SignageHubTab />}
-            {tab === 'painting' && <PaintingHubTab />}
+            {tab === 'signage' && <SignageHubTab accessToken={accessToken} />}
+            {tab === 'painting' && <PaintingHubTab accessToken={accessToken} />}
           </div>
         </section>
       </div>
@@ -10241,7 +10241,78 @@ function formatTime(iso: string): string {
 // The HQ signage-compliance product. The heavy surfaces live at their
 // own routes (/dashboard/signage + /dashboard/signage/queue) so they get
 // full-screen real estate; this tab is the launch pad.
-function SignageHubTab() {
+type SgRequest = {
+  id: string
+  studio_name: string
+  token: string
+  link: string
+  state: string
+  overall: string | null
+  assessment_id: string | null
+}
+type SgSweep = { id: string; name: string; created_at: string; status: string; requests: SgRequest[] }
+type SgRollup = {
+  studios: number
+  assessed: number
+  pass: number
+  fix_needed: number
+  needs_review: number
+  awaiting: number
+}
+
+function SignageHubTab({ accessToken }: { accessToken: string | null }) {
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState<string | null>(null)
+  const [sweeps, setSweeps] = useState<SgSweep[]>([])
+  const [rollup, setRollup] = useState<SgRollup | null>(null)
+
+  const load = useCallback(async () => {
+    if (!accessToken) {
+      setErr('Not signed in')
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    setErr(null)
+    try {
+      const headers = { Authorization: `Bearer ${accessToken}` }
+      const [sRes, qRes] = await Promise.all([
+        fetch('/api/signage/sweeps', { headers, cache: 'no-store' }),
+        fetch('/api/signage/queue?status=all', { headers, cache: 'no-store' }),
+      ])
+      const sJson = (await sRes.json().catch(() => ({}))) as {
+        ok?: boolean
+        sweeps?: SgSweep[]
+        error?: string
+      }
+      if (!sRes.ok || !sJson.ok) {
+        throw new Error(
+          sJson.error === 'unauthorized'
+            ? 'No franchisor org is linked to this account yet — seed one with scripts/seed-signage-demo.mjs.'
+            : sJson.error || `HTTP ${sRes.status}`,
+        )
+      }
+      setSweeps(sJson.sweeps ?? [])
+      const qJson = (await qRes.json().catch(() => ({}))) as { ok?: boolean; rollup?: SgRollup }
+      if (qJson?.ok && qJson.rollup) setRollup(qJson.rollup)
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoading(false)
+    }
+  }, [accessToken])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  // Flatten every sweep's requests into one recent-first history list — the
+  // signage analogue of the roofing tab's "Saved roofing jobs". Sweeps come
+  // back newest-first from the API, so this preserves recency.
+  const recent: Array<SgRequest & { sweep_name: string }> = []
+  for (const sw of sweeps) for (const r of sw.requests) recent.push({ ...r, sweep_name: sw.name })
+  const recentTop = recent.slice(0, 15)
+
   return (
     <div className="space-y-7">
       <div>
@@ -10254,50 +10325,157 @@ function SignageHubTab() {
         </p>
       </div>
 
-      <Link
-        href="/dashboard/signage"
-        className="group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
-      >
-        <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">01</span>
-        <div className="flex-1">
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
-            Compliance sweep
-          </div>
-          <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
-            Run a sweep
-          </h3>
-          <p className="mt-4 text-base leading-relaxed text-text-sec">
-            Pick a region + the photos to request, and each studio gets a tokenised upload
-            link. As they respond, the AI scores their signage and surfaces the fleet status.
-          </p>
-          <div className="mt-6 inline-flex items-center gap-2 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-accent transition-transform group-hover:translate-x-1">
-            Open sweeps <span aria-hidden="true">&rarr;</span>
-          </div>
+      {rollup && (
+        <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+          <SgStat label="Studios" value={rollup.studios} />
+          <SgStat label="Assessed" value={rollup.assessed} />
+          <SgStat label="Compliant" value={rollup.pass} tone="good" />
+          <SgStat label="To fix" value={rollup.fix_needed} tone="warn" />
+          <SgStat label="Needs review" value={rollup.needs_review} tone="accent" />
+          <SgStat label="Awaiting" value={rollup.awaiting} />
         </div>
-      </Link>
+      )}
 
-      <Link
-        href="/dashboard/signage/queue"
-        className="group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
-      >
-        <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">02</span>
-        <div className="flex-1">
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
-            Human review
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Link
+          href="/dashboard/signage"
+          className="group flex flex-col gap-5 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-7"
+        >
+          <span className="font-mono text-4xl font-bold leading-none text-accent sm:text-5xl">01</span>
+          <div className="flex-1">
+            <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
+              Compliance sweep
+            </div>
+            <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri sm:text-2xl">
+              Run a sweep
+            </h3>
+            <p className="mt-3 text-sm leading-relaxed text-text-sec">
+              Pick a region + the photos to request; each studio gets a tokenised upload link
+              and the AI scores their signage as they respond.
+            </p>
+            <div className="mt-5 inline-flex items-center gap-2 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-accent transition-transform group-hover:translate-x-1">
+              Open sweeps <span aria-hidden="true">&rarr;</span>
+            </div>
           </div>
-          <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
-            Review queue
-          </h3>
-          <p className="mt-4 text-base leading-relaxed text-text-sec">
-            The AI flags non-compliant and can&rsquo;t-determine items; you approve, request
-            changes, or escalate. A green report is a pre-check, never automatic HQ approval.
-          </p>
-          <div className="mt-6 inline-flex items-center gap-2 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-accent transition-transform group-hover:translate-x-1">
-            Open queue <span aria-hidden="true">&rarr;</span>
+        </Link>
+
+        <Link
+          href="/dashboard/signage/queue"
+          className="group flex flex-col gap-5 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-7"
+        >
+          <span className="font-mono text-4xl font-bold leading-none text-accent sm:text-5xl">02</span>
+          <div className="flex-1">
+            <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
+              Human review
+            </div>
+            <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri sm:text-2xl">
+              Review queue
+            </h3>
+            <p className="mt-3 text-sm leading-relaxed text-text-sec">
+              The AI flags non-compliant + can&rsquo;t-determine items; you approve, request
+              changes, or escalate. A green report is a pre-check, never automatic HQ approval.
+            </p>
+            <div className="mt-5 inline-flex items-center gap-2 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-accent transition-transform group-hover:translate-x-1">
+              Open queue <span aria-hidden="true">&rarr;</span>
+            </div>
           </div>
+        </Link>
+      </div>
+
+      {/* Recent requests — the signage analogue of "Saved roofing jobs".
+          Every sweep + request auto-persists, so this history is always
+          live; click through to review an assessed studio. */}
+      <div className="border border-ink-line bg-ink-card p-7 sm:p-9">
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
+            Recent requests{recent.length ? ` · ${recent.length}` : ''}
+          </div>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-accent"
+          >
+            Refresh
+          </button>
         </div>
-      </Link>
+
+        {loading && <p className="mt-4 text-base text-text-dim">Loading recent requests…</p>}
+        {err && !loading && <p className="mt-4 text-base text-warning">{err}</p>}
+        {!loading && !err && recentTop.length === 0 && (
+          <p className="mt-4 text-base text-text-sec">
+            No requests yet. Run a sweep to send your studios their upload links — each one shows
+            up here as it responds.
+          </p>
+        )}
+
+        {recentTop.length > 0 && (
+          <div className="mt-4 grid gap-2">
+            {recentTop.map((r) => (
+              <div
+                key={r.id}
+                className="flex flex-wrap items-center justify-between gap-3 border border-ink-line bg-ink-deep px-4 py-3"
+              >
+                <div className="flex items-center gap-3">
+                  <SgChip state={r.state} overall={r.overall} />
+                  <div>
+                    <div className="font-mono text-sm text-text-pri">{r.studio_name}</div>
+                    <div className="font-mono text-[0.66rem] uppercase tracking-[0.12em] text-text-dim">
+                      {r.sweep_name}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void navigator.clipboard.writeText(r.link)}
+                    className="border border-ink-line px-3 py-1.5 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-sec transition-colors hover:border-accent hover:text-accent"
+                  >
+                    Copy link
+                  </button>
+                  {r.assessment_id && (
+                    <Link
+                      href={`/dashboard/signage/queue?a=${r.assessment_id}`}
+                      className="bg-accent px-3 py-1.5 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press"
+                    >
+                      Review
+                    </Link>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
+  )
+}
+
+function SgStat({ label, value, tone }: { label: string; value: number; tone?: 'good' | 'warn' | 'accent' }) {
+  const colour =
+    tone === 'good' ? 'text-teal-glow' : tone === 'warn' ? 'text-warning' : tone === 'accent' ? 'text-accent' : 'text-text-pri'
+  return (
+    <div className="border border-ink-line bg-ink-card p-4">
+      <div className="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-text-dim">{label}</div>
+      <div className={`mt-1.5 font-mono text-2xl font-bold tabular-nums ${colour}`}>{value}</div>
+    </div>
+  )
+}
+
+function SgChip({ state, overall }: { state: string; overall: string | null }) {
+  const { label, cls } =
+    overall === 'pass'
+      ? { label: 'Compliant', cls: 'text-teal-glow border-teal-glow' }
+      : overall === 'fix_needed'
+        ? { label: 'To fix', cls: 'text-warning border-warning' }
+        : overall === 'needs_review'
+          ? { label: 'Needs review', cls: 'text-accent border-accent' }
+          : state === 'submitted'
+            ? { label: 'Scoring…', cls: 'text-text-dim border-ink-line' }
+            : { label: 'Awaiting', cls: 'text-text-dim border-ink-line' }
+  return (
+    <span className={`border px-2.5 py-1 font-mono text-[0.64rem] font-semibold uppercase tracking-[0.12em] ${cls}`}>
+      {label}
+    </span>
   )
 }
 
@@ -10308,7 +10486,65 @@ function SignageHubTab() {
 // ("realestate.com.au" + "Other tools"). Future: recent estimates,
 // floor-plan upload, save-as-quote.
 
-function PaintingHubTab() {
+type SavedPaintJob = {
+  id: string
+  address: string | null
+  postcode: string | null
+  state: string | null
+  customer_name: string | null
+  source: string | null
+  scopes: string[] | null
+  floor_area_m2: number | null
+  total_area_m2: number | null
+  confidence: string | null
+  better_inc_gst: number | null
+  routing: string | null
+  public_token: string | null
+  created_at: string
+}
+
+function PaintingHubTab({ accessToken }: { accessToken: string | null }) {
+  const [jobs, setJobs] = useState<SavedPaintJob[] | null>(null)
+  const [loadingJobs, setLoadingJobs] = useState(true)
+  const [jobsError, setJobsError] = useState<string | null>(null)
+
+  const loadJobs = useCallback(async () => {
+    if (!accessToken) {
+      setJobsError('Not signed in')
+      setLoadingJobs(false)
+      return
+    }
+    setLoadingJobs(true)
+    setJobsError(null)
+    try {
+      const res = await fetch('/api/painting/save', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: 'no-store',
+      })
+      const json = (await res.json().catch(() => ({}))) as {
+        ok?: boolean
+        jobs?: SavedPaintJob[]
+        error?: string
+      }
+      if (!res.ok || !json.ok) throw new Error(json.error || `HTTP ${res.status}`)
+      setJobs(json.jobs ?? [])
+    } catch (e) {
+      setJobsError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoadingJobs(false)
+    }
+  }, [accessToken])
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      if (cancelled) return
+      await loadJobs()
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [loadJobs])
   return (
     <div className="space-y-7">
       <div>
@@ -10347,6 +10583,62 @@ function PaintingHubTab() {
           </span>
         </div>
       </Link>
+
+      {/* Saved paint jobs — history of every "Save job", scoped to this tenant. */}
+      <div className="border border-ink-line bg-ink-card p-7 sm:p-9">
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
+            Saved paint jobs{jobs ? ` · ${jobs.length}` : ''}
+          </div>
+          <button
+            type="button"
+            onClick={() => void loadJobs()}
+            className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-accent"
+          >
+            Refresh
+          </button>
+        </div>
+
+        {loadingJobs && <p className="mt-4 text-base text-text-dim">Loading saved jobs…</p>}
+        {jobsError && !loadingJobs && (
+          <p className="mt-4 text-base text-warning">Couldn&apos;t load saved jobs: {jobsError}</p>
+        )}
+        {!loadingJobs && !jobsError && jobs && jobs.length === 0 && (
+          <p className="mt-4 text-base text-text-dim">
+            No saved jobs yet. Run an estimate and hit{' '}
+            <span className="text-text-pri">Save job</span> — it&apos;ll show up here.
+          </p>
+        )}
+        {!loadingJobs && !jobsError && jobs && jobs.length > 0 && (
+          <ul className="mt-5 space-y-3">
+            {jobs.map((j) => {
+              const inspection = j.routing === 'inspection_required'
+              const scopes = Array.isArray(j.scopes) ? j.scopes : []
+              return (
+                <li key={j.id} className="border border-ink-line bg-ink-deep p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate font-semibold text-text-pri">
+                        {j.address ?? 'Unknown address'}
+                      </div>
+                      <div className="mt-1 font-mono text-xs text-text-dim">
+                        {inspection ? 'Inspection' : fmtAUD(j.better_inc_gst)}
+                        {scopes.length ? ` · ${scopes.join(', ')}` : ''}
+                        {j.total_area_m2 ? ` · ${Math.round(j.total_area_m2)} m²` : ''}
+                        {j.confidence ? ` · ${j.confidence} conf` : ''}
+                        {` · ${formatDate(j.created_at)}`}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <Pill tone={inspection ? 'warn' : 'ok'} label={inspection ? 'Inspection' : 'Quote'} />
+                    </div>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
     </div>
   )
 }

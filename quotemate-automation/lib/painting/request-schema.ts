@@ -36,3 +36,19 @@ export const EstimateRequestSchema = z.object({
 })
 
 export type EstimateRequest = z.infer<typeof EstimateRequestSchema>
+
+/** Persist a confirmed painting estimate as a saved job. The full
+ *  PaintingEstimate is stored verbatim in `estimate`; the route derives
+ *  the denormalised summary columns from it. */
+export const SavePaintingSchema = z.object({
+  address: PaintAddressSchema,
+  /** The data source the estimate came from. */
+  source: z.enum(['rea', 'domain', 'solar', 'geoscape', 'mock', 'manual']),
+  inputs: PaintInputsSchema,
+  /** The whole PaintingEstimate object, stored as-is. */
+  estimate: z.unknown(),
+  customer_name: z.string().max(160).optional().nullable(),
+  customer_phone: z.string().max(40).optional().nullable(),
+})
+
+export type SavePaintingRequest = z.infer<typeof SavePaintingSchema>
