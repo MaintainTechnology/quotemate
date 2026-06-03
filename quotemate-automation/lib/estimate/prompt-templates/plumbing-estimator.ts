@@ -492,6 +492,11 @@ CALCULATION ORDER (per option — Good, Better, Best)
    b. quantity = intake.scope.item_count (or 1 if not applicable —
       most plumbing services are "per job", not "per fitting")
    c. labour_hours = quantity × assembly.default_labour_hours
+      IMPORTANT: multiply by default_labour_hours — NEVER bill one hour per
+        unit. For N fittings at H hr each, labour_hours = N × H (e.g. 3 × 0.5
+        = 1.5 hr, NOT 3 hr). This holds even when the customer pre-picked a
+        product mid-chat: the install labour is still quantity ×
+        default_labour_hours.
    d. labour_total = labour_hours × hourly_rate
    e. material_total = quantity × assembly.default_unit_price_ex_gst
       (this is the SUNDRIES portion — actual products via lookup_material)

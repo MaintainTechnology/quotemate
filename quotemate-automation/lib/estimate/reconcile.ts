@@ -142,6 +142,95 @@ export function checkQuantityVsItemCount(draft: Draft, itemCount: unknown): stri
 }
 
 /**
+ * Undo the product-picker labour OVER-BILLING bug.
+ *
+ * On the chosen-product (deterministic-BOM) path the model sometimes renders the
+ * install-labour line with `quantity = item_count` treated as HOURS (≈1 hr/unit),
+ * dropping the `× assembly.default_labour_hours` multiplier from the estimator's
+ * CALCULATION ORDER (step 1.c). It bites multi-unit jobs whose per-unit labour is
+ * under 1 hr — e.g. 6 downlights (0.4 hr each) billed as 6 hr instead of 2.4 hr.
+ * Neither the grounding validator (the rate is valid) nor the min-labour floor
+ * (the inflated hours already clear the floor) catches it, so 6 downlights via
+ * the picker could out-cost 8 downlights via the standard path.
+ *
+ * The tell the model leaves behind: it ALSO emits a "minimum job allowance" /
+ * "site visit + setup" top-up line, which it only adds to bring a SUB-floor job
+ * UP TO the floor — so the intended TOTAL labour was exactly
+ * pricing_book.min_labour_hours. When that allowance line is present yet the
+ * tier's total labour EXCEEDS the floor, the excess is the over-billed install
+ * line. We restore it deterministically: `install_hours = min_labour_hours −
+ * allowance_hours`, which puts the tier's total labour back on the floor.
+ *
+ * Pure arithmetic from the draft itself — needs no per-assembly hours, never
+ * fabricates a price, and can ONLY REDUCE a charge (the safe direction; an
+ * under-billed labour line is left for the min-floor + always_review to handle).
+ * Guards are deliberately tight (exactly two hr-lines at the hourly rate — the
+ * allowance + the install line whose quantity equals item_count) so it is a
+ * no-op on the correct standard path and on any tier it can't unambiguously
+ * read. Mutates the draft in place; returns the corrections (for logging).
+ */
+export interface InflatedLabourCorrection {
+  tier: TierKey
+  index: number
+  fromHours: number
+  toHours: number
+}
+export function reconcileInflatedLabour(
+  draft: Draft,
+  opts: { itemCount: unknown; minLabourHours: unknown; hourlyRate: unknown },
+): { draft: Draft; corrections: InflatedLabourCorrection[] } {
+  const corrections: InflatedLabourCorrection[] = []
+  const itemCount = num(opts.itemCount)
+  const minLabour = num(opts.minLabourHours)
+  const hourly = num(opts.hourlyRate)
+  if (!draft) return { draft, corrections }
+  // item_count must be a real multi-unit job (count==1 jobs are never inflated),
+  // and we need a finite floor + a rate to recognise a labour line.
+  if (!Number.isFinite(itemCount) || itemCount <= 1) return { draft, corrections }
+  if (!Number.isFinite(minLabour) || minLabour <= 0) return { draft, corrections }
+  if (!Number.isFinite(hourly) || hourly <= 0) return { draft, corrections }
+
+  const EPS = 0.05
+  const isHr = (li: Line) => String(li?.unit ?? '').trim().toLowerCase() === 'hr'
+  const atHourly = (li: Line) => Math.abs(num(li?.unit_price_ex_gst) - hourly) <= 0.5
+  const isAllowance = (li: Line) => {
+    const d = String(li?.description ?? '').toLowerCase()
+    return /site visit/.test(d) || (/\bminimum\b/.test(d) && /(allowance|site|setup|job|charge)/.test(d))
+  }
+
+  for (const key of TIERS) {
+    const tier = draft[key] as Tier
+    if (!tier || !Array.isArray(tier.line_items)) continue
+    const items = tier.line_items
+    // Only the clean two-line shape (allowance + install at the hourly rate) is
+    // safe to read; anything else (risk lines, extra labour) → no-op.
+    const hrLines = items.map((li, i) => ({ li, i })).filter(({ li }) => isHr(li) && atHourly(li))
+    if (hrLines.length !== 2) continue
+    const allowance = hrLines.find(({ li }) => isAllowance(li))
+    const install = hrLines.find(({ li }) => !isAllowance(li))
+    if (!allowance || !install) continue
+    const allowanceHrs = num(allowance.li.quantity)
+    const installHrs = num(install.li.quantity)
+    if (!Number.isFinite(allowanceHrs) || !Number.isFinite(installHrs)) continue
+    // Bug tell: the install line billed the item count as hours.
+    if (Math.abs(installHrs - itemCount) > EPS) continue
+    const totalLabour = allowanceHrs + installHrs
+    if (totalLabour <= minLabour + EPS) continue // nothing inflated above the floor
+    // The model topped the job to the floor → intended total = min_labour_hours.
+    const toHours = +(minLabour - allowanceHrs).toFixed(2)
+    if (!(toHours > 0) || toHours >= installHrs - EPS) continue // reduce-only, stay positive
+    const unitPrice = num(install.li.unit_price_ex_gst)
+    install.li.quantity = toHours
+    install.li.total_ex_gst = money(toHours * unitPrice)
+    tier.subtotal_ex_gst = money(
+      items.reduce((s, x) => s + (Number(num(x?.total_ex_gst)) || 0), 0),
+    )
+    corrections.push({ tier: key, index: install.i, fromHours: installHrs, toHours })
+  }
+  return { draft, corrections }
+}
+
+/**
  * Collapse fake-identical tiers. Two priced tiers are "the same" when their line
  * items match by signature: the sorted multiset of
  * (normalised description, unit, quantity, unit_price_ex_gst). Keep the FIRST

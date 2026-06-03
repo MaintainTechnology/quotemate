@@ -22,6 +22,7 @@ export const PaintInputsSchema = z.object({
   condition: z.enum(['sound', 'minor', 'bare', 'poor']),
   ceiling_height: z.enum(['standard', 'high', 'raked']),
   colour_change: z.boolean(),
+  storeys: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
   manual_floor_area_m2: z.number().positive().max(2000).optional().nullable(),
 })
 

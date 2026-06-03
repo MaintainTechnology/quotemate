@@ -27,6 +27,7 @@ import type {
 import type { PropertyDataProvider } from './providers/base'
 import { MockPropertyProvider } from './providers/mock'
 import { ReaListingProvider } from './providers/rea'
+import { SolarPropertyProvider } from './providers/solar'
 import { measurePaintableArea } from './area'
 import { calculatePaintingPrice, requiresInspection } from './pricing'
 
@@ -51,11 +52,12 @@ export type EstimateResult =
 /**
  * Pick a property-data provider based on opts → source → env.
  *
- * The "other tools" providers (Google Solar, Geoscape, Domain) are not
- * wired yet — until their keys/adapters land, `auto` falls back to the
- * mock so the tab works end-to-end. The REA tab uses ReaListingProvider,
- * which is inert (returns rea_not_configured) until a scraper/paste
- * backend is injected — unless the demo toggle forces the mock.
+ * The "other tools" `auto` tab uses the real Google Solar provider when
+ * GOOGLE_MAPS_API_KEY is set (footprint → floor-area estimate); without a
+ * key it falls back to the mock. Geoscape/Domain adapters are still to
+ * come. The REA tab uses ReaListingProvider, which is inert (returns
+ * rea_not_configured) until a scraper/paste backend is injected — unless
+ * the demo toggle forces the mock.
  */
 export function pickProvider(opts: EstimateOpts = {}): PropertyDataProvider {
   if (opts.provider) return opts.provider
@@ -76,8 +78,11 @@ export function pickProvider(opts: EstimateOpts = {}): PropertyDataProvider {
     return new ReaListingProvider()
   }
 
-  // 'auto' tab — the Solar/Geoscape/Domain adapters are not built yet, so
-  // fall back to the mock until they (and their API keys) land.
+  // 'auto' tab — real Google Solar footprint lookup when the key is set;
+  // otherwise the deterministic mock so the tab still works.
+  if (process.env.GOOGLE_MAPS_API_KEY) {
+    return new SolarPropertyProvider()
+  }
   return new MockPropertyProvider()
 }
 
@@ -108,7 +113,12 @@ export async function estimatePainting(
     return { ok: false, code: lookup.code, detail: lookup.detail }
   }
 
-  const { facts } = lookup
+  // The user's declared storeys override the provider's value (Google
+  // Solar can't infer storeys, and floor area scales with it).
+  const facts =
+    inputs.storeys && inputs.storeys > 0
+      ? { ...lookup.facts, storeys: inputs.storeys }
+      : lookup.facts
   const measurement = measurePaintableArea(facts, inputs)
 
   // No floor area at all → there's nothing to price. Surface the

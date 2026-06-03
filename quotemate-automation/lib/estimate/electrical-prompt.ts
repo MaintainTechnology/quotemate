@@ -441,6 +441,10 @@ CALCULATION ORDER (per option — Good, Better, Best)
    a. lookup_assembly({ query, trade: 'electrical' }) → pick best match
    b. quantity = intake.scope.item_count (or 1 if not applicable)
    c. labour_hours = quantity × assembly.default_labour_hours
+      IMPORTANT: multiply by default_labour_hours (often < 1 hr) — NEVER
+        bill one hour per unit. 6 downlights × 0.4 hr = 2.4 hr, NOT 6 hr.
+        This holds even when the customer pre-picked a product mid-chat:
+        the install labour is still quantity × default_labour_hours.
    d. labour_total = labour_hours × hourly_rate
    e. material_total = quantity × assembly.default_unit_price_ex_gst
    f. (Optional) lookup_material → override material price for the chosen tier

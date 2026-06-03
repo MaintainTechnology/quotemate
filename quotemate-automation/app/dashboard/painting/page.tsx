@@ -64,6 +64,7 @@ export default function PaintingEstimatePage() {
   const [coats, setCoats] = useState<1 | 2 | 3>(2)
   const [condition, setCondition] = useState<(typeof CONDITIONS)[number][0]>('sound')
   const [ceiling, setCeiling] = useState<(typeof CEILINGS)[number][0]>('standard')
+  const [storeys, setStoreys] = useState<1 | 2 | 3>(1)
   const [colourChange, setColourChange] = useState(false)
   const [manualArea, setManualArea] = useState('')
   const [useMock, setUseMock] = useState(true)
@@ -109,6 +110,7 @@ export default function PaintingEstimatePage() {
               coats,
               condition,
               ceiling_height: ceiling,
+              storeys,
               colour_change: colourChange,
               manual_floor_area_m2: manualArea ? Number(manualArea) : null,
             },
@@ -128,7 +130,7 @@ export default function PaintingEstimatePage() {
         setBusy(false)
       }
     },
-    [token, address, postcode, stateCode, scopes, coats, condition, ceiling, colourChange, manualArea, tab, useMock],
+    [token, address, postcode, stateCode, scopes, coats, condition, ceiling, storeys, colourChange, manualArea, tab, useMock],
   )
 
   const estimate = resp && resp.ok === true ? resp.estimate : null
@@ -166,10 +168,11 @@ export default function PaintingEstimatePage() {
             below to run the flow end-to-end with sample numbers.
           </ProvenanceNote>
         ) : (
-          <ProvenanceNote tone="accent" label="Other tools — the recommended stack">
-            Google Solar footprint (always-on) → Geoscape licensed floor area →
-            customer floor-plan upload. These adapters are stubbed for now, so
-            <strong> demo data</strong> backs this tab until their keys land.
+          <ProvenanceNote tone="accent" label="Other tools — Google Solar is live">
+            Turn <strong>demo data off</strong> to run a real Google Solar lookup:
+            address → building footprint → floor area (× storeys). Works for most
+            AU addresses even with no listing. Set the storey count and confirm the
+            area for a tight number. Geoscape + floor-plan upload come next.
           </ProvenanceNote>
         )}
       </section>
@@ -230,6 +233,15 @@ export default function PaintingEstimatePage() {
           </div>
 
           <div>
+            <Label>Storeys</Label>
+            <select aria-label="Storeys" value={storeys} onChange={(e) => setStoreys(Number(e.target.value) as 1 | 2 | 3)} className={INPUT}>
+              <option value={1}>Single storey</option>
+              <option value={2}>Double storey</option>
+              <option value={3}>3 storeys (forces inspection)</option>
+            </select>
+          </div>
+
+          <div>
             <Label>Floor area override (m², optional)</Label>
             <input type="number" min={1} max={2000} value={manualArea} onChange={(e) => setManualArea(e.target.value)} placeholder="from the floor plan" className={INPUT} />
           </div>
@@ -258,6 +270,17 @@ export default function PaintingEstimatePage() {
 
       {/* ── Result ────────────────────────────────────────────────── */}
       {estimate && <ResultBlock estimate={estimate} />}
+
+      {/* ── Visual repaint preview ────────────────────────────────── */}
+      {estimate && (
+        <PaintPreviewSection
+          token={token}
+          address={address}
+          postcode={postcode}
+          state={stateCode}
+          scopes={scopes}
+        />
+      )}
 
       <div className="relative z-10 mt-16 bg-accent px-6 py-5 text-center text-white">
         <span className="font-mono text-sm font-semibold uppercase tracking-[0.16em]">QuoteMate · Paint estimate · two-tab</span>
@@ -338,6 +361,180 @@ function ResultBlock({ estimate }: { estimate: PaintingEstimate }) {
             <li key={`w${i}`} className="flex items-baseline gap-3"><span className="text-warning">!</span><span>{w}</span></li>
           ))}
         </ul>
+      </div>
+    </section>
+  )
+}
+
+// ─── Visual repaint preview ─────────────────────────────────────────
+
+const COLOUR_SWATCHES = [
+  'Surfmist off-white',
+  'Dulux Natural White',
+  'Monument charcoal',
+  'Woodland Grey',
+  'Sage green',
+  'Hamptons blue',
+] as const
+
+function PaintPreviewSection({
+  token,
+  address,
+  postcode,
+  state,
+  scopes,
+}: {
+  token: string | null
+  address: string
+  postcode: string
+  state: string
+  scopes: PaintScope[]
+}) {
+  const [beforeSrc, setBeforeSrc] = useState<string | null>(null)
+  const [beforeState, setBeforeState] = useState<'idle' | 'loading' | 'ready' | 'none'>('idle')
+  const [colour, setColour] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [after, setAfter] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+
+  // Fetch the Street View "before" (cheap, no Gemini) so the tradie sees
+  // the house resolved correctly before spending a generation.
+  useEffect(() => {
+    if (!token || address.trim().length < 3) return
+    let cancelled = false
+    let objUrl: string | null = null
+    setBeforeState('loading')
+    setBeforeSrc(null)
+    const params = new URLSearchParams({ address, postcode, state })
+    fetch(`/api/painting/street-view?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(async (res) => {
+        if (cancelled) return
+        if (!res.ok || !(res.headers.get('content-type') ?? '').startsWith('image')) {
+          setBeforeState('none')
+          return
+        }
+        const blob = await res.blob()
+        objUrl = URL.createObjectURL(blob)
+        setBeforeSrc(objUrl)
+        setBeforeState('ready')
+      })
+      .catch(() => {
+        if (!cancelled) setBeforeState('none')
+      })
+    return () => {
+      cancelled = true
+      if (objUrl) URL.revokeObjectURL(objUrl)
+    }
+  }, [token, address, postcode, state])
+
+  const generate = useCallback(async () => {
+    if (!token) return
+    setBusy(true)
+    setErr(null)
+    setAfter(null)
+    try {
+      const res = await fetch('/api/painting/preview', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address, postcode, state, colour, scopes }),
+      })
+      const json = (await res.json()) as
+        | { ok: true; before: string; after: string; imagery_date: string | null }
+        | { ok: false; code?: string; detail?: string; error?: string }
+      if (json.ok) {
+        setAfter(json.after)
+        if (json.before) setBeforeSrc(json.before)
+      } else {
+        setErr(json.detail ?? json.code ?? json.error ?? 'Could not generate the preview.')
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }, [token, address, postcode, state, colour, scopes])
+
+  return (
+    <section className="relative z-10 mx-auto mt-8 max-w-6xl px-6 pb-4 sm:px-10">
+      <div className="border border-ink-line bg-ink-card p-6 sm:p-8">
+        <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
+          Visual preview · exterior repaint
+        </div>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-sec">
+          A Google Street View photo of the front of the house, repainted by AI in your
+          chosen colour. The structure stays identical — only the paint changes. Great for
+          showing the customer what they&rsquo;re buying. (Exterior front only.)
+        </p>
+
+        {/* Colour picker */}
+        <div className="mt-5">
+          <Label>Preview colour</Label>
+          <input
+            value={colour}
+            onChange={(e) => setColour(e.target.value)}
+            placeholder="e.g. Surfmist off-white, Monument charcoal, sage green"
+            className={INPUT}
+          />
+          <div className="mt-3 flex flex-wrap gap-2">
+            {COLOUR_SWATCHES.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setColour(c)}
+                className="border border-ink-line px-3 py-1.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-text-sec transition-colors hover:border-accent hover:text-accent"
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={generate}
+          disabled={busy || !token || beforeState === 'none'}
+          className="mt-5 inline-flex items-center gap-2 bg-accent px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {busy ? (<><Spinner /> Painting… (10–20s)</>) : (<>Generate painted preview <span aria-hidden="true">&rarr;</span></>)}
+        </button>
+
+        {beforeState === 'none' && (
+          <p className="mt-4 text-sm text-warning">
+            No Street View imagery for this address — the visual preview isn&rsquo;t available here.
+          </p>
+        )}
+        {err && <p className="mt-4 text-sm text-warning">{err}</p>}
+
+        {/* Before / after */}
+        {(beforeSrc || after) && (
+          <div className="mt-6 grid gap-5 sm:grid-cols-2">
+            <figure>
+              <figcaption className="mb-2 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">Before</figcaption>
+              {beforeSrc ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={beforeSrc} alt="Street View of the house" className="w-full border border-ink-line" />
+              ) : (
+                <div className="flex h-48 items-center justify-center border border-ink-line bg-ink-deep text-text-dim">{beforeState === 'loading' ? 'Loading…' : '—'}</div>
+              )}
+            </figure>
+            <figure>
+              <figcaption className="mb-2 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-accent">After · AI repaint</figcaption>
+              {after ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={after} alt="AI preview of the house repainted" className="w-full border border-accent" />
+              ) : (
+                <div className="flex h-48 items-center justify-center border border-ink-line bg-ink-deep text-text-dim">{busy ? 'Generating…' : 'Pick a colour and generate'}</div>
+              )}
+            </figure>
+          </div>
+        )}
+        {after && (
+          <p className="mt-3 text-xs text-text-dim">
+            AI-generated illustration for discussion only — actual colour and finish may vary.
+          </p>
+        )}
       </div>
     </section>
   )

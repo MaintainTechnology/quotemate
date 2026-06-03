@@ -60,6 +60,13 @@ export type PaintUserInputs = {
   /** Light-over-dark / dark-over-light needs extra coverage. */
   colour_change: boolean
   /**
+   * Storeys the customer/tradie declares. Overrides the provider's value
+   * (the Google Solar footprint path can't infer storeys, and a 2-storey
+   * home has ~2× the floor area for the same footprint). When omitted,
+   * the provider's storeys (or 1) is used.
+   */
+  storeys?: 1 | 2 | 3
+  /**
    * Customer/tradie-supplied internal floor area, in m². When present it
    * overrides whatever the property-data provider returned and pins
    * confidence to HIGH — this is the "paste the floor plan figure" path.

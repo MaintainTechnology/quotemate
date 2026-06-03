@@ -21,7 +21,7 @@ import {
   type CatalogueProductRef,
 } from './catalogue'
 import { applyMinLabourFloor } from './min-labour'
-import { reconcileTierMath, collapseDuplicateTiers, checkQuantityVsItemCount } from './reconcile'
+import { reconcileTierMath, collapseDuplicateTiers, checkQuantityVsItemCount, reconcileInflatedLabour } from './reconcile'
 import { specGuardMode, evaluateSpecGuard, evaluateDraftSpecGuard } from './spec-guard'
 import { categoryForJobType } from '@/lib/sms/product-options'
 import {
@@ -598,6 +598,21 @@ export async function runEstimation(
     // billed quantity, or downgrading a good quote. Best-effort: a failure here
     // must never break an already-grounded quote.
     try {
+      // Undo product-picker labour over-billing (install line billed the item
+      // count as hours) BEFORE the arithmetic pass, so reconcileTierMath then
+      // re-asserts a consistent bill on the corrected hours. Reduce-only; no-op
+      // unless the model's own "minimum job allowance" line proves the tier was
+      // topped to the floor yet total labour exceeds it.
+      const labour = reconcileInflatedLabour(draft, {
+        itemCount: intake?.scope?.item_count,
+        minLabourHours: (pricingBook as any)?.min_labour_hours,
+        hourlyRate: (pricingBook as any)?.hourly_rate,
+      })
+      if (labour.corrections.length > 0) {
+        cacheLog.ok('inflated-labour backstop applied (picker count-as-hours fix)', {
+          corrections: labour.corrections,
+        })
+      }
       const { corrections } = reconcileTierMath(draft)
       collapseDuplicateTiers(draft)
       const qtyFlags = checkQuantityVsItemCount(draft, intake?.scope?.item_count)
@@ -607,10 +622,11 @@ export async function runEstimation(
           ...qtyFlags,
         ]
       }
-      if (corrections.length > 0 || qtyFlags.length > 0) {
+      if (corrections.length > 0 || qtyFlags.length > 0 || labour.corrections.length > 0) {
         cacheLog.ok('reconcile backstops applied', {
           math_corrections: corrections.length,
           quantity_flags: qtyFlags.length,
+          labour_corrections: labour.corrections.length,
         })
       }
     } catch (err: any) {
