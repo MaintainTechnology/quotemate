@@ -44,5 +44,24 @@ export async function orgFromBearer(
     }
   }
 
+  // Demo/MVP convenience: if this authenticated user owns no org and none
+  // matches their email, adopt a single seeded-but-unclaimed org (one whose
+  // owner_user_id is still null) so the feature just works without a manual
+  // link. Bounded to EXACTLY ONE unclaimed org — if several franchisors
+  // exist, orgs must be claimed explicitly rather than guessed.
+  const { data: unclaimed } = await supabase
+    .from('orgs')
+    .select('id')
+    .is('owner_user_id', null)
+    .limit(2)
+  if (unclaimed && unclaimed.length === 1) {
+    const orgId = unclaimed[0].id as string
+    await supabase
+      .from('orgs')
+      .update({ owner_user_id: user.id, owner_email: user.email?.toLowerCase() ?? null })
+      .eq('id', orgId)
+    return { userId: user.id, orgId }
+  }
+
   return null
 }

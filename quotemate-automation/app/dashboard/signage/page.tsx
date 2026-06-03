@@ -60,13 +60,15 @@ export default function SignageHubPage() {
       fetch('/api/signage/sweeps', { headers }),
       fetch('/api/signage/queue?status=all', { headers }),
     ])
+    // load() only runs once we already have a session token, so a 401/!ok
+    // here is NOT "signed out" — it means this signed-in account has no
+    // franchisor org yet. Show the no-org state (not the sign-in prompt).
     if (sweepsRes.status === 401) {
-      setAuthState('signed-out')
+      setAuthState('no-org')
       return
     }
     const sweepsJson = await sweepsRes.json()
     if (!sweepsJson.ok) {
-      // unauthorized-but-authed → no org provisioned for this user yet
       setAuthState('no-org')
       return
     }
