@@ -36,6 +36,16 @@ export type ShotSlot =
 
 export type Confidence = 'high' | 'medium' | 'low'
 
+/** How the AI is allowed to act on a rule (migration 090). Drives which
+ *  rules are sent to vision and how their verdicts are grounded:
+ *   - pass_fail       AI may confirm AND deny
+ *   - detect_only     AI may FLAG a violation but never certify compliance
+ *                     (a "compliant" verdict is downgraded to review)
+ *   - needs_reference decidable only with a tape/known object in frame →
+ *                     review until that capture ships
+ *   - review          not photo-checkable / legal → always human review */
+export type VerdictMode = 'pass_fail' | 'detect_only' | 'needs_reference' | 'review'
+
 /** A single compliance rule from the registry (signage_rules row). */
 export type SignageRule = {
   rule_key: string
@@ -45,6 +55,8 @@ export type SignageRule = {
   applicability: RuleApplicability
   confidence: Confidence
   mvp_tier: MvpTier
+  /** Drives AI participation (migration 090). */
+  verdict_mode: VerdictMode
   required_shots: ShotSlot[]
   check_hint: string | null
   source_citation: string | null

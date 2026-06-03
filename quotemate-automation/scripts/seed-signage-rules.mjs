@@ -63,6 +63,7 @@ const records = rows.map((r) => ({
   applicability: r.applicability ?? 'human_review_only',
   confidence: r.confidence ?? 'low',
   mvp_tier: r.mvp_tier ?? 'human_queue',
+  verdict_mode: r.verdict_mode ?? 'review',
   required_shots: toShots(r.required_shots),
   check_hint: r.check_method ?? null,
   source_citation: toCitation(r.page),

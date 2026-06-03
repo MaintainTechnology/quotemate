@@ -10,6 +10,7 @@ function rule(partial: Partial<SignageRule> & { rule_key: string }): SignageRule
     applicability: 'auto_vision',
     confidence: 'high',
     mvp_tier: 'mvp_core',
+    verdict_mode: 'pass_fail',
     required_shots: ['logo_wall'],
     check_hint: null,
     source_citation: null,
@@ -27,12 +28,12 @@ function verdict(partial: Partial<RuleVerdict> & { rule_key: string }): RuleVerd
   }
 }
 
-describe('validateSignageAssessment — applicability gate', () => {
-  it('forces every non-auto rule to cannot_determine regardless of model output', () => {
+describe('validateSignageAssessment — review / needs_reference gate', () => {
+  it('forces review + needs_reference rules to cannot_determine regardless of model output', () => {
     const rules: SignageRule[] = [
-      rule({ rule_key: 'meta', applicability: 'needs_metadata_or_context' }),
-      rule({ rule_key: 'scale', applicability: 'needs_scale_reference' }),
-      rule({ rule_key: 'legal', applicability: 'human_review_only' }),
+      rule({ rule_key: 'meta', verdict_mode: 'review' }),
+      rule({ rule_key: 'scale', verdict_mode: 'needs_reference' }),
+      rule({ rule_key: 'legal', verdict_mode: 'review' }),
     ]
     // Even if the model "decided" them, they must not pass/fail.
     const model: RuleVerdict[] = [
@@ -43,6 +44,37 @@ describe('validateSignageAssessment — applicability gate', () => {
     const { verdicts, overall } = validateSignageAssessment(rules, model)
     expect(verdicts.every((v) => v.status === 'cannot_determine')).toBe(true)
     expect(overall).toBe('needs_review')
+  })
+})
+
+describe('validateSignageAssessment — detect_only mode', () => {
+  it('downgrades a compliant verdict to review (AI cannot certify, only flag)', () => {
+    const rules = [rule({ rule_key: 'paint', verdict_mode: 'detect_only' })]
+    const { verdicts } = validateSignageAssessment(rules, [
+      verdict({ rule_key: 'paint', status: 'compliant', confidence: 'high' }),
+    ])
+    expect(verdicts[0].status).toBe('cannot_determine')
+  })
+
+  it('keeps a confident, evidenced violation (flags it)', () => {
+    const rules = [rule({ rule_key: 'paint', verdict_mode: 'detect_only' })]
+    const { verdicts, overall } = validateSignageAssessment(rules, [
+      verdict({ rule_key: 'paint', status: 'non_compliant', confidence: 'high', evidence: 'wall is bright blue, not grey' }),
+    ])
+    expect(verdicts[0].status).toBe('non_compliant')
+    expect(overall).toBe('fix_needed')
+  })
+
+  it('downgrades a low-confidence or unevidenced violation to review', () => {
+    const rules = [rule({ rule_key: 'paint', verdict_mode: 'detect_only' })]
+    const lowConf = validateSignageAssessment(rules, [
+      verdict({ rule_key: 'paint', status: 'non_compliant', confidence: 'low', evidence: 'maybe off' }),
+    ])
+    expect(lowConf.verdicts[0].status).toBe('cannot_determine')
+    const noEvidence = validateSignageAssessment(rules, [
+      verdict({ rule_key: 'paint', status: 'non_compliant', confidence: 'high', evidence: '   ' }),
+    ])
+    expect(noEvidence.verdicts[0].status).toBe('cannot_determine')
   })
 })
 

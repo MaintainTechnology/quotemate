@@ -38,7 +38,13 @@ export function buildAssessmentPrompt(args: {
   )
   args.rules.forEach((r, i) => {
     const hint = r.check_hint ? ` — how to check: ${r.check_hint}` : ''
-    lines.push(`  ${i + 1}. [${r.rule_key}] ${r.rule_text}${hint}`)
+    // detect_only rules: the AI may flag an obvious violation but can never
+    // certify compliance (e.g. exact paint SKU). Tell the model so.
+    const tag =
+      r.verdict_mode === 'detect_only'
+        ? ' [FLAG-ONLY: return non_compliant ONLY if you clearly SEE a violation; otherwise cannot_determine. NEVER return compliant for this rule.]'
+        : ''
+    lines.push(`  ${i + 1}. [${r.rule_key}] ${r.rule_text}${hint}${tag}`)
   })
   lines.push(
     ``,

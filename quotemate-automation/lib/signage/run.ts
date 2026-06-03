@@ -29,6 +29,7 @@ export function mapRuleRow(row: Record<string, unknown>): SignageRule {
     applicability: (row.applicability as SignageRule['applicability']) ?? 'human_review_only',
     confidence: (row.confidence as SignageRule['confidence']) ?? 'low',
     mvp_tier: (row.mvp_tier as SignageRule['mvp_tier']) ?? 'human_queue',
+    verdict_mode: (row.verdict_mode as SignageRule['verdict_mode']) ?? 'review',
     required_shots: coerceShots(row.required_shots),
     check_hint: (row.check_hint as string | null) ?? null,
     source_citation: (row.source_citation as string | null) ?? null,
@@ -43,7 +44,7 @@ export async function loadActiveRules(
   const { data } = await supabase
     .from('signage_rules')
     .select(
-      'rule_key, rule_text, rule_group, modality, applicability, confidence, mvp_tier, required_shots, check_hint, source_citation',
+      'rule_key, rule_text, rule_group, modality, applicability, confidence, mvp_tier, verdict_mode, required_shots, check_hint, source_citation',
     )
     .eq('brand_slug', brandSlug)
     .eq('rule_set_version', ruleSetVersion)

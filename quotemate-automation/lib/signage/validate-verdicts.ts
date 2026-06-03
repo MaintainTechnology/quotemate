@@ -72,58 +72,53 @@ export function validateSignageAssessment(
   return { verdicts, overall, counts }
 }
 
-/** Ground a single rule into its final verdict. */
+/** Build a cannot_determine ("needs HQ review") verdict for a rule. */
+function review(rule: SignageRule, evidence: string, redFlags: string[] = []): RuleVerdict {
+  return { rule_key: rule.rule_key, status: 'cannot_determine', confidence: 'low', evidence, red_flags: redFlags }
+}
+
+function reviewReason(rule: SignageRule): string {
+  if (rule.verdict_mode === 'needs_reference') {
+    return 'Requires a tape measure or known object in frame — routed to HQ review (Phase 2).'
+  }
+  return NON_AUTO_REASON[rule.applicability] ?? 'Routed to HQ review.'
+}
+
+/** Ground a single rule into its final verdict, keyed on verdict_mode. */
 function groundOne(rule: SignageRule, model: RuleVerdict | undefined): RuleVerdict {
-  // Downgrade 1 — applicability gate. Non-auto rules are never auto-decided.
-  if (rule.applicability !== 'auto_vision') {
-    return {
-      rule_key: rule.rule_key,
-      status: 'cannot_determine',
-      confidence: 'low',
-      evidence: NON_AUTO_REASON[rule.applicability] ?? 'Routed to HQ review.',
-      red_flags: [],
+  const mode = rule.verdict_mode
+
+  // review / needs_reference are never auto-decided — materialise as review.
+  if (mode === 'review' || mode === 'needs_reference') {
+    return review(rule, reviewReason(rule))
+  }
+
+  // pass_fail + detect_only expect a model verdict.
+  if (!model) return review(rule, 'No verdict returned — routed to HQ review.')
+  if (model.status === 'cannot_determine') return { ...model, rule_key: rule.rule_key }
+
+  if (mode === 'detect_only') {
+    // The AI may FLAG a violation but never CERTIFY compliance.
+    if (model.status === 'compliant') {
+      return review(rule, "Looks right, but this rule can't be auto-certified from a photo — routed to HQ review.", model.red_flags)
     }
-  }
-
-  // Downgrade 3 — no model verdict for an auto rule.
-  if (!model) {
-    return {
-      rule_key: rule.rule_key,
-      status: 'cannot_determine',
-      confidence: 'low',
-      evidence: 'No verdict returned — routed to HQ review.',
-      red_flags: [],
+    // non_compliant — must be evidenced and confident enough to accuse.
+    if (model.evidence.trim() === '') {
+      return review(rule, 'Possible issue flagged without a photo-grounded reason — routed to HQ review.', model.red_flags)
     }
+    if (!confidenceSurvives(model.confidence, rule.confidence)) {
+      return review(rule, 'Possible issue but not confident enough to flag — routed to HQ review.', model.red_flags)
+    }
+    return { ...model, rule_key: rule.rule_key } // keep the violation
   }
 
-  // cannot_determine passes straight through.
-  if (model.status === 'cannot_determine') {
-    return { ...model, rule_key: rule.rule_key }
-  }
-
-  // Downgrade 4 — a fail with no stated evidence can't stand.
+  // pass_fail — the AI may confirm AND deny.
   if (model.status === 'non_compliant' && model.evidence.trim() === '') {
-    return {
-      rule_key: rule.rule_key,
-      status: 'cannot_determine',
-      confidence: 'low',
-      evidence: 'Flagged non-compliant without a photo-grounded reason — routed to HQ review.',
-      red_flags: model.red_flags,
-    }
+    return review(rule, 'Flagged non-compliant without a photo-grounded reason — routed to HQ review.', model.red_flags)
   }
-
-  // Downgrade 2 — confidence floor. A pass/fail only survives at high
-  // confidence (or medium where the registry itself only claims medium).
   if (!confidenceSurvives(model.confidence, rule.confidence)) {
-    return {
-      rule_key: rule.rule_key,
-      status: 'cannot_determine',
-      confidence: model.confidence,
-      evidence: `Model not confident enough to decide automatically — routed to HQ review.`,
-      red_flags: model.red_flags,
-    }
+    return review(rule, 'Model not confident enough to decide automatically — routed to HQ review.', model.red_flags)
   }
-
   return { ...model, rule_key: rule.rule_key }
 }
 

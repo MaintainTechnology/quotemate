@@ -82,11 +82,15 @@ export function shotLabel(slot: ShotSlot): string {
   return SHOT_DEFS.find((s) => s.slot === slot)?.label ?? slot
 }
 
-/** The auto_vision rules a given shot can score — i.e. the rules whose
- *  `required_shots` include this slot. Used to build the per-photo prompt
- *  and to size the assessment. */
+/** The rules the AI actually scores for a given shot — those it may at
+ *  least FLAG (verdict_mode pass_fail or detect_only) whose `required_shots`
+ *  include this slot. needs_reference + review rules are never sent to the
+ *  model; the backstop materialises them as review. Used to build the
+ *  per-photo prompt and to size the assessment. */
 export function autoRulesForShot(rules: SignageRule[], slot: ShotSlot): SignageRule[] {
   return rules.filter(
-    (r) => r.applicability === 'auto_vision' && r.required_shots.includes(slot),
+    (r) =>
+      (r.verdict_mode === 'pass_fail' || r.verdict_mode === 'detect_only') &&
+      r.required_shots.includes(slot),
   )
 }

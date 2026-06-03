@@ -38,6 +38,7 @@ describe('autoRulesForShot', () => {
       applicability: 'auto_vision',
       confidence: 'high',
       mvp_tier: 'mvp_core',
+      verdict_mode: 'pass_fail',
       required_shots: ['logo_wall'],
       check_hint: null,
       source_citation: null,
@@ -50,6 +51,7 @@ describe('autoRulesForShot', () => {
       applicability: 'needs_scale_reference', // not auto — excluded
       confidence: 'high',
       mvp_tier: 'phase2_measure',
+      verdict_mode: 'needs_reference',
       required_shots: ['logo_wall'],
       check_hint: null,
       source_citation: null,
@@ -62,6 +64,7 @@ describe('autoRulesForShot', () => {
       applicability: 'auto_vision',
       confidence: 'high',
       mvp_tier: 'mvp_core',
+      verdict_mode: 'pass_fail',
       required_shots: ['storefront'], // wrong shot — excluded
       check_hint: null,
       source_citation: null,
