@@ -72,9 +72,11 @@ describe('composeReport', () => {
     expect(paint.items.map((i) => i.state)).toEqual(['fix', 'review'])
   })
 
-  it('always carries the not-HQ-approval disclaimer', () => {
-    const r = composeReport(rules, verdicts)
+  it('carries a not-approval disclaimer parametrised by the brand HQ name', () => {
+    const r = composeReport(rules, verdicts, 'F45 HQ')
     expect(r.disclaimer.toLowerCase()).toContain('not f45 hq approval')
+    const r2 = composeReport(rules, verdicts, "McDonald's Corporate")
+    expect(r2.disclaimer).toContain("not McDonald's Corporate approval")
   })
 
   it('treats a rule with no verdict as review', () => {

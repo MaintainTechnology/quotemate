@@ -10,7 +10,6 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
-import { SHOT_DEFS, DEFAULT_SWEEP_SHOTS } from '@/lib/signage/shots'
 import type { ShotSlot } from '@/lib/signage/types'
 
 type Studio = { id: string; name: string; region: string | null; status: string }
@@ -40,6 +39,8 @@ type Rollup = {
   needs_review: number
   awaiting: number
 }
+type ShotDef = { slot: string; label: string; instruction: string }
+type Brand = { name: string; location_noun: string; location_noun_plural: string; shots: ShotDef[] }
 
 export default function SignageHubPage() {
   const [token, setToken] = useState<string | null>(null)
@@ -47,10 +48,11 @@ export default function SignageHubPage() {
   const [studios, setStudios] = useState<Studio[]>([])
   const [sweeps, setSweeps] = useState<Sweep[]>([])
   const [rollup, setRollup] = useState<Rollup | null>(null)
+  const [brand, setBrand] = useState<Brand | null>(null)
 
   const [name, setName] = useState('')
   const [region, setRegion] = useState('')
-  const [shots, setShots] = useState<Set<ShotSlot>>(new Set(DEFAULT_SWEEP_SHOTS))
+  const [shots, setShots] = useState<Set<ShotSlot>>(new Set<ShotSlot>())
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
@@ -74,6 +76,10 @@ export default function SignageHubPage() {
     }
     setStudios(sweepsJson.studios ?? [])
     setSweeps(sweepsJson.sweeps ?? [])
+    const b: Brand | null = sweepsJson.brand ?? null
+    setBrand(b)
+    // Default the sweep's shot selection to all of this brand's shots.
+    if (b) setShots((prev) => (prev.size > 0 ? prev : new Set(b.shots.map((s) => s.slot))))
     const queueJson = await queueRes.json().catch(() => null)
     if (queueJson?.ok) setRollup(queueJson.rollup)
     setAuthState('ready')
@@ -152,8 +158,8 @@ export default function SignageHubPage() {
             Signage <span className="text-accent">compliance</span>
           </h1>
           <p className="max-w-md text-base leading-relaxed text-text-sec md:text-lg">
-            Request photos from your studios, let the AI pre-check them against the F45
-            standards, and review the flagged ones. The AI triages — HQ decides.
+            Request photos from your {brand?.location_noun_plural ?? 'locations'}, let the AI pre-check them against
+            the {brand?.name ?? 'brand'} standards, and review the flagged ones. The AI triages — HQ decides.
           </p>
         </div>
         <AuthBadge state={authState} />
@@ -209,7 +215,7 @@ export default function SignageHubPage() {
               <div className="md:col-span-2">
                 <Label>Photos to request</Label>
                 <div className="flex flex-wrap gap-3">
-                  {SHOT_DEFS.map((s) => (
+                  {(brand?.shots ?? []).map((s) => (
                     <label
                       key={s.slot}
                       className={`inline-flex cursor-pointer items-center gap-2 border px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] transition-colors ${

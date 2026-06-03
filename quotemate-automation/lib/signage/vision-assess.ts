@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════════
 
 import type { Confidence, RuleVerdict, ShotSlot, SignageRule, VerdictStatus } from './types'
-import { autoRulesForShot, shotLabel } from './shots'
+import { autoRulesForShot } from './shots'
 
 const DEFAULT_MODEL = process.env.SIGNAGE_VISION_MODEL ?? 'claude-sonnet-4-6'
 
@@ -21,13 +21,14 @@ const DEFAULT_MODEL = process.env.SIGNAGE_VISION_MODEL ?? 'claude-sonnet-4-6'
  *  exactly the shape the parser expects. Instructs the model to return
  *  `cannot_determine` whenever the feature is unclear — never to guess. */
 export function buildAssessmentPrompt(args: {
-  shotSlot: ShotSlot
+  persona: string
+  shotLabel: string
   rules: SignageRule[]
 }): string {
   const lines: string[] = []
   lines.push(
-    `You are a strict brand-compliance assistant for F45 fitness studios.`,
-    `Attached is ONE franchisee photo, taken on a phone. It is the "${shotLabel(args.shotSlot)}" shot.`,
+    `You are a strict brand-compliance assistant for ${args.persona}.`,
+    `Attached is ONE location photo, taken on a phone. It is the "${args.shotLabel}" shot.`,
     ``,
     `Assess the photo ONLY against the numbered rules below. For each rule decide:`,
     `  - "compliant"        the photo clearly shows the rule is met`,
@@ -153,9 +154,13 @@ function allCannotDetermine(rules: SignageRule[], reason: string): RuleVerdict[]
 export type AssessArgs = {
   photo: { base64: string; mime: string }
   shotSlot: ShotSlot
-  /** The studio's applicable rule set. Only the auto_vision rules whose
-   *  required_shots include this slot are actually sent to the model. */
+  /** The location's applicable rule set. Only the pass_fail/detect_only
+   *  rules whose required_shots include this slot are sent to the model. */
   rules: SignageRule[]
+  /** Brand framing for the prompt (brands.vision_persona). */
+  persona: string
+  /** Human label for this shot (from the brand's shot defs). */
+  shotLabel: string
   model?: string
 }
 
@@ -177,7 +182,7 @@ export async function assessPhoto(args: AssessArgs): Promise<RuleVerdict[]> {
     const { anthropic } = await import('@ai-sdk/anthropic')
     const { generateText } = await import('ai')
 
-    const prompt = buildAssessmentPrompt({ shotSlot: args.shotSlot, rules: relevant })
+    const prompt = buildAssessmentPrompt({ persona: args.persona, shotLabel: args.shotLabel, rules: relevant })
     const { text } = await generateText({
       model: anthropic(args.model ?? DEFAULT_MODEL),
       temperature: 0,

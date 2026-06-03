@@ -15,6 +15,7 @@ export default function StudioUploadPage() {
   const router = useRouter()
 
   const [studioName, setStudioName] = useState<string>('')
+  const [brand, setBrand] = useState<{ name: string; location_noun: string; hq_name: string } | null>(null)
   const [shots, setShots] = useState<Shot[]>([])
   const [files, setFiles] = useState<Record<string, File[]>>({})
   const [state, setState] = useState<'loading' | 'collect' | 'invalid' | 'done'>('loading')
@@ -36,6 +37,7 @@ export default function StudioUploadPage() {
           return
         }
         setStudioName(json.studio_name)
+        setBrand(json.brand ?? null)
         setShots(json.shots ?? [])
         setState('collect')
       })
@@ -77,19 +79,22 @@ export default function StudioUploadPage() {
   return (
     <main className="min-h-screen bg-ink-deep text-text-pri">
       <section className="mx-auto max-w-2xl px-6 pt-14 pb-10 sm:px-8">
-        <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">F45 signage check</div>
+        <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
+          {brand?.name ?? 'Brand'} compliance check
+        </div>
         <h1 className="mt-3 font-extrabold uppercase leading-[0.95] tracking-[-0.03em] text-[clamp(2rem,7vw,3rem)]">
-          {state === 'collect' ? studioName : 'Signage check'}
+          {state === 'collect' ? studioName : 'Compliance check'}
         </h1>
         <p className="mt-4 text-base leading-relaxed text-text-sec">
-          Take the photos below and submit. HQ&rsquo;s tool will pre-check them against the F45
-          standards and tell you what (if anything) needs fixing. This is a pre-check, not final HQ approval.
+          Take the photos below and submit. {brand?.hq_name ?? 'HQ'}&rsquo;s tool will pre-check them against the{' '}
+          {brand?.name ?? 'brand'} standards and tell you what (if anything) needs fixing. This is a pre-check,
+          not final {brand?.hq_name ?? 'HQ'} approval.
         </p>
 
         {state === 'loading' && <p className="mt-8 text-text-sec">Loading…</p>}
         {state === 'invalid' && (
           <div className="mt-8 border border-ink-line border-l-4 border-l-warning bg-ink-card p-6">
-            <p className="text-text-sec">This link is invalid or has expired. Please contact F45 HQ for a new one.</p>
+            <p className="text-text-sec">This link is invalid or has expired. Please contact {brand?.hq_name ?? 'HQ'} for a new one.</p>
           </div>
         )}
         {state === 'done' && (

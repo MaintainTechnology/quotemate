@@ -15,7 +15,8 @@ import { createClient } from '@supabase/supabase-js'
 import { randomBytes } from 'node:crypto'
 import { z } from 'zod'
 import { orgFromBearer } from '@/lib/signage/org'
-import { coerceShots, DEFAULT_SWEEP_SHOTS } from '@/lib/signage/shots'
+import { coerceShots, shotSlots } from '@/lib/signage/shots'
+import { brandForOrg } from '@/lib/signage/brand'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,8 +51,10 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, error: 'invalid_request', issues: parsed.error.issues }, { status: 400 })
   }
 
-  const shots = coerceShots(parsed.data.required_shots)
-  const requiredShots = shots.length > 0 ? shots : [...DEFAULT_SWEEP_SHOTS]
+  const brand = await brandForOrg(supabase, ctx.orgId)
+  const brandSlots = shotSlots(brand.shots)
+  const shots = coerceShots(parsed.data.required_shots, brandSlots)
+  const requiredShots = shots.length > 0 ? shots : brandSlots
 
   // Find target studios for this org.
   let studioQ = supabase.from('studios').select('id, name').eq('org_id', ctx.orgId)
@@ -186,5 +189,17 @@ export async function GET(req: Request) {
     requests: requestsBySweep[s.id as string] ?? [],
   }))
 
-  return Response.json({ ok: true, studios: studios ?? [], sweeps: sweepsOut })
+  // The brand drives the sweep builder's shot checkboxes + terminology.
+  const brand = await brandForOrg(supabase, ctx.orgId)
+  return Response.json({
+    ok: true,
+    brand: {
+      name: brand.name,
+      location_noun: brand.location_noun,
+      location_noun_plural: brand.location_noun_plural,
+      shots: brand.shots,
+    },
+    studios: studios ?? [],
+    sweeps: sweepsOut,
+  })
 }

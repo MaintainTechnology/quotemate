@@ -24,15 +24,34 @@ export type MvpTier =
   | 'human_queue_metadata'
   | 'human_queue_legal'
 
-/** The guided photo slots a studio submits. Each rule declares which
- *  slots can satisfy it (a rule is only assessed against its slots). */
-export type ShotSlot =
-  | 'storefront'
-  | 'logo_wall'
-  | 'v_design_close'
-  | 'reception'
-  | 'workout_walls'
-  | 'retail'
+/** A brand-defined photo slot id (e.g. 'storefront', 'drive_thru',
+ *  'gelato_display'). Each brand declares its own shot list in
+ *  `brands.shots`, so this is an open string, not a fixed union. A rule
+ *  declares which slots can satisfy it via `required_shots`. */
+export type ShotSlot = string
+
+/** One guided photo a brand asks its locations to take. */
+export type ShotDef = {
+  slot: ShotSlot
+  label: string
+  /** Franchisee-facing camera guidance shown on the upload page. */
+  instruction: string
+}
+
+/** Per-brand config (a `brands` row) the engine reads instead of F45
+ *  constants — so the same pipeline audits any franchise. */
+export type BrandConfig = {
+  slug: string
+  name: string
+  /** What a site is called: "studio" | "restaurant" | "store". */
+  location_noun: string
+  location_noun_plural: string
+  /** Who approves: "F45 HQ" | "McDonald's Corporate". */
+  hq_name: string
+  /** How the AI is framed: "F45 fitness studios". */
+  vision_persona: string
+  shots: ShotDef[]
+}
 
 export type Confidence = 'high' | 'medium' | 'low'
 

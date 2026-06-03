@@ -20,6 +20,7 @@ type Report = {
 export default function StudioReportPage() {
   const { token } = useParams<{ token: string }>()
   const [studioName, setStudioName] = useState('')
+  const [brand, setBrand] = useState<{ name: string } | null>(null)
   const [report, setReport] = useState<Report | null>(null)
   const [state, setState] = useState<'loading' | 'scoring' | 'ready' | 'invalid'>('loading')
   const tries = useRef(0)
@@ -33,11 +34,13 @@ export default function StudioReportPage() {
     }
     if (json.mode === 'report') {
       setStudioName(json.studio_name)
+      setBrand(json.brand ?? null)
       setReport(json.report)
       setState('ready')
       return true
     }
     setStudioName(json.studio_name ?? '')
+    setBrand(json.brand ?? null)
     setState('scoring')
     return false
   }, [token])
@@ -61,7 +64,7 @@ export default function StudioReportPage() {
   return (
     <main className="min-h-screen bg-ink-deep text-text-pri">
       <section className="mx-auto max-w-2xl px-6 pt-14 pb-16 sm:px-8">
-        <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">F45 signage check</div>
+        <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">{brand?.name ?? 'Brand'} compliance check</div>
         <h1 className="mt-3 font-extrabold uppercase leading-[0.95] tracking-[-0.03em] text-[clamp(2rem,7vw,3rem)]">
           {studioName || 'Your report'}
         </h1>
@@ -72,7 +75,7 @@ export default function StudioReportPage() {
           <div className="mt-8 border border-ink-line border-l-4 border-l-accent bg-ink-card p-6">
             <p className="text-text-sec">
               <span className="inline-block h-3 w-3 animate-pulse bg-accent" aria-hidden="true" /> Checking your
-              photos against the F45 standards… this page will update automatically.
+              photos against the {brand?.name ?? 'brand'} standards… this page will update automatically.
             </p>
           </div>
         )}

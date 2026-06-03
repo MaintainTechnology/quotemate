@@ -32,8 +32,9 @@ export type ComplianceReport = {
   disclaimer: string
 }
 
-const DISCLAIMER =
-  'This is an automated pre-check, not F45 HQ approval. Final signage compliance is determined by F45 HQ.'
+function disclaimerFor(hqName: string): string {
+  return `This is an automated pre-check, not ${hqName} approval. Final compliance is determined by ${hqName}.`
+}
 
 function stateOf(v: RuleVerdict): ReportItemState {
   if (v.status === 'compliant') return 'compliant'
@@ -53,6 +54,7 @@ function prettyGroup(group: string): string {
 export function composeReport(
   rules: SignageRule[],
   verdicts: RuleVerdict[],
+  hqName = 'HQ',
 ): ComplianceReport {
   const verdictByKey = new Map(verdicts.map((v) => [v.rule_key, v]))
 
@@ -101,5 +103,5 @@ export function composeReport(
   const counts: VerdictCounts = { compliant, fix, review }
   const summary = `${compliant} compliant · ${fix} to fix · ${review} need HQ review`
 
-  return { counts, groups, summary, disclaimer: DISCLAIMER }
+  return { counts, groups, summary, disclaimer: disclaimerFor(hqName) }
 }

@@ -33,7 +33,7 @@ const RULES: SignageRule[] = [
 
 describe('buildAssessmentPrompt', () => {
   it('lists each rule key and demands strict JSON', () => {
-    const p = buildAssessmentPrompt({ shotSlot: 'logo_wall', rules: RULES })
+    const p = buildAssessmentPrompt({ persona: 'F45 fitness studios', shotLabel: 'Logo wall', rules: RULES })
     expect(p).toContain('[wall-logo-required]')
     expect(p).toContain('[v-design-mandatory]')
     expect(p).toContain('STRICT JSON')

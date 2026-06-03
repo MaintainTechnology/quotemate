@@ -13,7 +13,8 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { RuleVerdict, SignageRule, ShotSlot } from './types'
-import { coerceShots } from './shots'
+import { coerceShots, shotLabel } from './shots'
+import { brandForOrg } from './brand'
 import { assessPhoto } from './vision-assess'
 import { validateSignageAssessment } from './validate-verdicts'
 
@@ -114,24 +115,32 @@ export async function runAssessment(
     if (sweep?.rule_set_version) ruleSetVersion = sweep.rule_set_version as number
   }
 
-  // 3. Load submissions + rules.
+  // 3. Resolve the brand for this org, then load submissions + rules.
+  const brand = await brandForOrg(supabase, reqRow.org_id as string)
   const [{ data: subs }, allRules] = await Promise.all([
     supabase
       .from('signage_photo_submissions')
       .select('shot_slot, storage_path')
       .eq('request_id', requestId),
-    loadActiveRules(supabase, 'f45', ruleSetVersion),
+    loadActiveRules(supabase, brand.slug, ruleSetVersion),
   ])
 
   const scoped = applicableRules(allRules, requestedShots)
 
-  // 4. Assess each submitted photo against the scoped rules.
+  // 4. Assess each submitted photo against the scoped rules, framed for
+  //    this brand (persona + the brand's label for the shot).
   const modelVerdicts: RuleVerdict[] = []
   for (const s of subs ?? []) {
     const slot = s.shot_slot as ShotSlot
     const photo = await downloadBase64(supabase, s.storage_path as string)
     if (!photo) continue // missing photo → its rules stay cannot_determine via backstop
-    const verdicts = await assessPhoto({ photo, shotSlot: slot, rules: scoped })
+    const verdicts = await assessPhoto({
+      photo,
+      shotSlot: slot,
+      rules: scoped,
+      persona: brand.vision_persona,
+      shotLabel: shotLabel(slot, brand.shots),
+    })
     modelVerdicts.push(...verdicts)
   }
 

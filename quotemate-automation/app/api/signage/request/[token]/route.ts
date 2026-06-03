@@ -13,7 +13,8 @@ import { createClient } from '@supabase/supabase-js'
 import { after } from 'next/server'
 import { uploadIntakePhoto } from '@/lib/storage/upload'
 import { pipelineLog } from '@/lib/log/pipeline'
-import { SHOT_DEFS, coerceShots, isShotSlot } from '@/lib/signage/shots'
+import { coerceShots, shotSlots } from '@/lib/signage/shots'
+import { brandForOrg } from '@/lib/signage/brand'
 import { loadActiveRules, applicableRules, runAssessment } from '@/lib/signage/run'
 import { composeReport } from '@/lib/signage/compose-report'
 import type { RuleVerdict } from '@/lib/signage/types'
@@ -60,7 +61,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   if (!resolved) return Response.json({ ok: false, error: 'invalid_or_expired' }, { status: 404 })
 
   const { req, studioName } = resolved
-  const requestedShots = coerceShots(req.required_shots)
+  const brand = await brandForOrg(supabase, req.org_id)
+  const requestedShots = coerceShots(req.required_shots, shotSlots(brand.shots))
+  const brandInfo = { name: brand.name, location_noun: brand.location_noun, hq_name: brand.hq_name }
 
   if (req.state === 'assessed') {
     const { data: assessment } = await supabase
@@ -69,14 +72,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
       .eq('request_id', req.id)
       .maybeSingle()
     if (assessment) {
-      const allRules = await loadActiveRules(supabase, 'f45', 1)
+      const allRules = await loadActiveRules(supabase, brand.slug, 1)
       const scoped = applicableRules(allRules, requestedShots)
       const verdicts = (assessment.verdicts as RuleVerdict[]) ?? []
-      const report = composeReport(scoped, verdicts)
+      const report = composeReport(scoped, verdicts, brand.hq_name)
       return Response.json({
         ok: true,
         mode: 'report',
         studio_name: studioName,
+        brand: brandInfo,
         overall: assessment.overall,
         report,
       })
@@ -84,12 +88,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   }
 
   // Still collecting (or assessed but report not yet ready) → shot list.
-  const shots = SHOT_DEFS.filter((s) => requestedShots.includes(s.slot)).map((s) => ({
-    slot: s.slot,
-    label: s.label,
-    instruction: s.instruction,
-  }))
-  return Response.json({ ok: true, mode: 'collect', studio_name: studioName, shots, state: req.state })
+  const shots = brand.shots.filter((s) => requestedShots.includes(s.slot))
+  return Response.json({ ok: true, mode: 'collect', studio_name: studioName, brand: brandInfo, shots, state: req.state })
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ token: string }> }) {
@@ -106,10 +106,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     return Response.json({ ok: false, error: 'bad_request' }, { status: 400 })
   }
 
-  // Files are keyed by shot slot (e.g. formData 'storefront' → File[]).
+  // Files are keyed by shot slot (e.g. formData 'storefront' → File[]),
+  // using THIS brand's shot list.
+  const brand = await brandForOrg(supabase, request.org_id)
+  const validSlots = new Set(shotSlots(brand.shots))
   type Pending = { slot: string; file: File }
   const pending: Pending[] = []
-  for (const def of SHOT_DEFS) {
+  for (const def of brand.shots) {
     const files = formData.getAll(def.slot).filter((v): v is File => v instanceof File)
     for (const f of files) pending.push({ slot: def.slot, file: f })
   }
@@ -123,7 +126,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   for (const p of pending) {
     if (p.file.size > MAX_SIZE) return Response.json({ ok: false, error: `${p.file.name}_over_5mb` }, { status: 400 })
     if (!ALLOWED_MIME.has(p.file.type)) return Response.json({ ok: false, error: `${p.file.name}_bad_type` }, { status: 400 })
-    if (!isShotSlot(p.slot)) return Response.json({ ok: false, error: 'bad_shot' }, { status: 400 })
+    if (!validSlots.has(p.slot)) return Response.json({ ok: false, error: 'bad_shot' }, { status: 400 })
   }
 
   log.step(`signage upload: ${pending.length} photo(s)`, { request: request.id.slice(0, 8) })
