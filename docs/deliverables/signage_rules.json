@@ -7,10 +7,11 @@
   "applicability": "needs_scale_reference",
   "confidence": "medium",
   "mvp_tier": "phase2_measure",
-  "required_shots": "na",
+  "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Compare the A-frame panel size/aspect to spec; aspect (~1.5:1 height:width) checkable from the rectangle, absolute size needs a scale reference.",
-  "rule_text": "The A-frame signage is 60cm x 90cm (23.6\" x 35.4\")."
+  "check_method": "Aspect ratio (~1.5:1 height:width) of the A-frame panel is checkable from the rectangle alone, but the absolute 60cm x 90cm dimensions require a tape measure or known object in frame to confirm.",
+  "rule_text": "The A-frame signage is 60cm x 90cm (23.6\" x 35.4\").",
+  "verdict_mode": "needs_reference"
  },
  {
   "rule_key": "large-teardrop-banner-dims",
@@ -20,10 +21,11 @@
   "applicability": "needs_scale_reference",
   "confidence": "medium",
   "mvp_tier": "phase2_measure",
-  "required_shots": "na",
+  "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Compare the banner's overall dimensions and aspect ratio to spec; absolute size needs a scale reference, though the ~4.4:1 aspect ratio is checkable from the silhouette alone.",
-  "rule_text": "The large teardrop banner is 307.5cm x 100cm (121\" x 27.5\")."
+  "check_method": "The ~4.4:1 teardrop silhouette aspect is readable, but verifying the absolute 307.5cm x 100cm size needs a scale reference (tape/known object) in the same frame.",
+  "rule_text": "The large teardrop banner is 307.5cm x 100cm (121\" x 27.5\").",
+  "verdict_mode": "needs_reference"
  },
  {
   "rule_key": "small-teardrop-banner-dims",
@@ -33,10 +35,11 @@
   "applicability": "needs_scale_reference",
   "confidence": "medium",
   "mvp_tier": "phase2_measure",
-  "required_shots": "na",
+  "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Compare overall size/aspect to spec; absolute dimensions need a scale reference, aspect (~2.06:1 height:width) checkable from silhouette.",
-  "rule_text": "The small teardrop banner is 86.3cm x 177.8cm (34\" x 70\")."
+  "check_method": "The ~2.06:1 teardrop aspect is readable from the silhouette, but confirming the absolute 86.3cm x 177.8cm size requires a scale reference in frame.",
+  "rule_text": "The small teardrop banner is 86.3cm x 177.8cm (34\" x 70\").",
+  "verdict_mode": "needs_reference"
  },
  {
   "rule_key": "aframe-internal-directional-use",
@@ -46,10 +49,11 @@
   "applicability": "auto_vision",
   "confidence": "low",
   "mvp_tier": "human_queue",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Permissive option; vision can confirm an A-frame being used as a directional sign indoors, but no compliance failure attaches to non-use.",
-  "rule_text": "A-frames may also be used as internal directional signs to direct customers within a building."
+  "check_method": "Permissive 'may also be used' option with no compliance failure attached to non-use; nothing to pass or fail from a photo.",
+  "rule_text": "A-frames may also be used as internal directional signs to direct customers within a building.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "banners-supplied-equipment-pack",
@@ -59,10 +63,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "low",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Provenance/availability statement; not a photo-checkable constraint on the installed banner.",
-  "rule_text": "Banners are created and provided in the equipment pack; alternative artwork is also available in Canva."
+  "check_method": "Provenance/availability statement about equipment-pack supply and Canva artwork; not a constraint on the installed banner, needs no photo.",
+  "rule_text": "Banners are created and provided in the equipment pack; alternative artwork is also available in Canva.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "pull-up-banner-presence",
@@ -72,10 +77,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "low",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "The pull-up banner page presents the asset without explicit dimensions or placement constraints in text; only artwork conformance is implied.",
-  "rule_text": "A pull-up banner is provided as an additional signage and branding option."
+  "check_method": "Optional 'additional option' with no placement/dimension constraint in the text; nothing photo-checkable to pass or fail.",
+  "rule_text": "A pull-up banner is provided as an additional signage and branding option.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "best-workout-decal-optional",
@@ -87,8 +93,9 @@
   "mvp_tier": "mvp_core",
   "required_shots": "workout_walls",
   "dup_count": 1,
-  "check_method": "Detect presence/absence of the 'Best Workout' decal; absence is acceptable since it is optional.",
-  "rule_text": "The 'Best Workout' logo is an optional wall decal that may be installed if the training area allows."
+  "check_method": "Detect presence/absence of the 'Best Workout' decal on a workout-area wall; since it is optional, both present and absent are acceptable states the photo can confirm.",
+  "rule_text": "The 'Best Workout' logo is an optional wall decal that may be installed if the training area allows.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "google-review-cling-placement-visibility",
@@ -98,10 +105,11 @@
   "applicability": "auto_vision",
   "confidence": "medium",
   "mvp_tier": "mvp_core",
-  "required_shots": "workout_walls",
+  "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Detect the Google Review cling/sticker on a window in a customer-accessible, visible location near the entrance.",
-  "rule_text": "The Studio Window Google Review cling should be placed per the placement recommendation for easy visibility and access (on the studio window)."
+  "check_method": "Detect the Google Review cling/sticker on the studio window in a visible, customer-accessible spot; presence and window placement are both confirmable and deniable from a photo.",
+  "rule_text": "The Studio Window Google Review cling should be placed per the placement recommendation for easy visibility and access (on the studio window).",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "invest-in-yourself-decal-present",
@@ -113,8 +121,9 @@
   "mvp_tier": "mvp_core",
   "required_shots": "workout_walls",
   "dup_count": 1,
-  "check_method": "Detect an 'Invest In Yourself' text decal on an internal wall via OCR.",
-  "rule_text": "The 'Invest In Yourself' decal is a specified internal decal (shown with the Team Training and Worlds Best decals on the page 19 spec diagram)."
+  "check_method": "OCR for the 'Invest In Yourself' text decal on an internal wall; presence/absence of the required copy is confirmable and deniable.",
+  "rule_text": "The 'Invest In Yourself' decal is a specified internal decal (shown with the Team Training and Worlds Best decals on the page 19 spec diagram).",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "main-door-decal-present",
@@ -124,10 +133,11 @@
   "applicability": "auto_vision",
   "confidence": "medium",
   "mvp_tier": "mvp_core",
-  "required_shots": "workout_walls",
+  "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Detect the F45 door decal applied to the main glass entrance door. Confirm a decal (logo/copy) is present on the door leaf.",
-  "rule_text": "A main door decal must be installed on the entrance door as part of the external master logo options."
+  "check_method": "Detect an F45 decal (logo/copy) applied to the main glass entrance door leaf; presence/absence on the door is directly confirmable.",
+  "rule_text": "A main door decal must be installed on the entrance door as part of the external master logo options.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "team-training-decal-feature-wall-workout",
@@ -139,8 +149,9 @@
   "mvp_tier": "mvp_core",
   "required_shots": "workout_walls",
   "dup_count": 4,
-  "check_method": "Detect a 'Team Training' text decal on a workout-area feature wall via OCR/logo match.",
-  "rule_text": "The 'Team Training' wall decal must be installed on a feature wall in the workout area."
+  "check_method": "OCR/logo-match the 'Team Training' decal on a workout-area feature wall; both presence and wall placement are confirmable and deniable.",
+  "rule_text": "The 'Team Training' wall decal must be installed on a feature wall in the workout area.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "best-workout-decal-24in-if-ceiling-ge-12ft",
@@ -152,8 +163,9 @@
   "mvp_tier": "phase2_measure",
   "required_shots": "workout_walls",
   "dup_count": 2,
-  "check_method": "Determine ceiling height via reference; if >=12ft, measure ground-to-decal-base ~24in via a known reference.",
-  "rule_text": "If installed, the 'Best Workout' decal must be installed 24 inches (60cm) from the ground to the base of the decal if the ceiling height is 12 feet or more."
+  "check_method": "Both the 12ft ceiling-height trigger and the 24in floor-to-base measurement are absolute distances requiring a known reference object or tape in frame.",
+  "rule_text": "If installed, the 'Best Workout' decal must be installed 24 inches (60cm) from the ground to the base of the decal if the ceiling height is 12 feet or more.",
+  "verdict_mode": "needs_reference"
  },
  {
   "rule_key": "best-workout-decal-lettering-consistent-with-team-training",
@@ -165,8 +177,9 @@
   "mvp_tier": "phase2_measure",
   "required_shots": "workout_walls",
   "dup_count": 1,
-  "check_method": "Compare absolute lettering heights of the two decals; because they are usually on different walls/photos, a common scale reference is needed to compare true sizes.",
-  "rule_text": "The lettering size of the 'Best Workout' decal must be consistent with the lettering size of the 'Team Training' wall decal."
+  "check_method": "Comparing true lettering heights of two decals usually on different walls/photos requires a common scale reference; a single photo cannot match absolute letter sizes across frames.",
+  "rule_text": "The lettering size of the 'Best Workout' decal must be consistent with the lettering size of the 'Team Training' wall decal.",
+  "verdict_mode": "needs_reference"
  },
  {
   "rule_key": "retail-slogan-centered-above-rack-10ft",
@@ -176,10 +189,11 @@
   "applicability": "needs_scale_reference",
   "confidence": "high",
   "mvp_tier": "phase2_measure",
-  "required_shots": "workout_walls",
+  "required_shots": "retail",
   "dup_count": 2,
-  "check_method": "Confirm the slogan is centered above the retail rack and measure ~10ft to its base via a known reference; presence/centering is auto_vision but the 10ft height needs scale.",
-  "rule_text": "The retail slogan must be installed centered above the retail rack at approximately 10 feet from the floor to the base of the logo (consult Onboarding Specialist if low ceiling requires adjustment)."
+  "check_method": "Centering above the rack is photo-checkable, but the binding constraint is the ~10ft floor-to-base height, which is an absolute measurement needing a scale reference.",
+  "rule_text": "The retail slogan must be installed centered above the retail rack at approximately 10 feet from the floor to the base of the logo (consult Onboarding Specialist if low ceiling requires adjustment).",
+  "verdict_mode": "needs_reference"
  },
  {
   "rule_key": "team-training-decal-10ft-reference",
@@ -191,8 +205,9 @@
   "mvp_tier": "phase2_measure",
   "required_shots": "workout_walls",
   "dup_count": 1,
-  "check_method": "Measure decal height to ~10ft via a known reference where the diagram applies; needs scale.",
-  "rule_text": "Per the page 19 specification diagram, certain internal decals reference a 10-foot installation dimension (consistent with the retail slogan ~10ft placement)."
+  "check_method": "Rule turns on a ~10ft absolute installation dimension from the spec diagram; requires a known reference/tape in frame to verify height.",
+  "rule_text": "Per the page 19 specification diagram, certain internal decals reference a 10-foot installation dimension (consistent with the retail slogan ~10ft placement).",
+  "verdict_mode": "needs_reference"
  },
  {
   "rule_key": "worlds-best-decal-24in",
@@ -204,8 +219,9 @@
   "mvp_tier": "phase2_measure",
   "required_shots": "workout_walls",
   "dup_count": 1,
-  "check_method": "Detect the 'Worlds Best' decal and measure ~24in floor-to-base via a known reference; presence is auto_vision, the 24in height needs scale.",
-  "rule_text": "The 'Worlds Best' decal (including the 'Worlds Best - Solid' variant) is installed at a 24-inch base height per the page 19 specification diagram."
+  "check_method": "Presence of the 'Worlds Best' decal is detectable, but the binding 24in floor-to-base height is an absolute measurement needing a known reference in frame.",
+  "rule_text": "The 'Worlds Best' decal (including the 'Worlds Best - Solid' variant) is installed at a 24-inch base height per the page 19 specification diagram.",
+  "verdict_mode": "needs_reference"
  },
  {
   "rule_key": "best-workout-decal-dedicated-wall-facing-workout",
@@ -217,8 +233,9 @@
   "mvp_tier": "human_queue",
   "required_shots": "workout_walls",
   "dup_count": 1,
-  "check_method": "If a 'Best Workout' decal is present, confirm it occupies a dedicated feature wall oriented toward the workout floor.",
-  "rule_text": "If installed, the 'Best Workout' wall decal must be on a dedicated feature wall facing the workout area."
+  "check_method": "If a 'Best Workout' decal is present, confirm it sits on a dedicated feature wall oriented toward the workout floor; layout/orientation is confirmable and deniable from a photo.",
+  "rule_text": "If installed, the 'Best Workout' wall decal must be on a dedicated feature wall facing the workout area.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "best-workout-decal-not-replace-logo-or-team-training",
@@ -230,8 +247,9 @@
   "mvp_tier": "human_queue",
   "required_shots": "workout_walls",
   "dup_count": 1,
-  "check_method": "Confirm that, where a 'Best Workout' decal exists, the internal wall logo and the 'Team Training' decal are also still present (not replaced).",
-  "rule_text": "The 'Best Workout' decal must not take the place of the internal wall logo or the 'Team Training' wall decal."
+  "check_method": "Where a 'Best Workout' decal exists, confirm the internal wall logo and 'Team Training' decal are also still present (not replaced); co-presence is verifiable from photos of the area.",
+  "rule_text": "The 'Best Workout' decal must not take the place of the internal wall logo or the 'Team Training' wall decal.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "team-training-decal-white",
@@ -243,8 +261,9 @@
   "mvp_tier": "human_queue",
   "required_shots": "workout_walls",
   "dup_count": 1,
-  "check_method": "Confirm the decal lettering is white.",
-  "rule_text": "The 'Team Training' wall decal must be white in color."
+  "check_method": "Confirm the 'Team Training' decal lettering is white; white is a colour-family judgement the photo can both confirm and deny (a non-white decal is a clear fail).",
+  "rule_text": "The 'Team Training' wall decal must be white in color.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "do-not-install-legacy-internal-signage",
@@ -256,8 +275,9 @@
   "mvp_tier": "human_queue_metadata",
   "required_shots": "workout_walls",
   "dup_count": 1,
-  "check_method": "Detecting a legacy decal requires a reference catalogue of legacy-vs-current designs to compare against the photographed wall; without that reference the model cannot distinguish legacy from current.",
-  "rule_text": "If the equipment pack includes legacy F45 internal signage designs, the franchisee must not install that legacy internal signage in the studio because it is no longer compliant (it may be disposed of at the franchisee's discretion; no refunds/credits for prior internal signage decals)."
+  "check_method": "Distinguishing a legacy decal design from the current one requires a reference catalogue of legacy-vs-current artwork; without that external reference the model cannot tell them apart.",
+  "rule_text": "If the equipment pack includes legacy F45 internal signage designs, the franchisee must not install that legacy internal signage in the studio because it is no longer compliant (it may be disposed of at the franchisee's discretion; no refunds/credits for prior internal signage decals).",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "logo-lockup-on-glass-present",
@@ -269,8 +289,9 @@
   "mvp_tier": "mvp_core",
   "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Detect presence of the F45 logo lockup applied to a glass storefront panel/window. Confirm the lockup (logo + associated elements) is present on glass.",
-  "rule_text": "A logo lockup must be applied on the glass as part of the external master logo options (logo lockup on glass)."
+  "check_method": "Detect presence/absence of the F45 logo lockup applied to a glass storefront panel/window; the logo-on-glass is directly confirmable and deniable.",
+  "rule_text": "A logo lockup must be applied on the glass as part of the external master logo options (logo lockup on glass).",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "master-logo-white-on-blue-required",
@@ -282,8 +303,9 @@
   "mvp_tier": "phase2_ref",
   "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Detect the F45 master logo on the storefront and classify the logo glyph colour (white) against the background colour family (dark/navy blue). Verify the high-contrast white-on-blue pairing is present rather than the blue-on-light alternative.",
-  "rule_text": "The external master logo must use the white F45 logo on a dark blue background; this is the REQUIRED master logo option."
+  "check_method": "Classify the storefront master logo as white glyph on a dark/navy-blue background (the required high-contrast pairing) vs the blue-on-light alternative; the colour-family pairing is confirmable and deniable.",
+  "rule_text": "The external master logo must use the white F45 logo on a dark blue background; this is the REQUIRED master logo option.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "logo-not-printed-on-white-backing",
@@ -295,8 +317,9 @@
   "mvp_tier": "human_queue",
   "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Inspect the logo-on-glass and door decal for an opaque white panel/box behind the artwork. Flag if a solid white rectangular backing is visible around the logo on the glass.",
-  "rule_text": "The logo lockup on glass and door decal are not to be printed on a white backing."
+  "check_method": "Inspect the glass logo lockup and door decal for a solid white rectangular backing box behind the artwork; a visible opaque white panel is a clear fail, its absence (logo sitting on glass) confirms compliance.",
+  "rule_text": "The logo lockup on glass and door decal are not to be printed on a white backing.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "main-logo-not-white-backing",
@@ -308,8 +331,9 @@
   "mvp_tier": "human_queue",
   "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Inspect the glass logo lockup; confirm there is no solid white rectangular backing block behind the logo (it should sit directly on glass with agreed opacity).",
-  "rule_text": "External master logo / main door decal logo lockups on glass are not to be printed on a white backing; opacity is to be agreed in production."
+  "check_method": "Confirm no solid white rectangular backing block sits behind the glass logo lockup; presence/absence of the white box is directly checkable from the storefront photo.",
+  "rule_text": "External master logo / main door decal logo lockups on glass are not to be printed on a white backing; opacity is to be agreed in production.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "master-logo-blue-on-light-fallback-only",
@@ -321,8 +345,9 @@
   "mvp_tier": "human_queue_metadata",
   "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "A photo can confirm the blue-on-light variant is the one installed, but determining whether it is permissible requires confirming that a blue backer was genuinely not possible at this site \u2014 context not present in the image.",
-  "rule_text": "The blue F45 logo on a light background may be used only as a fallback when a blue backer is not possible."
+  "check_method": "A photo can confirm the blue-on-light variant is installed, but permissibility hinges on whether a blue backer was genuinely impossible at this site, which only HQ/site context can establish.",
+  "rule_text": "The blue F45 logo on a light background may be used only as a fallback when a blue backer is not possible.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "master-logo-hot-location-fade-note",
@@ -332,10 +357,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "medium",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "storefront",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "This is advisory rationale, not a testable visual constraint; verifying it would require knowing the studio's climate/location, which is not in the photo.",
-  "rule_text": "The white-on-blue logo option is often utilized in hotter locations to avoid long-term fading."
+  "check_method": "Advisory rationale about hot-climate fade, not a testable visual constraint; verifying it would require the studio's climate/location, not in the photo.",
+  "rule_text": "The white-on-blue logo option is often utilized in hotter locations to avoid long-term fading.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "frp-chin-up-bar-wall-encouraged",
@@ -347,8 +373,9 @@
   "mvp_tier": "human_queue",
   "required_shots": "workout_walls",
   "dup_count": 1,
-  "check_method": "Check for FRP paneling on the chin-up bar wall lower band; recommended not mandatory.",
-  "rule_text": "Installing the FRP along the chin-up bar wall as well is strongly encouraged."
+  "check_method": "Recommendation (strongly encouraged, not mandatory) for FRP paneling on the chin-up-bar wall lower band; AI can flag an obviously bare wall but cannot certify the panel is genuine FRP vs painted, and non-use is not a hard failure.",
+  "rule_text": "Installing the FRP along the chin-up bar wall as well is strongly encouraged.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "frp-supplier-hjc",
@@ -360,8 +387,9 @@
   "mvp_tier": "human_queue_metadata",
   "required_shots": "workout_walls",
   "dup_count": 1,
-  "check_method": "Supplier identity needs purchase/spec documentation; the pebbled texture and peppercorn (dark) color could be loosely inferred from a close-up but not the supplier.",
-  "rule_text": "The mandatory FRP material must be sourced from supplier Haines, Jones & Cadbury LLC (hjcinc.com), in the Pebbled (Peppercorn) finish/color."
+  "check_method": "Confirming the FRP supplier (Haines, Jones & Cadbury) and exact Pebbled/Peppercorn finish requires purchase/spec documentation; supplier identity is not inferable from a photo.",
+  "rule_text": "The mandatory FRP material must be sourced from supplier Haines, Jones & Cadbury LLC (hjcinc.com), in the Pebbled (Peppercorn) finish/color.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "wall-logo-no-obstruction",
@@ -373,8 +401,9 @@
   "mvp_tier": "mvp_core",
   "required_shots": "logo_wall",
   "dup_count": 1,
-  "check_method": "Check whether equipment, fixtures, racks, or other objects overlap or sit in front of the logo feature wall.",
-  "rule_text": "The F45 Training Logo Wall may not be obstructed by any equipment or any other encumbrance."
+  "check_method": "Check whether equipment, racks, fixtures, or other objects overlap or sit in front of the F45 logo feature wall; obstruction vs a clear logo wall is directly confirmable and deniable.",
+  "rule_text": "The F45 Training Logo Wall may not be obstructed by any equipment or any other encumbrance.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "wall-logo-required",
@@ -386,8 +415,9 @@
   "mvp_tier": "mvp_core",
   "required_shots": "logo_wall",
   "dup_count": 1,
-  "check_method": "Detect presence of the F45 Training logo on the main interior feature wall in the photo.",
-  "rule_text": "Every F45 Training studio must feature an internal wall logo (Wall Logo) on the main interior wall."
+  "check_method": "Confirm an F45 Training logo is present on the main interior feature wall. Present = pass; absent = fail.",
+  "rule_text": "Every F45 Training studio must feature an internal wall logo (Wall Logo) on the main interior wall.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "wall-logo-center-height-68in",
@@ -399,8 +429,9 @@
   "mvp_tier": "phase2_measure",
   "required_shots": "logo_wall",
   "dup_count": 1,
-  "check_method": "Locate floor line and logo vertical center in the photo; convert pixel distance to inches via a known reference object; compare to 68in.",
-  "rule_text": "The F45 Training Wall Logo must be installed 68 inches from the floor to the center of the logo."
+  "check_method": "Floor-to-logo-center must be 68in; an absolute height needs a tape measure or known object (door) in frame to convert pixels to inches.",
+  "rule_text": "The F45 Training Wall Logo must be installed 68 inches from the floor to the center of the logo.",
+  "verdict_mode": "needs_reference"
  },
  {
   "rule_key": "wall-logo-min-width-100in",
@@ -412,8 +443,9 @@
   "mvp_tier": "phase2_measure",
   "required_shots": "logo_wall",
   "dup_count": 1,
-  "check_method": "Measure the logo's pixel width and convert to inches using a known reference in the frame (door height ~80in, standard ceiling, or a placed scale); compare to 100in.",
-  "rule_text": "The Wall Logo must be a minimum of 100 inches wide."
+  "check_method": "Logo width must be >=100in; absolute width needs a scale reference (door ~80in, placed scale) to certify.",
+  "rule_text": "The Wall Logo must be a minimum of 100 inches wide.",
+  "verdict_mode": "needs_reference"
  },
  {
   "rule_key": "wall-logo-backlit-led",
@@ -425,8 +457,9 @@
   "mvp_tier": "human_queue",
   "required_shots": "logo_wall",
   "dup_count": 1,
-  "check_method": "Look for halo/edge glow, illuminated channel-letter effect, or visible backlight behind the logo; distinguish from a flat printed/vinyl decal.",
-  "rule_text": "The internal F45 Training Wall Logo must be an LED backlit logo."
+  "check_method": "Logo must be LED backlit. Flag a clearly flat printed/vinyl decal with no glow as a violation; a glowing logo cannot certify LED vs other lighting, downgrade compliant to review.",
+  "rule_text": "The internal F45 Training Wall Logo must be an LED backlit logo.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "wall-logo-larger-case-by-case",
@@ -438,8 +471,9 @@
   "mvp_tier": "human_queue_metadata",
   "required_shots": "logo_wall",
   "dup_count": 1,
-  "check_method": "Requires HQ case-by-case approval record; a photo alone cannot confirm authorization for an oversized logo.",
-  "rule_text": "Wall Logos larger than the 100-inch minimum may be approved by F45 on a case-by-case basis."
+  "check_method": "Oversized logos need HQ case-by-case approval on file; a photo cannot confirm authorization.",
+  "rule_text": "Wall Logos larger than the 100-inch minimum may be approved by F45 on a case-by-case basis.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "lightbox-option1-frame-box-hanging",
@@ -449,10 +483,11 @@
   "applicability": "auto_vision",
   "confidence": "low",
   "mvp_tier": "human_queue",
-  "required_shots": "na",
+  "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Identify a hanging/side-mounted frame box lightbox if present; confirm it matches the Option 1 mount style.",
-  "rule_text": "Lightbox sign Option 1 is a frame box insert with hanging top and side mount (CAD drawings pending)."
+  "check_method": "If a lightbox is present, confirm it is a frame-box insert with hanging-top/side mount matching Option 1. Optional asset, so absence is acceptable; this checks the mount style when present.",
+  "rule_text": "Lightbox sign Option 1 is a frame box insert with hanging top and side mount (CAD drawings pending).",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "lightbox-option2-wall-mounted",
@@ -462,10 +497,11 @@
   "applicability": "auto_vision",
   "confidence": "low",
   "mvp_tier": "human_queue",
-  "required_shots": "na",
+  "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Identify a wall-mounted lightbox if present; confirm it is flush wall-mounted per Option 2.",
-  "rule_text": "Lightbox sign Option 2 is a wall-mounted light box (CAD drawings pending)."
+  "check_method": "If a lightbox is present, confirm it is a flush wall-mounted box matching Option 2. Optional asset; checks mount style when present.",
+  "rule_text": "Lightbox sign Option 2 is a wall-mounted light box (CAD drawings pending).",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "workout-wall-stacking-order",
@@ -475,10 +511,11 @@
   "applicability": "auto_vision",
   "confidence": "high",
   "mvp_tier": "mvp_core",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "workout_walls",
   "dup_count": 1,
-  "check_method": "Vision model verifies the three horizontal bands appear in the correct bottom-to-top order (dark gray, red, light gray).",
-  "rule_text": "Workout/back-of-studio walls must follow the vertical stack order: dark gray (floor to 28\"), then a 1.5\" red stripe, then light gray to the ceiling."
+  "check_method": "Verify the three horizontal bands appear bottom-to-top in order: dark gray, then red stripe, then light gray to ceiling. Ordinal stacking order checkable from photo.",
+  "rule_text": "Workout/back-of-studio walls must follow the vertical stack order: dark gray (floor to 28\"), then a 1.5\" red stripe, then light gray to the ceiling.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "red-stripe-zone-application",
@@ -488,10 +525,11 @@
   "applicability": "auto_vision",
   "confidence": "high",
   "mvp_tier": "phase2_ref",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "workout_walls",
   "dup_count": 1,
-  "check_method": "Vision model detects presence of a horizontal red stripe on the front and back training-area walls; relative thinness of the stripe is checkable, exact 1.5\" width is not from an uncalibrated photo.",
-  "rule_text": "The compliant red paint is used for the 1.5\" stripe painted along the front and back walls of the training area."
+  "check_method": "Confirm a thin horizontal red stripe is present along the front and back training-area walls. Presence/coverage checkable; exact 1.5in width is not required for this presence check.",
+  "rule_text": "The compliant red paint is used for the 1.5\" stripe painted along the front and back walls of the training area.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "v-design-paints-only",
@@ -501,10 +539,11 @@
   "applicability": "auto_vision",
   "confidence": "high",
   "mvp_tier": "phase2_ref",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "v_design_close",
   "dup_count": 1,
-  "check_method": "Vision model confirms the V design uses two distinct gray tones (a darker upper and lighter lower) against the light gray wall.",
-  "rule_text": "The paint codes labelled 'Compliant Paints for V Design Only' apply specifically to the painted V design and must use the specified colors."
+  "check_method": "Confirm the V design uses two distinct gray tones (darker upper, lighter lower) against the light gray wall. Colour-family presence checkable.",
+  "rule_text": "The paint codes labelled 'Compliant Paints for V Design Only' apply specifically to the painted V design and must use the specified colors.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "workout-walls-dark-gray-to-28in",
@@ -514,10 +553,11 @@
   "applicability": "needs_scale_reference",
   "confidence": "high",
   "mvp_tier": "phase2_measure",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "workout_walls",
   "dup_count": 2,
-  "check_method": "Confirm a dark-gray band at the base of the workout walls and measure its height to ~28in via a known reference; color family checkable from photo, exact height needs scale.",
-  "rule_text": "Workout room walls and back-of-studio supporting areas must be painted dark gray from the floor up to 28 inches (70cm) above finished floor."
+  "check_method": "Dark gray band from floor to 28in. Color family is visible, but the 28in height needs a tape measure or known reference to certify.",
+  "rule_text": "Workout room walls and back-of-studio supporting areas must be painted dark gray from the floor up to 28 inches (70cm) above finished floor.",
+  "verdict_mode": "needs_reference"
  },
  {
   "rule_key": "colors-used-external-and-internal-logo-wall",
@@ -527,10 +567,11 @@
   "applicability": "auto_vision",
   "confidence": "medium",
   "mvp_tier": "human_queue",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "logo_wall",
   "dup_count": 1,
-  "check_method": "Vision model checks that the external signage and the main interior logo wall use the F45 red/gray palette rather than arbitrary colors.",
-  "rule_text": "These color schemes must be used in F45 Training external signage and on the F45 Training internal logo placed on the main interior wall."
+  "check_method": "External signage and internal logo wall must use the F45 red/gray palette. Flag an obviously off-palette wall (green/yellow/blue) as violation; a grey-looking wall cannot certify exact swatch, downgrade compliant to review.",
+  "rule_text": "These color schemes must be used in F45 Training external signage and on the F45 Training internal logo placed on the main interior wall.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "dark-gray-zone-application",
@@ -540,10 +581,11 @@
   "applicability": "auto_vision",
   "confidence": "high",
   "mvp_tier": "human_queue",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "workout_walls",
   "dup_count": 1,
-  "check_method": "Vision model verifies decal walls read as the darker of the two grays relative to the light-gray feature wall.",
-  "rule_text": "Dark gray paint is used on decal walls and sections of the training floor."
+  "check_method": "Confirm decal walls read as the darker of the two grays relative to the light-gray feature wall. Relative colour-family comparison checkable.",
+  "rule_text": "Dark gray paint is used on decal walls and sections of the training floor.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "light-gray-above-red-stripe-to-ceiling",
@@ -553,10 +595,11 @@
   "applicability": "auto_vision",
   "confidence": "high",
   "mvp_tier": "human_queue",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "workout_walls",
   "dup_count": 2,
-  "check_method": "Vision model verifies the upper wall band (above the red stripe) reads as the lighter gray continuing to the ceiling.",
-  "rule_text": "The wall must be painted light gray from the top of the red stripe up to the ceiling."
+  "check_method": "Confirm the wall band above the red stripe reads as the lighter gray continuing to the ceiling. Layout/colour-family checkable from photo.",
+  "rule_text": "The wall must be painted light gray from the top of the red stripe up to the ceiling.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "light-gray-zone-application",
@@ -566,10 +609,11 @@
   "applicability": "auto_vision",
   "confidence": "high",
   "mvp_tier": "human_queue",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "logo_wall",
   "dup_count": 1,
-  "check_method": "Vision model verifies the logo feature wall and entry/reception area read as light gray (lighter of the two grays).",
-  "rule_text": "Light gray paint is used on the main logo feature wall, entry area, and sections of the training floor."
+  "check_method": "Confirm the main logo feature wall and entry/reception read as light gray (lighter of the two grays). Relative colour-family checkable.",
+  "rule_text": "Light gray paint is used on the main logo feature wall, entry area, and sections of the training floor.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "palette-two-grays-plus-red-accent",
@@ -579,10 +623,11 @@
   "applicability": "auto_vision",
   "confidence": "high",
   "mvp_tier": "human_queue",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "workout_walls",
   "dup_count": 2,
-  "check_method": "Vision model verifies the overall interior is two gray tones with a red stripe accent on the workout-space front/back walls.",
-  "rule_text": "The studio color palette must be two tones of gray with an accented red stripe featured on the front and back walls of the workout space."
+  "check_method": "Confirm the interior is two gray tones with a red stripe accent on front/back workout walls. Colour-family-present check.",
+  "rule_text": "The studio color palette must be two tones of gray with an accented red stripe featured on the front and back walls of the workout space.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "retail-area-dark-gray-floor-to-ceiling",
@@ -592,10 +637,11 @@
   "applicability": "auto_vision",
   "confidence": "medium",
   "mvp_tier": "human_queue",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "retail",
   "dup_count": 1,
-  "check_method": "Vision model confirms the retail-area wall reads as the darker gray, full height, with wall-affixed retail racks present.",
-  "rule_text": "The retail area must be painted the darker shade of gray from floor to ceiling, with retail racks affixed to the wall."
+  "check_method": "Retail wall must read as the darker gray full height with racks affixed. Flag an off-palette retail wall as violation; a grey-looking wall cannot certify exact swatch, downgrade compliant to review. Rack presence is separately visible.",
+  "rule_text": "The retail area must be painted the darker shade of gray from floor to ceiling, with retail racks affixed to the wall.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "color-schemes-no-modify",
@@ -605,10 +651,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "workout_walls",
   "dup_count": 1,
-  "check_method": "Vision model can flag obviously off-palette walls (e.g. a green or yellow wall) but cannot confirm exact swatch compliance; verifying the precise specified codes requires paint SKU/receipt metadata, not a phone photo.",
-  "rule_text": "Studios must strictly adhere to the F45 color schemes and must not modify these colors in any manner."
+  "check_method": "Walls must strictly match F45 color schemes. Flag obviously off-palette walls (green/yellow/blue) as violation; exact swatch compliance needs paint SKU/receipt, so downgrade compliant to review.",
+  "rule_text": "Studios must strictly adhere to the F45 color schemes and must not modify these colors in any manner.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "dark-gray-dulux-noble-gray",
@@ -618,10 +665,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "workout_walls",
   "dup_count": 1,
-  "check_method": "Vision model confirms dark gray family only; exact Dulux SKU needs metadata.",
-  "rule_text": "Compliant dark gray paint option: Dulux 30BB 10/019 | Noble Gray."
+  "check_method": "Named dark-gray SKU (Dulux Noble Gray). Flag a wall that is clearly not dark grey as violation; a grey-looking wall needs a paint receipt to certify the exact SKU, downgrade compliant to review.",
+  "rule_text": "Compliant dark gray paint option: Dulux 30BB 10/019 | Noble Gray.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "dark-gray-sherwin-williams-peppercorn",
@@ -631,10 +679,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "workout_walls",
   "dup_count": 1,
-  "check_method": "Vision model confirms decal walls read as the darker of the two grays; exact SW7674 swatch requires metadata.",
-  "rule_text": "Compliant dark gray paint option: Sherwin Williams SW 7674 | Peppercorn (used on decal walls and sections of the training floor; also referenced as the FRP panel color 'Pebbled (Peppercorn)')."
+  "check_method": "Named dark-gray SKU (SW7674 Peppercorn). Flag a non-dark-grey decal wall as violation; exact SW SKU needs a receipt, downgrade compliant to review.",
+  "rule_text": "Compliant dark gray paint option: Sherwin Williams SW 7674 | Peppercorn (used on decal walls and sections of the training floor; also referenced as the FRP panel color 'Pebbled (Peppercorn)').",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "dark-gray-wattyl-opera-grey",
@@ -644,10 +693,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "workout_walls",
   "dup_count": 1,
-  "check_method": "Vision model confirms dark gray family only; exact Wattyl SKU needs metadata.",
-  "rule_text": "Compliant dark gray paint option: Wattyl CW23.4 | Opera Grey."
+  "check_method": "Named dark-gray SKU (Wattyl Opera Grey). Flag a clearly non-dark-grey wall as violation; exact SKU needs a receipt, downgrade compliant to review.",
+  "rule_text": "Compliant dark gray paint option: Wattyl CW23.4 | Opera Grey.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "dark-gray-wattyl-solar-eclipse",
@@ -657,10 +707,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "workout_walls",
   "dup_count": 1,
-  "check_method": "Vision model confirms dark gray family only; exact Wattyl SKU needs metadata.",
-  "rule_text": "Compliant dark gray paint option: Wattyl CW22.6 | Solar Eclipse."
+  "check_method": "Named dark-gray SKU (Wattyl Solar Eclipse). Flag a clearly non-dark-grey wall as violation; exact SKU needs a receipt, downgrade compliant to review.",
+  "rule_text": "Compliant dark gray paint option: Wattyl CW22.6 | Solar Eclipse.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "frp-encouraged-chin-up-bar-wall",
@@ -670,10 +721,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "workout_walls",
   "dup_count": 1,
-  "check_method": "Vision model can look for a panel band on the chin-up-bar wall, but it is a recommendation and material/wall identity needs context.",
-  "rule_text": "FRP is strongly encouraged along the chin up bar wall as well."
+  "check_method": "Recommendation (should) to add FRP on the chin-up-bar wall; non-use is not a failure and confirming the material is FRP vs painted needs context. Not a certifiable pass/fail from a photo.",
+  "rule_text": "FRP is strongly encouraged along the chin up bar wall as well.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "frp-mandatory-sled-track-wall",
@@ -683,10 +735,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "workout_walls",
   "dup_count": 2,
-  "check_method": "Vision model can detect a panel-textured lower wall band on the sled track wall, but confirming it is FRP (vs painted dark gray) and that it is the sled track wall needs context/material metadata.",
-  "rule_text": "An FRP (Fiberglass Reinforced Plastic) panel is mandatory along the sled track wall, covering the dark gray section of the wall."
+  "check_method": "FRP panel mandatory along the sled track wall over the dark-gray section. Flag a sled-track wall with no panel band as violation; a panel-textured band cannot certify it is genuine FRP vs painted, downgrade compliant to review.",
+  "rule_text": "An FRP (Fiberglass Reinforced Plastic) panel is mandatory along the sled track wall, covering the dark gray section of the wall.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "frp-supplier-color-peppercorn",
@@ -696,10 +749,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "workout_walls",
   "dup_count": 1,
-  "check_method": "Confirming the FRP brand/finish requires supplier invoice/spec metadata; color family (dark gray/Peppercorn) can be eyeballed but not the SKU.",
-  "rule_text": "The mandatory FRP material must be the specified product: Manufacturer Haines, Jones & Cadbury LLC, finish color 'Pebbled (Peppercorn)'."
+  "check_method": "Specific FRP product (HJC, Pebbled Peppercorn finish). Supplier/finish needs invoice/spec metadata; a photo cannot establish the brand/SKU.",
+  "rule_text": "The mandatory FRP material must be the specified product: Manufacturer Haines, Jones & Cadbury LLC, finish color 'Pebbled (Peppercorn)'.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "interior-entire-painted-per-spec",
@@ -709,10 +763,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "workout_walls",
   "dup_count": 2,
-  "check_method": "Vision model can confirm presence/absence of paint on doors and ceiling and whether the palette family is correct, but exact code compliance and any HQ exemption require metadata.",
-  "rule_text": "The entire interior of the studio must be painted per the document's paint codes, including walls (floor to ceiling), internal doors, and ceiling, unless prior written approval of F45 HQ is obtained."
+  "check_method": "Entire interior (walls, internal doors, ceiling) painted per codes unless HQ written approval. Flag clearly unpainted/off-palette doors or ceiling as violation; exact code compliance and any HQ exemption need metadata, downgrade compliant to review.",
+  "rule_text": "The entire interior of the studio must be painted per the document's paint codes, including walls (floor to ceiling), internal doors, and ceiling, unless prior written approval of F45 HQ is obtained.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "light-gray-benjamin-moore-gray",
@@ -722,10 +777,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "logo_wall",
   "dup_count": 1,
-  "check_method": "Vision model confirms light gray family only; exact Benjamin Moore SKU needs metadata.",
-  "rule_text": "Compliant light gray paint option: Benjamin Moore 2121-10 | Gray."
+  "check_method": "Named light-gray SKU (Benjamin Moore 2121-10). Flag a wall that is clearly not light grey as violation; exact SKU needs a receipt, downgrade compliant to review.",
+  "rule_text": "Compliant light gray paint option: Benjamin Moore 2121-10 | Gray.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "light-gray-dulux-surreal-blue",
@@ -735,10 +791,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "logo_wall",
   "dup_count": 1,
-  "check_method": "Vision model confirms a light gray wall only; exact Dulux tint/ratio needs paint metadata.",
-  "rule_text": "Compliant light gray paint option: Dulux 30BB 45/015 w/2:1 ratio | Surreal Blue."
+  "check_method": "Named light-gray SKU (Dulux Surreal Blue tint). Flag a clearly non-light-grey wall as violation; exact tint/ratio needs paint metadata, downgrade compliant to review.",
+  "rule_text": "Compliant light gray paint option: Dulux 30BB 45/015 w/2:1 ratio | Surreal Blue.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "light-gray-sherwin-williams-swanky-gray",
@@ -748,10 +805,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "logo_wall",
   "dup_count": 1,
-  "check_method": "Vision model confirms the logo/feature wall and entry are a light gray family; exact SW6261 swatch requires metadata.",
-  "rule_text": "Compliant light gray paint option: Sherwin Williams SW6261 | Swanky Gray (the primary light gray used on the logo feature wall, entry area, and sections of the training floor)."
+  "check_method": "Named primary light-gray SKU (SW6261 Swanky Gray) for logo/feature wall and entry. Flag a clearly non-light-grey feature wall as violation; exact SW6261 swatch needs a receipt, downgrade compliant to review.",
+  "rule_text": "Compliant light gray paint option: Sherwin Williams SW6261 | Swanky Gray (the primary light gray used on the logo feature wall, entry area, and sections of the training floor).",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "logo-and-reception-walls-light-gray-floor-ceiling",
@@ -761,10 +819,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "logo_wall",
   "dup_count": 2,
-  "check_method": "Vision confirms light-gray family floor-to-ceiling on logo and reception walls; exact SKU needs paint docs/reference.",
-  "rule_text": "The walls featuring the F45 logo and V-design backdrop (internal logo wall and front reception/desk wall) must be painted light gray from floor to ceiling."
+  "check_method": "Logo wall and front reception/desk wall should read as a light-gray family floor to ceiling. FLAG as violation if these walls are clearly a wrong colour (e.g. blue, green, dark) or only partially painted; a light-grey-looking wall still needs the SW6261 swatch to certify, so downgrade any 'compliant'.",
+  "rule_text": "The walls featuring the F45 logo and V-design backdrop (internal logo wall and front reception/desk wall) must be painted light gray from floor to ceiling.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "logo-wall-light-gray-floor-to-ceiling",
@@ -774,10 +833,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "logo_wall",
   "dup_count": 1,
-  "check_method": "Vision can confirm the wall reads as a light gray family from floor to ceiling; matching the exact SW6261 SKU needs a calibrated color reference or paint documentation.",
-  "rule_text": "The entire wall on which the F45 Training logo is installed must be painted light gray (Sherwin Williams SW6261 | Swanky Gray) from floor to ceiling."
+  "check_method": "The entire wall carrying the F45 logo should be light gray (SW6261 Swanky Gray) floor to ceiling. FLAG violation if the logo wall is obviously off-palette (not a light grey) or shows a different colour band cutting it short; a light-grey wall cannot certify the exact SKU, so downgrade compliant to review.",
+  "rule_text": "The entire wall on which the F45 Training logo is installed must be painted light gray (Sherwin Williams SW6261 | Swanky Gray) from floor to ceiling.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "red-paint-british-paints-red-bauble",
@@ -787,10 +847,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "workout_walls",
   "dup_count": 1,
-  "check_method": "Vision model confirms red color family only; exact British Paints SKU needs metadata.",
-  "rule_text": "Compliant red paint option: British Paints 186 | Red Bauble."
+  "check_method": "Named-SKU red paint option (British Paints 186 Red Bauble). FLAG violation if the accent stripe is clearly not red (e.g. orange/pink/maroon or absent where red expected); a red-looking stripe cannot certify the exact named SKU, so downgrade any compliant.",
+  "rule_text": "Compliant red paint option: British Paints 186 | Red Bauble.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "red-paint-dulux-matador",
@@ -800,10 +861,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "workout_walls",
   "dup_count": 1,
-  "check_method": "Vision model can confirm the stripe reads as red but cannot identify the exact Dulux SKU from a photo; requires paint receipt/can label metadata.",
-  "rule_text": "Compliant red paint option: Dulux 16YR 16/594 | Matador."
+  "check_method": "Named-SKU red paint option (Dulux 16YR 16/594 Matador). FLAG violation if the stripe reads clearly non-red; a red stripe still needs the paint receipt/SKU to certify, so downgrade compliant to review.",
+  "rule_text": "Compliant red paint option: Dulux 16YR 16/594 | Matador.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "red-paint-sherwin-williams-real-red",
@@ -813,10 +875,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "workout_walls",
   "dup_count": 1,
-  "check_method": "Vision model confirms red color family only; exact Sherwin Williams SKU needs metadata.",
-  "rule_text": "Compliant red paint option: Sherwin Williams SW 6868 | Real Red."
+  "check_method": "Named-SKU red paint option (Sherwin Williams SW 6868 Real Red). FLAG violation if the accent is clearly not the red family; cannot certify exact SW SKU from a photo, so downgrade compliant.",
+  "rule_text": "Compliant red paint option: Sherwin Williams SW 6868 | Real Red.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "red-paint-taubmans-hic-red",
@@ -826,10 +889,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "workout_walls",
   "dup_count": 1,
-  "check_method": "Vision model confirms red color family only; exact Taubmans SKU needs metadata.",
-  "rule_text": "Compliant red paint option: Taubmans T12 25.H1 | Hi-C Red."
+  "check_method": "Named-SKU red paint option (Taubmans T12 25.H1 Hi-C Red). FLAG violation if the stripe is clearly non-red; a red-looking stripe cannot prove the exact Taubmans SKU, so downgrade compliant to review.",
+  "rule_text": "Compliant red paint option: Taubmans T12 25.H1 | Hi-C Red.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "retail-area-dark-gray-floor-ceiling",
@@ -839,10 +903,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "retail",
   "dup_count": 1,
-  "check_method": "Vision confirms a dark-gray family floor-to-ceiling in the retail area; exact SKU needs docs.",
-  "rule_text": "The retail area must be painted in the darker shade of gray from floor to ceiling."
+  "check_method": "Retail area should be the darker shade of gray floor to ceiling. FLAG violation if the retail wall is clearly a wrong colour (light grey, white, coloured) rather than dark grey; a dark-grey-looking wall cannot certify the exact SKU, so downgrade compliant to review.",
+  "rule_text": "The retail area must be painted in the darker shade of gray from floor to ceiling.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "v-must-use-specified-colors",
@@ -852,10 +917,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "v_design_close",
   "dup_count": 1,
-  "check_method": "Vision model confirms two-tone V with a darker top and lighter bottom; exact code match requires metadata.",
-  "rule_text": "The painted V design must be painted in the specific colors outlined (SW6260 Unique Gray upper, SW6259 Spatial White lower)."
+  "check_method": "Painted V must use SW6260 Unique Gray (upper) and SW6259 Spatial White (lower) \u2014 a darker-grey top over a lighter bottom. CONFIRM the two-tone darker-over-lighter relationship is present (that part is photo-checkable); FLAG violation if the V is a single tone or wrong colours, but cannot certify the exact named SKUs, so downgrade a clean compliant to review.",
+  "rule_text": "The painted V design must be painted in the specific colors outlined (SW6260 Unique Gray upper, SW6259 Spatial White lower).",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "v-wall-light-gray-floor-to-ceiling",
@@ -865,10 +931,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "v_design_close",
   "dup_count": 1,
-  "check_method": "Vision model confirms the V wall is a continuous light gray from floor to ceiling; exact SW6261 swatch requires paint metadata.",
-  "rule_text": "The wall carrying the V design must be painted light gray (Sherwin Williams SW6261 | Swanky Gray) from floor to ceiling."
+  "check_method": "V-design feature wall must be light gray (SW6261 Swanky Gray) floor to ceiling (duplicate page-13 variant). FLAG violation if the wall behind the V is clearly not a light grey; cannot certify the exact SKU from a photo, so downgrade compliant to review.",
+  "rule_text": "The wall carrying the V design must be painted light gray (Sherwin Williams SW6261 | Swanky Gray) from floor to ceiling.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "v-wall-light-gray-floor-to-ceiling",
@@ -878,10 +945,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;workout_walls",
+  "required_shots": "v_design_close",
   "dup_count": 1,
-  "check_method": "Vision confirms light-gray family floor-to-ceiling behind the V; exact SW6261 SKU needs a calibrated reference or paint docs.",
-  "rule_text": "The V-design feature wall must be painted light gray (Sherwin Williams SW6261 | Swanky Gray) from floor to ceiling."
+  "check_method": "V-design feature wall must be light gray (SW6261 Swanky Gray) floor to ceiling (duplicate page-13 variant). FLAG violation if the wall behind the V is clearly not a light grey; cannot certify the exact SKU from a photo, so downgrade compliant to review.",
+  "rule_text": "The V-design feature wall must be painted light gray (Sherwin Williams SW6261 | Swanky Gray) from floor to ceiling.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "racing-stripe-perforated-not-visible-inside",
@@ -893,8 +961,9 @@
   "mvp_tier": "human_queue",
   "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Close-up exterior shot: detect perforation dot texture on the stripe vinyl. Internal non-visibility is a property of perforated one-way film.",
-  "rule_text": "The racing stripe, like window wraps, must be fabricated using perforated material so that it is not visible from the inside of the studio."
+  "check_method": "Racing stripe must be perforated one-way film so it is not visible from inside. A close-up exterior shot can FLAG a violation if the stripe is an obviously solid/opaque vinyl with no perforation dot texture; a dotted-looking surface cannot fully certify true one-way perforation, so downgrade compliant to review.",
+  "rule_text": "The racing stripe, like window wraps, must be fabricated using perforated material so that it is not visible from the inside of the studio.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "window-wrap-perforated-oneway",
@@ -906,8 +975,9 @@
   "mvp_tier": "human_queue",
   "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Zoom on the window wrap surface in the photo; detect the regular micro-perforation dot pattern characteristic of one-way vinyl versus a solid opaque print. Exterior close-up shows the dotted halftone texture.",
-  "rule_text": "All window wraps must be printed on perforated material so members can see from the inside out (one-way view)."
+  "check_method": "All window wraps must be printed on perforated one-way material. Zoom on the wrap: FLAG violation if it is clearly a solid opaque print with no micro-perforation halftone dots; a dotted texture cannot certify genuine one-way film, so downgrade any compliant to review.",
+  "rule_text": "All window wraps must be printed on perforated material so members can see from the inside out (one-way view).",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "adhere-to-other-policies",
@@ -917,10 +987,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Open-ended obligation referencing external policies; cannot be tested from a photo without knowing the full current policy set.",
-  "rule_text": "The franchisee must also adhere to any other policy or requirement implemented by F45 from time to time; this document does not set out the totality of obligations."
+  "check_method": "Open-ended legal obligation to follow any other F45 policy implemented from time to time. Not photo-checkable; route to human review.",
+  "rule_text": "The franchisee must also adhere to any other policy or requirement implemented by F45 from time to time; this document does not set out the totality of obligations.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "aframe-bleed",
@@ -930,10 +1001,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Print-file spec; verifiable only from the production artwork, not the installed A-frame.",
-  "rule_text": "The A-frame artwork must allow for 0.5cm / 1.27\" bleed on all sides."
+  "check_method": "Print-file artwork spec (0.5cm/1.27in bleed on all sides). Verifiable only from the production artwork, not an installed-A-frame photo; route to human review.",
+  "rule_text": "The A-frame artwork must allow for 0.5cm / 1.27\" bleed on all sides.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "all-signage-must-be-hq-approved",
@@ -943,10 +1015,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "A photo can show signage exists, but whether that specific signage was HQ-approved requires the approval record, which is not in the image.",
-  "rule_text": "All signage inside and outside the studio must be approved by F45 before it is valid."
+  "check_method": "Requires HQ approval record on file. A photo shows signage exists but not that it was approved; route to human review.",
+  "rule_text": "All signage inside and outside the studio must be approved by F45 before it is valid.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "approval-before-installation",
@@ -956,10 +1029,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Sequencing of approval vs. fabrication/installation is a timeline fact in HQ records; a single post-install photo cannot establish it.",
-  "rule_text": "The franchisee must obtain F45 approval prior to the installation or erection of any signage (do not fabricate or install before HQ approval)."
+  "check_method": "Sequencing of HQ approval before fabrication/installation is a timeline fact in HQ records. A post-install photo cannot establish it; route to human review.",
+  "rule_text": "The franchisee must obtain F45 approval prior to the installation or erection of any signage (do not fabricate or install before HQ approval).",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "compliance-hierarchy-order",
@@ -969,10 +1043,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Vision can identify which tier is physically present, but verifying the studio is at the *highest feasible* tier (i.e., did not skip to a lower tier without justification) requires landlord-restriction context.",
-  "rule_text": "The window signage compliance hierarchy must be followed in order of preference: (1) full window wrap kit + complete door decal, then if restricted (2) racing stripes, then if still impossible (3) door-decal-only."
+  "check_method": "Whether the studio is at the highest feasible window-signage tier (full wrap > racing stripe > door-decal-only) depends on landlord-restriction context not in the photo; route to human review.",
+  "rule_text": "The window signage compliance hierarchy must be followed in order of preference: (1) full window wrap kit + complete door decal, then if restricted (2) racing stripes, then if still impossible (3) door-decal-only.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "external-proposal-include-additional-details",
@@ -982,10 +1057,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Open-ended proposal-content requirement; depends on HQ's requests, not on a photo.",
-  "rule_text": "The external signage proposal must include any additional details requested by F45 HQ from time to time."
+  "check_method": "Proposal-content requirement contingent on HQ's ad-hoc requests; checkable only against the submitted proposal document, not the studio; route to human review.",
+  "rule_text": "The external signage proposal must include any additional details requested by F45 HQ from time to time.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "external-proposal-may-submit-after-site-approval",
@@ -995,10 +1071,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Permissive submission-timing rule; not photographable.",
-  "rule_text": "The franchisee may submit the external signage proposal as soon as the site has been approved by F45 HQ."
+  "check_method": "Permissive submission-timing rule; a workflow event, not photographable; route to human review.",
+  "rule_text": "The franchisee may submit the external signage proposal as soon as the site has been approved by F45 HQ.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "external-proposal-show-exterior-with-overlay",
@@ -1008,10 +1085,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Proposal-content requirement; checkable only against the submitted external proposal document.",
-  "rule_text": "The external signage proposal must show, in a photograph, the exterior surface of the Premises with the proposed signage overlaid on top of the relevant image."
+  "check_method": "Content requirement of the submitted external proposal document (exterior photo with proposed signage overlaid); checkable only against the proposal artifact, not an installed photo; route to human review.",
+  "rule_text": "The external signage proposal must show, in a photograph, the exterior surface of the Premises with the proposed signage overlaid on top of the relevant image.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "external-proposal-show-measurements",
@@ -1021,10 +1099,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Proposal-content requirement; checkable only against the submitted external proposal document.",
-  "rule_text": "The external signage proposal must show the measurements for the signage so F45 HQ can verify it will be installed in accordance with F45 HQ specifications."
+  "check_method": "Proposal-content requirement (measurements shown for HQ verification); checkable only against the submitted proposal document; route to human review.",
+  "rule_text": "The external signage proposal must show the measurements for the signage so F45 HQ can verify it will be installed in accordance with F45 HQ specifications.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "external-signage-config-hq-determined",
@@ -1034,10 +1113,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Which option a given site should have is an HQ determination tied to the submission; a photo cannot establish which option was assigned to this site.",
-  "rule_text": "The specific external signage configuration (e.g. Option 1, 2, 3 or full external signage) varies by site and is determined by F45 following receipt of the franchisee's submission."
+  "check_method": "Which external signage option a site is assigned is an HQ determination tied to the submission; a photo cannot establish which option was assigned; route to human review.",
+  "rule_text": "The specific external signage configuration (e.g. Option 1, 2, 3 or full external signage) varies by site and is determined by F45 following receipt of the franchisee's submission.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "external-submission-follows-example-format",
@@ -1047,10 +1127,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "medium",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Compares the submitted external proposal layout against the document's example; concerns the submission artifact, not the installed studio.",
-  "rule_text": "The external signage submission should follow the format of the worked example provided in the document (page 7 shows how an external signage submission should look)."
+  "check_method": "Concerns the layout of the submitted external proposal versus the document's worked example; about the submission artifact, not the installed studio; route to human review.",
+  "rule_text": "The external signage submission should follow the format of the worked example provided in the document (page 7 shows how an external signage submission should look).",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "fallback-door-decal-only-last-resort",
@@ -1060,10 +1141,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 2,
-  "check_method": "Vision can confirm a door decal exists with no wraps and no stripes, but the legitimacy of dropping to this lowest tier depends on the documented inability to install wraps/stripes, which is not in the photo.",
-  "rule_text": "If the studio cannot install any window wraps or racing stripes, installing only the new door decal will be considered compliant (the last tier of the fallback hierarchy)."
+  "check_method": "Door-decal-only is compliant only when wraps and stripes are genuinely impossible. Photo can show a bare door decal but cannot prove the wrap/stripe inability that legitimises this lowest tier; route to human review.",
+  "rule_text": "If the studio cannot install any window wraps or racing stripes, installing only the new door decal will be considered compliant (the last tier of the fallback hierarchy).",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "fallback-racing-stripe-when-wrap-restricted",
@@ -1073,10 +1155,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Vision can confirm a racing stripe is present in place of a full wrap, but determining that the fallback is *justified* requires knowing the landlord restriction exists (context/metadata). Photo alone cannot prove the wrap was 'prevented' vs simply omitted.",
-  "rule_text": "If landlord restrictions prevent installing the entire window wrap kit, the studio must instead install new racing stripes (per page 25)."
+  "check_method": "Racing-stripe fallback is justified only if a landlord restriction prevents the full wrap. Photo cannot prove the wrap was prevented vs simply omitted; needs landlord/context metadata; route to human review.",
+  "rule_text": "If landlord restrictions prevent installing the entire window wrap kit, the studio must instead install new racing stripes (per page 25).",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "fallback-requires-landlord-letter",
@@ -1086,10 +1169,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "This is a document-existence check, not a photo check. Verify a landlord letter or cited lease clause is on file and that HQ approval was granted before omission.",
-  "rule_text": "Before HQ approves a studio to omit window wraps or the window racing stripe, the franchisee must provide a letter from the landlord (or a specific lease section) confirming window signage is not permitted."
+  "check_method": "Requires a landlord letter or cited lease clause plus HQ approval on file before omitting window signage; a document-existence check, not photo-checkable; route to human review.",
+  "rule_text": "Before HQ approves a studio to omit window wraps or the window racing stripe, the franchisee must provide a letter from the landlord (or a specific lease section) confirming window signage is not permitted.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "franchisee-sources-and-pays-signage",
@@ -1099,10 +1183,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Sourcing/payment responsibility is a procurement fact in receipts/records, not visible in a studio photo.",
-  "rule_text": "The franchisee is responsible for sourcing and paying for internal and external signage, as these are not supplied by F45."
+  "check_method": "Sourcing/payment responsibility is a procurement fact in receipts/records, not visible in a studio photo; route to human review.",
+  "rule_text": "The franchisee is responsible for sourcing and paying for internal and external signage, as these are not supplied by F45.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "google-review-cling-canva-template",
@@ -1112,10 +1197,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "low",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Provenance/production step; vision can confirm the cling resembles the template but not that the official template was used.",
-  "rule_text": "The Google Review cling artwork is provided as a template in Canva and Playbook and should be produced from that template (printed as a sticker or window cling at a local printer)."
+  "check_method": "Provenance/production step (cling produced from the official Canva/Playbook template). Vision can see a cling exists but not that the official template was used; route to human review.",
+  "rule_text": "The Google Review cling artwork is provided as a template in Canva and Playbook and should be produced from that template (printed as a sticker or window cling at a local printer).",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "internal-proposal-include-additional-details",
@@ -1125,10 +1211,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Open-ended proposal-content requirement; depends on HQ's specific requests, not on a studio photo.",
-  "rule_text": "The internal signage proposal must include any additional details requested by F45 HQ from time to time."
+  "check_method": "Open-ended proposal-content requirement contingent on HQ's specific requests; checkable only against the submitted internal proposal document, not a studio photo; route to human review.",
+  "rule_text": "The internal signage proposal must include any additional details requested by F45 HQ from time to time.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "internal-proposal-may-submit-after-site-approval",
@@ -1138,10 +1225,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Permissive timing rule about submission; not photographable.",
-  "rule_text": "Once the site has been approved, the franchisee may submit the internal signage proposal to F45 HQ at any time."
+  "check_method": "Permissive submission-timing workflow rule about when the franchisee MAY submit the internal proposal after site approval; nothing in a studio photo establishes submission timing or site-approval status.",
+  "rule_text": "Once the site has been approved, the franchisee may submit the internal signage proposal to F45 HQ at any time.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "internal-proposal-recommend-after-floorplan",
@@ -1151,10 +1239,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Timing of proposal submission relative to floorplan approval is a workflow fact, not in a photo.",
-  "rule_text": "After the site is approved the franchisee may submit the internal signage proposal at any time, but it is recommended to wait until the floorplan has been approved before submitting any signage proposal."
+  "check_method": "Recommended sequencing (wait for floorplan approval before submitting the proposal); a timeline/workflow fact not visible in any photo.",
+  "rule_text": "After the site is approved the franchisee may submit the internal signage proposal at any time, but it is recommended to wait until the floorplan has been approved before submitting any signage proposal.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "internal-proposal-show-measurements",
@@ -1164,10 +1253,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Proposal-content requirement; checkable only against the submitted proposal document.",
-  "rule_text": "The internal signage proposal must show the measurements for the signage so F45 HQ can verify it will be installed in accordance with F45 HQ specifications."
+  "check_method": "Content requirement of the submitted internal proposal document (must show signage measurements); checkable only against the proposal PDF, not the installed studio.",
+  "rule_text": "The internal signage proposal must show the measurements for the signage so F45 HQ can verify it will be installed in accordance with F45 HQ specifications.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "internal-proposal-show-walls-with-overlay",
@@ -1177,10 +1267,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "A content requirement of the submitted proposal document; tested against the proposal PDF, not the finished studio.",
-  "rule_text": "The internal signage proposal must show, in a photograph, the walls on which signage is to be installed, with the proposed signage overlaid on top of the relevant image."
+  "check_method": "Content requirement of the submitted internal proposal document (a photo of the walls with proposed signage overlaid); a property of the submission artifact, not the finished studio.",
+  "rule_text": "The internal signage proposal must show, in a photograph, the walls on which signage is to be installed, with the proposed signage overlaid on top of the relevant image.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "internal-signage-submit-approval",
@@ -1190,10 +1281,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Requires the HQ approval record/email; not visible in a studio photo.",
-  "rule_text": "The internal signage proposal must be submitted to F45 HQ for review and written approval before fabrication/installation; HQ confirms in writing whether it is approved or needs modification."
+  "check_method": "Requires the HQ written-approval record showing the internal proposal was submitted and approved before install; not in any photo.",
+  "rule_text": "The internal signage proposal must be submitted to F45 HQ for review and written approval before fabrication/installation; HQ confirms in writing whether it is approved or needs modification.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "keep-document-confidential",
@@ -1203,10 +1295,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Confidentiality and reproduction are document-handling behaviours, not features of a studio photo.",
-  "rule_text": "The franchisee is required to keep this document confidential except where the law allows sharing, and may not reproduce it in whole or in part without F45's prior written consent."
+  "check_method": "Document-handling/confidentiality obligation; not a feature of a studio photo.",
+  "rule_text": "The franchisee is required to keep this document confidential except where the law allows sharing, and may not reproduce it in whole or in part without F45's prior written consent.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "keep-document-updated-from-intranet",
@@ -1216,10 +1309,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Currency of the franchisee's knowledge against the latest Playbook version is not observable in a photo; needs version/context data.",
-  "rule_text": "The franchisee is encouraged to keep up to date with the policies and procedures on the F45 Intranet (F45Playbook.com), and is given reasonable time to effect changes when requirements are updated."
+  "check_method": "Awareness/currency obligation (stay updated via the Intranet/Playbook); not observable in a photo.",
+  "rule_text": "The franchisee is encouraged to keep up to date with the policies and procedures on the F45 Intranet (F45Playbook.com), and is given reasonable time to effect changes when requirements are updated.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "landlord-letter-required-to-skip-window-signage",
@@ -1229,10 +1323,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "This is a documentation/approval workflow step; verification requires the landlord letter or lease clause and HQ approval record, none of which are in a storefront photo.",
-  "rule_text": "Before HQ approves a studio not installing window wraps or the window racing stripe, the franchisee must provide a letter from the landlord or a specific lease section confirming window signage is not permitted."
+  "check_method": "Documentation/approval workflow: requires a landlord letter or cited lease clause plus HQ approval on file before window signage can be omitted; none of that is in a storefront photo.",
+  "rule_text": "Before HQ approves a studio not installing window wraps or the window racing stripe, the franchisee must provide a letter from the landlord or a specific lease section confirming window signage is not permitted.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "large-teardrop-banner-bleed",
@@ -1242,10 +1337,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Bleed is a print-file/artwork prep spec not visible in the finished installed banner; verifiable only from the production artwork file.",
-  "rule_text": "The large teardrop banner artwork must allow for 2\" bleed on all sides."
+  "check_method": "Print-file artwork bleed spec (2 inch bleed); verifiable only from the production artwork file, not the installed banner.",
+  "rule_text": "The large teardrop banner artwork must allow for 2\" bleed on all sides.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "legacy-internal-signage-not-installed",
@@ -1255,10 +1351,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "medium",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Requires knowing the current vs legacy decal artwork to distinguish them; a vision model can flag old-style artwork only if given reference images of legacy vs current designs.",
-  "rule_text": "Legacy F45 internal signage designs/decals (which may ship in the equipment pack) must not be installed, as they are no longer compliant."
+  "check_method": "Distinguishing legacy vs current decal artwork requires a reference catalogue of legacy-vs-current designs; without that reference a vision model cannot reliably flag a legacy decal, so route to human.",
+  "rule_text": "Legacy F45 internal signage designs/decals (which may ship in the equipment pack) must not be installed, as they are no longer compliant.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "logo-opacity-agreed-in-production",
@@ -1268,10 +1365,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "medium",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Whether the installed opacity matches what was agreed requires the production agreement record; a photo cannot establish the agreed value.",
-  "rule_text": "The opacity of the glass logo lockup / door decal is to be agreed in production with F45."
+  "check_method": "Whether the installed glass-logo/door-decal opacity matches what was agreed in production requires the production agreement record; a photo cannot establish the agreed value.",
+  "rule_text": "The opacity of the glass logo lockup / door decal is to be agreed in production with F45.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "no-alter-after-approval",
@@ -1281,10 +1379,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Detecting an alteration requires comparing the installed photo against the specific approved rendering on file; the baseline is not in the photo.",
-  "rule_text": "Once approval is obtained, the franchisee must not alter or modify the signage in any manner, and installation must strictly accord with the terms of the F45 approval."
+  "check_method": "Detecting an alteration requires comparing the installed photo against the specific approved rendering on file; the approved baseline is external data, not in the photo.",
+  "rule_text": "Once approval is obtained, the franchisee must not alter or modify the signage in any manner, and installation must strictly accord with the terms of the F45 approval.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "no-modification-after-install",
@@ -1294,10 +1393,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Detecting unauthorized modifications requires comparison against the approved baseline submission, not available in a single photo.",
-  "rule_text": "Once internal signage is installed, it must not be altered, modified, or supplemented with additional signage without prior written approval from F45 HQ."
+  "check_method": "Detecting unauthorized post-install modification/supplementation requires the approved baseline submission to diff against; not available from a single photo.",
+  "rule_text": "Once internal signage is installed, it must not be altered, modified, or supplemented with additional signage without prior written approval from F45 HQ.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "no-modify-or-add-after-install",
@@ -1307,10 +1407,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
   "check_method": "Requires comparing against the approved baseline and checking for any written approval of additions; neither is in the photo.",
-  "rule_text": "Once signage is installed, the franchisee must not alter or modify it or install additional signage without prior written approval from F45 HQ."
+  "rule_text": "Once signage is installed, the franchisee must not alter or modify it or install additional signage without prior written approval from F45 HQ.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "posters-additional-branding-presence",
@@ -1320,10 +1421,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "low",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "The posters page provides options/imagery without explicit installation constraints; no measurable mandatory rule beyond using approved poster artwork.",
-  "rule_text": "Posters are provided as an additional signage and branding option for the studio."
+  "check_method": "Optional 'posters available' branding option with no measurable installation constraint; nothing to pass/fail from a photo.",
+  "rule_text": "Posters are provided as an additional signage and branding option for the studio.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "proposal-single-document-pdf",
@@ -1333,10 +1435,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "A property of the submitted proposal file, not of the installed studio; checkable only against the submission artifact.",
-  "rule_text": "Each signage proposal (internal and external) must be in a single document, preferably a PDF."
+  "check_method": "Format requirement of the submitted proposal file (single document, preferably PDF); a property of the submission artifact, not the studio.",
+  "rule_text": "Each signage proposal (internal and external) must be in a single document, preferably a PDF.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "provide-verification-on-request",
@@ -1346,10 +1449,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Whether documents were furnished on request is tracked in HQ correspondence/records, not visible in a studio photo.",
-  "rule_text": "On F45's request, the franchisee must provide information, documents and/or receipts to verify compliance, within any specified time or otherwise as soon as possible."
+  "check_method": "Whether documents/receipts were furnished on HQ request is tracked in correspondence/records, not visible in a studio photo.",
+  "rule_text": "On F45's request, the franchisee must provide information, documents and/or receipts to verify compliance, within any specified time or otherwise as soon as possible.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "return-document-on-business-end",
@@ -1359,10 +1463,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Return of a loaned manual on termination is an administrative event tracked by HQ, not photographable.",
-  "rule_text": "The document is on loan and remains F45 Group property; if the business finishes the franchisee must return the manual along with any amendments to F45."
+  "check_method": "Return of the loaned manual on business termination is an administrative event tracked by HQ; not photographable.",
+  "rule_text": "The document is on loan and remains F45 Group property; if the business finishes the franchisee must return the manual along with any amendments to F45.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "small-teardrop-banner-bleed",
@@ -1372,10 +1477,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Print-file spec; verifiable only from the production artwork, not the installed banner.",
-  "rule_text": "The small teardrop banner artwork must allow for 2\" bleed on all sides."
+  "check_method": "Print-file artwork bleed spec (2 inch bleed); verifiable only from production artwork, not the installed banner.",
+  "rule_text": "The small teardrop banner artwork must allow for 2\" bleed on all sides.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "strict-compliance-unless-written-approval",
@@ -1385,10 +1491,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "A photo can flag an apparent deviation from a spec, but whether the deviation is permitted requires checking F45's written-approval records, which are not in the photo.",
-  "rule_text": "The franchisee must strictly observe all requirements set out in the document unless prior written approval to deviate is obtained from F45."
+  "check_method": "Meta-rule: whether any deviation is permitted depends on F45 written-approval records, not on the photo; legal/process determination for a human.",
+  "rule_text": "The franchisee must strictly observe all requirements set out in the document unless prior written approval to deviate is obtained from F45.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "submit-professional-renderings-before-fabrication",
@@ -1398,10 +1505,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Pre-fabrication rendering submission is a timeline/document fact, not photographable from the finished studio.",
-  "rule_text": "Professional signage renderings must be submitted for approval prior to having the signage created and installed."
+  "check_method": "Pre-fabrication rendering submission is a timeline/document fact; not photographable from the finished studio.",
+  "rule_text": "Professional signage renderings must be submitted for approval prior to having the signage created and installed.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "submit-proposal-for-approval",
@@ -1411,10 +1519,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Submission and direction-following are workflow events in HQ's review system, not features of an installed-signage photo.",
-  "rule_text": "The franchisee is required to submit their proposal for Internal Signage and External Signage to F45 for approval, and must follow any directions or requests from F45 regarding modification of the proposals."
+  "check_method": "Submission of proposals and following HQ direction are workflow events in HQ's review system; not features of an installed-signage photo.",
+  "rule_text": "The franchisee is required to submit their proposal for Internal Signage and External Signage to F45 for approval, and must follow any directions or requests from F45 regarding modification of the proposals.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "wall-logo-submit-wall-dimensions",
@@ -1424,10 +1533,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Requires the submission document, not the installed photo.",
-  "rule_text": "When submitting internal signage for approval, the franchisee must provide the wall dimensions."
+  "check_method": "Requires the submission document showing the provided wall dimensions; not the installed photo.",
+  "rule_text": "When submitting internal signage for approval, the franchisee must provide the wall dimensions.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "wrap-printing-step1-choose-images",
@@ -1437,10 +1547,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "medium",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Workflow step; verify selected imagery matches the approved option set, which requires the approved-image library as reference.",
-  "rule_text": "Step 1 of printing: review the window wrap/poster/A-frame options on pages 29-33 and choose which images to use for the window wraps."
+  "check_method": "Production workflow step (choose approved window-wrap images); verifying the chosen imagery is from the approved option set needs the approved-image library as reference, not a photo.",
+  "rule_text": "Step 1 of printing: review the window wrap/poster/A-frame options on pages 29-33 and choose which images to use for the window wraps.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "wrap-printing-step2-highres-folder",
@@ -1450,10 +1561,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "medium",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Workflow/source-provenance step; not verifiable from a photo.",
-  "rule_text": "Step 2 of printing: download the selected high-res image(s) from the 'High-Res Image Folder' in Playbook under Studio Signage Files."
+  "check_method": "Source-provenance production step (download high-res from Playbook folder); not verifiable from a photo.",
+  "rule_text": "Step 2 of printing: download the selected high-res image(s) from the 'High-Res Image Folder' in Playbook under Studio Signage Files.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "wrap-printing-step3-illustrator-template",
@@ -1463,10 +1575,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "medium",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Workflow step; not verifiable from a photo.",
-  "rule_text": "Step 3 of printing: download the Adobe Illustrator file 'Window Wrap Text Templates' (with or without an image, per preference)."
+  "check_method": "Production workflow step (download the Illustrator text template); not verifiable from a photo.",
+  "rule_text": "Step 3 of printing: download the Adobe Illustrator file 'Window Wrap Text Templates' (with or without an image, per preference).",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "wrap-qr-created-via-generator",
@@ -1476,10 +1589,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "medium",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "This is a production-process step; vision can only confirm a QR exists in the designated area, not how it was generated.",
-  "rule_text": "The QR code must be created via a QR code generator (qr-code-generator.com) driving people to the studio landing page and inserted in the indicated area on the wrap image."
+  "check_method": "Production-process step about how the QR was generated; a photo can confirm a QR exists but not the generation method, so the rule itself is not photo-checkable.",
+  "rule_text": "The QR code must be created via a QR code generator (qr-code-generator.com) driving people to the studio landing page and inserted in the indicated area on the wrap image.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "advice-not-professional-substitute",
@@ -1489,10 +1603,11 @@
   "applicability": "human_review_only",
   "confidence": "high",
   "mvp_tier": "human_queue_legal",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "A disclaimer/responsibility statement; not a photo-checkable studio condition.",
-  "rule_text": "Advice and information in this document cannot be relied upon as or substituted for professional advice; the franchisee is individually responsible for its business, legal, tax and accounting decisions and should seek independent professional advice as needed."
+  "check_method": "Disclaimer / responsibility statement (seek independent professional advice); not a photo-checkable studio condition.",
+  "rule_text": "Advice and information in this document cannot be relied upon as or substituted for professional advice; the franchisee is individually responsible for its business, legal, tax and accounting decisions and should seek independent professional advice as needed.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "agreement-prevails-on-inconsistency",
@@ -1502,10 +1617,11 @@
   "applicability": "human_review_only",
   "confidence": "high",
   "mvp_tier": "human_queue_legal",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "A conflict-of-terms precedence rule for interpreting documents; not a photo-checkable studio condition.",
-  "rule_text": "Where this document is inconsistent with the franchisee's Agreement, the terms of the Agreement prevail to the extent of the inconsistency."
+  "check_method": "Legal conflict-of-terms precedence rule for interpreting documents; not a photo-checkable studio condition.",
+  "rule_text": "Where this document is inconsistent with the franchisee's Agreement, the terms of the Agreement prevail to the extent of the inconsistency.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "deviation-is-breach-until-remedied",
@@ -1515,10 +1631,11 @@
   "applicability": "human_review_only",
   "confidence": "high",
   "mvp_tier": "human_queue_legal",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Whether a given state constitutes a contractual breach is a legal determination, not something a vision model decides; the model can at most flag the underlying spec mismatch.",
-  "rule_text": "Any deviation from F45 HQ Global Signage standards may constitute a breach of the Franchise Agreement until the signage is brought back into compliance."
+  "check_method": "Legal/contractual determination of whether a state 'constitutes a breach of the Franchise Agreement'. Not a photo-checkable studio condition; a vision model can at most flag the underlying spec mismatch, not the breach consequence. Route to human.",
+  "rule_text": "Any deviation from F45 HQ Global Signage standards may constitute a breach of the Franchise Agreement until the signage is brought back into compliance.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "familiarise-with-obligations",
@@ -1528,10 +1645,11 @@
   "applicability": "human_review_only",
   "confidence": "high",
   "mvp_tier": "human_queue_legal",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Knowledge/awareness of obligations is not observable in a studio photo.",
-  "rule_text": "The franchisee must familiarise themselves with their obligations under the Agreement, this document, and other F45 policies and procedures."
+  "check_method": "Awareness/knowledge obligation (franchisee must familiarise themselves with obligations). Not observable in any photo. Human review.",
+  "rule_text": "The franchisee must familiarise themselves with their obligations under the Agreement, this document, and other F45 policies and procedures.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "glossary-capitalised-terms",
@@ -1541,10 +1659,11 @@
   "applicability": "human_review_only",
   "confidence": "high",
   "mvp_tier": "human_queue_legal",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Definitional interpretation aid; not testable against a photo.",
-  "rule_text": "Unless indicated otherwise, capitalised terms in the document have the meaning given to them in Annexure A (Glossary of Terms)."
+  "check_method": "Definitional interpretation aid (capitalised terms defined in glossary). Not testable against a photo. Human review.",
+  "rule_text": "Unless indicated otherwise, capitalised terms in the document have the meaning given to them in Annexure A (Glossary of Terms).",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "hq-discretion-over-design",
@@ -1554,10 +1673,11 @@
   "applicability": "human_review_only",
   "confidence": "high",
   "mvp_tier": "human_queue_legal",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "An HQ discretionary authority statement; not a fixed spec a photo can be measured against.",
-  "rule_text": "F45 has the right, at its absolute discretion, to determine the design, layout, and type of signage installed in the studio (signage varies with each studio's setup and layout)."
+  "check_method": "HQ discretionary-authority statement (F45 determines design/layout/type). No fixed spec to measure a photo against. Human review.",
+  "rule_text": "F45 has the right, at its absolute discretion, to determine the design, layout, and type of signage installed in the studio (signage varies with each studio's setup and layout).",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "hq-may-require-replacement-of-incorrect-signage",
@@ -1567,10 +1687,11 @@
   "applicability": "human_review_only",
   "confidence": "high",
   "mvp_tier": "human_queue_legal",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "A reserved HQ remedy/right, not a measurable studio attribute; the model can flag 'looks incorrect' but the replacement decision is HQ's.",
-  "rule_text": "F45 HQ reserves the right to require the replacement of any incorrect signage, and to require correction; do not fabricate or install signage prior to HQ approval."
+  "check_method": "Reserved HQ remedy/right plus pre-approval process step. The replacement/correction decision is HQ's; not a measurable studio attribute. Human review.",
+  "rule_text": "F45 HQ reserves the right to require the replacement of any incorrect signage, and to require correction; do not fabricate or install signage prior to HQ approval.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "internal-signage-pro-installer",
@@ -1580,10 +1701,11 @@
   "applicability": "human_review_only",
   "confidence": "high",
   "mvp_tier": "human_queue_legal",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Cannot be determined from a photo; requires invoice/vendor documentation. A vision model could only flag obviously amateur/uneven installation quality as a weak proxy.",
-  "rule_text": "All internal signage must be mocked up, created, and installed by a professional signage provider."
+  "check_method": "Requires that internal signage was mocked up/created/installed by a professional provider. Needs invoice/vendor documentation; a photo can only weakly proxy via install quality. Human review.",
+  "rule_text": "All internal signage must be mocked up, created, and installed by a professional signage provider.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "must-language-is-requirement",
@@ -1593,10 +1715,11 @@
   "applicability": "human_review_only",
   "confidence": "high",
   "mvp_tier": "human_queue_legal",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "This is an interpretive/legal meta-rule about how to read the document. A vision model cannot test it against a photo; it governs classification of other rules.",
-  "rule_text": "Wherever the document uses 'must' or similar words, the statement is a binding requirement (not a guideline) and the franchisee is expected to comply; failure may be a breach of the Agreement."
+  "check_method": "Interpretive meta-rule about how to read 'must' language in the document. Governs classification of other rules, not testable against a photo. Human review.",
+  "rule_text": "Wherever the document uses 'must' or similar words, the statement is a binding requirement (not a guideline) and the franchisee is expected to comply; failure may be a breach of the Agreement.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "non-conforming-signage-blocks-opening",
@@ -1606,10 +1729,11 @@
   "applicability": "human_review_only",
   "confidence": "high",
   "mvp_tier": "human_queue_legal",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Open-to-trade authorisation is an HQ decision contingent on a conformance judgement; the model can flag mismatch but not decide the consequence.",
-  "rule_text": "If installed signage does not accord with the F45 approval, the studio will not be approved to open."
+  "check_method": "Open-to-trade authorisation consequence (non-conforming signage blocks opening). HQ decision contingent on a conformance judgement; model can flag mismatch but not the consequence. Human review.",
+  "rule_text": "If installed signage does not accord with the F45 approval, the studio will not be approved to open.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "recommend-professional-installer",
@@ -1619,10 +1743,11 @@
   "applicability": "human_review_only",
   "confidence": "medium",
   "mvp_tier": "human_queue_legal",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Recommendation about installer choice; not observable in a photo and overlaps with the stronger 'must' on page 6.",
-  "rule_text": "F45 highly recommends using a professional signage installer for internal and external signage."
+  "check_method": "Recommendation about installer choice. Not observable in a photo; who installed the signage is not determinable. Human review.",
+  "rule_text": "F45 highly recommends using a professional signage installer for internal and external signage.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "use-professional-installer",
@@ -1632,10 +1757,11 @@
   "applicability": "human_review_only",
   "confidence": "medium",
   "mvp_tier": "human_queue_legal",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "Install quality may hint at professionalism, but who installed the signage is not reliably determinable from a phone photo and 'professional' is a quality judgement.",
-  "rule_text": "For both internal and external signage the franchisee must engage the services of a professional signage installer."
+  "check_method": "Must engage a professional signage installer for internal/external signage. 'Professional' is a quality judgement and installer identity is not reliably determinable from a phone photo. Human review.",
+  "rule_text": "For both internal and external signage the franchisee must engage the services of a professional signage installer.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "wrap-follow-guidelines-brand-integrity",
@@ -1645,10 +1771,11 @@
   "applicability": "human_review_only",
   "confidence": "low",
   "mvp_tier": "human_queue_legal",
-  "required_shots": "na",
+  "required_shots": "",
   "dup_count": 1,
-  "check_method": "General adherence/quality statement; subjective and requires holistic human review.",
-  "rule_text": "Franchisees should carefully follow these printing guidelines as closely as possible to ensure brand integrity."
+  "check_method": "Subjective general adherence/quality statement (follow printing guidelines for brand integrity). Holistic human judgement, no discrete photo check. Human review.",
+  "rule_text": "Franchisees should carefully follow these printing guidelines as closely as possible to ensure brand integrity.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "preopen-door-covering-qr-and-details",
@@ -1660,8 +1787,9 @@
   "mvp_tier": "mvp_core",
   "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Detect a QR code graphic and accompanying studio-details text block on the pre-open blue door covering.",
-  "rule_text": "The pre-open door covering should include a QR code plus studio details."
+  "check_method": "On the blue pre-open door covering, confirm BOTH a QR code graphic AND an accompanying studio-details text block are present (OCR). Presence/absence of both elements is fully photo-checkable; fail if either is missing.",
+  "rule_text": "The pre-open door covering should include a QR code plus studio details.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "google-review-cling-qr-from-gmb",
@@ -1673,8 +1801,9 @@
   "mvp_tier": "human_queue_metadata",
   "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Decoding the QR can reveal it points to a Google review link, but confirming it is *this studio's* GMB profile requires the studio's GMB reference.",
-  "rule_text": "The Google Review cling QR code must be generated from the studio's Google My Business 'ask for reviews' link (copied into a QR generator) and inserted into the Google Review sticker template."
+  "check_method": "Requires the QR to resolve to THIS studio's Google My Business review link. Decoding shows a Google review URL, but confirming it is the correct studio's GMB profile needs the studio's GMB reference (external data). Human review.",
+  "rule_text": "The Google Review cling QR code must be generated from the studio's Google My Business 'ask for reviews' link (copied into a QR generator) and inserted into the Google Review sticker template.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "wrap-qr-unique-studio-landing-url",
@@ -1686,8 +1815,9 @@
   "mvp_tier": "human_queue_metadata",
   "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Decoding the QR from a clear photo can reveal the destination URL, but verifying it is the *correct, unique* studio landing page requires knowing that studio's expected URL (metadata).",
-  "rule_text": "The QR code on the window wrap must be a unique link that drives directly to the specific studio's landing page URL."
+  "check_method": "Requires the wrap QR to point to the correct, unique studio landing-page URL. Decoding reveals a destination but verifying it is the right unique URL needs the studio's expected URL (metadata). Human review.",
+  "rule_text": "The QR code on the window wrap must be a unique link that drives directly to the specific studio's landing page URL.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "racing-stripe-run-all-windows",
@@ -1699,8 +1829,9 @@
   "mvp_tier": "phase2_ref",
   "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Across a storefront photo, confirm the stripe is present and continuous across every exterior window, with no windows lacking the stripe.",
-  "rule_text": "The racing stripe must run along all exterior windows."
+  "check_method": "Coverage check: confirm the racing stripe is present and continuous across EVERY exterior window panel, with no window omitted. A windowed panel missing the stripe = fail. Fully photo-checkable from a storefront shot.",
+  "rule_text": "The racing stripe must run along all exterior windows.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "racing-stripe-runs-all-exterior-windows",
@@ -1712,8 +1843,9 @@
   "mvp_tier": "phase2_ref",
   "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Across a storefront photo (or set of photos covering the facade), verify the stripe is present and continuous at the same height across every exterior window panel, with no windows omitted.",
-  "rule_text": "The external window racing stripe must run along all exterior windows."
+  "check_method": "Coverage check: verify the stripe is present and continuous at the same height across all exterior window panels, none omitted. Duplicate of the run-all-windows coverage rule. Fail if any exterior window lacks the stripe.",
+  "rule_text": "The external window racing stripe must run along all exterior windows.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "racing-stripe-tagline-multi-windows-alternating",
@@ -1725,8 +1857,9 @@
   "mvp_tier": "phase2_ref",
   "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Detect the door, then for the windows on each side OCR the stripe taglines and verify both taglines appear and alternate (A,B,A,B...) across the windows on each side of the door.",
-  "rule_text": "Studios with more than one (1) window on either side of the storefront door will install both the 'Team Training. Life Changing.' and '45 Minutes To Change Your Life' taglines on both sides in an alternating fashion."
+  "check_method": "For studios with >1 window per side: OCR the stripe taglines and confirm BOTH 'Team Training. Life Changing.' and '45 Minutes To Change Your Life' appear and alternate (A,B,A,B) across the windows on each side. Text + ordering both photo-checkable.",
+  "rule_text": "Studios with more than one (1) window on either side of the storefront door will install both the 'Team Training. Life Changing.' and '45 Minutes To Change Your Life' taglines on both sides in an alternating fashion.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "racing-stripe-tagline-one-window",
@@ -1738,8 +1871,9 @@
   "mvp_tier": "phase2_ref",
   "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Count storefront windows; if one window, OCR the stripe text and confirm it reads 'Team Training. Life Changing.' and that the '45 Minutes To Change Your Life' tagline is not present.",
-  "rule_text": "Studios with one (1) storefront window will install only the 'Team Training. Life Changing.' tagline on the racing stripe."
+  "check_method": "If exactly one storefront window: OCR the stripe and confirm it reads ONLY 'Team Training. Life Changing.' and the '45 Minutes' tagline is absent. Text presence/absence fully checkable.",
+  "rule_text": "Studios with one (1) storefront window will install only the 'Team Training. Life Changing.' tagline on the racing stripe.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "racing-stripe-tagline-two-windows",
@@ -1751,8 +1885,9 @@
   "mvp_tier": "phase2_ref",
   "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "If two storefront windows are detected, OCR each window's stripe text and verify left = 'Team Training. Life Changing.' and right = '45 Minutes To Change Your Life'. Confirm left/right ordering from the facing-the-storefront viewpoint.",
-  "rule_text": "Studios with two (2) storefront windows will install the 'Team Training. Life Changing.' tagline on the left window and the '45 Minutes To Change Your Life' tagline on the right window."
+  "check_method": "If exactly two storefront windows: OCR each and verify left = 'Team Training. Life Changing.' and right = '45 Minutes To Change Your Life' (correct left/right placement from the facing viewpoint). OCR + position both checkable.",
+  "rule_text": "Studios with two (2) storefront windows will install the 'Team Training. Life Changing.' tagline on the left window and the '45 Minutes To Change Your Life' tagline on the right window.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "racing-stripe-height-27p5in-to-base",
@@ -1764,8 +1899,9 @@
   "mvp_tier": "phase2_measure",
   "required_shots": "storefront",
   "dup_count": 2,
-  "check_method": "Measure the vertical distance from the ground to the bottom edge of the stripe using a known scale reference in the frame (door height ~80in, a standard window mullion, or a placed scale marker), then convert pixels to inches and compare to 27.5in.",
-  "rule_text": "The external window racing stripe must be installed 27.5 inches (70cm) from the ground to the base of the stripe."
+  "check_method": "Absolute measurement: 27.5in (70cm) from ground to base of stripe. Decidable only with a tape measure or known-scale object (standard door ~80in) in the same frame. Without a scale reference, not verifiable.",
+  "rule_text": "The external window racing stripe must be installed 27.5 inches (70cm) from the ground to the base of the stripe.",
+  "verdict_mode": "needs_reference"
  },
  {
   "rule_key": "racing-stripe-width-10in",
@@ -1777,8 +1913,9 @@
   "mvp_tier": "phase2_measure",
   "required_shots": "storefront",
   "dup_count": 2,
-  "check_method": "Measure the band thickness of the stripe in pixels and convert using a known scale reference in the frame, then compare to 10in. Relative check: the stripe band should read ~10in against the ~27.5in base height (roughly 0.36x the base-height dimension).",
-  "rule_text": "The external window racing stripe must be 10 inches (25.5cm) in width (stripe height/thickness)."
+  "check_method": "Absolute measurement: 10in (25.5cm) stripe band thickness. Needs a known-scale reference in frame to convert pixels to inches. Not verifiable from an uncalibrated photo.",
+  "rule_text": "The external window racing stripe must be 10 inches (25.5cm) in width (stripe height/thickness).",
+  "verdict_mode": "needs_reference"
  },
  {
   "rule_key": "red-stripe-above-dark-gray-1p5in",
@@ -1788,10 +1925,11 @@
   "applicability": "needs_scale_reference",
   "confidence": "high",
   "mvp_tier": "phase2_measure",
-  "required_shots": "storefront",
+  "required_shots": "workout_walls",
   "dup_count": 2,
-  "check_method": "Detect a red horizontal stripe just above the dark gray band; confirm red color family from photo and measure ~1.5in width via a known reference.",
-  "rule_text": "A red stripe with a width of 1.5 inches must be painted immediately above the dark gray section on the workout-area front and back walls."
+  "check_method": "Core requirement is the absolute 1.5in red-stripe width immediately above the dark gray band on the workout-area front/back walls. Width needs a tape measure / known-scale object in frame; band ordering alone does not satisfy the rule.",
+  "rule_text": "A red stripe with a width of 1.5 inches must be painted immediately above the dark gray section on the workout-area front and back walls.",
+  "verdict_mode": "needs_reference"
  },
  {
   "rule_key": "racing-stripe-fallback-when-wraps-restricted",
@@ -1803,8 +1941,9 @@
   "mvp_tier": "human_queue_metadata",
   "required_shots": "storefront",
   "dup_count": 2,
-  "check_method": "A photo can confirm whether a racing stripe is present, but whether it is the required treatment depends on the landlord/city restriction status, which is external context.",
-  "rule_text": "Where window wraps are restricted by the landlord or city, an external window racing stripe must be installed."
+  "check_method": "Whether a racing stripe is the REQUIRED treatment depends on landlord/city wrap restriction status (external context). A photo confirms the stripe exists but cannot establish the restriction justifying the fallback. Human review.",
+  "rule_text": "Where window wraps are restricted by the landlord or city, an external window racing stripe must be installed.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "racing-stripe-perforated-material",
@@ -1816,8 +1955,9 @@
   "mvp_tier": "human_queue_metadata",
   "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Perforation can sometimes be inferred from a close-up exterior macro shot (fine dot pattern) or an interior shot showing see-through, but a standard storefront phone photo cannot reliably confirm the material is perforated.",
-  "rule_text": "The racing stripe must be fabricated using perforated material so that it is not visible from the inside of the studio (one-way view)."
+  "check_method": "Flag a clearly solid/opaque (non-perforated) stripe visible from inside as a violation; a standard storefront phone photo cannot certify the material IS perforated one-way film. Confident non-compliant kept; any 'compliant' downgraded to review.",
+  "rule_text": "The racing stripe must be fabricated using perforated material so that it is not visible from the inside of the studio (one-way view).",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "red-stripe-color-code",
@@ -1827,10 +1967,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "storefront",
+  "required_shots": "workout_walls",
   "dup_count": 1,
-  "check_method": "Vision confirms a saturated red family; exact compliant SKU requires paint documentation or a calibrated color reference.",
-  "rule_text": "The 1.5-inch stripe (front and back walls of the training area) must use the compliant red paint (Sherwin Williams SW 6868 Real Red / Dulux 16YR 16/594 Matador / Taubmans T12 25.H1 Hi-C Red / British Paints 186 Red Bauble)."
+  "check_method": "Named-SKU red paint (SW6868 Real Red / Dulux Matador / Taubmans Hi-C Red / British Paints Red Bauble). AI flags a stripe that is clearly not red (e.g. orange/pink/wrong family) = violation; a red-looking stripe still needs paint documentation to certify the exact SKU.",
+  "rule_text": "The 1.5-inch stripe (front and back walls of the training area) must use the compliant red paint (Sherwin Williams SW 6868 Real Red / Dulux 16YR 16/594 Matador / Taubmans T12 25.H1 Hi-C Red / British Paints 186 Red Bauble).",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "desk-signage-team-studio-name-center-front",
@@ -1842,8 +1983,9 @@
   "mvp_tier": "mvp_core",
   "required_shots": "reception",
   "dup_count": 1,
-  "check_method": "Detect text signage reading 'Team <studio name>' centered on the front face of the reception desk.",
-  "rule_text": "Desk signage featuring 'Team [Studio Name]' must be installed on the center front of the desk."
+  "check_method": "OCR text signage reading 'Team [Studio Name]' located on the CENTER FRONT face of the reception desk. Presence + text + center placement all photo-checkable; fail if absent or off-center.",
+  "rule_text": "Desk signage featuring 'Team [Studio Name]' must be installed on the center front of the desk.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "retail-racks-wall-affixed",
@@ -1853,10 +1995,11 @@
   "applicability": "auto_vision",
   "confidence": "low",
   "mvp_tier": "mvp_core",
-  "required_shots": "reception",
+  "required_shots": "retail",
   "dup_count": 1,
-  "check_method": "Confirm retail racks/shelving are mounted on the retail wall.",
-  "rule_text": "Retail racks must be affixed to the retail wall."
+  "check_method": "Confirm retail racks/shelving are mounted/affixed to the retail wall (vs free-standing). Presence and wall-mounting are photo-checkable; fail if no wall-affixed racks visible.",
+  "rule_text": "Retail racks must be affixed to the retail wall.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "desk-signage-3d-or-led",
@@ -1868,8 +2011,9 @@
   "mvp_tier": "human_queue",
   "required_shots": "reception",
   "dup_count": 1,
-  "check_method": "Confirm the desk signage is one of the two allowed forms (raised 3D lettering or LED backlit); both are compliant.",
-  "rule_text": "The desk signage may be installed as either a 3D sign or an LED backlit sign."
+  "check_method": "Permits EITHER raised 3D lettering OR LED-backlit. AI can confirm 3D raised lettering or flag clearly-flat vinyl (neither allowed form) = violation, but cannot certify LED-backlit from a photo, so a clean photo cannot always prove compliance. Keep confident violations; downgrade 'compliant'.",
+  "rule_text": "The desk signage may be installed as either a 3D sign or an LED backlit sign.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "reception-logo-centered-above-desk-backlit",
@@ -1881,8 +2025,9 @@
   "mvp_tier": "human_queue",
   "required_shots": "reception",
   "dup_count": 1,
-  "check_method": "In a reception photo, verify an F45 logo horizontally centered above the desk and showing backlit/illuminated characteristics.",
-  "rule_text": "The F45 logo must be centered above the desk in the reception area and be backlit with LED lighting."
+  "check_method": "Logo centered above desk is pass-fail-able, but the rule also mandates 'backlit with LED' which a flat photo cannot certify; AI can flag a clearly flat/unlit or off-center logo = violation but cannot prove LED-backlit compliance. Confident non-compliant kept; 'compliant' downgraded to review.",
+  "rule_text": "The F45 logo must be centered above the desk in the reception area and be backlit with LED lighting.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "reception-v-proportionate-to-logo",
@@ -1895,7 +2040,8 @@
   "required_shots": "reception",
   "dup_count": 1,
   "check_method": "Compare relative scale of the reception V to the reception logo against the design-control lockup proportions.",
-  "rule_text": "The reception V design must be proportionate to the F45 Training logo per the specifications in this document."
+  "rule_text": "The reception V design must be proportionate to the F45 Training logo per the specifications in this document.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "reception-signage-layout-exemption",
@@ -1907,8 +2053,9 @@
   "mvp_tier": "human_queue_metadata",
   "required_shots": "reception",
   "dup_count": 1,
-  "check_method": "Whether the absence of reception signage is permitted depends on layout suitability and HQ confirmation, not visible in a photo.",
-  "rule_text": "Not all studio layouts can accommodate reception signage; open-plan studios generally cannot install it, and the franchisee must contact F45 HQ to confirm whether their studio is suitable for reception signage."
+  "check_method": "Whether the absence of reception signage is allowed depends on layout suitability and HQ confirmation; an open-plan exemption is not provable from a photo and needs HQ sign-off.",
+  "rule_text": "Not all studio layouts can accommodate reception signage; open-plan studios generally cannot install it, and the franchisee must contact F45 HQ to confirm whether their studio is suitable for reception signage.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "reception-wall-light-gray-floor-ceiling",
@@ -1920,8 +2067,9 @@
   "mvp_tier": "human_queue_metadata",
   "required_shots": "reception",
   "dup_count": 1,
-  "check_method": "Vision confirms light-gray family floor-to-ceiling behind reception; exact SKU needs docs.",
-  "rule_text": "The reception signage must be on a wall painted the lighter shade of gray from floor to ceiling."
+  "check_method": "Flag if the reception/desk wall is clearly NOT a light-grey family (e.g. blue, green, dark wall) = violation; a grey-looking wall cannot certify the exact light-grey SKU without a paint receipt.",
+  "rule_text": "The reception signage must be on a wall painted the lighter shade of gray from floor to ceiling.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "racing-stripe-multi-window-alternating",
@@ -1933,8 +2081,9 @@
   "mvp_tier": "phase2_ref",
   "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Identify multiple windows on each side of the door; OCR the stripes and verify both taglines appear and alternate across panels on both sides.",
-  "rule_text": "Studios with more than one window on either side of the storefront door will install both the 'Team Training. Life Changing.' and '45 Minutes To Change Your Life' taglines on both sides in an alternating fashion."
+  "check_method": "Where multiple windows sit on each side of the door, OCR the stripe taglines and confirm both 'Team Training. Life Changing.' and '45 Minutes To Change Your Life' appear and alternate (A,B,A,B) on both sides.",
+  "rule_text": "Studios with more than one window on either side of the storefront door will install both the 'Team Training. Life Changing.' and '45 Minutes To Change Your Life' taglines on both sides in an alternating fashion.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "racing-stripe-one-window-tagline",
@@ -1946,8 +2095,9 @@
   "mvp_tier": "phase2_ref",
   "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Count storefront windows; if one, OCR the stripe and confirm it shows 'Team Training. Life Changing.' and not the other tagline.",
-  "rule_text": "Studios with one storefront window will install only the 'Team Training. Life Changing.' tagline."
+  "check_method": "If exactly one storefront window, OCR the stripe text and confirm it reads 'Team Training. Life Changing.' and that the other tagline is absent.",
+  "rule_text": "Studios with one storefront window will install only the 'Team Training. Life Changing.' tagline.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "racing-stripe-two-windows-tagline-split",
@@ -1959,8 +2109,9 @@
   "mvp_tier": "phase2_ref",
   "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Confirm exactly two windows; OCR left and right stripes and verify the correct tagline is on each side in the correct left/right placement.",
-  "rule_text": "Studios with two storefront windows will install the 'Team Training. Life Changing.' tagline on the left window and '45 Minutes To Change Your Life' on the right window."
+  "check_method": "If exactly two storefront windows, OCR each and confirm left = 'Team Training. Life Changing.' and right = '45 Minutes To Change Your Life' in correct left/right placement.",
+  "rule_text": "Studios with two storefront windows will install the 'Team Training. Life Changing.' tagline on the left window and '45 Minutes To Change Your Life' on the right window.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "v-design-behind-logo",
@@ -1970,10 +2121,11 @@
   "applicability": "auto_vision",
   "confidence": "high",
   "mvp_tier": "mvp_core",
-  "required_shots": "logo_wall;v_design_close",
+  "required_shots": "v_design_close",
   "dup_count": 2,
-  "check_method": "Verify the logo is centered over and visually in front of the V graphic on the same feature wall.",
-  "rule_text": "The V design must be painted behind the main interior F45 Training Wall Logo (i.e., the V sits behind the LED backlit logo)."
+  "check_method": "Confirm the F45 logo is centred over and visually in front of the painted V graphic on the same feature wall (V sits behind the logo).",
+  "rule_text": "The V design must be painted behind the main interior F45 Training Wall Logo (i.e., the V sits behind the LED backlit logo).",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "v-design-mandatory",
@@ -1983,10 +2135,11 @@
   "applicability": "auto_vision",
   "confidence": "high",
   "mvp_tier": "mvp_core",
-  "required_shots": "logo_wall;v_design_close",
+  "required_shots": "v_design_close",
   "dup_count": 2,
-  "check_method": "Vision model detects a V-shaped two-tone painted design located behind/around the F45 logo on the feature wall.",
-  "rule_text": "Painting a V design in the studio is mandatory; it must be painted behind the main interior F45 Training Wall Logo."
+  "check_method": "Detect presence of a V-shaped two-tone painted design behind/around the F45 logo on the feature wall; absence = violation.",
+  "rule_text": "Painting a V design in the studio is mandatory; it must be painted behind the main interior F45 Training Wall Logo.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "v-design-top-2x-bottom",
@@ -1996,10 +2149,11 @@
   "applicability": "auto_vision",
   "confidence": "high",
   "mvp_tier": "phase2_ref",
-  "required_shots": "logo_wall;v_design_close",
+  "required_shots": "v_design_close",
   "dup_count": 1,
-  "check_method": "Measure the band widths of the wide (upper) and narrow (lower) V sections in pixels and confirm a 2:1 ratio; this is relative, so no scale reference is needed.",
-  "rule_text": "The top (upper wide) section of the V must be 2x the width of the bottom (lower narrow) section."
+  "check_method": "Measure relative band widths of the upper (wide) vs lower (narrow) V sections and confirm a ~2:1 ratio; relative ratio needs no scale reference.",
+  "rule_text": "The top (upper wide) section of the V must be 2x the width of the bottom (lower narrow) section.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "v-own-feature-wall-no-equipment",
@@ -2009,10 +2163,11 @@
   "applicability": "auto_vision",
   "confidence": "high",
   "mvp_tier": "phase2_ref",
-  "required_shots": "logo_wall;v_design_close",
+  "required_shots": "v_design_close",
   "dup_count": 2,
-  "check_method": "Vision model checks the V/logo feature wall is unobstructed by equipment, racks, or fixtures.",
-  "rule_text": "The V design must be on its own feature wall with no equipment or fixtures."
+  "check_method": "Confirm the V/logo feature wall is unobstructed by equipment, racks, or fixtures; obstruction = violation.",
+  "rule_text": "The V design must be on its own feature wall with no equipment or fixtures.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "v-top-2x-bottom-width",
@@ -2022,10 +2177,11 @@
   "applicability": "auto_vision",
   "confidence": "high",
   "mvp_tier": "phase2_ref",
-  "required_shots": "logo_wall;v_design_close",
+  "required_shots": "v_design_close",
   "dup_count": 1,
-  "check_method": "Vision model measures the relative band widths of the upper vs lower V sections and checks the ~2:1 ratio (relative, not absolute).",
-  "rule_text": "The top section of the V should be 2x the width of the bottom section (upper 15\" vs lower 7.5\")."
+  "check_method": "Measure relative widths of upper vs lower V bands and confirm ~2:1 ratio (15in vs 7.5in is a ratio, not absolute); no scale needed.",
+  "rule_text": "The top section of the V should be 2x the width of the bottom section (upper 15\" vs lower 7.5\").",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "v-design-base-28in",
@@ -2035,10 +2191,11 @@
   "applicability": "needs_scale_reference",
   "confidence": "high",
   "mvp_tier": "phase2_measure",
-  "required_shots": "logo_wall;v_design_close",
+  "required_shots": "v_design_close",
   "dup_count": 1,
-  "check_method": "Measure floor-to-lowest-V-point pixel distance and convert to inches via a known reference; compare to 28in.",
-  "rule_text": "The V design must be painted 28 inches from the floor to the lowest point of the V."
+  "check_method": "Absolute 28in floor-to-lowest-V-point measurement; only decidable with a tape measure or known-size object (door, person) in the frame.",
+  "rule_text": "The V design must be painted 28 inches from the floor to the lowest point of the V.",
+  "verdict_mode": "needs_reference"
  },
  {
   "rule_key": "v-design-lower-7p5in-spatial-white",
@@ -2048,10 +2205,11 @@
   "applicability": "needs_scale_reference",
   "confidence": "high",
   "mvp_tier": "phase2_measure",
-  "required_shots": "logo_wall;v_design_close",
+  "required_shots": "v_design_close",
   "dup_count": 1,
-  "check_method": "Width: convert pixel band width to inches via known reference, compare to 7.5in. Color: confirm an off-white/very-light gray family; exact SW6259 needs a color reference.",
-  "rule_text": "The lower narrow section of the V must be 7.5 inches wide and painted Sherwin Williams SW 6259 | Spatial White."
+  "check_method": "Absolute 7.5in band width needs a scale reference; the colour (off-white/very-light grey family) is detectable but the binding spec is the 7.5in measurement.",
+  "rule_text": "The lower narrow section of the V must be 7.5 inches wide and painted Sherwin Williams SW 6259 | Spatial White.",
+  "verdict_mode": "needs_reference"
  },
  {
   "rule_key": "v-design-upper-15in-unique-gray",
@@ -2061,10 +2219,11 @@
   "applicability": "needs_scale_reference",
   "confidence": "high",
   "mvp_tier": "phase2_measure",
-  "required_shots": "logo_wall;v_design_close",
+  "required_shots": "v_design_close",
   "dup_count": 1,
-  "check_method": "Width: convert measured pixel band width to inches via a known reference, compare to 15in. Color: confirm a mid/dark gray family; exact SW6260 needs a color reference.",
-  "rule_text": "The upper wide section of the V must be 15 inches wide and painted Sherwin Williams SW 6260 | Unique Gray."
+  "check_method": "Absolute 15in band width needs a scale reference; mid/dark-grey colour family is detectable but the binding spec is the 15in measurement.",
+  "rule_text": "The upper wide section of the V must be 15 inches wide and painted Sherwin Williams SW 6260 | Unique Gray.",
+  "verdict_mode": "needs_reference"
  },
  {
   "rule_key": "v-painted-28in-from-floor",
@@ -2074,10 +2233,11 @@
   "applicability": "needs_scale_reference",
   "confidence": "high",
   "mvp_tier": "phase2_measure",
-  "required_shots": "logo_wall;v_design_close",
+  "required_shots": "v_design_close",
   "dup_count": 1,
-  "check_method": "Vision model measures floor-to-lowest-V distance only with a known scale reference (e.g. a person, door, or two-point ruler) in the frame.",
-  "rule_text": "The V design must be painted 28\" (70cm) from the floor to the lowest point of the V."
+  "check_method": "Absolute 28in floor-to-lowest-V measurement; only decidable with a tape measure or known-size reference object in the frame.",
+  "rule_text": "The V design must be painted 28\" (70cm) from the floor to the lowest point of the V.",
+  "verdict_mode": "needs_reference"
  },
  {
   "rule_key": "v-90-degree-angle",
@@ -2087,10 +2247,11 @@
   "applicability": "auto_vision",
   "confidence": "medium",
   "mvp_tier": "human_queue",
-  "required_shots": "logo_wall;v_design_close",
+  "required_shots": "v_design_close",
   "dup_count": 1,
-  "check_method": "Vision model estimates the apex angle of the V from a roughly front-on photo and checks it is ~90 degrees.",
-  "rule_text": "The V design must be a 90-degree angle."
+  "check_method": "From a roughly front-on photo, estimate the apex angle of the V and confirm it is ~90 degrees; angle is geometric and needs no scale.",
+  "rule_text": "The V design must be a 90-degree angle.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "v-behind-led-backlit-logo",
@@ -2100,10 +2261,11 @@
   "applicability": "auto_vision",
   "confidence": "medium",
   "mvp_tier": "human_queue",
-  "required_shots": "logo_wall;v_design_close",
+  "required_shots": "v_design_close",
   "dup_count": 1,
-  "check_method": "Vision model confirms the painted V sits behind/around the logo and that the logo appears LED backlit (visible halo glow).",
-  "rule_text": "The V design must be behind the F45 Training LED backlit logo."
+  "check_method": "Can confirm the V sits behind the logo (pass_fail-able), but the LED-backlit requirement can only be flagged when the logo is clearly a flat/unlit decal = violation; a glowing logo cannot certify LED vs other lighting.",
+  "rule_text": "The V design must be behind the F45 Training LED backlit logo.",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "v-design-90-degree-angle",
@@ -2113,10 +2275,11 @@
   "applicability": "auto_vision",
   "confidence": "medium",
   "mvp_tier": "human_queue",
-  "required_shots": "logo_wall;v_design_close",
+  "required_shots": "v_design_close",
   "dup_count": 1,
-  "check_method": "Measure the interior angle at the apex of the V from the two leg edges; compare to 90 degrees.",
-  "rule_text": "The V design must form a 90-degree angle."
+  "check_method": "Measure the interior apex angle of the V from its two leg edges and confirm ~90 degrees; geometric ratio, no scale needed.",
+  "rule_text": "The V design must form a 90-degree angle.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "v-decal-requires-preferred-vendor-and-approval",
@@ -2126,10 +2289,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;v_design_close",
+  "required_shots": "v_design_close",
   "dup_count": 2,
-  "check_method": "Whether a V is a decal or paint is hard to tell from a photo, and authorization (preferred vendor + HQ approval) is not visible; requires HQ/vendor records.",
-  "rule_text": "F45 HQ may approve a decal V instead of a painted V only if the franchisee has engaged F45 HQ's preferred signage vendor; the franchisee must contact HQ to install a V decal."
+  "check_method": "Decal-vs-paint is hard to tell from a photo and the authorisation (HQ preferred vendor + written approval) is not visible; requires HQ/vendor records.",
+  "rule_text": "F45 HQ may approve a decal V instead of a painted V only if the franchisee has engaged F45 HQ's preferred signage vendor; the franchisee must contact HQ to install a V decal.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "v-design-exact-colors-only",
@@ -2139,10 +2303,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;v_design_close",
+  "required_shots": "v_design_close",
   "dup_count": 1,
-  "check_method": "Vision confirms two-tone gray V with the correct relative darkness (upper darker than lower); exact brand SKUs require paint documentation or a color reference card.",
-  "rule_text": "The painted V design must be painted only in the specified colors (upper = SW6260 Unique Gray / Dulux Night Jewels 5; lower = SW6259 Spatial White / Dulux Gray Steel 3 / Polished Pebble)."
+  "check_method": "Flag if the V is clearly wrong (single-tone, wrong colour family, or upper lighter than lower) = violation; matching exact SW6260/SW6259 SKUs needs a paint receipt or colour-reference card.",
+  "rule_text": "The painted V design must be painted only in the specified colors (upper = SW6260 Unique Gray / Dulux Night Jewels 5; lower = SW6259 Spatial White / Dulux Gray Steel 3 / Polished Pebble).",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "v-design-length-varies-wall-height",
@@ -2152,10 +2317,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "medium",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;v_design_close",
+  "required_shots": "v_design_close",
   "dup_count": 1,
-  "check_method": "This is a design rule, not a single threshold; correctness depends on wall height which needs a scale reference plus the design-control derivation.",
-  "rule_text": "The length of the V legs varies depending on the height of the wall (no fixed length)."
+  "check_method": "No fixed threshold; V-leg length is derived from wall height per the design control, so correctness is a contextual design-review judgment, not a single photo check.",
+  "rule_text": "The length of the V legs varies depending on the height of the wall (no fixed length).",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "v-lower-section-color-spatial-white",
@@ -2165,10 +2331,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;v_design_close",
+  "required_shots": "v_design_close",
   "dup_count": 2,
-  "check_method": "Vision model confirms the lower/narrower V band is the lighter near-white tone; exact SW6259 requires paint metadata.",
-  "rule_text": "The lower narrow section of the V design must be Sherwin Williams SW 6259 | Spatial White (also referenced on Dulux as Gray Steel 3 / Polished Pebble)."
+  "check_method": "Flag if the lower/narrow V band is clearly NOT a near-white/light tone = violation; certifying exact SW6259 Spatial White needs paint documentation.",
+  "rule_text": "The lower narrow section of the V design must be Sherwin Williams SW 6259 | Spatial White (also referenced on Dulux as Gray Steel 3 / Polished Pebble).",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "v-upper-section-color-unique-gray",
@@ -2178,10 +2345,11 @@
   "applicability": "needs_metadata_or_context",
   "confidence": "high",
   "mvp_tier": "human_queue_metadata",
-  "required_shots": "logo_wall;v_design_close",
+  "required_shots": "v_design_close",
   "dup_count": 2,
-  "check_method": "Vision model confirms the upper/wider V band is a darker gray than the lower band; exact SW6260 requires paint metadata.",
-  "rule_text": "The upper wide section of the V design must be Sherwin Williams SW 6260 | Unique Gray (also referenced on Dulux as Night Jewels 5)."
+  "check_method": "Flag if the upper/wide V band is not a darker grey than the lower band (or is an off-palette colour) = violation; certifying exact SW6260 Unique Gray needs paint documentation.",
+  "rule_text": "The upper wide section of the V design must be Sherwin Williams SW 6260 | Unique Gray (also referenced on Dulux as Night Jewels 5).",
+  "verdict_mode": "detect_only"
  },
  {
   "rule_key": "v-design-proportionate-to-logo",
@@ -2191,10 +2359,11 @@
   "applicability": "human_review_only",
   "confidence": "medium",
   "mvp_tier": "human_queue_legal",
-  "required_shots": "logo_wall;v_design_close",
+  "required_shots": "v_design_close",
   "dup_count": 2,
-  "check_method": "Whether the V is 'proportionate' to the logo is a subjective design-control judgment best left to HQ reviewer comparison against the control document.",
-  "rule_text": "The V design must be painted proportionate to the F45 Training logo per the design control document."
+  "check_method": "'Proportionate to the logo per the design control document' is a subjective design-control judgment best left to an HQ reviewer comparing against the control doc.",
+  "rule_text": "The V design must be painted proportionate to the F45 Training logo per the design control document.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "v-length-varies-with-wall-height",
@@ -2204,10 +2373,11 @@
   "applicability": "human_review_only",
   "confidence": "low",
   "mvp_tier": "human_queue_legal",
-  "required_shots": "logo_wall;v_design_close",
+  "required_shots": "v_design_close",
   "dup_count": 1,
-  "check_method": "This is guidance that V length scales with wall height; there is no fixed value to test, so it is a contextual design-review judgment rather than a photo check.",
-  "rule_text": "The length of the V varies depending on the height of the wall."
+  "check_method": "Guidance that V length scales with wall height; no fixed value to test, so it is a contextual design-review judgment rather than a photo pass/fail.",
+  "rule_text": "The length of the V varies depending on the height of the wall.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "wrap-one-window-copyline-qr-logo",
@@ -2219,8 +2389,9 @@
   "mvp_tier": "mvp_core",
   "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Scan all window panels; verify at least one panel simultaneously shows the 'Team Training. Life Changing.' tagline text, a QR code, and the F45 logo together.",
-  "rule_text": "One window panel must contain the copyline 'TEAM TRAINING LIFE CHANGING' plus the QR code plus the F45 logo."
+  "check_method": "Scan window panels and confirm at least one panel shows the 'TEAM TRAINING LIFE CHANGING' copyline, a QR code, and the F45 logo together (OCR + detect).",
+  "rule_text": "One window panel must contain the copyline 'TEAM TRAINING LIFE CHANGING' plus the QR code plus the F45 logo.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "window-wrap-kit-paired-door-decal",
@@ -2232,8 +2403,9 @@
   "mvp_tier": "phase2_ref",
   "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "From a wide storefront photo, detect (a) full-coverage perforated vinyl window wraps across the windows and (b) a printed door decal on the entry door. Verify both are present together, not one without the other.",
-  "rule_text": "HQ mandates installation of the full window wrap kit, which must always be paired with the complete door decal."
+  "check_method": "From a wide storefront photo, confirm both full-coverage window wraps AND a printed door decal are present together; wraps without a door decal (or vice versa) = violation.",
+  "rule_text": "HQ mandates installation of the full window wrap kit, which must always be paired with the complete door decal.",
+  "verdict_mode": "pass_fail"
  },
  {
   "rule_key": "additional-signage-no-wraps-dual-offering",
@@ -2245,8 +2417,9 @@
   "mvp_tier": "human_queue_metadata",
   "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Applicability depends on the studio offering dual F45+Recovery branding and landlord wrap permission, both of which are context not in a photo.",
-  "rule_text": "For studios that have both F45 Training and Recovery by F45 offerings and where wraps are not permitted by the landlord, the open-studio example branding configuration applies."
+  "check_method": "Applicability depends on the studio offering both F45 + Recovery branding and on landlord wrap permission, both external context not in a photo.",
+  "rule_text": "For studios that have both F45 Training and Recovery by F45 offerings and where wraps are not permitted by the landlord, the open-studio example branding configuration applies.",
+  "verdict_mode": "review"
  },
  {
   "rule_key": "preopen-door-covering-temporary",
@@ -2258,7 +2431,8 @@
   "mvp_tier": "human_queue_metadata",
   "required_shots": "storefront",
   "dup_count": 1,
-  "check_method": "Vision can detect a blue-background temporary door covering, but confirming it is correctly present (pre-open) or correctly removed depends on knowing the studio's open/closed status (context).",
-  "rule_text": "The pre-open door covering is a simplified temporary version of the permanent decal, built into the blue background, in place only while the studio is closed and removed once the studio is ready to open."
+  "check_method": "A blue temporary door covering is detectable, but judging it correctly present (pre-open) vs correctly removed (open) requires knowing the studio's open/closed status (context/metadata).",
+  "rule_text": "The pre-open door covering is a simplified temporary version of the permanent decal, built into the blue background, in place only while the studio is closed and removed once the studio is ready to open.",
+  "verdict_mode": "review"
  }
 ]
