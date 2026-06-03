@@ -8,7 +8,7 @@
 
 const TOTAL_STEPS = 4
 
-type Scope = 'webhook' | 'intake' | 'estimate' | 'sms' | 'whatsapp' | 'dispatch'
+type Scope = 'webhook' | 'intake' | 'estimate' | 'sms' | 'whatsapp' | 'dispatch' | 'signage'
 
 const STEP_BY_SCOPE: Record<Scope, number> = {
   webhook: 1,
@@ -17,6 +17,7 @@ const STEP_BY_SCOPE: Record<Scope, number> = {
   dispatch: 4,
   sms: 4,
   whatsapp: 4,
+  signage: 2,
 }
 
 function fmtKv(data?: Record<string, unknown>): string {

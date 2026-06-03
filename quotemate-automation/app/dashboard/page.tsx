@@ -39,6 +39,8 @@ import {
   Banknote,
   Shield,
   Home,
+  Megaphone,
+  Paintbrush,
   type LucideProps,
 } from 'lucide-react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
@@ -238,6 +240,10 @@ type Tab =
   | 'followups'
   /** v10 — only rendered when tenant.trades includes 'roofing'. */
   | 'roofing'
+  /** Signage compliance (HQ product) — links to standalone /dashboard/signage routes. */
+  | 'signage'
+  /** Painting estimate (Phase 1 scaffold) — links to /dashboard/painting. Not trade-gated yet. */
+  | 'painting'
 
 /** SMS conversation summary returned by /api/tenant/chats. Drives the
  *  Chats tab — communication history including leads that didn't
@@ -614,6 +620,8 @@ export default function DashboardPage() {
               } />
             )}
             {tab === 'roofing' && <RoofingHubTab accessToken={accessToken} />}
+            {tab === 'signage' && <SignageHubTab />}
+            {tab === 'painting' && <PaintingHubTab />}
           </div>
         </section>
       </div>
@@ -825,6 +833,11 @@ function buildNav(quoteCount: number, hasRoofingTrade = false): NavItem[] {
   if (hasRoofingTrade) {
     items.push({ tab: 'roofing', label: 'Roof', icon: Home })
   }
+  // Signage compliance is a separate HQ product (not trade-gated) — always shown.
+  items.push({ tab: 'signage', label: 'Signage', icon: Megaphone })
+  // Painting estimate (Phase 1 scaffold) — not trade-gated yet so it's
+  // discoverable while painting isn't a live tenant trade.
+  items.push({ tab: 'painting', label: 'Paint', icon: Paintbrush })
   items.push(
     { tab: 'account', label: 'Account', icon: User },
     { tab: 'payouts', label: 'Payouts', icon: Banknote },
@@ -850,7 +863,7 @@ const SIDEBAR_GROUPS: { label: string; tabs: Tab[] }[] = [
   // tenants the byTab.get('roofing') lookup returns undefined and the
   // sidebar quietly skips the row. No tenant-specific filtering needed
   // in this layout list.
-  { label: 'Daily work', tabs: ['overview', 'quotes', 'followups', 'chats', 'roofing'] },
+  { label: 'Daily work', tabs: ['overview', 'quotes', 'followups', 'chats', 'roofing', 'signage', 'painting'] },
   {
     label: 'Setup',
     tabs: ['account', 'payouts', 'pricing', 'services', 'catalogue', 'estimating', 'recipes'],
@@ -1075,6 +1088,14 @@ const TAB_META: Record<
   roofing: {
     title: 'Roof tools',
     desc: 'Measure any address, apply your $/m² rate, get a three-tier price band ready to send.',
+  },
+  signage: {
+    title: 'Signage compliance',
+    desc: 'Request photos from your studios, AI-triage them against the F45 standards, and review the flagged ones.',
+  },
+  painting: {
+    title: 'Paint tools',
+    desc: 'Estimate paintable area from an address, get a Good / Better / Best range with a confidence band.',
   },
 }
 
@@ -10161,6 +10182,10 @@ function tabLabel(t: Tab): string {
       return 'Recipes'
     case 'roofing':
       return 'Roof'
+    case 'signage':
+      return 'Signage'
+    case 'painting':
+      return 'Paint'
   }
 }
 
@@ -10210,6 +10235,120 @@ function formatTime(iso: string): string {
   } catch {
     return ''
   }
+}
+
+// ─── Signage compliance hub tab ────────────────────────────────────
+// The HQ signage-compliance product. The heavy surfaces live at their
+// own routes (/dashboard/signage + /dashboard/signage/queue) so they get
+// full-screen real estate; this tab is the launch pad.
+function SignageHubTab() {
+  return (
+    <div className="space-y-7">
+      <div>
+        <h2 className="font-extrabold uppercase tracking-[-0.025em] text-[clamp(1.5rem,2.6vw,2.25rem)] leading-[1.1] text-text-pri">
+          Signage compliance
+        </h2>
+        <p className="mt-3 max-w-2xl text-base leading-relaxed text-text-sec">
+          Request photos from your studios, let the AI pre-check them against the F45 brand
+          standards, and review the flagged ones. The AI triages — HQ decides.
+        </p>
+      </div>
+
+      <Link
+        href="/dashboard/signage"
+        className="group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
+      >
+        <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">01</span>
+        <div className="flex-1">
+          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
+            Compliance sweep
+          </div>
+          <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+            Run a sweep
+          </h3>
+          <p className="mt-4 text-base leading-relaxed text-text-sec">
+            Pick a region + the photos to request, and each studio gets a tokenised upload
+            link. As they respond, the AI scores their signage and surfaces the fleet status.
+          </p>
+          <div className="mt-6 inline-flex items-center gap-2 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-accent transition-transform group-hover:translate-x-1">
+            Open sweeps <span aria-hidden="true">&rarr;</span>
+          </div>
+        </div>
+      </Link>
+
+      <Link
+        href="/dashboard/signage/queue"
+        className="group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
+      >
+        <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">02</span>
+        <div className="flex-1">
+          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
+            Human review
+          </div>
+          <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+            Review queue
+          </h3>
+          <p className="mt-4 text-base leading-relaxed text-text-sec">
+            The AI flags non-compliant and can&rsquo;t-determine items; you approve, request
+            changes, or escalate. A green report is a pre-check, never automatic HQ approval.
+          </p>
+          <div className="mt-6 inline-flex items-center gap-2 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-accent transition-transform group-hover:translate-x-1">
+            Open queue <span aria-hidden="true">&rarr;</span>
+          </div>
+        </div>
+      </Link>
+    </div>
+  )
+}
+
+// ─── Painting hub tab (Phase 1 scaffold) ───────────────────────────
+// Not trade-gated yet (no tenant has 'painting' in trades[]). The hub is
+// intentionally minimal — the estimate tool lives at /dashboard/painting,
+// a separate route with full-screen real estate and its own two tabs
+// ("realestate.com.au" + "Other tools"). Future: recent estimates,
+// floor-plan upload, save-as-quote.
+
+function PaintingHubTab() {
+  return (
+    <div className="space-y-7">
+      <div>
+        <h2 className="font-extrabold uppercase tracking-[-0.025em] text-[clamp(1.5rem,2.6vw,2.25rem)] leading-[1.1] text-text-pri">
+          Paint tools
+        </h2>
+        <p className="mt-3 max-w-2xl text-base leading-relaxed text-text-sec">
+          Type any address, pick the surfaces, and get an estimated
+          paintable area plus a Good / Better / Best range. Phase 1 scaffold
+          — every estimate is a range with a confidence band, and low
+          confidence routes to a site measure. Tradie signs off before send.
+        </p>
+      </div>
+
+      <Link
+        href="/dashboard/painting"
+        className="group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
+      >
+        <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">
+          01
+        </span>
+        <div className="flex-1">
+          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
+            Address estimate
+          </div>
+          <h3 className="mt-2 font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+            Estimate a paint job
+          </h3>
+          <p className="mt-4 text-base leading-relaxed text-text-sec">
+            Address → property lookup → paintable wall / ceiling / trim /
+            exterior m² with a confidence band → tiered price range. One tab
+            for realestate.com.au, one for the footprint / floor-plan stack.
+          </p>
+          <span className="mt-5 inline-flex items-center gap-2 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-accent transition-colors group-hover:text-accent-press">
+            Open paint estimate <span aria-hidden="true">&rarr;</span>
+          </span>
+        </div>
+      </Link>
+    </div>
+  )
 }
 
 // ─── Roofing hub tab (v10) ─────────────────────────────────────────
