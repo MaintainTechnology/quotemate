@@ -270,7 +270,7 @@ export default function SignageHubPage() {
             )}
             <div className="mt-6 grid gap-6">
               {sweeps.map((sw) => (
-                <SweepCard key={sw.id} sweep={sw} />
+                <SweepCard key={sw.id} sweep={sw} token={token} onDeleted={() => token && load(token)} />
               ))}
             </div>
           </section>
@@ -298,8 +298,23 @@ export default function SignageHubPage() {
   )
 }
 
-function SweepCard({ sweep }: { sweep: Sweep }) {
+function SweepCard({ sweep, token, onDeleted }: { sweep: Sweep; token: string | null; onDeleted: () => void }) {
   const submitted = sweep.requests.filter((r) => r.state === 'assessed' || r.state === 'submitted').length
+  const [deleting, setDeleting] = useState(false)
+  const onDelete = async () => {
+    if (!token) return
+    if (!window.confirm(`Delete the "${sweep.name}" sweep and all its photos + results? This cannot be undone.`)) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/signage/sweeps/${sweep.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) onDeleted()
+    } finally {
+      setDeleting(false)
+    }
+  }
   return (
     <article className="border border-ink-line bg-ink-card p-6 sm:p-7">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -309,9 +324,19 @@ function SweepCard({ sweep }: { sweep: Sweep }) {
           </div>
           <h3 className="mt-1.5 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri">{sweep.name}</h3>
         </div>
-        <span className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim">
-          {submitted}/{sweep.requests.length} responded
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim">
+            {submitted}/{sweep.requests.length} responded
+          </span>
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={deleting}
+            className="border border-ink-line px-3 py-1.5 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-text-dim transition-colors hover:border-warning hover:text-warning disabled:opacity-50"
+          >
+            {deleting ? 'Deleting…' : 'Delete'}
+          </button>
+        </div>
       </div>
       <div className="mt-5 grid gap-3">
         {sweep.requests.map((r) => (
