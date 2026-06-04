@@ -8,6 +8,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { orgFromBearer } from '@/lib/signage/org'
+import { buildGeocodeUrl, parseGeocode } from '@/lib/signage/maps'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,7 +22,7 @@ export async function GET(req: Request) {
   if (!ctx) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   const { data, error } = await supabase
     .from('studios')
-    .select('id, name, region, status, address, state, postcode')
+    .select('id, name, region, status, address, state, postcode, lat, lng, place_id')
     .eq('org_id', ctx.orgId)
     .order('region')
     .order('name')
@@ -37,6 +38,9 @@ const CreateStudioSchema = z.object({
   postcode: z.string().trim().max(12).optional(),
   contact_phone: z.string().trim().max(40).optional(),
   contact_email: z.string().trim().max(120).optional(),
+  lat: z.number().optional(),
+  lng: z.number().optional(),
+  place_id: z.string().trim().max(300).optional(),
 })
 
 export async function POST(req: Request) {
@@ -54,6 +58,28 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, error: 'invalid_request', issues: parsed.error.issues }, { status: 400 })
   }
   const d = parsed.data
+
+  // Coordinates: use provided ones (e.g. from Places search), else geocode
+  // the address so the location shows on the static map. Best-effort.
+  let lat = d.lat ?? null
+  let lng = d.lng ?? null
+  let placeId = d.place_id ?? null
+  if ((lat === null || lng === null) && d.address) {
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY
+    if (apiKey) {
+      try {
+        const g = parseGeocode(await (await fetch(buildGeocodeUrl(d.address, apiKey))).json())
+        if (g) {
+          lat = g.lat
+          lng = g.lng
+          placeId = placeId ?? g.place_id
+        }
+      } catch {
+        /* geocode is best-effort — the studio still saves without coords */
+      }
+    }
+  }
+
   const { data, error } = await supabase
     .from('studios')
     .insert({
@@ -65,9 +91,12 @@ export async function POST(req: Request) {
       postcode: d.postcode ?? null,
       contact_phone: d.contact_phone ?? null,
       contact_email: d.contact_email ?? null,
+      lat,
+      lng,
+      place_id: placeId,
       status: 'open',
     })
-    .select('id, name, region, status, address, state, postcode')
+    .select('id, name, region, status, address, state, postcode, lat, lng, place_id')
     .single()
   if (error) return Response.json({ ok: false, error: error.message }, { status: 500 })
   return Response.json({ ok: true, studio: data })
