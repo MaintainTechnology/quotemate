@@ -57,6 +57,7 @@ function insightFixture(overrides: Partial<SolarRoofInsight> = {}): SolarRoofIns
     segments: [{ pitchDegrees: 22, azimuthDegrees: 124, areaMeters2: 100 }],
     segmentCount: 1,
     weightedMeanPitchDegrees: 22,
+    totalSegmentAreaM2: 100,
     imageryQuality: 'HIGH',
     imageryDate: '2022-07-05',
     ...overrides,
@@ -166,6 +167,7 @@ describe('parseBuildingInsights', () => {
     expect(insight).not.toBeNull()
     expect(insight!.segmentCount).toBe(2)
     expect(insight!.weightedMeanPitchDegrees).toBeCloseTo(21.25, 2)
+    expect(insight!.totalSegmentAreaM2).toBe(100)
     expect(insight!.imageryQuality).toBe('HIGH')
     expect(insight!.imageryDate).toBe('2022-07-05')
   })
@@ -304,6 +306,22 @@ describe('enrichMetricsWithSolar', () => {
     expect(out.metrics.pitch_source).toBe('declared')
     expect(out.metrics.sloped_area_m2).toBe(slopedAreaFromFootprint(200, 'standard'))
     expect(out.warnings.join(' ')).toContain('LOW')
+  })
+
+  it('falls back when Solar roof area grossly mismatches the footprint (wrong building)', async () => {
+    // footprint 200 m²; one 900 m² segment → ratio 4.5× → distrust.
+    const body = buildingInsightsBody({
+      quality: 'HIGH',
+      segments: [{ pitchDegrees: 22, azimuthDegrees: 0, areaMeters2: 900 }],
+    })
+    const out = await enrichMetricsWithSolar(
+      metrics({ footprint_m2: 200 }),
+      inputs(),
+      RESOLVED({ fetchImpl: async () => makeRes(body) }),
+    )
+    expect(out.applied).toBe(false)
+    expect(out.metrics.pitch_source).toBe('declared')
+    expect(out.warnings.join(' ')).toContain('different building')
   })
 
   it('falls back on no coverage (404)', async () => {

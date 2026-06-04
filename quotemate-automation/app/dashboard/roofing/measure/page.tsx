@@ -779,6 +779,8 @@ function StructureCard({
         <MiniStat label="Hips · valleys" value={`${m.hips ?? '?'} · ${m.valleys ?? '?'}`} hint={m.buildingId ? `ID ${String(m.buildingId).slice(0, 10)}` : ''} />
       </div>
 
+      <PitchProvenance metrics={m} declaredPitch={structure.inputs.pitch} />
+
       {/* Per-structure material override */}
       <div className="mt-5" onClick={(e) => e.stopPropagation()}>
         <div className="mb-2 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
@@ -888,6 +890,31 @@ function SectionHeading({ eyebrow, title }: { eyebrow: string; title: string }) 
 function Label({ children }: { children: React.ReactNode }) {
   return (
     <div className="mb-2 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-text-dim">{children}</div>
+  )
+}
+
+/** Shows where the pitch driving sloped area came from. When the Google
+ *  Solar API measured it, surface the degrees + imagery provenance so the
+ *  tradie can trust or override it (imagery can be several years old). When
+ *  it fell back to the customer's declared bucket, say so plainly. */
+function PitchProvenance({ metrics, declaredPitch }: { metrics: RoofMetrics; declaredPitch: string }) {
+  const measured = metrics.pitch_source === 'measured' && metrics.pitch_degrees != null
+  if (measured) {
+    return (
+      <div className="mt-4 inline-flex flex-wrap items-center gap-x-2 gap-y-1 border border-accent/40 bg-accent/5 px-3 py-2 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.12em]">
+        <span className="text-accent">◳ Pitch {metrics.pitch_degrees}° measured</span>
+        <span className="text-text-dim">
+          · Google aerial {metrics.imagery_date ?? 'date n/a'}
+          {metrics.imagery_quality ? ` · ${metrics.imagery_quality} quality` : ''}
+          {metrics.roof_segment_count != null ? ` · ${metrics.roof_segment_count} planes` : ''}
+        </span>
+      </div>
+    )
+  }
+  return (
+    <div className="mt-4 inline-flex items-center gap-2 border border-ink-line bg-ink-deep px-3 py-2 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-text-dim">
+      <span>◳ Pitch declared · {declaredPitch}</span>
+    </div>
   )
 }
 

@@ -57,6 +57,9 @@ export type SolarRoofInsight = {
   segmentCount: number
   /** Area-weighted mean pitch across all usable segments. */
   weightedMeanPitchDegrees: number
+  /** Sum of roof-segment areas (m²) — used to sanity-check that
+   *  findClosest snapped to the same building Geoscape measured. */
+  totalSegmentAreaM2: number
   imageryQuality: ImageryQuality
   /** ISO date (YYYY-MM-DD) the imagery was captured, when present. */
   imageryDate: string | null
@@ -114,6 +117,15 @@ const DEFAULT_BASE_URL =
   'https://solar.googleapis.com/v1/buildingInsights:findClosest'
 
 const DEFAULT_ACCEPT_QUALITIES: ImageryQuality[] = ['HIGH', 'MEDIUM']
+
+// findClosest returns the nearest building with solar data, which in dense
+// areas (terraces, units) can be a DIFFERENT, larger building than the one
+// Geoscape measured. Guard: the Solar roof's total area should be within a
+// sane band of the Geoscape footprint. Upper bound is generous — a steep
+// roof's sloped area + eaves can legitimately exceed the flat footprint —
+// but a 3×+ blow-out almost always means a wrong (bigger) building.
+export const MAX_SOLAR_AREA_RATIO = 3.0
+export const MIN_SOLAR_AREA_RATIO = 0.33
 
 // ── Config resolution ───────────────────────────────────────────────
 
@@ -238,6 +250,7 @@ export function parseBuildingInsights(body: unknown): SolarRoofInsight | null {
     segments,
     segmentCount: segments.length,
     weightedMeanPitchDegrees: mean,
+    totalSegmentAreaM2: segments.reduce((acc, s) => acc + s.areaMeters2, 0),
     imageryQuality: normaliseQuality(b.imageryQuality),
     imageryDate: formatImageryDate(b.imageryDate),
   }
@@ -417,6 +430,20 @@ export async function enrichMetricsWithSolar(
       inputs,
       `Solar imagery quality ${res.insight.imageryQuality} is below the threshold for pricing; used declared pitch.`,
     )
+  }
+
+  // Sanity-check that findClosest snapped to the same building Geoscape
+  // measured — a gross area mismatch means a different (usually bigger)
+  // building, so trust the declared pitch instead.
+  if (metrics.footprint_m2 > 0) {
+    const ratio = res.insight.totalSegmentAreaM2 / metrics.footprint_m2
+    if (ratio > MAX_SOLAR_AREA_RATIO || ratio < MIN_SOLAR_AREA_RATIO) {
+      return declaredFallback(
+        metrics,
+        inputs,
+        `Solar roof area (${Math.round(res.insight.totalSegmentAreaM2)} m²) is ${ratio.toFixed(1)}× the measured footprint — likely a different building; used declared pitch.`,
+      )
+    }
   }
 
   return applySolarInsight(metrics, inputs, res.insight)
