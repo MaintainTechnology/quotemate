@@ -76,14 +76,47 @@ function IngestCard({ token, brandName }: { token: string | null; brandName: str
       setBusy(apply ? 'saving' : 'reading')
       setErr(null)
       try {
-        const fd = new FormData()
-        fd.append('pdf', file)
-        const res = await fetch(`/api/signage/ingest${apply ? '?apply=1' : ''}`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-          body: fd,
-        })
-        const json = await res.json()
+        // 1. Try to extract the PDF text in the BROWSER (works for any size).
+        //    Sending only the text (~30KB) avoids the platform's request-size
+        //    limit, which is what caused the "Request Entity Too Large" /
+        //    non-JSON crash when posting the whole 50MB+ file.
+        let text = ''
+        try {
+          const { extractText, getDocumentProxy } = await import('unpdf')
+          const pdf = await getDocumentProxy(new Uint8Array(await file.arrayBuffer()))
+          const r = await extractText(pdf, { mergePages: true })
+          text = Array.isArray(r.text) ? r.text.join('\n') : (r.text as string)
+        } catch {
+          text = ''
+        }
+
+        // 2. Choose the upload path.
+        let res: Response
+        if (text.trim().length >= 200) {
+          res = await fetch(`/api/signage/ingest${apply ? '?apply=1' : ''}`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text }),
+          })
+        } else if (file.size <= 4 * 1024 * 1024) {
+          // Browser couldn't read it, but it's small — let the server parse it.
+          const fd = new FormData()
+          fd.append('pdf', file)
+          res = await fetch(`/api/signage/ingest${apply ? '?apply=1' : ''}`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: fd,
+          })
+        } else {
+          setErr('Could not read that PDF (a scanned image?) and it is too large to upload directly. Try a text-based PDF.')
+          return
+        }
+
+        const json = await res.json().catch(() => null)
+        if (!json) {
+          setErr(`Server error (HTTP ${res.status}). Please try again.`)
+          return
+        }
         if (!json.ok) setErr(humanIngestErr(json.error))
         else setResult(json)
       } catch (e) {
@@ -106,6 +139,7 @@ function IngestCard({ token, brandName }: { token: string | null; brandName: str
       <input
         type="file"
         accept="application/pdf"
+        aria-label="Standards PDF to decipher"
         onChange={(e) => { setFile(e.target.files?.[0] ?? null); setResult(null) }}
         className="mt-4 block w-full text-sm text-text-sec file:mr-4 file:border-0 file:bg-accent file:px-4 file:py-2.5 file:font-mono file:text-xs file:font-semibold file:uppercase file:tracking-[0.12em] file:text-white"
       />
@@ -172,7 +206,11 @@ function AuditCard({ token, brand }: { token: string | null; brand: Brand | null
       const fd = new FormData()
       for (const [slot, list] of Object.entries(files)) for (const f of list) fd.append(slot, f)
       const res = await fetch('/api/signage/audit', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd })
-      const json = await res.json()
+      const json = await res.json().catch(() => null)
+      if (!json) {
+        setErr(res.status === 413 ? 'Those photos are too large to send together — try fewer or smaller images.' : `Server error (HTTP ${res.status}).`)
+        return
+      }
       if (!json.ok) setErr(json.error)
       else { setReport(json.report); setOverall(json.overall) }
     } catch (e) {
@@ -197,6 +235,7 @@ function AuditCard({ token, brand }: { token: string | null; brand: Brand | null
             </div>
             <input
               type="file" accept="image/*" multiple
+              aria-label={`Photos for ${s.label}`}
               onChange={(e) => setFiles((p) => ({ ...p, [s.slot]: e.target.files ? Array.from(e.target.files) : [] }))}
               className="mt-2 block w-full text-xs text-text-sec file:mr-3 file:border-0 file:bg-ink-line file:px-3 file:py-1.5 file:font-mono file:text-[0.65rem] file:font-semibold file:uppercase file:tracking-[0.1em] file:text-text-pri"
             />

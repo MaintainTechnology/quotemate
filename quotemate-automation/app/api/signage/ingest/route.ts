@@ -33,30 +33,45 @@ export async function POST(req: Request) {
   const brand = await brandForOrg(supabase, ctx.orgId)
   const apply = new URL(req.url).searchParams.get('apply') === '1'
 
-  let formData: FormData
-  try {
-    formData = await req.formData()
-  } catch {
-    return Response.json({ ok: false, error: 'bad_request' }, { status: 400 })
-  }
-  const file = formData.get('pdf')
-  if (!(file instanceof File)) return Response.json({ ok: false, error: 'no_pdf' }, { status: 400 })
-  if (file.type !== 'application/pdf') return Response.json({ ok: false, error: 'not_a_pdf' }, { status: 400 })
-  if (file.size > MAX_PDF) return Response.json({ ok: false, error: 'pdf_too_large' }, { status: 400 })
-
-  // 1. PDF → text (unpdf; handles large, image-heavy docs).
+  // Two ingress paths:
+  //  • JSON { text } — the browser extracted the PDF text and sends only
+  //    that (~30KB), so a 58MB PDF never hits the platform's ~4.5MB request
+  //    body limit. This is the path the audit page uses.
+  //  • multipart PDF — for small docs / programmatic callers; parsed here.
+  const contentType = req.headers.get('content-type') ?? ''
   let docText = ''
-  try {
-    const { extractText, getDocumentProxy } = await import('unpdf')
-    const pdf = await getDocumentProxy(new Uint8Array(await file.arrayBuffer()))
-    const res = await extractText(pdf, { mergePages: true })
-    docText = Array.isArray(res.text) ? res.text.join('\n') : (res.text as string)
-  } catch (e) {
-    return Response.json(
-      { ok: false, error: 'pdf_parse_failed', detail: e instanceof Error ? e.message : String(e) },
-      { status: 200 },
-    )
+  if (contentType.includes('application/json')) {
+    let body: unknown
+    try {
+      body = await req.json()
+    } catch {
+      return Response.json({ ok: false, error: 'invalid_json' }, { status: 400 })
+    }
+    docText = typeof (body as { text?: unknown })?.text === 'string' ? ((body as { text: string }).text) : ''
+  } else {
+    let formData: FormData
+    try {
+      formData = await req.formData()
+    } catch {
+      return Response.json({ ok: false, error: 'bad_request' }, { status: 400 })
+    }
+    const file = formData.get('pdf')
+    if (!(file instanceof File)) return Response.json({ ok: false, error: 'no_pdf' }, { status: 400 })
+    if (file.type !== 'application/pdf') return Response.json({ ok: false, error: 'not_a_pdf' }, { status: 400 })
+    if (file.size > MAX_PDF) return Response.json({ ok: false, error: 'pdf_too_large' }, { status: 400 })
+    try {
+      const { extractText, getDocumentProxy } = await import('unpdf')
+      const pdf = await getDocumentProxy(new Uint8Array(await file.arrayBuffer()))
+      const res = await extractText(pdf, { mergePages: true })
+      docText = Array.isArray(res.text) ? res.text.join('\n') : (res.text as string)
+    } catch (e) {
+      return Response.json(
+        { ok: false, error: 'pdf_parse_failed', detail: e instanceof Error ? e.message : String(e) },
+        { status: 200 },
+      )
+    }
   }
+
   if (docText.trim().length < 200) {
     return Response.json({ ok: false, error: 'no_text_extracted', detail: 'The PDF has little/no extractable text (scanned image?).' }, { status: 200 })
   }
