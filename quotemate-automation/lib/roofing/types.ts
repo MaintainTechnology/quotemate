@@ -103,6 +103,20 @@ export type RoofMetrics = {
    * MultiPolygon footprint are suffixed (e.g. `${buildingId}#1`).
    */
   buildingId?: string | null
+  // ── Solar-API pitch enrichment (optional, additive) ────────────────
+  // Populated by lib/roofing/solar-api.ts when ROOFING_SOLAR_ENRICHMENT
+  // is on and Google Solar imagery covers the building. All optional so
+  // existing callers / persisted payloads are unaffected.
+  /** Area-weighted mean roof pitch in degrees, when measured from imagery. */
+  pitch_degrees?: number | null
+  /** Where sloped_area_m2's pitch came from: 'measured' (Solar) or 'declared'. */
+  pitch_source?: 'measured' | 'declared'
+  /** Number of roof planes the Solar API reported for this building. */
+  roof_segment_count?: number | null
+  /** Solar imagery quality backing the measured pitch. */
+  imagery_quality?: 'HIGH' | 'MEDIUM' | 'LOW' | null
+  /** ISO date (YYYY-MM-DD) the Solar imagery was captured. */
+  imagery_date?: string | null
 }
 
 /** Which structure on the parcel a measurement represents. */

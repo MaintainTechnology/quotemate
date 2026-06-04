@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { buildRepaintPrompt, normaliseColour } from './repaint-prompt'
+import {
+  buildRefinePrompt,
+  buildRepaintPrompt,
+  normaliseColour,
+  normaliseInstruction,
+} from './repaint-prompt'
 
 describe('normaliseColour', () => {
   it('falls back to a default when empty', () => {
@@ -33,5 +38,23 @@ describe('buildRepaintPrompt', () => {
     const p = buildRepaintPrompt({ colour: 'white', scopes: ['exterior'] })
     expect(p.system.toLowerCase()).toContain('pixel-faithful')
     expect(p.user.toLowerCase()).toContain('do not change the roof')
+  })
+})
+
+describe('normaliseInstruction', () => {
+  it('trims, collapses whitespace, and caps length', () => {
+    expect(normaliseInstruction('  paint   the fence  ')).toBe('paint the fence')
+    expect(normaliseInstruction('x'.repeat(500)).length).toBeLessThanOrEqual(300)
+    expect(normaliseInstruction(null)).toBe('')
+  })
+})
+
+describe('buildRefinePrompt', () => {
+  it('embeds the requested change and grounds it to a single edit', () => {
+    const p = buildRefinePrompt('paint the fence grey too')
+    expect(p.user).toContain('paint the fence grey too')
+    expect(p.user.toLowerCase()).toContain('change only what is asked')
+    expect(p.system.toLowerCase()).toContain('pixel-faithful')
+    expect(p.user.toLowerCase()).toContain('do not undo earlier repainting')
   })
 })

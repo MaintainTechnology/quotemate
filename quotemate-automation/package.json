@@ -9,12 +9,14 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "postinstall": "node scripts/copy-cesium-assets.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.71",
     "@supabase/supabase-js": "^2.105.1",
     "ai": "^6.0.168",
+    "cesium": "^1.142.0",
     "csv-parse": "^6.2.1",
     "lucide-react": "^1.14.0",
     "maplibre-gl": "^5.24.0",

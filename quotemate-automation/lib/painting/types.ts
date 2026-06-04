@@ -208,6 +208,38 @@ export type PaintingPriceTier = {
   scope: string
 }
 
+/**
+ * Transparent breakdown of HOW the tiers were built — every input that
+ * contributed to the numbers, so the tradie can see (and trust) where
+ * Good/Better/Best came from. All figures are at the POINT quantity.
+ */
+export type PaintingPriceBreakdown = {
+  /** Per-scope Better-tier contribution: quantity × rate × multipliers. */
+  surfaces: Array<{
+    scope: PaintScope
+    unit: 'm2' | 'lm'
+    quantity: number
+    rate_per_unit: number
+    line_ex_gst: number
+  }>
+  /** Multipliers applied to every surface line (1.0 = no effect). */
+  coats_multiplier: number
+  prep_multiplier: number
+  colour_change_multiplier: number
+  /** Exterior-only access multiplier (1.0 unless 2-storey exterior). */
+  double_storey_multiplier: number
+  /** Better-tier subtotal ex GST (sum of the surface lines). */
+  better_ex_gst: number
+  /** Good = Better × this fraction (a lighter 1-coat refresh scope). */
+  good_refresh_fraction: number
+  /** Best = Better × (1 + this). */
+  premium_uplift_pct: number
+  /** inc-GST multiplier (1.10 when GST-registered, else 1.0). */
+  gst_factor: number
+  /** Per-job floor that raised any tier (0 = no floor). */
+  call_out_minimum_ex_gst: number
+}
+
 /** The full price breakdown returned to the dashboard / customer page. */
 export type PaintingQuotePrice = {
   confidence: PaintConfidence
@@ -221,6 +253,8 @@ export type PaintingQuotePrice = {
   }>
   routing: PaintingRoutingDecision
   call_out_minimum_applied?: boolean
+  /** How the tiers were computed — surfaced in the UI for transparency. */
+  breakdown?: PaintingPriceBreakdown
 }
 
 /** The orchestrator's combined result — facts + measurement + price. */

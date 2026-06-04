@@ -257,6 +257,44 @@ export function calculatePaintingPrice(args: {
   const betterLow = betterCostExGst(measurement, inputs, rateCard, (s) => s.quantity_low)
   const betterHigh = betterCostExGst(measurement, inputs, rateCard, (s) => s.quantity_high)
 
+  // ── Transparent breakdown — every contributor to the tiers ──────────
+  const coatsMult = rateCard.coats_multiplier[inputs.coats] ?? 1.0
+  const prepMult =
+    inputs.condition === 'poor'
+      ? 1.0
+      : (rateCard.condition_multiplier[
+          inputs.condition as Exclude<PaintCondition, 'poor'>
+        ] ?? 1.0)
+  const colourMult = inputs.colour_change ? 1 + rateCard.colour_change_extra : 1.0
+  const doubleStoreyMult =
+    inputs.scopes.includes('exterior') && (measurement.storeys ?? 1) >= 2
+      ? 1 + rateCard.double_storey_loading_pct
+      : 1.0
+  const breakdownSurfaces = measurement.surfaces.map((s) => {
+    const rate = rateCard.rate_per_unit[s.scope] ?? 0
+    const surfaceMult =
+      coatsMult * prepMult * colourMult * (s.scope === 'exterior' ? doubleStoreyMult : 1.0)
+    return {
+      scope: s.scope,
+      unit: s.unit,
+      quantity: s.quantity,
+      rate_per_unit: rate,
+      line_ex_gst: roundTo(s.quantity * rate * surfaceMult, 2),
+    }
+  })
+  const breakdown = {
+    surfaces: breakdownSurfaces,
+    coats_multiplier: coatsMult,
+    prep_multiplier: prepMult,
+    colour_change_multiplier: colourMult,
+    double_storey_multiplier: doubleStoreyMult,
+    better_ex_gst: roundTo(betterPoint, 2),
+    good_refresh_fraction: rateCard.good_refresh_fraction,
+    premium_uplift_pct: rateCard.premium_uplift_pct,
+    gst_factor: rateCard.gst_registered ? 1.1 : 1.0,
+    call_out_minimum_ex_gst: rateCard.call_out_minimum_ex_gst ?? 0,
+  }
+
   const tierFractions: Record<'good' | 'better' | 'best', number> = {
     good: rateCard.good_refresh_fraction,
     better: 1.0,
@@ -302,6 +340,7 @@ export function calculatePaintingPrice(args: {
     loadings_applied: applicableLoadings(measurement, inputs, rateCard),
     routing,
     call_out_minimum_applied: callOutApplied,
+    breakdown,
   }
 }
 

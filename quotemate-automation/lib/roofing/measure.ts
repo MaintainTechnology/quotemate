@@ -32,12 +32,25 @@ import {
   slopedAreaFromFootprint,
   type RoofStructureInput,
 } from './pricing'
+import {
+  enrichMetricsWithSolar,
+  resolveSolarOpts,
+  solarEnabled,
+  type SolarEnrichmentOpts,
+} from './solar-api'
 
 export type MeasureRoofOpts = {
   /** Explicit provider override — tests and the dashboard demo path use this. */
   provider?: RoofingMeasurementProvider
   /** Per-tenant rate card. When omitted, pricing.ts default applies. */
   rateCard?: RoofingRateCard
+  /**
+   * Google Solar API pitch enrichment. Defaults from env
+   * (ROOFING_SOLAR_ENRICHMENT + GOOGLE_SOLAR_API_KEY/GOOGLE_MAPS_API_KEY).
+   * When disabled (the default), the declared-pitch path runs unchanged
+   * and NO Solar call is made. Tests pass an explicit override here.
+   */
+  solar?: SolarEnrichmentOpts
 }
 
 export type MeasureRoofResult =
@@ -101,14 +114,30 @@ export async function measureAndPriceRoof(
     return { ok: false, code: raw.code, detail: raw.detail }
   }
 
-  // The provider used a default pitch to seed sloped area; rerun the
-  // pitch correction with the customer's declared bucket so the price
-  // matches what the customer just confirmed.
-  const metrics = reapplyPitchToMetrics(raw.metrics, inputs)
+  // Resolve the pitch the price is computed against. With Solar
+  // enrichment on, the measured pitch (and a possibly-overridden pitch
+  // bucket) drives sloped area; otherwise we rerun the declared-pitch
+  // correction exactly as before. effectiveInputs may differ from inputs
+  // only in the `pitch` field (measured override).
+  const warnings = [...raw.warnings]
+  let metrics: RoofMetrics
+  let effectiveInputs = inputs
+  if (solarEnabled(opts.solar)) {
+    const enriched = await enrichMetricsWithSolar(
+      raw.metrics,
+      inputs,
+      resolveSolarOpts(opts.solar),
+    )
+    metrics = enriched.metrics
+    effectiveInputs = enriched.inputs
+    warnings.push(...enriched.warnings)
+  } else {
+    metrics = reapplyPitchToMetrics(raw.metrics, inputs)
+  }
 
   const price = calculateRoofingPrice({
     metrics,
-    inputs,
+    inputs: effectiveInputs,
     rateCard: opts.rateCard,
   })
 
@@ -117,7 +146,7 @@ export async function measureAndPriceRoof(
     metrics,
     price,
     provider: raw.provider,
-    warnings: raw.warnings,
+    warnings,
   }
 }
 
@@ -193,14 +222,35 @@ export async function measureAndPriceRoofs(
     return { ok: false, code: multi.code, detail: multi.detail }
   }
 
-  const structures: RoofStructureInput[] = multi.buildings.map((b) => {
+  // Per-building pitch resolution. With Solar on, each structure is
+  // enriched with its own measured pitch (one Solar call per building,
+  // bounded by Geoscape's MAX_BUILDINGS cap); otherwise the declared
+  // pitch is applied as before. Sequential to stay gentle on the Solar
+  // quota, matching the multi-fetch style in the Geoscape provider.
+  const warnings = [...multi.warnings]
+  const solarOn = solarEnabled(opts.solar)
+  const solarOpts = resolveSolarOpts(opts.solar)
+  const structures: RoofStructureInput[] = []
+  for (const b of multi.buildings) {
     const override = (b.buildingId ? opts.perBuilding?.[b.buildingId] : undefined) ?? {}
     const merged: RoofUserInputs = { ...inputs, ...override }
-    const metrics = reapplyPitchToMetrics(b.metrics, merged)
-    return { buildingId: b.buildingId, role: b.role, metrics, inputs: merged }
-  })
+    if (solarOn) {
+      const enriched = await enrichMetricsWithSolar(b.metrics, merged, solarOpts)
+      structures.push({
+        buildingId: b.buildingId,
+        role: b.role,
+        metrics: enriched.metrics,
+        inputs: enriched.inputs,
+      })
+      const tag = b.role === 'primary' ? 'Main dwelling' : `Structure ${b.buildingId ?? ''}`.trim()
+      for (const w of enriched.warnings) warnings.push(`${tag}: ${w}`)
+    } else {
+      const metrics = reapplyPitchToMetrics(b.metrics, merged)
+      structures.push({ buildingId: b.buildingId, role: b.role, metrics, inputs: merged })
+    }
+  }
 
   const quote = priceMultiRoof({ structures, rateCard: opts.rateCard })
 
-  return { ok: true, quote, provider: multi.provider, warnings: multi.warnings }
+  return { ok: true, quote, provider: multi.provider, warnings }
 }

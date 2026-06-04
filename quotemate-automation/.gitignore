@@ -48,3 +48,4 @@ playwright/.cache/
 
 # Local smoke-test image output
 tmp/
+/cesium/

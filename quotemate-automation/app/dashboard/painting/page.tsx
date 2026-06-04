@@ -16,6 +16,9 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
+import { PaintRatesEditor } from '../_components/PaintRatesEditor'
+import { MaterialCheck } from './_components/MaterialCheck'
+import { Paint3DTilesViewer } from './_components/Paint3DTilesViewer'
 import type {
   PaintScope,
   PaintingEstimate,
@@ -317,6 +320,17 @@ export default function PaintingEstimatePage() {
       {/* ── Result ────────────────────────────────────────────────── */}
       {estimate && <ResultBlock estimate={estimate} />}
 
+      {/* ── Exterior wall material (Street View) ──────────────────── */}
+      {estimate && (
+        <MaterialCheck
+          token={token}
+          address={address}
+          postcode={postcode}
+          state={stateCode}
+          yearBuilt={estimate.facts.year_built}
+        />
+      )}
+
       {/* ── Save job ──────────────────────────────────────────────── */}
       {estimate && (
         <section className="relative z-10 mx-auto mt-6 max-w-6xl px-6 sm:px-10">
@@ -355,6 +369,20 @@ export default function PaintingEstimatePage() {
         />
       )}
 
+      {/* Your pricing — set/tweak the rates that build every estimate */}
+      {authState === 'ready' && (
+        <section className="relative z-10 mx-auto mt-8 max-w-6xl px-6 pb-4 sm:px-10">
+          <details className="border border-ink-line bg-ink-card">
+            <summary className="cursor-pointer list-none px-6 py-5 font-mono text-sm font-semibold uppercase tracking-[0.16em] text-accent hover:text-accent-press">
+              ⚙ Your painting pricing — set your own rates
+            </summary>
+            <div className="border-t border-ink-line p-2 sm:p-4">
+              <PaintRatesEditor accessToken={token} />
+            </div>
+          </details>
+        </section>
+      )}
+
       <div className="relative z-10 mt-16 bg-accent px-6 py-5 text-center text-white">
         <span className="font-mono text-sm font-semibold uppercase tracking-[0.16em]">QuoteMate · Paint estimate · two-tab</span>
       </div>
@@ -384,6 +412,17 @@ function ResultBlock({ estimate }: { estimate: PaintingEstimate }) {
         />
         <Stat label="Storeys · ceiling" value={`${measurement.storeys} · ${measurement.ceiling_height_m} m`} hint={facts.property_type ?? ''} />
         <Stat label="Beds · baths" value={`${facts.bedrooms ?? '?'} · ${facts.bathrooms ?? '?'}`} hint={facts.year_built ? `Built ${facts.year_built}` : ''} />
+      </div>
+
+      {/* Property details — everything the data source told us */}
+      <div className="mt-6 border border-ink-line bg-ink-card p-6 sm:p-7">
+        <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">Property details</div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <Stat label="Building footprint" value={facts.footprint_m2 != null ? `${Math.round(facts.footprint_m2)} m²` : '—'} hint={facts.footprint_m2 != null ? 'roof outprint' : 'not provided'} />
+          <Stat label="Land size" value={facts.land_size_m2 != null ? `${Math.round(facts.land_size_m2)} m²` : '—'} />
+          <Stat label="Type · built" value={`${facts.property_type ?? '—'}${facts.year_built ? ` · ${facts.year_built}` : ''}`} hint={facts.has_floor_plan ? 'floor plan available' : ''} />
+        </div>
+        {facts.capture_note && <p className="mt-3 text-xs text-text-dim">{facts.capture_note}</p>}
       </div>
 
       {/* Paintable surfaces */}
@@ -423,6 +462,57 @@ function ResultBlock({ estimate }: { estimate: PaintingEstimate }) {
         </div>
       )}
 
+      {/* How the price was built — every contributor to the tiers */}
+      {price.breakdown && (
+        <div className="mt-6 border border-ink-line border-l-4 border-l-accent bg-ink-card p-6 sm:p-7">
+          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">How the price was built</div>
+          <p className="mt-2 text-xs text-text-dim">Better = each surface × your rate × multipliers. Good and Best are derived from Better.</p>
+          <div className="mt-4 space-y-2 font-mono text-sm">
+            {price.breakdown.surfaces.map((s) => (
+              <div key={s.scope} className="flex flex-wrap items-baseline justify-between gap-2 border-b border-ink-line pb-2">
+                <span className="uppercase tracking-[0.1em] text-text-sec">{s.scope}</span>
+                <span className="tabular-nums text-text-dim">{s.quantity.toFixed(0)} {s.unit === 'lm' ? 'lm' : 'm²'} × ${s.rate_per_unit} → <span className="text-text-pri">${money(s.line_ex_gst)}</span></span>
+              </div>
+            ))}
+            <div className="flex items-baseline justify-between pt-1">
+              <span className="text-text-sec">Coats · prep · colour</span>
+              <span className="tabular-nums text-text-pri">× {price.breakdown.coats_multiplier} · {price.breakdown.prep_multiplier} · {price.breakdown.colour_change_multiplier}</span>
+            </div>
+            {price.breakdown.double_storey_multiplier !== 1 && (
+              <div className="flex items-baseline justify-between">
+                <span className="text-text-sec">Double-storey exterior</span>
+                <span className="tabular-nums text-text-pri">× {price.breakdown.double_storey_multiplier}</span>
+              </div>
+            )}
+            <div className="flex items-baseline justify-between border-t border-ink-line pt-2">
+              <span className="font-semibold text-text-pri">Better subtotal (ex GST)</span>
+              <span className="font-bold tabular-nums text-accent">${money(price.breakdown.better_ex_gst)}</span>
+            </div>
+            <div className="flex items-baseline justify-between">
+              <span className="text-text-sec">Good = Better ×</span>
+              <span className="tabular-nums text-text-pri">{Math.round(price.breakdown.good_refresh_fraction * 100)}%</span>
+            </div>
+            <div className="flex items-baseline justify-between">
+              <span className="text-text-sec">Best = Better ×</span>
+              <span className="tabular-nums text-text-pri">{Math.round((1 + price.breakdown.premium_uplift_pct) * 100)}%</span>
+            </div>
+            {price.breakdown.gst_factor > 1 && (
+              <div className="flex items-baseline justify-between">
+                <span className="text-text-sec">GST</span>
+                <span className="tabular-nums text-text-pri">+ {Math.round((price.breakdown.gst_factor - 1) * 100)}%</span>
+              </div>
+            )}
+            {price.breakdown.call_out_minimum_ex_gst > 0 && (
+              <div className="flex items-baseline justify-between">
+                <span className="text-text-sec">Call-out minimum (floor)</span>
+                <span className="tabular-nums text-text-pri">${money(price.breakdown.call_out_minimum_ex_gst)}</span>
+              </div>
+            )}
+          </div>
+          <p className="mt-3 text-xs text-text-dim">Tune any of these in &ldquo;Your painting pricing&rdquo; below.</p>
+        </div>
+      )}
+
       {/* Derivation notes + warnings */}
       <div className="mt-6 border border-ink-line border-l-4 border-l-accent bg-ink-card p-6 sm:p-7">
         <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">How this was derived</div>
@@ -444,10 +534,18 @@ function ResultBlock({ estimate }: { estimate: PaintingEstimate }) {
 const COLOUR_SWATCHES = [
   'Surfmist off-white',
   'Dulux Natural White',
+  'Dulux Vivid White',
+  'Lexicon Quarter',
+  'Hog Bristle',
   'Monument charcoal',
+  'Basalt grey',
   'Woodland Grey',
+  'Shale Grey',
   'Sage green',
   'Hamptons blue',
+  'Terracotta',
+  'Heritage red',
+  'Charcoal black',
 ] as const
 
 function PaintPreviewSection({
@@ -469,6 +567,12 @@ function PaintPreviewSection({
   const [busy, setBusy] = useState(false)
   const [after, setAfter] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  // Conversational refinement of the preview (Jon's "paint the fence grey too").
+  const [changeLog, setChangeLog] = useState<string[]>([])
+  const [history, setHistory] = useState<string[]>([])
+  const [refineInput, setRefineInput] = useState('')
+  const [refining, setRefining] = useState(false)
+  const [show3D, setShow3D] = useState(false)
 
   // Fetch the Street View "before" (cheap, no Gemini) so the tradie sees
   // the house resolved correctly before spending a generation.
@@ -518,6 +622,8 @@ function PaintPreviewSection({
         | { ok: false; code?: string; detail?: string; error?: string }
       if (json.ok) {
         setAfter(json.after)
+        setChangeLog([])
+        setHistory([])
         if (json.before) setBeforeSrc(json.before)
       } else {
         setErr(json.detail ?? json.code ?? json.error ?? 'Could not generate the preview.')
@@ -528,6 +634,45 @@ function PaintPreviewSection({
       setBusy(false)
     }
   }, [token, address, postcode, state, colour, scopes])
+
+  // Apply one conversational change to the CURRENT preview image.
+  const refine = useCallback(async () => {
+    const instruction = refineInput.trim()
+    if (!token || !after || instruction.length < 2) return
+    setRefining(true)
+    setErr(null)
+    try {
+      const res = await fetch('/api/painting/preview/refine', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: after, instruction }),
+      })
+      const json = (await res.json()) as
+        | { ok: true; after: string }
+        | { ok: false; code?: string; detail?: string; error?: string }
+      if (json.ok) {
+        setHistory((h) => [...h, after])
+        setAfter(json.after)
+        setChangeLog((c) => [...c, instruction])
+        setRefineInput('')
+      } else {
+        setErr(json.detail ?? json.code ?? json.error ?? 'Could not apply that change.')
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setRefining(false)
+    }
+  }, [token, after, refineInput])
+
+  const undo = useCallback(() => {
+    setHistory((h) => {
+      if (h.length === 0) return h
+      setAfter(h[h.length - 1])
+      setChangeLog((c) => c.slice(0, -1))
+      return h.slice(0, -1)
+    })
+  }, [])
 
   return (
     <section className="relative z-10 mx-auto mt-8 max-w-6xl px-6 pb-4 sm:px-10">
@@ -544,12 +689,22 @@ function PaintPreviewSection({
         {/* Colour picker */}
         <div className="mt-5">
           <Label>Preview colour</Label>
-          <input
-            value={colour}
-            onChange={(e) => setColour(e.target.value)}
-            placeholder="e.g. Surfmist off-white, Monument charcoal, sage green"
-            className={INPUT}
-          />
+          <div className="flex items-center gap-3">
+            <input
+              value={colour}
+              onChange={(e) => setColour(e.target.value)}
+              placeholder="e.g. Monument charcoal — or pick a colour →"
+              className={`${INPUT} flex-1`}
+            />
+            <input
+              type="color"
+              aria-label="Pick a custom colour"
+              title="Custom colour"
+              value={/^#[0-9a-fA-F]{6}$/.test(colour) ? colour : '#777777'}
+              onChange={(e) => setColour(e.target.value)}
+              className="h-12 w-14 shrink-0 cursor-pointer border border-ink-line bg-ink-deep p-1"
+            />
+          </div>
           <div className="mt-3 flex flex-wrap gap-2">
             {COLOUR_SWATCHES.map((c) => (
               <button
@@ -603,11 +758,94 @@ function PaintPreviewSection({
             </figure>
           </div>
         )}
+        {/* Conversational refinement — ask for more changes */}
+        {after && (
+          <div className="mt-6 border border-ink-line border-l-4 border-l-accent bg-ink-deep p-5">
+            <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">Refine the preview</div>
+            <p className="mt-1 text-sm text-text-sec">
+              Ask for changes in plain English — e.g. &ldquo;paint the fence grey too&rdquo;, &ldquo;make the front door black&rdquo;, &ldquo;add a darker trim&rdquo;.
+            </p>
+            {changeLog.length > 0 && (
+              <ul className="mt-3 space-y-1.5">
+                {changeLog.map((c, i) => (
+                  <li key={i} className="flex items-baseline gap-2 text-sm text-text-sec">
+                    <span className="font-mono text-xs text-accent">{i + 1}.</span>
+                    <span>{c}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <input
+                value={refineInput}
+                onChange={(e) => setRefineInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    void refine()
+                  }
+                }}
+                placeholder="paint the fence grey too…"
+                disabled={refining}
+                className={`${INPUT} flex-1`}
+              />
+              <button
+                type="button"
+                onClick={() => void refine()}
+                disabled={refining || refineInput.trim().length < 2}
+                className="inline-flex items-center gap-2 bg-accent px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {refining ? (<><Spinner /> Applying…</>) : (<>Apply change</>)}
+              </button>
+              {history.length > 0 && (
+                <button
+                  type="button"
+                  onClick={undo}
+                  disabled={refining}
+                  className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-accent disabled:opacity-50"
+                >
+                  Undo
+                </button>
+              )}
+            </div>
+            <p className="mt-2 text-xs text-text-dim">
+              Updates the picture only — if a change adds work (e.g. the fence), add it to the price in the estimate above.
+            </p>
+          </div>
+        )}
+
         {after && (
           <p className="mt-3 text-xs text-text-dim">
             AI-generated illustration for discussion only — actual colour and finish may vary.
           </p>
         )}
+
+        {/* 3D fly-around (Google Photorealistic 3D Tiles, recoloured) */}
+        <div className="mt-6 border-t border-ink-line pt-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">Fly around in 3D</div>
+              <p className="mt-1 max-w-2xl text-sm text-text-sec">
+                Orbit the property in Google&rsquo;s photorealistic 3D model, tinted to your colour.
+                The walls are auto-detected, so it&rsquo;s approximate — drag to orbit, scroll to zoom.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShow3D((v) => !v)}
+              disabled={address.trim().length < 3}
+              className="inline-flex items-center gap-2 border border-ink-line px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {show3D ? 'Hide 3D' : (<>Fly around in 3D <span aria-hidden="true">&rarr;</span></>)}
+            </button>
+          </div>
+          {show3D && (
+            <div className="mt-4">
+              <Paint3DTilesViewer token={token} address={address} postcode={postcode} state={state} colour={colour} />
+              <p className="mt-2 text-xs text-text-dim">3D imagery © Google. Tint is an AI-approximated preview, not a precise paint match.</p>
+            </div>
+          )}
+        </div>
       </div>
     </section>
   )

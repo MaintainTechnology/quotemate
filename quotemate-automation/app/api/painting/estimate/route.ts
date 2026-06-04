@@ -13,7 +13,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { EstimateRequestSchema } from '@/lib/painting/request-schema'
 import { estimatePainting } from '@/lib/painting/measure'
-import { DEFAULT_PAINTING_RATE_CARD } from '@/lib/painting/pricing'
+import { effectivePaintingRateCardFromOverlay } from '@/lib/painting/rate-card-overlay'
 import type { PaintingRateCard } from '@/lib/painting/types'
 
 export const dynamic = 'force-dynamic'
@@ -65,31 +65,6 @@ async function loadPaintingOverlay(
   }
 }
 
-/** Defensive shallow merge of an overlay JSON onto the default rate card.
- *  Only known keys are taken; rate_per_unit merges per-scope. */
-function effectivePaintingRateCard(overlay: unknown): PaintingRateCard {
-  const base = DEFAULT_PAINTING_RATE_CARD
-  if (overlay == null || typeof overlay !== 'object') return base
-  const o = overlay as Record<string, unknown>
-  const num = (v: unknown, fallback: number) =>
-    typeof v === 'number' && Number.isFinite(v) ? v : fallback
-  return {
-    ...base,
-    rate_per_unit: {
-      walls: num((o.rate_per_unit as Record<string, unknown>)?.walls, base.rate_per_unit.walls),
-      ceilings: num((o.rate_per_unit as Record<string, unknown>)?.ceilings, base.rate_per_unit.ceilings),
-      trim: num((o.rate_per_unit as Record<string, unknown>)?.trim, base.rate_per_unit.trim),
-      exterior: num((o.rate_per_unit as Record<string, unknown>)?.exterior, base.rate_per_unit.exterior),
-    },
-    double_storey_loading_pct: num(o.double_storey_loading_pct, base.double_storey_loading_pct),
-    premium_uplift_pct: num(o.premium_uplift_pct, base.premium_uplift_pct),
-    good_refresh_fraction: num(o.good_refresh_fraction, base.good_refresh_fraction),
-    call_out_minimum_ex_gst: num(o.call_out_minimum_ex_gst, base.call_out_minimum_ex_gst ?? 0),
-    gst_registered:
-      typeof o.gst_registered === 'boolean' ? o.gst_registered : base.gst_registered,
-  }
-}
-
 export async function POST(req: Request) {
   const auth = await userAndTenantFromBearer(req)
   if (!auth) {
@@ -116,7 +91,7 @@ export async function POST(req: Request) {
   let rateCard: PaintingRateCard | undefined
   if (auth.tenantId) {
     const overlayJson = await loadPaintingOverlay(auth.tenantId, auth.primaryTrade)
-    if (overlayJson != null) rateCard = effectivePaintingRateCard(overlayJson)
+    if (overlayJson != null) rateCard = effectivePaintingRateCardFromOverlay(overlayJson)
   }
 
   const result = await estimatePainting(address, inputs, {
