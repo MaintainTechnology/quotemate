@@ -1,10 +1,8 @@
-EE6 AC ceiling fan x1 (picker Tempest) — PASS. AUTO-QUOTE. mat $178 + kit $47.60 grounded; labour 1.0 folded to 3.0 floor; $637.56.
-fied electrical OK (used "external brick wall" not eaves).
-=======================================================================
-d per-tap 3x$68=$204 (steep).
-
-================================================================================
-RALPH ROUND-2 SUMMARY (16 tests): 11 PASS / 1 PARTIAL / 4 FAIL (2 CRITICAL)
+PP6 CCTV drain inspection x1 (standard) — PASS. AUTO-QUOTE. CCTV assembly $204(=$150x1.36) + call-out $160 grounded; labour 3.0 floor; GOOD $718.
+floor; GOOD $609.20 (default=better full-suite $1105 upsell).
+20x1.36); labour 3.0 floor; $996.82. Picker recipe substitution (only garden tap in tap recipe).
+ICAL round3 done: EE1-9 PASS (EE2 was r2), EE7 FAIL(customer-supply fan billed), EE10 FAIL(diagnostic $99). 8 PASS / 2 FAIL ---
+/ 4 FAIL (2 CRITICAL)
 LABOUR FIX: PERFECT everywhere (E1=4.0/E6=2.4/E7=3.0/P16=3.0+0.75; large counts correct; NO count-as-hours anywhere). Materials grounded@catalogue+36% markup everywhere they quoted.
 PASS: E1,E3,E4,E5,E6,E7,E8,E9,P10,P11,P16
 PARTIAL: E2 (premium DC request -> default tier=AC fans; correct DC only in unselected BEST)

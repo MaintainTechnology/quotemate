@@ -59,6 +59,7 @@ export function Paint3DTilesViewer({ token, address, postcode, state, colour }: 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cesiumRef = useRef<any>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error' | 'unsupported'>('loading')
+  const [stage, setStage] = useState('Starting…')
   const [errMsg, setErrMsg] = useState<string | null>(null)
 
   // Build / tear down the scene when the address changes.
@@ -72,7 +73,19 @@ export function Paint3DTilesViewer({ token, address, postcode, state, colour }: 
 
     let cancelled = false
     setStatus('loading')
+    setStage('Locating property…')
     setErrMsg(null)
+
+    // Never spin forever — surface a hint if something stalls.
+    const watchdog = setTimeout(() => {
+      if (cancelled) return
+      setStatus((s) => (s === 'loading' ? 'error' : s))
+      setErrMsg(
+        (m) =>
+          m ??
+          'The 3D view is taking unusually long — likely the Map Tiles API key/billing, or no 3D coverage for this address. Open the browser console to see tile errors.',
+      )
+    }, 50_000)
 
     void (async () => {
       try {
@@ -86,17 +99,24 @@ export function Paint3DTilesViewer({ token, address, postcode, state, colour }: 
         if (!locJson.ok) throw new Error(locJson.detail ?? locJson.code ?? 'Could not locate the property.')
         if (cancelled) return
 
-        // 2. Load Cesium (set asset base + Ion token before the import).
+        // 2. Load Cesium (set asset base + tokens before the import). The
+        // first dynamic import compiles a large chunk — slow on the first
+        // open in dev, fast after.
         ;(window as unknown as { CESIUM_BASE_URL?: string }).CESIUM_BASE_URL = '/cesium'
         ensureCesiumCss()
+        setStage('Loading 3D engine…')
         const Cesium = await import('cesium')
         if (cancelled || !containerRef.current) return
         cesiumRef.current = Cesium
         if (ION_TOKEN) Cesium.Ion.defaultAccessToken = ION_TOKEN
+        Cesium.GoogleMaps.defaultApiKey = MAPS_3D_KEY
 
-        // 3. Viewer with no globe (Google tiles supply terrain + imagery) and minimal UI.
+        // 3. Viewer: no globe AND no base imagery layer. Google 3D Tiles are
+        // the whole scene; without baseLayer:false the Viewer tries to fetch
+        // default Cesium-Ion world imagery, which stalls the load.
         const viewer = new Cesium.Viewer(containerRef.current, {
           globe: false,
+          baseLayer: false,
           baseLayerPicker: false,
           geocoder: false,
           homeButton: false,
@@ -111,9 +131,11 @@ export function Paint3DTilesViewer({ token, address, postcode, state, colour }: 
         viewerRef.current = viewer
         if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false
 
-        // 4. Google Photorealistic 3D Tiles, loaded directly with the Maps key.
-        const tileset = await Cesium.Cesium3DTileset.fromUrl(
-          `https://tile.googleapis.com/v1/3dtiles/root.json?key=${encodeURIComponent(MAPS_3D_KEY)}`,
+        // 4. Google Photorealistic 3D Tiles via the official helper — it
+        // attaches the key to EVERY tile request (a raw root URL does not).
+        setStage('Loading Google 3D tiles…')
+        const tileset = await Cesium.createGooglePhotorealistic3DTileset(
+          { key: MAPS_3D_KEY },
           { showCreditsOnScreen: true },
         )
         if (cancelled) {
@@ -121,6 +143,7 @@ export function Paint3DTilesViewer({ token, address, postcode, state, colour }: 
           return
         }
         viewer.scene.primitives.add(tileset)
+        setStage('Framing the property…')
 
         // 5. The recolour shader (wall mask + luminance-preserving tint).
         const { center, up, radius } = maskGeometry(Cesium, locJson)
@@ -138,9 +161,13 @@ export function Paint3DTilesViewer({ token, address, postcode, state, colour }: 
         )
         viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY)
 
-        if (!cancelled) setStatus('ready')
+        if (!cancelled) {
+          clearTimeout(watchdog)
+          setStatus('ready')
+        }
       } catch (e) {
         if (!cancelled) {
+          clearTimeout(watchdog)
           setStatus('error')
           setErrMsg(e instanceof Error ? e.message : String(e))
         }
@@ -149,6 +176,7 @@ export function Paint3DTilesViewer({ token, address, postcode, state, colour }: 
 
     return () => {
       cancelled = true
+      clearTimeout(watchdog)
       if (viewerRef.current) {
         try {
           viewerRef.current.destroy()
@@ -180,7 +208,7 @@ export function Paint3DTilesViewer({ token, address, postcode, state, colour }: 
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <span className="inline-flex items-center gap-3 bg-ink-deep/80 px-4 py-2 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-sec">
             <span className="inline-block h-3.5 w-3.5 animate-spin border-2 border-accent/40 border-t-accent" aria-hidden="true" />
-            Loading 3D…
+            {stage}
           </span>
         </div>
       )}

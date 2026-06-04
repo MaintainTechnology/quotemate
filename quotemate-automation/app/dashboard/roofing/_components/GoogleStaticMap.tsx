@@ -14,6 +14,7 @@
 // looking at.
 
 import { useEffect, useState } from 'react'
+import { ZoomableImage } from '../../_components/ZoomableImage'
 
 export type GoogleStaticMapProps = {
   /** Bearer access token — the proxy gates on it. */
@@ -101,12 +102,12 @@ export function GoogleStaticMap({
         </span>
       </div>
 
-      {/* The PNG */}
+      {/* The PNG — click to enlarge */}
       {src ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <ZoomableImage
           src={src}
           alt={`Google Maps satellite view of ${address ?? 'the property'}`}
+          caption="Google satellite"
           className="h-full w-full object-cover"
         />
       ) : (

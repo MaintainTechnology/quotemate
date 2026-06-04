@@ -19,6 +19,7 @@ import { getBrowserSupabase } from '@/lib/supabase/client'
 import { PaintRatesEditor } from '../_components/PaintRatesEditor'
 import { MaterialCheck } from './_components/MaterialCheck'
 import { Paint3DTilesViewer } from './_components/Paint3DTilesViewer'
+import { ZoomableImage } from '../_components/ZoomableImage'
 import type {
   PaintScope,
   PaintingEstimate,
@@ -741,8 +742,7 @@ function PaintPreviewSection({
             <figure>
               <figcaption className="mb-2 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">Before</figcaption>
               {beforeSrc ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={beforeSrc} alt="Street View of the house" className="w-full border border-ink-line" />
+                <ZoomableImage src={beforeSrc} alt="Street View of the house" caption="Before · Street View" className="w-full border border-ink-line" />
               ) : (
                 <div className="flex h-48 items-center justify-center border border-ink-line bg-ink-deep text-text-dim">{beforeState === 'loading' ? 'Loading…' : '—'}</div>
               )}
@@ -750,8 +750,7 @@ function PaintPreviewSection({
             <figure>
               <figcaption className="mb-2 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-accent">After · AI repaint</figcaption>
               {after ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={after} alt="AI preview of the house repainted" className="w-full border border-accent" />
+                <ZoomableImage src={after} alt="AI preview of the house repainted" caption="After · AI repaint" className="w-full border border-accent" />
               ) : (
                 <div className="flex h-48 items-center justify-center border border-ink-line bg-ink-deep text-text-dim">{busy ? 'Generating…' : 'Pick a colour and generate'}</div>
               )}
