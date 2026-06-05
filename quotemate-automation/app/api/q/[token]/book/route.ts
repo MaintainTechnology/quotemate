@@ -25,6 +25,7 @@ import { createClient } from '@supabase/supabase-js'
 import { pipelineLog } from '@/lib/log/pipeline'
 import { BOOKING_STATE } from '@/lib/quote/hold'
 import { earlyBirdStatus } from '@/lib/quote/early-bird'
+import { resolveBookableSlots } from '@/lib/quote/slots'
 import {
   createCheckoutSessionForTier,
   expireCheckoutSession,
@@ -111,14 +112,17 @@ export async function POST(
     return Response.json({ ok: false, error: 'No tradie configured' }, { status: 409 })
   }
 
-  const currentSlots: string[] = Array.isArray(tenantSlots.available_slots)
-    ? (tenantSlots.available_slots as string[])
-    : []
+  // The bookable set MUST be derived the same way the booking page renders
+  // it: the tenant's own FUTURE curated slots, or a generated rolling
+  // window when those are empty/stale. Validating against the raw stored
+  // list would 409 every customer once the static seed decayed to all-past
+  // (the bug) and would reject the rolling slots the page now offers.
+  const bookableSlots = resolveBookableSlots(tenantSlots.available_slots)
 
-  if (!currentSlots.includes(slot)) {
+  if (!bookableSlots.includes(slot)) {
     log.err('slot not available', null, {
       slot,
-      currentSlots: currentSlots.slice(0, 10),
+      bookableSlots: bookableSlots.slice(0, 10),
     })
     return Response.json({ ok: false, error: 'That slot is no longer available' }, { status: 409 })
   }

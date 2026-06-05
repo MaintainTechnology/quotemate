@@ -21,6 +21,7 @@ import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { resolveGoogleBookingUrl } from '@/lib/quote/booking'
+import { resolveBookableSlots } from '@/lib/quote/slots'
 import { SlotPicker } from './SlotPicker'
 
 export const dynamic = 'force-dynamic'
@@ -147,9 +148,14 @@ export default async function BookingPage(props: {
         .maybeSingle()
     : { data: null }
 
-  const slots: string[] = Array.isArray(tenantRow?.available_slots)
-    ? (tenantRow!.available_slots as string[])
-    : []
+  // Bookable slots = the tenant's own FUTURE curated slots when they have
+  // any, otherwise a generated rolling window. This is the fix for the
+  // "no upcoming slots" dead-end: a static available_slots list decays to
+  // all-past over time (the May pilot seed had fully elapsed for every
+  // tenant), and resolveBookableSlots self-renews so the picker is never
+  // empty. The booking API derives the same list, so a picked generated
+  // slot always validates.
+  const slots: string[] = resolveBookableSlots(tenantRow?.available_slots)
 
   const isPaid = !!quote.paid_at
   const isScheduled = !!quote.scheduled_at
