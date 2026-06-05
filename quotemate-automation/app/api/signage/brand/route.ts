@@ -7,7 +7,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { orgFromBearer } from '@/lib/signage/org'
-import { brandForOrg } from '@/lib/signage/brand'
+import { resolveSignageBrand, loadBrand } from '@/lib/signage/brand'
 import { normalizeShots } from '@/lib/signage/shots'
 
 export const dynamic = 'force-dynamic'
@@ -20,8 +20,8 @@ const supabase = createClient(
 export async function GET(req: Request) {
   const ctx = await orgFromBearer(supabase, req)
   if (!ctx) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  const brand = await brandForOrg(supabase, ctx.orgId)
-  return Response.json({ ok: true, brand })
+  const { brand, brands } = await resolveSignageBrand(supabase, req, ctx.orgId)
+  return Response.json({ ok: true, brand, brands, selected: brand.slug })
 }
 
 const PatchSchema = z.object({
@@ -35,7 +35,7 @@ const PatchSchema = z.object({
 export async function PATCH(req: Request) {
   const ctx = await orgFromBearer(supabase, req)
   if (!ctx) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  const brand = await brandForOrg(supabase, ctx.orgId)
+  const { brand } = await resolveSignageBrand(supabase, req, ctx.orgId)
 
   let body: unknown
   try {
@@ -66,6 +66,6 @@ export async function PATCH(req: Request) {
   const { error } = await supabase.from('brands').update(update).eq('slug', brand.slug)
   if (error) return Response.json({ ok: false, error: error.message }, { status: 500 })
 
-  const updated = await brandForOrg(supabase, ctx.orgId)
+  const updated = await loadBrand(supabase, brand.slug)
   return Response.json({ ok: true, brand: updated })
 }

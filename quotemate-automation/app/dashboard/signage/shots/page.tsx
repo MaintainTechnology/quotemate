@@ -7,6 +7,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
+import { BrandTabs, withBrand, brandFromUrl, syncBrandInUrl, type BrandTab } from '../_components/BrandTabs'
 
 type Shot = { slot: string; label: string; instruction: string }
 
@@ -14,16 +15,21 @@ export default function SignageShotsPage() {
   const [token, setToken] = useState<string | null>(null)
   const [authState, setAuthState] = useState<'loading' | 'signed-out' | 'ready'>('loading')
   const [brandName, setBrandName] = useState('')
+  const [brands, setBrands] = useState<BrandTab[]>([])
+  const [brandSlug, setBrandSlug] = useState<string | null>(null)
   const [shots, setShots] = useState<Shot[]>([])
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
-  const load = useCallback(async (t: string) => {
-    const res = await fetch('/api/signage/brand', { headers: { Authorization: `Bearer ${t}` }, cache: 'no-store' })
+  const load = useCallback(async (t: string, brandParam: string | null) => {
+    const q = brandParam ? `?brand=${encodeURIComponent(brandParam)}` : ''
+    const res = await fetch(`/api/signage/brand${q}`, { headers: { Authorization: `Bearer ${t}` }, cache: 'no-store' })
     if (res.status === 401) return setAuthState('signed-out')
     const json = await res.json()
     if (json.ok) {
       setBrandName(json.brand?.name ?? 'Brand')
+      setBrands(json.brands ?? [])
+      setBrandSlug(json.selected ?? null)
       setShots(
         (json.brand?.shots ?? []).map((s: Shot) => ({ slot: s.slot, label: s.label, instruction: s.instruction ?? '' })),
       )
@@ -38,9 +44,20 @@ export default function SignageShotsPage() {
         const t = session?.access_token ?? null
         setToken(t)
         if (!t) return setAuthState('signed-out')
-        void load(t)
+        void load(t, brandFromUrl())
       })
   }, [load])
+
+  const switchBrand = useCallback(
+    (slug: string) => {
+      if (!token || slug === brandSlug) return
+      syncBrandInUrl(slug)
+      setBrandSlug(slug)
+      setMsg(null)
+      void load(token, slug)
+    },
+    [token, brandSlug, load],
+  )
 
   const setShot = (i: number, patch: Partial<Shot>) => setShots((prev) => prev.map((s, j) => (j === i ? { ...s, ...patch } : s)))
   const addShot = () => setShots((prev) => [...prev, { slot: '', label: '', instruction: '' }])
@@ -51,7 +68,8 @@ export default function SignageShotsPage() {
     setBusy(true)
     setMsg(null)
     try {
-      const res = await fetch('/api/signage/brand', {
+      const q = brandSlug ? `?brand=${encodeURIComponent(brandSlug)}` : ''
+      const res = await fetch(`/api/signage/brand${q}`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ shots }),
@@ -65,12 +83,12 @@ export default function SignageShotsPage() {
     } finally {
       setBusy(false)
     }
-  }, [token, shots])
+  }, [token, shots, brandSlug])
 
   return (
     <main className="min-h-screen bg-ink-deep text-text-pri">
       <section className="relative z-10 mx-auto max-w-4xl px-6 pt-14 pb-8 sm:px-10 md:pt-16">
-        <Breadcrumb />
+        <Breadcrumb brandSlug={brandSlug} />
         <h1 className="mt-6 font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2rem,4.5vw,3.25rem)]">
           Photo <span className="text-accent">shots</span>
         </h1>
@@ -78,6 +96,9 @@ export default function SignageShotsPage() {
           These are the photos {brandName || 'the brand'} asks each location to take. Add, rename, or remove
           surfaces — the slot id is snake_case and auto-cleaned on save.
         </p>
+        {authState === 'ready' && brands.length > 1 && (
+          <BrandTabs brands={brands} selected={brandSlug} onSelect={switchBrand} />
+        )}
       </section>
 
       {authState === 'signed-out' && (
@@ -130,12 +151,12 @@ export default function SignageShotsPage() {
 function Label({ children }: { children: React.ReactNode }) {
   return <div className="mb-1.5 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-dim">{children}</div>
 }
-function Breadcrumb() {
+function Breadcrumb({ brandSlug }: { brandSlug: string | null }) {
   return (
     <div className="flex flex-wrap items-center gap-3 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
       <Link href="/dashboard" className="hover:text-text-pri">Dashboard</Link>
       <span className="text-ink-line">/</span>
-      <Link href="/dashboard/signage" className="hover:text-text-pri">Signage</Link>
+      <Link href={withBrand('/dashboard/signage', brandSlug)} className="hover:text-text-pri">Signage</Link>
       <span className="text-ink-line">/</span>
       <span className="text-text-pri">Shots</span>
     </div>

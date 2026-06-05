@@ -14,7 +14,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { RuleVerdict, SignageRule, ShotSlot } from './types'
 import { coerceShots, shotLabel } from './shots'
-import { brandForOrg } from './brand'
+import { brandForOrg, loadBrand } from './brand'
 import { assessPhoto } from './vision-assess'
 import { validateSignageAssessment } from './validate-verdicts'
 import {
@@ -113,7 +113,7 @@ export async function runAssessment(
   // 1. Load the request.
   const { data: reqRow, error: reqErr } = await supabase
     .from('signage_requests')
-    .select('id, studio_id, org_id, required_shots, submitted_at, sweep_id')
+    .select('id, studio_id, org_id, required_shots, submitted_at, sweep_id, brand_slug')
     .eq('id', requestId)
     .maybeSingle()
   if (reqErr || !reqRow) return { ok: false, error: 'request_not_found' }
@@ -131,8 +131,14 @@ export async function runAssessment(
     if (sweep?.rule_set_version) ruleSetVersion = sweep.rule_set_version as number
   }
 
-  // 3. Resolve the brand for this org, then load submissions + rules.
-  const brand = await brandForOrg(supabase, reqRow.org_id as string)
+  // 3. Resolve the brand from the REQUEST (set at sweep creation) so the
+  //    assessment scores against the right brand's rules + shots and queries
+  //    the right brand's Gemini file store — never the org's default. Fall
+  //    back to the org's brand for legacy rows with no brand_slug.
+  const reqBrandSlug = (reqRow.brand_slug as string | null)?.trim()
+  const brand = reqBrandSlug
+    ? await loadBrand(supabase, reqBrandSlug)
+    : await brandForOrg(supabase, reqRow.org_id as string)
   const [{ data: subs }, allRules] = await Promise.all([
     supabase
       .from('signage_photo_submissions')
@@ -199,6 +205,7 @@ export async function runAssessment(
     request_id: requestId,
     studio_id: reqRow.studio_id,
     org_id: reqRow.org_id,
+    brand_slug: brand.slug,
     rule_set_version: ruleSetVersion,
     status,
     overall: finalOverall,

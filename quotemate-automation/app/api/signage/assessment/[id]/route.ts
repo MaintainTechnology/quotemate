@@ -25,7 +25,7 @@ const supabase = createClient(
 async function loadOwned(orgId: string, id: string) {
   const { data } = await supabase
     .from('signage_assessments')
-    .select('id, request_id, studio_id, org_id, status, overall, counts, verdicts, hq_decision, hq_note, rule_set_version, created_at')
+    .select('id, request_id, studio_id, org_id, brand_slug, status, overall, counts, verdicts, hq_decision, hq_note, rule_set_version, created_at')
     .eq('id', id)
     .maybeSingle()
   if (!data || (data.org_id as string) !== orgId) return null
@@ -40,13 +40,14 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   const a = await loadOwned(auth.orgId, id)
   if (!a) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
 
+  const brandSlug = (a.brand_slug as string | null)?.trim() || 'f45'
   const [{ data: studio }, { data: subs }, rules] = await Promise.all([
     supabase.from('studios').select('name, region').eq('id', a.studio_id as string).maybeSingle(),
     supabase
       .from('signage_photo_submissions')
       .select('shot_slot, storage_path')
       .eq('request_id', a.request_id as string),
-    loadActiveRules(supabase, 'f45', (a.rule_set_version as number) ?? 1),
+    loadActiveRules(supabase, brandSlug, (a.rule_set_version as number) ?? 1),
   ])
 
   const ruleByKey = new Map<string, SignageRule>(rules.map((r) => [r.rule_key, r]))

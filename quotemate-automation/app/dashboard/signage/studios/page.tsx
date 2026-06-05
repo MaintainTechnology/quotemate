@@ -12,6 +12,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 import { AddressAutocomplete } from '@/app/dashboard/roofing/_components/AddressAutocomplete'
+import { BrandTabs, withBrand, brandFromUrl, syncBrandInUrl, type BrandTab } from '../_components/BrandTabs'
 
 type Studio = {
   id: string
@@ -30,6 +31,8 @@ export default function SignageStudiosPage() {
   const [token, setToken] = useState<string | null>(null)
   const [authState, setAuthState] = useState<'loading' | 'signed-out' | 'ready'>('loading')
   const [studios, setStudios] = useState<Studio[]>([])
+  const [brands, setBrands] = useState<BrandTab[]>([])
+  const [brandSlug, setBrandSlug] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<string | null>(null)
 
   const [name, setName] = useState('')
@@ -50,12 +53,15 @@ export default function SignageStudiosPage() {
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const geoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const load = useCallback(async (t: string) => {
-    const res = await fetch('/api/signage/studios', { headers: { Authorization: `Bearer ${t}` }, cache: 'no-store' })
+  const load = useCallback(async (t: string, brandParam: string | null) => {
+    const q = brandParam ? `?brand=${encodeURIComponent(brandParam)}` : ''
+    const res = await fetch(`/api/signage/studios${q}`, { headers: { Authorization: `Bearer ${t}` }, cache: 'no-store' })
     if (res.status === 401) return setAuthState('signed-out')
     const json = await res.json()
     if (json.ok) {
       setStudios(json.studios ?? [])
+      setBrands(json.brands ?? [])
+      setBrandSlug(json.selected ?? null)
       setAuthState('ready')
     }
   }, [])
@@ -67,9 +73,19 @@ export default function SignageStudiosPage() {
         const t = session?.access_token ?? null
         setToken(t)
         if (!t) return setAuthState('signed-out')
-        void load(t)
+        void load(t, brandFromUrl())
       })
   }, [load])
+
+  const switchBrand = useCallback(
+    (slug: string) => {
+      if (!token || slug === brandSlug) return
+      syncBrandInUrl(slug)
+      setBrandSlug(slug)
+      void load(token, slug)
+    },
+    [token, brandSlug, load],
+  )
 
   // Debounced Places search.
   useEffect(() => {
@@ -145,7 +161,8 @@ export default function SignageStudiosPage() {
       setBusy(true)
       setErr(null)
       try {
-        const res = await fetch('/api/signage/studios', {
+        const q = brandSlug ? `?brand=${encodeURIComponent(brandSlug)}` : ''
+        const res = await fetch(`/api/signage/studios${q}`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -163,13 +180,13 @@ export default function SignageStudiosPage() {
         if (!json.ok) setErr(json.error)
         else {
           resetForm()
-          await load(token)
+          await load(token, brandSlug)
         }
       } finally {
         setBusy(false)
       }
     },
-    [token, name, address, stateCode, postcode, region, lat, lng, placeId, load],
+    [token, name, address, stateCode, postcode, region, lat, lng, placeId, brandSlug, load],
   )
 
   const importCsv = useCallback(
@@ -178,18 +195,19 @@ export default function SignageStudiosPage() {
       setBusy(true)
       setImportMsg(null)
       try {
+        const q = brandSlug ? `?brand=${encodeURIComponent(brandSlug)}` : ''
         const fd = new FormData()
         fd.append('csv', file)
-        const res = await fetch('/api/signage/studios/import', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd })
+        const res = await fetch(`/api/signage/studios/import${q}`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd })
         const json = await res.json()
         if (!json.ok) setImportMsg(`Import failed: ${(json.issues ?? [json.error]).join('; ')}`)
         else setImportMsg(`Imported ${json.created} studio(s); ${json.skipped_existing} already existed.`)
-        await load(token)
+        await load(token, brandSlug)
       } finally {
         setBusy(false)
       }
     },
-    [token, load],
+    [token, brandSlug, load],
   )
 
   const deleteStudio = useCallback(
@@ -197,15 +215,15 @@ export default function SignageStudiosPage() {
       if (!token) return
       if (!window.confirm(`Delete "${s.name}"? This removes it and any sweep photos/results for it.`)) return
       const res = await fetch(`/api/signage/studios/${s.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
-      if (res.ok) await load(token)
+      if (res.ok) await load(token, brandSlug)
     },
-    [token, load],
+    [token, brandSlug, load],
   )
 
   return (
     <main className="min-h-screen bg-ink-deep text-text-pri">
       <section className="relative z-10 mx-auto max-w-5xl px-6 pt-14 pb-8 sm:px-10 md:pt-16">
-        <Breadcrumb />
+        <Breadcrumb brandSlug={brandSlug} />
         <h1 className="mt-6 font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2rem,4.5vw,3.25rem)]">
           Manage <span className="text-accent">studios</span>
         </h1>
@@ -213,6 +231,9 @@ export default function SignageStudiosPage() {
           Add your real locations. Search Google for a studio by name/area, or type an address — we
           geocode it, show a live Street View + map, and you can click any image to view it full-size.
         </p>
+        {authState === 'ready' && brands.length > 1 && (
+          <BrandTabs brands={brands} selected={brandSlug} onSelect={switchBrand} />
+        )}
       </section>
 
       {authState === 'signed-out' && (
@@ -426,12 +447,12 @@ function Thumb({ src, alt, empty, onView }: { src: string | null; alt: string; e
 function Label({ children }: { children: React.ReactNode }) {
   return <div className="mb-2 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-text-dim">{children}</div>
 }
-function Breadcrumb() {
+function Breadcrumb({ brandSlug }: { brandSlug: string | null }) {
   return (
     <div className="flex flex-wrap items-center gap-3 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
       <Link href="/dashboard" className="hover:text-text-pri">Dashboard</Link>
       <span className="text-ink-line">/</span>
-      <Link href="/dashboard/signage" className="hover:text-text-pri">Signage</Link>
+      <Link href={withBrand('/dashboard/signage', brandSlug)} className="hover:text-text-pri">Signage</Link>
       <span className="text-ink-line">/</span>
       <span className="text-text-pri">Studios</span>
     </div>

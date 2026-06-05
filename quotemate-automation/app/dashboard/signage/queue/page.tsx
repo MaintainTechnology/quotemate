@@ -9,6 +9,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
+import { BrandTabs, withBrand, brandFromUrl, syncBrandInUrl, type BrandTab } from '../_components/BrandTabs'
 
 type QueueItem = {
   id: string
@@ -62,12 +63,15 @@ export default function SignageQueuePage() {
   const [rollup, setRollup] = useState<Rollup | null>(null)
   const [fleet, setFleet] = useState<FleetRow[]>([])
   const [queue, setQueue] = useState<QueueItem[]>([])
+  const [brands, setBrands] = useState<BrandTab[]>([])
+  const [brandSlug, setBrandSlug] = useState<string | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
   const [detail, setDetail] = useState<Detail | null>(null)
   const [detailBusy, setDetailBusy] = useState(false)
 
-  const load = useCallback(async (accessToken: string) => {
-    const res = await fetch('/api/signage/queue?status=hq_review', {
+  const load = useCallback(async (accessToken: string, brandParam: string | null) => {
+    const brandSep = brandParam ? `&brand=${encodeURIComponent(brandParam)}` : ''
+    const res = await fetch(`/api/signage/queue?status=hq_review${brandSep}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
     if (res.status === 401) {
@@ -79,6 +83,8 @@ export default function SignageQueuePage() {
       setRollup(json.rollup)
       setFleet(json.fleet ?? [])
       setQueue(json.queue ?? [])
+      setBrands(json.brands ?? [])
+      setBrandSlug(json.selected ?? null)
       setAuthState('ready')
     }
   }, [])
@@ -110,12 +116,24 @@ export default function SignageQueuePage() {
         setAuthState('signed-out')
         return
       }
-      void load(t).then(() => {
+      void load(t, brandFromUrl()).then(() => {
         const pre = new URLSearchParams(window.location.search).get('a')
         if (pre) void openDetail(pre, t)
       })
     })
   }, [load, openDetail])
+
+  const switchBrand = useCallback(
+    (slug: string) => {
+      if (!token || slug === brandSlug) return
+      syncBrandInUrl(slug)
+      setBrandSlug(slug)
+      setSelected(null)
+      setDetail(null)
+      void load(token, slug)
+    },
+    [token, brandSlug, load],
+  )
 
   const decide = useCallback(
     async (decision: 'approved' | 'needs_changes' | 'escalated') => {
@@ -129,28 +147,31 @@ export default function SignageQueuePage() {
         })
         const json = await res.json()
         if (json.ok) {
-          await load(token)
+          await load(token, brandSlug)
           await openDetail(detail.assessment.id, token)
         }
       } finally {
         setDetailBusy(false)
       }
     },
-    [token, detail, load, openDetail],
+    [token, detail, brandSlug, load, openDetail],
   )
 
   return (
     <main className="min-h-screen bg-ink-deep text-text-pri">
       <section className="relative z-10 mx-auto max-w-7xl px-6 pt-14 pb-6 sm:px-10 md:pt-16">
-        <Breadcrumb />
+        <Breadcrumb brandSlug={brandSlug} />
         <div className="mt-6 flex flex-wrap items-end justify-between gap-6">
           <h1 className="font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2rem,4.5vw,3.5rem)]">
             Review <span className="text-accent">queue</span>
           </h1>
-          <Link href="/dashboard/signage" className="font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-sec hover:text-accent">
+          <Link href={withBrand('/dashboard/signage', brandSlug)} className="font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-sec hover:text-accent">
             ← Back to sweeps
           </Link>
         </div>
+        {authState === 'ready' && brands.length > 1 && (
+          <BrandTabs brands={brands} selected={brandSlug} onSelect={switchBrand} />
+        )}
         {rollup && (
           <div className="mt-7 grid grid-cols-2 gap-4 md:grid-cols-6">
             <Stat label="Studios" value={rollup.studios} />
@@ -380,12 +401,12 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: 'go
   )
 }
 
-function Breadcrumb() {
+function Breadcrumb({ brandSlug }: { brandSlug: string | null }) {
   return (
     <div className="flex flex-wrap items-center gap-3 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
       <Link href="/dashboard" className="transition-colors hover:text-text-pri">Dashboard</Link>
       <span className="text-ink-line">/</span>
-      <Link href="/dashboard/signage" className="transition-colors hover:text-text-pri">Signage</Link>
+      <Link href={withBrand('/dashboard/signage', brandSlug)} className="transition-colors hover:text-text-pri">Signage</Link>
       <span className="text-ink-line">/</span>
       <span className="text-text-pri">Queue</span>
     </div>

@@ -8,6 +8,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { orgFromBearer } from '@/lib/signage/org'
+import { resolveSignageBrand } from '@/lib/signage/brand'
 import { buildGeocodeUrl, parseGeocode } from '@/lib/signage/maps'
 
 export const dynamic = 'force-dynamic'
@@ -20,14 +21,16 @@ const supabase = createClient(
 export async function GET(req: Request) {
   const ctx = await orgFromBearer(supabase, req)
   if (!ctx) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  const { brand, brands } = await resolveSignageBrand(supabase, req, ctx.orgId)
   const { data, error } = await supabase
     .from('studios')
     .select('id, name, region, status, address, state, postcode, lat, lng, place_id')
     .eq('org_id', ctx.orgId)
+    .eq('brand_slug', brand.slug)
     .order('region')
     .order('name')
   if (error) return Response.json({ ok: false, error: error.message }, { status: 500 })
-  return Response.json({ ok: true, studios: data ?? [] })
+  return Response.json({ ok: true, studios: data ?? [], brands, selected: brand.slug })
 }
 
 const CreateStudioSchema = z.object({
@@ -58,6 +61,7 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, error: 'invalid_request', issues: parsed.error.issues }, { status: 400 })
   }
   const d = parsed.data
+  const { brand } = await resolveSignageBrand(supabase, req, ctx.orgId)
 
   // Coordinates: use provided ones (e.g. from Places search), else geocode
   // the address so the location shows on the static map. Best-effort.
@@ -84,6 +88,7 @@ export async function POST(req: Request) {
     .from('studios')
     .insert({
       org_id: ctx.orgId,
+      brand_slug: brand.slug,
       name: d.name,
       address: d.address ?? null,
       region: d.region ?? null,

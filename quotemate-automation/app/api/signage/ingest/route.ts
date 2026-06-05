@@ -6,7 +6,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { orgFromBearer } from '@/lib/signage/org'
-import { brandForOrg } from '@/lib/signage/brand'
+import { resolveSignageBrand } from '@/lib/signage/brand'
 import { extractBrand } from '@/lib/signage/extract-brand'
 import type { VerdictMode } from '@/lib/signage/types'
 
@@ -30,7 +30,7 @@ const MODE_TO_LEGACY: Record<VerdictMode, { applicability: string; mvp_tier: str
 export async function POST(req: Request) {
   const ctx = await orgFromBearer(supabase, req)
   if (!ctx) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  const brand = await brandForOrg(supabase, ctx.orgId)
+  const { brand } = await resolveSignageBrand(supabase, req, ctx.orgId)
   const apply = new URL(req.url).searchParams.get('apply') === '1'
 
   // Two ingress paths:

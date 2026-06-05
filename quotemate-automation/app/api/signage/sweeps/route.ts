@@ -16,7 +16,8 @@ import { randomBytes } from 'node:crypto'
 import { z } from 'zod'
 import { orgFromBearer } from '@/lib/signage/org'
 import { coerceShots, shotSlots } from '@/lib/signage/shots'
-import { brandForOrg } from '@/lib/signage/brand'
+import { resolveSignageBrand } from '@/lib/signage/brand'
+import { filterStudiosByRegion } from '@/lib/signage/region'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,18 +52,25 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, error: 'invalid_request', issues: parsed.error.issues }, { status: 400 })
   }
 
-  const brand = await brandForOrg(supabase, ctx.orgId)
+  const { brand } = await resolveSignageBrand(supabase, req, ctx.orgId)
   const brandSlots = shotSlots(brand.shots)
   const shots = coerceShots(parsed.data.required_shots, brandSlots)
   const requiredShots = shots.length > 0 ? shots : brandSlots
 
-  // Find target studios for this org.
-  let studioQ = supabase.from('studios').select('id, name').eq('org_id', ctx.orgId)
-  if (parsed.data.region) studioQ = studioQ.eq('region', parsed.data.region)
+  // Find target studios for this org + brand. Region targeting is matched in
+  // JS (case-insensitively, against region OR state) so a studio saved as
+  // "Au-Qld" still matches a sweep filter "AU-QLD" and a Places-added studio
+  // (state only) is still reachable.
+  let studioQ = supabase
+    .from('studios')
+    .select('id, name, region, state, status')
+    .eq('org_id', ctx.orgId)
+    .eq('brand_slug', brand.slug)
   if (parsed.data.studio_status) studioQ = studioQ.eq('status', parsed.data.studio_status)
-  const { data: studios, error: studioErr } = await studioQ
+  const { data: allStudios, error: studioErr } = await studioQ
   if (studioErr) return Response.json({ ok: false, error: studioErr.message }, { status: 500 })
-  if (!studios || studios.length === 0) {
+  const studios = filterStudiosByRegion(allStudios ?? [], parsed.data.region)
+  if (studios.length === 0) {
     return Response.json({ ok: false, error: 'no_matching_studios' }, { status: 400 })
   }
 
@@ -71,6 +79,7 @@ export async function POST(req: Request) {
     .from('signage_sweeps')
     .insert({
       org_id: ctx.orgId,
+      brand_slug: brand.slug,
       name: parsed.data.name,
       rule_set_version: 1,
       studio_filter: {
@@ -92,6 +101,7 @@ export async function POST(req: Request) {
     sweep_id: sweep.id as string,
     studio_id: s.id as string,
     org_id: ctx.orgId,
+    brand_slug: brand.slug,
     public_token: randomBytes(16).toString('hex'),
     state: 'pending',
     required_shots: requiredShots,
@@ -124,18 +134,21 @@ export async function GET(req: Request) {
   if (!ctx) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
 
   const origin = originOf(req)
+  const { brand, brands } = await resolveSignageBrand(supabase, req, ctx.orgId)
 
   const [{ data: studios }, { data: sweeps }] = await Promise.all([
     supabase
       .from('studios')
-      .select('id, name, region, status')
+      .select('id, name, region, state, status')
       .eq('org_id', ctx.orgId)
+      .eq('brand_slug', brand.slug)
       .order('region')
       .order('name'),
     supabase
       .from('signage_sweeps')
       .select('id, name, created_at, required_shots, status')
       .eq('org_id', ctx.orgId)
+      .eq('brand_slug', brand.slug)
       .order('created_at', { ascending: false })
       .limit(25),
   ])
@@ -189,16 +202,19 @@ export async function GET(req: Request) {
     requests: requestsBySweep[s.id as string] ?? [],
   }))
 
-  // The brand drives the sweep builder's shot checkboxes + terminology.
-  const brand = await brandForOrg(supabase, ctx.orgId)
+  // The brand drives the sweep builder's shot checkboxes + terminology; the
+  // brands list drives the F45 / Anytime Fitness tab switcher.
   return Response.json({
     ok: true,
     brand: {
+      slug: brand.slug,
       name: brand.name,
       location_noun: brand.location_noun,
       location_noun_plural: brand.location_noun_plural,
       shots: brand.shots,
     },
+    brands,
+    selected: brand.slug,
     studios: studios ?? [],
     sweeps: sweepsOut,
   })

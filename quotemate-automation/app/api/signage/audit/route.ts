@@ -5,7 +5,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { orgFromBearer } from '@/lib/signage/org'
-import { brandForOrg } from '@/lib/signage/brand'
+import { resolveSignageBrand } from '@/lib/signage/brand'
 import { shotLabel, shotSlots } from '@/lib/signage/shots'
 import { loadActiveRules, applicableRules } from '@/lib/signage/run'
 import { assessPhoto } from '@/lib/signage/vision-assess'
@@ -34,7 +34,7 @@ const supabase = createClient(
 export async function POST(req: Request) {
   const ctx = await orgFromBearer(supabase, req)
   if (!ctx) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  const brand = await brandForOrg(supabase, ctx.orgId)
+  const { brand } = await resolveSignageBrand(supabase, req, ctx.orgId)
   const validSlots = new Set(shotSlots(brand.shots))
 
   let formData: FormData

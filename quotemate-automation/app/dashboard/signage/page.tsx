@@ -11,8 +11,10 @@ import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 import type { ShotSlot } from '@/lib/signage/types'
+import { distinctRegions, regionMatches } from '@/lib/signage/region'
+import { BrandTabs, withBrand, brandFromUrl, syncBrandInUrl, type BrandTab } from './_components/BrandTabs'
 
-type Studio = { id: string; name: string; region: string | null; status: string }
+type Studio = { id: string; name: string; region: string | null; state?: string | null; status: string }
 type SweepRequest = {
   id: string
   studio_name: string
@@ -40,7 +42,7 @@ type Rollup = {
   awaiting: number
 }
 type ShotDef = { slot: string; label: string; instruction: string }
-type Brand = { name: string; location_noun: string; location_noun_plural: string; shots: ShotDef[] }
+type Brand = { slug: string; name: string; location_noun: string; location_noun_plural: string; shots: ShotDef[] }
 
 export default function SignageHubPage() {
   const [token, setToken] = useState<string | null>(null)
@@ -49,6 +51,8 @@ export default function SignageHubPage() {
   const [sweeps, setSweeps] = useState<Sweep[]>([])
   const [rollup, setRollup] = useState<Rollup | null>(null)
   const [brand, setBrand] = useState<Brand | null>(null)
+  const [brands, setBrands] = useState<BrandTab[]>([])
+  const [brandSlug, setBrandSlug] = useState<string | null>(null)
 
   const [name, setName] = useState('')
   const [region, setRegion] = useState('')
@@ -56,11 +60,13 @@ export default function SignageHubPage() {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
-  const load = useCallback(async (accessToken: string) => {
+  const load = useCallback(async (accessToken: string, brandParam: string | null) => {
     const headers = { Authorization: `Bearer ${accessToken}` }
+    const q = brandParam ? `?brand=${encodeURIComponent(brandParam)}` : ''
+    const queueSep = brandParam ? `&brand=${encodeURIComponent(brandParam)}` : ''
     const [sweepsRes, queueRes] = await Promise.all([
-      fetch('/api/signage/sweeps', { headers }),
-      fetch('/api/signage/queue?status=all', { headers }),
+      fetch(`/api/signage/sweeps${q}`, { headers }),
+      fetch(`/api/signage/queue?status=all${queueSep}`, { headers }),
     ])
     // load() only runs once we already have a session token, so a 401/!ok
     // here is NOT "signed out" — it means this signed-in account has no
@@ -76,6 +82,8 @@ export default function SignageHubPage() {
     }
     setStudios(sweepsJson.studios ?? [])
     setSweeps(sweepsJson.sweeps ?? [])
+    setBrands(sweepsJson.brands ?? [])
+    setBrandSlug(sweepsJson.selected ?? null)
     const b: Brand | null = sweepsJson.brand ?? null
     setBrand(b)
     // Default the sweep's shot selection to all of this brand's shots.
@@ -94,18 +102,27 @@ export default function SignageHubPage() {
         setAuthState('signed-out')
         return
       }
-      void load(t)
+      void load(t, brandFromUrl())
     })
   }, [load])
 
-  const regions = useMemo(() => {
-    const set = new Set<string>()
-    for (const s of studios) if (s.region) set.add(s.region)
-    return Array.from(set).sort()
-  }, [studios])
+  // Switch brand tab: sync the URL, clear the per-brand sweep selection, reload.
+  const switchBrand = useCallback(
+    (slug: string) => {
+      if (!token || slug === brandSlug) return
+      syncBrandInUrl(slug)
+      setBrandSlug(slug)
+      setShots(new Set<ShotSlot>())
+      setRegion('')
+      void load(token, slug)
+    },
+    [token, brandSlug, load],
+  )
+
+  const regions = useMemo(() => distinctRegions(studios), [studios])
 
   const targetCount = useMemo(
-    () => (region ? studios.filter((s) => s.region === region).length : studios.length),
+    () => (region ? studios.filter((s) => regionMatches(s, region)).length : studios.length),
     [studios, region],
   )
 
@@ -124,7 +141,8 @@ export default function SignageHubPage() {
       setBusy(true)
       setErr(null)
       try {
-        const res = await fetch('/api/signage/sweeps', {
+        const q = brandSlug ? `?brand=${encodeURIComponent(brandSlug)}` : ''
+        const res = await fetch(`/api/signage/sweeps${q}`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -138,7 +156,7 @@ export default function SignageHubPage() {
           setErr(json.error === 'no_matching_studios' ? 'No studios match that filter.' : json.error)
         } else {
           setName('')
-          await load(token)
+          await load(token, brandSlug)
         }
       } catch (e) {
         setErr(e instanceof Error ? e.message : String(e))
@@ -146,7 +164,7 @@ export default function SignageHubPage() {
         setBusy(false)
       }
     },
-    [token, name, region, shots, load],
+    [token, name, region, shots, brandSlug, load],
   )
 
   return (
@@ -162,7 +180,12 @@ export default function SignageHubPage() {
             the {brand?.name ?? 'brand'} standards, and review the flagged ones. The AI triages — HQ decides.
           </p>
         </div>
-        <AuthBadge state={authState} />
+        <div className="flex flex-wrap items-center gap-x-8 gap-y-4">
+          <AuthBadge state={authState} />
+          {authState === 'ready' && brands.length > 1 && (
+            <BrandTabs brands={brands} selected={brandSlug} onSelect={switchBrand} />
+          )}
+        </div>
       </section>
 
       {authState === 'ready' && (
@@ -180,25 +203,25 @@ export default function SignageHubPage() {
               </div>
               <div className="mt-5 flex flex-wrap gap-3">
                 <Link
-                  href="/dashboard/signage/queue"
+                  href={withBrand('/dashboard/signage/queue', brandSlug)}
                   className="inline-flex items-center gap-2 bg-accent px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press"
                 >
                   Open review queue <span aria-hidden="true">&rarr;</span>
                 </Link>
                 <Link
-                  href="/dashboard/signage/audit"
+                  href={withBrand('/dashboard/signage/audit', brandSlug)}
                   className="inline-flex items-center gap-2 border border-ink-line px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent"
                 >
                   Instant audit (upload PDF / photos) <span aria-hidden="true">&rarr;</span>
                 </Link>
                 <Link
-                  href="/dashboard/signage/studios"
+                  href={withBrand('/dashboard/signage/studios', brandSlug)}
                   className="inline-flex items-center gap-2 border border-ink-line px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent"
                 >
                   Manage studios <span aria-hidden="true">&rarr;</span>
                 </Link>
                 <Link
-                  href="/dashboard/signage/shots"
+                  href={withBrand('/dashboard/signage/shots', brandSlug)}
                   className="inline-flex items-center gap-2 border border-ink-line px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent"
                 >
                   Edit shots <span aria-hidden="true">&rarr;</span>
@@ -270,7 +293,7 @@ export default function SignageHubPage() {
             )}
             <div className="mt-6 grid gap-6">
               {sweeps.map((sw) => (
-                <SweepCard key={sw.id} sweep={sw} token={token} onDeleted={() => token && load(token)} />
+                <SweepCard key={sw.id} sweep={sw} token={token} brandSlug={brandSlug} onDeleted={() => token && load(token, brandSlug)} />
               ))}
             </div>
           </section>
@@ -298,7 +321,7 @@ export default function SignageHubPage() {
   )
 }
 
-function SweepCard({ sweep, token, onDeleted }: { sweep: Sweep; token: string | null; onDeleted: () => void }) {
+function SweepCard({ sweep, token, brandSlug, onDeleted }: { sweep: Sweep; token: string | null; brandSlug: string | null; onDeleted: () => void }) {
   const submitted = sweep.requests.filter((r) => r.state === 'assessed' || r.state === 'submitted').length
   const [deleting, setDeleting] = useState(false)
   const onDelete = async () => {
@@ -356,7 +379,7 @@ function SweepCard({ sweep, token, onDeleted }: { sweep: Sweep; token: string | 
               </a>
               {r.assessment_id && (
                 <Link
-                  href={`/dashboard/signage/queue?a=${r.assessment_id}`}
+                  href={withBrand(`/dashboard/signage/queue?a=${r.assessment_id}`, brandSlug)}
                   className="bg-accent px-3 py-1.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-white hover:bg-accent-press"
                 >
                   Review

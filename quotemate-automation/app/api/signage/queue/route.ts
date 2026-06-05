@@ -9,6 +9,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { orgFromBearer } from '@/lib/signage/org'
+import { resolveSignageBrand } from '@/lib/signage/brand'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,18 +24,21 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url)
   const statusFilter = url.searchParams.get('status') ?? 'hq_review'
+  const { brand, brands } = await resolveSignageBrand(supabase, req, ctx.orgId)
 
   const [{ data: studios }, { data: assessments }, { data: openRequests }] = await Promise.all([
-    supabase.from('studios').select('id, name, region, status').eq('org_id', ctx.orgId),
+    supabase.from('studios').select('id, name, region, status').eq('org_id', ctx.orgId).eq('brand_slug', brand.slug),
     supabase
       .from('signage_assessments')
       .select('id, request_id, studio_id, status, overall, counts, hq_decision, created_at')
       .eq('org_id', ctx.orgId)
+      .eq('brand_slug', brand.slug)
       .order('created_at', { ascending: false }),
     supabase
       .from('signage_requests')
       .select('id, state')
       .eq('org_id', ctx.orgId)
+      .eq('brand_slug', brand.slug)
       .in('state', ['pending', 'submitted']),
   ])
 
@@ -87,5 +91,5 @@ export async function GET(req: Request) {
     created_at: a.created_at,
   }))
 
-  return Response.json({ ok: true, rollup, fleet, queue })
+  return Response.json({ ok: true, rollup, fleet, queue, brands, selected: brand.slug })
 }

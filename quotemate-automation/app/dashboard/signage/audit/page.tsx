@@ -8,9 +8,10 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
+import { BrandTabs, withBrand, brandFromUrl, syncBrandInUrl, type BrandTab } from '../_components/BrandTabs'
 
 type ShotDef = { slot: string; label: string; instruction: string }
-type Brand = { name: string; location_noun: string; location_noun_plural: string; shots: ShotDef[] }
+type Brand = { slug?: string; name: string; location_noun: string; location_noun_plural: string; shots: ShotDef[] }
 type ExtractedRule = { rule_key: string; rule_text: string; verdict_mode: string; shot: string }
 type IngestResult = { applied: boolean; chars: number; scored: number; tiers: Record<string, number>; shots: ShotDef[]; rules: ExtractedRule[] }
 type ReportItem = { rule_key: string; rule_text: string; state: 'compliant' | 'fix' | 'review'; detail: string; source_citation: string | null }
@@ -19,25 +20,46 @@ type Report = { counts: { compliant: number; fix: number; review: number }; grou
 export default function SignageAuditPage() {
   const [token, setToken] = useState<string | null>(null)
   const [brand, setBrand] = useState<Brand | null>(null)
+  const [brands, setBrands] = useState<BrandTab[]>([])
+  const [brandSlug, setBrandSlug] = useState<string | null>(null)
   const [authState, setAuthState] = useState<'loading' | 'signed-out' | 'ready'>('loading')
+
+  const load = useCallback(async (t: string, brandParam: string | null) => {
+    const q = brandParam ? `?brand=${encodeURIComponent(brandParam)}` : ''
+    const res = await fetch(`/api/signage/sweeps${q}`, { headers: { Authorization: `Bearer ${t}` } })
+    const json = await res.json().catch(() => ({}))
+    if (json?.ok) {
+      setBrand(json.brand ?? null)
+      setBrands(json.brands ?? [])
+      setBrandSlug(json.selected ?? null)
+    }
+    setAuthState('ready')
+  }, [])
 
   useEffect(() => {
     const sb = getBrowserSupabase()
-    sb.auth.getSession().then(async ({ data: { session } }) => {
+    sb.auth.getSession().then(({ data: { session } }) => {
       const t = session?.access_token ?? null
       setToken(t)
       if (!t) return setAuthState('signed-out')
-      const res = await fetch('/api/signage/sweeps', { headers: { Authorization: `Bearer ${t}` } })
-      const json = await res.json().catch(() => ({}))
-      if (json?.ok) setBrand(json.brand ?? null)
-      setAuthState('ready')
+      void load(t, brandFromUrl())
     })
-  }, [])
+  }, [load])
+
+  const switchBrand = useCallback(
+    (slug: string) => {
+      if (!token || slug === brandSlug) return
+      syncBrandInUrl(slug)
+      setBrandSlug(slug)
+      void load(token, slug)
+    },
+    [token, brandSlug, load],
+  )
 
   return (
     <main className="min-h-screen bg-ink-deep text-text-pri">
       <section className="relative z-10 mx-auto max-w-5xl px-6 pt-14 pb-8 sm:px-10 md:pt-16">
-        <Breadcrumb />
+        <Breadcrumb brandSlug={brandSlug} />
         <h1 className="mt-6 font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2rem,4.5vw,3.25rem)]">
           Instant <span className="text-accent">audit</span>
         </h1>
@@ -45,6 +67,9 @@ export default function SignageAuditPage() {
           Upload a standards PDF and the AI deciphers it into rules. Upload photos and the AI
           checks them against {brand?.name ?? 'the brand'} standards on the spot. The AI triages — HQ decides.
         </p>
+        {authState === 'ready' && brands.length > 1 && (
+          <BrandTabs brands={brands} selected={brandSlug} onSelect={switchBrand} />
+        )}
       </section>
 
       {authState === 'signed-out' && (
@@ -54,8 +79,8 @@ export default function SignageAuditPage() {
       {authState === 'ready' && (
         <section className="relative z-10 mx-auto max-w-5xl px-6 pb-24 sm:px-10">
           <div className="grid gap-6 lg:grid-cols-2">
-            <IngestCard token={token} brandName={brand?.name ?? 'this brand'} />
-            <AuditCard token={token} brand={brand} />
+            <IngestCard token={token} brandName={brand?.name ?? 'this brand'} brandSlug={brandSlug} />
+            <AuditCard token={token} brand={brand} brandSlug={brandSlug} />
           </div>
         </section>
       )}
@@ -64,7 +89,7 @@ export default function SignageAuditPage() {
 }
 
 // ── Card 1: upload a standards PDF, AI deciphers the rules ────────────
-function IngestCard({ token, brandName }: { token: string | null; brandName: string }) {
+function IngestCard({ token, brandName, brandSlug }: { token: string | null; brandName: string; brandSlug: string | null }) {
   const [file, setFile] = useState<File | null>(null)
   const [busy, setBusy] = useState<'idle' | 'reading' | 'saving'>('idle')
   const [result, setResult] = useState<IngestResult | null>(null)
@@ -91,9 +116,13 @@ function IngestCard({ token, brandName }: { token: string | null; brandName: str
         }
 
         // 2. Choose the upload path.
+        const params = new URLSearchParams()
+        if (apply) params.set('apply', '1')
+        if (brandSlug) params.set('brand', brandSlug)
+        const qs = params.toString() ? `?${params.toString()}` : ''
         let res: Response
         if (text.trim().length >= 200) {
-          res = await fetch(`/api/signage/ingest${apply ? '?apply=1' : ''}`, {
+          res = await fetch(`/api/signage/ingest${qs}`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ text }),
@@ -102,7 +131,7 @@ function IngestCard({ token, brandName }: { token: string | null; brandName: str
           // Browser couldn't read it, but it's small — let the server parse it.
           const fd = new FormData()
           fd.append('pdf', file)
-          res = await fetch(`/api/signage/ingest${apply ? '?apply=1' : ''}`, {
+          res = await fetch(`/api/signage/ingest${qs}`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` },
             body: fd,
@@ -125,7 +154,7 @@ function IngestCard({ token, brandName }: { token: string | null; brandName: str
         setBusy('idle')
       }
     },
-    [token, file],
+    [token, file, brandSlug],
   )
 
   return (
@@ -190,7 +219,7 @@ function IngestCard({ token, brandName }: { token: string | null; brandName: str
 }
 
 // ── Card 2: upload photos, AI assesses against the rules ──────────────
-function AuditCard({ token, brand }: { token: string | null; brand: Brand | null }) {
+function AuditCard({ token, brand, brandSlug }: { token: string | null; brand: Brand | null; brandSlug: string | null }) {
   const [files, setFiles] = useState<Record<string, File[]>>({})
   const [busy, setBusy] = useState(false)
   const [report, setReport] = useState<Report | null>(null)
@@ -205,7 +234,8 @@ function AuditCard({ token, brand }: { token: string | null; brand: Brand | null
     try {
       const fd = new FormData()
       for (const [slot, list] of Object.entries(files)) for (const f of list) fd.append(slot, f)
-      const res = await fetch('/api/signage/audit', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd })
+      const q = brandSlug ? `?brand=${encodeURIComponent(brandSlug)}` : ''
+      const res = await fetch(`/api/signage/audit${q}`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd })
       const json = await res.json().catch(() => null)
       if (!json) {
         setErr(res.status === 413 ? 'Those photos are too large to send together — try fewer or smaller images.' : `Server error (HTTP ${res.status}).`)
@@ -218,7 +248,7 @@ function AuditCard({ token, brand }: { token: string | null; brand: Brand | null
     } finally {
       setBusy(false)
     }
-  }, [token, files])
+  }, [token, files, brandSlug])
 
   return (
     <div className="border border-ink-line bg-ink-card p-6 sm:p-7">
@@ -302,12 +332,12 @@ function Eyebrow({ n, children }: { n: string; children: React.ReactNode }) {
     </div>
   )
 }
-function Breadcrumb() {
+function Breadcrumb({ brandSlug }: { brandSlug: string | null }) {
   return (
     <div className="flex flex-wrap items-center gap-3 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
       <Link href="/dashboard" className="hover:text-text-pri">Dashboard</Link>
       <span className="text-ink-line">/</span>
-      <Link href="/dashboard/signage" className="hover:text-text-pri">Signage</Link>
+      <Link href={withBrand('/dashboard/signage', brandSlug)} className="hover:text-text-pri">Signage</Link>
       <span className="text-ink-line">/</span>
       <span className="text-text-pri">Instant audit</span>
     </div>

@@ -14,7 +14,8 @@ import { after } from 'next/server'
 import { uploadIntakePhoto } from '@/lib/storage/upload'
 import { pipelineLog } from '@/lib/log/pipeline'
 import { coerceShots, shotSlots } from '@/lib/signage/shots'
-import { brandForOrg } from '@/lib/signage/brand'
+import { brandForOrg, loadBrand } from '@/lib/signage/brand'
+import type { BrandConfig } from '@/lib/signage/types'
 import { loadActiveRules, applicableRules, runAssessment } from '@/lib/signage/run'
 import { composeReport } from '@/lib/signage/compose-report'
 import type { RuleVerdict } from '@/lib/signage/types'
@@ -38,12 +39,13 @@ type RequestRow = {
   state: string
   required_shots: unknown
   sweep_id: string | null
+  brand_slug: string | null
 }
 
 async function resolveRequest(token: string): Promise<{ req: RequestRow; studioName: string } | null> {
   const { data: req } = await supabase
     .from('signage_requests')
-    .select('id, studio_id, org_id, state, required_shots, sweep_id')
+    .select('id, studio_id, org_id, state, required_shots, sweep_id, brand_slug')
     .eq('public_token', token)
     .maybeSingle()
   if (!req) return null
@@ -55,13 +57,22 @@ async function resolveRequest(token: string): Promise<{ req: RequestRow; studioN
   return { req: req as RequestRow, studioName: (studio?.name as string) ?? 'Your studio' }
 }
 
+/** Resolve the brand for a request from its stored brand_slug (set at sweep
+ *  creation) so the franchisee sees the right brand's shots and the
+ *  assessment uses the right brand's rules + Gemini file store. Falls back to
+ *  the org's brand for legacy rows. */
+async function brandForRequest(reqRow: RequestRow): Promise<BrandConfig> {
+  const slug = reqRow.brand_slug?.trim()
+  return slug ? loadBrand(supabase, slug) : brandForOrg(supabase, reqRow.org_id)
+}
+
 export async function GET(_req: Request, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params
   const resolved = await resolveRequest(token)
   if (!resolved) return Response.json({ ok: false, error: 'invalid_or_expired' }, { status: 404 })
 
   const { req, studioName } = resolved
-  const brand = await brandForOrg(supabase, req.org_id)
+  const brand = await brandForRequest(req)
   const requestedShots = coerceShots(req.required_shots, shotSlots(brand.shots))
   const brandInfo = { name: brand.name, location_noun: brand.location_noun, hq_name: brand.hq_name }
 
@@ -107,8 +118,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   }
 
   // Files are keyed by shot slot (e.g. formData 'storefront' → File[]),
-  // using THIS brand's shot list.
-  const brand = await brandForOrg(supabase, request.org_id)
+  // using THIS request's brand shot list.
+  const brand = await brandForRequest(request)
   const validSlots = new Set(shotSlots(brand.shots))
   type Pending = { slot: string; file: File }
   const pending: Pending[] = []
