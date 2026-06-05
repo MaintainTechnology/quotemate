@@ -66,8 +66,19 @@ export function validateSignageAssessment(
   const verdicts: RuleVerdict[] = rules.map((rule) => groundOne(rule, byKey.get(rule.rule_key)))
 
   const counts = tally(verdicts)
+  // An EMPTY rule set is not a pass — it means the studio was never checked
+  // (e.g. the brand has no rules loaded, or the requested shots matched none).
+  // A vacuous 'pass' here would show a false green on the HQ dashboard while
+  // the per-rule report is blank. Route it to HQ review instead — the same
+  // "never a false pass" posture as every other downgrade in this file.
   const overall: AssessmentOverall =
-    counts.fix > 0 ? 'fix_needed' : counts.review > 0 ? 'needs_review' : 'pass'
+    rules.length === 0
+      ? 'needs_review'
+      : counts.fix > 0
+        ? 'fix_needed'
+        : counts.review > 0
+          ? 'needs_review'
+          : 'pass'
 
   return { verdicts, overall, counts }
 }

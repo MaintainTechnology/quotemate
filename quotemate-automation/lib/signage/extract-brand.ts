@@ -38,24 +38,60 @@ const VERDICT_GUIDANCE = `verdict_mode tells the AI how it may act on a rule fro
 - "needs_reference": needs an absolute measurement only checkable with a tape/known object in frame (e.g. "28 inches from the floor", "100 inches wide").
 - "review": not photo-checkable — needs external data (HQ approval on file, a receipt/invoice, a landlord letter) OR is legal/process/awareness/subjective.`
 
-/** PURE — build the extraction prompt for one brand's standards document. */
+/** PURE — build the extraction prompt for one brand's standards document.
+ *
+ *  When `targetShots` is supplied the model must map rules onto THAT fixed
+ *  shot list (and not invent its own) — used by the "regenerate one coherent
+ *  shot list, then extract every doc against it" onboarding flow. Without it,
+ *  the model proposes its own shots (the original single-doc behaviour). */
 export function buildBrandExtractionPrompt(args: {
   brandName: string
   locationNoun: string
   docText: string
+  targetShots?: ShotDef[]
 }): string {
+  const fixed = !!(args.targetShots && args.targetShots.length > 0)
+
+  const shotTask = fixed
+    ? [
+        `1. Use EXACTLY this fixed photo-shot list — do NOT invent, rename, or drop shots:`,
+        ...args.targetShots!.map((s) => `   - ${s.slot}: ${s.label} — ${s.instruction}`),
+      ]
+    : [
+        `1. Propose the guided PHOTO SHOTS a ${args.locationNoun} should submit for a compliance audit — 3 to 7 shots. Each: a snake_case "slot" id, a short "label", and a one-line "instruction" telling the person what to capture.`,
+      ]
+
+  const shape = fixed
+    ? [
+        `Respond with STRICT JSON only, exactly this shape (rules ONLY — do not echo the shot list):`,
+        `{`,
+        `  "rules": [ { "rule_key": "...", "rule_text": "...", "rule_group": "...", "modality": "must",`,
+        `              "shot": "<one slot id from the fixed list above, or na>", "verdict_mode": "pass_fail", "check_hint": "...", "confidence": "high",`,
+        `              "source_citation": null } ]`,
+        `}`,
+      ]
+    : [
+        `Respond with STRICT JSON only, exactly this shape:`,
+        `{`,
+        `  "shots": [ { "slot": "...", "label": "...", "instruction": "..." } ],`,
+        `  "rules": [ { "rule_key": "...", "rule_text": "...", "rule_group": "...", "modality": "must",`,
+        `              "shot": "...", "verdict_mode": "pass_fail", "check_hint": "...", "confidence": "high",`,
+        `              "source_citation": null } ]`,
+        `}`,
+      ]
+
   return [
     `You are onboarding the brand "${args.brandName}" onto a photo-based compliance-audit platform.`,
     `A "${args.locationNoun}" is one of this brand's locations. Below is their brand-standards document.`,
     ``,
-    `Do TWO things:`,
-    `1. Propose the guided PHOTO SHOTS a ${args.locationNoun} should submit for a compliance audit — 3 to 7 shots. Each: a snake_case "slot" id, a short "label", and a one-line "instruction" telling the person what to capture.`,
+    `Do the following:`,
+    ...shotTask,
     `2. Extract EVERY discrete, checkable compliance rule from the document. For each rule provide:`,
     `   - rule_key: a stable kebab-case id`,
     `   - rule_text: the normalised rule`,
     `   - rule_group: a short category (e.g. "storefront", "signage", "cleanliness", "uniform")`,
     `   - modality: "must" | "should" | "optional" | "process"`,
-    `   - shot: the slot id (from your shot list) this rule is best judged from, or "na"`,
+    `   - shot: the slot id (from ${fixed ? 'the fixed list above' : 'your shot list'}) this rule is best judged from, or "na"`,
     `   - verdict_mode: one of pass_fail | detect_only | needs_reference | review`,
     `   - check_hint: concretely what the AI looks for (for detect_only, what VIOLATION to flag)`,
     `   - confidence: high | medium | low`,
@@ -64,15 +100,31 @@ export function buildBrandExtractionPrompt(args: {
     VERDICT_GUIDANCE,
     `Be generous toward pass_fail/detect_only where a photo genuinely supports it, but never mark pass_fail if a compliant photo cannot PROVE compliance (use detect_only). Never invent rules not in the document.`,
     ``,
-    `Respond with STRICT JSON only, exactly this shape:`,
-    `{`,
-    `  "shots": [ { "slot": "...", "label": "...", "instruction": "..." } ],`,
-    `  "rules": [ { "rule_key": "...", "rule_text": "...", "rule_group": "...", "modality": "must",`,
-    `              "shot": "...", "verdict_mode": "pass_fail", "check_hint": "...", "confidence": "high",`,
-    `              "source_citation": null } ]`,
-    `}`,
+    ...shape,
     ``,
     `=== BRAND STANDARDS DOCUMENT (${args.brandName}) ===`,
+    args.docText,
+  ].join('\n')
+}
+
+/** PURE — a lightweight prompt that asks ONLY for a coherent guided shot list
+ *  across a brand's documents. Small output (no rules) → safe from truncation
+ *  even over a large concatenated corpus. */
+export function buildShotProposalPrompt(args: {
+  brandName: string
+  locationNoun: string
+  docText: string
+}): string {
+  return [
+    `You are onboarding the brand "${args.brandName}" onto a photo-based compliance-audit platform.`,
+    `A "${args.locationNoun}" is one of this brand's locations. Below are excerpts from their brand-standards documents.`,
+    ``,
+    `Propose the guided PHOTO SHOTS a ${args.locationNoun} should submit for a brand-compliance audit — 4 to 8 shots that TOGETHER cover the visually-checkable standards in these documents (e.g. storefront/external signage, the branded logo wall, reception/desk, each distinct training or zone area, and bathrooms/change-rooms). Each shot: a snake_case "slot" id, a short "label", and a one-line "instruction" telling the person what to capture.`,
+    ``,
+    `Respond with STRICT JSON only, exactly this shape:`,
+    `{ "shots": [ { "slot": "...", "label": "...", "instruction": "..." } ] }`,
+    ``,
+    `=== BRAND STANDARDS (excerpts) ===`,
     args.docText,
   ].join('\n')
 }
@@ -88,8 +140,16 @@ function coerceConf(v: unknown): Confidence {
 }
 
 /** PURE — tolerant parse of the model's extraction response. Drops malformed
- *  rows; never throws. */
-export function parseBrandExtraction(text: string | null | undefined): BrandExtraction {
+ *  rows; never throws.
+ *
+ *  `validSlotOverride` lets a caller supply the authoritative slot list (used
+ *  by the fixed-shot flow, where the model is told to emit rules ONLY and not
+ *  re-echo the shots). When given, rule `shot`s validate against it instead of
+ *  the parsed shots. */
+export function parseBrandExtraction(
+  text: string | null | undefined,
+  validSlotOverride?: readonly string[],
+): BrandExtraction {
   const empty: BrandExtraction = { shots: [], rules: [] }
   const t = (text ?? '').trim()
   if (!t) return empty
@@ -111,7 +171,9 @@ export function parseBrandExtraction(text: string | null | undefined): BrandExtr
         .filter((s) => s.slot !== '')
     : []
 
-  const validSlots = new Set(shots.map((s) => s.slot))
+  const validSlots = new Set(
+    validSlotOverride && validSlotOverride.length > 0 ? validSlotOverride : shots.map((s) => s.slot),
+  )
   const seen = new Set<string>()
   const rules: ExtractedRule[] = Array.isArray(o.rules)
     ? (o.rules as unknown[])
@@ -142,12 +204,16 @@ export function parseBrandExtraction(text: string | null | undefined): BrandExtr
 }
 
 /** Best-effort Claude extraction. NEVER throws — returns an empty extraction
- *  on any failure so the operator pipeline can report and stop cleanly. */
+ *  on any failure so the operator pipeline can report and stop cleanly.
+ *
+ *  When `targetShots` is supplied the model maps rules onto that fixed list
+ *  (and emits no shots of its own); the returned `shots` echo the input. */
 export async function extractBrand(args: {
   brandName: string
   locationNoun: string
   docText: string
   model?: string
+  targetShots?: ShotDef[]
 }): Promise<BrandExtraction> {
   if (!process.env.ANTHROPIC_API_KEY) return { shots: [], rules: [] }
   try {
@@ -162,8 +228,35 @@ export async function extractBrand(args: {
       maxOutputTokens: 32000,
       messages: [{ role: 'user' as const, content: prompt }],
     })
-    return parseBrandExtraction(text)
+    const fixed = args.targetShots && args.targetShots.length > 0
+    const parsed = parseBrandExtraction(text, fixed ? args.targetShots!.map((s) => s.slot) : undefined)
+    return fixed ? { shots: args.targetShots!, rules: parsed.rules } : parsed
   } catch {
     return { shots: [], rules: [] }
+  }
+}
+
+/** Best-effort Claude shot-list proposal across a brand's whole corpus.
+ *  NEVER throws — returns [] on any failure. Small output (shots only) so it
+ *  survives even a large concatenated input without truncation. */
+export async function proposeBrandShots(args: {
+  brandName: string
+  locationNoun: string
+  docText: string
+  model?: string
+}): Promise<ShotDef[]> {
+  if (!process.env.ANTHROPIC_API_KEY) return []
+  try {
+    const { anthropic } = await import('@ai-sdk/anthropic')
+    const { generateText } = await import('ai')
+    const { text } = await generateText({
+      model: anthropic(args.model ?? DEFAULT_MODEL),
+      temperature: 0,
+      maxOutputTokens: 2000,
+      messages: [{ role: 'user' as const, content: buildShotProposalPrompt(args) }],
+    })
+    return parseBrandExtraction(text).shots
+  } catch {
+    return []
   }
 }

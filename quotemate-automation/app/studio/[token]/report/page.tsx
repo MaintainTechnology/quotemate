@@ -80,7 +80,18 @@ export default function StudioReportPage() {
           </div>
         )}
 
-        {state === 'ready' && report && (
+        {state === 'ready' && report && report.groups.length === 0 && (
+          <div className="mt-8 border border-ink-line border-l-4 border-l-accent bg-ink-card p-6">
+            <p className="text-text-sec">
+              Your photos were received, but {brand?.name ?? 'this brand'} doesn’t have any automated
+              checks set up yet — so there was nothing to score here. {brand?.name ?? 'HQ'} will review
+              your photos manually.
+            </p>
+            <p className="mt-5 border-t border-ink-line pt-5 text-xs leading-relaxed text-text-dim">{report.disclaimer}</p>
+          </div>
+        )}
+
+        {state === 'ready' && report && report.groups.length > 0 && (
           <>
             <div className="mt-6 grid grid-cols-3 gap-3">
               <Tally label="Compliant" value={report.counts.compliant} tone="good" />

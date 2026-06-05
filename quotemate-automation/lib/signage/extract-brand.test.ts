@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildBrandExtractionPrompt, parseBrandExtraction } from './extract-brand'
+import { buildBrandExtractionPrompt, buildShotProposalPrompt, parseBrandExtraction } from './extract-brand'
 
 describe('buildBrandExtractionPrompt', () => {
   it('frames the brand + location noun and demands strict JSON with shots + rules', () => {
@@ -10,6 +10,36 @@ describe('buildBrandExtractionPrompt', () => {
     expect(p).toContain('verdict_mode')
     expect(p).toContain('pass_fail')
     expect(p).toContain('detect_only')
+    // Default mode asks the model to PROPOSE its own shots.
+    expect(p).toContain('Propose the guided PHOTO SHOTS')
+  })
+
+  it('with targetShots, pins the fixed list and asks for rules only', () => {
+    const p = buildBrandExtractionPrompt({
+      brandName: 'Anytime Fitness',
+      locationNoun: 'club',
+      docText: 'Standards…',
+      targetShots: [
+        { slot: 'logo_wall', label: 'Logo Wall', instruction: 'Square-on shot of the logo wall.' },
+        { slot: 'bathroom', label: 'Bathroom', instruction: 'Wide shot of the bathroom.' },
+      ],
+    })
+    expect(p).toContain('Use EXACTLY this fixed photo-shot list')
+    expect(p).toContain('logo_wall')
+    expect(p).toContain('bathroom')
+    expect(p).not.toContain('Propose the guided PHOTO SHOTS')
+    expect(p).toContain('rules ONLY')
+  })
+})
+
+describe('buildShotProposalPrompt', () => {
+  it('asks for a coherent shot list only, as strict JSON', () => {
+    const p = buildShotProposalPrompt({ brandName: 'Anytime Fitness', locationNoun: 'club', docText: 'Standards…' })
+    expect(p).toContain('Anytime Fitness')
+    expect(p).toContain('club')
+    expect(p).toContain('"shots"')
+    expect(p).toContain('STRICT JSON')
+    expect(p).not.toContain('verdict_mode')
   })
 })
 
@@ -65,5 +95,20 @@ describe('parseBrandExtraction', () => {
     expect(parseBrandExtraction('nonsense')).toEqual({ shots: [], rules: [] })
     expect(parseBrandExtraction('')).toEqual({ shots: [], rules: [] })
     expect(parseBrandExtraction(null)).toEqual({ shots: [], rules: [] })
+  })
+
+  it('validates rule shots against validSlotOverride when shots are omitted', () => {
+    // Fixed-shot mode: the model emits rules only (no shots array), so slot
+    // validity must come from the override, not the parsed shots.
+    const t = JSON.stringify({
+      rules: [
+        { rule_key: 'a', rule_text: 'in scope', shot: 'bathroom', verdict_mode: 'pass_fail' },
+        { rule_key: 'b', rule_text: 'out of scope', shot: 'ghost', verdict_mode: 'pass_fail' },
+      ],
+    })
+    const r = parseBrandExtraction(t, ['logo_wall', 'bathroom'])
+    expect(r.rules).toHaveLength(2)
+    expect(r.rules.find((x) => x.rule_key === 'a')!.shot).toBe('bathroom')
+    expect(r.rules.find((x) => x.rule_key === 'b')!.shot).toBe('na')
   })
 })

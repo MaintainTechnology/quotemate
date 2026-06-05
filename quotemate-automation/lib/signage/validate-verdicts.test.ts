@@ -150,6 +150,13 @@ describe('validateSignageAssessment — overall rollup', () => {
     expect(overall).toBe('fix_needed')
   })
 
+  it('an empty rule set is needs_review, never a vacuous pass', () => {
+    const { verdicts, overall, counts } = validateSignageAssessment([], [])
+    expect(verdicts).toHaveLength(0)
+    expect(counts).toEqual({ compliant: 0, fix: 0, review: 0 })
+    expect(overall).toBe('needs_review')
+  })
+
   it('pass only when every rule is compliant', () => {
     const rules = [rule({ rule_key: 'a' }), rule({ rule_key: 'b' })]
     const { overall } = validateSignageAssessment(rules, [
