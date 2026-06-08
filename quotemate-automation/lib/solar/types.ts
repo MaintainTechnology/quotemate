@@ -409,6 +409,12 @@ export type SolarConfig = {
   self_consumption_pct: number
   /** Retail electricity rate, $/kWh, for savings calc. */
   retail_rate_aud_per_kwh: number
+  /**
+   * Default panel capacity in watts when the API response omits
+   * panelCapacityWatts. Versioned here so a model-year change (e.g. 400→415)
+   * is tracked alongside STC prices and deeming schedules (spec §5).
+   */
+  default_panel_capacity_watts?: number
 }
 
 /** Result of validating config freshness before a publish (spec §5, §7). */

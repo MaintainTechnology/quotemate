@@ -22,27 +22,34 @@ import type {
   SolarOrientation,
   SolarPanelConfig,
   SolarImageryQuality,
+  SolarConfig,
 } from './types'
 
 /** The parsed insight plus the raw response body it came from. */
 export type SolarRoofInsightWithRaw = SolarRoofInsight & { raw: unknown }
 
+/** Module-level constant; config.default_panel_capacity_watts takes precedence. */
 const DEFAULT_PANEL_CAPACITY_WATTS = 400
 
 export function normaliseSolarRoofFacts(
   insights: SolarRoofInsightWithRaw,
   coverage: Extract<SolarCoverageResult, { covered: true }>,
+  config?: Pick<SolarConfig, 'default_panel_capacity_watts'>,
 ): SolarRoofFacts {
   const planes: SolarRoofPlane[] = insights.segments.map((s) => ({
     pitch_degrees: round1(s.pitchDegrees),
     azimuth_degrees: s.azimuthDegrees,
+    // Store the raw area per plane — do NOT round individual areas here.
+    // usable_area_m2 sums the raws and applies a single round1() to avoid
+    // accumulated rounding error (quality issue #1).
     area_m2: round1(s.areaMeters2),
     orientation: azimuthToOrientation(s.azimuthDegrees, s.pitchDegrees),
   }))
 
-  const usable_area_m2 = round1(
-    planes.reduce((acc, p) => acc + p.area_m2, 0),
-  )
+  // Sum raw segment areas first; apply a single round1() to avoid
+  // double-rounding that accumulates across segments (quality issue #1).
+  const rawAreaSum = insights.segments.reduce((acc, s) => acc + s.areaMeters2, 0)
+  const usable_area_m2 = round1(rawAreaSum)
 
   // Primary orientation = the orientation of the single largest plane.
   const largest = planes.reduce<SolarRoofPlane | null>(
@@ -52,14 +59,19 @@ export function normaliseSolarRoofFacts(
   const primary_orientation: SolarOrientation = largest?.orientation ?? 'unknown'
 
   const sp = readSolarPotential(insights.raw)
-  const max_panels_count =
-    numberOr(sp.maxArrayPanelsCount, 0) > 0
-      ? Math.floor(numberOr(sp.maxArrayPanelsCount, 0))
-      : 0
-  const panel_capacity_watts = numberOr(
-    sp.panelCapacityWatts,
-    DEFAULT_PANEL_CAPACITY_WATTS,
-  )
+
+  // Assign to a local variable to avoid the double parse (quality issue #4).
+  const rawMaxPanels = numberOr(sp.maxArrayPanelsCount, 0)
+  const max_panels_count = rawMaxPanels > 0 ? Math.floor(rawMaxPanels) : 0
+
+  // Prefer config.default_panel_capacity_watts for reproducibility (quality issue #3).
+  const configDefault =
+    config?.default_panel_capacity_watts != null &&
+    Number.isFinite(config.default_panel_capacity_watts)
+      ? config.default_panel_capacity_watts
+      : DEFAULT_PANEL_CAPACITY_WATTS
+
+  const panel_capacity_watts = numberOr(sp.panelCapacityWatts, configDefault)
 
   const panel_configs: SolarPanelConfig[] = Array.isArray(sp.solarPanelConfigs)
     ? sp.solarPanelConfigs
@@ -77,13 +89,21 @@ export function normaliseSolarRoofFacts(
         .filter((c): c is SolarPanelConfig => c !== null)
     : []
 
+  // mean_pitch_degrees: apply an explicit isFinite guard before round1 so
+  // that an undeterminable pitch (NaN from a degenerate single-segment body)
+  // returns null rather than 0 (quality issue #2).
+  const rawPitch = insights.weightedMeanPitchDegrees
+  const mean_pitch_degrees: number | null = Number.isFinite(rawPitch)
+    ? round1(rawPitch)
+    : null
+
   return {
     source: 'google',
     usable_area_m2,
     planes,
     segment_count: insights.segmentCount,
     primary_orientation,
-    mean_pitch_degrees: round1(insights.weightedMeanPitchDegrees),
+    mean_pitch_degrees,
     max_panels_count,
     panel_capacity_watts,
     panel_configs,
@@ -95,12 +115,18 @@ export function normaliseSolarRoofFacts(
 }
 
 /** PURE — coarse 8-point orientation from a compass azimuth. Flat roofs
- *  (pitch < 5°) read as 'flat'; a null azimuth reads as 'unknown'. */
+ *  (pitch < 5°) read as 'flat'; a non-finite or null azimuth reads as
+ *  'unknown'. A non-finite pitch also reads as 'unknown' because the roof
+ *  tilt is undeterminable — we cannot reliably assign a direction label
+ *  (quality issue #7). */
 export function azimuthToOrientation(
   azimuth: number | null,
   pitchDegrees: number,
 ): SolarOrientation {
-  if (Number.isFinite(pitchDegrees) && pitchDegrees < 5) return 'flat'
+  // Guard non-finite pitch first — an undeterminable tilt means we cannot
+  // reliably classify the orientation (quality issue #7).
+  if (!Number.isFinite(pitchDegrees)) return 'unknown'
+  if (pitchDegrees < 5) return 'flat'
   if (azimuth === null || !Number.isFinite(azimuth)) return 'unknown'
   const a = ((azimuth % 360) + 360) % 360
   const buckets: SolarOrientation[] = [
