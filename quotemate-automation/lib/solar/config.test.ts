@@ -67,4 +67,57 @@ describe('validateSolarConfig', () => {
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.code).toBe('config_invalid')
   })
+
+  it('blocks publish when derate_factor is 0 (would produce 0 kWh AC)', () => {
+    const bad = { ...DEFAULT_SOLAR_CONFIG, derate_factor: 0 }
+    const r = validateSolarConfig(bad, 2026)
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.code).toBe('config_invalid')
+      expect(r.detail).toMatch(/derate_factor/)
+    }
+  })
+
+  it('blocks publish when derate_factor is 1 or greater (nonsensical)', () => {
+    const bad = { ...DEFAULT_SOLAR_CONFIG, derate_factor: 1 }
+    const r = validateSolarConfig(bad, 2026)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe('config_invalid')
+  })
+
+  it('blocks publish when self_consumption_pct is 0 (would produce $0 savings)', () => {
+    const bad = { ...DEFAULT_SOLAR_CONFIG, self_consumption_pct: 0 }
+    const r = validateSolarConfig(bad, 2026)
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.code).toBe('config_invalid')
+      expect(r.detail).toMatch(/self_consumption_pct/)
+    }
+  })
+
+  it('blocks publish when a named install rate (non-unknown) is 0', () => {
+    const bad = {
+      ...DEFAULT_SOLAR_CONFIG,
+      default_rate_card: {
+        ...DEFAULT_SOLAR_CONFIG.default_rate_card,
+        install_rate_per_kw: {
+          ...DEFAULT_SOLAR_CONFIG.default_rate_card.install_rate_per_kw,
+          standard_panels: 0,
+        },
+      },
+    }
+    const r = validateSolarConfig(bad, 2026)
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.code).toBe('config_invalid')
+      expect(r.detail).toMatch(/standard_panels/)
+    }
+  })
+
+  it('passes when unknown install rate is 0 (sentinel — pricing.ts guards this path)', () => {
+    // 'unknown: 0' in DEFAULT_RATE_CARD is intentional; validateSolarConfig
+    // must NOT reject it so the rest of the engine remains testable.
+    const r = validateSolarConfig(DEFAULT_SOLAR_CONFIG, 2026)
+    expect(r.ok).toBe(true)
+  })
 })

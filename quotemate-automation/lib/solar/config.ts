@@ -132,6 +132,44 @@ export function validateSolarConfig(
     }
   }
 
+  if (
+    !Number.isFinite(config.derate_factor) ||
+    config.derate_factor <= 0 ||
+    config.derate_factor >= 1
+  ) {
+    return {
+      ok: false,
+      code: 'config_invalid',
+      detail: 'derate_factor must be a fraction in (0,1).',
+    }
+  }
+
+  if (
+    !Number.isFinite(config.self_consumption_pct) ||
+    config.self_consumption_pct <= 0 ||
+    config.self_consumption_pct >= 1
+  ) {
+    return {
+      ok: false,
+      code: 'config_invalid',
+      detail: 'self_consumption_pct must be a fraction in (0,1).',
+    }
+  }
+
+  // Guard: every non-'unknown' panel-type install rate must be positive.
+  // 'unknown' is intentionally 0 — it is a sentinel that means "panel type
+  // undetermined at quote time"; pricing.ts must guard this path separately.
+  const rateCard = config.default_rate_card.install_rate_per_kw
+  for (const [panelType, rate] of Object.entries(rateCard)) {
+    if (panelType !== 'unknown' && (!Number.isFinite(rate) || rate <= 0)) {
+      return {
+        ok: false,
+        code: 'config_invalid',
+        detail: `install_rate_per_kw.${panelType} must be a positive number; found ${rate}.`,
+      }
+    }
+  }
+
   return { ok: true, config }
 }
 
