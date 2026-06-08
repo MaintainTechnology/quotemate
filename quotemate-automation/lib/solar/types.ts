@@ -63,6 +63,18 @@ export type SolarCoverageSource = 'google' | 'manual'
  */
 export type SolarConfidenceBand = 'tight' | 'wide'
 
+/**
+ * Fractional spread applied to the production midpoint when computing the
+ * payback band. Tight ±20%, wide ±30% — shared between production.ts
+ * (which computes annual_kwh_low/high) and economics.ts (which reconstructs
+ * the payback interval from the same spread). Both files MUST use this
+ * constant so the band widths stay semantically coupled.
+ */
+export const BAND_SPREAD: Record<SolarConfidenceBand, number> = {
+  tight: 0.20,
+  wide: 0.30,
+}
+
 /** Panel quality grade the tenant offers — drives $/kW lookup. */
 export type SolarPanelType =
   | 'standard_panels'
@@ -345,9 +357,12 @@ export type SolarEconomicsTier = {
   export_earnings_aud: number
   /** Total first-year benefit, $/yr. */
   annual_savings_aud: number
-  /** Simple payback band, years (net price ÷ savings, low/high bounds). */
-  payback_years_low: number
-  payback_years_high: number
+  /**
+   * Simple payback band, years (net price ÷ savings, low/high bounds).
+   * Null when annual_savings_aud is 0 and net > 0 (uncalculable, not free).
+   */
+  payback_years_low: number | null
+  payback_years_high: number | null
 }
 
 /** The economics engine's output — per-tier + the assumptions panel data. */

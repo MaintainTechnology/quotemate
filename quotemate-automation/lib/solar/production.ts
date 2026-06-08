@@ -25,6 +25,7 @@ import type {
   SolarProductionResult,
   SolarConfidenceBand,
 } from './types'
+import { BAND_SPREAD } from './types'
 
 /** The config's assumed per-panel DC baseline, watts. */
 const CONFIG_PANEL_BASELINE_WATTS = 400
@@ -107,7 +108,10 @@ export function estimateSolarProduction(args: {
   // 4. Confidence band — tight on covered/HIGH, wide otherwise.
   const band: SolarConfidenceBand =
     roof.source === 'google' && roof.imagery_quality === 'HIGH' ? 'tight' : 'wide'
-  const spread = band === 'tight' ? 0.20 : 0.30
+  // Use BAND_SPREAD from types.ts — economics.ts uses the same constant so
+  // the payback band reconstructed there stays semantically coupled with the
+  // production band width chosen here.
+  const spread = BAND_SPREAD[band]
   const annual_kwh_low = Math.round(annual_kwh_ac * (1 - spread))
   const annual_kwh_high = Math.round(annual_kwh_ac * (1 + spread))
 

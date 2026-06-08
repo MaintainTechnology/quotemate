@@ -112,8 +112,38 @@ describe('calculateSolarEconomics', () => {
       config: DEFAULT_SOLAR_CONFIG,
       context: CONTEXT,
     })
-    const span = e.tiers[0].payback_years_high - e.tiers[0].payback_years_low
-    const tightSpan = t.payback_years_high - t.payback_years_low
+    const span = (e.tiers[0].payback_years_high as number) - (e.tiers[0].payback_years_low as number)
+    const tightSpan = (t.payback_years_high as number) - (t.payback_years_low as number)
     expect(span).toBeGreaterThan(tightSpan)
+  })
+
+  it('returns null payback when annual production is zero and net > 0', () => {
+    // Simulates a zero-AC production result (e.g. a degenerate panel config).
+    const zeroProd: SolarProductionResult = {
+      ...PRODUCTION,
+      annual_kwh_ac: 0,
+    }
+    const e = calculateSolarEconomics({
+      price: PRICE,
+      production: [zeroProd],
+      config: DEFAULT_SOLAR_CONFIG,
+      context: CONTEXT,
+    })
+    expect(e.tiers[0].annual_savings_aud).toBe(0)
+    // Payback is uncalculable (not free/zero) when savings are 0 and cost is non-zero.
+    expect(e.tiers[0].payback_years_low).toBeNull()
+    expect(e.tiers[0].payback_years_high).toBeNull()
+  })
+
+  it('throws when production array length does not match price.tiers length', () => {
+    // A caller bug: price has 1 tier but production has 0 entries.
+    expect(() =>
+      calculateSolarEconomics({
+        price: PRICE,
+        production: [],
+        config: DEFAULT_SOLAR_CONFIG,
+        context: CONTEXT,
+      }),
+    ).toThrow(/production\.length.*price\.tiers\.length/)
   })
 })
