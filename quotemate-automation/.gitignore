@@ -49,3 +49,6 @@ playwright/.cache/
 # Local smoke-test image output
 tmp/
 /cesium/
+
+# DB CSV exports (contain real customer PII — never commit)
+/db-export/
