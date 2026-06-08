@@ -63,12 +63,16 @@ function buildSplitOption(sizing: AcSizing, rateCard: AcRateCard, band: number):
 function buildDuctedOption(sizing: AcSizing, rateCard: AcRateCard, band: number): AcOption {
   const capacity = roundUpHalf(sizing.ducted_kw)
   const zones = sizing.conditioned_zones
-  const exGst = Math.max(
-    rateCard.ducted.min_ex_gst,
-    rateCard.ducted.base_ex_gst +
-      rateCard.ducted.rate_per_kw * capacity +
-      rateCard.ducted.per_zone * zones,
-  )
+  // No conditioned rooms → no system, so no phantom min-price floor.
+  const exGst =
+    zones === 0 || sizing.connected_kw === 0
+      ? 0
+      : Math.max(
+          rateCard.ducted.min_ex_gst,
+          rateCard.ducted.base_ex_gst +
+            rateCard.ducted.rate_per_kw * capacity +
+            rateCard.ducted.per_zone * zones,
+        )
   return {
     system_type: 'ducted',
     capacity_kw: capacity,

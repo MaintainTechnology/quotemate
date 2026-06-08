@@ -65,6 +65,17 @@ describe('recommendAircon', () => {
     const r = recommend({ bedrooms: 1, living_spaces: 1, floor_area_m2: 60, budget: 500 })
     expect(r.routing.reason.toLowerCase()).toContain('budget')
   })
+
+  it('does not invent a ducted price for a home with zero conditioned rooms', () => {
+    const i = inputs({ bedrooms: 0, living_spaces: 0, floor_area_m2: null })
+    const sizing = sizeAircon('temperate', i)
+    const r = recommendAircon({ sizing, inputs: i })
+    const ducted = r.options.find((o) => o.system_type === 'ducted')!
+    const split = r.options.find((o) => o.system_type === 'split')!
+    expect(ducted.price.low).toBe(0)
+    expect(ducted.price.high).toBe(0)
+    expect(split.price.low).toBe(0)
+  })
 })
 
 describe('mergeAcRateCard', () => {
