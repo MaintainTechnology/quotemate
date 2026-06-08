@@ -14,9 +14,9 @@
 // ════════════════════════════════════════════════════════════════════
 
 import { fetchBuildingInsights } from '../roofing/solar-api'
+import type { ImageryQuality } from '../roofing/solar-api'
 import type { ResolvedSolarOpts } from '../roofing/solar-api'
 import type {
-  SolarAddressInput,
   LatLng,
   SolarCoverageResult,
   SolarImageryQuality,
@@ -25,51 +25,53 @@ import type {
 /** Imagery qualities good enough for the solar money path. */
 const COVERAGE_FLOOR: SolarImageryQuality[] = ['HIGH', 'MEDIUM']
 
+/**
+ * Map the roofing module's ImageryQuality onto the solar module's
+ * SolarImageryQuality. Both are currently the same union, but they are
+ * independent types — an explicit mapping makes the safety contract
+ * visible at compile time and insulates against divergence.
+ */
+function toSolarImageryQuality(q: ImageryQuality): SolarImageryQuality {
+  if (q === 'HIGH') return 'HIGH'
+  if (q === 'MEDIUM') return 'MEDIUM'
+  return 'LOW'
+}
+
+/**
+ * Check whether Google Solar has usable building-insights coverage for the
+ * given coordinate. Returns a discriminated union:
+ *   - `covered: true`  → imagery quality meets the MEDIUM floor; includes
+ *                        the resolved location + imagery metadata so the
+ *                        caller does not need to re-fetch.
+ *   - `covered: false` → includes a `code` from `SolarCoverageFailureCode`
+ *                        so the orchestrator can branch to the manual-roof
+ *                        fallback (never a hard fail — spec §7).
+ *
+ * The address-input parameter has been removed: it was only intended for an
+ * offline GeoJSON pre-check (which would produce 'outside_coverage'), but
+ * that check is not implemented. Adding it back prematurely would require
+ * callers to supply data that the function ignores, creating a misleading
+ * API surface.
+ */
 export async function checkSolarCoverage(
-  _input: SolarAddressInput,
   location: LatLng,
   opts: ResolvedSolarOpts,
 ): Promise<SolarCoverageResult> {
   const res = await fetchBuildingInsights(location, opts)
 
   if (!res.ok) {
-    if (res.code === 'no_coverage') {
-      return {
-        covered: false,
-        code: 'no_building_at_address',
-        detail: res.detail,
-      }
-    }
-    if (res.code === 'no_key') {
-      return {
-        covered: false,
-        code: 'provider_unavailable',
-        detail: res.detail,
-      }
-    }
-    if (res.code === 'network_error') {
-      return {
-        covered: false,
-        code: 'provider_unavailable',
-        detail: res.detail,
-      }
-    }
-    if (res.code === 'invalid_response') {
-      return {
-        covered: false,
-        code: 'provider_invalid_response',
-        detail: res.detail,
-      }
-    }
-    // http_error
-    return {
-      covered: false,
-      code: 'provider_unavailable',
-      detail: res.detail,
+    switch (res.code) {
+      case 'no_coverage':
+        return { covered: false, code: 'no_building_at_address', detail: res.detail }
+      case 'invalid_response':
+        return { covered: false, code: 'provider_invalid_response', detail: res.detail }
+      // no_key, network_error, http_error → provider_unavailable
+      default:
+        return { covered: false, code: 'provider_unavailable', detail: res.detail }
     }
   }
 
-  const quality = res.insight.imageryQuality as SolarImageryQuality
+  const quality = toSolarImageryQuality(res.insight.imageryQuality)
   if (!COVERAGE_FLOOR.includes(quality)) {
     return {
       covered: false,
