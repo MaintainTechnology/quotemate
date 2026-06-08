@@ -131,6 +131,8 @@ describe('calculateSolarPrice', () => {
       config: DEFAULT_SOLAR_CONFIG,
       context: CONTEXT,
     })
+    // Guard: sizing must produce tiers before we attempt to price.
+    expect(tinySizing.tiers.length).toBeGreaterThan(0)
     const p = calculateSolarPrice({
       sizing: tinySizing,
       roof: tinyRoof,
@@ -139,6 +141,65 @@ describe('calculateSolarPrice', () => {
     })
     expect(p.call_out_minimum_applied).toBe(true)
     expect(p.tiers[0].gross_ex_gst).toBeGreaterThanOrEqual(DEFAULT_SOLAR_RATE_CARD.call_out_minimum_ex_gst!)
+  })
+
+  it('net_ex_gst clamps to 0 when the STC rebate exceeds the gross (high zone, large system)', () => {
+    // Use Cairns (postcode 4870, zone 1.622) + 10 deeming years (synthetic) to
+    // force a rebate that exceeds the gross install cost on a standard-rate system.
+    // certificates = floor(kW × 1.622 × 10); at $38/STC a large-enough system
+    // makes the rebate > gross, which must clamp to net_ex_gst = 0.
+    const syntheticConfig = {
+      ...DEFAULT_SOLAR_CONFIG,
+      deeming_schedule: { ...DEFAULT_SOLAR_CONFIG.deeming_schedule, 2026: 10 },
+      // Disable the call-out floor so net=0 is visible (floor would raise gross, not net).
+      default_rate_card: {
+        ...DEFAULT_SOLAR_CONFIG.default_rate_card,
+        call_out_minimum_ex_gst: undefined,
+      },
+      // Raise the export ceiling so all tiers size up.
+      export_limits: {
+        ...DEFAULT_SOLAR_CONFIG.export_limits,
+        by_network: { ...DEFAULT_SOLAR_CONFIG.export_limits.by_network, Ausgrid: 100 },
+      },
+    }
+    const highZoneContext: SolarEstimateContext = { ...CONTEXT, postcode: '4870' }
+    // Build a large single-tier sizing directly to guarantee the maths.
+    // 20 kW × $1100/kW = $22 000 gross; STC = floor(20 × 1.622 × 10) × $38 = 324 × $38 = $12 312.
+    // 30 kW × $1100/kW = $33 000 gross; STC = floor(30 × 1.622 × 10) × $38 = 486 × $38 = $18 468.
+    // 50 kW × $1100/kW = $55 000 gross; STC = floor(50 × 1.622 × 10) × $38 = 811 × $38 = $30 818.
+    // None of those exceed gross yet. Use $10/kW rate to guarantee rebate > gross.
+    const cheapRateConfig = {
+      ...syntheticConfig,
+      default_rate_card: {
+        ...syntheticConfig.default_rate_card,
+        install_rate_per_kw: {
+          standard_panels: 10, // $10/kW → 20 kW = $200 gross; STC = 324 × $38 = $12 312 >> gross
+          premium_panels: 1450,
+          unknown: 0,
+        },
+      },
+    }
+    // Build a synthetic SolarSizingResult with a 20 kW tier.
+    const bigSizing = {
+      ...SIZING,
+      tiers: [
+        {
+          ...SIZING.tiers[0],
+          system_kw_dc: 20,
+          panels_count: 50,
+        },
+      ],
+    }
+    const p = calculateSolarPrice({
+      sizing: bigSizing,
+      roof: ROOF,
+      context: highZoneContext,
+      config: cheapRateConfig,
+    })
+    // Net must never be negative — clamp asserts zero.
+    expect(p.tiers[0].net_ex_gst).toBe(0)
+    // And inc-GST net must also be zero (0 × GST_RATE = 0).
+    expect(p.tiers[0].net_inc_gst).toBe(0)
   })
 
   it('carries the sizing routing through unchanged (tradie_review)', () => {

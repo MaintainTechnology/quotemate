@@ -9,7 +9,8 @@
 // HERE (not in the caller) because it needs the context's postcode/year
 // and the dated config; the customer page renders gross → STC → net as a
 // transparent three-line breakdown. GST computed as ex_gst + roundTo(ex_gst
-// × 0.10, 2) so the displayed GST component equals a legal invoice line.
+// × GST_RATE, 2) so the displayed GST component equals a legal invoice line.
+// GST is only applied when rateCard.gst_registered is true.
 // Call-out floor after the multiplication — identical to lib/roofing/pricing.ts.
 //
 // PURE — no I/O, fully unit-testable.
@@ -26,6 +27,10 @@ import type {
   SolarQuotePrice,
 } from './types'
 import { DEFAULT_SOLAR_CONFIG } from './config'
+import { roundTo } from './math'
+
+// ── GST rate constant (10% AU GST). Applied only when rateCard.gst_registered. ──
+const GST_RATE = 0.10
 
 // ── Default rate card re-exported from config (single source of truth) ──
 // Callers that need a fallback rate card should import this rather than
@@ -44,6 +49,7 @@ type Loading = {
 export function applicableLoadings(
   roof: SolarRoofFacts,
   rateCard: SolarRateCard,
+  config?: SolarConfig,
 ): Loading[] {
   const out: Loading[] = []
   if ((roof.storeys ?? 1) >= 2) {
@@ -54,8 +60,10 @@ export function applicableLoadings(
     })
   }
   // A steep mean pitch (> 35°) or a complex many-plane roof loads access.
+  // The segment threshold is config-driven (defaults to 6 if not set).
+  const complexRoofMinSegments = config?.complex_roof_min_segments ?? 6
   const steep = typeof roof.mean_pitch_degrees === 'number' && roof.mean_pitch_degrees > 35
-  const manyPlanes = roof.segment_count >= 6
+  const manyPlanes = roof.segment_count >= complexRoofMinSegments
   if (steep || manyPlanes) {
     out.push({
       code: 'complex_roof',
@@ -114,17 +122,13 @@ export function calculateSolarPrice(args: {
   // Use config's default_rate_card as the fallback — single source of truth.
   const rateCard = args.rateCard ?? config.default_rate_card
 
-  const loadings = applicableLoadings(roof, rateCard)
+  const loadings = applicableLoadings(roof, rateCard, config)
   const loadingMultiplier = loadings.reduce((acc, l) => acc * (1 + l.pct), 1)
 
   const floor = rateCard.call_out_minimum_ex_gst ?? 0
   const applyFloor = (n: number) => (floor > 0 && n > 0 ? Math.max(n, floor) : n)
 
   let callOutMinimumApplied = false
-  // Use the panel type from the first tier for the effective-rate display.
-  const displayRate =
-    (rateCard.install_rate_per_kw[sizing.tiers[0]?.panel_type ?? 'unknown'] ?? 0) *
-    loadingMultiplier
 
   const tiers: SolarPriceTier[] = sizing.tiers.map((t) => {
     const baseRate = rateCard.install_rate_per_kw[t.panel_type] ?? 0
@@ -148,9 +152,10 @@ export function calculateSolarPrice(args: {
     const net_ex_gst = roundTo(Math.max(0, gross_ex_gst - stc.rebate_aud), 2)
 
     // GST: compute the tax component separately so the displayed line
-    // (inc_gst − ex_gst) equals roundTo(ex_gst × 0.10, 2) on AU tax invoices.
-    const gross_gst = roundTo(gross_ex_gst * 0.10, 2)
-    const net_gst = roundTo(net_ex_gst * 0.10, 2)
+    // (inc_gst − ex_gst) equals roundTo(ex_gst × GST_RATE, 2) on AU tax
+    // invoices. GST is only applied when rateCard.gst_registered is true.
+    const gross_gst = rateCard.gst_registered ? roundTo(gross_ex_gst * GST_RATE, 2) : 0
+    const net_gst = rateCard.gst_registered ? roundTo(net_ex_gst * GST_RATE, 2) : 0
 
     return {
       tier: t.tier,
@@ -165,6 +170,12 @@ export function calculateSolarPrice(args: {
     }
   })
 
+  // Compute effective_rate_per_kw AFTER the tier loop (so any guard throws
+  // above have already fired — displayRate must reflect a known panel type).
+  const displayRate =
+    (rateCard.install_rate_per_kw[sizing.tiers[0].panel_type] ?? 0) *
+    loadingMultiplier
+
   return {
     tiers,
     effective_rate_per_kw: roundTo(displayRate, 2),
@@ -174,10 +185,4 @@ export function calculateSolarPrice(args: {
   }
 }
 
-function roundTo(n: number, dp: number): number {
-  if (!Number.isFinite(n)) return 0
-  const f = Math.pow(10, dp)
-  return Math.round(n * f) / f
-}
-
-export const __test_only__ = { roundTo, stcBreakdown, applicableLoadings }
+export const __test_only__ = { applicableLoadings }

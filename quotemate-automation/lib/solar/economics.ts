@@ -34,6 +34,7 @@ import type {
   SolarEconomicsResult,
 } from './types'
 import { BAND_SPREAD } from './types'
+import { roundTo } from './math'
 
 export function calculateSolarEconomics(args: {
   price: SolarQuotePrice
@@ -114,11 +115,3 @@ export function calculateSolarEconomics(args: {
     },
   }
 }
-
-function roundTo(n: number, dp: number): number {
-  if (!Number.isFinite(n)) return 0
-  const f = Math.pow(10, dp)
-  return Math.round(n * f) / f
-}
-
-export const __test_only__ = { roundTo }

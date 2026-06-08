@@ -87,9 +87,16 @@ describe('calculateSolarEconomics', () => {
     // is non-zero so both should be non-null positive numbers.
     expect(t.payback_years_low).not.toBeNull()
     expect(t.payback_years_high).not.toBeNull()
-    expect(t.payback_years_low!).toBeLessThan(t.payback_years_high!)
-    // low = net / (savings × upper band factor); high = net / (savings × lower band factor)
-    expect(t.payback_years_low!).toBeGreaterThan(0)
+    // Assert non-null before numeric comparisons to satisfy TypeScript.
+    const low = t.payback_years_low as number
+    const high = t.payback_years_high as number
+    expect(low).toBeLessThan(high)
+    expect(low).toBeGreaterThan(0)
+    // Exact values: net=5368, savings=1368.48, tight spread=±20%.
+    // low  = roundTo(5368 / (1368.48 × 1.20), 1) = 3.3
+    // high = roundTo(5368 / (1368.48 × 0.80), 1) = 4.9
+    expect(low).toBe(3.3)
+    expect(high).toBe(4.9)
   })
 
   it('surfaces the assumptions panel verbatim from config + context', () => {
