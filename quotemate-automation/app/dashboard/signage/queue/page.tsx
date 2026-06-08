@@ -31,6 +31,7 @@ type FleetRow = {
 }
 type Rollup = { studios: number; assessed: number; pass: number; fix_needed: number; needs_review: number; awaiting: number }
 
+type ProvStage = 'agreed' | 'conflict' | 'db_only' | 'kb_only' | null
 type Verdict = {
   rule_key: string
   status: 'compliant' | 'non_compliant' | 'cannot_determine'
@@ -41,7 +42,13 @@ type Verdict = {
   rule_group: string
   applicability: string
   source_citation: string | null
+  // Two-stage provenance (null when Step 2 didn't run).
+  stage: ProvStage
+  kb_status: 'compliant' | 'non_compliant' | 'cannot_determine' | 'absent' | null
+  kb_note: string | null
+  kb_citation: string | null
 }
+type Advisory = { shot: string; description: string; citation: string | null; store: string }
 type Detail = {
   assessment: {
     id: string
@@ -52,8 +59,11 @@ type Detail = {
     hq_note: string | null
     studio_name: string
     region: string | null
+    kb_degraded: boolean
+    kb_stores: string[]
   }
   verdicts: Verdict[]
+  advisory: Advisory[]
   photos: Array<{ shot_slot: string; url: string | null }>
 }
 
@@ -99,7 +109,7 @@ export default function SignageQueuePage() {
           headers: { Authorization: `Bearer ${accessToken}` },
         })
         const json = await res.json()
-        if (json.ok) setDetail({ assessment: json.assessment, verdicts: json.verdicts, photos: json.photos })
+        if (json.ok) setDetail({ assessment: json.assessment, verdicts: json.verdicts, advisory: json.advisory ?? [], photos: json.photos })
       } finally {
         setDetailBusy(false)
       }
@@ -264,7 +274,7 @@ function DetailPanel({
   busy: boolean
   onDecide: (d: 'approved' | 'needs_changes' | 'escalated') => void
 }) {
-  const { assessment, verdicts, photos } = detail
+  const { assessment, verdicts, advisory, photos } = detail
   const groups = Array.from(new Set(verdicts.map((v) => v.rule_group)))
   return (
     <div>
@@ -281,6 +291,12 @@ function DetailPanel({
       {assessment.hq_decision && (
         <div className="mt-3 inline-block border border-ink-line border-l-4 border-l-teal-glow bg-ink-deep px-3 py-1.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-teal-glow">
           HQ: {assessment.hq_decision.replace('_', ' ')}
+        </div>
+      )}
+
+      {assessment.kb_degraded && (
+        <div className="mt-3 border border-ink-line border-l-4 border-l-warning bg-ink-deep px-3 py-2 font-mono text-[0.7rem] uppercase tracking-[0.12em] text-warning">
+          ⚠ The second-stage brand-standards check did not complete for this assessment — verdicts are Step-1 (database) only.
         </div>
       )}
 
@@ -313,8 +329,17 @@ function DetailPanel({
                     <div className="flex items-start gap-3">
                       <VerdictIcon status={v.status} />
                       <div className="min-w-0">
-                        <p className="text-sm text-text-pri">{v.rule_text}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm text-text-pri">{v.rule_text}</p>
+                          <StageBadge stage={v.stage} />
+                        </div>
                         {v.evidence && <p className="mt-1 text-xs text-text-sec">{v.evidence}</p>}
+                        {v.kb_note && (
+                          <p className="mt-1 text-xs text-accent">
+                            ◇ {v.kb_note}
+                            {v.kb_citation && <span className="text-text-dim"> · {v.kb_citation}</span>}
+                          </p>
+                        )}
                         <div className="mt-1 flex flex-wrap gap-2 font-mono text-[0.62rem] uppercase tracking-[0.1em] text-text-dim">
                           {v.source_citation && <span>{v.source_citation}</span>}
                           {v.applicability !== 'auto_vision' && <span>· auto-downgraded ({v.applicability.replace(/_/g, ' ')})</span>}
@@ -327,6 +352,29 @@ function DetailPanel({
           </div>
         ))}
       </div>
+
+      {/* Advisory — Step-2-only brand-standard observations */}
+      {advisory.length > 0 && (
+        <div className="mt-6">
+          <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">Other observations</div>
+          <div className="mt-2 grid gap-2">
+            {advisory.map((a, i) => (
+              <div key={i} className="border border-ink-line bg-ink-deep px-4 py-3">
+                <div className="flex items-start gap-3">
+                  <span className="text-accent" aria-label="advisory">◇</span>
+                  <div className="min-w-0">
+                    <p className="text-sm text-text-pri">{a.description}</p>
+                    <div className="mt-1 flex flex-wrap gap-2 font-mono text-[0.62rem] uppercase tracking-[0.1em] text-text-dim">
+                      <span>{a.shot}</span>
+                      {a.citation && <span>· {a.citation}</span>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Decision */}
       <div className="mt-7 flex flex-wrap gap-3 border-t border-ink-line pt-6">
@@ -366,6 +414,23 @@ function VerdictIcon({ status }: { status: Verdict['status'] }) {
   if (status === 'compliant') return <span className="text-teal-glow" aria-label="compliant">✓</span>
   if (status === 'non_compliant') return <span className="text-warning" aria-label="non-compliant">✕</span>
   return <span className="text-accent" aria-label="needs review">◑</span>
+}
+
+// How the two stages combined for this rule (null when Step 2 didn't run).
+function StageBadge({ stage }: { stage: ProvStage }) {
+  if (!stage) return null
+  const map: Record<Exclude<ProvStage, null>, { label: string; cls: string }> = {
+    agreed: { label: 'DB + file store agree', cls: 'text-teal-glow border-teal-glow' },
+    conflict: { label: 'Stages disagree', cls: 'text-warning border-warning' },
+    kb_only: { label: 'File-store flag', cls: 'text-accent border-accent' },
+    db_only: { label: 'DB only', cls: 'text-text-dim border-ink-line' },
+  }
+  const { label, cls } = map[stage]
+  return (
+    <span className={`border px-1.5 py-0.5 font-mono text-[0.56rem] font-semibold uppercase tracking-[0.1em] ${cls}`}>
+      {label}
+    </span>
+  )
 }
 
 function OverallChip({ overall, compact }: { overall: string | null; compact?: boolean }) {

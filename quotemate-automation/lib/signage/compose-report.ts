@@ -6,7 +6,7 @@
 // renders from the same verdicts; this shapes the franchisee view.
 // ════════════════════════════════════════════════════════════════════
 
-import type { RuleVerdict, SignageRule, VerdictCounts } from './types'
+import type { AdvisoryFinding, RuleProvenance, RuleVerdict, SignageRule, VerdictCounts } from './types'
 
 export type ReportItemState = 'compliant' | 'fix' | 'review'
 
@@ -17,6 +17,27 @@ export type ReportItem = {
   /** What the franchisee should do / why it can't be auto-checked. */
   detail: string
   source_citation: string | null
+  /** Provenance label when the file-store cross-check (Step 2) was involved
+   *  (e.g. "Flagged by a second brand-standards check"); null otherwise. */
+  note: string | null
+  /** Brand-standard page/section Step 2 cited, when any. */
+  kb_citation: string | null
+}
+
+/** A short provenance label for the franchisee — only when Step 2 changed,
+ *  confirmed, or added something. `db_only` (Step 1 alone) shows nothing. */
+function provLabel(p: RuleProvenance | undefined): string | null {
+  if (!p) return null
+  switch (p.stage) {
+    case 'conflict':
+      return 'Flagged by a second brand-standards check'
+    case 'kb_only':
+      return 'Raised by the brand-standards reference'
+    case 'agreed':
+      return 'Confirmed against the brand standard'
+    default:
+      return null // db_only
+  }
 }
 
 export type ReportGroup = {
@@ -50,13 +71,18 @@ function prettyGroup(group: string): string {
 }
 
 /** PURE — compose the grouped report. `rules` supplies the rule text +
- *  citation + group; `verdicts` supplies the per-rule state + evidence. */
+ *  citation + group; `verdicts` supplies the per-rule state + evidence;
+ *  `opts.provenance` adds the two-stage source label + brand citation per
+ *  rule, and `opts.advisory` appends a group of Step-2-only observations. */
 export function composeReport(
   rules: SignageRule[],
   verdicts: RuleVerdict[],
   hqName = 'HQ',
+  opts: { provenance?: RuleProvenance[]; advisory?: AdvisoryFinding[] } = {},
 ): ComplianceReport {
   const verdictByKey = new Map(verdicts.map((v) => [v.rule_key, v]))
+  const provByKey = new Map((opts.provenance ?? []).map((p) => [p.rule_key, p]))
+  const advisory = opts.advisory ?? []
 
   const groupOrder: string[] = []
   const grouped = new Map<string, ReportItem[]>()
@@ -78,12 +104,15 @@ export function composeReport(
           ? `${v?.evidence?.trim() || 'Does not meet the standard.'} — ${rule.rule_text}`
           : v?.evidence?.trim() || 'Needs an HQ reviewer to confirm.'
 
+    const prov = provByKey.get(rule.rule_key)
     const item: ReportItem = {
       rule_key: rule.rule_key,
       rule_text: rule.rule_text,
       state,
       detail,
       source_citation: rule.source_citation,
+      note: provLabel(prov),
+      kb_citation: prov?.citation ?? null,
     }
     if (!grouped.has(rule.rule_group)) {
       grouped.set(rule.rule_group, [])
@@ -100,6 +129,24 @@ export function composeReport(
     items: (grouped.get(group) ?? []).sort((a, b) => stateRank[a.state] - stateRank[b.state]),
   }))
 
+  // Step-2-only findings → their own group. They have no DB rule, so they
+  // are always "needs HQ review" and count toward review.
+  if (advisory.length > 0) {
+    groups.push({
+      group: 'Other observations',
+      items: advisory.map((a, i) => ({
+        rule_key: `advisory-${i}`,
+        rule_text: a.description,
+        state: 'review' as const,
+        detail: a.description,
+        source_citation: null,
+        note: 'New brand-standard observation from the file-store check',
+        kb_citation: a.citation,
+      })),
+    })
+  }
+
+  review += advisory.length
   const counts: VerdictCounts = { compliant, fix, review }
   const summary = `${compliant} compliant · ${fix} to fix · ${review} need HQ review`
 

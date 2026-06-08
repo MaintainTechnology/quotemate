@@ -18,7 +18,7 @@ import { brandForOrg, loadBrand } from '@/lib/signage/brand'
 import type { BrandConfig } from '@/lib/signage/types'
 import { loadActiveRules, applicableRules, runAssessment } from '@/lib/signage/run'
 import { composeReport } from '@/lib/signage/compose-report'
-import type { RuleVerdict } from '@/lib/signage/types'
+import type { AdvisoryFinding, RuleProvenance, RuleVerdict, TwoStageDetail } from '@/lib/signage/types'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -79,14 +79,18 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   if (req.state === 'assessed') {
     const { data: assessment } = await supabase
       .from('signage_assessments')
-      .select('overall, verdicts, counts')
+      .select('overall, verdicts, counts, two_stage')
       .eq('request_id', req.id)
       .maybeSingle()
     if (assessment) {
       const allRules = await loadActiveRules(supabase, brand.slug, 1)
       const scoped = applicableRules(allRules, requestedShots)
       const verdicts = (assessment.verdicts as RuleVerdict[]) ?? []
-      const report = composeReport(scoped, verdicts, brand.hq_name)
+      const twoStage = (assessment.two_stage as TwoStageDetail | null) ?? null
+      const report = composeReport(scoped, verdicts, brand.hq_name, {
+        provenance: (twoStage?.provenance as RuleProvenance[]) ?? [],
+        advisory: (twoStage?.advisory as AdvisoryFinding[]) ?? [],
+      })
       return Response.json({
         ok: true,
         mode: 'report',

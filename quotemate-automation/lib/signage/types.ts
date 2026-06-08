@@ -106,3 +106,61 @@ export type VerdictCounts = {
   fix: number
   review: number
 }
+
+// ════════════════════════════════════════════════════════════════════
+// Two-stage assessment (Step 2 = brand file-store cross-check + merge).
+// ════════════════════════════════════════════════════════════════════
+
+/** Step 2's per-rule verdict — produced by re-looking at the photo with the
+ *  brand-standard passages retrieved from the brand's Gemini File Search
+ *  store(s). Same three statuses as Step 1, plus a page/section citation. */
+export type KbRuleVerdict = {
+  rule_key: string
+  status: VerdictStatus
+  confidence: Confidence
+  /** One short sentence grounded in BOTH the photo and the cited standard. */
+  evidence: string
+  /** Where in the brand docs this came from, when the store cited it. */
+  citation: string | null
+}
+
+/** A brand-standard issue Step 2 surfaced that has NO matching DB rule.
+ *  Has no rule_key, so it can never be auto-decided — it always routes to
+ *  HQ review and is shown in the franchisee report's advisory group. */
+export type AdvisoryFinding = {
+  shot: ShotSlot
+  description: string
+  citation: string | null
+  /** The brand store that raised it. */
+  store: string
+}
+
+/** How a rule's final verdict was decided across the two stages. */
+export type ProvenanceStage =
+  | 'agreed' // both stages reached the same decisive verdict
+  | 'conflict' // the stages disagreed → routed to HQ review
+  | 'db_only' // Step 2 abstained / didn't cover it → Step 1 stands
+  | 'kb_only' // Step 1 abstained; Step 2 weighed in (never a solo pass)
+
+/** Per-rule audit trail of the merge — drives the franchisee provenance
+ *  note + citation and the HQ side-by-side. */
+export type RuleProvenance = {
+  rule_key: string
+  stage: ProvenanceStage
+  db_status: VerdictStatus
+  kb_status: VerdictStatus | 'absent'
+  /** Short human note explaining a conflict / kb-only outcome (else null). */
+  note: string | null
+  citation: string | null
+}
+
+/** The full two-stage breakdown persisted on `signage_assessments.two_stage`. */
+export type TwoStageDetail = {
+  step1: RuleVerdict[]
+  kb: KbRuleVerdict[]
+  provenance: RuleProvenance[]
+  advisory: AdvisoryFinding[]
+  stores: string[]
+  /** True when Step 2 was meant to run but failed (outage/keys) — HQ signal. */
+  kb_degraded: boolean
+}

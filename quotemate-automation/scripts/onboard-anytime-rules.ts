@@ -34,6 +34,29 @@ const RULE_SET_VERSION = 1
 // the per-doc rule extraction.
 const SHOT_PROPOSAL_CHARS_PER_DOC = 45000
 
+// A single extractBrand call emits one large JSON rule array. Past ~110K chars
+// of input the rule set can exceed the 32K output-token cap → the JSON
+// truncates → unparseable → 0 rules (this silently dropped the 218K-char
+// Design Manual on the first run). So chunk big docs and extract each chunk.
+const MAX_EXTRACT_CHARS = 70000
+
+/** Split on whitespace boundaries so no rule sentence is cut mid-word. */
+function chunkText(text: string, max: number): string[] {
+  if (text.length <= max) return [text]
+  const chunks: string[] = []
+  let i = 0
+  while (i < text.length) {
+    let end = Math.min(i + max, text.length)
+    if (end < text.length) {
+      const sp = text.lastIndexOf(' ', end)
+      if (sp > i + max * 0.5) end = sp
+    }
+    chunks.push(text.slice(i, end).trim())
+    i = end
+  }
+  return chunks.filter((c) => c.length > 0)
+}
+
 function arg(flag: string, fallback?: string): string | undefined {
   const i = process.argv.indexOf(flag)
   return i >= 0 ? process.argv[i + 1] : fallback
@@ -110,34 +133,45 @@ async function main() {
   console.log(`\nProposed shots (${shots.length}):`)
   for (const s of shots) console.log(`  - ${s.slot.padEnd(18)} ${s.label} — ${s.instruction}`)
 
-  // 2. Extract rules per doc, mapped onto the fixed shot list.
+  // 2. Extract rules per doc (chunked for big docs), mapped onto the fixed
+  //    shot list. Chunk index namespaces the rule_key so two chunks of the
+  //    same doc can't collide.
   const allRules: Array<ExtractedRule & { source_doc: string }> = []
   for (const d of docs) {
-    process.stdout.write(`\nExtracting rules from ${d.label}… `)
-    const { rules } = await extractBrand({
-      brandName: BRAND_NAME,
-      locationNoun: LOCATION_NOUN,
-      docText: d.text,
-      targetShots: shots,
-    })
-    console.log(`${rules.length} rules`)
-    for (const r of rules) {
-      allRules.push({
-        ...r,
-        rule_key: `${d.tag}-${r.rule_key}`,
-        source_citation: r.source_citation ? `${d.label} · ${r.source_citation}` : d.label,
-        source_doc: d.label,
+    const chunks = chunkText(d.text, MAX_EXTRACT_CHARS)
+    let docCount = 0
+    for (let ci = 0; ci < chunks.length; ci++) {
+      const { rules } = await extractBrand({
+        brandName: BRAND_NAME,
+        locationNoun: LOCATION_NOUN,
+        docText: chunks[ci],
+        targetShots: shots,
       })
+      const keyPrefix = chunks.length > 1 ? `${d.tag}${ci + 1}` : d.tag
+      for (const r of rules) {
+        allRules.push({
+          ...r,
+          rule_key: `${keyPrefix}-${r.rule_key}`,
+          source_citation: r.source_citation ? `${d.label} · ${r.source_citation}` : d.label,
+          source_doc: d.label,
+        })
+      }
+      docCount += rules.length
     }
+    console.log(`  ${d.label}: ${docCount} rules across ${chunks.length} chunk(s)`)
   }
 
-  // 3. Dedupe: exact rule_key (cross-doc safe via prefix) + identical text.
+  // 3. Dedupe. rule_key is unique by construction; the real dedupe is on a
+  //    normalised text SIGNATURE (alphanumeric, first 100 chars) so the same
+  //    requirement reworded across the design + remodel manuals collapses to
+  //    one row instead of cluttering the franchisee report twice.
+  const sig = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 100)
   const byKey = new Map<string, (typeof allRules)[number]>()
-  const seenText = new Set<string>()
+  const seenSig = new Set<string>()
   for (const r of allRules) {
-    const norm = r.rule_text.toLowerCase().replace(/\s+/g, ' ').trim()
-    if (byKey.has(r.rule_key) || seenText.has(norm)) continue
-    seenText.add(norm)
+    const s = sig(r.rule_text)
+    if (!r.rule_text.trim() || byKey.has(r.rule_key) || seenSig.has(s)) continue
+    seenSig.add(s)
     byKey.set(r.rule_key, r)
   }
   const rules = [...byKey.values()]

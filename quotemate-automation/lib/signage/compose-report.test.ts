@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { composeReport } from './compose-report'
-import type { RuleVerdict, SignageRule } from './types'
+import type { AdvisoryFinding, RuleProvenance, RuleVerdict, SignageRule } from './types'
 
 const rules: SignageRule[] = [
   {
@@ -81,6 +81,45 @@ describe('composeReport', () => {
 
   it('treats a rule with no verdict as review', () => {
     const r = composeReport(rules, verdicts.slice(0, 1))
+    expect(r.counts.review).toBe(2)
+  })
+
+  it('defaults note/kb_citation to null with no provenance', () => {
+    const r = composeReport(rules, verdicts)
+    const allItems = r.groups.flatMap((g) => g.items)
+    expect(allItems.every((i) => i.note === null && i.kb_citation === null)).toBe(true)
+  })
+})
+
+describe('composeReport — two-stage provenance + advisory', () => {
+  const provenance: RuleProvenance[] = [
+    { rule_key: 'wall-logo-required', stage: 'agreed', db_status: 'compliant', kb_status: 'compliant', note: null, citation: 'AF Design Manual p.3' },
+    { rule_key: 'red-stripe', stage: 'conflict', db_status: 'compliant', kb_status: 'non_compliant', note: 'why', citation: 'p.15' },
+    { rule_key: 'paint-sku', stage: 'db_only', db_status: 'cannot_determine', kb_status: 'absent', note: null, citation: null },
+  ]
+
+  it('labels each item by provenance stage + carries the kb citation', () => {
+    const r = composeReport(rules, verdicts, 'HQ', { provenance })
+    const items = r.groups.flatMap((g) => g.items)
+    const logo = items.find((i) => i.rule_key === 'wall-logo-required')!
+    const stripe = items.find((i) => i.rule_key === 'red-stripe')!
+    const sku = items.find((i) => i.rule_key === 'paint-sku')!
+    expect(logo.note).toBe('Confirmed against the brand standard')
+    expect(logo.kb_citation).toBe('AF Design Manual p.3')
+    expect(stripe.note).toBe('Flagged by a second brand-standards check')
+    expect(sku.note).toBeNull() // db_only shows no provenance label
+  })
+
+  it('appends advisory findings as an "Other observations" review group', () => {
+    const advisory: AdvisoryFinding[] = [
+      { shot: 'storefront', description: 'Window decals are last-season.', citation: 'p.7', store: 's' },
+    ]
+    const r = composeReport(rules, verdicts, 'HQ', { advisory })
+    const other = r.groups.find((g) => g.group === 'Other observations')!
+    expect(other.items).toHaveLength(1)
+    expect(other.items[0].state).toBe('review')
+    expect(other.items[0].kb_citation).toBe('p.7')
+    // advisory counts toward review (1 rule review + 1 advisory = 2)
     expect(r.counts.review).toBe(2)
   })
 })

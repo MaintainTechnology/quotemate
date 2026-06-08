@@ -13,7 +13,7 @@ import { z } from 'zod'
 import { orgFromBearer } from '@/lib/signage/org'
 import { loadActiveRules } from '@/lib/signage/run'
 import { refreshSignedUrl } from '@/lib/storage/upload'
-import type { RuleVerdict, SignageRule } from '@/lib/signage/types'
+import type { RuleProvenance, RuleVerdict, SignageRule, TwoStageDetail } from '@/lib/signage/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,7 +25,7 @@ const supabase = createClient(
 async function loadOwned(orgId: string, id: string) {
   const { data } = await supabase
     .from('signage_assessments')
-    .select('id, request_id, studio_id, org_id, brand_slug, status, overall, counts, verdicts, hq_decision, hq_note, rule_set_version, created_at')
+    .select('id, request_id, studio_id, org_id, brand_slug, status, overall, counts, verdicts, two_stage, hq_decision, hq_note, rule_set_version, created_at')
     .eq('id', id)
     .maybeSingle()
   if (!data || (data.org_id as string) !== orgId) return null
@@ -50,15 +50,24 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     loadActiveRules(supabase, brandSlug, (a.rule_set_version as number) ?? 1),
   ])
 
+  const twoStage = (a.two_stage as TwoStageDetail | null) ?? null
+  const provByKey = new Map<string, RuleProvenance>((twoStage?.provenance ?? []).map((p) => [p.rule_key, p]))
+
   const ruleByKey = new Map<string, SignageRule>(rules.map((r) => [r.rule_key, r]))
   const verdicts = ((a.verdicts as RuleVerdict[]) ?? []).map((v) => {
     const rule = ruleByKey.get(v.rule_key)
+    const prov = provByKey.get(v.rule_key)
     return {
       ...v,
       rule_text: rule?.rule_text ?? v.rule_key,
       rule_group: rule?.rule_group ?? 'other',
       applicability: rule?.applicability ?? 'human_review_only',
       source_citation: rule?.source_citation ?? null,
+      // Two-stage provenance (null when Step 2 didn't run).
+      stage: prov?.stage ?? null,
+      kb_status: prov?.kb_status ?? null,
+      kb_note: prov?.note ?? null,
+      kb_citation: prov?.citation ?? null,
     }
   })
 
@@ -86,8 +95,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       created_at: a.created_at,
       studio_name: (studio?.name as string) ?? 'Studio',
       region: (studio?.region as string) ?? null,
+      kb_degraded: twoStage?.kb_degraded ?? false,
+      kb_stores: twoStage?.stores ?? [],
     },
     verdicts,
+    advisory: twoStage?.advisory ?? [],
     photos,
   })
 }
