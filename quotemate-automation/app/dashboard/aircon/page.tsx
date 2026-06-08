@@ -107,13 +107,13 @@ export default function AirconRecommendPage() {
     [token, address, postcode, stateCode, bedrooms, bathrooms, livingSpaces, floorArea, ceiling, insulation, situation, budget],
   )
 
-  if (authState === 'loading') return <main className="p-8 text-ink-muted">Loading…</main>
-  if (authState === 'signed-out') return <main className="p-8 text-ink-muted">Sign in to use the AC recommender.</main>
+  if (authState === 'loading') return <main className="p-8 text-text-sec">Loading…</main>
+  if (authState === 'signed-out') return <main className="p-8 text-text-sec">Sign in to use the AC recommender.</main>
 
   return (
     <main className="mx-auto max-w-3xl p-6 sm:p-8">
       <h1 className="mb-1 text-2xl font-bold">Air-Conditioning Recommender</h1>
-      <p className="mb-6 text-sm text-ink-muted">
+      <p className="mb-6 text-sm text-text-sec">
         Indicative ducted-vs-split sizing from a few questions. Every result needs a site assessment to confirm.
       </p>
 
@@ -171,7 +171,7 @@ export default function AirconRecommendPage() {
           <input type="number" min={0} className="border border-ink-line bg-ink-card p-2" value={budget} onChange={(e) => setBudget(e.target.value)} />
         </label>
 
-        <button type="submit" disabled={busy} className="col-span-2 mt-2 bg-accent p-3 font-semibold text-ink-bg disabled:opacity-50">
+        <button type="submit" disabled={busy} className="col-span-2 mt-2 bg-accent p-3 font-semibold text-ink-deep disabled:opacity-50">
           {busy ? 'Calculating…' : 'Get recommendation'}
         </button>
       </form>
@@ -196,7 +196,7 @@ function Result({ resp }: { resp: Extract<RecommendResponse, { ok: true }> }) {
           {r.sizing.conditioned_zones} zones · {r.sizing.total_floor_area_m2} m² ·{' '}
           {r.sizing.total_volume_m3} m³ · climate {climate_zone} · confidence {r.confidence}
         </p>
-        <p className="mt-1 text-ink-muted">{climate_note}</p>
+        <p className="mt-1 text-text-sec">{climate_note}</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -207,14 +207,14 @@ function Result({ resp }: { resp: Extract<RecommendResponse, { ok: true }> }) {
           >
             <div className="mb-1 flex items-center justify-between">
               <h2 className="text-lg font-bold capitalize">{o.system_type}</h2>
-              {o.best_fit && <span className="bg-accent px-2 py-0.5 text-xs font-semibold text-ink-bg">Best fit</span>}
+              {o.best_fit && <span className="bg-accent px-2 py-0.5 text-xs font-semibold text-ink-deep">Best fit</span>}
             </div>
-            <p className="text-sm text-ink-muted">{o.capacity_kw} kW</p>
+            <p className="text-sm text-text-sec">{o.capacity_kw} kW</p>
             <p className="my-2 text-xl font-bold">
               {money(o.price.low)} – {money(o.price.high)}
-              <span className="ml-1 text-xs font-normal text-ink-muted">inc GST, indicative</span>
+              <span className="ml-1 text-xs font-normal text-text-sec">inc GST, indicative</span>
             </p>
-            <ul className="mt-2 list-disc pl-5 text-xs text-ink-muted">
+            <ul className="mt-2 list-disc pl-5 text-xs text-text-sec">
               {o.pros.map((p) => <li key={p}>{p}</li>)}
             </ul>
           </div>
@@ -223,7 +223,7 @@ function Result({ resp }: { resp: Extract<RecommendResponse, { ok: true }> }) {
 
       <div className="border border-accent bg-ink-card p-4 text-sm">
         <strong>Next step: book a site assessment.</strong>
-        <p className="mt-1 text-ink-muted">{r.routing.reason}</p>
+        <p className="mt-1 text-text-sec">{r.routing.reason}</p>
       </div>
     </section>
   )
