@@ -69,6 +69,23 @@ export function sizeSolarSystem(args: {
     .filter((n) => n >= 1 && n <= maxPanels)
     .sort((a, b) => a - b)
 
+  // A single unique count means the roof is too small to produce genuinely
+  // different tiers (e.g. 1-panel roof: GOOD_FRACTION × 1 = 1 = MIDDLE = max).
+  // This breaks the "always 2 or 3 tiers" guarantee in SolarSizingResult, so
+  // treat it the same as the no-panel case: route to inspection.
+  if (uniqueCounts.length < 2) {
+    return {
+      tiers: [],
+      roof_capacity_kw_dc,
+      export_limit_kw_ac,
+      routing: {
+        decision: 'inspection_required',
+        reason:
+          'The roof is too small to produce distinct system-size tiers; a site inspection is required before sizing a system.',
+      },
+    }
+  }
+
   const tierNames = pickTierNames(uniqueCounts.length)
 
   const tiers: SolarSystemTier[] = uniqueCounts.map((count, i) => {

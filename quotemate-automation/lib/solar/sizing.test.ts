@@ -3,8 +3,12 @@ import { sizeSolarSystem } from './sizing'
 import { DEFAULT_SOLAR_CONFIG } from './config'
 import { normaliseSolarRoofFacts } from './roof'
 import { buildManualRoofFacts } from './manual-fallback'
-import { COVERED_INSIGHT, COVERED_RAW_BODY } from './__fixtures__/building-insights'
+import { COVERED_INSIGHT, COVERED_RAW_BODY, SMALL_PANEL_CONFIG } from './__fixtures__/building-insights'
 import type { SolarCoverageResult, SolarEstimateContext } from './types'
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100
+}
 
 const COVERAGE = {
   covered: true,
@@ -46,7 +50,7 @@ describe('sizeSolarSystem', () => {
 
   it('derives kW DC from panels × panelCapacityWatts/1000', () => {
     const t = result.tiers[0]
-    expect(t.system_kw_dc).toBe((t.panels_count * ROOF.panel_capacity_watts) / 1000)
+    expect(t.system_kw_dc).toBe(round2((t.panels_count * ROOF.panel_capacity_watts) / 1000))
   })
 
   it('never exceeds the roof capacity (30 panels × 400 W = 12 kW)', () => {
@@ -76,6 +80,48 @@ describe('sizeSolarSystem', () => {
     const tiny = { ...emptyRoof, max_panels_count: 0, panel_configs: [] }
     const r = sizeSolarSystem({
       roof: tiny,
+      panelType: 'standard_panels',
+      config: DEFAULT_SOLAR_CONFIG,
+      context: CONTEXT,
+    })
+    expect(r.routing.decision).toBe('inspection_required')
+    expect(r.tiers.length).toBe(0)
+  })
+
+  it('sets export_limited=false for tiers below the 5 kW/phase export ceiling', () => {
+    // SMALL_PANEL_CONFIG: 10 panels × 400 W = 4 kW DC → 4 × 0.81 = 3.24 kW AC < 5 kW limit
+    // Build a small roof using COVERED_ROOF_FACTS shape but with max_panels_count=10
+    // and only the single SMALL_PANEL_CONFIG entry.
+    const smallRoof = {
+      ...ROOF,
+      max_panels_count: 10,
+      panel_capacity_watts: 400,
+      panel_configs: [
+        { panels_count: 5, yearly_energy_dc_kwh: 3000 },
+        SMALL_PANEL_CONFIG,
+      ],
+    }
+    const r = sizeSolarSystem({
+      roof: smallRoof,
+      panelType: 'standard_panels',
+      config: DEFAULT_SOLAR_CONFIG,
+      context: CONTEXT,
+    })
+    // 5 kW AC / 0.81 derate ≈ 6.17 kW DC ceiling; 10 × 400 W = 4 kW DC < ceiling
+    const allNotLimited = r.tiers.every((t) => !t.export_limited)
+    expect(allNotLimited).toBe(true)
+  })
+
+  it('routes to inspection_required when the roof is too small for distinct tiers (1 panel)', () => {
+    // max_panels_count=1: GOOD_FRACTION(0.55)×1=0.55→1, MIDDLE(0.80)×1=0.80→1, max=1
+    // uniqueCounts=[1] — only one unique count, cannot produce 2+ distinct tiers
+    const tinyRoof = {
+      ...ROOF,
+      max_panels_count: 1,
+      panel_configs: [{ panels_count: 1, yearly_energy_dc_kwh: 600 }],
+    }
+    const r = sizeSolarSystem({
+      roof: tinyRoof,
       panelType: 'standard_panels',
       config: DEFAULT_SOLAR_CONFIG,
       context: CONTEXT,

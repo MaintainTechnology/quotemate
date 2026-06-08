@@ -120,4 +120,43 @@ describe('validateSolarConfig', () => {
     const r = validateSolarConfig(DEFAULT_SOLAR_CONFIG, 2026)
     expect(r.ok).toBe(true)
   })
+
+  it('blocks publish when export_limits.default_kw_per_phase is 0 (would zero the DC ceiling)', () => {
+    const bad = {
+      ...DEFAULT_SOLAR_CONFIG,
+      export_limits: { ...DEFAULT_SOLAR_CONFIG.export_limits, default_kw_per_phase: 0 },
+    }
+    const r = validateSolarConfig(bad, 2026)
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.code).toBe('config_invalid')
+      expect(r.detail).toMatch(/default_kw_per_phase/)
+    }
+  })
+
+  it('blocks publish when export_limits.default_kw_per_phase is negative', () => {
+    const bad = {
+      ...DEFAULT_SOLAR_CONFIG,
+      export_limits: { ...DEFAULT_SOLAR_CONFIG.export_limits, default_kw_per_phase: -1 },
+    }
+    const r = validateSolarConfig(bad, 2026)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe('config_invalid')
+  })
+
+  it('blocks publish when a by_network export limit is 0', () => {
+    const bad = {
+      ...DEFAULT_SOLAR_CONFIG,
+      export_limits: {
+        ...DEFAULT_SOLAR_CONFIG.export_limits,
+        by_network: { ...DEFAULT_SOLAR_CONFIG.export_limits.by_network, Ausgrid: 0 },
+      },
+    }
+    const r = validateSolarConfig(bad, 2026)
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.code).toBe('config_invalid')
+      expect(r.detail).toMatch(/Ausgrid/)
+    }
+  })
 })

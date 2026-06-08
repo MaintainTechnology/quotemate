@@ -156,6 +156,30 @@ export function validateSolarConfig(
     }
   }
 
+  // Guard: this value is used as a divisor in sizing.ts (DC ceiling = AC limit / derate).
+  // Zero or negative makes the ceiling 0 and silently marks every tier export_limited=true.
+  if (
+    !Number.isFinite(config.export_limits.default_kw_per_phase) ||
+    config.export_limits.default_kw_per_phase <= 0
+  ) {
+    return {
+      ok: false,
+      code: 'config_invalid',
+      detail: 'export_limits.default_kw_per_phase must be a positive number.',
+    }
+  }
+
+  // Guard every by_network export limit the same way.
+  for (const [network, kw] of Object.entries(config.export_limits.by_network)) {
+    if (!Number.isFinite(kw) || kw <= 0) {
+      return {
+        ok: false,
+        code: 'config_invalid',
+        detail: `export_limits.by_network.${network} must be a positive number; found ${kw}.`,
+      }
+    }
+  }
+
   // Guard: every non-'unknown' panel-type install rate must be positive.
   // 'unknown' is intentionally 0 — it is a sentinel that means "panel type
   // undetermined at quote time"; pricing.ts must guard this path separately.
