@@ -98,4 +98,61 @@ describe('estimateSolarProduction', () => {
     const ap = estimateSolarProduction({ tier: absurd, roof: ROOF, config: DEFAULT_SOLAR_CONFIG, context: CONTEXT })
     expect(ap.within_cec_benchmark).toBe(false)
   })
+
+  it('scales annual_kwh_ac proportionally for non-400W panels (450W)', () => {
+    // 450W panel → ratingScale = 450/400 = 1.125
+    // scaledDc = 9600 × 1.125 = 10800; annual_kwh_ac = round(10800 × 0.81) = 8748
+    const roof450 = { ...ROOF, panel_capacity_watts: 450 }
+    const p450 = estimateSolarProduction({
+      tier: TIER,
+      roof: roof450,
+      config: DEFAULT_SOLAR_CONFIG,
+      context: CONTEXT,
+    })
+    expect(p450.annual_kwh_ac).toBe(Math.round(9600 * (450 / 400) * 0.81))
+    // Verify it is strictly greater than the 400W baseline result (7776)
+    expect(p450.annual_kwh_ac).toBeGreaterThan(7776)
+  })
+
+  it('scales annual_kwh_ac proportionally for non-400W panels (380W)', () => {
+    // 380W panel → ratingScale = 380/400 = 0.95
+    // scaledDc = 9600 × 0.95 = 9120; annual_kwh_ac = round(9120 × 0.81) = 7387
+    const roof380 = { ...ROOF, panel_capacity_watts: 380 }
+    const p380 = estimateSolarProduction({
+      tier: TIER,
+      roof: roof380,
+      config: DEFAULT_SOLAR_CONFIG,
+      context: CONTEXT,
+    })
+    expect(p380.annual_kwh_ac).toBe(Math.round(9600 * (380 / 400) * 0.81))
+    // Verify it is strictly less than the 400W baseline result (7776)
+    expect(p380.annual_kwh_ac).toBeLessThan(7776)
+  })
+
+  it('throws when panel_capacity_watts is zero (corrupt API body guard)', () => {
+    const corruptRoof = { ...ROOF, panel_capacity_watts: 0 }
+    expect(() =>
+      estimateSolarProduction({
+        tier: TIER,
+        roof: corruptRoof,
+        config: DEFAULT_SOLAR_CONFIG,
+        context: CONTEXT,
+      }),
+    ).toThrow(/panel_capacity_watts must be positive/)
+  })
+
+  it('throws when yearly_energy_dc_kwh is zero (corrupt config guard)', () => {
+    const zeroEnergyTier: SolarSystemTier = {
+      ...TIER,
+      source_config: { panels_count: 16, yearly_energy_dc_kwh: 0 },
+    }
+    expect(() =>
+      estimateSolarProduction({
+        tier: zeroEnergyTier,
+        roof: ROOF,
+        config: DEFAULT_SOLAR_CONFIG,
+        context: CONTEXT,
+      }),
+    ).toThrow(/yearly_energy_dc_kwh must be positive/)
+  })
 })
