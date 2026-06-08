@@ -86,6 +86,13 @@ export const DEFAULT_SOLAR_CONFIG: SolarConfig = {
   derate_factor: 0.81,
   self_consumption_pct: 0.40,
   retail_rate_aud_per_kwh: 0.32,
+  // Optional fields — config becomes single source of truth for constants
+  // that were previously hardcoded in individual modules.
+  default_panel_capacity_watts: 400,          // was CONFIG_PANEL_BASELINE_WATTS / MANUAL_PANEL_CAPACITY_WATTS
+  manual_benchmark_kwh_per_kw: 1400,          // was MANUAL_BENCHMARK_KWH_PER_KW
+  area_per_panel_m2: 1.95,                    // was AREA_PER_PANEL_M2
+  degradation_pct_per_year: 0.005,            // was DEGRADATION_PCT_PER_YEAR
+  complex_roof_min_segments: 6,               // was the literal 6 in pricing.ts applicableLoadings
 }
 
 export function validateSolarConfig(
@@ -153,6 +160,38 @@ export function validateSolarConfig(
       ok: false,
       code: 'config_invalid',
       detail: 'self_consumption_pct must be a fraction in (0,1).',
+    }
+  }
+
+  // Guard: retail_rate_aud_per_kwh is the $/kWh multiplier for self-consumed
+  // kWh in economics.ts. A non-positive value would silently produce $0 bill
+  // savings and an uncalculable (null) payback even when solar is genuinely
+  // valuable — the same category of silent failure as a zero derate.
+  if (
+    !Number.isFinite(config.retail_rate_aud_per_kwh) ||
+    config.retail_rate_aud_per_kwh <= 0
+  ) {
+    return {
+      ok: false,
+      code: 'config_invalid',
+      detail: 'retail_rate_aud_per_kwh must be a positive number; found ' +
+        String(config.retail_rate_aud_per_kwh) + '.',
+    }
+  }
+
+  // Guard: feed_in.default_aud_per_kwh is the fallback $/kWh used when the
+  // network cannot be resolved from the postcode. A non-positive value would
+  // silently produce $0 export earnings and inflate payback years for every
+  // uncovered-network customer — same category as a zero retail rate.
+  if (
+    !Number.isFinite(config.feed_in.default_aud_per_kwh) ||
+    config.feed_in.default_aud_per_kwh <= 0
+  ) {
+    return {
+      ok: false,
+      code: 'config_invalid',
+      detail: 'feed_in.default_aud_per_kwh must be a positive number; found ' +
+        String(config.feed_in.default_aud_per_kwh) + '.',
     }
   }
 

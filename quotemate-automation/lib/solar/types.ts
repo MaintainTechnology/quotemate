@@ -446,6 +446,28 @@ export type SolarConfig = {
    * reflect this uncertainty downstream.
    */
   manual_benchmark_kwh_per_kw?: number
+  /**
+   * Roof area consumed by one panel including setbacks, m². Used on the
+   * manual-fallback path to convert declared usable_area_m2 into a panel
+   * count. Versioned here so a panel-size model-year change is tracked
+   * alongside deeming schedules (spec §5). Default: 1.95 m².
+   */
+  area_per_panel_m2?: number
+  /**
+   * Annual linear degradation fraction applied in production.ts (e.g. 0.005
+   * = 0.5%/yr). Passed through as metadata to the economics layer for
+   * year-by-year calculations. Versioned here so a manufacturer-spec update
+   * is tracked alongside STC prices rather than buried in code.
+   * Default: 0.005.
+   */
+  degradation_pct_per_year?: number
+  /**
+   * Minimum number of roof segments to trigger the complex-roof loading in
+   * pricing.ts (segment_count >= this value). Versioned here so an
+   * operational policy change (e.g. "charge complexity from 4 planes, not 6")
+   * is config-driven rather than a code edit. Default: 6.
+   */
+  complex_roof_min_segments?: number
 }
 
 /** Result of validating config freshness before a publish (spec §5, §7). */

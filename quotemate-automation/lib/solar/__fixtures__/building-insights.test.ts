@@ -82,9 +82,32 @@ describe('solar fixtures', () => {
     expect(typeof SOLAR_CONFIG_FIXTURE.feed_in.by_network).toBe('object')
   })
 
+  // ── Pinned exact values ──────────────────────────────────────────────
+  // These toBe assertions lock the hand-worked constants that downstream
+  // pricing / production / economics tests derive their expected values from.
+  // Any drift in these fixtures will surface here immediately.
+
+  it('SOLAR_CONFIG_FIXTURE pins deeming_schedule[2026] === 5', () => {
+    expect(SOLAR_CONFIG_FIXTURE.deeming_schedule[2026]).toBe(5)
+  })
+
+  it('SOLAR_CONFIG_FIXTURE pins zone_table["2000"] === 1.382', () => {
+    expect(SOLAR_CONFIG_FIXTURE.zone_table['2000']).toBe(1.382)
+  })
+
+  it('SOLAR_CONFIG_FIXTURE pins stc_price_aud === 38', () => {
+    expect(SOLAR_CONFIG_FIXTURE.stc_price_aud).toBe(38)
+  })
+
+  it('SOLAR_CONFIG_FIXTURE pins derate_factor === 0.80 (fixture real default)', () => {
+    expect(SOLAR_CONFIG_FIXTURE.derate_factor).toBe(0.80)
+  })
+
   it('SMALL_PANEL_CONFIG produces < 5 kW AC (non-export-limited path)', () => {
-    // 10 panels × 400 W = 4 kW DC; 4 kW × 0.80 derate = 3.2 kW AC < 5 kW limit
-    const kw_dc = (SMALL_PANEL_CONFIG.panels_count * 400) / 1000
+    // 10 panels × 400 W = 4 kW DC; 4 kW × 0.80 derate = 3.2 kW AC < 5 kW limit.
+    // Use COVERED_ROOF_FACTS.panel_capacity_watts (400 W) rather than a literal
+    // so that a panel-capacity model-year change is reflected here automatically.
+    const kw_dc = (SMALL_PANEL_CONFIG.panels_count * COVERED_ROOF_FACTS.panel_capacity_watts) / 1000
     const kw_ac = kw_dc * 0.80
     expect(kw_dc).toBe(4)
     expect(kw_ac).toBeLessThan(5)

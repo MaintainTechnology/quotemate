@@ -85,6 +85,11 @@ export const COVERED_INSIGHT: SolarRoofInsight = (() => {
  *
  * Hand-worked values:
  *   usable_area_m2 = 70 + 50 = 120
+ *     NOTE: usable_area_m2 here is the SUM of raw segment areas reported by
+ *     the Google Solar API. It is the POST-obstruction-discount area as
+ *     returned by the API (i.e. Google already applies its own obstruction
+ *     model). roof.ts emits this value directly (round1 of raw area sum);
+ *     no additional obstruction discount is applied in this codebase.
  *   segment_count  = 2
  *   primary_orientation = 'north'   (largest plane: azimuth=0, area=70)
  *   mean_pitch_degrees  = 20        (area-weighted: both planes pitch=20)
@@ -134,9 +139,18 @@ export const MANUAL_INPUT: SolarManualRoofInput = {
  * A complete SolarConfig with hand-worked values consistent with
  * COVERED_RAW_BODY. Postcode 2000 (Sydney CBD, zone 3 ≈ 1.382).
  * Install year 2026 → deeming_years = 5.
- * Network 'ausgrid' → feed-in $0.06/kWh.
+ * Network 'Ausgrid' → feed-in $0.06/kWh.
  * stc_price_aud = 38 (conservative vs $40 clearing-house cap).
- * derate_factor = 0.80.
+ * derate_factor = 0.80 (real default from this fixture).
+ *
+ * Pinned values downstream tests assert on:
+ *   deeming_schedule[2026] === 5
+ *   zone_table['2000']     === 1.382
+ *   stc_price_aud          === 38
+ *   derate_factor          === 0.80
+ *
+ * Network keys use Title-case (Ausgrid/Endeavour/Essential) to match
+ * SolarEstimateContext.network and DEFAULT_SOLAR_CONFIG conventions.
  */
 export const SOLAR_CONFIG_FIXTURE: SolarConfig = {
   version: '2026-01-15',
@@ -156,20 +170,22 @@ export const SOLAR_CONFIG_FIXTURE: SolarConfig = {
   stc_price_aud: 38,
   feed_in: {
     by_network: {
-      ausgrid: 0.06,
-      endeavour: 0.05,
-      essential: 0.05,
+      // Title-case keys align with SolarEstimateContext.network values.
+      Ausgrid: 0.06,
+      Endeavour: 0.05,
+      Essential: 0.05,
     },
     default_aud_per_kwh: 0.05,
   },
   export_limits: {
     default_kw_per_phase: 5,
     by_network: {
-      ausgrid: 5,
-      endeavour: 5,
+      Ausgrid: 5,
+      Endeavour: 5,
     },
   },
   default_rate_card: {
+    // install_rate_per_kw values are EX-GST ($/kW DC installed, before 10% GST).
     install_rate_per_kw: {
       standard_panels: 1100,
       premium_panels: 1400,

@@ -159,4 +159,27 @@ describe('validateSolarConfig', () => {
       expect(r.detail).toMatch(/Ausgrid/)
     }
   })
+
+  it('blocks publish when retail_rate_aud_per_kwh is 0 (would produce $0 bill savings)', () => {
+    const bad = { ...DEFAULT_SOLAR_CONFIG, retail_rate_aud_per_kwh: 0 }
+    const r = validateSolarConfig(bad, 2026)
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.code).toBe('config_invalid')
+      expect(r.detail).toMatch(/retail_rate_aud_per_kwh/)
+    }
+  })
+
+  it('blocks publish when feed_in.default_aud_per_kwh is 0 (would produce $0 export earnings for unknown networks)', () => {
+    const bad = {
+      ...DEFAULT_SOLAR_CONFIG,
+      feed_in: { ...DEFAULT_SOLAR_CONFIG.feed_in, default_aud_per_kwh: 0 },
+    }
+    const r = validateSolarConfig(bad, 2026)
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.code).toBe('config_invalid')
+      expect(r.detail).toMatch(/feed_in\.default_aud_per_kwh/)
+    }
+  })
 })
