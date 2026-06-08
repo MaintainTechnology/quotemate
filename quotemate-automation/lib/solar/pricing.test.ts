@@ -21,10 +21,24 @@ const CONTEXT: SolarEstimateContext = {
 }
 
 const ROOF = normaliseSolarRoofFacts({ ...COVERED_INSIGHT, raw: COVERED_RAW_BODY }, COVERAGE)
+
+// The corrected export-cap enforcement means that with a 30-panel, 400 W roof
+// and the standard 5 kW/phase Ausgrid limit (DC ceiling ≈ 6.17 kW = 15 panels),
+// all three candidate tiers (17/24/30 panels) collapse to the same capped value
+// and sizing returns inspection_required. Use a high export limit so the pricing
+// tests can exercise the tradie_review path without changing the roof fixture.
+const PRICING_CONFIG = {
+  ...DEFAULT_SOLAR_CONFIG,
+  export_limits: {
+    ...DEFAULT_SOLAR_CONFIG.export_limits,
+    by_network: { ...DEFAULT_SOLAR_CONFIG.export_limits.by_network, Ausgrid: 100 },
+  },
+}
+
 const SIZING = sizeSolarSystem({
   roof: ROOF,
   panelType: 'standard_panels',
-  config: DEFAULT_SOLAR_CONFIG,
+  config: PRICING_CONFIG,
   context: CONTEXT,
 })
 
@@ -84,14 +98,14 @@ describe('calculateSolarPrice', () => {
     const premiumSizing = sizeSolarSystem({
       roof: ROOF,
       panelType: 'premium_panels',
-      config: DEFAULT_SOLAR_CONFIG,
+      config: PRICING_CONFIG,
       context: CONTEXT,
     })
     const p = calculateSolarPrice({
       sizing: premiumSizing,
       roof: ROOF,
       context: CONTEXT,
-      config: DEFAULT_SOLAR_CONFIG,
+      config: PRICING_CONFIG,
     })
     const kw = premiumSizing.tiers[0].system_kw_dc
     expect(p.tiers[0].gross_ex_gst).toBe(Math.round(kw * 1450 * 100) / 100)

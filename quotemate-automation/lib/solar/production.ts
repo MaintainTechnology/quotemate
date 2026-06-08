@@ -24,12 +24,13 @@ import type {
   SolarEstimateContext,
   SolarProductionResult,
   SolarConfidenceBand,
+  AuState,
 } from './types'
 import { BAND_SPREAD } from './types'
 
 /** The config's assumed per-panel DC baseline, watts. */
 const CONFIG_PANEL_BASELINE_WATTS = 400
-/** Annual linear degradation fraction. */
+/** Annual linear degradation fraction (module-level fallback only; prefer config.degradation_pct_per_year). */
 const DEGRADATION_PCT_PER_YEAR = 0.005
 /** CEC cross-check tolerance — ±35% of the city benchmark. */
 const CEC_TOLERANCE = 0.35
@@ -40,14 +41,15 @@ const CEC_TOLERANCE = 0.35
  * constant is unreachable for well-typed inputs. It is retained as a
  * runtime safety net for corrupt or out-of-range data that bypasses the type
  * system (e.g. a DB row with an unknown state string). Value is the simple
- * average of the 8 metro benchmarks below (~1378), rounded to a round number.
+ * mean of the 8 metro benchmarks below (1382+1278+1424+1490+1521+1130+1382+1621)/8
+ * = 11228/8 = 1403.5, rounded conservatively down to 1380.
  */
 const CEC_BENCHMARK_FALLBACK_KWH_PER_KW = 1380
 
 /** CEC-derived specific-yield table, kWh per kW DC per year, keyed by
  *  AuState. All 8 members of the AuState union are present — exhaustive.
  *  Conservative metro values; admin can widen later. */
-const CEC_BENCHMARK_BY_STATE: Record<string, number> = {
+const CEC_BENCHMARK_BY_STATE: Record<AuState, number> = {
   NSW: 1382,
   VIC: 1278,
   QLD: 1424,
@@ -66,20 +68,23 @@ export function estimateSolarProduction(args: {
 }): SolarProductionResult {
   const { tier, roof, config, context } = args
 
-  // Guard: panel_capacity_watts <= 0 means the API returned corrupt data.
+  // Guard: panel_capacity_watts must be a positive finite number. The check
+  // uses !(v > 0) rather than v <= 0 so that NaN is also rejected (NaN <= 0
+  // is false but NaN > 0 is also false, so !(NaN > 0) = true → throws).
   // numberOr() in roof.ts can fall back to 0 from a missing field; dividing
   // by zero here would silently produce annual_kwh_ac = 0 with no flag. Throw
   // early so the caller can surface this as a guardrail flag.
-  if (roof.panel_capacity_watts <= 0) {
+  if (!(roof.panel_capacity_watts > 0)) {
     throw new Error(
       `panel_capacity_watts must be positive; received ${roof.panel_capacity_watts}. ` +
         'The Google Solar API response may be corrupt or missing panelCapacityWatts.',
     )
   }
 
-  // Guard: yearly_energy_dc_kwh = 0 would silently produce a zero-AC estimate
-  // that looks valid but would cause division by zero in the economics layer.
-  if (tier.source_config.yearly_energy_dc_kwh <= 0) {
+  // Guard: yearly_energy_dc_kwh must be a positive finite number. Uses !(v > 0)
+  // so NaN is also rejected (see above). A zero or NaN value would silently
+  // produce a zero-AC estimate and cause division by zero in the economics layer.
+  if (!(tier.source_config.yearly_energy_dc_kwh > 0)) {
     throw new Error(
       `source_config.yearly_energy_dc_kwh must be positive; received ${tier.source_config.yearly_energy_dc_kwh}. ` +
         'The panel config or manual fallback produced a zero DC energy estimate.',
@@ -115,13 +120,21 @@ export function estimateSolarProduction(args: {
   const annual_kwh_low = Math.round(annual_kwh_ac * (1 - spread))
   const annual_kwh_high = Math.round(annual_kwh_ac * (1 + spread))
 
+  // Read degradation_pct_per_year from config so a manufacturer-spec change is
+  // config-driven (spec §5). Fall back to the module constant when the field is
+  // absent (pre-v1 configs without the optional key) or non-positive/non-finite.
+  const degradation_pct_per_year =
+    config.degradation_pct_per_year != null && config.degradation_pct_per_year > 0
+      ? config.degradation_pct_per_year
+      : DEGRADATION_PCT_PER_YEAR
+
   return {
     system_kw_dc: tier.system_kw_dc,
     annual_kwh_ac,
     annual_kwh_low,
     annual_kwh_high,
     derate_applied: derate,
-    degradation_pct_per_year: DEGRADATION_PCT_PER_YEAR,
+    degradation_pct_per_year,
     cec_benchmark_kwh_per_kw,
     within_cec_benchmark,
     band,

@@ -52,6 +52,7 @@ const PRICE: SolarQuotePrice = {
   effective_rate_per_kw: 1100,
   loadings_applied: [],
   routing: { decision: 'tradie_review', reason: 'x' },
+  call_out_minimum_applied: false,
 }
 
 describe('calculateSolarEconomics', () => {
@@ -82,9 +83,13 @@ describe('calculateSolarEconomics', () => {
   })
 
   it('produces a payback RANGE (low < high), net ÷ savings band', () => {
-    expect(t.payback_years_low).toBeLessThan(t.payback_years_high)
+    // payback_years_low/high are null only when annual_savings_aud=0; here production
+    // is non-zero so both should be non-null positive numbers.
+    expect(t.payback_years_low).not.toBeNull()
+    expect(t.payback_years_high).not.toBeNull()
+    expect(t.payback_years_low!).toBeLessThan(t.payback_years_high!)
     // low = net / (savings × upper band factor); high = net / (savings × lower band factor)
-    expect(t.payback_years_low).toBeGreaterThan(0)
+    expect(t.payback_years_low!).toBeGreaterThan(0)
   })
 
   it('surfaces the assumptions panel verbatim from config + context', () => {

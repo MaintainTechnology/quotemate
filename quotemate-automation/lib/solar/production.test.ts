@@ -90,6 +90,20 @@ describe('estimateSolarProduction', () => {
     expect(mp.annual_kwh_high).toBe(Math.round(mp.annual_kwh_ac * 1.30))
   })
 
+  it('source=google + imagery_quality=MEDIUM yields confidence band=wide', () => {
+    // MEDIUM imagery on the google path is NOT HIGH → wide band (±30%).
+    const mediumRoof = { ...ROOF, source: 'google' as const, imagery_quality: 'MEDIUM' as const }
+    const mp = estimateSolarProduction({
+      tier: TIER,
+      roof: mediumRoof,
+      config: DEFAULT_SOLAR_CONFIG,
+      context: CONTEXT,
+    })
+    expect(mp.band).toBe('wide')
+    expect(mp.annual_kwh_low).toBe(Math.round(mp.annual_kwh_ac * 0.70))
+    expect(mp.annual_kwh_high).toBe(Math.round(mp.annual_kwh_ac * 1.30))
+  })
+
   it('flags within_cec_benchmark=false for an absurd AC/kW yield', () => {
     const absurd: SolarSystemTier = {
       ...TIER,
@@ -154,5 +168,43 @@ describe('estimateSolarProduction', () => {
         context: CONTEXT,
       }),
     ).toThrow(/yearly_energy_dc_kwh must be positive/)
+  })
+
+  it('throws when panel_capacity_watts is NaN (NaN guard)', () => {
+    const nanRoof = { ...ROOF, panel_capacity_watts: NaN }
+    expect(() =>
+      estimateSolarProduction({
+        tier: TIER,
+        roof: nanRoof,
+        config: DEFAULT_SOLAR_CONFIG,
+        context: CONTEXT,
+      }),
+    ).toThrow(/panel_capacity_watts must be positive/)
+  })
+
+  it('throws when yearly_energy_dc_kwh is NaN (NaN guard)', () => {
+    const nanTier: SolarSystemTier = {
+      ...TIER,
+      source_config: { panels_count: 16, yearly_energy_dc_kwh: NaN },
+    }
+    expect(() =>
+      estimateSolarProduction({
+        tier: nanTier,
+        roof: ROOF,
+        config: DEFAULT_SOLAR_CONFIG,
+        context: CONTEXT,
+      }),
+    ).toThrow(/yearly_energy_dc_kwh must be positive/)
+  })
+
+  it('reads degradation_pct_per_year from config instead of hardcoded constant', () => {
+    const customConfig = { ...DEFAULT_SOLAR_CONFIG, degradation_pct_per_year: 0.007 }
+    const cp = estimateSolarProduction({
+      tier: TIER,
+      roof: ROOF,
+      config: customConfig,
+      context: CONTEXT,
+    })
+    expect(cp.degradation_pct_per_year).toBe(0.007)
   })
 })

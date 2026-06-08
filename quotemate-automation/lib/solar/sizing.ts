@@ -34,6 +34,30 @@ export function sizeSolarSystem(args: {
   context: SolarEstimateContext
 }): SolarSizingResult {
   const { roof, panelType, config, context } = args
+
+  // Guard: a non-finite or non-positive derate_factor means the DC ceiling
+  // calculation (AC limit / derate) would produce infinity or a negative
+  // result, silently marking every tier export_limited. Route to inspection
+  // so the tradie knows the config needs attention.
+  if (!Number.isFinite(config.derate_factor) || config.derate_factor <= 0) {
+    const roof_capacity_kw_dc_guard = round2(
+      (roof.max_panels_count * roof.panel_capacity_watts) / 1000,
+    )
+    const export_limit_kw_ac_guard =
+      config.export_limits.by_network[context.network] ??
+      config.export_limits.default_kw_per_phase
+    return {
+      tiers: [],
+      roof_capacity_kw_dc: roof_capacity_kw_dc_guard,
+      export_limit_kw_ac: export_limit_kw_ac_guard,
+      routing: {
+        decision: 'inspection_required',
+        reason:
+          'Solar config has an invalid derate_factor; a site inspection is required until the config is corrected.',
+      },
+    }
+  }
+
   const wattsPerPanel = roof.panel_capacity_watts
   const roof_capacity_kw_dc = round2((roof.max_panels_count * wattsPerPanel) / 1000)
 
@@ -86,13 +110,53 @@ export function sizeSolarSystem(args: {
     }
   }
 
-  const tierNames = pickTierNames(uniqueCounts.length)
+  // Compute the export-ceiling panel count once (floor so we never exceed AC limit).
+  const exportCeilPanels = Math.floor((exportDcCeiling * 1000) / wattsPerPanel)
 
-  const tiers: SolarSystemTier[] = uniqueCounts.map((count, i) => {
-    const config_src = nearestConfig(roof.panel_configs, count)
-    const panels_count = count
+  // Apply the DNSP export-limit cap: pair each candidate count with whether the
+  // export limit actually reduced it. Track the original (pre-cap) count so the
+  // export_limited flag reflects the original intent, not the clamped value.
+  type TierCandidate = { original: number; panels: number }
+  const candidates: TierCandidate[] = uniqueCounts.map((count) => {
+    const exceedsLimit = (count * wattsPerPanel) / 1000 > exportDcCeiling
+    return { original: count, panels: exceedsLimit ? exportCeilPanels : count }
+  })
+
+  // Deduplicate by final panels count (ascending). When two candidate counts
+  // map to the same clamped value, keep the entry with the larger original
+  // count (the most export-limited one) so the flag is correctly set.
+  const seenPanels = new Map<number, TierCandidate>()
+  for (const c of candidates) {
+    const existing = seenPanels.get(c.panels)
+    if (!existing || c.original > existing.original) {
+      seenPanels.set(c.panels, c)
+    }
+  }
+  const dedupedCandidates = Array.from(seenPanels.values()).sort(
+    (a, b) => a.panels - b.panels,
+  )
+
+  // After capping, if fewer than 2 distinct sizes remain, route to inspection
+  // (the same guarantee as the pre-cap uniqueCounts check).
+  if (dedupedCandidates.length < 2) {
+    return {
+      tiers: [],
+      roof_capacity_kw_dc,
+      export_limit_kw_ac,
+      routing: {
+        decision: 'inspection_required',
+        reason:
+          'The DNSP export limit reduces all size tiers to the same system size; a site inspection is required to confirm the installation design.',
+      },
+    }
+  }
+
+  const tierNames = pickTierNames(dedupedCandidates.length)
+
+  const tiers: SolarSystemTier[] = dedupedCandidates.map(({ original, panels: panels_count }, i) => {
+    const export_limited = (original * wattsPerPanel) / 1000 > exportDcCeiling
     const system_kw_dc = round2((panels_count * wattsPerPanel) / 1000)
-    const export_limited = system_kw_dc > exportDcCeiling
+    const config_src = nearestConfig(roof.panel_configs, panels_count)
     return {
       tier: tierNames[i],
       label: tierLabel(tierNames[i], system_kw_dc),
@@ -125,16 +189,24 @@ function nearestConfig(
   configs: SolarPanelConfig[],
   targetCount: number,
 ): SolarPanelConfig {
-  return configs.reduce((best, c) =>
-    Math.abs(c.panels_count - targetCount) < Math.abs(best.panels_count - targetCount)
-      ? c
-      : best,
+  if (configs.length === 0) {
+    // Synthetic fallback so callers never receive undefined from reduce().
+    // This path is unreachable in normal flow (the no-panel guard above fires
+    // first) but protects against unexpected empty arrays from test fixtures.
+    return { panels_count: targetCount, yearly_energy_dc_kwh: 0 }
+  }
+  return configs.reduce(
+    (best, c) =>
+      Math.abs(c.panels_count - targetCount) < Math.abs(best.panels_count - targetCount)
+        ? c
+        : best,
+    configs[0],
   )
 }
 
 function tierLabel(tier: 'good' | 'better' | 'best', kw: number): string {
   if (tier === 'good') return `${kw.toFixed(1)} kW starter system`
-  if (tier === 'better') return `${kw.toFixed(1)} kW full-size system`
+  if (tier === 'better') return `${kw.toFixed(1)} kW recommended system`
   return `${kw.toFixed(1)} kW maximum-output system`
 }
 
