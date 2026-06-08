@@ -11,6 +11,7 @@ import {
   parseSearchResponse,
   kbCreateStore,
   kbUploadDocument,
+  kbDeleteDocument,
   KB_UPLOAD_MAX_BYTES,
   type KbConfig,
   type KbFetch,
@@ -346,6 +347,38 @@ describe('kbUploadDocument', () => {
     const f = mockStatus(413, 'too large')
     await expect(
       kbUploadDocument(config, { storeId: 'x', file: mkFile() }, f),
+    ).rejects.toThrow(KbHttpError)
+  })
+})
+
+describe('kbDeleteDocument', () => {
+  it('DELETEs the nested store/doc path parsed from the full name', async () => {
+    const f = mockOk({ deleted: true })
+    await kbDeleteDocument(
+      config,
+      'fileSearchStores/abc/documents/xyz',
+      f,
+    )
+    const [url, init] = (f as any).mock.calls[0]
+    expect(url).toBe(
+      'https://kb.example.com/v1/stores/abc/documents/xyz',
+    )
+    expect(init.method).toBe('DELETE')
+    expect((init.headers as Headers).get('x-api-key')).toBe('test-api-key')
+  })
+
+  it('throws on a name that is not a document resource', async () => {
+    const f = mockOk({})
+    await expect(
+      kbDeleteDocument(config, 'fileSearchStores/abc', f),
+    ).rejects.toThrow(/documentName/)
+    expect(f).not.toHaveBeenCalled()
+  })
+
+  it('throws KbHttpError on a non-2xx', async () => {
+    const f = mockStatus(404, 'not found')
+    await expect(
+      kbDeleteDocument(config, 'fileSearchStores/abc/documents/x', f),
     ).rejects.toThrow(KbHttpError)
   })
 })
