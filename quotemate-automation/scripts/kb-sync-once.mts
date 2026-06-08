@@ -1,6 +1,6 @@
 // QuoteMate · run the DB→KB sync once from the CLI (backfill / reconcile).
 // Loops until no dirty tables remain (each pass is bounded by maxTables).
-// Run: node --env-file=.env.local --import tsx scripts/kb-sync-once.ts
+// Run: node --env-file=.env.local --import tsx scripts/kb-sync-once.mts
 //   --all   first mark every table dirty (full re-sync)
 
 import pg from 'pg'

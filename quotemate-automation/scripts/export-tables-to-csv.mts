@@ -1,5 +1,5 @@
 // QuoteMate · dump every public table to db-export/<table>.csv
-// Run: node --env-file=.env.local --import tsx scripts/export-tables-to-csv.ts
+// Run: node --env-file=.env.local --import tsx scripts/export-tables-to-csv.mts
 //
 // ⚠ Output contains real customer PII — db-export/ is gitignored.
 

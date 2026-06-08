@@ -19,7 +19,7 @@ re-exports dirty tables to CSV and replaces `db__<table>.csv` in the store
 - Enable failure notifications.
 
 ## Ops
-- Full re-sync / backfill: `node --env-file=.env.local --import tsx scripts/kb-sync-once.ts --all`
+- Full re-sync / backfill: `node --env-file=.env.local --import tsx scripts/kb-sync-once.mts --all`
 - Inspect state: `select table_name, dirty, last_synced_at, last_error, row_count from kb_sync_state order by bumped_at desc;`
 
 ## Caveats
