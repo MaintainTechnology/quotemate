@@ -14,6 +14,7 @@
 
 import type { Confidence, RuleVerdict, ShotSlot, SignageRule, VerdictStatus } from './types'
 import { autoRulesForShot } from './shots'
+import { chunk, runWithVisionLimit, visionChunkSize } from './vision-limit'
 
 const DEFAULT_MODEL = process.env.SIGNAGE_VISION_MODEL ?? 'claude-sonnet-4-6'
 
@@ -178,11 +179,36 @@ export async function assessPhoto(args: AssessArgs): Promise<RuleVerdict[]> {
     return allCannotDetermine(relevant, 'ANTHROPIC_API_KEY not set — routed to human review.')
   }
 
+  // A single vision call over ~70 rules is output-token-bound (very slow).
+  // Chunk into small batches that run concurrently — bounded by the shared
+  // vision limiter so a multi-shot assessment can't exceed rate limits.
+  const batches = chunk(relevant, visionChunkSize())
+  const results = await Promise.all(batches.map((batch) => runWithVisionLimit(() => assessChunk(args, batch))))
+  const parsed = results.flat()
+
+  // Any rule no chunk returned a verdict for → cannot_determine, so the
+  // assessment always covers the full shot.
+  const got = new Set(parsed.map((v) => v.rule_key))
+  const missing = relevant
+    .filter((r) => !got.has(r.rule_key))
+    .map((r) => ({
+      rule_key: r.rule_key,
+      status: 'cannot_determine' as const,
+      confidence: 'low' as const,
+      evidence: 'No verdict returned for this rule.',
+      red_flags: [],
+    }))
+  return [...parsed, ...missing]
+}
+
+/** One vision call over a chunk of rules. NEVER throws — a failure yields
+ *  all-cannot_determine for that chunk so the backstop routes them to review. */
+async function assessChunk(args: AssessArgs, rules: SignageRule[]): Promise<RuleVerdict[]> {
   try {
     const { anthropic } = await import('@ai-sdk/anthropic')
     const { generateText } = await import('ai')
 
-    const prompt = buildAssessmentPrompt({ persona: args.persona, shotLabel: args.shotLabel, rules: relevant })
+    const prompt = buildAssessmentPrompt({ persona: args.persona, shotLabel: args.shotLabel, rules })
     const { text } = await generateText({
       model: anthropic(args.model ?? DEFAULT_MODEL),
       temperature: 0,
@@ -196,28 +222,11 @@ export async function assessPhoto(args: AssessArgs): Promise<RuleVerdict[]> {
         },
       ],
     })
-
-    const parsed = parseAssessmentResponse(
+    return parseAssessmentResponse(
       text,
-      relevant.map((r) => r.rule_key),
+      rules.map((r) => r.rule_key),
     )
-    // Any rule the model didn't return a verdict for is filled in as
-    // cannot_determine so the assessment always covers the full shot.
-    const got = new Set(parsed.map((v) => v.rule_key))
-    const missing = relevant
-      .filter((r) => !got.has(r.rule_key))
-      .map((r) => ({
-        rule_key: r.rule_key,
-        status: 'cannot_determine' as const,
-        confidence: 'low' as const,
-        evidence: 'No verdict returned for this rule.',
-        red_flags: [],
-      }))
-    return [...parsed, ...missing]
   } catch (e) {
-    return allCannotDetermine(
-      relevant,
-      `Vision check failed: ${e instanceof Error ? e.message : String(e)}`,
-    )
+    return allCannotDetermine(rules, `Vision check failed: ${e instanceof Error ? e.message : String(e)}`)
   }
 }

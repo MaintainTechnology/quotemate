@@ -52,7 +52,9 @@ export default function StudioReportPage() {
       const done = await poll().catch(() => false)
       if (cancelled) return
       tries.current += 1
-      if (!done && tries.current < 30) timer = setTimeout(tick, 4000)
+      // Up to ~4 min: a multi-shot brand with a large rule set runs many
+      // chunked Step-1 + Step-2 vision calls (bounded by the vision limiter).
+      if (!done && tries.current < 60) timer = setTimeout(tick, 4000)
     }
     void tick()
     return () => {

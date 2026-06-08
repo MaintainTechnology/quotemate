@@ -17,7 +17,7 @@ import { coerceShots, shotLabel } from './shots'
 import { brandForOrg, loadBrand } from './brand'
 import { assessPhoto } from './vision-assess'
 import { validateSignageAssessment } from './validate-verdicts'
-import { runKbStage } from './kb-assess'
+import { runKbStage, type KbStageResult } from './kb-assess'
 import { mergeRuleVerdicts } from './merge'
 import { loadKbConfigFromEnv } from '../admin-loader/mt-filestore-kb'
 
@@ -143,64 +143,72 @@ export async function runAssessment(
 
   const scoped = applicableRules(allRules, requestedShots)
 
-  // 4. Assess each submitted photo against the scoped rules, framed for
-  //    this brand (persona + the brand's label for the shot). Keep one
-  //    representative photo per shot so Step 2 can re-look at the actual
-  //    image against the brand's standards.
-  const modelVerdicts: RuleVerdict[] = []
+  // 4. Download every submitted photo (in parallel), keeping one representative
+  //    photo per shot so Step 2 can re-look at the actual image.
+  const downloaded = await Promise.all(
+    (subs ?? []).map(async (s) => {
+      const slot = s.shot_slot as ShotSlot
+      const photo = await downloadBase64(supabase, s.storage_path as string)
+      return photo ? { slot, photo } : null // missing photo → backstop routes its rules to review
+    }),
+  )
+  const submissions = downloaded.filter(
+    (d): d is { slot: ShotSlot; photo: { base64: string; mime: string } } => d !== null,
+  )
   const photoByShot = new Map<ShotSlot, { base64: string; mime: string }>()
-  for (const s of subs ?? []) {
-    const slot = s.shot_slot as ShotSlot
-    const photo = await downloadBase64(supabase, s.storage_path as string)
-    if (!photo) continue // missing photo → its rules stay cannot_determine via backstop
-    const verdicts = await assessPhoto({
-      photo,
-      shotSlot: slot,
-      rules: scoped,
-      persona: brand.vision_persona,
-      shotLabel: shotLabel(slot, brand.shots),
-    })
-    modelVerdicts.push(...verdicts)
-    if (!photoByShot.has(slot)) photoByShot.set(slot, photo)
-  }
+  for (const { slot, photo } of submissions) if (!photoByShot.has(slot)) photoByShot.set(slot, photo)
+  const shotsForKb = Array.from(photoByShot, ([slot, photo]) => ({
+    slot,
+    label: shotLabel(slot, brand.shots),
+    photo,
+  }))
 
-  // 5. Step 1 — grounding backstop over the full scoped rule set.
-  const step1 = validateSignageAssessment(scoped, modelVerdicts)
-
-  // 5b. Step 2 — brand file-store cross-check — then the deterministic merge.
-  //     Default on. Step 2 re-looks at each photo against the brand's own
-  //     standards and may correct/supplement Step 1; the merge keeps the
-  //     liability shield (any disagreement → HQ review; no solo machine
-  //     pass). Degrades to a Step-1-only result on any KB/vision failure —
-  //     the merge with an empty Step 2 is the identity over Step 1.
-  let merged = mergeRuleVerdicts(scoped, step1.verdicts, [], [])
-  let twoStage: TwoStageDetail | null = null
-  if (twoStageEnabled()) {
+  // 5. Step 1 (vision vs DB rules) and Step 2 (brand file-store cross-check)
+  //    run CONCURRENTLY — Step 2 re-looks at the photo independently, so it
+  //    doesn't depend on Step 1's output. Each is internally chunked across
+  //    many small vision calls, all bounded by the shared vision limiter.
+  const step2Promise: Promise<KbStageResult | null> = (async () => {
+    if (!twoStageEnabled()) return null
     try {
       const kbConfig = loadKbConfigFromEnv()
-      const shotsForKb = Array.from(photoByShot, ([slot, photo]) => ({
-        slot,
-        label: shotLabel(slot, brand.shots),
-        photo,
-      }))
-      const stage = await runKbStage(kbConfig, { brand, shots: shotsForKb, scopedRules: scoped })
-      if (stage.stores.length > 0) {
-        merged = mergeRuleVerdicts(scoped, step1.verdicts, stage.kbVerdicts, stage.advisory)
-        twoStage = {
-          step1: step1.verdicts,
-          kb: stage.kbVerdicts,
-          provenance: merged.provenance,
-          advisory: merged.advisory,
-          stores: stage.stores,
-          kb_degraded: stage.degraded,
-        }
-      }
+      return await runKbStage(kbConfig, { brand, shots: shotsForKb, scopedRules: scoped })
     } catch {
-      // KB not configured / outage — keep the Step-1-only merge above.
+      return null // KB not configured / outage → Step-1-only
+    }
+  })()
+  const [modelVerdicts, stage] = await Promise.all([
+    Promise.all(
+      submissions.map((s) =>
+        assessPhoto({
+          photo: s.photo,
+          shotSlot: s.slot,
+          rules: scoped,
+          persona: brand.vision_persona,
+          shotLabel: shotLabel(s.slot, brand.shots),
+        }),
+      ),
+    ).then((r) => r.flat()),
+    step2Promise,
+  ])
+
+  // 6. Step 1 grounding backstop, then the deterministic merge with Step 2.
+  //    The merge keeps the liability shield (any disagreement → HQ review; no
+  //    solo machine pass). With an empty Step 2 it is the identity over Step 1.
+  const step1 = validateSignageAssessment(scoped, modelVerdicts)
+  const merged = mergeRuleVerdicts(scoped, step1.verdicts, stage?.kbVerdicts ?? [], stage?.advisory ?? [])
+  let twoStage: TwoStageDetail | null = null
+  if (stage && stage.stores.length > 0) {
+    twoStage = {
+      step1: step1.verdicts,
+      kb: stage.kbVerdicts,
+      provenance: merged.provenance,
+      advisory: merged.advisory,
+      stores: stage.stores,
+      kb_degraded: stage.degraded,
     }
   }
 
-  // 6. Persist the assessment (upsert on request_id) + advance the request.
+  // 7. Persist the assessment (upsert on request_id) + advance the request.
   const status = merged.overall === 'pass' ? 'report_ready' : 'hq_review'
   const payload: Record<string, unknown> = {
     request_id: requestId,

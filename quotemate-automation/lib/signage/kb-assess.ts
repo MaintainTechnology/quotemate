@@ -26,6 +26,7 @@
 import { kbSearch, type KbConfig, type KbFetch, type KbGroundingPassage } from '../admin-loader/mt-filestore-kb'
 import { kbStoresForBrand, type KbStoreRef } from './kb-supplement'
 import { autoRulesForShot } from './shots'
+import { chunk, runWithVisionLimit, visionChunkSize } from './vision-limit'
 import type {
   AdvisoryFinding,
   BrandConfig,
@@ -300,6 +301,9 @@ export async function assessShotAgainstStores(
   }
   const vision = args.vision ?? defaultKbVision
   try {
+    // Retrieve the brand-standard passages ONCE, then judge the rules in
+    // small parallel vision calls (bounded by the shared limiter) so a large
+    // rule set doesn't become one slow, output-token-bound call.
     const query = buildRetrievalQuery({ brand: args.brand, shotLabel: args.shotLabel, rules: args.rules })
     const { passages, cited } = await retrievePassages(config, {
       stores,
@@ -307,23 +311,38 @@ export async function assessShotAgainstStores(
       ...(args.model ? { model: args.model } : {}),
       ...(args.fetchImpl ? { fetchImpl: args.fetchImpl } : {}),
     })
-    const prompt = buildKbVisionPrompt({
-      brand: args.brand,
-      shotLabel: args.shotLabel,
-      passages,
-      rules: args.rules,
-    })
-    const text = await vision({ model: args.model ?? DEFAULT_MODEL, prompt, photo: args.photo })
-    const parsed = parseKbAssessment(text, args.rules.map((r) => r.rule_key))
     const fallbackCite = passageCitation(cited)
-    const verdicts = parsed.verdicts.map((v) => ({ ...v, citation: v.citation ?? fallbackCite }))
-    const advisory: AdvisoryFinding[] = parsed.advisory.map((a) => ({
-      shot: args.slot,
-      description: a.description,
-      citation: a.citation ?? fallbackCite,
-      store: stores[0],
-    }))
-    return { verdicts, advisory, ok: true }
+
+    const batches = chunk([...args.rules], visionChunkSize())
+    const perChunk = await Promise.all(
+      batches.map((batch, i) =>
+        runWithVisionLimit(async () => {
+          try {
+            const prompt = buildKbVisionPrompt({ brand: args.brand, shotLabel: args.shotLabel, passages, rules: batch })
+            const text = await vision({ model: args.model ?? DEFAULT_MODEL, prompt, photo: args.photo })
+            // Only keep new findings from the first chunk — they describe the
+            // whole photo, not this rule subset, so every chunk would repeat them.
+            return { parsed: parseKbAssessment(text, batch.map((r) => r.rule_key)), includeAdvisory: i === 0, failed: false }
+          } catch {
+            return { parsed: { verdicts: [], advisory: [] }, includeAdvisory: false, failed: true }
+          }
+        }),
+      ),
+    )
+
+    const verdicts: KbRuleVerdict[] = []
+    const advisory: AdvisoryFinding[] = []
+    let anyFailed = false
+    for (const c of perChunk) {
+      if (c.failed) anyFailed = true
+      for (const v of c.parsed.verdicts) verdicts.push({ ...v, citation: v.citation ?? fallbackCite })
+      if (c.includeAdvisory) {
+        for (const a of c.parsed.advisory) {
+          advisory.push({ shot: args.slot, description: a.description, citation: a.citation ?? fallbackCite, store: stores[0] })
+        }
+      }
+    }
+    return { verdicts, advisory, ok: !anyFailed }
   } catch {
     return { verdicts: [], advisory: [], ok: false }
   }
@@ -363,23 +382,32 @@ export async function runKbStage(
     return { kbVerdicts: [], advisory: [], stores: [], degraded: false }
   }
 
+  // Run all shots concurrently — the shared vision limiter bounds the real
+  // number of in-flight Claude calls across every shot + chunk.
+  const perShot = await Promise.all(
+    args.shots.map((shot) => {
+      const rulesForShot = autoRulesForShot([...args.scopedRules], shot.slot)
+      if (rulesForShot.length === 0) {
+        return Promise.resolve<AssessShotResult>({ verdicts: [], advisory: [], ok: true })
+      }
+      return assessShotAgainstStores(config, {
+        brand: args.brand,
+        slot: shot.slot,
+        shotLabel: shot.label,
+        photo: shot.photo,
+        rules: rulesForShot,
+        stores,
+        ...(args.model ? { model: args.model } : {}),
+        ...(args.fetchImpl ? { fetchImpl: args.fetchImpl } : {}),
+        ...(args.vision ? { vision: args.vision } : {}),
+      })
+    }),
+  )
+
   const kbVerdicts: KbRuleVerdict[] = []
   const advisory: AdvisoryFinding[] = []
   let degraded = false
-  for (const shot of args.shots) {
-    const rulesForShot = autoRulesForShot([...args.scopedRules], shot.slot)
-    if (rulesForShot.length === 0) continue
-    const res = await assessShotAgainstStores(config, {
-      brand: args.brand,
-      slot: shot.slot,
-      shotLabel: shot.label,
-      photo: shot.photo,
-      rules: rulesForShot,
-      stores,
-      ...(args.model ? { model: args.model } : {}),
-      ...(args.fetchImpl ? { fetchImpl: args.fetchImpl } : {}),
-      ...(args.vision ? { vision: args.vision } : {}),
-    })
+  for (const res of perShot) {
     if (!res.ok) degraded = true
     kbVerdicts.push(...res.verdicts)
     advisory.push(...res.advisory)

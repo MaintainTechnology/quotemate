@@ -11,10 +11,10 @@ import { loadActiveRules, applicableRules } from '@/lib/signage/run'
 import { assessPhoto } from '@/lib/signage/vision-assess'
 import { validateSignageAssessment } from '@/lib/signage/validate-verdicts'
 import { composeReport } from '@/lib/signage/compose-report'
-import { runKbStage } from '@/lib/signage/kb-assess'
+import { runKbStage, type KbStageResult } from '@/lib/signage/kb-assess'
 import { mergeRuleVerdicts } from '@/lib/signage/merge'
 import { loadKbConfigFromEnv } from '@/lib/admin-loader/mt-filestore-kb'
-import type { RuleVerdict, ShotSlot } from '@/lib/signage/types'
+import type { ShotSlot } from '@/lib/signage/types'
 
 /** Step-2 brand file-store cross-check runs by default; kill-switch with
  *  SIGNAGE_TWO_STAGE=0 (mirrors lib/signage/run.ts). */
@@ -63,47 +63,51 @@ export async function POST(req: Request) {
   const allRules = await loadActiveRules(supabase, brand.slug, 1)
   const scoped = applicableRules(allRules, submittedShots)
 
-  // Assess each photo in-memory (no storage needed for an instant audit).
-  // Keep one representative photo per shot for the Step-2 re-look.
-  const modelVerdicts: RuleVerdict[] = []
+  // Read all photos into memory (no storage for an instant audit); keep one
+  // representative photo per shot for the Step-2 re-look.
+  const photos = await Promise.all(
+    pending.map(async (p) => ({
+      slot: p.slot,
+      photo: { base64: Buffer.from(await p.file.arrayBuffer()).toString('base64'), mime: p.file.type },
+    })),
+  )
   const photoByShot = new Map<ShotSlot, { base64: string; mime: string }>()
-  for (const p of pending) {
-    const base64 = Buffer.from(await p.file.arrayBuffer()).toString('base64')
-    const verdicts = await assessPhoto({
-      photo: { base64, mime: p.file.type },
-      shotSlot: p.slot,
-      rules: scoped,
-      persona: brand.vision_persona,
-      shotLabel: shotLabel(p.slot, brand.shots),
-    })
-    modelVerdicts.push(...verdicts)
-    if (!photoByShot.has(p.slot)) photoByShot.set(p.slot, { base64, mime: p.file.type })
-  }
+  for (const { slot, photo } of photos) if (!photoByShot.has(slot)) photoByShot.set(slot, photo)
+  const shotsForKb = Array.from(photoByShot, ([slot, photo]) => ({
+    slot,
+    label: shotLabel(slot, brand.shots),
+    photo,
+  }))
 
-  // Step 1 — grounded DB rule-check.
-  const step1 = validateSignageAssessment(scoped, modelVerdicts)
-
-  // Step 2 — brand file-store cross-check + merge (default on; degrades to
-  // Step-1-only on any KB/vision failure). Same pipeline as the tracked flow.
-  let merged = mergeRuleVerdicts(scoped, step1.verdicts, [], [])
-  let kb: { stores: string[]; kb_degraded: boolean } | undefined
-  if (twoStageEnabled()) {
+  // Step 1 (vision vs DB rules) ∥ Step 2 (brand file-store cross-check) run
+  // concurrently; each is internally chunked + bounded by the vision limiter.
+  const step2Promise: Promise<KbStageResult | null> = (async () => {
+    if (!twoStageEnabled()) return null
     try {
       const kbConfig = loadKbConfigFromEnv()
-      const shotsForKb = Array.from(photoByShot, ([slot, photo]) => ({
-        slot,
-        label: shotLabel(slot, brand.shots),
-        photo,
-      }))
-      const stage = await runKbStage(kbConfig, { brand, shots: shotsForKb, scopedRules: scoped })
-      if (stage.stores.length > 0) {
-        merged = mergeRuleVerdicts(scoped, step1.verdicts, stage.kbVerdicts, stage.advisory)
-        kb = { stores: stage.stores, kb_degraded: stage.degraded }
-      }
+      return await runKbStage(kbConfig, { brand, shots: shotsForKb, scopedRules: scoped })
     } catch {
-      // KB not configured / outage — keep the Step-1-only merge above.
+      return null
     }
-  }
+  })()
+  const [modelVerdicts, stage] = await Promise.all([
+    Promise.all(
+      photos.map((p) =>
+        assessPhoto({
+          photo: p.photo,
+          shotSlot: p.slot,
+          rules: scoped,
+          persona: brand.vision_persona,
+          shotLabel: shotLabel(p.slot, brand.shots),
+        }),
+      ),
+    ).then((r) => r.flat()),
+    step2Promise,
+  ])
+
+  const step1 = validateSignageAssessment(scoped, modelVerdicts)
+  const merged = mergeRuleVerdicts(scoped, step1.verdicts, stage?.kbVerdicts ?? [], stage?.advisory ?? [])
+  const kb = stage && stage.stores.length > 0 ? { stores: stage.stores, kb_degraded: stage.degraded } : undefined
 
   const report = composeReport(scoped, merged.verdicts, brand.hq_name, {
     provenance: merged.provenance,
