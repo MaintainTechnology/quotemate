@@ -1,5 +1,5 @@
-// QuoteMate · run migration 097 (kb_sync_state + dirty triggers)
-// Usage: node --env-file=.env.local scripts/run-migration-097.mjs
+// QuoteMate · run migration 098 (kb_sync_state + dirty triggers)
+// Usage: node --env-file=.env.local scripts/run-migration-098.mjs
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
@@ -7,7 +7,7 @@ import pg from 'pg'
 
 const { Client } = pg
 const here = dirname(fileURLToPath(import.meta.url))
-const sqlPath = join(here, '..', 'sql', 'migrations', '097_kb_sync_state.sql')
+const sqlPath = join(here, '..', 'sql', 'migrations', '098_kb_sync_state.sql')
 
 const dbUrl = process.env.SUPABASE_DB_URL
 if (!dbUrl) {
@@ -20,7 +20,7 @@ const c = new Client({ connectionString: dbUrl, ssl: { rejectUnauthorized: false
 
 try {
   await c.connect()
-  console.log(`→ Applying 097_kb_sync_state.sql (${sql.length.toLocaleString()} chars)...`)
+  console.log(`→ Applying 098_kb_sync_state.sql (${sql.length.toLocaleString()} chars)...`)
   await c.query(sql)
   console.log('OK migration applied')
 
@@ -34,7 +34,7 @@ try {
     console.error('POST-VERIFY FAIL: state rows or triggers missing')
     process.exit(1)
   }
-  console.log('\nOK — migration 097 verified.')
+  console.log('\nOK — migration 098 verified.')
 } catch (err) {
   console.error('Migration failed:', err.message ?? err)
   process.exit(1)

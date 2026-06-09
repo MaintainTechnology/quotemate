@@ -1,9 +1,9 @@
--- Migration 097 · kb_sync_state + dirty-tracking triggers on all public tables
+-- Migration 098 · kb_sync_state + dirty-tracking triggers on all public tables
 -- Drives the DB→MT-QM-PRICING-KB CSV sync. Additive + idempotent.
--- Highest existing migration before this is 096.
--- (Originally authored as 096; renumbered to 097 because 096_signage_two_stage
---  landed on main first. Already applied to prod under the old number; the SQL
---  is idempotent so the number is just bookkeeping.)
+-- Highest existing migration before this is 097.
+-- (Originally authored as 096; renumbered to 098 because 096_signage_two_stage
+--  and 097_aircon_trade_phase1 landed on main first. Already applied to prod
+--  under the old number; the SQL is idempotent so the number is just bookkeeping.)
 
 create table if not exists public.kb_sync_state (
   table_name       text primary key,
