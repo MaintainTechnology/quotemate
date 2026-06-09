@@ -57,7 +57,7 @@ export function finaliseSolarEstimate(estimate: SolarEstimate): SolarEstimate {
     flags.length > 0
       ? {
           decision: 'tradie_review',
-          reason: `${flags.length} estimate checks need your review before this can be sent.`,
+          reason: `${flags.length} estimate check${flags.length === 1 ? '' : 's'} need your review before this can be sent.`,
         }
       : {
           decision: 'tradie_review',
@@ -168,12 +168,8 @@ export async function runSolarEstimate(args: {
   const confidence_band: SolarConfidenceBand =
     coverage_source === 'google' && roof.imagery_quality === 'HIGH' ? 'tight' : 'wide'
 
-  // 5. Deterministic-output guardrails (spec §7).
-  const guardrail_flags = runGuardrails({ price, production, economics })
-
-  // 6. Routing — sizing's decision is the job-level routing.
-  const routing: SolarRoutingDecision = sizing.routing
-
+  // 5. Assemble draft estimate — guardrail_flags and final routing are
+  //    stamped by finaliseSolarEstimate below (spec §7).
   const estimate: SolarEstimate = {
     token: generateSolarToken(),
     context,
@@ -185,13 +181,16 @@ export async function runSolarEstimate(args: {
     economics,
     confidence_band,
     satellite_image_url,
-    routing,
-    guardrail_flags,
+    routing: sizing.routing,
+    guardrail_flags: [],
     config_version: config.version,
   }
 
-  if (opts.persist) await opts.persist(estimate)
-  return estimate
+  // 6. Stamp guardrail_flags and force tradie_review routing (spec §7).
+  const finalEstimate = finaliseSolarEstimate(estimate)
+
+  if (opts.persist) await opts.persist(finalEstimate)
+  return finalEstimate
 }
 
 // ── helpers ──────────────────────────────────────────────────────────

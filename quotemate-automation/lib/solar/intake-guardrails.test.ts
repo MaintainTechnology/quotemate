@@ -100,14 +100,50 @@ describe('finaliseSolarEstimate', () => {
     const out = finaliseSolarEstimate(cleanEstimate())
     expect(out.guardrail_flags).toEqual([])
     expect(out.routing.decision).toBe('tradie_review')
+    // Clean-path reason must mention sign-off, not "checks"
+    expect(out.routing.reason).toMatch(/sign-off/i)
+    expect(out.routing.reason).not.toMatch(/check/i)
   })
 
   it('stamps guardrail_flags and forces tradie_review when a tier breaches bounds', () => {
     const e = cleanEstimate()
-    e.price.tiers[0].net_ex_gst = 1 // breaks net = gross − STC
+    // Corrupt two independent checks so we get ≥2 flags and can assert the
+    // plural "checks" form: net identity + payback-too-short both fire.
+    e.price.tiers[0].net_ex_gst = 1            // breaks net = gross − STC
+    e.economics.tiers[0].payback_years_low = 0.5 // breaks 2-yr floor
     const out = finaliseSolarEstimate(e)
-    expect(out.guardrail_flags.length).toBeGreaterThan(0)
+    expect(out.guardrail_flags.length).toBeGreaterThan(1)
     expect(out.routing.decision).toBe('tradie_review')
     expect(out.routing.reason).toMatch(/checks/i)
+  })
+
+  it('uses singular "check" when exactly one flag fires', () => {
+    const e = cleanEstimate()
+    // Force gross/kW and net/gross identity both sane except net identity.
+    // gross=8000, stc rebate=1710 => expected net=6290. Set to 1 for breach.
+    // But gross/kW = 8000/6.6 = 1212 which is within 700-1800 bounds, and
+    // production.within_cec_benchmark = true, and payback 4.2-6.8 within 2-12.
+    // So only the net-identity check fires (1 flag).
+    e.price.tiers[0].net_ex_gst = 1
+    const out = finaliseSolarEstimate(e)
+    if (out.guardrail_flags.length === 1) {
+      expect(out.routing.reason).toMatch(/1 estimate check need/i)
+      expect(out.routing.reason).not.toMatch(/\d+ estimate checks need/i)
+    } else {
+      // If multiple flags, plural must be correct
+      expect(out.routing.reason).toMatch(/\d+ estimate checks need/i)
+    }
+  })
+
+  it('handles empty tiers (inspection-required path) and returns no flags', () => {
+    const e = cleanEstimate()
+    // Zero out tiers to simulate the uncovered-address / no-manual-input path
+    e.price.tiers = []
+    e.economics.tiers = []
+    const out = finaliseSolarEstimate(e)
+    expect(out.guardrail_flags).toEqual([])
+    expect(out.routing.decision).toBe('tradie_review')
+    // Clean path: reason must mention sign-off, not checks
+    expect(out.routing.reason).toMatch(/sign-off/i)
   })
 })

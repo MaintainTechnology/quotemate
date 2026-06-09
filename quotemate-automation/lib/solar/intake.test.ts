@@ -110,7 +110,11 @@ describe('runSolarEstimate — manual fallback path', () => {
       },
     })
     expect(est.coverage_source).toBe('manual')
-    expect(est.routing.decision).toBe('inspection_required')
+    // finaliseSolarEstimate always sets top-level routing to tradie_review
+    // (solar never auto-sends — spec §7). The job-level decision (inspection)
+    // is preserved on sizing.routing.
+    expect(est.routing.decision).toBe('tradie_review')
+    expect(est.sizing.routing.decision).toBe('inspection_required')
     expect(est.sizing.tiers.length).toBe(0)
   })
 })
