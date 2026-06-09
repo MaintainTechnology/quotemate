@@ -69,9 +69,39 @@ if (!exPath || !gtPath) {
   process.exit(1)
 }
 
-const extraction = JSON.parse(readFileSync(exPath, 'utf8'))
-const truth = JSON.parse(readFileSync(gtPath, 'utf8'))
-const aliases = aliasPath ? { ...DEFAULT_ALIASES, ...JSON.parse(readFileSync(aliasPath, 'utf8')) } : DEFAULT_ALIASES
+// Load JSON with a clear, actionable error instead of a raw Node stack trace —
+// the ground-truth file in particular won't exist until a real take-off lands.
+function loadJson(path, label) {
+  let raw
+  try {
+    raw = readFileSync(path, 'utf8')
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e
+    console.error(`\n✗ ${label} not found:\n    ${path}`)
+    if (/ground-truth/i.test(path)) {
+      console.error(`\nThis file must hold the estimator's REAL take-off — line counts (+ unit prices`)
+      console.error(`and labour hours if you want $ variance). The AI is scored against it.`)
+      console.error(`\nThere is no quantity schedule in the plan PDF to derive this from automatically`)
+      console.error(`(the sheets show "location & quantity" on the drawing, legend-only), so the`)
+      console.error(`numbers have to come from a human count.`)
+      console.error(`\nStart from the template, fill in the real numbers, save it under this exact name:`)
+      console.error(`    cp estimation-truth/citycave.ground-truth.template.json ${path}`)
+      console.error(`then edit ${path} and re-run. Scoring against the *template* only tests the`)
+      console.error(`harness — the result is not a real accuracy figure.`)
+    }
+    process.exit(1)
+  }
+  try {
+    return JSON.parse(raw)
+  } catch (e) {
+    console.error(`\n✗ ${label} is not valid JSON (${path}):\n    ${e.message}`)
+    process.exit(1)
+  }
+}
+
+const extraction = loadJson(exPath, 'Extraction')
+const truth = loadJson(gtPath, 'Ground-truth')
+const aliases = aliasPath ? { ...DEFAULT_ALIASES, ...loadJson(aliasPath, 'Aliases') } : DEFAULT_ALIASES
 
 const ai = indexItems(extraction.items, aliases)
 const gt = indexItems(truth.items, aliases)
