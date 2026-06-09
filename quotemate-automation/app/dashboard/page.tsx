@@ -42,11 +42,13 @@ import {
   Megaphone,
   Paintbrush,
   AirVent,
+  ScanLine,
   type LucideProps,
 } from 'lucide-react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 import { tenantHasRoofingTrade } from '@/lib/roofing/tenant'
 import { RoofRatesEditor } from './_components/RoofRatesEditor'
+import { EstimatorBetaTab } from './_components/EstimatorBetaTab'
 import { ErrorBanner, Field, INPUT } from '../signup/page'
 
 type NavIcon = ComponentType<LucideProps>
@@ -247,6 +249,8 @@ type Tab =
   | 'painting'
   /** AC recommender (Phase 1) — links to /dashboard/aircon. Not trade-gated yet. */
   | 'aircon'
+  /** Estimator (Beta) — electrical plan PDF → AI quantity take-off. Not trade-gated. */
+  | 'estimator'
 
 /** SMS conversation summary returned by /api/tenant/chats. Drives the
  *  Chats tab — communication history including leads that didn't
@@ -648,6 +652,7 @@ export default function DashboardPage() {
                 </Link>
               </div>
             )}
+            {tab === 'estimator' && <EstimatorBetaTab accessToken={accessToken} />}
           </div>
         </section>
       </div>
@@ -866,6 +871,8 @@ function buildNav(quoteCount: number, hasRoofingTrade = false): NavItem[] {
   items.push({ tab: 'painting', label: 'Paint', icon: Paintbrush })
   // AC recommender (Phase 1) — not trade-gated yet so it's discoverable.
   items.push({ tab: 'aircon', label: 'AC', icon: AirVent })
+  // Estimator (Beta) — electrical plan take-off. Not trade-gated yet.
+  items.push({ tab: 'estimator', label: 'Estimator', icon: ScanLine })
   items.push(
     { tab: 'account', label: 'Account', icon: User },
     { tab: 'payouts', label: 'Payouts', icon: Banknote },
@@ -891,7 +898,7 @@ const SIDEBAR_GROUPS: { label: string; tabs: Tab[] }[] = [
   // tenants the byTab.get('roofing') lookup returns undefined and the
   // sidebar quietly skips the row. No tenant-specific filtering needed
   // in this layout list.
-  { label: 'Daily work', tabs: ['overview', 'quotes', 'followups', 'chats', 'roofing', 'signage', 'painting', 'aircon'] },
+  { label: 'Daily work', tabs: ['overview', 'quotes', 'followups', 'chats', 'roofing', 'signage', 'painting', 'aircon', 'estimator'] },
   {
     label: 'Setup',
     tabs: ['account', 'payouts', 'pricing', 'services', 'catalogue', 'estimating', 'recipes'],
@@ -1076,6 +1083,10 @@ const TAB_META: Record<
   aircon: {
     title: 'AC recommender',
     desc: 'Indicative ducted-vs-split air-conditioning sizing and price ranges from a few questions.',
+  },
+  estimator: {
+    title: 'Estimator (Beta)',
+    desc: 'Upload an electrical plan PDF and get an AI quantity take-off you can correct and save. Counts only — verify before quoting.',
   },
   quotes: {
     title: 'Quotes',
@@ -10220,6 +10231,8 @@ function tabLabel(t: Tab): string {
       return 'Signage'
     case 'painting':
       return 'Paint'
+    case 'estimator':
+      return 'Estimator'
   }
 }
 

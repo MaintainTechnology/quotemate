@@ -1,0 +1,107 @@
+// POST /api/tenant/estimator/extract — Estimator (Beta).
+//
+// Accepts a multipart upload of one electrical plan PDF, runs the live Claude
+// take-off (~1–2 min), persists plan_uploads + plan_extractions for the authed
+// tenant, and returns the extracted items for the dashboard to render + edit.
+//
+// Counts only — no pricing/labour. The raw PDF bytes are not stored (v1).
+
+import { tenantFromBearer, estimatorSupabase as supabase } from '@/lib/estimation/auth'
+import { runExtraction } from '@/lib/estimation/extract'
+
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+// The take-off is a single long Claude call (~60–110s); match the intake route.
+export const maxDuration = 300
+
+const MAX_PDF_BYTES = 32 * 1024 * 1024
+
+export async function POST(req: Request) {
+  const tenant = await tenantFromBearer(req)
+  if (!tenant) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+
+  let form: FormData
+  try {
+    form = await req.formData()
+  } catch {
+    return Response.json({ ok: false, error: 'expected multipart/form-data' }, { status: 400 })
+  }
+
+  const file = form.get('pdf')
+  if (!(file instanceof File)) {
+    return Response.json({ ok: false, error: 'missing "pdf" file' }, { status: 400 })
+  }
+  if (file.type && file.type !== 'application/pdf') {
+    return Response.json({ ok: false, error: 'file must be a PDF' }, { status: 400 })
+  }
+  if (file.size > MAX_PDF_BYTES) {
+    return Response.json(
+      { ok: false, error: `PDF too large (${(file.size / 1e6).toFixed(1)} MB; max 32 MB)` },
+      { status: 413 },
+    )
+  }
+  const sheetHint = String(form.get('sheet_hint') ?? '').slice(0, 200)
+  const pdf = Buffer.from(await file.arrayBuffer())
+
+  // 1. record the upload
+  const { data: upload, error: upErr } = await supabase
+    .from('plan_uploads')
+    .insert({
+      tenant_id: tenant.id,
+      filename: file.name || 'plan.pdf',
+      sheet_hint: sheetHint || null,
+      size_bytes: file.size,
+    })
+    .select('id')
+    .single()
+  if (upErr || !upload) {
+    return Response.json({ ok: false, error: upErr?.message ?? 'could not record upload' }, { status: 500 })
+  }
+
+  // 2. run the take-off
+  let result
+  try {
+    result = await runExtraction({ pdf, sheetHint })
+  } catch (e) {
+    return Response.json(
+      { ok: false, error: e instanceof Error ? e.message : 'extraction failed', planUploadId: upload.id },
+      { status: 502 },
+    )
+  }
+  if (!result.parsed) {
+    return Response.json(
+      { ok: false, error: 'the model did not return a readable take-off — try a clearer sheet hint', planUploadId: upload.id },
+      { status: 422 },
+    )
+  }
+
+  // 3. persist the extraction
+  const { data: extraction, error: exErr } = await supabase
+    .from('plan_extractions')
+    .insert({
+      plan_upload_id: upload.id,
+      tenant_id: tenant.id,
+      items: result.parsed.items,
+      sheets_used: result.parsed.sheets_used,
+      overall_note: result.parsed.overall_note || null,
+      model: result.model,
+      runtime_seconds: result.runtimeSeconds,
+    })
+    .select('id, items, sheets_used, overall_note, model, runtime_seconds, created_at')
+    .single()
+  if (exErr || !extraction) {
+    return Response.json({ ok: false, error: exErr?.message ?? 'could not save extraction' }, { status: 500 })
+  }
+
+  return Response.json({
+    ok: true,
+    planUploadId: upload.id,
+    extractionId: extraction.id,
+    filename: file.name || 'plan.pdf',
+    items: result.parsed.items,
+    sheetsUsed: result.parsed.sheets_used,
+    overallNote: result.parsed.overall_note,
+    model: result.model,
+    runtimeSeconds: result.runtimeSeconds,
+  })
+}
