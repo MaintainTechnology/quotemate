@@ -43,6 +43,32 @@ type HistoryUpload = {
   plan_extractions: HistoryExtraction[]
 }
 
+type PricedLine = {
+  type: string
+  count: number
+  matched: string
+  unitPriceExGst: number
+  materialExGst: number
+  labourHours: number
+  labourExGst: number
+  lineExGst: number
+}
+type PricedBom = {
+  lines: PricedLine[]
+  unmatched: { type: string; count: number }[]
+  materialExGst: number
+  labourExGst: number
+  labourFloorAddedExGst: number
+  subtotalExGst: number
+  gstExGst: number
+  totalIncGst: number
+  gstRegistered: boolean
+  assumptions: { hourlyRate: number; markupPct: number; minLabourHours: number }
+}
+type PriceResponse =
+  | { ok: true; bom: PricedBom; catalogueSize: number; pricingBookSource: string }
+  | { ok: false; error: string }
+
 type Props = { accessToken: string | null }
 
 export function EstimatorBetaTab({ accessToken }: Props) {
@@ -61,6 +87,10 @@ export function EstimatorBetaTab({ accessToken }: Props) {
 
   const [history, setHistory] = useState<HistoryUpload[]>([])
   const [showHistory, setShowHistory] = useState(false)
+
+  const [pricing, setPricing] = useState(false)
+  const [priced, setPriced] = useState<PricedBom | null>(null)
+  const [priceInfo, setPriceInfo] = useState<{ catalogueSize: number; source: string } | null>(null)
 
   const loadHistory = useCallback(async () => {
     if (!accessToken) return
@@ -146,6 +176,32 @@ export function EstimatorBetaTab({ accessToken }: Props) {
     }
   }, [accessToken, extractionId, rows, loadHistory])
 
+  const price = useCallback(async () => {
+    if (!accessToken || rows.length === 0) return
+    setPricing(true)
+    setErrMsg(null)
+    setPriced(null)
+    try {
+      const items = rows.map((r) => ({ type: r.type, count: Number(r.count) || 0 }))
+      const res = await fetch('/api/tenant/estimator/price', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      })
+      const json = (await res.json()) as PriceResponse
+      if (!json.ok) {
+        setErrMsg(json.error || 'Could not price the take-off.')
+        return
+      }
+      setPriced(json.bom)
+      setPriceInfo({ catalogueSize: json.catalogueSize, source: json.pricingBookSource })
+    } catch (err) {
+      setErrMsg(err instanceof Error ? err.message : String(err))
+    } finally {
+      setPricing(false)
+    }
+  }, [accessToken, rows])
+
   const loadFromHistory = (u: HistoryUpload) => {
     const ex = u.plan_extractions?.[0]
     if (!ex) return
@@ -161,10 +217,13 @@ export function EstimatorBetaTab({ accessToken }: Props) {
     setSavedAt(null)
     setErrMsg(null)
     setShowHistory(false)
+    setPriced(null)
   }
 
-  const setCount = (idx: number, v: string) =>
+  const setCount = (idx: number, v: string) => {
+    setPriced(null)
     setRows((rs) => rs.map((r, i) => (i === idx ? { ...r, count: v } : r)))
+  }
 
   const totalCount = rows.reduce((s, r) => s + (Number(r.count) || 0), 0)
 
@@ -336,13 +395,101 @@ export function EstimatorBetaTab({ accessToken }: Props) {
           )}
 
           <div className="mt-6 flex flex-wrap items-center gap-4">
-            <button onClick={save} disabled={saving || !extractionId} className="inline-flex items-center gap-2 bg-accent px-6 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50">
+            <button type="button" onClick={save} disabled={saving || !extractionId} className="inline-flex items-center gap-2 bg-accent px-6 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50">
               {saving ? (<><span className="inline-block h-3.5 w-3.5 animate-spin border-2 border-white/40 border-t-white" aria-hidden="true" /> Saving…</>) : (<>Save corrected counts <span aria-hidden="true">&rarr;</span></>)}
             </button>
-            <span className="font-mono text-xs text-text-dim">Edit any count above, then save.</span>
+            <button type="button" onClick={price} disabled={pricing || rows.length === 0} className="inline-flex items-center gap-2 border border-accent px-6 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-accent transition-colors hover:bg-accent hover:text-white disabled:cursor-not-allowed disabled:opacity-50">
+              {pricing ? (<><span className="inline-block h-3.5 w-3.5 animate-spin border-2 border-accent/40 border-t-accent" aria-hidden="true" /> Pricing…</>) : (<>Price this take-off</>)}
+            </button>
+            <span className="font-mono text-xs text-text-dim">Edit counts, then save or price (indicative).</span>
           </div>
+
+          {priced && <PricedPanel bom={priced} info={priceInfo} />}
         </div>
       )}
+    </div>
+  )
+}
+
+function PricedPanel({ bom, info }: { bom: PricedBom; info: { catalogueSize: number; source: string } | null }) {
+  const money = (n: number) => '$' + n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return (
+    <div className="mt-6 border-t border-ink-line pt-6">
+      <div className="border border-ink-line border-l-4 border-l-warning bg-ink-deep px-4 py-3">
+        <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-warning">Indicative estimate</div>
+        <p className="mt-1 text-sm text-text-sec">
+          Priced from your electrical catalogue at {money(bom.assumptions.hourlyRate)}/hr labour and {bom.assumptions.markupPct}% markup.
+          Items not in your catalogue are flagged below and not priced — add them under Services/Catalogue. Verify before sending.
+        </p>
+      </div>
+
+      {bom.lines.length > 0 && (
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full border-collapse text-left">
+            <thead>
+              <tr className="border-b border-ink-line font-mono text-[0.62rem] uppercase tracking-[0.12em] text-text-dim">
+                <th className="py-2 pr-3 font-semibold">Item → assembly</th>
+                <th className="py-2 px-3 text-right font-semibold">Qty</th>
+                <th className="py-2 px-3 text-right font-semibold">Unit</th>
+                <th className="py-2 px-3 text-right font-semibold">Material</th>
+                <th className="py-2 px-3 text-right font-semibold">Labour</th>
+                <th className="py-2 pl-3 text-right font-semibold">Line</th>
+              </tr>
+            </thead>
+            <tbody>
+              {bom.lines.map((l, i) => (
+                <tr key={i} className="border-b border-ink-line/60">
+                  <td className="py-2 pr-3 text-sm text-text-pri">{l.type}<span className="block font-mono text-xs text-text-dim">&rarr; {l.matched}</span></td>
+                  <td className="py-2 px-3 text-right font-mono text-sm text-text-sec">{l.count}</td>
+                  <td className="py-2 px-3 text-right font-mono text-sm text-text-sec">{money(l.unitPriceExGst)}</td>
+                  <td className="py-2 px-3 text-right font-mono text-sm text-text-sec">{money(l.materialExGst)}</td>
+                  <td className="py-2 px-3 text-right font-mono text-sm text-text-sec">{money(l.labourExGst)}<span className="block text-xs text-text-dim">{l.labourHours}h</span></td>
+                  <td className="py-2 pl-3 text-right font-mono text-sm text-text-pri">{money(l.lineExGst)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {bom.unmatched.length > 0 && (
+        <div className="mt-4">
+          <div className="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-warning">Not priced — not in your catalogue ({bom.unmatched.length})</div>
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {bom.unmatched.map((u, i) => (
+              <li key={i} className="border border-warning/50 px-2 py-1 font-mono text-xs text-text-sec">{u.count}× {u.type}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="mt-5 border-t border-ink-line pt-4">
+        <div className="ml-auto max-w-xs space-y-1.5 font-mono text-sm">
+          <SumRow label="Materials" value={money(bom.materialExGst)} />
+          <SumRow label="Labour" value={money(bom.labourExGst)} />
+          {bom.labourFloorAddedExGst > 0 && <SumRow label="Min-labour top-up" value={money(bom.labourFloorAddedExGst)} />}
+          <SumRow label="Subtotal (ex GST)" value={money(bom.subtotalExGst)} />
+          {bom.gstRegistered && <SumRow label="GST 10%" value={money(bom.gstExGst)} />}
+          <div className="flex items-center justify-between border-t border-ink-line pt-2 text-text-pri">
+            <span className="font-semibold uppercase tracking-[0.12em]">Total inc GST</span>
+            <span className="text-base font-bold">{money(bom.totalIncGst)}</span>
+          </div>
+        </div>
+      </div>
+      {info && (
+        <p className="mt-3 text-right font-mono text-[0.66rem] text-text-dim">
+          catalogue: {info.catalogueSize} assemblies · pricing book: {info.source}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function SumRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between text-text-sec">
+      <span>{label}</span>
+      <span>{value}</span>
     </div>
   )
 }
