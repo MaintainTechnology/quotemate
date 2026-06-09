@@ -1,4 +1,44 @@
 import { describe, it, expect } from 'vitest'
+import { canShowPrices } from './publish'
+
+describe('canShowPrices', () => {
+  it('hides prices until the tradie has confirmed (no auto-send)', () => {
+    const r = canShowPrices({ confirmedAt: null, guardrailFlags: [], configStale: false })
+    expect(r.showPrices).toBe(false)
+    expect(r.reason).toMatch(/installer will confirm/i)
+  })
+
+  it('shows prices once confirmed, clean, and config is fresh', () => {
+    const r = canShowPrices({
+      confirmedAt: '2026-06-08T02:00:00Z',
+      guardrailFlags: [],
+      configStale: false,
+    })
+    expect(r.showPrices).toBe(true)
+    expect(r.reason).toBeNull()
+  })
+
+  it('blocks publish when guardrail flags exist, even after confirmation', () => {
+    const r = canShowPrices({
+      confirmedAt: '2026-06-08T02:00:00Z',
+      guardrailFlags: ['better: net price ($1.00) does not equal gross − STC ...'],
+      configStale: false,
+    })
+    expect(r.showPrices).toBe(false)
+    expect(r.reason).toMatch(/checks/i)
+  })
+
+  it('blocks publish when the solar config is stale, even after confirmation', () => {
+    const r = canShowPrices({
+      confirmedAt: '2026-06-08T02:00:00Z',
+      guardrailFlags: [],
+      configStale: true,
+    })
+    expect(r.showPrices).toBe(false)
+    expect(r.reason).toMatch(/pricing data is being refreshed/i)
+  })
+})
+
 import { solarPayRedirectTarget } from './publish'
 
 describe('solarPayRedirectTarget', () => {
