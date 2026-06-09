@@ -126,13 +126,9 @@ describe('finaliseSolarEstimate', () => {
     // So only the net-identity check fires (1 flag).
     e.price.tiers[0].net_ex_gst = 1
     const out = finaliseSolarEstimate(e)
-    if (out.guardrail_flags.length === 1) {
-      expect(out.routing.reason).toMatch(/1 estimate check need/i)
-      expect(out.routing.reason).not.toMatch(/\d+ estimate checks need/i)
-    } else {
-      // If multiple flags, plural must be correct
-      expect(out.routing.reason).toMatch(/\d+ estimate checks need/i)
-    }
+    expect(out.guardrail_flags).toHaveLength(1)
+    expect(out.routing.reason).toMatch(/1 estimate check need/i)
+    expect(out.routing.reason).not.toMatch(/\d+ estimate checks need/i)
   })
 
   it('handles empty tiers (inspection-required path) and returns no flags', () => {

@@ -8,8 +8,10 @@ describe('confirmEligibility', () => {
       alreadyConfirmedAt: null,
     })
     expect(r.ok).toBe(false)
-    expect(r.status).toBe(409)
-    expect(r.error).toMatch(/flag/i)
+    if (!r.ok) {
+      expect(r.status).toBe(409)
+      expect(r.error).toMatch(/flag/i)
+    }
   })
 
   it('is idempotent — already confirmed returns ok without re-stamping', () => {
@@ -18,12 +20,16 @@ describe('confirmEligibility', () => {
       alreadyConfirmedAt: '2026-06-08T02:00:00Z',
     })
     expect(r.ok).toBe(true)
-    expect(r.stamp).toBe(false)
+    if (r.ok) {
+      expect(r.stamp).toBe(false)
+    }
   })
 
   it('confirms a clean, unconfirmed estimate and signals a fresh stamp', () => {
     const r = confirmEligibility({ guardrailFlags: [], alreadyConfirmedAt: null })
     expect(r.ok).toBe(true)
-    expect(r.stamp).toBe(true)
+    if (r.ok) {
+      expect(r.stamp).toBe(true)
+    }
   })
 })

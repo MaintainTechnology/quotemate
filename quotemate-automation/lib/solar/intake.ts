@@ -67,12 +67,6 @@ export function finaliseSolarEstimate(estimate: SolarEstimate): SolarEstimate {
   return { ...estimate, guardrail_flags: flags, routing }
 }
 
-/** Deterministic-output guardrail bounds (spec §7). */
-const GROSS_PER_KW_MIN = 700
-const GROSS_PER_KW_MAX = 1800
-const PAYBACK_YEARS_MIN = 2
-const PAYBACK_YEARS_MAX = 12
-
 export type SolarEnrichmentOrchestratorOpts = {
   /** Resolve the address to a coordinate. */
   geocode: (input: SolarAddressInput) => Promise<LatLng>
@@ -218,56 +212,6 @@ async function fetchRawInsights(
   return { ...parsed, raw: body }
 }
 
-/** PURE — collect deterministic-output guardrail breaches (spec §7). */
-export function runGuardrails(args: {
-  price: SolarEstimate['price']
-  production: SolarProductionResult[]
-  economics: SolarEstimate['economics']
-}): string[] {
-  const flags: string[] = []
-  const { price, production, economics } = args
-
-  price.tiers.forEach((t, i) => {
-    if (t.system_kw_dc > 0) {
-      const grossPerKw = t.gross_ex_gst / t.system_kw_dc
-      if (grossPerKw < GROSS_PER_KW_MIN || grossPerKw > GROSS_PER_KW_MAX) {
-        flags.push(
-          `Tier ${t.tier}: gross $${grossPerKw.toFixed(0)}/kW is outside the sane $${GROSS_PER_KW_MIN}–$${GROSS_PER_KW_MAX}/kW band.`,
-        )
-      }
-    }
-    // Net must equal gross − rebate (allow 1c rounding tolerance).
-    const expectedNet = Math.max(0, t.gross_ex_gst - t.stc.rebate_aud)
-    if (Math.abs(t.net_ex_gst - expectedNet) > 0.01) {
-      flags.push(`Tier ${t.tier}: net ${t.net_ex_gst} ≠ gross − STC (${expectedNet.toFixed(2)}).`)
-    }
-    const prod = production[i]
-    if (prod && !prod.within_cec_benchmark) {
-      flags.push(
-        `Tier ${t.tier}: production ${prod.annual_kwh_ac} kWh/yr is outside ±35% of the CEC benchmark (${prod.cec_benchmark_kwh_per_kw} kWh/kW/yr).`,
-      )
-    }
-    const econ = economics.tiers[i]
-    if (
-      econ &&
-      econ.annual_savings_aud > 0 &&
-      econ.payback_years_low != null &&
-      econ.payback_years_high != null
-    ) {
-      if (
-        econ.payback_years_low < PAYBACK_YEARS_MIN ||
-        econ.payback_years_high > PAYBACK_YEARS_MAX
-      ) {
-        flags.push(
-          `Tier ${t.tier}: payback ${econ.payback_years_low}–${econ.payback_years_high} yrs is outside the ${PAYBACK_YEARS_MIN}–${PAYBACK_YEARS_MAX} yr expectation.`,
-        )
-      }
-    }
-  })
-
-  return flags
-}
-
 /** Public share token — base64url, 16 bytes (mirrors generateShareToken). */
 export function generateSolarToken(): string {
   return randomBytes(16).toString('base64url')
@@ -302,10 +246,3 @@ function emptyEconomics(
   }
 }
 
-export const __test_only__ = {
-  runGuardrails,
-  GROSS_PER_KW_MIN,
-  GROSS_PER_KW_MAX,
-  PAYBACK_YEARS_MIN,
-  PAYBACK_YEARS_MAX,
-}
