@@ -1,0 +1,30 @@
+{
+  "plan": "citycave",
+  "model": "claude-sonnet-4-6",
+  "runtime_seconds": 110,
+  "note": "Real Approach-2 baseline extraction (no tiling) captured from estimation-spike.mjs",
+  "items": [
+    { "type": "Double GPO (standard)", "symbol": "▲▲", "count": 35, "confidence": "medium" },
+    { "type": "Single GPO", "symbol": "▲", "count": 0, "confidence": "medium" },
+    { "type": "Double GPO/USB", "symbol": "▲U", "count": 1, "confidence": "medium" },
+    { "type": "Double GPO for Cleaning", "symbol": "▲C", "count": 1, "confidence": "medium" },
+    { "type": "1500H Recessed GPO", "symbol": "▲", "count": 1, "confidence": "medium" },
+    { "type": "Hardwired Power", "symbol": "▲", "count": 2, "confidence": "medium" },
+    { "type": "Waterproof Double GPO 10A", "symbol": "WP ▲▲", "count": 2, "confidence": "high" },
+    { "type": "15-amp dedicated circuit", "symbol": "15 amp", "count": 6, "confidence": "medium" },
+    { "type": "Double Data outlet", "symbol": "◈ D", "count": 2, "confidence": "medium" },
+    { "type": "Comer Point (Data)", "symbol": "⊙ C", "count": 2, "confidence": "medium" },
+    { "type": "L1 Track Light / Recessed Downlight", "symbol": "L1", "count": 6, "confidence": "low" },
+    { "type": "L2 Recessed Downlight white IP44", "symbol": "L2", "count": 28, "confidence": "medium" },
+    { "type": "L3 Recessed Downlight tri-colour", "symbol": "L3", "count": 18, "confidence": "medium" },
+    { "type": "L5 Zip LED Up/Down Wall Light", "symbol": "L5", "count": 12, "confidence": "medium" },
+    { "type": "L6 Feature Pendant Light", "symbol": "L6", "count": 3, "confidence": "medium" },
+    { "type": "L7 Surface Mounted Linear Fitting", "symbol": "L7", "count": 8, "confidence": "low" },
+    { "type": "L9 Retail Wall Washer Downlight", "symbol": "L9", "count": 2, "confidence": "medium" },
+    { "type": "Emergency Light", "symbol": "EM", "count": 14, "confidence": "medium" },
+    { "type": "Emergency Exit Sign", "symbol": "EXIT", "count": 2, "confidence": "medium" },
+    { "type": "EDB (Electrical Distribution Board)", "symbol": "EDB", "count": 1, "confidence": "medium" },
+    { "type": "Hot Water Unit (HWU)", "symbol": "HWU", "count": 2, "confidence": "high" },
+    { "type": "Exhaust Fan (E2)", "symbol": "E2", "count": 6, "confidence": "medium" }
+  ]
+}

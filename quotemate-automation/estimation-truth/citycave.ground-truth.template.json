@@ -1,0 +1,19 @@
+{
+  "plan": "citycave",
+  "source": "PLACEHOLDER ⚠ — these counts/prices are illustrative ONLY. REPLACE every value with the estimator's actual CityCave take-off, then re-run the eval harness for the real number.",
+  "manual_hours": 40,
+  "_schema": "items[]: { type (estimator's wording), count (int), unit_price (AUD ex-GST, optional), labour_hours (optional) }. Add an aliases.json if the estimator's wording doesn't auto-match the AI's item types.",
+  "items": [
+    { "type": "double gpo", "count": 42, "unit_price": 85 },
+    { "type": "single gpo", "count": 2, "unit_price": 75 },
+    { "type": "waterproof gpo", "count": 2, "unit_price": 120 },
+    { "type": "data point", "count": 12, "unit_price": 140 },
+    { "type": "15a circuit", "count": 6, "unit_price": 220 },
+    { "type": "downlight", "count": 58, "unit_price": 65 },
+    { "type": "emergency light", "count": 15, "unit_price": 150 },
+    { "type": "exit sign", "count": 2, "unit_price": 160 },
+    { "type": "distribution board", "count": 1, "unit_price": 2800 },
+    { "type": "hot water unit", "count": 2, "unit_price": 950 },
+    { "type": "exhaust fan", "count": 7, "unit_price": 180 }
+  ]
+}

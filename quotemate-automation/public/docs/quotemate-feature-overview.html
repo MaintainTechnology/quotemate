@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QuoteMate · How It Works</title>
+<meta name="description" content="QuoteMate in plain English — instant AI quotes, paid deposits, and how the money flows." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --ink-deep:#0E1622; --ink:#141C29; --ink-card:#1B2433; --ink-line:#2D3A4F;
+    --accent:#FF5A1F; --accent-press:#E8470F; --accent-soft:#FF7A45;
+    --text-pri:#FFFFFF; --text-sec:#B8C2D1; --text-dim:#7A8699;
+    --teal:#14B8A6; --teal-deep:#0F766E;
+    --sans:'Manrope',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+    --maxw:1180px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--ink-deep); color:var(--text-pri);
+    font-family:var(--sans); line-height:1.55;
+    -webkit-font-smoothing:antialiased; overflow-x:hidden;
+  }
+  .topo{position:fixed; inset:0; z-index:0; pointer-events:none; opacity:.5}
+  .topo svg{width:100%; height:100%}
+  .glow{position:fixed; z-index:0; pointer-events:none; filter:blur(120px); opacity:.22}
+  .glow.a{top:-120px; right:-80px; width:420px; height:420px; background:var(--accent); border-radius:50%}
+  .glow.b{bottom:-160px; left:-100px; width:480px; height:480px; background:var(--teal); border-radius:50%; opacity:.16}
+  .wrap{position:relative; z-index:1; max-width:var(--maxw); margin:0 auto; padding:0 24px}
+
+  .eyebrow{font-family:var(--mono); font-size:.72rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--text-dim)}
+  .sec-title{font-weight:800; text-transform:uppercase; letter-spacing:-.03em; line-height:1.02; font-size:clamp(1.9rem,4.2vw,3.1rem)}
+  .accent{color:var(--accent)}
+  .teal{color:var(--teal)}
+  .lead{color:var(--text-sec); font-size:1.05rem; max-width:64ch}
+
+  header.hero{padding:92px 0 64px}
+  .hero h1{font-weight:800; text-transform:uppercase; letter-spacing:-.04em; line-height:.94;
+    font-size:clamp(2.9rem,8vw,6rem); margin:22px 0 0; max-width:18ch}
+  .hero-grid{display:grid; grid-template-columns:1.9fr 1fr; gap:40px; align-items:end}
+  .hero aside{color:var(--text-sec); font-size:1.05rem; border-left:2px solid var(--accent); padding-left:18px}
+  @media(max-width:820px){.hero-grid{grid-template-columns:1fr; gap:24px} header.hero{padding:64px 0 40px}}
+
+  .stats{display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--ink-line);
+    border:1px solid var(--ink-line); margin:54px 0 0}
+  .stat{background:var(--ink); padding:22px 20px}
+  .stat .n{font-family:var(--mono); font-weight:600; font-size:clamp(1.6rem,3.4vw,2.5rem); color:var(--accent); line-height:1}
+  .stat .l{font-family:var(--mono); font-size:.7rem; letter-spacing:.12em; text-transform:uppercase; color:var(--text-dim); margin-top:10px}
+  .stat .s{color:var(--text-sec); font-size:.78rem; margin-top:7px; line-height:1.4}
+  @media(max-width:760px){.stats{grid-template-columns:repeat(2,1fr)}}
+
+  section{padding:72px 0; position:relative}
+  .sec-head{margin-bottom:34px; max-width:var(--maxw)}
+  .sec-head .sec-title{margin-top:12px}
+  .sec-head p{margin-top:14px}
+
+  /* customer flow */
+  .flow{display:grid; grid-template-columns:repeat(7,1fr); gap:0; border:1px solid var(--ink-line); background:var(--ink-card)}
+  .step{position:relative; padding:22px 18px 26px; border-right:1px solid var(--ink-line)}
+  .step:last-child{border-right:0}
+  .step .num{font-family:var(--mono); font-size:.72rem; color:var(--text-dim); letter-spacing:.1em}
+  .step .ic{width:34px; height:34px; color:var(--accent); margin:14px 0 12px; display:block}
+  .step h4{font-size:.92rem; font-weight:800; text-transform:uppercase; letter-spacing:-.01em; line-height:1.1}
+  .step p{color:var(--text-sec); font-size:.82rem; margin-top:8px; line-height:1.45}
+  .step .eg{display:block; font-family:var(--mono); font-size:.66rem; color:var(--teal); margin-top:10px; letter-spacing:.02em; line-height:1.4}
+  .step .arrow{position:absolute; right:-9px; top:30px; width:18px; height:18px; color:var(--accent); z-index:2; background:var(--ink-deep); border-radius:50%}
+  .step:last-child .arrow{display:none}
+  .step.review{background:linear-gradient(180deg,rgba(20,184,166,.12),transparent 70%)}
+  .step.review .ic{color:var(--teal)}
+  @media(max-width:980px){
+    .flow{grid-template-columns:1fr}
+    .step{border-right:0; border-bottom:1px solid var(--ink-line); padding:18px 20px}
+    .step:last-child{border-bottom:0}
+    .step .arrow{right:auto; left:24px; top:auto; bottom:-9px; transform:rotate(90deg)}
+  }
+
+  /* feature cards */
+  .group{margin-top:48px}
+  .group:first-child{margin-top:0}
+  .group-label{display:flex; align-items:center; gap:14px; margin-bottom:14px}
+  .group-label .tag{display:inline-flex; align-items:center; background:var(--accent); color:#fff;
+    font-family:var(--mono); font-size:.7rem; font-weight:600; letter-spacing:.12em; text-transform:uppercase; padding:6px 12px}
+  .group-label .rule{flex:1; height:1px; background:var(--ink-line)}
+  .group .intro{color:var(--text-sec); font-size:.95rem; margin:0 0 18px; max-width:74ch}
+  .cards{display:grid; grid-template-columns:repeat(3,1fr); gap:16px}
+  @media(max-width:900px){.cards{grid-template-columns:1fr 1fr}}
+  @media(max-width:600px){.cards{grid-template-columns:1fr}}
+  .card{background:var(--ink-card); border:1px solid var(--ink-line); padding:22px;
+    display:flex; gap:16px; align-items:flex-start; transition:border-color .2s, transform .2s}
+  .card:hover{border-color:var(--accent); transform:translateY(-2px)}
+  .card .num{font-family:var(--mono); font-weight:600; font-size:2rem; color:var(--accent); line-height:.9; min-width:42px}
+  .card h3{font-size:1rem; font-weight:800; text-transform:uppercase; letter-spacing:-.01em; line-height:1.1}
+  .card p{color:var(--text-sec); font-size:.9rem; margin-top:8px}
+  .card .why{color:var(--text-dim); font-size:.82rem; margin-top:10px; line-height:1.45}
+  .card .why .ar{color:var(--accent); font-weight:700; margin-right:5px}
+  .card .soon{display:inline-block; font-family:var(--mono); font-size:.62rem; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--teal); border:1px solid var(--teal-deep); padding:2px 7px; margin-top:11px}
+
+  /* money flow */
+  .money{border:1px solid var(--ink-line); background:var(--ink-card); padding:28px}
+  .money-row{display:grid; grid-template-columns:repeat(4,1fr); gap:0; align-items:stretch}
+  .mbox{position:relative; border:1px solid var(--ink-line); background:var(--ink); padding:20px 18px; margin-right:26px}
+  .mbox:last-child{margin-right:0}
+  .mbox .when{font-family:var(--mono); font-size:.66rem; letter-spacing:.12em; text-transform:uppercase; color:var(--text-dim)}
+  .mbox .amt{font-weight:800; font-size:1.05rem; text-transform:uppercase; letter-spacing:-.01em; margin-top:8px; line-height:1.1}
+  .mbox .amt.pay{color:var(--accent)}
+  .mbox p{color:var(--text-sec); font-size:.82rem; margin-top:8px}
+  .mbox .marrow{position:absolute; right:-22px; top:50%; transform:translateY(-50%); width:18px; height:18px; color:var(--accent)}
+  .mbox:last-child .marrow{display:none}
+  .money-notes{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:22px}
+  .note{display:flex; gap:12px; align-items:flex-start; border-left:2px solid var(--teal); padding:8px 0 8px 14px}
+  .note.fee{border-left-color:var(--accent)}
+  .note .ic{width:22px;height:22px;color:var(--teal); flex:none; margin-top:2px}
+  .note.fee .ic{color:var(--accent)}
+  .note b{font-weight:800; text-transform:uppercase; letter-spacing:-.01em; font-size:.92rem}
+  .note span{display:block; color:var(--text-sec); font-size:.84rem; margin-top:3px}
+  .money-eg{margin-top:24px; border-top:1px solid var(--ink-line); padding-top:18px}
+  .money-eg .lbl{font-family:var(--mono); font-size:.66rem; letter-spacing:.12em; text-transform:uppercase; color:var(--text-dim)}
+  .money-eg .chain{display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:13px}
+  .money-eg .chip{background:var(--ink); border:1px solid var(--ink-line); padding:9px 13px; font-size:.85rem; line-height:1.2}
+  .money-eg .chip small{display:block; font-family:var(--mono); font-size:.6rem; letter-spacing:.1em; text-transform:uppercase; color:var(--text-dim); margin-bottom:4px}
+  .money-eg .chip b{color:var(--accent)}
+  .money-eg .sep{color:var(--accent); font-weight:700; font-size:1.1rem}
+  .money-eg .fine{color:var(--text-dim); font-size:.76rem; margin-top:13px}
+  @media(max-width:860px){
+    .money-row{grid-template-columns:1fr}
+    .mbox{margin-right:0; margin-bottom:26px}
+    .mbox .marrow{right:auto; left:50%; top:auto; bottom:-22px; transform:translateX(-50%) rotate(90deg)}
+    .money-notes{grid-template-columns:1fr}
+  }
+
+  /* two-sided value */
+  .sides{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+  @media(max-width:760px){.sides{grid-template-columns:1fr}}
+  .side{border:1px solid var(--ink-line); background:var(--ink-card); padding:26px}
+  .side h3{font-size:1.05rem; font-weight:800; text-transform:uppercase; letter-spacing:-.01em; display:flex; align-items:center; gap:10px}
+  .side h3 .ic{width:22px; height:22px; color:var(--accent)}
+  .side.cust h3 .ic{color:var(--teal)}
+  .side ul{list-style:none; margin-top:16px; display:grid; gap:12px}
+  .side li{color:var(--text-sec); font-size:.9rem; display:flex; gap:10px; line-height:1.45}
+  .side li::before{content:"—"; color:var(--accent); font-weight:700}
+  .side.cust li::before{color:var(--teal)}
+
+  /* why band */
+  .why-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:16px}
+  @media(max-width:760px){.why-grid{grid-template-columns:1fr}}
+  .why-grid .card{flex-direction:column; gap:10px}
+  .why-grid .ic{width:30px; height:30px; color:var(--accent)}
+
+  .cta{background:var(--accent); color:#fff; text-align:center; padding:20px; margin-top:8px}
+  .cta span{font-family:var(--mono); font-size:.82rem; letter-spacing:.14em; text-transform:uppercase}
+  footer.foot{padding:30px 0; color:var(--text-dim); font-family:var(--mono); font-size:.72rem; letter-spacing:.06em; text-align:center}
+
+  @media(prefers-reduced-motion:no-preference){
+    .reveal{opacity:0; transform:translateY(16px); animation:rise .6s cubic-bezier(.2,.7,.2,1) forwards; animation-delay:calc(var(--i,0)*70ms)}
+    @keyframes rise{to{opacity:1; transform:none}}
+  }
+</style>
+</head>
+<body>
+
+<div class="topo" aria-hidden="true">
+  <svg viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice" fill="none">
+    <g stroke="#14B8A6" stroke-width="1" opacity="0.5">
+      <path d="M0 640 Q200 560 400 610 T800 590 T1200 560"/>
+      <path d="M0 680 Q220 600 420 660 T820 630 T1200 610"/>
+      <path d="M0 720 Q180 660 400 700 T800 680 T1200 660"/>
+      <path d="M0 600 Q240 520 460 580 T860 540 T1200 520"/>
+    </g>
+    <g stroke="#FF5A1F" stroke-width="1" opacity="0.25">
+      <path d="M0 200 Q260 120 520 190 T980 150 T1200 170"/>
+      <path d="M0 150 Q300 90 560 150 T1000 110 T1200 130"/>
+    </g>
+  </svg>
+</div>
+<div class="glow a" aria-hidden="true"></div>
+<div class="glow b" aria-hidden="true"></div>
+
+<!-- ─────────────── HERO ─────────────── -->
+<header class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="eyebrow reveal">QuoteMate · How it works</span>
+      <h1 class="reveal" style="--i:1">Quotes in <span class="accent">minutes.</span> Paid jobs, <span class="accent">locked in.</span></h1>
+    </div>
+    <aside class="reveal" style="--i:2">
+      QuoteMate turns a customer enquiry into a detailed, priced quote in 1–2 minutes — day or
+      night — then takes a deposit to lock the job. The tradie never sits down to write a quote,
+      and only serious, part-paid jobs reach them.
+    </aside>
+  </div>
+
+  <div class="wrap">
+    <div class="stats reveal" style="--i:3">
+      <div class="stat"><div class="n">1–2 min</div><div class="l">Quote turnaround</div><div class="s">A full quote while the lead is still hot.</div></div>
+      <div class="stat"><div class="n">24 / 7</div><div class="l">Always quoting</div><div class="s">Replies at 9pm, weekends, public holidays.</div></div>
+      <div class="stat"><div class="n">10% off</div><div class="l">To book now</div><div class="s">A nudge that converts quotes into jobs.</div></div>
+      <div class="stat"><div class="n">$0</div><div class="l">Tradie admin time</div><div class="s">No nightly quoting after the tools go down.</div></div>
+    </div>
+  </div>
+</header>
+
+<!-- ─────────────── CUSTOMER FLOW ─────────────── -->
+<section>
+  <div class="wrap sec-head">
+    <span class="eyebrow">The journey</span>
+    <h2 class="sec-title">From <span class="accent">"got a job"</span> to <span class="accent">paid in full</span></h2>
+    <p class="lead">One simple path. The customer does the asking and the paying; QuoteMate and the AI do the quoting. A human only steps in when the price crosses a set threshold.</p>
+  </div>
+  <div class="wrap">
+    <div class="flow">
+      <div class="step reveal" style="--i:0">
+        <span class="num">STEP 01</span>
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-11.9 7.6L3 21l1.9-6.1A8.5 8.5 0 1 1 21 11.5Z"/></svg>
+        <h4>Enquiry</h4>
+        <p>Customer messages by text, voice or web — any hour.</p>
+        <span class="eg">in: "Need 6 downlights in the lounge"</span>
+        <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </div>
+      <div class="step reveal" style="--i:1">
+        <span class="num">STEP 02</span>
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></svg>
+        <h4>AI quote</h4>
+        <p>A real, priced quote is drafted in 1–2 minutes.</p>
+        <span class="eg">priced from a real rate book</span>
+        <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </div>
+      <div class="step review reveal" style="--i:2">
+        <span class="num">STEP 03</span>
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 5 3.5 7.5 8 9 4.5-1.5 8-4 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg>
+        <h4>Human check</h4>
+        <p>Big or risky jobs get a person's eyes before sending.</p>
+        <span class="eg">only over the price threshold</span>
+        <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </div>
+      <div class="step reveal" style="--i:3">
+        <span class="num">STEP 04</span>
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>
+        <h4>Quote sent</h4>
+        <p>Detailed Good / Better / Best options, clearly priced.</p>
+        <span class="eg">3 options, photos, licence details</span>
+        <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </div>
+      <div class="step reveal" style="--i:4">
+        <span class="num">STEP 05</span>
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="1.5"/><path d="M3 9h18M8 3v4M16 3v4m-7 8 2 2 4-4"/></svg>
+        <h4>Book + deposit</h4>
+        <p>Customer books (10% off) and pays a deposit to lock it in.</p>
+        <span class="eg">−10% · deposit secures the slot</span>
+        <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </div>
+      <div class="step reveal" style="--i:5">
+        <span class="num">STEP 06</span>
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4l-6 6 2 2 6-6a4 4 0 0 0 5.4-5.4l-2.3 2.3-2-2 2.3-2.3Z"/></svg>
+        <h4>Job done</h4>
+        <p>The tradie turns up and completes the work.</p>
+        <span class="eg">job already part-paid</span>
+        <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </div>
+      <div class="step reveal" style="--i:6">
+        <span class="num">STEP 07</span>
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.2c0-1 1.1-1.7 2.5-1.7s2.5.7 2.5 1.7-1.1 1.7-2.5 1.7-2.5.7-2.5 1.7 1.1 1.7 2.5 1.7 2.5-.7 2.5-1.7"/></svg>
+        <h4>Paid in full</h4>
+        <p>Balance paid in full, on site, on completion.</p>
+        <span class="eg">no invoice chasing</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────── FEATURES ─────────────── -->
+<section>
+  <div class="wrap sec-head">
+    <span class="eyebrow">The features</span>
+    <h2 class="sec-title">Everything <span class="accent">working</span> for the tradie</h2>
+    <p class="lead">Twelve things QuoteMate does — grouped by what they give you. Each one in plain English, with the reason it matters.</p>
+  </div>
+
+  <div class="wrap">
+    <!-- GROUP: ALWAYS ON -->
+    <div class="group">
+      <div class="group-label"><span class="tag">Always on · Instant</span><span class="rule"></span></div>
+      <p class="intro">Speed and availability win jobs. QuoteMate quotes the moment a lead lands — any hour — so enquiries never go cold waiting for a callback, and the tradie never quotes after hours.</p>
+      <div class="cards">
+        <article class="card reveal" style="--i:0"><span class="num">03</span><div>
+          <h3>Real-time quotes</h3>
+          <p>A real, priced quote in 1–2 minutes — not "we'll get back to you."</p>
+          <p class="why"><span class="ar">→</span> The first tradie to send a real quote usually wins the job.</p></div></article>
+        <article class="card reveal" style="--i:1"><span class="num">11</span><div>
+          <h3>24 / 7 quoting</h3>
+          <p>Quotes go out around the clock — evenings, weekends, public holidays.</p>
+          <p class="why"><span class="ar">→</span> A 9pm lead gets a 9pm quote, not one next week.</p></div></article>
+        <article class="card reveal" style="--i:2"><span class="num">06</span><div>
+          <h3>No estimating time</h3>
+          <p>The tradie never sits down to write quotes — the AI drafts them.</p>
+          <p class="why"><span class="ar">→</span> Hours of nightly admin handed back to the tradie.</p></div></article>
+      </div>
+    </div>
+
+    <!-- GROUP: QUOTES THAT SELL -->
+    <div class="group">
+      <div class="group-label"><span class="tag">Quotes that sell</span><span class="rule"></span></div>
+      <p class="intro">The quote itself does the selling: clear options the customer can pick from, a safety check before big numbers go out, and a process that only lets serious buyers through.</p>
+      <div class="cards">
+        <article class="card reveal" style="--i:0"><span class="num">04</span><div>
+          <h3>Information-rich</h3>
+          <p>Every quote is detailed: Good / Better / Best options, each clearly priced.</p>
+          <p class="why"><span class="ar">→</span> Customers self-select up — many choose Better or Best.</p></div></article>
+        <article class="card reveal" style="--i:1"><span class="num">05</span><div>
+          <h3>Human in the loop</h3>
+          <p>Over a price threshold, a person reviews and validates the quote before it's sent.</p>
+          <p class="why"><span class="ar">→</span> Small jobs auto-send; big or risky ones get checked first.</p></div></article>
+        <article class="card reveal" style="--i:2"><span class="num">10</span><div>
+          <h3>High-intent buyers</h3>
+          <p>People who pay a deposit are serious — far fewer time-wasters.</p>
+          <p class="why"><span class="ar">→</span> The deposit filters out tyre-kickers before they reach you.</p></div></article>
+      </div>
+    </div>
+
+    <!-- GROUP: MONEY -->
+    <div class="group">
+      <div class="group-label"><span class="tag">Money, sorted</span><span class="rule"></span></div>
+      <p class="intro">Money is handled end-to-end — site-visit fees, deposits, the final payment and the processing fees — so the tradie keeps their full rate and just does the work.</p>
+      <div class="cards">
+        <article class="card reveal" style="--i:0"><span class="num">07</span><div>
+          <h3>Deposit locks the job</h3>
+          <p>A deposit is paid up front to lock the job in before any work starts.</p>
+          <p class="why"><span class="ar">→</span> Money down means committed, not just "thinking about it."</p></div></article>
+        <article class="card reveal" style="--i:1"><span class="num">09</span><div>
+          <h3>Paid site visits</h3>
+          <p>If a visit is needed to scope the work, the customer pays for it.</p>
+          <p class="why"><span class="ar">→</span> Quoting visits stop being free labour.</p></div></article>
+        <article class="card reveal" style="--i:2"><span class="num">08</span><div>
+          <h3>Paid in full on site</h3>
+          <p>The balance is paid in full, on site, when the job is finished.</p>
+          <p class="why"><span class="ar">→</span> No chasing invoices weeks later.</p></div></article>
+        <article class="card reveal" style="--i:3"><span class="num">12</span><div>
+          <h3>Fees on top</h3>
+          <p>Transaction fees are added on top of the price — the customer covers them.</p>
+          <p class="why"><span class="ar">→</span> The tradie keeps their full rate; fees aren't a cost to them.</p></div></article>
+        <article class="card reveal" style="--i:4"><span class="num">01</span><div>
+          <h3>10% booking discount</h3>
+          <p>Book through QuoteMate and the customer gets 10% off.</p>
+          <p class="why"><span class="ar">→</span> Turns a "maybe" quote into a locked-in, paid booking.</p></div></article>
+        <article class="card reveal" style="--i:5"><span class="num">02</span><div>
+          <h3>Booking integrations</h3>
+          <p>Confirmed bookings will flow straight into your existing calendar and job software.</p>
+          <p class="why"><span class="ar">→</span> No double-entry — accepted jobs land in the tools you already use.</p>
+          <span class="soon">Coming soon</span></div></article>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────── MONEY FLOW ─────────────── -->
+<section>
+  <div class="wrap sec-head">
+    <span class="eyebrow">The money</span>
+    <h2 class="sec-title">How the <span class="accent">cash</span> flows</h2>
+    <p class="lead">Up to three moments money changes hands — plus who pays the fees, and the discount that gets the "yes".</p>
+  </div>
+  <div class="wrap">
+    <div class="money">
+      <div class="money-row">
+        <div class="mbox reveal" style="--i:0">
+          <div class="when">If a visit is needed</div>
+          <div class="amt pay">Site-visit fee</div>
+          <p>Customer pays for the tradie to come and scope the job.</p>
+          <svg class="marrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </div>
+        <div class="mbox reveal" style="--i:1">
+          <div class="when">To accept the quote</div>
+          <div class="amt pay">Deposit</div>
+          <p>Locks the job in. The customer is committed before work starts.</p>
+          <svg class="marrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </div>
+        <div class="mbox reveal" style="--i:2">
+          <div class="when">Work happens</div>
+          <div class="amt">Job completed</div>
+          <p>The tradie does the work, knowing the job is already paid into.</p>
+          <svg class="marrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </div>
+        <div class="mbox reveal" style="--i:3">
+          <div class="when">On completion, on site</div>
+          <div class="amt pay">Paid in full</div>
+          <p>The balance is paid in full when the job is done.</p>
+        </div>
+      </div>
+
+      <div class="money-notes">
+        <div class="note fee reveal" style="--i:4">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 5 5 19M8.5 8.5a2 2 0 1 0 0-.001M16 17.5a2 2 0 1 0 0-.001"/></svg>
+          <div><b>Fees on top</b><span>Transaction fees are added on top of the price — the customer pays them, so the tradie keeps their full rate.</span></div>
+        </div>
+        <div class="note reveal" style="--i:5">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v5a8 8 0 0 0 16 0Z"/><path d="m9 11 2 2 4-4"/></svg>
+          <div><b>10% to book</b><span>Booking through QuoteMate gives the customer 10% off — turning a quote into a locked-in job.</span></div>
+        </div>
+      </div>
+
+      <div class="money-eg reveal" style="--i:6">
+        <div class="lbl">Illustrative example</div>
+        <div class="chain">
+          <span class="chip"><small>Quote</small><b>$1,000</b></span>
+          <span class="sep">→</span>
+          <span class="chip"><small>Book now −10%</small><b>$900</b></span>
+          <span class="sep">→</span>
+          <span class="chip"><small>Deposit locks it</small>e.g. $270</span>
+          <span class="sep">→</span>
+          <span class="chip"><small>Work done</small>Balance on site</span>
+          <span class="sep">→</span>
+          <span class="chip"><small>+ card fee</small>paid by customer</span>
+        </div>
+        <p class="fine">Numbers are illustrative only — your real rate book, tier pricing and deposit rules apply.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────── TWO SIDES ─────────────── -->
+<section>
+  <div class="wrap sec-head">
+    <span class="eyebrow">Two sides, one flow</span>
+    <h2 class="sec-title">What each side <span class="accent">gets</span></h2>
+  </div>
+  <div class="wrap sides">
+    <div class="side cust reveal" style="--i:0">
+      <h3><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21a8 8 0 1 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>The customer gets</h3>
+      <ul>
+        <li>A real, detailed quote in minutes — not days.</li>
+        <li>Clear Good / Better / Best options to choose from.</li>
+        <li>10% off for booking through QuoteMate.</li>
+        <li>A locked-in slot the moment they pay the deposit.</li>
+        <li>To pay the balance only when the job is done.</li>
+      </ul>
+    </div>
+    <div class="side reveal" style="--i:1">
+      <h3><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4l-6 6 2 2 6-6a4 4 0 0 0 5.4-5.4l-2.3 2.3-2-2 2.3-2.3Z"/></svg>The tradie gets</h3>
+      <ul>
+        <li>Zero time spent writing quotes.</li>
+        <li>Only serious, part-paid jobs reaching them.</li>
+        <li>Paid site visits instead of free quoting trips.</li>
+        <li>Their full rate — fees are added on top for the customer.</li>
+        <li>No after-hours admin and no invoice chasing.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────── WHY IT WORKS ─────────────── -->
+<section>
+  <div class="wrap sec-head">
+    <span class="eyebrow">Why it works</span>
+    <h2 class="sec-title">Less <span class="accent">admin</span>, more <span class="accent">won work</span></h2>
+  </div>
+  <div class="wrap why-grid">
+    <article class="card reveal" style="--i:0">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      <h3>Win the speed race</h3>
+      <p>The first tradie to send a real quote usually wins. QuoteMate replies in 1–2 minutes, 24/7 — before a competitor even sees the message.</p>
+    </article>
+    <article class="card reveal" style="--i:1">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V11l9-6 9 6v10M9 21v-6h6v6"/></svg>
+      <h3>Get your evenings back</h3>
+      <p>No quoting after the tools are down. The AI handles estimates while the tradie is on the job or off the clock.</p>
+    </article>
+    <article class="card reveal" style="--i:2">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 11a4 4 0 1 0-4-4M3 21a7 7 0 0 1 13 0M16 11l2 2 4-4"/></svg>
+      <h3>Only serious buyers</h3>
+      <p>A paid deposit filters out the tyre-kickers. The jobs that reach the tradie are real, committed, and already part-paid.</p>
+    </article>
+  </div>
+</section>
+
+<div class="cta">
+  <span>QuoteMate · quote in minutes · deposit locks the job · paid in full on site</span>
+</div>
+<footer class="foot">
+  Maintain Technology · QuoteMate — feature overview · plain-English summary
+</footer>
+
+</body>
+</html>

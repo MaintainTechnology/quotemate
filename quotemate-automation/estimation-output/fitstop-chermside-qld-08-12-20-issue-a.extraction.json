@@ -1,0 +1,197 @@
+{
+  "plan": "fitstop-chermside-qld-08-12-20-issue-a",
+  "model": "claude-sonnet-4-6",
+  "sheet_hint": "ELECTRICAL / POWER & DATA",
+  "sheets_used": [
+    "103 - Reflected Ceiling Plan Including Lighting",
+    "104 - Electrical Plan Including Power & Data"
+  ],
+  "legend_symbols": [
+    {
+      "symbol": "DGPO with superscript 1",
+      "means": "Double General Purpose Outlet (AB=above bench, UB=under bench, SK=skirting)"
+    },
+    {
+      "symbol": "GPO with superscript arrow",
+      "means": "GPO Single General Purpose Outlet (fit for purpose as noted)"
+    },
+    {
+      "symbol": "curved arrow / G",
+      "means": "Switch (refer RCP)"
+    },
+    {
+      "symbol": "∇",
+      "means": "Data CAT6 (fit for purpose as noted)"
+    },
+    {
+      "symbol": "(B)/(W) speaker circle",
+      "means": "Speakers – wall mount, black or white finish, qty 4x"
+    },
+    {
+      "symbol": "filled square with lines",
+      "means": "General LED Panels (surface mounted or suspended)"
+    },
+    {
+      "symbol": "circle with centre dot",
+      "means": "Feature Recessed LED Downlight – Aurora Triline ~Ø93mm IP44, 4000K"
+    },
+    {
+      "symbol": "EXIT box",
+      "means": "Existing and/or new exit signs (C.A.S.) – to BCA requirements"
+    },
+    {
+      "symbol": "circle with cross (mirror)",
+      "means": "Feature Recessed LED Downlight in mirrors – Aurora Triline IP44"
+    },
+    {
+      "symbol": "shower head circle",
+      "means": "Shower Recessed Downlight – IP65, 4000K"
+    },
+    {
+      "symbol": "switch with dimmer note",
+      "means": "Switch with dimmer if noted (fit for purpose as noted)"
+    },
+    {
+      "symbol": "diamond",
+      "means": "Security Dome Camera"
+    },
+    {
+      "symbol": "filled fan blade circle",
+      "means": "Fans – wall mounted, industrial/commercial, Ø914mm, 970mm blade"
+    },
+    {
+      "symbol": "rectangle with fins (AC)",
+      "means": "Air Conditioning Supply Ceiling Diffuser"
+    },
+    {
+      "symbol": "rectangle outline (AC return)",
+      "means": "Air Conditioning Return Air Grille"
+    },
+    {
+      "symbol": "louvred rectangle",
+      "means": "Mechanical Exhaust Ventilation Registers"
+    }
+  ],
+  "items": [
+    {
+      "type": "DGPO – Double General Purpose Outlet",
+      "symbol": "DGPO¹",
+      "count": 11,
+      "confidence": "medium",
+      "note": "Includes AB (above bench), UB (under bench) and SK (skirting) variants across BOH, kitchenette, male/female amenities, gym floor, and reception. Dense annotation in reception zone makes exact split difficult; 2x Dual DGPO+USB at reception desk counted as 2 DGPO units per the plan note."
+    },
+    {
+      "type": "GPO – Single General Purpose Outlet",
+      "symbol": "GPO⁴",
+      "count": 3,
+      "confidence": "medium",
+      "note": "Single GPO symbols visible on north gym wall, east gym wall, and near gang-fan switch area. Some may be obscured by annotation."
+    },
+    {
+      "type": "Data / Comms Outlet (CAT6)",
+      "symbol": "∇",
+      "count": 3,
+      "confidence": "medium",
+      "note": "One in BOH/comms cupboard, one at reception desk (main data point to modem), one near LCD display. Legend note also references additional CAT6 cabling for speakers wired back to reception – not counted as separate data outlets."
+    },
+    {
+      "type": "Speakers (wall-mounted)",
+      "symbol": "(B)/(W) circle",
+      "count": 4,
+      "confidence": "high",
+      "note": "Legend explicitly states qty 4x; four speaker positions confirmed on plan (two on north wall gym zone, two near entry/shopfront zone)."
+    },
+    {
+      "type": "Light Switches (refer RCP)",
+      "symbol": "G / curved arrow",
+      "count": 6,
+      "confidence": "medium",
+      "note": "Includes 3x gang lights switches (zones 1–3), 2x gang fans switch (fans 1+2 and 3+4), plus individual light switch at kitchenette/amenities entry. Some switch symbols are on RCP sheet 103 only."
+    },
+    {
+      "type": "Feature Recessed LED Downlight (IP44, Aurora Triline ~Ø93mm)",
+      "symbol": "circle with centre dot",
+      "count": 18,
+      "confidence": "low",
+      "note": "Counted from RCP sheet 103 across main gym floor and change/amenity corridors. Symbol density in gym floor is high and PDF resolution limits precise count; range likely 16–20."
+    },
+    {
+      "type": "Shower Recessed Downlight (IP65)",
+      "symbol": "shower-head circle",
+      "count": 4,
+      "confidence": "high",
+      "note": "2 in male shower/change, 2 in female shower/change. RCP note states '2x fittings to be IP65 rated' per amenities compartment."
+    },
+    {
+      "type": "General LED Panels (surface/suspended)",
+      "symbol": "filled square with lines",
+      "count": 6,
+      "confidence": "medium",
+      "note": "Located in BOH storage, kitchenette, and amenities corridor areas on RCP sheet 103."
+    },
+    {
+      "type": "Exit / Emergency Signs",
+      "symbol": "EXIT box",
+      "count": 2,
+      "confidence": "high",
+      "note": "One at main entry zone, one at rear/secondary exit. RCP note states 'exit sign only if required by certifier' for some locations."
+    },
+    {
+      "type": "Fans – Wall Mounted Industrial",
+      "symbol": "filled fan-blade circle",
+      "count": 4,
+      "confidence": "high",
+      "note": "Labelled Fan 1, Fan 2, Fan 3, Fan 4 on RCP sheet 103. Switched in two pairs (fans 1+2 and fans 3+4) per switch note."
+    },
+    {
+      "type": "Security Dome Camera",
+      "symbol": "diamond",
+      "count": 2,
+      "confidence": "medium",
+      "note": "Two camera positions visible on RCP sheet 103 – one covering entry/reception, one covering main gym floor."
+    },
+    {
+      "type": "Dedicated Power – Fountain / Appliance",
+      "symbol": "FOUNTAIN POWER label",
+      "count": 1,
+      "confidence": "high",
+      "note": "Labelled 'FOUNTAIN POWER' in amenities/void area on sheet 104. Separate circuit implied."
+    },
+    {
+      "type": "Dedicated Power – Shopfront Signage (with timer)",
+      "symbol": "POWER FOR SHOPFRONT SIGNAGE label",
+      "count": 1,
+      "confidence": "high",
+      "note": "Labelled at bottom of sheet 104 with note 'allow for timer in DB'."
+    },
+    {
+      "type": "Dedicated Power – LED Neon Sign",
+      "symbol": "POWER FOR LED NEON SIGN label",
+      "count": 1,
+      "confidence": "high",
+      "note": "Labelled on north/top wall of main gym on sheet 104."
+    },
+    {
+      "type": "Existing Switchboard / EDB (Electrical Distribution Board)",
+      "symbol": "EDB rectangle",
+      "count": 1,
+      "confidence": "high",
+      "note": "Existing EDB shown in BOH/storage area top-left on sheets 103 and 104 with note 'upgrade as required'. No new DB shown separately."
+    },
+    {
+      "type": "Air Conditioning Supply Ceiling Diffuser",
+      "symbol": "rectangle with fins",
+      "count": 8,
+      "confidence": "low",
+      "note": "Mechanical item on RCP sheet 103; counted approximately 8 diffusers across main gym and amenities. Exact count limited by PDF resolution."
+    },
+    {
+      "type": "Mechanical Exhaust Ventilation Register",
+      "symbol": "louvred rectangle",
+      "count": 4,
+      "confidence": "low",
+      "note": "Located in amenities/shower areas on RCP sheet 103. Count approximate."
+    }
+  ],
+  "overall_note": "Primary electrical sheets used are 103 (RCP inc. Lighting) and 104 (Electrical Plan inc. Power & Data). PDF resolution at 1/50 scale on A2 sheets causes symbol crowding, particularly in the main gym floor downlight grid and the reception desk annotation cluster, reducing confidence on those counts. No separate DB/switchboard schedule sheet was included in the set. Speakers are confirmed at qty 4 by legend text. All dedicated/appliance circuits are identified by text labels rather than a distinct symbol. The RCP and power plan should be cross-referenced on site as some switch and outlet positions are only annotated on one sheet."
+}
