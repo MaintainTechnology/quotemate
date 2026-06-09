@@ -6,6 +6,7 @@ import { exportTableCsv, type PgQueryable, type TableCsv } from './export-table-
 import {
   kbUploadDocument,
   kbDeleteDocument,
+  kbListDocuments,
   type KbConfig,
 } from '../admin-loader/mt-filestore-kb'
 
@@ -24,6 +25,7 @@ export type SyncDeps = {
   exportTable?: (db: PgQueryable, table: string) => Promise<TableCsv>
   uploadDocument?: typeof kbUploadDocument
   deleteDocument?: typeof kbDeleteDocument
+  listDocuments?: typeof kbListDocuments
 }
 
 export type SyncResult = {
@@ -44,6 +46,7 @@ export async function syncDirtyTables(deps: SyncDeps): Promise<SyncSummary> {
   const exportTable = deps.exportTable ?? exportTableCsv
   const upload = deps.uploadDocument ?? kbUploadDocument
   const del = deps.deleteDocument ?? kbDeleteDocument
+  const list = deps.listDocuments ?? kbListDocuments
 
   // bumped_at is read AS TEXT and the race guard compares it AS TEXT below.
   // A timestamptz keeps microsecond precision in Postgres, but a JS Date only
@@ -81,20 +84,37 @@ export async function syncDirtyTables(deps: SyncDeps): Promise<SyncSummary> {
         continue
       }
 
-      const file = new File([csv], `db__${row.table_name}.csv`, { type: 'text/csv' })
-      const doc = await upload(deps.kb, {
-        storeId: deps.storeId,
-        file,
-        displayName: `db__${row.table_name}.csv`,
-      })
+      const displayName = `db__${row.table_name}.csv`
 
-      // Upload-then-delete: only remove the prior doc once the new one exists.
-      if (row.kb_document_name) {
+      // Resolve the prior version(s) of this table's doc BEFORE uploading. The
+      // upload API does not return the created document's resource name, so we
+      // identify docs by displayName via the store listing. Capturing the prior
+      // names up front lets us delete exactly them after the new upload — which
+      // also self-heals any duplicate db__<table>.csv docs left by earlier runs.
+      let priorNames: string[] = []
+      try {
+        const docs = await list(deps.kb, deps.storeId)
+        priorNames = docs
+          .filter((d) => d.displayName === displayName && d.name)
+          .map((d) => d.name as string)
+      } catch (e) {
+        console.warn(
+          `[kb-sync] could not list docs for ${row.table_name} (uploading anyway):`,
+          e instanceof Error ? e.message : e,
+        )
+      }
+
+      const file = new File([csv], displayName, { type: 'text/csv' })
+      const doc = await upload(deps.kb, { storeId: deps.storeId, file, displayName })
+
+      // Replace: now that the new doc is indexed, delete the prior version(s).
+      // Resolving by displayName (not a stored name) self-heals duplicates.
+      for (const name of priorNames) {
         try {
-          await del(deps.kb, row.kb_document_name)
+          await del(deps.kb, name)
         } catch (e) {
           console.warn(
-            `[kb-sync] orphan: failed to delete prior doc for ${row.table_name}:`,
+            `[kb-sync] orphan: failed to delete prior doc ${name} for ${row.table_name}:`,
             e instanceof Error ? e.message : e,
           )
         }
