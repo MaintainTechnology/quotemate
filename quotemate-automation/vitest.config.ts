@@ -8,7 +8,7 @@ import path from 'node:path'
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['lib/**/*.test.ts', 'tests/**/*.test.ts'],
+    include: ['lib/**/*.test.ts', 'tests/**/*.test.ts', 'app/**/*.test.ts'],
     // E2E specs live in tests/e2e/*.spec.ts and are driven by Playwright,
     // not vitest. Exclude them so `npm test` stays node-only and fast.
     exclude: ['node_modules/**', 'tests/e2e/**'],
