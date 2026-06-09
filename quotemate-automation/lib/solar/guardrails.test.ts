@@ -132,8 +132,8 @@ describe('apiFailureFallback', () => {
     expect(r.quotaNote).toMatch(/daily/i)
   })
 
-  it('routes rate-limited and unavailable to the manual path (no quota note)', () => {
-    for (const code of ['provider_rate_limited', 'provider_unavailable'] as SolarCoverageFailureCode[]) {
+  it('routes rate-limited, unavailable, and invalid-response to the manual path (no quota note)', () => {
+    for (const code of ['provider_rate_limited', 'provider_unavailable', 'provider_invalid_response'] as SolarCoverageFailureCode[]) {
       const r = apiFailureFallback(code)
       expect(r.useManualFallback).toBe(true)
       expect(r.quotaNote).toBeNull()
