@@ -329,3 +329,32 @@ export async function kbUploadDocument(
   const doc = (json as { document?: KbDocumentSummary }).document ?? (json as KbDocumentSummary)
   return doc
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// kbDeleteDocument — DELETE /v1/stores/:storeId/documents/:docId
+//
+// The store has no bulk replace, so the DB→KB sync deletes a table's
+// prior document before/after re-uploading. Takes the full Gemini
+// document resource name (as returned by kbUploadDocument) and routes
+// it to mt-filestore-kb's nested delete endpoint.
+// ─────────────────────────────────────────────────────────────────────
+
+export async function kbDeleteDocument(
+  config: KbConfig,
+  documentName: string,
+  fetchImpl: KbFetch = fetch,
+): Promise<void> {
+  const name = (documentName ?? '').trim()
+  const m = name.match(/^fileSearchStores\/([^/]+)\/documents\/(.+)$/)
+  if (!m) {
+    throw new Error(
+      `kbDeleteDocument: documentName must be "fileSearchStores/<storeId>/documents/<docId>", got "${documentName}"`,
+    )
+  }
+  const [, storeId, docId] = m
+  const path = `/v1/stores/${encodeURIComponent(storeId)}/documents/${encodeURIComponent(docId)}`
+  const res = await kbFetch(config, path, { method: 'DELETE' }, fetchImpl)
+  if (!res.ok) {
+    throw new KbHttpError(res.status, path, await res.text())
+  }
+}

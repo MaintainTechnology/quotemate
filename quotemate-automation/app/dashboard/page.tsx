@@ -41,6 +41,7 @@ import {
   Home,
   Megaphone,
   Paintbrush,
+  AirVent,
   type LucideProps,
 } from 'lucide-react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
@@ -244,6 +245,8 @@ type Tab =
   | 'signage'
   /** Painting estimate (Phase 1 scaffold) — links to /dashboard/painting. Not trade-gated yet. */
   | 'painting'
+  /** AC recommender (Phase 1) — links to /dashboard/aircon. Not trade-gated yet. */
+  | 'aircon'
 
 /** SMS conversation summary returned by /api/tenant/chats. Drives the
  *  Chats tab — communication history including leads that didn't
@@ -622,6 +625,29 @@ export default function DashboardPage() {
             {tab === 'roofing' && <RoofingHubTab accessToken={accessToken} />}
             {tab === 'signage' && <SignageHubTab accessToken={accessToken} />}
             {tab === 'painting' && <PaintingHubTab accessToken={accessToken} />}
+            {tab === 'aircon' && (
+              <div className="space-y-7">
+                <Link
+                  href="/dashboard/aircon"
+                  className="group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
+                >
+                  <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">
+                    AC
+                  </span>
+                  <div className="flex-1">
+                    <h3 className="font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+                      Air-conditioning recommender
+                    </h3>
+                    <p className="mt-4 text-base leading-relaxed text-text-sec">
+                      Size a home and get an indicative ducted-vs-split recommendation with a price range. Opens the full tool.
+                    </p>
+                    <span className="mt-5 inline-flex items-center gap-2 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-accent transition-colors group-hover:text-accent-press">
+                      Open AC recommender <span aria-hidden="true">&rarr;</span>
+                    </span>
+                  </div>
+                </Link>
+              </div>
+            )}
           </div>
         </section>
       </div>
@@ -838,6 +864,8 @@ function buildNav(quoteCount: number, hasRoofingTrade = false): NavItem[] {
   // Painting estimate (Phase 1 scaffold) — not trade-gated yet so it's
   // discoverable while painting isn't a live tenant trade.
   items.push({ tab: 'painting', label: 'Paint', icon: Paintbrush })
+  // AC recommender (Phase 1) — not trade-gated yet so it's discoverable.
+  items.push({ tab: 'aircon', label: 'AC', icon: AirVent })
   items.push(
     { tab: 'account', label: 'Account', icon: User },
     { tab: 'payouts', label: 'Payouts', icon: Banknote },
@@ -863,7 +891,7 @@ const SIDEBAR_GROUPS: { label: string; tabs: Tab[] }[] = [
   // tenants the byTab.get('roofing') lookup returns undefined and the
   // sidebar quietly skips the row. No tenant-specific filtering needed
   // in this layout list.
-  { label: 'Daily work', tabs: ['overview', 'quotes', 'followups', 'chats', 'roofing', 'signage', 'painting'] },
+  { label: 'Daily work', tabs: ['overview', 'quotes', 'followups', 'chats', 'roofing', 'signage', 'painting', 'aircon'] },
   {
     label: 'Setup',
     tabs: ['account', 'payouts', 'pricing', 'services', 'catalogue', 'estimating', 'recipes'],
@@ -1045,6 +1073,10 @@ const TAB_META: Record<
   Exclude<Tab, 'overview'>,
   { title: string; desc: string }
 > = {
+  aircon: {
+    title: 'AC recommender',
+    desc: 'Indicative ducted-vs-split air-conditioning sizing and price ranges from a few questions.',
+  },
   quotes: {
     title: 'Quotes',
     desc: 'Every quote your AI receptionist has drafted — review the numbers, send, and track what converts.',
@@ -10158,6 +10190,8 @@ function tenantTradesLabel(tenant: Tenant): string {
 
 function tabLabel(t: Tab): string {
   switch (t) {
+    case 'aircon':
+      return 'AC'
     case 'overview':
       return 'Overview'
     case 'account':
