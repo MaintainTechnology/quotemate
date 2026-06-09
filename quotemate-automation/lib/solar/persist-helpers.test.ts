@@ -152,3 +152,133 @@ describe('buildSolarRowPayloads', () => {
     expect('intake_id' in out.quote).toBe(false)
   })
 })
+
+describe('buildSolarRowPayloads — inspection_required branch', () => {
+  // Same fixture but with routing.decision='inspection_required'.
+  const inspectionEstimate: SolarEstimate = {
+    ...estimate,
+    routing: { decision: 'inspection_required', reason: 'Roof complexity requires on-site inspection.' },
+  }
+
+  const out = buildSolarRowPayloads({
+    estimate: inspectionEstimate,
+    tenantId: 'TENANT1',
+    address: { address: '1 Test St, Sydney', postcode: '2000', state: 'NSW' },
+  })
+
+  it('sets intake.inspection_required=true', () => {
+    expect(out.intake.inspection_required).toBe(true)
+  })
+
+  it('sets quote.needs_inspection=true', () => {
+    expect(out.quote.needs_inspection).toBe(true)
+  })
+
+  it('sets quote.inspection_reason to the routing reason', () => {
+    expect(out.quote.inspection_reason).toBe('Roof complexity requires on-site inspection.')
+  })
+})
+
+describe('buildSolarRowPayloads — auto_quote branch for risk_flags', () => {
+  // With decision='auto_quote', risk_flags should be only guardrail_flags
+  // (routing.reason is NOT prepended).
+  const autoEstimate: SolarEstimate = {
+    ...estimate,
+    routing: { decision: 'auto_quote', reason: 'Clean auto-quote.' },
+    guardrail_flags: ['panel_count_near_max'],
+  }
+
+  const out = buildSolarRowPayloads({
+    estimate: autoEstimate,
+    tenantId: 'TENANT1',
+    address: { address: '1 Test St, Sydney', postcode: '2000', state: 'NSW' },
+  })
+
+  it('risk_flags equals guardrail_flags only — routing.reason is not prepended', () => {
+    expect(out.quote.risk_flags).toEqual(['panel_count_near_max'])
+  })
+
+  it('non-auto_quote prepends routing.reason to risk_flags', () => {
+    // Verify the contrast: tradie_review fixture does prepend.
+    const tradieOut = buildSolarRowPayloads({
+      estimate: {
+        ...estimate,
+        routing: { decision: 'tradie_review', reason: 'Needs review.' },
+        guardrail_flags: ['panel_count_near_max'],
+      },
+      tenantId: 'TENANT1',
+      address: { address: '1 Test St, Sydney', postcode: '2000', state: 'NSW' },
+    })
+    expect(tradieOut.quote.risk_flags[0]).toBe('Needs review.')
+    expect(tradieOut.quote.risk_flags[1]).toBe('panel_count_near_max')
+  })
+})
+
+describe('buildSolarRowPayloads — confidence_band=wide → MED', () => {
+  const wideEstimate: SolarEstimate = {
+    ...estimate,
+    confidence_band: 'wide',
+  }
+
+  const out = buildSolarRowPayloads({
+    estimate: wideEstimate,
+    tenantId: 'TENANT1',
+    address: { address: '1 Test St, Sydney', postcode: '2000', state: 'NSW' },
+  })
+
+  it('maps confidence_band=wide to intake.confidence=MED', () => {
+    expect(out.intake.confidence).toBe('MED')
+  })
+
+  it('tight still maps to HIGH (baseline sanity)', () => {
+    const tightOut = buildSolarRowPayloads({
+      estimate,
+      tenantId: 'TENANT1',
+      address: { address: '1 Test St, Sydney', postcode: '2000', state: 'NSW' },
+    })
+    expect(tightOut.intake.confidence).toBe('HIGH')
+  })
+})
+
+describe('buildSolarRowPayloads — tier fallback (no better tier → first tier)', () => {
+  // Price tiers contain only 'good' — 'better' is absent, so the fallback
+  // priceTiers[0] must be selected.
+  const goodOnlyEstimate: SolarEstimate = {
+    ...estimate,
+    price: {
+      ...estimate.price,
+      tiers: [
+        {
+          tier: 'good',
+          label: 'Starter system',
+          system_kw_dc: 4.4,
+          gross_ex_gst: 6000,
+          gross_inc_gst: 6600,
+          stc: {
+            system_kw: 4.4,
+            zone_rating: 1.382,
+            deeming_years: 5,
+            certificates: 30,
+            stc_price_aud: 38,
+            rebate_aud: 1140,
+          },
+          net_ex_gst: 4860,
+          net_inc_gst: 5346,
+          scope: '4.4 kW solar install.',
+        },
+      ],
+    },
+  }
+
+  const out = buildSolarRowPayloads({
+    estimate: goodOnlyEstimate,
+    tenantId: 'TENANT1',
+    address: { address: '1 Test St, Sydney', postcode: '2000', state: 'NSW' },
+  })
+
+  it('falls back to priceTiers[0] (good) when better is absent', () => {
+    expect(out.quote.selected_tier).toBe('good')
+    expect(out.quote.subtotal_ex_gst).toBe(4860)
+    expect(out.quote.total_inc_gst).toBe(5346)
+  })
+})
