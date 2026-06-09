@@ -74,7 +74,7 @@ export async function POST(
   const { data: row, error } = await supabase
     .from('solar_estimates')
     .select('id, tenant_id, confirmed_at, guardrail_flags')
-    .eq('token', token)
+    .eq('public_token', token)
     .maybeSingle()
   if (error || !row) {
     return Response.json({ ok: false, error: 'not_found' }, { status: 404 })

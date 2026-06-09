@@ -43,12 +43,14 @@ import {
   Paintbrush,
   AirVent,
   ScanLine,
+  Sun,
   type LucideProps,
 } from 'lucide-react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 import { tenantHasRoofingTrade } from '@/lib/roofing/tenant'
 import { RoofRatesEditor } from './_components/RoofRatesEditor'
 import { EstimatorBetaTab } from './_components/EstimatorBetaTab'
+import { SolarTab } from './_components/SolarTab'
 import { ErrorBanner, Field, INPUT } from '../signup/page'
 
 type NavIcon = ComponentType<LucideProps>
@@ -251,6 +253,8 @@ type Tab =
   | 'aircon'
   /** Estimator (Beta) — electrical plan PDF → AI quantity take-off. Not trade-gated. */
   | 'estimator'
+  /** Solar — AI solar PV estimates (share link, list, confirm & release). Not trade-gated. */
+  | 'solar'
 
 /** SMS conversation summary returned by /api/tenant/chats. Drives the
  *  Chats tab — communication history including leads that didn't
@@ -653,6 +657,13 @@ export default function DashboardPage() {
               </div>
             )}
             {tab === 'estimator' && <EstimatorBetaTab accessToken={accessToken} />}
+            {tab === 'solar' && (
+              <SolarTab
+                accessToken={accessToken}
+                tenantId={data.tenant.id}
+                appUrl={process.env.NEXT_PUBLIC_APP_URL ?? null}
+              />
+            )}
           </div>
         </section>
       </div>
@@ -873,6 +884,8 @@ function buildNav(quoteCount: number, hasRoofingTrade = false): NavItem[] {
   items.push({ tab: 'aircon', label: 'AC', icon: AirVent })
   // Estimator (Beta) — electrical plan take-off. Not trade-gated yet.
   items.push({ tab: 'estimator', label: 'Estimator', icon: ScanLine })
+  // Solar — AI solar PV estimates. Not trade-gated yet so it's discoverable.
+  items.push({ tab: 'solar', label: 'Solar', icon: Sun })
   items.push(
     { tab: 'account', label: 'Account', icon: User },
     { tab: 'payouts', label: 'Payouts', icon: Banknote },
@@ -898,7 +911,7 @@ const SIDEBAR_GROUPS: { label: string; tabs: Tab[] }[] = [
   // tenants the byTab.get('roofing') lookup returns undefined and the
   // sidebar quietly skips the row. No tenant-specific filtering needed
   // in this layout list.
-  { label: 'Daily work', tabs: ['overview', 'quotes', 'followups', 'chats', 'roofing', 'signage', 'painting', 'aircon', 'estimator'] },
+  { label: 'Daily work', tabs: ['overview', 'quotes', 'followups', 'chats', 'roofing', 'signage', 'painting', 'aircon', 'estimator', 'solar'] },
   {
     label: 'Setup',
     tabs: ['account', 'payouts', 'pricing', 'services', 'catalogue', 'estimating', 'recipes'],
@@ -1087,6 +1100,10 @@ const TAB_META: Record<
   estimator: {
     title: 'Estimator (Beta)',
     desc: 'Upload an electrical plan PDF and get an AI quantity take-off you can correct and save. Counts only — verify before quoting.',
+  },
+  solar: {
+    title: 'Solar',
+    desc: 'Share your solar link, review the AI-drafted tiered estimates, and confirm & release each one to the customer.',
   },
   quotes: {
     title: 'Quotes',
@@ -10233,6 +10250,8 @@ function tabLabel(t: Tab): string {
       return 'Paint'
     case 'estimator':
       return 'Estimator'
+    case 'solar':
+      return 'Solar'
   }
 }
 
