@@ -85,7 +85,7 @@ describe('checkGrossPerKwBounds', () => {
   it('flags when gross/kW is below the $700 floor', () => {
     const flags = checkGrossPerKwBounds(tier({ gross_ex_gst: 4000 })) // ≈$606/kW
     expect(flags).toHaveLength(1)
-    expect(flags[0]).toMatch(/\$\/kW/)
+    expect(flags[0]).toMatch(/\$\d+\/kW/)
     expect(flags[0]).toContain('better')
   })
   it('flags when gross/kW is above the $1,800 ceiling', () => {

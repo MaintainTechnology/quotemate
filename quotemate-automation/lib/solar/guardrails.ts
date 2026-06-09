@@ -47,8 +47,8 @@ export function checkGrossPerKwBounds(tier: SolarPriceTier): string[] {
   const perKw = tier.gross_ex_gst / tier.system_kw_dc
   if (perKw < GROSS_PER_KW_MIN_AUD || perKw > GROSS_PER_KW_MAX_AUD) {
     return [
-      `${tier.tier}: gross price is $${perKw.toFixed(0)} $/kW, outside the ` +
-        `$${GROSS_PER_KW_MIN_AUD}–$${GROSS_PER_KW_MAX_AUD} $/kW sanity band.`,
+      `${tier.tier}: gross price is $${perKw.toFixed(0)}/kW, outside the ` +
+        `$${GROSS_PER_KW_MIN_AUD}–$${GROSS_PER_KW_MAX_AUD}/kW sanity band.`,
     ]
   }
   return []
