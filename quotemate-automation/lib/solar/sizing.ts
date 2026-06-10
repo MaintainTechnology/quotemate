@@ -82,6 +82,21 @@ export function sizeSolarSystem(args: {
     }
   }
 
+  // Compute the export-ceiling panel count once (floor so we never exceed AC limit).
+  const exportCeilPanels = Math.floor((exportDcCeiling * 1000) / wattsPerPanel)
+  if (exportCeilPanels <= 0) {
+    return {
+      tiers: [],
+      roof_capacity_kw_dc,
+      export_limit_kw_ac,
+      routing: {
+        decision: 'inspection_required',
+        reason:
+          'The DNSP export limit leaves no safe system size to quote automatically; a site inspection is required to confirm the installation design.',
+      },
+    }
+  }
+
   // Candidate panel counts, ascending, deduped, each capped by the roof.
   const maxPanels = roof.max_panels_count
   const targets = [
@@ -110,9 +125,6 @@ export function sizeSolarSystem(args: {
     }
   }
 
-  // Compute the export-ceiling panel count once (floor so we never exceed AC limit).
-  const exportCeilPanels = Math.floor((exportDcCeiling * 1000) / wattsPerPanel)
-
   // Apply the DNSP export-limit cap: pair each candidate count with whether the
   // export limit actually reduced it. Track the original (pre-cap) count so the
   // export_limited flag reflects the original intent, not the clamped value.
@@ -132,9 +144,33 @@ export function sizeSolarSystem(args: {
       seenPanels.set(c.panels, c)
     }
   }
-  const dedupedCandidates = Array.from(seenPanels.values()).sort(
+  let dedupedCandidates = Array.from(seenPanels.values()).sort(
     (a, b) => a.panels - b.panels,
   )
+
+  // On very large roofs, every roof-fraction target can exceed the DNSP cap
+  // and collapse to the same export-limited panel count. That is still a
+  // quoteable residential system: regenerate distinct tiers inside the capped
+  // maximum instead of returning an empty estimate.
+  if (dedupedCandidates.length < 2 && roof.max_panels_count > exportCeilPanels) {
+    const cappedMaxPanels = Math.min(roof.max_panels_count, exportCeilPanels)
+    const fallbackCounts = Array.from(
+      new Set([
+        Math.max(1, Math.round(cappedMaxPanels * GOOD_FRACTION)),
+        Math.max(1, Math.round(cappedMaxPanels * MIDDLE_FRACTION)),
+        cappedMaxPanels,
+      ]),
+    )
+      .filter((n) => n >= 1 && n <= cappedMaxPanels)
+      .sort((a, b) => a - b)
+
+    if (fallbackCounts.length >= 2) {
+      dedupedCandidates = fallbackCounts.map((panels, i) => ({
+        original: targets[Math.min(i, targets.length - 1)] ?? maxPanels,
+        panels,
+      }))
+    }
+  }
 
   // After capping, if fewer than 2 distinct sizes remain, route to inspection
   // (the same guarantee as the pre-cap uniqueCounts check).

@@ -82,4 +82,18 @@ describe('buildHeroOverlay', () => {
       'Indicative layout based on Google aerial imagery.',
     )
   })
+
+  it('renders confirm placeholders when no tier was produced', () => {
+    const overlay = buildHeroOverlay({
+      headlineTier: null,
+      roof: manualRoof,
+      annualKwhAc: 0,
+    })
+    expect(overlay.stats).toEqual([
+      { label: 'System size', value: 'To confirm' },
+      { label: 'Panels', value: 'To confirm' },
+      { label: 'Orientation', value: 'North' },
+      { label: 'Yearly output', value: 'To confirm' },
+    ])
+  })
 })

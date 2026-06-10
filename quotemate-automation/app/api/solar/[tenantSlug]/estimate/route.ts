@@ -24,6 +24,8 @@ import { runSolarEstimate } from '@/lib/solar/intake'
 import { loadSolarConfig } from '@/lib/solar/config'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { geocodeAddress } from '@/lib/solar/geocode'
+import { validateSolarAddress } from '@/lib/solar/address-validation'
+import { fetchSolarDataLayers } from '@/lib/solar/data-layers'
 import { resolveNetworkFromPostcode } from '@/lib/solar/network-lookup'
 
 export const dynamic = 'force-dynamic'
@@ -83,11 +85,29 @@ export async function POST(
         geocode: async (input) => {
           const r = await geocodeAddress(
             input.address + ', ' + input.state,
-            { apiKey: process.env.GOOGLE_GEOCODE_API_KEY },
+            // Geocoding uses a Maps-Platform key. Prefer a dedicated
+            // GOOGLE_GEOCODE_API_KEY if set, else fall back to the
+            // provisioned GOOGLE_MAPS_API_KEY (same key family).
+            { apiKey: process.env.GOOGLE_GEOCODE_API_KEY ?? process.env.GOOGLE_MAPS_API_KEY },
           )
           if (!r.ok) throw new Error(r.detail)
           return r.location
         },
+        // Best-effort Google Address Validation — refines the coordinate
+        // when it resolves to premise level; never blocks the quote.
+        addressValidation: async (input) =>
+          validateSolarAddress(input, {
+            apiKey:
+              process.env.GOOGLE_ADDRESS_VALIDATION_API_KEY ??
+              process.env.GOOGLE_MAPS_API_KEY,
+          }),
+        // Best-effort Solar dataLayers (imagery/shade availability) — pure
+        // enrichment persisted on the estimate for a future heatmap view.
+        dataLayers: async (location) =>
+          fetchSolarDataLayers(location, {
+            apiKey:
+              process.env.GOOGLE_SOLAR_API_KEY ?? process.env.GOOGLE_MAPS_API_KEY,
+          }),
         network: resolvedNetwork,
       },
     })

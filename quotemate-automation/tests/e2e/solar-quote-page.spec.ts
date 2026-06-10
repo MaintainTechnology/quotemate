@@ -101,7 +101,12 @@ test.describe('Solar customer quote page', () => {
 
   test('hides prices and the deposit CTA before tradie confirmation', async ({ page }) => {
     await page.goto(`/q/solar/${token}`)
-    await expect(page.getByText('Your installer will confirm this estimate.')).toBeVisible()
+    await expect(page.getByText('Estimate drafted')).toBeVisible()
+    await expect(
+      page.getByText(
+        'We have estimated the system size and output. Your installer will review the price before it is released.',
+      ),
+    ).toBeVisible()
     await expect(page.getByRole('link', { name: 'Pay deposit' })).toHaveCount(0)
     // Net price figure must not be exposed pre-confirmation.
     await expect(page.getByText('Net (inc GST)')).toHaveCount(0)

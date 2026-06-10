@@ -5,7 +5,8 @@ describe('canShowPrices', () => {
   it('hides prices until the tradie has confirmed (no auto-send)', () => {
     const r = canShowPrices({ confirmedAt: null, guardrailFlags: [], configStale: false })
     expect(r.showPrices).toBe(false)
-    expect(r.reason).toMatch(/installer will confirm/i)
+    expect(r.reason).toMatch(/estimated the system size and output/i)
+    expect(r.reason).toMatch(/review the price/i)
   })
 
   it('shows prices once confirmed, clean, and config is fresh', () => {

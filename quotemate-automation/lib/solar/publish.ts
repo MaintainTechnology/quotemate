@@ -47,7 +47,8 @@ export function canShowPrices(input: PublishGateInput): PublishGateResult {
   if (!input.confirmedAt) {
     return {
       showPrices: false,
-      reason: 'Your installer will confirm this estimate before pricing is finalised.',
+      reason:
+        'We have estimated the system size and output. Your installer will review the price before it is released.',
     }
   }
   return { showPrices: true, reason: null }
