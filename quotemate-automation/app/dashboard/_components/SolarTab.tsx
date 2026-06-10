@@ -7,7 +7,7 @@
 //  • The list of drafted estimates as cards: status badge, system kW, net
 //    price, customer + address, a "View" link to the public /q/solar/<token>
 //    page, and a "Confirm & release" button for clean, awaiting-confirmation
-//    estimates (POSTs Bearer-auth to /api/solar/<token>/confirm).
+//    estimates (POSTs Bearer-auth to /api/solar/confirm/<token>).
 //  • Flagged estimates show a clear "needs review" note and NO confirm
 //    button — the tradie must adjust the numbers + re-draft first.
 //
@@ -148,7 +148,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
         return next
       })
       try {
-        const res = await fetch(`/api/solar/${token}/confirm`, {
+        const res = await fetch(`/api/solar/confirm/${token}`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${accessToken}` },
         })

@@ -202,13 +202,13 @@ describe('sizeSolarSystem', () => {
   })
 
   it('export ceiling below roof capacity: capped tiers REDUCE panels_count and system_kw_dc', () => {
-    // 30-panel, 400 W roof. Export ceiling = 5 kW AC / 0.81 derate ≈ 6.17 kW DC
+    // 30-panel, 400 W roof. Export ceiling = 5 kW AC / 0.81 derate ~= 6.17 kW DC
     // = exportCeilPanels = floor(6170 / 400) = 15 panels = 6.0 kW DC.
     //
     // Candidate counts: good=round(30×0.55)=17, middle=round(30×0.80)=24, max=30.
-    // All three (6.8 kW, 9.6 kW, 12 kW) exceed the 6.17 kW DC ceiling →
-    // all clamp to 15 panels → only 1 distinct size → inspection_required.
-    // (This confirms the guard fires when the ceiling is very tight.)
+    // All three (6.8 kW, 9.6 kW, 12 kW) exceed the 6.17 kW DC ceiling and
+    // would clamp to 15 panels. The sizing engine should recover by picking
+    // distinct tiers within the capped max: 8, 12, and 15 panels.
     const bigRoof: SolarRoofFacts = {
       ...FULL_ROOF,
       max_panels_count: 30,
@@ -225,9 +225,10 @@ describe('sizeSolarSystem', () => {
       config: DEFAULT_SOLAR_CONFIG,
       context: CONTEXT,
     })
-    // All tiers collapse to the same clamped value → inspection_required
-    expect(r.routing.decision).toBe('inspection_required')
-    expect(r.tiers.length).toBe(0)
+    expect(r.routing.decision).toBe('tradie_review')
+    expect(r.tiers.map((t) => t.panels_count)).toEqual([8, 12, 15])
+    expect(r.tiers.map((t) => t.system_kw_dc)).toEqual([3.2, 4.8, 6])
+    expect(r.tiers.every((t) => t.export_limited)).toBe(true)
 
     // Now use an export limit of 10 kW instead (override via by_network) to
     // verify that the cap REDUCES the best tier from 30→24 panels but leaves the

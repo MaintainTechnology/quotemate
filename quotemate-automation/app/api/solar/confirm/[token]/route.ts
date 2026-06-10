@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════════
-// POST /api/solar/[token]/confirm — the forced tradie review step.
+// POST /api/solar/confirm/[token] — the forced tradie review step.
 //
 // No solar estimate auto-sends. The tradie reviews the drafted tiers and
 // confirms; that stamps confirmed_at on the solar_estimates row, which is

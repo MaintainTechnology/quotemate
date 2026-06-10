@@ -22,6 +22,8 @@ import { randomBytes } from 'node:crypto'
 import { resolveSolarOpts } from '../roofing/solar-api'
 import type { SolarEnrichmentOpts } from '../roofing/solar-api'
 import { checkSolarCoverage } from './coverage'
+import { fetchSolarBuildingInsights } from './insights'
+import { addressValidationLocationUsable } from './address-validation'
 import { normaliseSolarRoofFacts } from './roof'
 import { buildManualRoofFacts } from './manual-fallback'
 import { sizeSolarSystem } from './sizing'
@@ -42,6 +44,8 @@ import type {
   SolarProductionResult,
   SolarConfidenceBand,
   SolarRoutingDecision,
+  SolarAddressValidationInsight,
+  SolarDataLayersSummary,
 } from './types'
 
 /**
@@ -80,6 +84,19 @@ export type SolarEnrichmentOrchestratorOpts = {
   persist?: (estimate: SolarEstimate) => Promise<void>
   /** Optional satellite hero image URL resolver (real photo, no generative). */
   satelliteImageUrl?: (location: LatLng) => Promise<string | null>
+  /**
+   * Optional Google Address Validation enrichment. Best-effort: when it
+   * returns a premise-level location it refines the coordinate; otherwise
+   * geocode is used. The insight is persisted on context.address_validation.
+   */
+  addressValidation?: (
+    input: SolarAddressInput,
+  ) => Promise<SolarAddressValidationInsight | null>
+  /**
+   * Optional Google Solar dataLayers enrichment for the covered path. Best-
+   * effort: a miss never blocks the quote. Persisted on estimate.data_layers.
+   */
+  dataLayers?: (location: LatLng) => Promise<SolarDataLayersSummary | null>
 }
 
 export async function runSolarEstimate(args: {
@@ -109,8 +126,25 @@ export async function runSolarEstimate(args: {
     network: opts.network,
   }
 
-  // 1. Geocode + coverage gate.
-  const location = await opts.geocode(args.input)
+  // 1. Address validation (best-effort) → geocode → coverage gate.
+  //    Address Validation, when it returns a premise-level coordinate,
+  //    is a more precise seed than a free-text geocode; otherwise we fall
+  //    back to geocode. A missing/disabled API never blocks the path.
+  let addressValidation: SolarAddressValidationInsight | null = null
+  if (opts.addressValidation) {
+    try {
+      addressValidation = await opts.addressValidation(args.input)
+    } catch {
+      addressValidation = null
+    }
+  }
+  context.address_validation = addressValidation
+
+  const location = addressValidationLocationUsable(addressValidation)
+    ? addressValidation.location
+    : await opts.geocode(args.input)
+  context.location = location
+
   const solarOpts = resolveSolarOpts(opts.solarOpts)
   const coverage = await checkSolarCoverage(location, solarOpts)
 
@@ -118,17 +152,27 @@ export async function runSolarEstimate(args: {
   let roof: SolarRoofFacts
   let coverage_source: SolarEstimate['coverage_source']
   let satellite_image_url: string | null = null
+  let data_layers: SolarDataLayersSummary | null = null
 
   if (coverage.covered) {
     // Re-fetch the raw body for the panel configs roof.ts needs. The
     // coverage gate already proved the call succeeds; fetch once more
-    // through the same injected client and parse.
+    // through the solar-owned insights client and parse.
     const raw = await fetchRawInsights(location, opts.solarOpts)
     roof = normaliseSolarRoofFacts(raw, coverage, config)
     coverage_source = 'google'
     satellite_image_url = opts.satelliteImageUrl
       ? await opts.satelliteImageUrl(location)
       : null
+    // dataLayers is pure enrichment for a future shade/heatmap view — a
+    // miss must never block the quote (spec §7).
+    if (opts.dataLayers) {
+      try {
+        data_layers = await opts.dataLayers(location)
+      } catch {
+        data_layers = null
+      }
+    }
   } else if (args.manual) {
     roof = buildManualRoofFacts(args.manual, config)
     coverage_source = 'manual'
@@ -175,6 +219,7 @@ export async function runSolarEstimate(args: {
     economics,
     confidence_band,
     satellite_image_url,
+    data_layers,
     routing: sizing.routing,
     guardrail_flags: [],
     config_version: config.version,
@@ -190,26 +235,17 @@ export async function runSolarEstimate(args: {
 // ── helpers ──────────────────────────────────────────────────────────
 
 /** Fetch the raw buildingInsights body so roof.ts can read panel configs.
- *  Uses the same injected client/key as the coverage gate. */
+ *  Delegates to the solar-owned insights client (insights.ts), which uses
+ *  the same injected client/key as the coverage gate. */
 async function fetchRawInsights(
   location: LatLng,
   solarOpts: SolarEnrichmentOpts | undefined,
 ): Promise<import('./roof').SolarRoofInsightWithRaw> {
-  const { parseBuildingInsights } = await import('../roofing/solar-api')
-  const resolved = resolveSolarOpts(solarOpts)
-  const base =
-    resolved.baseUrl ??
-    'https://solar.googleapis.com/v1/buildingInsights:findClosest'
-  const url =
-    `${base}?location.latitude=${encodeURIComponent(location.lat.toFixed(7))}` +
-    `&location.longitude=${encodeURIComponent(location.lng.toFixed(7))}` +
-    `&requiredQuality=LOW&key=${encodeURIComponent(resolved.apiKey ?? '')}`
-  const fetchImpl = resolved.fetchImpl ?? ((u, init) => fetch(u, init))
-  const res = await fetchImpl(url, { method: 'GET', headers: { Accept: 'application/json' } })
-  const body = await res.json()
-  const parsed = parseBuildingInsights(body)
-  if (!parsed) throw new Error('Solar API raw re-fetch returned no usable roof segments.')
-  return { ...parsed, raw: body }
+  const res = await fetchSolarBuildingInsights(location, solarOpts)
+  if (!res.ok) {
+    throw new Error(`Solar API raw re-fetch failed (${res.code}): ${res.detail}`)
+  }
+  return res.insight
 }
 
 /** Public share token — base64url, 16 bytes (mirrors generateShareToken). */

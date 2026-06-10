@@ -48,7 +48,16 @@ describe('resolveSolarQuoteView', () => {
 
   it('exposes the headline tier as the largest sizing tier (last in order)', () => {
     const view = resolveSolarQuoteView({ estimate, confirmedAt: null })
-    expect(view.headlineTier.system_kw_dc).toBe(10)
-    expect(view.headlineTier.panels_count).toBe(25)
+    expect(view.headlineTier?.system_kw_dc).toBe(10)
+    expect(view.headlineTier?.panels_count).toBe(25)
+  })
+
+  it('allows no headline tier when sizing produced no tiers', () => {
+    const empty = {
+      ...estimate,
+      sizing: { tiers: [] },
+    } as unknown as SolarEstimate
+    const view = resolveSolarQuoteView({ estimate: empty, confirmedAt: null })
+    expect(view.headlineTier).toBeNull()
   })
 })

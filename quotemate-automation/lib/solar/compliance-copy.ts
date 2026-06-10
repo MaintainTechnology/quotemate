@@ -13,4 +13,5 @@ export const SOLAR_COMPLIANCE_COPY =
   'Estimate, not a contract.'
 
 /** Shown in place of the deposit CTA before the tradie confirms. */
-export const SOLAR_PRE_CONFIRM_COPY = 'Your installer will confirm this estimate.'
+export const SOLAR_PRE_CONFIRM_COPY =
+  'We have estimated the system size and output. Your installer will review the price before it is released.'

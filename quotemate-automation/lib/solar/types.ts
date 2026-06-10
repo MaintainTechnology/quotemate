@@ -46,6 +46,47 @@ export type LatLng = {
   lng: number
 }
 
+/** Google Address Validation summary persisted with the estimate. */
+export type SolarAddressValidationInsight = {
+  status:
+    | 'validated'
+    | 'needs_confirmation'
+    | 'needs_fix'
+    | 'unavailable'
+    | 'skipped'
+  formatted_address: string | null
+  location: LatLng | null
+  validation_granularity: string | null
+  geocode_granularity: string | null
+  next_action: string | null
+  address_complete: boolean | null
+  missing_components: string[]
+  unconfirmed_components: string[]
+  response_id: string | null
+  detail: string | null
+}
+
+/** Metadata from Solar API dataLayers. GeoTIFF URLs are intentionally not persisted. */
+export type SolarDataLayersSummary = {
+  status: 'available' | 'unavailable' | 'skipped'
+  fetched_at: string | null
+  radius_meters: number
+  pixel_size_meters: number
+  view: string
+  imagery_quality: SolarImageryQuality | null
+  imagery_date: string | null
+  imagery_processed_date: string | null
+  layers: {
+    dsm: boolean
+    rgb: boolean
+    mask: boolean
+    annual_flux: boolean
+    monthly_flux: boolean
+    hourly_shade_months: number
+  }
+  detail: string | null
+}
+
 /** Google Solar imagery quality, normalised. LOW fails the money gate. */
 export type SolarImageryQuality = 'HIGH' | 'MEDIUM' | 'LOW'
 
@@ -494,6 +535,10 @@ export type SolarEstimateContext = {
   install_year: number
   /** The network/DNSP resolved from postcode (for FiT + export limit). */
   network: string
+  /** Resolved coordinate used for Solar/Maps calls. */
+  location?: LatLng | null
+  /** Best-effort Google Address Validation result for the input address. */
+  address_validation?: SolarAddressValidationInsight | null
 }
 
 /**
@@ -516,6 +561,8 @@ export type SolarEstimate = {
   confidence_band: SolarConfidenceBand
   /** Satellite hero image URL/storage path (real photo, no generative). */
   satellite_image_url: string | null
+  /** Best-effort Solar API dataLayers availability for future heatmap/shade views. */
+  data_layers?: SolarDataLayersSummary | null
   /** Job-level routing (always tradie-reviewed; never auto-send). */
   routing: SolarRoutingDecision
   /** Deterministic-output check flags (spec §7); empty = clean. */

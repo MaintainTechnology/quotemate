@@ -142,7 +142,7 @@ export default async function SolarQuotePage({
         {!view.showPrices && (
           <div className="mt-8 border border-ink-line border-l-4 border-l-accent bg-ink-card px-6 py-5">
             <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
-              {view.inspectionRequired ? 'On-site check needed' : 'Awaiting confirmation'}
+              {view.inspectionRequired ? 'On-site check needed' : 'Estimate drafted'}
             </div>
             <p className="mt-2 text-base text-text-sec">
               {view.inspectionRequired

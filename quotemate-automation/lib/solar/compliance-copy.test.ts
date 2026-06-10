@@ -27,9 +27,9 @@ describe('SOLAR_COMPLIANCE_COPY', () => {
 })
 
 describe('SOLAR_PRE_CONFIRM_COPY', () => {
-  it('tells the customer their installer will confirm the estimate', () => {
+  it('tells the customer the estimate exists and pricing is under review', () => {
     expect(SOLAR_PRE_CONFIRM_COPY).toBe(
-      'Your installer will confirm this estimate.',
+      'We have estimated the system size and output. Your installer will review the price before it is released.',
     )
   })
 })

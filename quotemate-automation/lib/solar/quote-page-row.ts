@@ -9,7 +9,7 @@ export type SolarQuoteView = {
   confirmed: boolean
   inspectionRequired: boolean
   showPrices: boolean
-  headlineTier: SolarSystemTier
+  headlineTier: SolarSystemTier | null
 }
 
 export function resolveSolarQuoteView(args: {
@@ -21,6 +21,6 @@ export function resolveSolarQuoteView(args: {
     args.estimate.routing.decision === 'inspection_required'
   const showPrices = confirmed && !inspectionRequired
   const tiers = args.estimate.sizing.tiers
-  const headlineTier = tiers[tiers.length - 1]
+  const headlineTier = tiers[tiers.length - 1] ?? null
   return { confirmed, inspectionRequired, showPrices, headlineTier }
 }

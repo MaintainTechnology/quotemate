@@ -45,16 +45,22 @@ function formatImageryDate(iso: string | null): string | null {
 }
 
 export function buildHeroOverlay(args: {
-  headlineTier: SolarSystemTier
+  headlineTier: SolarSystemTier | null
   roof: SolarRoofFacts
   annualKwhAc: number
 }): SolarHeroOverlay {
   const { headlineTier, roof, annualKwhAc } = args
   const stats = [
-    { label: 'System size', value: `${kw(headlineTier.system_kw_dc)} kW` },
-    { label: 'Panels', value: String(headlineTier.panels_count) },
+    {
+      label: 'System size',
+      value: headlineTier ? `${kw(headlineTier.system_kw_dc)} kW` : 'To confirm',
+    },
+    { label: 'Panels', value: headlineTier ? String(headlineTier.panels_count) : 'To confirm' },
     { label: 'Orientation', value: orientationLabel(roof.primary_orientation) },
-    { label: 'Yearly output', value: `${kwh(annualKwhAc)} kWh` },
+    {
+      label: 'Yearly output',
+      value: annualKwhAc > 0 ? `${kwh(annualKwhAc)} kWh` : 'To confirm',
+    },
   ]
 
   let caption: string

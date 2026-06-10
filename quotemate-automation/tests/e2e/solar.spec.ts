@@ -4,7 +4,7 @@
 // the rendered page states rather than the full address→estimate wizard
 // (which needs a real Supabase Auth session + live Google Solar key).
 //
-//   1. POST /api/solar/[token]/confirm unauthenticated → 401 (no auto-
+//   1. POST /api/solar/confirm/[token] unauthenticated → 401 (no auto-
 //      send; the forced tradie step is auth-gated).
 //   2. GET /r/solar/[token]/[tier] with a bogus tier → 400 (tier guard).
 //   3. /q/solar/[token] for an UNKNOWN token → the page does not crash;
@@ -16,7 +16,7 @@ const SAMPLE_TOKEN = 'tok_e2e_unknown_000000'
 
 test.describe('Solar review gate — API contracts', () => {
   test('confirm route rejects unauthenticated calls', async ({ request }) => {
-    const res = await request.post(`/api/solar/${SAMPLE_TOKEN}/confirm`)
+    const res = await request.post(`/api/solar/confirm/${SAMPLE_TOKEN}`)
     expect(res.status()).toBe(401)
     const body = await res.json()
     expect(body.ok).toBe(false)
@@ -24,7 +24,7 @@ test.describe('Solar review gate — API contracts', () => {
   })
 
   test('confirm route rejects bogus Bearer tokens with 401', async ({ request }) => {
-    const res = await request.post(`/api/solar/${SAMPLE_TOKEN}/confirm`, {
+    const res = await request.post(`/api/solar/confirm/${SAMPLE_TOKEN}`, {
       headers: { Authorization: 'Bearer not-a-real-token-just-for-testing' },
     })
     expect(res.status()).toBe(401)
