@@ -1,0 +1,1652 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QuoteMate · Database Architecture & Site Wiring Map</title>
+  <meta name="description" content="Every Supabase table mapped to the pages, API routes, lib modules, and cron jobs that read or write it. Foreign keys, IDs, ownership, and the full request flow on one page." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink-deep:#0E1622; --ink:#141C29; --ink-card:#1B2433; --ink-line:#2D3A4F;
+      --accent:#FF5A1F; --accent-press:#E8470F; --accent-soft:#FF7A45;
+      --text-pri:#FFFFFF; --text-sec:#B8C2D1; --text-dim:#7A8699;
+      --teal:#14B8A6; --violet:#A78BFA; --amber:#FBBF24; --green:#10B981; --rose:#F87171; --sky:#38BDF8;
+      --grp-identity:#A78BFA;
+      --grp-pricing:#FBBF24;
+      --grp-pipeline:#FF5A1F;
+      --grp-sms:#38BDF8;
+      --grp-registry:#10B981;
+      --grp-admin:#F87171;
+    }
+    *,*::before,*::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--ink-deep);
+      color: var(--text-pri);
+      font-family: 'Manrope', system-ui, -apple-system, sans-serif;
+      font-weight: 400;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 90rem; margin: 0 auto; padding: 0 1.5rem; position: relative; }
+
+    /* ─── Type ─────────────────────────────────────────────── */
+    .eyebrow {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.72rem; font-weight: 600;
+      letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--text-dim);
+    }
+    .display-mega {
+      font-weight: 900; text-transform: uppercase;
+      font-size: clamp(2.5rem, 6.5vw, 5rem);
+      line-height: 0.96; letter-spacing: -0.035em;
+      margin: 0.75rem 0 0;
+    }
+    .display-lg {
+      font-weight: 800; text-transform: uppercase;
+      font-size: clamp(1.75rem, 3.5vw, 2.75rem);
+      line-height: 1.0; letter-spacing: -0.03em;
+      margin: 0;
+    }
+    .display-md {
+      font-weight: 800; text-transform: uppercase;
+      font-size: clamp(1.15rem, 1.8vw, 1.35rem);
+      line-height: 1.15; letter-spacing: -0.02em;
+      margin: 0;
+    }
+    .accent { color: var(--accent); }
+    p { margin: 0; color: var(--text-sec); }
+    p + p { margin-top: 0.75rem; }
+    a { color: var(--accent-soft); text-decoration: none; }
+    a:hover { color: var(--accent); text-decoration: underline; }
+
+    section { position: relative; z-index: 1; }
+    .section-pad { padding: 3.5rem 0; border-top: 1px solid var(--ink-line); }
+    .section-pad:first-of-type { border-top: none; }
+
+    /* ─── Hero ─────────────────────────────────────────────── */
+    .hero { padding: 4rem 0 2.5rem; border-bottom: 1px solid var(--ink-line); }
+    .hero p { font-size: 1.05rem; line-height: 1.65; max-width: 56rem; }
+    .stat-row {
+      display: grid; gap: 1rem;
+      grid-template-columns: repeat(2, 1fr);
+      margin-top: 2.5rem;
+    }
+    @media (min-width: 700px) { .stat-row { grid-template-columns: repeat(4, 1fr); } }
+    .stat {
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      padding: 1.25rem 1.5rem;
+    }
+    .stat-num {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 2rem; font-weight: 700;
+      color: var(--accent); line-height: 1;
+    }
+    .stat-lbl {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.72rem; font-weight: 600;
+      letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--text-dim); margin-top: 0.5rem;
+    }
+
+    /* ─── Legend ───────────────────────────────────────────── */
+    .legend {
+      display: flex; flex-wrap: wrap; gap: 0.75rem;
+      margin: 2rem 0 0;
+    }
+    .chip {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.72rem; font-weight: 600;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--text-sec);
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      padding: 0.5rem 0.75rem;
+    }
+    .dot { width: 0.6rem; height: 0.6rem; border-radius: 999px; flex: none; }
+
+    /* ─── Group sections ───────────────────────────────────── */
+    .grp-header {
+      display: flex; align-items: baseline; gap: 1rem;
+      margin-bottom: 0.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 2px solid currentColor;
+    }
+    .grp-tag {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.72rem; font-weight: 700;
+      letter-spacing: 0.14em; text-transform: uppercase;
+    }
+    .grp-sub { color: var(--text-dim); font-size: 0.9rem; }
+
+    /* ─── Table grid ───────────────────────────────────────── */
+    .tbl-grid {
+      display: grid; gap: 1rem;
+      grid-template-columns: 1fr;
+      margin-top: 1.5rem;
+    }
+    @media (min-width: 720px) { .tbl-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (min-width: 1280px) { .tbl-grid { grid-template-columns: repeat(3, 1fr); } }
+
+    .tbl {
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      border-top: 3px solid var(--grp-color, var(--accent));
+      padding: 1.25rem;
+      display: flex; flex-direction: column; gap: 0.85rem;
+      position: relative;
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+    .tbl:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+    .tbl-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+    .tbl-name {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.95rem; font-weight: 700;
+      color: var(--text-pri); margin: 0;
+    }
+    .tbl-meta {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.65rem; font-weight: 600;
+      color: var(--text-dim);
+      letter-spacing: 0.1em; text-transform: uppercase;
+    }
+    .tbl-purpose {
+      font-size: 0.88rem; line-height: 1.5;
+      color: var(--text-sec);
+    }
+    .tbl-purpose b { color: var(--text-pri); font-weight: 700; }
+    .tbl-cols, .tbl-rw {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.72rem; line-height: 1.6;
+      color: var(--text-sec);
+    }
+    .col-key { color: var(--accent-soft); font-weight: 700; }
+    .col-fk  { color: var(--violet); font-weight: 700; }
+    .col-json { color: var(--teal); }
+    .lbl {
+      display: inline-block;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.62rem; font-weight: 700;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 0.35rem;
+    }
+    .rw-list { margin: 0; padding: 0; list-style: none; }
+    .rw-list li {
+      padding: 0.15rem 0;
+      color: var(--text-sec);
+      font-size: 0.7rem;
+      display: flex; align-items: baseline; gap: 0.5rem;
+    }
+    .op-r { color: var(--sky); font-weight: 700; min-width: 1.5rem; }
+    .op-w { color: var(--amber); font-weight: 700; min-width: 1.5rem; }
+    .op-del { color: var(--rose); font-weight: 700; min-width: 1.5rem; }
+
+    /* ─── Feature-to-table matrix ──────────────────────────── */
+    .matrix-wrap { overflow-x: auto; margin-top: 1.5rem; border: 1px solid var(--ink-line); }
+    table.matrix {
+      width: 100%; border-collapse: collapse;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.72rem;
+    }
+    .matrix th, .matrix td {
+      padding: 0.5rem 0.75rem; text-align: left;
+      border-bottom: 1px solid var(--ink-line);
+      vertical-align: top;
+    }
+    .matrix th {
+      background: var(--ink);
+      color: var(--text-dim);
+      font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; font-size: 0.66rem;
+      position: sticky; top: 0; z-index: 1;
+    }
+    .matrix td.feat { color: var(--text-pri); font-weight: 700; white-space: nowrap; }
+    .matrix td.tables { color: var(--text-sec); line-height: 1.6; }
+    .matrix code { color: var(--accent-soft); }
+
+    /* ─── FK graph ─────────────────────────────────────────── */
+    .fk-grid {
+      display: grid; gap: 0.75rem;
+      grid-template-columns: 1fr;
+      margin-top: 1.5rem;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.78rem;
+    }
+    @media (min-width: 720px) { .fk-grid { grid-template-columns: repeat(2, 1fr); } }
+    .fk-row {
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      padding: 0.75rem 1rem;
+      display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+    }
+    .fk-from { color: var(--accent); font-weight: 700; }
+    .fk-arrow { color: var(--text-dim); }
+    .fk-to { color: var(--violet); font-weight: 700; }
+    .fk-note { color: var(--text-dim); font-family: 'Manrope'; font-size: 0.78rem; }
+
+    /* ─── Footer ───────────────────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--ink-line);
+      padding: 2.5rem 0;
+      color: var(--text-dim);
+      font-size: 0.85rem;
+    }
+    footer strong { color: var(--text-sec); }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- HERO                                                              -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="hero">
+  <div class="wrap">
+    <div class="eyebrow">QuoteMate · Engineering map · v1 · 2026-05-26</div>
+    <h1 class="display-mega">Database<br/><span class="accent">Architecture</span></h1>
+    <p style="margin-top:1.5rem">
+      Every Supabase table mapped to the pages, API routes, lib modules, and
+      cron jobs that touch it. Where does a customer's photo land? Which
+      route writes the quote? Who reads <code>tenant_material_catalogue</code>?
+      This page answers all of it &mdash; grounded in the actual code on
+      <code>main</code>, not what we wish was true.
+    </p>
+    <p>
+      <b>How to read each card:</b> the table name, a one-line purpose, the
+      key columns (with foreign keys highlighted), and two lists &mdash;
+      <span style="color:var(--sky);font-weight:700">R</span> rows are
+      <em>reads</em> (route/file selects from this table) and
+      <span style="color:var(--amber);font-weight:700">W</span> rows are
+      <em>writes</em> (insert/update/upsert/delete).
+    </p>
+    <p style="margin-top:0.5rem">
+      <b>Looking for the picture-first version?</b> Six plain-English
+      diagrams for non-technical readers live at
+      <a href="./database-visual.html" style="color:var(--accent-soft)">database-visual.html</a>.
+    </p>
+
+    <div class="stat-row">
+      <div class="stat">
+        <div class="stat-num">32</div>
+        <div class="stat-lbl">Tables in <code>public</code></div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">57</div>
+        <div class="stat-lbl">Migrations applied</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">68</div>
+        <div class="stat-lbl">Routes / libs touching DB</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">6</div>
+        <div class="stat-lbl">Functional groups</div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span class="chip"><span class="dot" style="background:var(--grp-identity)"></span>Identity &amp; Tenancy</span>
+      <span class="chip"><span class="dot" style="background:var(--grp-pricing)"></span>Pricing &amp; Catalogue</span>
+      <span class="chip"><span class="dot" style="background:var(--grp-pipeline)"></span>Quote Pipeline</span>
+      <span class="chip"><span class="dot" style="background:var(--grp-sms)"></span>Conversations</span>
+      <span class="chip"><span class="dot" style="background:var(--grp-registry)"></span>Trades Registry (v9)</span>
+      <span class="chip"><span class="dot" style="background:var(--grp-admin)"></span>Admin / Loader</span>
+      <span class="chip"><span style="color:var(--col-key,var(--accent-soft))">PK</span> primary key</span>
+      <span class="chip"><span style="color:var(--violet)">FK</span> foreign key</span>
+      <span class="chip"><span style="color:var(--teal)">jsonb</span> payload</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- FEATURE → TABLE MATRIX                                            -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="section-pad">
+  <div class="wrap">
+    <div class="eyebrow">01 · The end-user view</div>
+    <h2 class="display-lg">Site features &mdash; which tables they touch</h2>
+    <p style="margin-top:1rem;max-width:60rem">
+      Each user-facing flow as it actually runs on production. Tables in
+      <code>monospace</code> show the order they're read/written along
+      the request path. <b>This is the answer to "what gets touched when
+      X happens?"</b>
+    </p>
+
+    <div class="matrix-wrap">
+      <table class="matrix">
+        <thead>
+          <tr>
+            <th style="width:18rem">Feature / user journey</th>
+            <th style="width:9rem">Entry point</th>
+            <th>Tables touched (in order)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="feat">Customer rings the Vapi number</td>
+            <td><code>POST /api/vapi/webhook</code></td>
+            <td class="tables">
+              <code>tenants</code> (lookup by <code>vapi_assistant_id</code>) →
+              <code>calls</code> (upsert by <code>vapi_call_id</code>, store
+              transcript + recording) → triggers the intake pipeline below.
+            </td>
+          </tr>
+          <tr>
+            <td class="feat">Customer texts the tradie's number</td>
+            <td><code>POST /api/sms/inbound</code></td>
+            <td class="tables">
+              <code>tenants</code> (route by <code>twilio_number</code>) →
+              <code>sms_conversations</code> (find-or-create, lock,
+              update state) → <code>sms_messages</code> (idempotent insert
+              by <code>twilio_sid</code>) →
+              <code>tenant_service_offerings</code> +
+              <code>tenant_custom_assemblies</code> +
+              <code>tenant_material_catalogue</code> +
+              <code>shared_assemblies</code> (AI dialog reads what tenant
+              offers) → triggers intake pipeline.
+            </td>
+          </tr>
+          <tr>
+            <td class="feat">Intake structuring (voice or SMS)</td>
+            <td><code>POST /api/intake/structure</code></td>
+            <td class="tables">
+              <code>calls</code> + <code>sms_messages</code> +
+              <code>sms_conversations</code> (gather raw input) →
+              <code>customers</code> (find-or-create by phone,
+              stamp <code>tenant_id</code>) → <code>tenants</code> (resolve
+              trade + branding) → <code>intakes</code> (insert
+              structured JSON + Voyage embedding).
+            </td>
+          </tr>
+          <tr>
+            <td class="feat">Draft a quote</td>
+            <td><code>POST /api/estimate/draft</code></td>
+            <td class="tables">
+              <code>intakes</code> + <code>calls</code> +
+              <code>sms_conversations</code> (load context) →
+              <code>tenants</code> + <code>pricing_book</code> (load
+              tradie's rates) → <code>shared_assemblies</code> +
+              <code>shared_materials</code> +
+              <code>tenant_custom_assemblies</code> +
+              <code>tenant_material_catalogue</code> +
+              <code>tenant_assembly_bom</code> +
+              <code>tenant_assembly_overrides</code> +
+              <code>tenant_service_offerings</code> +
+              <code>tenant_material_preferences</code> +
+              <code>tenant_tier_ladder</code> (Opus tool-calls) →
+              <code>quotes</code> (insert/update draft) → SMS dispatch.
+            </td>
+          </tr>
+          <tr>
+            <td class="feat">Customer opens <code>/q/[token]</code></td>
+            <td><code>GET /q/[token]</code> page</td>
+            <td class="tables">
+              <code>quotes</code> → <code>intakes</code> →
+              <code>tenants</code> (branding) → <code>pricing_book</code>
+              (licence footer) → <code>sms_conversations</code>
+              (price-hold timer) → <code>calls</code> (display recording link
+              if voice job).
+            </td>
+          </tr>
+          <tr>
+            <td class="feat">Customer pays deposit via Stripe</td>
+            <td><code>POST /api/stripe/webhook</code></td>
+            <td class="tables">
+              <code>quotes</code> (mark <code>booking_state='reserved'</code>,
+              stamp <code>accepted_at</code>) → <code>tradies</code> /
+              <code>tenants</code> (notify the right inbox).
+            </td>
+          </tr>
+          <tr>
+            <td class="feat">Customer picks a booking slot</td>
+            <td><code>POST /api/q/[token]/book</code></td>
+            <td class="tables">
+              <code>quotes</code> + <code>intakes</code> +
+              <code>tradies</code> → <code>quotes</code>
+              (mark <code>booking_state='booked'</code>, store slot).
+            </td>
+          </tr>
+          <tr>
+            <td class="feat">Customer uploads photos</td>
+            <td><code>POST /api/upload/[token]</code></td>
+            <td class="tables">
+              <code>sms_conversations</code> + <code>quotes</code> +
+              <code>calls</code> + <code>intakes</code> (locate the job by
+              token) → Supabase Storage <code>intake-photos</code> bucket →
+              <code>intakes</code> (append paths to
+              <code>scope.photo_paths</code>).
+            </td>
+          </tr>
+          <tr>
+            <td class="feat">Tradie signs up</td>
+            <td><code>POST /api/auth/signup</code> → <code>/onboard/*</code></td>
+            <td class="tables">
+              <code>tradie_signup_intents</code> (insert token) → email
+              link → <code>/onboard</code> form →
+              <code>POST /api/onboard/activate</code> → <code>tenants</code>
+              (insert + provision Twilio/Vapi) →
+              <code>pricing_book</code> (insert per-trade row) →
+              <code>tenant_service_offerings</code> +
+              <code>tenant_licences</code> (seed defaults) →
+              <code>/onboard/stripe</code> for Connect Express.
+            </td>
+          </tr>
+          <tr>
+            <td class="feat">Tradie opens the dashboard</td>
+            <td><code>GET /dashboard</code></td>
+            <td class="tables">
+              <code>GET /api/tenant/me</code> →
+              <code>tenants</code> + <code>pricing_book</code> +
+              <code>shared_materials</code> + <code>shared_assemblies</code>
+              + <code>tenant_material_preferences</code> +
+              <code>tenant_custom_assemblies</code> +
+              <code>tenant_service_offerings</code> +
+              <code>tenant_licences</code> + <code>calls</code> +
+              <code>intakes</code> + <code>quotes</code> +
+              <code>sms_conversations</code> + <code>sms_messages</code> +
+              <code>payments</code>. (This route is the dashboard's hot path
+              &mdash; it reads almost everything.)
+            </td>
+          </tr>
+          <tr>
+            <td class="feat">Tradie edits a quote tier</td>
+            <td><code>POST /api/quote/[id]/edit</code></td>
+            <td class="tables">
+              <code>quotes</code> (load) → <code>intakes</code> +
+              <code>tenants</code> + <code>pricing_book</code> (re-validate
+              grounding) → <code>quotes</code> (update tier line items).
+            </td>
+          </tr>
+          <tr>
+            <td class="feat">Tradie logs a follow-up touch</td>
+            <td><code>POST /api/tenant/followups/*</code></td>
+            <td class="tables">
+              <code>tenants</code> + <code>quotes</code> +
+              <code>customers</code> + <code>intakes</code> (resolve) →
+              <code>quote_followup_events</code> (insert outcome+note) →
+              optionally <code>sms_conversations</code> +
+              <code>sms_messages</code> (send text/log call).
+            </td>
+          </tr>
+          <tr>
+            <td class="feat">Tradie uploads supplier CSV</td>
+            <td><code>POST /api/tenant/catalogue/upload</code></td>
+            <td class="tables">
+              <code>tenants</code> (auth) → <code>tenant_material_catalogue</code>
+              (insert-only bulk) &mdash; provenance from
+              <code>supplier_catalogue</code> if matched.
+            </td>
+          </tr>
+          <tr>
+            <td class="feat">Operator runs admin trade-loader</td>
+            <td><code>POST /api/admin/loader/upload</code></td>
+            <td class="tables">
+              <code>admin_users</code> (auth) → CSV parse →
+              <code>trades</code> + <code>categories</code> +
+              <code>trade_pricing_defaults</code> +
+              <code>trade_prompts</code> + <code>shared_assemblies</code> +
+              <code>shared_materials</code> + <code>tenants</code> (read
+              for impact) → <code>import_batches</code> +
+              <code>import_staged_rows</code> (staging) →
+              approval → commit to live tables.
+            </td>
+          </tr>
+          <tr>
+            <td class="feat">Cron: stale SMS cleanup</td>
+            <td><code>GET /api/cron/sms-cleanup</code> (Vercel cron)</td>
+            <td class="tables">
+              <code>sms_conversations</code> (close any conversation
+              idle &gt; 24h).
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- GROUP: IDENTITY & TENANCY                                         -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="section-pad" style="color:var(--grp-identity)">
+  <div class="wrap">
+    <div class="grp-header">
+      <span class="grp-tag">02 · Identity &amp; Tenancy</span>
+      <span class="grp-sub" style="color:var(--text-dim)">Who's who. Owners, customers, signup intents, admin operators.</span>
+    </div>
+
+    <div class="tbl-grid" style="--grp-color: var(--grp-identity)">
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">tenants</h3>
+          <span class="tbl-meta">5 rows · root entity</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>One row per tradie business.</b> Owns every quote, call, SMS and
+          catalogue row downstream via <code>tenant_id</code>. Carries Twilio /
+          Vapi / Stripe Connect ids, branding, the active trade(s), and
+          provisioning status.
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK ·
+          <span class="col-key">owner_user_id</span> uuid (auth.users) ·
+          business_name · slug · status ·
+          <span class="col-json">trade</span> · <span class="col-json">trades[]</span> ·
+          twilio_number · vapi_assistant_id ·
+          stripe_connect_account_id ·
+          stripe_connect_charges_enabled · stripe_connect_payouts_enabled ·
+          <span class="col-json">branding</span>
+        </div>
+        <div>
+          <div class="lbl">Read by (39 files &mdash; everything touches it)</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span> Every <code>/api/tenant/*</code> route (auth)</li>
+            <li><span class="op-r">R</span> <code>/api/vapi/webhook</code> &middot; <code>/api/sms/inbound</code> (route inbound by number)</li>
+            <li><span class="op-r">R</span> <code>/api/estimate/draft</code> &middot; <code>/api/quote/[id]/edit</code> (trade + book lookup)</li>
+            <li><span class="op-r">R</span> <code>/auth/callback</code> page (own-tenant gate)</li>
+            <li><span class="op-r">R</span> <code>lib/tenant/lookup.ts</code> &middot; <code>lib/quote/booking-notify.ts</code></li>
+          </ul>
+        </div>
+        <div>
+          <div class="lbl">Written by</div>
+          <ul class="rw-list">
+            <li><span class="op-w">W</span> <code>/api/onboard/activate</code> &mdash; insert on signup</li>
+            <li><span class="op-w">W</span> <code>/api/tenant/me</code> &middot; <code>/api/tenant/trades</code> &mdash; profile edits</li>
+            <li><span class="op-w">W</span> <code>/api/stripe/connect/start</code> &middot; <code>/api/stripe/connect-webhook</code> &mdash; Connect state</li>
+            <li><span class="op-w">W</span> <code>lib/onboard/run-provisioning.ts</code> &mdash; mark provisioned</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">tradies</h3>
+          <span class="tbl-meta">1 row · legacy, pre-tenants</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>Pre-multi-tenant remnant.</b> Holds the notify phone+email for the
+          single-tradie pilot. Still read by the booking + Stripe webhook
+          paths to know who to ping. Slated for merge into <code>tenants</code>.
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK · name · phone · email
+        </div>
+        <div>
+          <div class="lbl">Read by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span> <code>/api/q/[token]/book</code> &middot; <code>/q/[token]/book</code> page</li>
+            <li><span class="op-r">R</span> <code>/api/stripe/webhook</code></li>
+          </ul>
+        </div>
+        <div>
+          <div class="lbl">Written by</div>
+          <ul class="rw-list">
+            <li><span class="op-w">W</span> <code>/api/stripe/webhook</code> &mdash; rare admin-side updates</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">customers</h3>
+          <span class="tbl-meta">4 rows · per-tenant</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>The end-customer.</b> Find-or-create by phone, scoped to a tenant.
+          Stamped with <code>tenant_id</code> on insert (see project memory
+          &mdash; fix landed 2026-05-20 to prevent orphans).
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK ·
+          <span class="col-fk">tenant_id</span> → tenants ·
+          phone · name · email · created_at
+        </div>
+        <div>
+          <div class="lbl">Read by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span> <code>/api/tenant/followups</code></li>
+            <li><span class="op-r">R</span> <code>lib/quote/followup-contact.ts</code></li>
+          </ul>
+        </div>
+        <div>
+          <div class="lbl">Written by</div>
+          <ul class="rw-list">
+            <li><span class="op-w">W</span> <code>lib/customers/lookup.ts</code> &mdash; the only writer (called from inbound SMS + intake structuring)</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">tradie_signup_intents</h3>
+          <span class="tbl-meta">2 rows · ephemeral</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>Signup token store.</b> A row gets created when someone hits
+          <code>/signup</code>, the email link carries the token, and
+          <code>/onboard/activate</code> consumes it.
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK · token · email ·
+          intent_state · expires_at
+        </div>
+        <div>
+          <div class="lbl">Read &amp; written by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span><span class="op-w">/W</span> <code>lib/onboard/intent-tokens.ts</code> &mdash; sole owner</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">admin_users</h3>
+          <span class="tbl-meta">N rows · operator allowlist</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>QuoteMate-side operators</b> (not tradies). Gates the
+          <code>/admin/loader</code> CSV import UI &mdash; only emails in this
+          table can run trade-data imports.
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK · email · role · created_at
+        </div>
+        <div>
+          <div class="lbl">Read by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span> <code>lib/admin-loader/auth.ts</code> &mdash; the only reader</li>
+          </ul>
+        </div>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- GROUP: PRICING & CATALOGUE                                        -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="section-pad" style="color:var(--grp-pricing)">
+  <div class="wrap">
+    <div class="grp-header">
+      <span class="grp-tag">03 · Pricing &amp; Catalogue</span>
+      <span class="grp-sub" style="color:var(--text-dim)">What things cost. Shared cookbooks + per-tradie overrides + supplier feeds.</span>
+    </div>
+
+    <div class="tbl-grid" style="--grp-color: var(--grp-pricing)">
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">pricing_book</h3>
+          <span class="tbl-meta">5 rows · per-tenant per-trade</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>The tradie's rate card.</b> One row per <code>(tenant_id, trade)</code>
+          combination. Hourly + apprentice + senior rates, call-out minimum,
+          default markup, after-hours multiplier, GST, licence, and an
+          <code>overlays</code> jsonb (early-bird discount, etc).
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK ·
+          <span class="col-fk">tenant_id</span> NOT NULL → tenants ·
+          trade · hourly_rate · call_out_minimum · apprentice_rate ·
+          senior_rate · default_markup_pct · risk_buffer_pct ·
+          min_labour_hours · after_hours_multiplier · gst_registered ·
+          licence_type · <span class="col-json">overlays</span>
+        </div>
+        <div>
+          <div class="lbl">Read by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span> <code>/api/estimate/draft</code> &mdash; load rates for Opus</li>
+            <li><span class="op-r">R</span> <code>/api/quote/[id]/edit</code> &mdash; re-ground edits</li>
+            <li><span class="op-r">R</span> <code>/api/tenant/me</code> &middot; <code>/api/tenant/estimation</code></li>
+            <li><span class="op-r">R</span> <code>/q/[token]</code> page (licence footer)</li>
+          </ul>
+        </div>
+        <div>
+          <div class="lbl">Written by</div>
+          <ul class="rw-list">
+            <li><span class="op-w">W</span> <code>/api/onboard/activate</code> &mdash; insert on signup</li>
+            <li><span class="op-w">W</span> <code>/api/tenant/me</code> &mdash; update rates</li>
+            <li><span class="op-w">W</span> <code>/api/tenant/trades</code> &mdash; insert/delete on trade activation</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">shared_assemblies</h3>
+          <span class="tbl-meta">43 rows · master cookbook</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>The generic recipe library</b> &mdash; "Install LED downlight",
+          "Replace double GPO", etc. Each row has a category (for grounding)
+          and optional MUST-ASK clarifying questions.
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK · trade · name · description ·
+          default_unit · default_unit_price_ex_gst · default_labour_hours ·
+          default_exclusions · category ·
+          <span class="col-json">clarifying_questions</span> ·
+          <span class="col-json">properties</span>
+        </div>
+        <div>
+          <div class="lbl">Read by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span> <code>lib/estimate/tools.ts</code> &mdash; Opus tool-call lookup</li>
+            <li><span class="op-r">R</span> <code>lib/estimate/run.ts</code> &mdash; grounding candidate set</li>
+            <li><span class="op-r">R</span> <code>/api/sms/inbound</code> &mdash; SMS dialog menu</li>
+            <li><span class="op-r">R</span> <code>/api/tenant/bom/*</code> &middot; <code>/api/tenant/estimation/[assemblyId]</code></li>
+            <li><span class="op-r">R</span> <code>/api/health/deep</code> &mdash; smoke test</li>
+          </ul>
+        </div>
+        <div>
+          <div class="lbl">Written by</div>
+          <ul class="rw-list">
+            <li><span class="op-w">W</span> SQL migrations only (017-021, 029, 036-037)</li>
+            <li><span class="op-w">W</span> <code>/api/admin/loader/upload</code> &mdash; future trade imports</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">shared_materials</h3>
+          <span class="tbl-meta">37 rows · master parts list</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>Generic parts</b> &mdash; "Standard double GPO", "Tri-colour LED",
+          "RCBO safety switch". Has properties (color_temp, dimmable, smart,
+          weatherproof, supplied_by) the AI uses to filter.
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK · trade · name · brand · unit ·
+          default_unit_price_ex_gst ·
+          <span class="col-json">properties</span>
+        </div>
+        <div>
+          <div class="lbl">Read by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span> <code>lib/estimate/tools.ts</code> &mdash; Opus tool-call lookup</li>
+            <li><span class="op-r">R</span> <code>lib/estimate/run.ts</code> &mdash; grounding candidate set</li>
+            <li><span class="op-r">R</span> <code>/api/tenant/me</code> &mdash; dashboard material picker</li>
+          </ul>
+        </div>
+        <div>
+          <div class="lbl">Written by</div>
+          <ul class="rw-list">
+            <li><span class="op-w">W</span> SQL migrations only</li>
+            <li><span class="op-w">W</span> <code>/api/admin/loader/upload</code> &mdash; future imports</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">tenant_custom_assemblies</h3>
+          <span class="tbl-meta">0 rows · per-tenant recipes</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>The tradie's own services</b> &mdash; "Install pool light",
+          "Patch kitchen splashback". UNION'd with <code>shared_assemblies</code>
+          in <code>lookupAssembly</code>; rows flagged
+          <code>always_inspection</code> are excluded so the AI can't price
+          them.
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK ·
+          <span class="col-fk">tenant_id</span> → tenants ·
+          trade · name · enabled · always_inspection · category ·
+          <span class="col-json">properties</span>
+        </div>
+        <div>
+          <div class="lbl">Read by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span> <code>lib/estimate/tools.ts</code> &mdash; UNION with shared</li>
+            <li><span class="op-r">R</span> <code>lib/estimate/run.ts</code> &mdash; grounding</li>
+            <li><span class="op-r">R</span> <code>/api/sms/inbound</code> &middot; <code>/api/tenant/me</code></li>
+          </ul>
+        </div>
+        <div>
+          <div class="lbl">Written by</div>
+          <ul class="rw-list">
+            <li><span class="op-w">W</span> <code>/api/tenant/services</code> &mdash; dashboard form (insert/update/delete)</li>
+            <li><span class="op-w">W</span> <code>/api/tenant/me</code> &mdash; tier toggles</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">tenant_material_catalogue</h3>
+          <span class="tbl-meta">N rows · per-tenant SKUs</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>The tradie's real SKUs &amp; brands</b> (Clipsal Iconic vs 2000).
+          Loaded via CSV upload or dashboard. Carries a separate
+          <code>customer_supply_price_ex_gst</code> for install-only pricing
+          (WP5).
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK ·
+          <span class="col-fk">tenant_id</span> → tenants ·
+          <span class="col-fk">supplier_row_id</span> → supplier_catalogue ·
+          trade · name · brand · range_series · unit_price_ex_gst ·
+          customer_supply_price_ex_gst · active ·
+          <span class="col-json">properties</span>
+        </div>
+        <div>
+          <div class="lbl">Read by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span> <code>lib/estimate/tools.ts</code> &mdash; UNION with shared materials</li>
+            <li><span class="op-r">R</span> <code>lib/estimate/run.ts</code> &mdash; grounding candidates</li>
+            <li><span class="op-r">R</span> <code>/api/sms/inbound</code> &middot; <code>/api/tenant/bom</code> &middot; <code>/api/tenant/tier-ladder</code></li>
+            <li><span class="op-r">R</span> <code>/api/supplier-catalogue</code> (provenance link)</li>
+          </ul>
+        </div>
+        <div>
+          <div class="lbl">Written by</div>
+          <ul class="rw-list">
+            <li><span class="op-w">W</span> <code>/api/tenant/catalogue</code> &mdash; dashboard add/edit</li>
+            <li><span class="op-w">W</span> <code>/api/tenant/catalogue/upload</code> &middot; <code>bulk-add</code> &middot; <code>stock-essentials</code> &mdash; CSV/preset bulk</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">shared_assembly_bom</h3>
+          <span class="tbl-meta">N rows · recipe → parts</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>Bill of materials for shared assemblies.</b> Tells you that the
+          "Install LED downlight" assembly needs 1× downlight + 1× sundries.
+          Read-only from app code.
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK ·
+          <span class="col-fk">assembly_id</span> → shared_assemblies ·
+          <span class="col-fk">material_id</span> → shared_materials ·
+          quantity · is_optional
+        </div>
+        <div>
+          <div class="lbl">Read by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span> <code>/api/tenant/bom/*</code> &middot; <code>/api/tenant/estimation</code></li>
+            <li><span class="op-r">R</span> <code>lib/estimate/run.ts</code></li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">tenant_assembly_bom</h3>
+          <span class="tbl-meta">N rows · tenant recipe → parts</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>The tradie's own BOM</b> for either custom assemblies or forked
+          shared ones. <code>/api/tenant/bom/fork</code> deep-copies a shared
+          BOM into here so the tradie can tweak it without affecting peers.
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK ·
+          <span class="col-fk">tenant_id</span> → tenants ·
+          <span class="col-fk">assembly_id</span> (shared OR custom) ·
+          <span class="col-fk">material_id</span> → tenant_material_catalogue ·
+          quantity · is_optional
+        </div>
+        <div>
+          <div class="lbl">Read &amp; written by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span><span class="op-w">/W</span> <code>/api/tenant/bom</code> (list, add)</li>
+            <li><span class="op-w">W</span> <code>/api/tenant/bom/[id]</code> (update, delete)</li>
+            <li><span class="op-w">W</span> <code>/api/tenant/bom/fork</code> (deep copy from shared)</li>
+            <li><span class="op-r">R</span> <code>lib/estimate/run.ts</code> &middot; <code>/api/tenant/estimation</code></li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">tenant_assembly_overrides</h3>
+          <span class="tbl-meta">N rows · per-tradie tweaks</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>Tradie-specific overrides</b> on a shared assembly &mdash;
+          alternate price, labour hours, or exclusions without forking the
+          whole BOM.
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK ·
+          <span class="col-fk">tenant_id</span> → tenants ·
+          <span class="col-fk">assembly_id</span> → shared_assemblies ·
+          override_price · override_labour_hours · override_exclusions
+        </div>
+        <div>
+          <div class="lbl">Read &amp; written by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span><span class="op-w">/W</span> <code>/api/tenant/estimation/[assemblyId]</code></li>
+            <li><span class="op-r">R</span> <code>/api/tenant/estimation</code> &middot; <code>lib/estimate/run.ts</code></li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">tenant_material_preferences</h3>
+          <span class="tbl-meta">0 rows · soft hints</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>Brand preference hints</b> the AI weights when picking from
+          shared_materials &mdash; "prefer Clipsal", "avoid HPM". Soft signal,
+          not a hard filter.
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK ·
+          <span class="col-fk">tenant_id</span> → tenants ·
+          brand · preference (prefer|avoid)
+        </div>
+        <div>
+          <div class="lbl">Read &amp; written by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span> <code>lib/estimate/run.ts</code> &mdash; brand hint in prompt</li>
+            <li><span class="op-r">R</span><span class="op-w">/W</span> <code>/api/tenant/me</code> &mdash; dashboard editor</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">tenant_service_offerings</h3>
+          <span class="tbl-meta">54 rows · "what I offer"</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>Which shared assemblies a tenant offers.</b> Toggling OFF here
+          politely declines the request in SMS (not the old $199 fallback &mdash;
+          see project memory).
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK ·
+          <span class="col-fk">tenant_id</span> → tenants ·
+          <span class="col-fk">assembly_id</span> → shared_assemblies ·
+          enabled · custom_price_ex_gst
+        </div>
+        <div>
+          <div class="lbl">Read by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span> <code>/api/sms/inbound</code> &mdash; OFF → decline directive</li>
+            <li><span class="op-r">R</span> <code>lib/estimate/run.ts</code> &middot; <code>/api/tenant/estimation</code></li>
+            <li><span class="op-r">R</span> <code>/api/tenant/me</code></li>
+          </ul>
+        </div>
+        <div>
+          <div class="lbl">Written by</div>
+          <ul class="rw-list">
+            <li><span class="op-w">W</span> <code>/api/tenant/me</code> (toggles) &middot; <code>/api/tenant/trades</code></li>
+            <li><span class="op-w">W</span> <code>lib/onboard/seed-tenant-defaults.ts</code> &mdash; signup seed</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">tenant_tier_ladder</h3>
+          <span class="tbl-meta">N rows · G/B/B tier rules</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>Maps Good / Better / Best tiers to specific SKUs</b> per assembly
+          &mdash; e.g. Good = generic LED, Better = Clipsal, Best = Philips Hue.
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK ·
+          <span class="col-fk">tenant_id</span> → tenants ·
+          <span class="col-fk">assembly_id</span> · tier · sku_filter
+        </div>
+        <div>
+          <div class="lbl">Read &amp; written by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span><span class="op-w">/W</span> <code>/api/tenant/tier-ladder</code></li>
+            <li><span class="op-r">R</span> <code>lib/estimate/run.ts</code></li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">tenant_licences</h3>
+          <span class="tbl-meta">0 rows · compliance metadata</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>Licence numbers per trade</b> (NECA NSW, QBCC QLD, etc.). Shown
+          in the customer-facing quote footer for compliance.
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK ·
+          <span class="col-fk">tenant_id</span> → tenants ·
+          trade · licence_type · licence_number · state · expiry
+        </div>
+        <div>
+          <div class="lbl">Read &amp; written by</div>
+          <ul class="rw-list">
+            <li><span class="op-w">W</span> <code>/api/onboard/activate</code> &mdash; upsert on signup</li>
+            <li><span class="op-r">R</span><span class="op-w">/W</span> <code>/api/tenant/me</code> &middot; <code>/api/tenant/trades</code></li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">supplier_catalogue</h3>
+          <span class="tbl-meta">N rows · provenance source</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>Operator-owned supplier feed</b> (Reece, Tradelink, Beacon, etc.).
+          Tradies bulk-add into their <code>tenant_material_catalogue</code>
+          from this, and matches keep a <code>supplier_row_id</code> link for
+          provenance.
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK · supplier · trade · sku ·
+          brand · name · unit_price_ex_gst · category · last_seen_at
+        </div>
+        <div>
+          <div class="lbl">Read by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span> <code>/api/supplier-catalogue</code> &mdash; tradie browse</li>
+            <li><span class="op-r">R</span> <code>/api/tenant/catalogue/bulk-add</code> &middot; <code>stock-essentials</code></li>
+          </ul>
+        </div>
+        <div>
+          <div class="lbl">Written by</div>
+          <ul class="rw-list">
+            <li><span class="op-w">W</span> <code>/api/supplier-catalogue/import</code> &mdash; operator CSV</li>
+          </ul>
+        </div>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- GROUP: QUOTE PIPELINE                                             -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="section-pad" style="color:var(--grp-pipeline)">
+  <div class="wrap">
+    <div class="grp-header">
+      <span class="grp-tag">04 · Quote Pipeline</span>
+      <span class="grp-sub" style="color:var(--text-dim)">The job's journey: call → intake → quote → follow-up → payment.</span>
+    </div>
+
+    <div class="tbl-grid" style="--grp-color: var(--grp-pipeline)">
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">calls</h3>
+          <span class="tbl-meta">49 rows · voice channel</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>Every Vapi voice call.</b> Created by the Vapi webhook,
+          carries the transcript + recording URL + customer photo URLs sent
+          mid-call via the SMS-photo-link tool.
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK ·
+          <span class="col-fk">tenant_id</span> → tenants ·
+          vapi_call_id (unique) · caller_number · duration_seconds ·
+          transcript · recording_url ·
+          <span class="col-json">photo_urls</span> ·
+          ended_at · photo_request_sent_at
+        </div>
+        <div>
+          <div class="lbl">Read by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span> <code>/api/intake/structure</code> &mdash; structure transcript into JSON</li>
+            <li><span class="op-r">R</span> <code>/api/estimate/draft</code> &middot; <code>/api/upload/[token]</code></li>
+            <li><span class="op-r">R</span> <code>/api/tenant/me</code> &middot; <code>/api/tenant/chats</code> &mdash; dashboard</li>
+            <li><span class="op-r">R</span> <code>/q/[token]</code> &middot; <code>/upload/[token]</code> pages</li>
+            <li><span class="op-r">R</span> <code>lib/quote/booking-notify.ts</code></li>
+          </ul>
+        </div>
+        <div>
+          <div class="lbl">Written by</div>
+          <ul class="rw-list">
+            <li><span class="op-w">W</span> <code>/api/vapi/webhook</code> &mdash; upsert by <code>vapi_call_id</code></li>
+            <li><span class="op-w">W</span> <code>/api/vapi/tools/send-sms-photo-link</code> &mdash; stamp photo request</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">intakes</h3>
+          <span class="tbl-meta">157 rows · structured job spec</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>The job described in machine-readable form.</b> Five jsonb
+          payloads (<code>scope</code>, <code>access</code>,
+          <code>property</code>, <code>risks</code>, <code>caller</code>,
+          <code>timing</code>) plus a Voyage 1024-dim embedding for RAG.
+          Channel-agnostic &mdash; voice and SMS both end up here.
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK ·
+          <span class="col-fk">call_id</span> → calls (nullable) ·
+          <span class="col-fk">tenant_id</span> → tenants ·
+          trade · job_type · address · suburb ·
+          <span class="col-json">scope</span> ·
+          <span class="col-json">access</span> ·
+          <span class="col-json">property</span> ·
+          <span class="col-json">risks</span> ·
+          <span class="col-json">caller</span> ·
+          <span class="col-json">timing</span> ·
+          inspection_required · confidence ·
+          <span class="col-key">embedding</span> vector(1024)
+        </div>
+        <div>
+          <div class="lbl">Read by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span> <code>/api/estimate/draft</code> &mdash; the AI's input</li>
+            <li><span class="op-r">R</span> <code>/api/quote/[id]/edit</code> &middot; <code>/api/q/[token]/book</code></li>
+            <li><span class="op-r">R</span> <code>/api/tenant/{me,chats,followups,followups/text}</code></li>
+            <li><span class="op-r">R</span> <code>/q/[token]</code> page</li>
+            <li><span class="op-r">R</span> <code>lib/ig-engine/{generate,samples}.ts</code> &middot; <code>lib/quote/*</code></li>
+            <li><span class="op-r">R</span> <code>match_intakes()</code> SQL fn &mdash; pgvector similarity RAG</li>
+          </ul>
+        </div>
+        <div>
+          <div class="lbl">Written by</div>
+          <ul class="rw-list">
+            <li><span class="op-w">W</span> <code>/api/intake/structure</code> &mdash; the only inserter</li>
+            <li><span class="op-w">W</span> <code>/api/upload/[token]</code> &mdash; append photo paths</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">quotes</h3>
+          <span class="tbl-meta">137 rows · the deliverable</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>The quote shown to the customer.</b> Good/Better/Best tiers live
+          in three jsonb columns (line items are NOT normalised &mdash; see the
+          note on <code>quote_line_items</code>). Carries Stripe sessions,
+          preview-image paths, routing decision, price-hold deadline, and
+          booking state.
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK ·
+          <span class="col-fk">intake_id</span> → intakes ·
+          <span class="col-fk">tenant_id</span> → tenants ·
+          status · scope_of_works ·
+          <span class="col-json">good</span> ·
+          <span class="col-json">better</span> ·
+          <span class="col-json">best</span> ·
+          <span class="col-json">optional_upsells</span> ·
+          <span class="col-json">risk_flags</span> ·
+          needs_inspection · routing_decision · selected_tier ·
+          subtotal_ex_gst · total_inc_gst · sent_at · accepted_at ·
+          price_hold_until · booking_state · preview_image_paths ·
+          sample_image_paths
+        </div>
+        <div>
+          <div class="lbl">Read by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span> <code>/q/[token]</code> &middot; <code>/q/[token]/book</code> &middot; <code>/q/[token]/paid</code> pages</li>
+            <li><span class="op-r">R</span> <code>/r/[token]/[tier]</code> &mdash; Stripe redirect</li>
+            <li><span class="op-r">R</span> <code>/api/q/[token]/{book,preview-status}</code> &middot; <code>/api/q/choose</code></li>
+            <li><span class="op-r">R</span> <code>/api/quote/[id]/{check-owner,edit}</code></li>
+            <li><span class="op-r">R</span> <code>/api/stripe/webhook</code> &middot; <code>/api/tenant/{me,followups,followups/text}</code></li>
+            <li><span class="op-r">R</span> <code>lib/estimate/{rag,run}.ts</code> &middot; <code>lib/ig-engine/*</code> &middot; <code>lib/quote/*</code></li>
+          </ul>
+        </div>
+        <div>
+          <div class="lbl">Written by</div>
+          <ul class="rw-list">
+            <li><span class="op-w">W</span> <code>/api/estimate/draft</code> &mdash; the only inserter</li>
+            <li><span class="op-w">W</span> <code>/api/quote/[id]/edit</code> &mdash; tradie tier edits</li>
+            <li><span class="op-w">W</span> <code>/api/q/[token]/book</code> &mdash; slot booked</li>
+            <li><span class="op-w">W</span> <code>/api/stripe/webhook</code> &mdash; mark paid/accepted</li>
+            <li><span class="op-w">W</span> <code>/api/tenant/followups/*</code> &mdash; status moves</li>
+            <li><span class="op-w">W</span> <code>lib/ig-engine/*</code> &mdash; image paths · <code>lib/quote/lifecycle.ts</code></li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">quote_line_items</h3>
+          <span class="tbl-meta">0 rows · UNUSED</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>Declared but not populated.</b> The intent was a normalised line
+          model; in practice every line lives in <code>quotes.good/better/best</code>
+          jsonb. Only read by a generator utility &mdash; safe to leave, do not
+          assume normalised rows exist.
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK ·
+          <span class="col-fk">quote_id</span> → quotes ·
+          tier · description · quantity · unit · unit_price_ex_gst · source
+        </div>
+        <div>
+          <div class="lbl">Read by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span> <code>lib/ig-engine/generate.ts</code> only (degrades to jsonb)</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">quote_followup_events</h3>
+          <span class="tbl-meta">N rows · CRM touch log</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>Every follow-up touch on a quote</b> &mdash; outcome + free-text
+          note + auto-logged calls/texts. Replaced the binary "mark contacted"
+          UI (see project memory 2026-05-20).
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK ·
+          <span class="col-fk">tenant_id</span> → tenants ·
+          <span class="col-fk">quote_id</span> → quotes ·
+          channel · outcome · note · happened_at · created_by
+        </div>
+        <div>
+          <div class="lbl">Read &amp; written by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span><span class="op-w">/W</span> <code>/api/tenant/followups/events</code> (list, insert)</li>
+            <li><span class="op-r">R</span> <code>/api/tenant/followups/{call,text}</code> &mdash; auto-log</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">payments</h3>
+          <span class="tbl-meta">0 rows · Stripe-only stub</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>Schema reserved for Stripe Connect Express flows.</b> Currently
+          0 rows &mdash; live payments today go straight through the webhook
+          handler against test-mode Checkout. Will fill when Connect is wired.
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK ·
+          <span class="col-fk">tenant_id</span> · <span class="col-fk">quote_id</span> ·
+          stripe_payment_intent · amount · status · created_at
+        </div>
+        <div>
+          <div class="lbl">Read by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span> <code>/api/tenant/me</code> &mdash; dashboard placeholder</li>
+          </ul>
+        </div>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- GROUP: SMS / CONVERSATIONS                                        -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="section-pad" style="color:var(--grp-sms)">
+  <div class="wrap">
+    <div class="grp-header">
+      <span class="grp-tag">05 · Conversations</span>
+      <span class="grp-sub" style="color:var(--text-dim)">The SMS engine. Two tables hold the whole back-and-forth.</span>
+    </div>
+
+    <div class="tbl-grid" style="--grp-color: var(--grp-sms)">
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">sms_conversations</h3>
+          <span class="tbl-meta">89 rows · session container</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>One row per open SMS thread.</b> Two flavours via
+          <code>conversation_type</code>: <code>customer_quote</code> (the AI
+          dialog with a customer) and <code>tradie_registration</code>
+          (SMS-based onboarding). State machine lives in
+          <code>conversation_state</code> jsonb. Tradie token + photo upload
+          links resolve via the unique token.
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK · token (unique) ·
+          <span class="col-fk">tenant_id</span> → tenants ·
+          <span class="col-fk">quote_id</span> → quotes (nullable) ·
+          conversation_type · conversation_state ·
+          <span class="col-json">state</span> ·
+          phone_customer · phone_tradie · last_msg_at · closed_at
+        </div>
+        <div>
+          <div class="lbl">Read by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span> <code>/api/sms/inbound</code> &mdash; resume context</li>
+            <li><span class="op-r">R</span> <code>/api/intake/structure</code> &middot; <code>/api/estimate/draft</code></li>
+            <li><span class="op-r">R</span> <code>/api/upload/[token]</code> &middot; <code>/upload/[token]</code> page</li>
+            <li><span class="op-r">R</span> <code>/api/q/choose/[token]</code> &middot; <code>/q/choose/[token]</code> page</li>
+            <li><span class="op-r">R</span> <code>/api/tenant/{me,chats,followups/messages,followups/text}</code></li>
+            <li><span class="op-r">R</span> <code>/q/[token]</code> page (price-hold timer)</li>
+            <li><span class="op-r">R</span> <code>lib/ig-engine/generate.ts</code></li>
+          </ul>
+        </div>
+        <div>
+          <div class="lbl">Written by</div>
+          <ul class="rw-list">
+            <li><span class="op-w">W</span> <code>/api/sms/inbound</code> &mdash; create/lock/advance state</li>
+            <li><span class="op-w">W</span> <code>/api/intake/structure</code> &middot; <code>/api/q/choose/[token]</code></li>
+            <li><span class="op-w">W</span> <code>/api/tenant/followups/text</code> &mdash; tradie-initiated</li>
+            <li><span class="op-w">W</span> <code>/api/cron/sms-cleanup</code> &mdash; close idle threads &gt; 24h</li>
+            <li><span class="op-w">W</span> <code>lib/onboard/intent-tokens.ts</code></li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">sms_messages</h3>
+          <span class="tbl-meta">1,038 rows · every single text</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>Every inbound and outbound SMS</b>, idempotent on Twilio's
+          <code>MessageSid</code> so webhook retries can't double-insert.
+          Photo MMS attachments are stored as URLs in the body or
+          a side jsonb.
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK ·
+          <span class="col-fk">conversation_id</span> → sms_conversations ·
+          twilio_sid (unique) · direction (inbound|outbound) ·
+          from_number · to_number · body · media_urls · created_at
+        </div>
+        <div>
+          <div class="lbl">Read by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span> <code>/api/sms/inbound</code> &mdash; dialog history</li>
+            <li><span class="op-r">R</span> <code>/api/intake/structure</code> &mdash; structure conversation</li>
+            <li><span class="op-r">R</span> <code>/api/q/choose/[token]</code></li>
+            <li><span class="op-r">R</span> <code>/api/tenant/{me,chats,followups/messages,followups/text}</code></li>
+          </ul>
+        </div>
+        <div>
+          <div class="lbl">Written by</div>
+          <ul class="rw-list">
+            <li><span class="op-w">W</span> <code>/api/sms/inbound</code> &mdash; insert inbound</li>
+            <li><span class="op-w">W</span> <code>lib/sms/dispatch.ts</code> (via Twilio) &mdash; outbound is written by the SMS dispatch helper (not shown in static grep because it goes through a wrapper)</li>
+          </ul>
+        </div>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- GROUP: TRADES REGISTRY                                            -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="section-pad" style="color:var(--grp-registry)">
+  <div class="wrap">
+    <div class="grp-header">
+      <span class="grp-tag">06 · Trades Registry &nbsp;<small style="opacity:0.6;font-weight:400">(v9 — partial)</small></span>
+      <span class="grp-sub" style="color:var(--text-dim)">Lets a new trade (carpentry, HVAC) be added via admin CSV instead of hand-wiring.</span>
+    </div>
+
+    <div class="tbl-grid" style="--grp-color: var(--grp-registry)">
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">trades</h3>
+          <span class="tbl-meta">N rows · trade dictionary</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>The list of supported trades.</b> Replaces the hard-coded enum;
+          rows ship with display name, slug, and active flag.
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK · slug (unique) ·
+          display_name · is_active · created_at
+        </div>
+        <div>
+          <div class="lbl">Read by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span> <code>/api/admin/loader/upload</code></li>
+            <li><span class="op-r">R</span> <code>/api/tenant/trades/available</code></li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">categories</h3>
+          <span class="tbl-meta">N rows · grounding category list</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>The DB-side mirror</b> of <code>lib/estimate/categories.ts</code>
+          so the admin loader can validate <code>assembly.category</code>
+          against the live registry on import.
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK ·
+          <span class="col-fk">trade_id</span> → trades ·
+          slug · label · created_at
+        </div>
+        <div>
+          <div class="lbl">Read by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span> <code>/api/admin/loader/upload</code> only</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">trade_prompts</h3>
+          <span class="tbl-meta">N rows · per-trade system prompt</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>Trade-specific Opus system prompt</b> (the electrical / plumbing
+          ones today are in code; new trades load theirs from here).
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK ·
+          <span class="col-fk">trade_id</span> → trades ·
+          version · system_prompt · is_active
+        </div>
+        <div>
+          <div class="lbl">Read by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span> <code>lib/estimate/prompt.ts</code></li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">trade_pricing_defaults</h3>
+          <span class="tbl-meta">N rows · per-trade starter rates</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>Default pricing_book values</b> when a tenant activates a new
+          trade &mdash; e.g. carpentry's default hourly rate, markup, callout.
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK ·
+          <span class="col-fk">trade_id</span> → trades ·
+          hourly_rate · call_out_minimum · default_markup_pct ·
+          risk_buffer_pct · min_labour_hours
+        </div>
+        <div>
+          <div class="lbl">Read by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span> <code>/api/admin/loader/upload</code></li>
+            <li><span class="op-r">R</span> (planned) <code>/api/tenant/trades/activate</code> to seed pricing_book</li>
+          </ul>
+        </div>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- GROUP: ADMIN LOADER                                               -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="section-pad" style="color:var(--grp-admin)">
+  <div class="wrap">
+    <div class="grp-header">
+      <span class="grp-tag">07 · Admin Loader (CSV)</span>
+      <span class="grp-sub" style="color:var(--text-dim)">Staging-then-commit pipeline for bulk trade/catalogue imports.</span>
+    </div>
+
+    <div class="tbl-grid" style="--grp-color: var(--grp-admin)">
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">import_batches</h3>
+          <span class="tbl-meta">N rows · import header</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>One row per CSV upload.</b> Tracks filename, uploader,
+          target_kind (trade / assembly / material), status
+          (staged → approved → committed / rolled back), counts.
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK ·
+          <span class="col-fk">uploaded_by</span> → admin_users ·
+          filename · target_kind · status · row_count · created_at ·
+          committed_at
+        </div>
+        <div>
+          <div class="lbl">Read &amp; written by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span><span class="op-w">/W</span> <code>lib/admin-loader/store.ts</code> &mdash; sole writer</li>
+            <li><span class="op-r">R</span> <code>/api/admin/loader/batch/*</code> &middot; <code>/admin/loader</code> page</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tbl">
+        <div class="tbl-head">
+          <h3 class="tbl-name">import_staged_rows</h3>
+          <span class="tbl-meta">N rows · staged CSV rows</span>
+        </div>
+        <p class="tbl-purpose">
+          <b>Every individual CSV row</b> pre-commit, with validation errors
+          flagged per row. Approval scripts read from here and write to the
+          live target table (e.g. <code>shared_assemblies</code>).
+        </p>
+        <div class="tbl-cols">
+          <span class="col-key">id</span> uuid PK ·
+          <span class="col-fk">batch_id</span> → import_batches ·
+          row_index · <span class="col-json">data</span> · status · errors
+        </div>
+        <div>
+          <div class="lbl">Read &amp; written by</div>
+          <ul class="rw-list">
+            <li><span class="op-r">R</span><span class="op-w">/W</span> <code>lib/admin-loader/store.ts</code></li>
+          </ul>
+        </div>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- FK GRAPH                                                          -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="section-pad">
+  <div class="wrap">
+    <div class="eyebrow">08 · How the IDs link up</div>
+    <h2 class="display-lg">Foreign-key map</h2>
+    <p style="margin-top:1rem;max-width:60rem">
+      Every <code>uuid</code> reference between tables. Almost every domain
+      table descends from <code>tenants.id</code> &mdash; that's the tenancy
+      spine.
+    </p>
+
+    <div class="fk-grid">
+      <div class="fk-row"><span class="fk-from">customers.tenant_id</span><span class="fk-arrow">→</span><span class="fk-to">tenants.id</span><span class="fk-note">on delete set null</span></div>
+      <div class="fk-row"><span class="fk-from">calls.tenant_id</span><span class="fk-arrow">→</span><span class="fk-to">tenants.id</span><span class="fk-note">on delete set null</span></div>
+      <div class="fk-row"><span class="fk-from">intakes.tenant_id</span><span class="fk-arrow">→</span><span class="fk-to">tenants.id</span><span class="fk-note">on delete set null</span></div>
+      <div class="fk-row"><span class="fk-from">intakes.call_id</span><span class="fk-arrow">→</span><span class="fk-to">calls.id</span><span class="fk-note">on delete cascade</span></div>
+      <div class="fk-row"><span class="fk-from">quotes.intake_id</span><span class="fk-arrow">→</span><span class="fk-to">intakes.id</span><span class="fk-note">on delete cascade</span></div>
+      <div class="fk-row"><span class="fk-from">quotes.tenant_id</span><span class="fk-arrow">→</span><span class="fk-to">tenants.id</span><span class="fk-note">on delete set null</span></div>
+      <div class="fk-row"><span class="fk-from">quote_line_items.quote_id</span><span class="fk-arrow">→</span><span class="fk-to">quotes.id</span><span class="fk-note">on delete cascade · unused</span></div>
+      <div class="fk-row"><span class="fk-from">quote_followup_events.tenant_id</span><span class="fk-arrow">→</span><span class="fk-to">tenants.id</span></div>
+      <div class="fk-row"><span class="fk-from">quote_followup_events.quote_id</span><span class="fk-arrow">→</span><span class="fk-to">quotes.id</span></div>
+      <div class="fk-row"><span class="fk-from">payments.tenant_id / quote_id</span><span class="fk-arrow">→</span><span class="fk-to">tenants.id / quotes.id</span></div>
+      <div class="fk-row"><span class="fk-from">pricing_book.tenant_id</span><span class="fk-arrow">→</span><span class="fk-to">tenants.id</span><span class="fk-note">NOT NULL since migration 025</span></div>
+      <div class="fk-row"><span class="fk-from">tenant_custom_assemblies.tenant_id</span><span class="fk-arrow">→</span><span class="fk-to">tenants.id</span></div>
+      <div class="fk-row"><span class="fk-from">tenant_material_catalogue.tenant_id</span><span class="fk-arrow">→</span><span class="fk-to">tenants.id</span></div>
+      <div class="fk-row"><span class="fk-from">tenant_material_catalogue.supplier_row_id</span><span class="fk-arrow">→</span><span class="fk-to">supplier_catalogue.id</span><span class="fk-note">nullable · provenance</span></div>
+      <div class="fk-row"><span class="fk-from">shared_assembly_bom.assembly_id</span><span class="fk-arrow">→</span><span class="fk-to">shared_assemblies.id</span></div>
+      <div class="fk-row"><span class="fk-from">shared_assembly_bom.material_id</span><span class="fk-arrow">→</span><span class="fk-to">shared_materials.id</span></div>
+      <div class="fk-row"><span class="fk-from">tenant_assembly_bom.tenant_id / assembly_id / material_id</span><span class="fk-arrow">→</span><span class="fk-to">tenants / either assemblies / tenant_material_catalogue</span></div>
+      <div class="fk-row"><span class="fk-from">tenant_assembly_overrides.tenant_id / assembly_id</span><span class="fk-arrow">→</span><span class="fk-to">tenants.id / shared_assemblies.id</span></div>
+      <div class="fk-row"><span class="fk-from">tenant_service_offerings.tenant_id / assembly_id</span><span class="fk-arrow">→</span><span class="fk-to">tenants.id / shared_assemblies.id</span></div>
+      <div class="fk-row"><span class="fk-from">tenant_tier_ladder.tenant_id / assembly_id</span><span class="fk-arrow">→</span><span class="fk-to">tenants.id / shared_assemblies.id</span></div>
+      <div class="fk-row"><span class="fk-from">tenant_licences.tenant_id</span><span class="fk-arrow">→</span><span class="fk-to">tenants.id</span></div>
+      <div class="fk-row"><span class="fk-from">tenant_material_preferences.tenant_id</span><span class="fk-arrow">→</span><span class="fk-to">tenants.id</span></div>
+      <div class="fk-row"><span class="fk-from">sms_conversations.tenant_id</span><span class="fk-arrow">→</span><span class="fk-to">tenants.id</span></div>
+      <div class="fk-row"><span class="fk-from">sms_conversations.quote_id</span><span class="fk-arrow">→</span><span class="fk-to">quotes.id</span><span class="fk-note">nullable</span></div>
+      <div class="fk-row"><span class="fk-from">sms_messages.conversation_id</span><span class="fk-arrow">→</span><span class="fk-to">sms_conversations.id</span><span class="fk-note">on delete cascade</span></div>
+      <div class="fk-row"><span class="fk-from">categories.trade_id</span><span class="fk-arrow">→</span><span class="fk-to">trades.id</span></div>
+      <div class="fk-row"><span class="fk-from">trade_prompts.trade_id</span><span class="fk-arrow">→</span><span class="fk-to">trades.id</span></div>
+      <div class="fk-row"><span class="fk-from">trade_pricing_defaults.trade_id</span><span class="fk-arrow">→</span><span class="fk-to">trades.id</span></div>
+      <div class="fk-row"><span class="fk-from">import_batches.uploaded_by</span><span class="fk-arrow">→</span><span class="fk-to">admin_users.id</span></div>
+      <div class="fk-row"><span class="fk-from">import_staged_rows.batch_id</span><span class="fk-arrow">→</span><span class="fk-to">import_batches.id</span><span class="fk-note">on delete cascade</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- FOOTER                                                            -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<footer>
+  <div class="wrap">
+    <p>
+      <strong>Generated 2026-05-26</strong> from
+      <code>sql/init.sql</code> + 57 migrations + a full grep across
+      <code>app/</code> and <code>lib/</code>. The map is exact for tables
+      and read/write directionality; column lists prioritise the load-bearing
+      columns over exhaustive coverage. When in doubt the authoritative
+      definitions live in <code>sql/migrations/NNN_*.sql</code> and
+      <code>lib/estimate/{tools,validate,run}.ts</code>.
+    </p>
+    <p>
+      <strong>Honest caveats:</strong> outbound SMS writes to
+      <code>sms_messages</code> go through <code>lib/sms/dispatch.ts</code>
+      which wraps the insert &mdash; the grep above only picked up the
+      direct <code>.from('sms_messages').insert(...)</code> sites. RLS is
+      enabled across 22 tables (migration 040, Phase 1) but service-role
+      reads bypass it &mdash; every API route in the map runs with service
+      role, so the table list is the real access surface today.
+    </p>
+    <p>
+      <strong>Related docs:</strong>
+      <a href="./pricing-flow.html">pricing-flow.html</a> ·
+      <a href="./onboarding-bundle.html">onboarding-bundle.html</a> ·
+      <a href="../../CLAUDE.md">CLAUDE.md (engineering context)</a>
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,29 @@
+-- Migration 063 · Drop the legacy `tradies` table
+--
+-- Phase 2b of the 2026-05-26 DB cleanup audit. The 4 code call-sites
+-- that previously read from `tradies` (booking page, booking POST,
+-- Stripe webhook read + update) have been switched to read
+-- `tenants.available_slots` in the same change. Mig 062 already
+-- backfilled `tenants.available_slots` from the (single) tradies row.
+--
+-- Pre-cleanup `tradies` contents (1 row, "Quote Mate" / Jon's pilot
+-- record):
+--   id              30fb1d7b-6018-436e-932b-e289d37b9e24
+--   business_name   Quote Mate
+--   email           jon@maintain.com.au
+--   phone           +61414530836
+--   licence         NECA / NSW / EC-123456
+--   default_deposit_pct  30.00
+--   30 booking slots (now mirrored onto every tenant)
+--
+-- We are deliberately NOT preserving the rest (email/phone/licence/
+-- deposit_pct/stripe_account_id) — none of those columns are read
+-- anywhere in the codebase today (verified by grep), and the tenants
+-- table already carries equivalents (owner_email / owner_mobile /
+-- licence_*). If a future migration needs the data, it can be recovered
+-- from the migration 023+/038 audit logs or git history of the seed
+-- scripts.
+--
+-- Idempotent: `drop table if exists`.
+
+drop table if exists tradies cascade;

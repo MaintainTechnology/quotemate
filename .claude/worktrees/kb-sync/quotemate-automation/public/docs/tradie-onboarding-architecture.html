@@ -1,0 +1,693 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Tradie Onboarding Architecture — QuoteMate</title>
+  <meta
+    name="description"
+    content="End-to-end architecture of the QuoteMate tradie onboarding flow: signup → email verify → wizard → activate → AI live. Includes database schema, activation checklist, and external service integrations."
+  />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap"
+  />
+  <style>
+    :root {
+      --ink-deep: #0a1628;
+      --ink: #131c2d;
+      --ink-card: #1a2332;
+      --ink-line: #2a3548;
+      --accent: #ff5a1f;
+      --accent-press: #e8470f;
+      --text-pri: #ffffff;
+      --text-sec: #b8c2d1;
+      --text-dim: #7a8699;
+      --teal-glow: #14b8a6;
+      --success: #34d399;
+      --warning: #fbbf24;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: var(--ink-deep);
+      color: var(--text-pri);
+      font-family: 'Manrope', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      font-weight: 400;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+    .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+    .container {
+      max-width: 80rem;
+      margin: 0 auto;
+      padding: 0 1.5rem;
+      position: relative;
+      z-index: 1;
+    }
+    .topo {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      opacity: 0.22; pointer-events: none; z-index: 0;
+    }
+
+    /* ─── HERO ─── */
+    .hero {
+      position: relative;
+      padding: 5rem 0 3.5rem;
+      border-bottom: 1px solid var(--ink-line);
+      overflow: hidden;
+    }
+    .eyebrow {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem; font-weight: 600;
+      letter-spacing: 0.16em; text-transform: uppercase;
+      color: var(--text-dim);
+    }
+    h1.display {
+      margin-top: 1.25rem;
+      font-weight: 800; text-transform: uppercase;
+      font-size: clamp(2.25rem, 5.5vw, 4.5rem);
+      letter-spacing: -0.035em;
+      line-height: 0.95;
+    }
+    .hi { color: var(--accent); }
+    .lede {
+      margin-top: 1.5rem;
+      max-width: 52ch;
+      color: var(--text-sec);
+      font-size: 1.05rem;
+      line-height: 1.55;
+    }
+
+    /* ─── SECTION ─── */
+    section.block { padding: 4rem 0; border-bottom: 1px solid var(--ink-line); }
+    h2.section-title {
+      font-weight: 800; text-transform: uppercase;
+      font-size: clamp(1.5rem, 2.6vw, 2.25rem);
+      letter-spacing: -0.03em; line-height: 1.05;
+    }
+    .section-eyebrow { display: inline-block; margin-bottom: 0.85rem; }
+    .section-lead {
+      margin-top: 1rem; color: var(--text-sec);
+      max-width: 60ch; font-size: 0.98rem;
+    }
+
+    /* ─── FLOW DIAGRAM (6 horizontal nodes) ─── */
+    .flow {
+      margin-top: 2.5rem;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0.75rem;
+    }
+    @media (min-width: 1000px) {
+      .flow { grid-template-columns: repeat(6, 1fr); gap: 0.5rem; }
+    }
+    .node {
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      padding: 1rem 1.1rem;
+      position: relative;
+      min-height: 7rem;
+      display: flex; flex-direction: column;
+    }
+    .node .num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem; font-weight: 700;
+      color: var(--accent); letter-spacing: 0.14em;
+    }
+    .node .label {
+      margin-top: 0.4rem;
+      font-weight: 800; text-transform: uppercase;
+      font-size: 0.92rem; letter-spacing: -0.01em;
+    }
+    .node .desc {
+      margin-top: 0.35rem;
+      font-size: 0.78rem; color: var(--text-sec); line-height: 1.45;
+    }
+    @media (min-width: 1000px) {
+      .node:not(:last-child)::after {
+        content: "→";
+        color: var(--accent);
+        position: absolute;
+        right: -1rem; top: 50%;
+        transform: translateY(-50%);
+        font-size: 1.1rem; font-weight: 700; line-height: 1;
+      }
+    }
+    @media (max-width: 999px) {
+      .node:not(:last-child)::before {
+        content: "↓";
+        color: var(--accent); font-weight: 700; font-size: 1rem;
+        position: absolute; left: 50%; bottom: -1rem;
+        transform: translateX(-50%);
+      }
+    }
+
+    /* ─── CHECKLIST CARDS ─── */
+    .checklist {
+      margin-top: 2.5rem;
+      display: grid; gap: 0.85rem;
+    }
+    .check-card {
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      padding: 1.25rem 1.5rem;
+      display: grid;
+      grid-template-columns: 3rem 1fr auto;
+      gap: 1.25rem;
+      align-items: center;
+    }
+    @media (max-width: 640px) {
+      .check-card { grid-template-columns: 2rem 1fr; }
+      .check-card .tag { grid-column: 2; margin-top: 0.5rem; }
+    }
+    .check-card .step-n {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.5rem; font-weight: 700;
+      color: var(--accent); line-height: 1;
+    }
+    .check-card h3 {
+      font-weight: 800; text-transform: uppercase;
+      font-size: 0.98rem; letter-spacing: -0.01em; line-height: 1.2;
+    }
+    .check-card p {
+      margin-top: 0.3rem;
+      font-size: 0.85rem; color: var(--text-sec); line-height: 1.5;
+    }
+    .check-card .tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem; font-weight: 600;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      padding: 0.35rem 0.7rem;
+      border: 1px solid var(--ink-line);
+      color: var(--text-dim);
+      white-space: nowrap;
+    }
+    .tag.ok { color: var(--success); border-color: var(--success); }
+    .tag.gated { color: var(--warning); border-color: var(--warning); }
+
+    /* ─── SCHEMA BLOCKS ─── */
+    .schema-grid {
+      margin-top: 2.5rem;
+      display: grid; gap: 1rem;
+    }
+    @media (min-width: 800px) {
+      .schema-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    .schema-card {
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      padding: 1.5rem;
+    }
+    .schema-card h3 {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem; font-weight: 700;
+      color: var(--accent); letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    .schema-card .note {
+      margin-top: 0.5rem;
+      font-size: 0.82rem; color: var(--text-sec); line-height: 1.5;
+    }
+    .schema-card pre {
+      margin-top: 1rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem; line-height: 1.65;
+      color: var(--text-pri);
+      overflow-x: auto;
+      padding: 1rem;
+      background: var(--ink-deep);
+      border: 1px solid var(--ink-line);
+    }
+    .schema-card pre .kw { color: var(--accent); }
+    .schema-card pre .ty { color: var(--teal-glow); }
+    .schema-card pre .cm { color: var(--text-dim); font-style: italic; }
+
+    /* ─── SERVICES TRIANGLE ─── */
+    .services {
+      margin-top: 2.5rem;
+      display: grid; gap: 1rem;
+    }
+    @media (min-width: 720px) {
+      .services { grid-template-columns: repeat(3, 1fr); }
+    }
+    .svc {
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      padding: 1.5rem;
+    }
+    .svc .svc-name {
+      font-weight: 800; text-transform: uppercase;
+      font-size: 1.05rem; letter-spacing: -0.01em;
+    }
+    .svc .svc-role {
+      margin-top: 0.5rem;
+      font-size: 0.85rem; color: var(--text-sec); line-height: 1.5;
+    }
+    .svc .svc-creds {
+      margin-top: 0.9rem;
+      padding-top: 0.9rem;
+      border-top: 1px solid var(--ink-line);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem; line-height: 1.6;
+      color: var(--text-dim);
+    }
+    .svc .svc-creds strong { color: var(--text-pri); font-weight: 600; }
+
+    /* ─── FLAGS PANEL ─── */
+    .flags {
+      margin-top: 2.5rem;
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      padding: 1.5rem 1.75rem;
+    }
+    .flags h3 {
+      font-weight: 800; text-transform: uppercase;
+      font-size: 1rem; letter-spacing: -0.01em;
+    }
+    .flags-table {
+      margin-top: 1rem;
+      display: grid; gap: 0.55rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+    }
+    .flags-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 1rem;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--ink-line);
+    }
+    .flags-row:last-child { border-bottom: 0; }
+    .flags-row .k { color: var(--accent); font-weight: 600; letter-spacing: 0.06em; }
+    .flags-row .v { color: var(--text-dim); }
+
+    /* ─── CTA BAR ─── */
+    .cta-bar {
+      background: var(--accent);
+      color: var(--text-pri);
+      text-align: center;
+      padding: 1.1rem 1.5rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem; font-weight: 600;
+      letter-spacing: 0.16em; text-transform: uppercase;
+    }
+
+    /* ─── MOBILE TUNING ─── */
+    @media (max-width: 719px) {
+      .container { padding: 0 1.1rem; }
+      .hero { padding: 3rem 0 2.25rem; }
+      .topo { opacity: 0.16; }
+      section.block { padding: 2.75rem 0; }
+      h1.display { font-size: clamp(2rem, 9vw, 2.85rem); line-height: 1; }
+      h2.section-title { font-size: clamp(1.4rem, 6.5vw, 1.85rem); line-height: 1.1; }
+      .flow { margin-top: 1.75rem; gap: 0.6rem; }
+      .node { min-height: auto; padding: 0.95rem 1rem; }
+      .check-card { padding: 1rem 1.1rem; gap: 0.85rem; }
+      .schema-card pre { font-size: 0.65rem; padding: 0.85rem; }
+    }
+  </style>
+</head>
+<body>
+  <!-- ───────── HERO ───────── -->
+  <header class="hero">
+    <svg class="topo" viewBox="0 0 1920 500" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <g fill="none" stroke="#14b8a6" stroke-width="1">
+        <path d="M0,340 Q240,240 480,280 T960,260 T1440,300 T1920,270" />
+        <path d="M0,390 Q240,300 480,320 T960,310 T1440,350 T1920,330" opacity="0.7" />
+        <path d="M0,440 Q240,360 480,380 T960,360 T1440,400 T1920,380" opacity="0.5" />
+        <path d="M0,490 Q240,420 480,440 T960,420 T1440,450 T1920,430" opacity="0.3" />
+      </g>
+    </svg>
+    <div class="container">
+      <span class="eyebrow">QuoteMate · v6 · Onboarding Architecture</span>
+      <h1 class="display">
+        Tradie signs up →<br />
+        AI <span class="hi">live</span> in 4 minutes.
+      </h1>
+      <p class="lede">
+        Full view of how a new tradie goes from "Get my QuoteMate" on the homepage
+        to receiving real customer calls + SMS on their own dedicated AU number,
+        with their own pricing book and AI receptionist. Schema, services, flags,
+        all in one screen.
+      </p>
+    </div>
+  </header>
+
+  <!-- ───────── THE FLOW ───────── -->
+  <section class="block">
+    <div class="container">
+      <span class="eyebrow section-eyebrow">The Flow</span>
+      <h2 class="section-title">Six steps, <span class="hi">one button click</span> at the end.</h2>
+      <p class="section-lead">
+        Each node below is a real page or process. Hitting "Activate my QuoteMate"
+        on step 5 fires every backend integration in parallel.
+      </p>
+
+      <div class="flow" aria-label="Tradie onboarding flow">
+        <div class="node">
+          <span class="num">01</span>
+          <span class="label">Home</span>
+          <span class="desc">Tradie lands on <span class="mono">/</span>, clicks "Get my QuoteMate".</span>
+        </div>
+        <div class="node">
+          <span class="num">02</span>
+          <span class="label">Signup</span>
+          <span class="desc">Page <span class="mono">/signup</span>. Business name, owner first name, email, password (4 fields).</span>
+        </div>
+        <div class="node">
+          <span class="num">03</span>
+          <span class="label">Email verify</span>
+          <span class="desc">Supabase sends a link. Tradie clicks → <span class="mono">/auth/callback</span> picks up session.</span>
+        </div>
+        <div class="node">
+          <span class="num">04</span>
+          <span class="label">Wizard</span>
+          <span class="desc"><span class="mono">/onboard</span>: trade + state + pricing essentials + review (3 steps).</span>
+        </div>
+        <div class="node">
+          <span class="num">05</span>
+          <span class="label">Activate</span>
+          <span class="desc">POST <span class="mono">/api/onboard/activate</span> runs the 7-step provisioning chain.</span>
+        </div>
+        <div class="node">
+          <span class="num">06</span>
+          <span class="label">Live AI</span>
+          <span class="desc"><span class="mono">/onboard/success</span>. Owner gets a welcome text from the new number.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── ACTIVATION CHECKLIST ───────── -->
+  <section class="block">
+    <div class="container">
+      <span class="eyebrow section-eyebrow">The Activation Checklist</span>
+      <h2 class="section-title">Seven things run when <span class="hi">"Activate"</span> is clicked.</h2>
+      <p class="section-lead">
+        Steps 1–3 are pure database writes (always real). Steps 4–7 hit external
+        APIs and are gated by env flags so test phase costs nothing. Order is
+        atomic — failure at any step rolls back or surfaces a clear warning.
+      </p>
+
+      <div class="checklist">
+        <div class="check-card">
+          <span class="step-n">01</span>
+          <div>
+            <h3>Validate the payload</h3>
+            <p>Zod schema in <span class="mono">lib/onboard/schema.ts</span> checks every field. Inline errors returned per-field for the wizard to render.</p>
+          </div>
+          <span class="tag ok">Always real</span>
+        </div>
+
+        <div class="check-card">
+          <span class="step-n">02</span>
+          <div>
+            <h3>Insert tenants row</h3>
+            <p>Owner identity, business name, mobile, trade, state. Status starts as <span class="mono">'onboarding'</span>. Flipped to <span class="mono">'active'</span> in step 6.</p>
+          </div>
+          <span class="tag ok">Supabase</span>
+        </div>
+
+        <div class="check-card">
+          <span class="step-n">03</span>
+          <div>
+            <h3>Insert pricing_book + tenant_service_offerings</h3>
+            <p>Hourly rate, markup, callout. Auto-enables the trade's easy-5 services. Defaults applied for any blank advanced field (apprentice rate, after-hours multiplier, etc.).</p>
+          </div>
+          <span class="tag ok">Supabase</span>
+        </div>
+
+        <div class="check-card">
+          <span class="step-n">04</span>
+          <div>
+            <h3>Provision AU Twilio number</h3>
+            <p>AU only · Voice + SMS + MMS required, Fax best-effort. Sets SmsUrl → <span class="mono">/api/sms/inbound</span>, VoiceUrl → <span class="mono">api.vapi.ai/twilio/inbound_call</span>. No manual Twilio console clicks.</p>
+          </div>
+          <span class="tag gated">TWILIO_PROVISIONING_ENABLED</span>
+        </div>
+
+        <div class="check-card">
+          <span class="step-n">05</span>
+          <div>
+            <h3>Create Vapi assistant</h3>
+            <p>Unique per tenant. Business name in greeting, trade-aware system prompt, chosen voice persona. <span class="mono">serverUrl</span> set to our post-call webhook so quote drafting fires after each call.</p>
+          </div>
+          <span class="tag gated">VAPI_PROVISIONING_ENABLED</span>
+        </div>
+
+        <div class="check-card">
+          <span class="step-n">5b</span>
+          <div>
+            <h3>Register Twilio number with Vapi</h3>
+            <p>POST <span class="mono">api.vapi.ai/phone-number</span> with the new number + assistant id. Number appears in Vapi dashboard's Phone Numbers tab, pre-assigned to the tenant's assistant.</p>
+          </div>
+          <span class="tag gated">VAPI_PROVISIONING_ENABLED</span>
+        </div>
+
+        <div class="check-card">
+          <span class="step-n">06</span>
+          <div>
+            <h3>Update tenants row → active</h3>
+            <p>Saves <span class="mono">twilio_sms_number</span>, <span class="mono">twilio_voice_number</span>, <span class="mono">vapi_assistant_id</span>. Flips status to <span class="mono">'active'</span>, stamps <span class="mono">activated_at</span>.</p>
+          </div>
+          <span class="tag ok">Supabase</span>
+        </div>
+
+        <div class="check-card">
+          <span class="step-n">07</span>
+          <div>
+            <h3>Send welcome SMS</h3>
+            <p>From the new QuoteMate number to the owner's personal mobile. Closes the loop visibly — they physically receive a text seconds after activation.</p>
+          </div>
+          <span class="tag gated">TWILIO_PROVISIONING_ENABLED</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── DATABASE SCHEMA ───────── -->
+  <section class="block">
+    <div class="container">
+      <span class="eyebrow section-eyebrow">Database Schema</span>
+      <h2 class="section-title">Three tables, <span class="hi">one tenant_id</span> across them.</h2>
+      <p class="section-lead">
+        Migration <span class="mono">015_tenants_onboarding.sql</span> is the foundation. Every
+        operational table (intakes, quotes, calls, sms_conversations, customers)
+        also gained a <span class="mono">tenant_id</span> column for downstream scoping.
+      </p>
+
+      <div class="schema-grid">
+        <div class="schema-card">
+          <h3>tenants</h3>
+          <p class="note">One row per registered tradie. Owns pricing, branding, and the provisioned Twilio + Vapi identifiers.</p>
+<pre><span class="kw">create table</span> tenants (
+  id                   <span class="ty">uuid</span> primary key,
+  owner_user_id        <span class="ty">uuid</span> -> auth.users,
+  business_name        <span class="ty">text</span> not null,
+  owner_first_name     <span class="ty">text</span>,
+  owner_email          <span class="ty">text</span> unique,
+  owner_mobile         <span class="ty">text</span> not null,
+  trade                <span class="ty">text</span> <span class="cm">-- electrical | plumbing</span>
+  state                <span class="ty">text</span>,
+  abn                  <span class="ty">text</span>,
+  licence_type         <span class="ty">text</span>,
+  licence_number       <span class="ty">text</span>,
+  licence_expiry       <span class="ty">date</span>,
+  twilio_sms_number    <span class="ty">text</span> unique,
+  twilio_voice_number  <span class="ty">text</span> unique,
+  vapi_assistant_id    <span class="ty">text</span>,
+  vapi_voice_persona   <span class="ty">text</span>,
+  stripe_connect_account_id <span class="ty">text</span>,
+  status               <span class="ty">text</span> <span class="cm">-- onboarding | active</span>
+  created_at           <span class="ty">timestamptz</span>,
+  activated_at         <span class="ty">timestamptz</span>
+);</pre>
+        </div>
+
+        <div class="schema-card">
+          <h3>pricing_book (extended)</h3>
+          <p class="note">Pre-existing table. Migration 015 added <span class="mono">tenant_id</span>, <span class="mono">senior_rate</span>, <span class="mono">after_hours_multiplier</span>. One row per (tenant, trade).</p>
+<pre><span class="kw">alter table</span> pricing_book
+  <span class="kw">add</span> tenant_id              <span class="ty">uuid</span> -> tenants(id),
+  <span class="kw">add</span> senior_rate            <span class="ty">numeric(8,2)</span>,
+  <span class="kw">add</span> after_hours_multiplier <span class="ty">numeric(4,2)</span>
+        default 1.5;
+
+<span class="cm">-- Existing columns that matter:</span>
+<span class="cm">--   hourly_rate, call_out_minimum,</span>
+<span class="cm">--   apprentice_rate, default_markup_pct,</span>
+<span class="cm">--   risk_buffer_pct, min_labour_hours,</span>
+<span class="cm">--   gst_registered,</span>
+<span class="cm">--   licence_type/number/state/expiry</span>
+
+<span class="kw">create unique index</span>
+  pricing_book_tenant_trade_unique
+  <span class="kw">on</span> pricing_book (tenant_id, trade)
+  <span class="kw">where</span> tenant_id <span class="kw">is not null</span>;</pre>
+        </div>
+
+        <div class="schema-card">
+          <h3>tenant_service_offerings</h3>
+          <p class="note">Which catalogue items the tradie offers. Auto-populated with the easy-5 for their trade on activate.</p>
+<pre><span class="kw">create table</span> tenant_service_offerings (
+  tenant_id    <span class="ty">uuid</span> -> tenants(id),
+  assembly_id  <span class="ty">uuid</span> -> shared_assemblies(id),
+  enabled      <span class="ty">boolean</span> default true,
+  <span class="kw">primary key</span> (tenant_id, assembly_id)
+);</pre>
+        </div>
+
+        <div class="schema-card">
+          <h3>tenant_id added to operational tables</h3>
+          <p class="note">Every downstream table got the tenant_id column so quote drafting, intake structuring, and SMS dialogs can scope per-tradie. NULL allowed for back-compat with pre-v6 conversations.</p>
+<pre><span class="kw">alter table</span> intakes
+  <span class="kw">add</span> tenant_id <span class="ty">uuid</span> -> tenants(id);
+
+<span class="kw">alter table</span> quotes
+  <span class="kw">add</span> tenant_id <span class="ty">uuid</span> -> tenants(id);
+
+<span class="kw">alter table</span> calls
+  <span class="kw">add</span> tenant_id <span class="ty">uuid</span> -> tenants(id);
+
+<span class="kw">alter table</span> sms_conversations
+  <span class="kw">add</span> tenant_id <span class="ty">uuid</span> -> tenants(id);
+
+<span class="kw">alter table</span> customers
+  <span class="kw">add</span> tenant_id <span class="ty">uuid</span> -> tenants(id);</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── EXTERNAL SERVICES ───────── -->
+  <section class="block">
+    <div class="container">
+      <span class="eyebrow section-eyebrow">External Services</span>
+      <h2 class="section-title">Three integrations, <span class="hi">zero manual config</span>.</h2>
+      <p class="section-lead">
+        Each tradie gets their own resources in all three external services. The
+        activate endpoint orchestrates the creation; the tradie never opens any
+        of these dashboards themselves.
+      </p>
+
+      <div class="services">
+        <div class="svc">
+          <div class="svc-name">Supabase</div>
+          <div class="svc-role">
+            Auth (sign up + email verify + sign in). Postgres for tenants,
+            pricing_book, intakes, quotes. RLS planned for v6.x.
+          </div>
+          <div class="svc-creds">
+            <strong>Env:</strong><br />
+            NEXT_PUBLIC_SUPABASE_URL<br />
+            NEXT_PUBLIC_SUPABASE_ANON_KEY<br />
+            SUPABASE_SERVICE_ROLE_KEY<br />
+            SUPABASE_DB_URL
+          </div>
+        </div>
+
+        <div class="svc">
+          <div class="svc-name">Twilio</div>
+          <div class="svc-role">
+            Buys the tenant's AU phone number. Pre-configures SMS webhook to our app,
+            voice webhook to Vapi's hosted endpoint. Sends the welcome SMS from the
+            new number.
+          </div>
+          <div class="svc-creds">
+            <strong>Env:</strong><br />
+            TWILIO_ACCOUNT_SID<br />
+            TWILIO_AUTH_TOKEN<br />
+            APP_URL <span style="color:var(--text-sec)">(webhooks)</span><br />
+            TWILIO_PROVISIONING_ENABLED
+          </div>
+        </div>
+
+        <div class="svc">
+          <div class="svc-name">Vapi</div>
+          <div class="svc-role">
+            Creates per-tenant AI assistant (Claude + 11labs + Deepgram). Registers
+            the Twilio number against the assistant so inbound calls run THAT
+            specific assistant.
+          </div>
+          <div class="svc-creds">
+            <strong>Env:</strong><br />
+            VAPI_API_KEY<br />
+            VAPI_VOICE_JON <span style="color:var(--text-sec)">(optional)</span><br />
+            VAPI_VOICE_SARAH <span style="color:var(--text-sec)">(optional)</span><br />
+            VAPI_PROVISIONING_ENABLED
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── WEBHOOK AUTO-CONFIG ───────── -->
+  <section class="block">
+    <div class="container">
+      <span class="eyebrow section-eyebrow">Webhook Auto-config</span>
+      <h2 class="section-title">Every new Twilio number is <span class="hi">born wired up</span>.</h2>
+      <p class="section-lead">
+        Set at purchase time by the Twilio API call. Tradies never open the Twilio
+        console; numbers arrive with both webhooks pre-configured.
+      </p>
+
+      <div class="schema-grid">
+        <div class="schema-card">
+          <h3>SMS webhook</h3>
+          <p class="note">Customer SMS lands on our app. The inbound route resolves tenant by destination number, then runs the dialog Haiku with the right pricing book.</p>
+<pre><span class="kw">URL:</span>    https://quote-mate-rho.vercel.app
+       /api/sms/inbound
+<span class="kw">METHOD:</span> POST</pre>
+        </div>
+
+        <div class="schema-card">
+          <h3>Voice webhook</h3>
+          <p class="note">Customer call lands on Vapi's hosted endpoint. Vapi looks up the destination number in its phone-number table (registered in step 5b) and runs the bound assistant.</p>
+<pre><span class="kw">URL:</span>    https://api.vapi.ai
+       /twilio/inbound_call
+<span class="kw">METHOD:</span> POST</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── ENV FLAGS ───────── -->
+  <section class="block">
+    <div class="container">
+      <span class="eyebrow section-eyebrow">Activation Flags</span>
+      <h2 class="section-title">Two flags decide <span class="hi">stub vs real</span>.</h2>
+      <p class="section-lead">
+        Test phase runs with both flags off — no Twilio money, no Vapi calls, but
+        every UI screen + database write works end to end. Flip to true (per
+        environment) when you're ready to provision real numbers and assistants.
+      </p>
+
+      <div class="flags">
+        <h3>Environment toggles</h3>
+        <div class="flags-table">
+          <div class="flags-row">
+            <span class="k">TWILIO_PROVISIONING_ENABLED=true</span>
+            <span class="v">→ real number buy + welcome SMS</span>
+          </div>
+          <div class="flags-row">
+            <span class="k">VAPI_PROVISIONING_ENABLED=true</span>
+            <span class="v">→ real assistant create + number register</span>
+          </div>
+          <div class="flags-row">
+            <span class="k">APP_URL=https://quote-mate-rho.vercel.app</span>
+            <span class="v">→ webhook destination</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── CTA BAR ───────── -->
+  <div class="cta-bar">
+    Migration 015 applied · Activate endpoint live · Twilio + Vapi gated · Ready when you fund
+  </div>
+</body>
+</html>

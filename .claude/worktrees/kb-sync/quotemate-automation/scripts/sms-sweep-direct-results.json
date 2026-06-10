@@ -1,0 +1,380 @@
+[
+  {
+    "test_id": "T017",
+    "trade": "electrical",
+    "service_name": "Install security camera (single)",
+    "category": "security_camera",
+    "default_enabled": false,
+    "mandated_questions": 3,
+    "prompt": "[T017] NEW JOB - Quote to install a single PoE camera at the front entry.",
+    "sentAt": "2026-05-20T09:13:09.305Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  },
+  {
+    "test_id": "T018",
+    "trade": "electrical",
+    "service_name": "Install wired doorbell or intercom",
+    "category": "doorbell_intercom",
+    "default_enabled": false,
+    "mandated_questions": 3,
+    "prompt": "[T018] NEW JOB - Old wired doorbell stopped working — want a replacement or intercom.",
+    "sentAt": "2026-05-20T09:13:20.886Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  },
+  {
+    "test_id": "T019",
+    "trade": "electrical",
+    "service_name": "Replace double GPO",
+    "category": "gpo",
+    "default_enabled": true,
+    "mandated_questions": 0,
+    "prompt": "[T019] NEW JOB - Replace 2 double power points in the bedroom — like-for-like.",
+    "sentAt": "2026-05-20T09:13:32.629Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  },
+  {
+    "test_id": "T020",
+    "trade": "electrical",
+    "service_name": "Supply + install AC ceiling fan",
+    "category": "fan",
+    "default_enabled": true,
+    "mandated_questions": 0,
+    "prompt": "[T020] NEW JOB - Can you supply and install a ceiling fan in our bedroom?",
+    "sentAt": "2026-05-20T09:13:43.643Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  },
+  {
+    "test_id": "T021",
+    "trade": "plumbing",
+    "service_name": "CCTV drain inspection",
+    "category": "cctv",
+    "default_enabled": true,
+    "mandated_questions": 3,
+    "prompt": "[T021] NEW JOB - Need a camera inspection of the drain before settlement.",
+    "sentAt": "2026-05-20T09:13:54.207Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  },
+  {
+    "test_id": "T022",
+    "trade": "plumbing",
+    "service_name": "Disposal and site cleanup",
+    "category": "sundry",
+    "default_enabled": true,
+    "mandated_questions": 1,
+    "prompt": "[T022] NEW JOB - When you replace the toilet, need to take the old one away.",
+    "sentAt": "2026-05-20T09:14:04.002Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  },
+  {
+    "test_id": "T023",
+    "trade": "plumbing",
+    "service_name": "Gas appliance connection",
+    "category": "gas",
+    "default_enabled": true,
+    "mandated_questions": 3,
+    "prompt": "[T023] NEW JOB - Have a new gas cooktop arriving, need it connected to existing gas line.",
+    "sentAt": "2026-05-20T09:14:14.066Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  },
+  {
+    "test_id": "T024",
+    "trade": "plumbing",
+    "service_name": "Hand rod blocked drain",
+    "category": "drain",
+    "default_enabled": true,
+    "mandated_questions": 0,
+    "prompt": "[T024] NEW JOB - Kitchen sink drain is blocked, water's not going down at all.",
+    "sentAt": "2026-05-20T09:14:23.901Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  },
+  {
+    "test_id": "T025",
+    "trade": "plumbing",
+    "service_name": "Install dishwasher",
+    "category": "dishwasher",
+    "default_enabled": false,
+    "mandated_questions": 3,
+    "prompt": "[T025] NEW JOB - Need a new dishwasher plumbed in under the kitchen sink.",
+    "sentAt": "2026-05-20T09:14:30.953Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  },
+  {
+    "test_id": "T026",
+    "trade": "plumbing",
+    "service_name": "Install electric HWS",
+    "category": "hot_water",
+    "default_enabled": true,
+    "mandated_questions": 0,
+    "prompt": "[T026] NEW JOB - Need to replace our old electric hot water system — 250L.",
+    "sentAt": "2026-05-20T09:14:41.107Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  },
+  {
+    "test_id": "T027",
+    "trade": "plumbing",
+    "service_name": "Install external garden tap",
+    "category": "tap",
+    "default_enabled": false,
+    "mandated_questions": 3,
+    "prompt": "[T027] NEW JOB - Need a new garden tap installed on the side of the house.",
+    "sentAt": "2026-05-20T09:14:51.394Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  },
+  {
+    "test_id": "T028",
+    "trade": "plumbing",
+    "service_name": "Install garbage disposal",
+    "category": "sundry",
+    "default_enabled": false,
+    "mandated_questions": 3,
+    "prompt": "[T028] NEW JOB - Want a sink garbage disposal unit fitted under the kitchen.",
+    "sentAt": "2026-05-20T09:15:00.763Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  },
+  {
+    "test_id": "T029",
+    "trade": "plumbing",
+    "service_name": "Install gas HWS",
+    "category": "hot_water",
+    "default_enabled": true,
+    "mandated_questions": 0,
+    "prompt": "[T029] NEW JOB - Gas hot water unit died, need a new one installed.",
+    "sentAt": "2026-05-20T09:15:13.007Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  },
+  {
+    "test_id": "T030",
+    "trade": "plumbing",
+    "service_name": "Install heat pump HWS",
+    "category": "hot_water",
+    "default_enabled": true,
+    "mandated_questions": 0,
+    "prompt": "[T030] NEW JOB - Looking at swapping to a heat pump hot water system, possible rebate eligible.",
+    "sentAt": "2026-05-20T09:15:23.853Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  },
+  {
+    "test_id": "T031",
+    "trade": "plumbing",
+    "service_name": "Install rainwater tank",
+    "category": "rainwater_tank",
+    "default_enabled": false,
+    "mandated_questions": 3,
+    "prompt": "[T031] NEW JOB - Got a 2000L rainwater tank to connect to the downpipe.",
+    "sentAt": "2026-05-20T09:15:34.246Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  },
+  {
+    "test_id": "T032",
+    "trade": "plumbing",
+    "service_name": "Install washing machine taps",
+    "category": "tap",
+    "default_enabled": false,
+    "mandated_questions": 3,
+    "prompt": "[T032] NEW JOB - Washing machine taps are leaking, need them replaced.",
+    "sentAt": "2026-05-20T09:15:44.314Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  },
+  {
+    "test_id": "T033",
+    "trade": "plumbing",
+    "service_name": "Install whole-house water filter",
+    "category": "water_filter",
+    "default_enabled": false,
+    "mandated_questions": 3,
+    "prompt": "[T033] NEW JOB - Want a whole house water filter installed at the mains.",
+    "sentAt": "2026-05-20T09:15:52.101Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  },
+  {
+    "test_id": "T034",
+    "trade": "plumbing",
+    "service_name": "Jet blast blocked drain",
+    "category": "drain",
+    "default_enabled": true,
+    "mandated_questions": 0,
+    "prompt": "[T034] NEW JOB - Backyard stormwater drain has been blocked for weeks — probably tree roots.",
+    "sentAt": "2026-05-20T09:16:01.492Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  },
+  {
+    "test_id": "T035",
+    "trade": "plumbing",
+    "service_name": "Leak detection",
+    "category": "leak_detection",
+    "default_enabled": false,
+    "mandated_questions": 3,
+    "prompt": "[T035] NEW JOB - Wet patch under the bathroom floor — need someone to find the leak.",
+    "sentAt": "2026-05-20T09:16:08.513Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  },
+  {
+    "test_id": "T036",
+    "trade": "plumbing",
+    "service_name": "Pressure reduction valve install",
+    "category": "prv",
+    "default_enabled": true,
+    "mandated_questions": 3,
+    "prompt": "[T036] NEW JOB - Water pressure is way too high, getting water hammer — need a PRV.",
+    "sentAt": "2026-05-20T09:16:18.603Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  },
+  {
+    "test_id": "T037",
+    "trade": "plumbing",
+    "service_name": "Replace shower head",
+    "category": "shower",
+    "default_enabled": false,
+    "mandated_questions": 2,
+    "prompt": "[T037] NEW JOB - Just need the shower head swapped for a new one.",
+    "sentAt": "2026-05-20T09:16:28.015Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  },
+  {
+    "test_id": "T038",
+    "trade": "plumbing",
+    "service_name": "Replace toilet seat",
+    "category": "toilet",
+    "default_enabled": false,
+    "mandated_questions": 2,
+    "prompt": "[T038] NEW JOB - Toilet seat is cracked, need a new soft-close fitted.",
+    "sentAt": "2026-05-20T09:16:37.882Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  },
+  {
+    "test_id": "T039",
+    "trade": "plumbing",
+    "service_name": "Stormwater drain unblock",
+    "category": "drain",
+    "default_enabled": false,
+    "mandated_questions": 3,
+    "prompt": "[T039] NEW JOB - Stormwater drain in the backyard is blocked again, water pooling.",
+    "sentAt": "2026-05-20T09:16:44.921Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  },
+  {
+    "test_id": "T040",
+    "trade": "plumbing",
+    "service_name": "Tap replacement",
+    "category": "tap",
+    "default_enabled": true,
+    "mandated_questions": 0,
+    "prompt": "[T040] NEW JOB - Bathroom basin mixer needs replacing.",
+    "sentAt": "2026-05-20T09:16:52.772Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  },
+  {
+    "test_id": "T041",
+    "trade": "plumbing",
+    "service_name": "Tap washer replacement",
+    "category": "tap",
+    "default_enabled": true,
+    "mandated_questions": 0,
+    "prompt": "[T041] NEW JOB - Kitchen tap is dripping constantly — washer probably gone.",
+    "sentAt": "2026-05-20T09:17:02.566Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  },
+  {
+    "test_id": "T042",
+    "trade": "plumbing",
+    "service_name": "Toilet cistern repair",
+    "category": "toilet",
+    "default_enabled": true,
+    "mandated_questions": 0,
+    "prompt": "[T042] NEW JOB - Toilet keeps running and won't stop filling.",
+    "sentAt": "2026-05-20T09:17:09.949Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  },
+  {
+    "test_id": "T043",
+    "trade": "plumbing",
+    "service_name": "Toilet suite install",
+    "category": "toilet",
+    "default_enabled": true,
+    "mandated_questions": 0,
+    "prompt": "[T043] NEW JOB - Buying a new toilet suite — need it installed, old one removed.",
+    "sentAt": "2026-05-20T09:17:19.860Z",
+    "send": {
+      "status": 200,
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response/>"
+    }
+  }
+]

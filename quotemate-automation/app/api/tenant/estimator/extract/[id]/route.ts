@@ -1,6 +1,8 @@
 // PATCH /api/tenant/estimator/extract/[id] — save the tradie's corrected counts.
 //
-// Body: { corrected_items: Array<{ type: string; symbol?: string; count: number }> }
+// Body: { corrected_items: Array<{ type; symbol?; count; confidence?; note?; locations? }> }
+// The optional audit fields (confidence, zone-tally note, per-symbol pin
+// locations) are retained so the plan-overlay + pricing trace survive a save.
 // Scoped to the authed tenant; a mismatched id/tenant returns 404.
 
 import { tenantFromBearer, estimatorSupabase as supabase } from '@/lib/estimation/auth'
@@ -8,7 +10,30 @@ import { tenantFromBearer, estimatorSupabase as supabase } from '@/lib/estimatio
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-type CorrectedItem = { type: string; symbol: string; count: number }
+type Location = { page: number; x: number; y: number }
+type CorrectedItem = {
+  type: string
+  symbol: string
+  count: number
+  confidence?: 'high' | 'medium' | 'low'
+  note?: string
+  locations?: Location[]
+}
+
+function cleanLocations(input: unknown): Location[] {
+  if (!Array.isArray(input)) return []
+  const out: Location[] = []
+  for (const raw of input) {
+    if (!raw || typeof raw !== 'object') continue
+    const r = raw as Record<string, unknown>
+    const page = Math.round(Number(r.page))
+    const x = Number(r.x)
+    const y = Number(r.y)
+    if (!Number.isFinite(page) || page < 1 || !Number.isFinite(x) || !Number.isFinite(y)) continue
+    out.push({ page, x: Math.min(100, Math.max(0, x)), y: Math.min(100, Math.max(0, y)) })
+  }
+  return out
+}
 
 function cleanCorrected(input: unknown): CorrectedItem[] | null {
   if (!Array.isArray(input)) return null
@@ -19,10 +44,16 @@ function cleanCorrected(input: unknown): CorrectedItem[] | null {
     const type = String(r.type ?? r.item ?? r.name ?? '').trim()
     if (!type) continue
     const count = Number(r.count)
+    const locations = cleanLocations(r.locations)
     out.push({
       type,
       symbol: r.symbol != null ? String(r.symbol) : '',
       count: Number.isFinite(count) ? Math.max(0, Math.round(count)) : 0,
+      ...(r.confidence === 'high' || r.confidence === 'medium' || r.confidence === 'low'
+        ? { confidence: r.confidence }
+        : {}),
+      ...(r.note != null && String(r.note).trim() ? { note: String(r.note).slice(0, 2000) } : {}),
+      ...(locations.length > 0 ? { locations } : {}),
     })
   }
   return out

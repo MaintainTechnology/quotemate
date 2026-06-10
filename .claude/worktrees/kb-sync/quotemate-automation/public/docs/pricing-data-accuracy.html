@@ -1,0 +1,876 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QuoteMate · How accurate is the price book — for Jon</title>
+  <meta name="description" content="Visual answer to Jon's three questions: how accurate the after-hours rate is, how to get the price book right, and whether we can build it from a tradie's own book. Plain English with database references for follow-up." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800;900&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink-deep:#0E1622; --ink:#141C29; --ink-card:#1B2433; --ink-line:#2D3A4F; --ink-soft:#243049;
+      --accent:#FF5A1F; --accent-soft:#FF7A45; --accent-deep:#9C3210;
+      --text-pri:#FFFFFF; --text-sec:#C8D2E1; --text-dim:#8995A8;
+      --green:#34D399; --rose:#F87171; --amber:#FBBF24; --sky:#38BDF8; --violet:#A78BFA; --teal:#14B8A6;
+    }
+    *,*::before,*::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--ink-deep);
+      color: var(--text-pri);
+      font-family: 'Manrope', system-ui, -apple-system, sans-serif;
+      font-weight: 400;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 78rem; margin: 0 auto; padding: 0 1.25rem; }
+
+    .eyebrow {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.72rem; font-weight: 600;
+      letter-spacing: 0.16em; text-transform: uppercase;
+      color: var(--text-dim);
+    }
+    h1.title {
+      font-weight: 900; text-transform: uppercase;
+      font-size: clamp(2.25rem, 6vw, 4.5rem);
+      line-height: 0.96; letter-spacing: -0.035em;
+      margin: 0.75rem 0 0;
+    }
+    h2.section-title {
+      font-weight: 800; text-transform: uppercase;
+      font-size: clamp(1.6rem, 3vw, 2.25rem);
+      line-height: 1.05; letter-spacing: -0.025em;
+      margin: 0 0 0.25rem;
+    }
+    h2.section-title .num {
+      color: var(--accent);
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.8em; margin-right: 0.4em;
+    }
+    h3.sub {
+      font-size: 0.95rem; font-weight: 800;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--text-pri);
+      margin: 1.6rem 0 0.5rem;
+    }
+    .lead { font-size: 1.05rem; color: var(--text-sec); max-width: 60rem; line-height: 1.7; }
+    .lead b { color: var(--text-pri); font-weight: 700; }
+    .caption { font-size: 1rem; color: var(--text-sec); max-width: 62rem; line-height: 1.7; margin: 0.5rem 0 1.25rem; }
+    .caption b { color: var(--text-pri); font-weight: 700; }
+    .body-text { font-size: 0.97rem; color: var(--text-sec); max-width: 62rem; line-height: 1.7; margin: 0.75rem 0 0; }
+    .body-text b { color: var(--text-pri); font-weight: 700; }
+    .accent { color: var(--accent); }
+    p { margin: 0; color: var(--text-sec); }
+    a { color: var(--accent-soft); text-decoration: none; border-bottom: 1px dotted currentColor; }
+    a:hover { color: var(--accent); }
+
+    /* Inline "real-name" badge for database tables / file paths / settings.
+       Shows the friendly term and the technical name side by side, so Jon
+       can ask follow-up questions using the exact field names. */
+    .tbl {
+      display: inline-block;
+      margin-left: 0.35rem;
+      padding: 0.1rem 0.45rem;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: var(--accent);
+      background: rgba(255,90,31,0.1);
+      border: 1px solid rgba(255,90,31,0.32);
+      border-radius: 3px;
+      vertical-align: baseline;
+      line-height: 1.3;
+    }
+    .box .tbl {
+      display: inline-block;
+      margin: 0.4rem 0 0;
+      font-size: 0.66rem;
+    }
+
+    .hero { padding: 4rem 0 2.5rem; border-bottom: 1px solid var(--ink-line); }
+    .section { padding: 3.25rem 0; border-top: 1px solid var(--ink-line); }
+
+    .diag {
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      padding: 1.75rem 1.5rem;
+      margin-top: 1rem;
+    }
+    @media (min-width: 720px) { .diag { padding: 2.25rem 2.25rem; } }
+
+    .box {
+      background: var(--ink);
+      border: 2px solid var(--ink-line);
+      border-radius: 6px;
+      padding: 0.95rem 1rem;
+      text-align: center;
+    }
+    .box-lbl { font-weight: 700; font-size: 1rem; line-height: 1.25; color: var(--text-pri); }
+    .box-sub { font-size: 0.86rem; color: var(--text-sec); margin-top: 0.45rem; line-height: 1.45; }
+    .box.green   { border-color: var(--green); }
+    .box.rose    { border-color: var(--rose); }
+    .box.amber   { border-color: var(--amber); }
+    .box.sky     { border-color: var(--sky); }
+    .box.violet  { border-color: var(--violet); }
+    .box.solid-orange {
+      background: var(--accent); border-color: var(--accent); color: #000;
+    }
+    .box.solid-orange .box-lbl { color: #000; }
+    .box.solid-orange .box-sub { color: rgba(0,0,0,0.78); }
+    .box.solid-orange .tbl {
+      color: #000; background: rgba(0,0,0,0.12);
+      border-color: rgba(0,0,0,0.25);
+    }
+
+    .arr-down { display: flex; align-items: center; justify-content: center; color: var(--accent); font-size: 1.6rem; font-weight: 800; min-height: 1.65rem; font-family: 'JetBrains Mono', ui-monospace, monospace; }
+    .arr-down::before { content: '↓'; }
+
+    .chain { display: grid; gap: 0; grid-template-columns: 1fr; }
+    .pair { display: grid; gap: 1rem; grid-template-columns: 1fr; }
+    @media (min-width: 720px) { .pair { grid-template-columns: 1fr 1fr; } }
+    .pair-3 { display: grid; gap: 1rem; grid-template-columns: 1fr; }
+    @media (min-width: 720px) { .pair-3 { grid-template-columns: 1fr 1fr 1fr; } }
+
+    .data-table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.92rem; }
+    .data-table th, .data-table td {
+      padding: 0.75rem 0.9rem;
+      border-bottom: 1px solid var(--ink-line);
+      text-align: left;
+      vertical-align: top;
+    }
+    .data-table th {
+      background: var(--ink);
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.7rem; font-weight: 700;
+      letter-spacing: 0.12em; text-transform: uppercase;
+    }
+    .data-table td { background: var(--ink-card); color: var(--text-sec); }
+    .data-table td.strong { color: var(--text-pri); font-weight: 700; }
+    .data-table td.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 0.86rem; }
+    .ok { color: var(--green); font-weight: 700; }
+    .bad { color: var(--rose); font-weight: 700; }
+    .meh { color: var(--amber); font-weight: 700; }
+
+    .verdict {
+      background: var(--ink);
+      border-left: 4px solid var(--verdict-color, var(--accent));
+      padding: 0.9rem 1.2rem;
+      margin: 1.25rem 0 0;
+      border-radius: 0 6px 6px 0;
+    }
+    .verdict-label {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.72rem; font-weight: 700;
+      letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--verdict-color, var(--accent));
+    }
+    .verdict p { margin-top: 0.3rem; color: var(--text-pri); font-size: 0.95rem; line-height: 1.55; }
+    .verdict.green { --verdict-color: var(--green); }
+    .verdict.amber { --verdict-color: var(--amber); }
+    .verdict.rose { --verdict-color: var(--rose); }
+    .verdict.violet { --verdict-color: var(--violet); }
+
+    .compare { display: grid; gap: 1rem; grid-template-columns: 1fr; margin-top: 1rem; }
+    @media (min-width: 720px) { .compare { grid-template-columns: 1fr 1fr; } }
+    .compare-card {
+      background: var(--ink);
+      border: 2px solid var(--compare-border, var(--ink-line));
+      border-radius: 6px;
+      padding: 1.1rem 1.25rem;
+    }
+    .compare-card h4 {
+      margin: 0 0 0.45rem;
+      font-weight: 800; font-size: 0.95rem;
+      text-transform: uppercase; letter-spacing: 0.04em;
+      color: var(--compare-border, var(--text-pri));
+    }
+    .compare-card.have { --compare-border: var(--amber); }
+    .compare-card.need { --compare-border: var(--green); }
+    .compare-card ul { margin: 0.4rem 0 0; padding-left: 1.15rem; font-size: 0.9rem; }
+    .compare-card li { color: var(--text-sec); padding: 0.14rem 0; }
+    .compare-card li::marker { color: var(--compare-border); }
+    .compare-card .foot {
+      font-size: 0.86rem;
+      color: var(--text-dim);
+      margin-top: 0.65rem;
+      padding-top: 0.55rem;
+      border-top: 1px dashed var(--ink-line);
+    }
+    .compare-card .foot b { color: var(--text-pri); }
+
+    .steps { display: grid; gap: 0.85rem; margin-top: 1rem; }
+    .step {
+      display: grid;
+      grid-template-columns: 3rem 1fr;
+      background: var(--ink);
+      border: 2px solid var(--ink-line);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .step-num {
+      background: var(--accent);
+      color: #000;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 1.25rem;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+    }
+    .step.proposed .step-num { background: var(--text-dim); }
+    .step-body { padding: 0.85rem 1.1rem; }
+    .step-title { font-weight: 800; color: var(--text-pri); font-size: 1rem; margin-bottom: 0.25rem; }
+    .step-text { color: var(--text-sec); font-size: 0.92rem; line-height: 1.5; }
+    .step-tag {
+      display: inline-block;
+      margin-top: 0.55rem;
+      padding: 0.2rem 0.6rem;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: var(--accent);
+      background: rgba(255,90,31,0.1);
+      border: 1px solid rgba(255,90,31,0.35);
+      border-radius: 3px;
+    }
+    .step-tag.new { color: var(--amber); background: rgba(251,191,36,0.1); border-color: rgba(251,191,36,0.35); }
+
+    .example {
+      background: var(--ink);
+      border-left: 4px solid var(--sky);
+      padding: 0.95rem 1.2rem;
+      margin: 1.25rem 0 0;
+      border-radius: 0 6px 6px 0;
+    }
+    .example-label {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.72rem; font-weight: 700;
+      letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--sky);
+      margin-bottom: 0.45rem;
+    }
+    .example-row {
+      font-size: 0.94rem; color: var(--text-pri);
+      line-height: 1.55; padding: 0.15rem 0;
+    }
+    .example-row .actor {
+      display: inline-block;
+      font-weight: 700;
+      min-width: 8rem;
+      color: var(--sky);
+    }
+    .example-row .actor.ai { color: var(--amber); }
+    .example-row .actor.system { color: var(--green); }
+
+    .themes {
+      display: grid; gap: 0.85rem;
+      grid-template-columns: 1fr;
+      margin-top: 2.25rem;
+    }
+    @media (min-width: 720px) { .themes { grid-template-columns: repeat(3, 1fr); } }
+    .theme-card {
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      border-top: 3px solid var(--accent);
+      padding: 1.1rem 1.25rem;
+    }
+    .theme-num {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.72rem; font-weight: 700;
+      letter-spacing: 0.14em; color: var(--accent);
+    }
+    .theme-q { font-weight: 800; color: var(--text-pri); font-size: 1rem; margin-top: 0.3rem; line-height: 1.3; }
+    .theme-tldr { color: var(--text-sec); font-size: 0.86rem; margin-top: 0.5rem; line-height: 1.5; }
+    .theme-tldr b { color: var(--text-pri); }
+
+    .legend {
+      display: flex; flex-wrap: wrap; gap: 0.5rem;
+      margin-top: 1.25rem;
+    }
+    .legend-chip {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      background: var(--ink);
+      border: 1px solid var(--ink-line);
+      padding: 0.4rem 0.7rem;
+      border-radius: 999px;
+      font-size: 0.8rem; color: var(--text-sec);
+    }
+    .legend-chip .tbl { margin-left: 0; }
+
+    footer {
+      border-top: 1px solid var(--ink-line);
+      padding: 2.5rem 0;
+      color: var(--text-dim);
+      font-size: 0.88rem;
+    }
+    footer strong { color: var(--text-sec); }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- HERO                                                              -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="hero">
+  <div class="wrap">
+    <div class="eyebrow">QuoteMate · For Jon · Price book accuracy</div>
+    <h1 class="title">How tight is<br/>the <span class="accent">price book</span>?</h1>
+    <p class="lead" style="margin-top:1.5rem">
+      A picture-first walkthrough of your three questions, with the real
+      numbers from the system today. One honest answer per section — plus
+      the actual database table names alongside the plain-English labels
+      so you can follow up using the exact field names.
+    </p>
+
+    <div class="legend">
+      <span class="legend-chip">Plain English label + <span class="tbl">database_name</span> reference</span>
+    </div>
+
+    <div class="themes">
+      <div class="theme-card">
+        <div class="theme-num">01 · After-hours rate</div>
+        <div class="theme-q">"How accurate is the after-hours rate on an emergency job?"</div>
+        <div class="theme-tldr"><b>Working as designed.</b> The maths is locked in. The only soft spot is whether the customer's wording clearly signals urgency.</div>
+      </div>
+      <div class="theme-card">
+        <div class="theme-num">02 · Catalogue gaps</div>
+        <div class="theme-q">"What do we need to do to get the price book right?"</div>
+        <div class="theme-tldr"><b>You're right, there's a gap.</b> Your downlight example shows it. Fix is adding entries to the cookbook, not changing code.</div>
+      </div>
+      <div class="theme-card">
+        <div class="theme-num">03 · Building from trade books</div>
+        <div class="theme-q">"Can the scanning tool build this from a tradie's own book?"</div>
+        <div class="theme-tldr"><b>Yes, and most of it is already built.</b> The scanner is live, the review tool is built. One step missing.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SECTION 00 — HOW THE ENGINE WORKS                                 -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="section">
+  <div class="wrap">
+    <h2 class="section-title"><span class="num">00</span>How a price gets chosen — quick reset</h2>
+    <p class="caption">
+      One quick correction. The system does <b>not</b> read the master
+      cookbook first and then "update" with the tradie's book. Both books
+      are read <b>at the same time</b>, and the AI picks the best match for
+      what the customer asked for. Tradie's recipes win ties.
+    </p>
+
+    <div class="diag">
+      <div class="chain">
+
+        <div class="pair">
+          <div class="box amber">
+            <div class="box-lbl">The Master Cookbook</div>
+            <div class="box-sub">Generic recipes we wrote. Used by every tradie unless they've added their own version.</div>
+            <span class="tbl">shared_assemblies + shared_materials</span>
+          </div>
+          <div class="box violet">
+            <div class="box-lbl">The Tradie's Personal Cookbook</div>
+            <div class="box-sub">Their specific brands and prices. Optional — overrides the master when present.</div>
+            <span class="tbl">tenant_custom_assemblies + tenant_material_catalogue</span>
+          </div>
+        </div>
+
+        <div class="arr-down"></div>
+
+        <div class="box solid-orange">
+          <div class="box-lbl">Smart Sorter</div>
+          <div class="box-sub">Looks at the customer's wording and ranks the best matches from BOTH books together. Tradie's recipes win ties.</div>
+          <span class="tbl">lib/estimate/tools.ts · re-ranker</span>
+        </div>
+
+        <div class="arr-down"></div>
+
+        <div class="box solid-orange">
+          <div class="box-lbl">AI builds Good / Better / Best</div>
+          <div class="box-sub">Can only quote what the cookbooks return — it cannot invent a price.</div>
+          <span class="tbl">Claude Opus + tool-calling</span>
+        </div>
+
+        <div class="arr-down"></div>
+
+        <div class="box rose">
+          <div class="box-lbl">The Price Checker (safety net)</div>
+          <div class="box-sub">Reads every line. If anything doesn't match a real recipe, the whole quote gets replaced with a $99 site visit.</div>
+          <span class="tbl">lib/estimate/validate.ts</span>
+        </div>
+
+        <div class="arr-down"></div>
+
+        <div class="pair">
+          <div class="box green">
+            <div class="box-lbl">Pass → Quote sent</div>
+            <div class="box-sub">Customer sees Good / Better / Best on the quote page.</div>
+            <span class="tbl">quotes.good / quotes.better / quotes.best</span>
+          </div>
+          <div class="box green">
+            <div class="box-lbl">Fail → $99 site visit</div>
+            <div class="box-sub">Safer than sending a wrong number.</div>
+            <span class="tbl">quotes.needs_inspection = true</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <p class="body-text">
+      The Price Checker is the load-bearing safety layer. It reads every
+      line of the AI's draft quote and confirms each price traces back to
+      a real entry in either <span class="tbl">shared_assemblies</span> or
+      <span class="tbl">tenant_custom_assemblies</span>. If even one line
+      can't be matched, the whole quote is replaced with the $99 inspection
+      route. That's why the cookbooks can have gaps and the engine still
+      stays safe — the gate is downstream of the cookbook.
+    </p>
+
+    <div class="verdict green">
+      <div class="verdict-label">Verdict — the engine is sound</div>
+      <p>A wrong price can't reach a customer. Worst case is a $99 site visit instead of the auto-quote. <b>The guarantee lives in the Price Checker</b>, not in the cookbooks themselves.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SECTION 01 — AFTER-HOURS RATE                                     -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="section">
+  <div class="wrap">
+    <h2 class="section-title"><span class="num">01</span>After-hours rate — walking through an emergency</h2>
+    <p class="caption">
+      Your question: <b>"how accurate is the after-hours rate on an
+      emergency job?"</b> Easiest way to answer is to follow one all the
+      way through and look at every gate it passes.
+    </p>
+
+    <div class="diag">
+      <div class="chain">
+
+        <div class="box sky">
+          <div class="box-lbl">Customer texts or calls</div>
+          <div class="box-sub">"My hot water just blew, can someone come tonight"</div>
+          <span class="tbl">sms_messages or vapi webhook</span>
+        </div>
+
+        <div class="arr-down"></div>
+
+        <div class="box sky">
+          <div class="box-lbl">AI listens for urgency words</div>
+          <div class="box-sub">"Tonight", "ASAP", "weekend", "emergency", "right now" — marks the job as urgent.</div>
+          <span class="tbl">intakes.timing.urgency = 'emergency'</span>
+        </div>
+
+        <div class="arr-down"></div>
+
+        <div class="box amber">
+          <div class="box-lbl">System multiplies the rate</div>
+          <div class="box-sub">Looks up THIS tradie's multiplier (you set it per business), works out the inflated hourly + call-out, hands those numbers to the AI.</div>
+          <span class="tbl">pricing_book.after_hours_multiplier</span>
+        </div>
+
+        <div class="arr-down"></div>
+
+        <div class="box solid-orange">
+          <div class="box-lbl">AI writes the quote</div>
+          <div class="box-sub">Uses the after-hours numbers. Each affected line is clearly tagged "after-hours" — that tag is the proof the inflated rate is allowed.</div>
+          <span class="tbl">line.source = 'after_hours' or 'after_hours_callout'</span>
+        </div>
+
+        <div class="arr-down"></div>
+
+        <div class="box rose">
+          <div class="box-lbl">Price Checker (strict)</div>
+          <div class="box-sub">Accepts inflated rates ONLY when the line is tagged. A normal-hours line at an inflated rate gets rejected — whole quote dumps to a site visit.</div>
+          <span class="tbl">lib/estimate/validate.ts — strict tag check</span>
+        </div>
+
+      </div>
+
+      <h3 class="sub">What each tradie has set up today</h3>
+      <p class="body-text">
+        Each tradie sets their own multiplier on their rate card row
+        (<span class="tbl">pricing_book</span>). No two are the same — Sparky
+        charges double, Peppers charges 70% more, Atomic charges 50% more.
+        When an urgent job comes in, here's the exact maths the AI gets
+        handed:
+      </p>
+
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Tradie</th>
+            <th>Trade</th>
+            <th>Normal hourly</th>
+            <th>Normal call-out</th>
+            <th>Multiplier</th>
+            <th>After-hours hourly</th>
+            <th>After-hours call-out</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="strong">Atomic Electrical</td><td>electrical</td><td>$160</td><td>$200</td><td class="mono">1.5×</td><td class="mono">$240</td><td class="mono">$300</td></tr>
+          <tr><td class="strong">Peppers Plumbing</td><td>electrical</td><td>$120</td><td>$200</td><td class="mono">1.7×</td><td class="mono">$204</td><td class="mono">$340</td></tr>
+          <tr><td class="strong">Peppers Plumbing</td><td>plumbing</td><td>$120</td><td>$200</td><td class="mono">1.7×</td><td class="mono">$204</td><td class="mono">$340</td></tr>
+          <tr><td class="strong">Sparky</td><td>electrical</td><td>$118</td><td>$150</td><td class="mono">2.0×</td><td class="mono">$236</td><td class="mono">$300</td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="sub">Worked example — Sparky on a Saturday night</h3>
+      <p class="body-text">
+        Customer texts Sparky at 11pm on Saturday: <em>"my power's out in
+        the kitchen, can someone come tonight?"</em>
+      </p>
+
+      <div class="example">
+        <div class="example-label">Step by step</div>
+        <div class="example-row"><span class="actor">Customer:</span>"Power's out in the kitchen, can someone come tonight?"</div>
+        <div class="example-row"><span class="actor ai">AI:</span>Picks up "tonight" → sets <span class="tbl">intakes.timing.urgency = 'emergency'</span></div>
+        <div class="example-row"><span class="actor system">System:</span>Looks up Sparky's <span class="tbl">pricing_book.after_hours_multiplier</span> = 2.0. Hands AI: hourly $236, call-out $300.</div>
+        <div class="example-row"><span class="actor ai">AI:</span>Writes 3 quote options. Each one has an "after-hours emergency call-out" line at $300 + labour at $236/hr, both tagged <span class="tbl">source = after_hours</span></div>
+        <div class="example-row"><span class="actor system">Price Checker:</span>Confirms $300 = $150 × 2.0 ✓ and $236 = $118 × 2.0 ✓. Tags present. Quote approved.</div>
+        <div class="example-row"><span class="actor">Customer:</span>Gets the quote within seconds with the right emergency rates applied.</div>
+      </div>
+    </div>
+
+    <div class="verdict green">
+      <div class="verdict-label">Verdict — works as designed</div>
+      <p>The maths is locked in, the strict tagging rule stops inflated rates leaking onto normal jobs, and each tradie controls their own multiplier on their <span class="tbl">pricing_book</span> row. The only soft spot is whether the AI correctly classifies the customer's wording as urgent. If it ever errs in the wrong direction, the Price Checker catches it. Happy to run a real test text through the whole system and screenshot the result for you.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SECTION 02 — THE DOWNLIGHT GAP                                    -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="section">
+  <div class="wrap">
+    <h2 class="section-title"><span class="num">02</span>The downlight gap — you're right</h2>
+    <p class="caption">
+      There's only <b>ONE</b> downlight entry in the cookbook
+      (<span class="tbl">shared_assemblies</span>, row name "Install LED
+      downlight"), and its labour time only fits the "replace existing"
+      job. A "new install" downlight job dumps to a $99 site visit — safe,
+      but a missed quote we could've delivered. Your example walked into
+      this directly.
+    </p>
+
+    <div class="diag">
+
+      <div class="compare">
+        <div class="compare-card need">
+          <h4>NEW INSTALL (your first scenario)</h4>
+          <ul>
+            <li>Find a power source</li>
+            <li>Run new cables through the ceiling</li>
+            <li>Cut holes in the plaster</li>
+            <li>Terminate cables at each fitting</li>
+            <li>Connect downlights</li>
+            <li>Test and commission</li>
+          </ul>
+          <div class="foot">Labour: <b>1.5–2 hours per fitting</b></div>
+        </div>
+        <div class="compare-card have">
+          <h4>REPLACE EXISTING (your second scenario)</h4>
+          <ul>
+            <li>Remove old downlights</li>
+            <li>Install new terminals</li>
+            <li>Install new downlights</li>
+            <li>Test</li>
+          </ul>
+          <div class="foot">Labour: <b>about 25 minutes per fitting</b></div>
+        </div>
+      </div>
+
+      <p class="body-text" style="margin-top:1.5rem">
+        New install is roughly <b>3–4×</b> the labour per fitting. The
+        existing downlight row in <span class="tbl">shared_assemblies</span>
+        carries the replacement labour (0.40 hr) and its
+        <span class="tbl">default_exclusions</span> column literally says
+        <em>"Excludes new wiring runs and ceiling repair"</em> — so by
+        design the row only covers the replacement scenario. Power points
+        got this right: three entries in <span class="tbl">shared_assemblies</span>
+        for three labour profiles. Downlights and smoke alarms didn't.
+      </p>
+
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Service</th>
+            <th>Entries in <span class="tbl">shared_assemblies</span></th>
+            <th>Labour per unit</th>
+            <th>What's covered</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="strong">Downlights</td><td class="mono">1</td><td class="mono">25 min</td><td class="bad">Replacement only. New install → site visit.</td></tr>
+          <tr><td class="strong">Power points (GPOs)</td><td class="mono">3</td><td class="mono">18 min · 1 hr · 2 hr</td><td class="ok">Replace · outdoor new · aircon new.</td></tr>
+          <tr><td class="strong">Smoke alarms</td><td class="mono">1</td><td class="mono">30 min</td><td class="bad">Same gap. No entry for first-install whole-house compliance.</td></tr>
+          <tr><td class="strong">Outdoor lights</td><td class="mono">2</td><td class="mono">36 min · 1 hr</td><td class="meh">Splits by light type, not by new vs replace.</td></tr>
+          <tr><td class="strong">Ceiling fans</td><td class="mono">3</td><td class="mono">1 hr · 1 hr · 1.5 hr</td><td class="meh">Splits by fan model, no new vs replace split.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="verdict amber">
+      <div class="verdict-label">Verdict — fix is adding entries, not code</div>
+      <p>Add a second row to <span class="tbl">shared_assemblies</span> — "Install LED downlight (new install, single-storey, switch within 5m)" at 1.5–2 hours per fitting, with rules to escalate the tricky cases (raked ceiling, no roof access, multi-storey) to a site visit. The easy 80% of new-install jobs auto-quote; the hard 20% still go to a site visit, which is the right call. Same pattern for smoke alarms.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SECTION 03 — ASSUMPTIONS                                          -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="section">
+  <div class="wrap">
+    <h2 class="section-title"><span class="num">03</span>Where the assumptions live</h2>
+    <p class="caption">
+      You mentioned <b>"we can find a switch within 5 metres, we have roof
+      space access, we can drill through framing."</b> Those assumptions DO
+      exist in the system — but spread across three places. The most useful
+      spot (right on the cookbook entry itself) is still missing.
+    </p>
+
+    <div class="diag">
+      <div class="pair-3">
+        <div class="box amber">
+          <div class="box-lbl">1. Built into the AI's rules</div>
+          <div class="box-sub">Per job <em>type</em>, default assumptions are baked in. Downlights = flat plaster, indoor, modern house. Used silently when the customer doesn't say otherwise.</div>
+          <span class="tbl">ASSUMPTION_RULES in lib/sms/assumptions.ts</span>
+        </div>
+        <div class="box violet">
+          <div class="box-lbl">2. One line per entry</div>
+          <div class="box-sub">Each cookbook entry can carry a single short exclusion line. The downlight row's text: <em>"Excludes new wiring runs and ceiling repair."</em> Plain text, not structured.</div>
+          <span class="tbl">shared_assemblies.default_exclusions</span>
+        </div>
+        <div class="box sky">
+          <div class="box-lbl">3. Saved with each quote</div>
+          <div class="box-sub">When the AI builds a quote, the assumptions it relied on are saved with that quote. The customer sees them and can correct anything wrong.</div>
+          <span class="tbl">quotes.assumptions (jsonb array)</span>
+        </div>
+      </div>
+
+      <h3 class="sub">What's missing — structured rules ON each entry</h3>
+      <p class="body-text">
+        Today the downlight row in <span class="tbl">shared_assemblies</span>
+        only has the one-line exclusion text. It can't say things like
+        "switch must be within 5 metres" because there's no column for
+        structured rules. Adding a new column
+        (<span class="tbl">shared_assemblies.row_assumptions</span>, a
+        jsonb field) would close this gap. Your example becomes the
+        template:
+      </p>
+
+      <div class="compare">
+        <div class="compare-card have">
+          <h4>What "Install LED downlight" carries today</h4>
+          <ul>
+            <li>One line of exclusion text (<span class="tbl">default_exclusions</span>)</li>
+            <li>Four must-ask questions (<span class="tbl">clarifying_questions</span>)</li>
+            <li>No structured rules attached</li>
+          </ul>
+        </div>
+        <div class="compare-card need">
+          <h4>What it could carry (your example)</h4>
+          <ul>
+            <li>Switch must be within 5 metres</li>
+            <li>Must have roof space access</li>
+            <li>Flat plaster ceiling only</li>
+            <li>Single-storey only</li>
+            <li>Plus the existing exclusions and questions</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="verdict violet">
+      <div class="verdict-label">Verdict — half there</div>
+      <p>The first two layers work. The missing piece is per-entry structured assumptions on each <span class="tbl">shared_assemblies</span> row — the exact thing you described. <b>This pairs with the downlight fix</b> from section 02: add the column once, and every new entry (including the "new install" downlight) can use it.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SECTION 04 — TRADE BOOK PIPELINE                                  -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="section">
+  <div class="wrap">
+    <h2 class="section-title"><span class="num">04</span>From trade book to cookbook — your scanning idea</h2>
+    <p class="caption">
+      Yes — and most of the pipeline already exists. The scanner is live on
+      Railway (<span class="tbl">mt-filestore-kb</span>), the review tool is
+      built (the admin loader). Only step 3 is new. Your "tradies just give
+      one-line invoices" point is right: invoices are too thin. The right
+      input is their <b>work-instruction manual</b> — the doc with labour
+      breakdowns, assumptions, and exclusions.
+    </p>
+
+    <div class="diag">
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">Tradie uploads their work-instruction manual</div>
+            <div class="step-text">A PDF that tells an apprentice how to price each job. Upload directly, or pull from a shared Google Drive folder.</div>
+            <div class="step-tag">mt-filestore-kb · already live</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">The scanner indexes the document</div>
+            <div class="step-text">Google's document search service (Gemini File Search) chops the PDF into searchable chunks and embeds them — already deployed on our Railway cloud.</div>
+            <div class="step-tag">Already live</div>
+          </div>
+        </div>
+        <div class="step proposed">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-title">AI pulls out the pricing details</div>
+            <div class="step-text">Asks the indexed document one structured question: <em>"For each install service, give me the name, labour time, parts, assumptions, exclusions."</em> Returns the answers with citations back to the original PDF.</div>
+            <div class="step-tag new">NEW · the only piece to write</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <div class="step-title">Extracted entries land in a review queue</div>
+            <div class="step-text">The admin loader's staging area (<span class="tbl">import_batches</span> + <span class="tbl">import_staged_rows</span>). Each row auto-checked for obvious mistakes before it can be approved.</div>
+            <div class="step-tag">Already built</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">5</div>
+          <div class="step-body">
+            <div class="step-title">Operator reviews and approves</div>
+            <div class="step-text">You browse the staged rows in <span class="tbl">/admin/loader</span>, fix anything wrong, approve in one click. Nothing goes live without sign-off.</div>
+            <div class="step-tag">Already built</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">6</div>
+          <div class="step-body">
+            <div class="step-title">Committed to the cookbook</div>
+            <div class="step-text">Lands in <span class="tbl">shared_assemblies</span> + <span class="tbl">shared_materials</span> (master cookbook) or in <span class="tbl">tenant_custom_assemblies</span> + <span class="tbl">tenant_material_catalogue</span> (that tradie's personal cookbook).</div>
+            <div class="step-tag">Already built</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="verdict green">
+      <div class="verdict-label">Verdict — best long-term move</div>
+      <p>Five of six steps already shipped. Step 3 is about a week of focused work to build properly. Big advantage: every new trade we add later (carpentry, solar, etc.) just needs the tradie's existing pricing guide scanned — much faster than hand-writing 50+ entries. Worth a short proposal first so we agree on the extracted output shape.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SECTION 05 — SHARED vs TENANT BOOK                                -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="section">
+  <div class="wrap">
+    <h2 class="section-title"><span class="num">05</span>Two books, different detail — what happens?</h2>
+    <p class="caption">
+      You raised: <b>"there will be detail in one book and not the other.
+      Some tradies just give a one-line invoice."</b> Real concern. The
+      good news: the Price Checker only cares that each line traces back to
+      a real entry <em>somewhere</em> — either book counts. The two books
+      mix together coherently.
+    </p>
+
+    <div class="diag">
+      <div class="chain">
+
+        <div class="pair">
+          <div class="box amber">
+            <div class="box-lbl">Rich master cookbook</div>
+            <div class="box-sub">Full labour breakdowns, exclusions, materials. We curate this.</div>
+            <span class="tbl">shared_assemblies + shared_materials</span>
+          </div>
+          <div class="box violet">
+            <div class="box-lbl">Sparse tradie's cookbook</div>
+            <div class="box-sub">Maybe just one entry — "MY Clipsal Iconic GPO at $85". No labour breakdown. That's fine; the rest comes from the master.</div>
+            <span class="tbl">tenant_custom_assemblies + tenant_material_catalogue</span>
+          </div>
+        </div>
+
+        <div class="arr-down"></div>
+
+        <div class="box solid-orange">
+          <div class="box-lbl">AI mixes them together</div>
+          <div class="box-sub">Labour from the master cookbook + part price from the tradie's cookbook = one coherent quote.</div>
+        </div>
+
+        <div class="arr-down"></div>
+
+        <div class="box rose">
+          <div class="box-lbl">Price Checker</div>
+          <div class="box-sub">Each line just needs to trace to a real entry. Doesn't matter which book.</div>
+          <span class="tbl">lib/estimate/validate.ts</span>
+        </div>
+
+        <div class="arr-down"></div>
+
+        <div class="box green">
+          <div class="box-lbl">Customer sees one clean quote</div>
+          <div class="box-sub">Same level of polish regardless of how rich either book is.</div>
+        </div>
+
+      </div>
+
+      <h3 class="sub">Worked example with real numbers</h3>
+      <p class="body-text">
+        Atomic Electrical has uploaded just ONE thing to their personal
+        cookbook (<span class="tbl">tenant_material_catalogue</span>) —
+        their preferred Clipsal Iconic GPO at $85. A customer asks for a
+        power point replacement.
+      </p>
+
+      <div class="example">
+        <div class="example-label">How the quote gets built</div>
+        <div class="example-row"><span class="actor ai">AI looks up labour:</span>"Replace double GPO" — found in <span class="tbl">shared_assemblies</span> (master). 18 min × $160/hr = $48.</div>
+        <div class="example-row"><span class="actor ai">AI looks up part:</span>Atomic's <span class="tbl">tenant_material_catalogue</span> has Clipsal Iconic at $85. Master has generic at $25. Atomic's wins.</div>
+        <div class="example-row"><span class="actor ai">AI builds line:</span>"Replace double GPO with Clipsal Iconic" — labour $48 + part $85 + markup ≈ <b>$175 per GPO</b>.</div>
+        <div class="example-row"><span class="actor system">Price Checker:</span>Labour traces to master ✓. Part traces to tenant ✓. Quote approved.</div>
+        <div class="example-row"><span class="actor">Customer:</span>Sees the Clipsal Iconic brand named on the quote at Atomic's premium price.</div>
+      </div>
+    </div>
+
+    <div class="verdict green">
+      <div class="verdict-label">Verdict — already handled by design</div>
+      <p>A tradie with a rich <span class="tbl">tenant_custom_assemblies</span> + <span class="tbl">tenant_material_catalogue</span> gets their brands and prices honoured. A tradie with nothing in those tables falls back to the master — still produces a valid, professional quote. <b>The difference never reaches the customer.</b> Your concern was the right one to raise; the answer is the system was built knowing this would happen.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- FOOTER                                                            -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<footer>
+  <div class="wrap">
+    <p>
+      <strong>Generated 2026-05-26</strong> from the real numbers in the
+      system today. Every multiplier, rate, and labour time is the actual
+      value sitting in the database right now — not an estimate. The
+      orange-tagged references are the actual database table / column /
+      file names if you want to ask follow-up questions using the exact
+      field names.
+    </p>
+    <p>
+      <strong>Related pages:</strong>
+      <a href="./pricing-flow.html">How a quote gets priced</a> ·
+      <a href="./database-visual.html">How the data flows</a> ·
+      <a href="./database-architecture.html">Engineer's reference (full database map)</a>.
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Tradie Onboarding Plan — QuoteMate</title>
+  <meta
+    name="description"
+    content="How a tradie signs up, fills the form, and gets a live AI receptionist on their own QuoteMate number. End to end, fully automated."
+  />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap"
+  />
+  <style>
+    :root {
+      --ink-deep: #0a1628;
+      --ink: #131c2d;
+      --ink-card: #1a2332;
+      --ink-line: #2a3548;
+      --accent: #ff5a1f;
+      --accent-press: #e8470f;
+      --text-pri: #ffffff;
+      --text-sec: #b8c2d1;
+      --text-dim: #7a8699;
+      --teal-glow: #14b8a6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: var(--ink-deep);
+      color: var(--text-pri);
+      font-family: 'Manrope', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      font-weight: 400;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+    .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+    .container {
+      max-width: 80rem;
+      margin: 0 auto;
+      padding: 0 1.5rem;
+      position: relative;
+      z-index: 1;
+    }
+    .topo {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      opacity: 0.25; pointer-events: none; z-index: 0;
+    }
+
+    /* ─── HERO ─────────────────────────────────────────────── */
+    .hero {
+      position: relative;
+      padding: 5rem 0 4rem;
+      border-bottom: 1px solid var(--ink-line);
+      overflow: hidden;
+    }
+    .eyebrow {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+    h1.display {
+      margin-top: 1.25rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      font-size: clamp(2.5rem, 6vw, 5rem);
+      letter-spacing: -0.035em;
+      line-height: 0.95;
+    }
+    h1.display .hi { color: var(--accent); }
+    .lede {
+      margin-top: 1.5rem;
+      max-width: 48ch;
+      color: var(--text-sec);
+      font-size: 1.05rem;
+      line-height: 1.55;
+    }
+
+    /* ─── SECTION ──────────────────────────────────────────── */
+    section.block { padding: 4rem 0; border-bottom: 1px solid var(--ink-line); }
+    h2.section-title {
+      font-weight: 800;
+      text-transform: uppercase;
+      font-size: clamp(1.5rem, 2.6vw, 2.25rem);
+      letter-spacing: -0.03em;
+      line-height: 1.05;
+    }
+    h2.section-title .hi { color: var(--accent); }
+    .section-eyebrow { display: inline-block; margin-bottom: 0.85rem; }
+    .section-lead {
+      margin-top: 1rem;
+      color: var(--text-sec);
+      max-width: 55ch;
+      font-size: 0.98rem;
+    }
+
+    /* ─── DIAGRAM ──────────────────────────────────────────── */
+    .diagram {
+      margin-top: 2.5rem;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0.75rem;
+    }
+    @media (min-width: 900px) {
+      .diagram { grid-template-columns: repeat(6, 1fr); gap: 0.5rem; }
+    }
+    .node {
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      padding: 1rem 1.1rem;
+      position: relative;
+      min-height: 6.5rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .node .step-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem; font-weight: 700;
+      color: var(--accent); letter-spacing: 0.12em;
+    }
+    .node .step-label {
+      margin-top: 0.4rem; font-weight: 800;
+      text-transform: uppercase; font-size: 0.92rem;
+      letter-spacing: -0.01em;
+    }
+    .node .step-desc {
+      margin-top: 0.35rem; font-size: 0.78rem;
+      color: var(--text-sec); line-height: 1.45;
+    }
+    @media (min-width: 900px) {
+      .node:not(:last-child)::after {
+        content: "→"; color: var(--accent); position: absolute;
+        right: -1rem; top: 50%; transform: translateY(-50%);
+        font-size: 1.2rem; font-weight: 700; line-height: 1;
+      }
+    }
+    @media (max-width: 899px) {
+      .node:not(:last-child)::before {
+        content: "↓"; color: var(--accent); font-weight: 700;
+        font-size: 1rem; position: absolute;
+        left: 50%; bottom: -1rem; transform: translateX(-50%);
+      }
+    }
+
+    /* ─── NUMBERED CARDS ───────────────────────────────────── */
+    .cards { margin-top: 2.5rem; display: grid; gap: 1rem; }
+    @media (min-width: 720px) { .cards { grid-template-columns: 1fr 1fr; } }
+    .card {
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      padding: 1.5rem 1.5rem 1.4rem;
+      display: flex; gap: 1.25rem;
+    }
+    .card .num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: clamp(2rem, 3.5vw, 3rem);
+      font-weight: 700; color: var(--accent);
+      line-height: 1; flex-shrink: 0; min-width: 3rem;
+    }
+    .card h3 {
+      font-weight: 800; text-transform: uppercase;
+      font-size: 1.05rem; letter-spacing: -0.01em; line-height: 1.15;
+    }
+    .card p {
+      margin-top: 0.5rem; color: var(--text-sec);
+      font-size: 0.9rem; line-height: 1.5;
+    }
+    .card .meta {
+      display: block; margin-top: 0.65rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--text-dim);
+    }
+
+    /* ─── OUTCOME PANEL ────────────────────────────────────── */
+    .outcome {
+      margin-top: 2.5rem;
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      padding: 2rem;
+      display: grid; gap: 1.25rem;
+    }
+    @media (min-width: 720px) {
+      .outcome { grid-template-columns: 1fr 1fr; align-items: center; }
+    }
+    .outcome .phone {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: clamp(1.6rem, 3.5vw, 2.4rem);
+      font-weight: 700; color: var(--accent); letter-spacing: 0.04em;
+    }
+    .outcome h3 {
+      font-weight: 800; text-transform: uppercase;
+      font-size: 1.1rem; letter-spacing: -0.01em;
+    }
+    .outcome p {
+      margin-top: 0.5rem; color: var(--text-sec); font-size: 0.92rem;
+    }
+    .checklist {
+      margin-top: 0.75rem; list-style: none; padding: 0;
+      display: grid; gap: 0.45rem;
+    }
+    .checklist li {
+      font-size: 0.85rem; color: var(--text-sec);
+      display: flex; gap: 0.5rem; align-items: baseline;
+    }
+    .checklist li::before {
+      content: "✓"; color: var(--accent); font-weight: 700;
+    }
+
+    /* ─── CTA BAR ──────────────────────────────────────────── */
+    .cta-bar {
+      background: var(--accent);
+      color: var(--text-pri);
+      text-align: center;
+      padding: 1.1rem 1.5rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem; font-weight: 600;
+      letter-spacing: 0.16em; text-transform: uppercase;
+    }
+
+    /* ─── MOBILE OVERRIDES (under 720px) ───────────────────── */
+    @media (max-width: 719px) {
+      .container { padding: 0 1.1rem; }
+      .hero { padding: 3rem 0 2.25rem; }
+      .topo { opacity: 0.18; }
+      h1.display {
+        font-size: clamp(2rem, 9vw, 2.75rem);
+        letter-spacing: -0.03em; line-height: 1;
+      }
+      .lede { font-size: 0.98rem; margin-top: 1.1rem; }
+      section.block { padding: 2.5rem 0; }
+      h2.section-title {
+        font-size: clamp(1.4rem, 6.5vw, 1.85rem);
+        line-height: 1.1;
+      }
+      .section-lead { font-size: 0.93rem; }
+      .diagram { margin-top: 1.75rem; gap: 0.6rem; }
+      .node { min-height: auto; padding: 0.95rem 1rem; }
+      .node .step-num { font-size: 0.66rem; }
+      .node .step-label { font-size: 0.88rem; }
+      .node .step-desc { font-size: 0.83rem; margin-top: 0.3rem; }
+      .cards { margin-top: 1.75rem; }
+      .card { padding: 1.15rem 1.15rem 1.1rem; gap: 0.9rem; }
+      .card .num { font-size: 2rem; min-width: 2.2rem; }
+      .card h3 { font-size: 0.98rem; }
+      .card p { font-size: 0.9rem; }
+      .card .meta { font-size: 0.66rem; }
+      .outcome { margin-top: 1.75rem; padding: 1.5rem 1.25rem; gap: 1rem; }
+      .outcome h3 { font-size: 1rem; }
+      .outcome p { font-size: 0.9rem; }
+      .outcome .phone {
+        font-size: clamp(1.7rem, 8vw, 2.2rem);
+        word-break: break-all;
+      }
+      .cta-bar {
+        padding: 1rem 1.1rem;
+        font-size: 0.7rem; letter-spacing: 0.1em;
+        line-height: 1.55;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- ───────── HERO ───────── -->
+  <header class="hero">
+    <svg class="topo" viewBox="0 0 1920 600" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <g fill="none" stroke="#14b8a6" stroke-width="1">
+        <path d="M0,420 Q240,300 480,360 T960,330 T1440,380 T1920,340" />
+        <path d="M0,470 Q240,360 480,400 T960,380 T1440,430 T1920,400" opacity="0.7" />
+        <path d="M0,520 Q240,420 480,450 T960,430 T1440,480 T1920,450" opacity="0.5" />
+        <path d="M0,570 Q240,480 480,500 T960,480 T1440,530 T1920,500" opacity="0.3" />
+      </g>
+    </svg>
+    <div class="container">
+      <span class="eyebrow">QuoteMate · v6 Architecture Plan</span>
+      <h1 class="display">
+        Tradie <span class="hi">Onboarding</span><br />
+        Flow + System
+      </h1>
+      <p class="lede">
+        How a tradie signs up, fills the form, and gets a live AI receptionist on
+        their own QuoteMate number. End to end, fully automated, four pages on the
+        front, six steps on the back.
+      </p>
+    </div>
+  </header>
+
+  <!-- ───────── THE FLOW (diagram) ───────── -->
+  <section class="block">
+    <div class="container">
+      <span class="eyebrow section-eyebrow">The Flow</span>
+      <h2 class="section-title">
+        Website to <span class="hi">live AI</span> in under 4 minutes
+      </h2>
+      <p class="section-lead">
+        One forward path. No branching, no separate apps to install. Tradie hits one
+        button at the end and the system provisions everything in parallel.
+      </p>
+
+      <div class="diagram" aria-label="Onboarding flow diagram">
+        <div class="node">
+          <span class="step-num">01</span>
+          <span class="step-label">Website</span>
+          <span class="step-desc">Tradie visits quotemate.com.au and clicks Get Started</span>
+        </div>
+        <div class="node">
+          <span class="step-num">02</span>
+          <span class="step-label">Form</span>
+          <span class="step-desc">4 short pages on mobile, ~3 minutes to fill</span>
+        </div>
+        <div class="node">
+          <span class="step-num">03</span>
+          <span class="step-label">Database</span>
+          <span class="step-desc">Tenant row, pricing book, service offerings written</span>
+        </div>
+        <div class="node">
+          <span class="step-num">04</span>
+          <span class="step-label">Twilio</span>
+          <span class="step-desc">New AU phone number bought, SMS + voice webhooks wired</span>
+        </div>
+        <div class="node">
+          <span class="step-num">05</span>
+          <span class="step-label">Vapi</span>
+          <span class="step-desc">AI assistant created with their pricing and brand</span>
+        </div>
+        <div class="node">
+          <span class="step-num">06</span>
+          <span class="step-label">Live AI</span>
+          <span class="step-desc">Welcome SMS sent. Tradie tests their new number.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── THE FORM (4 pages) ───────── -->
+  <section class="block">
+    <div class="container">
+      <span class="eyebrow section-eyebrow">The Form</span>
+      <h2 class="section-title">
+        Four pages, <span class="hi">three minutes</span>
+      </h2>
+      <p class="section-lead">
+        Fields that need outside verification (ABN, licence, insurance) are optional
+        in test. The tradie can add them later from the dashboard.
+      </p>
+
+      <div class="cards">
+        <article class="card">
+          <span class="num">01</span>
+          <div>
+            <h3>Account basics</h3>
+            <p>Business name, owner first + last name, mobile, email, password. Six fields. All required.</p>
+            <span class="meta">→ tenants table</span>
+          </div>
+        </article>
+        <article class="card">
+          <span class="num">02</span>
+          <div>
+            <h3>Trade and licence</h3>
+            <p>Pick electrical or plumbing, choose your state. ABN, licence number, and expiry are optional in test.</p>
+            <span class="meta">→ tenants + pricing_book</span>
+          </div>
+        </article>
+        <article class="card">
+          <span class="num">03</span>
+          <div>
+            <h3>Pricing essentials</h3>
+            <p>Hourly rate, callout minimum, markup percent. Advanced fields hide behind a toggle with sensible defaults.</p>
+            <span class="meta">→ pricing_book</span>
+          </div>
+        </article>
+        <article class="card">
+          <span class="num">04</span>
+          <div>
+            <h3>Review and activate</h3>
+            <p>Summary of every field. Services pre-ticked. Big orange button: Activate my QuoteMate.</p>
+            <span class="meta">→ /api/onboard/activate</span>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── WHAT ACTIVATE TRIGGERS ───────── -->
+  <section class="block">
+    <div class="container">
+      <span class="eyebrow section-eyebrow">Behind the Activate Button</span>
+      <h2 class="section-title">
+        Six things happen in <span class="hi">parallel</span>
+      </h2>
+      <p class="section-lead">
+        Total elapsed time around 10 to 15 seconds. The tradie watches a live
+        checklist tick over while the system provisions everything.
+      </p>
+
+      <div class="cards">
+        <article class="card">
+          <span class="num">01</span>
+          <div>
+            <h3>Save to database</h3>
+            <p>Tenant row, pricing book, and service offerings inserted in one atomic transaction.</p>
+            <span class="meta">Supabase</span>
+          </div>
+        </article>
+        <article class="card">
+          <span class="num">02</span>
+          <div>
+            <h3>Buy phone number</h3>
+            <p>New AU mobile long code purchased via Twilio API. SMS and voice webhooks pointed at QuoteMate.</p>
+            <span class="meta">Twilio API</span>
+          </div>
+        </article>
+        <article class="card">
+          <span class="num">03</span>
+          <div>
+            <h3>Create AI assistant</h3>
+            <p>Vapi assistant spun up with the tradie's business name, trade prompt, and pricing book bound to it.</p>
+            <span class="meta">Vapi API</span>
+          </div>
+        </article>
+        <article class="card">
+          <span class="num">04</span>
+          <div>
+            <h3>Bind number to tradie</h3>
+            <p>Twilio number and Vapi assistant ID saved on the tenant row. Inbound webhooks know which tradie to route to.</p>
+            <span class="meta">tenants.twilio_sms_number</span>
+          </div>
+        </article>
+        <article class="card">
+          <span class="num">05</span>
+          <div>
+            <h3>Send welcome SMS</h3>
+            <p>Tradie gets a text from their new QuoteMate number on their personal mobile. Closes the loop visibly.</p>
+            <span class="meta">Twilio outbound</span>
+          </div>
+        </article>
+        <article class="card">
+          <span class="num">06</span>
+          <div>
+            <h3>Show the new number</h3>
+            <p>Welcome screen displays the number with a Send a test text button. Stripe Connect deferred to dashboard.</p>
+            <span class="meta">/onboard/success</span>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── OUTCOME ───────── -->
+  <section class="block">
+    <div class="container">
+      <span class="eyebrow section-eyebrow">The Outcome</span>
+      <h2 class="section-title">
+        Tradie sees one screen. <span class="hi">AI is live.</span>
+      </h2>
+
+      <div class="outcome">
+        <div>
+          <h3>You're live</h3>
+          <p>Your QuoteMate line:</p>
+          <div class="phone">+61 482 123 456</div>
+          <p style="margin-top:1rem">
+            Send any text to that number now to try your AI receptionist. We just sent
+            you a welcome text from it too.
+          </p>
+        </div>
+        <div>
+          <h3>What's active</h3>
+          <ul class="checklist">
+            <li>AI receptionist taking SMS</li>
+            <li>AI receptionist taking voice calls</li>
+            <li>Your pricing book loaded</li>
+            <li>Services configured for your trade</li>
+            <li>Welcome SMS delivered</li>
+          </ul>
+          <p style="margin-top:0.85rem">
+            Set up Stripe Connect from the dashboard later to start accepting deposits.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── CTA BAR ───────── -->
+  <div class="cta-bar">
+    Build order · migration 015 → form routes → /api/onboard/activate → twilio + vapi provisioning
+  </div>
+</body>
+</html>

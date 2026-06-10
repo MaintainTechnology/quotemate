@@ -31,15 +31,18 @@ export async function POST(req: Request) {
   }
   const items: TakeoffItem[] = rawItems
     .filter((r): r is Record<string, unknown> => !!r && typeof r === 'object')
-    .map((r) => ({
-      type: String(r.type ?? r.item ?? r.name ?? '').trim(),
-      count: Number(r.count) || 0,
+    .map((r): TakeoffItem => {
+      const item: TakeoffItem = {
+        type: String(r.type ?? r.item ?? r.name ?? '').trim(),
+        count: Number(r.count) || 0,
+      }
       // Take-off provenance → priced-line audit trace.
-      ...(r.confidence === 'high' || r.confidence === 'medium' || r.confidence === 'low'
-        ? { confidence: r.confidence }
-        : {}),
-      ...(r.note != null && String(r.note).trim() ? { note: String(r.note) } : {}),
-    }))
+      if (r.confidence === 'high' || r.confidence === 'medium' || r.confidence === 'low') {
+        item.confidence = r.confidence
+      }
+      if (r.note != null && String(r.note).trim()) item.note = String(r.note)
+      return item
+    })
     .filter((i) => i.type)
 
   // Load assemblies: tenant-custom first (so tenant overrides win on ties), then shared.

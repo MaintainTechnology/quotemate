@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuoteMate · AI Agents</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./_shared.css">
+  <style>
+    .agents-grid {
+      display: grid;
+      gap: 1.25rem;
+      grid-template-columns: 1fr 1fr;
+    }
+    @media (max-width: 920px) { .agents-grid { grid-template-columns: 1fr; } }
+    .agent-card {
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      padding: 1.75rem 1.5rem;
+      position: relative;
+    }
+    .agent-card.sms   { border-left: 3px solid var(--success); }
+    .agent-card.voice { border-left: 3px solid var(--warning); }
+    .agent-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1.25rem; }
+    .agent-name { font-size: 1.35rem; font-weight: 800; text-transform: uppercase; letter-spacing: -0.01em; }
+    .agent-sub  { color: var(--text-dim); font-size: 0.85rem; margin-top: 0.2rem; }
+    .agent-block { padding-top: 1rem; border-top: 1px solid var(--ink-line); margin-top: 1rem; }
+    .agent-block .label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 0.5rem;
+    }
+    .shared-brain {
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      border-left: 3px solid var(--accent);
+      padding: 1.5rem;
+      margin-top: 1.5rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand-row">
+        <span class="brand-mark">Q</span>
+        <span class="brand-name">QuoteMate</span>
+        <span class="brand-meta">AI Agents · May 2026</span>
+      </div>
+      <h1>SMS + Voice<br>Two Front Doors, One Brain</h1>
+      <p class="subtitle">
+        Both agents run on the same intake, the same pricing book, and the same quote drafter
+        underneath. Today, SMS is live and answering. Voice is provisioned per tradie and ready
+        to flip on as a premium tier.
+      </p>
+      <nav class="nav-pills">
+        <a href="./index.html">Overview</a>
+        <a href="./architecture.html">Architecture</a>
+        <a href="./agents.html" class="current">AI Agents</a>
+        <a href="./demo-script.html">Live Demo Script</a>
+      </nav>
+    </header>
+
+    <section>
+      <div class="agents-grid">
+        <!-- ─── SMS AGENT ──────────────────────────────────── -->
+        <div class="agent-card sms">
+          <div class="agent-head">
+            <div>
+              <div class="agent-name">SMS Agent</div>
+              <div class="agent-sub">Live in production · v1</div>
+            </div>
+            <span class="pill built"><span class="pill-dot"></span>Live</span>
+          </div>
+
+          <p>Answers every text to a tradie's number. Asks the right questions, captures photos,
+          decides when it has enough, and hands off to the quote drafter — usually inside four turns.</p>
+
+          <div class="agent-block">
+            <div class="label">How it thinks</div>
+            <ul class="clean">
+              <li><strong style="color:var(--text-pri)">Layer 1 — Intent.</strong> Regex first (80% of texts), Haiku 4.5 fallback for the tricky middle.</li>
+              <li><strong style="color:var(--text-pri)">Layer 2 — Dialog.</strong> One Haiku call per turn. Returns: ask, finish, escalate-to-inspection, or end.</li>
+              <li><strong style="color:var(--text-pri)">Layer 3 — Slot extraction.</strong> Pulls name, suburb, item count, specs from each reply.</li>
+              <li><strong style="color:var(--text-pri)">Layer 4 — Handoff.</strong> On finish, fires intake structuring + quote drafting in the background.</li>
+            </ul>
+          </div>
+
+          <div class="agent-block">
+            <div class="label">Models</div>
+            <dl class="kv">
+              <dt>Dialog</dt><dd>Claude Haiku 4.5 · 320-char SMS-fit replies</dd>
+              <dt>Intent</dt><dd>Claude Haiku 4.5 (regex bypass for 80% of calls)</dd>
+              <dt>Reliability</dt><dd>Twilio signature check · MessageSid idempotency · sub-500ms ack</dd>
+            </dl>
+          </div>
+
+          <div class="agent-block">
+            <div class="label">What it knows about (today)</div>
+            <ul class="clean">
+              <li>Electrical: downlights, GPOs, ceiling fans, smoke alarms, outdoor lighting</li>
+              <li>Plumbing: blocked drains, hot water, taps, toilets</li>
+              <li>Auto-escalates anything risky (gas leak, sparks, burst pipe) to a paid $99 inspection</li>
+              <li>Customer memory — returning customers skip name + address questions</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- ─── VOICE AGENT ────────────────────────────────── -->
+        <div class="agent-card voice">
+          <div class="agent-head">
+            <div>
+              <div class="agent-name">Voice Agent</div>
+              <div class="agent-sub">Provisioned per tradie · parked behind env flag</div>
+            </div>
+            <span class="pill partial"><span class="pill-dot"></span>Ready</span>
+          </div>
+
+          <p>Answers phone calls to the tradie's number with the same brain. The full stack is built
+          and assistants are spun up at signup — kept off in production today because voice costs
+          (~$1,500/mo per tradie at moderate volume) don't fit SaaS pricing yet. v3 premium tier.</p>
+
+          <div class="agent-block">
+            <div class="label">How it works</div>
+            <ul class="clean">
+              <li><strong style="color:var(--text-pri)">Speech in.</strong> Deepgram Nova-2, Australian English.</li>
+              <li><strong style="color:var(--text-pri)">Dialog.</strong> Same Haiku 4.5 brain as SMS, same assumptions and rules.</li>
+              <li><strong style="color:var(--text-pri)">Voice out.</strong> ElevenLabs (Australian male persona by default).</li>
+              <li><strong style="color:var(--text-pri)">Mid-call tools.</strong> Can fire an SMS to the caller with a photo-upload link while still on the call.</li>
+              <li><strong style="color:var(--text-pri)">Post-call.</strong> Transcript + photos flow into the same intake + quote drafter as SMS.</li>
+            </ul>
+          </div>
+
+          <div class="agent-block">
+            <div class="label">Stack</div>
+            <dl class="kv">
+              <dt>Orchestrator</dt><dd>Vapi (per-tradie assistant)</dd>
+              <dt>STT</dt><dd>Deepgram Nova-2 (en-AU)</dd>
+              <dt>TTS</dt><dd>ElevenLabs</dd>
+              <dt>Brain</dt><dd>Claude Haiku 4.5</dd>
+              <dt>Number</dt><dd>Bound to the same Twilio AU number as SMS</dd>
+            </dl>
+          </div>
+
+          <div class="agent-block">
+            <div class="label">Why parked</div>
+            <ul class="clean">
+              <li>Unit economics — voice minutes + STT/TTS don't fit SaaS pricing at v1</li>
+              <li>Liability — voice quotes can't be reviewed by the tradie before going out</li>
+              <li>Reserved as the v3 premium tier, flipped on per-tradie when justified</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── SHARED BRAIN ───────────────────────────────────── -->
+      <div class="shared-brain">
+        <h2><span class="num">→</span>Shared Brain Underneath</h2>
+        <p style="color:var(--text-sec); margin-bottom:1.25rem">
+          Both agents hand off to the same downstream pipeline. This is why adding the voice tier
+          later is mostly a cost decision, not a build decision.
+        </p>
+
+        <div class="card-grid">
+          <div class="card">
+            <h3>Intake Structuring</h3>
+            <p>Claude Opus 4.7 reads the transcript + photos and writes a clean structured job brief.
+            Strict grounding — only facts the customer actually said.</p>
+          </div>
+          <div class="card">
+            <h3>Quote Drafter</h3>
+            <p>Opus 4.7 with tool-calling. Picks line items from the tradie's pricing book, builds
+            three tiers, validates every price against the catalogue before saving.</p>
+          </div>
+          <div class="card">
+            <h3>Pricing Book</h3>
+            <p>Per-tradie, per-trade. Hourly rate, markup, custom line items. The drafter never
+            invents a price — it pulls from this and fails loudly if it can't.</p>
+          </div>
+          <div class="card">
+            <h3>Image Generator</h3>
+            <p>Gemini renders a preview of each tier so the customer sees what they're buying.
+            Product names piped through from the chosen catalogue item.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <span>QuoteMate · Australia · 2026</span>
+      <span>AI Agents · May 13, 2026</span>
+    </footer>
+  </div>
+</body>
+</html>

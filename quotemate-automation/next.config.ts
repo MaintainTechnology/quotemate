@@ -13,6 +13,9 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.join(__dirname, "."),
   },
+  // mupdf is a WASM package loaded at runtime by the estimator's tiled-refine
+  // pass — keep it external so the bundler doesn't try to inline the .wasm.
+  serverExternalPackages: ["mupdf"],
 };
 
 export default nextConfig;

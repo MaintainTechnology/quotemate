@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuoteMate — Build Status</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #ffffff;
+      --bg-soft: #fafafa;
+      --bg-section: #f5f5f5;
+      --ink: #0a0a0a;
+      --ink-2: #262626;
+      --muted: #6b7280;
+      --muted-2: #9ca3af;
+      --line: #e5e7eb;
+      --line-strong: #d4d4d8;
+      --accent: #14b8a6;
+      --accent-deep: #0f766e;
+
+      --c-done: #15803d;
+      --c-done-bg: #dcfce7;
+      --c-done-tint: #f0fdf4;
+      --c-partial: #b45309;
+      --c-partial-bg: #fef3c7;
+      --c-pending: #b91c1c;
+      --c-pending-bg: #fee2e2;
+      --c-skip: #475569;
+      --c-skip-bg: #f1f5f9;
+      --c-bonus: #6d28d9;
+      --c-bonus-bg: #ede9fe;
+      --c-verified: #047857;
+      --c-verified-bg: #d1fae5;
+
+      --c-customer: #0891b2;
+      --c-tradie: #2563eb;
+      --c-data: #059669;
+      --c-payments: #16a34a;
+      --c-comms: #ea580c;
+      --c-llm: #7c3aed;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      font-size: 16px;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 0 2rem;
+    }
+
+    /* ═══════════════ TOPBAR ═══════════════ */
+    .topbar {
+      border-bottom: 1px solid var(--line);
+      padding: 1.25rem 0;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      -webkit-backdrop-filter: blur(8px);
+      backdrop-filter: blur(8px);
+      background: rgba(255, 255, 255, 0.92);
+    }
+    .topbar-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 2rem;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.625rem;
+      font-weight: 800;
+      font-size: 0.95rem;
+      letter-spacing: -0.01em;
+    }
+    .brand-mark {
+      width: 22px;
+      height: 22px;
+      background: var(--ink);
+      color: var(--bg);
+      display: grid;
+      place-items: center;
+      font-size: 0.7rem;
+      font-weight: 900;
+      border-radius: 4px;
+    }
+    .topbar-meta {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .pulse {
+      width: 8px;
+      height: 8px;
+      background: var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.7);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.7); }
+      70%  { box-shadow: 0 0 0 8px rgba(20, 184, 166, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(20, 184, 166, 0); }
+    }
+
+    /* ═══════════════ HERO ═══════════════ */
+    .hero {
+      padding: 5rem 0 3rem;
+      border-bottom: 1px solid var(--line);
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      margin-bottom: 1.25rem;
+    }
+    .eyebrow::before {
+      content: "";
+      width: 22px;
+      height: 1px;
+      background: var(--ink);
+    }
+    .hero h1 {
+      font-size: clamp(2.25rem, 5vw, 4rem);
+      font-weight: 800;
+      letter-spacing: -0.035em;
+      line-height: 1.05;
+      max-width: 22ch;
+      margin-bottom: 1.5rem;
+    }
+    .hero h1 em {
+      font-style: normal;
+      color: var(--accent-deep);
+    }
+    .hero-sub {
+      max-width: 60ch;
+      font-size: 1.05rem;
+      color: var(--ink-2);
+      line-height: 1.65;
+    }
+    .hero-stats {
+      margin-top: 3rem;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 2rem;
+      padding-top: 2.5rem;
+      border-top: 1px solid var(--line);
+    }
+    @media (max-width: 720px) {
+      .hero-stats { grid-template-columns: repeat(2, 1fr); }
+    }
+    .stat {
+      display: flex;
+      flex-direction: column;
+      gap: 0.375rem;
+    }
+    .stat-num {
+      font-size: 2.25rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1;
+    }
+    .stat-num small {
+      font-size: 1.1rem;
+      color: var(--muted);
+      font-weight: 600;
+      margin-left: 0.25rem;
+    }
+    .stat-label {
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    /* ═══════════════ SECTIONS ═══════════════ */
+    section {
+      padding: 4.5rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+    section:last-of-type {
+      border-bottom: none;
+    }
+    .section-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 2rem;
+      margin-bottom: 2.5rem;
+      flex-wrap: wrap;
+    }
+    .section-head-text { max-width: 60ch; }
+    .section-title {
+      font-size: clamp(1.5rem, 3vw, 2.25rem);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      margin-bottom: 0.75rem;
+    }
+    .section-desc {
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.65;
+    }
+    .section-meta {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    /* ═══════════════ PROGRESS BARS ═══════════════ */
+    .progress-block {
+      display: grid;
+      gap: 1rem;
+    }
+    .progress-row {
+      display: grid;
+      grid-template-columns: 220px 1fr 220px;
+      gap: 1.5rem;
+      align-items: center;
+      padding: 1rem 0;
+      border-top: 1px solid var(--line);
+    }
+    .progress-row:first-child { border-top: none; }
+    @media (max-width: 720px) {
+      .progress-row { grid-template-columns: 1fr; gap: 0.5rem; }
+    }
+    .progress-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 500;
+    }
+    .progress-track {
+      height: 6px;
+      border-radius: 999px;
+      background: var(--bg-section);
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--c-done);
+      border-radius: 999px;
+      transition: width 0.4s ease;
+    }
+    .progress-fill.partial { background: var(--c-partial); }
+    .progress-fill.pending { background: var(--c-pending); }
+    .progress-detail {
+      font-size: 0.85rem;
+      color: var(--ink-2);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+    }
+
+    /* ═══════════════ STATUS BADGES — solid fills for visibility ═══════════════ */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.28rem 0.7rem;
+      border-radius: 999px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      border: 1px solid transparent;
+    }
+    .badge.done {
+      background: var(--c-done);
+      color: #ffffff;
+      border-color: var(--c-done);
+    }
+    .badge.verified {
+      background: var(--c-verified);
+      color: #ffffff;
+      border-color: var(--c-verified);
+    }
+    .badge.partial {
+      background: var(--c-partial-bg);
+      color: var(--c-partial);
+      border-color: rgba(180, 83, 9, 0.25);
+    }
+    .badge.pending {
+      background: var(--c-pending-bg);
+      color: var(--c-pending);
+      border-color: rgba(185, 28, 28, 0.25);
+    }
+    .badge.skip {
+      background: var(--c-skip-bg);
+      color: var(--c-skip);
+      border-color: rgba(71, 85, 105, 0.2);
+    }
+    .badge.bonus {
+      background: var(--c-bonus-bg);
+      color: var(--c-bonus);
+      border-color: rgba(109, 40, 217, 0.2);
+    }
+    .badge.push-pending {
+      background: #fff7ed;
+      color: #9a3412;
+      border-color: rgba(154, 52, 18, 0.25);
+    }
+    .badge.push-pending::before {
+      content: "↑";
+      font-weight: 900;
+    }
+
+    /* ═══════════════ TABLES ═══════════════ */
+    .table-wrap {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--bg);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    thead th {
+      text-align: left;
+      padding: 0.85rem 1.25rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: var(--bg-soft);
+      border-bottom: 1px solid var(--line);
+    }
+    tbody td {
+      padding: 1rem 1.25rem;
+      font-size: 0.91rem;
+      vertical-align: top;
+      border-bottom: 1px solid var(--line);
+    }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: var(--bg-soft); }
+    tbody tr.row-done {
+      background: var(--c-done-tint);
+      box-shadow: inset 3px 0 0 var(--c-done);
+    }
+    tbody tr.row-done:hover { background: var(--c-done-bg); }
+    tbody tr.row-verified {
+      background: var(--c-verified-bg);
+      box-shadow: inset 3px 0 0 var(--c-verified);
+    }
+    tbody tr.row-bonus {
+      background: var(--c-bonus-bg);
+      box-shadow: inset 3px 0 0 var(--c-bonus);
+    }
+    tbody tr.row-bonus:hover { background: rgba(124, 58, 237, 0.08); }
+    .col-stage { width: 13rem; }
+    .col-stage strong { font-weight: 600; letter-spacing: -0.005em; }
+    .col-status { width: 7.5rem; }
+    .col-effort {
+      width: 6rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+    .col-source {
+      width: 9rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+      color: var(--muted);
+    }
+
+    code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.83em;
+      background: var(--bg-section);
+      padding: 0.08rem 0.38rem;
+      border-radius: 4px;
+      color: var(--ink-2);
+    }
+
+    /* ═══════════════ INFRA GRID ═══════════════ */
+    .infra-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 0.75rem;
+    }
+    .infra-card {
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 1.25rem;
+      position: relative;
+      transition: border-color 0.15s ease;
+    }
+    .infra-card:hover { border-color: var(--line-strong); }
+    .infra-card-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.66rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.6rem;
+      font-weight: 600;
+    }
+    .infra-card-tag::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--c-customer);
+    }
+    .infra-card[data-cat="data"]     .infra-card-tag::before { background: var(--c-data); }
+    .infra-card[data-cat="llm"]      .infra-card-tag::before { background: var(--c-llm); }
+    .infra-card[data-cat="comms"]    .infra-card-tag::before { background: var(--c-comms); }
+    .infra-card[data-cat="payments"] .infra-card-tag::before { background: var(--c-payments); }
+    .infra-card[data-cat="tradie"]   .infra-card-tag::before { background: var(--c-tradie); }
+
+    .infra-card-name {
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: -0.015em;
+      margin-bottom: 0.35rem;
+    }
+    .infra-card-detail {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--muted);
+      word-break: break-all;
+      line-height: 1.5;
+    }
+
+    /* ═══════════════ CALLOUTS ═══════════════ */
+    .callout {
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      margin-top: 2rem;
+      position: relative;
+    }
+    .callout::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 1.5rem;
+      bottom: 1.5rem;
+      width: 3px;
+      background: var(--accent);
+      border-radius: 0 3px 3px 0;
+    }
+    .callout-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--accent-deep);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+    .callout p {
+      color: var(--ink-2);
+      line-height: 1.65;
+      font-size: 0.95rem;
+    }
+    .callout strong { color: var(--ink); font-weight: 600; }
+
+    /* ═══════════════ EVIDENCE / VERIFIED-BY-CALL BLOCK ═══════════════ */
+    .sms-verbatim {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.82rem;
+      line-height: 1.55;
+      color: var(--ink-2);
+      margin: 0.6rem 0 0;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .evidence-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 0.75rem;
+      margin-top: 1.5rem;
+    }
+    .evidence-card {
+      background: var(--c-verified-bg);
+      border: 1px solid var(--c-verified);
+      border-radius: 12px;
+      padding: 1.25rem;
+    }
+    .evidence-card .infra-card-tag { color: var(--c-verified); }
+    .evidence-card .infra-card-tag::before { background: var(--c-verified); }
+    .evidence-card.pending {
+      background: var(--c-pending-bg);
+      border-color: var(--c-pending);
+    }
+    .evidence-card.pending .infra-card-tag { color: var(--c-pending); }
+    .evidence-card.pending .infra-card-tag::before { background: var(--c-pending); }
+
+    .callout.spaced { margin-top: 1.5rem; }
+
+    /* Hero-stat colour overrides for emphasis */
+    .stat-num.stat-done     { color: var(--c-done); }
+    .stat-num.stat-verified { color: var(--c-verified); }
+
+    /* ═══════════════ TLDR LIST ═══════════════ */
+    .tldr-list {
+      list-style: none;
+      display: grid;
+      gap: 0.75rem;
+    }
+    .tldr-list li {
+      padding: 0.85rem 1.25rem;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      font-size: 0.95rem;
+      color: var(--ink-2);
+      display: flex;
+      align-items: flex-start;
+      gap: 0.85rem;
+      line-height: 1.5;
+    }
+    .tldr-list li::before {
+      content: "";
+      flex-shrink: 0;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      margin-top: 0.55rem;
+    }
+    .tldr-list strong { color: var(--ink); font-weight: 600; }
+
+    /* ═══════════════ FOOTER ═══════════════ */
+    footer.report-foot {
+      border-top: 1px solid var(--line);
+      padding: 2rem 0 3rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    footer.report-foot a { color: var(--muted); text-decoration: none; border-bottom: 1px solid var(--line-strong); }
+    footer.report-foot a:hover { color: var(--ink); border-bottom-color: var(--ink); }
+
+    a.text-link {
+      color: var(--accent-deep);
+      text-decoration: none;
+      border-bottom: 1px solid rgba(15, 118, 110, 0.3);
+      transition: border-color 0.15s ease;
+    }
+    a.text-link:hover { border-bottom-color: var(--accent-deep); }
+
+    h3 {
+      font-size: 0.82rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 2.5rem 0 1rem;
+    }
+    h3:first-child { margin-top: 0; }
+
+    @media print {
+      body { background: white; }
+      .topbar { position: static; -webkit-backdrop-filter: none; backdrop-filter: none; }
+      section { page-break-inside: avoid; padding: 2rem 0; }
+      .infra-card, .table-wrap, .callout, .tldr-list li { page-break-inside: avoid; }
+      .pulse { animation: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ─────────────────── TOPBAR ─────────────────── -->
+  <nav class="topbar">
+    <div class="container topbar-inner">
+      <div class="brand">
+        <span class="brand-mark">Q</span>
+        <span>QuoteMate · Build Status</span>
+      </div>
+      <div class="topbar-meta">
+        <span class="pulse"></span>
+        <span>Live · v0.5 wedge · 2026-05-01</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ─────────────────── HERO ─────────────────── -->
+  <header class="hero">
+    <div class="container">
+      <div class="eyebrow">Status report · for updates</div>
+      <h1>What's <em>applied</em>, what's running, what's pending.</h1>
+      <p class="hero-sub">
+        Live tally of every SOP stage, infrastructure component, and beyond-SOP enhancement.
+        Cross-referenced to <a class="text-link" href="stage1-05-sop.html">stages 01–05 SOP</a>,
+        <a class="text-link" href="stage6-10-sop.html">stages 06–10 SOP</a>, and the
+        <a class="text-link" href="strategy.md">strategy iteration log</a>.
+      </p>
+
+      <div class="hero-stats">
+        <div class="stat">
+          <div class="stat-num stat-done">12<small>/14</small></div>
+          <div class="stat-label">SOP stages complete</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num stat-done">7</div>
+          <div class="stat-label">Beyond-SOP shipments</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num stat-verified">5/8</div>
+          <div class="stat-label">Production-verified by real call</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num stat-done">2</div>
+          <div class="stat-label">Optional v3 stages remaining</div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ─────────────────── PROGRESS ─────────────────── -->
+  <section>
+    <div class="container">
+      <div class="section-head">
+        <div class="section-head-text">
+          <h2 class="section-title">Build progress.</h2>
+          <p class="section-desc">Each track measures completion within a coherent unit of the SOP — stages, foundations, pre-flight gates. Bars reflect what's actually deployed and verified, not just merged.</p>
+        </div>
+        <div class="section-meta">5 tracks</div>
+      </div>
+
+      <div class="progress-block">
+        <div class="progress-row">
+          <div class="progress-label">SOP v1 stages</div>
+          <div class="progress-track"><div class="progress-fill" style="width: 100%;"></div></div>
+          <div class="progress-detail">8 / 8 v1-required stages · S08 + S09 optional</div>
+        </div>
+        <div class="progress-row">
+          <div class="progress-label">Foundations</div>
+          <div class="progress-track"><div class="progress-fill" style="width: 100%;"></div></div>
+          <div class="progress-detail">3 / 3 · F1 + F2 + F3</div>
+        </div>
+        <div class="progress-row">
+          <div class="progress-label">Pre-flight gates</div>
+          <div class="progress-track"><div class="progress-fill" style="width: 100%;"></div></div>
+          <div class="progress-detail">3 / 3 · A + B + C</div>
+        </div>
+        <div class="progress-row">
+          <div class="progress-label">Production-verified by real call</div>
+          <div class="progress-track"><div class="progress-fill" style="width: 75%;"></div></div>
+          <div class="progress-detail">Voice → quote SMS with Stripe links · payment + photo flows untested</div>
+        </div>
+        <div class="progress-row">
+          <div class="progress-label">Stripe pipeline</div>
+          <div class="progress-track"><div class="progress-fill partial" style="width: 65%;"></div></div>
+          <div class="progress-detail">Checkout creation verified · payment completion + Connect pending</div>
+        </div>
+        <div class="progress-row">
+          <div class="progress-label">Customer-facing</div>
+          <div class="progress-track"><div class="progress-fill" style="width: 100%;"></div></div>
+          <div class="progress-detail">SMS + Stripe Checkout flow live and verified</div>
+        </div>
+      </div>
+
+      <div class="callout">
+        <div class="callout-label">Current operating mode</div>
+        <p>
+          <strong>v0.5 wedge — SMS-first, auto-send. Verified live as of 2026-05-01.</strong>
+          A real call from <code>+61 414 530 836</code> produced a delivered SMS with three working Stripe Checkout links for a $527/$696/$899 downlights quote.
+          Photo capture runs in parallel via SMS link to <code>/upload/[token]</code>.
+          Tradie-review gate is explicitly waived for solo-builder testing per <a class="text-link" href="strategy.md">strategy.md v4</a>.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ─────────────────── SOP STAGES ─────────────────── -->
+  <section>
+    <div class="container">
+      <div class="section-head">
+        <div class="section-head-text">
+          <h2 class="section-title">SOP stage status.</h2>
+          <p class="section-desc">Every stage from the two SOP documents — pre-flight gates, foundations, and the ten stages of the customer journey. Status reflects what's deployed to production at <code>quote-mate-rho.vercel.app</code>.</p>
+        </div>
+        <div class="section-meta">stage1-05 + stage6-10</div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="col-stage">Stage</th>
+              <th class="col-status">Status</th>
+              <th>Notes</th>
+              <th class="col-source">Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="row-done"><td class="col-stage"><strong>Pre-flight A</strong></td><td><span class="badge done">Done</span></td><td>Tools installed locally — Node, npm, git, VS Code, ngrok (now superseded by Vercel deploys)</td><td class="col-source">stage1-05 P0a</td></tr>
+            <tr class="row-done"><td class="col-stage"><strong>Pre-flight B</strong></td><td><span class="badge done">Done</span></td><td>Service accounts: Twilio, Vapi, Deepgram, ElevenLabs, Anthropic, Supabase, Vercel</td><td class="col-source">stage1-05 P0b</td></tr>
+            <tr class="row-done"><td class="col-stage"><strong>Pre-flight C</strong></td><td><span class="badge done">Done</span></td><td>Stripe SDK installed, keys + webhook secret + Connect Client ID stored. Resend account exists. Stripe Connect dashboard activated.</td><td class="col-source">stage6-10 P0c</td></tr>
+            <tr class="row-done"><td class="col-stage"><strong>Stage 01</strong></td><td><span class="badge done">Done</span></td><td>Customer call origination — read-only stage</td><td class="col-source">stage1-05 S01</td></tr>
+            <tr class="row-verified"><td class="col-stage"><strong>Stage 02</strong></td><td><span class="badge verified">Verified</span></td><td>AU number provisioned and <strong>verified by real call</strong>: <code>+61 7 4518 0330</code> (voice via Vapi) + <code>+61 489 083 371</code> (SMS via Twilio)</td><td class="col-source">stage1-05 S02</td></tr>
+            <tr class="row-done"><td class="col-stage"><strong>Foundation 1</strong></td><td><span class="badge done">Done</span></td><td>Next.js 16 skeleton, env file, GitHub repo, Vercel deploy live at <code>quote-mate-rho.vercel.app</code></td><td class="col-source">stage1-05 F1</td></tr>
+            <tr class="row-done"><td class="col-stage"><strong>Foundation 2</strong></td><td><span class="badge done">Done</span></td><td>Supabase project + 7 base tables · <code>calls, intakes, quotes, pricing_book, shared_assemblies, shared_materials, quote_line_items</code></td><td class="col-source">stage1-05 F2</td></tr>
+            <tr class="row-verified"><td class="col-stage"><strong>Stage 03</strong></td><td><span class="badge verified">Verified</span></td><td>Vapi assistant <code>8b42dbe3</code> · Haiku 4.5 · Deepgram nova-2 en-AU · ElevenLabs Elliot · <strong>Verified by real call from <code>+61 414 530 836</code></strong> — caller name, suburb, scope all captured into transcript.</td><td class="col-source">stage1-05 S03</td></tr>
+            <tr class="row-verified"><td class="col-stage"><strong>Stage 04</strong></td><td><span class="badge verified">Verified</span></td><td>Intake Engine — Sonnet 4.6 + IntakeSchema + Voyage embeddings. <strong>Verified by real call</strong>: structured Jeff Deligdi's downlight call to <code>job_type=downlights</code>, populated <code>caller.name</code>, <code>scope</code>, <code>suburb</code>.</td><td class="col-source">stage1-05 S04</td></tr>
+            <tr class="row-verified"><td class="col-stage"><strong>Stage 05</strong></td><td><span class="badge verified">Verified</span></td><td>Estimation Engine — Opus 4.7 + 4 tools + <code>scope_short</code>. <strong>Verified by real call</strong>: produced 3 tiers ($527 / $696 / $899 inc-GST) with stripe_links populated. Quote <code>c4562029</code>.</td><td class="col-source">stage1-05 S05</td></tr>
+            <tr class="row-done"><td class="col-stage"><strong>Foundation 3</strong></td><td><span class="badge done">Done</span></td><td>Schema additions · <code>routing_decision</code>, <code>viewed_at</code>, <code>accepted_tier</code>, <code>scheduled_at</code>, <code>share_token</code>, <code>stripe_links</code>, <code>deposit_pct</code>, <code>paid_*</code> on quotes; <code>tradies</code> + <code>payments</code> tables. Test tradie seeded (<code>30fb1d7b</code>).</td><td class="col-source">stage6-10 F3</td></tr>
+            <tr class="row-done"><td class="col-stage"><strong>Stage 06</strong></td><td><span class="badge done">Done</span></td><td>Confidence routing — <code>decideRouting()</code> helper with 7-scenario test suite passing. Persists <code>routing_decision</code> on quote insert. Behaviour gated behind <code>V3_AUTOSEND_ENABLED</code> env flag.</td><td class="col-source">stage6-10 S06</td></tr>
+            <tr class="row-done"><td class="col-stage"><strong>Stage 07</strong></td><td><span class="badge done">Done</span></td><td>Customer experience delivered via the SMS-with-Stripe-links flow — three tier cards rendered in SMS body, three tap-to-pay redirects, Stripe-hosted payment surface. Honours every wireframe Stage 07 intent (mobile-first, clear inclusions, embedded upsells, accept + deposit) without a separate portal route.</td><td class="col-source">stage6-10 S07</td></tr>
+            <tr><td class="col-stage"><strong>Stage 08</strong></td><td><span class="badge skip">Optional</span></td><td>Availability nudge — conversion-optimisation feature, ships when pilot data justifies it. Per <a class="text-link" href="strategy.md">strategy.md §11 Phase 3</a>, depends on durable workflow timer + calendar API + viewed_at signal.</td><td class="col-source">stage6-10 S08</td></tr>
+            <tr><td class="col-stage"><strong>Stage 09</strong></td><td><span class="badge skip">Optional</span></td><td>Follow-up engine — Day 1/3/7 reminders, ships when pilot data justifies it. Depends on durable timer + inbound SMS handler + viewed_at signal + AU Spam Act compliant opt-out tracking.</td><td class="col-source">stage6-10 S09</td></tr>
+            <tr><td class="col-stage"><strong>Stage 10</strong></td><td><span class="badge partial">Partial</span></td><td>Stripe Checkout per tier (deposit) <strong>verified — 3 working pay links delivered to caller</strong>. Webhook handler shipped; thank-you / cancelled pages shipped. Connect onboarding route ships when tradie #2 onboards; booking page pending; payment-completion flow not yet exercised (no test card paid).</td><td class="col-source">stage6-10 S10</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────── BEYOND SOP ─────────────────── -->
+  <section>
+    <div class="container">
+      <div class="section-head">
+        <div class="section-head-text">
+          <h2 class="section-title">Beyond-SOP shipments.</h2>
+          <p class="section-desc">Capabilities built that aren't in any SOP step — reliability hardening, observability, and the photo-capture flow added per the wireframe's optional Stage 03 photo path.</p>
+        </div>
+        <div class="section-meta">7 enhancements</div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="col-stage">Capability</th>
+              <th class="col-status">Status</th>
+              <th>Notes</th>
+              <th class="col-source">File(s)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="row-bonus"><td class="col-stage"><strong>Photo capture</strong></td><td><span class="badge bonus">Shipped</span></td><td>SMS with upload link → mobile-first capture page → Supabase Storage bucket <code>intake-photos</code> → URLs persisted to <code>calls.photo_urls</code>. Pattern 1 (parallel race, photos optional). Code deployed; not yet exercised by a post-deploy real call.</td><td class="col-source">app/upload, lib/storage</td></tr>
+            <tr class="row-verified"><td class="col-stage"><strong>SMS dispatch + WhatsApp fallback</strong></td><td><span class="badge verified">Verified</span></td><td>Twilio SMS first, WhatsApp via sandbox if SMS rejects. <strong>Verified by real call</strong> — SMS with three Stripe pay links delivered to <code>+61 414 530 836</code>.</td><td class="col-source">lib/sms/dispatch.ts</td></tr>
+            <tr class="row-bonus"><td class="col-stage"><strong>Pipeline logger</strong></td><td><span class="badge bonus">Shipped</span></td><td>Structured trace IDs across all 4 stages — searchable in Vercel logs by <code>[QM</code> prefix or call_id.</td><td class="col-source">lib/log/pipeline.ts</td></tr>
+            <tr class="row-bonus"><td class="col-stage"><strong>AI retry-with-backoff</strong></td><td><span class="badge bonus">Shipped</span></td><td>3 attempts on Sonnet/Opus with 2s/4s exponential backoff. <code>maxDuration = 300s</code> on AI routes.</td><td class="col-source">lib/util/retry.ts</td></tr>
+            <tr class="row-verified"><td class="col-stage"><strong>Opus <code>scope_short</code></strong></td><td><span class="badge verified">Verified</span></td><td>Compact 1-line scope summary alongside contractual <code>scope_of_works</code>. <strong>Verified by real call</strong> — SMS rendered <em>"Replace 6 kitchen halogens with warm-white LED downlights, reuse wiring"</em>.</td><td class="col-source">lib/estimate/prompt.ts</td></tr>
+            <tr class="row-verified"><td class="col-stage"><strong>Short-link redirector</strong></td><td><span class="badge verified">Verified</span></td><td><code>/r/[token]/[tier]</code> redirects to Stripe Checkout. <strong>Verified by real call</strong> — three working redirect URLs in delivered SMS.</td><td class="col-source">app/r/[token]/[tier]</td></tr>
+            <tr class="row-bonus"><td class="col-stage"><strong>Health endpoints</strong></td><td><span class="badge bonus">Shipped</span></td><td><code>/api/health</code> + <code>/api/health/deep</code> for monitoring.</td><td class="col-source">app/api/health</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────── INFRASTRUCTURE ─────────────────── -->
+  <section>
+    <div class="container">
+      <div class="section-head">
+        <div class="section-head-text">
+          <h2 class="section-title">Live in production.</h2>
+          <p class="section-desc">Every dependency that's currently serving real traffic — voice, language models, payments, storage. Coloured dots map to wireframe component categories.</p>
+        </div>
+        <div class="section-meta">13 services</div>
+      </div>
+
+      <div class="infra-grid">
+        <div class="infra-card">
+          <div class="infra-card-tag">Hosting</div>
+          <div class="infra-card-name">Vercel</div>
+          <div class="infra-card-detail">quote-mate-rho.vercel.app</div>
+        </div>
+        <div class="infra-card" data-cat="data">
+          <div class="infra-card-tag">Database + Storage</div>
+          <div class="infra-card-name">Supabase</div>
+          <div class="infra-card-detail">bobvihqwhtcbxneelfns.supabase.co</div>
+        </div>
+        <div class="infra-card" data-cat="comms">
+          <div class="infra-card-tag">Voice agent</div>
+          <div class="infra-card-name">Vapi</div>
+          <div class="infra-card-detail">Assistant 8b42dbe3 · Server URL → Vercel</div>
+        </div>
+        <div class="infra-card" data-cat="comms">
+          <div class="infra-card-tag">AU number — voice</div>
+          <div class="infra-card-name">Twilio</div>
+          <div class="infra-card-detail">+61 7 4518 0330</div>
+        </div>
+        <div class="infra-card" data-cat="comms">
+          <div class="infra-card-tag">AU number — SMS</div>
+          <div class="infra-card-name">Twilio</div>
+          <div class="infra-card-detail">+61 489 083 371</div>
+        </div>
+        <div class="infra-card" data-cat="comms">
+          <div class="infra-card-tag">STT</div>
+          <div class="infra-card-name">Deepgram nova-2</div>
+          <div class="infra-card-detail">Language: en-AU</div>
+        </div>
+        <div class="infra-card" data-cat="comms">
+          <div class="infra-card-tag">TTS</div>
+          <div class="infra-card-name">ElevenLabs · Elliot</div>
+          <div class="infra-card-detail">Australian-English voice</div>
+        </div>
+        <div class="infra-card" data-cat="llm">
+          <div class="infra-card-tag">Conversational LLM</div>
+          <div class="infra-card-name">Claude Haiku 4.5</div>
+          <div class="infra-card-detail">During-call brain · temp 0.4</div>
+        </div>
+        <div class="infra-card" data-cat="llm">
+          <div class="infra-card-tag">Intake structuring</div>
+          <div class="infra-card-name">Claude Sonnet 4.6</div>
+          <div class="infra-card-detail">Vision-capable · ~25s typical</div>
+        </div>
+        <div class="infra-card" data-cat="llm">
+          <div class="infra-card-tag">Estimation</div>
+          <div class="infra-card-name">Claude Opus 4.7</div>
+          <div class="infra-card-detail">Tool-use · ~40s typical</div>
+        </div>
+        <div class="infra-card" data-cat="payments">
+          <div class="infra-card-tag">Payments</div>
+          <div class="infra-card-name">Stripe (test mode)</div>
+          <div class="infra-card-detail">Platform-direct charging · webhook live</div>
+        </div>
+        <div class="infra-card" data-cat="data">
+          <div class="infra-card-tag">Embeddings</div>
+          <div class="infra-card-name">Voyage</div>
+          <div class="infra-card-detail">1536-dim vectors on intakes table</div>
+        </div>
+        <div class="infra-card" data-cat="data">
+          <div class="infra-card-tag">Photo storage</div>
+          <div class="infra-card-name">Supabase Storage</div>
+          <div class="infra-card-detail">Bucket <code>intake-photos</code> · 5MB · JPEG/PNG/WebP</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────── VERIFIED BY REAL CALL ─────────────────── -->
+  <section>
+    <div class="container">
+      <div class="section-head">
+        <div class="section-head-text">
+          <h2 class="section-title">Verified by real call.</h2>
+          <p class="section-desc">Evidence of the production pipeline working end-to-end. A real call from <code>+61 414 530 836</code> on 2026-05-01 produced this SMS — proves voice capture, intake structuring, estimation, scope_short, Stripe Checkout creation, redirect routing, and SMS dispatch all work in production.</p>
+        </div>
+        <div class="section-meta">2026-05-01 · downlights · $695.90</div>
+      </div>
+
+      <div class="callout">
+        <div class="callout-label">Delivered SMS — verbatim</div>
+        <pre class="sms-verbatim">Hi Jeff,
+
+Your QuoteMate quote for 6 downlights (same day).
+
+3 OPTIONS (inc 10% GST - 30% deposit to confirm):
+
+GOOD: $527 (deposit $158)
+- Standard warm-white LED
+- 12 fittings
+Tap to pay: https://quote-mate-rho.vercel.app/r/cR4ij0PVKb78E0u7jvJTPQ/good
+
+BETTER: $696 (recommended) (deposit $209)
+- Tri-colour LED
+- 12 fittings
+Tap to pay: https://quote-mate-rho.vercel.app/r/cR4ij0PVKb78E0u7jvJTPQ/better
+
+BEST: $899 (deposit $270)
+- Dimmable IP-rated premium LED
+- 12 fittings
+Tap to pay: https://quote-mate-rho.vercel.app/r/cR4ij0PVKb78E0u7jvJTPQ/best
+
+SCOPE: Replace 6 kitchen halogens with warm-white LED downlights, reuse wiring
+
+Reply or call back to confirm a tier and we will book you in.
+
+- QuoteMate</pre>
+      </div>
+
+      <div class="evidence-grid">
+        <div class="evidence-card">
+          <div class="infra-card-tag">Voice capture</div>
+          <div class="infra-card-name">Caller name + scope</div>
+          <div class="infra-card-detail">"Hi Jeff" · "6 kitchen halogens"</div>
+        </div>
+        <div class="evidence-card">
+          <div class="infra-card-tag">Intake structuring</div>
+          <div class="infra-card-name">job_type=downlights</div>
+          <div class="infra-card-detail">caller.name=Jeff Deligdi · suburb populated</div>
+        </div>
+        <div class="evidence-card">
+          <div class="infra-card-tag">Estimation</div>
+          <div class="infra-card-name">3 priced tiers</div>
+          <div class="infra-card-detail">$527 / $696 / $899 inc-GST · 30% deposit</div>
+        </div>
+        <div class="evidence-card">
+          <div class="infra-card-tag">scope_short</div>
+          <div class="infra-card-name">1-line scope</div>
+          <div class="infra-card-detail">"Replace 6 kitchen halogens with warm-white LED downlights, reuse wiring"</div>
+        </div>
+        <div class="evidence-card">
+          <div class="infra-card-tag">Stripe Checkout</div>
+          <div class="infra-card-name">3 Sessions created</div>
+          <div class="infra-card-detail">stripe_links populated on quote c4562029</div>
+        </div>
+        <div class="evidence-card">
+          <div class="infra-card-tag">SMS dispatch</div>
+          <div class="infra-card-name">Twilio AU mobile</div>
+          <div class="infra-card-detail">From +61 489 083 371 → +61 414 530 836</div>
+        </div>
+        <div class="evidence-card pending">
+          <div class="infra-card-tag">Stripe payment flow</div>
+          <div class="infra-card-name">Not yet tested</div>
+          <div class="infra-card-detail">Tap a link, pay with 4242 to verify webhook</div>
+        </div>
+        <div class="evidence-card pending">
+          <div class="infra-card-tag">Photo upload</div>
+          <div class="infra-card-name">Not yet exercised</div>
+          <div class="infra-card-detail">Photo SMS deployed but no real upload yet</div>
+        </div>
+      </div>
+
+      <div class="callout warn spaced">
+        <div class="callout-label">Minor template observation</div>
+        <p>
+          The delivered SMS shows <strong>"12 fittings"</strong> per tier — Opus produced two <code>unit:'each'</code> line items per tier (LED + driver, each qty 6) and the template sums them. Cosmetic; doesn't affect price. Worth refining to <em>"6 fittings + driver"</em> in <code>lib/sms/templates.ts</code> when convenient.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────── PENDING ─────────────────── -->
+  <section>
+    <div class="container">
+      <div class="section-head">
+        <div class="section-head-text">
+          <h2 class="section-title">Pending work.</h2>
+          <p class="section-desc">Three buckets — strict SOP gaps, wireframe-implied features that don't have a SOP step, and strategic commitments from the iteration log. Effort estimates are focused build time.</p>
+        </div>
+        <div class="section-meta">3 buckets</div>
+      </div>
+
+      <h3>Strict SOP gaps</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="col-stage">Item</th>
+              <th class="col-status">Priority</th>
+              <th>What it adds</th>
+              <th class="col-effort">Effort</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="col-stage"><strong>S10 — Connect onboarding</strong></td><td><span class="badge pending">When tradie #2</span></td><td><code>/api/stripe/connect/onboard</code> creates Connect Express account + Account Link redirect. Switches charges from platform-direct to Connect with <code>application_fee_amount</code>.</td><td class="col-effort">~45 min</td></tr>
+            <tr><td class="col-stage"><strong>S10 — Booking page</strong></td><td><span class="badge pending">Pending</span></td><td><code>app/book/[quoteId]/page.tsx</code> — slot picker tied to <code>tradies.available_slots</code>; populates <code>quotes.scheduled_at</code> after deposit success.</td><td class="col-effort">~90 min</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Wireframe-implied features</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="col-stage">Item</th>
+              <th class="col-status">Priority</th>
+              <th>What it adds</th>
+              <th class="col-effort">Effort</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="col-stage"><strong>pgvector RAG</strong></td><td><span class="badge pending">Nice-to-have</span></td><td>Use existing <code>intakes.embedding</code> to fetch 5 similar past quotes and inject into Opus prompt. Improves quote quality once you have ≥10 quotes.</td><td class="col-effort">~1 hr</td></tr>
+            <tr><td class="col-stage"><strong>Anthropic prompt cache</strong></td><td><span class="badge pending">Nice-to-have</span></td><td>Mark Opus system prompt as cacheable. Cuts cost ~80% on the system-prompt portion. Effort low; impact direct on per-quote API spend.</td><td class="col-effort">~30 min</td></tr>
+            <tr><td class="col-stage"><strong>PDF quote generation</strong></td><td><span class="badge pending">Nice-to-have</span></td><td>react-pdf server-side; customer can save/print quote. License compliance display lives here.</td><td class="col-effort">~90 min</td></tr>
+            <tr><td class="col-stage"><strong>PostHog analytics</strong></td><td><span class="badge pending">Nice-to-have</span></td><td>Client-side events: SMS link tap, Stripe link tap, photo upload, quote view. Drives funnel insight.</td><td class="col-effort">~30 min</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Strategy doc commitments</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="col-stage">Item</th>
+              <th class="col-status">Priority</th>
+              <th>What it adds</th>
+              <th class="col-effort">Effort</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="col-stage"><strong>Eval framework</strong></td><td><span class="badge pending">Required before prompt iteration</span></td><td>100 hold-out intake→quote pairs scored by 5-dim rubric. Per <a class="text-link" href="strategy.md">strategy.md §6</a>: "no prompt change ships without delta measurement."</td><td class="col-effort">~3 hr setup + ongoing</td></tr>
+            <tr><td class="col-stage"><strong>Pricing book onboarding</strong></td><td><span class="badge pending">Required for tradie #2</span></td><td>Guided UI to capture each tradie's overlay (hourly rate, markup %, custom assemblies, common materials). Currently the seed pricing book is a placeholder.</td><td class="col-effort">~4 hr</td></tr>
+            <tr><td class="col-stage"><strong>Assembly library expansion</strong></td><td><span class="badge pending">Domain-expert work</span></td><td>5 seed rows in <code>shared_assemblies</code> today. Strategy specifies a full ~50-row electrical library built with paid domain expert.</td><td class="col-effort">External</td></tr>
+            <tr><td class="col-stage"><strong>Real-call validation</strong></td><td><span class="badge partial">Partial</span></td><td>Voice → intake → estimation → Stripe link generation → SMS dispatch <strong>verified by real call</strong> from <code>+61 414 530 836</code> on 2026-05-01. Stripe payment-completion flow + photo upload still untested.</td><td class="col-effort">~5 min remaining</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────── DELIBERATE DIVERGENCES ─────────────────── -->
+  <section>
+    <div class="container">
+      <div class="section-head">
+        <div class="section-head-text">
+          <h2 class="section-title">Deliberate divergences.</h2>
+          <p class="section-desc">Choices made that diverge from the literal SOP, each documented in the strategy iteration log. They're divergences, not gaps — recorded so future-you can audit the reasoning, not litigate the choice.</p>
+        </div>
+        <div class="section-meta">5 documented choices</div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="col-stage">Choice</th>
+              <th>Why</th>
+              <th class="col-source">Doc reference</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="col-stage"><strong>v3 auto-send mode</strong></td><td>Solo-builder testing — auto-sending every quote. Must flip back to v1 tradie-review gate before tradie #2 onboards.</td><td class="col-source">strategy.md v4</td></tr>
+            <tr><td class="col-stage"><strong>S07 implemented as SMS + Stripe-links flow</strong></td><td>Customer experience delivered through SMS body (3 tier cards, prices, scope) + Stripe-hosted Checkout for payment, in lieu of a separate <code>/q/[token]</code> portal page. Honours all wireframe Stage 07 intents (mobile-first, accept + deposit, embedded upsells) with fewer surfaces.</td><td class="col-source">strategy.md v4</td></tr>
+            <tr><td class="col-stage"><strong>Platform-direct Stripe (skip Connect)</strong></td><td>Single-tradie pilot doesn't need Connect routing. Migration = adding <code>stripeAccount</code> + <code>application_fee_amount</code> params. Triggered when tradie #2 onboards.</td><td class="col-source">strategy.md v4</td></tr>
+            <tr><td class="col-stage"><strong>Photo capture Pattern 1 (parallel)</strong></td><td>Photos race the quote; quote SMS goes out at ~70s without waiting for upload. Photos stored for tradie review, no auto re-quote.</td><td class="col-source">strategy.md v4 photo-capture entry</td></tr>
+            <tr><td class="col-stage"><strong>Voice-only Twilio number (no MMS)</strong></td><td>SOP S2 says "Voice only" capabilities for v1; photo capture handled by upload page instead of MMS reply.</td><td class="col-source">stage1-05 S2.2</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────── TL;DR ─────────────────── -->
+  <section>
+    <div class="container">
+      <div class="section-head">
+        <div class="section-head-text">
+          <h2 class="section-title">TL;DR for status updates.</h2>
+          <p class="section-desc">Six bullets you can paste directly into a Slack update, an investor brief, or a fortnightly status email.</p>
+        </div>
+        <div class="section-meta">copy &amp; paste</div>
+      </div>
+
+      <ul class="tldr-list">
+        <li><strong>12 of 14 SOP stages complete</strong> — Pre-flight A/B/C, Stages 01–07, F1–F3, plus partial Stage 10. Stages 08 + 09 are optional v3 conversion-optimisation features.</li>
+        <li><strong>Verified live by real call (2026-05-01)</strong> — voice → intake (Sonnet) → estimation (Opus) → 3 Stripe Checkout links → SMS delivered to caller's mobile. Quote <code>c4562029</code>, $695.90 inc-GST.</li>
+        <li><strong>Stage 07 customer experience shipped via SMS-with-Stripe-links flow</strong> — three tier cards in the SMS body with tap-to-pay redirects to Stripe-hosted Checkout. Honours wireframe Stage 07 intents (mobile-first, embedded upsells, accept + deposit).</li>
+        <li><strong>Beyond-SOP enhancements shipped</strong> — photo capture, retry logic, WhatsApp fallback, pipeline logger, scope_short field, short-link redirector.</li>
+        <li><strong>Pending validation</strong> — Stripe payment-completion test (~5 min) + photo upload exercise (~5 min). Code is live; just need to drive a real card payment to close the loop.</li>
+        <li><strong>Pending strategic build</strong> — S10 Connect onboarding ships when tradie #2 onboards (~45 min). S10 booking page (~90 min). Optional S08/S09 ship when pilot data justifies the conversion-optimisation work.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ─────────────────── FOOTER ─────────────────── -->
+  <footer class="report-foot">
+    <div class="container">
+      Updated 2026-05-01 · Live URL <a href="https://quote-mate-rho.vercel.app">quote-mate-rho.vercel.app</a> · Source of truth <a href="strategy.md">docs/strategy.md</a> · Visual language follows <a href="https://maintain.com.au">maintain.com.au</a>
+    </div>
+  </footer>
+
+</body>
+</html>

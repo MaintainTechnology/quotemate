@@ -1,15 +1,18 @@
 'use client'
 
 // Estimator (Beta) — upload an electrical plan PDF, get an AI quantity take-off,
-// correct the counts, and save. Counts only (no pricing yet). The extraction is
-// a live ~1–2 min Claude call via POST /api/tenant/estimator/extract; corrections
-// save via PATCH .../extract/[id]; past uploads load from .../history.
+// verify each count against the drawing (plan-overlay pins), refine dense items
+// with a tiled high-DPI recount, correct, save, and price with a full audit
+// trace. The extraction is a live ~1–2 min Claude call via POST
+// /api/tenant/estimator/extract; corrections save via PATCH .../extract/[id];
+// past uploads load from .../history; dense recounts via .../refine.
 
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { PlanOverlay, type PinLocation } from './PlanOverlay'
 
 type Confidence = 'high' | 'medium' | 'low'
-type Item = { type: string; symbol: string; count: number; confidence: Confidence; note?: string }
-type Row = { type: string; symbol: string; count: string; confidence: Confidence; note?: string }
+type Item = { type: string; symbol: string; count: number; confidence: Confidence; note?: string; locations?: PinLocation[] }
+type Row = { type: string; symbol: string; count: string; confidence: Confidence; note?: string; locations?: PinLocation[] }
 
 type ExtractResponse =
   | {
@@ -43,6 +46,16 @@ type HistoryUpload = {
   plan_extractions: HistoryExtraction[]
 }
 
+type PriceTrace = {
+  countSource: { confidence?: Confidence; tally?: string }
+  matchedSignals: string[]
+  baseUnitPriceExGst: number
+  markupPct: number
+  materialFormula: string
+  unitLabourHours: number
+  hourlyRate: number
+  labourFormula: string
+}
 type PricedLine = {
   type: string
   count: number
@@ -52,7 +65,11 @@ type PricedLine = {
   labourHours: number
   labourExGst: number
   lineExGst: number
+  trace: PriceTrace
 }
+type RefineResponse =
+  | { ok: true; page: number; model: string; tiles: number; runtimeSeconds: number; items: { type: string; count: number; locations: PinLocation[] }[] }
+  | { ok: false; error: string }
 type PricedBom = {
   lines: PricedLine[]
   unmatched: { type: string; count: number }[]
@@ -92,6 +109,10 @@ export function EstimatorBetaTab({ accessToken }: Props) {
   const [priced, setPriced] = useState<PricedBom | null>(null)
   const [priceInfo, setPriceInfo] = useState<{ catalogueSize: number; source: string } | null>(null)
 
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
+  const [refining, setRefining] = useState(false)
+  const [refineNote, setRefineNote] = useState<string | null>(null)
+
   const loadHistory = useCallback(async () => {
     if (!accessToken) return
     try {
@@ -111,7 +132,14 @@ export function EstimatorBetaTab({ accessToken }: Props) {
   }, [loadHistory])
 
   const itemsToRows = (items: Item[]): Row[] =>
-    items.map((i) => ({ type: i.type, symbol: i.symbol ?? '', count: String(i.count ?? 0), confidence: i.confidence ?? 'medium', note: i.note }))
+    items.map((i) => ({
+      type: i.type,
+      symbol: i.symbol ?? '',
+      count: String(i.count ?? 0),
+      confidence: i.confidence ?? 'medium',
+      note: i.note,
+      locations: i.locations,
+    }))
 
   const analyse = useCallback(
     async (e: React.FormEvent) => {
@@ -123,6 +151,9 @@ export function EstimatorBetaTab({ accessToken }: Props) {
       setExtractionId(null)
       setRows([])
       setMeta(null)
+      setSelectedIdx(null)
+      setRefineNote(null)
+      setPriced(null)
       try {
         const fd = new FormData()
         fd.append('pdf', file)
@@ -156,7 +187,16 @@ export function EstimatorBetaTab({ accessToken }: Props) {
     setSaving(true)
     setErrMsg(null)
     try {
-      const corrected_items = rows.map((r) => ({ type: r.type, symbol: r.symbol, count: Number(r.count) || 0 }))
+      // Audit fields (confidence / zone tally / pin locations) ride along so the
+      // overlay + pricing trace survive a reload from history.
+      const corrected_items = rows.map((r) => ({
+        type: r.type,
+        symbol: r.symbol,
+        count: Number(r.count) || 0,
+        confidence: r.confidence,
+        note: r.note,
+        locations: r.locations,
+      }))
       const res = await fetch(`/api/tenant/estimator/extract/${extractionId}`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
@@ -182,7 +222,7 @@ export function EstimatorBetaTab({ accessToken }: Props) {
     setErrMsg(null)
     setPriced(null)
     try {
-      const items = rows.map((r) => ({ type: r.type, count: Number(r.count) || 0 }))
+      const items = rows.map((r) => ({ type: r.type, count: Number(r.count) || 0, confidence: r.confidence, note: r.note }))
       const res = await fetch('/api/tenant/estimator/price', {
         method: 'POST',
         headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
@@ -218,7 +258,74 @@ export function EstimatorBetaTab({ accessToken }: Props) {
     setErrMsg(null)
     setShowHistory(false)
     setPriced(null)
+    setSelectedIdx(null)
+    setRefineNote(null)
+    // The raw PDF isn't stored server-side — the viewer/refine only work when
+    // the selected file IS this upload. Drop a mismatched file to avoid pinning
+    // one plan's counts onto another plan's drawing.
+    if (file && file.name !== u.filename) setFile(null)
   }
+
+  // The densest pinned page — the default sheet for a tiled recount (usually
+  // the RCP grid that made the single-pass count unstable).
+  const dominantPage = useMemo(() => {
+    const counts = new Map<number, number>()
+    for (const r of rows) for (const l of r.locations ?? []) counts.set(l.page, (counts.get(l.page) ?? 0) + 1)
+    let best: number | null = null
+    let bestCount = 0
+    for (const [p, c] of counts) if (c > bestCount) { best = p; bestCount = c }
+    return best
+  }, [rows])
+
+  /** Tiled high-DPI recount of the low-confidence rows on the dense sheet. */
+  const refine = useCallback(async () => {
+    if (!accessToken || !file || dominantPage === null) return
+    const targetRows = rows.filter((r) => r.confidence === 'low')
+    const targets = (targetRows.length > 0 ? targetRows : rows).map((r) => ({
+      type: r.type,
+      symbol: r.symbol,
+      hint: r.note?.slice(0, 200),
+    }))
+    setRefining(true)
+    setErrMsg(null)
+    setRefineNote(null)
+    try {
+      const fd = new FormData()
+      fd.append('pdf', file)
+      fd.append('page', String(dominantPage))
+      fd.append('targets', JSON.stringify(targets))
+      const res = await fetch('/api/tenant/estimator/refine', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: fd,
+      })
+      const json = (await res.json()) as RefineResponse
+      if (!json.ok) {
+        setErrMsg(json.error || 'Refine failed.')
+        return
+      }
+      setPriced(null)
+      setRows((rs) =>
+        rs.map((r) => {
+          const refined = json.items.find((i) => i.type === r.type)
+          if (!refined) return r
+          const prev = Number(r.count) || 0
+          return {
+            ...r,
+            count: String(refined.count),
+            locations: refined.locations,
+            confidence: r.confidence === 'low' ? 'medium' : r.confidence,
+            note: `${r.note ? r.note + ' — ' : ''}tiled recount on p${json.page}: ${refined.count}${refined.count !== prev ? ` (was ${prev})` : ''}`,
+          }
+        }),
+      )
+      setRefineNote(`Recounted ${json.items.length} item(s) on page ${json.page} across ${json.tiles} tiles in ${json.runtimeSeconds}s (${json.model}).`)
+    } catch (err) {
+      setErrMsg(err instanceof Error ? err.message : String(err))
+    } finally {
+      setRefining(false)
+    }
+  }, [accessToken, file, rows, dominantPage])
 
   const setCount = (idx: number, v: string) => {
     setPriced(null)
@@ -352,9 +459,20 @@ export function EstimatorBetaTab({ accessToken }: Props) {
               </thead>
               <tbody>
                 {rows.map((r, idx) => (
-                  <tr key={idx} className="border-b border-ink-line/60 align-top">
+                  <tr
+                    key={idx}
+                    className={`border-b border-ink-line/60 align-top ${selectedIdx === idx ? 'bg-ink-deep' : ''}`}
+                  >
                     <td className="py-2.5 pr-3">
-                      <div className="text-sm text-text-pri">{r.type}</div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedIdx((s) => (s === idx ? null : idx))}
+                        className={`text-left text-sm ${selectedIdx === idx ? 'text-accent' : 'text-text-pri hover:text-accent'}`}
+                        title={r.locations?.length ? 'Highlight this item’s pins on the plan' : undefined}
+                      >
+                        {r.type}
+                        {r.locations?.length ? <span className="ml-1.5 font-mono text-[0.6rem] text-text-dim">📍{r.locations.length}</span> : null}
+                      </button>
                       {r.note && <div className="mt-0.5 max-w-md text-xs text-text-dim">{r.note}</div>}
                     </td>
                     <td className="py-2.5 px-3 font-mono text-sm text-text-sec">{r.symbol}</td>
@@ -394,12 +512,40 @@ export function EstimatorBetaTab({ accessToken }: Props) {
             </p>
           )}
 
+          {/* Plan overlay viewer — pins every counted symbol on the drawing.
+              Needs the original PDF in-memory (it is never stored server-side). */}
+          {file && filename === file.name ? (
+            <PlanOverlay
+              file={file}
+              items={rows.map((r) => ({ type: r.type, locations: r.locations }))}
+              selectedIdx={selectedIdx}
+              onSelect={setSelectedIdx}
+            />
+          ) : (
+            <p className="mt-4 font-mono text-xs text-text-dim">
+              Plan viewer &amp; refine need the original PDF — re-select the file above to verify pins on the drawing.
+            </p>
+          )}
+
+          {refineNote && !errMsg && (
+            <p className="mt-3 font-mono text-xs text-teal-glow">✓ {refineNote}</p>
+          )}
+
           <div className="mt-6 flex flex-wrap items-center gap-4">
             <button type="button" onClick={save} disabled={saving || !extractionId} className="inline-flex items-center gap-2 bg-accent px-6 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50">
               {saving ? (<><span className="inline-block h-3.5 w-3.5 animate-spin border-2 border-white/40 border-t-white" aria-hidden="true" /> Saving…</>) : (<>Save corrected counts <span aria-hidden="true">&rarr;</span></>)}
             </button>
             <button type="button" onClick={price} disabled={pricing || rows.length === 0} className="inline-flex items-center gap-2 border border-accent px-6 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-accent transition-colors hover:bg-accent hover:text-white disabled:cursor-not-allowed disabled:opacity-50">
               {pricing ? (<><span className="inline-block h-3.5 w-3.5 animate-spin border-2 border-accent/40 border-t-accent" aria-hidden="true" /> Pricing…</>) : (<>Price this take-off</>)}
+            </button>
+            <button
+              type="button"
+              onClick={refine}
+              disabled={refining || !file || filename !== file?.name || dominantPage === null}
+              title={dominantPage === null ? 'No pin locations yet — run a fresh analysis first' : `Tiled high-DPI recount of the low-confidence items on page ${dominantPage}`}
+              className="inline-flex items-center gap-2 border border-ink-line px-6 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-sec transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {refining ? (<><span className="inline-block h-3.5 w-3.5 animate-spin border-2 border-text-sec/40 border-t-text-sec" aria-hidden="true" /> Refining… ~1 min</>) : (<>Refine dense items</>)}
             </button>
             <span className="font-mono text-xs text-text-dim">Edit counts, then save or price (indicative).</span>
           </div>
@@ -413,6 +559,7 @@ export function EstimatorBetaTab({ accessToken }: Props) {
 
 function PricedPanel({ bom, info }: { bom: PricedBom; info: { catalogueSize: number; source: string } | null }) {
   const money = (n: number) => '$' + n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const [openTrace, setOpenTrace] = useState<number | null>(null)
   return (
     <div className="mt-6 border-t border-ink-line pt-6">
       <div className="border border-ink-line border-l-4 border-l-warning bg-ink-deep px-4 py-3">
@@ -420,6 +567,7 @@ function PricedPanel({ bom, info }: { bom: PricedBom; info: { catalogueSize: num
         <p className="mt-1 text-sm text-text-sec">
           Priced from your electrical catalogue at {money(bom.assumptions.hourlyRate)}/hr labour and {bom.assumptions.markupPct}% markup.
           Items not in your catalogue are flagged below and not priced — add them under Services/Catalogue. Verify before sending.
+          Click a line&rsquo;s <span className="font-mono text-xs">how?</span> to see the full calculation chain.
         </p>
       </div>
 
@@ -438,14 +586,64 @@ function PricedPanel({ bom, info }: { bom: PricedBom; info: { catalogueSize: num
             </thead>
             <tbody>
               {bom.lines.map((l, i) => (
-                <tr key={i} className="border-b border-ink-line/60">
-                  <td className="py-2 pr-3 text-sm text-text-pri">{l.type}<span className="block font-mono text-xs text-text-dim">&rarr; {l.matched}</span></td>
-                  <td className="py-2 px-3 text-right font-mono text-sm text-text-sec">{l.count}</td>
-                  <td className="py-2 px-3 text-right font-mono text-sm text-text-sec">{money(l.unitPriceExGst)}</td>
-                  <td className="py-2 px-3 text-right font-mono text-sm text-text-sec">{money(l.materialExGst)}</td>
-                  <td className="py-2 px-3 text-right font-mono text-sm text-text-sec">{money(l.labourExGst)}<span className="block text-xs text-text-dim">{l.labourHours}h</span></td>
-                  <td className="py-2 pl-3 text-right font-mono text-sm text-text-pri">{money(l.lineExGst)}</td>
-                </tr>
+                <Fragment key={i}>
+                  <tr className="border-b border-ink-line/60">
+                    <td className="py-2 pr-3 text-sm text-text-pri">
+                      {l.type}
+                      <span className="block font-mono text-xs text-text-dim">
+                        &rarr; {l.matched}
+                        <button
+                          type="button"
+                          onClick={() => setOpenTrace((s) => (s === i ? null : i))}
+                          className={`ml-2 font-semibold uppercase tracking-widest ${openTrace === i ? 'text-accent' : 'text-text-dim hover:text-accent'}`}
+                        >
+                          how?
+                        </button>
+                      </span>
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono text-sm text-text-sec">{l.count}</td>
+                    <td className="py-2 px-3 text-right font-mono text-sm text-text-sec">{money(l.unitPriceExGst)}</td>
+                    <td className="py-2 px-3 text-right font-mono text-sm text-text-sec">{money(l.materialExGst)}</td>
+                    <td className="py-2 px-3 text-right font-mono text-sm text-text-sec">{money(l.labourExGst)}<span className="block text-xs text-text-dim">{l.labourHours}h</span></td>
+                    <td className="py-2 pl-3 text-right font-mono text-sm text-text-pri">{money(l.lineExGst)}</td>
+                  </tr>
+                  {openTrace === i && (
+                    <tr className="border-b border-ink-line/60 bg-ink-deep">
+                      <td colSpan={6} className="px-4 py-3">
+                        <div className="grid gap-2 text-xs sm:grid-cols-2">
+                          <div>
+                            <div className="font-mono font-semibold uppercase tracking-[0.12em] text-text-dim">1 · Count from drawing</div>
+                            <p className="mt-1 text-text-sec">
+                              {l.trace.countSource.tally ?? 'No zone tally recorded for this line.'}
+                              {l.trace.countSource.confidence && (
+                                <span className="ml-1.5 font-mono uppercase text-text-dim">[{l.trace.countSource.confidence} confidence]</span>
+                              )}
+                            </p>
+                          </div>
+                          <div>
+                            <div className="font-mono font-semibold uppercase tracking-[0.12em] text-text-dim">2 · Catalogue match</div>
+                            <p className="mt-1 text-text-sec">
+                              &ldquo;{l.type}&rdquo; &rarr; <span className="text-text-pri">{l.matched}</span>
+                              {l.trace.matchedSignals.length > 0 && (
+                                <span className="block font-mono text-text-dim">matched on: {l.trace.matchedSignals.join(', ')}</span>
+                              )}
+                            </p>
+                          </div>
+                          <div>
+                            <div className="font-mono font-semibold uppercase tracking-[0.12em] text-text-dim">3 · Material</div>
+                            <p className="mt-1 font-mono text-text-sec">{l.trace.materialFormula}</p>
+                            <p className="font-mono text-text-dim">base {money(l.trace.baseUnitPriceExGst)}/unit ex-GST + {l.trace.markupPct}% markup</p>
+                          </div>
+                          <div>
+                            <div className="font-mono font-semibold uppercase tracking-[0.12em] text-text-dim">4 · Labour</div>
+                            <p className="mt-1 font-mono text-text-sec">{l.trace.labourFormula}</p>
+                            <p className="font-mono text-text-dim">{l.trace.unitLabourHours}h/unit at {money(l.trace.hourlyRate)}/h (labour is not marked up)</p>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>

@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SMS Onboarding Flow — QuoteMate</title>
+  <meta
+    name="description"
+    content="SMS-initiated tradie onboarding for QuoteMate: a tradie texts the shared number, AI replies with a link, signup completes on the web. Same end-state as web-only signup."
+  />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap"
+  />
+  <style>
+    :root {
+      --ink-deep: #0a1628;
+      --ink-card: #1a2332;
+      --ink-line: #2a3548;
+      --accent: #ff5a1f;
+      --accent-press: #e8470f;
+      --text-pri: #ffffff;
+      --text-sec: #b8c2d1;
+      --text-dim: #7a8699;
+      --teal-glow: #14b8a6;
+      --success: #34d399;
+      --warning: #fbbf24;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: var(--ink-deep);
+      color: var(--text-pri);
+      font-family: 'Manrope', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      font-weight: 400; line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+    .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+    .container { max-width: 80rem; margin: 0 auto; padding: 0 1.5rem; position: relative; z-index: 1; }
+    .topo { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.22; pointer-events: none; z-index: 0; }
+
+    .hero {
+      position: relative;
+      padding: 5rem 0 3.5rem;
+      border-bottom: 1px solid var(--ink-line);
+      overflow: hidden;
+    }
+    .eyebrow {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem; font-weight: 600;
+      letter-spacing: 0.16em; text-transform: uppercase;
+      color: var(--text-dim);
+    }
+    h1.display {
+      margin-top: 1.25rem;
+      font-weight: 800; text-transform: uppercase;
+      font-size: clamp(2.25rem, 5.5vw, 4.5rem);
+      letter-spacing: -0.035em; line-height: 0.95;
+    }
+    .hi { color: var(--accent); }
+    .lede { margin-top: 1.5rem; max-width: 56ch; color: var(--text-sec); font-size: 1.05rem; line-height: 1.55; }
+
+    section.block { padding: 4rem 0; border-bottom: 1px solid var(--ink-line); }
+    h2.section-title {
+      font-weight: 800; text-transform: uppercase;
+      font-size: clamp(1.5rem, 2.6vw, 2.25rem);
+      letter-spacing: -0.03em; line-height: 1.05;
+    }
+    .section-eyebrow { display: inline-block; margin-bottom: 0.85rem; }
+    .section-lead { margin-top: 1rem; color: var(--text-sec); max-width: 60ch; font-size: 0.98rem; }
+
+    /* ─── SMS thread visualisation ─── */
+    .thread {
+      margin-top: 2.5rem;
+      max-width: 32rem;
+      display: grid; gap: 0.6rem;
+    }
+    .bubble {
+      padding: 0.85rem 1rem;
+      font-size: 0.92rem; line-height: 1.5;
+      max-width: 88%;
+    }
+    .bubble.in {
+      justify-self: end;
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      color: var(--text-pri);
+    }
+    .bubble.out {
+      justify-self: start;
+      background: var(--accent);
+      color: var(--text-pri);
+    }
+    .bubble .who {
+      display: block;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.62rem; font-weight: 700;
+      letter-spacing: 0.14em; text-transform: uppercase;
+      margin-bottom: 0.25rem;
+      opacity: 0.85;
+    }
+    .bubble a, .bubble .link {
+      color: inherit;
+      text-decoration: underline;
+      word-break: break-all;
+    }
+
+    /* ─── Steps cards ─── */
+    .checklist { margin-top: 2.5rem; display: grid; gap: 0.85rem; }
+    .check-card {
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      padding: 1.25rem 1.5rem;
+      display: grid;
+      grid-template-columns: 3rem 1fr auto;
+      gap: 1.25rem;
+      align-items: center;
+    }
+    @media (max-width: 640px) {
+      .check-card { grid-template-columns: 2rem 1fr; }
+      .check-card .tag { grid-column: 2; margin-top: 0.5rem; justify-self: start; }
+    }
+    .check-card .step-n {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.5rem; font-weight: 700;
+      color: var(--accent); line-height: 1;
+    }
+    .check-card h3 {
+      font-weight: 800; text-transform: uppercase;
+      font-size: 0.98rem; letter-spacing: -0.01em; line-height: 1.2;
+    }
+    .check-card p {
+      margin-top: 0.3rem;
+      font-size: 0.85rem; color: var(--text-sec); line-height: 1.5;
+    }
+    .check-card .tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem; font-weight: 600;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      padding: 0.35rem 0.7rem;
+      border: 1px solid var(--ink-line);
+      color: var(--text-dim);
+      white-space: nowrap;
+    }
+    .tag.sms { color: var(--accent); border-color: var(--accent); }
+    .tag.web { color: var(--success); border-color: var(--success); }
+
+    /* ─── Schema / code blocks ─── */
+    .schema-grid { margin-top: 2.5rem; display: grid; gap: 1rem; }
+    @media (min-width: 800px) { .schema-grid { grid-template-columns: repeat(2, 1fr); } }
+    .schema-card { background: var(--ink-card); border: 1px solid var(--ink-line); padding: 1.5rem; }
+    .schema-card h3 {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem; font-weight: 700;
+      color: var(--accent); letter-spacing: 0.1em; text-transform: uppercase;
+    }
+    .schema-card .note { margin-top: 0.5rem; font-size: 0.82rem; color: var(--text-sec); line-height: 1.5; }
+    .schema-card pre {
+      margin-top: 1rem; font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem; line-height: 1.65; color: var(--text-pri);
+      overflow-x: auto; padding: 1rem;
+      background: var(--ink-deep); border: 1px solid var(--ink-line);
+    }
+    .schema-card pre .kw { color: var(--accent); }
+    .schema-card pre .ty { color: var(--teal-glow); }
+    .schema-card pre .fn { color: var(--teal-glow); }
+    .schema-card pre .str { color: #f8b78a; }
+    .schema-card pre .cm { color: var(--text-dim); font-style: italic; }
+
+    /* ─── CTA bar ─── */
+    .cta-bar {
+      background: var(--accent);
+      color: var(--text-pri); text-align: center;
+      padding: 1.1rem 1.5rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem; font-weight: 600;
+      letter-spacing: 0.16em; text-transform: uppercase;
+    }
+
+    @media (max-width: 719px) {
+      .container { padding: 0 1.1rem; }
+      .hero { padding: 3rem 0 2.25rem; }
+      .topo { opacity: 0.16; }
+      section.block { padding: 2.75rem 0; }
+      h1.display { font-size: clamp(2rem, 9vw, 2.85rem); line-height: 1; }
+      h2.section-title { font-size: clamp(1.4rem, 6.5vw, 1.85rem); line-height: 1.1; }
+      .check-card { padding: 1rem 1.1rem; gap: 0.85rem; }
+      .schema-card pre { font-size: 0.65rem; padding: 0.85rem; }
+      .thread { max-width: 100%; }
+      .bubble { font-size: 0.88rem; }
+    }
+  </style>
+</head>
+<body>
+  <!-- ───── HERO ───── -->
+  <header class="hero">
+    <svg class="topo" viewBox="0 0 1920 500" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <g fill="none" stroke="#14b8a6" stroke-width="1">
+        <path d="M0,340 Q240,240 480,280 T960,260 T1440,300 T1920,270" />
+        <path d="M0,390 Q240,300 480,320 T960,310 T1440,350 T1920,330" opacity="0.7" />
+        <path d="M0,440 Q240,360 480,380 T960,360 T1440,400 T1920,380" opacity="0.5" />
+        <path d="M0,490 Q240,420 480,440 T960,420 T1440,450 T1920,430" opacity="0.3" />
+      </g>
+    </svg>
+    <div class="container">
+      <span class="eyebrow">QuoteMate · v6 · SMS Onboarding</span>
+      <h1 class="display">
+        Tradie texts.<br />
+        AI sends the <span class="hi">link.</span>
+      </h1>
+      <p class="lede">
+        Same end state as web signup — own tenant, own AU phone number, own AI receptionist —
+        but kicked off with a single SMS to the shared QuoteMate number. Two SMS turns,
+        then the tradie finishes on the web wizard. Mobile is verified automatically.
+      </p>
+    </div>
+  </header>
+
+  <!-- ───── SMS THREAD ───── -->
+  <section class="block">
+    <div class="container">
+      <span class="eyebrow section-eyebrow">The SMS thread</span>
+      <h2 class="section-title">Two turns, <span class="hi">one link</span>.</h2>
+      <p class="section-lead">
+        Tradie texts the shared QuoteMate number (the same one customers use for quotes —
+        the intent classifier decides which path to take on turn 1).
+      </p>
+
+      <div class="thread">
+        <div class="bubble in">
+          <span class="who">Jon · 04xx xxx xxx</span>
+          I want to register as a tradie
+        </div>
+        <div class="bubble out">
+          <span class="who">QuoteMate AI</span>
+          G&rsquo;day! Welcome to QuoteMate. Tap the link to set up your AI receptionist.
+          Takes about 4 minutes.<br /><br />
+          <span class="link">https://quote-mate-rho.vercel.app/signup?intent=k4f2x9</span><br /><br />
+          Your mobile is already saved.<br /><br />
+          - QuoteMate
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───── FULL CHECKLIST ───── -->
+  <section class="block">
+    <div class="container">
+      <span class="eyebrow section-eyebrow">Full pipeline</span>
+      <h2 class="section-title">Eight steps. <span class="hi">SMS to live AI.</span></h2>
+      <p class="section-lead">
+        The first two steps run on SMS in seconds. Steps 3–7 happen on the web after the
+        tradie taps the link. Step 8 closes the loop by texting the tradie&rsquo;s new
+        QuoteMate number to itself.
+      </p>
+
+      <div class="checklist">
+        <div class="check-card">
+          <span class="step-n">01</span>
+          <div>
+            <h3>Tradie texts shared number</h3>
+            <p>+61 481 613 464 (shared). Hybrid classifier runs on the body: regex catches obvious phrasing ("register as a tradie", "sign me up"); ambiguous wording falls through to Haiku 4.5 for a semantic call.</p>
+          </div>
+          <span class="tag sms">SMS</span>
+        </div>
+
+        <div class="check-card">
+          <span class="step-n">02</span>
+          <div>
+            <h3>AI replies with signup link</h3>
+            <p>Creates a <span class="mono">tradie_signup_intents</span> row with a 6-char token + 24h TTL. SMS welcome template includes the link. Mobile saved from the From header.</p>
+          </div>
+          <span class="tag sms">SMS</span>
+        </div>
+
+        <div class="check-card">
+          <span class="step-n">03</span>
+          <div>
+            <h3>Tradie taps the link</h3>
+            <p>Lands on <span class="mono">/signup?intent=k4f2x9</span>. Page fetches the prefill via <span class="mono">/api/onboard/intent/[token]</span>. Shows a "we&rsquo;ve got your mobile" banner.</p>
+          </div>
+          <span class="tag web">Web</span>
+        </div>
+
+        <div class="check-card">
+          <span class="step-n">04</span>
+          <div>
+            <h3>Signup: business name + email + password</h3>
+            <p>Supabase Auth creates the user. Intent token is carried through Supabase&rsquo;s emailRedirectTo for the verification step.</p>
+          </div>
+          <span class="tag web">Web</span>
+        </div>
+
+        <div class="check-card">
+          <span class="step-n">05</span>
+          <div>
+            <h3>Email verification</h3>
+            <p>Supabase sends the verification link. /auth/callback reads the intent + mobile carry-over and forwards them to /onboard.</p>
+          </div>
+          <span class="tag web">Web</span>
+        </div>
+
+        <div class="check-card">
+          <span class="step-n">06</span>
+          <div>
+            <h3>Wizard: trade + pricing</h3>
+            <p>Owner_mobile is pre-filled + read-only (came from SMS, verified). Tradie picks trade/state + sets hourly rate, callout, markup. Reviews + activates.</p>
+          </div>
+          <span class="tag web">Web</span>
+        </div>
+
+        <div class="check-card">
+          <span class="step-n">07</span>
+          <div>
+            <h3>Activation chain runs</h3>
+            <p>Same 7-step chain as web-only signup: tenants insert → pricing_book → Twilio number buy → Vapi assistant create → Vapi phone-number register → tenants → active. Intent token marked used.</p>
+          </div>
+          <span class="tag web">Web</span>
+        </div>
+
+        <div class="check-card">
+          <span class="step-n">08</span>
+          <div>
+            <h3>Loop closed</h3>
+            <p>Welcome SMS dispatched from the tradie&rsquo;s new number to his personal mobile. Original SMS conversation marked status='converted' + tenant_id linked.</p>
+          </div>
+          <span class="tag sms">SMS</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───── DATABASE ADDITIONS ───── -->
+  <section class="block">
+    <div class="container">
+      <span class="eyebrow section-eyebrow">Database additions (migration 016)</span>
+      <h2 class="section-title">One table, <span class="hi">one column</span>.</h2>
+      <p class="section-lead">
+        The web-only foundation (migration 015) already had tenants, pricing_book and the
+        operational tenant_id columns. Migration 016 adds just what SMS onboarding needs.
+      </p>
+
+      <div class="schema-grid">
+        <div class="schema-card">
+          <h3>tradie_signup_intents</h3>
+          <p class="note">Short-lived token row linking a tradie&rsquo;s SMS thread to a pending web onboarding. Unique constraint on (owner_mobile) where used_at IS NULL prevents spam-creation.</p>
+<pre><span class="kw">create table</span> tradie_signup_intents (
+  id                   <span class="ty">uuid</span> primary key,
+  token                <span class="ty">text</span> unique,    <span class="cm">-- 6-char URL slug</span>
+  owner_mobile         <span class="ty">text</span> not null,  <span class="cm">-- E.164 from SMS From header</span>
+  sms_conversation_id  <span class="ty">uuid</span> -> sms_conversations,
+  expires_at           <span class="ty">timestamptz</span>     <span class="cm">-- 24h TTL</span>
+  used_at              <span class="ty">timestamptz</span>,    <span class="cm">-- null until activate</span>
+  resulting_tenant_id  <span class="ty">uuid</span> -> tenants(id),
+  created_at           <span class="ty">timestamptz</span>
+);</pre>
+        </div>
+
+        <div class="schema-card">
+          <h3>sms_conversations.conversation_type</h3>
+          <p class="note">Flag set on turn 1 by the intent classifier. The inbound route branches on this column to decide between the customer-quote pipeline and the tradie-registration pipeline.</p>
+<pre><span class="kw">alter table</span> sms_conversations
+  <span class="kw">add</span> conversation_type <span class="ty">text</span>
+    default <span class="kw">'customer_quote'</span>
+    check (value in (
+      <span class="kw">'customer_quote'</span>,
+      <span class="kw">'tradie_registration'</span>,
+      <span class="kw">'converted'</span>
+    ));</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───── INTENT CLASSIFIER ───── -->
+  <section class="block">
+    <div class="container">
+      <span class="eyebrow section-eyebrow">Intent classifier</span>
+      <h2 class="section-title">Regex first, <span class="hi">Haiku for the middle</span>.</h2>
+      <p class="section-lead">
+        Runs on turn 1 of every conversation whose destination doesn&rsquo;t resolve to a
+        registered tenant. Hybrid two-layer design: regex catches ~80% of inbounds with
+        clear phrasing (sub-millisecond, free, deterministic). Anything regex can&rsquo;t
+        resolve falls through to Haiku 4.5 — a cheap structured-output call (~$0.0001,
+        ~300ms) with a Zod schema that returns intent + confidence + reasoning.
+        LOW-confidence Haiku verdicts are downgraded to ambiguous so the customer dialog
+        handles them.
+      </p>
+
+      <div class="schema-grid">
+        <div class="schema-card">
+          <h3>Layer 1 — Regex (hot path)</h3>
+          <p class="note">Strong-phrase match on tradie or customer wording. Both matching → customer (safer). No match → fall through to Haiku.</p>
+<pre><span class="cm">// tradie strong phrases</span>
+/\b(register|sign\s*up|join)\b
+  .*\b(tradie|sparky|plumber)\b/i
+/\bbecome\s+(a\s+)?quotemate\b/i
+/\blist\s+my\s+business\b/i
+
+<span class="cm">// customer strong phrases</span>
+/\b(blocked|leaking|broken)\b/i
+/\b(my|our)\s+(tap|drain|gpo)\b/i
+/\bhow\s+much\s+(to|for)\b/i</pre>
+        </div>
+
+        <div class="schema-card">
+          <h3>Layer 2 — Haiku 4.5 (fallback)</h3>
+          <p class="note">generateObject() with a Zod schema. System prompt has disambiguation rules (e.g. "my sparky didn&rsquo;t turn up" → customer, not tradie). Failures degrade to ambiguous.</p>
+<pre><span class="kw">const</span> Schema = z.object({
+  intent: z.<span class="fn">enum</span>([
+    <span class="str">'tradie_registration'</span>,
+    <span class="str">'customer_quote'</span>
+  ]),
+  confidence: z.<span class="fn">enum</span>([
+    <span class="str">'HIGH'</span>, <span class="str">'MEDIUM'</span>, <span class="str">'LOW'</span>
+  ]),
+  reasoning: z.<span class="fn">string</span>().<span class="fn">max</span>(120),
+})</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───── CTA BAR ───── -->
+  <div class="cta-bar">
+    Migration 016 applied · Hybrid regex + Haiku 4.5 classifier · SMS branch shipped · Shares activate chain
+  </div>
+</body>
+</html>

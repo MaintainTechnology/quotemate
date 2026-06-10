@@ -1,0 +1,946 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SMS Onboarding Architecture — QuoteMate</title>
+  <meta
+    name="description"
+    content="End-to-end architecture of QuoteMate's SMS-initiated tradie onboarding flow: hybrid intent classifier, signup intent tokens, magic-link handoff to web, activation chain, AI live. Full Supabase schema."
+  />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap"
+  />
+  <style>
+    :root {
+      --ink-deep: #0a1628;
+      --ink: #131c2d;
+      --ink-card: #1a2332;
+      --ink-line: #2a3548;
+      --accent: #ff5a1f;
+      --accent-press: #e8470f;
+      --text-pri: #ffffff;
+      --text-sec: #b8c2d1;
+      --text-dim: #7a8699;
+      --teal-glow: #14b8a6;
+      --success: #34d399;
+      --warning: #fbbf24;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: var(--ink-deep);
+      color: var(--text-pri);
+      font-family: 'Manrope', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      font-weight: 400;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+    .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+    .container {
+      max-width: 80rem;
+      margin: 0 auto;
+      padding: 0 1.5rem;
+      position: relative;
+      z-index: 1;
+    }
+    .topo {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      opacity: 0.22; pointer-events: none; z-index: 0;
+    }
+
+    /* ─── HERO ─── */
+    .hero {
+      position: relative;
+      padding: 5rem 0 3.5rem;
+      border-bottom: 1px solid var(--ink-line);
+      overflow: hidden;
+    }
+    .eyebrow {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem; font-weight: 600;
+      letter-spacing: 0.16em; text-transform: uppercase;
+      color: var(--text-dim);
+    }
+    h1.display {
+      margin-top: 1.25rem;
+      font-weight: 800; text-transform: uppercase;
+      font-size: clamp(2.25rem, 5.5vw, 4.5rem);
+      letter-spacing: -0.035em;
+      line-height: 0.95;
+    }
+    .hi { color: var(--accent); }
+    .lede {
+      margin-top: 1.5rem;
+      max-width: 52ch;
+      color: var(--text-sec);
+      font-size: 1.05rem;
+      line-height: 1.55;
+    }
+    .inline-link {
+      color: var(--accent);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      font-weight: 600;
+    }
+    .inline-link:hover { color: var(--accent-press); }
+
+    /* ─── SECTION ─── */
+    section.block { padding: 4rem 0; border-bottom: 1px solid var(--ink-line); }
+    h2.section-title {
+      font-weight: 800; text-transform: uppercase;
+      font-size: clamp(1.5rem, 2.6vw, 2.25rem);
+      letter-spacing: -0.03em; line-height: 1.05;
+    }
+    .section-eyebrow { display: inline-block; margin-bottom: 0.85rem; }
+    .section-lead {
+      margin-top: 1rem; color: var(--text-sec);
+      max-width: 60ch; font-size: 0.98rem;
+    }
+
+    /* ─── FLOW DIAGRAM (8 nodes — 4 wide × 2 rows) ─── */
+    .flow {
+      margin-top: 2.5rem;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0.75rem;
+    }
+    @media (min-width: 1000px) {
+      .flow { grid-template-columns: repeat(4, 1fr); gap: 0.5rem; }
+    }
+    .node {
+      background: var(--ink-card); border: 1px solid var(--ink-line);
+      padding: 1rem 1.1rem; position: relative; min-height: 7rem;
+      display: flex; flex-direction: column;
+    }
+    .node-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem; font-weight: 700;
+      color: var(--accent); letter-spacing: 0.14em;
+    }
+    .node-label {
+      margin-top: 0.4rem;
+      font-weight: 800; text-transform: uppercase;
+      font-size: 0.92rem; letter-spacing: -0.01em;
+    }
+    .node-desc {
+      margin-top: 0.35rem;
+      font-size: 0.78rem; color: var(--text-sec); line-height: 1.45;
+    }
+    @media (min-width: 1000px) {
+      .node:not(:nth-child(4n)):not(:last-child)::after {
+        content: "→";
+        color: var(--accent);
+        position: absolute; right: -1rem; top: 50%;
+        transform: translateY(-50%);
+        font-size: 1.1rem; font-weight: 700; line-height: 1;
+      }
+    }
+    @media (max-width: 999px) {
+      .node:not(:last-child)::before {
+        content: "↓"; color: var(--accent);
+        font-weight: 700; font-size: 1rem;
+        position: absolute; left: 50%; bottom: -1rem;
+        transform: translateX(-50%);
+      }
+    }
+
+    /* ─── CHECKLIST CARDS ─── */
+    .checklist { margin-top: 2.5rem; display: grid; gap: 0.85rem; }
+    .check-card {
+      background: var(--ink-card); border: 1px solid var(--ink-line);
+      padding: 1.25rem 1.5rem;
+      display: grid; grid-template-columns: 3rem 1fr auto;
+      gap: 1.25rem; align-items: center;
+    }
+    @media (max-width: 640px) {
+      .check-card { grid-template-columns: 2rem 1fr; }
+      .check-card .tag { grid-column: 2; margin-top: 0.5rem; justify-self: start; }
+    }
+    .step-n {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.5rem; font-weight: 700;
+      color: var(--accent); line-height: 1;
+    }
+    .check-title {
+      font-weight: 800; text-transform: uppercase;
+      font-size: 0.98rem; letter-spacing: -0.01em;
+      line-height: 1.2; color: var(--text-pri);
+    }
+    .check-body {
+      margin-top: 0.3rem;
+      font-size: 0.85rem; color: var(--text-sec); line-height: 1.5;
+    }
+    .tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem; font-weight: 600;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      padding: 0.35rem 0.7rem; border: 1px solid var(--ink-line);
+      color: var(--text-dim); white-space: nowrap;
+    }
+    .tag-ok { color: var(--success); border-color: var(--success); }
+    .tag-gated { color: var(--warning); border-color: var(--warning); }
+
+    /* ─── SCHEMA BLOCKS ─── */
+    .schema-grid {
+      margin-top: 2.5rem;
+      display: grid; gap: 1rem;
+    }
+    @media (min-width: 800px) {
+      .schema-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    .schema-card {
+      background: var(--ink-card); border: 1px solid var(--ink-line);
+      padding: 1.5rem;
+    }
+    .schema-card h3 {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem; font-weight: 700;
+      color: var(--accent); letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    .schema-card .note {
+      margin-top: 0.5rem;
+      font-size: 0.82rem; color: var(--text-sec); line-height: 1.5;
+    }
+    .schema-card pre {
+      margin-top: 1rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem; line-height: 1.65;
+      color: var(--text-pri);
+      overflow-x: auto;
+      padding: 1rem;
+      background: var(--ink-deep);
+      border: 1px solid var(--ink-line);
+      white-space: pre;
+    }
+    .schema-card pre .kw { color: var(--accent); }
+    .schema-card pre .ty { color: var(--teal-glow); }
+    .schema-card pre .fn { color: var(--teal-glow); }
+    .schema-card pre .str { color: #f8b78a; }
+    .schema-card pre .cm { color: var(--text-dim); font-style: italic; }
+
+    /* ─── SERVICES GRID ─── */
+    .services {
+      margin-top: 2.5rem;
+      display: grid; gap: 1rem;
+    }
+    @media (min-width: 720px) {
+      .services { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (min-width: 1100px) {
+      .services { grid-template-columns: repeat(4, 1fr); }
+    }
+    .svc {
+      background: var(--ink-card); border: 1px solid var(--ink-line);
+      padding: 1.5rem;
+    }
+    .svc-name {
+      font-weight: 800; text-transform: uppercase;
+      font-size: 1.05rem; letter-spacing: -0.01em;
+    }
+    .svc-role {
+      margin-top: 0.5rem;
+      font-size: 0.85rem; color: var(--text-sec); line-height: 1.5;
+    }
+    .svc-creds {
+      margin-top: 0.9rem; padding-top: 0.9rem;
+      border-top: 1px solid var(--ink-line);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem; line-height: 1.6;
+      color: var(--text-dim);
+    }
+    .svc-creds strong { color: var(--text-pri); font-weight: 600; }
+    .svc-optional { color: var(--text-sec); }
+
+    /* ─── FLAGS PANEL ─── */
+    .flags {
+      margin-top: 2.5rem;
+      background: var(--ink-card); border: 1px solid var(--ink-line);
+      padding: 1.5rem 1.75rem;
+    }
+    .flags h3 {
+      font-weight: 800; text-transform: uppercase;
+      font-size: 1rem; letter-spacing: -0.01em;
+    }
+    .flags-table {
+      margin-top: 1rem;
+      display: grid; gap: 0.55rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+    }
+    .flags-row {
+      display: grid; grid-template-columns: 1fr auto;
+      gap: 1rem; padding: 0.5rem 0;
+      border-bottom: 1px solid var(--ink-line);
+    }
+    .flags-row:last-child { border-bottom: 0; }
+    .flags-key { color: var(--accent); font-weight: 600; letter-spacing: 0.06em; }
+    .flags-value { color: var(--text-dim); }
+
+    /* ─── CTA BAR ─── */
+    .cta-bar {
+      background: var(--accent); color: var(--text-pri);
+      text-align: center; padding: 1.1rem 1.5rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem; font-weight: 600;
+      letter-spacing: 0.16em; text-transform: uppercase;
+    }
+
+    /* ─── MOBILE ─── */
+    @media (max-width: 719px) {
+      .container { padding: 0 1.1rem; }
+      .hero { padding: 3rem 0 2.25rem; }
+      .topo { opacity: 0.16; }
+      h1.display { font-size: clamp(2rem, 9vw, 2.85rem); line-height: 1; }
+      .lede { font-size: 0.98rem; margin-top: 1.1rem; }
+      section.block { padding: 2.75rem 0; }
+      h2.section-title { font-size: clamp(1.4rem, 6.5vw, 1.85rem); line-height: 1.1; }
+      .flow { margin-top: 1.75rem; gap: 0.6rem; }
+      .node { min-height: auto; padding: 0.95rem 1rem; }
+      .node-num { font-size: 0.66rem; }
+      .node-label { font-size: 0.88rem; }
+      .node-desc { font-size: 0.83rem; }
+      .checklist { margin-top: 1.75rem; }
+      .check-card { padding: 1rem 1.1rem; gap: 0.85rem; }
+      .step-n { font-size: 1.3rem; }
+      .check-title { font-size: 0.92rem; }
+      .check-body { font-size: 0.84rem; }
+      .schema-grid { margin-top: 1.75rem; }
+      .schema-card { padding: 1.2rem 1.1rem; }
+      .schema-card pre { font-size: 0.65rem; padding: 0.85rem; }
+      .services { margin-top: 1.75rem; }
+      .svc { padding: 1.2rem 1.1rem; }
+      .flags { padding: 1.2rem 1.1rem; }
+      .flags-table { font-size: 0.72rem; }
+      .cta-bar {
+        padding: 1rem 1.1rem;
+        font-size: 0.7rem; letter-spacing: 0.1em; line-height: 1.55;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ───── HERO ───── -->
+  <header class="hero">
+    <svg class="topo" viewBox="0 0 1920 500" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <g fill="none" stroke="#14b8a6" stroke-width="1">
+        <path d="M0,340 Q240,240 480,280 T960,260 T1440,300 T1920,270" />
+        <path d="M0,390 Q240,300 480,320 T960,310 T1440,350 T1920,330" opacity="0.7" />
+        <path d="M0,440 Q240,360 480,380 T960,360 T1440,400 T1920,380" opacity="0.5" />
+        <path d="M0,490 Q240,420 480,440 T960,420 T1440,450 T1920,430" opacity="0.3" />
+      </g>
+    </svg>
+    <div class="container">
+      <span class="eyebrow">QuoteMate · v6 · SMS Onboarding Architecture</span>
+      <h1 class="display">
+        One SMS in →<br />
+        AI <span class="hi">live</span> in 5 minutes.
+      </h1>
+      <p class="lede">
+        Full view of the SMS-initiated onboarding branch: how a tradie&rsquo;s single
+        inbound text becomes their own dedicated AU number, AI receptionist, and pricing
+        book — all without leaving the SMS thread until the magic-link tap. Classifier,
+        token table, activation chain, schema, env flags — one screen.
+      </p>
+      <p class="lede" style="margin-top:0.85rem;font-size:0.92rem;">
+        See also:
+        <a href="/docs/tradie-onboarding-architecture" class="inline-link">web onboarding architecture</a> ·
+        <a href="/docs/sms-onboarding-flow" class="inline-link">SMS flow scenario</a> ·
+        <a href="/docs/tradie-onboarding-plan-sms" class="inline-link">SMS plan summary</a> ·
+        <a href="/" class="inline-link">home</a>.
+      </p>
+    </div>
+  </header>
+
+  <!-- ───── THE FLOW ───── -->
+  <section class="block">
+    <div class="container">
+      <span class="eyebrow section-eyebrow">The Flow</span>
+      <h2 class="section-title">Eight steps, <span class="hi">one classifier</span> and one tap.</h2>
+      <p class="section-lead">
+        Steps 01–03 happen entirely inside the SMS thread. Step 04 is the handoff to web.
+        Steps 05–08 mirror the standard web onboarding chain, with one extra SMS-specific
+        step on activate to close the loop on the originating thread.
+      </p>
+
+      <div class="flow" aria-label="SMS onboarding flow">
+        <div class="node">
+          <span class="node-num">01</span>
+          <span class="node-label">SMS in</span>
+          <span class="node-desc">Tradie texts <span class="mono">+61 481 613 464</span> (shared QuoteMate number).</span>
+        </div>
+        <div class="node">
+          <span class="node-num">02</span>
+          <span class="node-label">Classify</span>
+          <span class="node-desc">Hybrid classifier: regex first, Haiku 4.5 fallback for ambiguous wording.</span>
+        </div>
+        <div class="node">
+          <span class="node-num">03</span>
+          <span class="node-label">Token + reply</span>
+          <span class="node-desc">Insert <span class="mono">tradie_signup_intents</span> row, SMS back a <span class="mono">/signup?intent=</span> link.</span>
+        </div>
+        <div class="node">
+          <span class="node-num">04</span>
+          <span class="node-label">Tap link</span>
+          <span class="node-desc">Lands on <span class="mono">/signup</span>. Mobile prefilled + read-only.</span>
+        </div>
+        <div class="node">
+          <span class="node-num">05</span>
+          <span class="node-label">Signup</span>
+          <span class="node-desc">Business name + first name + email + password. Intent token carried through.</span>
+        </div>
+        <div class="node">
+          <span class="node-num">06</span>
+          <span class="node-label">Verify</span>
+          <span class="node-desc">Supabase emailRedirectTo → <span class="mono">/auth/callback</span> forwards intent + mobile to <span class="mono">/onboard</span>.</span>
+        </div>
+        <div class="node">
+          <span class="node-num">07</span>
+          <span class="node-label">Wizard</span>
+          <span class="node-desc">Trade + state + pricing essentials + review. Mobile field is locked ("verified via SMS").</span>
+        </div>
+        <div class="node">
+          <span class="node-num">08</span>
+          <span class="node-label">Activate</span>
+          <span class="node-desc">POST <span class="mono">/api/onboard/activate</span> runs the 8-step chain (one extra step vs. web: <span class="mono">markIntentUsed</span>).</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───── INTENT CLASSIFIER ───── -->
+  <section class="block">
+    <div class="container">
+      <span class="eyebrow section-eyebrow">The Intent Classifier</span>
+      <h2 class="section-title">Regex first, <span class="hi">Haiku for the middle</span>.</h2>
+      <p class="section-lead">
+        Lives in <span class="mono">lib/sms/intent.ts</span>. Runs on turn 1 of every
+        conversation whose destination doesn&rsquo;t resolve to a registered tenant. Three
+        outcomes: <span class="mono">tradie_registration</span>, <span class="mono">customer_quote</span>,
+        or <span class="mono">ambiguous</span> (defaults to customer flow).
+      </p>
+
+      <div class="schema-grid">
+        <div class="schema-card">
+          <h3>Layer 1 — Regex (hot path)</h3>
+          <p class="note">Strong-phrase match. ~80% of inbounds resolve here (sub-millisecond, free, deterministic). Both tradie + customer regex matching → customer (safer default; canned dialog disambiguates next turn).</p>
+<pre><span class="cm">// tradie strong phrases</span>
+/\b(register|sign\s*up|join)\b
+  .*\b(tradie|sparky|plumber)\b/i
+/\bbecome\s+(a\s+)?quotemate\b/i
+/\blist\s+my\s+business\b/i
+
+<span class="cm">// customer strong phrases</span>
+/\b(blocked|leaking|broken)\b/i
+/\b(my|our)\s+(tap|drain|gpo)\b/i
+/\bhow\s+much\s+(to|for)\b/i</pre>
+        </div>
+
+        <div class="schema-card">
+          <h3>Layer 2 — Haiku 4.5 (fallback)</h3>
+          <p class="note">Triggers when regex returns ambiguous AND the message has ≥4 words. generateObject() with a Zod schema. System prompt has disambiguation rules (e.g. "my sparky didn&rsquo;t turn up" → customer, not tradie). ~$0.0001, ~300ms. Failures degrade to ambiguous.</p>
+<pre><span class="kw">const</span> Schema = z.object({
+  intent: z.<span class="fn">enum</span>([
+    <span class="str">'tradie_registration'</span>,
+    <span class="str">'customer_quote'</span>
+  ]),
+  confidence: z.<span class="fn">enum</span>([
+    <span class="str">'HIGH'</span>, <span class="str">'MEDIUM'</span>, <span class="str">'LOW'</span>
+  ]),
+  reasoning: z.<span class="fn">string</span>().max(120),
+})</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───── ACTIVATION CHECKLIST ───── -->
+  <section class="block">
+    <div class="container">
+      <span class="eyebrow section-eyebrow">The Activation Checklist</span>
+      <h2 class="section-title">Nine steps run when <span class="hi">"Activate"</span> is clicked.</h2>
+      <p class="section-lead">
+        One more than the web flow: step 06 (markIntentUsed) is SMS-only and ties the
+        originating thread to the new tenant. Steps 04–06 + 5b + 08 hit external APIs and
+        are env-gated; the rest are pure Supabase writes.
+      </p>
+
+      <div class="checklist">
+        <div class="check-card">
+          <span class="step-n">01</span>
+          <div>
+            <h3 class="check-title">Validate the payload</h3>
+            <p class="check-body">Same Zod schema as web. Adds an optional <span class="mono">intent_token</span> field carried from the SMS thread.</p>
+          </div>
+          <span class="tag tag-ok">Always real</span>
+        </div>
+
+        <div class="check-card">
+          <span class="step-n">02</span>
+          <div>
+            <h3 class="check-title">Insert tenants row</h3>
+            <p class="check-body">Same identity columns. <span class="mono">owner_mobile</span> is taken from the SMS From header — already verified by physical possession of the device.</p>
+          </div>
+          <span class="tag tag-ok">Supabase</span>
+        </div>
+
+        <div class="check-card">
+          <span class="step-n">03</span>
+          <div>
+            <h3 class="check-title">Insert pricing_book + tenant_service_offerings</h3>
+            <p class="check-body">Identical to web. Easy-5 auto-enabled per trade. Pricing book version bumped on every subsequent edit.</p>
+          </div>
+          <span class="tag tag-ok">Supabase</span>
+        </div>
+
+        <div class="check-card">
+          <span class="step-n">04</span>
+          <div>
+            <h3 class="check-title">Provision AU Twilio number</h3>
+            <p class="check-body">AU only · Voice + SMS + MMS required. Pre-configures <span class="mono">SmsUrl</span> + <span class="mono">VoiceUrl</span> at purchase time.</p>
+          </div>
+          <span class="tag tag-gated">TWILIO_PROVISIONING_ENABLED</span>
+        </div>
+
+        <div class="check-card">
+          <span class="step-n">05</span>
+          <div>
+            <h3 class="check-title">Create Vapi assistant</h3>
+            <p class="check-body">Per-tenant assistant with trade-aware system prompt + chosen voice persona + <span class="mono">serverUrl</span> for post-call hooks.</p>
+          </div>
+          <span class="tag tag-gated">VAPI_PROVISIONING_ENABLED</span>
+        </div>
+
+        <div class="check-card">
+          <span class="step-n">5b</span>
+          <div>
+            <h3 class="check-title">Register Twilio number with Vapi</h3>
+            <p class="check-body">POST <span class="mono">api.vapi.ai/phone-number</span>. Binds the purchased number to the new assistant so calls route correctly.</p>
+          </div>
+          <span class="tag tag-gated">VAPI_PROVISIONING_ENABLED</span>
+        </div>
+
+        <div class="check-card">
+          <span class="step-n">06</span>
+          <div>
+            <h3 class="check-title">Mark SMS intent used + back-link</h3>
+            <p class="check-body"><strong>SMS-only step.</strong> <span class="mono">markIntentUsed(token, tenantId)</span> flips the intent row to consumed, then updates the originating <span class="mono">sms_conversations</span> row: <span class="mono">tenant_id</span> = new tenant, <span class="mono">conversation_type</span> = 'converted'. Idempotent — concurrent activate retries are safe.</p>
+          </div>
+          <span class="tag tag-ok">Supabase</span>
+        </div>
+
+        <div class="check-card">
+          <span class="step-n">07</span>
+          <div>
+            <h3 class="check-title">Update tenants row → active</h3>
+            <p class="check-body">Same as web: stamps <span class="mono">twilio_sms_number</span>, <span class="mono">twilio_voice_number</span>, <span class="mono">vapi_assistant_id</span>, status = <span class="mono">'active'</span>, <span class="mono">activated_at</span> = now().</p>
+          </div>
+          <span class="tag tag-ok">Supabase</span>
+        </div>
+
+        <div class="check-card">
+          <span class="step-n">08</span>
+          <div>
+            <h3 class="check-title">Send welcome SMS</h3>
+            <p class="check-body">From the new tenant's QuoteMate number to their personal mobile. Closes the loop — they get a text from THEIR number seconds after activation.</p>
+          </div>
+          <span class="tag tag-gated">TWILIO_PROVISIONING_ENABLED</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───── DATABASE SCHEMA ───── -->
+  <section class="block">
+    <div class="container">
+      <span class="eyebrow section-eyebrow">Database Schema</span>
+      <h2 class="section-title"><span class="hi">Two migrations</span>, six tables touched.</h2>
+      <p class="section-lead">
+        Migration <span class="mono">015_tenants_onboarding.sql</span> is shared with the web flow.
+        Migration <span class="mono">016_sms_onboarding.sql</span> adds the two SMS-specific pieces:
+        the token table and the conversation_type flag.
+      </p>
+
+      <div class="schema-grid">
+        <div class="schema-card">
+          <h3>tradie_signup_intents (016)</h3>
+          <p class="note">SMS-only. One row per tradie who texted to sign up. Token is a 6-char base64url slug, 24h TTL, single-use. Unique partial index on <span class="mono">(owner_mobile) where used_at is null</span> prevents spam-creation if a tradie texts repeatedly.</p>
+<pre><span class="kw">create table</span> tradie_signup_intents (
+  id                   <span class="ty">uuid</span> primary key
+                        default gen_random_uuid(),
+  token                <span class="ty">text</span> not null unique,
+  owner_mobile         <span class="ty">text</span> not null,
+  sms_conversation_id  <span class="ty">uuid</span>
+                        <span class="cm">-> sms_conversations(id)</span>
+  expires_at           <span class="ty">timestamptz</span> not null
+                        default now() + interval
+                          <span class="cm">-- 24h</span>
+  used_at              <span class="ty">timestamptz</span>,
+  resulting_tenant_id  <span class="ty">uuid</span> <span class="cm">-> tenants(id)</span>,
+  created_at           <span class="ty">timestamptz</span> default now()
+);
+
+<span class="cm">-- Active-token fast lookup by slug.</span>
+<span class="kw">create index</span> tradie_signup_intents
+  _active_lookup
+  <span class="kw">on</span> tradie_signup_intents (token)
+  <span class="kw">where</span> used_at <span class="kw">is null</span>;
+
+<span class="cm">-- One active intent per mobile at a time.</span>
+<span class="kw">create unique index</span>
+  tradie_signup_intents
+  _one_active_per_mobile
+  <span class="kw">on</span> tradie_signup_intents (owner_mobile)
+  <span class="kw">where</span> used_at <span class="kw">is null</span>;</pre>
+        </div>
+
+        <div class="schema-card">
+          <h3>sms_conversations (016 patch)</h3>
+          <p class="note">Existing table. Migration 016 added the <span class="mono">conversation_type</span> column with a 3-value check constraint. The inbound route flips it on turn 1; <span class="mono">markIntentUsed</span> flips it to 'converted' on activation.</p>
+<pre><span class="kw">alter table</span> sms_conversations
+  <span class="kw">add column if not exists</span>
+  conversation_type <span class="ty">text</span> not null
+  default 'customer_quote';
+
+<span class="kw">alter table</span> sms_conversations
+  <span class="kw">add constraint</span>
+  sms_conversations_conversation_type_check
+  check (conversation_type <span class="kw">in</span> (
+    'customer_quote',
+    'tradie_registration',
+    'converted'
+  ));
+
+<span class="cm">-- Index hot-path skip for default rows.</span>
+<span class="kw">create index</span> sms_conversations
+  _conversation_type_idx
+  <span class="kw">on</span> sms_conversations (conversation_type)
+  <span class="kw">where</span> conversation_type &lt;&gt; 'customer_quote';</pre>
+        </div>
+
+        <div class="schema-card">
+          <h3>tenants (015)</h3>
+          <p class="note">Shared with web flow. Same identity, pricing, branding, and provisioned Twilio + Vapi identifiers. Owner_mobile is stamped from the SMS From header (verified by physical possession).</p>
+<pre><span class="kw">create table</span> tenants (
+  id                   <span class="ty">uuid</span> primary key,
+  owner_user_id        <span class="ty">uuid</span> <span class="cm">-> auth.users</span>
+  business_name        <span class="ty">text</span> not null,
+  owner_first_name     <span class="ty">text</span>,
+  owner_email          <span class="ty">text</span> unique,
+  owner_mobile         <span class="ty">text</span> not null,
+  trade                <span class="ty">text</span> <span class="cm">-- electrical | plumbing</span>
+  state                <span class="ty">text</span>,
+  abn                  <span class="ty">text</span>,
+  licence_type         <span class="ty">text</span>,
+  licence_number       <span class="ty">text</span>,
+  licence_expiry       <span class="ty">date</span>,
+  twilio_sms_number    <span class="ty">text</span> unique,
+  twilio_voice_number  <span class="ty">text</span> unique,
+  vapi_assistant_id    <span class="ty">text</span>,
+  vapi_voice_persona   <span class="ty">text</span>,
+  stripe_connect_account_id <span class="ty">text</span>,
+  status               <span class="ty">text</span> <span class="cm">-- onboarding | active</span>
+  created_at           <span class="ty">timestamptz</span>,
+  activated_at         <span class="ty">timestamptz</span>
+);</pre>
+        </div>
+
+        <div class="schema-card">
+          <h3>pricing_book (015 patch)</h3>
+          <p class="note">Existing table. Migration 015 added <span class="mono">tenant_id</span>, <span class="mono">senior_rate</span>, <span class="mono">after_hours_multiplier</span>. One row per (tenant, trade).</p>
+<pre><span class="kw">alter table</span> pricing_book
+  <span class="kw">add</span> tenant_id              <span class="ty">uuid</span> <span class="cm">-> tenants(id)</span>,
+  <span class="kw">add</span> senior_rate            <span class="ty">numeric(8,2)</span>,
+  <span class="kw">add</span> after_hours_multiplier <span class="ty">numeric(4,2)</span>
+        default 1.5;
+
+<span class="cm">-- Existing columns that matter:</span>
+<span class="cm">--   hourly_rate, call_out_minimum,</span>
+<span class="cm">--   apprentice_rate, default_markup_pct,</span>
+<span class="cm">--   risk_buffer_pct, min_labour_hours,</span>
+<span class="cm">--   gst_registered,</span>
+<span class="cm">--   licence_type/number/state/expiry</span>
+
+<span class="kw">create unique index</span>
+  pricing_book_tenant_trade_unique
+  <span class="kw">on</span> pricing_book (tenant_id, trade)
+  <span class="kw">where</span> tenant_id <span class="kw">is not null</span>;</pre>
+        </div>
+
+        <div class="schema-card">
+          <h3>tenant_service_offerings (015)</h3>
+          <p class="note">Which catalogue items the tradie offers. Auto-populated with the easy-5 for their trade on activate.</p>
+<pre><span class="kw">create table</span> tenant_service_offerings (
+  tenant_id    <span class="ty">uuid</span> <span class="cm">-> tenants(id)</span>,
+  assembly_id  <span class="ty">uuid</span> <span class="cm">-> shared_assemblies(id)</span>,
+  enabled      <span class="ty">boolean</span> default true,
+  <span class="kw">primary key</span> (tenant_id, assembly_id)
+);</pre>
+        </div>
+
+        <div class="schema-card">
+          <h3>tenant_id added to operational tables (015)</h3>
+          <p class="note">Every downstream table got the tenant_id column for per-tradie scoping. SMS conversations get back-linked on markIntentUsed via this column.</p>
+<pre><span class="kw">alter table</span> intakes
+  <span class="kw">add</span> tenant_id <span class="ty">uuid</span> <span class="cm">-> tenants(id)</span>;
+
+<span class="kw">alter table</span> quotes
+  <span class="kw">add</span> tenant_id <span class="ty">uuid</span> <span class="cm">-> tenants(id)</span>;
+
+<span class="kw">alter table</span> calls
+  <span class="kw">add</span> tenant_id <span class="ty">uuid</span> <span class="cm">-> tenants(id)</span>;
+
+<span class="kw">alter table</span> sms_conversations
+  <span class="kw">add</span> tenant_id <span class="ty">uuid</span> <span class="cm">-> tenants(id)</span>;
+
+<span class="kw">alter table</span> customers
+  <span class="kw">add</span> tenant_id <span class="ty">uuid</span> <span class="cm">-> tenants(id)</span>;</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───── INTENT TOKEN LIFECYCLE ───── -->
+  <section class="block">
+    <div class="container">
+      <span class="eyebrow section-eyebrow">Intent token lifecycle</span>
+      <h2 class="section-title">Token <span class="hi">follows the tradie</span> from SMS to active.</h2>
+      <p class="section-lead">
+        Token is the single thread that connects the SMS thread, the signup page, email
+        verification, the wizard, and the activate endpoint. Each helper lives in
+        <span class="mono">lib/onboard/intent-tokens.ts</span>.
+      </p>
+
+      <div class="schema-grid">
+        <div class="schema-card">
+          <h3>createOrGetActiveIntent</h3>
+          <p class="note">Called from <span class="mono">/api/sms/inbound</span> after the classifier returns tradie_registration. Reuses an existing active row, refreshes expired-but-unused rows with a new token, or inserts fresh. Race-safe via unique constraint + retry.</p>
+<pre><span class="kw">async function</span> <span class="ty">createOrGetActiveIntent</span>(args) {
+  <span class="cm">// 1. unused row for this mobile?</span>
+  <span class="kw">const</span> existing =
+    .from(<span class="str">'tradie_signup_intents'</span>)
+    .eq(<span class="str">'owner_mobile'</span>, m)
+    .is(<span class="str">'used_at'</span>, <span class="kw">null</span>);
+
+  <span class="kw">if</span> (active)  return reuse
+  <span class="kw">if</span> (expired) return refresh
+  <span class="kw">else</span>         return insert
+}</pre>
+        </div>
+
+        <div class="schema-card">
+          <h3>resolveActiveIntent</h3>
+          <p class="note">Called from <span class="mono">/api/onboard/intent/[token]</span> when the signup page loads. Returns the prefill payload (mobile + sms_conversation_id) or null if the token is missing, expired, or already used.</p>
+<pre><span class="kw">async function</span> <span class="ty">resolveActiveIntent</span>(token) {
+  <span class="kw">return</span> supabase
+    .from(<span class="str">'tradie_signup_intents'</span>)
+    .eq(<span class="str">'token'</span>, token)
+    .is(<span class="str">'used_at'</span>, <span class="kw">null</span>)
+    .gt(<span class="str">'expires_at'</span>, now())
+    .maybeSingle();
+}</pre>
+        </div>
+
+        <div class="schema-card">
+          <h3>markIntentUsed</h3>
+          <p class="note">Called by <span class="mono">/api/onboard/activate</span> after the tenant row exists. Flips the intent to consumed, stamps the new tenant_id, AND back-links the originating <span class="mono">sms_conversations</span> row (tenant_id + conversation_type='converted'). Idempotent.</p>
+<pre><span class="kw">async function</span> <span class="ty">markIntentUsed</span>(token, tenantId) {
+  <span class="kw">const</span> row = update intent {
+    used_at: now(),
+    resulting_tenant_id: tenantId
+  }
+
+  <span class="kw">if</span> (row.sms_conversation_id) {
+    update sms_conversations {
+      tenant_id: tenantId,
+      conversation_type: <span class="str">'converted'</span>
+    }
+  }
+}</pre>
+        </div>
+
+        <div class="schema-card">
+          <h3>Token carry-through path</h3>
+          <p class="note">The token traverses six surfaces. Each handoff must preserve it unmodified — Supabase's emailRedirectTo is the trickiest piece (encoded into the magic link query string).</p>
+<pre>SMS reply: <span class="ty">/signup?intent=k4f2x9</span>
+  ↓ tap
+/signup (prefill via
+  /api/onboard/intent/[token])
+  ↓ submit
+Supabase signup w/
+  emailRedirectTo containing intent
+  ↓ verify link
+/auth/callback reads intent
+  ↓ forward
+/onboard?intent=k4f2x9
+  ↓ activate
+POST /api/onboard/activate
+  includes intent_token field
+  ↓
+<span class="kw">markIntentUsed</span>(token, tenantId)</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───── EXTERNAL SERVICES ───── -->
+  <section class="block">
+    <div class="container">
+      <span class="eyebrow section-eyebrow">External Services</span>
+      <h2 class="section-title">Four integrations, <span class="hi">zero manual config</span>.</h2>
+      <p class="section-lead">
+        One more than the web flow: Anthropic Haiku 4.5 sits on the SMS-inbound hot path as
+        the regex fallback. Twilio plays a double role — first the shared QuoteMate number
+        that catches the inbound, then the per-tenant number purchased on activate.
+      </p>
+
+      <div class="services">
+        <div class="svc">
+          <div class="svc-name">Supabase</div>
+          <div class="svc-role">Auth + Postgres. Same role as the web flow plus the tradie_signup_intents table and sms_conversations.conversation_type column. markIntentUsed is the only SMS-specific server-side mutation.</div>
+          <div class="svc-creds">
+            <strong>Env:</strong><br />
+            NEXT_PUBLIC_SUPABASE_URL<br />
+            NEXT_PUBLIC_SUPABASE_ANON_KEY<br />
+            SUPABASE_SERVICE_ROLE_KEY<br />
+            SUPABASE_DB_URL
+          </div>
+        </div>
+
+        <div class="svc">
+          <div class="svc-name">Twilio</div>
+          <div class="svc-role">Receives the inbound SMS on the shared QuoteMate number, posts to /api/sms/inbound. Later, buys the tenant's own AU number. Sends the welcome SMS link from the shared number AND the post-activation welcome from the new tenant number.</div>
+          <div class="svc-creds">
+            <strong>Env:</strong><br />
+            TWILIO_ACCOUNT_SID<br />
+            TWILIO_AUTH_TOKEN<br />
+            TWILIO_SHARED_FROM_NUMBER<br />
+            APP_URL <span class="svc-optional">(webhooks)</span><br />
+            TWILIO_PROVISIONING_ENABLED
+          </div>
+        </div>
+
+        <div class="svc">
+          <div class="svc-name">Anthropic (Haiku 4.5)</div>
+          <div class="svc-role">Fallback intent classifier. Only called when regex returns ambiguous AND the message has ≥4 words. Returns structured { intent, confidence, reasoning } via generateObject() with a Zod schema. ~$0.0001/call, ~300ms.</div>
+          <div class="svc-creds">
+            <strong>Env:</strong><br />
+            ANTHROPIC_API_KEY<br />
+            AI_GATEWAY_API_KEY <span class="svc-optional">(optional)</span>
+          </div>
+        </div>
+
+        <div class="svc">
+          <div class="svc-name">Vapi</div>
+          <div class="svc-role">Per-tenant assistant created in step 5. Identical to the web flow — SMS branch never touches Vapi until activation.</div>
+          <div class="svc-creds">
+            <strong>Env:</strong><br />
+            VAPI_API_KEY<br />
+            VAPI_VOICE_JON <span class="svc-optional">(optional)</span><br />
+            VAPI_VOICE_SARAH <span class="svc-optional">(optional)</span><br />
+            VAPI_PROVISIONING_ENABLED
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───── WEBHOOK AUTO-CONFIG ───── -->
+  <section class="block">
+    <div class="container">
+      <span class="eyebrow section-eyebrow">Webhook Auto-config</span>
+      <h2 class="section-title">Same wiring as <span class="hi">web onboarding</span>.</h2>
+      <p class="section-lead">
+        New tenant numbers arrive with both webhooks pre-configured at Twilio purchase time.
+        The shared QuoteMate number that catches the inbound is wired once, manually, in the
+        Twilio console — it's the only number that isn't auto-provisioned.
+      </p>
+
+      <div class="schema-grid">
+        <div class="schema-card">
+          <h3>SMS webhook (per-tenant)</h3>
+          <p class="note">Customer SMS lands on our app. Inbound route resolves tenant by destination number, then runs the customer dialog with the tenant's pricing book.</p>
+<pre><span class="kw">URL:</span>    https://quote-mate-rho.vercel.app
+       /api/sms/inbound
+<span class="kw">METHOD:</span> POST</pre>
+        </div>
+
+        <div class="schema-card">
+          <h3>Voice webhook (per-tenant)</h3>
+          <p class="note">Customer call lands on Vapi's hosted endpoint. Vapi looks up the destination number in its phone-number table (registered in step 5b) and runs the bound assistant.</p>
+<pre><span class="kw">URL:</span>    https://api.vapi.ai
+       /twilio/inbound_call
+<span class="kw">METHOD:</span> POST</pre>
+        </div>
+
+        <div class="schema-card">
+          <h3>Shared QuoteMate number (manual)</h3>
+          <p class="note">The +61 481 613 464 line that catches inbound tradie texts. Wired once in the Twilio console — points to the SAME /api/sms/inbound endpoint as per-tenant numbers. The route disambiguates by checking tenant_id on the conversation.</p>
+<pre><span class="kw">SMS:</span>  https://quote-mate-rho.vercel.app
+      /api/sms/inbound
+<span class="cm">// no voice wiring — SMS only</span></pre>
+        </div>
+
+        <div class="schema-card">
+          <h3>Tenant resolution priority</h3>
+          <p class="note">When an SMS arrives at /api/sms/inbound, the route looks up the tenant in this order. Falling all the way through to legacy_pilot_trade is what makes the shared QuoteMate number a valid "inbound" surface.</p>
+<pre>1. tenantByDestinationSms(To)
+2. tenantByOwnerUser(authed)
+3. tenantByLegacyPilotTrade()
+   <span class="cm">// shared number falls here</span>
+4. → run intent classifier</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───── ENV FLAGS ───── -->
+  <section class="block">
+    <div class="container">
+      <span class="eyebrow section-eyebrow">Activation Flags</span>
+      <h2 class="section-title">Three flags decide <span class="hi">stub vs real</span>.</h2>
+      <p class="section-lead">
+        Same two flags as the web flow plus the shared-number env. SMS development can run
+        end-to-end without any Twilio money — the inbound classifier + token issuance +
+        activation all work; just no actual outbound SMS.
+      </p>
+
+      <div class="flags">
+        <h3>Environment toggles</h3>
+        <div class="flags-table">
+          <div class="flags-row">
+            <span class="flags-key">TWILIO_PROVISIONING_ENABLED=true</span>
+            <span class="flags-value">→ real number buy + welcome SMS</span>
+          </div>
+          <div class="flags-row">
+            <span class="flags-key">VAPI_PROVISIONING_ENABLED=true</span>
+            <span class="flags-value">→ real assistant create + number register</span>
+          </div>
+          <div class="flags-row">
+            <span class="flags-key">TWILIO_SHARED_FROM_NUMBER=+61481613464</span>
+            <span class="flags-value">→ source for SMS reply with magic link</span>
+          </div>
+          <div class="flags-row">
+            <span class="flags-key">ANTHROPIC_API_KEY=sk-ant-...</span>
+            <span class="flags-value">→ enables Haiku fallback classifier</span>
+          </div>
+          <div class="flags-row">
+            <span class="flags-key">APP_URL=https://quote-mate-rho.vercel.app</span>
+            <span class="flags-value">→ webhook destination + magic link host</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───── CTA BAR ───── -->
+  <div class="cta-bar">
+    Migrations 015 + 016 applied · Hybrid classifier · Token lifecycle wired · Same activate chain as web
+  </div>
+</body>
+</html>

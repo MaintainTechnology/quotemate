@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QuoteMate · How the AI Picture Gets Made</title>
+  <meta name="description" content="Plain-English walkthrough of QuoteMate's three engines: Intake → Estimation → IG Engine. How a customer text becomes a quote with a finished-install preview image." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink-deep:#0E1622; --ink:#141C29; --ink-card:#1B2433; --ink-line:#2D3A4F;
+      --accent:#FF5A1F; --accent-press:#E8470F; --accent-soft:#FF7A45;
+      --text-pri:#FFFFFF; --text-sec:#B8C2D1; --text-dim:#7A8699;
+      --teal-glow:#14B8A6; --teal-deep:#0F766E;
+    }
+    *,*::before,*::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--ink-deep);
+      color: var(--text-pri);
+      font-family: 'Manrope', system-ui, -apple-system, sans-serif;
+      font-weight: 400;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 80rem; margin: 0 auto; padding: 0 1.5rem; position: relative; }
+
+    /* ─── Topographic SVG background ─────────────────────────────── */
+    .topo {
+      position: fixed; inset: 0; width: 100%; height: 100%;
+      pointer-events: none; opacity: 0.18; z-index: 0;
+    }
+
+    /* ─── Type ──────────────────────────────────────────────────── */
+    .eyebrow {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.72rem; font-weight: 600;
+      letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--text-dim);
+    }
+    .display-mega {
+      font-weight: 900; text-transform: uppercase;
+      font-size: clamp(2.75rem, 7vw, 5.5rem);
+      line-height: 0.96; letter-spacing: -0.035em;
+      margin: 0.75rem 0 0;
+    }
+    .display-lg {
+      font-weight: 800; text-transform: uppercase;
+      font-size: clamp(2rem, 4vw, 3.25rem);
+      line-height: 1.0; letter-spacing: -0.03em;
+      margin: 0;
+    }
+    .display-md {
+      font-weight: 800; text-transform: uppercase;
+      font-size: clamp(1.25rem, 2vw, 1.5rem);
+      line-height: 1.15; letter-spacing: -0.02em;
+      margin: 0;
+    }
+    .accent { color: var(--accent); }
+    p { margin: 0; color: var(--text-sec); }
+    p + p { margin-top: 0.75rem; }
+
+    /* ─── Sections ──────────────────────────────────────────────── */
+    section { position: relative; z-index: 1; }
+    .section-pad { padding: 4.5rem 0; }
+
+    /* ─── Hero ──────────────────────────────────────────────────── */
+    .hero {
+      padding: 5rem 0 3rem;
+      border-bottom: 1px solid var(--ink-line);
+    }
+    .hero-grid {
+      display: grid; gap: 2.5rem;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 900px) {
+      .hero-grid { grid-template-columns: 2fr 1fr; align-items: end; gap: 4rem; }
+    }
+    .hero p { font-size: 1.05rem; line-height: 1.65; }
+
+    /* ─── Pipeline cards ────────────────────────────────────────── */
+    .pipeline {
+      display: grid; gap: 1rem;
+      grid-template-columns: 1fr;
+      margin-top: 2rem;
+    }
+    @media (min-width: 700px) { .pipeline { grid-template-columns: repeat(2, 1fr); } }
+    @media (min-width: 1100px) { .pipeline { grid-template-columns: repeat(4, 1fr); } }
+    .stop {
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      padding: 1.5rem;
+      display: flex; flex-direction: column; gap: 0.75rem;
+      min-height: 11rem;
+    }
+    .stop-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 2.5rem; font-weight: 700; line-height: 1;
+      color: var(--accent);
+    }
+    .stop-title {
+      font-weight: 800; text-transform: uppercase;
+      letter-spacing: -0.01em; font-size: 1.05rem;
+      color: var(--text-pri);
+    }
+    .stop-body { color: var(--text-sec); font-size: 0.92rem; line-height: 1.55; }
+
+    /* ─── Flow diagram wrapper ──────────────────────────────────── */
+    .diagram {
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+    .diagram svg { width: 100%; height: auto; min-width: 720px; }
+
+    /* ─── Engine triptychs (IN / RULES / OUT) ───────────────────── */
+    .engine {
+      display: grid; gap: 1rem;
+      grid-template-columns: 1fr;
+      background: var(--ink);
+      border: 1px solid var(--ink-line);
+      padding: 1.5rem;
+    }
+    @media (min-width: 900px) {
+      .engine { grid-template-columns: 1fr 1.4fr 1fr; gap: 1.5rem; padding: 2rem; }
+    }
+    .col h4 {
+      margin: 0 0 0.75rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem; letter-spacing: 0.14em;
+      font-weight: 700; text-transform: uppercase;
+      color: var(--accent);
+    }
+    .col ul { margin: 0; padding-left: 1.1rem; color: var(--text-sec); font-size: 0.95rem; }
+    .col li + li { margin-top: 0.4rem; }
+    .col p { font-size: 0.95rem; }
+
+    /* ─── Engine header ─────────────────────────────────────────── */
+    .engine-header {
+      display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap;
+      margin: 2.5rem 0 1rem;
+    }
+    .engine-tag {
+      display: inline-block;
+      background: var(--accent); color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem; font-weight: 700;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      padding: 0.25rem 0.6rem;
+    }
+
+    /* ─── Safety-net cards ──────────────────────────────────────── */
+    .safety {
+      display: grid; gap: 1rem; grid-template-columns: 1fr;
+      margin-top: 1.5rem;
+    }
+    @media (min-width: 800px) { .safety { grid-template-columns: repeat(3, 1fr); } }
+    .safety-card {
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      border-left: 3px solid var(--accent);
+      padding: 1.25rem 1.5rem;
+    }
+    .safety-card h5 {
+      margin: 0 0 0.5rem;
+      font-weight: 800; text-transform: uppercase;
+      letter-spacing: -0.01em; font-size: 1rem;
+    }
+    .safety-card p { font-size: 0.9rem; }
+
+    /* ─── Worked example ────────────────────────────────────────── */
+    .example {
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      padding: 1.75rem;
+      margin-top: 2rem;
+    }
+    .example ol { margin: 0; padding-left: 1.25rem; color: var(--text-sec); }
+    .example li { margin-bottom: 0.85rem; line-height: 1.6; }
+    .example li strong {
+      color: var(--text-pri); font-weight: 800;
+      text-transform: uppercase; letter-spacing: 0.04em;
+      font-size: 0.78rem;
+      display: inline-block; margin-right: 0.5rem;
+    }
+    .mono { font-family: 'JetBrains Mono', monospace; color: var(--text-pri); font-size: 0.9rem; }
+
+    /* ─── Dividers ──────────────────────────────────────────────── */
+    .rule { border: 0; height: 1px; background: var(--ink-line); margin: 4rem 0; }
+
+    /* ─── CTA accent bar ────────────────────────────────────────── */
+    .cta-bar {
+      background: var(--accent); color: #fff;
+      text-align: center; padding: 1.25rem 1.5rem;
+      margin-top: 4rem;
+    }
+    .cta-bar span {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem; font-weight: 600;
+      letter-spacing: 0.15em; text-transform: uppercase;
+    }
+
+    /* ─── Reduced motion ────────────────────────────────────────── */
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Topographic background ──────────────────────────────────── -->
+<svg class="topo" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+  <g fill="none" stroke="var(--teal-glow)" stroke-width="1">
+    <path d="M0,820 Q220,640 440,720 T880,690 T1320,700 T1700,640 T1920,680" />
+    <path d="M0,720 Q220,560 440,620 T880,600 T1320,620 T1700,560 T1920,580" />
+    <path d="M0,620 Q220,480 440,540 T880,510 T1320,540 T1700,470 T1920,500" />
+    <path d="M0,520 Q220,400 440,460 T880,440 T1320,460 T1700,390 T1920,420" />
+    <path d="M0,420 Q220,320 440,380 T880,360 T1320,380 T1700,310 T1920,340" />
+    <path d="M0,320 Q220,240 440,300 T880,280 T1320,300 T1700,230 T1920,260" />
+  </g>
+</svg>
+
+<main>
+
+  <!-- ══ HERO ═══════════════════════════════════════════════════ -->
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <span class="eyebrow">IG Engine · How it works</span>
+        <h1 class="display-mega">
+          HOW A <span class="accent">TEXT</span> BECOMES A <span class="accent">PICTURE</span>
+        </h1>
+      </div>
+      <aside>
+        <p>
+          A customer texts QuoteMate. Four engines later, they get a quote
+          with a photo of their own room — with the new fittings already installed.
+        </p>
+        <p>
+          This page explains what happens between those two points, in plain English.
+        </p>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ══ PIPELINE — 4 NUMBERED CARDS ════════════════════════════ -->
+  <section class="section-pad">
+    <div class="wrap">
+      <span class="eyebrow">The pipeline</span>
+      <h2 class="display-lg" style="margin-top:.5rem;">FOUR <span class="accent">STOPS</span>, START TO FINISH.</h2>
+      <div class="pipeline" role="list">
+        <article class="stop" role="listitem">
+          <span class="stop-num">01</span>
+          <h3 class="stop-title">Customer message</h3>
+          <p class="stop-body">A text, voice call, or photo upload. The raw request — usually messy, partial, conversational.</p>
+        </article>
+        <article class="stop" role="listitem">
+          <span class="stop-num">02</span>
+          <h3 class="stop-title">Intake Engine</h3>
+          <p class="stop-body">Reads the message + photos. Turns it into a tidy record: what job, how many, what room, who, when.</p>
+        </article>
+        <article class="stop" role="listitem">
+          <span class="stop-num">03</span>
+          <h3 class="stop-title">Estimation Engine</h3>
+          <p class="stop-body">Prices the job using the tradie's real price list. Builds three tiers — Good / Better / Best — with real products.</p>
+        </article>
+        <article class="stop" role="listitem">
+          <span class="stop-num">04</span>
+          <h3 class="stop-title">IG Engine</h3>
+          <p class="stop-body">Edits the customer's room photo to show the finished install. Counts checked, products matched, retried until right.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ BIG FLOW DIAGRAM ══════════════════════════════════════ -->
+  <section class="section-pad" style="padding-top:0;">
+    <div class="wrap">
+      <span class="eyebrow">The full flow</span>
+      <h2 class="display-lg" style="margin: .5rem 0 1.5rem;">FROM <span class="accent">MESSAGE</span> TO <span class="accent">IMAGE</span>.</h2>
+      <div class="diagram">
+        <svg viewBox="0 0 1200 360" role="img" aria-labelledby="diagram-title">
+          <title id="diagram-title">Pipeline data flow from customer message to finished AI preview image</title>
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0,0 L10,5 L0,10 z" fill="#FF5A1F"/>
+            </marker>
+          </defs>
+
+          <!-- Stations -->
+          <g font-family="Manrope, sans-serif" font-weight="800" fill="#FFFFFF" text-anchor="middle">
+            <!-- 1. Customer -->
+            <rect x="20"  y="120" width="180" height="120" fill="#1B2433" stroke="#2D3A4F" />
+            <text x="110" y="155" font-size="11" fill="#7A8699" letter-spacing="2" font-family="JetBrains Mono, monospace">01 SOURCE</text>
+            <text x="110" y="185" font-size="18">CUSTOMER</text>
+            <text x="110" y="210" font-size="11" fill="#B8C2D1" font-weight="400">Text · Voice · Photos</text>
+
+            <!-- 2. Intake -->
+            <rect x="260" y="120" width="180" height="120" fill="#1B2433" stroke="#2D3A4F" />
+            <text x="350" y="155" font-size="11" fill="#FF5A1F" letter-spacing="2" font-family="JetBrains Mono, monospace">02 INTAKE</text>
+            <text x="350" y="185" font-size="17">UNDERSTAND</text>
+            <text x="350" y="210" font-size="11" fill="#B8C2D1" font-weight="400">Claude Opus 4.7</text>
+
+            <!-- 3. Estimator -->
+            <rect x="500" y="120" width="180" height="120" fill="#1B2433" stroke="#2D3A4F" />
+            <text x="590" y="155" font-size="11" fill="#FF5A1F" letter-spacing="2" font-family="JetBrains Mono, monospace">03 ESTIMATE</text>
+            <text x="590" y="185" font-size="18">PRICE IT</text>
+            <text x="590" y="210" font-size="11" fill="#B8C2D1" font-weight="400">Claude + Price Book</text>
+
+            <!-- 4. IG Engine -->
+            <rect x="740" y="120" width="180" height="120" fill="#1B2433" stroke="#FF5A1F" stroke-width="2" />
+            <text x="830" y="155" font-size="11" fill="#FF5A1F" letter-spacing="2" font-family="JetBrains Mono, monospace">04 IG ENGINE</text>
+            <text x="830" y="185" font-size="18">DRAW IT</text>
+            <text x="830" y="210" font-size="11" fill="#B8C2D1" font-weight="400">Gemini · GPT-image-2</text>
+
+            <!-- 5. Image -->
+            <rect x="980" y="120" width="200" height="120" fill="#1B2433" stroke="#2D3A4F" />
+            <text x="1080" y="155" font-size="11" fill="#7A8699" letter-spacing="2" font-family="JetBrains Mono, monospace">05 RESULT</text>
+            <text x="1080" y="185" font-size="18">CUSTOMER SEES</text>
+            <text x="1080" y="210" font-size="11" fill="#B8C2D1" font-weight="400">Their room · finished</text>
+          </g>
+
+          <!-- Arrows + data labels -->
+          <g stroke="#FF5A1F" stroke-width="2" fill="none" marker-end="url(#arrow)">
+            <line x1="200" y1="180" x2="256" y2="180" />
+            <line x1="440" y1="180" x2="496" y2="180" />
+            <line x1="680" y1="180" x2="736" y2="180" />
+            <line x1="920" y1="180" x2="976" y2="180" />
+          </g>
+
+          <g font-family="JetBrains Mono, monospace" font-size="9" fill="#14B8A6" text-anchor="middle" letter-spacing="1">
+            <text x="228" y="170">RAW</text>
+            <text x="468" y="170">JSON INTAKE</text>
+            <text x="708" y="170">QUOTE + PHOTOS</text>
+            <text x="948" y="170">IMAGE BYTES</text>
+          </g>
+
+          <!-- Verify loop arrow -->
+          <g stroke="#14B8A6" stroke-width="1.5" fill="none" stroke-dasharray="5 3">
+            <path d="M 830 240 Q 830 290 830 290 L 830 305" />
+          </g>
+          <rect x="730" y="305" width="200" height="35" fill="#0E1622" stroke="#14B8A6" stroke-dasharray="5 3" />
+          <text x="830" y="328" font-family="JetBrains Mono, monospace" font-size="10" fill="#14B8A6" text-anchor="middle" letter-spacing="1">JUDGE · RETRY IF WRONG</text>
+
+          <!-- Top eyebrow -->
+          <text x="600" y="40" font-family="JetBrains Mono, monospace" font-size="11" fill="#7A8699" text-anchor="middle" letter-spacing="3">PIPELINE · DATA FLOWS LEFT TO RIGHT</text>
+          <line x1="20" y1="65" x2="1180" y2="65" stroke="#2D3A4F" />
+        </svg>
+      </div>
+      <p style="font-size: .85rem; color: var(--text-dim); margin-top: 1rem;">
+        Each engine hands a tidier, more structured packet to the next. The IG Engine is the only one that produces an image — everything before it is text and data.
+      </p>
+    </div>
+  </section>
+
+  <hr class="rule" />
+
+  <!-- ══ INTAKE ENGINE ═════════════════════════════════════════ -->
+  <section>
+    <div class="wrap">
+      <div class="engine-header">
+        <span class="engine-tag">02 · Intake Engine</span>
+        <h3 class="display-lg">THE <span class="accent">LISTENER</span>.</h3>
+      </div>
+      <p style="max-width: 60ch; margin-bottom: 1.5rem;">
+        Turns a messy human message into structured facts the rest of the system can rely on.
+      </p>
+      <div class="engine">
+        <div class="col">
+          <h4>What comes in</h4>
+          <ul>
+            <li>SMS text or voice transcript.</li>
+            <li>Photos the customer uploaded.</li>
+            <li>Their phone number and name (if known).</li>
+          </ul>
+        </div>
+        <div class="col">
+          <h4>What the AI is told</h4>
+          <ul>
+            <li>Pull out: <em>what job, how many, what room, who, when</em>.</li>
+            <li>Look at the photos and add what you see.</li>
+            <li>Decide: <em>new install</em> or <em>replacing something old</em>?</li>
+            <li>Decide: safe to quote, or send to a <em>site inspection</em>? Some jobs always need a visit — gas hot water, switchboard work, anything on the mains.</li>
+            <li>Tag the trade (electrical vs plumbing) from the job type.</li>
+          </ul>
+        </div>
+        <div class="col">
+          <h4>What comes out</h4>
+          <p>A tidy record with every field filled in:</p>
+          <p class="mono">{ job_type, count, room, replacing?, tenant, customer, photos, needs_inspection }</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ ESTIMATION ENGINE ═════════════════════════════════════ -->
+  <section style="margin-top: 3rem;">
+    <div class="wrap">
+      <div class="engine-header">
+        <span class="engine-tag">03 · Estimation Engine</span>
+        <h3 class="display-lg">THE <span class="accent">PRICER</span>.</h3>
+      </div>
+      <p style="max-width: 60ch; margin-bottom: 1.5rem;">
+        Takes the structured job and builds a real quote with three tiers — using the tradie's actual price list, not made-up numbers.
+      </p>
+      <div class="engine">
+        <div class="col">
+          <h4>What comes in</h4>
+          <ul>
+            <li>The structured record from the Intake Engine.</li>
+            <li>The tradie's price list (hourly rate, callout, markup).</li>
+            <li>A catalogue of real products — with prices and photos.</li>
+          </ul>
+        </div>
+        <div class="col">
+          <h4>What the AI is told</h4>
+          <ul>
+            <li>You're a <em>[electrical / plumbing]</em> estimator in <em>[NSW / QLD]</em>.</li>
+            <li>Use <em>only</em> prices from the tradie's price list. Never invent a number.</li>
+            <li>Build three tiers — <em>Good</em>, <em>Better</em>, <em>Best</em>. Same install, different product brand and finish.</li>
+            <li>If something doesn't fit cleanly, fall back to a $99 site inspection rather than guess.</li>
+            <li>A separate non-AI check verifies every price came from the price list. Quotes that fail get downgraded to a $99 inspection automatically.</li>
+          </ul>
+        </div>
+        <div class="col">
+          <h4>What comes out</h4>
+          <p>A three-tier quote where every line item is linked to a real product (including its photo):</p>
+          <p class="mono">{ good: {...}, better: {...}, best: {...} }</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ IG ENGINE ═════════════════════════════════════════════ -->
+  <section style="margin-top: 3rem;">
+    <div class="wrap">
+      <div class="engine-header">
+        <span class="engine-tag">04 · IG Engine</span>
+        <h3 class="display-lg">THE <span class="accent">ARTIST</span>.</h3>
+      </div>
+      <p style="max-width: 60ch; margin-bottom: 1.5rem;">
+        Takes everything we now know — the job, the count, the exact product — and edits the customer's photo to show it installed.
+      </p>
+      <div class="engine">
+        <div class="col">
+          <h4>What comes in</h4>
+          <ul>
+            <li>The customer's room photo.</li>
+            <li>The exact product photo from the quote.</li>
+            <li>All the structured details: count, brand, room, customer name.</li>
+          </ul>
+        </div>
+        <div class="col">
+          <h4>What the AI is told (~400 words)</h4>
+          <ul>
+            <li><strong>Task.</strong> Edit the attached photo to show the install completed.</li>
+            <li><strong>Spec.</strong> Exact count, brand, model, finish.</li>
+            <li><strong>Must.</strong> Render exactly N items. Match the anchor product. Keep walls, floor, furniture, lighting identical. Photoreal, day-of-handover.</li>
+            <li><strong>Must not.</strong> Wrong count. People, packaging, text overlays. Generic substitutes for the real product.</li>
+            <li><strong>Placement.</strong> Ordinal list of where each item goes (e.g. "downlight 1: front-left of room…").</li>
+          </ul>
+        </div>
+        <div class="col">
+          <h4>What comes out</h4>
+          <p>The edited photo, uploaded to storage, ready to show the customer on their quote page.</p>
+          <p>The original photo's shape (16:9, 4:3 etc.) is preserved — no awkward cropping.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="rule" />
+
+  <!-- ══ ACCURACY SAFETY NET ═══════════════════════════════════ -->
+  <section>
+    <div class="wrap">
+      <span class="eyebrow">Accuracy safety net</span>
+      <h2 class="display-lg" style="margin-top:.5rem;">THREE <span class="accent">CHECKS</span> ON EVERY RENDER.</h2>
+      <p style="max-width: 60ch; margin-top: 1rem;">Image AI gets things wrong. The IG Engine assumes it will, and catches them.</p>
+
+      <div class="safety">
+        <article class="safety-card">
+          <h5>Two-pass for replacements</h5>
+          <p>When the job is replacing an old fitting, the engine first does a removal pass — strips the old one out — then installs the new one. Stops the AI leaving both in the picture.</p>
+        </article>
+        <article class="safety-card">
+          <h5>Independent Claude judge</h5>
+          <p>A different AI (Claude) reviews the rendered image. Counts items, checks the product matches, confirms the old fitting is gone. Different model = different blind spots.</p>
+        </article>
+        <article class="safety-card">
+          <h5>Retry with feedback</h5>
+          <p>If the judge fails the render, the engine re-renders with the exact defect named — "you drew 7 but we asked for 6" — and tries again. Up to twice.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ WORKED EXAMPLE ════════════════════════════════════════ -->
+  <section class="section-pad">
+    <div class="wrap">
+      <span class="eyebrow">A real example</span>
+      <h2 class="display-lg" style="margin-top:.5rem;">SIX <span class="accent">DOWNLIGHTS</span> IN SARAH'S LOUNGE.</h2>
+
+      <div class="example">
+        <ol>
+          <li>
+            <strong>01 · Customer.</strong>
+            Sarah texts: <em>"hi can i get a quote for 6 downlights in my lounge, replacing the old ones, here's a photo"</em>
+          </li>
+          <li>
+            <strong>02 · Intake Engine.</strong>
+            Reads the text + photo. Produces:
+            <span class="mono">{ job_type: "downlights", count: 6, room: "lounge", is_new_install: false, photos: ["sarah-lounge.jpg"], needs_inspection: false, trade: "electrical" }</span>
+          </li>
+          <li>
+            <strong>03 · Estimation Engine.</strong>
+            Builds three tiers from the electrician's price list. Each tier is "6 × downlights" — same install, different brand. Picks the matching product photo from the catalogue for each tier.
+          </li>
+          <li>
+            <strong>04 · IG Engine.</strong>
+            Edits Sarah's lounge photo. Removes the old downlights (pass 1). Installs 6 of the chosen brand in an even grid (pass 2). Keeps the walls, sofa, flooring identical.
+          </li>
+          <li>
+            <strong>04a · Judge.</strong>
+            Claude reviews: <em>counts 6 ✓, product matches ✓, old ones gone ✓</em>. Pass.
+          </li>
+          <li>
+            <strong>05 · Sarah sees.</strong>
+            A finished-install photo of her own lounge, with the quote underneath. Decision becomes obvious.
+          </li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ══ CTA accent bar — closing punctuation ══════════════════════ -->
+<div class="cta-bar">
+  <span>Quotemate · Intake → Estimation → IG Engine</span>
+</div>
+
+</body>
+</html>

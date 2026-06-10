@@ -1,0 +1,4 @@
+trade,name,description,unit,service_fee_ex_gst,labour_hours,exclusions,category,clarifying_question_1,clarifying_question_2,clarifying_question_3,clarifying_question_4,clarifying_question_5,default_enabled
+carpentry,ZZZ Carpentry deck install,Supply and lay a hardwood deck,each,650,8,Excludes stairs and footings,decking,What is the deck size in m2?,Preferred timber species?,,,,false
+carpentry,ZZZ Carpentry door hang,Hang a pre-finished internal door,each,45,1,Excludes door supply,door_window,How many doors?,,,,,false
+carpentry,ZZZ Carpentry stud wall framing,Frame a non-load-bearing stud wall,each,400,5,Excludes plaster and electrical,framing,Wall length and height?,,,,,false

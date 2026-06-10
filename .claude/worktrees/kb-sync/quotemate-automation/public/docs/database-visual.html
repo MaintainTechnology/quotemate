@@ -1,0 +1,1059 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QuoteMate · How the data flows · Visual guide</title>
+  <meta name="description" content="A picture-first guide to how QuoteMate works. Six simple diagrams: the whole system, the filing cabinet, a customer's journey, the tradie's stuff, the two cookbooks, and who can touch what. Written for non-technical readers." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800;900&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink-deep:#0E1622; --ink:#141C29; --ink-card:#1B2433; --ink-line:#2D3A4F; --ink-soft:#243049;
+      --accent:#FF5A1F; --accent-soft:#FF7A45; --accent-deep:#9C3210;
+      --text-pri:#FFFFFF; --text-sec:#C8D2E1; --text-dim:#8995A8;
+      --c-id:#A78BFA;       /* identity / tenancy — violet */
+      --c-price:#FBBF24;    /* pricing / catalogue — amber */
+      --c-pipe:#FF5A1F;     /* quote pipeline — orange */
+      --c-sms:#38BDF8;      /* conversations — sky */
+      --c-reg:#10B981;      /* trades registry — green */
+      --c-admin:#F87171;    /* admin loader — rose */
+      --c-customer:#34D399; /* customer-facing — emerald */
+      --c-tradie:#FBBF24;
+      --c-ai:#FF5A1F;
+    }
+    *,*::before,*::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--ink-deep);
+      color: var(--text-pri);
+      font-family: 'Manrope', system-ui, -apple-system, sans-serif;
+      font-weight: 400;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 78rem; margin: 0 auto; padding: 0 1.25rem; }
+
+    /* ─── Type ─────────────────────────────────────── */
+    .eyebrow {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.72rem; font-weight: 600;
+      letter-spacing: 0.16em; text-transform: uppercase;
+      color: var(--text-dim);
+    }
+    h1.title {
+      font-weight: 900; text-transform: uppercase;
+      font-size: clamp(2.25rem, 6vw, 4.5rem);
+      line-height: 0.96; letter-spacing: -0.035em;
+      margin: 0.75rem 0 0;
+    }
+    h2.diagram-title {
+      font-weight: 800; text-transform: uppercase;
+      font-size: clamp(1.6rem, 3vw, 2.25rem);
+      line-height: 1.05; letter-spacing: -0.025em;
+      margin: 0 0 0.25rem;
+    }
+    h2.diagram-title .num {
+      color: var(--accent);
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.8em; margin-right: 0.4em;
+    }
+    .lead { font-size: 1.05rem; color: var(--text-sec); max-width: 60rem; line-height: 1.65; }
+    .accent { color: var(--accent); }
+    p { margin: 0; color: var(--text-sec); }
+    p + p { margin-top: 0.65rem; }
+    a { color: var(--accent-soft); text-decoration: none; border-bottom: 1px dotted currentColor; }
+    a:hover { color: var(--accent); }
+
+    /* ─── Hero ─────────────────────────────────────── */
+    .hero {
+      padding: 4rem 0 2.5rem;
+      border-bottom: 1px solid var(--ink-line);
+    }
+
+    /* ─── Diagram section ─────────────────────────── */
+    .diag-section {
+      padding: 3.5rem 0 4rem;
+      border-top: 1px solid var(--ink-line);
+    }
+    .caption {
+      font-size: 1.02rem; color: var(--text-sec);
+      max-width: 60rem; line-height: 1.65;
+      margin: 0.5rem 0 2rem;
+    }
+    .caption b { color: var(--text-pri); font-weight: 700; }
+    .diag {
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      padding: 2.25rem 1.5rem;
+      margin-top: 1rem;
+    }
+    @media (min-width: 720px) { .diag { padding: 2.75rem 2.25rem; } }
+
+    /* ─── Reusable box ─────────────────────────────── */
+    .box {
+      background: var(--ink);
+      border: 2px solid var(--ink-line);
+      border-radius: 6px;
+      padding: 0.85rem 1rem;
+      text-align: center;
+      transition: transform 0.15s, border-color 0.15s;
+    }
+    .box-lbl { font-weight: 700; font-size: 0.95rem; line-height: 1.2; color: var(--text-pri); }
+    .box-sub {
+      font-size: 0.72rem; color: var(--text-dim);
+      margin-top: 0.4rem; line-height: 1.3;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+    }
+    /* Real database table name(s) — small accent badge so the reader can
+       always trace a friendly label back to the actual table. */
+    .box-table {
+      display: inline-block;
+      margin-top: 0.5rem;
+      padding: 0.18rem 0.55rem;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: var(--accent);
+      background: rgba(255,90,31,0.1);
+      border: 1px solid rgba(255,90,31,0.35);
+      border-radius: 3px;
+      line-height: 1.3;
+      word-break: break-word;
+    }
+    .box-table .plus { color: var(--text-dim); margin: 0 0.2rem; }
+    .box.violet  { border-color: var(--c-id);     }
+    .box.amber   { border-color: var(--c-price);  }
+    .box.orange  { border-color: var(--c-pipe);   }
+    .box.sky     { border-color: var(--c-sms);    }
+    .box.green   { border-color: var(--c-reg);    }
+    .box.rose    { border-color: var(--c-admin);  }
+    .box.emerald { border-color: var(--c-customer); }
+    .box.solid-orange {
+      background: var(--accent); border-color: var(--accent);
+      color: #000;
+    }
+    .box.solid-orange .box-lbl { color: #000; }
+    .box.solid-orange .box-sub { color: rgba(0,0,0,0.7); }
+
+    /* ─── Arrows ───────────────────────────────────── */
+    .arr-down, .arr-right, .arr-up, .arr-left {
+      display: flex; align-items: center; justify-content: center;
+      color: var(--accent); font-size: 1.6rem; font-weight: 800;
+      line-height: 1;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+    }
+    .arr-down::before  { content: '↓'; }
+    .arr-right::before { content: '→'; }
+    .arr-up::before    { content: '↑'; }
+    .arr-left::before  { content: '←'; }
+    .arr-tall { min-height: 2rem; }
+
+    /* ─── Diagram 1: top-down flow ─────────────────── */
+    .d1 { display: grid; gap: 1rem; }
+    .d1-doors { display: grid; gap: 0.75rem; grid-template-columns: 1fr; }
+    @media (min-width: 720px) { .d1-doors { grid-template-columns: repeat(3, 1fr); } }
+    .d1-drawers { display: grid; gap: 0.75rem; grid-template-columns: repeat(2, 1fr); }
+    @media (min-width: 720px) { .d1-drawers { grid-template-columns: repeat(5, 1fr); } }
+    .d1-exits { display: grid; gap: 0.75rem; grid-template-columns: 1fr; }
+    @media (min-width: 720px) { .d1-exits { grid-template-columns: repeat(2, 1fr); } }
+    .d1-fan {
+      display: grid; gap: 0;
+      grid-template-columns: repeat(5, 1fr);
+      align-items: end;
+      min-height: 2.5rem;
+    }
+    .d1-fan div {
+      border-left: 2px solid var(--accent);
+      height: 100%;
+      position: relative;
+    }
+    .d1-fan div:first-child::before, .d1-fan div::after {}
+    .d1-brain {
+      background: var(--accent);
+      color: #000;
+      border-radius: 12px;
+      padding: 1.5rem 1.25rem;
+      text-align: center;
+      border: 2px solid var(--accent);
+    }
+    .d1-brain .box-lbl { color: #000; font-size: 1.25rem; }
+    .d1-brain .box-sub { color: rgba(0,0,0,0.75); font-size: 0.8rem; margin-top: 0.5rem; }
+
+    /* ─── Diagram 2: filing cabinet ────────────────── */
+    .cabinet {
+      display: grid; gap: 0.75rem;
+      grid-template-columns: 1fr;
+    }
+    .drawer {
+      background: var(--ink);
+      border: 2px solid var(--ink-line);
+      border-left: 6px solid var(--drawer-color, var(--text-dim));
+      border-radius: 4px;
+      padding: 1.1rem 1.25rem;
+      display: grid; gap: 0.5rem;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 720px) { .drawer { grid-template-columns: 13rem 1fr; align-items: center; } }
+    .drawer-name {
+      font-weight: 800; font-size: 1.05rem; text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--drawer-color, var(--text-pri));
+    }
+    .drawer-sub { font-size: 0.78rem; color: var(--text-dim); margin-top: 0.2rem; font-family: 'JetBrains Mono', ui-monospace, monospace; }
+    .drawer-folders { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+    .folder {
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      padding: 0.35rem 0.75rem;
+      font-size: 0.82rem;
+      color: var(--text-sec);
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .folder .tbl {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--accent);
+      padding-left: 0.5rem;
+      border-left: 1px solid var(--ink-line);
+      letter-spacing: 0.02em;
+    }
+    .lane-effect .pill .tbl {
+      margin-left: 0.45rem;
+      padding-left: 0.45rem;
+      border-left: 1px solid currentColor;
+      opacity: 0.85;
+      font-weight: 700;
+      font-size: 0.68rem;
+    }
+    .tree-leaf .l3 {
+      display: inline-block;
+      margin-top: 0.35rem;
+      padding: 0.15rem 0.5rem;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.66rem;
+      font-weight: 700;
+      color: var(--c-id);
+      background: rgba(167,139,250,0.1);
+      border: 1px solid rgba(167,139,250,0.35);
+      border-radius: 3px;
+    }
+    .cookbook .tbl-row {
+      margin-top: 0.5rem;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: var(--c-price);
+    }
+    .cookbook[data-side="tradie"] .tbl-row { color: var(--c-id); }
+
+    /* ─── Diagram 3: journey lanes ─────────────────── */
+    .journey { display: grid; gap: 1rem; grid-template-columns: 1fr; }
+    .lane {
+      background: var(--ink);
+      border: 2px solid var(--ink-line);
+      border-radius: 6px;
+      display: grid;
+      grid-template-columns: 3.5rem 1fr;
+      gap: 0;
+      overflow: hidden;
+    }
+    .lane-num {
+      background: var(--accent);
+      color: #000;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 1.5rem;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+    }
+    .lane-body { padding: 1rem 1.25rem; }
+    .lane-title { font-weight: 800; font-size: 1.05rem; color: var(--text-pri); margin-bottom: 0.25rem; }
+    .lane-text { font-size: 0.92rem; color: var(--text-sec); }
+    .lane-effect {
+      margin-top: 0.6rem; font-size: 0.78rem;
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+    }
+    .lane-effect .pill {
+      display: inline-block;
+      background: var(--ink-card);
+      border: 1px solid var(--ink-line);
+      padding: 0.2rem 0.55rem;
+      margin-right: 0.35rem;
+      margin-top: 0.25rem;
+      color: var(--text-sec);
+      font-size: 0.72rem;
+      border-radius: 999px;
+    }
+    .lane-effect .pill.write { border-color: var(--c-pipe); color: var(--c-pipe); }
+    .lane-effect .pill.read  { border-color: var(--c-sms); color: var(--c-sms); }
+
+    /* ─── Diagram 4: family tree ───────────────────── */
+    .tree { text-align: center; }
+    .tree-top { display: inline-flex; flex-direction: column; align-items: center; gap: 0; }
+    .tree-root {
+      background: var(--c-id);
+      color: #000;
+      border-radius: 8px;
+      padding: 1rem 2.5rem;
+      font-weight: 900; font-size: 1.25rem;
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .tree-trunk {
+      width: 2px; height: 1.5rem; background: var(--c-id);
+    }
+    .tree-bar {
+      width: 100%; max-width: 60rem;
+      height: 2px; background: var(--c-id);
+      margin: 0 auto;
+    }
+    .tree-branches {
+      display: grid; gap: 0.5rem;
+      grid-template-columns: repeat(2, 1fr);
+      max-width: 64rem; margin: 0 auto;
+    }
+    @media (min-width: 720px) {
+      .tree-branches { grid-template-columns: repeat(6, 1fr); }
+    }
+    .tree-branch { display: flex; flex-direction: column; align-items: center; }
+    .tree-stem { width: 2px; height: 1.25rem; background: var(--c-id); }
+    .tree-leaf {
+      background: var(--ink);
+      border: 2px solid var(--c-id);
+      border-radius: 6px;
+      padding: 0.85rem 0.75rem;
+      width: 100%;
+      text-align: center;
+    }
+    .tree-leaf .l1 { font-weight: 700; color: var(--text-pri); font-size: 0.92rem; }
+    .tree-leaf .l2 { font-size: 0.7rem; color: var(--text-dim); margin-top: 0.3rem; font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+    /* ─── Diagram 5: cookbooks ─────────────────────── */
+    .cook { display: grid; gap: 1rem; grid-template-columns: 1fr; }
+    .cook-top { display: grid; gap: 1rem; grid-template-columns: 1fr; }
+    @media (min-width: 720px) { .cook-top { grid-template-columns: 1fr 1fr; } }
+    .cookbook {
+      background: var(--ink);
+      border: 2px solid var(--c-price);
+      border-radius: 8px;
+      padding: 1.25rem 1.25rem;
+      position: relative;
+    }
+    .cookbook h4 {
+      margin: 0 0 0.25rem;
+      font-weight: 800; font-size: 1rem;
+      text-transform: uppercase; letter-spacing: 0.04em;
+      color: var(--c-price);
+    }
+    .cookbook p { font-size: 0.88rem; color: var(--text-sec); }
+    .cookbook ul {
+      margin: 0.65rem 0 0; padding: 0; list-style: none;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.78rem;
+    }
+    .cookbook li { padding: 0.15rem 0; color: var(--text-dim); }
+    .cookbook li::before { content: '·  '; color: var(--c-price); }
+    .cook-merge {
+      background: var(--c-pipe);
+      color: #000;
+      border-radius: 8px;
+      padding: 1.25rem;
+      text-align: center;
+    }
+    .cook-merge h4 {
+      margin: 0 0 0.25rem; font-weight: 900; font-size: 1.1rem;
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .cook-merge p { color: rgba(0,0,0,0.78); font-size: 0.9rem; }
+    .cook-check {
+      background: var(--ink);
+      border: 2px dashed var(--accent);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      text-align: center;
+    }
+    .cook-check h4 { margin: 0 0 0.2rem; color: var(--accent); font-weight: 800; text-transform: uppercase; font-size: 1rem; letter-spacing: 0.04em; }
+    .cook-check p { font-size: 0.9rem; }
+    .cook-out {
+      display: grid; gap: 0.75rem;
+      grid-template-columns: 1fr 1fr;
+    }
+    .cook-out .box { padding: 1rem; }
+
+    /* ─── Diagram 6: who can do what ───────────────── */
+    .perm-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      overflow: hidden;
+      border-radius: 6px;
+      border: 1px solid var(--ink-line);
+      font-size: 0.85rem;
+    }
+    .perm-table th, .perm-table td {
+      padding: 0.85rem 0.85rem;
+      border-bottom: 1px solid var(--ink-line);
+      vertical-align: top;
+      text-align: left;
+    }
+    .perm-table thead th {
+      background: var(--ink);
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.7rem; font-weight: 700;
+      letter-spacing: 0.12em; text-transform: uppercase;
+    }
+    .perm-table tbody td:first-child {
+      font-weight: 800; color: var(--text-pri);
+      background: var(--ink);
+      white-space: nowrap;
+    }
+    .perm-table td { background: var(--ink-card); color: var(--text-sec); }
+    .perm-yes { color: var(--c-customer); font-weight: 700; }
+    .perm-edit { color: var(--c-price); font-weight: 700; }
+    .perm-no { color: var(--text-dim); }
+
+    /* ─── Legend ───────────────────────────────────── */
+    .legend {
+      display: flex; flex-wrap: wrap; gap: 0.5rem;
+      margin-top: 1rem;
+    }
+    .legend .chip {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      background: var(--ink);
+      border: 1px solid var(--ink-line);
+      padding: 0.4rem 0.7rem;
+      border-radius: 999px;
+      font-size: 0.78rem; color: var(--text-sec);
+    }
+    .legend .swatch { width: 0.85rem; height: 0.85rem; border-radius: 3px; }
+
+    /* ─── Footer ───────────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--ink-line);
+      padding: 2.5rem 0;
+      color: var(--text-dim);
+      font-size: 0.88rem;
+    }
+    footer strong { color: var(--text-sec); }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- HERO                                                              -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="hero">
+  <div class="wrap">
+    <div class="eyebrow">QuoteMate · Visual guide · For non-technical readers</div>
+    <h1 class="title">How the data<br/><span class="accent">flows</span>.</h1>
+    <p class="lead" style="margin-top:1.5rem">
+      Six simple diagrams. The whole system on one page. No jargon, no code,
+      no acronyms. If you can read a flowchart, you can read this.
+    </p>
+    <p class="lead">
+      If you want the engineer version with column names, foreign keys and
+      file paths, that lives at
+      <a href="./database-architecture.html">database-architecture.html</a>.
+    </p>
+
+    <div class="legend">
+      <span class="chip"><span class="swatch" style="background:var(--c-id)"></span>The tradie &amp; their people</span>
+      <span class="chip"><span class="swatch" style="background:var(--c-price)"></span>Prices &amp; recipes</span>
+      <span class="chip"><span class="swatch" style="background:var(--c-pipe)"></span>The quote pipeline</span>
+      <span class="chip"><span class="swatch" style="background:var(--c-sms)"></span>Customer chats</span>
+      <span class="chip"><span class="swatch" style="background:var(--c-reg)"></span>Trade settings</span>
+      <span class="chip"><span class="swatch" style="background:var(--c-admin)"></span>Admin tools</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- DIAGRAM 1 — THE WHOLE SYSTEM ON ONE PAGE                          -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="diag-section">
+  <div class="wrap">
+    <h2 class="diagram-title"><span class="num">01</span>The whole system, on one page</h2>
+    <p class="caption">
+      A customer reaches QuoteMate in <b>three different ways</b>. Whichever
+      door they come through, the same <b>AI receptionist</b> takes it from
+      there. As it works, it fills five different <b>storage drawers</b>
+      with the right pieces. The job ends one of two ways: a quote goes
+      out, or the tradie comes for a site visit.
+    </p>
+
+    <div class="diag">
+      <div class="d1">
+
+        <!-- Three doors -->
+        <div class="d1-doors">
+          <div class="box sky"><div class="box-lbl">Customer texts</div><div class="box-sub">SMS from their phone</div></div>
+          <div class="box sky"><div class="box-lbl">Customer rings</div><div class="box-sub">Phone call to the tradie's number</div></div>
+          <div class="box sky"><div class="box-lbl">Customer fills the website form</div><div class="box-sub">Self-serve on the web</div></div>
+        </div>
+
+        <div class="arr-down arr-tall"></div>
+
+        <!-- AI brain -->
+        <div class="d1-brain">
+          <div class="box-lbl">AI Receptionist</div>
+          <div class="box-sub">Listens, asks the right questions, looks up prices, drafts the quote</div>
+        </div>
+
+        <div class="arr-down arr-tall"></div>
+
+        <!-- Five drawers -->
+        <div class="d1-drawers">
+          <div class="box violet">
+            <div class="box-lbl">Who the customer is</div>
+            <div class="box-sub">name · phone · address</div>
+            <div class="box-table">customers</div>
+          </div>
+          <div class="box sky">
+            <div class="box-lbl">The conversation</div>
+            <div class="box-sub">every text or call</div>
+            <div class="box-table">sms_conversations<span class="plus">+</span>sms_messages</div>
+          </div>
+          <div class="box orange">
+            <div class="box-lbl">The job described</div>
+            <div class="box-sub">scope · access · photos</div>
+            <div class="box-table">intakes<span class="plus">+</span>calls</div>
+          </div>
+          <div class="box orange">
+            <div class="box-lbl">The quote</div>
+            <div class="box-sub">Good / Better / Best</div>
+            <div class="box-table">quotes</div>
+          </div>
+          <div class="box amber">
+            <div class="box-lbl">Recipes &amp; prices used</div>
+            <div class="box-sub">looked up, not invented</div>
+            <div class="box-table">pricing_book<span class="plus">+</span>shared_*<span class="plus">+</span>tenant_*</div>
+          </div>
+        </div>
+
+        <div class="arr-down arr-tall"></div>
+
+        <!-- Two exits -->
+        <div class="d1-exits">
+          <div class="box emerald"><div class="box-lbl">Quote sent to customer</div><div class="box-sub">customer pays deposit · tradie books the job</div></div>
+          <div class="box emerald"><div class="box-lbl">$99 site visit booked</div><div class="box-sub">when the job is too complex to price remotely</div></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- DIAGRAM 2 — THE FILING CABINET                                    -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="diag-section">
+  <div class="wrap">
+    <h2 class="diagram-title"><span class="num">02</span>The filing cabinet — what gets stored where</h2>
+    <p class="caption">
+      Think of the database as a tradie's filing cabinet with <b>six drawers</b>.
+      Each drawer holds folders for one kind of thing. Open any drawer and
+      every folder inside is the same shape — like all the customer folders
+      look the same, all the quote folders look the same.
+    </p>
+
+    <div class="diag">
+      <div class="cabinet">
+
+        <div class="drawer" style="--drawer-color: var(--c-id)">
+          <div>
+            <div class="drawer-name">Drawer 1 · The People</div>
+            <div class="drawer-sub">Who owns what · who's contacting who</div>
+          </div>
+          <div class="drawer-folders">
+            <span class="folder">The tradie (business) <span class="tbl">tenants</span></span>
+            <span class="folder">Each customer <span class="tbl">customers</span></span>
+            <span class="folder">Signup invites <span class="tbl">tradie_signup_intents</span></span>
+            <span class="folder">QuoteMate operators <span class="tbl">admin_users</span></span>
+            <span class="folder" style="opacity:0.65">Legacy contacts <span class="tbl">tradies</span></span>
+          </div>
+        </div>
+
+        <div class="drawer" style="--drawer-color: var(--c-price)">
+          <div>
+            <div class="drawer-name">Drawer 2 · Prices &amp; Recipes</div>
+            <div class="drawer-sub">The cookbook · what things cost</div>
+          </div>
+          <div class="drawer-folders">
+            <span class="folder">The tradie's rate card <span class="tbl">pricing_book</span></span>
+            <span class="folder">Master cookbook of services <span class="tbl">shared_assemblies</span></span>
+            <span class="folder">Master parts list <span class="tbl">shared_materials</span></span>
+            <span class="folder">The tradie's own services <span class="tbl">tenant_custom_assemblies</span></span>
+            <span class="folder">The tradie's own parts <span class="tbl">tenant_material_catalogue</span></span>
+            <span class="folder">Recipe-to-parts map <span class="tbl">shared_assembly_bom</span></span>
+            <span class="folder">Tradie's own BOM <span class="tbl">tenant_assembly_bom</span></span>
+            <span class="folder">Tradie tweaks &amp; overrides <span class="tbl">tenant_assembly_overrides</span></span>
+            <span class="folder">Brand preferences <span class="tbl">tenant_material_preferences</span></span>
+            <span class="folder">Which services they offer <span class="tbl">tenant_service_offerings</span></span>
+            <span class="folder">Good/Better/Best ladder <span class="tbl">tenant_tier_ladder</span></span>
+            <span class="folder">Licence numbers <span class="tbl">tenant_licences</span></span>
+            <span class="folder">Supplier feed <span class="tbl">supplier_catalogue</span></span>
+          </div>
+        </div>
+
+        <div class="drawer" style="--drawer-color: var(--c-pipe)">
+          <div>
+            <div class="drawer-name">Drawer 3 · The Quote Pipeline</div>
+            <div class="drawer-sub">The journey of one job, from idea to payment</div>
+          </div>
+          <div class="drawer-folders">
+            <span class="folder">Phone calls received <span class="tbl">calls</span></span>
+            <span class="folder">The job described <span class="tbl">intakes</span></span>
+            <span class="folder">The quote (Good/Better/Best) <span class="tbl">quotes</span></span>
+            <span class="folder">Follow-up touch log <span class="tbl">quote_followup_events</span></span>
+            <span class="folder">Payments received <span class="tbl">payments</span></span>
+            <span class="folder" style="opacity:0.55">Line items (unused) <span class="tbl">quote_line_items</span></span>
+          </div>
+        </div>
+
+        <div class="drawer" style="--drawer-color: var(--c-sms)">
+          <div>
+            <div class="drawer-name">Drawer 4 · Conversations</div>
+            <div class="drawer-sub">Every text back and forth</div>
+          </div>
+          <div class="drawer-folders">
+            <span class="folder">Each chat thread <span class="tbl">sms_conversations</span></span>
+            <span class="folder">Every single text message <span class="tbl">sms_messages</span></span>
+          </div>
+        </div>
+
+        <div class="drawer" style="--drawer-color: var(--c-reg)">
+          <div>
+            <div class="drawer-name">Drawer 5 · Trade Settings</div>
+            <div class="drawer-sub">Plumbing vs electrical vs carpentry</div>
+          </div>
+          <div class="drawer-folders">
+            <span class="folder">List of supported trades <span class="tbl">trades</span></span>
+            <span class="folder">Categories <span class="tbl">categories</span></span>
+            <span class="folder">AI prompts per trade <span class="tbl">trade_prompts</span></span>
+            <span class="folder">Default rates per trade <span class="tbl">trade_pricing_defaults</span></span>
+          </div>
+        </div>
+
+        <div class="drawer" style="--drawer-color: var(--c-admin)">
+          <div>
+            <div class="drawer-name">Drawer 6 · Admin Tools</div>
+            <div class="drawer-sub">QuoteMate-side bulk imports</div>
+          </div>
+          <div class="drawer-folders">
+            <span class="folder">CSV upload batches <span class="tbl">import_batches</span></span>
+            <span class="folder">Staged rows waiting approval <span class="tbl">import_staged_rows</span></span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- DIAGRAM 3 — A CUSTOMER'S JOURNEY                                  -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="diag-section">
+  <div class="wrap">
+    <h2 class="diagram-title"><span class="num">03</span>A customer's journey, step by step</h2>
+    <p class="caption">
+      Follow one real customer from "I need a sparky" to "I've paid the
+      deposit". Each step adds a piece of paper to a specific drawer.
+      Nothing is invented — every step is a thing that happens in real code.
+    </p>
+
+    <div class="diag">
+      <div class="journey">
+
+        <div class="lane">
+          <div class="lane-num">1</div>
+          <div class="lane-body">
+            <div class="lane-title">Customer sends a text or rings</div>
+            <div class="lane-text">"Hi, I need 8 downlights installed in my Kogarah unit, when can you come?"</div>
+            <div class="lane-effect">
+              <span class="pill read">Looks up · the tradie <span class="tbl">tenants</span></span>
+              <span class="pill write">Adds to · the conversation <span class="tbl">sms_conversations</span></span>
+              <span class="pill write">Adds to · phone calls received <span class="tbl">calls</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="lane">
+          <div class="lane-num">2</div>
+          <div class="lane-body">
+            <div class="lane-title">AI asks the right questions</div>
+            <div class="lane-text">Confirms the suburb, asks for photos of the ceiling, checks what colour temperature they want. Doesn't ask anything it already knows.</div>
+            <div class="lane-effect">
+              <span class="pill read">Looks up · services offered <span class="tbl">tenant_service_offerings</span></span>
+              <span class="pill read">Looks up · master cookbook <span class="tbl">shared_assemblies</span></span>
+              <span class="pill write">Updates · the conversation <span class="tbl">sms_conversations</span></span>
+              <span class="pill write">Updates · phone calls <span class="tbl">calls</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="lane">
+          <div class="lane-num">3</div>
+          <div class="lane-body">
+            <div class="lane-title">AI structures the job into a clean spec</div>
+            <div class="lane-text">Turns the messy back-and-forth into one neat job description: "8 × LED downlights, single-storey, switchboard accessible, customer has photos."</div>
+            <div class="lane-effect">
+              <span class="pill read">Looks up · the customer <span class="tbl">customers</span></span>
+              <span class="pill write">Adds new · job description <span class="tbl">intakes</span></span>
+              <span class="pill write">Adds or updates · customer record <span class="tbl">customers</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="lane">
+          <div class="lane-num">4</div>
+          <div class="lane-body">
+            <div class="lane-title">AI builds Good / Better / Best</div>
+            <div class="lane-text">Looks up recipes &amp; parts in both cookbooks. Picks SKUs by tier. Applies the tradie's markup. Checks every price actually exists. (If not — it dumps to a $99 site visit.)</div>
+            <div class="lane-effect">
+              <span class="pill read">Looks up · rate card <span class="tbl">pricing_book</span></span>
+              <span class="pill read">Looks up · recipes <span class="tbl">shared_assemblies + tenant_custom_assemblies</span></span>
+              <span class="pill read">Looks up · parts <span class="tbl">shared_materials + tenant_material_catalogue</span></span>
+              <span class="pill read">Looks up · tier ladder <span class="tbl">tenant_tier_ladder</span></span>
+              <span class="pill read">Looks up · brand prefs <span class="tbl">tenant_material_preferences</span></span>
+              <span class="pill write">Adds new · the quote <span class="tbl">quotes</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="lane">
+          <div class="lane-num">5</div>
+          <div class="lane-body">
+            <div class="lane-title">Customer opens the quote link</div>
+            <div class="lane-text">A mobile page shows Good/Better/Best with photos of what they'll get, the licence footer, the price-hold timer.</div>
+            <div class="lane-effect">
+              <span class="pill read">Looks up · the quote <span class="tbl">quotes</span></span>
+              <span class="pill read">Looks up · the job <span class="tbl">intakes</span></span>
+              <span class="pill read">Looks up · the tradie <span class="tbl">tenants</span></span>
+              <span class="pill read">Looks up · rate card (footer) <span class="tbl">pricing_book</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="lane">
+          <div class="lane-num">6</div>
+          <div class="lane-body">
+            <div class="lane-title">Customer picks a tier and pays the deposit</div>
+            <div class="lane-text">Stripe checkout. As soon as the deposit clears, the quote is locked in and the tradie gets a notification.</div>
+            <div class="lane-effect">
+              <span class="pill write">Updates · the quote (marked paid) <span class="tbl">quotes</span></span>
+              <span class="pill read">Looks up · the tradie (to notify them) <span class="tbl">tenants + tradies</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="lane">
+          <div class="lane-num">7</div>
+          <div class="lane-body">
+            <div class="lane-title">Customer picks a booking slot</div>
+            <div class="lane-text">Slot picker page → they choose Tuesday 9am. Job is now booked.</div>
+            <div class="lane-effect">
+              <span class="pill write">Updates · the quote (slot stored) <span class="tbl">quotes</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="lane">
+          <div class="lane-num">8</div>
+          <div class="lane-body">
+            <div class="lane-title">Tradie logs a follow-up touch (later)</div>
+            <div class="lane-text">"Rang Sarah, going ahead Tuesday." Stored against the quote for the CRM history.</div>
+            <div class="lane-effect">
+              <span class="pill write">Adds to · follow-up touch log <span class="tbl">quote_followup_events</span></span>
+              <span class="pill write">May add · text message <span class="tbl">sms_messages</span></span>
+              <span class="pill write">May add · call record <span class="tbl">calls</span></span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- DIAGRAM 4 — FAMILY TREE OF THE TRADIE                             -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="diag-section">
+  <div class="wrap">
+    <h2 class="diagram-title"><span class="num">04</span>Everything belongs to the tradie</h2>
+    <p class="caption">
+      Almost every piece of information in QuoteMate is owned by <b>one
+      specific tradie business</b>. Picture a family tree: at the top sits
+      THE TRADIE, and everything else hangs off them. This is how the
+      system knows "this quote belongs to Bob, not Mary".
+    </p>
+
+    <div class="diag">
+      <div class="tree">
+        <div class="tree-top">
+          <div class="tree-root">The Tradie (business) &nbsp;<span style="font-size:0.72rem;letter-spacing:0.05em;background:rgba(0,0,0,0.18);padding:0.15rem 0.55rem;border-radius:3px;font-family:'JetBrains Mono', ui-monospace, monospace">tenants</span></div>
+          <div class="tree-trunk"></div>
+        </div>
+        <div class="tree-bar"></div>
+        <div class="tree-branches">
+          <div class="tree-branch">
+            <div class="tree-stem"></div>
+            <div class="tree-leaf">
+              <div class="l1">Their customers</div>
+              <div class="l2">name · phone · address</div>
+              <div class="l3">customers</div>
+            </div>
+          </div>
+          <div class="tree-branch">
+            <div class="tree-stem"></div>
+            <div class="tree-leaf">
+              <div class="l1">Their phone calls</div>
+              <div class="l2">transcripts &amp; recordings</div>
+              <div class="l3">calls</div>
+            </div>
+          </div>
+          <div class="tree-branch">
+            <div class="tree-stem"></div>
+            <div class="tree-leaf">
+              <div class="l1">Their text chats</div>
+              <div class="l2">every message</div>
+              <div class="l3">sms_conversations + sms_messages</div>
+            </div>
+          </div>
+          <div class="tree-branch">
+            <div class="tree-stem"></div>
+            <div class="tree-leaf">
+              <div class="l1">Their quotes</div>
+              <div class="l2">Good / Better / Best</div>
+              <div class="l3">quotes + intakes</div>
+            </div>
+          </div>
+          <div class="tree-branch">
+            <div class="tree-stem"></div>
+            <div class="tree-leaf">
+              <div class="l1">Their cookbook</div>
+              <div class="l2">recipes &amp; parts</div>
+              <div class="l3">tenant_custom_assemblies + tenant_material_catalogue</div>
+            </div>
+          </div>
+          <div class="tree-branch">
+            <div class="tree-stem"></div>
+            <div class="tree-leaf">
+              <div class="l1">Their rate card</div>
+              <div class="l2">hourly · markup · licence</div>
+              <div class="l3">pricing_book + tenant_licences</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p class="caption" style="margin-top:2rem">
+        <b>Why it matters:</b> when Bob the sparky asks "show me all my
+        quotes", QuoteMate filters by "owned by Bob" and everything below
+        the tree comes back with it. Mary the plumber's data is never
+        visible &mdash; even though it's in the same database.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- DIAGRAM 5 — THE TWO COOKBOOKS                                     -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="diag-section">
+  <div class="wrap">
+    <h2 class="diagram-title"><span class="num">05</span>The two cookbooks &mdash; how a price gets onto a quote</h2>
+    <p class="caption">
+      This is the part most people get wrong. The AI doesn't make up
+      prices. It looks them up. There are <b>two cookbooks</b>, the AI
+      reads from both at once, picks the best-matching recipe, then a
+      <b>Price Checker</b> verifies every dollar before the quote can go
+      out. If anything looks fishy, the whole quote dumps to a $99 site
+      visit instead.
+    </p>
+
+    <div class="diag">
+      <div class="cook">
+
+        <div class="cook-top">
+          <div class="cookbook">
+            <h4>The Master Cookbook</h4>
+            <div class="tbl-row">shared_assemblies &nbsp;+&nbsp; shared_materials</div>
+            <p style="margin-top:0.65rem">Generic recipes everyone uses. We wrote these by hand. About 43 recipes today.</p>
+            <ul>
+              <li>"Install LED downlight"</li>
+              <li>"Replace double power point"</li>
+              <li>"Clear blocked drain"</li>
+              <li>...</li>
+            </ul>
+          </div>
+          <div class="cookbook" data-side="tradie" style="border-color: var(--c-id)">
+            <h4 style="color: var(--c-id)">The Tradie's Personal Cookbook</h4>
+            <div class="tbl-row">tenant_custom_assemblies &nbsp;+&nbsp; tenant_material_catalogue</div>
+            <p style="margin-top:0.65rem">Specific brands and SKUs this tradie uses. Loaded via CSV or the dashboard form.</p>
+            <ul style="color: var(--c-id)">
+              <li>"MY Clipsal Iconic GPO @ $85"</li>
+              <li>"MY Philips Hue downlight @ $48"</li>
+              <li>"MY custom 'Install pool light'"</li>
+              <li>...</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="arr-down arr-tall"></div>
+
+        <div class="cook-merge">
+          <h4>Smart Sorter</h4>
+          <p>Looks at what the customer asked for and ranks the best-matching recipes from both books, side by side. Tradie's personal recipes win ties.</p>
+        </div>
+
+        <div class="arr-down arr-tall"></div>
+
+        <div class="box solid-orange" style="padding:1.25rem">
+          <div class="box-lbl">AI builds the quote</div>
+          <div class="box-sub">Picks one recipe per tier, applies markup, writes line items. Cannot type a price &mdash; can only quote what the cookbooks say.</div>
+        </div>
+
+        <div class="arr-down arr-tall"></div>
+
+        <div class="cook-check">
+          <h4>Price Checker (the safety net)</h4>
+          <p>Reads every single line item and asks 3 questions: Does this price exist in the cookbook? Is it from the right category? Did the AI pick the exact recipe it claimed? If anything fails, the quote is replaced with a $99 site visit.</p>
+        </div>
+
+        <div class="arr-down arr-tall"></div>
+
+        <div class="cook-out">
+          <div class="box emerald" style="padding:1rem">
+            <div class="box-lbl">Pass &rarr; Quote sent</div>
+            <div class="box-sub">Customer sees Good/Better/Best</div>
+          </div>
+          <div class="box emerald" style="padding:1rem">
+            <div class="box-lbl">Fail &rarr; $99 site visit</div>
+            <div class="box-sub">Safer than a wrong price</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- DIAGRAM 6 — WHO CAN TOUCH WHAT                                    -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section class="diag-section">
+  <div class="wrap">
+    <h2 class="diagram-title"><span class="num">06</span>Who can touch which drawer</h2>
+    <p class="caption">
+      Five kinds of people (or systems) interact with QuoteMate. Each one
+      can read certain drawers and change certain drawers. This grid shows
+      what each can do. Notice that <b>customers can never write to the
+      cookbook</b> &mdash; only the tradie or the AI can.
+    </p>
+
+    <div class="diag" style="padding: 1.5rem; overflow-x: auto">
+      <table class="perm-table">
+        <thead>
+          <tr>
+            <th>Who</th>
+            <th>People drawer</th>
+            <th>Cookbook drawer</th>
+            <th>Quote drawer</th>
+            <th>Chats drawer</th>
+            <th>Trade settings</th>
+            <th>Admin drawer</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>The customer</td>
+            <td><span class="perm-no">No access</span></td>
+            <td><span class="perm-no">No access</span></td>
+            <td><span class="perm-yes">Reads their own only</span></td>
+            <td><span class="perm-edit">Adds messages</span></td>
+            <td><span class="perm-no">No access</span></td>
+            <td><span class="perm-no">No access</span></td>
+          </tr>
+          <tr>
+            <td>The AI receptionist</td>
+            <td><span class="perm-edit">Creates customer records</span></td>
+            <td><span class="perm-yes">Reads only</span></td>
+            <td><span class="perm-edit">Writes drafts &amp; updates</span></td>
+            <td><span class="perm-edit">Adds + updates</span></td>
+            <td><span class="perm-yes">Reads only</span></td>
+            <td><span class="perm-no">No access</span></td>
+          </tr>
+          <tr>
+            <td>The tradie (dashboard)</td>
+            <td><span class="perm-edit">Reads + edits own</span></td>
+            <td><span class="perm-edit">Reads + edits own</span></td>
+            <td><span class="perm-edit">Reads + edits own</span></td>
+            <td><span class="perm-edit">Reads + writes</span></td>
+            <td><span class="perm-edit">Activates trades</span></td>
+            <td><span class="perm-no">No access</span></td>
+          </tr>
+          <tr>
+            <td>QuoteMate operator</td>
+            <td><span class="perm-yes">Reads (support)</span></td>
+            <td><span class="perm-edit">Edits master cookbook</span></td>
+            <td><span class="perm-yes">Reads</span></td>
+            <td><span class="perm-yes">Reads</span></td>
+            <td><span class="perm-edit">Adds trades</span></td>
+            <td><span class="perm-edit">Bulk imports</span></td>
+          </tr>
+          <tr>
+            <td>Background jobs</td>
+            <td><span class="perm-no">&mdash;</span></td>
+            <td><span class="perm-no">&mdash;</span></td>
+            <td><span class="perm-no">&mdash;</span></td>
+            <td><span class="perm-edit">Closes stale chats</span></td>
+            <td><span class="perm-no">&mdash;</span></td>
+            <td><span class="perm-no">&mdash;</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="legend" style="margin-top:1.25rem">
+        <span class="chip"><span class="swatch" style="background:var(--c-customer)"></span>Reads only (look but don't touch)</span>
+        <span class="chip"><span class="swatch" style="background:var(--c-price)"></span>Can add or change things</span>
+        <span class="chip"><span class="swatch" style="background:var(--text-dim)"></span>No access at all</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- FOOTER                                                            -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<footer>
+  <div class="wrap">
+    <p>
+      <strong>This is the plain-English version.</strong> The detailed
+      engineer version &mdash; with column names, ID types, foreign keys,
+      and the actual file paths that read/write each drawer &mdash; lives at
+      <a href="./database-architecture.html">database-architecture.html</a>.
+    </p>
+    <p>
+      <strong>Related visual docs:</strong>
+      <a href="./pricing-flow.html">How a quote gets priced</a> ·
+      <a href="./onboarding-bundle.html">Adding a new trade</a>.
+    </p>
+    <p style="margin-top: 1.25rem;">
+      Generated 2026-05-26. If something on this page no longer matches
+      reality, it's the page that's wrong &mdash; trust the code.
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

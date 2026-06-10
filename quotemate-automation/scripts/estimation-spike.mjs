@@ -31,6 +31,7 @@ RULES — follow all of them:
 5. SWEEP ZONE BY ZONE. Walk the drawing systematically (e.g. left wall → top wall → right wall → bottom wall → interior rooms) so dense areas are not skipped. Count, do not estimate.
 6. SHOW YOUR WORKING. For every item, the "note" MUST give a zone-by-zone tally of where each symbol was found (e.g. "left wall 2, amenities 1, bottom wall 1 = 4") so a human can verify the count against the drawing.
 7. Wattage/size labels printed next to a symbol on the drawing (e.g. "12W", "9W", "IP65") identify which legend variant it is — use them.
+8. PIN EVERY SYMBOL. For each item, return "locations": one entry per counted symbol with the literal PDF page number (1-based, counting every page in the file) and the symbol's approximate position as percentages of that page — "x" from the left edge (0-100) and "y" from the top edge (0-100). locations.length must equal count. Approximate positions are fine; they are used to draw review pins on the drawing.
 
 Count at least these (use the legend's wording; 0 if absent):
 - general power outlets (GPO / power points) — each single/double/special variant as its own line
@@ -44,7 +45,7 @@ Return STRICT JSON only, no prose:
 {
   "sheets_used": ["<sheet number + revision used>"],
   "legend_symbols": [{ "symbol": "<as drawn>", "means": "<from legend>" }],
-  "items": [{ "type": "<item incl. variant e.g. wattage/IP>", "symbol": "<symbol>", "count": <int>, "confidence": "high|medium|low", "note": "<zone-by-zone tally>" }],
+  "items": [{ "type": "<item incl. variant e.g. wattage/IP>", "symbol": "<symbol>", "count": <int>, "confidence": "high|medium|low", "note": "<zone-by-zone tally>", "locations": [{ "page": <int>, "x": <0-100>, "y": <0-100> }] }],
   "overall_note": "<anything that hurt the count: density, illegible zones, multi-sheet, superseded revisions present, etc.>"
 }`
 
