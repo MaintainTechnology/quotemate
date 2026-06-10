@@ -18,26 +18,34 @@ if (!pdfPath) {
 }
 const model = process.env.ESTIMATION_MODEL ?? 'claude-sonnet-4-6'
 
+// Kept in sync with buildExtractionPrompt() in lib/estimation/extract.ts.
 const PROMPT = `You are an electrical estimator doing a quantity take-off from a construction plan set (PDF attached).
 
 TASK: Find the "${sheetHint}" sheet (and the Reflected Ceiling Plan / lighting sheet if present) and COUNT each electrical item type, using the sheet's own LEGEND to identify symbols.
 
-Be systematic: read the legend first, then sweep the drawing zone by zone so you do not miss symbols in dense areas. Count, do not estimate.
+RULES — follow all of them:
+1. LATEST REVISION ONLY. Plan sets often contain multiple revisions of the same sheet (e.g. 103A and 103B, or Rev A / Rev B in the title block). Identify every revision present, then count ONLY from the latest revision of each sheet. Record which revision you used in "sheets_used".
+2. READ THE LEGEND FIRST. List every symbol the legend defines before counting anything.
+3. ONE LINE ITEM PER LEGEND VARIANT — NEVER MERGE. If the legend defines multiple variants of the same fitting (different wattage e.g. 12W vs 9W, different IP rating e.g. IP44 vs IP65, different location e.g. "@ mirrors", different mounting, colour temperature, or product code), report EACH variant as its own item with its own count. A 9W mirror downlight is NOT the same item as a 12W feature downlight.
+4. SINGLE vs DOUBLE OUTLETS ARE DIFFERENT ITEMS. Distinguish GPO (single) from DGPO (double) symbols precisely, including suffix variants (AB/UB/SK, USB, waterproof). Report each as its own line.
+5. SWEEP ZONE BY ZONE. Walk the drawing systematically (e.g. left wall → top wall → right wall → bottom wall → interior rooms) so dense areas are not skipped. Count, do not estimate.
+6. SHOW YOUR WORKING. For every item, the "note" MUST give a zone-by-zone tally of where each symbol was found (e.g. "left wall 2, amenities 1, bottom wall 1 = 4") so a human can verify the count against the drawing.
+7. Wattage/size labels printed next to a symbol on the drawing (e.g. "12W", "9W", "IP65") identify which legend variant it is — use them.
 
 Count at least these (use the legend's wording; 0 if absent):
-- general power outlets (GPO / power points) — single and double, report total
+- general power outlets (GPO / power points) — each single/double/special variant as its own line
 - data / comms outlets
-- dedicated or 15-amp circuits / appliance points
-- light fittings (downlights, battens, feature, exit/emergency) from the RCP if visible
+- dedicated or 15-amp circuits / appliance points (including text-labelled power e.g. "fountain power")
+- light fittings from the RCP — each legend variant separately (downlights by wattage/IP, battens, panels, feature, exit/emergency)
 - switchboards / distribution boards
-- any other electrical item the legend defines (TV points, mech isolators, etc.)
+- any other electrical item the legend defines (TV points, mech isolators, speakers, fans, etc.)
 
 Return STRICT JSON only, no prose:
 {
-  "sheets_used": ["..."],
+  "sheets_used": ["<sheet number + revision used>"],
   "legend_symbols": [{ "symbol": "<as drawn>", "means": "<from legend>" }],
-  "items": [{ "type": "<item>", "symbol": "<symbol>", "count": <int>, "confidence": "high|medium|low", "note": "<optional>" }],
-  "overall_note": "<anything that hurt the count: density, illegible zones, multi-sheet, etc.>"
+  "items": [{ "type": "<item incl. variant e.g. wattage/IP>", "symbol": "<symbol>", "count": <int>, "confidence": "high|medium|low", "note": "<zone-by-zone tally>" }],
+  "overall_note": "<anything that hurt the count: density, illegible zones, multi-sheet, superseded revisions present, etc.>"
 }`
 
 const pdf = readFileSync(pdfPath)
@@ -46,7 +54,8 @@ const t0 = Date.now()
 try {
   const { text, usage } = await generateText({
     model: anthropic(model),
-    temperature: 0,
+    // Opus 4.7+ rejects `temperature` — only pin it on models that accept it.
+    ...(/opus-4-[78]/.test(model) ? {} : { temperature: 0 }),
     messages: [
       {
         role: 'user',

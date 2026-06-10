@@ -1,0 +1,362 @@
+{
+  "plan": "211025-citycave-caloundra-costruction-e",
+  "model": "claude-opus-4-8",
+  "sheet_hint": "POWER & DATA LAYOUT",
+  "sheets_used": [
+    "106 Electrical Plan Rev E",
+    "102 Reflected Ceiling Plan Rev E"
+  ],
+  "legend_symbols": [
+    {
+      "symbol": "single triangle",
+      "means": "SINGLE GPO"
+    },
+    {
+      "symbol": "double triangle",
+      "means": "DOUBLE GPO"
+    },
+    {
+      "symbol": "triangle (HARDWIRED)",
+      "means": "HARDWIRED POWER"
+    },
+    {
+      "symbol": "triangle + U",
+      "means": "DOUBLE GPO/ USB"
+    },
+    {
+      "symbol": "triangle + C",
+      "means": "DOUBLE GPO FOR CLEANING"
+    },
+    {
+      "symbol": "triangle (recessed)",
+      "means": "1500H RECESSED GPO + CENTRE OF TABLET"
+    },
+    {
+      "symbol": "D",
+      "means": "DOUBLE DATA"
+    },
+    {
+      "symbol": "S (alarm)",
+      "means": "MAIN/SECURITY/ALARM SYSTEM PHONE LINE"
+    },
+    {
+      "symbol": "EDB box",
+      "means": "EDB (electrical distribution board)"
+    },
+    {
+      "symbol": "S (circle)",
+      "means": "SONOS SPEAKERS"
+    },
+    {
+      "symbol": "C (circle)",
+      "means": "COMER POINT (DATA)"
+    },
+    {
+      "symbol": "WP triangle",
+      "means": "ALLOW FOR 2 WATERPROOF DOUBLE GPOS 10AMPS FOR HOT WATER UNITS"
+    },
+    {
+      "symbol": "HWU (circle)",
+      "means": "50L HOT WATER UNIT"
+    },
+    {
+      "symbol": "E1 box",
+      "means": "FLOAT ROOM EXHAUST SUPPLY & EXTRACTION (REFER RCP)"
+    },
+    {
+      "symbol": "E2 box",
+      "means": "EXHAUST FAN (REFER RCP)"
+    },
+    {
+      "symbol": "15 amp (text)",
+      "means": "15 amp dedicated circuit (float pump power)"
+    },
+    {
+      "symbol": "L1",
+      "means": "RECESSED LED DOWNLIGHT 12W 3000K DIMMABLE w/ matt black adaptor (LAMPADA)"
+    },
+    {
+      "symbol": "L2",
+      "means": "RECESSED DOWNLIGHT white finish, LEDLUX INFINITY IP44 11W 3000K"
+    },
+    {
+      "symbol": "L3",
+      "means": "RECESSED DOWNLIGHT, LEDLUX VENTURE TRI-COLOUR black trim, dimmable IP44 11W 3000K (float rooms)"
+    },
+    {
+      "symbol": "L4",
+      "means": "SPOTLIGHT LS60 LuxFeel Spot 60 (rock wall)"
+    },
+    {
+      "symbol": "L5",
+      "means": "WALL LIGHT / ZIP LED up-down warm white (float rooms/corridors)"
+    },
+    {
+      "symbol": "L6",
+      "means": "FEATURE PENDANT LIGHT, black textile cord 8W 2600K (recovery room)"
+    },
+    {
+      "symbol": "L7",
+      "means": "LEDLUX STRIX LED 2400lm dimmable pendant black 38W 3000K (open ceiling main areas <5m)"
+    },
+    {
+      "symbol": "L8",
+      "means": "BLACK HIGH BAY FITTING (open ceiling >5m)"
+    },
+    {
+      "symbol": "L9",
+      "means": "MFL by Masson Accent Minitrim wall washer LED dimmable black (retail)"
+    },
+    {
+      "symbol": "EM",
+      "means": "EMERGENCY LIGHT"
+    },
+    {
+      "symbol": "EXIT",
+      "means": "EMERGENCY EXIT SIGN"
+    },
+    {
+      "symbol": "LED strip",
+      "means": "WARM LED STRIP LIGHTING (joinery)"
+    },
+    {
+      "symbol": "HEAT box",
+      "means": "SUSPENDED HEAT LAMP"
+    },
+    {
+      "symbol": "AS",
+      "means": "AIR SWITCH INSIDE FLOAT TANKS"
+    },
+    {
+      "symbol": "switch 1/2/3/WP",
+      "means": "SINGLE/DOUBLE/TRIPLE/WATERPROOF GANG SWITCH"
+    }
+  ],
+  "items": [
+    {
+      "type": "Single GPO",
+      "symbol": "single triangle",
+      "count": 4,
+      "confidence": "low",
+      "note": "Tea point/kitchen area ~1, reception desk area ~1, sauna area ~1, store/back ~1 = 4 (symbols heavily obscured by text/dimensions)"
+    },
+    {
+      "type": "Double GPO",
+      "symbol": "double triangle",
+      "count": 8,
+      "confidence": "low",
+      "note": "recovery/tea point ~2, reception ~2, waiting/WC ~1, massage rooms ~2, store ~1 = 8 (dense, many overlap dimension callouts)"
+    },
+    {
+      "type": "Double GPO / USB",
+      "symbol": "triangle + U",
+      "count": 2,
+      "confidence": "low",
+      "note": "reception desk area 1 (TV/tablet zone), bar fridge/fridge zone 1 = 2"
+    },
+    {
+      "type": "Double GPO for cleaning",
+      "symbol": "triangle + C",
+      "count": 2,
+      "confidence": "low",
+      "note": "near cleaners sink/back of house 1, kitchen/store 1 = 2"
+    },
+    {
+      "type": "Hardwired power",
+      "symbol": "triangle (hardwired)",
+      "count": 3,
+      "confidence": "medium",
+      "note": "front of desk for signage 1, TV @1700 recessed 1, reception/joinery 1 = 3 (text-labelled HARDWIRED POWER callouts)"
+    },
+    {
+      "type": "1500H recessed GPO + centre of tablet",
+      "symbol": "triangle (recessed)",
+      "count": 1,
+      "confidence": "low",
+      "note": "reception desk 1500H recessed GPO callout = 1"
+    },
+    {
+      "type": "Waterproof double GPO 10A for HWU (allow for 2)",
+      "symbol": "WP triangle",
+      "count": 2,
+      "confidence": "medium",
+      "note": "legend says allow for 2; HWU/WP locations near pump room & kitchen = 2"
+    },
+    {
+      "type": "Double data",
+      "symbol": "D",
+      "count": 2,
+      "confidence": "low",
+      "note": "reception desk DATA/PHONE 1, back office/store 1 = 2"
+    },
+    {
+      "type": "Main/security/alarm system phone line",
+      "symbol": "S (alarm)",
+      "count": 1,
+      "confidence": "low",
+      "note": "near entry/reception 1 = 1"
+    },
+    {
+      "type": "Comer point (data)",
+      "symbol": "C (circle)",
+      "count": 3,
+      "confidence": "low",
+      "note": "reception 1, tea point/recovery 1, back of house 1 = 3"
+    },
+    {
+      "type": "Sonos speakers",
+      "symbol": "S (circle)",
+      "count": 4,
+      "confidence": "low",
+      "note": "recovery 1, reception 1, waiting 1, corridor 1 = 4 (also speakers noted inside float tanks per detail but not on this plan legend symbol)"
+    },
+    {
+      "type": "EDB - electrical distribution board",
+      "symbol": "EDB box",
+      "count": 1,
+      "confidence": "high",
+      "note": "1x EDB labelled 'EDB LOCATION TBC' near pump room/float rooms = 1"
+    },
+    {
+      "type": "50L Hot water unit",
+      "symbol": "HWU (circle)",
+      "count": 2,
+      "confidence": "medium",
+      "note": "kitchen/back HWU 1, pump room area HWU 1 = 2"
+    },
+    {
+      "type": "15 amp dedicated circuit (float pump power)",
+      "symbol": "15 amp (text)",
+      "count": 4,
+      "confidence": "medium",
+      "note": "Sauna/WC zone (2000) 15amp 1, Float 1 1, Float 2 1, Float 3 1 = 4 (each AMP/PUMP labelled 15amp 2000)"
+    },
+    {
+      "type": "Float room exhaust supply & extraction",
+      "symbol": "E1 box",
+      "count": 6,
+      "confidence": "medium",
+      "note": "Float 1 OUT+IN, Float 2 OUT+IN, Float 3 OUT+IN = 6 E1 points (IN/OUT pairs per float room)"
+    },
+    {
+      "type": "Exhaust fan",
+      "symbol": "E2 box",
+      "count": 3,
+      "confidence": "medium",
+      "note": "Float 1 1, Float 2 1, Float 3 1 (E2 OUT) = 3"
+    },
+    {
+      "type": "Heat panel power (REFER RCP)",
+      "symbol": "AMP/HEAT text",
+      "count": 3,
+      "confidence": "medium",
+      "note": "Float 1/2/3 each 'REFER TO RCP - POWER FOR HEAT PANEL' = 3"
+    },
+    {
+      "type": "Light L1 - 12W recessed downlight",
+      "symbol": "L1",
+      "count": 14,
+      "confidence": "low",
+      "note": "RCP: reception/recovery open area ~4, kitchen/store ~2, waiting/WC ~2, massage rooms ~4, corridors ~2 = 14 (open-area general downlights)"
+    },
+    {
+      "type": "Light L2 - 11W IP44 recessed downlight",
+      "symbol": "L2",
+      "count": 22,
+      "confidence": "low",
+      "note": "RCP: kitchen 2, WC/sauna 1/2/3 ~6, toilets ~3, corridors ~4, back of house/store ~7 = 22 (wet/utility areas)"
+    },
+    {
+      "type": "Light L3 - tri-colour float downlight",
+      "symbol": "L3",
+      "count": 8,
+      "confidence": "medium",
+      "note": "RCP float rooms: Float 1 2, Float 2 2, Float 3 2, plus 1 each in 2 float hall detail = ~8 (2 per float room shown)"
+    },
+    {
+      "type": "Light L4 - spotlight (rock wall)",
+      "symbol": "L4",
+      "count": 3,
+      "confidence": "low",
+      "note": "RCP recovery/feature rock wall zone: L4 x3 noted in legend cluster = 3"
+    },
+    {
+      "type": "Light L5 - wall light / ZIP LED up-down",
+      "symbol": "L5",
+      "count": 12,
+      "confidence": "low",
+      "note": "RCP: float rooms 2 each x3 =6, corridors/sauna ~4, recovery ~2 = 12 (wall lights)"
+    },
+    {
+      "type": "Light L6 - feature pendant (recovery)",
+      "symbol": "L6",
+      "count": 3,
+      "confidence": "medium",
+      "note": "RCP recovery pendant detail shows 3x L6 pendants = 3"
+    },
+    {
+      "type": "Light L7 - Strix pendant (open ceiling main)",
+      "symbol": "L7",
+      "count": 8,
+      "confidence": "medium",
+      "note": "RCP entry/retail/reception open ceiling: L7 row 'L7 L7 L7 / L7 L7 L7 / L7 L7' = ~8"
+    },
+    {
+      "type": "Light L8 - black high bay",
+      "symbol": "L8",
+      "count": 0,
+      "confidence": "low",
+      "note": "Legend defined but no clear L8 symbols located on RCP (ceilings under 5m) = 0"
+    },
+    {
+      "type": "Light L9 - Minitrim wall washer (retail)",
+      "symbol": "L9",
+      "count": 2,
+      "confidence": "medium",
+      "note": "RCP retail zone: L9 x2 near logo/retail = 2"
+    },
+    {
+      "type": "Emergency light",
+      "symbol": "EM",
+      "count": 14,
+      "confidence": "low",
+      "note": "RCP: reception/recovery ~3, sauna 1/2/3 ~3, float 1/2/3 ~3, massage ~2, kitchen/WC ~3 = 14 (EM markers throughout)"
+    },
+    {
+      "type": "Emergency exit sign",
+      "symbol": "EXIT",
+      "count": 2,
+      "confidence": "low",
+      "note": "Front retail/entry area (legend notes exit signs to be perspex edge-lit in front retail area); estimate 2 at main exits = 2 (not all clearly marked on plan)"
+    },
+    {
+      "type": "Suspended heat lamp / heat panel",
+      "symbol": "HEAT box",
+      "count": 6,
+      "confidence": "medium",
+      "note": "RCP: each float room 1 (x3) + each sauna/WC HEAT ~3 = 6 (HEAT boxes labelled in float & wet rooms)"
+    },
+    {
+      "type": "Air switch (inside float tanks)",
+      "symbol": "AS",
+      "count": 4,
+      "confidence": "medium",
+      "note": "RCP/electrical: Float 1 1, Float 2 1, Float 3 1, plus recovery detail 1 = 4 AS markers"
+    },
+    {
+      "type": "Single gang switch",
+      "symbol": "switch 1",
+      "count": 4,
+      "confidence": "low",
+      "note": "scattered at room entries; estimate reception 1, kitchen 1, massage 2 = 4 (switches small/obscured)"
+    },
+    {
+      "type": "Triple gang switch (float rooms)",
+      "symbol": "switch 3",
+      "count": 3,
+      "confidence": "low",
+      "note": "note: 3-gang switch per float for ceiling/pump/heat: Float 1/2/3 = 3"
+    }
+  ],
+  "overall_note": "Only one revision (E, 25/10/21) of each sheet present — no superseded duplicates to exclude. The Electrical Plan (106) is extremely dense: GPO/data/comm triangle symbols are tiny and heavily overlapped by dimension strings and mounting-height callouts (e.g. (300),(600),(1000)), making precise discrimination of single vs double vs USB/cleaning variants unreliable — most power/data counts are LOW confidence and should be field-verified. The RCP (102) light-fitting counts are approximations because the plan is small-scale with overlapping L-codes and dashed switching lines; reflected ceiling symbols (EM, L1-L9) could not all be individually resolved. Float-room services (E1/E2/AS/HEAT/15amp) are the most reliable as they are clearly labelled per room. Exit/emergency quantities are partly governed by a note deferring to centre management, so actual counts may differ."
+}

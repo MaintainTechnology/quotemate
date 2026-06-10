@@ -62,10 +62,14 @@ create index if not exists plan_extractions_upload_idx
   on public.plan_extractions (plan_upload_id);
 
 -- Enable RLS to match the post-040 posture. Service role (every /api/* route)
--- bypasses RLS, so the routes work unchanged; no positive policy is added —
--- these are pure per-tenant operational tables never read via the anon client.
+-- bypasses RLS after it has table privileges, so no positive anon/auth policy is
+-- added — these are per-tenant operational tables never read via the browser.
 alter table public.plan_uploads     enable row level security;
 alter table public.plan_extractions enable row level security;
+
+grant select, insert, update, delete
+  on public.plan_uploads, public.plan_extractions
+  to service_role;
 
 -- Keep PostgREST's schema cache fresh.
 notify pgrst, 'reload schema';

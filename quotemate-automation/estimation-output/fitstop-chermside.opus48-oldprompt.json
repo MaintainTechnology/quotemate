@@ -1,0 +1,194 @@
+{
+  "plan": "fitstop-chermside-qld-08-12-20-issue-a",
+  "model": "claude-opus-4-8",
+  "sheet_hint": "ELECTRICAL / POWER & DATA",
+  "sheets_used": [
+    "104A - ELECTRICAL PLAN - INCLUDING POWER & DATA",
+    "103A - REFLECTED CEILING PLAN (INC. LIGHTING)"
+  ],
+  "legend_symbols": [
+    {
+      "symbol": "DGPO",
+      "means": "DGPO Double General Purpose Outlet (fit for purpose as noted) (AB) Above Bench, (UB) Under Bench, (SK) Skirting"
+    },
+    {
+      "symbol": "GPO",
+      "means": "GPO Single General Purpose Outlet (fit for purpose as noted)"
+    },
+    {
+      "symbol": "data triangle (▽)",
+      "means": "Data CAT6 (fit to purpose as noted)"
+    },
+    {
+      "symbol": "switch (S with arrow)",
+      "means": "Switch (refer RCP)"
+    },
+    {
+      "symbol": "speaker (B)/(W)",
+      "means": "Speakers - Fitstop standard, black (B) or white (W) finish, qty 4x"
+    },
+    {
+      "symbol": "LED panel square",
+      "means": "General LED Panels (Osram Ledvance LED Panel, 32W 4000K, 1200x300mm)"
+    },
+    {
+      "symbol": "recessed downlight (circle)",
+      "means": "Feature Recessed LED Downlight (Aurora Tritone 410mm, IP44, 4000K)"
+    },
+    {
+      "symbol": "downlight IP44 @ mirrors",
+      "means": "Feature Recessed LED Downlight @ Mirrors (Aurora Tritone 410mm, IP44)"
+    },
+    {
+      "symbol": "downlight IP65",
+      "means": "Shower Recessed LED Downlight (Aurora 410mm, IP65)"
+    },
+    {
+      "symbol": "EXIT",
+      "means": "Existing AND/OR New Exit Signs (C.O.S.)"
+    },
+    {
+      "symbol": "emergency light (circle)",
+      "means": "Existing AND/OR New Emergency Lighting (C.O.S.)"
+    },
+    {
+      "symbol": "switch (fit for purpose)",
+      "means": "Switch with dimmer if noted (fit for purpose as noted)"
+    },
+    {
+      "symbol": "security camera (diamond)",
+      "means": "Security/CCTV camera (T.B.C. with client)"
+    },
+    {
+      "symbol": "ceiling fan",
+      "means": "Fans (wall mounted) - Renegade Industrial Fan, Reonfan 2x speed, IP44, black"
+    },
+    {
+      "symbol": "A/C supply diffuser (hatched square)",
+      "means": "Air Conditioning Square Ceiling Diffuser to mech engineer spec, black"
+    },
+    {
+      "symbol": "A/C return air grille (square)",
+      "means": "Air Conditioning Return Air Grille to mech engineer spec"
+    },
+    {
+      "symbol": "exhaust register (circle)",
+      "means": "Mechanical Exhaust Ventilation Registers (fit for purpose, comply AS1668)"
+    }
+  ],
+  "items": [
+    {
+      "type": "Double GPO (DGPO)",
+      "symbol": "DGPO",
+      "count": 14,
+      "confidence": "low",
+      "note": "Includes AB/UB/SK variants plus reception desk dual DGPO+USB and TV/clock DGPOs; many labelled but dense/overlapping - count approximate"
+    },
+    {
+      "type": "Single GPO",
+      "symbol": "GPO",
+      "count": 6,
+      "confidence": "low",
+      "note": "Several GPO tags around perimeter and reception; small/illegible at this resolution"
+    },
+    {
+      "type": "Data/Comms outlet (CAT6)",
+      "symbol": "▽",
+      "count": 3,
+      "confidence": "low",
+      "note": "Data points near reception/comms cupboard; main data point to modem noted in reception requirements"
+    },
+    {
+      "type": "Switchboard / Distribution board (EDB)",
+      "symbol": "EDB",
+      "count": 1,
+      "confidence": "medium",
+      "note": "Existing EDB - upgrade as required, top-left near stair/storage"
+    },
+    {
+      "type": "Comms cupboard",
+      "symbol": "COMMS",
+      "count": 1,
+      "confidence": "medium",
+      "note": "Comms point top-left"
+    },
+    {
+      "type": "Speakers",
+      "symbol": "(B)/(W)",
+      "count": 4,
+      "confidence": "high",
+      "note": "Legend states qty 4x; visible at perimeter walls and reception"
+    },
+    {
+      "type": "General LED Panel light",
+      "symbol": "LED panel square",
+      "count": 18,
+      "confidence": "low",
+      "note": "Main floor lighting on RCP - dense grid, count approximate"
+    },
+    {
+      "type": "Feature Recessed LED Downlight",
+      "symbol": "recessed downlight circle",
+      "count": 12,
+      "confidence": "low",
+      "note": "Throughout floor and amenities; RCP dense"
+    },
+    {
+      "type": "Shower/IP65 Recessed Downlight",
+      "symbol": "downlight IP65",
+      "count": 4,
+      "confidence": "low",
+      "note": "IP65 noted in shower/amenities zones"
+    },
+    {
+      "type": "Exit sign",
+      "symbol": "EXIT",
+      "count": 3,
+      "confidence": "low",
+      "note": "EXIT signs noted 'only if required by certifier' - locations near stair/entry"
+    },
+    {
+      "type": "Emergency light",
+      "symbol": "emergency circle",
+      "count": 4,
+      "confidence": "low",
+      "note": "C.O.S. - exact count unclear on RCP"
+    },
+    {
+      "type": "Ceiling/wall fans",
+      "symbol": "fan",
+      "count": 4,
+      "confidence": "medium",
+      "note": "FAN 1-4 labelled on RCP"
+    },
+    {
+      "type": "A/C supply diffuser",
+      "symbol": "hatched square",
+      "count": 6,
+      "confidence": "low",
+      "note": "Mechanical - to mech engineer spec"
+    },
+    {
+      "type": "A/C return air grille",
+      "symbol": "square",
+      "count": 2,
+      "confidence": "low",
+      "note": "Mechanical"
+    },
+    {
+      "type": "Exhaust ventilation register",
+      "symbol": "exhaust circle",
+      "count": 2,
+      "confidence": "low",
+      "note": "Amenities exhaust"
+    },
+    {
+      "type": "Dedicated/appliance power points",
+      "symbol": "GPO/DGPO (dedicated)",
+      "count": 5,
+      "confidence": "low",
+      "note": "Power for LED neon sign, shopfront signage (timer in EDB), HMU, fountain power, water cooler/fridge - called up as text, fit for purpose; no 15A symbol defined in legend"
+    }
+  ],
+  "overall_note": "Two relevant sheets: 104A (Power & Data) and 103A (RCP/lighting). Legends are clear but the plan symbols are small and low-resolution at this scale, and many power/data points are tagged by text notes rather than discrete countable symbols (e.g. 'power for neon sign', 'fountain power', 'power for shopfront signage'). Reception area requirements describe additional outlets (2x dual DGPO w/USB, 2x iPad power, 5x port switch, data to modem) that may not all appear as distinct symbols. The legend defines NO dedicated 15A circuit symbol; dedicated/appliance points are noted as text only. Light fitting counts from the RCP are approximate due to dense ceiling grid overlapping with A/C diffusers and structural elements. All counts marked low confidence should be field-verified against the full-resolution PDF."
+}

@@ -66,6 +66,32 @@ describe('recommendAircon', () => {
     expect(r.routing.reason.toLowerCase()).toContain('budget')
   })
 
+  it('prices a two-storey ducted install above the single-storey equivalent', () => {
+    const one = recommend({ storeys: 1 })
+    const two = recommend({ storeys: 2 })
+    const ductedOne = one.options.find((o) => o.system_type === 'ducted')!
+    const ductedTwo = two.options.find((o) => o.system_type === 'ducted')!
+    expect(ductedTwo.pricing.point_estimate_ex_gst).toBeGreaterThan(
+      ductedOne.pricing.point_estimate_ex_gst,
+    )
+    expect(
+      ductedTwo.pricing.adjustments.some((a) => a.label.toLowerCase().includes('storey')),
+    ).toBe(true)
+  })
+
+  it('routes 3+ level homes to an assessment with a duct-routing reason', () => {
+    const r = recommend({ storeys: 3 })
+    expect(r.routing.reason.toLowerCase()).toContain('level')
+  })
+
+  it('exposes a line-item price explanation for both options', () => {
+    for (const o of recommend().options) {
+      expect(o.pricing.components.length).toBeGreaterThan(0)
+      expect(o.pricing.point_estimate_inc_gst).toBeGreaterThan(0)
+      expect(o.pricing.formula.length).toBeGreaterThan(0)
+    }
+  })
+
   it('does not invent a ducted price for a home with zero conditioned rooms', () => {
     const i = inputs({ bedrooms: 0, living_spaces: 0, floor_area_m2: null })
     const sizing = sizeAircon('temperate', i)

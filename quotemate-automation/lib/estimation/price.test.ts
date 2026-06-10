@@ -56,6 +56,23 @@ describe('priceTakeoff', () => {
     expect(bom.totalIncGst).toBe(1452.44)
   })
 
+  it('builds a full audit trace per priced line (count source, match signals, formulas)', () => {
+    const bom = priceTakeoff(
+      [{ type: 'Double GPO (standard)', count: 4, confidence: 'medium', note: 'left wall 2, amenities 1, reception 1 = 4' }],
+      ASSEMBLIES,
+      BOOK,
+    )
+    const trace = bom.lines[0].trace
+    expect(trace.countSource).toEqual({ confidence: 'medium', tally: 'left wall 2, amenities 1, reception 1 = 4' })
+    expect(trace.matchedSignals).toContain('double gpo')
+    expect(trace.baseUnitPriceExGst).toBe(22)
+    expect(trace.markupPct).toBe(28)
+    expect(trace.materialFormula).toBe('4 × ($22.00 + 28%) = 4 × $28.16 = $112.64')
+    expect(trace.unitLabourHours).toBe(0.3)
+    expect(trace.hourlyRate).toBe(110)
+    expect(trace.labourFormula).toBe('4 × 0.3h × $110.00/h = 1.2h = $132.00')
+  })
+
   it('applies the min-labour floor on a tiny job', () => {
     const bom = priceTakeoff([{ type: 'Double GPO', count: 1 }], ASSEMBLIES, BOOK)
     // 0.3 labour hrs < 2.0 min → floor adds (2 − 0.3) × 110 = 187

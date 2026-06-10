@@ -9,6 +9,8 @@
 import { CONFIDENCE_BAND, roundTo, roundUpHalf, roundUpToUnit } from './sizing'
 import type {
   AcOption,
+  AcPriceComponent,
+  AcPriceExplanation,
   AcPriceRange,
   AcPropertyInputs,
   AcRateCard,
@@ -41,42 +43,175 @@ function priceRange(exGst: number, band: number, gstRegistered: boolean): AcPric
   }
 }
 
+function priceExplanation(args: {
+  exGst: number
+  band: number
+  gstRegistered: boolean
+  formula: string
+  bandReason: string
+  components: AcPriceComponent[]
+  adjustments?: AcPriceComponent[]
+}): AcPriceExplanation {
+  const gst = args.gstRegistered ? 1.1 : 1.0
+  return {
+    point_estimate_ex_gst: roundMoney(args.exGst),
+    point_estimate_inc_gst: roundMoney(args.exGst * gst),
+    confidence_band_pct: Math.round(args.band * 100),
+    gst_registered: args.gstRegistered,
+    formula: args.formula,
+    band_reason: args.bandReason,
+    components: args.components,
+    adjustments: args.adjustments ?? [],
+  }
+}
+
 function buildSplitOption(sizing: AcSizing, rateCard: AcRateCard, band: number): AcOption {
-  let exGst = 0
+  let grossExGst = 0
   let capacity = 0
+  const grouped = new Map<number, { count: number; rate: number }>()
+
   for (const room of sizing.rooms) {
     const headKw = roundUpToUnit(room.kw)
+    const rate = rateCard.split.per_head[String(headKw)] ?? rateCard.split.per_head['8'] ?? 0
     capacity += headKw
-    exGst += rateCard.split.per_head[String(headKw)] ?? rateCard.split.per_head['8'] ?? 0
+    grossExGst += rate
+    const current = grouped.get(headKw) ?? { count: 0, rate }
+    current.count += 1
+    grouped.set(headKw, current)
   }
-  if (sizing.rooms.length >= 2) exGst *= 1 - rateCard.split.multi_head_discount_pct
+
+  const discount =
+    sizing.rooms.length >= 2 ? grossExGst * rateCard.split.multi_head_discount_pct : 0
+  const exGst = grossExGst - discount
+  const components: AcPriceComponent[] = Array.from(grouped.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([headKw, group]) => ({
+      label: `${headKw} kW split head`,
+      quantity: group.count,
+      unit: 'head',
+      rate_ex_gst: group.rate,
+      total_ex_gst: roundMoney(group.count * group.rate),
+      note: 'Supply and install allowance from the AC rate card.',
+    }))
+  const adjustments: AcPriceComponent[] =
+    discount > 0
+      ? [
+          {
+            label: 'Multi-head discount',
+            quantity: rateCard.split.multi_head_discount_pct * 100,
+            unit: '%',
+            rate_ex_gst: 0,
+            total_ex_gst: -roundMoney(discount),
+            note: 'Applied when two or more indoor heads are installed together.',
+          },
+        ]
+      : []
+
   return {
     system_type: 'split',
     capacity_kw: roundTo(capacity, 1),
     price: priceRange(exGst, band, rateCard.gst_registered),
+    pricing: priceExplanation({
+      exGst,
+      band,
+      gstRegistered: rateCard.gst_registered,
+      formula: 'sum(selected split heads) - multi-head discount',
+      bandReason: `${Math.round(band * 100)}% range from ${sizing.confidence} sizing confidence.`,
+      components,
+      adjustments,
+    }),
     best_fit: false,
     pros: ['Lower upfront cost', 'Independent per-room control', 'Can be installed in stages'],
     cons: ['A visible indoor head in each room', 'Less tidy than ducted for whole-home cooling'],
   }
 }
 
+/** Storeys → ducted install-complexity uplift (duct runs, riser access). */
+export const DUCTED_STOREY_UPLIFT_PCT: Record<number, number> = { 1: 0, 2: 0.08, 3: 0.15 }
+
 function buildDuctedOption(sizing: AcSizing, rateCard: AcRateCard, band: number): AcOption {
   const capacity = roundUpHalf(sizing.ducted_kw)
   const zones = sizing.conditioned_zones
+  const subtotalExGst =
+    zones === 0 || sizing.connected_kw === 0
+      ? 0
+      : rateCard.ducted.base_ex_gst +
+        rateCard.ducted.rate_per_kw * capacity +
+        rateCard.ducted.per_zone * zones
+  const storeyPct = DUCTED_STOREY_UPLIFT_PCT[sizing.storeys] ?? 0
+  const storeyExtra = subtotalExGst * storeyPct
+  const rawExGst = subtotalExGst + storeyExtra
   // No conditioned rooms → no system, so no phantom min-price floor.
   const exGst =
     zones === 0 || sizing.connected_kw === 0
       ? 0
-      : Math.max(
-          rateCard.ducted.min_ex_gst,
-          rateCard.ducted.base_ex_gst +
-            rateCard.ducted.rate_per_kw * capacity +
-            rateCard.ducted.per_zone * zones,
-        )
+      : Math.max(rateCard.ducted.min_ex_gst, rawExGst)
+  const components: AcPriceComponent[] =
+    zones === 0 || sizing.connected_kw === 0
+      ? []
+      : [
+          {
+            label: 'Ducted base install',
+            quantity: 1,
+            unit: 'allowance',
+            rate_ex_gst: rateCard.ducted.base_ex_gst,
+            total_ex_gst: rateCard.ducted.base_ex_gst,
+            note: 'Core supply/install allowance before capacity and zoning.',
+          },
+          {
+            label: 'Ducted capacity allowance',
+            quantity: capacity,
+            unit: 'kW',
+            rate_ex_gst: rateCard.ducted.rate_per_kw,
+            total_ex_gst: roundMoney(rateCard.ducted.rate_per_kw * capacity),
+            note: 'Central unit sized from connected load with diversity.',
+          },
+          {
+            label: 'Zone control allowance',
+            quantity: zones,
+            unit: 'zone',
+            rate_ex_gst: rateCard.ducted.per_zone,
+            total_ex_gst: roundMoney(rateCard.ducted.per_zone * zones),
+            note: 'Bedrooms and living spaces are counted as conditioned zones.',
+          },
+        ]
+  const minAdjustment = exGst - rawExGst
+  const adjustments: AcPriceComponent[] = []
+  if (storeyExtra > 0) {
+    adjustments.push({
+      label: `Multi-storey duct access (${sizing.storeys}${sizing.storeys >= 3 ? '+' : ''} levels)`,
+      quantity: storeyPct * 100,
+      unit: '%',
+      rate_ex_gst: 0,
+      total_ex_gst: roundMoney(storeyExtra),
+      note: 'Longer duct runs, riser penetrations and harder roof-space access on multi-level homes.',
+    })
+  }
+  if (minAdjustment > 0) {
+    adjustments.push({
+      label: 'Minimum ducted system floor',
+      quantity: 1,
+      unit: 'floor',
+      rate_ex_gst: rateCard.ducted.min_ex_gst,
+      total_ex_gst: roundMoney(minAdjustment),
+      note: 'Small ducted jobs still carry minimum equipment, labour and commissioning cost.',
+    })
+  }
+
   return {
     system_type: 'ducted',
     capacity_kw: capacity,
     price: priceRange(exGst, band, rateCard.gst_registered),
+    pricing: priceExplanation({
+      exGst,
+      band,
+      gstRegistered: rateCard.gst_registered,
+      formula:
+        'base install + capacity allowance + zone allowance + multi-storey access + any minimum floor',
+      bandReason: `${Math.round(band * 100)}% range from ${sizing.confidence} sizing confidence.`,
+      components,
+      adjustments,
+    }),
     best_fit: false,
     pros: ['Whole-home climate control', 'Hidden ductwork — tidy finish', 'One system for the house'],
     cons: ['Higher upfront cost', 'Needs roof/ceiling space for ducts', 'Best installed in one go'],
@@ -100,6 +235,13 @@ function decideRouting(
       decision: 'book_assessment',
       reason:
         'Sizing is a rough estimate from limited inputs — a site assessment will confirm capacity and price.',
+    }
+  }
+  if (sizing.storeys >= 3) {
+    return {
+      decision: 'book_assessment',
+      reason:
+        'Homes with 3+ levels need duct-routing and riser checks that only a site assessment can confirm.',
     }
   }
   if (sizing.connected_kw >= 14) {

@@ -32,6 +32,8 @@ export type AcPropertyInputs = {
   bedrooms: number
   bathrooms: number
   living_spaces: number
+  /** Storeys/levels: 1, 2, or 3 (3 = "3 or more"). Defaults to 1. */
+  storeys?: number
   /** Internal floor area in m². When present, pins confidence to high. */
   floor_area_m2?: number | null
   ceiling_height: CeilingHeight
@@ -44,17 +46,25 @@ export type AcPropertyInputs = {
 export type RoomLoad = {
   room_type: RoomType
   area_m2: number
+  /** Room air volume (area × ceiling height) — the load basis. */
+  volume_m3: number
   kw: number
 }
+
+export type AcFloorAreaSource = 'entered' | 'typical_room_mix' | 'solar_footprint'
 
 /** Deterministic sizing output. */
 export type AcSizing = {
   rooms: RoomLoad[]
   conditioned_zones: number
   total_floor_area_m2: number
-  /** floor area × ceiling height — Jon's "volumetric box" explainer. */
+  floor_area_source: AcFloorAreaSource
+  /** Sum of per-room volumes — the volumetric load basis. */
   total_volume_m3: number
   ceiling_height_m: number
+  storeys: number
+  /** kW per m³ of conditioned air for this climate zone. */
+  volumetric_factor_kw_m3: number
   connected_kw: number
   connected_kw_low: number
   connected_kw_high: number
@@ -62,6 +72,7 @@ export type AcSizing = {
   ducted_kw: number
   confidence: AcConfidence
   notes: string[]
+  warnings: string[]
 }
 
 export type AcSystemType = 'ducted' | 'split'
@@ -72,10 +83,31 @@ export type AcPriceRange = {
   high: number
 }
 
+export type AcPriceComponent = {
+  label: string
+  quantity: number
+  unit: string
+  rate_ex_gst: number
+  total_ex_gst: number
+  note?: string
+}
+
+export type AcPriceExplanation = {
+  point_estimate_ex_gst: number
+  point_estimate_inc_gst: number
+  confidence_band_pct: number
+  gst_registered: boolean
+  formula: string
+  band_reason: string
+  components: AcPriceComponent[]
+  adjustments: AcPriceComponent[]
+}
+
 export type AcOption = {
   system_type: AcSystemType
   capacity_kw: number
   price: AcPriceRange
+  pricing: AcPriceExplanation
   best_fit: boolean
   pros: string[]
   cons: string[]

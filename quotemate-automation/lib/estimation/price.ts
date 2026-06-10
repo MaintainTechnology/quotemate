@@ -25,7 +25,31 @@ export type PricingBook = {
   gst_registered?: boolean | null
 }
 
-export type TakeoffItem = { type: string; count: number }
+export type TakeoffItem = {
+  type: string
+  count: number
+  /** Optional take-off provenance, passed through into the priced line's trace. */
+  confidence?: 'high' | 'medium' | 'low'
+  /** The extraction's zone-by-zone tally note (where each symbol was counted). */
+  note?: string
+}
+
+/** Full audit chain for one priced line: where the count came from, which
+ *  catalogue assembly matched and why, and the exact arithmetic used. */
+export type PriceTrace = {
+  /** Take-off provenance */
+  countSource: { confidence?: 'high' | 'medium' | 'low'; tally?: string }
+  /** Why this assembly matched (the signal phrases shared by item + assembly). */
+  matchedSignals: string[]
+  /** Material math */
+  baseUnitPriceExGst: number
+  markupPct: number
+  materialFormula: string // e.g. "4 × ($28.00 + 28%) = 4 × $35.84 = $143.36"
+  /** Labour math */
+  unitLabourHours: number
+  hourlyRate: number
+  labourFormula: string // e.g. "4 × 0.5h × $110/h = 2h = $220.00"
+}
 
 export type PricedLine = {
   type: string
@@ -36,6 +60,7 @@ export type PricedLine = {
   labourHours: number
   labourExGst: number
   lineExGst: number
+  trace: PriceTrace
 }
 
 export type PricedBom = {
@@ -75,26 +100,41 @@ const SIGNALS = [
   'ceiling rose', 'isolator', 'tv point', 'antenna',
 ]
 
-/** Best-matching assembly for an item type, or null when nothing matches.
+/** Best-matching assembly for an item type plus the signal phrases that made
+ *  the match — the "why" half of the pricing trace. Null when nothing matches.
  *  Score = total length of signals shared by the item type and the assembly
  *  name/category; longest-signal-overlap wins, first assembly breaks ties. */
-export function matchAssembly(type: string, assemblies: AssemblyRow[]): AssemblyRow | null {
+export function matchAssemblyWithSignals(
+  type: string,
+  assemblies: AssemblyRow[],
+): { assembly: AssemblyRow; signals: string[] } | null {
   const t = norm(type)
   if (!t) return null
   let best: AssemblyRow | null = null
   let bestScore = 0
+  let bestSignals: string[] = []
   for (const a of assemblies) {
     const hay = `${norm(a.name)} ${norm(a.category ?? '')}`
     let score = 0
+    const signals: string[] = []
     for (const sig of SIGNALS) {
-      if (t.includes(sig) && hay.includes(sig)) score += sig.length
+      if (t.includes(sig) && hay.includes(sig)) {
+        score += sig.length
+        signals.push(sig)
+      }
     }
     if (score > bestScore) {
       bestScore = score
       best = a
+      bestSignals = signals
     }
   }
-  return bestScore > 0 ? best : null
+  return best && bestScore > 0 ? { assembly: best, signals: bestSignals } : null
+}
+
+/** Best-matching assembly for an item type, or null when nothing matches. */
+export function matchAssembly(type: string, assemblies: AssemblyRow[]): AssemblyRow | null {
+  return matchAssemblyWithSignals(type, assemblies)?.assembly ?? null
 }
 
 /** Price a take-off against the catalogue + pricing book. Pure + deterministic. */
@@ -114,16 +154,20 @@ export function priceTakeoff(
   let labourExGst = 0
   let labourHoursTotal = 0
 
+  const money = (n: number) => '$' + n.toFixed(2)
+
   for (const it of items ?? []) {
     const count = Math.max(0, Math.round(Number(it.count) || 0))
-    const match = matchAssembly(it.type, assemblies)
+    const match = matchAssemblyWithSignals(it.type, assemblies)
     if (!match || count === 0) {
       if (count > 0) unmatched.push({ type: it.type, count })
       continue
     }
-    const unitPrice = round2((Number(match.default_unit_price_ex_gst) || 0) * markup)
+    const baseUnit = Number(match.assembly.default_unit_price_ex_gst) || 0
+    const unitHours = Number(match.assembly.default_labour_hours) || 0
+    const unitPrice = round2(baseUnit * markup)
     const material = round2(count * unitPrice)
-    const labourHours = round2(count * (Number(match.default_labour_hours) || 0))
+    const labourHours = round2(count * unitHours)
     const labour = round2(labourHours * hourly)
     materialExGst += material
     labourExGst += labour
@@ -131,12 +175,25 @@ export function priceTakeoff(
     lines.push({
       type: it.type,
       count,
-      matched: match.name,
+      matched: match.assembly.name,
       unitPriceExGst: unitPrice,
       materialExGst: material,
       labourHours,
       labourExGst: labour,
       lineExGst: round2(material + labour),
+      trace: {
+        countSource: {
+          ...(it.confidence ? { confidence: it.confidence } : {}),
+          ...(it.note ? { tally: it.note } : {}),
+        },
+        matchedSignals: match.signals,
+        baseUnitPriceExGst: baseUnit,
+        markupPct: Number(book.default_markup_pct) || 0,
+        materialFormula: `${count} × (${money(baseUnit)} + ${Number(book.default_markup_pct) || 0}%) = ${count} × ${money(unitPrice)} = ${money(material)}`,
+        unitLabourHours: unitHours,
+        hourlyRate: hourly,
+        labourFormula: `${count} × ${unitHours}h × ${money(hourly)}/h = ${labourHours}h = ${money(labour)}`,
+      },
     })
   }
 

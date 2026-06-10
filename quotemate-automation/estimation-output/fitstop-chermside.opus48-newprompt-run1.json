@@ -1,0 +1,292 @@
+{
+  "plan": "fitstop-chermside-qld-08-12-20-issue-a",
+  "model": "claude-opus-4-8",
+  "sheet_hint": "ELECTRICAL / POWER & DATA",
+  "sheets_used": [
+    "104A - ELECTRICAL PLAN INCLUDING POWER & DATA (Rev A)",
+    "103A - REFLECTED CEILING PLAN INC. LIGHTING (Rev A)"
+  ],
+  "legend_symbols": [
+    {
+      "symbol": "DGPO",
+      "means": "Double General Purpose Outlet (fit for purpose; AB=above bench, UB=under bench, SK=skirting)"
+    },
+    {
+      "symbol": "GPO",
+      "means": "Single General Purpose Outlet (fit for purpose as noted)"
+    },
+    {
+      "symbol": "Switch",
+      "means": "Switch (refer RCP)"
+    },
+    {
+      "symbol": "Triangle",
+      "means": "Data CAT6 (fit to purpose as noted)"
+    },
+    {
+      "symbol": "Speaker (B)/(W)",
+      "means": "Speakers - allow 1x power + 1x CAT6 per speaker; black or white finish; qty 4"
+    },
+    {
+      "symbol": "Plain rectangle panel",
+      "means": "General LED Panel - Osram Ledvance 32W 4000K 1200x300mm"
+    },
+    {
+      "symbol": "Square w/ concentric square (downlight)",
+      "means": "Feature Recessed LED Downlight - Aurora 12W 1170lm IP44 4000K"
+    },
+    {
+      "symbol": "EXIT",
+      "means": "Existing AND/OR new exit signs (E.O.L.S.)"
+    },
+    {
+      "symbol": "Downlight @ mirrors",
+      "means": "Feature Recessed LED Downlight @ mirrors - Aurora 9W 860lm IP44 4000K"
+    },
+    {
+      "symbol": "Downlight IP65",
+      "means": "Shower Recessed LED Downlight - Aurora 11W 1120lm IP65 4000K"
+    },
+    {
+      "symbol": "Emergency light",
+      "means": "Existing AND/OR new emergency lighting (E.O.L.S.)"
+    },
+    {
+      "symbol": "Switch w/ dimmer",
+      "means": "Switch (fit for purpose as noted)"
+    },
+    {
+      "symbol": "Security camera diamond",
+      "means": "Security system camera/details TBC"
+    },
+    {
+      "symbol": "Fan",
+      "means": "Wall mounted fan - Renegade Industrial 3-speed 4-blade black"
+    },
+    {
+      "symbol": "A/C supply diffuser",
+      "means": "Air conditioning square ceiling diffuser to mech spec, black"
+    },
+    {
+      "symbol": "A/C return air grille",
+      "means": "Air conditioning return air grille to mech spec"
+    },
+    {
+      "symbol": "Mech exhaust register",
+      "means": "Mechanical exhaust ventilation registers (fit for purpose, comply with AS1668)"
+    }
+  ],
+  "items": [
+    {
+      "type": "DGPO double GPO (AB - above bench)",
+      "symbol": "DGPO (AB)",
+      "count": 4,
+      "confidence": "medium",
+      "note": "Amenities/cupboard top-left 2 (UB labelled but DGPO(AB) at HMU area & cupboard) ; reception bench 'DUAL DGPO (AB)+USB' x2 at reception counter = reception 2; amenities 2 = 4"
+    },
+    {
+      "type": "DGPO double GPO (UB - under bench)",
+      "symbol": "DGPO (UB)",
+      "count": 2,
+      "confidence": "medium",
+      "note": "amenities/HMU cupboard area top-left: DGPO(UB) 2 = 2"
+    },
+    {
+      "type": "DGPO double GPO (SK - skirting)",
+      "symbol": "DGPO (SK)",
+      "count": 5,
+      "confidence": "medium",
+      "note": "top wall 2 (near cupboards each end), right wall 2 (mid + lower), bottom-left near skiers/bikes 1 = 5"
+    },
+    {
+      "type": "DGPO above TV + digital clock (reception)",
+      "symbol": "DGPO",
+      "count": 2,
+      "confidence": "medium",
+      "note": "x2 DGPO above TV and digital clock note near reception = 2"
+    },
+    {
+      "type": "GPO single general purpose outlet",
+      "symbol": "GPO",
+      "count": 4,
+      "confidence": "medium",
+      "note": "top-left HMU 1, top-right wall 1, reception area 1, amenities 1 = 4"
+    },
+    {
+      "type": "Data CAT6 outlet",
+      "symbol": "Triangle",
+      "count": 2,
+      "confidence": "medium",
+      "note": "reception counter 1 (main data point to modem in comms cupboard), reception desk iPad area 1 = 2"
+    },
+    {
+      "type": "Speakers (black/white, power + CAT6)",
+      "symbol": "Speaker (B)/(W)",
+      "count": 4,
+      "confidence": "high",
+      "note": "legend states qty 4; located top-left wall 1, mid-left wall 1, right wall 1, reception 1 = 4"
+    },
+    {
+      "type": "Fountain power (dedicated appliance point)",
+      "symbol": "text 'FOUNTAIN POWER'",
+      "count": 1,
+      "confidence": "high",
+      "note": "water cooler/VOID area amenities, labelled 'FOUNTAIN POWER' = 1"
+    },
+    {
+      "type": "Power for wall mounted TV",
+      "symbol": "text",
+      "count": 1,
+      "confidence": "high",
+      "note": "top-left 'POWER & DATA FOR WALL MOUNTED TV' = 1"
+    },
+    {
+      "type": "Power for LED neon sign",
+      "symbol": "text",
+      "count": 1,
+      "confidence": "high",
+      "note": "top-right wall 'POWER FOR LED NEON SIGN' = 1"
+    },
+    {
+      "type": "Power for shopfront signage (allow for timer in EDB)",
+      "symbol": "text",
+      "count": 1,
+      "confidence": "high",
+      "note": "bottom wall 'POWER FOR SHOPFRONT SIGNAGE' = 1"
+    },
+    {
+      "type": "Power for HMU",
+      "symbol": "text",
+      "count": 1,
+      "confidence": "medium",
+      "note": "top-left 'ALLOW POWER FOR HMU (IF REQUIRED)' = 1"
+    },
+    {
+      "type": "Existing EDB / distribution board (upgrade as required)",
+      "symbol": "EDB",
+      "count": 1,
+      "confidence": "high",
+      "note": "top-left storage/A/C control boxes area 'EXISTING EDB - UPGRADE AS REQUIRED' = 1"
+    },
+    {
+      "type": "Comms cupboard",
+      "symbol": "COMMS",
+      "count": 1,
+      "confidence": "high",
+      "note": "top-left near EDB 'COMMS' = 1"
+    },
+    {
+      "type": "Switch (light switch, refer RCP)",
+      "symbol": "Switch",
+      "count": 6,
+      "confidence": "low",
+      "note": "top-left 1, amenities corridor 3 (multiple 'LIGHT SWITCH REFER RCP'), reception 1, bottom-left near gang switches 1 = 6 (density medium)"
+    },
+    {
+      "type": "3x gang lights switches",
+      "symbol": "Switch (gang)",
+      "count": 1,
+      "confidence": "medium",
+      "note": "bottom-left '3x GANG LIGHTS SWITCHES REFER RCP' 1 + reception '3x gang lights switches' shown = grouped as 1 location bank"
+    },
+    {
+      "type": "Speakers switch",
+      "symbol": "Switch",
+      "count": 1,
+      "confidence": "medium",
+      "note": "reception 'SPEAKERS SWITCH' = 1"
+    },
+    {
+      "type": "2x gang fans switch",
+      "symbol": "Switch",
+      "count": 1,
+      "confidence": "medium",
+      "note": "amenities/VOID area '2x GANG FANS SWITCH (REFER RCP)' = 1"
+    },
+    {
+      "type": "General LED Panel 32W 4000K 1200x300",
+      "symbol": "Plain rectangle",
+      "count": 7,
+      "confidence": "low",
+      "note": "RCP main retail open ceiling: top row 2, mid row 2, lower row 2, entry area 1 = 7 (dense, some overlap with diffusers; medium-low confidence)"
+    },
+    {
+      "type": "Feature Recessed LED Downlight 12W IP44 4000K",
+      "symbol": "Square concentric (12W)",
+      "count": 14,
+      "confidence": "low",
+      "note": "RCP retail floor grid: top zone 4, middle zone 4, lower zone 4, entry 2 = 14; '12W' labelled near amenities cluster (dense grid, estimate)"
+    },
+    {
+      "type": "Feature Recessed LED Downlight @ mirrors 9W IP44 4000K",
+      "symbol": "Downlight 9W",
+      "count": 4,
+      "confidence": "low",
+      "note": "amenities '9W' labelled at mirror locations: male 1, female 1, vanity 2 = 4"
+    },
+    {
+      "type": "Shower Recessed LED Downlight 11W IP65 4000K",
+      "symbol": "Downlight IP65",
+      "count": 4,
+      "confidence": "medium",
+      "note": "RCP amenities: 'IP65' labelled at male shower 1, female shower 1, plus '2x FITTING TO BE IP65 RATED' note 2 = 4"
+    },
+    {
+      "type": "Exit sign (E.O.L.S.)",
+      "symbol": "EXIT",
+      "count": 4,
+      "confidence": "medium",
+      "note": "top-left near stairs 1, amenities corridor 1, bottom near shopfront/entry 1, mid-left 1 = 4 ('EXIT SIGN ONLY IF REQUIRED BY CERTIFIER' noted)"
+    },
+    {
+      "type": "Wall mounted fan (Renegade 3-speed)",
+      "symbol": "Fan",
+      "count": 4,
+      "confidence": "high",
+      "note": "RCP labelled FAN 1 (mid-left), FAN 2 (right), FAN 3 (top-left), FAN 4 (top-right) = 4"
+    },
+    {
+      "type": "Speakers (RCP - wall/tilt mount)",
+      "symbol": "Speaker",
+      "count": 4,
+      "confidence": "medium",
+      "note": "RCP: top-left 1, mid-left wall 1, right wall 1, reception/speaker switch area 1 = 4 (matches Power sheet qty 4)"
+    },
+    {
+      "type": "A/C supply square ceiling diffuser (black)",
+      "symbol": "Square diffuser",
+      "count": 6,
+      "confidence": "low",
+      "note": "RCP retail ceiling: distributed approx top 2, middle 2, lower 2 = 6 (dense, mech symbols overlap downlights)"
+    },
+    {
+      "type": "A/C return air grille",
+      "symbol": "Return grille",
+      "count": 2,
+      "confidence": "low",
+      "note": "RCP: 2 large grille symbols mid-retail = 2"
+    },
+    {
+      "type": "Mechanical exhaust ventilation register",
+      "symbol": "Exhaust register",
+      "count": 2,
+      "confidence": "low",
+      "note": "RCP amenities ceiling: male 1, female 1 = 2 (ceiling sensor activates exhaust per note)"
+    },
+    {
+      "type": "Security camera",
+      "symbol": "Diamond",
+      "count": 3,
+      "confidence": "low",
+      "note": "RCP: small diamond symbols - entry 1, retail mid 1, reception 1 = 3 (TBC per legend)"
+    },
+    {
+      "type": "Ceiling sensor (lights/exhaust activation in amenities)",
+      "symbol": "Sensor",
+      "count": 2,
+      "confidence": "low",
+      "note": "Note: 'provide one ceiling sensor in each amenities compartment' - male 1, female 1 = 2"
+    }
+  ],
+  "overall_note": "Only Rev A sheets present (104A power/data, 103A RCP); no superseded revisions. Power/data counts from 104A and lighting/mech from 103A. CONFIDENCE IS LOW on RCP fitting counts (panels, 12W downlights, diffusers) because the retail-floor ceiling grid is dense and the raster symbols are small/overlapping — panels vs diffusers vs downlights are hard to separate at this resolution; counts are best estimates and should be verified against a higher-res RCP. DGPO AB/UB/SK suffix allocation is partly inferred from labels near amenities/reception; some GPO/switch symbols in the tight amenities corridor may be undercounted. Speaker qty cross-confirmed by legend (4). Many 'power for...' items are text-noted special circuits rather than plotted symbols. Exit/emergency signs are conditional ('only if required by certifier')."
+}

@@ -8,6 +8,7 @@ import { RecommendRequestSchema } from '@/lib/aircon/request-schema'
 import { climateZoneForPostcode } from '@/lib/aircon/climate'
 import { sizeAircon } from '@/lib/aircon/sizing'
 import { recommendAircon, mergeAcRateCard, DEFAULT_AC_RATE_CARD } from '@/lib/aircon/recommend'
+import { resolveAcLocationEvidence } from '@/lib/aircon/location'
 import type { AcRateCard } from '@/lib/aircon/types'
 
 export const dynamic = 'force-dynamic'
@@ -84,11 +85,27 @@ export async function POST(req: Request) {
   }
 
   const { zone, note } = climateZoneForPostcode(address.postcode, address.state)
-  const sizing = sizeAircon(zone, inputs)
+  const location = await resolveAcLocationEvidence(address, {
+    geocodeApiKey: process.env.GOOGLE_GEOCODE_API_KEY ?? process.env.GOOGLE_MAPS_API_KEY,
+    weatherApiKey: process.env.GOOGLE_WEATHER_API_KEY ?? process.env.GOOGLE_MAPS_API_KEY,
+    solarApiKey: process.env.GOOGLE_SOLAR_API_KEY ?? process.env.GOOGLE_MAPS_API_KEY,
+    storeys: inputs.storeys ?? 1,
+  })
+  // When the tradie left floor area blank, the Google Solar roof
+  // footprint (× storeys × wall correction) stands in for the
+  // typical-room-mix guess. An entered area always wins.
+  const areaEvidence =
+    location.building.ok && inputs.floor_area_m2 == null
+      ? {
+          solar_floor_area_m2: location.building.estimated_floor_area_m2,
+          capture_note: `${location.building.footprint_m2} m2 roof footprint${location.building.imagery_date ? ` (satellite imagery ${location.building.imagery_date})` : ''} × ${location.building.storeys_assumed} storey${location.building.storeys_assumed === 1 ? '' : 's'} × 0.85 wall correction.`,
+        }
+      : null
+  const sizing = sizeAircon(zone, inputs, areaEvidence)
   const recommendation = recommendAircon({ sizing, inputs, rateCard })
 
   return Response.json(
-    { ok: true, climate_zone: zone, climate_note: note, recommendation },
+    { ok: true, climate_zone: zone, climate_note: note, location, recommendation },
     { status: 200 },
   )
 }

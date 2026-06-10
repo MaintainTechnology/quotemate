@@ -32,4 +32,17 @@ describe('RecommendRequestSchema', () => {
     const ok = { ...valid, inputs: rest }
     expect(RecommendRequestSchema.safeParse(ok).success).toBe(true)
   })
+  it('accepts storeys 1-3 and omitted storeys (older clients)', () => {
+    expect(RecommendRequestSchema.safeParse(valid).success).toBe(true)
+    for (const storeys of [1, 2, 3]) {
+      const ok = { ...valid, inputs: { ...valid.inputs, storeys } }
+      expect(RecommendRequestSchema.safeParse(ok).success).toBe(true)
+    }
+  })
+  it('rejects storeys outside 1-3', () => {
+    for (const storeys of [0, 4, 1.5]) {
+      const bad = { ...valid, inputs: { ...valid.inputs, storeys } }
+      expect(RecommendRequestSchema.safeParse(bad).success).toBe(false)
+    }
+  })
 })

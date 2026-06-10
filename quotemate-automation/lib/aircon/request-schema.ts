@@ -17,6 +17,8 @@ export const AcInputsSchema = z
     bedrooms: z.number().int().min(0).max(20),
     bathrooms: z.number().int().min(0).max(20),
     living_spaces: z.number().int().min(0).max(20),
+    /** 1, 2, or 3 (3 = "3 or more"). Optional for older clients. */
+    storeys: z.number().int().min(1).max(3).optional(),
     floor_area_m2: z.number().positive().max(2000).optional().nullable(),
     ceiling_height: z.enum(['standard', 'high', 'raked']),
     insulation: z.enum(['good', 'average', 'poor', 'unknown']),

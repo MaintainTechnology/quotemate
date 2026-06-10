@@ -54,6 +54,30 @@ describe('parseExtraction', () => {
     expect(parsed.overall_note).toBe('reception cluster was dense')
   })
 
+  it('parses per-symbol locations, clamping x/y and dropping invalid entries', () => {
+    const text = JSON.stringify({
+      items: [
+        {
+          type: 'Single GPO',
+          count: 4,
+          locations: [
+            { page: 3, x: 12.34, y: 56.78 },     // kept (rounded to 1dp)
+            { page: 3, x: 150, y: -5 },           // clamped to 100 / 0
+            { page: 0, x: 50, y: 50 },            // bad page → dropped
+            { page: 3, x: 'left', y: 10 },        // bad x → dropped
+          ],
+        },
+        { type: 'EDB', count: 1 },                // no locations → field omitted
+      ],
+    })
+    const parsed = parseExtraction(text)!
+    expect(parsed.items[0].locations).toEqual([
+      { page: 3, x: 12.3, y: 56.8 },
+      { page: 3, x: 100, y: 0 },
+    ])
+    expect(parsed.items[1].locations).toBeUndefined()
+  })
+
   it('tolerates missing fields (defaults to empty arrays / string)', () => {
     const parsed = parseExtraction('{"items":[]}')!
     expect(parsed.items).toEqual([])
