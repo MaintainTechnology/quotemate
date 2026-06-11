@@ -7,6 +7,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import {
+  BTN_PRIMARY,
+  delay,
+  Notice,
+  REVEAL,
+  TopoBackdrop,
+} from '@/app/dashboard/signage/_components/ui'
 
 type Shot = { slot: string; label: string; instruction: string }
 
@@ -52,6 +59,7 @@ export default function StudioUploadPage() {
   }, [])
 
   const totalFiles = useMemo(() => Object.values(files).reduce((n, f) => n + f.length, 0), [files])
+  const covered = useMemo(() => shots.filter((s) => (files[s.slot]?.length ?? 0) > 0).length, [shots, files])
 
   const submit = useCallback(async () => {
     setBusy(true)
@@ -95,79 +103,167 @@ export default function StudioUploadPage() {
   }, [files, token, router])
 
   return (
-    <main className="min-h-screen bg-ink-deep text-text-pri">
-      <section className="mx-auto max-w-2xl px-6 pt-14 pb-10 sm:px-8">
-        <a
-          href="/dashboard/signage"
-          className="mb-5 inline-flex items-center gap-2 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim transition-colors hover:text-accent"
-        >
-          <span aria-hidden="true">&larr;</span> Back to signage
-        </a>
-        <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
+    <main className="relative min-h-screen overflow-hidden bg-ink-deep text-text-pri">
+      <TopoBackdrop />
+
+      <section className="relative z-10 mx-auto max-w-2xl px-6 pt-12 pb-16 sm:px-8 sm:pt-14">
+        <div className={`font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent ${REVEAL}`}>
           {brand?.name ?? 'Brand'} compliance check
         </div>
-        <h1 className="mt-3 font-extrabold uppercase leading-[0.95] tracking-[-0.03em] text-[clamp(2rem,7vw,3rem)]">
+        <h1
+          className={`mt-3 font-extrabold uppercase leading-[0.95] tracking-[-0.03em] text-[clamp(2rem,7vw,3rem)] ${REVEAL}`}
+          style={delay(60)}
+        >
           {state === 'collect' ? studioName : 'Compliance check'}
         </h1>
-        <p className="mt-4 text-base leading-relaxed text-text-sec">
+        <p className={`mt-4 text-base leading-relaxed text-text-sec ${REVEAL}`} style={delay(120)}>
           Take the photos below and submit. {brand?.hq_name ?? 'HQ'}&rsquo;s tool will pre-check them against the{' '}
           {brand?.name ?? 'brand'} standards and tell you what (if anything) needs fixing. This is a pre-check,
           not final {brand?.hq_name ?? 'HQ'} approval.
         </p>
 
-        {state === 'loading' && <p className="mt-8 text-text-sec">Loading…</p>}
+        {state === 'loading' && (
+          <p className={`mt-8 text-text-sec ${REVEAL}`} style={delay(180)}>
+            <span className="mr-2 inline-block h-2.5 w-2.5 bg-accent motion-safe:animate-[pulse-soft_1.6s_ease-in-out_infinite]" aria-hidden="true" />
+            Loading your shot list…
+          </p>
+        )}
         {state === 'invalid' && (
-          <div className="mt-8 border border-ink-line border-l-4 border-l-warning bg-ink-card p-6">
-            <p className="text-text-sec">This link is invalid or has expired. Please contact {brand?.hq_name ?? 'HQ'} for a new one.</p>
+          <div className={`mt-8 ${REVEAL}`}>
+            <Notice tone="warn">
+              This link is invalid or has expired. Please contact {brand?.hq_name ?? 'HQ'} for a new one.
+            </Notice>
           </div>
         )}
         {state === 'done' && (
-          <div className="mt-8 border border-ink-line border-l-4 border-l-teal-glow bg-ink-card p-6">
-            <p className="text-teal-glow">Submitted — preparing your report…</p>
+          <div className={`mt-8 ${REVEAL}`}>
+            <Notice tone="good">
+              <span className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-teal-glow">✓ Submitted</span>
+              <p className="mt-1.5">Preparing your report — you&rsquo;ll be redirected in a moment…</p>
+            </Notice>
           </div>
         )}
 
         {state === 'collect' && (
-          <div className="mt-8 grid gap-5">
-            {shots.map((s) => {
-              const picked = files[s.slot]?.length ?? 0
-              return (
-                <div key={s.slot} className="border border-ink-line bg-ink-card p-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="font-mono text-sm font-semibold uppercase tracking-[0.14em] text-accent">{s.label}</div>
-                    {picked > 0 && <span className="font-mono text-[0.7rem] uppercase tracking-[0.12em] text-teal-glow">{picked} ✓</span>}
-                  </div>
-                  <p className="mt-2 text-sm text-text-sec">{s.instruction}</p>
-                  {/* No `capture` attr: on mobile this lets the user EITHER
-                      take a new photo OR pick one already in their gallery
-                      (capture="environment" forced the live camera + blocked
-                      the gallery, so phone-saved photos couldn't be chosen). */}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    aria-label={`Upload photo for ${s.label}`}
-                    onChange={(e) => onPick(s.slot, e.target.files)}
-                    className="mt-3 block w-full text-sm text-text-sec file:mr-4 file:border-0 file:bg-accent file:px-4 file:py-2.5 file:font-mono file:text-xs file:font-semibold file:uppercase file:tracking-[0.12em] file:text-white"
-                  />
+          <>
+            {/* Progress */}
+            {shots.length > 0 && (
+              <div className={`mt-8 border border-ink-line bg-ink-card p-5 ${REVEAL}`} style={delay(180)}>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">Your progress</span>
+                  <span className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-sec">
+                    <span className="tabular-nums text-text-pri">{covered}</span>/<span className="tabular-nums">{shots.length}</span> shots covered
+                  </span>
                 </div>
-              )
-            })}
+                <div
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={shots.length}
+                  aria-valuenow={covered}
+                  aria-label={`${covered} of ${shots.length} shots covered`}
+                  className="mt-3 flex h-1.5 w-full gap-px overflow-hidden bg-ink-deep"
+                >
+                  {shots.map((s) => (
+                    <div
+                      key={s.slot}
+                      className={`flex-1 transition-colors duration-300 ${(files[s.slot]?.length ?? 0) > 0 ? 'bg-teal-glow' : 'bg-ink-line'}`}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
 
-            {err && <p className="text-warning">{err}</p>}
+            <div className="mt-5 grid gap-4">
+              {shots.map((s, i) => {
+                const picked = files[s.slot] ?? []
+                const has = picked.length > 0
+                return (
+                  <div
+                    key={s.slot}
+                    className={`border border-ink-line bg-ink-card p-5 ${has ? 'border-l-2 border-l-teal-glow' : ''} ${REVEAL}`}
+                    style={delay(220 + Math.min(i, 8) * 50)}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono text-2xl font-bold leading-none text-accent" aria-hidden="true">
+                          {String(i + 1).padStart(2, '0')}
+                        </span>
+                        <span className="font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri">{s.label}</span>
+                      </div>
+                      {has && (
+                        <span className="font-mono text-[0.7rem] uppercase tracking-[0.12em] text-teal-glow">
+                          <span className="tabular-nums">{picked.length}</span> ✓
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-2.5 text-sm leading-relaxed text-text-sec">{s.instruction}</p>
+                    {has && <PickedThumbs files={picked} label={s.label} />}
+                    {/* No `capture` attr: on mobile this lets the user EITHER
+                        take a new photo OR pick one already in their gallery
+                        (capture="environment" forced the live camera + blocked
+                        the gallery, so phone-saved photos couldn't be chosen). */}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      aria-label={`Upload photo for ${s.label}`}
+                      onChange={(e) => onPick(s.slot, e.target.files)}
+                      className="mt-3 block w-full text-sm text-text-sec file:mr-4 file:cursor-pointer file:border-0 file:bg-accent file:px-4 file:py-2.5 file:font-mono file:text-xs file:font-semibold file:uppercase file:tracking-[0.12em] file:text-white"
+                    />
+                  </div>
+                )
+              })}
 
-            <button
-              type="button"
-              onClick={submit}
-              disabled={busy || totalFiles === 0}
-              className="mt-2 inline-flex items-center justify-center gap-2 bg-accent px-6 py-4 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {busy ? 'Submitting…' : <>Submit {totalFiles} photo{totalFiles === 1 ? '' : 's'} for review <span aria-hidden="true">&rarr;</span></>}
-            </button>
-          </div>
+              {err && <p role="alert" className="text-sm text-warning-bright">{err}</p>}
+
+              <button
+                type="button"
+                onClick={submit}
+                disabled={busy || totalFiles === 0}
+                className={`mt-2 w-full py-4 sm:w-auto ${BTN_PRIMARY}`}
+              >
+                {busy ? 'Uploading your photos…' : <>Submit {totalFiles} photo{totalFiles === 1 ? '' : 's'} for review <span aria-hidden="true">&rarr;</span></>}
+              </button>
+              {busy && (
+                <p className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim" aria-live="polite">
+                  <span className="mr-2 inline-block h-2 w-2 bg-accent motion-safe:animate-[pulse-soft_1.6s_ease-in-out_infinite]" aria-hidden="true" />
+                  Compressing + sending — this can take a few seconds on mobile
+                </p>
+              )}
+            </div>
+          </>
         )}
       </section>
     </main>
+  )
+}
+
+/** Small previews of the photos picked for one shot. Object URLs are
+ *  minted after commit (never during render, so aborted/double renders
+ *  can't leak them) and revoked on cleanup. The microtask keeps the
+ *  effect body itself free of synchronous setState. */
+function PickedThumbs({ files, label }: { files: File[]; label: string }) {
+  const [urls, setUrls] = useState<string[]>([])
+  useEffect(() => {
+    let cancelled = false
+    let created: string[] = []
+    void Promise.resolve().then(() => {
+      if (cancelled) return
+      created = files.map((f) => URL.createObjectURL(f))
+      setUrls(created)
+    })
+    return () => {
+      cancelled = true
+      created.forEach((u) => URL.revokeObjectURL(u))
+    }
+  }, [files])
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {urls.map((u, i) => (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img key={u} src={u} alt={`${label} — selected photo ${i + 1}`} className="h-16 w-20 border border-ink-line object-cover" />
+      ))}
+    </div>
   )
 }
 

@@ -31,7 +31,8 @@
 
   /* ─── STATE COLOURS ─────────────────────────────────────── */
   --success:      #15803D;
-  --warning:      #B45309;
+  --warning:      #B45309;   /* fill shade — behind white text only */
+  --warning-bright: #F59E0B; /* text/border shade — readable on the dark canvas */
   --danger:       #B91C1C;
 }
 
@@ -49,6 +50,7 @@
   --color-teal-glow:    var(--teal-glow);
   --color-success:      var(--success);
   --color-warning:      var(--warning);
+  --color-warning-bright: var(--warning-bright);
   --color-danger:       var(--danger);
 
   --font-sans: var(--font-manrope);

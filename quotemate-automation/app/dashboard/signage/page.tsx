@@ -1,6 +1,6 @@
 'use client'
 
-// /dashboard/signage — F45 HQ signage-compliance hub.
+// /dashboard/signage — the HQ signage-compliance hub (F45, Anytime Fitness, …).
 //
 // HQ runs a "sweep" (request photos from a set of studios), gets back
 // tokenised upload links, and sees each studio's latest compliance status.
@@ -13,6 +13,26 @@ import { getBrowserSupabase } from '@/lib/supabase/client'
 import type { ShotSlot } from '@/lib/signage/types'
 import { distinctRegions, regionMatches } from '@/lib/signage/region'
 import { BrandTabs, withBrand, brandFromUrl, syncBrandInUrl, type BrandTab } from './_components/BrandTabs'
+import {
+  BTN_DANGER_SM,
+  BTN_GHOST,
+  BTN_GHOST_SM,
+  BTN_PRIMARY,
+  Chip,
+  Crumbs,
+  delay,
+  EmptyState,
+  FleetSnapshot,
+  INPUT,
+  Label,
+  Notice,
+  overallTone,
+  REVEAL,
+  SectionHeading,
+  SignageNav,
+  TopoBackdrop,
+  type Tone,
+} from './_components/ui'
 
 type Studio = { id: string; name: string; region: string | null; state?: string | null; status: string }
 type SweepRequest = {
@@ -46,7 +66,7 @@ type Brand = { slug: string; name: string; location_noun: string; location_noun_
 
 export default function SignageHubPage() {
   const [token, setToken] = useState<string | null>(null)
-  const [authState, setAuthState] = useState<'loading' | 'signed-out' | 'ready' | 'no-org'>('loading')
+  const [authState, setAuthState] = useState<'loading' | 'signed-out' | 'ready' | 'no-org' | 'error'>('loading')
   const [studios, setStudios] = useState<Studio[]>([])
   const [sweeps, setSweeps] = useState<Sweep[]>([])
   const [rollup, setRollup] = useState<Rollup | null>(null)
@@ -61,36 +81,41 @@ export default function SignageHubPage() {
   const [err, setErr] = useState<string | null>(null)
 
   const load = useCallback(async (accessToken: string, brandParam: string | null) => {
-    const headers = { Authorization: `Bearer ${accessToken}` }
-    const q = brandParam ? `?brand=${encodeURIComponent(brandParam)}` : ''
-    const queueSep = brandParam ? `&brand=${encodeURIComponent(brandParam)}` : ''
-    const [sweepsRes, queueRes] = await Promise.all([
-      fetch(`/api/signage/sweeps${q}`, { headers }),
-      fetch(`/api/signage/queue?status=all${queueSep}`, { headers }),
-    ])
-    // load() only runs once we already have a session token, so a 401/!ok
-    // here is NOT "signed out" — it means this signed-in account has no
-    // franchisor org yet. Show the no-org state (not the sign-in prompt).
-    if (sweepsRes.status === 401) {
-      setAuthState('no-org')
-      return
+    try {
+      const headers = { Authorization: `Bearer ${accessToken}` }
+      const q = brandParam ? `?brand=${encodeURIComponent(brandParam)}` : ''
+      const queueSep = brandParam ? `&brand=${encodeURIComponent(brandParam)}` : ''
+      const [sweepsRes, queueRes] = await Promise.all([
+        fetch(`/api/signage/sweeps${q}`, { headers }),
+        fetch(`/api/signage/queue?status=all${queueSep}`, { headers }),
+      ])
+      // load() only runs once we already have a session token, so a 401/!ok
+      // here is NOT "signed out" — it means this signed-in account has no
+      // franchisor org yet. Show the no-org state (not the sign-in prompt).
+      if (sweepsRes.status === 401) {
+        setAuthState('no-org')
+        return
+      }
+      const sweepsJson = await sweepsRes.json()
+      if (!sweepsJson.ok) {
+        setAuthState('no-org')
+        return
+      }
+      setStudios(sweepsJson.studios ?? [])
+      setSweeps(sweepsJson.sweeps ?? [])
+      setBrands(sweepsJson.brands ?? [])
+      setBrandSlug(sweepsJson.selected ?? null)
+      const b: Brand | null = sweepsJson.brand ?? null
+      setBrand(b)
+      // Default the sweep's shot selection to all of this brand's shots.
+      if (b) setShots((prev) => (prev.size > 0 ? prev : new Set(b.shots.map((s) => s.slot))))
+      const queueJson = await queueRes.json().catch(() => null)
+      if (queueJson?.ok) setRollup(queueJson.rollup)
+      setAuthState('ready')
+    } catch {
+      // Network failure — say so instead of sticking on "Checking session…".
+      setAuthState((s) => (s === 'ready' ? s : 'error'))
     }
-    const sweepsJson = await sweepsRes.json()
-    if (!sweepsJson.ok) {
-      setAuthState('no-org')
-      return
-    }
-    setStudios(sweepsJson.studios ?? [])
-    setSweeps(sweepsJson.sweeps ?? [])
-    setBrands(sweepsJson.brands ?? [])
-    setBrandSlug(sweepsJson.selected ?? null)
-    const b: Brand | null = sweepsJson.brand ?? null
-    setBrand(b)
-    // Default the sweep's shot selection to all of this brand's shots.
-    if (b) setShots((prev) => (prev.size > 0 ? prev : new Set(b.shots.map((s) => s.slot))))
-    const queueJson = await queueRes.json().catch(() => null)
-    if (queueJson?.ok) setRollup(queueJson.rollup)
-    setAuthState('ready')
   }, [])
 
   useEffect(() => {
@@ -168,75 +193,68 @@ export default function SignageHubPage() {
   )
 
   return (
-    <main className="min-h-screen bg-ink-deep text-text-pri">
-      <section className="relative z-10 mx-auto max-w-6xl px-6 pt-14 pb-8 sm:px-10 md:pt-20">
-        <Breadcrumb />
+    <main className="relative min-h-screen overflow-hidden bg-ink-deep text-text-pri">
+      <TopoBackdrop />
+
+      {/* ── Header ── */}
+      <section className="relative z-10 mx-auto max-w-6xl px-6 pt-14 sm:px-10 md:pt-20">
+        <div className={REVEAL}>
+          <Crumbs trail={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Signage' }]} />
+        </div>
         <div className="mt-8 grid gap-8 md:grid-cols-[1.5fr_1fr] md:items-end md:gap-16">
-          <h1 className="font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2.5rem,5.5vw,4.5rem)]">
+          <h1
+            className={`font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2.5rem,5.5vw,4.5rem)] ${REVEAL}`}
+            style={delay(60)}
+          >
             Signage <span className="text-accent">compliance</span>
           </h1>
-          <p className="max-w-md text-base leading-relaxed text-text-sec md:text-lg">
+          <p className={`max-w-md text-base leading-relaxed text-text-sec md:text-lg ${REVEAL}`} style={delay(120)}>
             Request photos from your {brand?.location_noun_plural ?? 'locations'}, let the AI pre-check them against
             the {brand?.name ?? 'brand'} standards, and review the flagged ones. The AI triages — HQ decides.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-x-8 gap-y-4">
+        <div className={`mt-10 flex flex-wrap items-center gap-x-6 gap-y-4 ${REVEAL}`} style={delay(180)}>
           <AuthBadge state={authState} />
           {authState === 'ready' && brands.length > 1 && (
             <BrandTabs brands={brands} selected={brandSlug} onSelect={switchBrand} />
           )}
         </div>
+        {authState === 'ready' && (
+          <div className={`mt-10 ${REVEAL}`} style={delay(220)}>
+            <SignageNav active="overview" brandSlug={brandSlug} />
+          </div>
+        )}
       </section>
 
       {authState === 'ready' && (
         <>
-          {/* Fleet snapshot */}
+          {/* ── Fleet snapshot ── */}
           {rollup && (
-            <section className="relative z-10 mx-auto max-w-6xl px-6 sm:px-10">
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-6">
-                <Stat label="Studios" value={rollup.studios} />
-                <Stat label="Assessed" value={rollup.assessed} />
-                <Stat label="Compliant" value={rollup.pass} tone="good" />
-                <Stat label="To fix" value={rollup.fix_needed} tone="warn" />
-                <Stat label="Needs review" value={rollup.needs_review} tone="accent" />
-                <Stat label="Awaiting" value={rollup.awaiting} />
-              </div>
-              <div className="mt-5 flex flex-wrap gap-3">
-                <Link
-                  href={withBrand('/dashboard/signage/queue', brandSlug)}
-                  className="inline-flex items-center gap-2 bg-accent px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press"
-                >
+            <section className="relative z-10 mx-auto mt-10 max-w-6xl px-6 sm:px-10" aria-label="Fleet snapshot">
+              <FleetSnapshot rollup={rollup} />
+              <div className={`mt-6 flex flex-wrap gap-3 ${REVEAL}`} style={delay(340)}>
+                <Link href={withBrand('/dashboard/signage/queue', brandSlug)} className={BTN_PRIMARY}>
                   Open review queue <span aria-hidden="true">&rarr;</span>
                 </Link>
-                <Link
-                  href={withBrand('/dashboard/signage/audit', brandSlug)}
-                  className="inline-flex items-center gap-2 border border-ink-line px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent"
-                >
-                  Instant audit (upload PDF / photos) <span aria-hidden="true">&rarr;</span>
-                </Link>
-                <Link
-                  href={withBrand('/dashboard/signage/studios', brandSlug)}
-                  className="inline-flex items-center gap-2 border border-ink-line px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent"
-                >
-                  Manage studios <span aria-hidden="true">&rarr;</span>
-                </Link>
-                <Link
-                  href={withBrand('/dashboard/signage/shots', brandSlug)}
-                  className="inline-flex items-center gap-2 border border-ink-line px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent"
-                >
-                  Edit shots <span aria-hidden="true">&rarr;</span>
+                <Link href={withBrand('/dashboard/signage/audit', brandSlug)} className={BTN_GHOST}>
+                  Instant audit <span aria-hidden="true">&rarr;</span>
                 </Link>
               </div>
             </section>
           )}
 
-          {/* New sweep */}
-          <section className="relative z-10 mx-auto mt-12 max-w-6xl px-6 sm:px-10">
-            <SectionHeading eyebrow="New compliance sweep" title="Request photos from your studios" />
-            <form onSubmit={createSweep} className="mt-6 grid gap-7 border border-ink-line bg-ink-card p-7 sm:p-9 md:grid-cols-2">
+          {/* ── New sweep ── */}
+          <section className="relative z-10 mx-auto mt-16 max-w-6xl px-6 sm:px-10">
+            <SectionHeading
+              eyebrow="01 · New compliance sweep"
+              title="Request photos from your studios"
+              hint={`Pick the shots, optionally narrow by region, and every targeted ${brand?.location_noun ?? 'location'} gets its own upload link.`}
+            />
+            <form onSubmit={createSweep} className="mt-7 grid gap-7 border border-ink-line bg-ink-card p-7 sm:p-9 md:grid-cols-2">
               <div>
-                <Label>Sweep name</Label>
+                <Label htmlFor="sweep-name">Sweep name</Label>
                 <input
+                  id="sweep-name"
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -245,8 +263,8 @@ export default function SignageHubPage() {
                 />
               </div>
               <div>
-                <Label>Region (optional — all studios if blank)</Label>
-                <select aria-label="Region" value={region} onChange={(e) => setRegion(e.target.value)} className={INPUT}>
+                <Label htmlFor="sweep-region">Region (optional — all studios if blank)</Label>
+                <select id="sweep-region" value={region} onChange={(e) => setRegion(e.target.value)} className={INPUT}>
                   <option value="">All regions</option>
                   {regions.map((r) => (
                     <option key={r} value={r}>{r}</option>
@@ -256,59 +274,74 @@ export default function SignageHubPage() {
               <div className="md:col-span-2">
                 <Label>Photos to request</Label>
                 <div className="flex flex-wrap gap-3">
-                  {(brand?.shots ?? []).map((s) => (
-                    <label
-                      key={s.slot}
-                      className={`inline-flex cursor-pointer items-center gap-2 border px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] transition-colors ${
-                        shots.has(s.slot) ? 'border-accent text-accent' : 'border-ink-line text-text-sec hover:border-accent/50'
-                      }`}
-                    >
-                      <input type="checkbox" checked={shots.has(s.slot)} onChange={() => toggleShot(s.slot)} className="h-4 w-4 accent-accent" />
-                      {s.label}
-                    </label>
-                  ))}
+                  {(brand?.shots ?? []).map((s) => {
+                    const on = shots.has(s.slot)
+                    return (
+                      <label
+                        key={s.slot}
+                        className={`inline-flex cursor-pointer items-center gap-2 border px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] transition-colors has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-accent ${
+                          on
+                            ? 'border-accent bg-accent/10 text-accent'
+                            : 'border-ink-line text-text-sec hover:border-accent/50 hover:text-text-pri'
+                        }`}
+                      >
+                        <input type="checkbox" checked={on} onChange={() => toggleShot(s.slot)} className="sr-only" />
+                        <span aria-hidden="true">{on ? '✓' : '+'}</span>
+                        {s.label}
+                      </label>
+                    )
+                  })}
                 </div>
               </div>
-              <div className="md:col-span-2 flex flex-wrap items-center justify-between gap-5 pt-2">
+              <div className="md:col-span-2 flex flex-wrap items-center justify-between gap-5 border-t border-ink-line pt-6">
                 <span className="font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-dim">
-                  Targets {targetCount} studio{targetCount === 1 ? '' : 's'} · {shots.size} shot{shots.size === 1 ? '' : 's'}
+                  Targets <span className="tabular-nums text-text-pri">{targetCount}</span> studio{targetCount === 1 ? '' : 's'} ·{' '}
+                  <span className="tabular-nums text-text-pri">{shots.size}</span> shot{shots.size === 1 ? '' : 's'}
                 </span>
-                <button
-                  type="submit"
-                  disabled={busy || shots.size === 0 || targetCount === 0}
-                  className="inline-flex items-center gap-2 bg-accent px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
-                >
+                <button type="submit" disabled={busy || shots.size === 0 || targetCount === 0} className={BTN_PRIMARY}>
                   {busy ? 'Creating…' : <>Create sweep <span aria-hidden="true">&rarr;</span></>}
                 </button>
               </div>
-              {err && <p className="md:col-span-2 text-warning">{err}</p>}
+              {err && <p role="alert" className="md:col-span-2 text-sm text-warning-bright">{err}</p>}
             </form>
           </section>
 
-          {/* Sweeps list */}
-          <section className="relative z-10 mx-auto mt-12 max-w-6xl px-6 pb-20 sm:px-10">
-            <SectionHeading eyebrow="Sweeps" title={`${sweeps.length} sweep${sweeps.length === 1 ? '' : 's'}`} />
-            {sweeps.length === 0 && (
-              <p className="mt-6 text-text-sec">No sweeps yet. Create one above to send studios their upload links.</p>
+          {/* ── Sweeps list ── */}
+          <section className="relative z-10 mx-auto mt-16 max-w-6xl px-6 pb-20 sm:px-10">
+            <SectionHeading eyebrow="02 · Sweeps" title={`${sweeps.length} sweep${sweeps.length === 1 ? '' : 's'}`} />
+            {sweeps.length === 0 ? (
+              <div className="mt-7">
+                <EmptyState
+                  title="No sweeps yet"
+                  body="Create your first sweep above — every targeted studio gets a tokenised upload link, and the AI pre-checks whatever comes back."
+                />
+              </div>
+            ) : (
+              <div className="mt-7 grid gap-6">
+                {sweeps.map((sw) => (
+                  <SweepCard key={sw.id} sweep={sw} token={token} brandSlug={brandSlug} onDeleted={() => token && load(token, brandSlug)} />
+                ))}
+              </div>
             )}
-            <div className="mt-6 grid gap-6">
-              {sweeps.map((sw) => (
-                <SweepCard key={sw.id} sweep={sw} token={token} brandSlug={brandSlug} onDeleted={() => token && load(token, brandSlug)} />
-              ))}
-            </div>
           </section>
         </>
       )}
 
+      {authState === 'error' && (
+        <section className="relative z-10 mx-auto mt-10 max-w-6xl px-6 pb-20 sm:px-10">
+          <Notice tone="warn">Couldn&rsquo;t load your signage data — check your connection and refresh the page.</Notice>
+        </section>
+      )}
+
       {authState === 'no-org' && (
-        <section className="relative z-10 mx-auto max-w-6xl px-6 pb-20 sm:px-10">
-          <div className="border border-ink-line border-l-4 border-l-accent bg-ink-card p-7">
-            <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">No org yet</div>
-            <p className="mt-2 text-text-sec">
+        <section className="relative z-10 mx-auto mt-10 max-w-6xl px-6 pb-20 sm:px-10">
+          <Notice tone="accent">
+            <span className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">No org yet</span>
+            <p className="mt-2">
               You&rsquo;re signed in, but no franchisor org is linked to your account. Seed one with{' '}
               <code className="text-text-pri">scripts/seed-signage-demo.mjs your@email</code> then reload.
             </p>
-          </div>
+          </Notice>
         </section>
       )}
 
@@ -323,6 +356,8 @@ export default function SignageHubPage() {
 
 function SweepCard({ sweep, token, brandSlug, onDeleted }: { sweep: Sweep; token: string | null; brandSlug: string | null; onDeleted: () => void }) {
   const submitted = sweep.requests.filter((r) => r.state === 'assessed' || r.state === 'submitted').length
+  const pct = sweep.requests.length > 0 ? Math.round((submitted / sweep.requests.length) * 100) : 0
+  const created = formatDate(sweep.created_at)
   const [deleting, setDeleting] = useState(false)
   const onDelete = async () => {
     if (!token) return
@@ -339,48 +374,49 @@ function SweepCard({ sweep, token, brandSlug, onDeleted }: { sweep: Sweep; token
     }
   }
   return (
-    <article className="border border-ink-line bg-ink-card p-6 sm:p-7">
+    <article className={`border border-ink-line bg-ink-card p-6 sm:p-7 ${REVEAL}`}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
-            Sweep · {sweep.required_shots.length} shots
+            Sweep · {sweep.required_shots.length} shot{sweep.required_shots.length === 1 ? '' : 's'}
+            {created && <span className="text-text-dim"> · {created}</span>}
           </div>
           <h3 className="mt-1.5 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri">{sweep.name}</h3>
         </div>
         <div className="flex items-center gap-3">
           <span className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim">
-            {submitted}/{sweep.requests.length} responded
+            <span className="tabular-nums text-text-sec">{submitted}/{sweep.requests.length}</span> responded
           </span>
-          <button
-            type="button"
-            onClick={onDelete}
-            disabled={deleting}
-            className="border border-ink-line px-3 py-1.5 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-text-dim transition-colors hover:border-warning hover:text-warning disabled:opacity-50"
-          >
+          <button type="button" onClick={onDelete} disabled={deleting} className={BTN_DANGER_SM}>
             {deleting ? 'Deleting…' : 'Delete'}
           </button>
         </div>
       </div>
-      <div className="mt-5 grid gap-3">
+
+      {/* Response progress */}
+      <div
+        role="img"
+        aria-label={`${submitted} of ${sweep.requests.length} studios responded`}
+        className="mt-4 h-1 w-full bg-ink-deep"
+      >
+        <div className="h-full bg-teal-glow transition-[width] duration-500" style={{ width: `${pct}%` }} />
+      </div>
+
+      <div className="mt-5 grid gap-2.5">
         {sweep.requests.map((r) => (
           <div key={r.id} className="flex flex-wrap items-center justify-between gap-3 border border-ink-line bg-ink-deep px-4 py-3">
             <div className="flex items-center gap-3">
-              <StatusChip state={r.state} overall={r.overall} />
+              <RequestChip state={r.state} overall={r.overall} />
               <span className="font-mono text-sm text-text-pri">{r.studio_name}</span>
             </div>
             <div className="flex items-center gap-2">
-              <a
-                href={r.link}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text-sec transition-colors hover:border-accent hover:text-accent"
-              >
+              <a href={r.link} target="_blank" rel="noreferrer" className={BTN_GHOST_SM}>
                 Open <span aria-hidden="true">&#8599;</span>
               </a>
               {r.assessment_id && (
                 <Link
                   href={withBrand(`/dashboard/signage/queue?a=${r.assessment_id}`, brandSlug)}
-                  className="bg-accent px-3 py-1.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-white hover:bg-accent-press"
+                  className="inline-flex items-center justify-center bg-accent px-3 py-1.5 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-white transition-colors hover:bg-accent-press"
                 >
                   Review
                 </Link>
@@ -393,71 +429,37 @@ function SweepCard({ sweep, token, brandSlug, onDeleted }: { sweep: Sweep; token
   )
 }
 
-function StatusChip({ state, overall }: { state: string; overall: string | null }) {
-  const { label, cls } =
-    overall === 'pass'
-      ? { label: 'Compliant', cls: 'text-teal-glow border-teal-glow' }
-      : overall === 'fix_needed'
-        ? { label: 'To fix', cls: 'text-warning border-warning' }
-        : overall === 'needs_review'
-          ? { label: 'Needs review', cls: 'text-accent border-accent' }
-          : state === 'submitted'
-            ? { label: 'Scoring…', cls: 'text-text-dim border-ink-line' }
-            : { label: 'Awaiting', cls: 'text-text-dim border-ink-line' }
-  return (
-    <span className={`border px-2.5 py-1 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.12em] ${cls}`}>
-      {label}
-    </span>
-  )
+function RequestChip({ state, overall }: { state: string; overall: string | null }) {
+  const { label, tone } =
+    overall === 'pass' || overall === 'fix_needed' || overall === 'needs_review'
+      ? overallTone(overall)
+      : state === 'submitted'
+        ? { label: 'Scoring…', tone: 'dim' as Tone }
+        : { label: 'Awaiting', tone: 'dim' as Tone }
+  return <Chip label={label} tone={tone} />
 }
 
-function Stat({ label, value, tone }: { label: string; value: number; tone?: 'good' | 'warn' | 'accent' }) {
-  const colour = tone === 'good' ? 'text-teal-glow' : tone === 'warn' ? 'text-warning' : tone === 'accent' ? 'text-accent' : 'text-text-pri'
-  return (
-    <div className="border border-ink-line bg-ink-card p-5">
-      <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">{label}</div>
-      <div className={`mt-2 font-mono text-3xl font-bold tabular-nums ${colour}`}>{value}</div>
-    </div>
-  )
+function formatDate(iso: string): string | null {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-function Breadcrumb() {
-  return (
-    <div className="flex flex-wrap items-center gap-3 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
-      <Link href="/dashboard" className="transition-colors hover:text-text-pri">Dashboard</Link>
-      <span className="text-ink-line">/</span>
-      <span className="text-text-pri">Signage</span>
-    </div>
-  )
-}
-
-function SectionHeading({ eyebrow, title }: { eyebrow: string; title: string }) {
-  return (
-    <div>
-      <div className="font-mono text-[0.8rem] font-semibold uppercase tracking-[0.18em] text-accent">{eyebrow}</div>
-      <h2 className="mt-3 font-extrabold uppercase tracking-[-0.025em] text-[clamp(1.5rem,2.6vw,2.25rem)] leading-[1.1]">{title}</h2>
-    </div>
-  )
-}
-
-function Label({ children }: { children: React.ReactNode }) {
-  return <div className="mb-2 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-text-dim">{children}</div>
-}
-
-function AuthBadge({ state }: { state: 'loading' | 'signed-out' | 'ready' | 'no-org' }) {
+function AuthBadge({ state }: { state: 'loading' | 'signed-out' | 'ready' | 'no-org' | 'error' }) {
   const label =
     state === 'loading' ? 'Checking session…' :
     state === 'signed-out' ? 'Not signed in — sign in to manage signage' :
     state === 'no-org' ? 'Signed in — no franchisor org linked yet' :
+    state === 'error' ? 'Couldn’t load — refresh to retry' :
     'Signed in — ready'
-  const dot = state === 'ready' ? 'bg-teal-glow' : state === 'signed-out' || state === 'no-org' ? 'bg-accent' : 'bg-text-dim'
+  const dot =
+    state === 'ready' ? 'bg-teal-glow motion-safe:animate-[pulse-soft_2.4s_ease-in-out_infinite]' :
+    state === 'error' ? 'bg-warning-bright' :
+    state === 'signed-out' || state === 'no-org' ? 'bg-accent' : 'bg-text-dim'
   return (
-    <div className="mt-10 inline-flex items-center gap-3 border border-ink-line bg-ink-card px-5 py-3">
+    <div className="inline-flex items-center gap-3 border border-ink-line bg-ink-card px-5 py-3">
       <span className={`h-2.5 w-2.5 ${dot}`} aria-hidden="true" />
       <span className="font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-sec">{label}</span>
     </div>
   )
 }
-
-const INPUT =
-  'w-full border border-ink-line bg-ink-deep px-4 py-3 font-mono text-base text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none'

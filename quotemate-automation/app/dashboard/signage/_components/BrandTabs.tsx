@@ -21,20 +21,19 @@ export function BrandTabs({
 }) {
   if (!brands || brands.length === 0) return null
   return (
-    <div role="tablist" aria-label="Brand" className="mt-8 inline-flex flex-wrap gap-2 border border-ink-line bg-ink-card p-1.5">
+    <div role="group" aria-label="Brand" className="inline-flex flex-wrap gap-1 border border-ink-line bg-ink-card p-1">
       {brands.map((b) => {
         const active = b.slug === selected
         return (
           <button
             key={b.slug}
             type="button"
-            role="tab"
-            aria-selected={active}
+            aria-pressed={active ? 'true' : 'false'}
             onClick={() => !active && onSelect(b.slug)}
             className={`px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.16em] transition-colors ${
               active
                 ? 'bg-accent text-white'
-                : 'text-text-dim hover:text-accent'
+                : 'text-text-dim hover:bg-ink-line/40 hover:text-text-pri'
             }`}
           >
             {b.name}
