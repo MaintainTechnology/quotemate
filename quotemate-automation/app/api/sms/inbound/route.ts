@@ -635,6 +635,25 @@ export async function POST(req: Request) {
     }
   }
 
+  // ─────── Plan-estimation short-circuit (migration 104) ───────
+  // Tenants with the Account-tab "SMS electrical estimation" toggle ON:
+  // when the inbound text asks for a plan take-off ("can you quote my
+  // electrical plan?"), reply with a tokenised upload link and skip the
+  // normal quote dialog. Everything else falls through untouched.
+  if (tenant?.sms_estimator_enabled) {
+    const { maybeHandlePlanEstimation } = await import('@/lib/sms/plan-estimation')
+    const handled = await maybeHandlePlanEstimation({
+      supabase,
+      tenant,
+      fromNumber,
+      toNumber,
+      inboundBody,
+      messageSid,
+      customerFirstName: customer?.first_name ?? null,
+    })
+    if (handled) return ackTwiml()
+  }
+
   // ─────── Tradie-registration short-circuit (v6) ───────
   // When the destination number has no tenant match (e.g. the shared
   // QuoteMate admin number), check if the inbound message is a tradie
