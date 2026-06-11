@@ -256,6 +256,13 @@ type Tab =
   /** Solar — AI solar PV estimates (share link, list, confirm & release). Not trade-gated. */
   | 'solar'
 
+/** Tabs reachable via /dashboard?tab=… (e.g. the estimator run page's breadcrumb). */
+const DEEP_LINK_TABS: readonly Tab[] = [
+  'overview', 'account', 'payouts', 'pricing', 'services', 'catalogue', 'estimating',
+  'recipes', 'quotes', 'chats', 'followups', 'roofing', 'signage', 'painting',
+  'aircon', 'estimator', 'solar',
+]
+
 /** SMS conversation summary returned by /api/tenant/chats. Drives the
  *  Chats tab — communication history including leads that didn't
  *  convert to a drafted quote. */
@@ -304,6 +311,10 @@ export default function DashboardPage() {
       }
       if (cancelled) return
       setAccessToken(token)
+      // Deep-link: /dashboard?tab=estimator lands straight on that tab (used
+      // by the estimator run page's breadcrumb).
+      const want = new URLSearchParams(window.location.search).get('tab')
+      if (want && (DEEP_LINK_TABS as readonly string[]).includes(want)) setTab(want as Tab)
       await refresh(token)
     })()
     return () => {
