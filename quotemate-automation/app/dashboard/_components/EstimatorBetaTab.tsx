@@ -119,7 +119,7 @@ export function EstimatorBetaTab({ accessToken }: Props) {
             setDragOver(false)
             acceptFile(e.dataTransfer.files?.[0])
           }}
-          className={`mt-6 flex cursor-pointer flex-col items-center justify-center gap-2 border border-dashed px-6 py-10 text-center transition-colors ${
+          className={`mt-6 flex cursor-pointer flex-col items-center justify-center gap-2 border border-dashed px-6 py-10 text-center transition-colors has-focus-visible:outline-2 has-focus-visible:outline-accent ${
             dragOver
               ? 'border-accent bg-accent/5'
               : file
@@ -289,11 +289,8 @@ export function EstimatorBetaTab({ accessToken }: Props) {
                         <span className="font-mono text-sm font-bold tabular-nums text-accent">{money(total)}</span>
                       )}
                       <RunStatusChip status={status} />
-                      <span
-                        aria-hidden="true"
-                        className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim transition-colors group-hover:text-accent"
-                      >
-                        Open →
+                      <span className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim transition-colors group-hover:text-accent">
+                        Open <span aria-hidden="true">→</span>
                       </span>
                     </button>
                   ) : (

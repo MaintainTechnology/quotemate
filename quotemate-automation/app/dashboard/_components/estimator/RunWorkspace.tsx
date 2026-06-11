@@ -133,6 +133,7 @@ export function RunWorkspace({ runId }: { runId: string }) {
         setPriced(json.bom)
         setPricedAt(new Date().toISOString())
         setPriceInfo({ catalogueSize: json.catalogueSize, source: json.pricingBookSource })
+        setNotice(`Take-off priced — ${money(json.bom.totalIncGst)} inc GST.`)
         return true
       } catch (err) {
         setErrMsg(err instanceof Error ? err.message : String(err))
@@ -188,7 +189,7 @@ export function RunWorkspace({ runId }: { runId: string }) {
     if (!accessToken || !file || dominantPage === null) return
     const targetRows = rows.filter((r) => r.confidence === 'low')
     const targets = (targetRows.length > 0 ? targetRows : rows).map((r) => ({
-      type: r.type,
+      type: r.type.trim(),
       symbol: r.symbol,
       hint: r.note?.slice(0, 200),
     }))
@@ -215,7 +216,8 @@ export function RunWorkspace({ runId }: { runId: string }) {
       setDirty(true)
       setRows((rs) =>
         rs.map((r) => {
-          const refined = json.items.find((i) => i.type === r.type)
+          // The route trims target types before echoing them back — match trimmed.
+          const refined = json.items.find((i) => i.type === r.type.trim())
           if (!refined) return r
           const prev = Number(r.count) || 0
           return {
@@ -415,7 +417,7 @@ export function RunWorkspace({ runId }: { runId: string }) {
             <p className="text-sm text-text-sec">
               The plan viewer and dense-item recount need the original PDF — it’s never stored on our servers.
             </p>
-            <label className="mt-3 inline-flex cursor-pointer items-center gap-3">
+            <label className="mt-3 inline-flex cursor-pointer items-center gap-3 has-focus-visible:outline-2 has-focus-visible:outline-accent">
               <span className="border border-accent px-4 py-2 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-accent transition-colors hover:bg-accent hover:text-white">
                 Re-attach {filename}
               </span>
@@ -454,6 +456,16 @@ export function RunWorkspace({ runId }: { runId: string }) {
           <span className="font-mono text-xs tabular-nums text-text-dim">
             {rows.length} lines · {totalDevices} devices
             {dirty && <span className="ml-2 text-warning">● unsaved edits</span>}
+          </span>
+          {/* Always-mounted polite live region — reliable busy announcements. */}
+          <span role="status" className="sr-only">
+            {refining
+              ? 'Recounting dense items — takes about a minute.'
+              : pricing
+                ? 'Pricing the take-off…'
+                : saving
+                  ? 'Saving corrected counts…'
+                  : ''}
           </span>
           <div className="ml-auto flex flex-wrap items-center gap-3">
             <button

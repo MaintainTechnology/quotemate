@@ -4,7 +4,7 @@
 // book, and the per-line "how?" expands the full calculation chain. Nothing
 // here is model-generated: unmatched items are flagged, never guessed.
 
-import { Fragment, useState } from 'react'
+import { Fragment, useId, useState } from 'react'
 import { money, type PricedBom } from './types'
 
 type Props = {
@@ -15,6 +15,7 @@ type Props = {
 
 export function PricedSummary({ bom, info, pricedAt }: Props) {
   const [openTrace, setOpenTrace] = useState<number | null>(null)
+  const traceId = useId()
 
   return (
     <section aria-label="Indicative estimate" className="motion-safe:animate-[fade-up_220ms_ease-out_both]">
@@ -78,6 +79,7 @@ export function PricedSummary({ bom, info, pricedAt }: Props) {
                           type="button"
                           onClick={() => setOpenTrace((s) => (s === i ? null : i))}
                           aria-expanded={openTrace === i ? 'true' : 'false'}
+                          aria-controls={`${traceId}-trace-${i}`}
                           className={`ml-2 font-semibold uppercase tracking-widest transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
                             openTrace === i ? 'text-accent' : 'text-text-dim hover:text-accent'
                           }`}
@@ -102,7 +104,7 @@ export function PricedSummary({ bom, info, pricedAt }: Props) {
                     </td>
                   </tr>
                   {openTrace === i && (
-                    <tr className="border-b border-ink-line/60 bg-ink-deep">
+                    <tr id={`${traceId}-trace-${i}`} className="border-b border-ink-line/60 bg-ink-deep">
                       <td colSpan={6} className="px-4 py-4">
                         <TraceGrid line={l} />
                       </td>

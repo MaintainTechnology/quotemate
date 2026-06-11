@@ -24,7 +24,7 @@
         "scripts/run-migration-102.mjs applies + verifies columns",
         "Migration applied to the live Supabase DB"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "US-002",
@@ -35,7 +35,7 @@
         "GET /api/tenant/estimator/history rows include priced summary (totalIncGst, pricedAt) and corrected flag",
         "vitest unit coverage for new pure helpers"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "US-003",
@@ -46,7 +46,7 @@
         "Priced summary: KPI cards, totals ladder, unmatched items, pricing assumptions",
         "Maintain design system; typography per ui-typography"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "US-004",
@@ -56,7 +56,7 @@
         "Save corrections, price (persists), refine and plan overlay work; in-memory File handoff from tab; re-attach fallback when PDF absent",
         "Unauthed → signin redirect; missing run → not-found state"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "US-005",
@@ -66,7 +66,7 @@
         "Run history is an always-visible panel with empty state, status chips (draft/verified/priced), item + device counts, priced total, open-in-full-view",
         "After analyse, results open on the full-view page (file handed off in memory)"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "US-006",
@@ -77,7 +77,7 @@
         "pnpm test (vitest) all pass",
         "pnpm build succeeds"
       ],
-      "status": "pending"
+      "status": "done"
     }
   ]
 }

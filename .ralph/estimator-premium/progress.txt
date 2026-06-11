@@ -15,6 +15,22 @@
 - PDF bytes are never stored server-side; full-view page gets the File via an in-memory
   module store (Map keyed by extractionId), with a re-attach fallback after reload.
 
+[2026-06-11 12:25] EXECUTION
+- US-001 done (1fb97a8): migration 102 priced_bom/priced_at applied + verified on live DB.
+- US-002 done (048e6e6): GET extract/[id]; price persists when extractionId given; PATCH
+  clears stale pricing; history projects priced_total; lib/estimation/run-status.ts + tests.
+- US-003/004 done (1b460c4): estimator/ component module + /dashboard/estimator/[runId]
+  full-view workspace (file handoff via in-memory Map, re-attach fallback, sticky action
+  bar, auto re-price after saving a previously priced run).
+  BONUS BUG FIX: globals.css @theme lacked --color-warning/danger/success — every
+  text-warning/border-warning class in the app was silently unstyled.
+- US-005 done (6ced99e): tab rewritten (drag-drop upload, always-visible history with
+  status chips + totals, navigate-to-run-page on success); /dashboard?tab= deep link.
+- US-006 gates: tsc baseline unchanged (4 pre-existing test files), eslint 0 problems on
+  changed files (page.tsx stays at its pre-existing 47-error baseline), vitest 2609 passed,
+  next build OK with ƒ /dashboard/estimator/[runId] in the route table.
+- Adversarial review workflow (wf_f2b539bf-a38) launched over main...HEAD.
+
 LEARNINGS
 - Next 16: route ctx params are a Promise — `ctx: { params: Promise<{ id: string }> }`.
 - All /api/tenant/estimator/* use tenantFromBearer (Supabase access token) + service-role client.
