@@ -47,6 +47,9 @@
   --color-text-sec:     var(--text-sec);
   --color-text-dim:     var(--text-dim);
   --color-teal-glow:    var(--teal-glow);
+  --color-success:      var(--success);
+  --color-warning:      var(--warning);
+  --color-danger:       var(--danger);
 
   --font-sans: var(--font-manrope);
   --font-mono: var(--font-jetbrains-mono);
