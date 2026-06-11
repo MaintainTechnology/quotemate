@@ -29,12 +29,14 @@ export type TenantRow = {
   twilio_voice_number: string | null
   vapi_assistant_id: string | null
   stripe_connect_account_id: string | null
+  /** Migration 104 — SMS electrical-plan estimation opt-in (Account tab). */
+  sms_estimator_enabled: boolean | null
 }
 
 const SELECT_COLS =
   'id, business_name, owner_first_name, owner_email, owner_mobile, ' +
   'trade, trades, state, status, twilio_sms_number, twilio_voice_number, ' +
-  'vapi_assistant_id, stripe_connect_account_id'
+  'vapi_assistant_id, stripe_connect_account_id, sms_estimator_enabled'
 
 /** SMS webhooks: find the tenant whose number the customer texted.
  *

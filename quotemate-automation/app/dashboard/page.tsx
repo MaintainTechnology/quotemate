@@ -85,6 +85,8 @@ type Tenant = {
   stripe_connect_payouts_enabled: boolean | null
   stripe_connect_details_submitted: boolean | null
   stripe_connect_onboarded_at: string | null
+  /** Migration 104 — SMS electrical-plan estimation opt-in (Account tab). */
+  sms_estimator_enabled: boolean | null
 }
 
 type Pricing = {
@@ -1858,6 +1860,74 @@ function LatestChatRow({
 
 // ─── Account tab ──────────────────────────────────────────────────
 
+/** Migration 104 — opt-in toggle for the SMS electrical-plan estimator.
+ *  When on, a customer texting this tenant's number about an electrical plan
+ *  gets a PDF-upload link, an automatic AI take-off, and the results link
+ *  (+ PDF report) back by SMS. The run also lands in Estimator history. */
+function SmsEstimatorCard({
+  tenant,
+  onSave,
+}: {
+  tenant: Tenant
+  onSave: (payload: Record<string, unknown>) => Promise<void>
+}) {
+  const [enabled, setEnabled] = useState<boolean>(tenant.sms_estimator_enabled ?? false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [savedAt, setSavedAt] = useState<number | null>(null)
+
+  async function toggle() {
+    const next = !enabled
+    setBusy(true)
+    setError(null)
+    setSavedAt(null)
+    try {
+      await onSave({ tenant: { sms_estimator_enabled: next } })
+      setEnabled(next)
+      setSavedAt(Date.now())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card
+      title="SMS electrical estimation"
+      subtitle="Customers text for a plan take-off — upload link out, counted results back."
+    >
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="max-w-xl text-sm leading-relaxed text-text-sec">
+          <p>
+            When on, a customer texting {tenant.twilio_sms_number ?? 'your QuoteMate number'} about an
+            electrical plan receives a secure upload link. The take-off runs automatically and the customer
+            gets a results link plus a downloadable PDF report — the run also appears in your Estimator
+            history for review.
+          </p>
+          {error && <p className="mt-2 text-sm text-warning">{error}</p>}
+          {savedAt && !error && <p className="mt-2 font-mono text-xs text-teal-glow">✓ Saved</p>}
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled ? 'true' : 'false'}
+          onClick={toggle}
+          disabled={busy}
+          className={`inline-flex items-center gap-2 border px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] transition-colors focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50 ${
+            enabled
+              ? 'border-teal-glow/60 bg-teal-glow/10 text-teal-glow'
+              : 'border-ink-line text-text-dim hover:border-accent hover:text-accent'
+          }`}
+        >
+          <span aria-hidden="true" className={`inline-block h-2 w-2 ${enabled ? 'bg-teal-glow' : 'bg-text-dim'}`} />
+          {busy ? 'Saving…' : enabled ? 'On' : 'Off'}
+        </button>
+      </div>
+    </Card>
+  )
+}
+
 function AccountTab({
   data,
   onSave,
@@ -1923,6 +1993,8 @@ function AccountTab({
         onListAvailableTrades={onListAvailableTrades}
         onActivateTrade={onActivateTrade}
       />
+
+      <SmsEstimatorCard tenant={data.tenant} onSave={onSave} />
 
       <LicencesCard
         licences={data.licences ?? []}

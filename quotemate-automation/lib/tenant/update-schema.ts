@@ -55,6 +55,9 @@ export const UpdateSchema = z.object({
       licence_type: z.string().trim().max(40).optional().or(z.literal('')),
       licence_number: z.string().trim().max(60).optional().or(z.literal('')),
       licence_expiry: z.string().trim().optional().or(z.literal('')),
+      // Migration 104 — SMS plan-estimation opt-in. When true, the SMS agent
+      // offers the electrical-plan take-off flow on this tenant's number.
+      sms_estimator_enabled: z.boolean().optional(),
     })
     .optional(),
   // Legacy single-pricing payload: applies the same fields to EVERY
