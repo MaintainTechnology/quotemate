@@ -13,7 +13,7 @@ export async function GET(req: Request) {
   const { data, error } = await supabase
     .from('plan_uploads')
     .select(
-      'id, filename, sheet_hint, created_at, plan_extractions(id, items, corrected_items, sheets_used, overall_note, model, runtime_seconds, created_at, priced_at, priced_total:priced_bom->totalIncGst)',
+      'id, filename, sheet_hint, source, created_at, plan_extractions(id, items, corrected_items, sheets_used, overall_note, model, runtime_seconds, created_at, priced_at, priced_total:priced_bom->totalIncGst)',
     )
     .eq('tenant_id', tenant.id)
     .order('created_at', { ascending: false })
