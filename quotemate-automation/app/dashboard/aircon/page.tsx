@@ -20,10 +20,13 @@ import { getBrowserSupabase } from '@/lib/supabase/client'
 import { AddressAutocomplete } from '../roofing/_components/AddressAutocomplete'
 import { RoofTilesViewer } from '../roofing/_components/RoofTilesViewer'
 import { ZoomableImage } from '../_components/ZoomableImage'
+import { FloorPlanOverlay } from '../_components/FloorPlanOverlay'
 import type { AcLocationEvidence } from '@/lib/aircon/location'
 import type {
   AcOption,
+  AcPlanDesign,
   AcRecommendation,
+  AcResolvedRoom,
   AcSizing,
   AusState,
   CeilingHeight,
@@ -33,6 +36,21 @@ import type {
   RoomLoad,
 } from '@/lib/aircon/types'
 
+/** The plan readout block /api/aircon/plan adds to the response. */
+type PlanReadout = {
+  filename: string
+  page: number
+  model: string
+  runtime_seconds: number
+  rooms: AcResolvedRoom[]
+  dimensioned: boolean
+  total_area_m2: number
+  stated_total_area_m2: number | null
+  overall_note: string
+  notes: string[]
+  warnings: string[]
+}
+
 type RecommendResponse =
   | {
       ok: true
@@ -40,8 +58,10 @@ type RecommendResponse =
       climate_note: string
       location: AcLocationEvidence
       recommendation: AcRecommendation
+      plan?: PlanReadout
+      design?: AcPlanDesign
     }
-  | { ok: false; error: string; issues?: unknown }
+  | { ok: false; error: string; issues?: unknown; detail?: string }
 
 const STATES: readonly AusState[] = ['NSW', 'VIC', 'QLD', 'SA', 'WA', 'TAS', 'ACT', 'NT']
 const CEILINGS: ReadonlyArray<readonly [CeilingHeight, string]> = [
@@ -72,6 +92,13 @@ const FLOOR_AREA_SOURCE_LABEL: Record<AcSizing['floor_area_source'], string> = {
   entered: 'Floor area · entered by hand',
   solar_footprint: 'Floor area · Google Solar satellite footprint',
   typical_room_mix: 'Floor area · AU typical room mix (estimate)',
+  floor_plan: 'Floor area · read from the uploaded floor plan',
+}
+
+const AREA_SOURCE_LABEL: Record<AcResolvedRoom['area_source'], string> = {
+  dimensions: 'printed dimensions',
+  stated_total_apportioned: 'apportioned from total',
+  scale_inferred: 'plan scale',
 }
 
 // ── Shared style fragments (Maintain design system) ──────────────────
@@ -99,9 +126,13 @@ export default function AirconRecommendPage() {
   const [insulation, setInsulation] = useState<Insulation>('average')
   const [situation, setSituation] = useState<CurrentSituation>('replacing')
   const [budget, setBudget] = useState('')
+  const [planFile, setPlanFile] = useState<File | null>(null)
 
   const [busy, setBusy] = useState(false)
   const [resp, setResp] = useState<RecommendResponse | null>(null)
+  /** The file the current result was computed from — keeps the overlay
+   *  honest if the picker changes after a run. */
+  const [resultPlanFile, setResultPlanFile] = useState<File | null>(null)
   const [errMsg, setErrMsg] = useState<string | null>(null)
 
   useEffect(() => {
@@ -122,25 +153,39 @@ export default function AirconRecommendPage() {
       }
       setBusy(true)
       setErrMsg(null)
+      const addressPayload = { address, postcode, state: stateCode }
+      const inputsPayload = {
+        bedrooms,
+        bathrooms,
+        living_spaces: livingSpaces,
+        storeys,
+        floor_area_m2: floorArea ? Number(floorArea) : null,
+        ceiling_height: ceiling,
+        insulation,
+        current_situation: situation,
+        budget: budget ? Number(budget) : null,
+      }
       try {
-        const res = await fetch('/api/aircon/recommend', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            address: { address, postcode, state: stateCode },
-            inputs: {
-              bedrooms,
-              bathrooms,
-              living_spaces: livingSpaces,
-              storeys,
-              floor_area_m2: floorArea ? Number(floorArea) : null,
-              ceiling_height: ceiling,
-              insulation,
-              current_situation: situation,
-              budget: budget ? Number(budget) : null,
-            },
-          }),
-        })
+        let res: Response
+        if (planFile) {
+          // Floor-plan path: vision read → real rooms → design overlay.
+          const fd = new FormData()
+          fd.append('plan', planFile)
+          fd.append('address', JSON.stringify(addressPayload))
+          fd.append('inputs', JSON.stringify(inputsPayload))
+          res = await fetch('/api/aircon/plan', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: fd,
+          })
+        } else {
+          res = await fetch('/api/aircon/recommend', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ address: addressPayload, inputs: inputsPayload }),
+          })
+        }
+        setResultPlanFile(planFile)
         setResp((await res.json()) as RecommendResponse)
       } catch (err) {
         setErrMsg(err instanceof Error ? err.message : 'Request failed')
@@ -148,7 +193,7 @@ export default function AirconRecommendPage() {
         setBusy(false)
       }
     },
-    [token, address, postcode, stateCode, bedrooms, bathrooms, livingSpaces, storeys, floorArea, ceiling, insulation, situation, budget],
+    [token, address, postcode, stateCode, bedrooms, bathrooms, livingSpaces, storeys, floorArea, ceiling, insulation, situation, budget, planFile],
   )
 
   if (authState === 'loading') {
@@ -269,12 +314,50 @@ export default function AirconRecommendPage() {
             </label>
           </div>
 
+          <div className="mt-8">
+            <FormSectionHeading
+              num="04"
+              title="Floor plan (optional)"
+              sub="Real rooms beat estimates — PDF or photo of any plan"
+            />
+            <div className="flex flex-wrap items-center gap-4">
+              <label className="inline-flex cursor-pointer items-center gap-3 border border-ink-line bg-ink-deep px-4 py-3 text-sm text-text-sec hover:border-accent">
+                <span className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-accent">
+                  {planFile ? 'Change plan' : 'Upload plan'}
+                </span>
+                <input
+                  type="file"
+                  accept="application/pdf,image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(e) => setPlanFile(e.target.files?.[0] ?? null)}
+                />
+                <span className="max-w-60 truncate">
+                  {planFile ? planFile.name : 'builder drawings, listing plan, photo…'}
+                </span>
+              </label>
+              {planFile && (
+                <button
+                  type="button"
+                  onClick={() => setPlanFile(null)}
+                  className="font-mono text-xs font-semibold uppercase tracking-[0.12em] text-text-dim hover:text-accent"
+                >
+                  Remove
+                </button>
+              )}
+              <p className="max-w-md text-xs leading-relaxed text-text-dim">
+                With a plan, rooms and areas are read off the drawing (volumetric sizing per real
+                room) and an indicative ducted/split layout is drawn over it. Reading a full plan
+                can take a minute or two.
+              </p>
+            </div>
+          </div>
+
           <button
             type="submit"
             disabled={busy}
             className="mt-9 inline-flex w-full items-center justify-center gap-3 bg-accent px-8 py-4 text-sm font-semibold uppercase tracking-[0.08em] text-white transition-colors hover:bg-accent-press disabled:opacity-50 sm:w-auto"
           >
-            {busy ? 'Calculating…' : 'Get recommendation'}
+            {busy ? (planFile ? 'Reading plan…' : 'Calculating…') : 'Get recommendation'}
             {!busy && <span aria-hidden>→</span>}
           </button>
         </form>
@@ -286,10 +369,13 @@ export default function AirconRecommendPage() {
             resp={resp}
             token={token}
             addressInput={{ address, postcode, state: stateCode }}
+            planFile={resultPlanFile}
           />
         )}
         {resp && !resp.ok && (
-          <p className="mt-5 text-sm text-red-400">Could not size this job ({resp.error}).</p>
+          <p className="mt-5 text-sm text-red-400">
+            Could not size this job ({resp.error}).{resp.detail ? ` ${resp.detail}` : ''}
+          </p>
         )}
       </div>
     </main>
@@ -330,12 +416,14 @@ function Result({
   resp,
   token,
   addressInput,
+  planFile,
 }: {
   resp: Extract<RecommendResponse, { ok: true }>
   token: string | null
   addressInput: { address: string; postcode: string; state: AusState }
+  planFile: File | null
 }) {
-  const { recommendation: r, climate_zone, climate_note, location } = resp
+  const { recommendation: r, climate_zone, climate_note, location, plan, design } = resp
   return (
     <section className="mt-16 flex flex-col gap-14 sm:mt-20 sm:gap-16">
       <div>
@@ -354,6 +442,16 @@ function Result({
       <div>
         <SectionHeader num="02" title="Volumetric sizing" sub="How the kW was calculated" />
         <SizingPanel sizing={r.sizing} climateZone={climate_zone} climateNote={climate_note} />
+        {plan && <PlanRoomsPanel plan={plan} />}
+        {plan && design && planFile && (
+          <FloorPlanOverlay
+            file={planFile}
+            rooms={plan.rooms}
+            loads={r.sizing.rooms}
+            design={design}
+            ceilingHeightM={r.sizing.ceiling_height_m}
+          />
+        )}
       </div>
 
       <div>
@@ -485,12 +583,69 @@ function AcStaticMap({
   )
 }
 
+// ── Plan rooms review: what the vision read got, before sizing ───────
+
+function PlanRoomsPanel({ plan }: { plan: PlanReadout }) {
+  return (
+    <div className="mt-5 border border-ink-line bg-ink-card p-6 sm:p-8">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-accent">
+          Plan read · {plan.filename}
+        </span>
+        <Chip label={`page ${plan.page}`} />
+        <Chip label={plan.dimensioned ? 'dimensioned' : 'no printed dimensions'} accent={plan.dimensioned} />
+        <Chip label={`${plan.total_area_m2} m² total`} />
+        {plan.stated_total_area_m2 != null && <Chip label={`plan states ${plan.stated_total_area_m2} m²`} />}
+      </div>
+      <div className="mt-4 overflow-x-auto">
+        <table className="w-full border-collapse text-left text-sm">
+          <thead>
+            <tr className="border-b border-ink-line font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+              <th className="py-2.5 pr-4 font-semibold">Room</th>
+              <th className="py-2.5 pr-4 font-semibold">Type</th>
+              <th className="py-2.5 pr-4 font-semibold">Conditioned</th>
+              <th className="py-2.5 pr-4 font-semibold">Area m²</th>
+              <th className="py-2.5 font-semibold">Area source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {plan.rooms.map((room) => (
+              <tr key={room.name} className={`border-b border-ink-line/50 ${room.load_type ? '' : 'text-text-dim'}`}>
+                <td className="py-2.5 pr-4">{room.name}</td>
+                <td className="py-2.5 pr-4 font-mono text-xs uppercase">{room.room_type}</td>
+                <td className="py-2.5 pr-4 font-mono text-xs uppercase">
+                  {room.load_type ? `yes · ${room.load_type}` : 'no'}
+                </td>
+                <td className="py-2.5 pr-4 font-mono">{room.area_m2}</td>
+                <td className="py-2.5 font-mono text-xs">{AREA_SOURCE_LABEL[room.area_source]}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {(plan.notes.length > 0 || plan.overall_note) && (
+        <ul className="mt-4 flex list-disc flex-col gap-1 pl-5 text-xs leading-relaxed text-text-sec">
+          {plan.overall_note && <li>{plan.overall_note}</li>}
+          {plan.notes.map((n) => <li key={n}>{n}</li>)}
+        </ul>
+      )}
+      {plan.warnings.length > 0 && (
+        <ul className="mt-3 flex list-disc flex-col gap-1 pl-5 text-xs leading-relaxed text-amber-500">
+          {plan.warnings.map((w) => <li key={w}>{w}</li>)}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 // ── Volumetric sizing: the working behind the kW number ──────────────
 
 function roomLabels(rooms: RoomLoad[]): string[] {
   let bed = 0
   let liv = 0
-  return rooms.map((r) => (r.room_type === 'bedroom' ? `Bed ${++bed}` : `Living ${++liv}`))
+  return rooms.map(
+    (r) => r.name ?? (r.room_type === 'bedroom' ? `Bed ${++bed}` : `Living ${++liv}`),
+  )
 }
 
 function Stat({

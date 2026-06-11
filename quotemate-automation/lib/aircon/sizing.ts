@@ -12,6 +12,7 @@
 
 import type {
   AcConfidence,
+  AcPlanAreaEvidence,
   AcPropertyInputs,
   AcSizing,
   CeilingHeight,
@@ -126,6 +127,9 @@ export function sizeAircon(
   zone: ClimateZone,
   inputs: AcPropertyInputs,
   evidence?: AcAreaEvidence | null,
+  /** Rooms read from an uploaded floor plan — when present they replace
+   *  the synthetic room mix entirely (real areas, real room types). */
+  plan?: AcPlanAreaEvidence | null,
 ): AcSizing {
   const ceilingHeightM = CEILING_HEIGHT_M[inputs.ceiling_height]
   const rakedMult = inputs.ceiling_height === 'raked' ? RAKED_STRATIFICATION_MULT : 1.0
@@ -134,89 +138,10 @@ export function sizeAircon(
   const storeys = clampStoreys(inputs.storeys)
   const storeyMult = STOREY_MULT[storeys] ?? 1.0
 
-  const bedrooms = Math.max(0, Math.floor(inputs.bedrooms))
-  const living = Math.max(0, Math.floor(inputs.living_spaces))
-
-  const roomSpecs: RoomType[] = [
-    ...Array.from({ length: bedrooms }, () => 'bedroom' as RoomType),
-    ...Array.from({ length: living }, () => 'living' as RoomType),
-  ]
-
-  const typicalTotal = roomSpecs.reduce((acc, t) => acc + TYPICAL_ROOM_M2[t], 0)
-
-  const hasFloorArea =
-    typeof inputs.floor_area_m2 === 'number' &&
-    Number.isFinite(inputs.floor_area_m2) &&
-    (inputs.floor_area_m2 as number) > 0
-
-  const notes: string[] = []
-  const warnings: string[] = []
-  let confidence: AcConfidence
-  let totalFloorArea: number
-  let floorAreaSource: AcSizing['floor_area_source']
-
-  const enteredFloorArea = hasFloorArea ? (inputs.floor_area_m2 as number) : null
-  const plausible = (area: number) =>
-    typicalTotal === 0 ||
-    (area >= typicalTotal * FLOOR_AREA_RATIO.min && area <= typicalTotal * FLOOR_AREA_RATIO.max)
-
-  const solarArea =
-    evidence &&
-    Number.isFinite(evidence.solar_floor_area_m2) &&
-    evidence.solar_floor_area_m2 > 0
-      ? evidence.solar_floor_area_m2
-      : null
-
-  if (enteredFloorArea !== null && plausible(enteredFloorArea)) {
-    totalFloorArea = roundTo(enteredFloorArea, 1)
-    confidence = 'high'
-    floorAreaSource = 'entered'
-    notes.push(
-      `Floor area entered by hand (${totalFloorArea} m2) - apportioned across rooms by typical size.`,
-    )
-  } else if (enteredFloorArea === null && solarArea !== null && plausible(solarArea)) {
-    totalFloorArea = roundTo(solarArea, 1)
-    confidence = 'medium'
-    floorAreaSource = 'solar_footprint'
-    notes.push(
-      `Floor area estimated from the Google Solar roof footprint: ${evidence!.capture_note}`,
-    )
-    notes.push(
-      `Satellite-derived area (${totalFloorArea} m2) replaces the typical-room-mix guess - confirm on site.`,
-    )
-  } else {
-    totalFloorArea = roundTo(typicalTotal, 1)
-    floorAreaSource = 'typical_room_mix'
-    if (enteredFloorArea !== null) {
-      confidence = 'low'
-      warnings.push(
-        `Entered floor area (${roundTo(enteredFloorArea, 1)} m2) does not match ${roomSpecs.length} conditioned zones; using ${totalFloorArea} m2 from the room mix until confirmed.`,
-      )
-      notes.push(
-        `Floor area sanity check: ${roundTo(enteredFloorArea, 1)} m2 was outside the plausible band for ${roomSpecs.length} conditioned zones (typical ${totalFloorArea} m2).`,
-      )
-    } else {
-      if (solarArea !== null) {
-        warnings.push(
-          `Satellite floor area (${roundTo(solarArea, 1)} m2) did not match ${roomSpecs.length} conditioned zones - using the typical room mix instead.`,
-        )
-      }
-      confidence = bedrooms > 0 && living > 0 ? 'medium' : 'low'
-      notes.push(
-        `No floor area supplied - estimated from room counts using AU typical room sizes (${totalFloorArea} m2).`,
-      )
-    }
-  }
-
-  const scale =
-    floorAreaSource !== 'typical_room_mix' && typicalTotal > 0
-      ? totalFloorArea / typicalTotal
-      : 1
-  const band = CONFIDENCE_BAND[confidence]
-
-  const rooms: RoomLoad[] = roomSpecs.map((t) => {
-    const area = roundTo(TYPICAL_ROOM_M2[t] * scale, 1)
-    const volume = roundTo(area * ceilingHeightM, 1)
+  /** PURE per-room load: area → volume → kW under the current factors. */
+  const loadForRoom = (t: RoomType, area: number): RoomLoad => {
+    const a = roundTo(area, 1)
+    const volume = roundTo(a * ceilingHeightM, 1)
     const kw = roundTo(
       volume *
         volumetricFactor *
@@ -226,8 +151,119 @@ export function sizeAircon(
         rakedMult,
       2,
     )
-    return { room_type: t, area_m2: area, volume_m3: volume, kw }
-  })
+    return { room_type: t, area_m2: a, volume_m3: volume, kw }
+  }
+
+  const notes: string[] = []
+  const warnings: string[] = []
+  let confidence: AcConfidence
+  let totalFloorArea: number
+  let floorAreaSource: AcSizing['floor_area_source']
+  let rooms: RoomLoad[]
+
+  if (plan && plan.rooms.length > 0) {
+    // ── Floor-plan path: real rooms replace the synthetic mix. A
+    // dimensioned plan pins confidence to high; an undimensioned one
+    // (areas scaled, not read) is capped at medium.
+    const planRooms = plan.rooms
+    rooms = planRooms.map((r) => ({ ...loadForRoom(r.room_type, r.area_m2), name: r.name }))
+    totalFloorArea = roundTo(
+      planRooms.reduce((acc, r) => acc + r.area_m2, 0),
+      1,
+    )
+    floorAreaSource = 'floor_plan'
+    confidence = plan.dimensioned ? 'high' : 'medium'
+    notes.push(`Rooms and areas read from the uploaded floor plan: ${plan.capture_note}`)
+    notes.push(
+      plan.dimensioned
+        ? 'The plan carries printed dimensions or a stated total - sizing confidence is high.'
+        : 'The plan has no printed dimensions - areas are scaled estimates, so confidence is capped at medium.',
+    )
+    const declared =
+      Math.max(0, Math.floor(inputs.bedrooms)) + Math.max(0, Math.floor(inputs.living_spaces))
+    if (declared > 0 && declared !== planRooms.length) {
+      notes.push(
+        `The plan shows ${planRooms.length} conditioned zone${planRooms.length === 1 ? '' : 's'} where the form declared ${declared} - the plan wins.`,
+      )
+    }
+  } else {
+    const bedrooms = Math.max(0, Math.floor(inputs.bedrooms))
+    const living = Math.max(0, Math.floor(inputs.living_spaces))
+
+    const roomSpecs: RoomType[] = [
+      ...Array.from({ length: bedrooms }, () => 'bedroom' as RoomType),
+      ...Array.from({ length: living }, () => 'living' as RoomType),
+    ]
+
+    const typicalTotal = roomSpecs.reduce((acc, t) => acc + TYPICAL_ROOM_M2[t], 0)
+
+    const hasFloorArea =
+      typeof inputs.floor_area_m2 === 'number' &&
+      Number.isFinite(inputs.floor_area_m2) &&
+      (inputs.floor_area_m2 as number) > 0
+
+    const enteredFloorArea = hasFloorArea ? (inputs.floor_area_m2 as number) : null
+    const plausible = (area: number) =>
+      typicalTotal === 0 ||
+      (area >= typicalTotal * FLOOR_AREA_RATIO.min && area <= typicalTotal * FLOOR_AREA_RATIO.max)
+
+    const solarArea =
+      evidence &&
+      Number.isFinite(evidence.solar_floor_area_m2) &&
+      evidence.solar_floor_area_m2 > 0
+        ? evidence.solar_floor_area_m2
+        : null
+
+    if (enteredFloorArea !== null && plausible(enteredFloorArea)) {
+      totalFloorArea = roundTo(enteredFloorArea, 1)
+      confidence = 'high'
+      floorAreaSource = 'entered'
+      notes.push(
+        `Floor area entered by hand (${totalFloorArea} m2) - apportioned across rooms by typical size.`,
+      )
+    } else if (enteredFloorArea === null && solarArea !== null && plausible(solarArea)) {
+      totalFloorArea = roundTo(solarArea, 1)
+      confidence = 'medium'
+      floorAreaSource = 'solar_footprint'
+      notes.push(
+        `Floor area estimated from the Google Solar roof footprint: ${evidence!.capture_note}`,
+      )
+      notes.push(
+        `Satellite-derived area (${totalFloorArea} m2) replaces the typical-room-mix guess - confirm on site.`,
+      )
+    } else {
+      totalFloorArea = roundTo(typicalTotal, 1)
+      floorAreaSource = 'typical_room_mix'
+      if (enteredFloorArea !== null) {
+        confidence = 'low'
+        warnings.push(
+          `Entered floor area (${roundTo(enteredFloorArea, 1)} m2) does not match ${roomSpecs.length} conditioned zones; using ${totalFloorArea} m2 from the room mix until confirmed.`,
+        )
+        notes.push(
+          `Floor area sanity check: ${roundTo(enteredFloorArea, 1)} m2 was outside the plausible band for ${roomSpecs.length} conditioned zones (typical ${totalFloorArea} m2).`,
+        )
+      } else {
+        if (solarArea !== null) {
+          warnings.push(
+            `Satellite floor area (${roundTo(solarArea, 1)} m2) did not match ${roomSpecs.length} conditioned zones - using the typical room mix instead.`,
+          )
+        }
+        confidence = bedrooms > 0 && living > 0 ? 'medium' : 'low'
+        notes.push(
+          `No floor area supplied - estimated from room counts using AU typical room sizes (${totalFloorArea} m2).`,
+        )
+      }
+    }
+
+    const scale =
+      floorAreaSource !== 'typical_room_mix' && typicalTotal > 0
+        ? totalFloorArea / typicalTotal
+        : 1
+
+    rooms = roomSpecs.map((t) => loadForRoom(t, TYPICAL_ROOM_M2[t] * scale))
+  }
+
+  const band = CONFIDENCE_BAND[confidence]
 
   const connectedKw = roundTo(
     rooms.reduce((acc, r) => acc + r.kw, 0),
@@ -248,7 +284,7 @@ export function sizeAircon(
 
   return {
     rooms,
-    conditioned_zones: roomSpecs.length,
+    conditioned_zones: rooms.length,
     total_floor_area_m2: totalFloorArea,
     floor_area_source: floorAreaSource,
     total_volume_m3: totalVolume,
