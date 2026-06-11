@@ -1,0 +1,22 @@
+# Ralph progress — Estimator (Beta) premium upgrade
+# Branch: ralph/estimator-premium
+# NOTE: namespaced under .ralph/estimator-premium/ because .ralph/prd.json belongs
+# to the concurrent Solar Estimate Premium ralph run (worktree solar-dashboard).
+
+[2026-06-11 12:00] PLAN
+- Discovery done. Backend (099 tables, extract/price/refine/history routes) already live.
+- DB check: 2 saved runs exist (Sparky, Atomic Electrical) — history works server-side;
+  the UI hides it behind a toggle, which is why the user "never saw" past runs.
+- Pricing is deterministic + grounded (tenant_custom_assemblies + shared_assemblies +
+  pricing_book; unmatched items are flagged, never guessed). Keep it that way.
+- Design tokens (globals.css @theme): ink-deep #0E1622, ink-card #1B2433, ink-line
+  #2D3A4F, accent #FF5A1F (+press/soft), text-pri/sec/dim, teal-glow, warning.
+- Quality gates: npx tsc --noEmit · pnpm lint · pnpm test · pnpm build.
+- PDF bytes are never stored server-side; full-view page gets the File via an in-memory
+  module store (Map keyed by extractionId), with a re-attach fallback after reload.
+
+LEARNINGS
+- Next 16: route ctx params are a Promise — `ctx: { params: Promise<{ id: string }> }`.
+- All /api/tenant/estimator/* use tenantFromBearer (Supabase access token) + service-role client.
+- pnpm is the package manager; ops scripts run with `node --env-file=.env.local scripts/X.mjs`
+  from quotemate-automation/.

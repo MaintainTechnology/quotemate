@@ -1,0 +1,83 @@
+{
+  "project": "Estimator (Beta) premium upgrade",
+  "branch": "ralph/estimator-premium",
+  "completionPromise": "All tests pass",
+  "createdAt": "2026-06-11T12:00:00+08:00",
+  "context": {
+    "app": "quotemate-automation (Next.js 16 App Router, React 19, Tailwind v4 tokens in globals.css)",
+    "existing": "plan_uploads/plan_extractions (migration 099), extract/refine/price/history API routes, EstimatorBetaTab with inline results + PlanOverlay + per-line price trace ('how?')",
+    "gaps": "history hidden behind tiny toggle; no full-view results route; priced BOM not persisted; rows can't be added/removed; design is plain",
+    "invariants": [
+      "Pricing stays deterministic + grounded (tenant_custom_assemblies + shared_assemblies + pricing_book); unmatched items flagged, never guessed",
+      "PDF bytes never stored server-side; File handoff is in-memory with re-attach fallback",
+      "Maintain design system (ink-deep navy, #FF5A1F accent, mono uppercase labels, square corners, borders not shadows)",
+      "All /api/tenant/estimator/* tenant-scoped via tenantFromBearer"
+    ],
+    "gates": ["npx tsc --noEmit", "pnpm lint", "pnpm test", "pnpm build"]
+  },
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Persist priced BOM on a run",
+      "acceptance": [
+        "sql/migrations/102_plan_extraction_pricing.sql adds priced_bom jsonb + priced_at timestamptz to plan_extractions, idempotent",
+        "scripts/run-migration-102.mjs applies + verifies columns",
+        "Migration applied to the live Supabase DB"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "US-002",
+      "title": "API: single-run GET, price persistence, richer history",
+      "acceptance": [
+        "GET /api/tenant/estimator/extract/[id] returns upload + extraction + priced_bom, tenant-scoped, 404 on mismatch",
+        "POST /api/tenant/estimator/price accepts optional extractionId and persists bom + priced_at on success",
+        "GET /api/tenant/estimator/history rows include priced summary (totalIncGst, pricedAt) and corrected flag",
+        "vitest unit coverage for new pure helpers"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "US-003",
+      "title": "Shared premium results components",
+      "acceptance": [
+        "app/dashboard/_components/estimator/ module: take-off table with editable type/symbol/count, add row, remove row, confidence emphasis",
+        "Transparency: per-line count provenance + 4-step price trace + methodology panel ('how this estimate was built')",
+        "Priced summary: KPI cards, totals ladder, unmatched items, pricing assumptions",
+        "Maintain design system; typography per ui-typography"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "US-004",
+      "title": "Full-view run page /dashboard/estimator/[runId]",
+      "acceptance": [
+        "Client page resolves Supabase session, fetches run via GET, renders full-width premium dashboard",
+        "Save corrections, price (persists), refine and plan overlay work; in-memory File handoff from tab; re-attach fallback when PDF absent",
+        "Unauthed → signin redirect; missing run → not-found state"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "US-005",
+      "title": "Premium tab redesign + first-class history",
+      "acceptance": [
+        "Upload zone with drag-and-drop + premium framing",
+        "Run history is an always-visible panel with empty state, status chips (draft/verified/priced), item + device counts, priced total, open-in-full-view",
+        "After analyse, results open on the full-view page (file handed off in memory)"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "US-006",
+      "title": "Quality gates green",
+      "acceptance": [
+        "npx tsc --noEmit clean",
+        "pnpm lint clean",
+        "pnpm test (vitest) all pass",
+        "pnpm build succeeds"
+      ],
+      "status": "pending"
+    }
+  ]
+}
