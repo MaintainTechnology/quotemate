@@ -1,8 +1,12 @@
+// GET   /api/tenant/estimator/extract/[id] — one run (extraction + its upload
+//       + any persisted priced BOM) for the full-view run page.
 // PATCH /api/tenant/estimator/extract/[id] — save the tradie's corrected counts.
 //
-// Body: { corrected_items: Array<{ type; symbol?; count; confidence?; note?; locations? }> }
+// PATCH body: { corrected_items: Array<{ type; symbol?; count; confidence?; note?; locations? }> }
 // The optional audit fields (confidence, zone-tally note, per-symbol pin
 // locations) are retained so the plan-overlay + pricing trace survive a save.
+// Saving corrections clears the persisted priced BOM — it was computed from the
+// old counts; re-pricing is deterministic and one click.
 // Scoped to the authed tenant; a mismatched id/tenant returns 404.
 
 import { tenantFromBearer, estimatorSupabase as supabase } from '@/lib/estimation/auth'
@@ -59,6 +63,26 @@ function cleanCorrected(input: unknown): CorrectedItem[] | null {
   return out
 }
 
+export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const tenant = await tenantFromBearer(req)
+  if (!tenant) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+
+  const { id } = await ctx.params
+
+  const { data, error } = await supabase
+    .from('plan_extractions')
+    .select(
+      'id, plan_upload_id, items, corrected_items, sheets_used, overall_note, model, runtime_seconds, priced_bom, priced_at, created_at, updated_at, plan_uploads(filename, sheet_hint, created_at)',
+    )
+    .eq('id', id)
+    .eq('tenant_id', tenant.id)
+    .maybeSingle()
+
+  if (error) return Response.json({ ok: false, error: error.message }, { status: 500 })
+  if (!data) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
+  return Response.json({ ok: true, run: data })
+}
+
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const tenant = await tenantFromBearer(req)
   if (!tenant) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
@@ -78,7 +102,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 
   const { data, error } = await supabase
     .from('plan_extractions')
-    .update({ corrected_items: corrected, updated_at: new Date().toISOString() })
+    .update({ corrected_items: corrected, priced_bom: null, priced_at: null, updated_at: new Date().toISOString() })
     .eq('id', id)
     .eq('tenant_id', tenant.id)
     .select('id')

@@ -1,9 +1,11 @@
 // POST /api/tenant/estimator/price — indicative pricing for a take-off.
 //
-// Body: { items: Array<{ type: string; count: number }> }
+// Body: { items: Array<{ type: string; count: number }>, extractionId?: string }
 // Loads the tenant's electrical assemblies (custom + shared) and pricing book,
 // then prices deterministically (grounded — no LLM, no free-form prices).
 // Items with no catalogue match come back UNMATCHED, not guessed.
+// When extractionId is supplied the computed BOM is persisted onto that run
+// (plan_extractions.priced_bom/priced_at, tenant-scoped) so it survives reload.
 
 import { tenantFromBearer, estimatorSupabase as supabase } from '@/lib/estimation/auth'
 import { priceTakeoff, type AssemblyRow, type PricingBook, type TakeoffItem } from '@/lib/estimation/price'
@@ -76,5 +78,22 @@ export async function POST(req: Request) {
   }
 
   const bom = priceTakeoff(items, assemblies, book)
-  return Response.json({ ok: true, bom, catalogueSize: assemblies.length, pricingBookSource: bookSource })
+
+  // Persist onto the run when the caller names one — derived data, safe to overwrite.
+  const rawExtractionId = (body as Record<string, unknown>)?.extractionId
+  const extractionId = typeof rawExtractionId === 'string' && rawExtractionId.trim() ? rawExtractionId.trim() : null
+  let persisted = false
+  if (extractionId) {
+    const pricedAt = new Date().toISOString()
+    const { data: saved } = await supabase
+      .from('plan_extractions')
+      .update({ priced_bom: bom, priced_at: pricedAt, updated_at: pricedAt })
+      .eq('id', extractionId)
+      .eq('tenant_id', tenant.id)
+      .select('id')
+      .maybeSingle()
+    persisted = Boolean(saved)
+  }
+
+  return Response.json({ ok: true, bom, catalogueSize: assemblies.length, pricingBookSource: bookSource, persisted })
 }
