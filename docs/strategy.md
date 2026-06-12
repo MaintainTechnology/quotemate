@@ -1,6 +1,6 @@
-﻿# QuoteMate â€” Strategy & Re-evaluation
+# QuoteMate — Strategy & Re-evaluation
 
-> **Current iteration: v11 (2026-06-12).** v1 trade pivoted from **painting** to **electrical** in v3; v5 expanded to **multi-trade**; v10 added roofing; v11 adds **commercial painting** as a document-driven estimator extension. The prose in Â§1â€“Â§12 below is the v2 painting analysis, kept as audit-log record. See [Iteration history](#iteration-history) at the bottom for v3 (electrical pivot), v4 (photo-capture pattern), and v5 (multi-trade expansion) rationale.
+> **Current iteration: v11 (2026-06-12).** v1 trade pivoted from **painting** to **electrical** in v3; v5 expanded to **multi-trade** (electrical + plumbing); v10 added roofing; v11 adds **commercial painting** as a document-driven estimator extension. The prose in §1–§12 below is the v2 painting analysis, kept as audit-log record. See [Iteration history](#iteration-history) at the bottom for the full v3–v11 rationale.
 
 > Status: living document. Each iteration sharpens the analysis against the project assets and prior reasoning.
 
@@ -12,16 +12,16 @@ This document supersedes the initial chat-based analysis. It is written to be ho
 
 | # | Prior position | Why it was wrong / thin | Corrected view |
 |---|---|---|---|
-| 1 | Treated the voice-first AI receptionist as the obvious v1 architecture | Conflated two distinct product visions: the SVG (portal-first, tradie-typed intake from existing-platform enquiries) and the high-level design (voice-first AI receptionist). Different cost structures, different moats, different timelines. | Voice-first is the eventual product. Portal-first is the v1 you should actually build. See Â§2. |
-| 2 | "Ingest the tradie's pricing book via RAG" | Most owner-operator tradies have **no structured pricing book**. They quote from memory + gut markup. There's nothing to ingest. | Ship a base assembly library per trade (built by paid domain experts), and capture the tradie's overlay through a guided 30-minute onboarding. See Â§3. |
-| 3 | No unit economics computed | Without numbers, the architecture choice is fashion-driven. Voice-first economics are brutal (~$1,500/mo COGS per tradie at moderate call volume). Portal-first is ~$10/mo COGS. | Pricing model has to match architecture. Subscription pricing only works for portal-first. Voice-first needs per-call or premium tier. See Â§4. |
-| 4 | 10-agent architecture | YAGNI. Many of the agents are sub-functions, not standalone reasoning units. | 4 agents for v1: Quote Drafter, Quote Reviewer, Inspection Coordinator, Conversion Engine. See Â§5. |
-| 5 | "Use RAG over past quotes" â€” no eval framework | If you can't measure quote quality, you can't iterate on it. Every prompt change is blind. | Build the eval harness in week 1: 100 hold-out (intake â†’ quote) pairs, scored by rubric. See Â§6. |
-| 6 | "Start with plumbing or electrical" | Wrong on regulatory grounds. Plumbing is licensed per-state with QBCC/PIC/VBA requirements; electrical needs licensed-electrician details on every quote. Both are high-friction wedges. | Start with painting (no licensing in most AU states), then landscaping, then carpentry. See Â§7. |
-| 7 | No GTM plan | "Build it and they will come" is not a strategy. | Founder-led sales for first 20, then trade Facebook groups, then hipages partnership conversation. See Â§8. |
-| 8 | "Pricing knowledge base is the moat" â€” said but not explained | Doesn't articulate *how* the moat compounds, which means it can't be told to investors. | Per-tradie data lock-in: each correction calibrates the system; switching = losing the calibration. See Â§9. |
+| 1 | Treated the voice-first AI receptionist as the obvious v1 architecture | Conflated two distinct product visions: the SVG (portal-first, tradie-typed intake from existing-platform enquiries) and the high-level design (voice-first AI receptionist). Different cost structures, different moats, different timelines. | Voice-first is the eventual product. Portal-first is the v1 you should actually build. See §2. |
+| 2 | "Ingest the tradie's pricing book via RAG" | Most owner-operator tradies have **no structured pricing book**. They quote from memory + gut markup. There's nothing to ingest. | Ship a base assembly library per trade (built by paid domain experts), and capture the tradie's overlay through a guided 30-minute onboarding. See §3. |
+| 3 | No unit economics computed | Without numbers, the architecture choice is fashion-driven. Voice-first economics are brutal (~$1,500/mo COGS per tradie at moderate call volume). Portal-first is ~$10/mo COGS. | Pricing model has to match architecture. Subscription pricing only works for portal-first. Voice-first needs per-call or premium tier. See §4. |
+| 4 | 10-agent architecture | YAGNI. Many of the agents are sub-functions, not standalone reasoning units. | 4 agents for v1: Quote Drafter, Quote Reviewer, Inspection Coordinator, Conversion Engine. See §5. |
+| 5 | "Use RAG over past quotes" — no eval framework | If you can't measure quote quality, you can't iterate on it. Every prompt change is blind. | Build the eval harness in week 1: 100 hold-out (intake → quote) pairs, scored by rubric. See §6. |
+| 6 | "Start with plumbing or electrical" | Wrong on regulatory grounds. Plumbing is licensed per-state with QBCC/PIC/VBA requirements; electrical needs licensed-electrician details on every quote. Both are high-friction wedges. | Start with painting (no licensing in most AU states), then landscaping, then carpentry. See §7. |
+| 7 | No GTM plan | "Build it and they will come" is not a strategy. | Founder-led sales for first 20, then trade Facebook groups, then hipages partnership conversation. See §8. |
+| 8 | "Pricing knowledge base is the moat" — said but not explained | Doesn't articulate *how* the moat compounds, which means it can't be told to investors. | Per-tradie data lock-in: each correction calibrates the system; switching = losing the calibration. See §9. |
 | 9 | Treated the experience-map metrics (91% / 87% / 94% / 83%) as validated | Those are **prototype-cohort numbers** from 5 tradies. Signal, not proof. | Treat as directional. Real validation is paid pilots that don't churn at month 2. |
-| 10 | Glossed AU regulatory layer | Mentioned ABN/GST in passing; never reckoned with the per-trade implications. | Trade choice, license display, ACL binding-quote risk, and recording consent all materially shape the product. See Â§7 and Â§10. |
+| 10 | Glossed AU regulatory layer | Mentioned ABN/GST in passing; never reckoned with the per-trade implications. | Trade choice, license display, ACL binding-quote risk, and recording consent all materially shape the product. See §7 and §10. |
 
 ---
 
@@ -29,15 +29,15 @@ This document supersedes the initial chat-based analysis. It is written to be ho
 
 Your two reference assets describe two different products:
 
-- **`quotemate_flow_with_inspection.svg`**: customer enters via existing platform (hipages, Airtasker) â†’ tradie opens QuoteMate â†’ tradie *types* the job details â†’ AI drafts quote. This is **portal-first**.
-- **High-level design (in your prompt)**: customer dials the tradie's QuoteMate-provisioned number â†’ AI receptionist captures everything â†’ tradie wakes up to a draft. This is **voice-first**.
+- **`quotemate_flow_with_inspection.svg`**: customer enters via existing platform (hipages, Airtasker) → tradie opens QuoteMate → tradie *types* the job details → AI drafts quote. This is **portal-first**.
+- **High-level design (in your prompt)**: customer dials the tradie's QuoteMate-provisioned number → AI receptionist captures everything → tradie wakes up to a draft. This is **voice-first**.
 
 These are not the same product. They differ on:
 
 | Dimension | Portal-first | Voice-first |
 |---|---|---|
-| Time to v1 | 4â€“6 weeks | 12â€“16 weeks |
-| COGS per tradie/mo | ~$10 | ~$1,500 (at ~30 calls/day Ã— 4 min) |
+| Time to v1 | 4–6 weeks | 12–16 weeks |
+| COGS per tradie/mo | ~$10 | ~$1,500 (at ~30 calls/day × 4 min) |
 | Tradie adoption friction | Moderate (open another app) | High (give up phone-number control) |
 | Demo "wow" | Lower | Higher |
 | Defensibility | Pricing book accuracy | Pricing book + intake quality |
@@ -50,46 +50,46 @@ These are not the same product. They differ on:
 
 ---
 
-## 3. Pricing data â€” the real strategy
+## 3. Pricing data — the real strategy
 
 The core architectural assumption in any AI quoting tool is "we have access to the tradie's prices." Reality check:
 
 - ~70% of AU owner-operator tradies do not maintain a structured price list
 - The remaining ~30% have it in a spreadsheet, in their head, in old PDF quotes, or in Xero invoice line items
-- Even when a price list exists, it's stale â€” material prices move 5â€“15% per year on commodity items
+- Even when a price list exists, it's stale — material prices move 5–15% per year on commodity items
 
 **The real strategy is to build the pricing book *with* the tradie, not from them.**
 
 ### How
 
-1. **Hire a domain expert per trade.** A 30-year painter, a 25-year landscaper. ~$5k of consulting per trade for a base assembly library: 50â€“80 most common assemblies (e.g. "interior wall â€” prep, prime, two coats, low VOC") with default unit prices, default labour, default exclusions.
+1. **Hire a domain expert per trade.** A 30-year painter, a 25-year landscaper. ~$5k of consulting per trade for a base assembly library: 50–80 most common assemblies (e.g. "interior wall — prep, prime, two coats, low VOC") with default unit prices, default labour, default exclusions.
 
 2. **Onboarding produces a per-tradie overlay.** A 30-minute guided flow:
    - Hourly rate for owner / 2IC / apprentice
    - Default markup % on materials
-   - Walk through 20 highest-volume assemblies â€” "what would *you* charge?"
+   - Walk through 20 highest-volume assemblies — "what would *you* charge?"
    - Branding (logo, license number, ABN, GST status)
 
 3. **Active learning from the first 5 quotes.** Every edit the tradie makes to an AI draft is a calibration signal. After 5 quotes, the system has the tradie's actual price language and exclusion phrasing.
 
-4. **Background price refresh.** For commodity items (paint, fence palings), scrape Bunnings public pricing weekly. Surface "3 of your prices haven't been updated in 60+ days â€” verify?" before each quote send.
+4. **Background price refresh.** For commodity items (paint, fence palings), scrape Bunnings public pricing weekly. Surface "3 of your prices haven't been updated in 60+ days — verify?" before each quote send.
 
 ### Schema implication
 
 ```
 pricing_books              (per tradie, versioned)
-â”œâ”€â”€ overlay_labour         (their hourly rates)
-â”œâ”€â”€ overlay_assemblies     (their custom prices on shared assemblies)
-â”œâ”€â”€ overlay_materials      (custom material prices / preferred brands)
-â””â”€â”€ settings               (markup %, GST, branding)
+├── overlay_labour         (their hourly rates)
+├── overlay_assemblies     (their custom prices on shared assemblies)
+├── overlay_materials      (custom material prices / preferred brands)
+└── settings               (markup %, GST, branding)
 
 shared_libraries           (per trade, maintained by us)
-â”œâ”€â”€ assemblies             (the 50â€“80 base assemblies)
-â”œâ”€â”€ materials              (commodity catalog with refresh dates)
-â””â”€â”€ exclusion_templates    (standard exclusion language)
+├── assemblies             (the 50–80 base assemblies)
+├── materials              (commodity catalog with refresh dates)
+└── exclusion_templates    (standard exclusion language)
 ```
 
-The Estimation Agent reads from `shared_libraries` first, then applies the tradie's `overlay_*` deltas. This makes cold-start tractable: a new tradie's day-1 quote is "decent base library + their hourly rate" â€” not "blank page."
+The Estimation Agent reads from `shared_libraries` first, then applies the tradie's `overlay_*` deltas. This makes cold-start tractable: a new tradie's day-1 quote is "decent base library + their hourly rate" — not "blank page."
 
 ---
 
@@ -101,9 +101,9 @@ The Estimation Agent reads from `shared_libraries` first, then applies the tradi
 
 | Item | Cost |
 |---|---|
-| Quote drafts (Claude Opus, ~$0.05 Ã— 80 quotes/mo with prompt caching) | $4.00 |
-| SMS for photo capture (Twilio AU, ~$0.02 Ã— 80) | $1.60 |
-| SMS for quote delivery (~$0.04 Ã— 80) | $3.20 |
+| Quote drafts (Claude Opus, ~$0.05 × 80 quotes/mo with prompt caching) | $4.00 |
+| SMS for photo capture (Twilio AU, ~$0.02 × 80) | $1.60 |
+| SMS for quote delivery (~$0.04 × 80) | $3.20 |
 | Hosting, storage, misc (Vercel + Supabase amortized) | $1.20 |
 | **Total COGS** | **~$10/mo** |
 
@@ -119,20 +119,20 @@ The Estimation Agent reads from `shared_libraries` first, then applies the tradi
 
 ### Voice-first (for context)
 
-At 30 calls/day Ã— 4 min average Ã— ($0.30â€“0.50 stack cost) = **$1,100â€“$1,800 COGS per tradie per month.**
+At 30 calls/day × 4 min average × ($0.30–0.50 stack cost) = **$1,100–$1,800 COGS per tradie per month.**
 
 This destroys the SaaS model. Voice has to be either:
-- Premium tier at $299â€“$499/mo with per-minute overage, or
-- Per-call billing ($2â€“$5 per qualified call), or
+- Premium tier at $299–$499/mo with per-minute overage, or
+- Per-call billing ($2–$5 per qualified call), or
 - Optional add-on, off by default
 
 **Implication:** the moment you turn on voice, your pricing page has to change. Plan for that.
 
 ### CAC / LTV
 
-- Founder-led sales for first 20: ~5 hours per tradie Ã— your time = soft CAC
+- Founder-led sales for first 20: ~5 hours per tradie × your time = soft CAC
 - Paid acquisition (months 4+): estimate $200/tradie via trade Facebook + Google
-- LTV: $199/mo Ã— 24 months (assuming 4% monthly churn) = ~$4,800
+- LTV: $199/mo × 24 months (assuming 4% monthly churn) = ~$4,800
 - **LTV/CAC ~24x** if churn stays under 5%/mo, which is the hard part
 
 **The killer metric to watch:** monthly active quote rate per tradie. If a tradie sends fewer than 4 quotes/month after their first month, they will churn within 90 days.
@@ -147,7 +147,7 @@ The 10-agent decomposition was over-engineered. For v1, you need exactly four:
 
 | | |
 |---|---|
-| Replaces | Old Intake Cleaner (â‘¡) + Estimation Agent (â‘¢) |
+| Replaces | Old Intake Cleaner (②) + Estimation Agent (③) |
 | Trigger | Tradie completes intake form (or hipages enquiry parsed) |
 | Reads | Intake fields, photos, tradie's pricing book overlay, shared assembly library |
 | Writes | Draft quote with Good/Better/Best, line items, exclusions, confidence score |
@@ -160,19 +160,19 @@ The 10-agent decomposition was over-engineered. For v1, you need exactly four:
 
 | | |
 |---|---|
-| Replaces | Old Routing (â‘£) + Tradie Validator (â‘¤) + Quote Presentation (â‘¥) |
+| Replaces | Old Routing (④) + Tradie Validator (⑤) + Quote Presentation (⑥) |
 | Trigger | Quote draft ready |
 | Reads | Draft quote, tradie's review preferences |
 | Writes | Final approved quote, customer-facing portal page, PDF |
 | Model | Haiku (annotations) + Sonnet (cover note prose) + react-pdf (document) |
 
-**Why merged:** routing in v1 is rule-based (always go to tradie review â€” no auto-send). Validator and Presentation share the same data and run sequentially.
+**Why merged:** routing in v1 is rule-based (always go to tradie review — no auto-send). Validator and Presentation share the same data and run sequentially.
 
 ### Agent 3: Inspection Coordinator
 
 | | |
 |---|---|
-| Replaces | Old â‘¨a + â‘¨b + â‘© post-acceptance |
+| Replaces | Old ⑨a + ⑨b + ⑩ post-acceptance |
 | Trigger | Tradie marks quote as "needs site visit" OR Quote Drafter flagged inspection |
 | Reads | Quote, tradie's calendar, Stripe Connect account |
 | Writes | Inspection booking, payment intent, on-site capture session, post-acceptance side-effects |
@@ -184,44 +184,44 @@ The 10-agent decomposition was over-engineered. For v1, you need exactly four:
 
 | | |
 |---|---|
-| Replaces | Old Availability Nudge (â‘¦) + Follow-up (â‘§) |
+| Replaces | Old Availability Nudge (⑦) + Follow-up (⑧) |
 | Trigger | Quote sent + N hours/days, no acceptance |
 | Reads | Quote, customer history, tradie's calendar |
 | Writes | SMS to customer, in-portal banners, status updates |
 | Model | Haiku (message text) + Inngest/Vercel Workflow (durable timing) |
 
-**Why merged:** availability nudges and follow-ups are the same thing â€” post-send communication driven by time + state. They share infrastructure.
+**Why merged:** availability nudges and follow-ups are the same thing — post-send communication driven by time + state. They share infrastructure.
 
 ### Reserved for v3+
 
-- **Receptionist Agent** (voice â€” full Vapi/Retell stack with per-trade prompt sets)
+- **Receptionist Agent** (voice — full Vapi/Retell stack with per-trade prompt sets)
 - **On-Site Capture Agent** as a separate mobile-first agent (currently a sub-mode of Inspection Coordinator)
 
 ---
 
-## 6. The eval framework â€” built first
+## 6. The eval framework — built first
 
 You cannot iterate on quote quality without measuring it. Build this in week 1, before any prompt changes.
 
 ### What to collect
 
-- 100 historical (intake â†’ final quote) pairs from your first 3 pilot tradies
+- 100 historical (intake → final quote) pairs from your first 3 pilot tradies
 - Each pair tagged with trade, job type, complexity (simple/medium/complex)
-- Anonymized â€” no customer PII
+- Anonymized — no customer PII
 
 ### How to score
 
-A 5-dimension rubric, scored 0â€“5:
+A 5-dimension rubric, scored 0–5:
 
-1. **Scope completeness** â€” did the AI capture what the tradie ultimately scoped?
-2. **Price accuracy** â€” % delta between AI total and tradie's final total (â‰¤10% = 5, 10â€“20% = 3, >30% = 0)
-3. **Line-item correctness** â€” are the line items the right shape (assemblies vs raw parts)?
-4. **Exclusions** â€” did the AI surface the right exclusions (existing damage, hidden work, etc.)?
-5. **Confidence calibration** â€” did HIGH-confidence quotes need fewer edits than LOW-confidence ones?
+1. **Scope completeness** — did the AI capture what the tradie ultimately scoped?
+2. **Price accuracy** — % delta between AI total and tradie's final total (≤10% = 5, 10–20% = 3, >30% = 0)
+3. **Line-item correctness** — are the line items the right shape (assemblies vs raw parts)?
+4. **Exclusions** — did the AI surface the right exclusions (existing damage, hidden work, etc.)?
+5. **Confidence calibration** — did HIGH-confidence quotes need fewer edits than LOW-confidence ones?
 
 ### How to use it
 
-- Every prompt change â†’ run against the hold-out set â†’ publish delta
+- Every prompt change → run against the hold-out set → publish delta
 - Track per-trade per-job-type scores as a dashboard
 - The day a prompt change drops average score >5%, revert immediately
 
@@ -231,26 +231,26 @@ This is also your **investor pitch deck slide**. "Our AI quote engine scores 4.2
 
 ---
 
-## 7. Trade selection â€” reconsidered
+## 7. Trade selection — reconsidered
 
 Prior recommendation was plumbing or electrical. That's wrong for v1. Here's the regulatory reality:
 
 | Trade | Licensing burden | Quote frequency | Avg quote size | v1 fit? |
 |---|---|---|---|---|
-| **Painting** | Low (no national license) | High | $800â€“$5,000 | **â˜… Best v1** |
-| **Landscaping** | Low | Medium | $1,500â€“$15,000 | Strong v2 |
-| **Carpentry** | Lowâ€“Medium (state-varying) | Medium | $500â€“$10,000 | Strong v2 |
-| **Plumbing** | High (per-state license, must display) | Very High | $200â€“$3,000 | v3 (after voice) |
-| **Electrical** | High (licensed electrician on every quote) | Very High | $200â€“$5,000 | v3 (after voice) |
-| **Tiling, fencing, glazing** | Lowâ€“Medium | Medium | Varies | v2 candidates |
+| **Painting** | Low (no national license) | High | $800–$5,000 | **★ Best v1** |
+| **Landscaping** | Low | Medium | $1,500–$15,000 | Strong v2 |
+| **Carpentry** | Low–Medium (state-varying) | Medium | $500–$10,000 | Strong v2 |
+| **Plumbing** | High (per-state license, must display) | Very High | $200–$3,000 | v3 (after voice) |
+| **Electrical** | High (licensed electrician on every quote) | Very High | $200–$5,000 | v3 (after voice) |
+| **Tiling, fencing, glazing** | Low–Medium | Medium | Varies | v2 candidates |
 
 Painting wins v1 because:
 
 - No licensing complexity (don't have to handle per-state license display in the schema yet)
-- Quote structure is simple and bounded (rooms Ã— surfaces Ã— paint Ã— labour)
+- Quote structure is simple and bounded (rooms × surfaces × paint × labour)
 - Customers expect a written quote (high willingness to use a portal)
 - High AU/NZ density of owner-operator painters
-- Less emergency work â†’ AI receptionist not strictly needed â†’ defers voice complexity
+- Less emergency work → AI receptionist not strictly needed → defers voice complexity
 
 Plumbing and electrical have the highest *quote frequency* (which is why they're tempting), but their regulatory requirements force the schema and product to handle license display, supervision-by-licensed-trade, and emergency call patterns from day 1. That's three months of work for a v1 you don't need.
 
@@ -262,7 +262,7 @@ Plumbing and electrical have the highest *quote frequency* (which is why they're
 
 Missing entirely from prior analysis. Here's the realistic path:
 
-### First 20 customers (months 1â€“3) â€” founder-led
+### First 20 customers (months 1–3) — founder-led
 
 - You personally onboard each painter
 - 30-minute video call + walkthrough
@@ -272,29 +272,29 @@ Missing entirely from prior analysis. Here's the realistic path:
 
 This is brutal but necessary. Every one of these 20 becomes a referenceable case study and a feedback source.
 
-### Customers 21â€“80 (months 4â€“6) â€” community-led
+### Customers 21–80 (months 4–6) — community-led
 
 - AU painter Facebook groups (e.g. "Painters of Australia", "Master Painters AU"): post real demos, not marketing
 - Master Painters Australia partnership conversation
 - Referral program: $50 credit per referred painter who pays for one month
 - Aim for 60% inbound, 40% outbound
 
-### Customers 81â€“250 (months 7â€“12) â€” paid + partnerships
+### Customers 81–250 (months 7–12) — paid + partnerships
 
 - Google Ads on "quoting software for painters" (low competition keyword)
 - hipages partnership conversation: "QuoteMate widget on every painter enquiry"
 - Trade supplier partnerships: Inspirations Paint, Bristol Paint
-- Paid: aim for $200 CAC, $4,800 LTV â†’ 24x ratio
+- Paid: aim for $200 CAC, $4,800 LTV → 24x ratio
 
 ### Anti-patterns to avoid
 
-- **Don't list on app stores in v1** â€” tradies won't search for you, distribution is wasted
-- **Don't go to trade shows in year 1** â€” $20k+ for a booth, bad ROI for a 10-customer wedge
-- **Don't hire a salesperson before $20k MRR** â€” founder-led sales is the right CAC at this stage
+- **Don't list on app stores in v1** — tradies won't search for you, distribution is wasted
+- **Don't go to trade shows in year 1** — $20k+ for a booth, bad ROI for a 10-customer wedge
+- **Don't hire a salesperson before $20k MRR** — founder-led sales is the right CAC at this stage
 
 ---
 
-## 9. Defensibility â€” the per-tradie data lock-in
+## 9. Defensibility — the per-tradie data lock-in
 
 Prior analysis said "the pricing book is the moat" and stopped. Here's how the moat actually compounds, told as a 12-month painter timeline:
 
@@ -303,10 +303,10 @@ Prior analysis said "the pricing book is the moat" and stopped. Here's how the m
 | Day 1 | Generic painting library + their hourly rate. First quote: 60% of tradie's normal phrasing | Trivial |
 | Quote 10 | 30 line-item corrections logged. Quotes use their preferred brands (Dulux not Taubmans, etc.) | A bit of pain |
 | Quote 50 | Custom assemblies created, exclusion language matches their style, GST handling is right | Real switching cost |
-| Quote 200 | The system *is* their pricing book. Migrating means rebuilding 12 months of calibration | Painful â€” they'd lose 50+ hours of accumulated tuning |
+| Quote 200 | The system *is* their pricing book. Migrating means rebuilding 12 months of calibration | Painful — they'd lose 50+ hours of accumulated tuning |
 | Year 2 | Their employees (2IC, apprentices) use the system to quote without owner involvement | Now it's an org-level dependency |
 
-**This is a network effect of one** â€” between the tradie and their data â€” but it's real. It's also the thing that *no LLM-only competitor can match by being smarter*. They have to put in the same 200-quote calibration time.
+**This is a network effect of one** — between the tradie and their data — but it's real. It's also the thing that *no LLM-only competitor can match by being smarter*. They have to put in the same 200-quote calibration time.
 
 **Investor framing:** "Every quote our customers send makes their next quote better. After 6 months, switching means losing their book. After 12 months, it means losing their team's workflow. This is why our churn drops from 8% in month 1 to under 2% by month 6."
 
@@ -318,53 +318,53 @@ Not all of these matter for v1 (painting). They matter for the schema and roadma
 
 | Area | Implication for product |
 |---|---|
-| **Australian Consumer Law** â€” accepted quote = binding contract | Never auto-send in v1. Tradie human-in-loop is your liability shield. Add prominent "subject to inspection" language for inspection-flow quotes |
+| **Australian Consumer Law** — accepted quote = binding contract | Never auto-send in v1. Tradie human-in-loop is your liability shield. Add prominent "subject to inspection" language for inspection-flow quotes |
 | **GST registration** ($75k threshold) | `organizations.gst_registered` boolean. Quote display logic must omit GST line for non-registered tradies |
-| **License display per trade** | `organizations.licenses` table â€” type, number, state, expiry. Quote PDF generator includes them when present. Painting v1: not required. Plumbing/electrical v3: required |
+| **License display per trade** | `organizations.licenses` table — type, number, state, expiry. Quote PDF generator includes them when present. Painting v1: not required. Plumbing/electrical v3: required |
 | **Privacy Act + Notifiable Data Breaches** | Privacy policy, customer data deletion endpoint, encryption at rest (Supabase default), audit log on data access |
-| **Recording consent** (voice agent â€” v3) | Opening line announces recording; per-state dual-consent handled via Vapi config |
+| **Recording consent** (voice agent — v3) | Opening line announces recording; per-state dual-consent handled via Vapi config |
 | **Stripe Connect KYC** | ABN, bank, ID verification required before tradie can accept payments. Onboarding designed so tradies can *draft* quotes immediately and only need Connect when they want to *send* and accept payment |
-| **Spam Act** (SMS marketing) | Conversion Engine SMS must be "transactional" (about a quote the customer requested) â€” easy to comply by scoping to active quote follow-ups only |
+| **Spam Act** (SMS marketing) | Conversion Engine SMS must be "transactional" (about a quote the customer requested) — easy to comply by scoping to active quote follow-ups only |
 
 ---
 
 ## 11. The tightened plan
 
-### Phase 0 â€” Validate (2 weeks, no code)
+### Phase 0 — Validate (2 weeks, no code)
 - 15 painter interviews, 10 homeowner interviews
 - Specific tests: would painters pay $99/mo? Would homeowners pay $199 for a paid inspection on a complex repaint?
-- Hire painting domain expert ($5k consulting) â€” start the base assembly library
-- **Exit:** â‰¥5 paid pilot LOIs from painters
+- Hire painting domain expert ($5k consulting) — start the base assembly library
+- **Exit:** ≥5 paid pilot LOIs from painters
 
-### Phase 1 â€” Portal MVP (6 weeks)
+### Phase 1 — Portal MVP (6 weeks)
 - Next.js + Supabase + Stripe Connect Express
 - 4-agent architecture: Quote Drafter, Reviewer, Inspection Coordinator (no on-site capture yet), Conversion Engine
 - Painting only, NSW only
 - Manual intake form (no voice, no hipages integration yet)
 - Eval harness with 100 hold-out quote pairs from pilot painters
-- **Exit:** 3 painters each sending â‰¥5 real quotes, â‰¥1 deposit collected
+- **Exit:** 3 painters each sending ≥5 real quotes, ≥1 deposit collected
 
-### Phase 2 â€” Pricing intelligence + inspection flow (6 weeks)
-- Active learning from tradie edits â†’ pricing book overlay
+### Phase 2 — Pricing intelligence + inspection flow (6 weeks)
+- Active learning from tradie edits → pricing book overlay
 - Confidence scoring with calibrated thresholds
 - Full inspection flow (paid $199, on-site capture sub-mode in mobile web)
 - Bunnings/Inspirations Paint price refresh
-- **Exit:** average tradie editing time < 3 min/quote, eval score â‰¥4.0/5
+- **Exit:** average tradie editing time < 3 min/quote, eval score ≥4.0/5
 
-### Phase 3 â€” Conversion engine + scale (4 weeks)
+### Phase 3 — Conversion engine + scale (4 weeks)
 - Availability nudges tied to real calendar
 - SMS follow-up sequence with objection handling
 - hipages enquiry parsing (if partnership conversation goes well)
 - Open to 50 painters
 - **Exit:** measurable +15% acceptance rate vs Phase 2 baseline
 
-### Phase 4 â€” Trade expansion (8 weeks)
-- Add landscaping (already similar enough â€” bigger ticket, similar quote structure)
+### Phase 4 — Trade expansion (8 weeks)
+- Add landscaping (already similar enough — bigger ticket, similar quote structure)
 - Add carpentry
 - Multi-state expansion
 - 150 customers, $15k MRR
 
-### Phase 5 â€” Voice + premium tier (12 weeks)
+### Phase 5 — Voice + premium tier (12 weeks)
 - Vapi-based voice agent
 - Premium tier at $299/mo OR per-minute metered
 - Plumbing + electrical unlock (now justified by voice-driven enquiry capture)
@@ -383,7 +383,7 @@ Not all of these matter for v1 (painting). They matter for the schema and roadma
 
 ## 12. Updated feasibility verdict
 
-**Buildable today: yes â€” the right version of it.**
+**Buildable today: yes — the right version of it.**
 
 - Portal-first painting v1 in AU: 100% buildable in 6 weeks of focused engineering
 - Add multi-trade and inspection: another 6 weeks
@@ -415,7 +415,7 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
 ## Iteration history
 
 - **v1** (2026-04-27, chat-only): initial 5-section analysis, 10-agent architecture, plumbing/electrical wedge, voice-first assumed. Many shallow points. Superseded by v2.
-- **v2** (2026-04-27): honest critique + tighter plan. Portal-first v1, **painting wedge**, 4 agents, eval-first, GTM included. Trade-selection rationale (Â§7) anchored on regulatory simplicity. Superseded for trade selection by v3; everything else still stands.
+- **v2** (2026-04-27): honest critique + tighter plan. Portal-first v1, **painting wedge**, 4 agents, eval-first, GTM included. Trade-selection rationale (§7) anchored on regulatory simplicity. Superseded for trade selection by v3; everything else still stands.
 - **v3** (2026-04-28): **pivoted v1 trade from painting to electrical.** Architecture, agent design, build options, and feasibility verdict all unchanged.
 
   **Why the pivot:**
@@ -425,22 +425,22 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
   The user-supplied operational content for electrical signalled that the pilot relationship is in electrical, not painting:
 
     - 9 detailed job-flow question trees (downlights, GPOs, ceiling fans, smoke alarms, outdoor lighting, switchboards, oven/cooktop, EV charger, fault finding)
-    - Real AU electrician rates ($90â€“$130/hr, $120â€“$180 minimum call-out, 20â€“35% material margin)
+    - Real AU electrician rates ($90–$130/hr, $120–$180 minimum call-out, 20–35% material margin)
     - A considered "easy 5 vs hard 5" pilot recommendation (auto-quote downlights/GPOs/fans/alarms/outdoor; always inspection-route switchboards/fault-finding/EV/underground/renovations)
 
-  Content of that specificity comes from talking to actual electricians â€” not theorising about a market. **Painting was theoretical; electrical is operational.**
+  Content of that specificity comes from talking to actual electricians — not theorising about a market. **Painting was theoretical; electrical is operational.**
 
   **What this changes:**
 
   | Area | v2 (painting) | v3 (electrical) |
   |---|---|---|
   | v1 trade | Painting | **Electrical** |
-  | License display | Not required v1 | **Required v1** â€” per-state (NSW = NECA, VIC = ESV, QLD = QBCC); on every quote PDF |
+  | License display | Not required v1 | **Required v1** — per-state (NSW = NECA, VIC = ESV, QLD = QBCC); on every quote PDF |
   | Schema | `organizations.licenses` deferred | `organizations.licenses` shipped Phase 1 (type, number, state, expiry) |
   | Domain expert | "30-year painter" | "25-year electrician" (~$5k consulting) |
   | Base assembly library | Painting assemblies (interior wall, prep+prime+coat, etc.) | Electrical assemblies (replace GPO, install downlight, hardwire smoke alarm, etc.) |
   | Confidence-router defaults | All MED route (tradie validates) in v1 | **Inspection-only** for switchboards, fault finding, EV chargers, underground cabling, complex renovations. **Auto-quote candidates** (still MED in v1, HIGH later): downlights, GPOs, ceiling fans, smoke alarms, outdoor/deck lighting |
-  | Pricing structure | Sqm + paint Ã— labour | Hourly rate + materials + sundries + 20â€“35% margin + risk buffer 10â€“20% on unknown access |
+  | Pricing structure | Sqm + paint × labour | Hourly rate + materials + sundries + 20–35% margin + risk buffer 10–20% on unknown access |
   | GTM channels | "Painters of Australia" FB groups, Master Painters AU, Inspirations Paint suppliers | NECA member networks, sparky FB groups, Reece Electrical / L&H Group / MM Electrical suppliers |
 
   **What stays the same (every v2 architectural decision):**
@@ -450,25 +450,25 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
   - Build-with-tradie pricing book (overlay pattern)
   - Eval framework before prompt iteration (100 hold-out pairs, 5-dim rubric)
   - Stripe Connect Express
-  - No auto-send in v1 â€” tradie human-in-loop on every send
+  - No auto-send in v1 — tradie human-in-loop on every send
   - Multi-tenant via Supabase RLS from day 1
   - Mobile-first customer portal, Good/Better/Best, paid $199 inspection branch
 
   **Cautions specific to electrical (vs painting):**
 
   - Australian Consumer Law liability is *higher* for electrical than painting because work is safety-critical. Auto-send stays off in v1; even MED-confidence quotes go through tradie review
-  - Fault finding cannot be fixed-quoted â€” uses call-out + hourly diagnostic rate
+  - Fault finding cannot be fixed-quoted — uses call-out + hourly diagnostic rate
   - Switchboard work, EV chargers, anything with mains/underground cabling = always inspection-route
-  - Pre-1970 wiring may have asbestos in insulation â€” surface as a risk flag in Intake Engine
-  - Solar/EV interaction with switchboards requires three-phase awareness â€” ask the question at intake
+  - Pre-1970 wiring may have asbestos in insulation — surface as a risk flag in Intake Engine
+  - Solar/EV interaction with switchboards requires three-phase awareness — ask the question at intake
 
-  **Operational reference:** the 9 job-flow question trees and pilot strategy live in `docs/build-guide.html` â€” they're operational artefacts, not strategy. This entry records the rationale only.
+  **Operational reference:** the 9 job-flow question trees and pilot strategy live in `docs/build-guide.html` — they're operational artefacts, not strategy. This entry records the rationale only.
 
-- **v4** (2026-05-01): **photo-capture flow â€” Pattern 1 (parallel race) chosen for v1.**
+- **v4** (2026-05-01): **photo-capture flow — Pattern 1 (parallel race) chosen for v1.**
 
   **What's settled:**
 
-  Photos are captured via SMS link sent immediately on call-end, in parallel with the intake â†’ estimate chain. Quote SMS goes out as soon as Sonnet+Opus complete (~70s typical). Photos that arrive after the quote was sent are **stored for tradie review** but do **not** trigger an auto re-quote in v1.
+  Photos are captured via SMS link sent immediately on call-end, in parallel with the intake → estimate chain. Quote SMS goes out as soon as Sonnet+Opus complete (~70s typical). Photos that arrive after the quote was sent are **stored for tradie review** but do **not** trigger an auto re-quote in v1.
 
   **Patterns considered:**
 
@@ -481,19 +481,19 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
 
   **Why parallel works for v1:**
 
-  The auto-quote wedge is scoped to the "easy 5" job types (downlights, GPOs, ceiling fans, smoke alarms, outdoor lighting). Those are deliberately **photo-light** â€” the transcript carries enough info to quote at MEDIUM confidence. Vision adds nice-to-have detail (asbestos risk on pre-1970 ceilings, switchboard age verification) but is not deal-breaking. The inspection route (Stage 06 LOW path) is where vision is genuinely load-bearing â€” and that path involves the tradie capturing photos on-site, not the customer over SMS.
+  The auto-quote wedge is scoped to the "easy 5" job types (downlights, GPOs, ceiling fans, smoke alarms, outdoor lighting). Those are deliberately **photo-light** — the transcript carries enough info to quote at MEDIUM confidence. Vision adds nice-to-have detail (asbestos risk on pre-1970 ceilings, switchboard age verification) but is not deal-breaking. The inspection route (Stage 06 LOW path) is where vision is genuinely load-bearing — and that path involves the tradie capturing photos on-site, not the customer over SMS.
 
   **What this means in practice:**
 
   - `app/api/vapi/webhook/route.ts` generates a `photo_request_token` and dispatches the photo SMS in `after()` alongside the intake handoff
-  - Customer taps the SMS link â†’ opens `app/upload/[token]/page.tsx` â†’ snaps photos via native camera input (`<input type="file" capture="environment">`) â†’ photos land in Supabase Storage bucket `intake-photos`
+  - Customer taps the SMS link → opens `app/upload/[token]/page.tsx` → snaps photos via native camera input (`<input type="file" capture="environment">`) → photos land in Supabase Storage bucket `intake-photos`
   - Photo URLs are appended to `calls.photo_urls` and `calls.photos_completed_at` is set
   - Quote draft does **not** wait for photos; runs as soon as the transcript is structured
   - Photos remain available for the tradie's Stage 06b review and for any future re-quote logic
 
   **What changes when the mobile app exists (post-v2):**
 
-  Photo capture moves from after-call SMS to during-call in-app camera. The asynchrony question disappears â€” by the time the call ends, photos are already on the device. The pattern shifts toward "photos before quote" naturally, with no waiting. The current Pattern 1 is a v1 web-only workaround for SMS asynchrony, not a permanent architectural choice.
+  Photo capture moves from after-call SMS to during-call in-app camera. The asynchrony question disappears — by the time the call ends, photos are already on the device. The pattern shifts toward "photos before quote" naturally, with no waiting. The current Pattern 1 is a v1 web-only workaround for SMS asynchrony, not a permanent architectural choice.
 
   **What stays the same:**
 
@@ -504,39 +504,39 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
 
   **Trigger for revisiting this decision:**
 
-  - Pilot data shows >40% of customers actually upload photos within 5 minutes â€” then Pattern 3 (two-stage with revision SMS) becomes worth the complexity
-  - Real callers hit asbestos/old-switchboard surprises that photos would have caught â€” then we either tighten the auto-quote scope or add a confidence-gated "wait briefly for photos" branch in Stage 06 routing
-  - Mobile app development begins â€” Pattern 1 is replaced wholesale by in-app capture
+  - Pilot data shows >40% of customers actually upload photos within 5 minutes — then Pattern 3 (two-stage with revision SMS) becomes worth the complexity
+  - Real callers hit asbestos/old-switchboard surprises that photos would have caught — then we either tighten the auto-quote scope or add a confidence-gated "wait briefly for photos" branch in Stage 06 routing
+  - Mobile app development begins — Pattern 1 is replaced wholesale by in-app capture
 
-- **v5** (2026-05-11): **multi-trade expansion â€” plumbing alongside electrical (Brisbane pilot).**
+- **v5** (2026-05-11): **multi-trade expansion — plumbing alongside electrical (Brisbane pilot).**
 
   **What's settled:**
 
-  The system now supports two trades simultaneously via a `trade` column on `pricing_book`, plus the pre-existing `trade` column on `shared_assemblies` and `shared_materials`. Electrical (NSW/NECA) and plumbing (QLD/QBCC) live in the same database; the estimator routes to a trade-specific system prompt based on `intake.trade`. Plumbing follows the same Good/Better/Best architecture and strict-grounding discipline â€” no ranged quotes, every dollar amount traces to a DB row.
+  The system now supports two trades simultaneously via a `trade` column on `pricing_book`, plus the pre-existing `trade` column on `shared_assemblies` and `shared_materials`. Electrical (NSW/NECA) and plumbing (QLD/QBCC) live in the same database; the estimator routes to a trade-specific system prompt based on `intake.trade`. Plumbing follows the same Good/Better/Best architecture and strict-grounding discipline — no ranged quotes, every dollar amount traces to a DB row.
 
   **Why this crosses v1 scope:**
 
-  v3 locked v1 to "NSW electrical, easy 5 job types." Adding plumbing is a deliberate scope expansion driven by a second pilot opportunity (Brisbane plumber). The architectural cost is low because `trade` was already a column on assemblies/materials â€” the schema was architected for multi-trade from day 1, just not exercised. The product cost is two prompts to maintain and a per-trade `pricing_book` row.
+  v3 locked v1 to "NSW electrical, easy 5 job types." Adding plumbing is a deliberate scope expansion driven by a second pilot opportunity (Brisbane plumber). The architectural cost is low because `trade` was already a column on assemblies/materials — the schema was architected for multi-trade from day 1, just not exercised. The product cost is two prompts to maintain and a per-trade `pricing_book` row.
 
   **Plumbing "easy 5" (auto-quote tiered):**
 
-  - `blocked_drain` (G: hand rod Â· B: jet blast Â· X: jet blast + CCTV)
-  - `hot_water` (G: like-for-like electric Â· B: gas/continuous flow Â· X: heat pump w/ QLD rebate)
-  - `tap_repair` (G: washer Â· B: full tap replace Â· X: replace + new isolation valve)
-  - `toilet_repair` (G: cistern internals Â· B: full suite Â· X: wall-faced/in-wall premium)
-  - `tap_replace` (G: basin/laundry Â· B: kitchen mixer Â· X: wall-mounted premium)
+  - `blocked_drain` (G: hand rod · B: jet blast · X: jet blast + CCTV)
+  - `hot_water` (G: like-for-like electric · B: gas/continuous flow · X: heat pump w/ QLD rebate)
+  - `tap_repair` (G: washer · B: full tap replace · X: replace + new isolation valve)
+  - `toilet_repair` (G: cistern internals · B: full suite · X: wall-faced/in-wall premium)
+  - `tap_replace` (G: basin/laundry · B: kitchen mixer · X: wall-mounted premium)
 
   **Plumbing inspection-route (cannot auto-quote):**
 
-  Gas fitting (leak detection, appliance connection â€” requires gas-licence verification), burst pipe repair (access/make-good unknown), bathroom renovation (rough-in + fit-off), CCTV-only inspections, hot-water replacements where electrical/gas line upgrades are needed.
+  Gas fitting (leak detection, appliance connection — requires gas-licence verification), burst pipe repair (access/make-good unknown), bathroom renovation (rough-in + fit-off), CCTV-only inspections, hot-water replacements where electrical/gas line upgrades are needed.
 
   **What didn't change:**
 
   - Strict-grounding rule still binding: no fabricated ranges, every line item from DB
-  - Good/Better/Best framing reused â€” plumbing JSON's low/high ranges converted to midpoint assemblies
+  - Good/Better/Best framing reused — plumbing JSON's low/high ranges converted to midpoint assemblies
   - $199 site-visit fee + inspection-fallback shape reused
-  - No auto-send â€” tradie human-in-loop preserved
-  - 4-agent architecture, eval framework, Stripe Connect Express â€” all unchanged
+  - No auto-send — tradie human-in-loop preserved
+  - 4-agent architecture, eval framework, Stripe Connect Express — all unchanged
 
   **What's deferred to future iterations:**
 
@@ -548,12 +548,12 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
 
   **Trigger for the next iteration:**
 
-  - Plumbing pilot signs up 2+ tradies â†’ invest in true multi-tenancy before the third
-  - Plumbing intake quality drops below 4.0/5 on the eval rubric â†’ richer plumbing-specific intake schema
-  - QBCC compliance audit fails â†’ harden QLD PDF rendering before any further multi-trade growth
-  - Third trade gets pitched â†’ stop bolting trades on per-pilot and refactor to a trade-registry pattern
+  - Plumbing pilot signs up 2+ tradies → invest in true multi-tenancy before the third
+  - Plumbing intake quality drops below 4.0/5 on the eval rubric → richer plumbing-specific intake schema
+  - QBCC compliance audit fails → harden QLD PDF rendering before any further multi-trade growth
+  - Third trade gets pitched → stop bolting trades on per-pilot and refactor to a trade-registry pattern
 
-- **v6** (2026-05-20): **drift reconciliation â€” what shipped vs what this doc said would ship.**
+- **v6** (2026-05-20): **drift reconciliation — what shipped vs what this doc said would ship.**
 
   **Why this entry exists:**
 
@@ -561,199 +561,199 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
   contradicted by the running system. Per the project rule ("if work
   demands a change, add a new iteration entry before changing the
   decisions table"), this entry records the drift so future readers can
-  see the running system as canon and treat Â§1â€“Â§12 as historical.
+  see the running system as canon and treat §1–§12 as historical.
 
   This entry **records reality**; it does not justify it. The strategic
   rationale for shipping voice and auto-send earlier than v3/v5 said
   needs to be added by whoever made those product calls (pilot tradie
   feedback, the John 12-point list referenced in the engineering memory,
-  etc.). Future-Claude reading this: when in doubt, treat Â§1â€“Â§12 as
+  etc.). Future-Claude reading this: when in doubt, treat §1–§12 as
   v2 history; treat CLAUDE.md + this entry as ground truth.
 
   **What shipped, contradicting prior iterations:**
 
   | Decision in v2/v3/v4/v5 | Running system as of 2026-05-20 |
   |---|---|
-  | "v1 is portal-first. Voice agent is deferred to v3 (~month 7)" (Â§2) | Voice intake **shipped in v1** via Vapi (`/api/vapi/webhook` â†’ intake â†’ estimate â†’ quote SMS). Persona "jon". Deepgram STT + ElevenLabs TTS. |
-  | "Receptionist Agent (voice â€” full Vapi/Retell stack) â€” Phase 5 premium tier" (Â§5) | Same as above â€” voice is the v1 path, not a Phase 5 tier. |
-  | "No auto-send in v1 â€” tradie human-in-loop on every send" (v3/v5) | `lib/routing/decide.ts` records `tradie_review` as the routing decision but **every drafted quote auto-sends to the customer today (Path B)**. The two investor-pack commits `ad72ab8` and `602915e` explicitly moved to auto-send-to-customer / tradie-reviews-after. |
-  | "Eval framework before prompt iteration: 100 hold-out (intake â†’ quote) pairs, 5-dim rubric" (Â§6, every iteration) | **Not built.** Prompts iterate without delta measurement. The parity harness `scripts/test-sms-parity.mjs` (70 assertions) covers SMSâ†”voice intake parity, not quote quality. |
+  | "v1 is portal-first. Voice agent is deferred to v3 (~month 7)" (§2) | Voice intake **shipped in v1** via Vapi (`/api/vapi/webhook` → intake → estimate → quote SMS). Persona "jon". Deepgram STT + ElevenLabs TTS. |
+  | "Receptionist Agent (voice — full Vapi/Retell stack) — Phase 5 premium tier" (§5) | Same as above — voice is the v1 path, not a Phase 5 tier. |
+  | "No auto-send in v1 — tradie human-in-loop on every send" (v3/v5) | `lib/routing/decide.ts` records `tradie_review` as the routing decision but **every drafted quote auto-sends to the customer today (Path B)**. The two investor-pack commits `ad72ab8` and `602915e` explicitly moved to auto-send-to-customer / tradie-reviews-after. |
+  | "Eval framework before prompt iteration: 100 hold-out (intake → quote) pairs, 5-dim rubric" (§6, every iteration) | **Not built.** Prompts iterate without delta measurement. The parity harness `scripts/test-sms-parity.mjs` (70 assertions) covers SMS↔voice intake parity, not quote quality. |
 
   **What also shipped beyond the strategy doc, but doesn't contradict it:**
 
-  - **SMS intake** (full dialog agent, `/api/sms/inbound`, all 5 phases done â€” `docs/markdown/sms-progress.md`).
-  - **Multi-trade** (v5 already recorded â€” electrical + plumbing).
+  - **SMS intake** (full dialog agent, `/api/sms/inbound`, all 5 phases done — `docs/markdown/sms-progress.md`).
+  - **Multi-trade** (v5 already recorded — electrical + plumbing).
   - **v6 self-serve onboarding** (`/signup`, `/onboard/*`, Twilio + Vapi auto-provisioning behind `*_PROVISIONING_ENABLED` flags).
   - **Vercel AI SDK direct to Anthropic** (`ANTHROPIC_API_KEY`), not via Vercel AI Gateway as v2/v3 docs implied.
-  - **Google Gemini for image generation** (preview + per-tier sample images) â€” not in the v2 stack table.
+  - **Google Gemini for image generation** (preview + per-tier sample images) — not in the v2 stack table.
 
   **Asset gap acknowledged (not yet fixed):**
 
-  - `assets/quotemate_flow_with_inspection.svg` (STEP 5 "Tradie reviews quote") still depicts the pre-auto-send model. README.md's "How it works" prose was updated this iteration to match Path B (lines 27, 41, 67-69), but the SVG is a binary asset and needs a designer pass â€” leaving it annotated as historical until then.
+  - `assets/quotemate_flow_with_inspection.svg` (STEP 5 "Tradie reviews quote") still depicts the pre-auto-send model. README.md's "How it works" prose was updated this iteration to match Path B (lines 27, 41, 67-69), but the SVG is a binary asset and needs a designer pass — leaving it annotated as historical until then.
 
   **Outstanding debt unchanged from v5:**
 
-  - **Stripe Connect Express still not wired.** `tenants.stripe_connect_account_id` is null for every tenant; `payments` has 0 rows. The marketplace funds-split decision (Â§9, Phase 4 plan) is still owed.
-  - **Multi-tenant RLS still policy-less.** RLS-on with no policies for some tables; RLS-off entirely for `tenants/customers/sms_*/tenant_*` â€” meaning the public anon key currently allows `SELECT *` against those. Phase 1 plan written this iteration: see [`quotemate-automation/docs/rls-design.md`](../quotemate-automation/docs/rls-design.md). Apply before scaling past tenant #5.
+  - **Stripe Connect Express still not wired.** `tenants.stripe_connect_account_id` is null for every tenant; `payments` has 0 rows. The marketplace funds-split decision (§9, Phase 4 plan) is still owed.
+  - **Multi-tenant RLS still policy-less.** RLS-on with no policies for some tables; RLS-off entirely for `tenants/customers/sms_*/tenant_*` — meaning the public anon key currently allows `SELECT *` against those. Phase 1 plan written this iteration: see [`quotemate-automation/docs/rls-design.md`](../quotemate-automation/docs/rls-design.md). Apply before scaling past tenant #5.
   - **Eval framework** still not built (see drift table above).
 
   **What was confirmed unchanged from v5:**
 
   - 4-agent architecture (Drafter, Reviewer, Inspection Coordinator, Conversion Engine).
-  - Build-with-tradie pricing book (the WP2 operator material catalogue is the keystone here â€” migrations 028, 034 shipped tenant-owned brand/range/cost rows; see memory `project_wp1_pricing_book_fix`).
+  - Build-with-tradie pricing book (the WP2 operator material catalogue is the keystone here — migrations 028, 034 shipped tenant-owned brand/range/cost rows; see memory `project_wp1_pricing_book_fix`).
   - Strict-grounding rule binding on every line item.
   - Good/Better/Best tier shape, $199 paid-inspection fallback, Stripe test mode + Mobile HTML quote page (no PDF).
-  - Electrical + plumbing are the boundary â€” third trade requires a new entry.
+  - Electrical + plumbing are the boundary — third trade requires a new entry.
 
   **Trigger for the next iteration:**
 
-  - Stripe Connect Express ships â†’ record the funds-split design choice (platform fee shape, Connect Express vs Standard, dispute handling).
-  - First tenant signs up that brings active-tenant count to 5 â†’ record the RLS Phase 1 apply (and whether the Phase 2 tenant-scoped policies followed).
-  - First eval-rubric run â†’ record the framework that finally lands and the baseline scores.
-  - John (or whoever drove the voice + auto-send pivots) supplies the strategic rationale â†’ backfill it into this v6 entry rather than starting a v7.
+  - Stripe Connect Express ships → record the funds-split design choice (platform fee shape, Connect Express vs Standard, dispute handling).
+  - First tenant signs up that brings active-tenant count to 5 → record the RLS Phase 1 apply (and whether the Phase 2 tenant-scoped policies followed).
+  - First eval-rubric run → record the framework that finally lands and the baseline scores.
+  - John (or whoever drove the voice + auto-send pivots) supplies the strategic rationale → backfill it into this v6 entry rather than starting a v7.
 
-- **v7** (2026-05-20): **catalogue-as-template â€” pre-populated services, master supplier catalogue, per-tenant G/B/B ladder.**
+- **v7** (2026-05-20): **catalogue-as-template — pre-populated services, master supplier catalogue, per-tenant G/B/B ladder.**
 
   **Why this entry exists:**
 
-  Jon toured the live dashboard (Catalogue â†’ Recipes â†’ Estimation â†’ Services tabs) and described how he expected it to work for a brand-new tradie. Three quotes:
+  Jon toured the live dashboard (Catalogue → Recipes → Estimation → Services tabs) and described how he expected it to work for a brand-new tradie. Three quotes:
 
   > "I can imagine that we would load the whole clips or catalogue, and then the traders could select the items that they use"
-  > "We offer standard services and standard product catalogues and they just toggle on and off these catalogues â€” everything is pre-populated for them"
+  > "We offer standard services and standard product catalogues and they just toggle on and off these catalogues — everything is pre-populated for them"
   > "They can localise whether they have a preferred Good/Better/Best option"
 
-  This is **not a request for new capability** â€” the schema for almost all of it is already shipped (migrations 022, 023, 028, 031, 034). It is a request that the **default tradie experience** match a "stocked template they tick" model rather than a "blank tabs they configure" model. This entry records the decision to deliver that and the phased plan.
+  This is **not a request for new capability** — the schema for almost all of it is already shipped (migrations 022, 023, 028, 031, 034). It is a request that the **default tradie experience** match a "stocked template they tick" model rather than a "blank tabs they configure" model. This entry records the decision to deliver that and the phased plan.
 
   **What's already in place (no new schema needed):**
 
-  - `tenant_material_catalogue` (028 + 034) â€” brand, range_series, supplier, tier_hint, is_preferred, cost_price, image, active toggle, description.
-  - `tenant_assembly_bom` (031) â€” per-tenant editable recipe book; estimator already prefers it over shared baseline.
-  - `tenant_assembly_overrides` (028) â€” per-tenant labour_hours / markup overrides.
-  - `tenant_material_preferences` (022) â€” preferred brand per category.
-  - `shared_assembly_bom` (028) â€” global structured BOMs.
-  - `lib/estimate/catalogue.ts` â€” `chooseMaterial()` scores tenant rows ahead of shared; `catalogueCandidateRows()` feeds tenant catalogue into the grounding validator (the WP2 "trap" is solved); `formatCatalogueHint()` + `formatBomHint()` are live soft prompt hints; `enrichLinesWithCatalogue()` + `applyChosenProduct()` stamp catalogue_id/image post-grounding.
+  - `tenant_material_catalogue` (028 + 034) — brand, range_series, supplier, tier_hint, is_preferred, cost_price, image, active toggle, description.
+  - `tenant_assembly_bom` (031) — per-tenant editable recipe book; estimator already prefers it over shared baseline.
+  - `tenant_assembly_overrides` (028) — per-tenant labour_hours / markup overrides.
+  - `tenant_material_preferences` (022) — preferred brand per category.
+  - `shared_assembly_bom` (028) — global structured BOMs.
+  - `lib/estimate/catalogue.ts` — `chooseMaterial()` scores tenant rows ahead of shared; `catalogueCandidateRows()` feeds tenant catalogue into the grounding validator (the WP2 "trap" is solved); `formatCatalogueHint()` + `formatBomHint()` are live soft prompt hints; `enrichLinesWithCatalogue()` + `applyChosenProduct()` stamp catalogue_id/image post-grounding.
   - Dashboard tabs Catalogue / Recipes / Estimation / Services all exist and write through.
 
   **The real gaps Jon was reacting to:**
 
   1. **No master supplier catalogue.** Catalogue tab is empty by default. Tradies hand-type SKUs instead of ticking from a pre-loaded library.
   2. **Services pre-population is implicit.** `/api/tenant/me` defaults a missing row to enabled=true. CRM counts therefore lie about what's "configured" vs "default".
-  3. **No G/B/B ladder picker.** Tier is per-product (`tier_hint`); there's no "for downlights â†’ my Good is X, my Better is Y, my Best is Z" data shape, only inference.
-  4. **Two competing "is this on?" surfaces.** `tenant_service_offerings.enabled` (Services-tab â†’ estimator) AND `tenant_assembly_overrides.enabled` (Estimation-tab badge only â€” write-orphaned column). The latter is never written by any UI, so the Estimation tab can show "enabled" while the AI is actually declining the service.
+  3. **No G/B/B ladder picker.** Tier is per-product (`tier_hint`); there's no "for downlights → my Good is X, my Better is Y, my Best is Z" data shape, only inference.
+  4. **Two competing "is this on?" surfaces.** `tenant_service_offerings.enabled` (Services-tab → estimator) AND `tenant_assembly_overrides.enabled` (Estimation-tab badge only — write-orphaned column). The latter is never written by any UI, so the Estimation tab can show "enabled" while the AI is actually declining the service.
   5. **No bulk-import / "stock the essentials" defaults** to get a new tradie from signup to first quote in <5 min.
-  6. **Free-text catalogue categories** â€” silent join failures between Catalogue and Recipe when the tradie typos a category. Multiplies in severity once the catalogue grows 10x.
+  6. **Free-text catalogue categories** — silent join failures between Catalogue and Recipe when the tradie typos a category. Multiplies in severity once the catalogue grows 10x.
 
   **Phased delivery plan:**
 
   | # | Phase | New schema | Money-path | Effort |
   |---|---|---|---|---|
-  | 0 | Consolidate `enabled` surfaces â€” Services-tab is single source of truth; Estimation tab reads from `tenant_service_offerings`; drop `enabled` from `AssemblyOverride` type. **Preserves the deliberate decline-on-OFF semantics recorded in memory `project_services_toggle_off_decline`** (Services-tab OFF still routes SMS to polite decline, not the legacy $199 fallback). | none | no | 1 day |
-  | 1 | Extract the (already-shipped) explicit seeding from `/api/onboard/activate` into a reusable helper; backfill the 4 activated tenants whose offerings rows are incomplete (94 â†’ ~160 expected); add "Standard services on by default â€” untick what you don't do" banner. Safety-net fallback in `/api/tenant/me` (uses per-assembly `default_enabled` from migration 021) is sound â€” kept as belt-and-braces. | none | indirect (CRM truthfulness) | 1â€“2 days |
+  | 0 | Consolidate `enabled` surfaces — Services-tab is single source of truth; Estimation tab reads from `tenant_service_offerings`; drop `enabled` from `AssemblyOverride` type. **Preserves the deliberate decline-on-OFF semantics recorded in memory `project_services_toggle_off_decline`** (Services-tab OFF still routes SMS to polite decline, not the legacy $199 fallback). | none | no | 1 day |
+  | 1 | Extract the (already-shipped) explicit seeding from `/api/onboard/activate` into a reusable helper; backfill the 4 activated tenants whose offerings rows are incomplete (94 → ~160 expected); add "Standard services on by default — untick what you don't do" banner. Safety-net fallback in `/api/tenant/me` (uses per-assembly `default_enabled` from migration 021) is sound — kept as belt-and-braces. | none | indirect (CRM truthfulness) | 1–2 days |
   | 2a | `supplier_catalogue` table + `supplier_catalogue_id` link on `tenant_material_catalogue`; seed ~300 SKUs (Clipsal Iconic/2000, HPM, SAL, Versalux; Caroma, Methven, Phoenix, Rheem, Rinnai, Bosch) | mig 041 + 042 *(planned numbers; latest applied is 040 = RLS Phase 1)* | yes (catalogue feeds validator) | 3 days |
-  | 6 | Controlled-vocabulary categories. **Already shipped pre-v7** via `lib/estimate/categories.ts` (single source of truth, drift-guarded by `categories.test.ts`) â€” the CatalogueTab dropdown imports `CATEGORIES` directly. âš  Known issue uncovered while validating: supplier_catalogue (mig 041) uses granular material-category vocab (`tapware_basin`, `hws_gas`) while CATEGORIES uses coarse grounding vocab (`tap`, `hot_water`). The bridge is needed in Phase 2b's "Add to my catalogue" action â€” map granular â†’ grounding on copy, retain link via `supplier_catalogue_id`. | none | no | 0 days (pre-shipped); vocab mismatch becomes a Phase 2b deliverable |
-  | 2b | CatalogueTab "Browse supplier catalogue" mode â€” filters, multi-select, "Add N to my catalogue" | none | no | 3â€“4 days |
+  | 6 | Controlled-vocabulary categories. **Already shipped pre-v7** via `lib/estimate/categories.ts` (single source of truth, drift-guarded by `categories.test.ts`) — the CatalogueTab dropdown imports `CATEGORIES` directly. ⚠ Known issue uncovered while validating: supplier_catalogue (mig 041) uses granular material-category vocab (`tapware_basin`, `hws_gas`) while CATEGORIES uses coarse grounding vocab (`tap`, `hot_water`). The bridge is needed in Phase 2b's "Add to my catalogue" action — map granular → grounding on copy, retain link via `supplier_catalogue_id`. | none | no | 0 days (pre-shipped); vocab mismatch becomes a Phase 2b deliverable |
+  | 2b | CatalogueTab "Browse supplier catalogue" mode — filters, multi-select, "Add N to my catalogue" | none | no | 3–4 days |
   | 2c | "Already in your catalogue" badging via the link; supplier-refresh foundation (no UI yet) | none | no | 1 day |
-  | 2d | **"Stock the essentials for my trade" 1-click button** â€” auto-adds ~30 SKUs across most-quoted categories. Without this, 2a/b/c is a configuration tax | none | indirect | 2 days |
+  | 2d | **"Stock the essentials for my trade" 1-click button** — auto-adds ~30 SKUs across most-quoted categories. Without this, 2a/b/c is a configuration tax | none | indirect | 2 days |
   | 3 | `tenant_tier_ladder (tenant_id, category, tier, catalogue_id)`; wire `chooseMaterial()` to give ladder hits +10, prepend explicit ladder section in `formatCatalogueHint()`; per-category G/B/B picker UI | mig 043 *(planned number)* | yes (estimator priority) | 1 week |
-  | 4 | Per-assembly labour/markup override editor on Estimation tab + PATCH `/api/tenant/estimation/[assemblyId]` | none | yes (math input) | 3â€“5 days |
+  | 4 | Per-assembly labour/markup override editor on Estimation tab + PATCH `/api/tenant/estimation/[assemblyId]` | none | yes (math input) | 3–5 days |
 
   **What's explicitly OUT of scope for v7:**
 
-  - **Phase 5 (bulk CSV import + supplier refresh UI)** â€” deferred until a pilot tradie asks for it. The "Stock the essentials" button (Phase 2d) covers ~80% of new-tradie onboarding without CSV.
-  - **Licensed supplier feeds** (Clipsal/Reece APIs) â€” hand-curated ~300 SKUs is fine through pilot. Revisit when a tradie asks for a brand we don't carry or the manual quarterly refresh starts decaying.
-  - **Stripe Connect Express** â€” still flagged debt from v6; v7 doesn't touch the money flow.
-  - **RLS Phase 2 tenant-scoped policies** â€” Phase 1 (migration 040) shipped; v7 adds new tables (`supplier_catalogue` is global/read-only; `tenant_tier_ladder` is tenant-scoped) which must be added to the RLS apply list but Phase 2 policies are not bundled into v7.
-  - **Eval framework** â€” still flagged debt; v7 doesn't substitute for it. Each money-path migration in v7 must re-run `scripts/test-sms-parity.mjs` + the catalogue-trap tests, but that's regression coverage, not quality measurement.
+  - **Phase 5 (bulk CSV import + supplier refresh UI)** — deferred until a pilot tradie asks for it. The "Stock the essentials" button (Phase 2d) covers ~80% of new-tradie onboarding without CSV.
+  - **Licensed supplier feeds** (Clipsal/Reece APIs) — hand-curated ~300 SKUs is fine through pilot. Revisit when a tradie asks for a brand we don't carry or the manual quarterly refresh starts decaying.
+  - **Stripe Connect Express** — still flagged debt from v6; v7 doesn't touch the money flow.
+  - **RLS Phase 2 tenant-scoped policies** — Phase 1 (migration 040) shipped; v7 adds new tables (`supplier_catalogue` is global/read-only; `tenant_tier_ladder` is tenant-scoped) which must be added to the RLS apply list but Phase 2 policies are not bundled into v7.
+  - **Eval framework** — still flagged debt; v7 doesn't substitute for it. Each money-path migration in v7 must re-run `scripts/test-sms-parity.mjs` + the catalogue-trap tests, but that's regression coverage, not quality measurement.
 
   **What's confirmed unchanged from v6:**
 
   - 4-agent architecture, strict-grounding rule, G/B/B framing, $199 inspection fallback.
-  - Electrical + plumbing are still the boundary â€” no third trade.
+  - Electrical + plumbing are still the boundary — no third trade.
   - Auto-send-to-customer remains the Path B reality recorded in v6; v7 does not revisit that.
-  - Tenant-owned data physically partitioned in separate tables (`tenant_*`) â€” `supplier_catalogue` is a NEW table for global supplier SKUs (read-only to tradies), distinct from `shared_materials` (generic fallback library) and `tenant_material_catalogue` (operator-owned).
+  - Tenant-owned data physically partitioned in separate tables (`tenant_*`) — `supplier_catalogue` is a NEW table for global supplier SKUs (read-only to tradies), distinct from `shared_materials` (generic fallback library) and `tenant_material_catalogue` (operator-owned).
 
   **Risk model (carried through every phase):**
 
-  - The "zero-config tradie still gets a quote" guarantee is non-negotiable. Every new tenant-controlled dimension falls back gracefully â€” partial ladder â†’ keyword inference; no override â†’ global default; no supplier link â†’ existing tenant_material_catalogue flow.
+  - The "zero-config tradie still gets a quote" guarantee is non-negotiable. Every new tenant-controlled dimension falls back gracefully — partial ladder → keyword inference; no override → global default; no supplier link → existing tenant_material_catalogue flow.
   - Every money-path migration (2a, 3) runs `scripts/test-sms-parity.mjs` + `lib/estimate/catalogue-trap.test.ts` + `lib/estimate/catalogue-hints.test.ts` before the next phase starts.
-  - Per-migration prod-apply gate confirmed with operator (Anant) â€” no batch applies.
+  - Per-migration prod-apply gate confirmed with operator (Anant) — no batch applies.
   - Each phase is independently shippable; abandoning v7 mid-delivery never leaves the system worse than v6.
 
   **Trigger for the next iteration:**
 
-  - A pilot tradie asks for a brand outside the seeded ~300 SKUs â†’ log a supplier-catalogue expansion entry; consider whether hand-curation still scales or a feed is warranted.
-  - Catalogue-link refresh becomes a real workflow (more than 1 tenant needs it) â†’ record Phase 5 (bulk import + supplier-refresh banner) as a v8 entry rather than smuggling it into v7.
-  - Stripe Connect Express finally ships â†’ its own iteration entry (still owed from v5/v6).
-  - First eval-rubric run lands â†’ its own entry (still owed from every prior iteration).
-  - **Any phase in the v7 table ships â†’ backfill the actual migration number and note any scope deviation in this entry.** The 041/042/043 placeholders are nominal; whichever migration number ends up applied is what should appear here, so future readers see history not aspiration. (This is the lesson v6 learned the hard way about v3/v4/v5 drift.)
+  - A pilot tradie asks for a brand outside the seeded ~300 SKUs → log a supplier-catalogue expansion entry; consider whether hand-curation still scales or a feed is warranted.
+  - Catalogue-link refresh becomes a real workflow (more than 1 tenant needs it) → record Phase 5 (bulk import + supplier-refresh banner) as a v8 entry rather than smuggling it into v7.
+  - Stripe Connect Express finally ships → its own iteration entry (still owed from v5/v6).
+  - First eval-rubric run lands → its own entry (still owed from every prior iteration).
+  - **Any phase in the v7 table ships → backfill the actual migration number and note any scope deviation in this entry.** The 041/042/043 placeholders are nominal; whichever migration number ends up applied is what should appear here, so future readers see history not aspiration. (This is the lesson v6 learned the hard way about v3/v4/v5 drift.)
 
   **Note on prior debt status (correction to v6's outstanding-debt list):**
 
-  - RLS Phase 1 has now SHIPPED as migration 040 between v6 and v7 â€” v6 line 597 says "Phase 1 plan written this iteration" but the apply followed. Phase 2 tenant-scoped policies still outstanding (v7 is out of scope for them).
+  - RLS Phase 1 has now SHIPPED as migration 040 between v6 and v7 — v6 line 597 says "Phase 1 plan written this iteration" but the apply followed. Phase 2 tenant-scoped policies still outstanding (v7 is out of scope for them).
 
-- **v8** (2026-05-21): **dynamic pricing â€” per-tenant early-booking discount (Phase A).**
+- **v8** (2026-05-21): **dynamic pricing — per-tenant early-booking discount (Phase A).**
 
   **Why this entry exists:**
 
   Jon asked, reviewing the booking flow, for an Uber-style pricing lever:
 
   > "How do you bring up a prompt a bit earlier to say, hey, if you book it in today, you'll get a discount. Or if you book it in today, I can honor this price."
-  > "Some type of concept of dynamic pricing. Like Uber â€” if I'm free and available on a couple of these prices, these areas, maybe you could apply a 10% discount."
+  > "Some type of concept of dynamic pricing. Like Uber — if I'm free and available on a couple of these prices, these areas, maybe you could apply a 10% discount."
 
-  This introduces a **new pricing concept** not in the Â§"decisions" table â€” a promotional discount applied to a drafted quote. Per CLAUDE.md, a money-touching concept change requires an iteration entry before code. This records the decision, the deliberate scope split, and the guardrails.
+  This introduces a **new pricing concept** not in the §"decisions" table — a promotional discount applied to a drafted quote. Per CLAUDE.md, a money-touching concept change requires an iteration entry before code. This records the decision, the deliberate scope split, and the guardrails.
 
-  **The split â€” what ships now (Phase A) vs later (Phase B):**
+  **The split — what ships now (Phase A) vs later (Phase B):**
 
-  - **Phase A â€” early-booking discount (this iteration).** A deterministic, per-tenant % discount with a deadline. The tradie configures `{ enabled, discount_pct, window_hours }`; every drafted quote is stamped with an offer (`quotes.early_bird_discount_pct` + `early_bird_expires_at`). The quote page advertises a countdown ("book by <time> â†’ save X%"); the discount is *realised* server-side at the booking choke-point (`POST /api/q/[token]/book`) when the customer commits a time before expiry, and a fresh discounted Stripe Checkout Session is re-issued for the deposit.
-  - **Phase B â€” availability-derived dynamic pricing (deferred).** The true Uber-surge model ("if I'm free in these areas") needs two things QuoteMate does not have: a real two-way calendar integration (today `tradies.available_slots` is a flat ISO-timestamp array; `GOOGLE_BOOKING_URL` is an off-platform link with no callback) and geographic zones. Deferred until calendar sync exists. A crude per-day proxy (discount days with many open slots) is possible earlier but is explicitly **not** in Phase A.
+  - **Phase A — early-booking discount (this iteration).** A deterministic, per-tenant % discount with a deadline. The tradie configures `{ enabled, discount_pct, window_hours }`; every drafted quote is stamped with an offer (`quotes.early_bird_discount_pct` + `early_bird_expires_at`). The quote page advertises a countdown ("book by <time> → save X%"); the discount is *realised* server-side at the booking choke-point (`POST /api/q/[token]/book`) when the customer commits a time before expiry, and a fresh discounted Stripe Checkout Session is re-issued for the deposit.
+  - **Phase B — availability-derived dynamic pricing (deferred).** The true Uber-surge model ("if I'm free in these areas") needs two things QuoteMate does not have: a real two-way calendar integration (today `tradies.available_slots` is a flat ISO-timestamp array; `GOOGLE_BOOKING_URL` is an off-platform link with no callback) and geographic zones. Deferred until calendar sync exists. A crude per-day proxy (discount days with many open slots) is possible earlier but is explicitly **not** in Phase A.
 
   **Decisions locked with the operator (Anant), 2026-05-21:**
 
   | Decision | Choice |
   |---|---|
-  | What the discount reduces | **The whole job total** (deposit + balance both drop) â€” a real incentive, not just a cashflow nudge. Consequence: it eats tradie margin, so it is capped (below). |
+  | What the discount reduces | **The whole job total** (deposit + balance both drop) — a real incentive, not just a cashflow nudge. Consequence: it eats tradie margin, so it is capped (below). |
   | First-build scope | **Phase A only.** No per-slot/availability pricing. |
   | Who configures it | **Per-tenant.** Config lives in `pricing_book.overlays.early_bird` jsonb (no schema change for config); editable in the dashboard Pricing tab. |
 
   **Guardrails (non-negotiable):**
 
-  - **Margin cap.** `discount_pct` is clamped to a hard platform maximum of **15%** in the pure module (`MAX_EARLY_BIRD_DISCOUNT_PCT`). Plumbing books run 15â€“20% markup ([[project_plumbing_routing_rules]]); an uncapped discount could sell below cost. A misconfigured overlay can never exceed the cap.
-  - **Grounding validator untouched.** The `good/better/best` jsonb line items stay catalogue-derived. The discount is a **separate quote-level field** (`applied_discount_pct`), applied only at the display + Stripe layer. `lib/estimate/validate.ts` is not modified and never sees a discounted line item â€” the strict-grounding rule is preserved.
+  - **Margin cap.** `discount_pct` is clamped to a hard platform maximum of **15%** in the pure module (`MAX_EARLY_BIRD_DISCOUNT_PCT`). Plumbing books run 15–20% markup ([[project_plumbing_routing_rules]]); an uncapped discount could sell below cost. A misconfigured overlay can never exceed the cap.
+  - **Grounding validator untouched.** The `good/better/best` jsonb line items stay catalogue-derived. The discount is a **separate quote-level field** (`applied_discount_pct`), applied only at the display + Stripe layer. `lib/estimate/validate.ts` is not modified and never sees a discounted line item — the strict-grounding rule is preserved.
   - **Server-side evaluation.** The discount is decided from the DB-stamped `early_bird_expires_at`, never from a client-passed value. The book route is the single apply point.
-  - **Graceful degradation.** New `quotes` columns land via migration 044; until applied, the offer is stamped via a best-effort post-insert update (same pattern as `booking_state`) so quote creation never fails on a missing column. Zero-config tenants (no `early_bird` overlay, or `enabled:false`) behave exactly as v7 â€” no banner, no discount.
+  - **Graceful degradation.** New `quotes` columns land via migration 044; until applied, the offer is stamped via a best-effort post-insert update (same pattern as `booking_state`) so quote creation never fails on a missing column. Zero-config tenants (no `early_bird` overlay, or `enabled:false`) behave exactly as v7 — no banner, no discount.
 
-  **Schema:** migration 044 â€” `quotes.early_bird_discount_pct`, `quotes.early_bird_expires_at`, `quotes.applied_discount_pct` (default 0), `quotes.applied_discount_at`. Config (`pricing_book.overlays.early_bird`) needs no migration â€” `overlays` jsonb already exists.
+  **Schema:** migration 044 — `quotes.early_bird_discount_pct`, `quotes.early_bird_expires_at`, `quotes.applied_discount_pct` (default 0), `quotes.applied_discount_at`. Config (`pricing_book.overlays.early_bird`) needs no migration — `overlays` jsonb already exists.
 
   **What's confirmed unchanged from v7:**
 
   - 4-agent architecture, strict-grounding rule, G/B/B framing, paid-inspection fallback.
-  - Electrical + plumbing remain the boundary â€” no third trade.
+  - Electrical + plumbing remain the boundary — no third trade.
   - Book-first / pay-last funnel order (WP6) is unchanged; the discount is applied within it, not by reordering it.
 
   **Trigger for the next iteration:**
 
-  - Google Calendar two-way sync ships â†’ Phase B (availability-derived pricing + geographic zones) becomes buildable; record it as its own entry.
-  - A tradie sets a discount that needs to exceed 15% â†’ revisit the cap with a cost-floor check against assembly cost rather than a flat ceiling.
-  - Stripe Connect Express ships â†’ record how the discount interacts with the platform-fee split (the discount reduces the charge and should reduce the fee proportionally).
+  - Google Calendar two-way sync ships → Phase B (availability-derived pricing + geographic zones) becomes buildable; record it as its own entry.
+  - A tradie sets a discount that needs to exceed 15% → revisit the cap with a cost-floor check against assembly cost rather than a flat ceiling.
+  - Stripe Connect Express ships → record how the discount interacts with the platform-fee split (the discount reduces the charge and should reduce the fee proportionally).
 
-- **v9** (2026-05-21): **trades-as-data â€” admin bulk loader, no-code industry expansion.**
+- **v9** (2026-05-21): **trades-as-data — admin bulk loader, no-code industry expansion.**
 
   **Why this entry exists:**
 
-  Every iteration v5â†’v8 repeated the same line: "electrical + plumbing are the boundary â€” a third trade requires a new entry." v5's own trigger list spelled out the exit condition: *"Third trade gets pitched â†’ stop bolting trades on per-pilot and refactor to a trade-registry pattern."* That trigger has now fired. The operator wants QuoteMate to expand into carpentry, garden cleaning, swimming-pool cleaning and more â€” **added in bulk, by a non-developer, through an admin dashboard, not hand-wired in code per trade.**
+  Every iteration v5→v8 repeated the same line: "electrical + plumbing are the boundary — a third trade requires a new entry." v5's own trigger list spelled out the exit condition: *"Third trade gets pitched → stop bolting trades on per-pilot and refactor to a trade-registry pattern."* That trigger has now fired. The operator wants QuoteMate to expand into carpentry, garden cleaning, swimming-pool cleaning and more — **added in bulk, by a non-developer, through an admin dashboard, not hand-wired in code per trade.**
 
-  This entry **is** the authorization to cross the electrical+plumbing boundary. It supersedes that boundary line in v5/v6/v7/v8, and it supersedes v7's deferral of "Phase 5 â€” bulk CSV import" (v7 "out of scope" list): bulk loading is now the *mechanism* for growth, not a nice-to-have.
+  This entry **is** the authorization to cross the electrical+plumbing boundary. It supersedes that boundary line in v5/v6/v7/v8, and it supersedes v7's deferral of "Phase 5 — bulk CSV import" (v7 "out of scope" list): bulk loading is now the *mechanism* for growth, not a nice-to-have.
 
   **The decision: trades become data, not code.**
 
-  Today `trade` is a hardcoded `'electrical' | 'plumbing'` string â€” enforced by ~5 DB CHECK constraints (migrations 028/031/041) and assumed in ~10 code locations: the estimator prompt router (`lib/estimate/prompt.ts`), `deriveTradeFromJobType()`, the SMS `job_type` enum, the grounding validator's `Category` set, the Vapi assistant prompt, `defaultsForTrade()`, `LICENCE_BODIES`. v9 makes `trade` a row in a new `trades` registry table. Adding a trade becomes a data operation; the boundary moves from "2 hardcoded trades" to "N admin-loaded trades."
+  Today `trade` is a hardcoded `'electrical' | 'plumbing'` string — enforced by ~5 DB CHECK constraints (migrations 028/031/041) and assumed in ~10 code locations: the estimator prompt router (`lib/estimate/prompt.ts`), `deriveTradeFromJobType()`, the SMS `job_type` enum, the grounding validator's `Category` set, the Vapi assistant prompt, `defaultsForTrade()`, `LICENCE_BODIES`. v9 makes `trade` a row in a new `trades` registry table. Adding a trade becomes a data operation; the boundary moves from "2 hardcoded trades" to "N admin-loaded trades."
 
   **The two-capability split (non-negotiable):**
 
-  - **Capability 1 â€” bulk-add services to an EXISTING trade.** Low risk. Services are already data (`clarifying_questions`, `category`, pricing columns); the SMS/Voice agents read them straight from the row. Proven safe in the 2026-05-21 n8n adversarial sweep â€” a service the `job_type` classifier doesn't recognise still works via the `customAssemblies` path.
-  - **Capability 2 â€” add a NEW trade.** High risk. Needs the Phase 0 foundation first; a CSV alone cannot do it (the DB CHECK constraints reject the row). Building these two as one feature is how the system gets destroyed â€” they ship as separate phases.
+  - **Capability 1 — bulk-add services to an EXISTING trade.** Low risk. Services are already data (`clarifying_questions`, `category`, pricing columns); the SMS/Voice agents read them straight from the row. Proven safe in the 2026-05-21 n8n adversarial sweep — a service the `job_type` classifier doesn't recognise still works via the `customAssemblies` path.
+  - **Capability 2 — add a NEW trade.** High risk. Needs the Phase 0 foundation first; a CSV alone cannot do it (the DB CHECK constraints reject the row). Building these two as one feature is how the system gets destroyed — they ship as separate phases.
 
-  **The feature:** an admin-only dashboard that ingests a Services CSV + a Supplier Catalogue CSV (+ a trade-defaults block for a new trade), runs structural-then-row validation, shows a preview diff, allows manual single-row adds (CTA buttons) for anything missed, then a single **Approve** wires it in behind a grounding smoke-test. A detailed build spec (exact CSVâ†’column maps, validation rules) is to be filed under `docs/` before Phase 0 starts.
+  **The feature:** an admin-only dashboard that ingests a Services CSV + a Supplier Catalogue CSV (+ a trade-defaults block for a new trade), runs structural-then-row validation, shows a preview diff, allows manual single-row adds (CTA buttons) for anything missed, then a single **Approve** wires it in behind a grounding smoke-test. A detailed build spec (exact CSV→column maps, validation rules) is to be filed under `docs/` before Phase 0 starts.
 
   **Decisions locked with the operator, 2026-05-21:**
 
@@ -764,10 +764,10 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
   | Manual add | A single-service "Add" CTA on the review screen, for anything missed in the CSV; joins the same batch + validation. |
   | Access | Admin-only, behind a real server-side admin role. |
 
-  **Guardrails (non-negotiable â€” this is the "without destroying the system" requirement):**
+  **Guardrails (non-negotiable — this is the "without destroying the system" requirement):**
 
   - **Opt-in by default.** Every bulk-uploaded service lands `default_enabled = false`. Approve can never silently change a live tradie's SMS/Voice behaviour; default-on is a separate deliberate per-service action.
-  - **Grounding-category guard.** Every service's `category` is validated against the controlled vocabulary (v7 already shipped `lib/estimate/categories.ts` as the single source of truth, drift-guarded by `categories.test.ts`). A new trade's new categories must be registered first. An unknown category silently drops quotes to the paid-inspection fallback â€” so it is rejected at upload, never at quote time.
+  - **Grounding-category guard.** Every service's `category` is validated against the controlled vocabulary (v7 already shipped `lib/estimate/categories.ts` as the single source of truth, drift-guarded by `categories.test.ts`). A new trade's new categories must be registered first. An unknown category silently drops quotes to the paid-inspection fallback — so it is rejected at upload, never at quote time.
   - **Pricing-semantics guard.** The service-fee CSV column is the sundries portion ex-GST only (not product, not labour). The preview shows a **computed sample quote** per row so a wrong-but-groundable price is caught by a human, not by a customer.
   - **Smoke-test gate.** Each new service is drafted into a sample quote on Approve; it must ground (not fall to inspection) and render its mandated questions before going live. Failures are held back, not shipped.
   - **Strict-grounding rule untouched.** `lib/estimate/validate.ts` is not modified; money still flows only through catalogue-derived line items.
@@ -779,106 +779,106 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
   | # | Phase | New schema | Money-path | Exit gate |
   |---|---|---|---|---|
   | 0 | Foundation: `trades`, `categories`, `trade_pricing_defaults`, `import_batches` tables; swap the `trade` CHECK constraints for FKs; backfill electrical/plumbing + existing categories; add a server-side admin role | yes (schema) | no | existing electrical/plumbing quotes byte-identical; SMS parity sweep green |
-  | 1 | Capability 1 â€” admin loader scoped to existing trades: upload, structural+row validation, preview diff, manual-add CTA, Approve, smoke-test, audit/rollback | none | indirect | bulk-add 5 test services, verify via SMS sweep, roll the batch back cleanly |
-  | 2 | Capability 2 â€” new trades: data-composable estimator prompt, trade-defaults wiring, new-trade activation + tenant Vapi re-provision | none | yes | a real new trade quotes correctly end-to-end and the Voice agent speaks it |
-  | 3 | Supplier Catalogue CSV loader â€” extends v7 Phase 2a (`supplier_catalogue`, migrations 041/042) | none | no (browse-only) | can run parallel to Phase 1 |
+  | 1 | Capability 1 — admin loader scoped to existing trades: upload, structural+row validation, preview diff, manual-add CTA, Approve, smoke-test, audit/rollback | none | indirect | bulk-add 5 test services, verify via SMS sweep, roll the batch back cleanly |
+  | 2 | Capability 2 — new trades: data-composable estimator prompt, trade-defaults wiring, new-trade activation + tenant Vapi re-provision | none | yes | a real new trade quotes correctly end-to-end and the Voice agent speaks it |
+  | 3 | Supplier Catalogue CSV loader — extends v7 Phase 2a (`supplier_catalogue`, migrations 041/042) | none | no (browse-only) | can run parallel to Phase 1 |
 
   Each phase is independently shippable; abandoning v9 mid-delivery never leaves the system worse than v8. Never start Phase 1 before Phase 0's exit gate is green.
 
   **What's confirmed unchanged from v8:**
 
   - 4-agent architecture, strict-grounding rule, G/B/B framing, paid-inspection fallback.
-  - Auto-send Path B (v6), book-first funnel (WP6), early-booking discount (v8) â€” all unchanged.
+  - Auto-send Path B (v6), book-first funnel (WP6), early-booking discount (v8) — all unchanged.
   - Tenant-owned data stays physically partitioned in `tenant_*` tables; the `trades` registry and `categories` are new *global* tables.
 
   **What's OUT of scope for v9:**
 
   - **Trade-specific structured intake fields.** A new trade reuses the generic intake schema; richer per-trade structured fields (the kind plumbing still lacks per v5) are a later iteration.
-  - **Self-serve trade creation by tradies.** v9 is admin-only â€” tradies *activate* a trade and toggle its services, they do not create trades. Tradie-created trades are a different security model and need their own entry.
-  - **Licensed supplier feeds** â€” supplier catalogue stays hand-curated per v7.
-  - **Stripe Connect Express, RLS Phase 2, the eval framework** â€” still owed from prior iterations; v9 does not touch them.
+  - **Self-serve trade creation by tradies.** v9 is admin-only — tradies *activate* a trade and toggle its services, they do not create trades. Tradie-created trades are a different security model and need their own entry.
+  - **Licensed supplier feeds** — supplier catalogue stays hand-curated per v7.
+  - **Stripe Connect Express, RLS Phase 2, the eval framework** — still owed from prior iterations; v9 does not touch them.
 
   **Trigger for the next iteration:**
 
-  - First real new trade ships end-to-end â†’ backfill the actual migration numbers and note any scope deviation in this entry.
-  - A new trade needs trade-specific structured intake fields â†’ record an intake-schema-per-trade entry.
-  - Tradies ask to self-create trades â†’ that is a different security model; its own entry.
-  - Phase 0 changes how `category` is stored â†’ reconcile with v7's `lib/estimate/categories.ts` single-source-of-truth note so the two don't drift.
+  - First real new trade ships end-to-end → backfill the actual migration numbers and note any scope deviation in this entry.
+  - A new trade needs trade-specific structured intake fields → record an intake-schema-per-trade entry.
+  - Tradies ask to self-create trades → that is a different security model; its own entry.
+  - Phase 0 changes how `category` is stored → reconcile with v7's `lib/estimate/categories.ts` single-source-of-truth note so the two don't drift.
 
-- **v10** (2026-05-29): **roofing as the third trade â€” shipped ahead of v9's admin loader.**
+- **v10** (2026-05-29): **roofing as the third trade — shipped ahead of v9's admin loader.**
 
   **What's settled:**
 
-  Roofing is QuoteMate's third trade, joining electrical (NSW/NECA) and plumbing (QLD/QBCC). Phase 1 ships with the existing hand-wired pattern (a new migration seeding `shared_assemblies` + `shared_materials` rows scoped to `trade='roofing'`, no admin loader involved). The measurement engine starts on **Geoscape Buildings + customer-declared pitch** (precomputed footprints, ~10â€“15% accuracy on sloped area) with a clean swap-point for a real LiDAR pipeline (PDAL + Open3D over ELVIS data) once Phase 2 volume justifies the 4â€“6 week Python-worker investment.
+  Roofing is QuoteMate's third trade, joining electrical (NSW/NECA) and plumbing (QLD/QBCC). Phase 1 ships with the existing hand-wired pattern (a new migration seeding `shared_assemblies` + `shared_materials` rows scoped to `trade='roofing'`, no admin loader involved). The measurement engine starts on **Geoscape Buildings + customer-declared pitch** (precomputed footprints, ~10–15% accuracy on sloped area) with a clean swap-point for a real LiDAR pipeline (PDAL + Open3D over ELVIS data) once Phase 2 volume justifies the 4–6 week Python-worker investment.
 
   **Why this departs from v9 (intentionally):**
 
-  v9 said: *first real new trade ships end-to-end â†’ backfill the actual migration numbers and note any scope deviation in this entry.* The honest deviation: **v9 Phase 0 is not yet built**, so roofing cannot route through the admin loader. Hand-wiring through the legacy seed pattern (migration 080) is the pragmatic call â€” it ships in 2â€“3 weeks instead of 6+. The row set is shaped to be **adoptable by the v9 loader without change** when Phase 0 lands (same `shared_assemblies` columns, same `category`/`properties` JSON convention, same idempotent insert pattern).
+  v9 said: *first real new trade ships end-to-end → backfill the actual migration numbers and note any scope deviation in this entry.* The honest deviation: **v9 Phase 0 is not yet built**, so roofing cannot route through the admin loader. Hand-wiring through the legacy seed pattern (migration 080) is the pragmatic call — it ships in 2–3 weeks instead of 6+. The row set is shaped to be **adoptable by the v9 loader without change** when Phase 0 lands (same `shared_assemblies` columns, same `category`/`properties` JSON convention, same idempotent insert pattern).
 
   | Area | v9 plan | v10 reality |
   |---|---|---|
   | Trade onboarding | Admin CSV via `/admin/loader` | Hand-wired SQL migration (080) |
   | Trades registry | Global `trades` table + FK constraints | `trade` text column on existing tables (legacy pattern) |
-  | Intake fields | Generic schema reused | **NEW** â€” roofing runs through its own `lib/roofing/` pipeline, NOT `lib/intake/structure.ts`. IntakeSchema's `['electrical','plumbing']` enum is unchanged (the Anthropic generateObject 24-optional-field cap is preserved). |
-  | Estimator | Generic prompt + per-trade defaults | Roofing bypasses the strict-grounding estimator entirely â€” a deterministic $/mÂ² Ã— area Ã— loading calculation, no Opus call on the price path. |
+  | Intake fields | Generic schema reused | **NEW** — roofing runs through its own `lib/roofing/` pipeline, NOT `lib/intake/structure.ts`. IntakeSchema's `['electrical','plumbing']` enum is unchanged (the Anthropic generateObject 24-optional-field cap is preserved). |
+  | Estimator | Generic prompt + per-trade defaults | Roofing bypasses the strict-grounding estimator entirely — a deterministic $/m² × area × loading calculation, no Opus call on the price path. |
 
   **Roofing-specific decisions:**
 
   | Decision | Choice | Why |
   |---|---|---|
-  | Measurement source | Geoscape Buildings + customer pitch declaration (Phase 1) â†’ LiDAR via ELVIS (Phase 2) | Phase 1 ships fast and proves demand; Phase 2 lifts accuracy without changing the customer flow because the `lib/roofing/measure.ts` interface is provider-agnostic. |
-  | Auto-send | **NO â€” every roofing quote requires tradie review** | Roof jobs are A$8â€“40k. The v6 Path-B auto-send rule does not apply at these dollar values. This re-introduces a Path-A flow specifically for high-value trades; logged as a deliberate exception, not a strategy reversal. |
-  | Asbestos | Pre-1990 buildings + cement-sheet declaration â†’ forced inspection route | Legal/safety. Australian Consumer Law + state asbestos regulations make any auto-quoted roof work on suspected asbestos a non-starter. |
-  | Coverage fallback | Address outside Geoscape coverage â†’ $99 paid inspection route | Same pattern as low-confidence electrical/plumbing intakes; the Stage 0 IG-engine validator pattern (`lib/ig-engine/validate-inputs.ts`, shipped 2026-05-29) provides the template. |
-  | Pricing model | `$/mÂ² Ã— sloped area Ã— multi-storey loading % Ã— asbestos loading %` then tier-framed (patch / re-roof same material / upgrade) | Roofers price this way operationally; no per-line-item granularity needed. Deterministic â€” no Opus on the money path â†’ no grounding validator needed for roofing. |
+  | Measurement source | Geoscape Buildings + customer pitch declaration (Phase 1) → LiDAR via ELVIS (Phase 2) | Phase 1 ships fast and proves demand; Phase 2 lifts accuracy without changing the customer flow because the `lib/roofing/measure.ts` interface is provider-agnostic. |
+  | Auto-send | **NO — every roofing quote requires tradie review** | Roof jobs are A$8–40k. The v6 Path-B auto-send rule does not apply at these dollar values. This re-introduces a Path-A flow specifically for high-value trades; logged as a deliberate exception, not a strategy reversal. |
+  | Asbestos | Pre-1990 buildings + cement-sheet declaration → forced inspection route | Legal/safety. Australian Consumer Law + state asbestos regulations make any auto-quoted roof work on suspected asbestos a non-starter. |
+  | Coverage fallback | Address outside Geoscape coverage → $99 paid inspection route | Same pattern as low-confidence electrical/plumbing intakes; the Stage 0 IG-engine validator pattern (`lib/ig-engine/validate-inputs.ts`, shipped 2026-05-29) provides the template. |
+  | Pricing model | `$/m² × sloped area × multi-storey loading % × asbestos loading %` then tier-framed (patch / re-roof same material / upgrade) | Roofers price this way operationally; no per-line-item granularity needed. Deterministic — no Opus on the money path → no grounding validator needed for roofing. |
 
   **Phasing within roofing:**
 
   | # | Phase | Scope | Trigger to advance |
   |---|---|---|---|
   | 1 | Hand-wired seed + Geoscape measurement + dashboard tab + review-required routing | This iteration | First paying roofing tenant + 20 real quotes through the pipeline |
-  | 2 | Real LiDAR pipeline (PDAL + Open3D over ELVIS) replaces Geoscape behind the same interface | Defer | Phase 1 volume + accuracy complaints justify the 4â€“6 week Python-worker build |
+  | 2 | Real LiDAR pipeline (PDAL + Open3D over ELVIS) replaces Geoscape behind the same interface | Defer | Phase 1 volume + accuracy complaints justify the 4–6 week Python-worker build |
   | 3 | Roofing flows through the v9 admin loader once v9 Phase 0 ships | Defer | v9 Phase 0 exit gate green |
 
   **What stays unchanged from v8/v9:**
 
-  - 4-agent architecture (Drafter / Reviewer / Inspection Coordinator / Conversion Engine) â€” roofing reuses the Reviewer and Inspection Coordinator unchanged
+  - 4-agent architecture (Drafter / Reviewer / Inspection Coordinator / Conversion Engine) — roofing reuses the Reviewer and Inspection Coordinator unchanged
   - G/B/B tier framing
   - Paid-inspection fallback at $99
-  - Mobile-first customer portal at `/q/[token]` â€” extended with a roof-hero strip, otherwise unchanged
+  - Mobile-first customer portal at `/q/[token]` — extended with a roof-hero strip, otherwise unchanged
   - Stripe deposit + booking flow
-  - The Path-B auto-send default for electrical/plumbing â€” roofing is an explicit per-trade override
+  - The Path-B auto-send default for electrical/plumbing — roofing is an explicit per-trade override
 
   **What's OUT of scope for v10:**
 
   - The real LiDAR pipeline (deferred to roofing Phase 2)
-  - Asbestos detection from satellite imagery (out â€” relies on the customer's pre-1990 declaration; not the right tool to ML this)
-  - Roofing-specific intake structurer (out â€” the deterministic flow does not need one)
-  - Multi-line-item roofing breakdowns at the customer's quote level (out for v1 â€” single sloped-area Ã— rate line, with tier-level material variation)
-  - Voice channel for roofing intake (out â€” address-first web form is a much better intake channel than SMS/voice for this trade)
+  - Asbestos detection from satellite imagery (out — relies on the customer's pre-1990 declaration; not the right tool to ML this)
+  - Roofing-specific intake structurer (out — the deterministic flow does not need one)
+  - Multi-line-item roofing breakdowns at the customer's quote level (out for v1 — single sloped-area × rate line, with tier-level material variation)
+  - Voice channel for roofing intake (out — address-first web form is a much better intake channel than SMS/voice for this trade)
 
   **Trigger for the next iteration:**
 
-  - 20 roofing quotes processed end-to-end â†’ backfill Phase 2 LiDAR decision with real volume + accuracy delta data
-  - Customer complaint pattern emerges (under-quote / over-quote) â†’ record the diagnosis + the patch
-  - Second roofing tenant onboards in a different state (VIC/QLD) â†’ record any state-specific licence/regulatory adjustments needed
+  - 20 roofing quotes processed end-to-end → backfill Phase 2 LiDAR decision with real volume + accuracy delta data
+  - Customer complaint pattern emerges (under-quote / over-quote) → record the diagnosis + the patch
+  - Second roofing tenant onboards in a different state (VIC/QLD) → record any state-specific licence/regulatory adjustments needed
 
-- **v11** (2026-06-12): **commercial painting â€” document-driven takeoff as an estimator extension, not a new trade seed.**
+- **v11** (2026-06-12): **commercial painting — document-driven takeoff as an estimator extension, not a new trade seed.**
 
   **What's settled:**
 
-  Commercial painting ships as a tradie-facing dashboard tool (its own "Commercial Painting" tab) that turns uploaded construction documents (plan set required; measurement takeoff / services layout / site photo optional) into a confirmed surface-by-surface takeoff and a **single tender-style quote** â€” labour (hours / crew / days), materials (litres / products / $), equipment â€” plus a Gemini "after repaint" preview. Pilot job: IGA Swan Street, 480 Swan St, Richmond VIC (Sarris AS73 rev CP1). Full design: `docs/superpowers/specs/2026-06-12-commercial-painting-estimator-design.md`.
+  Commercial painting ships as a tradie-facing dashboard tool (its own "Commercial Painting" tab) that turns uploaded construction documents (plan set required; measurement takeoff / services layout / site photo optional) into a confirmed surface-by-surface takeoff and a **single tender-style quote** — labour (hours / crew / days), materials (litres / products / $), equipment — plus a Gemini "after repaint" preview. Pilot job: IGA Swan Street, 480 Swan St, Richmond VIC (Sarris AS73 rev CP1). Full design: `docs/superpowers/specs/2026-06-12-commercial-painting-estimator-design.md`.
 
   **Why this departs from v9/v10 (intentionally):**
 
-  This is NOT a trades-as-data seed (v9) and NOT a hand-wired customer-intake trade (v10 roofing). It extends the **Estimator Beta** plumbing the way electrical plan estimation did: `plan_uploads`/`plan_extractions` gain a `trade` column (`'commercial_painting'`), a `paint_runs` grouping table owns multi-file runs, and a `paint_rates` reference table (trade-scoped, tenant-overridable, migration-seeded with researched AU commercial defaults flagged `is_default`) carries coverage/spread/modifier rates. The residential painting flow (`lib/painting/`, address-derived $/mÂ² Ã— G/B/B) is untouched and coexists.
+  This is NOT a trades-as-data seed (v9) and NOT a hand-wired customer-intake trade (v10 roofing). It extends the **Estimator Beta** plumbing the way electrical plan estimation did: `plan_uploads`/`plan_extractions` gain a `trade` column (`'commercial_painting'`), a `paint_runs` grouping table owns multi-file runs, and a `paint_rates` reference table (trade-scoped, tenant-overridable, migration-seeded with researched AU commercial defaults flagged `is_default`) carries coverage/spread/modifier rates. The residential painting flow (`lib/painting/`, address-derived $/m² × G/B/B) is untouched and coexists.
 
   | Area | v9/v10 pattern | v11 reality |
   |---|---|---|
   | Entry point | Customer intake (SMS/voice/web form) | Tradie uploads documents in the dashboard |
   | Quote shape | G/B/B tiers | Single tender price + optional separate-price line items |
-  | Pricing | shared_assemblies catalogue / $-per-mÂ² heuristic | Pure-TS pricer over `paint_rates` (coverage mÂ²/hr, spread mÂ²/L, height/prep/sundries modifiers); unmatched lines returned unpriced â€” no LLM in the money path |
-  | Confidence fallback | $99 paid inspection route | No $99 route â€” commercial quotes always pass the human confirm step; low-confidence takeoffs (>50% area in low-confidence lines) get a "site measure recommended" banner |
+  | Pricing | shared_assemblies catalogue / $-per-m² heuristic | Pure-TS pricer over `paint_rates` (coverage m²/hr, spread m²/L, height/prep/sundries modifiers); unmatched lines returned unpriced — no LLM in the money path |
+  | Confidence fallback | $99 paid inspection route | No $99 route — commercial quotes always pass the human confirm step; low-confidence takeoffs (>50% area in low-confidence lines) get a "site measure recommended" banner |
   | AI usage | Opus intake structuring | Sonnet 4.6 doc classification + Opus 4.8 page-by-page takeoff extraction, with reconciliation against an uploaded measurement takeoff (deltas >10% flagged, nothing silently preferred) |
 
   **Decisions:**
@@ -888,10 +888,10 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
   | Audience | Tradie-facing dashboard tool first | The confirm-the-takeoff step IS the product trust mechanism; a customer portal can come later without rework |
   | Architecture | Extend Estimator-Beta plumbing; do NOT fork the workspace | One editable-takeoff pattern to maintain; painting-specific columns/panels are new components only |
   | Rates | Migration-seeded AU commercial defaults, `is_default = true`, tenant-overridable | Ship now, tune with a real painter before production quoting; the flag makes unvalidated rates auditable |
-  | Auto-send | NO â€” tender quotes always reviewed in the confirm step | Same dollar-value logic as v10 roofing's review-required rule |
-  | Preview | Gemini repaint preview in v1 (site photo â†’ repaint-only edit) | Reuses the shipped ig-engine provider; failure is non-blocking |
+  | Auto-send | NO — tender quotes always reviewed in the confirm step | Same dollar-value logic as v10 roofing's review-required rule |
+  | Preview | Gemini repaint preview in v1 (site photo → repaint-only edit) | Reuses the shipped ig-engine provider; failure is non-blocking |
 
-  **Phasing:** 0 strategy gate (this entry) â†’ 1 migration + `paint_rates` seed â†’ 2 upload & classification â†’ 3 extraction + reconciliation (pure cores, TDD) â†’ 4 confirmation editor â†’ 5 pricer + quote output â†’ 6 repaint preview â†’ 7 acceptance against the four IGA documents.
+  **Phasing:** 0 strategy gate (this entry) → 1 migration + `paint_rates` seed → 2 upload & classification → 3 extraction + reconciliation (pure cores, TDD) → 4 confirmation editor → 5 pricer + quote output → 6 repaint preview → 7 acceptance against the four IGA documents.
 
   **What stays unchanged:** money-path discipline (tool-calling/pure-TS only, grounding by reference data), migrations + run-script convention, ex-GST stored / inc-GST displayed, Maintain design system on all tradie-facing UI, residential painting flow, the v9 registry ambition (commercial painting's `paint_rates` rows are shaped to be loader-adoptable when v9 Phase 0 lands).
 
@@ -899,8 +899,8 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
 
   **Trigger for the next iteration:**
 
-  - A real painter validates/replaces the seeded `paint_rates` defaults â†’ record the deltas and flip `is_default`.
-  - First external commercial quote sent â†’ backfill accuracy vs the painter's manual takeoff (the IGA pilot gives the baseline).
-  - Demand for a customer-facing upload portal â†’ that is a different auth/abuse surface; its own entry.
+  - A real painter validates/replaces the seeded `paint_rates` defaults → record the deltas and flip `is_default`.
+  - First external commercial quote sent → backfill accuracy vs the painter's manual takeoff (the IGA pilot gives the baseline).
+  - Demand for a customer-facing upload portal → that is a different auth/abuse surface; its own entry.
 
 - *Future iterations:* drill into specific phases (eval rubric details, onboarding flow design, hipages partnership terms, voice tier economics, full multi-tenancy refactor).
