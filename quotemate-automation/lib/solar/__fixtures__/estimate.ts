@@ -30,6 +30,28 @@ export function makeFixtureEstimate(
       network: 'Endeavour',
       location: FIXTURE_CENTER,
       quarterly_bill_aud: 480,
+      // Sun & shade analysis (full-exploitation build 2026-06-13) — the
+      // dataLayers pipeline output, as stamped by sun-assets.ts.
+      sun: {
+        generated_at: '2026-06-13T00:00:00.000Z',
+        flux_image_path: 'solar/fixture/flux-annual-1.png',
+        min_flux: 820,
+        max_flux: 1810,
+        monthly_production_weights: [
+          0.115, 0.1, 0.095, 0.08, 0.065, 0.055, 0.06, 0.07, 0.08, 0.09, 0.09, 0.1,
+        ],
+        shade: {
+          hourly_sun_fraction: Array.from({ length: 24 }, (_, h) =>
+            h >= 8 && h <= 16 ? 0.95 : 0,
+          ),
+          monthly_midday_sun_fraction: new Array(12).fill(0.95),
+          shade_free_start_hour: 8,
+          shade_free_end_hour: 16,
+          shade_free_hours: 9,
+        },
+        building_height: { height_m: 5.8, storeys_hint: 2 },
+        imagery_date: '2025-03-14',
+      },
     },
     coverage_source: 'google',
     roof: {
@@ -61,6 +83,11 @@ export function makeFixtureEstimate(
       panel_size_m: { height_m: 1.879, width_m: 1.045 },
       carbon_offset_factor_kg_per_mwh: 790,
       whole_roof_area_m2: 130,
+      // Sun fields (full-exploitation build 2026-06-13).
+      max_sunshine_hours_per_year: 2510,
+      max_array_area_m2: 58.5,
+      panel_lifetime_years: 20,
+      whole_roof_sunshine_quantiles: [900, 1100, 1300, 1450, 1500, 1550, 1600, 1650, 1700, 1750, 1800],
     },
     sizing: {
       tiers: [

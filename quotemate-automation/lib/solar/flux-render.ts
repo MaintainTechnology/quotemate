@@ -56,14 +56,24 @@ export function fluxColor(t: number): [number, number, number] {
   ]
 }
 
+/** The aerial RGB layer (3 bands) for an opaque composite background. */
+export type RgbBands = { r: RasterBand; g: RasterBand; b: RasterBand }
+
+/** Blend factor of the flux colour over the aerial photo on roof pixels. */
+const COMPOSITE_BLEND = 0.72
+
 /**
- * PURE — render the annual flux band to a transparent-background heatmap
- * PNG. Returns null when no roof pixel carries a usable flux value.
+ * PURE — render the annual flux band to a heatmap PNG. When the aligned
+ * aerial RGB layer is provided the output is an opaque composite (photo
+ * under, flux colours blended over the roof); without it, roof pixels
+ * are near-opaque colour and everything else is transparent (an overlay).
+ * Returns null when no roof pixel carries a usable flux value.
  */
 export function renderFluxHeatmapPng(
   flux: RasterBand,
   mask: RasterBand | null,
   noDataValue: number | null = null,
+  rgb: RgbBands | null = null,
 ): FluxHeatmapResult | null {
   const { width, height } = flux
 
@@ -85,28 +95,57 @@ export function renderFluxHeatmapPng(
   const max = values[Math.min(values.length - 1, Math.floor(values.length * 0.98))]
   const range = max - min
 
+  // RGB base must match the flux grid to composite safely.
+  const rgbUsable =
+    rgb !== null &&
+    rgb.r.width === width &&
+    rgb.r.height === height &&
+    rgb.g.width === width &&
+    rgb.b.width === width
+
   const png = new PNG({ width, height })
   let roofPixels = 0
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const idx = (y * width + x) * 4
-      const v = flux.data[y * width + x]
+      const i = y * width + x
+      const idx = i * 4
+      const v = flux.data[i]
       const usable =
         typeof v === 'number' &&
         Number.isFinite(v) &&
         v >= 0 &&
         (noDataValue === null || v !== noDataValue) &&
         maskAt(mask, x, y, width, height)
+
+      const base: [number, number, number] | null = rgbUsable
+        ? [clamp255(rgb!.r.data[i]), clamp255(rgb!.g.data[i]), clamp255(rgb!.b.data[i])]
+        : null
+
       if (!usable) {
-        png.data[idx + 3] = 0 // transparent
+        if (base) {
+          // Composite mode: aerial photo carries the off-roof pixels.
+          png.data[idx] = base[0]
+          png.data[idx + 1] = base[1]
+          png.data[idx + 2] = base[2]
+          png.data[idx + 3] = 255
+        } else {
+          png.data[idx + 3] = 0 // overlay mode: transparent
+        }
         continue
       }
       const t = range > 0 ? (v - min) / range : 0.5
       const [r, g, b] = fluxColor(t)
-      png.data[idx] = r
-      png.data[idx + 1] = g
-      png.data[idx + 2] = b
-      png.data[idx + 3] = ROOF_ALPHA
+      if (base) {
+        png.data[idx] = Math.round(base[0] * (1 - COMPOSITE_BLEND) + r * COMPOSITE_BLEND)
+        png.data[idx + 1] = Math.round(base[1] * (1 - COMPOSITE_BLEND) + g * COMPOSITE_BLEND)
+        png.data[idx + 2] = Math.round(base[2] * (1 - COMPOSITE_BLEND) + b * COMPOSITE_BLEND)
+        png.data[idx + 3] = 255
+      } else {
+        png.data[idx] = r
+        png.data[idx + 1] = g
+        png.data[idx + 2] = b
+        png.data[idx + 3] = ROOF_ALPHA
+      }
       roofPixels++
     }
   }
@@ -122,4 +161,9 @@ export function renderFluxHeatmapPng(
   }
 }
 
-export const __test_only__ = { RAMP, ROOF_ALPHA }
+function clamp255(v: number): number {
+  if (!Number.isFinite(v)) return 0
+  return Math.max(0, Math.min(255, Math.round(v)))
+}
+
+export const __test_only__ = { RAMP, ROOF_ALPHA, COMPOSITE_BLEND }

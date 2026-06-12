@@ -69,4 +69,30 @@ describe('renderFluxHeatmapPng', () => {
     const mask = band(2, 2, () => 0)
     expect(renderFluxHeatmapPng(band(2, 2, () => 500), mask)).toBeNull()
   })
+
+  it('composites over the aerial RGB when provided (fully opaque output)', () => {
+    const flux = band(2, 2, (x) => (x === 0 ? 1000 : -1)) // left column roof flux
+    const grey = (v: number) => band(2, 2, () => v)
+    const rgb = { r: grey(100), g: grey(120), b: grey(140) }
+    const res = renderFluxHeatmapPng(flux, null, null, rgb)
+    expect(res).not.toBeNull()
+    const png = PNG.sync.read(Buffer.from(res!.png))
+    // Roof pixel: opaque blended colour (not the raw base grey).
+    expect(png.data[3]).toBe(255)
+    expect(png.data[0]).not.toBe(100)
+    // Off-roof pixel: the aerial photo verbatim, opaque.
+    expect(png.data[7]).toBe(255)
+    expect(png.data[4]).toBe(100)
+    expect(png.data[5]).toBe(120)
+    expect(png.data[6]).toBe(140)
+  })
+
+  it('falls back to overlay mode when the RGB grid mismatches', () => {
+    const flux = band(2, 2, () => 900)
+    const grey = (v: number) => band(4, 4, () => v) // wrong dimensions
+    const rgb = { r: grey(10), g: grey(20), b: grey(30) }
+    const res = renderFluxHeatmapPng(flux, null, null, rgb)
+    const png = PNG.sync.read(Buffer.from(res!.png))
+    expect(png.data[3]).toBe(__test_only__.ROOF_ALPHA) // overlay alpha, not 255
+  })
 })

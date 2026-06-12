@@ -137,10 +137,11 @@ export async function applySolarSunAssets(
     const mask = await downloadRaster(urls.mask, apiKey, fetchImpl)
     const maskBand = firstBand(mask)
 
-    const [annualFlux, monthlyFlux, dsm] = await Promise.all([
+    const [annualFlux, monthlyFlux, dsm, rgb] = await Promise.all([
       downloadRaster(urls.annual_flux, apiKey, fetchImpl),
       downloadRaster(urls.monthly_flux, apiKey, fetchImpl),
       downloadRaster(urls.dsm, apiKey, fetchImpl),
+      downloadRaster(urls.rgb, apiKey, fetchImpl),
     ])
 
     let hourlyShade: Array<SolarRaster | null> = []
@@ -151,9 +152,25 @@ export async function applySolarSunAssets(
     }
 
     // ── Analyses (each independent; failures null their slice). ──────
+    // The aerial RGB layer (same grid as the flux raster) makes the
+    // heatmap an opaque photo composite instead of a transparent overlay.
+    const rgbBands =
+      rgb !== null && rgb.bands >= 3
+        ? {
+            r: { data: rgb.rasters[0], width: rgb.width, height: rgb.height },
+            g: { data: rgb.rasters[1], width: rgb.width, height: rgb.height },
+            b: { data: rgb.rasters[2], width: rgb.width, height: rgb.height },
+          }
+        : null
+
     const flux =
       annualFlux !== null
-        ? renderFluxHeatmapPng(firstBand(annualFlux)!, maskBand, annualFlux.no_data_value)
+        ? renderFluxHeatmapPng(
+            firstBand(annualFlux)!,
+            maskBand,
+            annualFlux.no_data_value,
+            rgbBands,
+          )
         : null
 
     const monthlyWeights =

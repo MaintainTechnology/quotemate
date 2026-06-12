@@ -51,7 +51,8 @@ describe('buildSolarQuoteReportHtml — premium (spec §4.4)', () => {
     const order = [
       'Proposed panel layout',
       'Panel strings &amp; component markings',
-      'Monthly production (modelled)',
+      'Sun &amp; shade analysis',
+      'Monthly production',
       'Assumed values',
       'Utility costs',
       '20-year financial summary',
@@ -116,6 +117,6 @@ describe('buildSolarQuoteReportHtml — premium (spec §4.4)', () => {
     expect(manualHtml).not.toContain('Environmental analysis')
     // Financial + production sections still render.
     expect(manualHtml).toContain('20-year financial summary')
-    expect(manualHtml).toContain('Monthly production (modelled)')
+    expect(manualHtml).toContain('Monthly production')
   })
 })

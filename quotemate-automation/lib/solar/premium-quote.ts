@@ -40,6 +40,8 @@ import {
   type SolarEnvironmentalImpact,
 } from './financial-summary'
 import { orientationLabel } from './hero-overlay'
+import { monthlyKwhFromWeights } from './raster-analysis'
+import { buildSolarSunView, type SolarSunView } from './sun-view'
 
 /** Feature gate (spec §5) — pure so it is unit-testable; callers pass
  *  process.env.SOLAR_PREMIUM_QUOTE. Enabled on 'true' or '1' only. */
@@ -68,6 +70,9 @@ export type SolarPremiumQuote = {
   environmental: SolarEnvironmentalImpact | null
   /** Pylon-style assumed-values table (no dollar figures). */
   assumed_values: SolarAssumedValueRow[]
+  /** Sun & shade analysis (full-exploitation build 2026-06-13); null
+   *  when the estimate carries no sun data. No dollars → pre-confirm OK. */
+  sun: SolarSunView | null
 }
 
 export function buildSolarPremiumQuote(args: {
@@ -149,8 +154,20 @@ export function buildSolarPremiumQuote(args: {
     : null
 
   // ── Charts. ─────────────────────────────────────────────────────────
+  // Monthly production: prefer the MEASURED seasonal shape from the
+  // monthly-flux rasters (context.sun weights × the headline tier's
+  // annual AC output) over the modelled AU-wide curve.
+  const sunWeights = estimate.context.sun?.monthly_production_weights ?? null
+  const measuredMonthly =
+    headlineProd && sunWeights
+      ? monthlyKwhFromWeights(headlineProd.annual_kwh_ac, sunWeights)
+      : null
   const monthlyProduction = headlineProd
-    ? buildMonthlyProductionChart({ annual_kwh_ac: headlineProd.annual_kwh_ac, theme })
+    ? buildMonthlyProductionChart({
+        annual_kwh_ac: headlineProd.annual_kwh_ac,
+        theme,
+        monthly_kwh: measuredMonthly,
+      })
     : null
 
   const utilityCosts =
@@ -240,6 +257,19 @@ export function buildSolarPremiumQuote(args: {
     if (stcCheck.deeming_period != null) parts.push(`${stcCheck.deeming_period}-yr deeming`)
     assumed_values.push({ label: 'STC zone', value: parts.join(' · ') })
   }
+  // Sun facts from buildingInsights (full-exploitation build 2026-06-13).
+  if (roof.max_sunshine_hours_per_year != null) {
+    assumed_values.push({
+      label: 'Max sunshine',
+      value: `${Math.round(roof.max_sunshine_hours_per_year).toLocaleString('en-AU')} hrs/yr`,
+    })
+  }
+  if (roof.panel_lifetime_years != null) {
+    assumed_values.push({
+      label: 'Panel lifetime',
+      value: `${roof.panel_lifetime_years} yrs`,
+    })
+  }
   assumed_values.push({ label: 'Config version', value: estimate.config_version })
 
   return {
@@ -250,5 +280,6 @@ export function buildSolarPremiumQuote(args: {
     financial,
     environmental,
     assumed_values,
+    sun: buildSolarSunView(estimate),
   }
 }

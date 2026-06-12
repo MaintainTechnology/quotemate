@@ -45,6 +45,7 @@ import {
 import { loadSolarConfig } from '@/lib/solar/config'
 import type { SolarChart } from '@/lib/solar/charts'
 import { buildSolarHardwareCards } from '@/lib/solar/hardware-cards'
+import { buildSolarSunView } from '@/lib/solar/sun-view'
 import { money, kwh, kw, paybackBand } from '@/lib/solar/quote-page-format'
 
 export const dynamic = 'force-dynamic'
@@ -109,6 +110,10 @@ export default async function SolarQuotePage({
   })
   const explainers = buildSolarStatExplainers(estimate)
   const assumptions = buildSolarAssumptionsView(estimate)
+  // Sun & shade analysis (full-exploitation build 2026-06-13) — measured
+  // sun hours, per-plane sun scores, the flux heatmap and the shade-free
+  // window. No dollar figures → renders pre-confirm; null omits it.
+  const sunView = buildSolarSunView(estimate)
   // Pylon hardware supplement (build 2026-06-13) — customer-facing
   // datasheet cards; empty array when the tenant nominated no SKUs.
   const hardwareCards = buildSolarHardwareCards(estimate.context)
@@ -287,6 +292,64 @@ export default async function SolarQuotePage({
                 {premium.strings.caption}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Sun & shade analysis (full-exploitation build 2026-06-13) —
+            measured roof irradiance heatmap, sunshine hours, per-plane
+            sun scores and the shade-free window. No dollars → renders
+            pre-confirm. Each sub-block omits itself without data. */}
+        {sunView && (
+          <div className={`mt-10 ${reveal(280)}`}>
+            <SectionHeading label="Sun & shade analysis" />
+
+            {sunView.flux_image_available && (
+              <div className="mt-5 overflow-hidden border border-ink-line bg-ink-card">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/api/solar/q/${token}/flux-heatmap`}
+                  alt={`Roof irradiance heatmap for ${row.address ?? 'the property'} — brighter areas receive more annual sun`}
+                  className="w-full"
+                  style={{ imageRendering: 'pixelated' }}
+                />
+                {sunView.flux_caption && (
+                  <div className="border-t border-ink-line px-5 py-3 text-xs leading-relaxed text-text-dim">
+                    {sunView.flux_caption}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {sunView.stats.length > 0 && (
+              <div className="mt-5 grid gap-px overflow-hidden border border-ink-line bg-ink-line sm:grid-cols-2 lg:grid-cols-3">
+                {sunView.stats.map((s) => (
+                  <MiniStat key={s.label} label={s.label} value={s.value} hint={s.hint} />
+                ))}
+              </div>
+            )}
+
+            {sunView.planes.length > 0 && (
+              <div className="mt-5 grid gap-px bg-ink-line">
+                {sunView.planes.map((p, i) => (
+                  <div
+                    key={`${p.orientation}-${i}`}
+                    className="flex flex-wrap items-center justify-between gap-3 bg-ink-deep px-5 py-3"
+                  >
+                    <span className="font-mono text-sm font-semibold text-text-pri">
+                      {p.orientation} face · {p.area_m2.toLocaleString('en-AU')} m²
+                    </span>
+                    <span className="inline-flex items-center gap-3">
+                      <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-accent">
+                        {p.score_copy}
+                      </span>
+                      <span className="font-mono text-xs tabular-nums text-text-dim">
+                        {p.relative_pct}% of best face
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

@@ -40,6 +40,9 @@ export type SolarReportInput = {
   /** Absolute URL of the satellite hero — the layout/string overlays
    *  render over it. Absent → overlays draw on a dark panel instead. */
   staticMapUrl?: string | null
+  /** Absolute URL of the cached roof irradiance heatmap (sun & shade
+   *  build 2026-06-13). Absent → the figure is omitted from the PDF. */
+  fluxImageUrl?: string | null
 }
 
 /** Format a payback band as "4–6 yrs", or a graceful fallback. */
@@ -173,9 +176,37 @@ function premiumSections(input: SolarReportInput): string {
     )
   }
 
+  // 3b. Sun & shade analysis (full-exploitation build 2026-06-13) —
+  // heatmap figure + measured sun stats + per-plane sun scores. No
+  // dollar figures; mirrors the quote page section.
+  if (p.sun) {
+    const sunParts: string[] = ['<h2>Sun &amp; shade analysis</h2>']
+    if (p.sun.flux_image_available && input.fluxImageUrl) {
+      sunParts.push(
+        `<div class="figure"><img src="${esc(input.fluxImageUrl)}" alt="" style="width:100%;display:block;image-rendering:pixelated;">` +
+          (p.sun.flux_caption ? `<div class="fig-caption">${esc(p.sun.flux_caption)}</div>` : '') +
+          '</div>',
+      )
+    }
+    if (p.sun.stats.length > 0) {
+      sunParts.push(statGrid(p.sun.stats))
+    }
+    if (p.sun.planes.length > 0) {
+      const rows = p.sun.planes
+        .map(
+          (pl) =>
+            `<tr><td>${esc(pl.orientation)} face · ${pl.area_m2.toLocaleString('en-AU')} m²</td>` +
+            `<td class="num">${esc(pl.score_copy)} · ${pl.relative_pct}% of best face</td></tr>`,
+        )
+        .join('')
+      sunParts.push(`<table><tbody>${rows}</tbody></table>`)
+    }
+    if (sunParts.length > 1) parts.push(sunParts.join('\n'))
+  }
+
   // 4. System details — production chart + assumed values.
   if (p.charts.monthlyProduction) {
-    parts.push(chartFigure('Monthly production (modelled)', p.charts.monthlyProduction))
+    parts.push(chartFigure('Monthly production', p.charts.monthlyProduction))
   }
   if (p.assumed_values.length > 0) {
     parts.push('<h2>Assumed values</h2>' + statGrid(p.assumed_values))

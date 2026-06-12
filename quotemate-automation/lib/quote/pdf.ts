@@ -273,6 +273,11 @@ export async function ensureSolarQuotePdf(
       quoteViewUrl: `${APP_URL}/q/solar/${publicToken}`,
       premium,
       staticMapUrl: `${APP_URL}/api/solar/q/${publicToken}/static-map`,
+      // Sun & shade heatmap (build 2026-06-13) — only referenced when the
+      // cached asset exists, so the PDF never embeds a 404.
+      fluxImageUrl: estimate.context.sun?.flux_image_path
+        ? `${APP_URL}/api/solar/q/${publicToken}/flux-heatmap`
+        : null,
     })
     const pdf = await renderPdfFromHtml(html)
     const path = await storePdf(`solar/${publicToken}.pdf`, pdf)
