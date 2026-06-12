@@ -120,11 +120,16 @@ vi.mock('@/lib/solar/persist-helpers', () => ({
 // ── 2. Mock runSolarEstimate — this is the key regression test ────────
 // The stub records what args were passed so we can assert opts was set.
 let capturedRunArgs: unknown = null
+// Two tiers so 'better' ≠ headline (last/largest) — the notify SMS must
+// quote the headline tier, the same numbers the share page hero shows.
 const fakeEstimate = {
   token: 'tok_fake_estimate',
   coverage_source: 'manual',
   price: {
-    tiers: [{ tier: 'better', system_kw_dc: 6.6, net_inc_gst: 6919 }],
+    tiers: [
+      { tier: 'better', system_kw_dc: 4.8, net_inc_gst: 8422 },
+      { tier: 'best', system_kw_dc: 6.0, net_inc_gst: 9990 },
+    ],
   },
 }
 
@@ -269,5 +274,21 @@ describe('POST /api/solar/[tenantSlug]/estimate — unit (stubbed supabase)', ()
       expect(res.status).not.toBe(502)
       expect(json.error).not.toBe('engine_failed')
     }
+  })
+
+  it('notifies the tradie with the HEADLINE (largest) tier — the numbers the share page shows', async () => {
+    // Regression: the SMS used to quote the 'better' tier (4.8 kW) while
+    // the linked page headlined the largest tier (6.0 kW) — pilot tradies
+    // saw mismatched figures between the text and the page.
+    maybySingleImpl = vi.fn().mockResolvedValue({ data: fakeTenant, error: null })
+    const { notifySolarEstimate } = await import('@/lib/solar/notify')
+    const POST = await getPostHandler()
+    const res = await POST(buildRequest(VALID_BODY), buildCtx())
+    expect(res.status).toBe(200)
+    expect(notifySolarEstimate).toHaveBeenCalledTimes(1)
+    const args = vi.mocked(notifySolarEstimate).mock.calls[0][0]
+    expect(args.systemKw).toBe(6.0) // last tier, NOT better's 4.8
+    expect(args.netIncGst).toBe(9990) // last tier, NOT better's 8422
+    expect(args.shareToken).toBe('tok_fake_estimate')
   })
 })

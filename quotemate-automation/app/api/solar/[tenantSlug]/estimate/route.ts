@@ -161,8 +161,12 @@ export async function POST(
 
   // ── Notify the tradie (forced review) after the response. ────────
   const appUrl = process.env.APP_URL ?? 'https://quote-mate-rho.vercel.app'
-  const selected =
-    estimate.price.tiers.find((t) => t.tier === 'better') ?? estimate.price.tiers[0]
+  // The SMS must quote the SAME numbers the share page headlines. The
+  // page hero shows the LARGEST tier (resolveSolarQuoteView's
+  // headlineTier — last in good→best order); quoting the 'better' tier
+  // here produced mismatched figures in pilot (SMS "4.8 kW" vs the
+  // linked page's "6.0 kW").
+  const headline = estimate.price.tiers[estimate.price.tiers.length - 1]
   after(async () => {
     await notifySolarEstimate({
       tenant: {
@@ -171,8 +175,8 @@ export async function POST(
         twilio_sms_number: (tenant.twilio_sms_number as string | null) ?? null,
       },
       customerName: null,
-      systemKw: selected?.system_kw_dc ?? 0,
-      netIncGst: selected?.net_inc_gst ?? 0,
+      systemKw: headline?.system_kw_dc ?? 0,
+      netIncGst: headline?.net_inc_gst ?? 0,
       shareToken: estimate.token,
       appUrl,
       dispatch: (opts) => dispatchQuoteMessage(opts),
