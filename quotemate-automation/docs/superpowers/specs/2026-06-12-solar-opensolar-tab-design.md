@@ -1,7 +1,7 @@
 # Solar OpenSolar Tab — design spec
 
 **Date:** 2026-06-12
-**Status:** Draft — Phase 0 (API plan-level + payload verification) gates implementation. Full OpenSolar developer-docs review (all 52 API pages) folded in 2026-06-12: document generation, system-image endpoint, usage push, workflow/stage sync, component activations, private files + CER file tags, machine-user auth, throttle limits.
+**Status:** REMOVED 2026-06-13 — the OpenSolar tab (sub-tab UI, `/q/opensolar/*` pages, tenant/customer routes, import/proposal libs) was implemented 2026-06-13 and deleted the same day by owner decision; the instant-estimate OpenSolar enrichment (hardware catalogue cards, pricing-scheme cross-check, confirm-time lead push — `lib/opensolar/client.ts` + `lib/solar/opensolar-supplement.ts` + `lib/solar/opensolar-leadpush.ts`) remains. Recoverable from commit `57fddc0`. Full OpenSolar developer-docs review (all 52 API pages) folded in 2026-06-12: document generation, system-image endpoint, usage push, workflow/stage sync, component activations, private files + CER file tags, machine-user auth, throttle limits.
 **Sibling specs:** `2026-06-12-solar-premium-quote-design.md` (Google-path premium quote, `SOLAR_PREMIUM_QUOTE`) and `2026-06-12-solar-pylon-tab-design.md` (Pylon design-import path, `PYLON_PROPOSALS_ENABLED`). This spec adds a **third** quoting path beside them. None of the three paths touches the others.
 
 ---

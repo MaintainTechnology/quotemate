@@ -18,22 +18,6 @@ import { buildQuoteReportHtml, type QuoteReportTier } from './report-html'
 import { buildRoofQuoteReportHtml } from '@/lib/roofing/report-html'
 import type { MultiRoofQuote } from '@/lib/roofing/types'
 import { buildSolarQuoteReportHtml } from '@/lib/solar/report-html'
-import { buildPylonProposalHtml } from '@/lib/pylon/proposal-html'
-import { buildPylonModelled } from '@/lib/pylon/modelled'
-import {
-  buildPylonQuoteTable,
-  type PylonProposalCustomer,
-  type PylonProposalDesign,
-  type PylonProposalSite,
-} from '@/lib/pylon/proposal'
-import { buildOpenSolarProposalHtml } from '@/lib/opensolar/proposal-html'
-import { buildOpenSolarModelled } from '@/lib/opensolar/modelled'
-import {
-  buildOpenSolarQuoteTable,
-  type OpenSolarProposalCustomer,
-  type OpenSolarProposalDesign,
-  type OpenSolarProposalSite,
-} from '@/lib/opensolar/proposal'
 import {
   buildSolarPremiumQuote,
   solarPremiumQuoteEnabled,
@@ -71,15 +55,6 @@ export function solarQuotePdfUrl(publicToken: string): string {
   return `${APP_URL}/api/q/solar/${publicToken}/pdf`
 }
 
-/** Stable customer download URL for a Pylon proposal PDF. */
-export function pylonProposalPdfUrl(publicToken: string): string {
-  return `${APP_URL}/api/q/pylon/${publicToken}/pdf`
-}
-
-/** Stable customer download URL for an OpenSolar proposal PDF. */
-export function openSolarProposalPdfUrl(publicToken: string): string {
-  return `${APP_URL}/api/q/opensolar/${publicToken}/pdf`
-}
 
 async function storePdf(path: string, data: Buffer): Promise<string> {
   const { error } = await supabase()
@@ -262,159 +237,6 @@ export async function ensureRoofQuotePdf(
  * return null. Stored at solar/<publicToken>.pdf in the same quote-pdfs
  * bucket. Never throws.
  */
-type PylonPdfRow = {
-  public_token: string
-  tenant_id: string | null
-  title: string | null
-  address_text: string | null
-  customer: PylonProposalCustomer | null
-  site: PylonProposalSite | null
-  design: PylonProposalDesign | null
-  assets: Record<string, string | null> | null
-  confirmed_at: string | null
-  pdf_path: string | null
-}
-
-/**
- * Generate (or reuse) the PDF for an imported Pylon proposal. Only renders
- * post-confirm (the document carries the full verbatim quote table) and
- * embeds the CACHED design artefacts via the token-gated asset routes.
- * Never throws.
- */
-export async function ensurePylonProposalPdf(
-  publicToken: string,
-  opts: { regenerate?: boolean } = {},
-): Promise<string | null> {
-  try {
-    if (!gotenbergConfigured()) return null
-    const { data: row } = await supabase()
-      .from('pylon_proposals')
-      .select(
-        'public_token, tenant_id, title, address_text, customer, site, design, assets, confirmed_at, pdf_path',
-      )
-      .eq('public_token', publicToken)
-      .maybeSingle<PylonPdfRow>()
-    if (!row) return null
-    if (!row.confirmed_at) return null
-    if (row.pdf_path && !opts.regenerate) return row.pdf_path
-
-    const design = row.design
-    if (!design) return null
-    const businessName = await tenantBusinessName(row.tenant_id)
-
-    const config = await loadSolarConfig(supabase())
-    const state = row.site?.address?.state ?? null
-    const modelled = buildPylonModelled({ design, state, config, theme: 'light' })
-
-    const assets = row.assets ?? {}
-    const assetUrl = (kind: string, key: string) =>
-      assets[key] ? `${APP_URL}/api/pylon/q/${publicToken}/asset/${kind}` : null
-
-    const html = buildPylonProposalHtml({
-      businessName,
-      title: row.title,
-      address: row.address_text,
-      customerName: row.customer?.name ?? null,
-      design,
-      table: buildPylonQuoteTable(design),
-      modelled,
-      snapshotUrl: assetUrl('snapshot', 'snapshot_path'),
-      sldUrl: assetUrl('sld', 'sld_path'),
-      siteInfoUrl: assetUrl('site-info', 'site_info_path'),
-      quoteViewUrl: `${APP_URL}/q/pylon/${publicToken}`,
-    })
-    const pdf = await renderPdfFromHtml(html)
-    const path = await storePdf(`pylon/${publicToken}.pdf`, pdf)
-    await supabase().from('pylon_proposals').update({ pdf_path: path }).eq('public_token', publicToken)
-    return path
-  } catch (e) {
-    console.error('[quote-pdf] ensurePylonProposalPdf failed (non-fatal)', {
-      publicToken: publicToken.slice(0, 8) + '…',
-      message: e instanceof Error ? e.message : String(e),
-    })
-    return null
-  }
-}
-
-type OpenSolarPdfRow = {
-  public_token: string
-  tenant_id: string | null
-  title: string | null
-  address_text: string | null
-  customer: OpenSolarProposalCustomer | null
-  site: OpenSolarProposalSite | null
-  design: OpenSolarProposalDesign | null
-  assets: Record<string, string | null> | null
-  confirmed_at: string | null
-  pdf_path: string | null
-}
-
-/**
- * Generate (or reuse) the PDF for an imported OpenSolar proposal. Only
- * renders post-confirm (the document carries the full verbatim quote
- * table) and embeds the CACHED artefacts (system image, shade report,
- * energy yield report, PV site plan) via token-gated asset routes.
- * Never throws.
- */
-export async function ensureOpenSolarProposalPdf(
-  publicToken: string,
-  opts: { regenerate?: boolean } = {},
-): Promise<string | null> {
-  try {
-    if (!gotenbergConfigured()) return null
-    const { data: row } = await supabase()
-      .from('opensolar_proposals')
-      .select(
-        'public_token, tenant_id, title, address_text, customer, site, design, assets, confirmed_at, pdf_path',
-      )
-      .eq('public_token', publicToken)
-      .maybeSingle<OpenSolarPdfRow>()
-    if (!row) return null
-    if (!row.confirmed_at) return null
-    if (row.pdf_path && !opts.regenerate) return row.pdf_path
-
-    const design = row.design
-    if (!design) return null
-    const businessName = await tenantBusinessName(row.tenant_id)
-
-    const config = await loadSolarConfig(supabase())
-    const state = row.site?.state ?? null
-    const modelled = buildOpenSolarModelled({ design, state, config, theme: 'light' })
-
-    const assets = row.assets ?? {}
-    const assetUrl = (kind: string, key: string) =>
-      assets[key] ? `${APP_URL}/api/opensolar/q/${publicToken}/asset/${kind}` : null
-
-    const html = buildOpenSolarProposalHtml({
-      businessName,
-      title: row.title,
-      address: row.address_text,
-      customerName: row.customer?.name ?? null,
-      design,
-      table: buildOpenSolarQuoteTable(design),
-      modelled,
-      systemImageUrl: assetUrl('system-image', 'system_image_path'),
-      shadeReportUrl: assetUrl('shade-report', 'shade_report_path'),
-      energyYieldUrl: assetUrl('energy-yield', 'energy_yield_path'),
-      sitePlanUrl: assetUrl('site-plan', 'site_plan_path'),
-      quoteViewUrl: `${APP_URL}/q/opensolar/${publicToken}`,
-    })
-    const pdf = await renderPdfFromHtml(html)
-    const path = await storePdf(`opensolar/${publicToken}.pdf`, pdf)
-    await supabase()
-      .from('opensolar_proposals')
-      .update({ pdf_path: path })
-      .eq('public_token', publicToken)
-    return path
-  } catch (e) {
-    console.error('[quote-pdf] ensureOpenSolarProposalPdf failed (non-fatal)', {
-      publicToken: publicToken.slice(0, 8) + '…',
-      message: e instanceof Error ? e.message : String(e),
-    })
-    return null
-  }
-}
-
 export async function ensureSolarQuotePdf(
   publicToken: string,
   opts: { regenerate?: boolean } = {},

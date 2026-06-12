@@ -1,7 +1,7 @@
 # Solar Pylon Tab — design spec
 
 **Date:** 2026-06-12
-**Status:** Implemented 2026-06-12 (all 4 phases; behind `PYLON_PROPOSALS_ENABLED`, default off). Phase-0 findings folded in: `fields[solar_designs]` is mandatory on list+show; customer/site data lives on `solar_projects`; the design payload exposes NO production/financial data ("only basic information") so all charts are QuoteMate-modelled from `summary.dc_output_kw`; component endpoints expose identity + datasheet URL only; amounts are integer cents, line items ex-tax. Migration 108 applied to prod + dev Supabase.
+**Status:** REMOVED 2026-06-13 — the Pylon tab (sub-tab UI, `/q/pylon/*` pages, tenant/customer routes, proposal libs) was deleted by owner decision; the instant-estimate Pylon supplements (STC cross-check, hardware datasheets, lead push) remain. Recoverable from commit `57fddc0`. Was: Implemented 2026-06-12 (all 4 phases; behind `PYLON_PROPOSALS_ENABLED`, default off). Phase-0 findings folded in: `fields[solar_designs]` is mandatory on list+show; customer/site data lives on `solar_projects`; the design payload exposes NO production/financial data ("only basic information") so all charts are QuoteMate-modelled from `summary.dc_output_kw`; component endpoints expose identity + datasheet URL only; amounts are integer cents, line items ex-tax. Migration 108 applied to prod + dev Supabase.
 **Sibling spec:** `2026-06-12-solar-premium-quote-design.md` (the Google-path premium quote, shipped behind `SOLAR_PREMIUM_QUOTE`). This spec adds a second, fully-Pylon path beside it. Neither path touches the other.
 
 ---
