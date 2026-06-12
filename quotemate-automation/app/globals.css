@@ -113,6 +113,101 @@ body {
   50%      { opacity: 0.45; }
 }
 
+/* Rise — load-time hero choreography. Bigger travel than fade-up so
+   the first paint of the marketing page feels staged, not flickered. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Pop-in — SMS demo bubbles arriving in sequence on the home hero.
+   Slight scale + lift so each message reads as "just landed". */
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Topo drift — the hero topography breathes sideways very slowly.
+   Applied to a <g> inside the SVG; alternates so it never jumps. */
+@keyframes topo-drift {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-48px); }
+}
+
+/* Marquee — the signature orange CTA bar ticker. The track holds the
+   content twice; -50% loops seamlessly. */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   Scroll-triggered reveal. Elements start lifted + transparent and
+   settle when app/_components/Reveal.tsx flags them visible. The long
+   expo-out ease is what makes sections feel engineered rather than
+   animated. Reduced-motion users get instant content via the global
+   media block below (transitions collapse to 0.001ms).
+   ════════════════════════════════════════════════════════════════════ */
+.reveal {
+  opacity: 0;
+  transform: translateY(22px);
+  transition:
+    opacity 700ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.reveal-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Accent sweep — a 2px brand line that draws across a card's top edge
+   on hover. Sits over the card border (hence -1px), GPU-only. */
+.card-sweep {
+  position: relative;
+}
+.card-sweep::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  right: -1px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-soft));
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 480ms cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+.card-sweep:hover::before,
+.card-sweep:focus-within::before {
+  transform: scaleX(1);
+}
+
+/* Animated underline for nav/footer text links — draws left to right. */
+.link-underline {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-size: 0% 1px;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  transition: background-size 260ms ease, color 200ms ease;
+}
+.link-underline:hover,
+.link-underline:focus-visible {
+  background-size: 100% 1px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

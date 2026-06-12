@@ -551,10 +551,8 @@ export default function DashboardPage() {
 
   if (!data) {
     return (
-      <Shell businessName={null} onSignOut={signOut}>
-        <div className="font-mono text-xs uppercase tracking-[0.16em] text-text-dim">
-          Loading your portal…
-        </div>
+      <Shell businessName={null} onSignOut={signOut} wide>
+        <DashboardSkeleton />
       </Shell>
     )
   }
@@ -605,7 +603,7 @@ export default function DashboardPage() {
               brief loading state on first paint is acceptable. */}
           <div
             key={tab}
-            className="motion-safe:animate-[fade-in_220ms_ease-out_both]"
+            className="motion-safe:animate-[fade-up_300ms_cubic-bezier(0.22,1,0.36,1)_both]"
           >
             {tab !== 'overview' && <TabHeader tab={tab} />}
             {tab === 'overview' && (
@@ -690,6 +688,41 @@ export default function DashboardPage() {
 }
 
 // ─── Shell + Status badge ─────────────────────────────────────────
+
+/** Structural placeholder while /api/tenant/me loads. Mirrors the
+ *  Overview layout (sidebar rail, hero card, pipeline strip, KPI row,
+ *  two panels) so nothing jumps when the real content lands — the
+ *  pulse runs only for motion-safe users. */
+function DashboardSkeleton() {
+  return (
+    <div
+      className="mt-4 lg:mt-6 lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-8"
+      role="status"
+      aria-label="Loading your portal"
+    >
+      <div className="hidden lg:block">
+        <div className="h-96 border border-ink-line bg-ink motion-safe:animate-pulse" />
+      </div>
+      <div className="space-y-6">
+        <div className="space-y-2.5">
+          <div className="h-3 w-40 bg-ink-card motion-safe:animate-pulse" />
+          <div className="h-8 w-72 max-w-full bg-ink-card motion-safe:animate-pulse" />
+        </div>
+        <div className="h-36 border border-ink-line bg-ink-card motion-safe:animate-pulse" />
+        <div className="grid grid-cols-2 gap-px border border-ink-line bg-ink-line lg:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-28 bg-ink-card motion-safe:animate-pulse" />
+          ))}
+        </div>
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="h-64 border border-ink-line bg-ink-card motion-safe:animate-pulse lg:col-span-2" />
+          <div className="h-64 border border-ink-line bg-ink-card motion-safe:animate-pulse" />
+        </div>
+        <span className="sr-only">Loading your portal…</span>
+      </div>
+    </div>
+  )
+}
 
 function Shell({
   businessName,
@@ -1304,7 +1337,7 @@ function OverviewTab({
 
       {/* HERO — your QuoteMate number, the tradie's lifeline. Copy
           action + voice line make it the one card to hand a customer. */}
-      <div className="bg-ink-card border border-ink-line p-4 sm:p-5 md:p-6 motion-safe:animate-[fade-up_240ms_ease-out_both]">
+      <div className="bg-ink-card border border-ink-line p-4 sm:p-5 md:p-6 motion-safe:animate-[fade-up_380ms_cubic-bezier(0.22,1,0.36,1)_both]">
         <div className="flex flex-wrap items-start justify-between gap-3 sm:gap-4">
           <div className="min-w-0">
             <div className="font-mono text-[0.6rem] sm:text-[0.65rem] uppercase tracking-[0.18em] text-text-dim">
@@ -1360,7 +1393,10 @@ function OverviewTab({
       {/* PIPELINE — money view. Lifted to the top (right under the
           QuoteMate number hero) because revenue + conversion are what
           the tradie actually opens the dashboard to check first. */}
-      <section className="bg-ink-card border border-ink-line motion-safe:animate-[fade-up_280ms_ease-out_both]">
+      <section
+        className="bg-ink-card border border-ink-line motion-safe:animate-[fade-up_380ms_cubic-bezier(0.22,1,0.36,1)_both]"
+        style={{ animationDelay: '90ms' }}
+      >
         <header className="flex items-center justify-between px-5 py-3 border-b border-ink-line">
           <h2 className="font-mono text-[0.7rem] uppercase tracking-[0.16em] font-bold text-text-pri">
             Pipeline
@@ -1403,28 +1439,35 @@ function OverviewTab({
           label="Quotes total"
           value={activeQuotes}
           hint={activeQuotes === 0 ? 'No quotes yet' : 'All time'}
+          delay={150}
         />
         <KpiTile
           label="In review"
           value={draftQuotes}
           hint="Awaiting your send"
           tone={draftQuotes > 0 ? 'warn' : 'default'}
+          delay={210}
         />
         <KpiTile
           label="Services on"
           value={`${enabledServices}/${totalServices}`}
           hint="Auto-quote enabled"
+          delay={270}
         />
         <KpiTile
           label="AI receptionist"
           value={aiValue}
           hint={tenant.status === 'active' ? 'Account active' : 'Onboarding'}
           tone={aiTone}
+          delay={330}
         />
       </div>
 
       {/* TWO-COLUMN GRID — latest quotes hero + latest chats sidebar */}
-      <div className="grid gap-6 lg:grid-cols-3 motion-safe:animate-[fade-up_280ms_ease-out_both]">
+      <div
+        className="grid gap-6 lg:grid-cols-3 motion-safe:animate-[fade-up_380ms_cubic-bezier(0.22,1,0.36,1)_both]"
+        style={{ animationDelay: '280ms' }}
+      >
         {/* Latest quotes — primary scan target, takes 2/3 of the row */}
         <section className="lg:col-span-2 bg-ink-card border border-ink-line">
           <header className="flex items-center justify-between px-5 py-3 border-b border-ink-line">
@@ -1735,11 +1778,14 @@ function KpiTile({
   value,
   hint,
   tone = 'default',
+  delay = 0,
 }: {
   label: string
   value: string | number
   hint?: string
   tone?: 'default' | 'warn' | 'ok'
+  /** Entrance stagger in ms — the KPI row reveals tile by tile. */
+  delay?: number
 }) {
   const isNumber = typeof value === 'number'
   const animated = useCountUp(isNumber ? value : 0)
@@ -1751,7 +1797,10 @@ function KpiTile({
         ? 'text-emerald-300'
         : 'text-accent'
   return (
-    <div className="bg-ink-card border border-ink-line p-5 md:p-6 motion-safe:animate-[fade-up_240ms_ease-out_both]">
+    <div
+      className="bg-ink-card border border-ink-line p-5 md:p-6 motion-safe:animate-[fade-up_380ms_cubic-bezier(0.22,1,0.36,1)_both]"
+      style={delay > 0 ? { animationDelay: `${delay}ms` } : undefined}
+    >
       <div className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-text-dim">
         {label}
       </div>
