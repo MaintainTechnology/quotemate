@@ -106,4 +106,46 @@ describe('buildSolarSunView', () => {
     expect(view!.flux_image_available).toBe(false)
     expect(view!.flux_caption).toBeNull()
   })
+
+  it('builds on-image markers from anchors + scores, best plane first', () => {
+    const view = buildSolarSunView(
+      makeEstimate({
+        sun: {
+          ...FULL_SUN,
+          plane_anchors: [
+            { plane_index: 1, x_pct: 70, y_pct: 60 }, // south (75%)
+            { plane_index: 0, x_pct: 30, y_pct: 40 }, // north (best)
+          ],
+        },
+      }),
+    )
+    expect(view!.markers).toHaveLength(2)
+    // Best plane sorted first and flagged.
+    expect(view!.markers[0].is_best).toBe(true)
+    expect(view!.markers[0].orientation.toLowerCase()).toContain('north')
+    expect(view!.markers[0].x_pct).toBe(30)
+    expect(view!.markers[0].score_copy).toBe('Excellent sun')
+    expect(view!.markers[1].is_best).toBe(false)
+    expect(view!.markers[1].relative_pct).toBe(75)
+  })
+
+  it('skips markers for anchors without a scored plane and without an image', () => {
+    const orphanAnchor = buildSolarSunView(
+      makeEstimate({
+        sun: { ...FULL_SUN, plane_anchors: [{ plane_index: 9, x_pct: 10, y_pct: 10 }] },
+      }),
+    )
+    expect(orphanAnchor!.markers).toEqual([])
+
+    const noImage = buildSolarSunView(
+      makeEstimate({
+        sun: {
+          ...FULL_SUN,
+          flux_image_path: null,
+          plane_anchors: [{ plane_index: 0, x_pct: 30, y_pct: 40 }],
+        },
+      }),
+    )
+    expect(noImage!.markers).toEqual([])
+  })
 })

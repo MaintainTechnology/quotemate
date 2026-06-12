@@ -176,86 +176,49 @@ export const CLEAN_REFERENCE_LABEL =
   'driveway, vehicles and lighting.'
 
 /**
- * PURE — the box-replacement brief: the SOURCE image Gemini edits IS the
- * panel-marked plan (the Proposed Panel Layout frame), and the task is
- * pure local replacement — turn every orange rectangle into one
- * photorealistic panel of exactly that footprint, erase the markings,
- * change nothing else. Direct replacement on visible pixels is the most
- * compliant grounding an image editor accepts. `visionNotes` (the
- * Claude vision pre-step's description of the plan) ride along when
- * available; the deterministic layout facts are the fallback wording.
+ * PURE — the DIRECT box-replacement brief (simplified 2026-06-13 by
+ * owner request): the SOURCE image Gemini edits IS the Proposed Panel
+ * Layout frame (the aerial with the panel plan drawn as orange
+ * rectangles). One short, unambiguous instruction — turn each rectangle
+ * into a real solar panel at that exact footprint, real-world panel
+ * size, remove the orange, change nothing else. No vision pre-step, no
+ * long placement prose — the boxes ARE the instruction.
  */
 export function buildSolarBoxReplacementPrompt(args: {
   panelsCount: number
   systemKwDc: number
-  layout?: SolarPanelsLayoutFact[]
-  visionNotes?: string | null
   /** Real panel dimensions from the estimate — calibrates panel scale. */
   panelSizeM?: { height_m: number; width_m: number } | null
 }): { system: string; user: string } {
   const count = Math.max(1, Math.round(args.panelsCount))
 
   // Absolute size calibration: the estimate's real panel dimensions when
-  // available, else the standard residential module. An absolute figure
-  // stops the generator ballooning panels even if it misreads a rectangle.
+  // available, else the standard residential module.
   const size =
     args.panelSizeM && args.panelSizeM.height_m > 0 && args.panelSizeM.width_m > 0
       ? `${args.panelSizeM.width_m.toFixed(1)} m × ${args.panelSizeM.height_m.toFixed(1)} m`
       : '1.0 m × 1.7 m'
 
   const system =
-    'You are a photo-editing specialist working on a real top-down ' +
-    'satellite aerial photo of a property. The photo carries an approved ' +
-    'solar placement plan drawn on the roof as orange rectangles. ' +
-    'Recreate the photo exactly as-is with ONE change — local replacement: ' +
-    'each orange rectangle becomes one photorealistic dark monocrystalline ' +
-    "solar panel that fills exactly that rectangle's footprint (same " +
-    'position, same size, same rotation, same portrait/landscape ' +
-    'orientation), and every trace of orange is removed. Each rectangle ' +
-    `is drawn to true scale for a standard residential panel (about ${size} ` +
-    'relative to the house) — never enlarge or shrink the panels. ' +
-    'Everywhere outside the rectangles the output must match the original ' +
-    'photo exactly.'
-
-  // Placement wording: prefer the vision pre-step's pixel-grounded notes
-  // (SCENE + PLACEMENT sections), else the deterministic per-plane facts.
-  let layoutNotes = ''
-  if (args.visionNotes && args.visionNotes.trim().length > 0) {
-    layoutNotes = `${args.visionNotes.trim()} `
-  } else if (args.layout && args.layout.length > 0) {
-    const lines = args.layout.map((f, i) => {
-      const orient =
-        f.panel_orientation === 'mixed'
-          ? 'a mix of portrait and landscape'
-          : `${f.panel_orientation} orientation`
-      return (
-        `${i + 1}. ${f.plane_label}: ${f.panels_count} rectangle` +
-        `${f.panels_count === 1 ? '' : 's'} in ${f.rows} row` +
-        `${f.rows === 1 ? '' : 's'} (${orient}) on the ${f.region} part of the frame.`
-      )
-    })
-    layoutNotes = `PLACEMENT (from the plan): ${lines.join(' ')} `
-  }
+    'You edit real top-down satellite photos. This photo is the Proposed ' +
+    'Panel Layout for a house: the solar plan is drawn on the roof as ' +
+    'orange rectangles. Make exactly ONE change: turn every orange ' +
+    'rectangle into one photorealistic solar panel and remove all orange. ' +
+    'Nothing else in the photo may change.'
 
   const user =
-    `This aerial carries the approved Proposed Panel Layout for a ` +
-    `${args.systemKwDc.toFixed(1)} kW system: exactly ${count} orange ` +
-    'rectangles drawn on the roof. ' +
-    layoutNotes +
-    `Follow the Proposed Panel Layout exactly: replace EVERY orange rectangle ` +
-    'with one photorealistic dark monocrystalline solar panel that fills ' +
-    "exactly that rectangle's footprint — thin silver aluminium frames, " +
-    'subtle sun glint, lighting and shadows consistent with the photo. ' +
-    `Do NOT add panels anywhere there is no rectangle. TOTAL: exactly ${count} ` +
-    'panels — count them. Remove ALL orange markings: no orange outlines, ' +
-    'fills, or tint may remain anywhere in the output. ' +
-    'Keep everything else identical to the original photo: building ' +
-    'footprint and roof shape, roof colour and texture, ridges and ' +
-    'valleys, ground, lawn, driveway, trees, pool, fences, vehicles, ' +
-    'neighbouring buildings, lighting, shadows, camera angle, zoom and ' +
-    'the satellite-photo look. No text, labels, watermarks or people. ' +
-    'The result must read as the SAME property photographed after the ' +
-    'solar installation.'
+    `Replace each of the ${count} orange rectangles with one realistic ` +
+    'dark monocrystalline solar panel that fills EXACTLY that ' +
+    "rectangle's footprint — same position, same size, same rotation. " +
+    `Each rectangle is already drawn at the TRUE size of a real ` +
+    `residential panel (${size} relative to the house). The finished ` +
+    'panels must stay exactly that size: large, clearly visible modules ' +
+    'with thin silver frames — NEVER tiny dots, never smaller than the ' +
+    `rectangles. Exactly ${count} panels total (${args.systemKwDc.toFixed(1)} kW), ` +
+    'nowhere else on the roof or ground. Remove every orange marking. ' +
+    'Everything outside the rectangles stays identical to the original ' +
+    'photo — same roof, ground, trees, vehicles, lighting and framing. ' +
+    'No text, labels or watermarks.'
 
   return { system, user }
 }

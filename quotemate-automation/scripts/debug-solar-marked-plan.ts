@@ -75,7 +75,7 @@ console.log('\nlayout facts:', JSON.stringify(layout, null, 2))
 const prompt = buildSolarBoxReplacementPrompt({
   panelsCount: headlineTier.panels_count,
   systemKwDc: headlineTier.system_kw_dc,
-  layout,
+  panelSizeM: estimate.roof.panel_size_m ?? null,
 })
 console.log('\n── SYSTEM PROMPT ──\n' + prompt.system)
 console.log('\n── USER PROMPT ──\n' + prompt.user)

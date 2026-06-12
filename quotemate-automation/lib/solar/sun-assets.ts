@@ -21,6 +21,8 @@ import {
   analyzeHourlyShade,
   deriveMonthlyProductionWeights,
   estimateBuildingHeightFromDsm,
+  projectPlaneAnchors,
+  type PlaneAnchor,
   type RasterBand,
   type SolarShadeAnalysis,
   type SolarBuildingHeight,
@@ -67,12 +69,15 @@ export function buildSunContext(args: {
   shade: SolarShadeAnalysis | null
   buildingHeight: SolarBuildingHeight | null
   imageryDate: string | null
+  planeAnchors?: PlaneAnchor[] | null
 }): NonNullable<SolarEstimateContext['sun']> {
   return {
     generated_at: args.now,
     flux_image_path: args.fluxImagePath,
     min_flux: args.flux?.min_flux ?? null,
     max_flux: args.flux?.max_flux ?? null,
+    plane_anchors:
+      args.planeAnchors && args.planeAnchors.length > 0 ? args.planeAnchors : null,
     monthly_production_weights: args.monthlyWeights,
     shade: args.shade
       ? {
@@ -221,6 +226,15 @@ export async function applySolarSunAssets(
 
     // ── Merge context.sun into the persisted estimate jsonb. ─────────
     const estimate = row.estimate as SolarEstimate
+
+    // Per-plane label anchors: panel centroids projected through the flux
+    // raster's geo bbox → % positions inside the heatmap image, so the
+    // quote page can pin sun-score labels onto the roof deterministically.
+    const planeAnchors =
+      flux && annualFlux?.bbox
+        ? projectPlaneAnchors(estimate.roof.panels ?? [], annualFlux.bbox)
+        : []
+
     const sun = buildSunContext({
       now: new Date().toISOString(),
       fluxImagePath,
@@ -229,6 +243,7 @@ export async function applySolarSunAssets(
       shade,
       buildingHeight,
       imageryDate: summary.imagery_date,
+      planeAnchors,
     })
     const nextEstimate: SolarEstimate = {
       ...estimate,

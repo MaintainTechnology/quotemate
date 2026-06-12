@@ -188,17 +188,47 @@ function premiumSections(input: SolarReportInput): string {
   // dollar figures; mirrors the quote page section.
   if (p.sun) {
     const sunParts: string[] = ['<h2>Sun &amp; shade analysis</h2>']
+    // True only when the labels actually rendered onto the heatmap —
+    // gates the plane-table dedup below (no figure ⇒ keep the table).
+    let markersRendered = false
     if (p.sun.flux_image_available && input.fluxImageUrl) {
+      // Sun-score labels pinned onto the heatmap (same deterministic
+      // anchors the quote page uses) — best face highlighted.
+      const markers = p.sun.markers
+        .map((m) => {
+          const bg = m.is_best ? '#FF5F00' : 'rgba(22,32,43,0.85)'
+          const sub = m.is_best ? 'rgba(255,255,255,0.85)' : '#9aa6b2'
+          return (
+            `<div style="position:absolute;left:${m.x_pct}%;top:${m.y_pct}%;transform:translate(-50%,-50%);` +
+            `background:${bg};color:#fff;border:1px solid ${m.is_best ? '#FF5F00' : '#3a4654'};` +
+            `padding:3px 7px;text-align:center;white-space:nowrap;z-index:${m.is_best ? 2 : 1};">` +
+            `<div style="font-family:'Courier New',monospace;font-size:7.5px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;">` +
+            `${m.is_best ? '★ BEST SPOT — ' : ''}${esc(m.orientation)} FACE</div>` +
+            `<div style="font-family:'Courier New',monospace;font-size:7px;letter-spacing:0.08em;text-transform:uppercase;color:${sub};">` +
+            `${esc(m.score_copy)} · ${m.area_m2.toLocaleString('en-AU')} m²</div></div>`
+          )
+        })
+        .join('')
+      const caption =
+        (p.sun.markers.length > 0
+          ? 'Labels mark each roof face at its measured sun score — the highlighted face is the best place for panels. '
+          : '') + (p.sun.flux_caption ?? '')
       sunParts.push(
-        `<div class="figure"><img src="${esc(input.fluxImageUrl)}" alt="" style="width:100%;display:block;image-rendering:pixelated;">` +
-          (p.sun.flux_caption ? `<div class="fig-caption">${esc(p.sun.flux_caption)}</div>` : '') +
+        `<div class="figure"><div style="position:relative;">` +
+          `<img src="${esc(input.fluxImageUrl)}" alt="" style="width:100%;display:block;image-rendering:pixelated;">` +
+          markers +
+          '</div>' +
+          (caption ? `<div class="fig-caption">${esc(caption)}</div>` : '') +
           '</div>',
       )
+      markersRendered = p.sun.markers.length > 0
     }
     if (p.sun.stats.length > 0) {
       sunParts.push(statGrid(p.sun.stats))
     }
-    if (p.sun.planes.length > 0) {
+    // Plane rows only when the labels are NOT already pinned on the
+    // heatmap above (mirrors the quote page's dedup).
+    if (!markersRendered && p.sun.planes.length > 0) {
       const rows = p.sun.planes
         .map(
           (pl) =>

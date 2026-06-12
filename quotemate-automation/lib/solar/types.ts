@@ -773,6 +773,13 @@ export type SolarEstimateContext = {
     building_height: { height_m: number; storeys_hint: number } | null
     /** Imagery date the layers were computed from (dataLayers metadata). */
     imagery_date: string | null
+    /**
+     * Per-plane label anchors INSIDE the flux heatmap image, as % of its
+     * width/height (panel-centroid of each roof plane projected through
+     * the raster's geo bbox). Lets the quote page pin sun-score labels
+     * onto the heatmap deterministically. Absent on older estimates.
+     */
+    plane_anchors?: Array<{ plane_index: number; x_pct: number; y_pct: number }> | null
   } | null
 }
 

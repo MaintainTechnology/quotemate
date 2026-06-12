@@ -222,83 +222,44 @@ describe('buildSolarPanelsAfterPrompt (layout-grounded)', () => {
   })
 })
 
-describe('buildSolarBoxReplacementPrompt (marked plan as the SOURCE)', () => {
-  const layout = deriveSolarLayoutFacts({
-    panels: gridPanels({ rows: 2, cols: 7 }),
-    planes: PLANES,
-    center: SYD,
-    panel_size_m: PANEL_SIZE,
+describe('buildSolarBoxReplacementPrompt (direct box-replacement, 2026-06-13)', () => {
+  const p = buildSolarBoxReplacementPrompt({
+    panelsCount: 14,
+    systemKwDc: 5.6,
+    panelSizeM: PANEL_SIZE,
   })
 
-  it('frames the task as local replacement of the orange rectangles', () => {
-    const p = buildSolarBoxReplacementPrompt({
-      panelsCount: 14,
-      systemKwDc: 5.6,
-      layout,
-    })
-    expect(p.system).toContain('local replacement')
-    expect(p.user).toContain('Follow the Proposed Panel Layout exactly')
-    expect(p.user).toContain('replace EVERY orange rectangle')
-    expect(p.user).toContain("exactly that rectangle's footprint")
-    expect(p.system).toContain('never enlarge or shrink')
+  it('frames the task as turning the layout rectangles into panels', () => {
+    expect(p.system).toContain('Proposed')
+    expect(p.system).toContain('Panel Layout')
+    expect(p.system).toContain('orange')
+    expect(p.user).toContain("rectangle's footprint")
+    expect(p.user).toContain('same position, same size, same rotation')
+  })
+
+  it('demands real-world panel size — never tiny', () => {
+    expect(p.user).toContain('TRUE size of a real')
+    expect(p.user).toContain('NEVER tiny dots')
+    expect(p.user).toContain('never smaller than the rectangles')
   })
 
   it('calibrates panel scale with real dimensions when available', () => {
-    const withSize = buildSolarBoxReplacementPrompt({
-      panelsCount: 14,
-      systemKwDc: 5.6,
-      layout,
-      panelSizeM: PANEL_SIZE,
-    })
-    expect(withSize.system).toContain('1.0 m × 1.9 m')
-    const withoutSize = buildSolarBoxReplacementPrompt({
-      panelsCount: 14,
-      systemKwDc: 5.6,
-      layout,
-    })
-    expect(withoutSize.system).toContain('1.0 m × 1.7 m')
+    expect(p.user).toContain('1.0 m × 1.9 m')
+    const withoutSize = buildSolarBoxReplacementPrompt({ panelsCount: 14, systemKwDc: 5.6 })
+    expect(withoutSize.user).toContain('1.0 m × 1.7 m')
   })
 
   it('pins the strict count and bans leftover orange', () => {
-    const p = buildSolarBoxReplacementPrompt({
-      panelsCount: 14,
-      systemKwDc: 5.6,
-      layout,
-    })
-    expect(p.user).toContain('exactly 14 orange rectangles')
-    expect(p.user).toContain('TOTAL: exactly 14 panels — count them')
-    expect(p.user).toContain('Remove ALL orange markings')
-    expect(p.user).toContain('Do NOT add panels anywhere there is no rectangle')
+    expect(p.user).toContain('each of the 14 orange rectangles')
+    expect(p.user).toContain('Exactly 14 panels total (5.6 kW)')
+    expect(p.user).toContain('Remove every orange marking')
   })
 
-  it('prefers the Claude vision notes over the deterministic facts', () => {
-    const p = buildSolarBoxReplacementPrompt({
-      panelsCount: 14,
-      systemKwDc: 5.6,
-      layout,
-      visionNotes:
-        'SCENE: Grey hip roof with a pool at the top of frame. PLACEMENT: Two rows of seven rectangles on the left roof section, rows parallel to the ridge. Total: exactly 14 panels.',
-    })
-    expect(p.user).toContain('Two rows of seven rectangles on the left roof section')
-    expect(p.user).not.toContain('north-facing plane (pitch 22°): 14 rectangles')
-  })
-
-  it('falls back to the deterministic layout facts without vision notes', () => {
-    const p = buildSolarBoxReplacementPrompt({
-      panelsCount: 14,
-      systemKwDc: 5.6,
-      layout,
-      visionNotes: null,
-    })
-    expect(p.user).toContain('PLACEMENT (from the plan)')
-    expect(p.user).toContain('north-facing plane (pitch 22°)')
-  })
-
-  it('states the preserve-everything-else invariants compactly', () => {
-    const p = buildSolarBoxReplacementPrompt({ panelsCount: 14, systemKwDc: 5.6 })
-    expect(p.user).toContain('Keep everything else identical to the original photo')
-    expect(p.user).toContain('No text, labels, watermarks or people')
-    expect(p.user).toContain('SAME property photographed after the solar installation')
+  it('is short and direct — no vision-notes or placement prose', () => {
+    expect(p.user.length).toBeLessThan(900)
+    expect(p.user).not.toContain('PLACEMENT (from the plan)')
+    expect(p.user).toContain('stays identical to the original photo')
+    expect(p.user).toContain('No text, labels or watermarks')
   })
 
   it('the clean-photo reference label demands fidelity outside the panels', () => {

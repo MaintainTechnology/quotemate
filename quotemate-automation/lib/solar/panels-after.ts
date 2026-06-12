@@ -30,7 +30,6 @@ import {
   CLEAN_REFERENCE_LABEL,
 } from './panels-after-prompt'
 import { buildPanelMarkupPaths } from './panel-marked-map'
-import { describePanelPlanWithClaude } from './panels-after-vision'
 import { resolveSolarOverlayCenter } from './static-map-center'
 import type { SolarEstimate } from './types'
 
@@ -179,20 +178,13 @@ export async function generateSolarPanelsImage(
 
     let out: { base64: string; mime: string }
     if (markedPlan) {
-      // Vision pre-step: Claude looks at the marked plan and writes
-      // pixel-grounded instructions ("two rows of seven on the left
-      // roof section, rows parallel to the ridge…"). Best-effort —
-      // null falls back to the deterministic layout-facts wording.
-      const visionNotes = await describePanelPlanWithClaude({
-        marked: markedPlan,
-        expectedCount: headlineTier.panels_count,
-      })
-
+      // DIRECT box-replacement (simplified 2026-06-13): the Proposed
+      // Panel Layout frame IS the source image; the short prompt tells
+      // the editor to turn each rectangle into a real-size panel. No
+      // vision pre-step — the drawn boxes are the instruction.
       const prompt = buildSolarBoxReplacementPrompt({
         panelsCount: headlineTier.panels_count,
         systemKwDc: headlineTier.system_kw_dc,
-        layout,
-        visionNotes,
         panelSizeM: estimate.roof.panel_size_m ?? null,
       })
       out = await geminiProvider.renderImage({

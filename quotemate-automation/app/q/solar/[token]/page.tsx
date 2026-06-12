@@ -420,15 +420,50 @@ export default async function SolarQuotePage({
 
             {sunView.flux_image_available && (
               <div className="mt-5 overflow-hidden border border-ink-line bg-ink-card">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`/api/solar/q/${token}/flux-heatmap`}
-                  alt={`Roof irradiance heatmap for ${row.address ?? 'the property'} — brighter areas receive more annual sun`}
-                  className="w-full"
-                  style={{ imageRendering: 'pixelated' }}
-                />
+                <div className="relative">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/api/solar/q/${token}/flux-heatmap`}
+                    alt={`Roof irradiance heatmap for ${row.address ?? 'the property'} — brighter areas receive more annual sun`}
+                    className="w-full"
+                    style={{ imageRendering: 'pixelated' }}
+                  />
+                  {/* Sun-score labels pinned to each roof plane — positions
+                      are the plane's panel centroid projected through the
+                      raster's geo bbox (deterministic, never AI-placed). */}
+                  {sunView.markers.map((m, i) => (
+                    <div
+                      key={`${m.orientation}-${i}`}
+                      className="absolute -translate-x-1/2 -translate-y-1/2"
+                      style={{ left: `${m.x_pct}%`, top: `${m.y_pct}%`, zIndex: m.is_best ? 2 : 1 }}
+                    >
+                      <div
+                        className={`whitespace-nowrap border px-2.5 py-1.5 text-center backdrop-blur-sm ${
+                          m.is_best
+                            ? 'border-accent bg-accent/90 text-white'
+                            : 'border-ink-line bg-ink-deep/85 text-text-pri'
+                        }`}
+                      >
+                        <div className="font-mono text-[0.6rem] font-bold uppercase tracking-[0.12em]">
+                          {m.is_best ? '★ Best spot — ' : ''}
+                          {m.orientation} face
+                        </div>
+                        <div
+                          className={`font-mono text-[0.56rem] uppercase tracking-[0.1em] ${
+                            m.is_best ? 'text-white/85' : 'text-text-dim'
+                          }`}
+                        >
+                          {m.score_copy} · {m.area_m2.toLocaleString('en-AU')} m²
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
                 {sunView.flux_caption && (
                   <div className="border-t border-ink-line px-5 py-3 text-xs leading-relaxed text-text-dim">
+                    {sunView.markers.length > 0
+                      ? 'Labels mark each roof face at its measured sun score — the highlighted face is the best place for panels. '
+                      : ''}
                     {sunView.flux_caption}
                   </div>
                 )}
@@ -443,7 +478,11 @@ export default async function SolarQuotePage({
               </div>
             )}
 
-            {sunView.planes.length > 0 && (
+            {/* Per-plane rows are the FALLBACK for estimates without
+                on-image anchors (pre-anchor rows, manual path). When the
+                labels are pinned on the heatmap above, the list would
+                duplicate them — so it only renders without markers. */}
+            {sunView.markers.length === 0 && sunView.planes.length > 0 && (
               <div className="mt-5 grid gap-px bg-ink-line">
                 {sunView.planes.map((p, i) => (
                   <div

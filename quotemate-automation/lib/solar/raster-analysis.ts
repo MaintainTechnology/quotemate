@@ -243,6 +243,52 @@ export function estimateBuildingHeightFromDsm(
   }
 }
 
+export type PlaneAnchor = { plane_index: number; x_pct: number; y_pct: number }
+
+/**
+ * PURE — project each roof plane's panel-centroid into percentage
+ * coordinates inside a geo-referenced raster (the flux heatmap), via the
+ * raster's [west, south, east, north] bbox. Planes with no panels inside
+ * the bbox are skipped, so a label can never float off the roof.
+ */
+export function projectPlaneAnchors(
+  panels: Array<{ center: { lat: number; lng: number }; segment_index: number }>,
+  bbox: [number, number, number, number] | null,
+): PlaneAnchor[] {
+  if (!bbox || panels.length === 0) return []
+  const [west, south, east, north] = bbox
+  const spanX = east - west
+  const spanY = north - south
+  if (!(spanX > 0) || !(spanY > 0)) return []
+
+  const sums = new Map<number, { x: number; y: number; n: number }>()
+  for (const p of panels) {
+    const { lat, lng } = p.center
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue
+    const x = (lng - west) / spanX
+    const y = (north - lat) / spanY
+    if (x < 0 || x > 1 || y < 0 || y > 1) continue
+    const acc = sums.get(p.segment_index)
+    if (acc) {
+      acc.x += x
+      acc.y += y
+      acc.n++
+    } else {
+      sums.set(p.segment_index, { x, y, n: 1 })
+    }
+  }
+
+  const anchors: PlaneAnchor[] = []
+  for (const [plane_index, acc] of [...sums.entries()].sort((a, b) => a[0] - b[0])) {
+    anchors.push({
+      plane_index,
+      x_pct: Math.round((acc.x / acc.n) * 1000) / 10,
+      y_pct: Math.round((acc.y / acc.n) * 1000) / 10,
+    })
+  }
+  return anchors
+}
+
 // ── helpers ──────────────────────────────────────────────────────────
 
 /** Count set bits among the lowest `limit` bits of v. */

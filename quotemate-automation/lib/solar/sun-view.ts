@@ -26,6 +26,22 @@ export type SolarSunPlaneRow = {
   relative_pct: number
 }
 
+/** A sun-score label pinned ONTO the heatmap image (deterministic —
+ *  panel centroids projected through the raster's geo bbox). */
+export type SolarSunMarker = {
+  /** Position inside the heatmap image, % of width/height. */
+  x_pct: number
+  y_pct: number
+  /** e.g. "North face". */
+  orientation: string
+  /** e.g. "Excellent sun". */
+  score_copy: string
+  area_m2: number
+  relative_pct: number
+  /** True for the sunniest plane — the page renders it in accent. */
+  is_best: boolean
+}
+
 export type SolarSunView = {
   /** Headline stat cards (only rows with real data are present). */
   stats: SolarSunStat[]
@@ -35,6 +51,8 @@ export type SolarSunView = {
   flux_image_available: boolean
   /** Figure caption for the heatmap (bounds + imagery date). */
   flux_caption: string | null
+  /** Sun-score labels pinned onto the heatmap (empty without anchors). */
+  markers: SolarSunMarker[]
   /** Hourly sun fractions (0–23) for a future hour-strip view. */
   hourly_sun_fraction: number[] | null
 }
@@ -116,6 +134,29 @@ export function buildSolarSunView(estimate: SolarEstimate): SolarSunView | null 
     .sort((a, b) => b.relative_pct - a.relative_pct)
 
   const flux_image_available = Boolean(sun?.flux_image_path)
+
+  // On-image sun-score markers: join the per-plane anchors (projected at
+  // asset-generation time) with the derived scores. Only planes that have
+  // BOTH an anchor and a score get a label — nothing ever floats.
+  const markers: SolarSunMarker[] = []
+  if (flux_image_available && sun?.plane_anchors) {
+    for (const anchor of sun.plane_anchors) {
+      const score = scores.planes[anchor.plane_index]
+      if (!score || score.relative_pct == null || score.label == null) continue
+      markers.push({
+        x_pct: anchor.x_pct,
+        y_pct: anchor.y_pct,
+        orientation: orientationLabel(score.orientation),
+        score_copy: SUN_SCORE_COPY[score.label],
+        area_m2: score.area_m2,
+        relative_pct: score.relative_pct,
+        is_best: scores.best_plane_index === anchor.plane_index,
+      })
+    }
+    // Best plane first so it stacks above neighbours when labels overlap.
+    markers.sort((a, b) => Number(b.is_best) - Number(a.is_best))
+  }
+
   const flux_caption = flux_image_available
     ? 'Roof irradiance measured by Google Solar — brighter means more annual sun' +
       (sun?.min_flux != null && sun?.max_flux != null
@@ -131,6 +172,7 @@ export function buildSolarSunView(estimate: SolarEstimate): SolarSunView | null 
     planes,
     flux_image_available,
     flux_caption,
+    markers,
     hourly_sun_fraction: sun?.shade?.hourly_sun_fraction ?? null,
   }
 }

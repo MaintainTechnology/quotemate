@@ -6,6 +6,7 @@ import {
   monthlyKwhFromWeights,
   analyzeHourlyShade,
   estimateBuildingHeightFromDsm,
+  projectPlaneAnchors,
   __test_only__,
   type RasterBand,
 } from './raster-analysis'
@@ -162,6 +163,53 @@ describe('analyzeHourlyShade', () => {
     const mask = band(2, 2, (x) => (x === 0 ? 1 : 0))
     const res = analyzeHourlyShade(months, mask)
     expect(res!.hourly_sun_fraction[12]).toBe(1)
+  })
+})
+
+describe('projectPlaneAnchors', () => {
+  // bbox [west, south, east, north] — a 100 m-ish box around Sydney.
+  const BBOX: [number, number, number, number] = [151.2, -33.87, 151.21, -33.86]
+
+  it('projects per-plane panel centroids to % coordinates', () => {
+    const panels = [
+      // Plane 0: two panels straddling the bbox centre horizontally.
+      { center: { lat: -33.865, lng: 151.2025 }, segment_index: 0 },
+      { center: { lat: -33.865, lng: 151.2075 }, segment_index: 0 },
+      // Plane 1: one panel at the exact bbox centre.
+      { center: { lat: -33.865, lng: 151.205 }, segment_index: 1 },
+    ]
+    const anchors = projectPlaneAnchors(panels, BBOX)
+    expect(anchors).toHaveLength(2)
+    expect(anchors[0].plane_index).toBe(0)
+    expect(anchors[0].x_pct).toBeCloseTo(50, 0)
+    expect(anchors[0].y_pct).toBeCloseTo(50, 0)
+    expect(anchors[1]).toMatchObject({ plane_index: 1 })
+    expect(anchors[1].x_pct).toBeCloseTo(50, 0)
+  })
+
+  it('drops panels outside the bbox so labels never float off-image', () => {
+    const anchors = projectPlaneAnchors(
+      [
+        { center: { lat: -33.865, lng: 151.205 }, segment_index: 0 },
+        { center: { lat: -40, lng: 140 }, segment_index: 1 }, // far away
+      ],
+      BBOX,
+    )
+    expect(anchors).toHaveLength(1)
+    expect(anchors[0].plane_index).toBe(0)
+  })
+
+  it('returns empty for a null/degenerate bbox or no panels', () => {
+    expect(projectPlaneAnchors([], BBOX)).toEqual([])
+    expect(
+      projectPlaneAnchors([{ center: { lat: -33.865, lng: 151.205 }, segment_index: 0 }], null),
+    ).toEqual([])
+    expect(
+      projectPlaneAnchors(
+        [{ center: { lat: -33.865, lng: 151.205 }, segment_index: 0 }],
+        [151.2, -33.86, 151.2, -33.86],
+      ),
+    ).toEqual([])
   })
 })
 
