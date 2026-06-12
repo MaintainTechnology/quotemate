@@ -31,6 +31,64 @@ describe('buildSolarQuoteReportHtml — legacy (no premium)', () => {
     expect(html).not.toContain('20-year financial summary')
     expect(html).not.toContain('Environmental analysis')
   })
+
+  it('contains no Felt sections when feltMap/aiBrief are absent', () => {
+    expect(html).not.toContain('Your roof — interactive map')
+    expect(html).not.toContain('Roof intelligence')
+  })
+})
+
+describe('buildSolarQuoteReportHtml — Felt variant (spec 2026-06-13)', () => {
+  const html = buildSolarQuoteReportHtml({
+    ...BASE,
+    estimate: makeFixtureEstimate(),
+    feltMap: {
+      thumbnailUrl: 'https://felt.test/thumb.png',
+      mapUrl: 'https://felt.com/map/abc',
+    },
+    aiBrief: {
+      headline: 'A strong north-facing roof for solar',
+      layout_rationale: 'The layout places 25 panels on the north face.',
+      best_plane_note: 'The north face does the heavy lifting.',
+      seasonal_note: 'Output stays solid across the seasons.',
+      caveats: ['Based on 2025 satellite imagery.'],
+      model: 'test-model',
+      input_hash: 'abc123',
+      generated_at: '2026-06-13T00:00:00.000Z',
+    },
+  })
+
+  it('renders the map snapshot with the live-map link', () => {
+    expect(html).toContain('Your roof — interactive map')
+    expect(html).toContain('https://felt.test/thumb.png')
+    expect(html).toContain('https://felt.com/map/abc')
+  })
+
+  it('renders the AI brief with its labelling', () => {
+    expect(html).toContain('Roof intelligence — AI-generated summary')
+    expect(html).toContain('A strong north-facing roof for solar')
+    expect(html).toContain('Based on 2025 satellite imagery.')
+    expect(html).toContain('every figure comes from your roof analysis')
+  })
+
+  it('escapes HTML in brief prose', () => {
+    const xss = buildSolarQuoteReportHtml({
+      ...BASE,
+      estimate: makeFixtureEstimate(),
+      aiBrief: {
+        headline: 'Roof <script>alert(1)</script> summary',
+        layout_rationale: 'Safe & sound prose that runs long enough to pass.',
+        best_plane_note: 'North face works hardest.',
+        seasonal_note: 'Steady output through the year.',
+        caveats: [],
+        model: 'm',
+        input_hash: 'h',
+        generated_at: '2026-06-13T00:00:00.000Z',
+      },
+    })
+    expect(xss).not.toContain('<script>alert(1)</script>')
+    expect(xss).toContain('&lt;script&gt;')
+  })
 })
 
 describe('buildSolarQuoteReportHtml — premium (spec §4.4)', () => {

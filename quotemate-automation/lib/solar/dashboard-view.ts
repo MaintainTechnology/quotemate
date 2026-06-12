@@ -93,6 +93,15 @@ function pickTier<T extends { tier: string }>(tiers: T[] | null | undefined): T 
   return tiers.find((t) => t.tier === 'better') ?? tiers[0] ?? null
 }
 
+/** Felt provisioning summary as stored on solar_estimates.felt (Felt tab
+ *  spec 2026-06-13) — only the fields the dashboard renders. */
+export type SolarFeltRowSummary = {
+  status?: 'pending' | 'provisioning' | 'ready' | 'partial' | 'failed' | null
+  map_url?: string | null
+  embed_url?: string | null
+  thumbnail_url?: string | null
+} | null
+
 /** The raw row shape GET /api/tenant/solar reads from solar_estimates. */
 export type SolarEstimateRawRow = {
   public_token: string
@@ -107,6 +116,10 @@ export type SolarEstimateRawRow = {
   created_at: string
   price: { tiers?: SolarPriceTier[] } | null
   sizing: { tiers?: SolarSystemTier[] } | null
+  /** Quote layout variant (migration 111). Missing on old rows = instant. */
+  quote_variant?: string | null
+  /** Felt map provisioning record (felt-variant rows only). */
+  felt?: SolarFeltRowSummary
 }
 
 /** The lean, client-safe view model the SolarTab renders per card. */
@@ -138,6 +151,14 @@ export type SolarEstimateViewModel = {
   /** Deep link to the OpenSolar project created by the confirm-time lead
    *  push (enrichment build 2026-06-13); null when none was pushed. */
   openSolarProjectUrl: string | null
+  /** Quote layout variant (Felt tab spec 2026-06-13). */
+  quoteVariant: 'instant' | 'felt'
+  /** Felt map provisioning status; null on instant rows / pre-provision. */
+  feltStatus: 'pending' | 'provisioning' | 'ready' | 'partial' | 'failed' | null
+  /** Tradie-facing "Open in Felt" editor link. */
+  feltMapUrl: string | null
+  /** Static map thumbnail for the card preview. */
+  feltThumbnailUrl: string | null
 }
 
 /**
@@ -189,6 +210,10 @@ export function mapSolarEstimateRow(args: {
     pylonStage: args.pylonStage?.stage ?? null,
     pylonLeadUrl: args.pylonStage?.url ?? null,
     openSolarProjectUrl: args.openSolarProjectUrl ?? null,
+    quoteVariant: row.quote_variant === 'felt' ? 'felt' : 'instant',
+    feltStatus: row.felt?.status ?? null,
+    feltMapUrl: row.felt?.map_url ?? null,
+    feltThumbnailUrl: row.felt?.thumbnail_url ?? null,
   }
 }
 

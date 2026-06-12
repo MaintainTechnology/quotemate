@@ -24,6 +24,8 @@ import { geocodeAddress } from '@/lib/solar/geocode'
 import { validateSolarAddress } from '@/lib/solar/address-validation'
 import { fetchSolarDataLayers } from '@/lib/solar/data-layers'
 import { applySolarSunAssets } from '@/lib/solar/sun-assets'
+import { applySolarFeltMap } from '@/lib/solar/felt-provision'
+import { applySolarAiBrief } from '@/lib/solar/ai-brief'
 import { resolveNetworkFromPostcode } from '@/lib/solar/network-lookup'
 import { redraftEligibility, reconstructSolarInputs } from '@/lib/solar/redraft'
 import { applyPylonStcCrossCheck } from '@/lib/solar/pylon-aftercheck'
@@ -64,7 +66,7 @@ export async function POST(
 
   const { data: row, error } = await supabase
     .from('solar_estimates')
-    .select('id, tenant_id, public_token, address, state, postcode, confirmed_at, estimate')
+    .select('id, tenant_id, public_token, address, state, postcode, confirmed_at, estimate, quote_variant')
     .eq('public_token', token)
     .maybeSingle()
   if (error || !row) {
@@ -148,10 +150,15 @@ export async function POST(
 
   // Shape the refreshed engine output with the same payload builder the
   // creation route uses, then strip insert-only identity fields.
+  const quoteVariant: 'instant' | 'felt' =
+    row.quote_variant === 'felt' ? 'felt' : 'instant'
   const payloads = buildSolarRowPayloads({
     estimate: redrafted,
     tenantId: (row.tenant_id as string | null) ?? '',
     address: inputs.input,
+    // Keep the row's variant — a re-draft must never flip a Felt quote
+    // back to the instant layout (Felt tab spec 2026-06-13 §4.5).
+    quoteVariant,
   })
   const {
     tenant_id: _t,
@@ -207,6 +214,22 @@ export async function POST(
   if (redrafted.coverage_source === 'google' && redrafted.context.location) {
     const location = redrafted.context.location
     after(() => applySolarSunAssets(supabase, { publicToken: row.public_token as string, location }))
+  }
+
+  // Re-provision the Felt map against the fresh layout (the panel
+  // placements/sizing may have changed). applySolarFeltMap deletes the
+  // previous map first; best-effort, felt-variant rows only.
+  if (quoteVariant === 'felt') {
+    const feltLocation = redrafted.context.location ?? null
+    after(() =>
+      applySolarFeltMap(supabase, {
+        publicToken: row.public_token as string,
+        location: feltLocation,
+      }),
+    )
+    // Regenerate the AI brief — the facts hash changed with the layout,
+    // and applySolarAiBrief skips itself when it didn't. Best-effort.
+    after(() => applySolarAiBrief(supabase, { publicToken: row.public_token as string }))
   }
 
   return Response.json({

@@ -47,6 +47,11 @@ import type { SolarChart } from '@/lib/solar/charts'
 import { buildSolarHardwareCards } from '@/lib/solar/hardware-cards'
 import { buildSolarSunView } from '@/lib/solar/sun-view'
 import { money, kwh, kw, paybackBand } from '@/lib/solar/quote-page-format'
+import {
+  repairSolarFeltLayers,
+  type SolarFeltRecord,
+} from '@/lib/solar/felt-provision'
+import type { SolarAiBriefRecord } from '@/lib/solar/ai-brief'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,6 +65,9 @@ type Row = {
   state: string | null
   estimate: SolarEstimate | null
   confirmed_at: string | null
+  quote_variant: string | null
+  felt: SolarFeltRecord | null
+  ai_brief: SolarAiBriefRecord | null
 }
 
 const TIER_NAME: Record<'good' | 'better' | 'best', string> = {
@@ -83,7 +91,7 @@ export default async function SolarQuotePage({
 
   const { data, error } = await supabase
     .from('solar_estimates')
-    .select('address, state, estimate, confirmed_at')
+    .select('address, state, estimate, confirmed_at, quote_variant, felt, ai_brief')
     .eq('public_token', token)
     .maybeSingle()
 
@@ -91,6 +99,20 @@ export default async function SolarQuotePage({
   const row = data as Row
   const estimate = row.estimate
   if (!estimate) notFound()
+
+  // ── Felt variant (spec 2026-06-13 §4.7): the interactive roof map +
+  // AI brief sections render only on quote_variant='felt' rows. A
+  // failed/missing map degrades to the instant layout (§4.9). The lazy
+  // repair pass styles layers that finished processing after the
+  // provisioning poll budget — cheap status polls, no re-uploads.
+  const isFeltVariant = row.quote_variant === 'felt'
+  let felt = isFeltVariant ? row.felt : null
+  if (felt && (felt.status === 'partial' || felt.status === 'provisioning')) {
+    const repaired = await repairSolarFeltLayers(supabase, { publicToken: token })
+    if (repaired) felt = repaired
+  }
+  const showFeltMap = Boolean(isFeltVariant && felt?.embed_url && felt.status !== 'failed')
+  const aiBrief = isFeltVariant ? row.ai_brief : null
 
   const view = resolveSolarQuoteView({ estimate, confirmedAt: row.confirmed_at })
   const chip = confidenceChip({
@@ -227,6 +249,99 @@ export default async function SolarQuotePage({
             </div>
           )}
         </div>
+
+        {/* ── Felt interactive roof map (Felt tab spec 2026-06-13 §4.7).
+            Live satellite map with the panel layout, sun-exposure heat
+            map, roof-plane sun scores and elevation — toggled via Felt's
+            own legend inside the embed. Unlisted view_only map, tokenless
+            embed (Phase 0 verified). No dollars → renders pre-confirm. */}
+        {showFeltMap && felt && (
+          <div className={`mt-10 ${reveal(270)}`}>
+            <SectionHeading label="Explore your roof — interactive map" />
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-text-sec">
+              Pan and zoom the real satellite view of your roof. Use the map
+              legend to flip between the proposed panel layout, the
+              sun-exposure heat map, and the roof elevation. Tap any panel
+              for its yearly output.
+            </p>
+            <div className="mt-5 overflow-hidden border border-ink-line bg-ink-card">
+              <iframe
+                src={felt.embed_url!}
+                title={`Interactive roof map for ${row.address ?? 'the property'}`}
+                className="h-112 w-full sm:h-128"
+                loading="lazy"
+                referrerPolicy="no-referrer"
+                sandbox="allow-scripts allow-same-origin allow-popups"
+                allow="fullscreen"
+              />
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ink-line px-5 py-3">
+                <span className="font-mono text-xs uppercase tracking-[0.16em] text-text-dim">
+                  {felt.status === 'ready'
+                    ? 'Panels · Sun exposure · Elevation — toggle in the map legend'
+                    : 'Map layers are still building — refresh in a minute for the full set'}
+                </span>
+                <span className="font-mono text-[0.64rem] uppercase tracking-[0.14em] text-text-dim">
+                  Maps by Felt
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── AI roof-intelligence brief (§4.6) — Anthropic prose grounded
+            on the measured roof facts; a fabricated number would have
+            discarded the whole brief server-side. Clearly labelled. */}
+        {aiBrief && (
+          <div className={`mt-10 ${reveal(285)}`}>
+            <SectionHeading label="Roof intelligence" />
+            <div className="mt-5 border border-ink-line border-l-4 border-l-accent bg-ink-card p-6 sm:p-7">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="border border-ink-line bg-ink-deep px-3 py-1 font-mono text-[0.64rem] font-semibold uppercase tracking-[0.14em] text-accent">
+                  AI-generated summary
+                </span>
+                <span className="font-mono text-[0.64rem] uppercase tracking-[0.14em] text-text-dim">
+                  Figures from your roof analysis
+                </span>
+              </div>
+              <h3 className="mt-4 text-xl font-extrabold uppercase tracking-tight text-text-pri">
+                {aiBrief.headline}
+              </h3>
+              <p className="mt-3 text-base leading-relaxed text-text-sec">
+                {aiBrief.layout_rationale}
+              </p>
+              <div className="mt-5 grid gap-px bg-ink-line sm:grid-cols-2">
+                <div className="bg-ink-deep px-5 py-4">
+                  <div className="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+                    Best roof face
+                  </div>
+                  <p className="mt-2 text-sm leading-relaxed text-text-sec">
+                    {aiBrief.best_plane_note}
+                  </p>
+                </div>
+                <div className="bg-ink-deep px-5 py-4">
+                  <div className="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+                    Across the seasons
+                  </div>
+                  <p className="mt-2 text-sm leading-relaxed text-text-sec">
+                    {aiBrief.seasonal_note}
+                  </p>
+                </div>
+              </div>
+              {aiBrief.caveats.length > 0 && (
+                <ul className="mt-4 space-y-1.5">
+                  {aiBrief.caveats.map((c, i) => (
+                    <li key={i} className="flex items-start gap-2 text-xs leading-relaxed text-text-dim">
+                      <span className="mt-0.5 font-mono font-bold text-accent" aria-hidden>
+                        ·
+                      </span>
+                      {c}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* §4.4-2 — Proposed panel layout (deterministic, pre-confirm OK).
             The SVG projects the SAME Solar API panel geometry against the

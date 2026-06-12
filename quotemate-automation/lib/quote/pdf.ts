@@ -108,6 +108,10 @@ type SolarPdfRow = {
   estimate: SolarEstimate | null
   routing: string | null
   pdf_path: string | null
+  /** Felt tab (spec 2026-06-13): variant + map record + grounded brief. */
+  quote_variant?: string | null
+  felt?: { thumbnail_url?: string | null; map_url?: string | null; status?: string | null } | null
+  ai_brief?: import('@/lib/solar/ai-brief').SolarAiBriefRecord | null
 }
 
 type IntakePdfRow = {
@@ -245,7 +249,7 @@ export async function ensureSolarQuotePdf(
     if (!gotenbergConfigured()) return null
     const { data: row } = await supabase()
       .from('solar_estimates')
-      .select('public_token, tenant_id, address, estimate, routing, pdf_path')
+      .select('public_token, tenant_id, address, estimate, routing, pdf_path, quote_variant, felt, ai_brief')
       .eq('public_token', publicToken)
       .maybeSingle<SolarPdfRow>()
     if (!row) return null
@@ -278,6 +282,17 @@ export async function ensureSolarQuotePdf(
       fluxImageUrl: estimate.context.sun?.flux_image_path
         ? `${APP_URL}/api/solar/q/${publicToken}/flux-heatmap`
         : null,
+      // Felt variant (spec 2026-06-13 §4.7-8): the PDF carries the map
+      // thumbnail + live link (an iframe can't print) and the grounded
+      // AI brief. Instant rows pass null and render identically to today.
+      feltMap:
+        row.quote_variant === 'felt' && row.felt?.thumbnail_url
+          ? {
+              thumbnailUrl: row.felt.thumbnail_url ?? null,
+              mapUrl: row.felt.map_url ?? null,
+            }
+          : null,
+      aiBrief: row.quote_variant === 'felt' ? (row.ai_brief ?? null) : null,
     })
     const pdf = await renderPdfFromHtml(html)
     const path = await storePdf(`solar/${publicToken}.pdf`, pdf)

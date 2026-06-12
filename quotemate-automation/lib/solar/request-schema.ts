@@ -47,6 +47,10 @@ export const SolarEstimateRequestSchema = z.object({
       quarterly_bill_aud: z.number().positive().max(10_000).optional(),
     })
     .optional(),
+  // Quote variant (Felt tab spec 2026-06-13) — 'felt' rows run the
+  // IDENTICAL engine but render the Felt interactive-map layout and get
+  // a Felt map provisioned in after(). Defaults to 'instant'.
+  variant: z.enum(['instant', 'felt']).optional(),
 })
 
 export type SolarEstimateRequestBody = z.infer<typeof SolarEstimateRequestSchema>

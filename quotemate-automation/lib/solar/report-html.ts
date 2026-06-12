@@ -11,6 +11,7 @@
 
 import type { SolarEstimate, SolarPriceTier } from './types'
 import type { SolarPremiumQuote } from './premium-quote'
+import type { SolarAiBriefRecord } from './ai-brief'
 import { buildSolarHardwareCards } from './hardware-cards'
 import {
   SOLAR_PROJECTION_COPY,
@@ -43,6 +44,12 @@ export type SolarReportInput = {
   /** Absolute URL of the cached roof irradiance heatmap (sun & shade
    *  build 2026-06-13). Absent → the figure is omitted from the PDF. */
   fluxImageUrl?: string | null
+  /** Felt map snapshot for felt-variant quotes (spec 2026-06-13 §4.7-8).
+   *  Gotenberg can't print an iframe, so the PDF carries the static
+   *  thumbnail + the live-map link instead. Absent → omitted. */
+  feltMap?: { thumbnailUrl: string | null; mapUrl: string | null } | null
+  /** Grounded AI roof-intelligence brief (§4.6). Absent → omitted. */
+  aiBrief?: SolarAiBriefRecord | null
 }
 
 /** Format a payback band as "4–6 yrs", or a graceful fallback. */
@@ -287,6 +294,46 @@ function premiumSections(input: SolarReportInput): string {
   return parts.join('\n')
 }
 
+/** Felt-variant sections (spec 2026-06-13): map snapshot + AI brief.
+ *  The iframe can't print, so the PDF shows the map thumbnail and the
+ *  live-map URL; the brief renders as labelled, grounded prose. */
+function feltSections(input: SolarReportInput): string {
+  const parts: string[] = []
+
+  if (input.feltMap?.thumbnailUrl) {
+    parts.push(
+      '<h2>Your roof — interactive map</h2>' +
+        `<div class="figure"><img src="${esc(input.feltMap.thumbnailUrl)}" alt="" style="width:100%;display:block;">` +
+        `<div class="fig-caption">Snapshot of your interactive roof map — panel layout, sun-exposure heat map and elevation.` +
+        (input.feltMap.mapUrl
+          ? ` Explore it live: ${esc(input.feltMap.mapUrl)}`
+          : input.quoteViewUrl
+            ? ` Explore it live on your quote page: ${esc(input.quoteViewUrl)}`
+            : '') +
+        '</div></div>',
+    )
+  }
+
+  const b = input.aiBrief
+  if (b) {
+    const caveats =
+      b.caveats.length > 0
+        ? `<ul>${b.caveats.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>`
+        : ''
+    parts.push(
+      '<h2>Roof intelligence — AI-generated summary</h2>' +
+        `<div class="summary"><b>${esc(b.headline)}</b>` +
+        `<p>${esc(b.layout_rationale)}</p>` +
+        `<p><b>Best roof face.</b> ${esc(b.best_plane_note)}</p>` +
+        `<p><b>Across the seasons.</b> ${esc(b.seasonal_note)}</p>` +
+        caveats +
+        `<p class="note">AI-generated summary — every figure comes from your roof analysis.</p></div>`,
+    )
+  }
+
+  return parts.join('\n')
+}
+
 export function buildSolarQuoteReportHtml(input: SolarReportInput): string {
   const e = input.estimate
   const date = (input.generatedAt ?? new Date()).toLocaleDateString('en-AU', {
@@ -379,6 +426,8 @@ export function buildSolarQuoteReportHtml(input: SolarReportInput): string {
     sized to your roof and capped to your network's export limit. Prices are net of the STC rebate
     and include GST.
   </div>
+
+  ${feltSections(input)}
 
   ${premiumSections(input)}
 

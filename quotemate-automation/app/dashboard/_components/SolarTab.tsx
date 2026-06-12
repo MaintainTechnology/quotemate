@@ -2,20 +2,26 @@
 
 // Solar tab — the tradie's command centre for AI solar estimates.
 //
-//  • A shareable customer link (/solar/<tenant-id>) with a copy button —
-//    the entry-form a customer fills to request an estimate.
+//  • Two sub-tabs (Felt tab spec 2026-06-13): "Instant estimate" — the
+//    original path, byte-identical — and "Felt" — the same engine with
+//    an interactive Felt roof map (satellite, panel layout, sun heat
+//    map) provisioned per estimate. Deep-link: ?tab=solar&sub=felt.
+//  • A shareable customer link (/solar/<tenant-id>, +?path=felt on the
+//    Felt sub-tab) with a copy button.
 //  • The list of drafted estimates as cards: status badge, system kW, net
 //    price, customer + address, a "View" link to the public /q/solar/<token>
 //    page, and a "Confirm & release" button for clean, awaiting-confirmation
 //    estimates (POSTs Bearer-auth to /api/solar/confirm/<token>).
 //  • Flagged estimates show a clear "needs review" note and NO confirm
 //    button — the tradie must adjust the numbers + re-draft first.
+//  • Felt cards add the map provisioning chip (ready / building /
+//    unavailable) and an "Open in Felt" editor link.
 //
 // No solar estimate auto-sends; confirm is the forced human-in-loop gate.
 // Maintain design system: dark navy, vibrant orange accent, all-caps mono.
 
 import { useCallback, useEffect, useState } from 'react'
-import { Copy, Check, Sun, ExternalLink, RefreshCw } from 'lucide-react'
+import { Copy, Check, Sun, ExternalLink, RefreshCw, Map as MapIcon } from 'lucide-react'
 import type {
   SolarEstimateStatus,
   SolarEstimateViewModel,
@@ -72,12 +78,62 @@ function fmtDate(iso: string): string {
   })
 }
 
+type SolarSub = 'instant' | 'felt'
+
+/** Felt map provisioning chip copy + tone, by felt.status. */
+const FELT_CHIP: Record<
+  string,
+  { label: string; cls: string }
+> = {
+  ready: { label: 'Map ready', cls: 'border-teal-glow/40 text-teal-glow' },
+  partial: { label: 'Map building…', cls: 'border-amber-400/40 text-amber-300' },
+  provisioning: { label: 'Map building…', cls: 'border-amber-400/40 text-amber-300' },
+  pending: { label: 'Map building…', cls: 'border-amber-400/40 text-amber-300' },
+  failed: { label: 'Map unavailable', cls: 'border-warning/50 text-warning' },
+}
+
+function TabButton({
+  active,
+  onClick,
+  label,
+  sub,
+}: {
+  active: boolean
+  onClick: () => void
+  label: string
+  sub: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex-1 px-6 py-4 text-left transition-colors ${active ? 'bg-ink-card' : 'bg-ink-deep hover:bg-ink-card/60'}`}
+    >
+      <div
+        className={`font-mono text-sm font-semibold uppercase tracking-[0.14em] ${active ? 'text-accent' : 'text-text-sec'}`}
+      >
+        {label}
+      </div>
+      <div className="mt-1 text-xs text-text-dim">{sub}</div>
+    </button>
+  )
+}
+
 export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
   const [estimates, setEstimates] = useState<SolarEstimateViewModel[] | null>(null)
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  // Sub-tab (Felt tab spec 2026-06-13). Deep-link ?tab=solar&sub=felt.
+  const [sub, setSub] = useState<SolarSub>(() => {
+    if (typeof window === 'undefined') return 'instant'
+    return new URLSearchParams(window.location.search).get('sub') === 'felt'
+      ? 'felt'
+      : 'instant'
+  })
+  // Whether the Felt path is live server-side (FELT_TAB_ENABLED + key).
+  const [feltEnabled, setFeltEnabled] = useState<boolean | null>(null)
   // Per-token confirm state so each card's button works independently.
   const [confirming, setConfirming] = useState<Record<string, boolean>>({})
   const [confirmError, setConfirmError] = useState<Record<string, string>>({})
@@ -103,11 +159,13 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
         ok?: boolean
         estimates?: SolarEstimateViewModel[]
         shareUrl?: string
+        feltEnabled?: boolean
         error?: string
       }
       if (!res.ok || !json.ok) throw new Error(json.error || `HTTP ${res.status}`)
       setEstimates(json.estimates ?? [])
       if (json.shareUrl) setShareUrl(json.shareUrl)
+      setFeltEnabled(json.feltEnabled ?? false)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -128,10 +186,12 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
 
   // The link the tradie shares with customers. Prefer the server-built
   // shareUrl (uses APP_URL); fall back to appUrl prop, then the browser
-  // origin, all pointing at /solar/<tenant-id>.
-  const resolvedShareUrl =
+  // origin, all pointing at /solar/<tenant-id>. The Felt sub-tab shares
+  // the same entry form with ?path=felt (identical form, Felt layout).
+  const baseShareUrl =
     shareUrl ??
     `${(appUrl ?? (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/+$/, '')}/solar/${tenantId}`
+  const resolvedShareUrl = sub === 'felt' ? `${baseShareUrl}?path=felt` : baseShareUrl
 
   const copyLink = useCallback(async () => {
     try {
@@ -142,6 +202,12 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
       /* clipboard blocked — link is still visible to copy manually */
     }
   }, [resolvedShareUrl])
+
+  // Cards for the active sub-tab only. Rows predating migration 111 map
+  // to 'instant' (dashboard-view defaults the variant).
+  const visibleEstimates = (estimates ?? []).filter((e) =>
+    sub === 'felt' ? e.quoteVariant === 'felt' : e.quoteVariant !== 'felt',
+  )
 
   const confirmEstimate = useCallback(
     async (token: string) => {
@@ -251,15 +317,52 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
         </p>
       </div>
 
+      {/* ── Sub-tabs: Instant estimate | Felt (spec 2026-06-13) ──── */}
+      <div className="flex flex-wrap gap-px border border-ink-line bg-ink-line">
+        <TabButton
+          active={sub === 'instant'}
+          onClick={() => setSub('instant')}
+          label="Instant estimate"
+          sub="Address → engine → tiered quote"
+        />
+        <TabButton
+          active={sub === 'felt'}
+          onClick={() => setSub('felt')}
+          label="Felt"
+          sub="Same engine · interactive roof map"
+        />
+      </div>
+
+      {/* Felt setup notice — the sub-tab stays browsable when disabled. */}
+      {sub === 'felt' && feltEnabled === false && (
+        <div className="border border-ink-line border-l-4 border-l-warning bg-ink-card px-6 py-5">
+          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-warning">
+            Felt not configured
+          </div>
+          <p className="mt-1 text-sm leading-relaxed text-text-sec">
+            Set <code className="font-mono text-text-pri">FELT_TAB_ENABLED=true</code> and{' '}
+            <code className="font-mono text-text-pri">FELT_API_KEY</code> server-side to
+            activate the interactive-map quote path. Customer submissions fall
+            back to the instant layout until then.
+          </p>
+        </div>
+      )}
+
       <>
           {/* Shareable customer entry link + copy button */}
       <div className="border border-ink-line bg-ink-card p-7 sm:p-9">
         <div className="flex items-center gap-3 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
-          <Sun className="h-4 w-4" aria-hidden="true" />
+          {sub === 'felt' ? (
+            <MapIcon className="h-4 w-4" aria-hidden="true" />
+          ) : (
+            <Sun className="h-4 w-4" aria-hidden="true" />
+          )}
           Your customer link
         </div>
         <p className="mt-3 text-base leading-relaxed text-text-sec">
-          Send this to a customer so they can request a solar estimate.
+          {sub === 'felt'
+            ? 'Send this to a customer for a Felt-map solar estimate — same form, and their quote page carries a live satellite map with the panel layout and sun-exposure heat map.'
+            : 'Send this to a customer so they can request a solar estimate.'}
         </p>
         <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
           <code className="flex-1 break-all border border-ink-line bg-ink-deep px-4 py-3 font-mono text-sm text-text-pri">
@@ -284,14 +387,15 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
       </div>
 
       {/* Pylon supplements — standard-hardware SKUs (renders only when
-          the Pylon integration is enabled server-side). */}
-      <PylonHardwareCard accessToken={accessToken} />
+          the Pylon integration is enabled server-side). Instant path only. */}
+      {sub === 'instant' && <PylonHardwareCard accessToken={accessToken} />}
 
       {/* Estimate list */}
       <div className="border border-ink-line bg-ink-card p-7 sm:p-9">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
-            Solar estimates{estimates ? ` · ${estimates.length}` : ''}
+            {sub === 'felt' ? 'Felt estimates' : 'Solar estimates'}
+            {estimates ? ` · ${visibleEstimates.length}` : ''}
           </div>
           <button
             type="button"
@@ -310,17 +414,17 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
             Couldn&apos;t load estimates: {error}
           </p>
         )}
-        {!loading && !error && estimates && estimates.length === 0 && (
+        {!loading && !error && estimates && visibleEstimates.length === 0 && (
           <p className="mt-4 text-base text-text-dim">
-            No solar estimates yet. Share your customer link above — every
-            estimate a customer requests will show up here for you to review
-            and release.
+            {sub === 'felt'
+              ? 'No Felt estimates yet. Share the Felt customer link above — every map-backed estimate a customer requests will show up here for you to review and release.'
+              : 'No solar estimates yet. Share your customer link above — every estimate a customer requests will show up here for you to review and release.'}
           </p>
         )}
 
-        {!loading && !error && estimates && estimates.length > 0 && (
+        {!loading && !error && estimates && visibleEstimates.length > 0 && (
           <ul className="mt-5 space-y-4">
-            {estimates.map((e) => {
+            {visibleEstimates.map((e) => {
               const meta = STATUS_META[e.status]
               const busy = !!confirming[e.token]
               const cErr = confirmError[e.token]
@@ -344,6 +448,15 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                       </div>
                     </div>
                     <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                      {/* Felt map provisioning state (Felt tab spec
+                          2026-06-13) — felt-variant rows only. */}
+                      {e.quoteVariant === 'felt' && e.feltStatus && FELT_CHIP[e.feltStatus] && (
+                        <span
+                          className={`border ${FELT_CHIP[e.feltStatus].cls} px-3 py-1 font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em]`}
+                        >
+                          {FELT_CHIP[e.feltStatus].label}
+                        </span>
+                      )}
                       {/* Live Pylon pipeline stage of the pushed lead
                           (supplements build 2026-06-13). */}
                       {e.pylonStage &&
@@ -453,6 +566,19 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                       <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
                       View
                     </a>
+                    {/* Tradie-facing Felt editor link — annotate the map in
+                        Felt; the customer embed updates automatically. */}
+                    {e.quoteVariant === 'felt' && e.feltMapUrl && (
+                      <a
+                        href={e.feltMapUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 border border-ink-line px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-teal-glow hover:text-teal-glow"
+                      >
+                        <MapIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                        Open in Felt
+                      </a>
+                    )}
                     {e.canConfirm && (
                       <button
                         type="button"

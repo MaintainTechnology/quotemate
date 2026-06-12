@@ -46,7 +46,15 @@ const inputClass =
 const labelClass =
   'font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-text-dim'
 
-export function SolarAddressForm({ tenantSlug }: { tenantSlug: string }) {
+export function SolarAddressForm({
+  tenantSlug,
+  variant = 'instant',
+}: {
+  tenantSlug: string
+  /** Quote layout variant (Felt tab spec 2026-06-13). The form UX is
+   *  byte-identical either way — the variant only rides the POST body. */
+  variant?: 'instant' | 'felt'
+}) {
   const [address, setAddress] = useState('')
   const [postcode, setPostcode] = useState('')
   const [stateCode, setStateCode] = useState<string>('NSW')
@@ -188,6 +196,7 @@ export function SolarAddressForm({ tenantSlug }: { tenantSlug: string }) {
         address, postcode, state: stateCode, manualOpen,
         orientation, roofSize, storeys, panelType,
         customerName, customerMobile, quarterlyBill,
+        variant,
       })
       const res = await fetch(`/api/solar/${tenantSlug}/estimate`, {
         method: 'POST',

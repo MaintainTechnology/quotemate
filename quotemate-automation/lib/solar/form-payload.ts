@@ -18,6 +18,8 @@ export function buildSolarFormPayload(state: {
   customerMobile?: string
   /** Raw quarterly-bill text from the optional form field (e.g. "850"). */
   quarterlyBill?: string
+  /** Quote layout variant (Felt tab spec 2026-06-13). Omitted = instant. */
+  variant?: 'instant' | 'felt'
 }): SolarEstimateRequestBody {
   const payload: SolarEstimateRequestBody = {
     address: {
@@ -55,6 +57,11 @@ export function buildSolarFormPayload(state: {
     if (Number.isFinite(bill) && bill > 0 && bill <= 10_000) {
       payload.energy = { quarterly_bill_aud: bill }
     }
+  }
+  // The Felt variant rides the SAME engine; only the quote layout + map
+  // provisioning differ. 'instant' is the schema default, so omit it.
+  if (state.variant === 'felt') {
+    payload.variant = 'felt'
   }
   return payload
 }

@@ -29,6 +29,9 @@ import { geocodeAddress } from '@/lib/solar/geocode'
 import { validateSolarAddress } from '@/lib/solar/address-validation'
 import { fetchSolarDataLayers } from '@/lib/solar/data-layers'
 import { applySolarSunAssets } from '@/lib/solar/sun-assets'
+import { applySolarFeltMap } from '@/lib/solar/felt-provision'
+import { applySolarAiBrief } from '@/lib/solar/ai-brief'
+import { feltTabEnabled } from '@/lib/felt/client'
 import { resolveNetworkFromPostcode } from '@/lib/solar/network-lookup'
 
 export const dynamic = 'force-dynamic'
@@ -70,6 +73,12 @@ export async function POST(
     )
   }
   const { address, manual, panel_type, customer, energy } = parsed.data
+  // Felt tab spec 2026-06-13: a 'felt' submission runs the IDENTICAL
+  // engine; the variant only selects the quote layout + map provisioning.
+  // When the tab is disabled server-side, fall back to the instant
+  // variant (degradation matrix §4.9).
+  const quoteVariant: 'instant' | 'felt' =
+    parsed.data.variant === 'felt' && feltTabEnabled(process.env) ? 'felt' : 'instant'
 
   // ── Run the deterministic engine. ────────────────────────────────
   const config = await loadSolarConfig(supabase)
@@ -134,6 +143,7 @@ export async function POST(
     customer: customer
       ? { name: customer.name, phone: customer.mobile }
       : undefined,
+    quoteVariant,
   })
 
   const { data: intakeRow, error: intakeErr } = await supabase
@@ -202,6 +212,23 @@ export async function POST(
   if (estimate.coverage_source === 'google' && estimate.context.location) {
     const location = estimate.context.location
     after(() => applySolarSunAssets(supabase, { publicToken: estimate.token, location }))
+  }
+
+  // ── Felt map provisioning (Felt tab spec 2026-06-13 §4.5): create the
+  // per-estimate interactive map (satellite basemap, unlisted view_only),
+  // upload the panel/plane GeoJSON + flux/DSM GeoTIFF layers, style with
+  // FSL, and persist the provisioning record on the row's felt jsonb.
+  // Felt-variant rows only; best-effort in after() — a Felt outage leaves
+  // the estimate fully valid (the page falls back to the instant layout).
+  if (quoteVariant === 'felt') {
+    const feltLocation = estimate.context.location ?? null
+    after(() =>
+      applySolarFeltMap(supabase, { publicToken: estimate.token, location: feltLocation }),
+    )
+    // AI roof-intelligence brief (§4.6): Anthropic prose grounded on the
+    // frozen roof facts — never prices. A grounding violation discards
+    // the brief; the page falls back to the sun-score copy. Best-effort.
+    after(() => applySolarAiBrief(supabase, { publicToken: estimate.token }))
   }
 
   after(async () => {

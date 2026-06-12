@@ -8,6 +8,7 @@
 
 import { notFound } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
+import { feltTabEnabled } from '@/lib/felt/client'
 import { SolarAddressForm } from './_components/SolarAddressForm'
 
 export const dynamic = 'force-dynamic'
@@ -30,11 +31,20 @@ const TRUST_POINTS = [
 
 export default async function SolarEntryPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ tenantSlug: string }>
+  searchParams: Promise<{ path?: string }>
 }) {
   const { tenantSlug } = await params
   if (!tenantSlug || !looksLikeTenantId(tenantSlug)) notFound()
+
+  // ?path=felt → the Felt interactive-map quote (spec 2026-06-13). The
+  // form UX is identical; only the POST body's variant differs. Falls
+  // back to instant when the tab is disabled server-side.
+  const { path } = await searchParams
+  const variant: 'instant' | 'felt' =
+    path === 'felt' && feltTabEnabled(process.env) ? 'felt' : 'instant'
 
   const { data: tenant } = await supabase
     .from('tenants')
@@ -70,10 +80,19 @@ export default async function SolarEntryPage({
           <h1 className="mt-4 text-4xl font-extrabold uppercase leading-[0.98] tracking-[-0.035em] sm:text-5xl lg:text-6xl">
             Instant <span className="text-accent">solar</span> estimate
           </h1>
+          {variant === 'felt' && (
+            <span className="mt-4 inline-flex items-center bg-accent px-3 py-1 font-mono text-[0.7rem] font-bold uppercase tracking-[0.12em] text-white">
+              Interactive roof map
+            </span>
+          )}
           <p className="mt-5 max-w-md text-base leading-relaxed text-text-sec">
             Enter your address and see an honest, roof-specific estimate —
             system size, annual production, and your net price after the STC
-            rebate. Indicative until {business} confirms it.
+            rebate.{' '}
+            {variant === 'felt'
+              ? 'Your quote includes a live satellite map of your roof with the panel layout and sun-exposure heat map.'
+              : ''}{' '}
+            Indicative until {business} confirms it.
           </p>
         </div>
 
@@ -89,7 +108,7 @@ export default async function SolarEntryPage({
                 ~30 sec
               </span>
             </div>
-            <SolarAddressForm tenantSlug={tenant.id as string} />
+            <SolarAddressForm tenantSlug={tenant.id as string} variant={variant} />
           </div>
 
           <p className="mt-6 text-xs leading-relaxed text-text-dim">

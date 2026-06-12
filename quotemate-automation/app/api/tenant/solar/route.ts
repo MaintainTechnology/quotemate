@@ -17,6 +17,7 @@ import {
   mapSolarEstimateRow,
   type SolarEstimateRawRow,
 } from '@/lib/solar/dashboard-view'
+import { feltTabEnabled } from '@/lib/felt/client'
 import { resolvePylonStages } from '@/lib/solar/pylon-stage'
 
 export const dynamic = 'force-dynamic'
@@ -70,7 +71,7 @@ export async function GET(req: Request) {
     .from('solar_estimates')
     .select(
       'public_token, address, state, postcode, intake_id, confirmed_at, ' +
-        'guardrail_flags, routing, created_at, price, sizing, ' +
+        'guardrail_flags, routing, created_at, price, sizing, quote_variant, felt, ' +
         'pylon_opportunity:estimate->context->pylon_opportunity, ' +
         'opensolar_project:estimate->context->opensolar->project',
     )
@@ -84,7 +85,12 @@ export async function GET(req: Request) {
   const rows = (estRes.data ?? []) as unknown as SolarEstimateRawRow[]
 
   if (rows.length === 0) {
-    return Response.json({ ok: true, estimates: [], shareUrl: `${appUrl.replace(/\/+$/, '')}/solar/${tenant.id}` })
+    return Response.json({
+      ok: true,
+      estimates: [],
+      shareUrl: `${appUrl.replace(/\/+$/, '')}/solar/${tenant.id}`,
+      feltEnabled: feltTabEnabled(process.env),
+    })
   }
 
   // Two-hop join → intakes for the customer name (intakes.caller JSONB),
@@ -141,5 +147,7 @@ export async function GET(req: Request) {
     estimates,
     // The customer-facing entry-form link the tradie shares.
     shareUrl: `${appUrl.replace(/\/+$/, '')}/solar/${tenant.id}`,
+    // Whether the Felt sub-tab is live server-side (key + flag present).
+    feltEnabled: feltTabEnabled(process.env),
   })
 }

@@ -26,6 +26,8 @@ export function buildSolarRowPayloads(args: {
   tenantId: string
   address: SolarAddressPayload
   customer?: SolarCustomer
+  /** Quote layout variant (Felt tab spec 2026-06-13). Default 'instant'. */
+  quoteVariant?: 'instant' | 'felt'
 }) {
   const { estimate, tenantId, address, customer } = args
   const inspection = estimate.routing.decision === 'inspection_required'
@@ -89,6 +91,7 @@ export function buildSolarRowPayloads(args: {
     config_version: estimate.config_version,
     routing: estimate.routing.decision,
     guardrail_flags: estimate.guardrail_flags,
+    quote_variant: args.quoteVariant ?? 'instant',
     // Full estimate persisted as jsonb so the /q/solar/[token] page
     // re-renders without recomputation.
     estimate: estimate,
