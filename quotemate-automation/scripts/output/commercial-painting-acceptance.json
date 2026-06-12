@@ -1,0 +1,2691 @@
+{
+  "ranAt": "2026-06-12T05:17:18.336Z",
+  "checks": [
+    {
+      "name": "plan set classified",
+      "pass": true,
+      "detail": "AS73 IGA Swan Street [CP1]_2026-05-16.pdf → plan_set"
+    },
+    {
+      "name": "measurements classified",
+      "pass": true,
+      "detail": "IGA Swan Street painting areas measurments.pdf → measurement_takeoff"
+    },
+    {
+      "name": "services layout classified",
+      "pass": true,
+      "detail": "ESS26073_M200_P1_DUCTWORK LAYOUT.pdf → services_layout"
+    },
+    {
+      "name": "photo falls back safely",
+      "pass": true,
+      "detail": "IGA 2.pdf → other (vision corrects to site_photo in-app)"
+    },
+    {
+      "name": "plan takeoff produced lines",
+      "pass": true,
+      "detail": "19 surface lines from the plan set"
+    },
+    {
+      "name": "finishes schedule read",
+      "pass": true,
+      "detail": "6 schedule entries"
+    },
+    {
+      "name": "measurements doc transcribed (~34 lines)",
+      "pass": true,
+      "detail": "37 lines vs the painter's 34"
+    },
+    {
+      "name": "measured area ≈ 1,100 m²",
+      "pass": true,
+      "detail": "1076 m² transcribed total"
+    },
+    {
+      "name": "retail ceiling ≈ 420 m² present",
+      "pass": true,
+      "detail": "Retail concrete ceiling covered with (thermal panels) area = 420 m²"
+    },
+    {
+      "name": "reconciliation matched lines across sources",
+      "pass": true,
+      "detail": "8 lines matched plan↔measurements"
+    },
+    {
+      "name": "nothing dropped",
+      "pass": true,
+      "detail": "48 merged lines ≥ max(19 plan, 37 measured)"
+    },
+    {
+      "name": "kitchen/bathroom lines carry semi_gloss",
+      "pass": true,
+      "detail": "found"
+    },
+    {
+      "name": "non-zero labour hours and days",
+      "pass": true,
+      "detail": "215.9h, 10 days"
+    },
+    {
+      "name": "per-product litres computed",
+      "pass": true,
+      "detail": "5 products"
+    },
+    {
+      "name": "lift-hire equipment line triggered (5.2 m surfaces)",
+      "pass": true,
+      "detail": "Scissor lift hire (19 ft electric): 3 days — 3 surfaces above 3.4 m (58.0h of access work)"
+    },
+    {
+      "name": "tender total is sane",
+      "pass": true,
+      "detail": "$21,262.33 inc GST"
+    },
+    {
+      "name": "unpriced lines disciplined",
+      "pass": true,
+      "detail": "0 unmatched (returned unpriced, never guessed)"
+    }
+  ],
+  "classification": {
+    "plan": "plan_set",
+    "measurements": "measurement_takeoff",
+    "services": "services_layout",
+    "photo": "other"
+  },
+  "planTakeoff": {
+    "model": "claude-opus-4-8",
+    "runtimeSeconds": 63.07,
+    "lines": [
+      {
+        "surface": "Retail sales area walls (general perimeter, PM)",
+        "room": "Retail",
+        "substrate": "plasterboard",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 230,
+        "coats": 2,
+        "height_m": 4.8,
+        "confidence": "low",
+        "source": "plan",
+        "note": "A105 main sales area wall finishes note (PM, no finish to exposed concrete columns; refer elevations). Wall area inferred from A106 perimeter dimensions × U/S beam 4.810 (A200/A201). Much of perimeter is shopfront glazing/PBD intertenancy — net painted wall length estimated. Quantity is indicative."
+      },
+      {
+        "surface": "Retail exposed concrete ceiling (open ceiling, sprayed matt)",
+        "room": "Retail",
+        "substrate": "concrete",
+        "system": "spray_matt",
+        "unit": "m2",
+        "quantity": 419.5,
+        "coats": 2,
+        "height_m": 5.1,
+        "confidence": "medium",
+        "source": "plan",
+        "note": "A105 RCP: 'OPEN CEILING — paint underside of existing concrete slab as specified, extent to match floor finish'. Retail floor area 419.5 m² (A106). U/S slab 5.110 (A200/A201). Dense ductwork over retail (M200 ductwork layout) — allow masking/cutting-in around supply/return duct, FSL track and pendant runs; spray access at ~5m."
+      },
+      {
+        "surface": "Deli/Cafe/Sushi area suspended plasterboard ceiling & bulkhead (CP1)",
+        "room": "Retail (Deli/Cafe/Sushi)",
+        "substrate": "plasterboard",
+        "system": "flat",
+        "unit": "m2",
+        "quantity": 40,
+        "coats": 2,
+        "height_m": 3.4,
+        "confidence": "low",
+        "source": "plan",
+        "note": "A105 RCP suspended PBD ceilings over food displays/deli + feature bulkhead; A040 CP1 (Black satin) for Deli ceiling & bulkhead. Ceiling height 3.350 (A200/A500). Area inferred from deli/sushi/cafe display footprint — indicative only."
+      },
+      {
+        "surface": "Office walls (P1)",
+        "room": "Office",
+        "substrate": "plasterboard",
+        "system": "semi_gloss",
+        "unit": "m2",
+        "quantity": 42,
+        "coats": 2,
+        "height_m": 2.7,
+        "confidence": "medium",
+        "source": "plan",
+        "note": "A105 'OFFICE WALL FINISHES: ALL WALLS FINISHED IN P1, no finish to exposed concrete columns'. Office 16.8 m² (A106); suspended PBD ceiling 2.700 (A105 RCP). Wall area = perimeter ~15.5 m × 2.7 (assumed perimeter from 16.8 m² room)."
+      },
+      {
+        "surface": "Office suspended plasterboard ceiling (CP2)",
+        "room": "Office",
+        "substrate": "plasterboard",
+        "system": "flat",
+        "unit": "m2",
+        "quantity": 16.8,
+        "coats": 2,
+        "height_m": 2.7,
+        "confidence": "medium",
+        "source": "plan",
+        "note": "A105 RCP 'SUSPENDED PLASTERBOARD CEILING OVER OFFICE' @ 2.700; BOH ceilings finished CP2 (A040). Floor area 16.8 m² (A106)."
+      },
+      {
+        "surface": "Back of House / Storage walls (P1)",
+        "room": "BOH",
+        "substrate": "plasterboard",
+        "system": "semi_gloss",
+        "unit": "m2",
+        "quantity": 95,
+        "coats": 2,
+        "height_m": 2.7,
+        "confidence": "medium",
+        "source": "plan",
+        "note": "A105 'BACK OF HOUSE WALL FINISHES: ALL WALLS FINISHED IN P1, no finish to exposed concrete columns'. BOH/storage 54.6 m² (A106). Wall perimeter ~35 m × 2.7 assumed ceiling height. Cool room/freezer panels excluded (by refrigeration contractor)."
+      },
+      {
+        "surface": "Back of House suspended plasterboard ceiling (CP2)",
+        "room": "BOH",
+        "substrate": "plasterboard",
+        "system": "flat",
+        "unit": "m2",
+        "quantity": 54.6,
+        "coats": 2,
+        "height_m": 2.7,
+        "confidence": "medium",
+        "source": "plan",
+        "note": "A105 RCP suspended PBD ceiling over BOH/amenities; CP2 BOH ceilings (A040). Floor area 54.6 m² (A106). Note: portions are exposed concrete over BOH per A105 — confirm extent on site."
+      },
+      {
+        "surface": "Staff Room walls (P1)",
+        "room": "Staff Room",
+        "substrate": "plasterboard",
+        "system": "semi_gloss",
+        "unit": "m2",
+        "quantity": 29,
+        "coats": 2,
+        "height_m": 2.7,
+        "confidence": "medium",
+        "source": "plan",
+        "note": "A105 'STAFF ROOM WALL FINISHES: ALL WALLS FINISHED IN P1'. Staff Room 7.1 m² (A106); wall perimeter ~10.7 m × 2.7 assumed. BOH ceiling height 2.700."
+      },
+      {
+        "surface": "Staff Room suspended plasterboard ceiling (CP2)",
+        "room": "Staff Room",
+        "substrate": "plasterboard",
+        "system": "flat",
+        "unit": "m2",
+        "quantity": 7.1,
+        "coats": 2,
+        "height_m": 2.7,
+        "confidence": "medium",
+        "source": "plan",
+        "note": "A105 RCP suspended PBD ceiling over kitchen & amenities; CP2 BOH ceiling (A040). Floor area 7.1 m² (A106)."
+      },
+      {
+        "surface": "Commercial Kitchen walls — paint portions only (P1 where not tiled)",
+        "room": "Kitchen",
+        "substrate": "plasterboard",
+        "system": "semi_gloss",
+        "unit": "m2",
+        "quantity": 30,
+        "coats": 2,
+        "height_m": 2.7,
+        "confidence": "low",
+        "source": "plan",
+        "note": "A105 'KITCHEN WALL FINISHES: ALL WALLS FINISHED IN TL1' (tile) — however A501 kitchen elevations show PM/P1 paint to upper/non-tiled wall portions above tiling. Tiled areas (TL1) excluded. Painted area = upper walls above tile line; indicative. Kitchen 41.5 m² (A106), ceiling 3.650 F.C.L per A500/A501 sections."
+      },
+      {
+        "surface": "Commercial Kitchen suspended plasterboard ceiling (CP2)",
+        "room": "Kitchen",
+        "substrate": "plasterboard",
+        "system": "flat",
+        "unit": "m2",
+        "quantity": 41.5,
+        "coats": 2,
+        "height_m": 3.7,
+        "confidence": "medium",
+        "source": "plan",
+        "note": "A500/A501 sections: suspended PBD ceiling, finish as specified @ 3.650 F.C.L.; CP2 BOH ceilings (A040). Floor area 41.5 m² (A106). Exhaust canopy penetrations — allow cutting-in."
+      },
+      {
+        "surface": "Staff Toilet walls — paint portions only (above tiling)",
+        "room": "WC / Staff Toilet",
+        "substrate": "plasterboard",
+        "system": "semi_gloss",
+        "unit": "m2",
+        "quantity": 8,
+        "coats": 2,
+        "height_m": 2.7,
+        "confidence": "low",
+        "source": "plan",
+        "note": "A500 staff toilet elevations show TL1 tile to wet walls; remaining wall area painted (CP2/semi-gloss). Tiled areas excluded. Staff T. 3.4 m² (A106); ceiling 2.700 F.C.L (A500)."
+      },
+      {
+        "surface": "Staff Toilet ceiling (CP2)",
+        "room": "WC / Staff Toilet",
+        "substrate": "plasterboard",
+        "system": "semi_gloss",
+        "unit": "m2",
+        "quantity": 3.4,
+        "coats": 2,
+        "height_m": 2.7,
+        "confidence": "high",
+        "source": "plan",
+        "note": "A040 CP2 'toilet ceilings' Vivid White semi gloss; A500 suspended PBD ceiling @ 2.700. Floor area 3.4 m² (A106)."
+      },
+      {
+        "surface": "Walls behind refrigeration units (P1)",
+        "room": "Retail",
+        "substrate": "plasterboard",
+        "system": "semi_gloss",
+        "unit": "m2",
+        "quantity": 45,
+        "coats": 2,
+        "height_m": 2.7,
+        "confidence": "low",
+        "source": "plan",
+        "note": "A105 'WALLS AT BACK OF REFRIGERATION UNITS — PAINT WALL FINISH: P1'. Length estimated from refrigeration run (cases 01–12, A106/A101 ~ 30 m) × ~1.5 m visible above units painted. Indicative."
+      },
+      {
+        "surface": "Rear delivery door D.01 (P1, both faces + edges) — Remax thermal traffic door",
+        "room": "BOH",
+        "substrate": "metal/thermal panel",
+        "system": "semi_gloss",
+        "unit": "item",
+        "quantity": 1,
+        "coats": 2,
+        "confidence": "medium",
+        "source": "plan",
+        "note": "A103 door schedule D.01 rear delivery door, finish P1. Note: proprietary Remax 4500 thermal door — confirm whether paint applies or factory finish; included as painted per schedule."
+      },
+      {
+        "surface": "Office door D.02 (P1, paint all edges/faces)",
+        "room": "Office",
+        "substrate": "timber (solid core SC1)",
+        "system": "semi_gloss",
+        "unit": "item",
+        "quantity": 1,
+        "coats": 2,
+        "confidence": "high",
+        "source": "plan",
+        "note": "A103 door schedule D.02, SC1 solid core, finish P1, paint top/bottom & all edges prior to install. SS frame linished (not painted)."
+      },
+      {
+        "surface": "Staff Room door D.03 (P1, paint all edges/faces)",
+        "room": "Staff Room",
+        "substrate": "timber (solid core SC1)",
+        "system": "semi_gloss",
+        "unit": "item",
+        "quantity": 1,
+        "coats": 2,
+        "confidence": "high",
+        "source": "plan",
+        "note": "A103 door schedule D.03, SC1, finish P1, paint all edges. SS frame linished (excluded)."
+      },
+      {
+        "surface": "Staff Toilet door D.04 (P1, paint all edges/faces)",
+        "room": "WC / Staff Toilet",
+        "substrate": "timber (solid core SC1)",
+        "system": "semi_gloss",
+        "unit": "item",
+        "quantity": 1,
+        "coats": 2,
+        "confidence": "high",
+        "source": "plan",
+        "note": "A103 door schedule D.04, SC1, finish P1, paint all edges. SS frame linished (excluded)."
+      },
+      {
+        "surface": "Kitchen door D.05 (P1, paint all edges/faces)",
+        "room": "Kitchen",
+        "substrate": "timber (solid core SC1)",
+        "system": "semi_gloss",
+        "unit": "item",
+        "quantity": 1,
+        "coats": 2,
+        "confidence": "high",
+        "source": "plan",
+        "note": "A103 door schedule D.05, SC1, finish P1, paint all edges. SS frame linished (excluded)."
+      }
+    ]
+  },
+  "measurements": {
+    "model": "claude-sonnet-4-6",
+    "runtimeSeconds": 39.54,
+    "lines": [
+      {
+        "line_no": 1,
+        "surface": "Retail concrete ceiling covered with (thermal panels) area",
+        "room": "Retail",
+        "unit": "m2",
+        "quantity": 420,
+        "system": "spray_matt",
+        "note": "Spray ceiling and beams face paint matt"
+      },
+      {
+        "line_no": 2,
+        "surface": "Concrete beams face 44x.3",
+        "room": "Retail",
+        "unit": "m2",
+        "quantity": 35,
+        "system": "spray_matt",
+        "note": "Spray ceiling and beams face paint matt"
+      },
+      {
+        "line_no": 3,
+        "surface": "Corner area 1.5 W x 5.2 H",
+        "room": "Retail area walls",
+        "unit": "m2",
+        "quantity": 7.8,
+        "system": "low_sheen",
+        "note": "Low sheen Walls"
+      },
+      {
+        "line_no": 4,
+        "surface": "Above foyer entry door 4.75 W x1 H",
+        "room": "Retail area walls",
+        "unit": "m2",
+        "quantity": 4.75,
+        "system": "low_sheen",
+        "note": "Low sheen Walls"
+      },
+      {
+        "line_no": 5,
+        "surface": "Around construction column beside brick wall 4.5 W x 5.2 H",
+        "room": "Retail area walls",
+        "unit": "m2",
+        "quantity": 23.4,
+        "system": "low_sheen",
+        "note": "Low sheen Walls"
+      },
+      {
+        "line_no": 6,
+        "surface": "Side and front of cool room wall and above door 2.9 W x 5.2 H",
+        "room": "Retail area walls",
+        "unit": "m2",
+        "quantity": 15.1,
+        "system": "low_sheen",
+        "note": "Low sheen Walls"
+      },
+      {
+        "line_no": 7,
+        "surface": "Fridges outside 1.7W x5.2 H",
+        "room": "Retail area walls",
+        "unit": "m2",
+        "quantity": 8.9,
+        "system": "low_sheen",
+        "note": "Low sheen Walls"
+      },
+      {
+        "line_no": 8,
+        "surface": "Fudges bulkhead 24 W x 3 H",
+        "room": "Retail area walls",
+        "unit": "m2",
+        "quantity": 72,
+        "system": "low_sheen",
+        "note": "Low sheen Walls"
+      },
+      {
+        "line_no": 9,
+        "surface": "Above fridges soffit 24W x 1.3 D",
+        "room": "Retail area walls",
+        "unit": "m2",
+        "quantity": 31.2,
+        "system": "low_sheen",
+        "note": "Low sheen Walls"
+      },
+      {
+        "line_no": 10,
+        "surface": "Fridges sides 1.3x2.2 x2",
+        "room": "Retail area walls",
+        "unit": "m2",
+        "quantity": 5.72,
+        "system": "low_sheen",
+        "note": "Low sheen Walls"
+      },
+      {
+        "line_no": 11,
+        "surface": "Behind fridges .3x28.5",
+        "room": "Retail area walls",
+        "unit": "m2",
+        "quantity": 8.55,
+        "system": "low_sheen",
+        "note": "Low sheen Walls"
+      },
+      {
+        "line_no": 12,
+        "surface": "Vinyl swing door soffit 2 x1.5",
+        "room": "Retail area walls",
+        "unit": "m2",
+        "quantity": 3
+      },
+      {
+        "line_no": 13,
+        "surface": "Vinyl swing door sides 1.5x2.1x2",
+        "room": "Retail area walls",
+        "unit": "m2",
+        "quantity": 6.3
+      },
+      {
+        "line_no": 14,
+        "surface": "Freezer unit bulkhead 6.62 W x 3.1 H",
+        "room": "Retail area walls",
+        "unit": "m2",
+        "quantity": 20.5,
+        "system": "low_sheen",
+        "note": "Low sheen Walls"
+      },
+      {
+        "line_no": 15,
+        "surface": "Front right part .6 W x 2.2 H",
+        "room": "Retail area walls",
+        "unit": "m2",
+        "quantity": 1.32,
+        "system": "low_sheen",
+        "note": "Low sheen Walls"
+      },
+      {
+        "line_no": 16,
+        "surface": "Freezer unit sides and soffit 8.4 x1.2",
+        "room": "Retail area walls",
+        "unit": "m2",
+        "quantity": 10.08
+      },
+      {
+        "line_no": 17,
+        "surface": "Behind the free freezer .3x 8.4",
+        "room": "Retail area walls",
+        "unit": "m2",
+        "quantity": 2.52
+      },
+      {
+        "line_no": 18,
+        "surface": "Fire hydrant wall 3.7 W x 5.2 H",
+        "room": "Retail area walls",
+        "unit": "m2",
+        "quantity": 20,
+        "system": "low_sheen",
+        "note": "Low sheen Walls"
+      },
+      {
+        "line_no": 19,
+        "surface": "Coffee side fin 1.6 w x 3.6 H",
+        "room": "Retail area walls",
+        "unit": "m2",
+        "quantity": 5.8,
+        "system": "low_sheen",
+        "note": "Low sheen Walls"
+      },
+      {
+        "line_no": 20,
+        "surface": "Window Plaster column .9 w x4.8 H",
+        "room": "Retail area walls",
+        "unit": "m2",
+        "quantity": 4.3,
+        "system": "low_sheen",
+        "note": "Low sheen Walls"
+      },
+      {
+        "line_no": 21,
+        "surface": "Sushi plaster board suspension ceiling 8.2 x 2.6",
+        "room": "Sushi area",
+        "unit": "m2",
+        "quantity": 22,
+        "system": "flat",
+        "note": "Suspension ceiling paint flat (Sushi area ceiling, staff room & office ceilings)"
+      },
+      {
+        "line_no": 22,
+        "surface": "Sushi fin wall 1 W x 3.6 H",
+        "room": "Sushi area",
+        "unit": "m2",
+        "quantity": 3.6,
+        "system": "low_sheen",
+        "note": "Low sheen Walls"
+      },
+      {
+        "line_no": 23,
+        "surface": "Window plaster column .9 w x3.6 H",
+        "room": "Retail area walls",
+        "unit": "m2",
+        "quantity": 3.3,
+        "system": "low_sheen",
+        "note": "Low sheen Walls"
+      },
+      {
+        "line_no": 24,
+        "surface": "Sushi wall (Partition) one side 2.5 W x3.6 H",
+        "room": "Sushi area",
+        "unit": "m2",
+        "quantity": 9,
+        "system": "low_sheen",
+        "note": "Low sheen Walls"
+      },
+      {
+        "line_no": 25,
+        "surface": "(separate price for fridge window wall) 3.9 x 3",
+        "room": "Retail area walls",
+        "unit": "m2",
+        "quantity": 12,
+        "note": "separate price for fridge window wall"
+      },
+      {
+        "line_no": 26,
+        "surface": "Window plaster column .9 w x4.8 H",
+        "room": "Retail area walls",
+        "unit": "m2",
+        "quantity": 4.4,
+        "system": "low_sheen",
+        "note": "Low sheen Walls"
+      },
+      {
+        "line_no": 27,
+        "surface": "Window plaster column behind construction column 1.5 x4.8 H",
+        "room": "Retail area walls",
+        "unit": "m2",
+        "quantity": 7.2,
+        "system": "low_sheen",
+        "note": "Low sheen Walls"
+      },
+      {
+        "line_no": 28,
+        "surface": "Office ceiling",
+        "room": "Office",
+        "unit": "m2",
+        "quantity": 16,
+        "system": "flat",
+        "note": "Suspension ceiling paint flat (Sushi area ceiling, staff room & office ceilings)"
+      },
+      {
+        "line_no": 29,
+        "surface": "Walls",
+        "room": "Office",
+        "unit": "m2",
+        "quantity": 20,
+        "system": "low_sheen",
+        "note": "Low sheen Walls"
+      },
+      {
+        "line_no": 30,
+        "surface": "Construction Column",
+        "room": "Office",
+        "unit": "m2",
+        "quantity": 10,
+        "system": "low_sheen",
+        "note": "Low sheen Walls"
+      },
+      {
+        "line_no": 31,
+        "surface": "(BOH walls) (4.8 +1.2+2+9) x 5.2",
+        "room": "BOH",
+        "unit": "m2",
+        "quantity": 88.5,
+        "system": "low_sheen",
+        "note": "Or 3.6 = 62.00 m2"
+      },
+      {
+        "line_no": 32,
+        "surface": "Toilet ceiling",
+        "room": "Toilet",
+        "unit": "m2",
+        "quantity": 4.5,
+        "system": "semi_gloss",
+        "note": "Suspension ceiling semi-gloss kitchen and bathroom premium paint"
+      },
+      {
+        "line_no": 33,
+        "surface": "Qty one timber door",
+        "room": "Toilet",
+        "unit": "item",
+        "quantity": 1
+      },
+      {
+        "line_no": 34,
+        "surface": "Staff room ceiling",
+        "room": "Staff room",
+        "unit": "m2",
+        "quantity": 30.5,
+        "system": "flat",
+        "note": "Suspension ceiling paint flat (Sushi area ceiling, staff room & office ceilings)"
+      },
+      {
+        "line_no": 35,
+        "surface": "Staff room walls",
+        "room": "Staff room",
+        "unit": "m2",
+        "quantity": 41,
+        "system": "low_sheen",
+        "note": "Low sheen Walls"
+      },
+      {
+        "line_no": 36,
+        "surface": "Kitchen ceiling",
+        "room": "Kitchen",
+        "unit": "m2",
+        "quantity": 42.5,
+        "system": "semi_gloss",
+        "note": "Suspension ceiling semi-gloss kitchen and bathroom premium paint"
+      },
+      {
+        "line_no": 37,
+        "surface": "Kitchen wall",
+        "room": "Kitchen",
+        "unit": "m2",
+        "quantity": 55,
+        "system": "semi_gloss",
+        "note": "Semi-gloss Walls, kitchen and bathroom premium paint (if its not tiled)"
+      }
+    ]
+  },
+  "reconciled": {
+    "items": [
+      {
+        "surface": "Retail exposed concrete ceiling (open ceiling, sprayed matt)",
+        "room": "Retail",
+        "substrate": "concrete",
+        "system": "spray_matt",
+        "unit": "m2",
+        "quantity": 420,
+        "coats": 2,
+        "height_m": 5.1,
+        "confidence": "high",
+        "source": "both",
+        "note": "A105 RCP: 'OPEN CEILING — paint underside of existing concrete slab as specified, extent to match floor finish'. Retail floor area 419.5 m² (A106). U/S slab 5.110 (A200/A201). Dense ductwork over retail (M200 ductwork layout) — allow masking/cutting-in around supply/return duct, FSL track and pendant runs; spray access at ~5m. · measurements line 1 · plan read 419.5 m² vs measured 420 m²",
+        "delta_pct": -0.1
+      },
+      {
+        "surface": "Concrete beams face 44x.3",
+        "room": "Retail",
+        "substrate": "unknown",
+        "system": "spray_matt",
+        "unit": "m2",
+        "quantity": 35,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 2 — not found on plans"
+      },
+      {
+        "surface": "Retail sales area walls (general perimeter, PM)",
+        "room": "Retail",
+        "substrate": "plasterboard",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 7.8,
+        "coats": 2,
+        "height_m": 4.8,
+        "confidence": "medium",
+        "source": "both",
+        "note": "A105 main sales area wall finishes note (PM, no finish to exposed concrete columns; refer elevations). Wall area inferred from A106 perimeter dimensions × U/S beam 4.810 (A200/A201). Much of perimeter is shopfront glazing/PBD intertenancy — net painted wall length estimated. Quantity is indicative. · measurements line 3 · plan read 230 m² vs measured 7.8 m²",
+        "delta_pct": 2848.7
+      },
+      {
+        "surface": "Above foyer entry door 4.75 W x1 H",
+        "room": "Retail area walls",
+        "substrate": "unknown",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 4.75,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 4 — not found on plans"
+      },
+      {
+        "surface": "Around construction column beside brick wall 4.5 W x 5.2 H",
+        "room": "Retail area walls",
+        "substrate": "unknown",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 23.4,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 5 — not found on plans"
+      },
+      {
+        "surface": "Side and front of cool room wall and above door 2.9 W x 5.2 H",
+        "room": "Retail area walls",
+        "substrate": "unknown",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 15.1,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 6 — not found on plans"
+      },
+      {
+        "surface": "Fridges outside 1.7W x5.2 H",
+        "room": "Retail area walls",
+        "substrate": "unknown",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 8.9,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 7 — not found on plans"
+      },
+      {
+        "surface": "Fudges bulkhead 24 W x 3 H",
+        "room": "Retail area walls",
+        "substrate": "unknown",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 72,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 8 — not found on plans"
+      },
+      {
+        "surface": "Above fridges soffit 24W x 1.3 D",
+        "room": "Retail area walls",
+        "substrate": "unknown",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 31.2,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 9 — not found on plans"
+      },
+      {
+        "surface": "Fridges sides 1.3x2.2 x2",
+        "room": "Retail area walls",
+        "substrate": "unknown",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 5.72,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 10 — not found on plans"
+      },
+      {
+        "surface": "Walls behind refrigeration units (P1)",
+        "room": "Retail",
+        "substrate": "plasterboard",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 8.55,
+        "coats": 2,
+        "height_m": 2.7,
+        "confidence": "medium",
+        "source": "both",
+        "note": "A105 'WALLS AT BACK OF REFRIGERATION UNITS — PAINT WALL FINISH: P1'. Length estimated from refrigeration run (cases 01–12, A106/A101 ~ 30 m) × ~1.5 m visible above units painted. Indicative. · measurements line 11 · plan read 45 m² vs measured 8.55 m² · system per measurements: low_sheen",
+        "delta_pct": 426.3
+      },
+      {
+        "surface": "Vinyl swing door soffit 2 x1.5",
+        "room": "Retail area walls",
+        "substrate": "unknown",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 3,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 12 — not found on plans"
+      },
+      {
+        "surface": "Vinyl swing door sides 1.5x2.1x2",
+        "room": "Retail area walls",
+        "substrate": "unknown",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 6.3,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 13 — not found on plans"
+      },
+      {
+        "surface": "Freezer unit bulkhead 6.62 W x 3.1 H",
+        "room": "Retail area walls",
+        "substrate": "unknown",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 20.5,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 14 — not found on plans"
+      },
+      {
+        "surface": "Front right part .6 W x 2.2 H",
+        "room": "Retail area walls",
+        "substrate": "unknown",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 1.32,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 15 — not found on plans"
+      },
+      {
+        "surface": "Freezer unit sides and soffit 8.4 x1.2",
+        "room": "Retail area walls",
+        "substrate": "unknown",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 10.08,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 16 — not found on plans"
+      },
+      {
+        "surface": "Behind the free freezer .3x 8.4",
+        "room": "Retail area walls",
+        "substrate": "unknown",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 2.52,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 17 — not found on plans"
+      },
+      {
+        "surface": "Fire hydrant wall 3.7 W x 5.2 H",
+        "room": "Retail area walls",
+        "substrate": "unknown",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 20,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 18 — not found on plans"
+      },
+      {
+        "surface": "Coffee side fin 1.6 w x 3.6 H",
+        "room": "Retail area walls",
+        "substrate": "unknown",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 5.8,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 19 — not found on plans"
+      },
+      {
+        "surface": "Window Plaster column .9 w x4.8 H",
+        "room": "Retail area walls",
+        "substrate": "unknown",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 4.3,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 20 — not found on plans"
+      },
+      {
+        "surface": "Sushi plaster board suspension ceiling 8.2 x 2.6",
+        "room": "Sushi area",
+        "substrate": "unknown",
+        "system": "flat",
+        "unit": "m2",
+        "quantity": 22,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 21 — not found on plans"
+      },
+      {
+        "surface": "Sushi fin wall 1 W x 3.6 H",
+        "room": "Sushi area",
+        "substrate": "unknown",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 3.6,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 22 — not found on plans"
+      },
+      {
+        "surface": "Window plaster column .9 w x3.6 H",
+        "room": "Retail area walls",
+        "substrate": "unknown",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 3.3,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 23 — not found on plans"
+      },
+      {
+        "surface": "Sushi wall (Partition) one side 2.5 W x3.6 H",
+        "room": "Sushi area",
+        "substrate": "unknown",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 9,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 24 — not found on plans"
+      },
+      {
+        "surface": "(separate price for fridge window wall) 3.9 x 3",
+        "room": "Retail area walls",
+        "substrate": "unknown",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 12,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 25 — not found on plans"
+      },
+      {
+        "surface": "Window plaster column .9 w x4.8 H",
+        "room": "Retail area walls",
+        "substrate": "unknown",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 4.4,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 26 — not found on plans"
+      },
+      {
+        "surface": "Window plaster column behind construction column 1.5 x4.8 H",
+        "room": "Retail area walls",
+        "substrate": "unknown",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 7.2,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 27 — not found on plans"
+      },
+      {
+        "surface": "Office suspended plasterboard ceiling (CP2)",
+        "room": "Office",
+        "substrate": "plasterboard",
+        "system": "flat",
+        "unit": "m2",
+        "quantity": 16,
+        "coats": 2,
+        "height_m": 2.7,
+        "confidence": "high",
+        "source": "both",
+        "note": "A105 RCP 'SUSPENDED PLASTERBOARD CEILING OVER OFFICE' @ 2.700; BOH ceilings finished CP2 (A040). Floor area 16.8 m² (A106). · measurements line 28 · plan read 16.8 m² vs measured 16 m²",
+        "delta_pct": 5
+      },
+      {
+        "surface": "Office walls (P1)",
+        "room": "Office",
+        "substrate": "plasterboard",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 20,
+        "coats": 2,
+        "height_m": 2.7,
+        "confidence": "medium",
+        "source": "both",
+        "note": "A105 'OFFICE WALL FINISHES: ALL WALLS FINISHED IN P1, no finish to exposed concrete columns'. Office 16.8 m² (A106); suspended PBD ceiling 2.700 (A105 RCP). Wall area = perimeter ~15.5 m × 2.7 (assumed perimeter from 16.8 m² room). · measurements line 29 · plan read 42 m² vs measured 20 m² · system per measurements: low_sheen",
+        "delta_pct": 110
+      },
+      {
+        "surface": "Construction Column",
+        "room": "Office",
+        "substrate": "unknown",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 10,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 30 — not found on plans"
+      },
+      {
+        "surface": "Back of House / Storage walls (P1)",
+        "room": "BOH",
+        "substrate": "plasterboard",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 88.5,
+        "coats": 2,
+        "height_m": 2.7,
+        "confidence": "high",
+        "source": "both",
+        "note": "A105 'BACK OF HOUSE WALL FINISHES: ALL WALLS FINISHED IN P1, no finish to exposed concrete columns'. BOH/storage 54.6 m² (A106). Wall perimeter ~35 m × 2.7 assumed ceiling height. Cool room/freezer panels excluded (by refrigeration contractor). · measurements line 31 · plan read 95 m² vs measured 88.5 m² · system per measurements: low_sheen",
+        "delta_pct": 7.3
+      },
+      {
+        "surface": "Staff Toilet ceiling (CP2)",
+        "room": "WC / Staff Toilet",
+        "substrate": "plasterboard",
+        "system": "semi_gloss",
+        "unit": "m2",
+        "quantity": 4.5,
+        "coats": 2,
+        "height_m": 2.7,
+        "confidence": "medium",
+        "source": "both",
+        "note": "A040 CP2 'toilet ceilings' Vivid White semi gloss; A500 suspended PBD ceiling @ 2.700. Floor area 3.4 m² (A106). · measurements line 32 · plan read 3.4 m² vs measured 4.5 m²",
+        "delta_pct": -24.4
+      },
+      {
+        "surface": "Qty one timber door",
+        "room": "Toilet",
+        "substrate": "unknown",
+        "system": "low_sheen",
+        "unit": "item",
+        "quantity": 1,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 33 — not found on plans"
+      },
+      {
+        "surface": "Staff Room walls (P1)",
+        "room": "Staff Room",
+        "substrate": "plasterboard",
+        "system": "flat",
+        "unit": "m2",
+        "quantity": 30.5,
+        "coats": 2,
+        "height_m": 2.7,
+        "confidence": "high",
+        "source": "both",
+        "note": "A105 'STAFF ROOM WALL FINISHES: ALL WALLS FINISHED IN P1'. Staff Room 7.1 m² (A106); wall perimeter ~10.7 m × 2.7 assumed. BOH ceiling height 2.700. · measurements line 34 · plan read 29 m² vs measured 30.5 m² · system per measurements: flat",
+        "delta_pct": -4.9
+      },
+      {
+        "surface": "Staff room walls",
+        "room": "Staff room",
+        "substrate": "unknown",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 41,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 35 — not found on plans"
+      },
+      {
+        "surface": "Kitchen ceiling",
+        "room": "Kitchen",
+        "substrate": "unknown",
+        "system": "semi_gloss",
+        "unit": "m2",
+        "quantity": 42.5,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 36 — not found on plans"
+      },
+      {
+        "surface": "Kitchen wall",
+        "room": "Kitchen",
+        "substrate": "unknown",
+        "system": "semi_gloss",
+        "unit": "m2",
+        "quantity": 55,
+        "coats": 2,
+        "confidence": "high",
+        "source": "measurements",
+        "note": "measurements line 37 — not found on plans"
+      },
+      {
+        "surface": "Deli/Cafe/Sushi area suspended plasterboard ceiling & bulkhead (CP1)",
+        "room": "Retail (Deli/Cafe/Sushi)",
+        "substrate": "plasterboard",
+        "system": "flat",
+        "unit": "m2",
+        "quantity": 40,
+        "coats": 2,
+        "height_m": 3.4,
+        "confidence": "low",
+        "source": "plan",
+        "note": "A105 RCP suspended PBD ceilings over food displays/deli + feature bulkhead; A040 CP1 (Black satin) for Deli ceiling & bulkhead. Ceiling height 3.350 (A200/A500). Area inferred from deli/sushi/cafe display footprint — indicative only."
+      },
+      {
+        "surface": "Back of House suspended plasterboard ceiling (CP2)",
+        "room": "BOH",
+        "substrate": "plasterboard",
+        "system": "flat",
+        "unit": "m2",
+        "quantity": 54.6,
+        "coats": 2,
+        "height_m": 2.7,
+        "confidence": "medium",
+        "source": "plan",
+        "note": "A105 RCP suspended PBD ceiling over BOH/amenities; CP2 BOH ceilings (A040). Floor area 54.6 m² (A106). Note: portions are exposed concrete over BOH per A105 — confirm extent on site."
+      },
+      {
+        "surface": "Staff Room suspended plasterboard ceiling (CP2)",
+        "room": "Staff Room",
+        "substrate": "plasterboard",
+        "system": "flat",
+        "unit": "m2",
+        "quantity": 7.1,
+        "coats": 2,
+        "height_m": 2.7,
+        "confidence": "medium",
+        "source": "plan",
+        "note": "A105 RCP suspended PBD ceiling over kitchen & amenities; CP2 BOH ceiling (A040). Floor area 7.1 m² (A106)."
+      },
+      {
+        "surface": "Commercial Kitchen walls — paint portions only (P1 where not tiled)",
+        "room": "Kitchen",
+        "substrate": "plasterboard",
+        "system": "semi_gloss",
+        "unit": "m2",
+        "quantity": 30,
+        "coats": 2,
+        "height_m": 2.7,
+        "confidence": "low",
+        "source": "plan",
+        "note": "A105 'KITCHEN WALL FINISHES: ALL WALLS FINISHED IN TL1' (tile) — however A501 kitchen elevations show PM/P1 paint to upper/non-tiled wall portions above tiling. Tiled areas (TL1) excluded. Painted area = upper walls above tile line; indicative. Kitchen 41.5 m² (A106), ceiling 3.650 F.C.L per A500/A501 sections."
+      },
+      {
+        "surface": "Commercial Kitchen suspended plasterboard ceiling (CP2)",
+        "room": "Kitchen",
+        "substrate": "plasterboard",
+        "system": "flat",
+        "unit": "m2",
+        "quantity": 41.5,
+        "coats": 2,
+        "height_m": 3.7,
+        "confidence": "medium",
+        "source": "plan",
+        "note": "A500/A501 sections: suspended PBD ceiling, finish as specified @ 3.650 F.C.L.; CP2 BOH ceilings (A040). Floor area 41.5 m² (A106). Exhaust canopy penetrations — allow cutting-in."
+      },
+      {
+        "surface": "Staff Toilet walls — paint portions only (above tiling)",
+        "room": "WC / Staff Toilet",
+        "substrate": "plasterboard",
+        "system": "semi_gloss",
+        "unit": "m2",
+        "quantity": 8,
+        "coats": 2,
+        "height_m": 2.7,
+        "confidence": "low",
+        "source": "plan",
+        "note": "A500 staff toilet elevations show TL1 tile to wet walls; remaining wall area painted (CP2/semi-gloss). Tiled areas excluded. Staff T. 3.4 m² (A106); ceiling 2.700 F.C.L (A500)."
+      },
+      {
+        "surface": "Rear delivery door D.01 (P1, both faces + edges) — Remax thermal traffic door",
+        "room": "BOH",
+        "substrate": "metal/thermal panel",
+        "system": "semi_gloss",
+        "unit": "item",
+        "quantity": 1,
+        "coats": 2,
+        "confidence": "medium",
+        "source": "plan",
+        "note": "A103 door schedule D.01 rear delivery door, finish P1. Note: proprietary Remax 4500 thermal door — confirm whether paint applies or factory finish; included as painted per schedule."
+      },
+      {
+        "surface": "Office door D.02 (P1, paint all edges/faces)",
+        "room": "Office",
+        "substrate": "timber (solid core SC1)",
+        "system": "semi_gloss",
+        "unit": "item",
+        "quantity": 1,
+        "coats": 2,
+        "confidence": "high",
+        "source": "plan",
+        "note": "A103 door schedule D.02, SC1 solid core, finish P1, paint top/bottom & all edges prior to install. SS frame linished (not painted)."
+      },
+      {
+        "surface": "Staff Room door D.03 (P1, paint all edges/faces)",
+        "room": "Staff Room",
+        "substrate": "timber (solid core SC1)",
+        "system": "semi_gloss",
+        "unit": "item",
+        "quantity": 1,
+        "coats": 2,
+        "confidence": "high",
+        "source": "plan",
+        "note": "A103 door schedule D.03, SC1, finish P1, paint all edges. SS frame linished (excluded)."
+      },
+      {
+        "surface": "Staff Toilet door D.04 (P1, paint all edges/faces)",
+        "room": "WC / Staff Toilet",
+        "substrate": "timber (solid core SC1)",
+        "system": "semi_gloss",
+        "unit": "item",
+        "quantity": 1,
+        "coats": 2,
+        "confidence": "high",
+        "source": "plan",
+        "note": "A103 door schedule D.04, SC1, finish P1, paint all edges. SS frame linished (excluded)."
+      },
+      {
+        "surface": "Kitchen door D.05 (P1, paint all edges/faces)",
+        "room": "Kitchen",
+        "substrate": "timber (solid core SC1)",
+        "system": "semi_gloss",
+        "unit": "item",
+        "quantity": 1,
+        "coats": 2,
+        "confidence": "high",
+        "source": "plan",
+        "note": "A103 door schedule D.05, SC1, finish P1, paint all edges. SS frame linished (excluded)."
+      }
+    ],
+    "flags": [
+      {
+        "kind": "measurements_only",
+        "surface": "Concrete beams face 44x.3",
+        "room": "Retail",
+        "detail": "In the measurements doc (35 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "delta",
+        "surface": "Corner area 1.5 W x 5.2 H",
+        "room": "Retail area walls",
+        "detail": "Plan-derived 230 m² differs from measured 7.8 m² by +2848.7%"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Above foyer entry door 4.75 W x1 H",
+        "room": "Retail area walls",
+        "detail": "In the measurements doc (4.75 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Around construction column beside brick wall 4.5 W x 5.2 H",
+        "room": "Retail area walls",
+        "detail": "In the measurements doc (23.4 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Side and front of cool room wall and above door 2.9 W x 5.2 H",
+        "room": "Retail area walls",
+        "detail": "In the measurements doc (15.1 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Fridges outside 1.7W x5.2 H",
+        "room": "Retail area walls",
+        "detail": "In the measurements doc (8.9 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Fudges bulkhead 24 W x 3 H",
+        "room": "Retail area walls",
+        "detail": "In the measurements doc (72 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Above fridges soffit 24W x 1.3 D",
+        "room": "Retail area walls",
+        "detail": "In the measurements doc (31.2 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Fridges sides 1.3x2.2 x2",
+        "room": "Retail area walls",
+        "detail": "In the measurements doc (5.72 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "delta",
+        "surface": "Behind fridges .3x28.5",
+        "room": "Retail area walls",
+        "detail": "Plan-derived 45 m² differs from measured 8.55 m² by +426.3%"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Vinyl swing door soffit 2 x1.5",
+        "room": "Retail area walls",
+        "detail": "In the measurements doc (3 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Vinyl swing door sides 1.5x2.1x2",
+        "room": "Retail area walls",
+        "detail": "In the measurements doc (6.3 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Freezer unit bulkhead 6.62 W x 3.1 H",
+        "room": "Retail area walls",
+        "detail": "In the measurements doc (20.5 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Front right part .6 W x 2.2 H",
+        "room": "Retail area walls",
+        "detail": "In the measurements doc (1.32 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Freezer unit sides and soffit 8.4 x1.2",
+        "room": "Retail area walls",
+        "detail": "In the measurements doc (10.08 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Behind the free freezer .3x 8.4",
+        "room": "Retail area walls",
+        "detail": "In the measurements doc (2.52 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Fire hydrant wall 3.7 W x 5.2 H",
+        "room": "Retail area walls",
+        "detail": "In the measurements doc (20 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Coffee side fin 1.6 w x 3.6 H",
+        "room": "Retail area walls",
+        "detail": "In the measurements doc (5.8 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Window Plaster column .9 w x4.8 H",
+        "room": "Retail area walls",
+        "detail": "In the measurements doc (4.3 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Sushi plaster board suspension ceiling 8.2 x 2.6",
+        "room": "Sushi area",
+        "detail": "In the measurements doc (22 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Sushi fin wall 1 W x 3.6 H",
+        "room": "Sushi area",
+        "detail": "In the measurements doc (3.6 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Window plaster column .9 w x3.6 H",
+        "room": "Retail area walls",
+        "detail": "In the measurements doc (3.3 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Sushi wall (Partition) one side 2.5 W x3.6 H",
+        "room": "Sushi area",
+        "detail": "In the measurements doc (9 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "(separate price for fridge window wall) 3.9 x 3",
+        "room": "Retail area walls",
+        "detail": "In the measurements doc (12 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Window plaster column .9 w x4.8 H",
+        "room": "Retail area walls",
+        "detail": "In the measurements doc (4.4 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Window plaster column behind construction column 1.5 x4.8 H",
+        "room": "Retail area walls",
+        "detail": "In the measurements doc (7.2 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "delta",
+        "surface": "Walls",
+        "room": "Office",
+        "detail": "Plan-derived 42 m² differs from measured 20 m² by +110%"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Construction Column",
+        "room": "Office",
+        "detail": "In the measurements doc (10 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "delta",
+        "surface": "Toilet ceiling",
+        "room": "Toilet",
+        "detail": "Plan-derived 3.4 m² differs from measured 4.5 m² by -24.4%"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Qty one timber door",
+        "room": "Toilet",
+        "detail": "In the measurements doc (1 item(s)) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Staff room walls",
+        "room": "Staff room",
+        "detail": "In the measurements doc (41 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Kitchen ceiling",
+        "room": "Kitchen",
+        "detail": "In the measurements doc (42.5 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "measurements_only",
+        "surface": "Kitchen wall",
+        "room": "Kitchen",
+        "detail": "In the measurements doc (55 m²) but not in the AI plan takeoff"
+      },
+      {
+        "kind": "plan_only",
+        "surface": "Deli/Cafe/Sushi area suspended plasterboard ceiling & bulkhead (CP1)",
+        "room": "Retail (Deli/Cafe/Sushi)",
+        "detail": "On the plans (40 m²) but not in the painter's measurements — confirm whether it was deliberately excluded"
+      },
+      {
+        "kind": "plan_only",
+        "surface": "Back of House suspended plasterboard ceiling (CP2)",
+        "room": "BOH",
+        "detail": "On the plans (54.6 m²) but not in the painter's measurements — confirm whether it was deliberately excluded"
+      },
+      {
+        "kind": "plan_only",
+        "surface": "Staff Room suspended plasterboard ceiling (CP2)",
+        "room": "Staff Room",
+        "detail": "On the plans (7.1 m²) but not in the painter's measurements — confirm whether it was deliberately excluded"
+      },
+      {
+        "kind": "plan_only",
+        "surface": "Commercial Kitchen walls — paint portions only (P1 where not tiled)",
+        "room": "Kitchen",
+        "detail": "On the plans (30 m²) but not in the painter's measurements — confirm whether it was deliberately excluded"
+      },
+      {
+        "kind": "plan_only",
+        "surface": "Commercial Kitchen suspended plasterboard ceiling (CP2)",
+        "room": "Kitchen",
+        "detail": "On the plans (41.5 m²) but not in the painter's measurements — confirm whether it was deliberately excluded"
+      },
+      {
+        "kind": "plan_only",
+        "surface": "Staff Toilet walls — paint portions only (above tiling)",
+        "room": "WC / Staff Toilet",
+        "detail": "On the plans (8 m²) but not in the painter's measurements — confirm whether it was deliberately excluded"
+      },
+      {
+        "kind": "plan_only",
+        "surface": "Rear delivery door D.01 (P1, both faces + edges) — Remax thermal traffic door",
+        "room": "BOH",
+        "detail": "On the plans (1 item(s)) but not in the painter's measurements — confirm whether it was deliberately excluded"
+      },
+      {
+        "kind": "plan_only",
+        "surface": "Office door D.02 (P1, paint all edges/faces)",
+        "room": "Office",
+        "detail": "On the plans (1 item(s)) but not in the painter's measurements — confirm whether it was deliberately excluded"
+      },
+      {
+        "kind": "plan_only",
+        "surface": "Staff Room door D.03 (P1, paint all edges/faces)",
+        "room": "Staff Room",
+        "detail": "On the plans (1 item(s)) but not in the painter's measurements — confirm whether it was deliberately excluded"
+      },
+      {
+        "kind": "plan_only",
+        "surface": "Staff Toilet door D.04 (P1, paint all edges/faces)",
+        "room": "WC / Staff Toilet",
+        "detail": "On the plans (1 item(s)) but not in the painter's measurements — confirm whether it was deliberately excluded"
+      },
+      {
+        "kind": "plan_only",
+        "surface": "Kitchen door D.05 (P1, paint all edges/faces)",
+        "room": "Kitchen",
+        "detail": "On the plans (1 item(s)) but not in the painter's measurements — confirm whether it was deliberately excluded"
+      }
+    ]
+  },
+  "bom": {
+    "lines": [
+      {
+        "surface": "Retail exposed concrete ceiling (open ceiling, sprayed matt)",
+        "room": "Retail",
+        "system": "spray_matt",
+        "unit": "m2",
+        "quantity": 420,
+        "coats": 2,
+        "height_m": 5.1,
+        "separate_price": false,
+        "labourHours": 51.74,
+        "labourExGst": 3880.5,
+        "product": "Spray-grade ceiling matt (white)",
+        "litres": 70,
+        "materialExGst": 700,
+        "lineExGst": 4580.5,
+        "trace": {
+          "method": "spray",
+          "rateCode": "labour:spray_matt:spray",
+          "heightMultiplier": 1.4,
+          "labourFormula": "420 m² ÷ 25 m²/h × 2 coats × 1.4 height × 1.10 prep = 51.74h × $75.00/h = $3880.50",
+          "materialFormula": "420 m² × 2 coats ÷ 12 m²/L = 70.0 L × $10.00/L = $700.00"
+        }
+      },
+      {
+        "surface": "Concrete beams face 44x.3",
+        "room": "Retail",
+        "system": "spray_matt",
+        "unit": "m2",
+        "quantity": 35,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 3.08,
+        "labourExGst": 231,
+        "product": "Spray-grade ceiling matt (white)",
+        "litres": 5.83,
+        "materialExGst": 58.33,
+        "lineExGst": 289.33,
+        "trace": {
+          "method": "spray",
+          "rateCode": "labour:spray_matt:spray",
+          "heightMultiplier": 1,
+          "labourFormula": "35 m² ÷ 25 m²/h × 2 coats × 1 height × 1.10 prep = 3.08h × $75.00/h = $231.00",
+          "materialFormula": "35 m² × 2 coats ÷ 12 m²/L = 5.8 L × $10.00/L = $58.33"
+        }
+      },
+      {
+        "surface": "Retail sales area walls (general perimeter, PM)",
+        "room": "Retail",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 7.8,
+        "coats": 2,
+        "height_m": 4.8,
+        "separate_price": false,
+        "labourHours": 2.15,
+        "labourExGst": 161.25,
+        "product": "Low-sheen acrylic interior",
+        "litres": 1.04,
+        "materialExGst": 11.44,
+        "lineExGst": 172.69,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1.25,
+          "labourFormula": "7.8 m² ÷ 10 m²/h × 2 coats × 1.25 height × 1.10 prep = 2.15h × $75.00/h = $161.25",
+          "materialFormula": "7.8 m² × 2 coats ÷ 15 m²/L = 1.0 L × $11.00/L = $11.44"
+        }
+      },
+      {
+        "surface": "Above foyer entry door 4.75 W x1 H",
+        "room": "Retail area walls",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 4.75,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 1.05,
+        "labourExGst": 78.75,
+        "product": "Low-sheen acrylic interior",
+        "litres": 0.63,
+        "materialExGst": 6.97,
+        "lineExGst": 85.72,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "4.75 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 1.05h × $75.00/h = $78.75",
+          "materialFormula": "4.75 m² × 2 coats ÷ 15 m²/L = 0.6 L × $11.00/L = $6.97"
+        }
+      },
+      {
+        "surface": "Around construction column beside brick wall 4.5 W x 5.2 H",
+        "room": "Retail area walls",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 23.4,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 5.15,
+        "labourExGst": 386.25,
+        "product": "Low-sheen acrylic interior",
+        "litres": 3.12,
+        "materialExGst": 34.32,
+        "lineExGst": 420.57,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "23.4 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 5.15h × $75.00/h = $386.25",
+          "materialFormula": "23.4 m² × 2 coats ÷ 15 m²/L = 3.1 L × $11.00/L = $34.32"
+        }
+      },
+      {
+        "surface": "Side and front of cool room wall and above door 2.9 W x 5.2 H",
+        "room": "Retail area walls",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 15.1,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 3.32,
+        "labourExGst": 249,
+        "product": "Low-sheen acrylic interior",
+        "litres": 2.01,
+        "materialExGst": 22.15,
+        "lineExGst": 271.15,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "15.1 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 3.32h × $75.00/h = $249.00",
+          "materialFormula": "15.1 m² × 2 coats ÷ 15 m²/L = 2.0 L × $11.00/L = $22.15"
+        }
+      },
+      {
+        "surface": "Fridges outside 1.7W x5.2 H",
+        "room": "Retail area walls",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 8.9,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 1.96,
+        "labourExGst": 147,
+        "product": "Low-sheen acrylic interior",
+        "litres": 1.19,
+        "materialExGst": 13.05,
+        "lineExGst": 160.05,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "8.9 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 1.96h × $75.00/h = $147.00",
+          "materialFormula": "8.9 m² × 2 coats ÷ 15 m²/L = 1.2 L × $11.00/L = $13.05"
+        }
+      },
+      {
+        "surface": "Fudges bulkhead 24 W x 3 H",
+        "room": "Retail area walls",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 72,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 15.84,
+        "labourExGst": 1188,
+        "product": "Low-sheen acrylic interior",
+        "litres": 9.6,
+        "materialExGst": 105.6,
+        "lineExGst": 1293.6,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "72 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 15.84h × $75.00/h = $1188.00",
+          "materialFormula": "72 m² × 2 coats ÷ 15 m²/L = 9.6 L × $11.00/L = $105.60"
+        }
+      },
+      {
+        "surface": "Above fridges soffit 24W x 1.3 D",
+        "room": "Retail area walls",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 31.2,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 6.86,
+        "labourExGst": 514.5,
+        "product": "Low-sheen acrylic interior",
+        "litres": 4.16,
+        "materialExGst": 45.76,
+        "lineExGst": 560.26,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "31.2 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 6.86h × $75.00/h = $514.50",
+          "materialFormula": "31.2 m² × 2 coats ÷ 15 m²/L = 4.2 L × $11.00/L = $45.76"
+        }
+      },
+      {
+        "surface": "Fridges sides 1.3x2.2 x2",
+        "room": "Retail area walls",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 5.72,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 1.26,
+        "labourExGst": 94.5,
+        "product": "Low-sheen acrylic interior",
+        "litres": 0.76,
+        "materialExGst": 8.39,
+        "lineExGst": 102.89,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "5.72 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 1.26h × $75.00/h = $94.50",
+          "materialFormula": "5.72 m² × 2 coats ÷ 15 m²/L = 0.8 L × $11.00/L = $8.39"
+        }
+      },
+      {
+        "surface": "Walls behind refrigeration units (P1)",
+        "room": "Retail",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 8.55,
+        "coats": 2,
+        "height_m": 2.7,
+        "separate_price": false,
+        "labourHours": 1.88,
+        "labourExGst": 141,
+        "product": "Low-sheen acrylic interior",
+        "litres": 1.14,
+        "materialExGst": 12.54,
+        "lineExGst": 153.54,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "8.55 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 1.88h × $75.00/h = $141.00",
+          "materialFormula": "8.55 m² × 2 coats ÷ 15 m²/L = 1.1 L × $11.00/L = $12.54"
+        }
+      },
+      {
+        "surface": "Vinyl swing door soffit 2 x1.5",
+        "room": "Retail area walls",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 3,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 0.66,
+        "labourExGst": 49.5,
+        "product": "Low-sheen acrylic interior",
+        "litres": 0.4,
+        "materialExGst": 4.4,
+        "lineExGst": 53.9,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "3 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 0.66h × $75.00/h = $49.50",
+          "materialFormula": "3 m² × 2 coats ÷ 15 m²/L = 0.4 L × $11.00/L = $4.40"
+        }
+      },
+      {
+        "surface": "Vinyl swing door sides 1.5x2.1x2",
+        "room": "Retail area walls",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 6.3,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 1.39,
+        "labourExGst": 104.25,
+        "product": "Low-sheen acrylic interior",
+        "litres": 0.84,
+        "materialExGst": 9.24,
+        "lineExGst": 113.49,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "6.3 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 1.39h × $75.00/h = $104.25",
+          "materialFormula": "6.3 m² × 2 coats ÷ 15 m²/L = 0.8 L × $11.00/L = $9.24"
+        }
+      },
+      {
+        "surface": "Freezer unit bulkhead 6.62 W x 3.1 H",
+        "room": "Retail area walls",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 20.5,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 4.51,
+        "labourExGst": 338.25,
+        "product": "Low-sheen acrylic interior",
+        "litres": 2.73,
+        "materialExGst": 30.07,
+        "lineExGst": 368.32,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "20.5 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 4.51h × $75.00/h = $338.25",
+          "materialFormula": "20.5 m² × 2 coats ÷ 15 m²/L = 2.7 L × $11.00/L = $30.07"
+        }
+      },
+      {
+        "surface": "Front right part .6 W x 2.2 H",
+        "room": "Retail area walls",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 1.32,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 0.29,
+        "labourExGst": 21.75,
+        "product": "Low-sheen acrylic interior",
+        "litres": 0.18,
+        "materialExGst": 1.94,
+        "lineExGst": 23.69,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "1.32 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 0.29h × $75.00/h = $21.75",
+          "materialFormula": "1.32 m² × 2 coats ÷ 15 m²/L = 0.2 L × $11.00/L = $1.94"
+        }
+      },
+      {
+        "surface": "Freezer unit sides and soffit 8.4 x1.2",
+        "room": "Retail area walls",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 10.08,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 2.22,
+        "labourExGst": 166.5,
+        "product": "Low-sheen acrylic interior",
+        "litres": 1.34,
+        "materialExGst": 14.78,
+        "lineExGst": 181.28,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "10.08 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 2.22h × $75.00/h = $166.50",
+          "materialFormula": "10.08 m² × 2 coats ÷ 15 m²/L = 1.3 L × $11.00/L = $14.78"
+        }
+      },
+      {
+        "surface": "Behind the free freezer .3x 8.4",
+        "room": "Retail area walls",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 2.52,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 0.55,
+        "labourExGst": 41.25,
+        "product": "Low-sheen acrylic interior",
+        "litres": 0.34,
+        "materialExGst": 3.7,
+        "lineExGst": 44.95,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "2.52 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 0.55h × $75.00/h = $41.25",
+          "materialFormula": "2.52 m² × 2 coats ÷ 15 m²/L = 0.3 L × $11.00/L = $3.70"
+        }
+      },
+      {
+        "surface": "Fire hydrant wall 3.7 W x 5.2 H",
+        "room": "Retail area walls",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 20,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 4.4,
+        "labourExGst": 330,
+        "product": "Low-sheen acrylic interior",
+        "litres": 2.67,
+        "materialExGst": 29.33,
+        "lineExGst": 359.33,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "20 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 4.4h × $75.00/h = $330.00",
+          "materialFormula": "20 m² × 2 coats ÷ 15 m²/L = 2.7 L × $11.00/L = $29.33"
+        }
+      },
+      {
+        "surface": "Coffee side fin 1.6 w x 3.6 H",
+        "room": "Retail area walls",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 5.8,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 1.28,
+        "labourExGst": 96,
+        "product": "Low-sheen acrylic interior",
+        "litres": 0.77,
+        "materialExGst": 8.51,
+        "lineExGst": 104.51,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "5.8 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 1.28h × $75.00/h = $96.00",
+          "materialFormula": "5.8 m² × 2 coats ÷ 15 m²/L = 0.8 L × $11.00/L = $8.51"
+        }
+      },
+      {
+        "surface": "Window Plaster column .9 w x4.8 H",
+        "room": "Retail area walls",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 4.3,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 0.95,
+        "labourExGst": 71.25,
+        "product": "Low-sheen acrylic interior",
+        "litres": 0.57,
+        "materialExGst": 6.31,
+        "lineExGst": 77.56,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "4.3 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 0.95h × $75.00/h = $71.25",
+          "materialFormula": "4.3 m² × 2 coats ÷ 15 m²/L = 0.6 L × $11.00/L = $6.31"
+        }
+      },
+      {
+        "surface": "Sushi plaster board suspension ceiling 8.2 x 2.6",
+        "room": "Sushi area",
+        "system": "flat",
+        "unit": "m2",
+        "quantity": 22,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 1.73,
+        "labourExGst": 129.75,
+        "product": "Flat ceiling acrylic (white)",
+        "litres": 3.14,
+        "materialExGst": 29.86,
+        "lineExGst": 159.61,
+        "trace": {
+          "method": "spray",
+          "rateCode": "labour:flat:spray",
+          "heightMultiplier": 1,
+          "labourFormula": "22 m² ÷ 28 m²/h × 2 coats × 1 height × 1.10 prep = 1.73h × $75.00/h = $129.75",
+          "materialFormula": "22 m² × 2 coats ÷ 14 m²/L = 3.1 L × $9.50/L = $29.86"
+        }
+      },
+      {
+        "surface": "Sushi fin wall 1 W x 3.6 H",
+        "room": "Sushi area",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 3.6,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 0.79,
+        "labourExGst": 59.25,
+        "product": "Low-sheen acrylic interior",
+        "litres": 0.48,
+        "materialExGst": 5.28,
+        "lineExGst": 64.53,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "3.6 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 0.79h × $75.00/h = $59.25",
+          "materialFormula": "3.6 m² × 2 coats ÷ 15 m²/L = 0.5 L × $11.00/L = $5.28"
+        }
+      },
+      {
+        "surface": "Window plaster column .9 w x3.6 H",
+        "room": "Retail area walls",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 3.3,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 0.73,
+        "labourExGst": 54.75,
+        "product": "Low-sheen acrylic interior",
+        "litres": 0.44,
+        "materialExGst": 4.84,
+        "lineExGst": 59.59,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "3.3 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 0.73h × $75.00/h = $54.75",
+          "materialFormula": "3.3 m² × 2 coats ÷ 15 m²/L = 0.4 L × $11.00/L = $4.84"
+        }
+      },
+      {
+        "surface": "Sushi wall (Partition) one side 2.5 W x3.6 H",
+        "room": "Sushi area",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 9,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 1.98,
+        "labourExGst": 148.5,
+        "product": "Low-sheen acrylic interior",
+        "litres": 1.2,
+        "materialExGst": 13.2,
+        "lineExGst": 161.7,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "9 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 1.98h × $75.00/h = $148.50",
+          "materialFormula": "9 m² × 2 coats ÷ 15 m²/L = 1.2 L × $11.00/L = $13.20"
+        }
+      },
+      {
+        "surface": "(separate price for fridge window wall) 3.9 x 3",
+        "room": "Retail area walls",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 12,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 2.64,
+        "labourExGst": 198,
+        "product": "Low-sheen acrylic interior",
+        "litres": 1.6,
+        "materialExGst": 17.6,
+        "lineExGst": 215.6,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "12 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 2.64h × $75.00/h = $198.00",
+          "materialFormula": "12 m² × 2 coats ÷ 15 m²/L = 1.6 L × $11.00/L = $17.60"
+        }
+      },
+      {
+        "surface": "Window plaster column .9 w x4.8 H",
+        "room": "Retail area walls",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 4.4,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 0.97,
+        "labourExGst": 72.75,
+        "product": "Low-sheen acrylic interior",
+        "litres": 0.59,
+        "materialExGst": 6.45,
+        "lineExGst": 79.2,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "4.4 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 0.97h × $75.00/h = $72.75",
+          "materialFormula": "4.4 m² × 2 coats ÷ 15 m²/L = 0.6 L × $11.00/L = $6.45"
+        }
+      },
+      {
+        "surface": "Window plaster column behind construction column 1.5 x4.8 H",
+        "room": "Retail area walls",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 7.2,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 1.58,
+        "labourExGst": 118.5,
+        "product": "Low-sheen acrylic interior",
+        "litres": 0.96,
+        "materialExGst": 10.56,
+        "lineExGst": 129.06,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "7.2 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 1.58h × $75.00/h = $118.50",
+          "materialFormula": "7.2 m² × 2 coats ÷ 15 m²/L = 1.0 L × $11.00/L = $10.56"
+        }
+      },
+      {
+        "surface": "Office suspended plasterboard ceiling (CP2)",
+        "room": "Office",
+        "system": "flat",
+        "unit": "m2",
+        "quantity": 16,
+        "coats": 2,
+        "height_m": 2.7,
+        "separate_price": false,
+        "labourHours": 1.26,
+        "labourExGst": 94.5,
+        "product": "Flat ceiling acrylic (white)",
+        "litres": 2.29,
+        "materialExGst": 21.71,
+        "lineExGst": 116.21,
+        "trace": {
+          "method": "spray",
+          "rateCode": "labour:flat:spray",
+          "heightMultiplier": 1,
+          "labourFormula": "16 m² ÷ 28 m²/h × 2 coats × 1 height × 1.10 prep = 1.26h × $75.00/h = $94.50",
+          "materialFormula": "16 m² × 2 coats ÷ 14 m²/L = 2.3 L × $9.50/L = $21.71"
+        }
+      },
+      {
+        "surface": "Office walls (P1)",
+        "room": "Office",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 20,
+        "coats": 2,
+        "height_m": 2.7,
+        "separate_price": false,
+        "labourHours": 4.4,
+        "labourExGst": 330,
+        "product": "Low-sheen acrylic interior",
+        "litres": 2.67,
+        "materialExGst": 29.33,
+        "lineExGst": 359.33,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "20 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 4.4h × $75.00/h = $330.00",
+          "materialFormula": "20 m² × 2 coats ÷ 15 m²/L = 2.7 L × $11.00/L = $29.33"
+        }
+      },
+      {
+        "surface": "Construction Column",
+        "room": "Office",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 10,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 2.2,
+        "labourExGst": 165,
+        "product": "Low-sheen acrylic interior",
+        "litres": 1.33,
+        "materialExGst": 14.67,
+        "lineExGst": 179.67,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "10 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 2.2h × $75.00/h = $165.00",
+          "materialFormula": "10 m² × 2 coats ÷ 15 m²/L = 1.3 L × $11.00/L = $14.67"
+        }
+      },
+      {
+        "surface": "Back of House / Storage walls (P1)",
+        "room": "BOH",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 88.5,
+        "coats": 2,
+        "height_m": 2.7,
+        "separate_price": false,
+        "labourHours": 19.47,
+        "labourExGst": 1460.25,
+        "product": "Low-sheen acrylic interior",
+        "litres": 11.8,
+        "materialExGst": 129.8,
+        "lineExGst": 1590.05,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "88.5 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 19.47h × $75.00/h = $1460.25",
+          "materialFormula": "88.5 m² × 2 coats ÷ 15 m²/L = 11.8 L × $11.00/L = $129.80"
+        }
+      },
+      {
+        "surface": "Staff Toilet ceiling (CP2)",
+        "room": "WC / Staff Toilet",
+        "system": "semi_gloss",
+        "unit": "m2",
+        "quantity": 4.5,
+        "coats": 2,
+        "height_m": 2.7,
+        "separate_price": false,
+        "labourHours": 1.1,
+        "labourExGst": 82.5,
+        "product": "Premium semi-gloss acrylic",
+        "litres": 0.6,
+        "materialExGst": 8.4,
+        "lineExGst": 90.9,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:semi_gloss:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "4.5 m² ÷ 9 m²/h × 2 coats × 1 height × 1.10 prep = 1.1h × $75.00/h = $82.50",
+          "materialFormula": "4.5 m² × 2 coats ÷ 15 m²/L = 0.6 L × $14.00/L = $8.40"
+        }
+      },
+      {
+        "surface": "Qty one timber door",
+        "room": "Toilet",
+        "system": "low_sheen",
+        "unit": "item",
+        "quantity": 1,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 1.65,
+        "labourExGst": 123.75,
+        "product": "Water-based enamel",
+        "litres": 0.71,
+        "materialExGst": 11.43,
+        "lineExGst": 135.18,
+        "trace": {
+          "method": "per_item",
+          "rateCode": "labour:door:per_item",
+          "heightMultiplier": 1,
+          "labourFormula": "1 × 0.75h × 2 coats × 1 height × 1.10 prep × $75.00/h = $123.75",
+          "materialFormula": "1 × 5 m² × 2 ÷ 14 m²/L = 0.7 L × $16.00/L = $11.43"
+        }
+      },
+      {
+        "surface": "Staff Room walls (P1)",
+        "room": "Staff Room",
+        "system": "flat",
+        "unit": "m2",
+        "quantity": 30.5,
+        "coats": 2,
+        "height_m": 2.7,
+        "separate_price": false,
+        "labourHours": 2.4,
+        "labourExGst": 180,
+        "product": "Flat ceiling acrylic (white)",
+        "litres": 4.36,
+        "materialExGst": 41.39,
+        "lineExGst": 221.39,
+        "trace": {
+          "method": "spray",
+          "rateCode": "labour:flat:spray",
+          "heightMultiplier": 1,
+          "labourFormula": "30.5 m² ÷ 28 m²/h × 2 coats × 1 height × 1.10 prep = 2.4h × $75.00/h = $180.00",
+          "materialFormula": "30.5 m² × 2 coats ÷ 14 m²/L = 4.4 L × $9.50/L = $41.39"
+        }
+      },
+      {
+        "surface": "Staff room walls",
+        "room": "Staff room",
+        "system": "low_sheen",
+        "unit": "m2",
+        "quantity": 41,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 9.02,
+        "labourExGst": 676.5,
+        "product": "Low-sheen acrylic interior",
+        "litres": 5.47,
+        "materialExGst": 60.13,
+        "lineExGst": 736.63,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:low_sheen:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "41 m² ÷ 10 m²/h × 2 coats × 1 height × 1.10 prep = 9.02h × $75.00/h = $676.50",
+          "materialFormula": "41 m² × 2 coats ÷ 15 m²/L = 5.5 L × $11.00/L = $60.13"
+        }
+      },
+      {
+        "surface": "Kitchen ceiling",
+        "room": "Kitchen",
+        "system": "semi_gloss",
+        "unit": "m2",
+        "quantity": 42.5,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 10.39,
+        "labourExGst": 779.25,
+        "product": "Premium semi-gloss acrylic",
+        "litres": 5.67,
+        "materialExGst": 79.33,
+        "lineExGst": 858.58,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:semi_gloss:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "42.5 m² ÷ 9 m²/h × 2 coats × 1 height × 1.10 prep = 10.39h × $75.00/h = $779.25",
+          "materialFormula": "42.5 m² × 2 coats ÷ 15 m²/L = 5.7 L × $14.00/L = $79.33"
+        }
+      },
+      {
+        "surface": "Kitchen wall",
+        "room": "Kitchen",
+        "system": "semi_gloss",
+        "unit": "m2",
+        "quantity": 55,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 13.44,
+        "labourExGst": 1008,
+        "product": "Premium semi-gloss acrylic",
+        "litres": 7.33,
+        "materialExGst": 102.67,
+        "lineExGst": 1110.67,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:semi_gloss:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "55 m² ÷ 9 m²/h × 2 coats × 1 height × 1.10 prep = 13.44h × $75.00/h = $1008.00",
+          "materialFormula": "55 m² × 2 coats ÷ 15 m²/L = 7.3 L × $14.00/L = $102.67"
+        }
+      },
+      {
+        "surface": "Deli/Cafe/Sushi area suspended plasterboard ceiling & bulkhead (CP1)",
+        "room": "Retail (Deli/Cafe/Sushi)",
+        "system": "flat",
+        "unit": "m2",
+        "quantity": 40,
+        "coats": 2,
+        "height_m": 3.4,
+        "separate_price": false,
+        "labourHours": 3.14,
+        "labourExGst": 235.5,
+        "product": "Flat ceiling acrylic (white)",
+        "litres": 5.71,
+        "materialExGst": 54.29,
+        "lineExGst": 289.79,
+        "trace": {
+          "method": "spray",
+          "rateCode": "labour:flat:spray",
+          "heightMultiplier": 1,
+          "labourFormula": "40 m² ÷ 28 m²/h × 2 coats × 1 height × 1.10 prep = 3.14h × $75.00/h = $235.50",
+          "materialFormula": "40 m² × 2 coats ÷ 14 m²/L = 5.7 L × $9.50/L = $54.29"
+        }
+      },
+      {
+        "surface": "Back of House suspended plasterboard ceiling (CP2)",
+        "room": "BOH",
+        "system": "flat",
+        "unit": "m2",
+        "quantity": 54.6,
+        "coats": 2,
+        "height_m": 2.7,
+        "separate_price": false,
+        "labourHours": 4.29,
+        "labourExGst": 321.75,
+        "product": "Flat ceiling acrylic (white)",
+        "litres": 7.8,
+        "materialExGst": 74.1,
+        "lineExGst": 395.85,
+        "trace": {
+          "method": "spray",
+          "rateCode": "labour:flat:spray",
+          "heightMultiplier": 1,
+          "labourFormula": "54.6 m² ÷ 28 m²/h × 2 coats × 1 height × 1.10 prep = 4.29h × $75.00/h = $321.75",
+          "materialFormula": "54.6 m² × 2 coats ÷ 14 m²/L = 7.8 L × $9.50/L = $74.10"
+        }
+      },
+      {
+        "surface": "Staff Room suspended plasterboard ceiling (CP2)",
+        "room": "Staff Room",
+        "system": "flat",
+        "unit": "m2",
+        "quantity": 7.1,
+        "coats": 2,
+        "height_m": 2.7,
+        "separate_price": false,
+        "labourHours": 0.56,
+        "labourExGst": 42,
+        "product": "Flat ceiling acrylic (white)",
+        "litres": 1.01,
+        "materialExGst": 9.64,
+        "lineExGst": 51.64,
+        "trace": {
+          "method": "spray",
+          "rateCode": "labour:flat:spray",
+          "heightMultiplier": 1,
+          "labourFormula": "7.1 m² ÷ 28 m²/h × 2 coats × 1 height × 1.10 prep = 0.56h × $75.00/h = $42.00",
+          "materialFormula": "7.1 m² × 2 coats ÷ 14 m²/L = 1.0 L × $9.50/L = $9.64"
+        }
+      },
+      {
+        "surface": "Commercial Kitchen walls — paint portions only (P1 where not tiled)",
+        "room": "Kitchen",
+        "system": "semi_gloss",
+        "unit": "m2",
+        "quantity": 30,
+        "coats": 2,
+        "height_m": 2.7,
+        "separate_price": false,
+        "labourHours": 7.33,
+        "labourExGst": 549.75,
+        "product": "Premium semi-gloss acrylic",
+        "litres": 4,
+        "materialExGst": 56,
+        "lineExGst": 605.75,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:semi_gloss:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "30 m² ÷ 9 m²/h × 2 coats × 1 height × 1.10 prep = 7.33h × $75.00/h = $549.75",
+          "materialFormula": "30 m² × 2 coats ÷ 15 m²/L = 4.0 L × $14.00/L = $56.00"
+        }
+      },
+      {
+        "surface": "Commercial Kitchen suspended plasterboard ceiling (CP2)",
+        "room": "Kitchen",
+        "system": "flat",
+        "unit": "m2",
+        "quantity": 41.5,
+        "coats": 2,
+        "height_m": 3.7,
+        "separate_price": false,
+        "labourHours": 4.08,
+        "labourExGst": 306,
+        "product": "Flat ceiling acrylic (white)",
+        "litres": 5.93,
+        "materialExGst": 56.32,
+        "lineExGst": 362.32,
+        "trace": {
+          "method": "spray",
+          "rateCode": "labour:flat:spray",
+          "heightMultiplier": 1.25,
+          "labourFormula": "41.5 m² ÷ 28 m²/h × 2 coats × 1.25 height × 1.10 prep = 4.08h × $75.00/h = $306.00",
+          "materialFormula": "41.5 m² × 2 coats ÷ 14 m²/L = 5.9 L × $9.50/L = $56.32"
+        }
+      },
+      {
+        "surface": "Staff Toilet walls — paint portions only (above tiling)",
+        "room": "WC / Staff Toilet",
+        "system": "semi_gloss",
+        "unit": "m2",
+        "quantity": 8,
+        "coats": 2,
+        "height_m": 2.7,
+        "separate_price": false,
+        "labourHours": 1.96,
+        "labourExGst": 147,
+        "product": "Premium semi-gloss acrylic",
+        "litres": 1.07,
+        "materialExGst": 14.93,
+        "lineExGst": 161.93,
+        "trace": {
+          "method": "roller",
+          "rateCode": "labour:semi_gloss:roller",
+          "heightMultiplier": 1,
+          "labourFormula": "8 m² ÷ 9 m²/h × 2 coats × 1 height × 1.10 prep = 1.96h × $75.00/h = $147.00",
+          "materialFormula": "8 m² × 2 coats ÷ 15 m²/L = 1.1 L × $14.00/L = $14.93"
+        }
+      },
+      {
+        "surface": "Rear delivery door D.01 (P1, both faces + edges) — Remax thermal traffic door",
+        "room": "BOH",
+        "system": "semi_gloss",
+        "unit": "item",
+        "quantity": 1,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 1.65,
+        "labourExGst": 123.75,
+        "product": "Water-based enamel",
+        "litres": 0.71,
+        "materialExGst": 11.43,
+        "lineExGst": 135.18,
+        "trace": {
+          "method": "per_item",
+          "rateCode": "labour:door:per_item",
+          "heightMultiplier": 1,
+          "labourFormula": "1 × 0.75h × 2 coats × 1 height × 1.10 prep × $75.00/h = $123.75",
+          "materialFormula": "1 × 5 m² × 2 ÷ 14 m²/L = 0.7 L × $16.00/L = $11.43"
+        }
+      },
+      {
+        "surface": "Office door D.02 (P1, paint all edges/faces)",
+        "room": "Office",
+        "system": "semi_gloss",
+        "unit": "item",
+        "quantity": 1,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 1.65,
+        "labourExGst": 123.75,
+        "product": "Water-based enamel",
+        "litres": 0.71,
+        "materialExGst": 11.43,
+        "lineExGst": 135.18,
+        "trace": {
+          "method": "per_item",
+          "rateCode": "labour:door:per_item",
+          "heightMultiplier": 1,
+          "labourFormula": "1 × 0.75h × 2 coats × 1 height × 1.10 prep × $75.00/h = $123.75",
+          "materialFormula": "1 × 5 m² × 2 ÷ 14 m²/L = 0.7 L × $16.00/L = $11.43"
+        }
+      },
+      {
+        "surface": "Staff Room door D.03 (P1, paint all edges/faces)",
+        "room": "Staff Room",
+        "system": "semi_gloss",
+        "unit": "item",
+        "quantity": 1,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 1.65,
+        "labourExGst": 123.75,
+        "product": "Water-based enamel",
+        "litres": 0.71,
+        "materialExGst": 11.43,
+        "lineExGst": 135.18,
+        "trace": {
+          "method": "per_item",
+          "rateCode": "labour:door:per_item",
+          "heightMultiplier": 1,
+          "labourFormula": "1 × 0.75h × 2 coats × 1 height × 1.10 prep × $75.00/h = $123.75",
+          "materialFormula": "1 × 5 m² × 2 ÷ 14 m²/L = 0.7 L × $16.00/L = $11.43"
+        }
+      },
+      {
+        "surface": "Staff Toilet door D.04 (P1, paint all edges/faces)",
+        "room": "WC / Staff Toilet",
+        "system": "semi_gloss",
+        "unit": "item",
+        "quantity": 1,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 1.65,
+        "labourExGst": 123.75,
+        "product": "Water-based enamel",
+        "litres": 0.71,
+        "materialExGst": 11.43,
+        "lineExGst": 135.18,
+        "trace": {
+          "method": "per_item",
+          "rateCode": "labour:door:per_item",
+          "heightMultiplier": 1,
+          "labourFormula": "1 × 0.75h × 2 coats × 1 height × 1.10 prep × $75.00/h = $123.75",
+          "materialFormula": "1 × 5 m² × 2 ÷ 14 m²/L = 0.7 L × $16.00/L = $11.43"
+        }
+      },
+      {
+        "surface": "Kitchen door D.05 (P1, paint all edges/faces)",
+        "room": "Kitchen",
+        "system": "semi_gloss",
+        "unit": "item",
+        "quantity": 1,
+        "coats": 2,
+        "separate_price": false,
+        "labourHours": 1.65,
+        "labourExGst": 123.75,
+        "product": "Water-based enamel",
+        "litres": 0.71,
+        "materialExGst": 11.43,
+        "lineExGst": 135.18,
+        "trace": {
+          "method": "per_item",
+          "rateCode": "labour:door:per_item",
+          "heightMultiplier": 1,
+          "labourFormula": "1 × 0.75h × 2 coats × 1 height × 1.10 prep × $75.00/h = $123.75",
+          "materialFormula": "1 × 5 m² × 2 ÷ 14 m²/L = 0.7 L × $16.00/L = $11.43"
+        }
+      }
+    ],
+    "unmatched": [],
+    "excluded": [],
+    "labour": {
+      "hours": 215.9,
+      "ratePerHr": 75,
+      "crewSize": 3,
+      "estimatedDays": 10,
+      "costExGst": 16192.5
+    },
+    "materials": [
+      {
+        "product": "Spray-grade ceiling matt (white)",
+        "litresRaw": 75.83,
+        "litres": 76,
+        "pricePerL": 10.01,
+        "costExGst": 821.62
+      },
+      {
+        "product": "Low-sheen acrylic interior",
+        "litresRaw": 60.03,
+        "litres": 61,
+        "pricePerL": 10.99,
+        "costExGst": 724.02
+      },
+      {
+        "product": "Flat ceiling acrylic (white)",
+        "litresRaw": 30.24,
+        "litres": 31,
+        "pricePerL": 9.5,
+        "costExGst": 318.06
+      },
+      {
+        "product": "Premium semi-gloss acrylic",
+        "litresRaw": 18.67,
+        "litres": 19,
+        "pricePerL": 13.95,
+        "costExGst": 286.25
+      },
+      {
+        "product": "Water-based enamel",
+        "litresRaw": 4.26,
+        "litres": 5,
+        "pricePerL": 16.1,
+        "costExGst": 86.94
+      }
+    ],
+    "materialsExGst": 2236.89,
+    "equipment": [
+      {
+        "code": "equip:scissor_lift",
+        "label": "Scissor lift hire (19 ft electric)",
+        "days": 3,
+        "dayRate": 300,
+        "costExGst": 900,
+        "reason": "3 surfaces above 3.4 m (58.0h of access work)"
+      }
+    ],
+    "equipmentExGst": 900,
+    "separate": {
+      "lines": [],
+      "exGst": 0
+    },
+    "subtotalExGst": 19329.39,
+    "gst": 1932.94,
+    "totalIncGst": 21262.33,
+    "gstRegistered": true,
+    "assumptions": [
+      "Labour at $75.00/hr ex GST, crew of 3, 7.6 productive hrs/day",
+      "Surface prep allowance 10% on all labour",
+      "Materials sundries 8% (masking, drop sheets, rollers)",
+      "Height access multipliers applied: ×1.4, ×1.25",
+      "Rates are seeded AU commercial defaults pending painter validation"
+    ],
+    "exclusions": [
+      "Tiled and glazed surfaces excluded",
+      "Colours TBC by client — one colour scheme assumed per system"
+    ]
+  }
+}

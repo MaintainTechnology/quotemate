@@ -34,3 +34,25 @@ LEARNINGS:
   (estimator work); solar panels preview became 103. Applied to prod + dev.
 - Gemini panels-after render verified live end-to-end: ~25-28s, 1200px jpg,
   CAS retry from 'failed' worked after the bucket fix.
+
+================================================================================
+RALPH RUN 2026-06-12 — Commercial Painting Estimator (strategy v11, spec
+docs/superpowers/specs/2026-06-12-commercial-painting-estimator-design.md)
+All phases 0-7 DONE on local main. Gates: vitest 2771/2771, next build green,
+tsc at the same pre-existing 9-error baseline, eslint clean on all new files.
+IGA acceptance 17/17 + Gemini preview verified on the real pilot documents.
+LEARNINGS:
+- PS5.1 Get-Content/Set-Content round-trips mangle UTF-8 (mojibake) — never
+  rewrite docs via the shell; use the Edit tool (strategy.md needed a
+  git-checkout restore + re-apply).
+- Hand-rolled structural Supabase client types hit TS2589 excessive-depth;
+  type IO wrappers against the real SupabaseClient import instead.
+- 'wash' as a low_sheen keyword captured 'limewash' — keyword maps need
+  negative tests for adjacent vocabulary.
+- The exhaustive tabLabel switch in app/dashboard/page.tsx breaks compile on
+  any new Tab member — by design; remember it when adding tabs.
+- Migration numbering: 107 as per spec (102=plan pricing, 103=solar panels,
+  104-106 taken by parallel sessions). Applied to BOTH Supabase projects.
+- Opus 4.8 over the 9.8MB 15-page IGA set: 63s, 19 surface lines, finishes
+  schedule read correctly. Sonnet transcription of the painter's takeoff:
+  37/34 lines, 420 m2 retail ceiling exact.
