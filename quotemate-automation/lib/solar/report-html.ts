@@ -11,6 +11,7 @@
 
 import type { SolarEstimate, SolarPriceTier } from './types'
 import type { SolarPremiumQuote } from './premium-quote'
+import { buildSolarHardwareCards } from './hardware-cards'
 import {
   SOLAR_PROJECTION_COPY,
   SOLAR_LAYOUT_COPY,
@@ -178,6 +179,20 @@ function premiumSections(input: SolarReportInput): string {
   }
   if (p.assumed_values.length > 0) {
     parts.push('<h2>Assumed values</h2>' + statGrid(p.assumed_values))
+  }
+
+  // 4b. Your hardware — Pylon datasheet supplement (build 2026-06-13).
+  const hardware = buildSolarHardwareCards(input.estimate.context)
+  if (hardware.length > 0) {
+    const rows = hardware
+      .map(
+        (c) =>
+          `<tr><td>${esc(c.kindLabel)}</td>` +
+          `<td>${esc(c.name)}${c.detail ? `<div class="note">${esc(c.detail)}</div>` : ''}` +
+          `${c.datasheetUrl ? ` <a href="${esc(c.datasheetUrl)}">Datasheet (PDF)</a>` : ''}</td></tr>`,
+      )
+      .join('')
+    parts.push(`<h2>Your hardware</h2><table><tbody>${rows}</tbody></table>`)
   }
 
   // 5. Utility costs.

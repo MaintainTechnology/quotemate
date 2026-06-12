@@ -14,6 +14,42 @@ describe('solarPremiumQuoteEnabled', () => {
   })
 })
 
+describe('buildSolarPremiumQuote — Pylon supplement rows', () => {
+  it('renders the STC verification badge + zone facts when present', () => {
+    const est = makeEstimate()
+    est.context = {
+      ...est.context,
+      pylon_stc_check: {
+        checked_at: '2026-06-13T00:00:00Z',
+        verified: true,
+        tiers: [],
+        zone: '3',
+        zone_rating: 1.382,
+        deeming_period: 5,
+      },
+    }
+    const premium = buildSolarPremiumQuote({
+      estimate: est,
+      config: DEFAULT_SOLAR_CONFIG,
+      theme: 'dark',
+    })
+    const labels = premium.assumed_values.map((r) => r.label)
+    expect(labels).toContain('STC count')
+    expect(labels).toContain('STC zone')
+    const zoneRow = premium.assumed_values.find((r) => r.label === 'STC zone')!
+    expect(zoneRow.value).toBe('Zone 3 · rating 1.382 · 5-yr deeming')
+  })
+
+  it('omits the zone row when Pylon never answered', () => {
+    const premium = buildSolarPremiumQuote({
+      estimate: makeEstimate(),
+      config: DEFAULT_SOLAR_CONFIG,
+      theme: 'dark',
+    })
+    expect(premium.assumed_values.map((r) => r.label)).not.toContain('STC zone')
+  })
+})
+
 describe('buildSolarPremiumQuote — google path', () => {
   const premium = buildSolarPremiumQuote({
     estimate: makeEstimate(),

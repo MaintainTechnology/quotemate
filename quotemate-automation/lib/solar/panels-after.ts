@@ -193,6 +193,7 @@ export async function generateSolarPanelsImage(
         systemKwDc: headlineTier.system_kw_dc,
         layout,
         visionNotes,
+        panelSizeM: estimate.roof.panel_size_m ?? null,
       })
       out = await geminiProvider.renderImage({
         system: prompt.system,

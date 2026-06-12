@@ -165,3 +165,6 @@ service-account*.json
 
 # Stray tsx temp files some tooling writes when an env var resolves to "undefined"
 undefined/
+
+# Browser-automation artefacts (playwright MCP snapshots)
+.playwright-mcp/

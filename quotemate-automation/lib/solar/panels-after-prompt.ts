@@ -190,23 +190,38 @@ export function buildSolarBoxReplacementPrompt(args: {
   systemKwDc: number
   layout?: SolarPanelsLayoutFact[]
   visionNotes?: string | null
+  /** Real panel dimensions from the estimate — calibrates panel scale. */
+  panelSizeM?: { height_m: number; width_m: number } | null
 }): { system: string; user: string } {
   const count = Math.max(1, Math.round(args.panelsCount))
 
-  const system =
-    'You are a photo-editing specialist. The image you receive is a real ' +
-    'top-down satellite aerial of a property with an approved solar panel ' +
-    'placement plan drawn on the roof as orange rectangles. Your ONLY task ' +
-    'is local replacement: turn each orange rectangle into one ' +
-    'photorealistic solar panel occupying exactly that footprint, and ' +
-    'remove every trace of orange. Every other pixel stays faithful to ' +
-    'the original photo.'
+  // Absolute size calibration: the estimate's real panel dimensions when
+  // available, else the standard residential module. An absolute figure
+  // stops the generator ballooning panels even if it misreads a rectangle.
+  const size =
+    args.panelSizeM && args.panelSizeM.height_m > 0 && args.panelSizeM.width_m > 0
+      ? `${args.panelSizeM.width_m.toFixed(1)} m × ${args.panelSizeM.height_m.toFixed(1)} m`
+      : '1.0 m × 1.7 m'
 
-  // Placement wording: prefer the vision pre-step's pixel-grounded notes,
-  // else the deterministic per-plane facts.
+  const system =
+    'You are a photo-editing specialist working on a real top-down ' +
+    'satellite aerial photo of a property. The photo carries an approved ' +
+    'solar placement plan drawn on the roof as orange rectangles. ' +
+    'Recreate the photo exactly as-is with ONE change — local replacement: ' +
+    'each orange rectangle becomes one photorealistic dark monocrystalline ' +
+    "solar panel that fills exactly that rectangle's footprint (same " +
+    'position, same size, same rotation, same portrait/landscape ' +
+    'orientation), and every trace of orange is removed. Each rectangle ' +
+    `is drawn to true scale for a standard residential panel (about ${size} ` +
+    'relative to the house) — never enlarge or shrink the panels. ' +
+    'Everywhere outside the rectangles the output must match the original ' +
+    'photo exactly.'
+
+  // Placement wording: prefer the vision pre-step's pixel-grounded notes
+  // (SCENE + PLACEMENT sections), else the deterministic per-plane facts.
   let layoutNotes = ''
   if (args.visionNotes && args.visionNotes.trim().length > 0) {
-    layoutNotes = `LAYOUT NOTES (from the plan): ${args.visionNotes.trim()} `
+    layoutNotes = `${args.visionNotes.trim()} `
   } else if (args.layout && args.layout.length > 0) {
     const lines = args.layout.map((f, i) => {
       const orient =
@@ -219,31 +234,28 @@ export function buildSolarBoxReplacementPrompt(args: {
         `${f.rows === 1 ? '' : 's'} (${orient}) on the ${f.region} part of the frame.`
       )
     })
-    layoutNotes = `LAYOUT NOTES (from the plan): ${lines.join(' ')} `
+    layoutNotes = `PLACEMENT (from the plan): ${lines.join(' ')} `
   }
 
   const user =
-    `This aerial photo carries the approved panel placement plan: exactly ` +
-    `${count} orange rectangles drawn on the roof (a ${args.systemKwDc.toFixed(1)} kW system). ` +
+    `This aerial carries the approved Proposed Panel Layout for a ` +
+    `${args.systemKwDc.toFixed(1)} kW system: exactly ${count} orange ` +
+    'rectangles drawn on the roof. ' +
+    layoutNotes +
     `Follow the Proposed Panel Layout exactly: replace EVERY orange rectangle ` +
     'with one photorealistic dark monocrystalline solar panel that fills ' +
-    "exactly that rectangle's footprint — the same position, the same size, " +
-    'the same rotation and the same portrait/landscape orientation as the ' +
-    'rectangle it replaces. Panels must keep the rectangles\u2019 true relative ' +
-    'size against the roof — do not enlarge or shrink them. ' +
-    layoutNotes +
+    "exactly that rectangle's footprint — thin silver aluminium frames, " +
+    'subtle sun glint, lighting and shadows consistent with the photo. ' +
     `Do NOT add panels anywhere there is no rectangle. TOTAL: exactly ${count} ` +
     'panels — count them. Remove ALL orange markings: no orange outlines, ' +
     'fills, or tint may remain anywhere in the output. ' +
-    'STRICT RULES: keep the exact same building footprint, roof shape, ' +
-    'ridges, valleys and number of structures; keep the ground, driveway, ' +
-    'trees, pool, fences, vehicles, neighbouring buildings and the camera ' +
-    'angle / zoom completely unchanged. Do NOT re-roof or recolour the ' +
-    'roof surface, do NOT add or remove buildings, do NOT rotate or ' +
-    're-frame, do NOT add text, labels, watermarks or people. ' +
-    'Photorealistic panels with consistent lighting and shadows matching ' +
-    'the original aerial. The result must read as the SAME property ' +
-    'photographed after the solar installation.'
+    'Keep everything else identical to the original photo: building ' +
+    'footprint and roof shape, roof colour and texture, ridges and ' +
+    'valleys, ground, lawn, driveway, trees, pool, fences, vehicles, ' +
+    'neighbouring buildings, lighting, shadows, camera angle, zoom and ' +
+    'the satellite-photo look. No text, labels, watermarks or people. ' +
+    'The result must read as the SAME property photographed after the ' +
+    'solar installation.'
 
   return { system, user }
 }

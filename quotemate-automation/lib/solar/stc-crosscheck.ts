@@ -39,6 +39,11 @@ export type PylonStcCheck = {
   /** True when every tier Pylon answered for sat within tolerance. */
   verified: boolean
   tiers: PylonStcTierCheck[]
+  /** Official zone facts from Pylon's calculator (supplements build
+   *  2026-06-13) — display-only rebate transparency on the quote. */
+  zone?: string | null
+  zone_rating?: number | null
+  deeming_period?: number | null
 }
 
 /** PURE — compare one tier's deterministic certificate count to Pylon's. */
@@ -84,6 +89,11 @@ export async function runPylonStcCrossCheck(
 
   const clientOpts: PylonClientOpts = { apiKey: env.PYLON_API_KEY, ...opts }
   const results: PylonStcTierCheck[] = []
+  // Zone facts are postcode-level (tier-independent) — keep the first
+  // answer for display in the assumed-values table.
+  let zone: string | null = null
+  let zoneRating: number | null = null
+  let deemingPeriod: number | null = null
   for (const tier of tiers) {
     let pylonStcs: number | null = null
     const res = await fetchPylonStcAmount(
@@ -96,6 +106,9 @@ export async function runPylonStcCrossCheck(
     )
     if (res.ok) {
       pylonStcs = res.data.stcs
+      zone = zone ?? res.data.zone
+      zoneRating = zoneRating ?? res.data.zone_rating
+      deemingPeriod = deemingPeriod ?? res.data.deeming_period
     } else {
       console.warn(`[solar/pylon] stc_amount ${tier.tier} unavailable (${res.code}): ${res.detail}`)
     }
@@ -109,6 +122,9 @@ export async function runPylonStcCrossCheck(
       checked_at: (args.now ? args.now() : new Date()).toISOString(),
       verified: answered.length > 0 && flags.length === 0,
       tiers: results,
+      zone,
+      zone_rating: zoneRating,
+      deeming_period: deemingPeriod,
     },
     flags,
   }

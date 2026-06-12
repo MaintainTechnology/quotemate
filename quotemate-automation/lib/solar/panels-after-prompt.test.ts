@@ -240,7 +240,23 @@ describe('buildSolarBoxReplacementPrompt (marked plan as the SOURCE)', () => {
     expect(p.user).toContain('Follow the Proposed Panel Layout exactly')
     expect(p.user).toContain('replace EVERY orange rectangle')
     expect(p.user).toContain("exactly that rectangle's footprint")
-    expect(p.user).toContain('do not enlarge or shrink')
+    expect(p.system).toContain('never enlarge or shrink')
+  })
+
+  it('calibrates panel scale with real dimensions when available', () => {
+    const withSize = buildSolarBoxReplacementPrompt({
+      panelsCount: 14,
+      systemKwDc: 5.6,
+      layout,
+      panelSizeM: PANEL_SIZE,
+    })
+    expect(withSize.system).toContain('1.0 m × 1.9 m')
+    const withoutSize = buildSolarBoxReplacementPrompt({
+      panelsCount: 14,
+      systemKwDc: 5.6,
+      layout,
+    })
+    expect(withoutSize.system).toContain('1.0 m × 1.7 m')
   })
 
   it('pins the strict count and bans leftover orange', () => {
@@ -261,7 +277,7 @@ describe('buildSolarBoxReplacementPrompt (marked plan as the SOURCE)', () => {
       systemKwDc: 5.6,
       layout,
       visionNotes:
-        'Two rows of seven rectangles on the left roof section, rows parallel to the ridge. Total: exactly 14 panels.',
+        'SCENE: Grey hip roof with a pool at the top of frame. PLACEMENT: Two rows of seven rectangles on the left roof section, rows parallel to the ridge. Total: exactly 14 panels.',
     })
     expect(p.user).toContain('Two rows of seven rectangles on the left roof section')
     expect(p.user).not.toContain('north-facing plane (pitch 22°): 14 rectangles')
@@ -274,15 +290,15 @@ describe('buildSolarBoxReplacementPrompt (marked plan as the SOURCE)', () => {
       layout,
       visionNotes: null,
     })
-    expect(p.user).toContain('LAYOUT NOTES (from the plan)')
+    expect(p.user).toContain('PLACEMENT (from the plan)')
     expect(p.user).toContain('north-facing plane (pitch 22°)')
   })
 
-  it('keeps the strict do-not-change rules', () => {
+  it('states the preserve-everything-else invariants compactly', () => {
     const p = buildSolarBoxReplacementPrompt({ panelsCount: 14, systemKwDc: 5.6 })
-    expect(p.user).toContain('STRICT RULES')
-    expect(p.user).toContain('Do NOT re-roof')
-    expect(p.user).toMatch(/do NOT add text, labels, watermarks or people/i)
+    expect(p.user).toContain('Keep everything else identical to the original photo')
+    expect(p.user).toContain('No text, labels, watermarks or people')
+    expect(p.user).toContain('SAME property photographed after the solar installation')
   })
 
   it('the clean-photo reference label demands fidelity outside the panels', () => {

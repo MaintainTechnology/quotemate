@@ -16,6 +16,7 @@ import { ensureSolarQuotePdf, solarQuotePdfUrl, signQuotePdfUrl } from '@/lib/qu
 import { dispatchQuoteWithPdf } from '@/lib/sms/send-quote-pdf'
 import { buildSolarCustomerSms } from '@/lib/solar/notify'
 import { pylonLeadPushEnabled, pushPylonOpportunity } from '@/lib/pylon/client'
+import { pushSolarLeadToOpenSolar } from '@/lib/solar/opensolar-leadpush'
 import type { SolarEstimate } from '@/lib/solar/types'
 
 export const dynamic = 'force-dynamic'
@@ -79,7 +80,9 @@ export async function POST(
 
   const { data: row, error } = await supabase
     .from('solar_estimates')
-    .select('id, tenant_id, public_token, intake_id, routing, address, confirmed_at, guardrail_flags')
+    .select(
+      'id, tenant_id, public_token, intake_id, routing, address, state, postcode, confirmed_at, guardrail_flags',
+    )
     .eq('public_token', token)
     .maybeSingle()
   if (error || !row) {
@@ -129,6 +132,23 @@ export async function POST(
         publicToken: row.public_token as string,
         intakeId: (row.intake_id as string | null) ?? null,
         address: (row.address as string | null) ?? null,
+        state: (row.state as string | null) ?? null,
+        postcode: (row.postcode as string | null) ?? null,
+      }),
+    )
+    // OpenSolar lead push (enrichment build 2026-06-13) — creates a real
+    // OpenSolar contact + project for the address (with the customer's
+    // quarterly bill as usage), so the tradie can design it in studio and
+    // the OpenSolar tab can import it back as the premium proposal.
+    // Behind OPENSOLAR_ENRICHMENT_ENABLED + the allowlist; idempotent.
+    after(() =>
+      pushSolarLeadToOpenSolar(supabase, {
+        tenantId: (row.tenant_id as string | null) ?? null,
+        publicToken: row.public_token as string,
+        intakeId: (row.intake_id as string | null) ?? null,
+        address: (row.address as string | null) ?? null,
+        state: (row.state as string | null) ?? null,
+        postcode: (row.postcode as string | null) ?? null,
       }),
     )
     return Response.json({ ok: true, confirmed_at: confirmedAt })
@@ -209,10 +229,13 @@ async function sendCustomerSolarQuote(
 }
 
 /**
- * Best-effort Pylon CRM lead push on first confirm (premium quote §4.5).
+ * Best-effort Pylon CRM lead push on first confirm (premium quote §4.5;
+ * field names fixed + opportunity persistence added 2026-06-13).
  * Gated by PYLON_ENABLED + PYLON_API_KEY + the PYLON_LEAD_PUSH_TENANTS
- * allowlist. Sends name/phone/address/system summary; logged, never
- * throws — the confirm flow must be bit-identical when Pylon is off.
+ * allowlist. On success the created opportunity's id + in-app URL are
+ * stamped into estimate.context.pylon_opportunity so the dashboard can
+ * read the lead's pipeline stage back. Logged, never throws — the
+ * confirm flow must be bit-identical when Pylon is off.
  */
 async function pushSolarLeadToPylon(
   supabase: ReturnType<typeof getSupabase>,
@@ -221,6 +244,8 @@ async function pushSolarLeadToPylon(
     publicToken: string
     intakeId: string | null
     address: string | null
+    state: string | null
+    postcode: string | null
   },
 ): Promise<void> {
   try {
@@ -237,14 +262,14 @@ async function pushSolarLeadToPylon(
       return
     }
 
-    let caller: { name?: string; phone?: string } | null = null
+    let caller: { name?: string; phone?: string; email?: string } | null = null
     if (row.intakeId) {
       const { data: intake } = await supabase
         .from('intakes')
         .select('caller')
         .eq('id', row.intakeId)
         .maybeSingle()
-      caller = (intake?.caller as { name?: string; phone?: string } | null) ?? null
+      caller = (intake?.caller as { name?: string; phone?: string; email?: string } | null) ?? null
     }
 
     const { data: est } = await supabase
@@ -260,13 +285,43 @@ async function pushSolarLeadToPylon(
     const result = await pushPylonOpportunity({
       name: caller?.name?.trim() || 'QuoteMate solar lead',
       phone: caller?.phone?.trim() || null,
+      email: caller?.email?.trim() || null,
       address: row.address,
+      state: row.state,
+      postcode: row.postcode,
+      title: headline ? `${headline.system_kw_dc} kW solar — QuoteMate` : 'QuoteMate solar estimate',
       summary: headline
         ? `${headline.system_kw_dc} kW solar — confirmed QuoteMate estimate ($${Math.round(headline.net_inc_gst).toLocaleString('en-AU')} net inc GST)`
         : 'Confirmed QuoteMate solar estimate',
+      valueDollars: headline?.net_inc_gst ?? null,
+      sourceLinkedId: row.publicToken,
     })
     if (!result.ok) {
       console.warn(`[solar/confirm] Pylon lead push skipped (${result.code}): ${result.detail}`)
+      return
+    }
+
+    // Stamp the opportunity onto the estimate so the dashboard can show
+    // the lead's live Pylon pipeline stage. Best-effort.
+    if (result.data.id && estimate) {
+      const updated: SolarEstimate = {
+        ...estimate,
+        context: {
+          ...estimate.context,
+          pylon_opportunity: {
+            id: result.data.id,
+            in_app_url: result.data.in_app_url,
+            pushed_at: new Date().toISOString(),
+          },
+        },
+      }
+      const { error: updErr } = await supabase
+        .from('solar_estimates')
+        .update({ estimate: updated })
+        .eq('public_token', row.publicToken)
+      if (updErr) {
+        console.warn('[solar/confirm] pylon_opportunity stamp failed', updErr.message)
+      }
     }
   } catch (e) {
     console.warn(

@@ -84,6 +84,18 @@ describe('runPylonStcCrossCheck', () => {
     expect(out!.check.tiers).toHaveLength(2)
   })
 
+  it('captures the official zone facts from the first answer (supplements build)', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ stcs: 44, zone: '3', zone_rating: 1.382, deeming_period: 5 }),
+    )
+    const est = makeFixtureEstimate()
+    est.price = { ...est.price, tiers: [est.price.tiers[0]] }
+    const out = await runPylonStcCrossCheck({ estimate: est, env }, { fetchImpl })
+    expect(out!.check.zone).toBe('3')
+    expect(out!.check.zone_rating).toBe(1.382)
+    expect(out!.check.deeming_period).toBe(5)
+  })
+
   it('flags the mismatching tier only', async () => {
     const answers = [44, 60] // better is 9 certs off
     let call = 0

@@ -44,6 +44,7 @@ import {
 } from '@/lib/solar/premium-quote'
 import { loadSolarConfig } from '@/lib/solar/config'
 import type { SolarChart } from '@/lib/solar/charts'
+import { buildSolarHardwareCards } from '@/lib/solar/hardware-cards'
 import { money, kwh, kw, paybackBand } from '@/lib/solar/quote-page-format'
 
 export const dynamic = 'force-dynamic'
@@ -108,6 +109,9 @@ export default async function SolarQuotePage({
   })
   const explainers = buildSolarStatExplainers(estimate)
   const assumptions = buildSolarAssumptionsView(estimate)
+  // Pylon hardware supplement (build 2026-06-13) — customer-facing
+  // datasheet cards; empty array when the tenant nominated no SKUs.
+  const hardwareCards = buildSolarHardwareCards(estimate.context)
 
   // Premium proposal sections (spec 2026-06-12 §4.4), behind the
   // SOLAR_PREMIUM_QUOTE flag. The view model degrades field-by-field
@@ -329,6 +333,40 @@ export default async function SolarQuotePage({
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Your hardware — tenant-nominated components enriched with
+            Pylon manufacturer datasheets (supplements build 2026-06-13).
+            No dollar figures → renders pre-confirm. */}
+        {hardwareCards.length > 0 && (
+          <div className="mt-10">
+            <SectionHeading label="Your hardware" />
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-text-sec">
+              The equipment your installer fits as standard — manufacturer
+              datasheets included.
+            </p>
+            <ul className="mt-5 space-y-3">
+              {hardwareCards.map((c) => (
+                <li key={c.kindLabel + c.name} className="border border-ink-line bg-ink-card p-5">
+                  <div className="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.16em] text-accent">
+                    {c.kindLabel}
+                  </div>
+                  <div className="mt-1.5 text-base font-semibold text-text-pri">{c.name}</div>
+                  {c.detail && <div className="mt-0.5 text-sm text-text-sec">{c.detail}</div>}
+                  {c.datasheetUrl && (
+                    <a
+                      href={c.datasheetUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-block font-mono text-xs font-semibold uppercase tracking-[0.12em] text-text-dim underline decoration-1 underline-offset-2 transition-colors hover:text-accent"
+                    >
+                      Manufacturer datasheet
+                    </a>
+                  )}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 

@@ -17,6 +17,7 @@ import {
   mapSolarEstimateRow,
   type SolarEstimateRawRow,
 } from '@/lib/solar/dashboard-view'
+import { resolvePylonStages } from '@/lib/solar/pylon-stage'
 
 export const dynamic = 'force-dynamic'
 
@@ -62,11 +63,16 @@ export async function GET(req: Request) {
   const appUrl = process.env.APP_URL ?? 'https://quote-mate-rho.vercel.app'
 
   // Pull the most recent N estimates for this tenant (newest first).
+  // pylon_opportunity rides along as a JSON-path projection so the lead's
+  // live pipeline stage can be read back without shipping the whole
+  // estimate jsonb.
   const estRes = await supabase
     .from('solar_estimates')
     .select(
       'public_token, address, state, postcode, intake_id, confirmed_at, ' +
-        'guardrail_flags, routing, created_at, price, sizing',
+        'guardrail_flags, routing, created_at, price, sizing, ' +
+        'pylon_opportunity:estimate->context->pylon_opportunity, ' +
+        'opensolar_project:estimate->context->opensolar->project',
     )
     .eq('tenant_id', tenant.id)
     .order('created_at', { ascending: false })
@@ -102,11 +108,31 @@ export async function GET(req: Request) {
     }
   }
 
+  // Pylon pipeline stage read-back for pushed leads (supplements build
+  // 2026-06-13) — capped + best-effort inside resolvePylonStages.
+  type RowWithOpp = SolarEstimateRawRow & {
+    pylon_opportunity?: { id?: string } | null
+    opensolar_project?: { id?: string; url?: string } | null
+  }
+  const lookups = (rows as RowWithOpp[])
+    .filter((r): r is RowWithOpp & { pylon_opportunity: { id: string } } =>
+      typeof r.pylon_opportunity?.id === 'string' && r.pylon_opportunity.id.length > 0,
+    )
+    .map((r) => ({ key: r.public_token, opportunityId: r.pylon_opportunity.id }))
+  const stageByToken = await resolvePylonStages(lookups)
+
   const estimates = rows.map((row) =>
     mapSolarEstimateRow({
       row,
       customerName: row.intake_id ? nameByIntake[row.intake_id] ?? null : null,
       appUrl,
+      pylonStage: stageByToken[row.public_token] ?? null,
+      // OpenSolar lead-push round-trip (enrichment build 2026-06-13):
+      // the project deep-link rides the same JSON-path projection.
+      openSolarProjectUrl:
+        typeof (row as RowWithOpp).opensolar_project?.url === 'string'
+          ? ((row as RowWithOpp).opensolar_project!.url as string)
+          : null,
     }),
   )
 

@@ -85,12 +85,23 @@ function esc(s: string): string {
 export function buildMonthlyProductionChart(args: {
   annual_kwh_ac: number
   theme: ChartTheme
+  /** Real per-month series (Jan → Dec, kWh) when the design exposes one
+   *  (e.g. OpenSolar output_monthly). Falls back to the modelled AU
+   *  seasonal shape when absent — the caption states which was used. */
+  monthly_kwh?: number[] | null
 }): SolarChart | null {
   const { annual_kwh_ac } = args
   if (!Number.isFinite(annual_kwh_ac) || annual_kwh_ac <= 0) return null
   const pal = PALETTES[args.theme]
 
-  const monthly = AU_MONTHLY_PRODUCTION_SHAPE.map((f) => annual_kwh_ac * f)
+  const real =
+    args.monthly_kwh &&
+    args.monthly_kwh.length === 12 &&
+    args.monthly_kwh.every((v) => Number.isFinite(v) && v >= 0) &&
+    args.monthly_kwh.some((v) => v > 0)
+      ? args.monthly_kwh
+      : null
+  const monthly = real ?? AU_MONTHLY_PRODUCTION_SHAPE.map((f) => annual_kwh_ac * f)
   const max = Math.max(...monthly)
 
   const W = 640
@@ -121,10 +132,16 @@ export function buildMonthlyProductionChart(args: {
   })
 
   return {
-    svg: wrapSvg(parts, W, H, `Modelled monthly production, ${int(annual_kwh_ac)} kWh per year total`),
-    caption:
-      `Modelled seasonal shape scaled to ${int(annual_kwh_ac)} kWh/yr — ` +
-      'month-by-month figures are indicative, not metered.',
+    svg: wrapSvg(
+      parts,
+      W,
+      H,
+      `${real ? 'Designed' : 'Modelled'} monthly production, ${int(annual_kwh_ac)} kWh per year total`,
+    ),
+    caption: real
+      ? `Month-by-month production from your designed system — ${int(annual_kwh_ac)} kWh/yr total.`
+      : `Modelled seasonal shape scaled to ${int(annual_kwh_ac)} kWh/yr — ` +
+        'month-by-month figures are indicative, not metered.',
   }
 }
 

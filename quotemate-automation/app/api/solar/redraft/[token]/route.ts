@@ -26,6 +26,7 @@ import { fetchSolarDataLayers } from '@/lib/solar/data-layers'
 import { resolveNetworkFromPostcode } from '@/lib/solar/network-lookup'
 import { redraftEligibility, reconstructSolarInputs } from '@/lib/solar/redraft'
 import { applyPylonStcCrossCheck } from '@/lib/solar/pylon-aftercheck'
+import { applyOpenSolarSupplement } from '@/lib/solar/opensolar-supplement'
 import { buildSolarRowPayloads } from '@/lib/solar/persist-helpers'
 import type { SolarEstimate } from '@/lib/solar/types'
 
@@ -193,7 +194,11 @@ export async function POST(
 
   // Re-run the Pylon STC cross-check against the new numbers (spec §4.5
   // "and on re-draft"). After the response; never blocks.
-  after(() => applyPylonStcCrossCheck(supabase, redrafted))
+  after(() => applyPylonStcCrossCheck(supabase, redrafted, (row.tenant_id as string | null) ?? null))
+
+  // Re-run the OpenSolar supplements (hardware + pricing cross-check)
+  // against the fresh numbers too — same after() semantics.
+  after(() => applyOpenSolarSupplement(supabase, redrafted))
 
   return Response.json({
     ok: true,

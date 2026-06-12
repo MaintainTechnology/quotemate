@@ -651,6 +651,75 @@ export type SolarEstimateContext = {
       delta: number | null
       flag: string | null
     }>
+    /** Official STC zone facts from Pylon's calculator (supplements
+     *  build 2026-06-13) — display-only rebate transparency. */
+    zone?: string | null
+    zone_rating?: number | null
+    deeming_period?: number | null
+  } | null
+  /**
+   * Tenant-nominated hardware enriched from Pylon datasheets (supplements
+   * build 2026-06-13). Stamped by the estimate route's after() when the
+   * tenant has saved their standard SKUs. Customer-facing: brand/model +
+   * datasheet link. price/cost cents are INTERNAL (hardware-floor
+   * guardrail + dashboard) — never rendered on a customer surface.
+   */
+  pylon_components?: Array<{
+    kind: 'module' | 'inverter' | 'battery'
+    sku: string
+    name: string | null
+    brand: string | null
+    series: string | null
+    model_number: string | null
+    datasheet_url: string | null
+    price_excl_tax_cents: number | null
+    cost_excl_tax_cents: number | null
+  }> | null
+  /**
+   * The Pylon CRM opportunity created by the confirm-time lead push
+   * (supplements build 2026-06-13) — lets the dashboard read the lead's
+   * pipeline stage back from Pylon.
+   */
+  pylon_opportunity?: {
+    id: string
+    in_app_url: string | null
+    pushed_at: string
+  } | null
+  /**
+   * OpenSolar supplements for the INSTANT estimate (enrichment build
+   * 2026-06-13): the tradie's activated hardware catalogue (display-only
+   * product cards), their own pricing scheme applied to each tier as a
+   * CROSS-CHECK (divergence ⇒ guardrail flag — never a price change),
+   * and the OpenSolar project created by the confirm-time lead push.
+   * Stamped by the estimate/redraft routes' after() when
+   * OPENSOLAR_ENRICHMENT_ENABLED. Shape: lib/solar/opensolar-supplement.ts.
+   */
+  opensolar?: {
+    checked_at: string
+    hardware: Array<{
+      kind: 'module' | 'inverter' | 'battery'
+      manufacturer: string | null
+      code: string | null
+      kw_stc: number | null
+      product_warranty_years: number | null
+      technology: string | null
+    }> | null
+    price_check: {
+      scheme_title: string | null
+      pricing_formula: string | null
+      tiers: Array<{
+        tier: string
+        our_net_inc_gst: number
+        opensolar_price: number | null
+        delta_pct: number | null
+        flag: string | null
+      }>
+    } | null
+    project?: {
+      id: string
+      url: string
+      pushed_at: string
+    } | null
   } | null
 }
 

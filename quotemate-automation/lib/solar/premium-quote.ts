@@ -231,6 +231,15 @@ export function buildSolarPremiumQuote(args: {
       value: 'Verified against Pylon ✓',
     })
   }
+  // Official zone facts from Pylon's calculator (supplements build
+  // 2026-06-13) — rebate transparency, display-only.
+  const stcCheck = estimate.context.pylon_stc_check
+  if (stcCheck?.zone != null) {
+    const parts = [`Zone ${stcCheck.zone}`]
+    if (stcCheck.zone_rating != null) parts.push(`rating ${stcCheck.zone_rating}`)
+    if (stcCheck.deeming_period != null) parts.push(`${stcCheck.deeming_period}-yr deeming`)
+    assumed_values.push({ label: 'STC zone', value: parts.join(' · ') })
+  }
   assumed_values.push({ label: 'Config version', value: estimate.config_version })
 
   return {

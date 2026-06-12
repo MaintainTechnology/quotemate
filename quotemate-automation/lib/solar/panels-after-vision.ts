@@ -48,16 +48,23 @@ export async function describePanelPlanWithClaude(args: {
                 'This aerial photo shows a real roof overlaid with orange ' +
                 `rectangles. Each rectangle marks the position of ONE solar ` +
                 `panel; there are exactly ${expected} rectangles. You are ` +
-                'writing placement instructions for an image-editing AI that ' +
-                'will replace each rectangle with a photorealistic panel.\n\n' +
-                'Describe, concretely and visually: (1) which roof section(s) ' +
-                'the rectangles sit on (left/right/upper/lower part of the ' +
-                'frame, which side of the ridge); (2) how they are arranged — ' +
-                'rows × columns per group, the direction the rows run, and ' +
-                'how they align to the ridge lines and roof edges; (3) the ' +
-                'rectangle size relative to the roof. Be specific about THIS ' +
-                `photo. End with: "Total: exactly ${expected} panels." ` +
-                'Maximum 120 words. No preamble.',
+                'writing instructions for an image-editing AI that will ' +
+                'replace each rectangle with a photorealistic panel while ' +
+                'reproducing the rest of the photo exactly.\n\n' +
+                'Write two labelled sections:\n' +
+                'SCENE: one or two sentences anchoring the photo itself — ' +
+                'roof colour and shape, and the notable surroundings visible ' +
+                'in frame (trees, pool, driveway, sheds, lawn).\n' +
+                'PLACEMENT: cluster by cluster. For each group of rectangles ' +
+                'give (1) which roof section it sits on (left/right/upper/' +
+                'lower part of the frame, which side of the ridge); (2) the ' +
+                'arrangement — rows × columns, the direction the rows run, ' +
+                'how they align to ridge lines and roof edges; (3) where the ' +
+                'cluster sits RELATIVE to the largest cluster (e.g. "near the ' +
+                'ridge, upper-right of the main array"); (4) the rectangle ' +
+                'size relative to the roof. Be specific about THIS photo. ' +
+                `End with: "Total: exactly ${expected} panels." ` +
+                'Maximum 160 words. No preamble.',
             },
             {
               type: 'image',

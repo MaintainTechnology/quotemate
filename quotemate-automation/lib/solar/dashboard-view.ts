@@ -130,6 +130,14 @@ export type SolarEstimateViewModel = {
   canRedraft: boolean
   /** The /q/solar/[token] public quote link. */
   quoteUrl: string
+  /** Live Pylon pipeline stage of the pushed lead (supplements build
+   *  2026-06-13); null when no lead was pushed or Pylon is unreachable. */
+  pylonStage: string | null
+  /** Deep link to the lead in Pylon's web app. */
+  pylonLeadUrl: string | null
+  /** Deep link to the OpenSolar project created by the confirm-time lead
+   *  push (enrichment build 2026-06-13); null when none was pushed. */
+  openSolarProjectUrl: string | null
 }
 
 /**
@@ -141,6 +149,10 @@ export function mapSolarEstimateRow(args: {
   row: SolarEstimateRawRow
   customerName: string | null
   appUrl: string
+  /** Resolved Pylon pipeline stage for this row's pushed lead, if any. */
+  pylonStage?: { stage: string; url: string | null } | null
+  /** OpenSolar project link for this row's pushed lead, if any. */
+  openSolarProjectUrl?: string | null
 }): SolarEstimateViewModel {
   const { row, customerName, appUrl } = args
 
@@ -174,6 +186,9 @@ export function mapSolarEstimateRow(args: {
     // rows, and a refresh path after a config/rate-card update.
     canRedraft: status === 'flagged' || status === 'awaiting_confirmation',
     quoteUrl: buildSolarQuoteUrl(appUrl, row.public_token),
+    pylonStage: args.pylonStage?.stage ?? null,
+    pylonLeadUrl: args.pylonStage?.url ?? null,
+    openSolarProjectUrl: args.openSolarProjectUrl ?? null,
   }
 }
 

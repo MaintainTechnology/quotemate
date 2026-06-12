@@ -24,6 +24,7 @@ import { runSolarEstimate } from '@/lib/solar/intake'
 import { loadSolarConfig } from '@/lib/solar/config'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { applyPylonStcCrossCheck } from '@/lib/solar/pylon-aftercheck'
+import { applyOpenSolarSupplement } from '@/lib/solar/opensolar-supplement'
 import { geocodeAddress } from '@/lib/solar/geocode'
 import { validateSolarAddress } from '@/lib/solar/address-validation'
 import { fetchSolarDataLayers } from '@/lib/solar/data-layers'
@@ -183,7 +184,14 @@ export async function POST(
   // the confirm gate already turns into "cannot confirm until
   // re-drafted clean". Pylon down ⇒ nothing changes. Runs in after()
   // so the customer response is never blocked.
-  after(() => applyPylonStcCrossCheck(supabase, estimate))
+  after(() => applyPylonStcCrossCheck(supabase, estimate, tenant.id as string))
+
+  // ── OpenSolar supplements (enrichment build 2026-06-13, behind
+  // OPENSOLAR_ENRICHMENT_ENABLED): the tradie's activated hardware
+  // catalogue (display-only product cards) + their own pricing scheme as
+  // a cross-check guardrail. Never changes a price; OpenSolar down ⇒
+  // the row is bit-identical. Runs in after() like the Pylon checks.
+  after(() => applyOpenSolarSupplement(supabase, estimate))
 
   after(async () => {
     await notifySolarEstimate({

@@ -30,7 +30,14 @@ export default function RootLayout({
       lang="en"
       className={`${manrope.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-ink-deep text-text-pri">{children}</body>
+      {/* suppressHydrationWarning: browser extensions (ClickUp etc.) inject
+          classes onto <body> before React hydrates — attribute-only, expected. */}
+      <body
+        suppressHydrationWarning
+        className="min-h-full flex flex-col bg-ink-deep text-text-pri"
+      >
+        {children}
+      </body>
     </html>
   );
 }
