@@ -32,6 +32,7 @@ import {
   Package,
   Calculator,
   ClipboardList,
+  Building2,
   LogOut,
   PhoneCall,
   Copy,
@@ -51,6 +52,7 @@ import { tenantHasRoofingTrade } from '@/lib/roofing/tenant'
 import { RoofRatesEditor } from './_components/RoofRatesEditor'
 import { EstimatorBetaTab } from './_components/EstimatorBetaTab'
 import { SolarTab } from './_components/SolarTab'
+import CommercialPaintingTab from './_components/commercial-painting/CommercialPaintingTab'
 import { ErrorBanner, Field, INPUT } from '../signup/page'
 
 type NavIcon = ComponentType<LucideProps>
@@ -251,6 +253,8 @@ type Tab =
   | 'signage'
   /** Painting estimate (Phase 1 scaffold) — links to /dashboard/painting. Not trade-gated yet. */
   | 'painting'
+  /** Commercial painting (strategy v11) — document-driven takeoff → tender quote. Not trade-gated. */
+  | 'commercial-painting'
   /** AC recommender (Phase 1) — links to /dashboard/aircon. Not trade-gated yet. */
   | 'aircon'
   /** Estimator (Beta) — electrical plan PDF → AI quantity take-off. Not trade-gated. */
@@ -262,7 +266,7 @@ type Tab =
 const DEEP_LINK_TABS: readonly Tab[] = [
   'overview', 'account', 'payouts', 'pricing', 'services', 'catalogue', 'estimating',
   'recipes', 'quotes', 'chats', 'followups', 'roofing', 'signage', 'painting',
-  'aircon', 'estimator', 'solar',
+  'commercial-painting', 'aircon', 'estimator', 'solar',
 ]
 
 /** SMS conversation summary returned by /api/tenant/chats. Drives the
@@ -669,6 +673,7 @@ export default function DashboardPage() {
                 </Link>
               </div>
             )}
+            {tab === 'commercial-painting' && <CommercialPaintingTab accessToken={accessToken} />}
             {tab === 'estimator' && <EstimatorBetaTab accessToken={accessToken} />}
             {tab === 'solar' && (
               <SolarTab
@@ -893,6 +898,8 @@ function buildNav(quoteCount: number, hasRoofingTrade = false): NavItem[] {
   // Painting estimate (Phase 1 scaffold) — not trade-gated yet so it's
   // discoverable while painting isn't a live tenant trade.
   items.push({ tab: 'painting', label: 'Paint', icon: Paintbrush })
+  // Commercial painting (strategy v11) — plan-set takeoff → tender quote.
+  items.push({ tab: 'commercial-painting', label: 'Comm. paint', icon: Building2 })
   // AC recommender (Phase 1) — not trade-gated yet so it's discoverable.
   items.push({ tab: 'aircon', label: 'AC', icon: AirVent })
   // Estimator (Beta) — electrical plan take-off. Not trade-gated yet.
@@ -924,7 +931,7 @@ const SIDEBAR_GROUPS: { label: string; tabs: Tab[] }[] = [
   // tenants the byTab.get('roofing') lookup returns undefined and the
   // sidebar quietly skips the row. No tenant-specific filtering needed
   // in this layout list.
-  { label: 'Daily work', tabs: ['overview', 'quotes', 'followups', 'chats', 'roofing', 'signage', 'painting', 'aircon', 'estimator', 'solar'] },
+  { label: 'Daily work', tabs: ['overview', 'quotes', 'followups', 'chats', 'roofing', 'signage', 'painting', 'commercial-painting', 'aircon', 'estimator', 'solar'] },
   {
     label: 'Setup',
     tabs: ['account', 'payouts', 'pricing', 'services', 'catalogue', 'estimating', 'recipes'],
@@ -1169,6 +1176,10 @@ const TAB_META: Record<
   painting: {
     title: 'Paint tools',
     desc: 'Estimate paintable area from an address, get a Good / Better / Best range with a confidence band.',
+  },
+  'commercial-painting': {
+    title: 'Commercial painting',
+    desc: 'Upload a plan set, confirm the AI surface takeoff, and get a tender-ready price with labour, materials and access equipment.',
   },
 }
 
@@ -10331,6 +10342,8 @@ function tabLabel(t: Tab): string {
       return 'Signage'
     case 'painting':
       return 'Paint'
+    case 'commercial-painting':
+      return 'Comm. paint'
     case 'estimator':
       return 'Estimator'
     case 'solar':
