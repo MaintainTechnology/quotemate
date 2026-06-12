@@ -199,14 +199,18 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
       if (siteAddress.trim()) fd.append('site_address', siteAddress.trim())
       if (runId) fd.append('paint_run_id', runId)
       const res = await fetch(`${API}/upload`, authed({ method: 'POST', body: fd }))
-      const body = await res.json()
-      if (!res.ok || !body.ok) {
+      const body = await res.json().catch(() => null)
+      if (!res.ok || !body?.ok) {
         setErrMsg(
           body?.error === 'file_too_large'
             ? `${body.filename} is over 32 MB.`
             : body?.error === 'unsupported_type'
               ? `${body.filename} isn’t a PDF or image.`
-              : 'Upload failed. Please try again.',
+              : body?.detail
+                ? `Upload failed: ${body.detail}`
+                : body?.error
+                  ? `Upload failed (${body.error}). Please try again.`
+                  : `Upload failed (HTTP ${res.status}). Please try again.`,
         )
         return
       }
