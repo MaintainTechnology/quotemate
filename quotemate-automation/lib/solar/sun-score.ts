@@ -72,6 +72,28 @@ export const SUN_SCORE_COPY: Record<SolarSunScoreLabel, string> = {
   limited: 'Limited sun',
 }
 
+/** Marker dot colour per score — shared by the quote page and the PDF
+ *  so the on-roof dots and the legend always agree. */
+export const SUN_SCORE_COLORS: Record<SolarSunScoreLabel, string> = {
+  excellent: '#34d399', // emerald
+  good: '#2dd4bf', // teal
+  moderate: '#fbbf24', // amber
+  limited: '#9ca3af', // grey
+}
+
+/**
+ * Dot/marker colour per score — shared by the quote page overlay, the
+ * PDF figure and the legend, so the scale reads identically everywhere.
+ * Follows the heatmap's own ramp (brighter = more sun): gold → orange →
+ * teal → dim grey.
+ */
+export const SUN_SCORE_COLOR: Record<SolarSunScoreLabel, string> = {
+  excellent: '#FFC83D',
+  good: '#FF7A45',
+  moderate: '#14B8A6',
+  limited: '#7A8699',
+}
+
 /**
  * PURE — derive the sun-score view from roof facts. Returns scores with
  * null medians/labels for planes without quantiles (manual path, old

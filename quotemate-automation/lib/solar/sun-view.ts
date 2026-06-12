@@ -14,7 +14,12 @@
 // ════════════════════════════════════════════════════════════════════
 
 import type { SolarEstimate } from './types'
-import { deriveSolarSunScores, SUN_SCORE_COPY } from './sun-score'
+import {
+  deriveSolarSunScores,
+  SUN_SCORE_COPY,
+  SUN_SCORE_COLORS,
+  type SolarSunScoreLabel,
+} from './sun-score'
 import { orientationLabel } from './hero-overlay'
 
 export type SolarSunStat = { label: string; value: string; hint?: string }
@@ -26,8 +31,10 @@ export type SolarSunPlaneRow = {
   relative_pct: number
 }
 
-/** A sun-score label pinned ONTO the heatmap image (deterministic —
- *  panel centroids projected through the raster's geo bbox). */
+/** A sun-score dot pinned ONTO the heatmap image (deterministic —
+ *  panel centroids projected through the raster's geo bbox). Rendered
+ *  as a score-coloured circle; details appear on hover/tap (page) or in
+ *  the numbered key table (PDF). */
 export type SolarSunMarker = {
   /** Position inside the heatmap image, % of width/height. */
   x_pct: number
@@ -36,9 +43,12 @@ export type SolarSunMarker = {
   orientation: string
   /** e.g. "Excellent sun". */
   score_copy: string
+  /** Raw score label — drives the dot colour (SUN_SCORE_COLOR). */
+  score_label: SolarSunScoreLabel
   area_m2: number
   relative_pct: number
-  /** True for the sunniest plane — the page renders it in accent. */
+  /** True for the sunniest plane — bigger ringed dot, tooltip leads
+   *  with "Best spot". */
   is_best: boolean
 }
 
@@ -148,6 +158,7 @@ export function buildSolarSunView(estimate: SolarEstimate): SolarSunView | null 
         y_pct: anchor.y_pct,
         orientation: orientationLabel(score.orientation),
         score_copy: SUN_SCORE_COPY[score.label],
+        score_label: score.label,
         area_m2: score.area_m2,
         relative_pct: score.relative_pct,
         is_best: scores.best_plane_index === anchor.plane_index,
