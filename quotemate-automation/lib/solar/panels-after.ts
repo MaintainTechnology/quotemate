@@ -23,8 +23,11 @@
 import { createClient } from '@supabase/supabase-js'
 import { buildStaticMapUrl } from '@/lib/roofing/google-maps'
 import { geminiProvider } from '@/lib/ig-engine/providers/gemini'
-import { buildSolarPanelsAfterPrompt } from './panels-after-prompt'
-import { centerForSolarEstimate } from './static-map-center'
+import {
+  buildSolarPanelsAfterPrompt,
+  deriveSolarLayoutFacts,
+} from './panels-after-prompt'
+import { resolveSolarOverlayCenter } from './static-map-center'
 import type { SolarEstimate } from './types'
 
 const supabase = createClient(
@@ -87,7 +90,13 @@ export async function generateSolarPanelsImage(
   if (!claimed) return { ok: false, status: 'busy' }
 
   try {
-    const center = centerForSolarEstimate({ roof: estimate.roof })
+    // SAME centre the hero static map + the deterministic layout/string
+    // figures use (panel centroid → polygon → geocode), so the per-plane
+    // region descriptions in the prompt match the source frame exactly.
+    const center = resolveSolarOverlayCenter({
+      roof: estimate.roof,
+      location: estimate.context.location ?? null,
+    })
     const address = (row.address as string | null) ?? undefined
     if (!center && !address) throw new Error('no_location')
 
@@ -106,10 +115,25 @@ export async function generateSolarPanelsImage(
     const satMime = satRes.headers.get('content-type') ?? 'image/png'
     const satBytes = Buffer.from(await satRes.arrayBuffer())
 
+    // Ground the render on the SAME per-plane distribution the Proposed
+    // Panel Layout / string figures draw (premium quote §4.2): plane,
+    // count, rows, photo region, rectangle orientation. Empty for
+    // pre-premium rows → the builder falls back to orientation-only.
+    const layout = center
+      ? deriveSolarLayoutFacts({
+          panels: estimate.roof.panels ?? [],
+          planes: estimate.roof.planes,
+          center,
+          panel_limit: headlineTier.panels_count,
+          panel_size_m: estimate.roof.panel_size_m ?? null,
+        })
+      : []
+
     const prompt = buildSolarPanelsAfterPrompt({
       panelsCount: headlineTier.panels_count,
       systemKwDc: headlineTier.system_kw_dc,
       orientation: estimate.roof.primary_orientation,
+      layout,
     })
     const out = await geminiProvider.renderImage({
       system: prompt.system,

@@ -164,8 +164,12 @@ export async function POST(
     .from('solar_estimates')
     .update({
       ...estimateUpdate,
-      // Stale PDF must regenerate against the new numbers on next request.
+      // Stale artefacts must regenerate against the new numbers: the PDF
+      // on next request, and the AI "panels installed" concept (its
+      // prompt is grounded on the headline tier's panel layout).
       pdf_path: null,
+      panels_image_status: 'idle',
+      panels_image_path: null,
     })
     .eq('id', row.id)
   if (updErr) {
