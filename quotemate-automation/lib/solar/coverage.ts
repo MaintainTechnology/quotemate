@@ -25,6 +25,11 @@ import type {
 /** Imagery qualities good enough for the solar money path. */
 const COVERAGE_FLOOR: SolarImageryQuality[] = ['HIGH', 'MEDIUM']
 
+/** The floor with expanded coverage on: BASE (satellite-derived) imagery
+ *  is admitted — the estimate then carries a wide confidence band
+ *  (intake.ts only grants 'tight' to HIGH imagery). */
+const EXPANDED_COVERAGE_FLOOR: SolarImageryQuality[] = ['HIGH', 'MEDIUM', 'BASE']
+
 /**
  * Map the roofing module's ImageryQuality onto the solar module's
  * SolarImageryQuality. Both are currently the same union, but they are
@@ -34,6 +39,7 @@ const COVERAGE_FLOOR: SolarImageryQuality[] = ['HIGH', 'MEDIUM']
 function toSolarImageryQuality(q: ImageryQuality): SolarImageryQuality {
   if (q === 'HIGH') return 'HIGH'
   if (q === 'MEDIUM') return 'MEDIUM'
+  if (q === 'BASE') return 'BASE'
   return 'LOW'
 }
 
@@ -72,7 +78,8 @@ export async function checkSolarCoverage(
   }
 
   const quality = toSolarImageryQuality(res.insight.imageryQuality)
-  if (!COVERAGE_FLOOR.includes(quality)) {
+  const floor = opts.expandedCoverage ? EXPANDED_COVERAGE_FLOOR : COVERAGE_FLOOR
+  if (!floor.includes(quality)) {
     return {
       covered: false,
       code: 'imagery_below_floor',

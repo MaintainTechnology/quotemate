@@ -88,3 +88,59 @@ describe('checkSolarCoverage', () => {
     if (!r.covered) expect(r.code).toBe('provider_invalid_response')
   })
 })
+
+describe('checkSolarCoverage — expanded coverage (SOLAR_EXPANDED_COVERAGE)', () => {
+  const baseBody = { ...COVERED_RAW_BODY, imageryQuality: 'BASE' }
+
+  it('rejects BASE imagery by default (flag off)', async () => {
+    const opts = resolveSolarOpts({
+      apiKey: 'k',
+      fetchImpl: fakeFetch(200, baseBody),
+      expandedCoverage: false,
+    })
+    const r = await checkSolarCoverage(LOC, opts)
+    expect(r.covered).toBe(false)
+    if (!r.covered) expect(r.code).toBe('imagery_below_floor')
+  })
+
+  it('accepts BASE imagery when expanded coverage is on', async () => {
+    const opts = resolveSolarOpts({
+      apiKey: 'k',
+      fetchImpl: fakeFetch(200, baseBody),
+      expandedCoverage: true,
+    })
+    const r = await checkSolarCoverage(LOC, opts)
+    expect(r.covered).toBe(true)
+    if (r.covered) expect(r.imagery_quality).toBe('BASE')
+  })
+
+  it('still rejects LOW imagery even with expanded coverage on', async () => {
+    const lowBody = { ...COVERED_RAW_BODY, imageryQuality: 'LOW' }
+    const opts = resolveSolarOpts({
+      apiKey: 'k',
+      fetchImpl: fakeFetch(200, lowBody),
+      expandedCoverage: true,
+    })
+    const r = await checkSolarCoverage(LOC, opts)
+    expect(r.covered).toBe(false)
+  })
+
+  it('appends experiments=EXPANDED_COVERAGE to the request only when on', async () => {
+    let url = ''
+    const capture = (body: unknown) => async (u: RequestInfo | URL) => {
+      url = String(u)
+      return new Response(JSON.stringify(body), { status: 200 })
+    }
+    await checkSolarCoverage(
+      LOC,
+      resolveSolarOpts({ apiKey: 'k', fetchImpl: capture(baseBody), expandedCoverage: true }),
+    )
+    expect(url).toContain('experiments=EXPANDED_COVERAGE')
+
+    await checkSolarCoverage(
+      LOC,
+      resolveSolarOpts({ apiKey: 'k', fetchImpl: capture(COVERED_RAW_BODY), expandedCoverage: false }),
+    )
+    expect(url).not.toContain('experiments=EXPANDED_COVERAGE')
+  })
+})

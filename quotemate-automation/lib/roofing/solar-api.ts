@@ -39,7 +39,10 @@ import type { PitchBucket, RoofMetrics, RoofUserInputs } from './types'
 import { slopedAreaFromFootprint } from './pricing'
 import { polygonCentroid } from './map-utils'
 
-export type ImageryQuality = 'HIGH' | 'MEDIUM' | 'LOW'
+/** 'BASE' = satellite-derived expanded-coverage imagery (Solar API
+ *  experiments=EXPANDED_COVERAGE) — only requested/accepted when the
+ *  expanded-coverage flag is on. */
+export type ImageryQuality = 'HIGH' | 'MEDIUM' | 'LOW' | 'BASE'
 
 /** One roof plane as reported by the Solar API. */
 export type SolarRoofSegment = {
@@ -102,10 +105,14 @@ export type SolarEnrichmentOpts = {
   baseUrl?: string
   /** Imagery qualities accepted for the MONEY path. Default HIGH+MEDIUM. */
   acceptQualities?: ImageryQuality[]
+  /** Request Google's EXPANDED_COVERAGE experiment (satellite-derived
+   *  BASE-quality insights for areas without aerial imagery). Defaults
+   *  to the SOLAR_EXPANDED_COVERAGE env flag. */
+  expandedCoverage?: boolean
 }
 
 export type ResolvedSolarOpts = Required<
-  Pick<SolarEnrichmentOpts, 'enabled' | 'acceptQualities'>
+  Pick<SolarEnrichmentOpts, 'enabled' | 'acceptQualities' | 'expandedCoverage'>
 > & {
   apiKey: string | undefined
   fetchImpl: FetchLike | undefined
@@ -140,6 +147,8 @@ export function resolveSolarOpts(opts: SolarEnrichmentOpts = {}): ResolvedSolarO
     fetchImpl: opts.fetchImpl,
     baseUrl: opts.baseUrl,
     acceptQualities: opts.acceptQualities ?? DEFAULT_ACCEPT_QUALITIES,
+    expandedCoverage:
+      opts.expandedCoverage ?? process.env.SOLAR_EXPANDED_COVERAGE === 'true',
   }
 }
 
@@ -270,9 +279,11 @@ export function formatImageryDate(raw: unknown): string | null {
 }
 
 /** PURE — coerce the imageryQuality enum; unknown values degrade to LOW
- *  so they fail the money-path quality gate rather than being trusted. */
+ *  so they fail the money-path quality gate rather than being trusted.
+ *  'BASE' (expanded-coverage satellite imagery) is preserved — accepting
+ *  it is an explicit opt-in at the coverage gate, never a default. */
 export function normaliseQuality(raw: unknown): ImageryQuality {
-  if (raw === 'HIGH' || raw === 'MEDIUM' || raw === 'LOW') return raw
+  if (raw === 'HIGH' || raw === 'MEDIUM' || raw === 'LOW' || raw === 'BASE') return raw
   return 'LOW'
 }
 
@@ -350,7 +361,10 @@ export async function fetchBuildingInsights(
   const url =
     `${base}?location.latitude=${encodeURIComponent(loc.lat.toFixed(7))}` +
     `&location.longitude=${encodeURIComponent(loc.lng.toFixed(7))}` +
-    `&requiredQuality=LOW&key=${encodeURIComponent(opts.apiKey)}`
+    `&requiredQuality=LOW&key=${encodeURIComponent(opts.apiKey)}` +
+    // Expanded coverage: ask Google for satellite-derived BASE-quality
+    // insights where aerial imagery is missing (flag-gated).
+    (opts.expandedCoverage ? '&experiments=EXPANDED_COVERAGE' : '')
   const fetchImpl = opts.fetchImpl ?? ((u, init) => fetch(u, init))
 
   let res: Response

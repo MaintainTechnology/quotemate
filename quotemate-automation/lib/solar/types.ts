@@ -87,8 +87,10 @@ export type SolarDataLayersSummary = {
   detail: string | null
 }
 
-/** Google Solar imagery quality, normalised. LOW fails the money gate. */
-export type SolarImageryQuality = 'HIGH' | 'MEDIUM' | 'LOW'
+/** Google Solar imagery quality, normalised. LOW fails the money gate.
+ *  BASE = expanded-coverage satellite imagery — accepted only behind the
+ *  SOLAR_EXPANDED_COVERAGE flag, always with a wide confidence band. */
+export type SolarImageryQuality = 'HIGH' | 'MEDIUM' | 'LOW' | 'BASE'
 
 /**
  * Where the roof facts came from. 'google' = buildingInsights;

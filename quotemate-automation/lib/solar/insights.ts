@@ -58,7 +58,11 @@ export async function fetchSolarBuildingInsights(
   const url =
     `${base}?location.latitude=${encodeURIComponent(location.lat.toFixed(7))}` +
     `&location.longitude=${encodeURIComponent(location.lng.toFixed(7))}` +
-    `&requiredQuality=LOW&key=${encodeURIComponent(resolved.apiKey)}`
+    `&requiredQuality=LOW&key=${encodeURIComponent(resolved.apiKey)}` +
+    // Expanded coverage (SOLAR_EXPANDED_COVERAGE): satellite-derived
+    // BASE-quality insights where aerial imagery is missing — must match
+    // the coverage-gate request or the two calls can disagree.
+    (resolved.expandedCoverage ? '&experiments=EXPANDED_COVERAGE' : '')
   const fetchImpl = resolved.fetchImpl ?? ((u, init) => fetch(u, init))
 
   let res: Response
