@@ -1,0 +1,13 @@
+# Ralph progress — Google Solar API full exploitation (2026-06-13)
+
+Completion promise: "All tests pass"
+
+## Learnings
+- pngjs already a direct dep (used in lib/estimation/refine.ts); geotiff must be added.
+- buildMonthlyProductionChart already accepts monthly_kwh?: number[] — sink for monthly flux.
+- data_layers summary persists inside solar_estimates.estimate jsonb (no dedicated column); GeoTIFF URLs are short-lived and must never be persisted (data-layers.test.ts asserts no 'geoTiff' in JSON).
+- after() pattern for enrichment: see pylon-aftercheck/opensolar-supplement invocations in /api/solar/[tenantSlug]/estimate route.
+- Asset caching pattern: intake-photos bucket, path solar/{row.id}/..., served via /api/solar/q/[token]/* routes (see panels-after).
+- Pre-existing uncommitted worktree changes (deleted pylon/opensolar tab files) must NOT be staged in story commits — stage explicitly.
+
+## History

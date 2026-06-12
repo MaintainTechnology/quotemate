@@ -149,6 +149,13 @@ export type SolarRoofPlane = {
    * (manual fallback / pre-premium estimates).
    */
   panels_count?: number | null
+  /**
+   * Google roofSegmentStats[].stats.sunshineQuantiles — the pointwise
+   * sun-exposure distribution across this plane (ascending percentiles,
+   * kWh/kW/year). Drives the per-plane sun score (sun-score.ts).
+   * Null/absent on the manual path or when Google omits it.
+   */
+  sunshine_quantiles?: number[] | null
 }
 
 /**
@@ -233,6 +240,20 @@ export type SolarRoofFacts = {
   carbon_offset_factor_kg_per_mwh?: number | null
   /** Google wholeRoofStats.areaMeters2 — validation cross-check only. */
   whole_roof_area_m2?: number | null
+  // ── Sun & shade fields (Google Solar full-exploitation build
+  //    2026-06-13). OPTIONAL for the same persisted-estimate reason as
+  //    the premium fields; manual fallback emits nulls. ───────────────
+  /** solarPotential.maxSunshineHoursPerYear — max sun hours/year at this
+   *  location ("your roof gets X hours of sun a year"). */
+  max_sunshine_hours_per_year?: number | null
+  /** solarPotential.maxArrayAreaMeters2 — max installable array area. */
+  max_array_area_m2?: number | null
+  /** solarPotential.panelLifetimeYears — Google's assumed panel life
+   *  (labels the financial horizon copy). */
+  panel_lifetime_years?: number | null
+  /** wholeRoofStats.sunshineQuantiles — whole-roof sun-exposure
+   *  distribution (ascending percentiles, kWh/kW/year). */
+  whole_roof_sunshine_quantiles?: number[] | null
 }
 
 // ── Coverage gate (coverage.ts) ──────────────────────────────────────

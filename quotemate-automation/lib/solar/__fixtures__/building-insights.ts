@@ -50,16 +50,32 @@ export const COVERED_RAW_BODY = {
     panelCapacityWatts: 400,
     panelHeightMeters: 1.879,
     panelWidthMeters: 1.045,
+    // Sun & shade fields (full-exploitation build 2026-06-13): hand-chosen
+    // so sun-score assertions land on exact values — north plane median
+    // 1600, south plane median 1200 → south relative = 75% ('good').
+    maxSunshineHoursPerYear: 2400,
+    maxArrayAreaMeters2: 58.5,
+    panelLifetimeYears: 20,
+    wholeRoofStats: {
+      areaMeters2: 130,
+      sunshineQuantiles: [900, 1100, 1300, 1450, 1500, 1550, 1600, 1650, 1700, 1750, 1800],
+    },
     roofSegmentStats: [
       {
         pitchDegrees: 20,
         azimuthDegrees: 0, // due north
-        stats: { areaMeters2: 70 },
+        stats: {
+          areaMeters2: 70,
+          sunshineQuantiles: [1200, 1300, 1400, 1500, 1550, 1600, 1650, 1700, 1750, 1800, 1850],
+        },
       },
       {
         pitchDegrees: 20,
         azimuthDegrees: 180, // due south
-        stats: { areaMeters2: 50 },
+        stats: {
+          areaMeters2: 50,
+          sunshineQuantiles: [800, 900, 1000, 1100, 1150, 1200, 1250, 1300, 1350, 1400, 1450],
+        },
       },
     ],
     solarPanelConfigs: [
@@ -102,8 +118,20 @@ export const COVERED_ROOF_FACTS: SolarRoofFacts = {
   source: 'google',
   usable_area_m2: 120,
   planes: [
-    { pitch_degrees: 20, azimuth_degrees: 0, area_m2: 70, orientation: 'north' },
-    { pitch_degrees: 20, azimuth_degrees: 180, area_m2: 50, orientation: 'south' },
+    {
+      pitch_degrees: 20,
+      azimuth_degrees: 0,
+      area_m2: 70,
+      orientation: 'north',
+      sunshine_quantiles: [1200, 1300, 1400, 1500, 1550, 1600, 1650, 1700, 1750, 1800, 1850],
+    },
+    {
+      pitch_degrees: 20,
+      azimuth_degrees: 180,
+      area_m2: 50,
+      orientation: 'south',
+      sunshine_quantiles: [800, 900, 1000, 1100, 1150, 1200, 1250, 1300, 1350, 1400, 1450],
+    },
   ],
   segment_count: 2,
   primary_orientation: 'north',
@@ -119,6 +147,12 @@ export const COVERED_ROOF_FACTS: SolarRoofFacts = {
   polygon_geojson: null,
   imagery_quality: 'HIGH',
   imagery_date: '2024-03-12',
+  // Sun & shade fields (full-exploitation build 2026-06-13) — mirror
+  // the COVERED_RAW_BODY values above.
+  max_sunshine_hours_per_year: 2400,
+  max_array_area_m2: 58.5,
+  panel_lifetime_years: 20,
+  whole_roof_sunshine_quantiles: [900, 1100, 1300, 1450, 1500, 1550, 1600, 1650, 1700, 1750, 1800],
 }
 
 /** What findClosest returns for an address with no imagery — no potential. */

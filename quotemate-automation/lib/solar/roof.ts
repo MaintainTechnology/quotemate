@@ -37,7 +37,12 @@ export function normaliseSolarRoofFacts(
   coverage: Extract<SolarCoverageResult, { covered: true }>,
   config?: Pick<SolarConfig, 'default_panel_capacity_watts'>,
 ): SolarRoofFacts {
-  const planes: SolarRoofPlane[] = insights.segments.map((s) => ({
+  // Per-plane sunshine quantiles, aligned with insights.segments by
+  // replaying the SAME skip conditions parseBuildingInsights applies
+  // (no pitch → skip; no positive area → skip). See readSegmentQuantiles.
+  const segmentQuantiles = readSegmentQuantiles(insights.raw)
+
+  const planes: SolarRoofPlane[] = insights.segments.map((s, i) => ({
     pitch_degrees: round1(s.pitchDegrees),
     azimuth_degrees: s.azimuthDegrees,
     // Each plane's area_m2 is rounded for display only. The usable_area_m2
@@ -47,6 +52,7 @@ export function normaliseSolarRoofFacts(
     // for human-readable output and does NOT feed into the area total.
     area_m2: round1(s.areaMeters2),
     orientation: azimuthToOrientation(s.azimuthDegrees, s.pitchDegrees),
+    sunshine_quantiles: segmentQuantiles[i] ?? null,
   }))
 
   // Sum raw segment areas first; apply a single round1() to avoid
@@ -163,6 +169,22 @@ export function normaliseSolarRoofFacts(
   const whole_roof_area_m2 =
     Number.isFinite(rawWholeArea) && rawWholeArea > 0 ? round1(rawWholeArea) : null
 
+  // ── Sun & shade fields (full-exploitation build 2026-06-13) ────────
+
+  const rawSunHours = numberOr(sp.maxSunshineHoursPerYear, NaN)
+  const max_sunshine_hours_per_year =
+    Number.isFinite(rawSunHours) && rawSunHours > 0 ? round1(rawSunHours) : null
+
+  const rawArrayArea = numberOr(sp.maxArrayAreaMeters2, NaN)
+  const max_array_area_m2 =
+    Number.isFinite(rawArrayArea) && rawArrayArea > 0 ? round1(rawArrayArea) : null
+
+  const rawLifetime = numberOr(sp.panelLifetimeYears, NaN)
+  const panel_lifetime_years =
+    Number.isFinite(rawLifetime) && rawLifetime > 0 ? Math.floor(rawLifetime) : null
+
+  const whole_roof_sunshine_quantiles = parseQuantiles(wholeStats.sunshineQuantiles)
+
   return {
     source: 'google',
     usable_area_m2,
@@ -181,6 +203,10 @@ export function normaliseSolarRoofFacts(
     panel_size_m,
     carbon_offset_factor_kg_per_mwh,
     whole_roof_area_m2,
+    max_sunshine_hours_per_year,
+    max_array_area_m2,
+    panel_lifetime_years,
+    whole_roof_sunshine_quantiles,
   }
 }
 
@@ -209,6 +235,50 @@ export function azimuthToOrientation(
 }
 
 // ── helpers ──────────────────────────────────────────────────────────
+
+/**
+ * PURE — validate a sunshineQuantiles value: a non-empty array of finite,
+ * non-negative numbers (Google sends ascending percentiles). Returns null
+ * for anything else so a malformed payload never poisons the estimate.
+ */
+function parseQuantiles(v: unknown): number[] | null {
+  if (!Array.isArray(v) || v.length === 0) return null
+  const out: number[] = []
+  for (const q of v) {
+    const n = numberOr(q, NaN)
+    if (!Number.isFinite(n) || n < 0) return null
+    out.push(round1(n))
+  }
+  return out
+}
+
+/**
+ * PURE — per-segment sunshineQuantiles aligned with the parser's surviving
+ * segments. parseBuildingInsights skips raw roofSegmentStats entries with
+ * no pitch or no positive area; this replays exactly those conditions so
+ * index i here corresponds to insights.segments[i]. If Google ever changes
+ * shape, a misaligned read degrades to null quantiles — never a wrong map.
+ */
+function readSegmentQuantiles(raw: unknown): Array<number[] | null> {
+  const sp = readSolarPotential(raw)
+  const rawSegments = sp.roofSegmentStats
+  if (!Array.isArray(rawSegments)) return []
+  const out: Array<number[] | null> = []
+  for (const item of rawSegments) {
+    if (!item || typeof item !== 'object') continue
+    const seg = item as Record<string, unknown>
+    const pitch = numberOr(seg.pitchDegrees, NaN)
+    if (!Number.isFinite(pitch)) continue
+    const stats = (seg.stats ?? {}) as Record<string, unknown>
+    const area = numberOr(
+      stats.areaMeters2,
+      numberOr(stats.groundAreaMeters2, numberOr(seg.areaMeters2, NaN)),
+    )
+    if (!Number.isFinite(area) || area <= 0) continue
+    out.push(parseQuantiles(stats.sunshineQuantiles))
+  }
+  return out
+}
 
 function readSolarPotential(raw: unknown): Record<string, unknown> {
   if (!raw || typeof raw !== 'object') return {}

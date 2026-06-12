@@ -128,6 +128,81 @@ describe('normaliseSolarRoofFacts', () => {
     const f = normaliseSolarRoofFacts(syntheticInsight, COVERAGE)
     expect(f.mean_pitch_degrees).toBeNull()
   })
+
+  // ── Sun & shade fields (full-exploitation build 2026-06-13) ────────
+
+  it('reads maxSunshineHoursPerYear / maxArrayAreaMeters2 / panelLifetimeYears', () => {
+    expect(facts.max_sunshine_hours_per_year).toBe(2400)
+    expect(facts.max_array_area_m2).toBe(58.5)
+    expect(facts.panel_lifetime_years).toBe(20)
+  })
+
+  it('reads wholeRoofStats.sunshineQuantiles + areaMeters2', () => {
+    expect(facts.whole_roof_sunshine_quantiles).toEqual([
+      900, 1100, 1300, 1450, 1500, 1550, 1600, 1650, 1700, 1750, 1800,
+    ])
+    expect(facts.whole_roof_area_m2).toBe(130)
+  })
+
+  it('aligns per-plane sunshine_quantiles with the parsed planes', () => {
+    expect(facts.planes[0].sunshine_quantiles?.[5]).toBe(1600) // north median
+    expect(facts.planes[1].sunshine_quantiles?.[5]).toBe(1200) // south median
+  })
+
+  it('keeps quantile alignment when the parser skips a malformed segment', () => {
+    const body = {
+      imageryQuality: 'HIGH',
+      imageryDate: { year: 2024, month: 3, day: 12 },
+      solarPotential: {
+        maxArrayPanelsCount: 10,
+        panelCapacityWatts: 400,
+        roofSegmentStats: [
+          // Skipped: no pitch.
+          { azimuthDegrees: 90, stats: { areaMeters2: 40, sunshineQuantiles: [1, 2, 3] } },
+          // Skipped: zero area.
+          { pitchDegrees: 20, azimuthDegrees: 0, stats: { areaMeters2: 0, sunshineQuantiles: [4, 5, 6] } },
+          // Survives — its quantiles must land on plane index 0.
+          { pitchDegrees: 20, azimuthDegrees: 180, stats: { areaMeters2: 60, sunshineQuantiles: [700, 800, 900] } },
+        ],
+        solarPanelConfigs: [],
+      },
+    }
+    const insight = parseBuildingInsights(body)
+    if (!insight) throw new Error('fixture failed to parse')
+    const f = normaliseSolarRoofFacts({ ...insight, raw: body }, COVERAGE)
+    expect(f.planes.length).toBe(1)
+    expect(f.planes[0].sunshine_quantiles).toEqual([700, 800, 900])
+  })
+
+  it('returns null sun fields when the raw body omits them', () => {
+    const noSun = normaliseSolarRoofFacts(
+      { ...COVERED_INSIGHT, raw: { solarPotential: {} } },
+      COVERAGE,
+    )
+    expect(noSun.max_sunshine_hours_per_year).toBeNull()
+    expect(noSun.max_array_area_m2).toBeNull()
+    expect(noSun.panel_lifetime_years).toBeNull()
+    expect(noSun.whole_roof_sunshine_quantiles).toBeNull()
+  })
+
+  it('rejects malformed quantile arrays (non-numeric / negative)', () => {
+    const body = {
+      imageryQuality: 'HIGH',
+      imageryDate: { year: 2024, month: 3, day: 12 },
+      solarPotential: {
+        roofSegmentStats: [
+          { pitchDegrees: 20, azimuthDegrees: 0, stats: { areaMeters2: 60, sunshineQuantiles: [100, 'x', 300] } },
+        ],
+        solarPanelConfigs: [],
+        wholeRoofStats: { sunshineQuantiles: [-5, 10] },
+      },
+    }
+    const insight = parseBuildingInsights(body)
+    if (!insight) throw new Error('fixture failed to parse')
+    const f = normaliseSolarRoofFacts({ ...insight, raw: body }, COVERAGE)
+    expect(f.planes[0].sunshine_quantiles).toBeNull()
+    expect(f.whole_roof_sunshine_quantiles).toBeNull()
+  })
 })
 
 describe('normaliseSolarRoofFacts — malformed solarPanelConfigs', () => {

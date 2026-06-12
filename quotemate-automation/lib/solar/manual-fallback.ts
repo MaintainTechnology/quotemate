@@ -143,6 +143,11 @@ export function buildManualRoofFacts(
     panel_size_m: null,
     carbon_offset_factor_kg_per_mwh: null,
     whole_roof_area_m2: null,
+    // Sun & shade fields: no Google data exists on the manual path.
+    max_sunshine_hours_per_year: null,
+    max_array_area_m2: null,
+    panel_lifetime_years: null,
+    whole_roof_sunshine_quantiles: null,
   }
 }
 

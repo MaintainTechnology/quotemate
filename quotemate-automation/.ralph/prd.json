@@ -1,0 +1,51 @@
+{
+  "project": "Google Solar API — full feature exploitation for the Instant Solar Estimate",
+  "branch": "main",
+  "completion_promise": "All tests pass",
+  "created": "2026-06-13",
+  "requirements": "Implement every unused Google Solar API capability into the solar estimate so tradie + customer get complete install information: (1) unused buildingInsights fields (sunshineQuantiles per plane + whole roof, maxSunshineHoursPerYear, maxArrayAreaMeters2, panelLifetimeYears) with derived per-plane sun scores; (2) dataLayers GeoTIFF pipeline via geoTiff:get — annual flux roof irradiance heatmap PNG, monthly flux -> real seasonal production curve, hourly shade -> shade-free window analysis, DSM -> building height/storeys hint, mask -> roof clipping; (3) cached assets in intake-photos served token-gated; (4) quote page + PDF sections surfacing all of it; (5) EXPANDED_COVERAGE experiment behind an env flag accepting BASE imagery. Money path untouched: all new data is informational/visual; pricing engine inputs unchanged.",
+  "stories": [
+    {
+      "id": "S1",
+      "title": "Roof facts: capture unused buildingInsights fields + sun scores",
+      "detail": "Extend SolarRoofFacts/SolarRoofPlane types with max_sunshine_hours_per_year, max_array_area_m2, panel_lifetime_years, whole-roof + per-plane sunshine quantiles. Parse them in roof.ts (roofSegmentStats[].stats.sunshineQuantiles, wholeRoofStats.sunshineQuantiles, solarPotential scalars). manual-fallback.ts emits nulls. New pure lib/solar/sun-score.ts deriving per-plane sun score labels (Excellent/Good/Moderate/Limited) + median sun hours from quantiles. Colocated vitest tests.",
+      "status": "pending",
+      "priority": 1
+    },
+    {
+      "id": "S2",
+      "title": "GeoTIFF decode + pure raster analysis modules",
+      "detail": "Add geotiff dependency. lib/solar/geotiff.ts: decode GeoTIFF bytes to typed rasters (width/height/bands). Pure analysis modules operating on plain arrays: flux-render.ts (annual flux -> color-ramp PNG via pngjs, clipped by mask raster), shade-analysis.ts (12 monthly 24-band hourly-shade bitmask rasters -> per-hour sun fraction, shade-free window, monthly shade table), monthly flux -> 12 production weights, dsm-height.ts (DSM + mask -> building height m + storeys hint). Tests use geotiff writeArrayBuffer fixtures + synthetic arrays.",
+      "status": "pending",
+      "priority": 2
+    },
+    {
+      "id": "S3",
+      "title": "Sun-assets generation pipeline wired into draft + redraft",
+      "detail": "data-layers.ts additionally returns the signed GeoTIFF URLs (in-memory only, never persisted). New lib/solar/sun-assets.ts: after-response job that re-fetches dataLayers, downloads annual flux + mask + monthly flux + hourly shade + DSM GeoTIFFs, runs S2 analyses, renders + uploads heatmap PNG(s) to intake-photos under solar/{rowId}/, and merges a compact context.sun summary (sun scores feed, monthly_production_kwh, shade window, building height, asset paths) into the persisted estimate jsonb. Invoked via after() in /api/solar/[tenantSlug]/estimate and /api/solar/redraft/[token]. Soft-fail everywhere.",
+      "status": "pending",
+      "priority": 3
+    },
+    {
+      "id": "S4",
+      "title": "Customer + PDF surfaces: sun & shade sections",
+      "detail": "Token-gated asset route /api/solar/q/[token]/sun-asset/[kind] streaming cached PNGs (mirror panels-after route). Quote page /q/solar/[token]: new pre-confirm-visible 'Sun & shade' section — annual flux heatmap image, max sunshine hours stat, per-plane sun scores, shade-free window, panel lifetime + array-area assumptions; monthly production chart consumes real monthly flux weights via existing monthly_kwh input labelled measured-irradiance. report-html.ts mirrors the section for the PDF. Tests for the view-model builders.",
+      "status": "pending",
+      "priority": 4
+    },
+    {
+      "id": "S5",
+      "title": "EXPANDED_COVERAGE experiment behind env flag",
+      "detail": "lib/roofing/solar-api.ts: send experiments=EXPANDED_COVERAGE when enabled; recognise BASE imagery quality. coverage.ts: SOLAR_EXPANDED_COVERAGE=true admits BASE-quality insights as covered (wide confidence band, satellite-grade label); default behaviour unchanged. Confidence chip / assumptions copy reflect satellite-grade imagery. Tests for both flag states.",
+      "status": "pending",
+      "priority": 5
+    },
+    {
+      "id": "S6",
+      "title": "Full quality gates + ship",
+      "detail": "Run the complete vitest suite, eslint, tsc/next build. Fix all fallout. Commit per-story work is already done; final push to origin main.",
+      "status": "pending",
+      "priority": 6
+    }
+  ]
+}
