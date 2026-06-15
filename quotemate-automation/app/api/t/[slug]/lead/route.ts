@@ -159,12 +159,23 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
         return
       }
 
-      const appUrl = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL
-      await fetch(`${appUrl}/api/estimate/draft`, {
+      // Resolve the base URL for the self-call to /api/estimate/draft.
+      // Prefer the configured APP_URL (prod), but fall back to the
+      // request's own origin so the quote pipeline still fires in dev /
+      // preview environments where APP_URL isn't set. Without this, the
+      // fetch becomes "undefined/api/estimate/draft" and no quote drafts.
+      const appUrl =
+        process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin
+      const draftRes = await fetch(`${appUrl}/api/estimate/draft`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ intakeId: intakeRow.id }),
       })
+      if (!draftRes.ok) {
+        console.error('[t/lead] estimate/draft returned', draftRes.status, (await draftRes.text()).slice(0, 200))
+      } else {
+        console.log('[t/lead] web intake → estimate/draft dispatched', { intakeId: intakeRow.id, appUrl })
+      }
     } catch (e: any) {
       console.error('[t/lead] web intake pipeline failed', e?.message ?? String(e))
     }
