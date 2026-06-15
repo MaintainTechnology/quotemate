@@ -693,13 +693,13 @@ export default function DashboardPage() {
                   </span>
                   <div className="flex-1">
                     <h3 className="font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
-                      Invitation codes
+                      Marketing
                     </h3>
                     <p className="mt-4 text-base leading-relaxed text-text-sec">
-                      Generate onboarding codes for flyers, ads, and referrals — each with a sign-up quota you can pause or revoke. Opens the full manager.
+                      Invite codes gate who can onboard. QR codes turn printed flyers into AI-drafted quotes — generate, download, and track scans. Opens the full manager.
                     </p>
                     <span className="mt-5 inline-flex items-center gap-2 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-accent transition-colors group-hover:text-accent-press">
-                      Open invitation codes <span aria-hidden="true">&rarr;</span>
+                      Open marketing <span aria-hidden="true">&rarr;</span>
                     </span>
                   </div>
                 </Link>
@@ -964,8 +964,8 @@ function buildNav(quoteCount: number, hasRoofingTrade = false): NavItem[] {
   items.push({ tab: 'estimator', label: 'Estimator', icon: ScanLine })
   // Solar — AI solar PV estimates. Not trade-gated yet so it's discoverable.
   items.push({ tab: 'solar', label: 'Solar', icon: Sun })
-  // Invitation codes — onboarding allowlist + campaign codes. Not trade-gated.
-  items.push({ tab: 'invites', label: 'Invites', icon: Megaphone })
+  // Marketing — invite codes + QR codes. Not trade-gated.
+  items.push({ tab: 'invites', label: 'Marketing', icon: Megaphone })
   items.push(
     { tab: 'account', label: 'Account', icon: User },
     { tab: 'payouts', label: 'Payouts', icon: Banknote },
@@ -1186,8 +1186,8 @@ const TAB_META: Record<
     desc: 'Share your solar link, review the AI-drafted tiered estimates, and confirm & release each one to the customer.',
   },
   invites: {
-    title: 'Invitation codes',
-    desc: 'Generate and manage onboarding codes for flyers, ads, and referrals. Each code carries a sign-up quota.',
+    title: 'Marketing',
+    desc: 'Invite codes gate who can onboard. QR codes turn printed flyers into AI-drafted quotes.',
   },
   quotes: {
     title: 'Quotes',
@@ -10395,7 +10395,7 @@ function tabLabel(t: Tab): string {
     case 'aircon':
       return 'AC'
     case 'invites':
-      return 'Invites'
+      return 'Marketing'
     case 'overview':
       return 'Overview'
     case 'account':
