@@ -50,15 +50,28 @@ const ZONE_TABLE: StcZoneTable = {
 // ── Postcode-RANGE zone fallback (config 2026-06-12) ──────────────────
 // The exact table above is a hand-curated slice; a missing postcode used
 // to silently price with 0 STCs (the 670 London Road, Chandler 4154 bug —
-// the customer was quoted with NO rebate). These contiguous CER zone-3
-// metro blocks are still postcode-based (never state-default); exact
+// the customer was quoted with NO rebate). These contiguous CER zone-3/2/1
+// blocks are still postcode-based (never state-default); exact
 // table entries always win. Extend per CER's published mapping.
 const ZONE_RANGES: StcZoneRange[] = [
+  // NSW zone 3 (coastal metro + regional)
   { from: 2000, to: 2249, rating: 1.382 }, // Sydney metro — zone 3
+  { from: 2250, to: 2554, rating: 1.382 }, // NSW coastal — zone 3
   { from: 2555, to: 2574, rating: 1.382 }, // Macarthur/Camden NSW — zone 3
-  { from: 2745, to: 2786, rating: 1.382 }, // Penrith/Blue Mtns fringe — zone 3
+  { from: 2575, to: 2744, rating: 1.382 }, // South coast NSW — zone 3
+  // NSW zone 2 (inland)
+  { from: 2745, to: 2786, rating: 1.536 }, // Penrith/Blue Mtns — zone 2
+  { from: 2787, to: 2899, rating: 1.536 }, // Southern inland NSW — zone 2
+  // NSW zone 1 (far south)
+  { from: 2900, to: 2999, rating: 1.622 }, // Far south coast — zone 1
+  // QLD zone 3 (coastal metro + regional)
   { from: 4000, to: 4399, rating: 1.382 }, // Brisbane metro + SEQ — zone 3
-  { from: 4500, to: 4575, rating: 1.382 }, // Moreton Bay/Sunshine Coast — zone 3
+  { from: 4400, to: 4499, rating: 1.382 }, // QLD inland — zone 3
+  { from: 4500, to: 4599, rating: 1.382 }, // Moreton Bay/Sunshine Coast — zone 3
+  // QLD zone 2 (inland)
+  { from: 4600, to: 4799, rating: 1.536 }, // QLD inland north — zone 2
+  // QLD zone 1 (far north)
+  { from: 4800, to: 4999, rating: 1.622 }, // Far north QLD — zone 1
 ]
 
 /**
