@@ -1,7 +1,10 @@
-// /dashboard/invites — Marketing: invitation codes + QR codes + landing slug.
+// /dashboard/invites — Marketing: QR codes + invitation codes + landing slug.
+// Styled to the Maintain design system (dark command-centre, orange accent,
+// numbered cards, monospace metadata, square corners, borders not shadows).
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, type ReactNode } from 'react'
+import Link from 'next/link'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 
 type Code = {
@@ -36,9 +39,15 @@ async function authHeader(): Promise<Record<string, string>> {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
 }
 
-const FIELD = 'mt-1 w-full bg-ink-deep border border-ink-line px-3 py-2.5 text-text-pri focus:border-accent focus:outline-none'
-const LABEL = 'font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim'
-const BTN = 'bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider disabled:opacity-50'
+/* ─── Maintain design tokens (local shorthands) ───────────────── */
+const INPUT =
+  'w-full bg-ink-deep border border-ink-line px-3.5 py-2.5 text-sm text-text-pri placeholder:text-text-dim/60 focus:border-accent focus:outline-none transition-colors'
+const EYEBROW = 'font-mono text-[0.7rem] uppercase tracking-[0.16em] text-text-dim'
+const PRIMARY =
+  'inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-xs uppercase tracking-[0.12em] transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
+const GHOST =
+  'inline-flex items-center gap-2 border border-ink-line hover:border-accent text-text-pri px-4 py-2.5 text-xs uppercase tracking-[0.12em] transition-colors disabled:opacity-40'
+const TH = 'px-4 py-3 text-left font-mono text-[0.62rem] uppercase tracking-[0.16em] text-text-dim font-semibold'
 
 export default function MarketingPage() {
   const [error, setError] = useState<string | null>(null)
@@ -162,155 +171,264 @@ export default function MarketingPage() {
     else { const d = await res.json().catch(() => ({})); setError(d.message ?? d.error ?? 'Update failed') }
   }
 
+  const activeQrScans = qrs.reduce((n, q) => n + q.scan_count, 0)
+
   return (
-    <main className="mx-auto max-w-5xl px-6 py-10">
-      <h1 className="font-extrabold uppercase tracking-tight text-2xl text-text-pri">Marketing</h1>
-      <p className="mt-2 text-text-sec">Invite codes gate who can onboard. QR codes turn flyers into quotes.</p>
-      {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
+    <main className="relative min-h-screen overflow-hidden bg-ink-deep text-text-pri">
+      <style>{`
+        @keyframes mtUp { from { opacity: 0; transform: translateY(14px) } to { opacity: 1; transform: none } }
+        .mt-up { animation: mtUp .55s cubic-bezier(.22,1,.36,1) both }
+        @media (prefers-reduced-motion: reduce) { .mt-up { animation: none } }
+      `}</style>
 
-      {/* ───────────── QR codes ───────────── */}
-      <h2 className="mt-10 font-extrabold uppercase tracking-tight text-lg text-text-pri">QR codes</h2>
-
-      {/* Landing link */}
-      <div className="mt-4 bg-ink-card border border-ink-line p-6">
-        <span className={LABEL}>Your landing link</span>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <span className="text-text-dim text-sm font-mono">{origin}/t/</span>
-          <input value={slugInput} onChange={(e) => setSlugInput(e.target.value)} placeholder="atomic-electrical"
-            className="bg-ink-deep border border-ink-line px-3 py-2 text-text-pri font-mono focus:border-accent focus:outline-none" />
-          <button onClick={saveSlug} disabled={slugSaving}
-            className="border border-ink-line hover:border-accent text-text-pri px-4 py-2 text-sm">
-            {slugSaving ? 'Saving…' : 'Save'}
-          </button>
-          {slug && <span className="text-emerald-400 text-xs">live</span>}
-        </div>
-        <p className="mt-2 text-xs text-text-dim">This is where the “landing page” QR sends customers. Auto-set from your business name; edit to taste.</p>
+      {/* atmosphere — faint orange glow + hairline grid, not a solid flat fill */}
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-40 right-[-10%] h-[480px] w-[480px] rounded-full opacity-[0.10] blur-3xl"
+             style={{ background: 'radial-gradient(circle, #FF5A1F 0%, transparent 70%)' }} />
+        <div className="absolute inset-0 opacity-[0.04]"
+             style={{ backgroundImage: 'linear-gradient(#2D3A4F 1px, transparent 1px), linear-gradient(90deg, #2D3A4F 1px, transparent 1px)', backgroundSize: '64px 64px' }} />
       </div>
 
-      {/* Generate QR */}
-      <div className="mt-4 bg-ink-card border border-ink-line p-6">
-        <div className="grid gap-4 md:grid-cols-3">
-          <label className="block">
-            <span className={LABEL}>Label</span>
-            <input value={qrLabel} onChange={(e) => setQrLabel(e.target.value)} placeholder="June letterbox drop" className={FIELD} />
-          </label>
-          <label className="block">
-            <span className={LABEL}>Sends to</span>
-            <select value={qrDest} onChange={(e) => setQrDest(e.target.value as 'sms' | 'landing')} className={FIELD}>
-              <option value="sms" className="bg-ink-deep">Text me a quote (SMS)</option>
-              <option value="landing" className="bg-ink-deep">My landing page</option>
-            </select>
-          </label>
-          {qrDest === 'sms' && (
-            <label className="block">
-              <span className={LABEL}>Pre-filled text</span>
-              <input value={qrPrefill} onChange={(e) => setQrPrefill(e.target.value)} className={FIELD} />
-            </label>
-          )}
+      {/* nav */}
+      <nav className="relative z-10 border-b border-ink-line">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-5">
+          <div className="flex items-center gap-2.5">
+            <span className="grid h-7 w-7 place-items-center bg-accent font-black text-white text-xs">Q</span>
+            <span className="font-extrabold uppercase tracking-tight">QuoteMate</span>
+          </div>
+          <Link href="/dashboard" className="flex items-center gap-2 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-text-pri">
+            <span aria-hidden>←</span> Dashboard
+          </Link>
         </div>
-        <button onClick={generateQr} disabled={qrGenerating} className={`mt-4 ${BTN}`}>
-          {qrGenerating ? 'Generating…' : 'Generate QR'}
-        </button>
-      </div>
+      </nav>
 
-      {/* QR list */}
-      <div className="mt-4 bg-ink-card border border-ink-line">
-        {loading ? <p className="p-6 text-text-dim">Loading…</p>
-          : qrs.length === 0 ? <p className="p-6 text-text-dim">No QR codes yet. Generate one above.</p>
-          : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-ink-line text-left font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
-                <th className="px-4 py-3">Label</th><th className="px-4 py-3">Sends to</th>
-                <th className="px-4 py-3">Scans</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Actions</th>
+      <div className="relative z-10 mx-auto max-w-5xl px-6 pb-24 pt-14 md:pt-20">
+        {/* hero header */}
+        <header className="mt-up" style={{ animationDelay: '0ms' }}>
+          <span className={EYEBROW}>Marketing</span>
+          <h1 className="mt-4 font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2.25rem,6vw,4rem)]">
+            Turn flyers<br />into <span className="text-accent">quotes</span>.
+          </h1>
+          <p className="mt-5 max-w-xl text-text-sec leading-relaxed">
+            Print a QR on your flyers — a scan becomes an AI-drafted quote, texted back in minutes.
+            Invitation codes control who can onboard.
+          </p>
+          {/* stat strip */}
+          <div className="mt-8 flex flex-wrap gap-x-10 gap-y-4">
+            <Stat n={qrs.length} label="QR codes" />
+            <Stat n={activeQrScans} label="Total scans" />
+            <Stat n={codes.length} label="Invite codes" />
+          </div>
+        </header>
+
+        {error && (
+          <div className="mt-8 border-l-2 border-danger bg-danger/10 px-4 py-3 text-sm text-text-pri">{error}</div>
+        )}
+
+        {/* ───────── 01 · QR CODES ───────── */}
+        <Section num="01" title="QR codes" blurb="Where a scanned flyer sends a customer — your SMS line or your branded landing page." delay={80}>
+          {/* landing link */}
+          <Panel>
+            <span className={EYEBROW}>Your landing link</span>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="font-mono text-sm text-text-dim">{origin}/t/</span>
+              <input value={slugInput} onChange={(e) => setSlugInput(e.target.value)} placeholder="atomic-electrical"
+                className="bg-ink-deep border border-ink-line px-3 py-2 font-mono text-sm text-text-pri focus:border-accent focus:outline-none" />
+              <button type="button" onClick={saveSlug} disabled={slugSaving} className={GHOST}>
+                {slugSaving ? 'Saving…' : 'Save'}
+              </button>
+              {slug && <span className="font-mono text-[0.62rem] uppercase tracking-[0.14em] text-success">● Live</span>}
+            </div>
+            <p className="mt-2.5 text-xs text-text-dim">Auto-set from your business name. This is where the “landing page” QR sends customers.</p>
+          </Panel>
+
+          {/* generate QR */}
+          <Panel>
+            <span className={EYEBROW}>New QR code</span>
+            <div className="mt-3 grid gap-4 md:grid-cols-3">
+              <Field label="Label">
+                <input value={qrLabel} onChange={(e) => setQrLabel(e.target.value)} placeholder="June letterbox drop" className={INPUT} />
+              </Field>
+              <Field label="Sends to">
+                <select aria-label="Where the QR sends customers" value={qrDest} onChange={(e) => setQrDest(e.target.value as 'sms' | 'landing')} className={INPUT}>
+                  <option value="sms" className="bg-ink-deep">Text me a quote (SMS)</option>
+                  <option value="landing" className="bg-ink-deep">My landing page</option>
+                </select>
+              </Field>
+              {qrDest === 'sms' && (
+                <Field label="Pre-filled text">
+                  <input aria-label="Pre-filled SMS text" value={qrPrefill} onChange={(e) => setQrPrefill(e.target.value)} className={INPUT} />
+                </Field>
+              )}
+            </div>
+            <button type="button" onClick={generateQr} disabled={qrGenerating} className={`mt-5 ${PRIMARY}`}>
+              {qrGenerating ? 'Generating…' : 'Generate QR'} <span aria-hidden>→</span>
+            </button>
+          </Panel>
+
+          {/* QR list */}
+          <TableShell
+            loading={loading}
+            empty={qrs.length === 0}
+            emptyText="No QR codes yet. Generate one above."
+            head={<tr>{['Label', 'Sends to', 'Scans', 'Status', 'Actions'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr>}
+          >
+            {qrs.map((q) => (
+              <tr key={q.id} className="border-b border-ink-line/50 align-top last:border-0">
+                <td className="px-4 py-3.5 text-text-pri">{q.label}<div className="mt-0.5 font-mono text-[0.62rem] text-text-dim">/s/{q.short_code}</div></td>
+                <td className="px-4 py-3.5 text-text-sec">{q.destination_type === 'sms' ? 'SMS' : 'Landing page'}</td>
+                <td className="px-4 py-3.5"><span className="font-mono text-base font-bold text-accent">{q.scan_count}</span></td>
+                <td className="px-4 py-3.5"><StatusPill status={q.status} /></td>
+                <td className="px-4 py-3.5">
+                  <div className="flex flex-wrap gap-x-3 gap-y-1.5 text-xs">
+                    <a href={`/api/dashboard/marketing/qr/${q.id}/image?format=png`} download className="text-accent hover:text-accent-soft">PNG</a>
+                    <a href={`/api/dashboard/marketing/qr/${q.id}/image?format=svg`} download className="text-accent hover:text-accent-soft">SVG</a>
+                    <ActionBtn onClick={() => navigator.clipboard.writeText(`${origin}/s/${q.short_code}`)}>Copy link</ActionBtn>
+                    <ActionBtn onClick={() => patchQr(q.id, { destination_type: q.destination_type === 'sms' ? 'landing' : 'sms' })}>Repoint→{q.destination_type === 'sms' ? 'page' : 'SMS'}</ActionBtn>
+                    {q.status === 'active' ? <ActionBtn onClick={() => patchQr(q.id, { status: 'paused' })}>Pause</ActionBtn>
+                      : q.status === 'paused' ? <ActionBtn onClick={() => patchQr(q.id, { status: 'active' })}>Resume</ActionBtn> : null}
+                    {q.status !== 'archived' && <ActionBtn danger onClick={() => patchQr(q.id, { status: 'archived' })}>Archive</ActionBtn>}
+                  </div>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {qrs.map((q) => (
-                <tr key={q.id} className="border-b border-ink-line/60 align-top">
-                  <td className="px-4 py-3 text-text-pri">{q.label}<div className="text-text-dim font-mono text-[0.65rem]">/s/{q.short_code}</div></td>
-                  <td className="px-4 py-3 text-text-sec">{q.destination_type === 'sms' ? 'SMS' : 'Landing page'}</td>
-                  <td className="px-4 py-3 text-text-sec">{q.scan_count}</td>
-                  <td className="px-4 py-3"><span className={q.status === 'active' ? 'text-emerald-400' : 'text-text-dim'}>{q.status}</span></td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-3">
-                      <a href={`/api/dashboard/marketing/qr/${q.id}/image?format=png`} download className="text-accent hover:text-accent-press underline">PNG</a>
-                      <a href={`/api/dashboard/marketing/qr/${q.id}/image?format=svg`} download className="text-accent hover:text-accent-press underline">SVG</a>
-                      <button onClick={() => navigator.clipboard.writeText(`${origin}/s/${q.short_code}`)} className="text-text-sec hover:text-text-pri underline">Copy link</button>
-                      <button onClick={() => patchQr(q.id, { destination_type: q.destination_type === 'sms' ? 'landing' : 'sms' })} className="text-text-sec hover:text-text-pri underline">Repoint→{q.destination_type === 'sms' ? 'page' : 'SMS'}</button>
-                      {q.status === 'active' ? <button onClick={() => patchQr(q.id, { status: 'paused' })} className="text-text-sec hover:text-text-pri underline">Pause</button>
-                        : q.status === 'paused' ? <button onClick={() => patchQr(q.id, { status: 'active' })} className="text-text-sec hover:text-text-pri underline">Resume</button> : null}
-                      {q.status !== 'archived' && <button onClick={() => patchQr(q.id, { status: 'archived' })} className="text-red-400 hover:text-red-300 underline">Archive</button>}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+            ))}
+          </TableShell>
+        </Section>
 
-      {/* ───────────── Invitation codes ───────────── */}
-      <h2 className="mt-12 font-extrabold uppercase tracking-tight text-lg text-text-pri">Invitation codes</h2>
-      <p className="mt-1 text-sm text-text-sec">Gate who can onboard as a tradie. Each code carries a sign-up quota.</p>
+        {/* ───────── 02 · INVITATION CODES ───────── */}
+        <Section num="02" title="Invitation codes" blurb="Gate who can onboard as a tradie. Each code carries a sign-up quota." delay={160}>
+          <Panel>
+            <span className={EYEBROW}>New code</span>
+            <div className="mt-3 grid gap-4 md:grid-cols-3">
+              <Field label="Campaign"><input value={campaign} onChange={(e) => setCampaign(e.target.value)} placeholder="june_flyers" className={INPUT} /></Field>
+              <Field label="Quota"><input aria-label="Sign-up quota" type="number" min="1" value={quota} onChange={(e) => setQuota(e.target.value)} className={INPUT} /></Field>
+              {isAdmin && (
+                <Field label="Scope">
+                  <select aria-label="Invitation code scope" value={scope} onChange={(e) => setScope(e.target.value as 'tenant' | 'platform')} className={INPUT}>
+                    <option value="tenant" className="bg-ink-deep">My campaign</option>
+                    <option value="platform" className="bg-ink-deep">Platform-wide</option>
+                  </select>
+                </Field>
+              )}
+            </div>
+            <button type="button" onClick={generate} disabled={generating} className={`mt-5 ${PRIMARY}`}>
+              {generating ? 'Generating…' : 'Generate code'} <span aria-hidden>→</span>
+            </button>
+            {justMade && (
+              <p className="mt-4 text-sm text-text-sec">New code:{' '}
+                <span className="font-mono text-accent">{justMade}</span>{' '}
+                <ActionBtn onClick={() => navigator.clipboard.writeText(justMade)}>Copy</ActionBtn>
+              </p>
+            )}
+          </Panel>
 
-      <div className="mt-4 bg-ink-card border border-ink-line p-6">
-        <div className="grid gap-4 md:grid-cols-3">
-          <label className="block">
-            <span className={LABEL}>Campaign</span>
-            <input value={campaign} onChange={(e) => setCampaign(e.target.value)} placeholder="june_flyers" className={FIELD} />
-          </label>
-          <label className="block">
-            <span className={LABEL}>Quota</span>
-            <input type="number" min="1" value={quota} onChange={(e) => setQuota(e.target.value)} className={FIELD} />
-          </label>
-          {isAdmin && (
-            <label className="block">
-              <span className={LABEL}>Scope</span>
-              <select value={scope} onChange={(e) => setScope(e.target.value as 'tenant' | 'platform')} className={FIELD}>
-                <option value="tenant" className="bg-ink-deep">My campaign</option>
-                <option value="platform" className="bg-ink-deep">Platform-wide</option>
-              </select>
-            </label>
-          )}
-        </div>
-        <button onClick={generate} disabled={generating} className={`mt-4 ${BTN}`}>{generating ? 'Generating…' : 'Generate code'}</button>
-        {justMade && (
-          <p className="mt-4 text-sm text-text-pri">New code: <span className="font-mono text-accent">{justMade}</span>{' '}
-            <button onClick={() => navigator.clipboard.writeText(justMade)} className="underline ml-2">Copy</button></p>
-        )}
-      </div>
-
-      <div className="mt-4 bg-ink-card border border-ink-line">
-        {loading ? <p className="p-6 text-text-dim">Loading…</p>
-          : codes.length === 0 ? <p className="p-6 text-text-dim">No codes yet. Generate one above.</p>
-          : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-ink-line text-left font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
-                <th className="px-4 py-3">Code</th><th className="px-4 py-3">Campaign</th>
-                <th className="px-4 py-3">Used</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Actions</th>
+          <TableShell
+            loading={loading}
+            empty={codes.length === 0}
+            emptyText="No codes yet. Generate one above."
+            head={<tr>{['Code', 'Campaign', 'Used', 'Status', 'Actions'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr>}
+          >
+            {codes.map((c) => (
+              <tr key={c.id} className="border-b border-ink-line/50 align-top last:border-0">
+                <td className="px-4 py-3.5 font-mono text-text-pri">{c.code}{c.tenant_id === null && <span className="ml-2 bg-accent px-1.5 py-0.5 text-[0.55rem] uppercase tracking-wide text-white">platform</span>}</td>
+                <td className="px-4 py-3.5 text-text-sec">{c.campaign ?? '—'}</td>
+                <td className="px-4 py-3.5 font-mono text-text-sec">{c.quota_used}/{c.quota_total}</td>
+                <td className="px-4 py-3.5"><StatusPill status={c.status} /></td>
+                <td className="px-4 py-3.5">
+                  <div className="flex flex-wrap gap-x-3 gap-y-1.5 text-xs">
+                    <ActionBtn onClick={() => navigator.clipboard.writeText(c.code)}>Copy</ActionBtn>
+                    {c.status === 'active' ? <ActionBtn onClick={() => patchCode(c.id, { status: 'paused' })}>Pause</ActionBtn>
+                      : c.status === 'paused' ? <ActionBtn onClick={() => patchCode(c.id, { status: 'active' })}>Resume</ActionBtn> : null}
+                    {c.status !== 'revoked' && <ActionBtn danger onClick={() => patchCode(c.id, { status: 'revoked' })}>Revoke</ActionBtn>}
+                  </div>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {codes.map((c) => (
-                <tr key={c.id} className="border-b border-ink-line/60">
-                  <td className="px-4 py-3 font-mono text-text-pri">{c.code}{c.tenant_id === null && <span className="ml-2 text-[0.6rem] text-accent uppercase">platform</span>}</td>
-                  <td className="px-4 py-3 text-text-sec">{c.campaign ?? '—'}</td>
-                  <td className="px-4 py-3 text-text-sec">{c.quota_used}/{c.quota_total}</td>
-                  <td className="px-4 py-3"><span className={c.status === 'active' ? 'text-emerald-400' : 'text-text-dim'}>{c.status}</span></td>
-                  <td className="px-4 py-3 flex gap-3">
-                    <button onClick={() => navigator.clipboard.writeText(c.code)} className="text-text-sec hover:text-text-pri underline">Copy</button>
-                    {c.status === 'active' ? <button onClick={() => patchCode(c.id, { status: 'paused' })} className="text-text-sec hover:text-text-pri underline">Pause</button>
-                      : c.status === 'paused' ? <button onClick={() => patchCode(c.id, { status: 'active' })} className="text-text-sec hover:text-text-pri underline">Resume</button> : null}
-                    {c.status !== 'revoked' && <button onClick={() => patchCode(c.id, { status: 'revoked' })} className="text-red-400 hover:text-red-300 underline">Revoke</button>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+            ))}
+          </TableShell>
+        </Section>
+      </div>
+
+      {/* closing orange accent bar */}
+      <div className="relative z-10 bg-accent">
+        <div className="mx-auto max-w-5xl px-6 py-4 text-center">
+          <span className="font-mono text-xs uppercase tracking-[0.16em] text-white">
+            Every scan is a lead · QuoteMate
+          </span>
+        </div>
       </div>
     </main>
+  )
+}
+
+/* ─── Primitives ──────────────────────────────────────────────── */
+
+function Stat({ n, label }: { n: number; label: string }) {
+  return (
+    <div>
+      <div className="font-mono text-3xl font-bold leading-none text-text-pri">{n}</div>
+      <div className="mt-1.5 font-mono text-[0.62rem] uppercase tracking-[0.16em] text-text-dim">{label}</div>
+    </div>
+  )
+}
+
+function Section({ num, title, blurb, delay, children }: { num: string; title: string; blurb: string; delay: number; children: ReactNode }) {
+  return (
+    <section className="mt-up mt-14" style={{ animationDelay: `${delay}ms` }}>
+      <div className="flex items-start gap-5 md:gap-7">
+        <span className="shrink-0 font-mono text-5xl font-bold leading-none text-accent md:text-6xl">{num}</span>
+        <div className="pt-1">
+          <h2 className="font-extrabold uppercase leading-none tracking-[-0.02em] text-2xl md:text-[1.7rem]">{title}</h2>
+          <p className="mt-2.5 max-w-xl text-sm leading-relaxed text-text-sec">{blurb}</p>
+        </div>
+      </div>
+      <div className="mt-6 space-y-4">{children}</div>
+    </section>
+  )
+}
+
+function Panel({ children }: { children: ReactNode }) {
+  return <div className="border border-ink-line bg-ink-card p-6">{children}</div>
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="block">
+      <span className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">{label}</span>
+      <div className="mt-1.5">{children}</div>
+    </label>
+  )
+}
+
+function TableShell({ loading, empty, emptyText, head, children }: { loading: boolean; empty: boolean; emptyText: string; head: ReactNode; children: ReactNode }) {
+  return (
+    <div className="border border-ink-line bg-ink-card">
+      {loading ? <p className="p-6 font-mono text-xs uppercase tracking-[0.14em] text-text-dim">Loading…</p>
+        : empty ? <p className="p-6 text-sm text-text-dim">{emptyText}</p>
+        : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="border-b border-ink-line">{head}</thead>
+              <tbody>{children}</tbody>
+            </table>
+          </div>
+        )}
+    </div>
+  )
+}
+
+function StatusPill({ status }: { status: string }) {
+  const tone =
+    status === 'active' ? 'text-success border-success/40'
+      : status === 'paused' ? 'text-warning border-warning/40'
+      : 'text-text-dim border-ink-line'
+  return <span className={`inline-flex border px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-[0.12em] ${tone}`}>{status}</span>
+}
+
+function ActionBtn({ children, onClick, danger }: { children: ReactNode; onClick: () => void; danger?: boolean }) {
+  return (
+    <button type="button" onClick={onClick}
+      className={`uppercase tracking-[0.08em] transition-colors ${danger ? 'text-danger hover:text-red-400' : 'text-text-sec hover:text-text-pri'}`}>
+      {children}
+    </button>
   )
 }
