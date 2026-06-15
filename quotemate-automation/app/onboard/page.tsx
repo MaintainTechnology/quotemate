@@ -91,6 +91,16 @@ function OnboardWizardInner() {
   const mobileFromUpstream = params.get('owner_mobile') ?? ''
   const mobileLocked = !!mobileFromUpstream
 
+  // Invitation code. Web tradies type it here at the gate; SMS tradies
+  // arrive with ?code=<code> pre-filled + locked (validated upstream).
+  const codeFromUpstream = params.get('code') ?? ''
+  const codeLocked = !!codeFromUpstream
+  const [invitationCode, setInvitationCode] = useState(codeFromUpstream)
+  const [codeAccepted, setCodeAccepted] = useState(false)
+  const [codeChecking, setCodeChecking] = useState(false)
+  const [codeError, setCodeError] = useState<string | null>(null)
+  const [codeNote, setCodeNote] = useState<string | null>(null)
+
   const [form, setForm] = useState<FormState>({
     business_name: '',
     owner_first_name: '',
@@ -212,6 +222,7 @@ function OnboardWizardInner() {
         // Pass through the SMS intent token so the API marks it used
         // and back-links the originating SMS conversation.
         intent_token: intentToken || undefined,
+        invitation_code: invitationCode.trim(),
       }
       const res = await fetch('/api/onboard/activate', {
         method: 'POST',
@@ -260,6 +271,41 @@ function OnboardWizardInner() {
     }
   }
 
+  async function checkCode() {
+    const code = invitationCode.trim()
+    if (!code) {
+      setCodeError('Enter your invitation code to continue.')
+      return
+    }
+    setCodeChecking(true)
+    setCodeError(null)
+    setCodeNote(null)
+    try {
+      const res = await fetch('/api/onboard/validate-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, channel: codeLocked ? 'sms' : 'web' }),
+      })
+      const data = await res.json()
+      if (!data.ok) {
+        setCodeError(data.message ?? 'That code was not accepted.')
+        return
+      }
+      if (data.last_slot) setCodeNote('Heads up — this is the last sign-up slot for this code.')
+      setCodeAccepted(true)
+    } catch {
+      setCodeError('Could not check the code just now. Try again.')
+    } finally {
+      setCodeChecking(false)
+    }
+  }
+
+  // SMS tradies arrive pre-validated — auto-accept the locked code.
+  useEffect(() => {
+    if (codeLocked && !codeAccepted) setCodeAccepted(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [codeLocked])
+
   const meta = STEP_META[step - 1]
 
   return (
@@ -300,6 +346,38 @@ function OnboardWizardInner() {
             </div>
           </div>
 
+          {/* Step 0 — invitation-code gate. Web tradies type it here;
+              SMS tradies arrive pre-validated and skip straight through. */}
+          {!codeAccepted && (
+            <div className="mt-10 bg-ink-card border border-ink-line p-6 md:p-8">
+              <Field
+                label="Invitation code"
+                hint={codeLocked ? 'From your text — locked' : 'The code whoever invited you gave you'}
+                error={codeError ?? undefined}
+              >
+                <input
+                  type="text"
+                  value={invitationCode}
+                  onChange={(e) => setInvitationCode(e.target.value.toUpperCase())}
+                  placeholder="e.g. JON-JUNE-FLYERS-7K2P"
+                  className={`${INPUT} ${codeLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
+                  readOnly={codeLocked}
+                  autoCapitalize="characters"
+                />
+              </Field>
+              {codeNote && (
+                <p className="mt-3 text-sm text-amber-400 font-medium">{codeNote}</p>
+              )}
+              <div className="mt-6 flex justify-end">
+                <PrimaryButton disabled={codeChecking} onClick={checkCode}>
+                  {codeChecking ? 'Checking…' : 'Continue'}
+                </PrimaryButton>
+              </div>
+            </div>
+          )}
+
+          {codeAccepted && (
+          <>
           {/* Step content */}
           <div className="mt-10 bg-ink-card border border-ink-line p-6 md:p-8">
             {step === 1 && (
@@ -370,6 +448,8 @@ function OnboardWizardInner() {
               </form>
             )}
           </div>
+          </>
+          )}
         </div>
       </div>
     </main>
