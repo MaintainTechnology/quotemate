@@ -18,9 +18,28 @@ import type { SolarPriceTier } from './types'
 // ── The 670 London Road, Chandler 4154 regression ────────────────────
 
 describe('resolveStcZoneRating', () => {
-  it('exact table entries win', () => {
-    expect(resolveStcZoneRating('2650', DEFAULT_SOLAR_CONFIG)).toBe(1.536)
-    expect(resolveStcZoneRating('4870', DEFAULT_SOLAR_CONFIG)).toBe(1.622)
+  it('exact table entries win over ranges', () => {
+    // Synthetic config where the exact entry deliberately disagrees with the
+    // range, proving precedence without baking a wrong value into production.
+    const cfg = {
+      zone_table: { '2000': 1.622 },
+      zone_ranges: [{ from: 2000, to: 2999, rating: 1.382 }],
+    }
+    expect(resolveStcZoneRating('2000', cfg)).toBe(1.622) // exact entry wins
+    expect(resolveStcZoneRating('2500', cfg)).toBe(1.382) // range fallback
+  })
+
+  it('resolves the authoritative CER zone for representative postcodes', () => {
+    // Verified 2026-06-15 against the CER Instrument 2019 schedule.
+    expect(resolveStcZoneRating('2000', DEFAULT_SOLAR_CONFIG)).toBe(1.382) // Sydney — zone 3
+    expect(resolveStcZoneRating('2650', DEFAULT_SOLAR_CONFIG)).toBe(1.382) // Wagga — zone 3 (not zone 2)
+    expect(resolveStcZoneRating('2750', DEFAULT_SOLAR_CONFIG)).toBe(1.382) // Penrith — zone 3
+    expect(resolveStcZoneRating('2880', DEFAULT_SOLAR_CONFIG)).toBe(1.536) // Broken Hill — zone 2
+    expect(resolveStcZoneRating('2548', DEFAULT_SOLAR_CONFIG)).toBe(1.185) // Merimbula — zone 4
+    expect(resolveStcZoneRating('2900', DEFAULT_SOLAR_CONFIG)).toBe(1.382) // Canberra/ACT — zone 3 (not zone 1)
+    expect(resolveStcZoneRating('4870', DEFAULT_SOLAR_CONFIG)).toBe(1.382) // Cairns — zone 3 (not zone 1)
+    expect(resolveStcZoneRating('4825', DEFAULT_SOLAR_CONFIG)).toBe(1.536) // Mount Isa — zone 2
+    expect(resolveStcZoneRating('4480', DEFAULT_SOLAR_CONFIG)).toBe(1.622) // far-west QLD outback — zone 1
   })
 
   it('falls back to postcode ranges — Chandler QLD 4154 now resolves', () => {

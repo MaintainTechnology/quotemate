@@ -144,8 +144,9 @@ describe('calculateSolarPrice', () => {
   })
 
   it('net_ex_gst clamps to 0 when the STC rebate exceeds the gross (high zone, large system)', () => {
-    // Use Cairns (postcode 4870, zone 1.622) + 10 deeming years (synthetic) to
-    // force a rebate that exceeds the gross install cost on a standard-rate system.
+    // Use a genuine zone-1 far-western QLD outback postcode (4480, rating 1.622)
+    // + 10 deeming years (synthetic) to force a rebate that exceeds the gross
+    // install cost on a standard-rate system. (Cairns 4870 is zone 3, not zone 1.)
     // certificates = floor(kW × 1.622 × 10); at $38/STC a large-enough system
     // makes the rebate > gross, which must clamp to net_ex_gst = 0.
     const syntheticConfig = {
@@ -162,7 +163,7 @@ describe('calculateSolarPrice', () => {
         by_network: { ...DEFAULT_SOLAR_CONFIG.export_limits.by_network, Ausgrid: 100 },
       },
     }
-    const highZoneContext: SolarEstimateContext = { ...CONTEXT, postcode: '4870' }
+    const highZoneContext: SolarEstimateContext = { ...CONTEXT, postcode: '4480' }
     // Build a large single-tier sizing directly to guarantee the maths.
     // 20 kW × $1100/kW = $22 000 gross; STC = floor(20 × 1.622 × 10) × $38 = 324 × $38 = $12 312.
     // 30 kW × $1100/kW = $33 000 gross; STC = floor(30 × 1.622 × 10) × $38 = 486 × $38 = $18 468.

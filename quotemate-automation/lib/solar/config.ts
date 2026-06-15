@@ -34,44 +34,92 @@ const DEEMING_SCHEDULE: StcDeemingSchedule = {
   2031: 0,
 }
 
-// ── CER postcode → STC zone rating. A representative v1 slice across the
-// two live electrical/plumbing states; NSW metro (2xxx) ≈ zone 3 (1.382),
-// QLD metro (4xxx) ≈ zone 3 (1.382), inland/north higher. Admin extends
-// this table; sizing/pricing NEVER state-default a missing postcode. ────
+// ── CER postcode → STC zone rating (exact anchors). ──────────────────
+// A small set of KNOWN-CORRECT cross-zone anchors; the comprehensive
+// ZONE_RANGES below carry the bulk of the mapping. Exact entries win over
+// ranges. Fixed CER ratings: zone 1 = 1.622, 2 = 1.536, 3 = 1.382, 4 = 1.185.
+// sizing/pricing NEVER state-default a missing postcode (→ 0 → guardrail).
 const ZONE_TABLE: StcZoneTable = {
-  '2000': 1.382, // Sydney CBD
-  '2570': 1.382, // Camden NSW
-  '2650': 1.536, // Wagga Wagga NSW (zone 2)
-  '4000': 1.382, // Brisbane CBD
-  '4350': 1.382, // Toowoomba QLD
-  '4870': 1.622, // Cairns QLD (zone 1)
+  '2000': 1.382, // Sydney CBD — zone 3
+  '2880': 1.536, // Broken Hill (far-west NSW) — zone 2
+  '2548': 1.185, // Merimbula (far south coast NSW) — zone 4
+  '4000': 1.382, // Brisbane CBD — zone 3
+  '4825': 1.536, // Mount Isa (NW QLD inland) — zone 2
 }
 
-// ── Postcode-RANGE zone fallback (config 2026-06-12) ──────────────────
-// The exact table above is a hand-curated slice; a missing postcode used
-// to silently price with 0 STCs (the 670 London Road, Chandler 4154 bug —
-// the customer was quoted with NO rebate). These contiguous CER zone-3/2/1
-// blocks are still postcode-based (never state-default); exact
-// table entries always win. Extend per CER's published mapping.
+// ── Postcode-RANGE zone map (authoritative, verified 2026-06-15) ──────
+// Source of truth: the Clean Energy Regulator "Postcode zone ratings and
+// zones for solar (photovoltaic) systems" schedule (Renewable Energy
+// (Electricity) (Zone Ratings and Zones for Solar (Photovoltaic) Systems)
+// Instrument 2019, as of 1 Jan 2020). These NSW (2000-2999, incl. ACT) and
+// QLD (4000-4999) ranges are transcribed from that schedule and were
+// adversarially cross-checked against the CER PDF, the Solargain/energymatters
+// mirrors, and independent STC calculators (every spot-check matched).
+// Both bands are CONTIGUOUS and gap-free, so no in-state postcode silently
+// resolves to 0 (the 670 London Road, Chandler 4154 bug). Exact ZONE_TABLE
+// entries still win. Other states resolve to 0 → stc_zone_missing guardrail.
+//
+// Corrections vs prior config (both were over-crediting customers):
+//   • Cairns 4870 / the whole QLD coast Brisbane→Cairns is ZONE 3 (1.382),
+//     NOT zone 1 — zone 1 in QLD is only far-western outback pockets.
+//   • Penrith 2750 & Wagga 2650 are ZONE 3 (1.382), not zone 2.
+//   • Canberra/ACT 2900-2999 is ZONE 3 (1.382), not zone 1.
+//   • Far-west NSW (Broken Hill 2878-2889) is genuinely ZONE 2 (1.536);
+//     far-south-coast (2545-2554) & Snowy alpine (2628, 2630-2639) are ZONE 4.
 const ZONE_RANGES: StcZoneRange[] = [
-  // NSW zone 3 (coastal metro + regional)
-  { from: 2000, to: 2249, rating: 1.382 }, // Sydney metro — zone 3
-  { from: 2250, to: 2554, rating: 1.382 }, // NSW coastal — zone 3
-  { from: 2555, to: 2574, rating: 1.382 }, // Macarthur/Camden NSW — zone 3
-  { from: 2575, to: 2744, rating: 1.382 }, // South coast NSW — zone 3
-  // NSW zone 2 (inland)
-  { from: 2745, to: 2786, rating: 1.536 }, // Penrith/Blue Mtns — zone 2
-  { from: 2787, to: 2899, rating: 1.536 }, // Southern inland NSW — zone 2
-  // NSW zone 1 (far south)
-  { from: 2900, to: 2999, rating: 1.622 }, // Far south coast — zone 1
-  // QLD zone 3 (coastal metro + regional)
-  { from: 4000, to: 4399, rating: 1.382 }, // Brisbane metro + SEQ — zone 3
-  { from: 4400, to: 4499, rating: 1.382 }, // QLD inland — zone 3
-  { from: 4500, to: 4599, rating: 1.382 }, // Moreton Bay/Sunshine Coast — zone 3
-  // QLD zone 2 (inland)
-  { from: 4600, to: 4799, rating: 1.536 }, // QLD inland north — zone 2
-  // QLD zone 1 (far north)
-  { from: 4800, to: 4999, rating: 1.622 }, // Far north QLD — zone 1
+  // ── NSW + ACT (2000-2999) — CER Instrument 2019 ──
+  { from: 2000, to: 2355, rating: 1.382 }, // Sydney, Central Coast, Hunter, Illawarra, lower North Coast — zone 3
+  { from: 2356, to: 2357, rating: 1.536 }, // NW inland pocket (Bingara) — zone 2
+  { from: 2358, to: 2384, rating: 1.382 }, // New England / NW slopes — zone 3
+  { from: 2385, to: 2389, rating: 1.536 }, // NW inland pocket (Manilla) — zone 2
+  { from: 2390, to: 2395, rating: 1.382 }, // NW slopes (Gunnedah) — zone 3
+  { from: 2396, to: 2397, rating: 1.536 }, // NW inland pocket — zone 2
+  { from: 2398, to: 2399, rating: 1.382 }, // NW slopes — zone 3
+  { from: 2400, to: 2400, rating: 1.536 }, // Narrabri — zone 2
+  { from: 2401, to: 2404, rating: 1.382 }, // NW slopes — zone 3
+  { from: 2405, to: 2407, rating: 1.536 }, // Far NW inland (Wee Waa) — zone 2
+  { from: 2408, to: 2544, rating: 1.382 }, // North/NW, Wollongong/Illawarra, Southern Highlands, South Coast — zone 3
+  { from: 2545, to: 2554, rating: 1.185 }, // Far South Coast (Merimbula, Bega, Eden) — zone 4
+  { from: 2555, to: 2627, rating: 1.382 }, // SW Sydney (Camden), Goulburn, Queanbeyan, ACT-central (2600-2619), Cooma fringe — zone 3
+  { from: 2628, to: 2628, rating: 1.185 }, // Jindabyne alpine — zone 4
+  { from: 2629, to: 2629, rating: 1.382 }, // Adaminaby — zone 3
+  { from: 2630, to: 2639, rating: 1.185 }, // Cooma / Snowy-Monaro alpine — zone 4
+  { from: 2640, to: 2816, rating: 1.382 }, // Albury, Wagga, Penrith, Bathurst, Central West — zone 3
+  { from: 2817, to: 2817, rating: 1.536 }, // Central-west inland pocket — zone 2
+  { from: 2818, to: 2820, rating: 1.382 }, // Central West (Gilgandra/Warren) — zone 3
+  { from: 2821, to: 2829, rating: 1.536 }, // Warren-Nyngan-Coonamble belt — zone 2
+  { from: 2830, to: 2830, rating: 1.382 }, // Narromine/Dubbo direction — zone 3
+  { from: 2831, to: 2841, rating: 1.536 }, // Walgett-Brewarrina-Bourke direction — zone 2
+  { from: 2842, to: 2872, rating: 1.382 }, // Wellington, Parkes, Forbes, Condobolin — zone 3
+  { from: 2873, to: 2873, rating: 1.536 }, // Nymagee/Hermidale pocket — zone 2
+  { from: 2874, to: 2877, rating: 1.382 }, // Lachlan (Tullamore/Trundle) — zone 3
+  { from: 2878, to: 2889, rating: 1.536 }, // FAR WEST: Broken Hill, Wilcannia, Menindee — zone 2
+  { from: 2890, to: 2999, rating: 1.382 }, // Upper NSW band incl. Canberra/Tuggeranong (2900-2920, ACT) — zone 3
+  // ── QLD (4000-4999) — CER Instrument 2019 ──
+  { from: 4000, to: 4416, rating: 1.382 }, // Brisbane, Gold Coast, Sunshine Coast, Toowoomba, SEQ + S inland — zone 3
+  { from: 4417, to: 4417, rating: 1.536 }, // Wandoan island — zone 2
+  { from: 4418, to: 4427, rating: 1.382 }, // Miles/Chinchilla — zone 3
+  { from: 4428, to: 4473, rating: 1.536 }, // Western Darling Downs / Maranoa (Roma) — zone 2
+  { from: 4474, to: 4476, rating: 1.622 }, // Far-western inland pocket — zone 1
+  { from: 4477, to: 4478, rating: 1.536 }, // Charleville area — zone 2
+  { from: 4479, to: 4485, rating: 1.622 }, // Far-western outback (Quilpie/Cunnamulla direction) — zone 1
+  { from: 4486, to: 4491, rating: 1.536 }, // Western inland — zone 2
+  { from: 4492, to: 4492, rating: 1.622 }, // Far-western outback island — zone 1
+  { from: 4493, to: 4493, rating: 1.536 }, // Western inland — zone 2
+  { from: 4494, to: 4494, rating: 1.382 }, // Zone-3 island within the western mix — zone 3
+  { from: 4495, to: 4497, rating: 1.536 }, // Western inland — zone 2
+  { from: 4498, to: 4719, rating: 1.382 }, // Wide Bay (Bundaberg, Hervey Bay), Gladstone, Rockhampton — zone 3
+  { from: 4720, to: 4722, rating: 1.536 }, // Emerald/Capella — zone 2
+  { from: 4723, to: 4723, rating: 1.382 }, // Zone-3 island — zone 3
+  { from: 4724, to: 4734, rating: 1.536 }, // Barcaldine/Longreach approach — zone 2
+  { from: 4735, to: 4736, rating: 1.622 }, // Longreach area — zone 1
+  { from: 4737, to: 4822, rating: 1.382 }, // Mackay, Whitsundays, Townsville + coast/inland — zone 3
+  { from: 4823, to: 4823, rating: 1.536 }, // Hughenden island — zone 2
+  { from: 4824, to: 4824, rating: 1.382 }, // Julia Creek island — zone 3
+  { from: 4825, to: 4827, rating: 1.536 }, // Mount Isa + NW inland — zone 2
+  { from: 4828, to: 4828, rating: 1.382 }, // Zone-3 island — zone 3
+  { from: 4829, to: 4829, rating: 1.622 }, // Camooweal far-NW island — zone 1
+  { from: 4830, to: 4999, rating: 1.382 }, // Far North QLD incl. Cairns (4870) + Cape — zone 3 (NOT zone 1)
 ]
 
 /**
