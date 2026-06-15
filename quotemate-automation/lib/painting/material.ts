@@ -55,10 +55,16 @@ export function buildMaterialDetectPrompt(): string {
     'You are analysing a street-level photo of the FRONT of an Australian house for an exterior ' +
     'painting quote. Identify the primary EXTERIOR WALL material of the main house (ignore the ' +
     'roof, fence, garden and neighbouring houses). ' +
-    'Choose ONE material from: render (rendered/painted masonry, smooth), weatherboard (horizontal ' +
-    'timber or fibre-cement boards), brick_face (bare unpainted brick), brick_painted (painted ' +
-    'brick), fibro (flat fibre-cement sheeting with battens — common pre-1990), metal (Colorbond / ' +
-    'metal cladding), or unknown. Also read the number of storeys and the coarse paint condition. ' +
+    'To differentiate materials: ' +
+    'render is flat, featureless masonry (uniform surface, no visible board edges); ' +
+    'weatherboard has VISIBLE HORIZONTAL BOARD EDGES, JOINTS between boards, or subtle grooves/profile even when painted; ' +
+    'brick_face is bare, unpainted brick texture; ' +
+    'brick_painted is previously painted brick; ' +
+    'fibro is flat sheeting with visible horizontal battens; ' +
+    'metal is smooth, shiny Colorbond or metal sheeting. ' +
+    'CRITICAL: If you see ANY horizontal board edges, joints, or grooves → weatherboard, NOT render. ' +
+    'Choose ONE: render, weatherboard, brick_face, brick_painted, fibro, metal, or unknown. ' +
+    'Also read the number of storeys and the coarse paint condition. ' +
     'Respond ONLY with strict JSON, no prose, no code fences: ' +
     '{"material": string, "storeys": number|null, "condition_hint": "sound"|"weathered"|"peeling"|"bare"|"unknown", ' +
     '"confidence": "high"|"medium"|"low", "notes": string}'
