@@ -30,20 +30,6 @@ export type SolarHeroOverlay = {
   caption: string
 }
 
-/** Format an ISO YYYY-MM-DD as e.g. '14 Mar 2025'; null on bad input. */
-function formatImageryDate(iso: string | null): string | null {
-  if (!iso) return null
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
-  if (!m) return null
-  const months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-  ]
-  const monthIdx = Number(m[2]) - 1
-  if (monthIdx < 0 || monthIdx > 11) return null
-  return `${Number(m[3])} ${months[monthIdx]} ${m[1]}`
-}
-
 export function buildHeroOverlay(args: {
   headlineTier: SolarSystemTier | null
   roof: SolarRoofFacts
@@ -67,10 +53,14 @@ export function buildHeroOverlay(args: {
   if (roof.source === 'manual') {
     caption = 'Indicative layout based on the roof details you provided.'
   } else {
-    const date = formatImageryDate(roof.imagery_date)
-    caption = date
-      ? `Indicative layout based on Google aerial imagery, ${date}.`
-      : 'Indicative layout based on Google aerial imagery.'
+    // The hero photo is served by Google Maps Static — Google's freshest
+    // default satellite tiles, returned with no capture date. roof.imagery_date
+    // is the Solar API buildingInsights vintage: a SEPARATE, often-older
+    // dataset used only for roof geometry. Printing it here mislabelled a
+    // current photo with a stale date (e.g. "27 Oct 2017"), so we don't.
+    // (The heatmap caption in sun-view.ts correctly keeps its Solar-API
+    // date — that image genuinely IS that dataset.)
+    caption = 'Indicative layout based on the latest Google aerial imagery.'
   }
 
   return { stats, caption }

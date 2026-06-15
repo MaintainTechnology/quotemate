@@ -50,15 +50,18 @@ describe('buildHeroOverlay', () => {
     ])
   })
 
-  it('captions a Google estimate with the imagery date', () => {
+  it('captions a Google estimate as the latest imagery (no stale Solar-API date)', () => {
     const overlay = buildHeroOverlay({
       headlineTier,
       roof: googleRoof,
       annualKwhAc: 11988,
     })
+    // Hero photo is Maps Static (Google's freshest tiles); we must NOT
+    // print the older Solar-API imagery_date over it.
     expect(overlay.caption).toBe(
-      'Indicative layout based on Google aerial imagery, 14 Mar 2025.',
+      'Indicative layout based on the latest Google aerial imagery.',
     )
+    expect(overlay.caption).not.toContain('2025')
   })
 
   it('omits the aerial caption for a manual-fallback estimate', () => {
@@ -72,14 +75,16 @@ describe('buildHeroOverlay', () => {
     )
   })
 
-  it('captions a Google estimate without a date gracefully', () => {
+  it('uses the same latest-imagery caption regardless of Solar-API date', () => {
     const overlay = buildHeroOverlay({
       headlineTier,
       roof: { ...googleRoof, imagery_date: null } as unknown as SolarRoofFacts,
       annualKwhAc: 11988,
     })
+    // Caption no longer depends on imagery_date — a null date yields the
+    // identical "latest imagery" line as a present one.
     expect(overlay.caption).toBe(
-      'Indicative layout based on Google aerial imagery.',
+      'Indicative layout based on the latest Google aerial imagery.',
     )
   })
 
