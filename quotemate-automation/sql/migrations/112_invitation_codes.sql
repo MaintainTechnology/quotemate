@@ -44,6 +44,19 @@ alter table tenants
 alter table onboarding_codes enable row level security;
 alter table code_redemptions enable row level security;
 
+-- ── 4b. Table grants — the API roles need explicit privileges. ──────
+-- service_role (used by every /api server route) bypasses RLS but still
+-- needs the table GRANT. Some Supabase projects auto-grant new tables via
+-- ALTER DEFAULT PRIVILEGES; others don't — so grant explicitly here to
+-- keep this migration portable across environments. anon/authenticated
+-- are granted too (RLS still gates them to zero rows until a policy lands).
+grant select, insert, update, delete on onboarding_codes to service_role;
+grant select, insert, update, delete on code_redemptions to service_role;
+grant select, insert, update, delete on onboarding_codes to authenticated;
+grant select, insert, update, delete on code_redemptions to authenticated;
+grant select on onboarding_codes to anon;
+grant select on code_redemptions to anon;
+
 -- ── 5. Atomic guarded quota increment ───────────────────────────
 -- Returns true if it incremented, false if quota was already full.
 create or replace function increment_code_quota(p_code_id uuid)
