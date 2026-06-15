@@ -261,12 +261,14 @@ type Tab =
   | 'estimator'
   /** Solar — AI solar PV estimates (share link, list, confirm & release). Not trade-gated. */
   | 'solar'
+  /** Invitation codes — generate/manage onboarding allowlist + campaign codes. */
+  | 'invites'
 
 /** Tabs reachable via /dashboard?tab=… (e.g. the estimator run page's breadcrumb). */
 const DEEP_LINK_TABS: readonly Tab[] = [
   'overview', 'account', 'payouts', 'pricing', 'services', 'catalogue', 'estimating',
   'recipes', 'quotes', 'chats', 'followups', 'roofing', 'signage', 'painting',
-  'commercial-painting', 'aircon', 'estimator', 'solar',
+  'commercial-painting', 'aircon', 'estimator', 'solar', 'invites',
 ]
 
 /** SMS conversation summary returned by /api/tenant/chats. Drives the
@@ -680,6 +682,29 @@ export default function DashboardPage() {
                 appUrl={process.env.NEXT_PUBLIC_APP_URL ?? null}
               />
             )}
+            {tab === 'invites' && (
+              <div className="space-y-7">
+                <Link
+                  href="/dashboard/invites"
+                  className="group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
+                >
+                  <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">
+                    QR
+                  </span>
+                  <div className="flex-1">
+                    <h3 className="font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+                      Invitation codes
+                    </h3>
+                    <p className="mt-4 text-base leading-relaxed text-text-sec">
+                      Generate onboarding codes for flyers, ads, and referrals — each with a sign-up quota you can pause or revoke. Opens the full manager.
+                    </p>
+                    <span className="mt-5 inline-flex items-center gap-2 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-accent transition-colors group-hover:text-accent-press">
+                      Open invitation codes <span aria-hidden="true">&rarr;</span>
+                    </span>
+                  </div>
+                </Link>
+              </div>
+            )}
           </div>
         </section>
       </div>
@@ -939,6 +964,8 @@ function buildNav(quoteCount: number, hasRoofingTrade = false): NavItem[] {
   items.push({ tab: 'estimator', label: 'Estimator', icon: ScanLine })
   // Solar — AI solar PV estimates. Not trade-gated yet so it's discoverable.
   items.push({ tab: 'solar', label: 'Solar', icon: Sun })
+  // Invitation codes — onboarding allowlist + campaign codes. Not trade-gated.
+  items.push({ tab: 'invites', label: 'Invites', icon: Megaphone })
   items.push(
     { tab: 'account', label: 'Account', icon: User },
     { tab: 'payouts', label: 'Payouts', icon: Banknote },
@@ -967,7 +994,7 @@ const SIDEBAR_GROUPS: { label: string; tabs: Tab[] }[] = [
   { label: 'Daily work', tabs: ['overview', 'quotes', 'followups', 'chats', 'roofing', 'signage', 'painting', 'commercial-painting', 'aircon', 'estimator', 'solar'] },
   {
     label: 'Setup',
-    tabs: ['account', 'payouts', 'pricing', 'services', 'catalogue', 'estimating', 'recipes'],
+    tabs: ['invites', 'account', 'payouts', 'pricing', 'services', 'catalogue', 'estimating', 'recipes'],
   },
 ]
 
@@ -1157,6 +1184,10 @@ const TAB_META: Record<
   solar: {
     title: 'Solar',
     desc: 'Share your solar link, review the AI-drafted tiered estimates, and confirm & release each one to the customer.',
+  },
+  invites: {
+    title: 'Invitation codes',
+    desc: 'Generate and manage onboarding codes for flyers, ads, and referrals. Each code carries a sign-up quota.',
   },
   quotes: {
     title: 'Quotes',
@@ -10363,6 +10394,8 @@ function tabLabel(t: Tab): string {
   switch (t) {
     case 'aircon':
       return 'AC'
+    case 'invites':
+      return 'Invites'
     case 'overview':
       return 'Overview'
     case 'account':
