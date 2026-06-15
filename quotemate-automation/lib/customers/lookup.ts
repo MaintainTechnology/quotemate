@@ -56,7 +56,7 @@ export type CustomerProfile = {
  */
 export async function findOrCreateCustomer(
   phoneNumber: string,
-  channel: 'voice' | 'sms',
+  channel: 'voice' | 'sms' | 'web',
   tenantId: string | null = null,
 ): Promise<CustomerProfile | null> {
   if (!phoneNumber) return null
