@@ -38,6 +38,7 @@ import {
 } from './price-history'
 import { buildDeterministicTiers, type DeterministicTierInput } from './deterministic-bom'
 import { fetchSimilarPastQuotesContext } from './rag'
+import { runKbEstimateVerification } from './kb-verify'
 import { pipelineLog } from '@/lib/log/pipeline'
 import { createTracer, stopwatch } from '@/lib/log/trace'
 
@@ -432,6 +433,49 @@ export async function runEstimation(
       'price-bands recipe merge errored — continuing with un-banded draft',
       e?.message ?? String(e),
     )
+  }
+
+  // ── KB VERIFICATION (MT-QM-PRICING-KB) ─────────────────────────────
+  // Flag-gated (KB_VERIFY_ESTIMATES: off | shadow | apply). Cross-checks
+  // every priced line item against the authoritative MT-QM-PRICING-KB file
+  // store (which mirrors the Supabase pricing/materials tables) BEFORE the
+  // grounding validator runs below. This is the key safety property: any
+  // price the KB rewrites in `apply` mode STILL has to ground against
+  // pricing_book + shared_* + tenant_custom_assemblies — an ungrounded KB
+  // "correction" self-downgrades the whole quote to the $99 inspection
+  // route, exactly like a drifted deterministic price. `shadow` only
+  // appends [kb-verify] risk_flags for tradie review without touching a
+  // customer-facing price. Best-effort + safe-degrade: KB disabled,
+  // unreachable, low-confidence, or no parseable price → the draft is
+  // bit-identical to the KB-off path. Default OFF → zero behaviour change.
+  try {
+    const kb = await runKbEstimateVerification(
+      { intake, draft },
+      {
+        log: {
+          ok: (m: string, x?: unknown) => cacheLog.ok(m, x as any),
+          err: (m: string, x?: unknown) =>
+            cacheLog.err(m, (typeof x === 'string' ? x : x == null ? null : String(x)) as any),
+        },
+      },
+    )
+    if (kb) {
+      trace('estimate', kb.reconciliation.summary.mismatch > 0 ? 'warn' : 'ok', {
+        substep: 'kb_verify',
+        message: `MT-QM-PRICING-KB verification (${kb.mode})`,
+        decisions: {
+          mode: kb.mode,
+          confirmed: kb.reconciliation.summary.confirmed,
+          mismatch: kb.reconciliation.summary.mismatch,
+          uncovered: kb.reconciliation.summary.uncovered,
+          flagged: kb.flagged,
+          corrected: kb.corrected,
+        },
+      })
+    }
+  } catch (e: any) {
+    // KB verification must NEVER block estimation.
+    cacheLog.err('KB verification errored — continuing without it', e?.message ?? String(e))
   }
 
   // Auto-quote path: every line_item.unit_price_ex_gst MUST be derivable

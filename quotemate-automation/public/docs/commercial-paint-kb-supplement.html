@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>KB File-Store Supplement · Commercial Paint Estimator · QuoteMate</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --ink-deep:#0E1622; --ink:#141C29; --ink-card:#1B2433; --ink-line:#2D3A4F;
+    --accent:#FF5A1F; --accent-press:#E8470F; --accent-soft:#FF7A45;
+    --text-pri:#FFFFFF; --text-sec:#B8C2D1; --text-dim:#7A8699;
+    --teal-glow:#14B8A6; --teal-deep:#0F766E;
+    --success:#15803D; --warning:#B45309; --danger:#B91C1C;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--ink-deep); color:var(--text-pri);
+    font-family:'Manrope','Inter',system-ui,sans-serif; line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px; margin:0 auto; padding:0 24px}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+  .eyebrow{font-family:'JetBrains Mono',monospace; font-size:.72rem; font-weight:600;
+    text-transform:uppercase; letter-spacing:.14em; color:var(--text-dim)}
+  .accent{color:var(--accent)}
+  .teal{color:var(--teal-glow)}
+  h1,h2,h3{text-transform:uppercase; font-weight:800; letter-spacing:-.03em; line-height:1.04; margin:0}
+  h1{font-size:clamp(2.6rem,6.5vw,5.2rem); letter-spacing:-.04em; line-height:.96}
+  h2{font-size:clamp(1.8rem,3.4vw,2.7rem); margin-bottom:.4em}
+  h3{font-size:clamp(1.15rem,2vw,1.5rem)}
+  p{color:var(--text-sec); margin:0 0 1rem}
+  section{padding:72px 0; border-top:1px solid var(--ink-line)}
+  section:first-of-type{border-top:0}
+  .lede{font-size:1.1rem; max-width:65ch}
+  a{color:var(--accent-soft); text-decoration:none}
+
+  /* ── HERO ── */
+  .hero{position:relative; overflow:hidden; padding:96px 0 80px; border-top:0}
+  .hero-grid{position:relative; z-index:2; display:grid; grid-template-columns:1fr; gap:36px}
+  @media(min-width:880px){.hero-grid{grid-template-columns:1.9fr 1fr; gap:56px; align-items:end}}
+  .hero aside{color:var(--text-sec); font-size:1rem}
+  .topo{position:absolute; inset:0; width:100%; height:100%; opacity:.35; z-index:1; pointer-events:none}
+
+  /* ── chips ── */
+  .chip{display:inline-flex; align-items:center; gap:.4em; background:var(--accent); color:#fff;
+    padding:5px 11px; font-family:'JetBrains Mono',monospace; font-size:.68rem; font-weight:600;
+    text-transform:uppercase; letter-spacing:.12em}
+  .chip.ghost{background:transparent; color:var(--text-dim); border:1px solid var(--ink-line)}
+  .chip.teal{background:var(--teal-deep)}
+  .chiprow{display:flex; flex-wrap:wrap; gap:10px; margin-top:20px}
+
+  /* ── cards ── */
+  .grid{display:grid; gap:18px}
+  @media(min-width:760px){.cols-3{grid-template-columns:repeat(3,1fr)} .cols-2{grid-template-columns:repeat(2,1fr)}}
+  .card{background:var(--ink-card); border:1px solid var(--ink-line); padding:26px}
+  .card .num{font-family:'JetBrains Mono',monospace; font-size:2.7rem; font-weight:700;
+    color:var(--accent); line-height:1; display:block; margin-bottom:10px}
+  .card h3{margin-bottom:.5em}
+  .card p{font-size:.95rem; margin:0}
+  .card.kbf{border-left:3px solid var(--teal-glow)}
+  .card.kbc{border-left:3px solid var(--warning)}
+  .card.kba{border-left:3px solid var(--accent)}
+
+  /* ── flow pipeline ── */
+  .flow{display:flex; flex-direction:column; align-items:center; gap:0; margin-top:8px}
+  .stage{width:100%; max-width:760px; background:var(--ink-card); border:1px solid var(--ink-line);
+    padding:16px 20px; display:flex; gap:16px; align-items:center}
+  .stage .tag{font-family:'JetBrains Mono',monospace; font-size:.66rem; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--text-dim); min-width:62px}
+  .stage .body{flex:1}
+  .stage .body b{color:var(--text-pri); font-weight:700}
+  .stage .body span{color:var(--text-sec); font-size:.92rem}
+  .connector{width:2px; height:26px; background:var(--ink-line); position:relative}
+  .connector::after{content:""; position:absolute; left:-4px; bottom:0; border:5px solid transparent;
+    border-top-color:var(--ink-line)}
+  .kbblock{width:100%; max-width:760px; border:2px dashed var(--accent); background:rgba(255,90,31,.05);
+    padding:18px; position:relative}
+  .kbblock .kbhead{font-family:'JetBrains Mono',monospace; font-size:.7rem; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--accent); margin-bottom:14px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px}
+  .substep{display:flex; gap:14px; align-items:flex-start; padding:9px 0; border-top:1px solid var(--ink-line)}
+  .substep:first-of-type{border-top:0}
+  .substep .s{font-family:'JetBrains Mono',monospace; color:var(--teal-glow); font-weight:600; min-width:26px}
+  .substep b{color:var(--text-pri); font-weight:700; font-size:.95rem}
+  .substep em{color:var(--text-dim); font-style:normal; font-family:'JetBrains Mono',monospace; font-size:.74rem}
+  .substep.final{border-top:1px dashed var(--accent); margin-top:6px}
+  .substep.final .s{color:var(--accent)}
+
+  /* ── svg figures ── */
+  figure{margin:0}
+  .fig{background:var(--ink); border:1px solid var(--ink-line); padding:20px; overflow-x:auto}
+  .fig svg{width:100%; height:auto; min-width:560px}
+  figcaption{font-family:'JetBrains Mono',monospace; font-size:.72rem; color:var(--text-dim);
+    text-transform:uppercase; letter-spacing:.1em; margin-top:12px}
+  text{font-family:'JetBrains Mono',monospace}
+
+  /* ── lists ── */
+  ul.clean{list-style:none; padding:0; margin:0}
+  ul.clean li{padding:12px 0 12px 26px; border-top:1px solid var(--ink-line); position:relative; color:var(--text-sec); font-size:.97rem}
+  ul.clean li::before{content:"›"; position:absolute; left:4px; color:var(--accent); font-weight:800}
+  ul.clean li b{color:var(--text-pri)}
+
+  code{font-family:'JetBrains Mono',monospace; font-size:.82em; background:var(--ink); border:1px solid var(--ink-line);
+    padding:1px 6px; color:var(--accent-soft)}
+
+  /* ── files table ── */
+  .files{width:100%; border-collapse:collapse; font-size:.9rem}
+  .files td{border-top:1px solid var(--ink-line); padding:12px 8px; vertical-align:top}
+  .files td:first-child{white-space:nowrap}
+  .files .fn{font-family:'JetBrains Mono',monospace; color:var(--accent-soft); font-size:.82rem}
+  .files td:last-child{color:var(--text-sec)}
+
+  /* ── CTA bar ── */
+  .ctabar{background:var(--accent); color:#fff; text-align:center; padding:18px 24px;
+    font-family:'JetBrains Mono',monospace; font-size:.82rem; text-transform:uppercase; letter-spacing:.14em}
+  .sub{color:var(--text-dim); font-family:'JetBrains Mono',monospace; font-size:.72rem; letter-spacing:.08em; text-transform:uppercase}
+</style>
+</head>
+<body>
+
+<!-- ════════ HERO ════════ -->
+<header class="hero">
+  <svg class="topo" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <g fill="none" stroke="#14B8A6" stroke-width="1">
+      <path d="M0,820 Q240,660 480,740 T960,700 T1440,760 T1920,690"/>
+      <path d="M0,880 Q240,740 480,800 T960,770 T1440,820 T1920,760" stroke-opacity=".7"/>
+      <path d="M0,940 Q240,820 480,870 T960,840 T1440,890 T1920,830" stroke-opacity=".5"/>
+      <path d="M0,760 Q240,600 480,690 T960,640 T1440,700 T1920,620" stroke-opacity=".4"/>
+    </g>
+    <g fill="none" stroke="#FF5A1F" stroke-width="1" stroke-opacity=".25">
+      <path d="M0,1000 Q240,900 480,950 T960,920 T1440,960 T1920,910"/>
+    </g>
+  </svg>
+  <div class="wrap hero-grid">
+    <div>
+      <span class="eyebrow">Commercial Paint · Estimator · Internal system note</span>
+      <h1 style="margin-top:22px">A <span class="accent">temporary</span> file-store that makes every <span class="accent">paint takeoff</span> more accurate</h1>
+      <div class="chiprow">
+        <span class="chip">mt-filestore-kb</span>
+        <span class="chip teal">Gemini File Search</span>
+        <span class="chip ghost">Best-effort</span>
+        <span class="chip ghost">Self-cleaning</span>
+        <span class="chip ghost">Hybrid merge</span>
+      </div>
+    </div>
+    <aside>
+      After the estimator extracts a takeoff from a tradie's uploaded plans, this system spins up a private, throwaway knowledge store from those same documents, asks it to verify and fill the gaps, folds the answer back in under strict rules, then deletes itself. It only ever makes the existing extraction more correct — it never blocks a quote.
+    </aside>
+  </div>
+</header>
+
+<!-- ════════ THE PROBLEM ════════ -->
+<section>
+  <div class="wrap">
+    <span class="eyebrow">01 · Why it exists</span>
+    <h2>The single extraction pass has <span class="accent">blind spots</span></h2>
+    <p class="lede">A commercial paint job arrives as a fat PDF plan set plus a painter's measurement sheet. One Claude Opus pass reads the plans and a Sonnet pass transcribes the measurements; the reconciler merges them into a takeoff. That works — but a single read of a 15-page set can miss a surface buried on page 9, mislabel a substrate, or carry a quantity the documents actually contradict.</p>
+    <div class="grid cols-3" style="margin-top:26px">
+      <article class="card"><span class="num">↯</span><h3>Missed surfaces</h3><p>A soffit or stair core described only in a schedule note never makes it onto the takeoff — so it's never quoted.</p></article>
+      <article class="card"><span class="num">≠</span><h3>Wrong numbers</h3><p>An area read off the wrong drawing, or a system inferred where the spec actually states something else.</p></article>
+      <article class="card"><span class="num">?</span><h3>Low-confidence gaps</h3><p>Fields the model left blank or flagged unsure — height, substrate, coats — that pricing then has to guess at.</p></article>
+    </div>
+    <p style="margin-top:24px">The fix isn't a bigger prompt. It's a <b class="teal">grounded second opinion</b> that can do retrieval over the full document set and cite the page it found each fact on.</p>
+  </div>
+</section>
+
+<!-- ════════ WHAT IT IS ════════ -->
+<section style="background:var(--ink)">
+  <div class="wrap">
+    <span class="eyebrow">02 · What it is</span>
+    <h2>A per-job, <span class="accent">throwaway</span> knowledge store</h2>
+    <p class="lede">The <b>mt-filestore-kb</b> service (a Gemini File Search wrapper) already powers QuoteMate's static trade-book knowledge. This system uses it differently: instead of a permanent library, it creates a <span class="teal">temporary store from the tradie's own uploaded PDFs</span>, queries it once to audit the takeoff, and tears it down. Nothing about the customer's documents persists in the KB after the run.</p>
+    <ul class="clean" style="margin-top:18px">
+      <li><b>Grounded.</b> Every answer is retrieved from the uploaded plans and must cite a page — it can't invent areas the documents don't show.</li>
+      <li><b>Private &amp; ephemeral.</b> The store is named per run, lives only for the extraction, and is deleted in a <code>finally</code> — including when something fails.</li>
+      <li><b>Best-effort.</b> If the KB is unreachable, slow to index, or returns nonsense, the system silently falls back to the original takeoff. The quote never waits on it.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ════════ PIPELINE DIAGRAM ════════ -->
+<section>
+  <div class="wrap">
+    <span class="eyebrow">03 · How it works — end to end</span>
+    <h2>Where it sits in the <span class="accent">extraction pipeline</span></h2>
+    <p class="lede">The supplement is one bordered block inserted after the reconciler and before the takeoff is persisted. Everything above and below it is unchanged.</p>
+
+    <div class="flow" style="margin-top:30px">
+      <div class="stage"><span class="tag">Upload</span><div class="body"><b>Tradie uploads PDFs</b><br><span>Plan set (required) · measurement takeoff · services layout — stored in <code>plan_uploads</code>.</span></div></div>
+      <div class="connector"></div>
+      <div class="stage"><span class="tag">Extract</span><div class="body"><b>Opus reads plans · Sonnet reads measurements</b><br><span>Run concurrently → a draft takeoff + transcribed measurement lines.</span></div></div>
+      <div class="connector"></div>
+      <div class="stage"><span class="tag">Reconcile</span><div class="body"><b>reconcileTakeoff()</b><br><span>Pure merge of the two sources with per-line provenance &amp; deltas → <code>reconciled.items</code>.</span></div></div>
+      <div class="connector"></div>
+
+      <div class="kbblock">
+        <div class="kbhead"><span>◆ KB File-Store Supplement — best-effort</span><span>gated · PAINT_KB_SUPPLEMENT_ENABLED</span></div>
+        <div class="substep"><span class="s">1</span><div><b>Create temporary store</b> &nbsp;<em>POST /v1/stores · paint-temp-&lt;runId&gt;</em></div></div>
+        <div class="substep"><span class="s">2</span><div><b>Upload the source PDFs</b> &nbsp;<em>POST /v1/stores/:id/upload · plan + measurements + services</em></div></div>
+        <div class="substep"><span class="s">3</span><div><b>Wait for indexing</b> &nbsp;<em>poll GET /:id/documents until none "processing" (bounded)</em></div></div>
+        <div class="substep"><span class="s">4</span><div><b>Grounded search</b> &nbsp;<em>POST /v1/search · "verify &amp; complete this takeoff, cite pages"</em></div></div>
+        <div class="substep"><span class="s">5</span><div><b>Hybrid merge</b> &nbsp;<em>applyPaintSupplement() → finalItems + kb_flags</em></div></div>
+        <div class="substep final"><span class="s">✕</span><div><b>finally: delete the whole store</b> &nbsp;<em>DELETE /v1/stores/:id?force=true — always, even on error</em></div></div>
+      </div>
+
+      <div class="connector"></div>
+      <div class="stage"><span class="tag">Persist</span><div class="body"><b>Insert plan_extractions</b><br><span><code>items = finalItems</code> · <code>sheets_used.kb_flags</code> carries the audit.</span></div></div>
+      <div class="connector"></div>
+      <div class="stage"><span class="tag">Review</span><div class="body"><b>Tradie confirm editor</b><br><span>Sees filled fields, added lines, and conflict flags — confirms or edits.</span></div></div>
+      <div class="connector"></div>
+      <div class="stage"><span class="tag">Price</span><div class="body"><b>Pricing → quote</b><br><span>The confirmed takeoff is priced against the paint rate book.</span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ CONNECTION MAP ════════ -->
+<section style="background:var(--ink)">
+  <div class="wrap">
+    <span class="eyebrow">04 · The connections</span>
+    <h2>QuoteMate ⇄ <span class="accent">mt-filestore-kb</span> ⇄ Gemini</h2>
+    <p class="lede">Five HTTP calls over the existing typed client (<code>lib/admin-loader/mt-filestore-kb.ts</code>). The route never touches Gemini directly — the node brokers it. The teardown call (orange) is guaranteed to run.</p>
+
+    <figure style="margin-top:26px">
+      <div class="fig">
+        <svg viewBox="0 0 980 430" role="img" aria-label="Connection map between the extract route, the mt-filestore-kb service endpoints, and the Gemini File Search temporary store">
+          <defs>
+            <marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="3.2" orient="auto">
+              <path d="M0,0 L7,3.2 L0,6.4 Z" fill="#7A8699"/>
+            </marker>
+            <marker id="arrT" markerWidth="9" markerHeight="9" refX="7" refY="3.2" orient="auto">
+              <path d="M0,0 L7,3.2 L0,6.4 Z" fill="#14B8A6"/>
+            </marker>
+            <marker id="arrO" markerWidth="9" markerHeight="9" refX="7" refY="3.2" orient="auto">
+              <path d="M0,0 L7,3.2 L0,6.4 Z" fill="#FF5A1F"/>
+            </marker>
+          </defs>
+
+          <!-- left: route -->
+          <rect x="20" y="150" width="210" height="130" fill="#1B2433" stroke="#2D3A4F"/>
+          <text x="36" y="180" fill="#FF5A1F" font-size="11" letter-spacing="1">QUOTEMATE</text>
+          <text x="36" y="202" fill="#FFFFFF" font-size="13">extract/route.ts</text>
+          <text x="36" y="224" fill="#B8C2D1" font-size="11">supplementTakeoffViaKb()</text>
+          <text x="36" y="250" fill="#7A8699" font-size="10">best-effort orchestrator</text>
+          <text x="36" y="266" fill="#7A8699" font-size="10">+ hybrid merge (pure)</text>
+
+          <!-- middle: service endpoints -->
+          <rect x="380" y="40" width="270" height="350" fill="#141C29" stroke="#2D3A4F"/>
+          <text x="396" y="66" fill="#14B8A6" font-size="11" letter-spacing="1">mt-filestore-kb · NEST</text>
+          <!-- endpoint rows -->
+          <g font-size="11">
+            <rect x="396" y="82"  width="238" height="44" fill="#1B2433" stroke="#2D3A4F"/>
+            <text x="408" y="100" fill="#FFFFFF">1 · POST /v1/stores</text><text x="408" y="116" fill="#7A8699">create temp store</text>
+            <rect x="396" y="134" width="238" height="44" fill="#1B2433" stroke="#2D3A4F"/>
+            <text x="408" y="152" fill="#FFFFFF">2 · POST /:id/upload</text><text x="408" y="168" fill="#7A8699">multipart PDF → index</text>
+            <rect x="396" y="186" width="238" height="44" fill="#1B2433" stroke="#2D3A4F"/>
+            <text x="408" y="204" fill="#FFFFFF">3 · GET /:id/documents</text><text x="408" y="220" fill="#7A8699">poll until indexed</text>
+            <rect x="396" y="238" width="238" height="44" fill="#1B2433" stroke="#2D3A4F"/>
+            <text x="408" y="256" fill="#FFFFFF">4 · POST /v1/search</text><text x="408" y="272" fill="#7A8699">grounded retrieval QA</text>
+            <rect x="396" y="306" width="238" height="44" fill="#231a17" stroke="#FF5A1F"/>
+            <text x="408" y="324" fill="#FF7A45">5 · DELETE /:id?force=true</text><text x="408" y="340" fill="#FF7A45">finally · teardown</text>
+          </g>
+
+          <!-- right: gemini store -->
+          <rect x="760" y="120" width="200" height="190" fill="#1B2433" stroke="#14B8A6"/>
+          <text x="776" y="146" fill="#14B8A6" font-size="11" letter-spacing="1">GEMINI</text>
+          <text x="776" y="168" fill="#FFFFFF" font-size="12">File Search store</text>
+          <text x="776" y="190" fill="#B8C2D1" font-size="11">the tradie's PDFs</text>
+          <text x="776" y="212" fill="#B8C2D1" font-size="11">chunked · embedded</text>
+          <text x="776" y="240" fill="#7A8699" font-size="10">EPHEMERAL —</text>
+          <text x="776" y="256" fill="#7A8699" font-size="10">created &amp; destroyed</text>
+          <text x="776" y="272" fill="#7A8699" font-size="10">within one run</text>
+
+          <!-- arrows route -> endpoints -->
+          <line x1="230" y1="200" x2="396" y2="104" stroke="#7A8699" stroke-width="1.4" marker-end="url(#arr)"/>
+          <line x1="230" y1="205" x2="396" y2="156" stroke="#7A8699" stroke-width="1.4" marker-end="url(#arr)"/>
+          <line x1="230" y1="212" x2="396" y2="208" stroke="#7A8699" stroke-width="1.4" marker-end="url(#arr)"/>
+          <line x1="230" y1="220" x2="396" y2="260" stroke="#7A8699" stroke-width="1.4" marker-end="url(#arr)"/>
+          <line x1="230" y1="250" x2="396" y2="328" stroke="#FF5A1F" stroke-width="1.6" marker-end="url(#arrO)"/>
+
+          <!-- arrows endpoints -> gemini -->
+          <line x1="634" y1="104" x2="760" y2="150" stroke="#14B8A6" stroke-width="1.4" marker-end="url(#arrT)"/>
+          <line x1="634" y1="156" x2="760" y2="175" stroke="#14B8A6" stroke-width="1.4" marker-end="url(#arrT)"/>
+          <line x1="634" y1="208" x2="760" y2="205" stroke="#14B8A6" stroke-width="1.4" marker-end="url(#arrT)"/>
+          <line x1="634" y1="260" x2="760" y2="235" stroke="#14B8A6" stroke-width="1.4" marker-end="url(#arrT)"/>
+          <line x1="634" y1="328" x2="760" y2="295" stroke="#FF5A1F" stroke-width="1.6" marker-end="url(#arrO)"/>
+        </svg>
+      </div>
+      <figcaption>Fig 1 — five brokered calls; the orange DELETE is the guaranteed teardown</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ════════ HYBRID MERGE ════════ -->
+<section>
+  <div class="wrap">
+    <span class="eyebrow">05 · The decision that protects the quote</span>
+    <h2>Hybrid merge — <span class="accent">fill gaps, flag conflicts</span></h2>
+    <p class="lede">The takeoff feeds pricing, so the KB is never allowed to silently overwrite a number a customer is quoted on. <code>applyPaintSupplement()</code> is a pure function with three outcomes. A confident value the documents disagree with becomes a <b>flag for the tradie</b>, not a rewrite.</p>
+
+    <div class="grid cols-3" style="margin:26px 0 34px">
+      <article class="card kbf"><span class="num teal" style="color:var(--teal-glow)">⊕</span><h3>kb_filled</h3><p>The field was <b>empty</b> or the line was <b>low-confidence</b>. The KB value is filled in and the line is noted.</p></article>
+      <article class="card kbc"><span class="num" style="color:var(--warning)">⚑</span><h3>kb_conflict</h3><p>The line was already <b>confident</b> and the documents disagree. The value is <b>kept</b>; a suggested correction is flagged for review.</p></article>
+      <article class="card kba"><span class="num">＋</span><h3>kb_added</h3><p>The documents describe a paintable surface <b>absent</b> from the takeoff. It's appended as a low-confidence line for the tradie to confirm.</p></article>
+    </div>
+
+    <figure>
+      <div class="fig">
+        <svg viewBox="0 0 980 430" role="img" aria-label="Decision tree for applying a KB finding to the takeoff under hybrid rules">
+          <defs>
+            <marker id="d" markerWidth="9" markerHeight="9" refX="7" refY="3.2" orient="auto"><path d="M0,0 L7,3.2 L0,6.4 Z" fill="#7A8699"/></marker>
+          </defs>
+          <!-- root -->
+          <rect x="400" y="20" width="180" height="48" fill="#1B2433" stroke="#FF5A1F"/>
+          <text x="490" y="42" fill="#FF5A1F" font-size="11" text-anchor="middle">KB FINDING</text>
+          <text x="490" y="58" fill="#7A8699" font-size="10" text-anchor="middle">grounded · page-cited</text>
+
+          <!-- two branches -->
+          <line x1="445" y1="68" x2="250" y2="110" stroke="#7A8699" stroke-width="1.4" marker-end="url(#d)"/>
+          <line x1="535" y1="68" x2="730" y2="110" stroke="#7A8699" stroke-width="1.4" marker-end="url(#d)"/>
+          <text x="320" y="92" fill="#B8C2D1" font-size="10">correction</text>
+          <text x="640" y="92" fill="#B8C2D1" font-size="10">missing item</text>
+
+          <!-- LEFT: correction decision 1 -->
+          <rect x="120" y="112" width="260" height="50" fill="#141C29" stroke="#2D3A4F"/>
+          <text x="250" y="133" fill="#FFFFFF" font-size="11" text-anchor="middle">field empty OR line low-conf?</text>
+          <text x="250" y="150" fill="#7A8699" font-size="9" text-anchor="middle">is it safe to fill?</text>
+
+          <!-- yes -> fill -->
+          <line x1="180" y1="162" x2="150" y2="210" stroke="#7A8699" stroke-width="1.4" marker-end="url(#d)"/>
+          <text x="150" y="190" fill="#14B8A6" font-size="10" text-anchor="middle">yes</text>
+          <rect x="40" y="212" width="190" height="58" fill="#1B2433" stroke="#14B8A6"/>
+          <text x="135" y="236" fill="#14B8A6" font-size="11" text-anchor="middle">FILL value</text>
+          <text x="135" y="254" fill="#B8C2D1" font-size="10" text-anchor="middle">flag kb_filled</text>
+
+          <!-- no -> differs? -->
+          <line x1="320" y1="162" x2="350" y2="210" stroke="#7A8699" stroke-width="1.4" marker-end="url(#d)"/>
+          <text x="350" y="190" fill="#B45309" font-size="10" text-anchor="middle">no</text>
+          <rect x="260" y="212" width="190" height="50" fill="#141C29" stroke="#2D3A4F"/>
+          <text x="355" y="240" fill="#FFFFFF" font-size="11" text-anchor="middle">value differs?</text>
+
+          <line x1="300" y1="262" x2="280" y2="304" stroke="#7A8699" stroke-width="1.4" marker-end="url(#d)"/>
+          <text x="268" y="290" fill="#B45309" font-size="10" text-anchor="middle">yes</text>
+          <rect x="170" y="306" width="220" height="58" fill="#231a17" stroke="#B45309"/>
+          <text x="280" y="330" fill="#FBBF77" font-size="11" text-anchor="middle">KEEP original value</text>
+          <text x="280" y="348" fill="#B8C2D1" font-size="10" text-anchor="middle">flag kb_conflict · for review</text>
+
+          <line x1="410" y1="262" x2="430" y2="304" stroke="#7A8699" stroke-width="1.4" marker-end="url(#d)"/>
+          <text x="440" y="290" fill="#14B8A6" font-size="10" text-anchor="middle">no</text>
+          <rect x="410" y="306" width="150" height="58" fill="#141C29" stroke="#2D3A4F"/>
+          <text x="485" y="330" fill="#FFFFFF" font-size="11" text-anchor="middle">no-op</text>
+          <text x="485" y="348" fill="#7A8699" font-size="10" text-anchor="middle">confirmed</text>
+
+          <!-- RIGHT: missing item -->
+          <rect x="620" y="112" width="240" height="50" fill="#141C29" stroke="#2D3A4F"/>
+          <text x="740" y="133" fill="#FFFFFF" font-size="11" text-anchor="middle">already in takeoff?</text>
+          <text x="740" y="150" fill="#7A8699" font-size="9" text-anchor="middle">match by surface + room</text>
+
+          <line x1="690" y1="162" x2="660" y2="210" stroke="#7A8699" stroke-width="1.4" marker-end="url(#d)"/>
+          <text x="650" y="190" fill="#B45309" font-size="10" text-anchor="middle">yes</text>
+          <rect x="560" y="212" width="160" height="50" fill="#141C29" stroke="#2D3A4F"/>
+          <text x="640" y="240" fill="#7A8699" font-size="11" text-anchor="middle">skip (not missing)</text>
+
+          <line x1="800" y1="162" x2="820" y2="210" stroke="#7A8699" stroke-width="1.4" marker-end="url(#d)"/>
+          <text x="828" y="190" fill="#14B8A6" font-size="10" text-anchor="middle">no</text>
+          <rect x="740" y="212" width="200" height="58" fill="#1B2433" stroke="#FF5A1F"/>
+          <text x="840" y="236" fill="#FF7A45" font-size="11" text-anchor="middle">APPEND line</text>
+          <text x="840" y="254" fill="#B8C2D1" font-size="10" text-anchor="middle">flag kb_added · low-conf</text>
+        </svg>
+      </div>
+      <figcaption>Fig 2 — every path is non-destructive to a confident, quoted value</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ════════ LIFECYCLE ════════ -->
+<section style="background:var(--ink)">
+  <div class="wrap">
+    <span class="eyebrow">06 · The temporary store's life</span>
+    <h2>Born, used, <span class="accent">deleted</span> — in one run</h2>
+    <p class="lede">The store exists only inside <code>supplementTakeoffViaKb()</code>. The teardown sits in a <code>finally</code>, so the store is removed on the happy path, on a search error, and on an indexing timeout alike. Nothing leaks.</p>
+    <div class="grid cols-3" style="margin-top:24px">
+      <article class="card"><span class="num">01</span><h3>Create &amp; load</h3><p>A run-scoped store is created and the uploaded PDFs are streamed in for chunking + embedding.</p></article>
+      <article class="card"><span class="num">02</span><h3>Query once</h3><p>After indexing settles, a single grounded search audits the takeoff and returns strict JSON findings.</p></article>
+      <article class="card"><span class="num">03</span><h3>Destroy</h3><p><code>finally</code> → <code>kbDeleteStore(force:true)</code>. A cleanup failure is swallowed; it can never surface as an extraction error.</p></article>
+    </div>
+    <ul class="clean" style="margin-top:22px">
+      <li><b>Never throws.</b> Any failure returns the original takeoff with <code>usedKb:false</code>.</li>
+      <li><b>Deterministic to test.</b> Network, sleep and the poll budget are injected, so the orchestrator is unit-tested with no live calls.</li>
+      <li><b>Gated.</b> Runs only when the KB env is present and <code>PAINT_KB_SUPPLEMENT_ENABLED ≠ false</code> — one switch disables it everywhere.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ════════ HOW IT HELPS ════════ -->
+<section>
+  <div class="wrap">
+    <span class="eyebrow">07 · How it helps</span>
+    <h2>Tighter takeoffs, <span class="accent">no new risk</span></h2>
+    <div class="grid cols-2" style="margin-top:24px">
+      <article class="card"><h3 class="accent">Fewer missed lines</h3><p>Surfaces hidden in schedules or later pages get surfaced and added — so they're priced, not lost.</p></article>
+      <article class="card"><h3 class="accent">Gaps filled with evidence</h3><p>Blank or unsure fields are completed from the documents, each carrying a page citation the tradie can check.</p></article>
+      <article class="card"><h3 class="accent">Less manual correction</h3><p>The tradie opens the editor to a cleaner takeoff with conflicts already flagged, instead of re-reading the plans cold.</p></article>
+      <article class="card"><h3 class="accent">The quote is protected</h3><p>Confident, customer-facing numbers are never silently changed; the money path keeps its human-in-the-loop discipline.</p></article>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ WHAT CHANGED ════════ -->
+<section style="background:var(--ink)">
+  <div class="wrap">
+    <span class="eyebrow">08 · What was built</span>
+    <h2>Four <span class="accent">surgical</span> pieces</h2>
+    <table class="files" style="margin-top:18px">
+      <tr>
+        <td><span class="chip teal">Client</span></td>
+        <td><div class="fn">lib/admin-loader/mt-filestore-kb.ts</div></td>
+        <td>New <code>kbDeleteStore()</code> — <code>DELETE /v1/stores/:id?force=true</code> tears down the whole temp store in one call.</td>
+      </tr>
+      <tr>
+        <td><span class="chip teal">Pure</span></td>
+        <td><div class="fn">lib/commercial-painting/kb-supplement.ts</div></td>
+        <td>Builds the grounded query, parses the JSON findings defensively, and runs the hybrid merge. No I/O — fully unit-tested.</td>
+      </tr>
+      <tr>
+        <td><span class="chip teal">Runner</span></td>
+        <td><div class="fn">lib/commercial-painting/kb-runner.ts</div></td>
+        <td>Orchestrates create → upload → index → search → merge, and always deletes the store in <code>finally</code>. Never throws.</td>
+      </tr>
+      <tr>
+        <td><span class="chip">Route</span></td>
+        <td><div class="fn">app/api/tenant/commercial-painting/extract/route.ts</div></td>
+        <td>Best-effort block after reconcile; persists <code>finalItems</code> + <code>sheets_used.kb_flags</code>. Output is identical when disabled.</td>
+      </tr>
+    </table>
+    <p class="sub" style="margin-top:20px">Verified · full suite 3,237 tests green · zero new type errors · spec at docs/superpowers/specs/2026-06-15-commercial-paint-kb-supplement.md</p>
+  </div>
+</section>
+
+<div class="ctabar">QuoteMate · Commercial Paint Estimator · KB File-Store Supplement</div>
+
+</body>
+</html>

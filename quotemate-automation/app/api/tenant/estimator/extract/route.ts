@@ -8,6 +8,14 @@
 
 import { tenantFromBearer, estimatorSupabase as supabase } from '@/lib/estimation/auth'
 import { runExtraction } from '@/lib/estimation/extract'
+import { resolveFileStoreConfig, createFileStoreClient } from '@/lib/estimation/filestore-client'
+import { supplementExtraction } from '@/lib/estimation/supplement'
+
+/** File-store supplementation is opt-in (default off). */
+function supplementEnabled(): boolean {
+  const v = process.env.ESTIMATOR_FILESTORE_SUPPLEMENT_ENABLED
+  return v === 'true' || v === '1'
+}
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -75,15 +83,38 @@ export async function POST(req: Request) {
     )
   }
 
+  // 2b. (opt-in) ephemeral file-store supplementation — verify/correct/fill the
+  // extracted counts against the plan's own text, then tear the store down. This
+  // never throws and degrades to the original extraction if anything goes wrong.
+  let parsed = result.parsed
+  if (supplementEnabled()) {
+    try {
+      const cfg = resolveFileStoreConfig(process.env)
+      const client = cfg ? createFileStoreClient(cfg) : null
+      const supp = await supplementExtraction({
+        parsed,
+        pdf,
+        filename: file.name || 'plan.pdf',
+        client,
+      })
+      parsed = supp.changes.length > 0 && supp.note
+        ? { ...supp.parsed, overall_note: [supp.parsed.overall_note, supp.note].filter(Boolean).join(' — ') }
+        : supp.parsed
+    } catch {
+      // belt-and-braces: supplementExtraction is already non-throwing
+      parsed = result.parsed
+    }
+  }
+
   // 3. persist the extraction
   const { data: extraction, error: exErr } = await supabase
     .from('plan_extractions')
     .insert({
       plan_upload_id: upload.id,
       tenant_id: tenant.id,
-      items: result.parsed.items,
-      sheets_used: result.parsed.sheets_used,
-      overall_note: result.parsed.overall_note || null,
+      items: parsed.items,
+      sheets_used: parsed.sheets_used,
+      overall_note: parsed.overall_note || null,
       model: result.model,
       runtime_seconds: result.runtimeSeconds,
     })
@@ -98,9 +129,9 @@ export async function POST(req: Request) {
     planUploadId: upload.id,
     extractionId: extraction.id,
     filename: file.name || 'plan.pdf',
-    items: result.parsed.items,
-    sheetsUsed: result.parsed.sheets_used,
-    overallNote: result.parsed.overall_note,
+    items: parsed.items,
+    sheetsUsed: parsed.sheets_used,
+    overallNote: parsed.overall_note,
     model: result.model,
     runtimeSeconds: result.runtimeSeconds,
   })

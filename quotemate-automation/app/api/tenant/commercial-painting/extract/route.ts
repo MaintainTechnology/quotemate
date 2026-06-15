@@ -22,6 +22,9 @@ import {
 import { reconcileTakeoff } from '@/lib/commercial-painting/reconcile'
 import { pipelineLog } from '@/lib/log/pipeline'
 import type { MeasurementLine } from '@/lib/commercial-painting/types'
+import { loadKbConfigFromEnv } from '@/lib/admin-loader/mt-filestore-kb'
+import { supplementTakeoffViaKb, type KbSupplementFile } from '@/lib/commercial-painting/kb-runner'
+import type { PaintSupplementFlag } from '@/lib/commercial-painting/kb-supplement'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -172,6 +175,52 @@ export async function POST(req: Request) {
     const measurementLines: MeasurementLine[] = measurements?.lines ?? []
     const reconciled = reconcileTakeoff(extraction.parsed.items, measurementLines)
 
+    // ── KB file-store supplement (best-effort; spec 2026-06-15) ──────
+    // Build a TEMPORARY File Search store from the tradie's own uploaded
+    // PDFs, ask it (grounded in those docs) to verify/fill the takeoff
+    // under hybrid rules, then delete the store. Any failure (missing KB
+    // env, network, indexing timeout) degrades to the reconciled takeoff;
+    // it never blocks the extraction. Disable with PAINT_KB_SUPPLEMENT_ENABLED=false.
+    let finalItems = reconciled.items
+    let kbFlags: PaintSupplementFlag[] = []
+    if (process.env.PAINT_KB_SUPPLEMENT_ENABLED !== 'false') {
+      try {
+        const kbConfig = loadKbConfigFromEnv()
+        const kbFiles: KbSupplementFile[] = [
+          { name: planSet.filename || 'plan-set.pdf', bytes: planBytes, mime: 'application/pdf' },
+        ]
+        if (servicesBytes && servicesDoc) {
+          kbFiles.push({ name: servicesDoc.filename || 'services-layout.pdf', bytes: servicesBytes, mime: 'application/pdf' })
+        }
+        if (measurementDoc) {
+          try {
+            const measBytes = await downloadPaintDoc(measurementDoc.pdf_path!)
+            kbFiles.push({ name: measurementDoc.filename || 'measurements.pdf', bytes: measBytes, mime: 'application/pdf' })
+          } catch {
+            // skip the measurement doc if it cannot be re-fetched for the KB
+          }
+        }
+        const sup = await supplementTakeoffViaKb({
+          config: kbConfig,
+          items: reconciled.items,
+          jobHint,
+          displayName: `paint-temp-${paintRunId}`,
+          files: kbFiles,
+        })
+        finalItems = sup.items
+        kbFlags = sup.flags
+        log.step('paint takeoff kb-supplement', {
+          usedKb: sup.usedKb,
+          kbFlags: kbFlags.length,
+          items: finalItems.length,
+        })
+      } catch (e) {
+        log.step('paint takeoff kb-supplement skipped', {
+          reason: e instanceof Error ? e.message : String(e),
+        })
+      }
+    }
+
     const runtime = extraction.runtimeSeconds + (measurements?.runtimeSeconds ?? 0)
     const { data: extRow, error: extErr } = await estimatorSupabase
       .from('plan_extractions')
@@ -180,13 +229,14 @@ export async function POST(req: Request) {
         tenant_id: tenant.id,
         trade: 'commercial_painting',
         paint_run_id: paintRunId,
-        items: reconciled.items,
+        items: finalItems,
         sheets_used: {
           job: extraction.parsed.job,
           finishes_schedule: extraction.parsed.finishes_schedule,
           measurement_line_count: measurementLines.length,
           measurement_parse_failed: Boolean(measurementDoc && !measurements?.lines),
           flags: reconciled.flags,
+          kb_flags: kbFlags,
         },
         overall_note: extraction.parsed.overall_note || null,
         model: extraction.model,
@@ -214,16 +264,18 @@ export async function POST(req: Request) {
     log.ok('paint takeoff ready', {
       model: extraction.model,
       runtime: runtime,
-      items: reconciled.items.length,
+      items: finalItems.length,
       flags: reconciled.flags.length,
+      kbFlags: kbFlags.length,
       measurementLines: measurementLines.length,
     })
 
     return Response.json({
       ok: true,
       extractionId: extRow.id,
-      items: reconciled.items,
+      items: finalItems,
       flags: reconciled.flags,
+      kbFlags,
       finishesSchedule: extraction.parsed.finishes_schedule,
       job: extraction.parsed.job,
       overallNote: extraction.parsed.overall_note,

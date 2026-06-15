@@ -358,3 +358,27 @@ export async function kbDeleteDocument(
     throw new KbHttpError(res.status, path, await res.text())
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// kbDeleteStore — DELETE /v1/stores/:storeId[?force=true]
+//
+// Tears down a whole File Search store (and, with force=true, any docs
+// still in it) in one call. Used to clean up the per-session TEMPORARY
+// store the commercial-paint KB-supplement pass creates from a tradie's
+// uploaded plans. Accepts a bare id or a full "fileSearchStores/<id>"
+// name; the service normalises either.
+// ─────────────────────────────────────────────────────────────────────
+
+export async function kbDeleteStore(
+  config: KbConfig,
+  storeId: string,
+  opts: { force?: boolean } = {},
+  fetchImpl: KbFetch = fetch,
+): Promise<void> {
+  if (!storeId) throw new Error('storeId is required')
+  const path = `/v1/stores/${encodeURIComponent(storeId)}${opts.force ? '?force=true' : ''}`
+  const res = await kbFetch(config, path, { method: 'DELETE' }, fetchImpl)
+  if (!res.ok) {
+    throw new KbHttpError(res.status, path, await res.text())
+  }
+}

@@ -12,6 +12,7 @@ import {
   kbCreateStore,
   kbUploadDocument,
   kbDeleteDocument,
+  kbDeleteStore,
   KB_UPLOAD_MAX_BYTES,
   type KbConfig,
   type KbFetch,
@@ -348,6 +349,35 @@ describe('kbUploadDocument', () => {
     await expect(
       kbUploadDocument(config, { storeId: 'x', file: mkFile() }, f),
     ).rejects.toThrow(KbHttpError)
+  })
+})
+
+describe('kbDeleteStore', () => {
+  it('DELETEs /v1/stores/{id} with ?force=true and the api-key header', async () => {
+    const f = mockOk({ deleted: true })
+    await kbDeleteStore(config, 'fileSearchStores/abc', { force: true }, f)
+    const [url, init] = (f as any).mock.calls[0]
+    expect(url).toBe('https://kb.example.com/v1/stores/fileSearchStores%2Fabc?force=true')
+    expect(init.method).toBe('DELETE')
+    expect((init.headers as Headers).get('x-api-key')).toBe('test-api-key')
+  })
+
+  it('omits the force query when not requested', async () => {
+    const f = mockOk({ deleted: true })
+    await kbDeleteStore(config, 'abc', {}, f)
+    const [url] = (f as any).mock.calls[0]
+    expect(url).toBe('https://kb.example.com/v1/stores/abc')
+  })
+
+  it('throws when storeId is empty', async () => {
+    const f = mockOk({})
+    await expect(kbDeleteStore(config, '', { force: true }, f)).rejects.toThrow('storeId is required')
+    expect(f).not.toHaveBeenCalled()
+  })
+
+  it('throws KbHttpError on a non-2xx', async () => {
+    const f = mockStatus(404, 'not found')
+    await expect(kbDeleteStore(config, 'abc', { force: true }, f)).rejects.toThrow(KbHttpError)
   })
 })
 
