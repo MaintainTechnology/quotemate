@@ -101,7 +101,13 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
   const [extractStep, setExtractStep] = useState(0)
   const [pricing, setPricing] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [savedQuote, setSavedQuote] = useState<{ quoteViewUrl: string; pdfUrl: string | null } | null>(null)
+  const [savedQuote, setSavedQuote] = useState<{
+    quoteViewUrl: string
+    pdfUrl: string | null
+    delivery?: { attempted: boolean; sent?: boolean; mms?: boolean; reason?: string }
+  } | null>(null)
+  const [customerName, setCustomerName] = useState('')
+  const [customerPhone, setCustomerPhone] = useState('')
   const [dragOver, setDragOver] = useState(false)
   const [errMsg, setErrMsg] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -423,7 +429,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
   }
 
   // ── Stage 2→3: confirm + price ─────────────────────────────────────
-  async function confirmAndPrice(items: PaintTakeoffItem[]) {
+  async function confirmAndPrice(items: PaintTakeoffItem[], labourRatePerHr: number | null) {
     if (!runId || !extraction) return
     setPricing(true)
     setErrMsg(null)
@@ -445,7 +451,11 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
       const res = await fetch(`${API}/price`, authed({
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ paintRunId: runId, extractionId: extraction.id }),
+        body: JSON.stringify({
+          paintRunId: runId,
+          extractionId: extraction.id,
+          ...(labourRatePerHr != null ? { labourRatePerHr } : {}),
+        }),
       }))
       const body = await res.json()
       if (!res.ok || !body.ok) {
@@ -468,14 +478,23 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
       const res = await fetch(`${API}/save-quote`, authed({
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ paintRunId: runId, extractionId: extraction.id }),
+        body: JSON.stringify({
+          paintRunId: runId,
+          extractionId: extraction.id,
+          ...(customerPhone.trim() ? { customerPhone: customerPhone.trim() } : {}),
+          ...(customerName.trim() ? { customerName: customerName.trim() } : {}),
+        }),
       }))
       const body = await res.json()
       if (!res.ok || !body.ok) {
         setErrMsg('Saving the quote failed. The pricing is kept — try again.')
         return
       }
-      setSavedQuote({ quoteViewUrl: body.quoteViewUrl, pdfUrl: body.pdfUrl ?? null })
+      setSavedQuote({
+        quoteViewUrl: body.quoteViewUrl,
+        pdfUrl: body.pdfUrl ?? null,
+        delivery: body.delivery ?? undefined,
+      })
     } catch {
       setErrMsg('Saving the quote failed. The pricing is kept — try again.')
     } finally {
@@ -493,6 +512,8 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
     setExtraction(null)
     setBom(null)
     setSavedQuote(null)
+    setCustomerName('')
+    setCustomerPhone('')
     setViewer(null)
     setErrMsg(null)
   }
@@ -753,7 +774,8 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
                 finishesSchedule={extraction.finishesSchedule}
                 overallNote={extraction.overallNote}
                 pricing={pricing}
-                onConfirm={(items) => void confirmAndPrice(items)}
+                defaultLabourRate={bom?.labour.ratePerHr ?? null}
+                onConfirm={(items, labourRatePerHr) => void confirmAndPrice(items, labourRatePerHr)}
               />
             </div>
           </div>
@@ -769,7 +791,36 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
               <h3 className="font-extrabold uppercase tracking-tight text-text-pri">Tender price</h3>
               <PaintPricedSummary bom={bom} />
 
-              <div className="mt-6 flex flex-wrap items-center gap-4 border-t border-ink-line pt-5">
+              {/* Customer delivery — text the quote + tender PDF (MMS), the
+                  same send path as the electrical/plumbing/solar SMS quotes. */}
+              <div className="mt-6 border-t border-ink-line pt-5">
+                <p className="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
+                  Text the quote to the customer (optional)
+                </p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <input
+                    type="text"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    placeholder="Customer name (optional)"
+                    className={inputClass}
+                  />
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    placeholder="Customer mobile e.g. 0412 345 678"
+                    className={inputClass}
+                  />
+                </div>
+                <p className="mt-2 text-xs text-text-dim">
+                  Enter a mobile to send an SMS + the tender PDF (as an MMS) the moment you save.
+                  Leave blank to just create the quote and share the link yourself.
+                </p>
+              </div>
+
+              <div className="mt-5 flex flex-wrap items-center gap-4">
                 <button
                   type="button"
                   disabled={saving}
@@ -783,6 +834,8 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
                     </>
                   ) : savedQuote ? (
                     'Save again'
+                  ) : customerPhone.trim() ? (
+                    'Save & text quote'
                   ) : (
                     'Save as quote'
                   )}
@@ -796,6 +849,14 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
                       <a href={savedQuote.pdfUrl} target="_blank" rel="noreferrer" className="cursor-pointer text-accent transition-colors hover:text-accent-press">
                         Tender PDF ↗
                       </a>
+                    )}
+                    {savedQuote.delivery?.attempted && savedQuote.delivery.sent && (
+                      <span className="text-success">
+                        Texted to customer ✓{savedQuote.delivery.mms ? ' (incl. PDF)' : ''}
+                      </span>
+                    )}
+                    {savedQuote.delivery?.attempted && !savedQuote.delivery.sent && (
+                      <span className="text-warning">Couldn’t text the customer — share the link above</span>
                     )}
                   </span>
                 )}

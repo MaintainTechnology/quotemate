@@ -13,10 +13,18 @@ import { createClient } from '@supabase/supabase-js'
 import { tenantFromBearer, estimatorSupabase } from '@/lib/estimation/auth'
 import { buildPaintQuotePayloads } from '@/lib/commercial-painting/save-quote-helpers'
 import { buildPaintTenderReportHtml } from '@/lib/commercial-painting/report-html'
+import { buildPaintCustomerSms, normaliseAuMobile } from '@/lib/commercial-painting/notify'
 import { gotenbergConfigured, renderPdfFromHtml } from '@/lib/pdf/gotenberg'
+import { dispatchQuoteWithPdf } from '@/lib/sms/send-quote-pdf'
+import { signQuotePdfUrl } from '@/lib/quote/pdf'
 import { generateShareToken } from '@/lib/stripe/checkout'
 import { pipelineLog } from '@/lib/log/pipeline'
 import type { PricedPaintBom } from '@/lib/commercial-painting/types'
+
+/** Customer-delivery outcome returned to the dashboard (best-effort send). */
+type PaintDelivery =
+  | { attempted: false }
+  | { attempted: true; sent: boolean; mms: boolean; channel?: string; reason?: string }
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 90
@@ -31,7 +39,12 @@ export async function POST(req: Request) {
   const tenant = await tenantFromBearer(req)
   if (!tenant) return Response.json({ ok: false, error: 'unauthorised' }, { status: 401 })
 
-  let body: { paintRunId?: string; extractionId?: string }
+  let body: {
+    paintRunId?: string
+    extractionId?: string
+    customerPhone?: string
+    customerName?: string
+  }
   try {
     body = await req.json()
   } catch {
@@ -39,6 +52,10 @@ export async function POST(req: Request) {
   }
   const paintRunId = body.paintRunId?.trim()
   const extractionId = body.extractionId?.trim()
+  // Optional customer delivery: a normalised mobile means "text the quote
+  // (+ tender PDF as MMS) the moment it's saved", mirroring electrical.
+  const customerMobile = normaliseAuMobile(body.customerPhone)
+  const customerName = body.customerName?.trim() || null
   if (!paintRunId || !extractionId) {
     return Response.json({ ok: false, error: 'missing_ids' }, { status: 400 })
   }
@@ -92,10 +109,11 @@ export async function POST(req: Request) {
 
   const { data: tenantRow } = await estimatorSupabase
     .from('tenants')
-    .select('business_name')
+    .select('business_name, twilio_sms_number')
     .eq('id', tenant.id)
     .maybeSingle()
   const businessName = (tenantRow?.business_name as string | null) ?? 'Your painter'
+  const twilioFrom = (tenantRow?.twilio_sms_number as string | null) ?? null
 
   const shareToken = generateShareToken()
   const payloads = buildPaintQuotePayloads({
@@ -183,7 +201,57 @@ export async function POST(req: Request) {
     })
     .eq('id', extractionId)
 
-  log.ok('paint quote saved', { quoteId: quoteRow.id, totalIncGst: bom.totalIncGst, pdfReady })
+  // ── Customer delivery — SMS + best-effort MMS (tender PDF), mirroring
+  //    electrical/plumbing/solar via the shared dispatchQuoteWithPdf
+  //    chokepoint. Only on a fresh save with a valid mobile; a send failure
+  //    never fails the save (the quote + dashboard links still stand). The
+  //    AU long code routinely drops the MMS → the body link carries the PDF.
+  let delivery: PaintDelivery = { attempted: false }
+  if (customerMobile) {
+    // Stamp the customer on the intake so the dashboard CRM shows who it
+    // went to (buildPaintQuotePayloads inserts an empty caller).
+    await estimatorSupabase
+      .from('intakes')
+      .update({ caller: { name: customerName ?? '', phone: customerMobile, email: '' } })
+      .eq('id', intakeRow.id)
+
+    try {
+      const text = buildPaintCustomerSms({
+        businessName,
+        customerName,
+        jobName: run.job_name as string | null,
+        totalIncGst: bom.totalIncGst,
+        quoteUrl: quoteViewUrl,
+        pdfUrl: pdfReady ? `${appUrl}/api/q/${shareToken}/pdf` : null,
+      })
+      const r = await dispatchQuoteWithPdf({
+        to: customerMobile,
+        text,
+        from: twilioFrom ?? undefined,
+        pdfPath: pdfReady ? `quotes/${quoteRow.id}.pdf` : null,
+        signMediaUrl: signQuotePdfUrl,
+      })
+      delivery = r.ok
+        ? { attempted: true, sent: true, mms: !!r.mms && !r.mediaDropped, channel: r.channel }
+        : { attempted: true, sent: false, mms: false, reason: r.smsAttempt?.reason ?? 'send_failed' }
+      if (!r.ok) {
+        log.err('paint customer quote SMS failed', undefined, {
+          quoteId: quoteRow.id,
+          reason: r.smsAttempt?.reason,
+        })
+      }
+    } catch (e) {
+      log.err('paint customer quote SMS threw', e, { quoteId: quoteRow.id })
+      delivery = { attempted: true, sent: false, mms: false, reason: 'exception' }
+    }
+  }
+
+  log.ok('paint quote saved', {
+    quoteId: quoteRow.id,
+    totalIncGst: bom.totalIncGst,
+    pdfReady,
+    delivered: delivery.attempted ? delivery.sent : 'not_attempted',
+  })
 
   return Response.json({
     ok: true,
@@ -191,5 +259,6 @@ export async function POST(req: Request) {
     shareToken,
     quoteViewUrl: `/q/${shareToken}`,
     pdfUrl: pdfReady ? `/api/q/${shareToken}/pdf` : null,
+    delivery,
   })
 }
