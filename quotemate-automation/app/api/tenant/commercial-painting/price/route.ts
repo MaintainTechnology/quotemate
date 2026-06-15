@@ -11,9 +11,9 @@
 // the confirm step is the source of truth, same as electrical.)
 
 import { tenantFromBearer, estimatorSupabase } from '@/lib/estimation/auth'
-import { loadPaintRates, resolvePaintRates } from '@/lib/commercial-painting/rates'
+import { loadPaintRates, resolvePaintRates, applyLabourRateOverride } from '@/lib/commercial-painting/rates'
 import { pricePaintTakeoff } from '@/lib/commercial-painting/price'
-import type { PaintTakeoffItem } from '@/lib/commercial-painting/types'
+import { MAX_LABOUR_RATE_PER_HR, type PaintTakeoffItem } from '@/lib/commercial-painting/types'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
   const tenant = await tenantFromBearer(req)
   if (!tenant) return Response.json({ ok: false, error: 'unauthorised' }, { status: 401 })
 
-  let body: { paintRunId?: string; extractionId?: string }
+  let body: { paintRunId?: string; extractionId?: string; labourRatePerHr?: number }
   try {
     body = await req.json()
   } catch {
@@ -33,6 +33,14 @@ export async function POST(req: Request) {
   if (!paintRunId || !extractionId) {
     return Response.json({ ok: false, error: 'missing_ids' }, { status: 400 })
   }
+
+  // Optional per-quote labour-rate override (tradie-set). Out-of-range or
+  // non-numeric values are ignored — the seeded/tenant rate is used instead.
+  const rawRate = body.labourRatePerHr
+  const labourRateOverride =
+    typeof rawRate === 'number' && Number.isFinite(rawRate) && rawRate > 0 && rawRate <= MAX_LABOUR_RATE_PER_HR
+      ? rawRate
+      : null
 
   const { data: ext } = await estimatorSupabase
     .from('plan_extractions')
@@ -62,7 +70,7 @@ export async function POST(req: Request) {
       { status: 500 },
     )
   }
-  const book = resolvePaintRates(rows)
+  const book = applyLabourRateOverride(resolvePaintRates(rows), labourRateOverride)
   const bom = pricePaintTakeoff(items, book, { gstRegistered: true })
 
   const { error: upErr } = await estimatorSupabase

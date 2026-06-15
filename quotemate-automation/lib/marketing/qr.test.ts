@@ -40,13 +40,13 @@ describe('resolveDestination', () => {
   const tenant = { slug: 'atomic-electrical', twilio_sms_number: '+61468011464' }
 
   it('landing → a 302-able /t/<slug> url with qr attribution', () => {
-    const qr = { short_code: 'aB3xK9', destination_type: 'landing', destination_config: {} }
+    const qr = { short_code: 'aB3xK9', destination_type: 'landing' as const, destination_config: {} }
     const r = resolveDestination(qr, tenant, appUrl)
     expect(r).toEqual({ kind: 'landing', url: `${appUrl}/t/atomic-electrical?qr=aB3xK9` })
   })
 
   it('sms → an sms: uri with the prefill body encoded', () => {
-    const qr = { short_code: 'aB3xK9', destination_type: 'sms', destination_config: { prefill_body: "Hi, I'd like a quote" } }
+    const qr = { short_code: 'aB3xK9', destination_type: 'sms' as const, destination_config: { prefill_body: "Hi, I'd like a quote" } }
     const r = resolveDestination(qr, tenant, appUrl)
     expect(r.kind).toBe('sms')
     if (r.kind === 'sms') {
@@ -56,13 +56,13 @@ describe('resolveDestination', () => {
   })
 
   it('sms with no prefill → bare sms: uri', () => {
-    const qr = { short_code: 'x', destination_type: 'sms', destination_config: {} }
+    const qr = { short_code: 'x', destination_type: 'sms' as const, destination_config: {} }
     const r = resolveDestination(qr, tenant, appUrl)
     if (r.kind === 'sms') expect(r.smsUri).toBe('sms:+61468011464')
   })
 
   it('landing with no slug → falls back to app home', () => {
-    const qr = { short_code: 'x', destination_type: 'landing', destination_config: {} }
+    const qr = { short_code: 'x', destination_type: 'landing' as const, destination_config: {} }
     const r = resolveDestination(qr, { slug: null, twilio_sms_number: null }, appUrl)
     expect(r).toEqual({ kind: 'landing', url: appUrl })
   })

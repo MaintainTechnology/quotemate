@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { pricePaintTakeoff } from './price'
-import { resolvePaintRates, heightMultiplier } from './rates'
+import { resolvePaintRates, heightMultiplier, applyLabourRateOverride } from './rates'
 import type { PaintRateRow, PaintTakeoffItem } from './types'
 
 // Mirror of the migration-107 seed (the values the pilot prices against).
@@ -42,6 +42,34 @@ function item(over: Partial<PaintTakeoffItem>): PaintTakeoffItem {
     ...over,
   }
 }
+
+describe('applyLabourRateOverride', () => {
+  it('overrides the labour rate with a valid positive value (book stays immutable)', () => {
+    const o = applyLabourRateOverride(book, 120)
+    expect(o.modifiers.labourRatePerHr).toBe(120)
+    expect(book.modifiers.labourRatePerHr).toBe(75) // original untouched
+  })
+
+  it('rounds the override to cents', () => {
+    expect(applyLabourRateOverride(book, 88.005).modifiers.labourRatePerHr).toBe(88.01)
+  })
+
+  it('ignores zero, negative, NaN and null overrides (keeps the book rate)', () => {
+    expect(applyLabourRateOverride(book, 0).modifiers.labourRatePerHr).toBe(75)
+    expect(applyLabourRateOverride(book, -5).modifiers.labourRatePerHr).toBe(75)
+    expect(applyLabourRateOverride(book, Number.NaN).modifiers.labourRatePerHr).toBe(75)
+    expect(applyLabourRateOverride(book, null).modifiers.labourRatePerHr).toBe(75)
+    expect(applyLabourRateOverride(book, undefined).modifiers.labourRatePerHr).toBe(75)
+  })
+
+  it('priced labour scales with the override and the BOM records the rate used', () => {
+    const items = [item({ unit: 'm2', system: 'low_sheen', quantity: 100, coats: 2 })]
+    const base = pricePaintTakeoff(items, book, { gstRegistered: true })
+    const hi = pricePaintTakeoff(items, applyLabourRateOverride(book, 150), { gstRegistered: true })
+    expect(hi.labour.ratePerHr).toBe(150)
+    expect(hi.labour.costExGst).toBeCloseTo(base.labour.costExGst * (150 / 75), 2)
+  })
+})
 
 describe('resolvePaintRates', () => {
   it('builds labour lookups keyed system:method', () => {

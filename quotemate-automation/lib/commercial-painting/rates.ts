@@ -156,6 +156,26 @@ export function heightMultiplier(book: PaintRateBook, heightM: number | undefine
 /** Equipment trigger: any priced surface above 3.4 m needs lift access. */
 export const EQUIPMENT_TRIGGER_HEIGHT_M = 3.4
 
+/**
+ * PURE — return the rate book with the labour $/hr overridden for this
+ * quote when a valid positive override is supplied; otherwise the book
+ * unchanged. Lets a tradie set a per-quote hourly rate without editing
+ * the seeded/tenant default (the override is not persisted; the priced
+ * BOM records the rate actually used in `labour.ratePerHr`).
+ */
+export function applyLabourRateOverride(
+  book: PaintRateBook,
+  rateOverride: number | null | undefined,
+): PaintRateBook {
+  if (typeof rateOverride !== 'number' || !Number.isFinite(rateOverride) || rateOverride <= 0) {
+    return book
+  }
+  return {
+    ...book,
+    modifiers: { ...book.modifiers, labourRatePerHr: Math.round(rateOverride * 100) / 100 },
+  }
+}
+
 // ── IO wrapper ────────────────────────────────────────────────────────
 
 import type { SupabaseClient } from '@supabase/supabase-js'

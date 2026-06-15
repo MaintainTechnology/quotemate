@@ -14,7 +14,7 @@ import type {
   PaintTakeoffItem,
   ReconcileFlag,
 } from '@/lib/commercial-painting/types'
-import { PAINT_SYSTEMS } from '@/lib/commercial-painting/types'
+import { PAINT_SYSTEMS, MAX_LABOUR_RATE_PER_HR } from '@/lib/commercial-painting/types'
 
 const SYSTEM_LABELS: Record<PaintSystem, string> = {
   spray_matt: 'Spray matt (exposed ceiling)',
@@ -67,12 +67,17 @@ function SourceChip({ row }: { row: Row }) {
   )
 }
 
+/** Coats range the bulk-set + per-row inputs accept. */
+const COATS_MIN = 1
+const COATS_MAX = 6
+
 export function PaintTakeoffEditor({
   initialItems,
   flags,
   finishesSchedule,
   overallNote,
   pricing,
+  defaultLabourRate,
   onConfirm,
 }: {
   initialItems: PaintTakeoffItem[]
@@ -80,13 +85,55 @@ export function PaintTakeoffEditor({
   finishesSchedule: Array<{ code: string; product: string; sheen: string; surfaces: string }>
   overallNote: string
   pricing: boolean
-  onConfirm: (items: PaintTakeoffItem[]) => void
+  /** The labour $/hr the last price used (tenant/seed default or a prior
+   *  override) — shown as the placeholder so the field reflects reality. */
+  defaultLabourRate?: number | null
+  onConfirm: (items: PaintTakeoffItem[], labourRatePerHr: number | null) => void
 }) {
   const [rows, setRows] = useState<Row[]>(() => toRows(initialItems))
   const [showFlags, setShowFlags] = useState(true)
+  // Bulk "set all coats" value, and the per-quote labour-rate override.
+  const [bulkCoats, setBulkCoats] = useState('')
+  // Always start blank: blank = "use my saved rate". defaultLabourRate is the
+  // last-priced rate, shown only as the placeholder — never pre-filled as a
+  // value, so a resumed run can't silently re-send a stale rate as an override.
+  const [labourRate, setLabourRate] = useState('')
+  const [labourRateError, setLabourRateError] = useState<string | null>(null)
 
   function patch(uid: number, partial: Partial<Row>) {
     setRows((prev) => prev.map((r) => (r.uid === uid ? { ...r, ...partial } : r)))
+  }
+
+  /** Set every line's coats to the entered value (clamped to COATS_MIN..MAX). */
+  function applyBulkCoats() {
+    const n = Math.round(Number(bulkCoats))
+    if (!Number.isFinite(n) || n < COATS_MIN) return
+    const coats = Math.min(COATS_MAX, Math.max(COATS_MIN, n))
+    setRows((prev) => prev.map((r) => ({ ...r, coats })))
+  }
+
+  /**
+   * Validate the labour-rate field, then price. Blank → null (use the saved
+   * rate). A non-blank value must be a number in (0, MAX]; anything else blocks
+   * pricing with an inline error rather than silently falling back to the
+   * default (which the server would do for an out-of-range value).
+   */
+  function handleConfirm() {
+    const raw = labourRate.trim()
+    if (raw === '') {
+      setLabourRateError(null)
+      onConfirm(rowsToItems(rows), null)
+      return
+    }
+    const n = Number(raw)
+    if (!Number.isFinite(n) || n <= 0 || n > MAX_LABOUR_RATE_PER_HR) {
+      setLabourRateError(
+        `Enter a labour rate between $1 and $${MAX_LABOUR_RATE_PER_HR}/hr, or clear it to use your saved rate.`,
+      )
+      return
+    }
+    setLabourRateError(null)
+    onConfirm(rowsToItems(rows), n)
   }
 
   function addRow(room: string) {
@@ -180,6 +227,39 @@ export function PaintTakeoffEditor({
         </details>
       )}
 
+      {/* Bulk edit — set the coats on every line at once. */}
+      <div className="mt-4 flex flex-wrap items-center gap-3 border border-ink-line bg-ink-deep px-4 py-3">
+        <span className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
+          Bulk edit
+        </span>
+        <label className="flex items-center gap-2 text-sm text-text-sec">
+          Set all coats to
+          <input
+            type="number"
+            step="1"
+            min={COATS_MIN}
+            max={COATS_MAX}
+            value={bulkCoats}
+            onChange={(e) => setBulkCoats(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyBulkCoats() } }}
+            placeholder="3"
+            aria-label="Set all coats to"
+            className="w-16 border border-ink-line bg-ink-deep px-2 py-1.5 text-right font-mono text-sm tabular-nums text-text-pri outline-none transition-colors focus:border-accent"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={applyBulkCoats}
+          disabled={bulkCoats.trim() === ''}
+          className="inline-flex cursor-pointer items-center gap-1.5 border border-ink-line bg-ink-card px-3 py-1.5 font-mono text-[0.64rem] font-semibold uppercase tracking-[0.12em] text-text-sec transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Apply to all lines
+        </button>
+        <span className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">
+          {COATS_MIN}–{COATS_MAX} coats
+        </span>
+      </div>
+
       {/* Grouped editable table */}
       <div className="mt-4 space-y-5">
         {groups.map(([room, groupRows]) => (
@@ -266,8 +346,8 @@ export function PaintTakeoffEditor({
                         <input
                           type="number"
                           step="1"
-                          min="1"
-                          max="4"
+                          min={COATS_MIN}
+                          max={COATS_MAX}
                           value={r.coats}
                           onChange={(e) => patch(r.uid, { coats: Number(e.target.value) })}
                           aria-label="Coats"
@@ -322,10 +402,30 @@ export function PaintTakeoffEditor({
 
       {/* Confirm bar */}
       <div className="mt-5 flex flex-wrap items-center gap-4 border-t border-ink-line pt-4">
+        <label className="flex items-center gap-2 font-mono text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-text-dim">
+          Labour rate $/hr
+          <input
+            type="number"
+            step="1"
+            min="1"
+            max={MAX_LABOUR_RATE_PER_HR}
+            value={labourRate}
+            onChange={(e) => {
+              setLabourRate(e.target.value)
+              if (labourRateError) setLabourRateError(null)
+            }}
+            placeholder={defaultLabourRate != null ? String(defaultLabourRate) : '75'}
+            aria-label="Labour rate in dollars per hour"
+            title="Per-quote override. Leave blank to use your saved rate."
+            className={`w-20 border bg-ink-deep px-2 py-1.5 text-right font-mono text-sm tabular-nums normal-case tracking-normal text-text-pri outline-none transition-colors focus:border-accent ${
+              labourRateError ? 'border-warning' : 'border-ink-line'
+            }`}
+          />
+        </label>
         <button
           type="button"
           disabled={pricing}
-          onClick={() => onConfirm(rowsToItems(rows))}
+          onClick={handleConfirm}
           className="inline-flex cursor-pointer items-center gap-2.5 bg-accent px-5 py-3 font-mono text-sm font-bold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
         >
           {pricing ? (
@@ -347,6 +447,11 @@ export function PaintTakeoffEditor({
         >
           <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Reset edits
         </button>
+        {labourRateError && (
+          <p role="alert" className="w-full text-sm text-warning">
+            {labourRateError}
+          </p>
+        )}
       </div>
     </div>
   )

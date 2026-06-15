@@ -32,6 +32,12 @@ export const PAINT_DOC_TYPES: PaintDocType[] = [
   'other',
 ]
 
+/** Sanity bound on a per-quote labour-rate override ($/hr). Shared by the
+ *  pricing route (server validation) and the takeoff editor (client input
+ *  max + inline validation) so the two never disagree — a value the editor
+ *  accepts is always one the server will apply. */
+export const MAX_LABOUR_RATE_PER_HR = 1000
+
 /** paint_runs.status lifecycle. */
 export type PaintRunStatus = 'draft' | 'extracting' | 'ready' | 'priced' | 'failed'
 
