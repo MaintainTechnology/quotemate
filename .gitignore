@@ -168,3 +168,6 @@ undefined/
 
 # Browser-automation artefacts (playwright MCP snapshots)
 .playwright-mcp/
+
+# Brainstorming visual-companion artifacts
+.superpowers/
