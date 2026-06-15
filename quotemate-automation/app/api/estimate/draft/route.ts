@@ -162,6 +162,19 @@ export async function POST(req: Request) {
           }
         }
       }
+      // Web-sourced intake (QR landing page) — call_id is null so it lands
+      // in this SMS branch, but there is NO sms_conversations row, so the
+      // recipient is still unknown. Recover the customer's mobile from the
+      // structured intake.caller.phone (captured from the landing form) so
+      // the quote SMS has a destination. Sent FROM the tenant's number per
+      // the fromNumber policy below.
+      if (!call?.caller_number) {
+        const webPhone = (intake.caller as { phone?: string } | null)?.phone?.trim() || null
+        if (webPhone) {
+          call = { caller_number: webPhone }
+          log.ok('web-sourced intake — recipient recovered from intake.caller.phone')
+        }
+      }
     } else {
       const { data: callRow } = await supabase
         .from('calls')

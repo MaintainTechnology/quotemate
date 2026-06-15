@@ -129,6 +129,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
         `What they need: ${description}`
 
       const intake = await structureIntake(transcript, photoUrls, tradeHint)
+
+      // Stamp the contact details we captured verbatim from the form onto
+      // the intake, even if the grounding model didn't lift them from the
+      // transcript. The quote SMS recipient is read from caller.phone in
+      // /api/estimate/draft, so this must always be the customer's mobile.
+      intake.caller = {
+        ...(intake.caller ?? {}),
+        name: (intake.caller?.name || name) ?? '',
+        phone: mobile,
+      } as typeof intake.caller
+
       const embedding = await embedIntake(intake)
 
       const { data: intakeRow, error: insErr } = await supabase
