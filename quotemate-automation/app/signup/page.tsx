@@ -144,6 +144,10 @@ function SignUpInner() {
         owner_mobile: mobileE164,
       })
       if (intentToken) next.set('intent', intentToken)
+      // Carry the SMS invitation code through so /onboard Step-0
+      // pre-fills + locks it (validated upstream in the SMS handler).
+      const code = params.get('code') ?? ''
+      if (code) next.set('code', code)
       router.push(`/onboard?${next.toString()}`)
     } catch (err: any) {
       setError(err?.message ?? 'Sign up failed')

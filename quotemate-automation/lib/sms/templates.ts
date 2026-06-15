@@ -174,8 +174,9 @@ function buildInspectionQuoteUpdatedSms(intake: Intake, quote: Quote): string {
 export function buildTradieWelcomeSms(opts: {
   appUrl: string
   token: string
+  code?: string
 }): string {
-  const link = `${opts.appUrl}/signup?intent=${opts.token}`
+  const link = `${opts.appUrl}/signup?intent=${opts.token}${opts.code ? `&code=${encodeURIComponent(opts.code)}` : ''}`
   const body =
     `G'day! Welcome to QuoteMate. Tap the link to set up your AI receptionist. ` +
     `Takes about 4 minutes.\n\n${link}\n\nYour mobile is already saved.\n\n- QuoteMate`
@@ -189,8 +190,9 @@ export function buildTradieWelcomeSms(opts: {
 export function buildTradieIntentStillOpenSms(opts: {
   appUrl: string
   token: string
+  code?: string
 }): string {
-  const link = `${opts.appUrl}/signup?intent=${opts.token}`
+  const link = `${opts.appUrl}/signup?intent=${opts.token}${opts.code ? `&code=${encodeURIComponent(opts.code)}` : ''}`
   const body =
     `Still got your signup link open? Tap it here:\n\n${link}\n\n` +
     `Replies here won't progress your signup — finish on the web.\n\n- QuoteMate`

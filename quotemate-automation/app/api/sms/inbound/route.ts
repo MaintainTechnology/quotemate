@@ -66,6 +66,7 @@ import {
 } from '@/lib/sms/extract-slots'
 import { classifyIntent } from '@/lib/sms/intent'
 import { createOrGetActiveIntent } from '@/lib/onboard/intent-tokens'
+import { checkInvitationCode } from '@/lib/onboard/invitation-codes'
 import {
   buildTradieWelcomeSms,
   buildTradieIntentStillOpenSms,
@@ -111,6 +112,18 @@ function ackTwiml() {
     status: 200,
     headers: { 'Content-Type': 'text/xml; charset=utf-8' },
   })
+}
+
+/** Pull an invitation code from a registration text. Accepts
+ *  "JOIN <code>" / "join <code>" or a bare hyphenated code token.
+ *  Returns the upper-cased code or null. */
+function parseJoinCode(body: string): string | null {
+  const trimmed = (body ?? '').trim()
+  const m = trimmed.match(/^\s*join\s+([A-Za-z0-9-]{3,60})\s*$/i)
+  if (m) return m[1].toUpperCase()
+  // Bare single-token code (no spaces) that looks like our format.
+  if (/^[A-Za-z0-9]{2,8}(-[A-Za-z0-9]+){1,4}$/.test(trimmed)) return trimmed.toUpperCase()
+  return null
 }
 
 // SMS-auto-quoteable jobs benefit from a photo before Opus drafts the
@@ -2593,7 +2606,8 @@ async function maybeHandleTradieRegistration(args: {
   //    classifier may fall back to Sonnet for messages that don't match
   //    the regex strong-phrase lists. Total latency budget ≤ ~400ms.
   const classification = await classifyIntent(args.inboundBody)
-  const isTradieIntent = classification.intent === 'tradie_registration'
+  const hasJoinCode = parseJoinCode(args.inboundBody) !== null
+  const isTradieIntent = classification.intent === 'tradie_registration' || hasJoinCode
 
   // Skip the branch entirely if neither path is triggered.
   if (!reusePriorTradieThread && !isTradieIntent) {
@@ -2636,6 +2650,28 @@ async function maybeHandleTradieRegistration(args: {
     twilio_message_sid: args.messageSid,
   })
 
+  // ── Invitation-code gate (SMS path) ──────────────────────────
+  // Fresh registrations must include a valid code (CTA: "JOIN <code>").
+  // A returning tradie re-texting an in-flight thread is already past
+  // the gate, so a missing code on the reuse path is allowed through.
+  const smsCode = parseJoinCode(args.inboundBody)
+  if (smsCode) {
+    const smsCodeCheck = await checkInvitationCode(supabase, smsCode)
+    if (!smsCodeCheck.ok) {
+      after(() => sendSms({ to: args.fromNumber, from: args.toNumber, text: smsCodeCheck.message }))
+      return ackTwiml()
+    }
+  } else if (!reusePriorTradieThread) {
+    after(() =>
+      sendSms({
+        to: args.fromNumber,
+        from: args.toNumber,
+        text: 'Welcome to QuoteMate! To start, reply with your invitation code, e.g. JOIN YOUR-CODE',
+      }),
+    )
+    return ackTwiml()
+  }
+
   // 5. Get-or-create the active signup intent for this mobile.
   const intent = await createOrGetActiveIntent(supabase, {
     owner_mobile: args.fromNumber,
@@ -2649,8 +2685,8 @@ async function maybeHandleTradieRegistration(args: {
   // 6. Build the SMS body. Welcome on first-touch, reminder on re-text.
   const appUrl = process.env.APP_URL ?? 'https://quote-mate-rho.vercel.app'
   const body = intent.reused
-    ? buildTradieIntentStillOpenSms({ appUrl, token: intent.token })
-    : buildTradieWelcomeSms({ appUrl, token: intent.token })
+    ? buildTradieIntentStillOpenSms({ appUrl, token: intent.token, code: smsCode ?? undefined })
+    : buildTradieWelcomeSms({ appUrl, token: intent.token, code: smsCode ?? undefined })
 
   // 7. Dispatch the outbound SMS in after() so we ack Twilio fast.
   after(async () => {
