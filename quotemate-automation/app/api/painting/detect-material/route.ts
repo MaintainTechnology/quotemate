@@ -22,7 +22,15 @@ import { geminiProvider } from '@/lib/ig-engine/providers/gemini'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
-const VISION_MODEL = process.env.GEMINI_VISION_MODEL ?? 'gemini-2.5-flash'
+// Wall-substrate discrimination from one Street View frame is hard: at the
+// route's fov=85 a set-back façade frames small, and gemini-2.5-flash cannot
+// resolve the weatherboard/plank shadow-lines — it reads the smooth-looking
+// wall as render at HIGH confidence (reproduced on 31 Greens Rd, Coorparoo).
+// Tightening fov is a knife-edge (non-monotonic across houses) and the prompt
+// has already over-corrected twice; 2.5-pro resolves the boards at the same
+// framing and keeps genuine render as render. So default this one vision call
+// to pro. GEMINI_VISION_MODEL still overrides (shared with the roofing route).
+const VISION_MODEL = process.env.GEMINI_VISION_MODEL ?? 'gemini-2.5-pro'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
