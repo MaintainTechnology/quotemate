@@ -20,6 +20,7 @@ const baseValidPayload = {
   hourly_rate: '100',
   call_out_minimum: '150',
   default_markup_pct: '15',
+  invitation_code: 'ACME-TEST-7K2P',
 }
 
 describe('OnboardActivateSchema — optional advanced-pricing fields', () => {
@@ -382,4 +383,26 @@ describe('OnboardActivateSchema — class-of-bug guard', () => {
       }
     })
   }
+})
+
+describe('OnboardActivateSchema — invitation_code (required)', () => {
+  it('rejects a payload with no invitation_code', () => {
+    const { invitation_code, ...withoutCode } = baseValidPayload
+    void invitation_code
+    const result = OnboardActivateSchema.safeParse(withoutCode)
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error.flatten().fieldErrors.invitation_code).toBeDefined()
+    }
+  })
+
+  it('rejects an empty invitation_code', () => {
+    const result = OnboardActivateSchema.safeParse({ ...baseValidPayload, invitation_code: '' })
+    expect(result.success).toBe(false)
+  })
+
+  it('accepts a non-empty invitation_code', () => {
+    const result = OnboardActivateSchema.safeParse({ ...baseValidPayload, invitation_code: 'JON-JUNE-7K2P' })
+    expect(result.success).toBe(true)
+  })
 })

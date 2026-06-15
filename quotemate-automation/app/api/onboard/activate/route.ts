@@ -22,6 +22,7 @@ import { OnboardActivateSchema, defaultsForTrade } from '@/lib/onboard/schema'
 import { runProvisioning } from '@/lib/onboard/run-provisioning'
 import { markIntentUsed } from '@/lib/onboard/intent-tokens'
 import { seedTenantServiceOfferings } from '@/lib/onboard/seed-tenant-defaults'
+import { checkInvitationCode, consumeInvitationCode } from '@/lib/onboard/invitation-codes'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -50,6 +51,16 @@ export async function POST(req: Request) {
     // the first row inserted into pricing_book. Multi-trade tenants get
     // additional pricing_book rows for each extra trade further down.
     const primaryTrade = form.trades[0]
+
+    // Re-validate the invitation code at the last moment. Cheap insurance
+    // against a code that was revoked or exhausted between Step-0 and submit.
+    const codeCheck = await checkInvitationCode(supabase, form.invitation_code)
+    if (!codeCheck.ok) {
+      return Response.json(
+        { ok: false, error: codeCheck.error, message: codeCheck.message },
+        { status: 422 },
+      )
+    }
 
     // Resolve owner_user_id authoritatively. The wizard CAN drop this
     // value if URL params got lost or the Supabase session backfill
@@ -185,6 +196,25 @@ export async function POST(req: Request) {
         tenantId: id,
         message: seedErr?.message ?? String(seedErr),
       })
+    }
+
+    // ─── Consume the invitation code (idempotent, once per tenant) ──
+    // Done after the tenant row exists so the redemption ledger has a
+    // valid FK. If quota was exhausted by a concurrent signup, roll the
+    // tenant back and surface the friendly error.
+    const consumed = await consumeInvitationCode(supabase, {
+      codeId: codeCheck.code_id,
+      tenantId: id,
+      channel: form.intent_token ? 'sms' : 'web',
+    })
+    if (!consumed.ok) {
+      await supabase.from('pricing_book').delete().eq('tenant_id', id)
+      await supabase.from('tenants').delete().eq('id', id)
+      tenantId = null
+      return Response.json(
+        { ok: false, error: consumed.error, message: consumed.message },
+        { status: 422 },
+      )
     }
 
     // ─── 4. Mark SMS signup intent as used (SMS-only step) ───────

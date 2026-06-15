@@ -94,6 +94,11 @@ export const OnboardActivateSchema = z.object({
     .max(16)
     .optional()
     .or(z.literal('')),
+
+  // ── Invitation code (required by the Step-0 gate) ──────────────
+  // Carried from the /onboard Step-0 gate (web) or the SMS JOIN flow.
+  // Consumed once at activate via consumeInvitationCode().
+  invitation_code: z.string().trim().min(1, 'Invitation code required').max(60),
 })
 
 export type OnboardActivatePayload = z.infer<typeof OnboardActivateSchema>
