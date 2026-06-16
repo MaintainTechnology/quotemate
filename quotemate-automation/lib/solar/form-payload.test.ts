@@ -60,3 +60,30 @@ describe('buildSolarFormPayload', () => {
     expect(p.address.address).toBe('1 Test St')
   })
 })
+
+describe('buildSolarFormPayload — phase + preferred size', () => {
+  const base = {
+    address: '1 Test St',
+    postcode: '2000',
+    state: 'NSW',
+    manualOpen: false,
+    orientation: 'north',
+    roofSize: 'medium' as const,
+    storeys: 1 as const,
+    panelType: 'standard_panels' as const,
+  }
+
+  it('includes phase when single or three', () => {
+    expect(buildSolarFormPayload({ ...base, phase: 'three' }).phase).toBe('three')
+    expect(buildSolarFormPayload({ ...base, phase: 'single' }).phase).toBe('single')
+  })
+
+  it('omits phase when unset', () => {
+    expect('phase' in buildSolarFormPayload({ ...base })).toBe(false)
+  })
+
+  it('includes a positive desired size and omits a missing one', () => {
+    expect(buildSolarFormPayload({ ...base, desiredKw: 10 }).desired_kw).toBe(10)
+    expect('desired_kw' in buildSolarFormPayload({ ...base })).toBe(false)
+  })
+})

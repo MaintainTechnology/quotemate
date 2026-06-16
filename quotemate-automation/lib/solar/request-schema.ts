@@ -51,6 +51,12 @@ export const SolarEstimateRequestSchema = z.object({
   // IDENTICAL engine but render the Felt interactive-map layout and get
   // a Felt map provisioned in after(). Defaults to 'instant'.
   variant: z.enum(['instant', 'felt']).optional(),
+  // Property electrical phase (design 2026-06-16). Absent → single-phase.
+  // Scales the DNSP export cap (single ×1, 3-phase ×3) in the sizing engine.
+  phase: z.enum(['single', 'three']).optional(),
+  // Customer/tradie-preferred system size in kW DC. Anchors the headline tier;
+  // bounded so a typo can't request an implausible array.
+  desired_kw: z.number().positive().max(30).optional(),
 })
 
 export type SolarEstimateRequestBody = z.infer<typeof SolarEstimateRequestSchema>

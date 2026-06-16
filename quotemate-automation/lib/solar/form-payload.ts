@@ -20,6 +20,10 @@ export function buildSolarFormPayload(state: {
   quarterlyBill?: string
   /** Quote layout variant (Felt tab spec 2026-06-13). Omitted = instant. */
   variant?: 'instant' | 'felt'
+  /** Property electrical phase; omit when the customer is unsure. */
+  phase?: 'single' | 'three'
+  /** Preferred system size in kW DC; omit to auto-size. */
+  desiredKw?: number
 }): SolarEstimateRequestBody {
   const payload: SolarEstimateRequestBody = {
     address: {
@@ -62,6 +66,15 @@ export function buildSolarFormPayload(state: {
   // provisioning differ. 'instant' is the schema default, so omit it.
   if (state.variant === 'felt') {
     payload.variant = 'felt'
+  }
+  // Phase only ships when the customer actually chose one ("Not sure" → omit,
+  // engine defaults to single).
+  if (state.phase === 'single' || state.phase === 'three') {
+    payload.phase = state.phase
+  }
+  // Preferred size — only a finite positive value within the schema bound.
+  if (typeof state.desiredKw === 'number' && Number.isFinite(state.desiredKw) && state.desiredKw > 0) {
+    payload.desired_kw = state.desiredKw
   }
   return payload
 }
