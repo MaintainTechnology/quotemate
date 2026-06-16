@@ -17,6 +17,7 @@ import type {
   SolarEstimate,
   SolarManualRoofInput,
   SolarPanelType,
+  SolarPhase,
 } from './types'
 
 export type RedraftEligibility =
@@ -66,6 +67,8 @@ export type ReconstructedSolarInputs = {
   manual?: SolarManualRoofInput
   panelType: SolarPanelType
   quarterlyBillAud: number | null
+  phase: SolarPhase
+  desiredKw: number | null
 }
 
 /**
@@ -78,6 +81,10 @@ export type ReconstructedSolarInputs = {
 export function reconstructSolarInputs(args: {
   row: { address: string | null; state: string | null; postcode: string | null }
   estimate: SolarEstimate
+  /** Tradie-supplied overrides from the re-draft request (design 2026-06-16).
+   *  A field present here wins over the persisted value; `desired_kw: null`
+   *  explicitly clears a previous request (back to auto-sizing). */
+  overrides?: { phase?: SolarPhase; desired_kw?: number | null }
 }): ReconstructedSolarInputs | null {
   const { row, estimate } = args
   const address = row.address?.trim()
@@ -113,5 +120,18 @@ export function reconstructSolarInputs(args: {
     }
   }
 
-  return { input, manual, panelType, quarterlyBillAud }
+  const phase: SolarPhase =
+    args.overrides?.phase ??
+    (estimate.context.phase === 'three' ? 'three' : 'single')
+
+  const desiredKw =
+    args.overrides && 'desired_kw' in args.overrides
+      ? args.overrides.desired_kw ?? null
+      : typeof estimate.context.requested_system_kw === 'number' &&
+          Number.isFinite(estimate.context.requested_system_kw) &&
+          estimate.context.requested_system_kw > 0
+        ? estimate.context.requested_system_kw
+        : null
+
+  return { input, manual, panelType, quarterlyBillAud, phase, desiredKw }
 }

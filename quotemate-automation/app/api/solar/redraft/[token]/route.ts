@@ -64,6 +64,21 @@ export async function POST(
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
 
+  // Optional tradie overrides (design 2026-06-16). A plain re-draft sends no
+  // body; an override sends { phase?, desired_kw? }. Invalid/empty → no override.
+  const overrides: { phase?: 'single' | 'three'; desired_kw?: number | null } = {}
+  try {
+    const raw = (await req.json()) as Record<string, unknown> | null
+    if (raw && typeof raw === 'object') {
+      if (raw.phase === 'single' || raw.phase === 'three') overrides.phase = raw.phase
+      if (raw.desired_kw === null) overrides.desired_kw = null
+      else if (typeof raw.desired_kw === 'number' && raw.desired_kw > 0 && raw.desired_kw <= 30)
+        overrides.desired_kw = raw.desired_kw
+    }
+  } catch {
+    // No body / invalid JSON → plain re-draft, unchanged behaviour.
+  }
+
   const { data: row, error } = await supabase
     .from('solar_estimates')
     .select('id, tenant_id, public_token, address, state, postcode, confirmed_at, estimate, quote_variant')
@@ -98,6 +113,7 @@ export async function POST(
       postcode: (row.postcode as string | null) ?? null,
     },
     estimate: previous,
+    overrides,
   })
   if (!inputs) {
     return Response.json(
@@ -116,6 +132,8 @@ export async function POST(
       input: inputs.input,
       manual: inputs.manual,
       panelType: inputs.panelType,
+      phase: inputs.phase,
+      desiredKw: inputs.desiredKw,
       quarterlyBillAud: inputs.quarterlyBillAud,
       config,
       opts: {

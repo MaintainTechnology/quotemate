@@ -15,6 +15,40 @@ import {
 import { makeFixtureEstimate } from './__fixtures__/estimate'
 import type { SolarPriceTier } from './types'
 
+describe('reconstructSolarInputs — phase + size override resolution', () => {
+  const row = { address: '1 Test St', state: 'NSW', postcode: '2000' }
+  const base = makeFixtureEstimate()
+  const previous = {
+    ...base,
+    context: { ...base.context, phase: 'single' as const, requested_system_kw: 6 },
+  }
+
+  it('falls back to the persisted context values when no override is given', () => {
+    const out = reconstructSolarInputs({ row, estimate: previous })!
+    expect(out.phase).toBe('single')
+    expect(out.desiredKw).toBe(6)
+  })
+
+  it('lets the tradie override win', () => {
+    const out = reconstructSolarInputs({
+      row,
+      estimate: previous,
+      overrides: { phase: 'three', desired_kw: 12 },
+    })!
+    expect(out.phase).toBe('three')
+    expect(out.desiredKw).toBe(12)
+  })
+
+  it('treats an explicit null desired_kw override as clear-to-auto-size', () => {
+    const out = reconstructSolarInputs({
+      row,
+      estimate: previous,
+      overrides: { desired_kw: null },
+    })!
+    expect(out.desiredKw).toBe(null)
+  })
+})
+
 // ── The 670 London Road, Chandler 4154 regression ────────────────────
 
 describe('resolveStcZoneRating', () => {
