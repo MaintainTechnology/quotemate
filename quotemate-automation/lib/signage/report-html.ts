@@ -1,0 +1,112 @@
+// Self-contained HTML for the signage compliance pre-check PDF, rendered
+// by Gotenberg (lib/pdf/gotenberg.ts). Same print-friendly light theme as
+// the quote reports — but this is a COMPLIANCE report (pass / fix / review
+// verdicts), not a money quote. Pure — no I/O.
+
+import type { ComplianceReport, ReportItem, ReportItemState } from './compose-report'
+
+export type SignageReportInput = {
+  brandName: string
+  report: ComplianceReport
+  generatedAt?: Date
+}
+
+const esc = (s: unknown) =>
+  String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+/** Finite-or-zero — guards the count tallies against a malformed payload. */
+const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+
+const STATE_META: Record<ReportItemState, { label: string; cls: string }> = {
+  compliant: { label: 'OK', cls: 'ok' },
+  fix: { label: 'Fix', cls: 'fix' },
+  review: { label: 'Review', cls: 'review' },
+}
+
+function itemRow(it: ReportItem): string {
+  const meta = STATE_META[it.state]
+  const cites = [
+    it.source_citation ? `Ref: ${esc(it.source_citation)}` : '',
+    it.note ? esc(it.note) : '',
+    it.kb_citation ? `Brand standard: ${esc(it.kb_citation)}` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  return `
+  <div class="item item-${meta.cls}">
+    <span class="tag tag-${meta.cls}">${meta.label}</span>
+    <div class="item-body">
+      <div class="item-detail">${esc(it.detail)}</div>
+      ${cites ? `<div class="item-cite">${cites}</div>` : ''}
+    </div>
+  </div>`
+}
+
+export function buildSignageReportHtml(input: SignageReportInput): string {
+  const date = (input.generatedAt ?? new Date()).toLocaleDateString('en-AU', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
+  const r = input.report
+  const c = r.counts
+
+  return `<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<title>Signage compliance pre-check — ${esc(input.brandName)}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #16202b; margin: 0; font-size: 12px; line-height: 1.5; }
+  header { border-bottom: 3px solid #FF5F00; padding-bottom: 14px; margin-bottom: 18px; }
+  .eyebrow { font-family: 'Courier New', monospace; font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: #6b7683; }
+  h1 { font-size: 24px; text-transform: uppercase; letter-spacing: -0.02em; margin: 6px 0 2px; }
+  h1 .accent { color: #FF5F00; }
+  .meta { color: #6b7683; font-size: 11px; }
+  h2 { font-size: 13px; text-transform: uppercase; margin: 22px 0 6px; letter-spacing: 0.02em; }
+  .statgrid { display: flex; gap: 12px; margin: 14px 0 4px; }
+  .stat { flex: 1; border: 1px solid #dde3e9; padding: 10px 12px; }
+  .stat .v { font-size: 22px; font-weight: 800; }
+  .stat .l { font-family: 'Courier New', monospace; font-size: 8.5px; letter-spacing: 0.15em; text-transform: uppercase; color: #6b7683; margin-top: 4px; }
+  .stat-ok .v { color: #15803d; }
+  .stat-fix .v { color: #b91c1c; }
+  .stat-review .v { color: #b45309; }
+  .group { font-family: 'Courier New', monospace; font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: #6b7683; margin: 16px 0 4px; border-bottom: 1px solid #e6ebf0; padding-bottom: 3px; }
+  .item { display: flex; gap: 10px; padding: 7px 0; border-bottom: 1px solid #f0f3f6; align-items: flex-start; }
+  .tag { font-family: 'Courier New', monospace; font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; color: #fff; padding: 2px 6px; white-space: nowrap; }
+  .tag-ok { background: #15803d; }
+  .tag-fix { background: #b91c1c; }
+  .tag-review { background: #b45309; }
+  .item-body { flex: 1; }
+  .item-detail { color: #16202b; }
+  .item-cite { font-family: 'Courier New', monospace; font-size: 8.5px; letter-spacing: 0.04em; color: #6b7683; margin-top: 2px; }
+  .disclaimer { margin-top: 22px; padding-top: 10px; border-top: 1px solid #dde3e9; color: #6b7683; font-size: 11px; }
+  footer { margin-top: 14px; font-family: 'Courier New', monospace; font-size: 8.5px; letter-spacing: 0.15em; text-transform: uppercase; color: #6b7683; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="eyebrow">Signage compliance pre-check</div>
+    <h1>${esc(input.brandName)} <span class="accent">×</span> QuoteMate</h1>
+    <div class="meta">${esc(r.summary)} · ${date}</div>
+  </header>
+
+  <div class="statgrid">
+    <div class="stat stat-ok"><div class="v">${num(c.compliant)}</div><div class="l">Compliant</div></div>
+    <div class="stat stat-fix"><div class="v">${num(c.fix)}</div><div class="l">To fix</div></div>
+    <div class="stat stat-review"><div class="v">${num(c.review)}</div><div class="l">Needs review</div></div>
+  </div>
+
+  ${r.groups
+    .map(
+      (g) => `<div class="group">${esc(g.group)}</div>
+  ${g.items.map(itemRow).join('')}`,
+    )
+    .join('')}
+
+  <div class="disclaimer">${esc(r.disclaimer)}</div>
+  <footer>Generated by QuoteMate · Automated pre-check — HQ decides</footer>
+</body>
+</html>`
+}

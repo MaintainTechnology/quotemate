@@ -102,6 +102,27 @@ Choose ONE material from EXACTLY: render, weatherboard, brick_face, brick_painte
 Respond ONLY with strict JSON, no prose, no code fences: {"material": string, "storeys": number|null, "condition_hint": "sound"|"weathered"|"peeling"|"bare"|"unknown", "confidence": "high"|"medium"|"low", "notes": string}`
 }
 
+/** Gemini structured-output schema mirroring the JSON the prompt requests —
+ *  passed as responseSchema so the model can only emit these keys/enums.
+ *  parseMaterialDetection remains the defensive fallback. */
+export const MATERIAL_DETECTION_SCHEMA: Record<string, unknown> = {
+  type: 'OBJECT',
+  properties: {
+    material: {
+      type: 'STRING',
+      enum: ['render', 'weatherboard', 'brick_face', 'brick_painted', 'fibro', 'metal', 'unknown'],
+    },
+    storeys: { type: 'INTEGER', nullable: true },
+    condition_hint: {
+      type: 'STRING',
+      enum: ['sound', 'weathered', 'peeling', 'bare', 'unknown'],
+    },
+    confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
+    notes: { type: 'STRING' },
+  },
+  required: ['material', 'condition_hint', 'confidence', 'notes'],
+}
+
 const MATERIALS: ReadonlyArray<WallMaterial> = [
   'render',
   'weatherboard',

@@ -68,6 +68,23 @@ export function buildSolarDetectPrompt(): string {
   )
 }
 
+/** Gemini structured-output schema mirroring the JSON the prompt requests —
+ *  passed as responseSchema so the model can only emit these keys (kills the
+ *  "Sure, here's the JSON:" / code-fence fluff). parseSolarDetection stays
+ *  as the defensive fallback for older/free-text responses. */
+export const SOLAR_DETECTION_SCHEMA: Record<string, unknown> = {
+  type: 'OBJECT',
+  properties: {
+    has_solar: { type: 'BOOLEAN' },
+    array_count: { type: 'INTEGER' },
+    panel_count_estimate: { type: 'INTEGER', nullable: true },
+    approx_area_m2: { type: 'NUMBER', nullable: true },
+    confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
+    notes: { type: 'STRING' },
+  },
+  required: ['has_solar', 'array_count', 'confidence', 'notes'],
+}
+
 /** PURE — parse the vision model's JSON text into a SolarDetection. Returns
  *  null when the text isn't usable. Defensive: tolerates code fences and
  *  coerces the numeric/enum fields. */

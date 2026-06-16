@@ -1,14 +1,15 @@
-// GET /api/q/roof/[token]/pdf — download the roofing quote PDF.
-// Token = roofing_measurements.public_token (same trust model as
-// /q/roof/[token]). Lazy-generates via Gotenberg on first hit and streams
-// from the private quote-pdfs bucket so the SMS'd link is stable.
+// GET /api/q/paint/[token]/pdf — download the residential painting quote
+// PDF. Token = painting_measurements.public_token. Lazy-generates via
+// Gotenberg on first hit and streams from the private quote-pdfs bucket so
+// the link is stable. Inspection-routed jobs return 404 (no committable
+// price belongs in a final-looking document). Mirrors the roof/solar routes.
 
 import { createClient } from '@supabase/supabase-js'
-import { ensureRoofQuotePdf, downloadQuotePdf } from '@/lib/quote/pdf'
+import { ensurePaintingPdf, downloadQuotePdf } from '@/lib/quote/pdf'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 60
+export const maxDuration = 60 // lazy Gotenberg render on a cold link
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,7 +20,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   const { token } = await ctx.params
 
   const { data: row } = await supabase
-    .from('roofing_measurements')
+    .from('painting_measurements')
     .select('public_token, pdf_path, routing')
     .eq('public_token', token)
     .maybeSingle()
@@ -29,14 +30,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   }
   if (row.routing === 'inspection_required') {
     return Response.json(
-      { ok: false, error: 'This roof needs a site visit first — no PDF until the price is confirmed' },
+      { ok: false, error: 'This job needs an on-site measure first — no PDF until the price is confirmed' },
       { status: 404 },
     )
   }
 
   let path = row.pdf_path as string | null
   if (!path) {
-    path = await ensureRoofQuotePdf(token)
+    path = await ensurePaintingPdf(token)
   }
   if (!path) {
     return Response.json({ ok: false, error: 'PDF unavailable right now — try again shortly' }, { status: 503 })
@@ -46,7 +47,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   try {
     pdf = await downloadQuotePdf(path)
   } catch (e) {
-    console.error('[q/roof/pdf] storage download failed', e instanceof Error ? e.message : e)
+    console.error('[q/paint/pdf] storage download failed', e instanceof Error ? e.message : e)
     return Response.json({ ok: false, error: 'PDF unavailable' }, { status: 500 })
   }
 
@@ -54,7 +55,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     status: 200,
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="roof-quote-${token.slice(0, 8)}.pdf"`,
+      'Content-Disposition': `attachment; filename="painting-quote-${token.slice(0, 8)}.pdf"`,
       'Cache-Control': 'private, max-age=300',
     },
   })

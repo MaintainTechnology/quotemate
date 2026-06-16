@@ -10,8 +10,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  ChevronRight,
   Eye,
   FileText,
+  History,
   Image as ImageIcon,
   Loader2,
   Plus,
@@ -57,6 +59,24 @@ const EXTRACT_STEPS = [
   'Building the surface takeoff…',
   'Reconciling against the measurements doc…',
 ] as const
+
+// Run lifecycle → a scannable, colour-coded chip for the history rail.
+// The brand's fill shades (success/danger/accent) sit behind white text;
+// idle 'draft' is a quiet outline. Keep labels human, not the raw enum.
+const RUN_STATUS: Record<string, { label: string; chip: string }> = {
+  draft: { label: 'Draft', chip: 'border border-ink-line bg-ink-deep text-text-dim' },
+  // Amber (not accent) so the brand orange stays reserved for the
+  // *selected* run; white-on-warning clears WCAG AA where white-on-accent
+  // would not at this chip size.
+  extracting: { label: 'Extracting', chip: 'bg-warning text-white' },
+  ready: { label: 'Ready', chip: 'bg-[var(--teal-deep)] text-white' },
+  priced: { label: 'Priced', chip: 'bg-success text-white' },
+  failed: { label: 'Failed', chip: 'bg-danger text-white' },
+}
+
+function runStatusMeta(status: string): { label: string; chip: string } {
+  return RUN_STATUS[status] ?? { label: status, chip: 'border border-ink-line bg-ink-deep text-text-dim' }
+}
 
 type UploadRow = {
   id: string
@@ -874,30 +894,89 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
 
       {/* ── History rail ────────────────────────────────────────────── */}
       {recentRuns.length > 0 && (
-        <section className="border border-ink-line bg-ink-card p-5">
-          <div className="flex items-center gap-3">
-            <span className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-text-dim">Recent runs</span>
-            <span className="h-px flex-1 bg-ink-line" aria-hidden />
-          </div>
-          <ul className="mt-3 grid gap-px bg-ink-line sm:grid-cols-2 lg:grid-cols-3">
-            {recentRuns.map((r) => (
-              <li key={r.id}>
-                <button
-                  type="button"
-                  disabled={extracting || pricing || saving}
-                  onClick={() => void loadRun(r.id)}
-                  className="flex w-full cursor-pointer items-center gap-3 bg-ink-deep px-4 py-3 text-left transition-colors hover:bg-ink disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <RefreshCw className="h-3.5 w-3.5 shrink-0 text-text-dim" aria-hidden />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm text-text-pri">{r.job_name ?? r.site_address ?? 'Untitled run'}</span>
-                    <span className="font-mono text-[0.62rem] uppercase tracking-[0.12em] text-text-dim">
-                      {new Date(r.created_at).toLocaleDateString('en-AU')} · {r.status}
+        <section className="border border-ink-line bg-ink-card">
+          <header className="flex items-center gap-3 border-b border-ink-line px-5 py-3.5">
+            <History className="h-4 w-4 shrink-0 text-accent" aria-hidden />
+            <h3 className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-pri">
+              Recent runs
+            </h3>
+            <span className="border border-ink-line px-1.5 py-0.5 font-mono text-[0.6rem] font-semibold leading-none text-text-sec">
+              {recentRuns.length}
+            </span>
+            <span className="ml-auto hidden text-[0.72rem] text-text-sec sm:block">
+              Pick up where you left off
+            </span>
+          </header>
+          <ul className="divide-y divide-ink-line">
+            {recentRuns.map((r) => {
+              const meta = runStatusMeta(r.status)
+              const isActive = r.id === runId
+              const title = r.job_name?.trim() || r.site_address?.trim() || 'Untitled run'
+              const subAddress = r.job_name?.trim() && r.site_address?.trim() ? r.site_address.trim() : null
+              return (
+                <li key={r.id}>
+                  <button
+                    type="button"
+                    disabled={extracting || pricing || saving}
+                    onClick={() => void loadRun(r.id)}
+                    aria-current={isActive ? 'true' : undefined}
+                    className={`group flex w-full cursor-pointer items-center gap-4 border-l-2 px-4 py-3.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50 ${
+                      isActive
+                        ? 'border-l-accent bg-accent/10 hover:bg-accent/20'
+                        : 'border-l-transparent bg-ink-deep hover:border-l-accent/50 hover:bg-ink'
+                    }`}
+                  >
+                    {/* Status gutter — fixed width so the job names line up. */}
+                    <span className="flex w-24 shrink-0 sm:w-28">
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2 py-0.5 font-mono text-[0.6rem] font-semibold uppercase tracking-[0.1em] ${meta.chip}`}
+                      >
+                        {r.status === 'extracting' && (
+                          <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                        )}
+                        {meta.label}
+                      </span>
                     </span>
-                  </span>
-                </button>
-              </li>
-            ))}
+
+                    {/* Job identity. */}
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2">
+                        <span className="truncate text-sm font-semibold text-text-pri">{title}</span>
+                        {isActive && (
+                          <span className="shrink-0 font-mono text-[0.55rem] font-semibold uppercase tracking-[0.14em] text-accent">
+                            Current
+                          </span>
+                        )}
+                      </span>
+                      <span className={`mt-0.5 flex items-center gap-1.5 text-[0.7rem] ${isActive ? 'text-text-sec' : 'text-text-dim'}`}>
+                        {subAddress && (
+                          <>
+                            <span className="truncate">{subAddress}</span>
+                            <span aria-hidden>·</span>
+                          </>
+                        )}
+                        <span className="shrink-0 font-mono uppercase tracking-[0.08em]">
+                          {new Date(r.created_at).toLocaleDateString('en-AU', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: '2-digit',
+                          })}
+                        </span>
+                      </span>
+                    </span>
+
+                    {/* Open affordance — replaces the old, misleading refresh icon. */}
+                    <span className="flex shrink-0 items-center gap-1.5 font-mono text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-text-dim transition-colors group-hover:text-accent">
+                      <span className="hidden sm:inline">{isActive ? 'Reload' : 'Open'}</span>
+                      <ChevronRight
+                        className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
+                        aria-hidden
+                      />
+                    </span>
+                  </button>
+                </li>
+              )
+            })}
           </ul>
         </section>
       )}

@@ -258,6 +258,27 @@ export function buildTradieDraftNotification(opts: {
 }
 
 /**
+ * Dialog-first web lead — "new web lead arrived" alert to the tradie, fired the
+ * moment a /t/<slug> form is submitted. The customer is being texted to finalise
+ * the quote; this guarantees the tradie hears about a hot lead even if the
+ * customer never replies. Kept ≤320 chars (1-2 SMS segments).
+ */
+export function buildTradieWebLeadAlert(opts: {
+  tradieFirstName?: string | null
+  customerName: string
+  suburb: string
+  description: string
+}): string {
+  const hi = opts.tradieFirstName?.trim() ? `Hi ${opts.tradieFirstName.trim()}, ` : ''
+  const who = opts.customerName.split(' ')[0] || opts.customerName
+  const desc = opts.description.trim().replace(/\s+/g, ' ').slice(0, 140)
+  const body =
+    `${hi}new web lead - ${who} in ${opts.suburb}: "${desc}". ` +
+    `We're texting them now to finalise the quote. - QuoteMate`
+  return scrubForGsm7(body).slice(0, 320)
+}
+
+/**
  * Mig 078 — tradie review-before-send notification.
  *
  * Sent INSTEAD of `buildTradieDraftNotification` when the tenant's

@@ -16,6 +16,7 @@ import {
   buildMaterialDetectPrompt,
   materialGuidance,
   parseMaterialDetection,
+  MATERIAL_DETECTION_SCHEMA,
 } from '@/lib/painting/material'
 import { geminiProvider } from '@/lib/ig-engine/providers/gemini'
 
@@ -102,6 +103,7 @@ export async function POST(req: Request) {
       images: [{ base64: bytes.toString('base64'), mime }],
       temperature: 0,
       model: VISION_MODEL,
+      responseSchema: MATERIAL_DETECTION_SCHEMA,
     })
     const detection = parseMaterialDetection(text)
     if (!detection) {

@@ -32,7 +32,9 @@ const user =
 const body = {
   systemInstruction: { parts: [{ text: system }] },
   contents: [{ role: 'user', parts: [{ text: user }, { inline_data: { mime_type: 'image/jpeg', data: srcBytes.toString('base64') } }] }],
-  generation_config: { temperature: 0.1, response_modalities: ['IMAGE'], image_config: { aspect_ratio: '4:3' } },
+  // Mirror the production renderImage config (lib/ig-engine/providers/gemini.ts):
+  // Gemini-3 default temperature 1.0 + thinkingLevel high for adherence.
+  generation_config: { temperature: 1, response_modalities: ['IMAGE'], thinking_config: { thinking_level: 'high' }, image_config: { aspect_ratio: '4:3' } },
 }
 
 try {

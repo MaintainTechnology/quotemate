@@ -37,7 +37,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
 
   const { data: tenant } = await supabase
     .from('tenants')
-    .select('id, trade, status, business_name')
+    .select('id, trade, trades, status, business_name, owner_mobile, owner_first_name, twilio_sms_number')
     .ilike('slug', slug)
     .maybeSingle()
   if (!tenant || tenant.status !== 'active') {
@@ -121,6 +121,35 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
   // homeowner's page returns instantly.
   after(async () => {
     try {
+      // Dialog-first (default): seed an SMS conversation and ask the first
+      // clarifying question instead of one-shot drafting. The customer's reply
+      // flows through /api/sms/inbound → finish → intake → estimate/draft.
+      // Flip WEB_LEAD_DIALOG_ENABLED=false to revert to the legacy one-shot path.
+      const dialogEnabled = (process.env.WEB_LEAD_DIALOG_ENABLED ?? 'true').toLowerCase() !== 'false'
+      if (dialogEnabled) {
+        const { startWebLeadConversation } = await import('@/lib/sms/start-web-lead-conversation')
+        await startWebLeadConversation({
+          supabase,
+          tenant: {
+            id: tenant.id,
+            business_name: tenant.business_name ?? null,
+            trade: tenant.trade ?? null,
+            trades: (tenant as { trades?: string[] | null }).trades ?? null,
+            owner_mobile: (tenant as { owner_mobile?: string | null }).owner_mobile ?? '',
+            owner_first_name: (tenant as { owner_first_name?: string | null }).owner_first_name ?? null,
+            twilio_sms_number: (tenant as { twilio_sms_number?: string | null }).twilio_sms_number ?? null,
+          },
+          form: { name, mobile, suburb, description },
+          photoPaths,
+          photoUrls,
+          customerId: customer?.id ?? null,
+          fallbackFrom: process.env.TWILIO_SMS_NUMBER ?? null,
+        })
+        console.log('[t/lead] web lead → SMS dialog started', { tenant: tenant.id })
+        return
+      }
+
+      // ── Legacy one-shot path (WEB_LEAD_DIALOG_ENABLED=false) ──
       const transcript =
         `New web enquiry from a QR flyer for ${tenant.business_name}.\n` +
         `Customer name: ${name}\n` +

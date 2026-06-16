@@ -80,6 +80,7 @@ export default function PaintingEstimatePage() {
 
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [savedId, setSavedId] = useState<string | null>(null)
+  const [savedToken, setSavedToken] = useState<string | null>(null)
   const [saveErr, setSaveErr] = useState<string | null>(null)
 
   useEffect(() => {
@@ -124,6 +125,7 @@ export default function PaintingEstimatePage() {
     setErrMsg(null)
     setSaveState('idle')
     setSavedId(null)
+    setSavedToken(null)
     setSaveErr(null)
     try {
       const res = await fetch('/api/painting/estimate', {
@@ -191,10 +193,11 @@ export default function PaintingEstimatePage() {
         }),
       })
       const json = (await res.json()) as
-        | { ok: true; id: string }
+        | { ok: true; id: string; public_token: string }
         | { ok: false; error?: string; detail?: string }
       if (json.ok) {
         setSavedId(json.id)
+        setSavedToken(json.public_token)
         setSaveState('saved')
       } else {
         setSaveState('error')
@@ -393,6 +396,16 @@ export default function PaintingEstimatePage() {
               <span className="font-mono text-sm font-semibold uppercase tracking-[0.14em] text-teal-glow">
                 ✓ Saved · find it in the Paint tab history
               </span>
+            )}
+            {saveState === 'saved' && savedToken && estimate.price.routing.decision !== 'inspection_required' && (
+              <a
+                href={`/api/q/paint/${savedToken}/pdf`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 border border-ink-line px-4 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent"
+              >
+                Download PDF <span aria-hidden="true">↓</span>
+              </a>
             )}
             {saveState === 'error' && saveErr && (
               <span className="text-sm text-warning">{saveErr}</span>

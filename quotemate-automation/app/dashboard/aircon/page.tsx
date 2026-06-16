@@ -470,9 +470,78 @@ function Result({
             Book a <span className="text-accent">site assessment</span>
           </p>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-text-sec">{r.routing.reason}</p>
+          <AirconPdfButton
+            token={token}
+            address={location.geocode.ok ? (location.geocode.formatted_address ?? addressInput.address) : addressInput.address}
+            recommendation={r}
+            climateZone={climate_zone}
+          />
         </div>
       </div>
     </section>
+  )
+}
+
+/** Stateless "Download PDF" — POSTs the current recommendation to
+ *  /api/aircon/pdf and triggers a browser download of the streamed PDF.
+ *  Aircon has no saved row, so there's nothing to link to — the doc is
+ *  rendered on demand from what's on screen. */
+function AirconPdfButton({
+  token,
+  address,
+  recommendation,
+  climateZone,
+}: {
+  token: string | null
+  address: string
+  recommendation: AcRecommendation
+  climateZone: string | null
+}) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const download = useCallback(async () => {
+    if (!token) return
+    setBusy(true)
+    setErr(null)
+    try {
+      const res = await fetch('/api/aircon/pdf', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address, recommendation, climateZone }),
+      })
+      if (!res.ok) {
+        const j = (await res.json().catch(() => null)) as { error?: string } | null
+        setErr(j?.error ?? `Couldn’t generate the PDF (HTTP ${res.status}).`)
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'aircon-recommendation.pdf'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch {
+      setErr('Couldn’t generate the PDF. Please try again.')
+    } finally {
+      setBusy(false)
+    }
+  }, [token, address, recommendation, climateZone])
+
+  return (
+    <div className="mt-5">
+      <button
+        type="button"
+        onClick={() => void download()}
+        disabled={busy}
+        className="inline-flex items-center gap-2 border border-ink-line px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {busy ? 'Preparing PDF…' : 'Download PDF ↓'}
+      </button>
+      {err && <p className="mt-2 text-sm text-warning">{err}</p>}
+    </div>
   )
 }
 

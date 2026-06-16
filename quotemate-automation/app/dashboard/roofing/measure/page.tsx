@@ -99,6 +99,7 @@ export default function RoofingMeasurePage() {
   // and returns a /q/[token] link the tradie can copy + share.
   const [quoteState, setQuoteState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [quoteShareUrl, setQuoteShareUrl] = useState<string | null>(null)
+  const [quoteShareToken, setQuoteShareToken] = useState<string | null>(null)
 
   useEffect(() => {
     const sb = getBrowserSupabase()
@@ -130,6 +131,12 @@ export default function RoofingMeasurePage() {
       setErrMsg(null)
       setSaveState('idle')
       setSavedId(null)
+      // A fresh measurement invalidates any quote sent from the previous
+      // one — clear the "customer quote created" panel + its PDF link so
+      // they can't point at a stale (different) job's document.
+      setQuoteState('idle')
+      setQuoteShareUrl(null)
+      setQuoteShareToken(null)
       try {
         const res = await fetch('/api/roofing/measure-all', {
           method: 'POST',
@@ -249,6 +256,7 @@ export default function RoofingMeasurePage() {
     const combined = resp.quote.combined
     setQuoteState('saving')
     setQuoteShareUrl(null)
+    setQuoteShareToken(null)
     setErrMsg(null)
     try {
       const res = await fetch('/api/roofing/save-as-quote', {
@@ -291,10 +299,11 @@ export default function RoofingMeasurePage() {
         }),
       })
       const json = (await res.json()) as
-        | { ok: true; shareUrl: string }
+        | { ok: true; shareUrl: string; shareToken: string }
         | { ok: false; error: string; detail?: string }
       if (json.ok) {
         setQuoteShareUrl(json.shareUrl)
+        setQuoteShareToken(json.shareToken)
         setQuoteState('saved')
       } else {
         setQuoteState('error')
@@ -480,6 +489,7 @@ export default function RoofingMeasurePage() {
           onSendAsQuote={onSendAsQuote}
           quoteState={quoteState}
           quoteShareUrl={quoteShareUrl}
+          quoteShareToken={quoteShareToken}
           onMaterialDetected={setMaterial}
         />
       )}
@@ -532,6 +542,7 @@ function MultiResultBlock({
   onSendAsQuote,
   quoteState,
   quoteShareUrl,
+  quoteShareToken,
   onMaterialDetected,
 }: {
   quote: MultiRoofQuote
@@ -552,6 +563,7 @@ function MultiResultBlock({
   onSendAsQuote: () => void | Promise<void>
   quoteState: 'idle' | 'saving' | 'saved' | 'error'
   quoteShareUrl: string | null
+  quoteShareToken: string | null
   onMaterialDetected: (m: RoofMaterial) => void
 }) {
   const keyOf = (i: number) => structureKey(quote.structures[i], i)
@@ -723,6 +735,16 @@ function MultiResultBlock({
               >
                 Open <span aria-hidden="true">&rarr;</span>
               </a>
+              {quoteShareToken && (
+                <a
+                  href={`/api/q/${quoteShareToken}/pdf`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 border border-ink-line px-3 py-1.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text-sec hover:border-accent hover:text-accent"
+                >
+                  Download PDF <span aria-hidden="true">&darr;</span>
+                </a>
+              )}
             </div>
           </div>
         )}

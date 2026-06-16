@@ -1,7 +1,7 @@
 // ════════════════════════════════════════════════════════════════════
 // POST /api/solar/confirm/[token] — the manual tradie release step.
 //
-// As of docs/strategy.md v12 (2026-06-16) a CLEAN solar estimate is
+// As of docs/strategy.md v10 (2026-06-16) a CLEAN solar estimate is
 // auto-released to the customer at creation time (Path B — see
 // lib/solar/release.ts::autoReleaseSolarEstimate). This route remains for
 //   • a FLAGGED estimate that the tradie has re-drafted clean and now

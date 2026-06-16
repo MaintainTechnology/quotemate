@@ -25,6 +25,8 @@ import {
 } from '@/lib/solar/premium-quote'
 import { loadSolarConfig } from '@/lib/solar/config'
 import type { SolarEstimate } from '@/lib/solar/types'
+import { buildPaintingQuoteReportHtml } from '@/lib/painting/report-html'
+import type { PaintingEstimate } from '@/lib/painting/types'
 
 const BUCKET = 'quote-pdfs'
 const APP_URL = (process.env.APP_URL ?? 'https://quote-mate-rho.vercel.app').replace(/\/$/, '')
@@ -53,6 +55,11 @@ export function roofQuotePdfUrl(publicToken: string): string {
 /** Stable customer download URL for a solar quote PDF. */
 export function solarQuotePdfUrl(publicToken: string): string {
   return `${APP_URL}/api/q/solar/${publicToken}/pdf`
+}
+
+/** Stable customer download URL for a residential painting quote PDF. */
+export function paintQuotePdfUrl(publicToken: string): string {
+  return `${APP_URL}/api/q/paint/${publicToken}/pdf`
 }
 
 
@@ -98,6 +105,7 @@ type RoofPdfRow = {
   tenant_id: string | null
   address: string | null
   quote: MultiRoofQuote | null
+  routing: string | null
   pdf_path: string | null
 }
 
@@ -112,6 +120,15 @@ type SolarPdfRow = {
   quote_variant?: string | null
   felt?: { thumbnail_url?: string | null; map_url?: string | null; status?: string | null } | null
   ai_brief?: import('@/lib/solar/ai-brief').SolarAiBriefRecord | null
+}
+
+type PaintingPdfRow = {
+  public_token: string
+  tenant_id: string | null
+  address: string | null
+  estimate: PaintingEstimate | null
+  routing: string | null
+  pdf_path: string | null
 }
 
 type IntakePdfRow = {
@@ -205,10 +222,13 @@ export async function ensureRoofQuotePdf(
     if (!gotenbergConfigured()) return null
     const { data: row } = await supabase()
       .from('roofing_measurements')
-      .select('public_token, tenant_id, address, quote, pdf_path')
+      .select('public_token, tenant_id, address, quote, routing, pdf_path')
       .eq('public_token', publicToken)
       .maybeSingle<RoofPdfRow>()
     if (!row) return null
+    // Inspection-routed roofs carry no committable price — no quote PDF
+    // (mirrors the paint/solar guard; defense-in-depth behind the UI gate).
+    if (row.routing === 'inspection_required') return null
     if (row.pdf_path && !opts.regenerate && !opts.quote) return row.pdf_path
 
     const quote = opts.quote ?? row.quote
@@ -300,6 +320,53 @@ export async function ensureSolarQuotePdf(
     return path
   } catch (e) {
     console.error('[quote-pdf] ensureSolarQuotePdf failed (non-fatal)', {
+      publicToken: publicToken.slice(0, 8) + '…',
+      message: e instanceof Error ? e.message : String(e),
+    })
+    return null
+  }
+}
+
+/**
+ * Generate (or reuse) the PDF for a residential painting quote (migration
+ * 115). Reads the full persisted PaintingEstimate from
+ * painting_measurements.estimate, so no recomputation. Inspection-routed
+ * jobs carry no committable price and return null. Stored at
+ * paint/<publicToken>.pdf in the same quote-pdfs bucket. Never throws.
+ */
+export async function ensurePaintingPdf(
+  publicToken: string,
+  opts: { regenerate?: boolean } = {},
+): Promise<string | null> {
+  try {
+    if (!gotenbergConfigured()) return null
+    const { data: row } = await supabase()
+      .from('painting_measurements')
+      .select('public_token, tenant_id, address, estimate, routing, pdf_path')
+      .eq('public_token', publicToken)
+      .maybeSingle<PaintingPdfRow>()
+    if (!row) return null
+    if (row.routing === 'inspection_required') return null
+    if (row.pdf_path && !opts.regenerate) return row.pdf_path
+
+    const estimate = row.estimate
+    if (!estimate) return null
+    const businessName = await tenantBusinessName(row.tenant_id)
+
+    const html = buildPaintingQuoteReportHtml({
+      businessName,
+      address: row.address ?? '',
+      estimate,
+      // No /q/paint/[token] customer page exists yet — omit the live link
+      // so the PDF footer never points at a 404.
+      quoteViewUrl: null,
+    })
+    const pdf = await renderPdfFromHtml(html)
+    const path = await storePdf(`paint/${publicToken}.pdf`, pdf)
+    await supabase().from('painting_measurements').update({ pdf_path: path }).eq('public_token', publicToken)
+    return path
+  } catch (e) {
+    console.error('[quote-pdf] ensurePaintingPdf failed (non-fatal)', {
       publicToken: publicToken.slice(0, 8) + '…',
       message: e instanceof Error ? e.message : String(e),
     })

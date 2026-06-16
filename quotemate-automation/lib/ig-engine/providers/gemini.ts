@@ -26,6 +26,23 @@ const DEFAULT_IMAGE_MODEL =
 const DEFAULT_TEXT_MODEL =
   process.env.GEMINI_TEXT_MODEL ?? DEFAULT_IMAGE_MODEL
 
+// ── Gemini 3 instruction-following levers ───────────────────────────
+// Verified against ai.google.dev (2026-06): for Gemini 3, Google STRONGLY
+// recommends keeping temperature at its default 1.0 — lowering it risks
+// "looping or degraded performance" — and driving adherence with
+// thinkingLevel + system rules, NOT top_p/top_k. gemini-3-pro-image-preview
+// supports thinkingConfig for image generation; thinkingLevel 'high' makes
+// it reason through complex / negative-constraint prompts before rendering.
+// Both are env-overridable so they can be tuned or disabled without a
+// deploy (set GEMINI_IMAGE_THINKING_LEVEL=off to drop the field entirely).
+const IMAGE_TEMPERATURE = (() => {
+  const v = Number(process.env.GEMINI_IMAGE_TEMPERATURE)
+  return Number.isFinite(v) ? v : 1
+})()
+const IMAGE_THINKING_LEVEL = (process.env.GEMINI_IMAGE_THINKING_LEVEL ?? 'high')
+  .trim()
+  .toLowerCase()
+
 const endpoint = (model: string): string =>
   `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
 
@@ -98,8 +115,15 @@ async function renderImage(req: RenderImageRequest): Promise<ImageBytes> {
     systemInstruction: { parts: [{ text: req.system }] },
     contents: [{ role: 'user', parts: userParts }],
     generation_config: {
-      temperature: req.temperature ?? 0.1,
+      temperature: req.temperature ?? IMAGE_TEMPERATURE,
       response_modalities: ['IMAGE'],
+      // High thinking = the Gemini-3 image adherence lever (complex /
+      // negative-constraint prompts). Image output → never add
+      // response_mime_type/response_schema here (those are text-only and
+      // would suppress the image). Disable via GEMINI_IMAGE_THINKING_LEVEL=off.
+      ...(IMAGE_THINKING_LEVEL && IMAGE_THINKING_LEVEL !== 'off' && IMAGE_THINKING_LEVEL !== 'none'
+        ? { thinking_config: { thinking_level: IMAGE_THINKING_LEVEL } }
+        : {}),
       ...(req.aspectRatio
         ? { image_config: { aspect_ratio: req.aspectRatio } }
         : {}),
@@ -143,15 +167,27 @@ async function generateText(req: TextRequest): Promise<string> {
       inline_data: { mime_type: img.mime, data: img.base64 },
     })
   }
+  // Opt-in structured output: a caller that passes responseSchema gets
+  // application/json constrained to that schema (Gemini structured output —
+  // text-only, so it replaces response_modalities). Free-text callers (the
+  // judge/verify paths) keep the TEXT modality. Pattern proven by
+  // lib/invoice/extract.ts; the downstream parsers still strip fences/coerce
+  // defensively, so this hardens — never weakens — the existing path.
+  const generationConfig: Record<string, unknown> = {
+    temperature: req.temperature ?? 0,
+  }
+  if (req.responseSchema) {
+    generationConfig.response_mime_type = 'application/json'
+    generationConfig.response_schema = req.responseSchema
+  } else {
+    generationConfig.response_modalities = ['TEXT']
+  }
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contents: [{ role: 'user', parts }],
-      generation_config: {
-        temperature: req.temperature ?? 0,
-        response_modalities: ['TEXT'],
-      },
+      generation_config: generationConfig,
     }),
   })
   if (!res.ok) throw new Error(`Gemini HTTP ${res.status}`)

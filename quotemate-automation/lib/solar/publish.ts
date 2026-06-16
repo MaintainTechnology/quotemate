@@ -2,7 +2,7 @@
 // Solar — the publish gate (spec §6 CTA, §7 guardrails, §5 freshness).
 //
 // Mirrors roofing's confirm-gate: prices are NEVER shown before the
-// estimate is confirmed (confirmed_at set). As of docs/strategy.md v12
+// estimate is confirmed (confirmed_at set). As of docs/strategy.md v10
 // (2026-06-16) a CLEAN estimate confirms automatically at creation (Path
 // B), so this gate opens on its own for it; a FLAGGED estimate stays
 // unconfirmed until the tradie reviews. On top of confirmation, prices are

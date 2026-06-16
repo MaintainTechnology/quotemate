@@ -461,7 +461,12 @@ export async function POST(req: Request) {
     // quote is still saved; SMS will go without pay buttons rather than failing.
     let payLinks: Partial<Record<'good' | 'better' | 'best' | 'inspection', string>> | undefined
     let depositPct: number | null = null
-    const appUrl = process.env.APP_URL!
+    // Prefer the configured APP_URL (prod), but fall back to NEXT_PUBLIC_APP_URL
+    // and finally the request's own origin so links still build in dev/preview
+    // where APP_URL isn't set — without this, `${appUrl}/q/...` becomes
+    // "undefined/q/..." and the customer SMS goes out with a broken link.
+    const appUrl =
+      process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin
 
     if (!draft.needs_inspection) {
       log.step('creating Stripe Checkout Sessions (one per tier, deposit only)')
@@ -486,7 +491,9 @@ export async function POST(req: Request) {
           tiers_with_links: Object.values(payLinks).filter(Boolean).length,
         })
       } catch (e: any) {
-        log.err('Stripe session creation failed — SMS will go without pay links', e?.message ?? e)
+        log.err('Stripe session creation failed — SMS will go without pay links', e?.message ?? e, {
+          quote_id: quote!.id,
+        })
       }
     } else {
       log.step('creating Stripe Checkout Session for $99 site-visit deposit (inspection-required path)')
@@ -505,10 +512,14 @@ export async function POST(req: Request) {
           }
           log.ok('Stripe inspection-fee Session created', { inspection_link_set: true })
         } else {
-          log.err('Stripe inspection Session returned no URL — SMS will mention the fee without a link')
+          log.err('Stripe inspection Session returned no URL — SMS will mention the fee without a link', null, {
+            quote_id: quote!.id,
+          })
         }
       } catch (e: any) {
-        log.err('Stripe inspection-fee creation failed — SMS will mention the fee without a link', e?.message ?? e)
+        log.err('Stripe inspection-fee creation failed — SMS will mention the fee without a link', e?.message ?? e, {
+          quote_id: quote!.id,
+        })
       }
     }
 
@@ -596,6 +607,27 @@ export async function POST(req: Request) {
 
     after(async () => {
       const dispatch = pipelineLog('dispatch', intake.call_id)
+      // Best-effort: if we can't deliver the quote to the customer, make sure
+      // the tradie gets the link so the lead is never silently lost.
+      const notifyTradieUndelivered = async (why: string) => {
+        if (!tenantOwnerMobile) {
+          dispatch.err('cannot notify tradie of undelivered quote — no owner_mobile', null, {
+            quote_id: quote!.id, why,
+          })
+          return
+        }
+        try {
+          const r = await dispatchQuoteMessage({
+            to: tenantOwnerMobile,
+            from: tenantSmsNumber ?? undefined,
+            text: `Heads up — we couldn't text the customer their quote (${why}). Quote ready: ${appUrl}/q/${shareToken}`,
+          })
+          if (r.ok) dispatch.ok('tradie notified of undelivered customer quote', { sid: r.sid })
+          else dispatch.err('tradie undelivered-notice failed (both SMS + WA)', null, { quote_id: quote!.id })
+        } catch (e: unknown) {
+          dispatch.err('tradie undelivered-notice threw', e instanceof Error ? e.message : String(e), { quote_id: quote!.id })
+        }
+      }
       if (reviewDecision.hold) {
         // Customer SMS is held — tradie review path. We fall through to
         // the tradie-notify block below, which uses
@@ -606,7 +638,11 @@ export async function POST(req: Request) {
           reason: reviewDecision.reason,
         })
       } else if (!callerNumber) {
-        dispatch.err('skipped', null, { quote_id: quote!.id, reason: 'no caller_number on call row' })
+        dispatch.err('customer SMS skipped — no recipient', null, {
+          quote_id: quote!.id,
+          reason: 'no caller_number (voice call row, SMS convo, or intake.caller.phone all empty)',
+        })
+        await notifyTradieUndelivered('no customer phone on file')
         return
       } else {
       try {
@@ -655,6 +691,11 @@ export async function POST(req: Request) {
         const fromNumber = isSmsSource
           ? (tenantSmsNumber ?? process.env.TWILIO_SMS_NUMBER)
           : undefined
+        if (isSmsSource && !fromNumber) {
+          dispatch.err('customer SMS — no tenant FROM number and TWILIO_SMS_NUMBER unset (send may use wrong line)', null, {
+            quote_id: quote!.id,
+          })
+        }
         dispatch.step('attempting SMS first (WhatsApp fallback if SMS rejects)', {
           to: callerNumber,
           from: fromNumber ?? '(default TWILIO_PHONE_NUMBER)',

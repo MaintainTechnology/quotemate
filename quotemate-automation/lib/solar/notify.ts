@@ -1,6 +1,6 @@
 // Solar estimate → tradie notification.
 //
-// As of docs/strategy.md v12 (2026-06-16) a CLEAN estimate auto-releases
+// As of docs/strategy.md v10 (2026-06-16) a CLEAN estimate auto-releases
 // to the customer at creation (Path B); the tradie notification then
 // reads "sent to your customer — review it here" (released:true). A
 // FLAGGED estimate still lands as "awaiting your confirmation" and the
