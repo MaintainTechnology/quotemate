@@ -282,3 +282,29 @@ describe('buildSolarRowPayloads — tier fallback (no better tier → first tier
     expect(out.quote.total_inc_gst).toBe(5346)
   })
 })
+
+describe('buildSolarRowPayloads — phase + requested size columns', () => {
+  it('stamps electrical_phase and requested_system_kw from context', () => {
+    const withPhase: SolarEstimate = {
+      ...estimate,
+      context: { ...estimate.context, phase: 'three', requested_system_kw: 10 },
+    }
+    const out = buildSolarRowPayloads({
+      estimate: withPhase,
+      tenantId: 'TENANT1',
+      address: { address: '1 Test St, Sydney', postcode: '2000', state: 'NSW' },
+    })
+    expect(out.solarEstimate.electrical_phase).toBe('three')
+    expect(out.solarEstimate.requested_system_kw).toBe(10)
+  })
+
+  it('defaults to single / null when context omits them', () => {
+    const out = buildSolarRowPayloads({
+      estimate,
+      tenantId: 'TENANT1',
+      address: { address: '1 Test St, Sydney', postcode: '2000', state: 'NSW' },
+    })
+    expect(out.solarEstimate.electrical_phase).toBe('single')
+    expect(out.solarEstimate.requested_system_kw).toBe(null)
+  })
+})

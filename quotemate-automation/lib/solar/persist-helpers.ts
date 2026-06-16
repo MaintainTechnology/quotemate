@@ -78,6 +78,8 @@ export function buildSolarRowPayloads(args: {
     postcode: address.postcode,
     install_year: estimate.context.install_year,
     network: estimate.context.network,
+    electrical_phase: estimate.context.phase ?? 'single',
+    requested_system_kw: estimate.context.requested_system_kw ?? null,
     coverage_source: estimate.coverage_source,
     imagery_quality: estimate.roof.imagery_quality,
     imagery_date: estimate.roof.imagery_date,
