@@ -1,5 +1,10 @@
-// Solar estimate → tradie notification. Forced review, no auto-send
-// (spec §6): every solar estimate lands as "awaiting your confirmation".
+// Solar estimate → tradie notification.
+//
+// As of docs/strategy.md v12 (2026-06-16) a CLEAN estimate auto-releases
+// to the customer at creation (Path B); the tradie notification then
+// reads "sent to your customer — review it here" (released:true). A
+// FLAGGED estimate still lands as "awaiting your confirmation" and the
+// notification keeps the "review and confirm before it goes live" wording.
 //
 // Modelled on lib/quote/booking-notify.ts: defensive (never throws), and
 // the SMS send is injectable so the message-building + routing logic is
@@ -16,7 +21,10 @@ type DispatchFn = (opts: {
   from?: string
 }) => Promise<DispatchResultLike>
 
-/** PURE — build the tradie SMS body. */
+/** PURE — build the tradie SMS body. `released:true` means the quote has
+ *  already auto-sent to the customer (Path B clean estimate) and the
+ *  tradie is reviewing after the fact; otherwise it still needs the
+ *  tradie's confirm before it goes live (flagged estimate). */
 export function buildSolarTradieNotification(args: {
   tradieFirstName: string | null | undefined
   customerName: string | null | undefined
@@ -24,14 +32,18 @@ export function buildSolarTradieNotification(args: {
   netIncGst: number
   reviewUrl: string
   dashboardUrl: string
+  released?: boolean
 }): string {
   const greeting = args.tradieFirstName ? `Hi ${args.tradieFirstName}, ` : ''
   const who = args.customerName ? args.customerName : 'A customer'
   const dollars = `$${Math.round(args.netIncGst).toLocaleString('en-AU')}`
+  const callToAction = args.released
+    ? `It's been sent to your customer — review it here: ${args.reviewUrl}`
+    : `Review and confirm before it goes live: ${args.reviewUrl}`
   return (
     `${greeting}${who} just got an instant solar estimate: ` +
     `${args.systemKw} kW, ${dollars} net (after STC). ` +
-    `Review and confirm before it goes live: ${args.reviewUrl} ` +
+    `${callToAction} ` +
     `· Dashboard: ${args.dashboardUrl}`
   )
 }
@@ -70,6 +82,9 @@ export async function notifySolarEstimate(args: {
   shareToken: string
   appUrl: string
   dispatch: DispatchFn
+  /** True when the quote auto-released to the customer (Path B clean
+   *  estimate) — switches the SMS to "sent to your customer" wording. */
+  released?: boolean
 }): Promise<{ notified: boolean }> {
   try {
     const notifyMobile =
@@ -85,6 +100,7 @@ export async function notifySolarEstimate(args: {
       netIncGst: args.netIncGst,
       reviewUrl,
       dashboardUrl,
+      released: args.released,
     })
     const r = await args.dispatch({
       to: notifyMobile,

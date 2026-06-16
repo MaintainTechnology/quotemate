@@ -30,6 +30,35 @@ describe('buildSolarTradieNotification', () => {
     expect(typeof body).toBe('string')
     expect(body.length).toBeGreaterThan(0)
   })
+
+  it('switches to "sent to your customer" wording when released (Path B)', () => {
+    const body = buildSolarTradieNotification({
+      tradieFirstName: 'Sam',
+      customerName: 'Mia',
+      systemKw: 6.6,
+      netIncGst: 8019,
+      reviewUrl: 'https://app/q/solar/TOKEN123',
+      dashboardUrl: 'https://app/dashboard',
+      released: true,
+    })
+    expect(body.toLowerCase()).toContain('sent to your customer')
+    expect(body).not.toContain('before it goes live')
+    expect(body).toContain('TOKEN123')
+  })
+
+  it('keeps "confirm before it goes live" wording for a flagged (un-released) estimate', () => {
+    const body = buildSolarTradieNotification({
+      tradieFirstName: 'Sam',
+      customerName: 'Mia',
+      systemKw: 6.6,
+      netIncGst: 8019,
+      reviewUrl: 'https://app/q/solar/TOKEN123',
+      dashboardUrl: 'https://app/dashboard',
+      released: false,
+    })
+    expect(body.toLowerCase()).toContain('confirm')
+    expect(body).toContain('before it goes live')
+  })
 })
 
 describe('buildSolarCustomerSms', () => {

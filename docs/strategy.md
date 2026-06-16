@@ -903,4 +903,36 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
   - First external commercial quote sent → backfill accuracy vs the painter's manual takeoff (the IGA pilot gives the baseline).
   - Demand for a customer-facing upload portal → that is a different auth/abuse surface; its own entry.
 
+- **v12** (2026-06-16): **solar joins Path B — a clean estimate auto-releases to the customer; the Sun & Shade heatmap race is fixed with page auto-refresh.**
+
+  **What's settled:**
+
+  Solar drops the forced "Confirm & release" gate for the common case. A **clean** estimate (no guardrail flags, priced/non-inspection route) now auto-confirms and texts the customer at creation time — the same Path-B auto-send model electrical/plumbing already use. The change is gated by `SOLAR_AUTO_RELEASE` (default on; set `false`/`0` to revert to forced-confirm without a deploy). Separately, the customer quote page now auto-refreshes until the deferred Sun & Shade heatmap (and the auto-confirm) land, so a viewer who opens the quote mid-generation no longer has to manually reload.
+
+  **Why this departs from the prior solar decision:**
+
+  Solar was previously review-required (forced human-in-loop confirm), unlike electrical/plumbing's Path-B default. The tradie complaint was that nothing — including the heatmap and prices — showed until they clicked "Confirm & release," which read as "the estimate isn't done." Root-cause investigation (workflow `wud6e08dx`, 6 unanimous agents) found the heatmap delay was **not** caused by the confirm gate at all: the flux heatmap is generated in the estimate route's `after()` job (`applySolarSunAssets`) that runs seconds after the response, and the page is a one-shot server read — so the first view races ahead of the job. Confirm only *correlated* with the heatmap appearing because it happened to be the first re-render after the job finished. So two independent fixes: (1) auto-refresh the page so deferred assets reveal themselves, and (2) — on the user's explicit call — extend Path B to solar so a clean quote reaches the customer without a manual click.
+
+  **The safety line that holds:**
+
+  A **flagged** estimate is NOT auto-sent. The publish gate (`canShowPrices`) hides prices on a flagged row regardless of `confirmed_at`, so auto-sending one would text the customer a price-less link. Flagged (and inspection-routed) estimates stay forced human-in-loop — the "Confirm & release" button remains the path for a flagged estimate the tradie re-drafts clean. This keeps the liability backstop exactly where the dollar/credibility risk lives while clearing the gate for the clean majority.
+
+  | Area | Prior solar | v12 solar |
+  |---|---|---|
+  | Clean estimate | Awaits tradie "Confirm & release" before any customer contact | Auto-confirms + texts the customer at creation (Path B), tradie notified after the fact |
+  | Flagged / inspection estimate | Forced confirm | **Unchanged** — forced confirm; not auto-sent |
+  | Heatmap on first view | Missing until manual reload / post-confirm re-render | Page polls (`HeatmapAutoRefresh`) and reveals it within seconds, no reload |
+  | Kill-switch | — | `SOLAR_AUTO_RELEASE` (default on) |
+  | Tradie notification | "review and confirm before it goes live" | "sent to your customer — review it here" for released; old wording retained for flagged |
+
+  **Implementation:** release side-effects extracted to `lib/solar/release.ts` (shared by the manual confirm route and the new `autoReleaseSolarEstimate` after()-job); eligibility decided synchronously off `estimate.guardrail_flags`, re-checked on the freshly-read row inside `after()` so a Pylon-appended flag is still caught. Customer-facing auto-refresh via a small `'use client'` `router.refresh()` poller, capped at ~60s.
+
+  **What stays unchanged:** money-path grounding discipline (the auto-release never re-prices — it stamps `confirmed_at` and fires the already-built customer SMS + CRM leads); the publish gate logic; redraft does NOT auto-resend (it preserves `confirmed_at`, avoiding customer spam); roofing + commercial painting remain review-required overrides; Maintain design system on the quote page.
+
+  **Trigger for the next iteration:**
+
+  - A clean estimate auto-sends with a number a tradie would have corrected → tighten the synchronous guardrails (or reconsider the clean-only line), and record the miss.
+  - Pylon-appended flags arrive *after* auto-send often enough to flip prices off post-send for a real tenant → move auto-release behind the awaited enrichment instead of a synchronous decision.
+  - The heatmap `after()` job routinely exceeds the auto-refresh cap → make heatmap generation faster or lazily on-demand, rather than widening the poll window.
+
 - *Future iterations:* drill into specific phases (eval rubric details, onboarding flow design, hipages partnership terms, voice tier economics, full multi-tenancy refactor).

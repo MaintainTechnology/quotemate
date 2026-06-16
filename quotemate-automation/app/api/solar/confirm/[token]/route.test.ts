@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { confirmEligibility } from './route'
+import { confirmEligibility } from '@/lib/solar/release'
 
 describe('confirmEligibility', () => {
   it('rejects an estimate that still has guardrail flags', () => {

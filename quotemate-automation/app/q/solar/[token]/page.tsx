@@ -2,10 +2,15 @@
 // against solar_estimates.public_token (unguessable); service-role client
 // because this is a public sharing surface.
 //
-// CONFIRM GATE: prices + deposit CTA are hidden until the tradie confirms
-// (solar_estimates.confirmed_at set). Before that the page shows the real
-// satellite roof photo + stats overlay framed "indicative — your installer
-// confirms". After confirmation it shows the full priced tier breakdown
+// CONFIRM GATE: prices + deposit CTA are hidden until the estimate is
+// confirmed (solar_estimates.confirmed_at set). A CLEAN estimate confirms
+// AUTOMATICALLY at creation (Path B, docs/strategy.md v12 2026-06-16); a
+// flagged estimate stays unconfirmed until the tradie reviews. The deferred
+// assets (heatmap, auto-confirm) land a few seconds after creation, so
+// HeatmapAutoRefresh re-renders the page until they arrive (no manual
+// reload). Before confirmation the page shows the real satellite roof photo
+// + stats overlay framed "indicative — your installer confirms". After
+// confirmation it shows the full priced tier breakdown
 // (kW, panels, yearly kWh, gross → STC subtraction → net, annual savings,
 // banded payback), the always-visible assumptions panel, the confidence
 // chip, the mandatory SAA/CEC compliance copy, and the per-tier deposit
@@ -47,6 +52,7 @@ import type { SolarChart } from '@/lib/solar/charts'
 import { buildSolarHardwareCards } from '@/lib/solar/hardware-cards'
 import { buildSolarSunView } from '@/lib/solar/sun-view'
 import { SunShadeOverlay } from './SunShadeOverlay'
+import { HeatmapAutoRefresh } from './HeatmapAutoRefresh'
 import { money, kwh, kw, paybackBand } from '@/lib/solar/quote-page-format'
 import {
   repairSolarFeltLayers,
@@ -141,6 +147,19 @@ export default async function SolarQuotePage({
   // datasheet cards; empty array when the tenant nominated no SKUs.
   const hardwareCards = buildSolarHardwareCards(estimate.context)
 
+  // Deferred-asset auto-refresh (2026-06-16): the Sun & shade heatmap and
+  // — for a clean estimate — the auto-release confirm land a few seconds
+  // after creation (estimate route's after() job). For a Google-coverage
+  // estimate, poll until they arrive so a viewer who opened the quote
+  // mid-generation sees the full result without a manual reload. The
+  // confirm-flip is only awaited for a CLEAN estimate (a flagged one never
+  // auto-confirms, so polling for it would never settle) — once its
+  // heatmap lands the poller stops.
+  const eligibleForAutoConfirm = (estimate.guardrail_flags ?? []).length === 0
+  const pendingAssets =
+    estimate.coverage_source === 'google' &&
+    (!sunView?.flux_image_available || (!view.confirmed && eligibleForAutoConfirm))
+
   // Premium proposal sections (spec 2026-06-12 §4.4), behind the
   // SOLAR_PREMIUM_QUOTE flag. The view model degrades field-by-field
   // (§4.6) — each null simply omits its section.
@@ -161,6 +180,9 @@ export default async function SolarQuotePage({
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-ink-deep text-text-pri">
+      {/* Reveal the heatmap + priced result without a manual reload once
+          the estimate route's after() job finishes (renders nothing). */}
+      {pendingAssets && <HeatmapAutoRefresh pending={pendingAssets} />}
       {/* Topographic background — signature Maintain motif. */}
       <svg
         className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.10]"
