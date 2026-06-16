@@ -2,10 +2,13 @@
 // Solar — the publish gate (spec §6 CTA, §7 guardrails, §5 freshness).
 //
 // Mirrors roofing's confirm-gate: prices are NEVER shown before the
-// tradie confirms (no auto-send — inherits the high-ticket rule). On top
-// of confirmation, prices are also withheld if any deterministic output
-// check flagged the estimate, or the solar config is stale. Each block
-// carries a customer-facing reason for the /q/solar/[token] page.
+// estimate is confirmed (confirmed_at set). As of docs/strategy.md v12
+// (2026-06-16) a CLEAN estimate confirms automatically at creation (Path
+// B), so this gate opens on its own for it; a FLAGGED estimate stays
+// unconfirmed until the tradie reviews. On top of confirmation, prices are
+// also withheld if any deterministic output check flagged the estimate, or
+// the solar config is stale. Each block carries a customer-facing reason
+// for the /q/solar/[token] page.
 //
 // PURE — no I/O. Fully unit-testable.
 // ════════════════════════════════════════════════════════════════════

@@ -103,6 +103,14 @@ vi.mock('@/lib/sms/dispatch', () => ({
   dispatchQuoteMessage: vi.fn().mockResolvedValue(undefined),
 }))
 
+// Mock the auto-release module — enabled, and the after() job is a no-op
+// (no real DB/Twilio). The route still computes eligibility off the
+// estimate's guardrail_flags synchronously.
+vi.mock('@/lib/solar/release', () => ({
+  solarAutoReleaseEnabled: vi.fn().mockReturnValue(true),
+  autoReleaseSolarEstimate: vi.fn().mockResolvedValue({ released: true }),
+}))
+
 // Mock next/server `after` to run the callback synchronously in tests.
 vi.mock('next/server', () => ({
   after: (fn: () => Promise<void>) => { fn().catch(() => {}) },
@@ -290,5 +298,21 @@ describe('POST /api/solar/[tenantSlug]/estimate — unit (stubbed supabase)', ()
     expect(args.systemKw).toBe(6.0) // last tier, NOT better's 4.8
     expect(args.netIncGst).toBe(9990) // last tier, NOT better's 8422
     expect(args.shareToken).toBe('tok_fake_estimate')
+  })
+
+  it('auto-releases a clean estimate and tells the tradie it was sent', async () => {
+    // fakeEstimate carries no guardrail_flags and a non-inspection route →
+    // eligible for Path B auto-release. The notify must carry released:true.
+    maybySingleImpl = vi.fn().mockResolvedValue({ data: fakeTenant, error: null })
+    const { autoReleaseSolarEstimate } = await import('@/lib/solar/release')
+    const { notifySolarEstimate } = await import('@/lib/solar/notify')
+    const POST = await getPostHandler()
+    const res = await POST(buildRequest(VALID_BODY), buildCtx())
+    expect(res.status).toBe(200)
+    expect(autoReleaseSolarEstimate).toHaveBeenCalledTimes(1)
+    const relArgs = vi.mocked(autoReleaseSolarEstimate).mock.calls[0][1]
+    expect(relArgs.token).toBe('tok_fake_estimate')
+    const notifyArgs = vi.mocked(notifySolarEstimate).mock.calls[0][0]
+    expect(notifyArgs.released).toBe(true)
   })
 })

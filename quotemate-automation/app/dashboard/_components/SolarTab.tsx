@@ -10,14 +10,17 @@
 //    Felt sub-tab) with a copy button.
 //  • The list of drafted estimates as cards: status badge, system kW, net
 //    price, customer + address, a "View" link to the public /q/solar/<token>
-//    page, and a "Confirm & release" button for clean, awaiting-confirmation
+//    page, and a "Confirm & release" button for awaiting-confirmation
 //    estimates (POSTs Bearer-auth to /api/solar/confirm/<token>).
 //  • Flagged estimates show a clear "needs review" note and NO confirm
 //    button — the tradie must adjust the numbers + re-draft first.
 //  • Felt cards add the map provisioning chip (ready / building /
 //    unavailable) and an "Open in Felt" editor link.
 //
-// No solar estimate auto-sends; confirm is the forced human-in-loop gate.
+// A CLEAN estimate auto-releases to the customer at creation (Path B,
+// docs/strategy.md v12 2026-06-16) — it lands here already "Released". The
+// "Confirm & release" button is the manual path for a FLAGGED estimate the
+// tradie has re-drafted clean (auto-release skips flagged rows).
 // Maintain design system: dark navy, vibrant orange accent, all-caps mono.
 
 import { useCallback, useEffect, useState } from 'react'
@@ -312,8 +315,8 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
         <p className="max-w-2xl text-base leading-relaxed text-text-sec">
           Share your solar estimate link with a customer. They enter their
           address; the AI sizes the roof, applies the STC rebate, and drafts
-          tiered prices. Nothing reaches the customer until you confirm and
-          release — flagged estimates need a re-draft first.
+          tiered prices. Clean estimates send to the customer automatically;
+          flagged estimates wait for your review and re-draft first.
         </p>
       </div>
 

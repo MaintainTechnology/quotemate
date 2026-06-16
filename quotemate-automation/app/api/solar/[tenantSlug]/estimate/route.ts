@@ -9,11 +9,16 @@
 //   • The deterministic lib/solar engine (runSolarEstimate) owns
 //     geocode → coverage gate → roof normalise (or manual fallback) →
 //     sizing/production/pricing/economics → token. This route persists
-//     intake (trade='solar') + solar_estimates + quote, then notifies
-//     the tradie (forced review, no auto-send — spec §6).
+//     intake (trade='solar') + solar_estimates + quote, then — for a
+//     CLEAN estimate — auto-releases it to the customer (Path B,
+//     docs/strategy.md v12 2026-06-16) and notifies the tradie after the
+//     fact. A FLAGGED estimate is NOT auto-sent: it lands awaiting the
+//     tradie's confirm, since the publish gate hides prices on a flagged
+//     row regardless of confirmed_at.
 //
-// Next 16: params is a Promise (awaited); force-dynamic; the notify
-// SMS runs in after() so the customer response is not blocked.
+// Next 16: params is a Promise (awaited); force-dynamic; the notify SMS,
+// enrichment, and auto-release all run in after() so the customer
+// response is not blocked.
 
 import { createClient } from '@supabase/supabase-js'
 import { after } from 'next/server'
@@ -29,6 +34,7 @@ import { geocodeAddress } from '@/lib/solar/geocode'
 import { validateSolarAddress } from '@/lib/solar/address-validation'
 import { fetchSolarDataLayers } from '@/lib/solar/data-layers'
 import { applySolarSunAssets } from '@/lib/solar/sun-assets'
+import { solarAutoReleaseEnabled, autoReleaseSolarEstimate } from '@/lib/solar/release'
 import { applySolarFeltMap } from '@/lib/solar/felt-provision'
 import { applySolarAiBrief } from '@/lib/solar/ai-brief'
 import { feltTabEnabled } from '@/lib/felt/client'
@@ -180,7 +186,18 @@ export async function POST(
     )
   }
 
-  // ── Notify the tradie (forced review) after the response. ────────
+  // ── Decide auto-release (Path B). A CLEAN, priced estimate is sent to
+  // the customer automatically — no forced confirm click. A flagged or
+  // inspection-routed estimate stays human-in-loop. Decided synchronously
+  // off the engine's guardrail_flags (autoReleaseSolarEstimate re-checks
+  // the freshly-read row inside after(), so a Pylon-appended flag is still
+  // caught when the cross-check runs first). Gated by SOLAR_AUTO_RELEASE.
+  const eligibleForAutoRelease =
+    solarAutoReleaseEnabled(process.env) &&
+    (estimate.guardrail_flags ?? []).length === 0 &&
+    estimate.routing?.decision !== 'inspection_required'
+
+  // ── Notify the tradie after the response. ────────────────────────
   const appUrl = process.env.APP_URL ?? 'https://quote-mate-rho.vercel.app'
   // The SMS must quote the SAME numbers the share page headlines. The
   // page hero shows the LARGEST tier (resolveSolarQuoteView's
@@ -231,6 +248,14 @@ export async function POST(
     after(() => applySolarAiBrief(supabase, { publicToken: estimate.token }))
   }
 
+  // ── Auto-release the clean estimate to the customer (Path B). Runs
+  // after the enrichment above so a Pylon-appended guardrail flag is seen;
+  // re-checks eligibility on the freshly-read row, stamps confirmed_at and
+  // fires the customer SMS + CRM leads. No-op for flagged/inspection rows.
+  if (eligibleForAutoRelease) {
+    after(() => autoReleaseSolarEstimate(supabase, { token: estimate.token }))
+  }
+
   after(async () => {
     await notifySolarEstimate({
       tenant: {
@@ -243,6 +268,9 @@ export async function POST(
       netIncGst: headline?.net_inc_gst ?? 0,
       shareToken: estimate.token,
       appUrl,
+      // Clean estimate already auto-sent → "sent to your customer" wording;
+      // flagged estimate → "review and confirm before it goes live".
+      released: eligibleForAutoRelease,
       dispatch: (opts) => dispatchQuoteMessage(opts),
     })
   })
