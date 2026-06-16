@@ -270,6 +270,26 @@ export function buildSolarPremiumQuote(args: {
       value: `${roof.panel_lifetime_years} yrs`,
     })
   }
+  // Power supply + any customer/tradie-requested size (design 2026-06-16).
+  // Phase explains the export ceiling; a clamped request is called out so the
+  // customer understands why they didn't get the full kW they asked for.
+  const supplyPhase = estimate.context.phase ?? 'single'
+  assumed_values.push({
+    label: 'Power supply',
+    value: supplyPhase === 'three' ? '3-phase' : 'Single-phase',
+  })
+  const reqKw = estimate.context.requested_system_kw
+  if (typeof reqKw === 'number' && reqKw > 0) {
+    const reqClamped = estimate.sizing.requested_kw_clamped === true
+    const headlineKw = headlineTier?.system_kw_dc
+    assumed_values.push({
+      label: 'Requested size',
+      value:
+        reqClamped && typeof headlineKw === 'number'
+          ? `${reqKw} kW — capped at ${headlineKw} kW by roof / connection`
+          : `${reqKw} kW`,
+    })
+  }
   assumed_values.push({ label: 'Config version', value: estimate.config_version })
 
   return {

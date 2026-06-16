@@ -14,6 +14,38 @@ describe('solarPremiumQuoteEnabled', () => {
   })
 })
 
+describe('buildSolarPremiumQuote — phase + requested size rows', () => {
+  it('shows the power supply and a clamped requested size', () => {
+    const est = makeEstimate()
+    est.context = { ...est.context, phase: 'three', requested_system_kw: 14 }
+    est.sizing = { ...est.sizing, requested_kw_clamped: true }
+    const premium = buildSolarPremiumQuote({
+      estimate: est,
+      config: DEFAULT_SOLAR_CONFIG,
+      theme: 'dark',
+    })
+    const labels = premium.assumed_values.map((r) => r.label)
+    expect(labels).toContain('Power supply')
+    expect(
+      premium.assumed_values.find((r) => r.label === 'Power supply')?.value,
+    ).toBe('3-phase')
+    const requested = premium.assumed_values.find((r) => r.label === 'Requested size')
+    expect(requested?.value).toContain('capped')
+  })
+
+  it("defaults to 'Single-phase' and omits the size row when unset", () => {
+    const premium = buildSolarPremiumQuote({
+      estimate: makeEstimate(),
+      config: DEFAULT_SOLAR_CONFIG,
+      theme: 'dark',
+    })
+    expect(
+      premium.assumed_values.find((r) => r.label === 'Power supply')?.value,
+    ).toBe('Single-phase')
+    expect(premium.assumed_values.some((r) => r.label === 'Requested size')).toBe(false)
+  })
+})
+
 describe('buildSolarPremiumQuote — Pylon supplement rows', () => {
   it('renders the STC verification badge + zone facts when present', () => {
     const est = makeEstimate()
