@@ -20,6 +20,13 @@ export function buildSolarFormPayload(state: {
   quarterlyBill?: string
   /** Quote layout variant (Felt tab spec 2026-06-13). Omitted = instant. */
   variant?: 'instant' | 'felt'
+  /** Building chosen in the multi-roof picker (2026-06-16). Present only
+   *  when the address resolved to ≥2 structures and the customer tapped
+   *  one — carries the engine's target centroid. Omitted = single-roof. */
+  targetBuilding?: {
+    building_id: string
+    centroid: { lat: number; lng: number }
+  } | null
 }): SolarEstimateRequestBody {
   const payload: SolarEstimateRequestBody = {
     address: {
@@ -62,6 +69,20 @@ export function buildSolarFormPayload(state: {
   // provisioning differ. 'instant' is the schema default, so omit it.
   if (state.variant === 'felt') {
     payload.variant = 'felt'
+  }
+  // Chosen building (multi-roof picker) — only send a valid, finite
+  // centroid so a partial selection never reaches the engine.
+  const tb = state.targetBuilding
+  if (
+    tb &&
+    tb.building_id &&
+    Number.isFinite(tb.centroid?.lat) &&
+    Number.isFinite(tb.centroid?.lng)
+  ) {
+    payload.target_building = {
+      building_id: tb.building_id,
+      centroid: { lat: tb.centroid.lat, lng: tb.centroid.lng },
+    }
   }
   return payload
 }

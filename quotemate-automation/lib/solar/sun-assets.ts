@@ -43,6 +43,13 @@ export type SunAssetsOpts = {
   baseUrl?: string
   /** Skip the 12 hourly-shade downloads (the heaviest part). */
   skipHourlyShade?: boolean
+  /**
+   * Multi-roof building picker (approach A): when set, the cached heatmap
+   * PNG is namespaced under this building id (`solar/{id}/{buildingId}/…`)
+   * so each detected building keeps its own heatmap rather than clobbering
+   * a sibling's. Absent ⇒ the flat `solar/{id}/…` path (single-building).
+   */
+  buildingId?: string
 }
 
 /** PURE — the generation gate. On by default when a Solar key exists;
@@ -217,7 +224,8 @@ export async function applySolarSunAssets(
     // ── Cache the heatmap PNG. ────────────────────────────────────────
     let fluxImagePath: string | null = null
     if (flux) {
-      const path = `solar/${row.id}/flux-annual-${Date.now()}.png`
+      const ns = opts.buildingId ? `${encodeURIComponent(opts.buildingId)}/` : ''
+      const path = `solar/${row.id}/${ns}flux-annual-${Date.now()}.png`
       const { error: upErr } = await supabase.storage
         .from(BUCKET)
         .upload(path, Buffer.from(flux.png), { contentType: 'image/png', upsert: false })

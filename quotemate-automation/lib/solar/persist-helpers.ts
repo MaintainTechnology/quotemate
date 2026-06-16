@@ -7,7 +7,7 @@
 // NO I/O. The route owns the actual inserts and stamps quote.intake_id
 // after the intake insert returns its id (so we deliberately omit it).
 
-import type { SolarEstimate } from './types'
+import type { DetectedBuilding, SolarEstimate } from './types'
 
 export type SolarCustomer = {
   name?: string
@@ -28,6 +28,15 @@ export function buildSolarRowPayloads(args: {
   customer?: SolarCustomer
   /** Quote layout variant (Felt tab spec 2026-06-13). Default 'instant'. */
   quoteVariant?: 'instant' | 'felt'
+  /**
+   * Multi-roof building picker (approach A): the structures detected on the
+   * property and which one this initial estimate is for. Default [] / null —
+   * a single-building estimate persists an empty list and the picker is
+   * hidden. Detection is best-effort (route-level) so the estimate never
+   * blocks on it.
+   */
+  buildings?: DetectedBuilding[]
+  selectedBuildingId?: string | null
 }) {
   const { estimate, tenantId, address, customer } = args
   const inspection = estimate.routing.decision === 'inspection_required'
@@ -92,6 +101,11 @@ export function buildSolarRowPayloads(args: {
     routing: estimate.routing.decision,
     guardrail_flags: estimate.guardrail_flags,
     quote_variant: args.quoteVariant ?? 'instant',
+    // Multi-roof picker (approach A): the detected structures on the
+    // property + which one this `estimate` reflects. [] / null on the
+    // single-building path (picker hidden).
+    buildings: args.buildings ?? [],
+    selected_building_id: args.selectedBuildingId ?? null,
     // Full estimate persisted as jsonb so the /q/solar/[token] page
     // re-renders without recomputation.
     estimate: estimate,

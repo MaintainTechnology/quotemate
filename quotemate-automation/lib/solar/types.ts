@@ -636,6 +636,58 @@ export type SolarConfigValidation =
     }
 
 // ╔══════════════════════════════════════════════════════════════════╗
+// ║ 6b. PROPERTY BUILDINGS  (building picker — approach A)            ║
+// ║     Multi-roof: one solar_estimates row is the PROPERTY record;  ║
+// ║     it lists every structure detected on the property and points ║
+// ║     `selected_building_id` at the one the headline estimate is    ║
+// ║     for. See 2026-06-16-solar-multi-roof-building-picker-design.  ║
+// ╚══════════════════════════════════════════════════════════════════╝
+
+/**
+ * Lazy-compute status of one detected building's full solar analysis.
+ *   pending     — detected/outlined, solar not computed yet
+ *   ready       — full SolarEstimate computed + cached
+ *   no_coverage — Google Solar has no usable imagery for this building
+ *   failed      — compute attempted and errored (transient; retryable)
+ */
+export type SolarBuildingSolarStatus =
+  | 'pending'
+  | 'ready'
+  | 'no_coverage'
+  | 'failed'
+
+/**
+ * One structure detected on the property (Geoscape `measureAll`) — the unit
+ * the building picker switches between. LIGHTWEIGHT metadata only; the full
+ * per-building SolarEstimate is computed lazily on selection and cached in
+ * `solar_building_cache`. Persisted as the `solar_estimates.buildings` jsonb
+ * array. Built by lib/solar/buildings.ts.
+ */
+export type DetectedBuilding = {
+  /** Stable id: Geoscape buildingId, or a synthetic `b<index>` when absent
+   *  (sub-polygons split from a MultiPolygon are suffixed `#1`, `#2`, …). */
+  building_id: string
+  /** Which structure on the parcel this is. */
+  role: 'primary' | 'secondary'
+  /** Friendly label for the picker, e.g. "Main house" / "Shed" /
+   *  "Secondary building 2". Derived from role + footprint area. */
+  label: string
+  /** Footprint centroid (EPSG:4326) — the point fed to Google
+   *  findClosest / dataLayers when this building is selected. */
+  centroid: LatLng
+  /** Building outline (EPSG:4326) for the picker overlay. Null when the
+   *  provider returned no polygon for this structure. */
+  footprint: GeoJSONPolygon | null
+  /** Planar footprint area in m² (ranking + label heuristics). */
+  area_m2: number | null
+  /** Geoscape roof shape string ('hip' | 'gable' | 'complex' | …). */
+  roof_shape: string | null
+  storeys: number | null
+  /** Lazy-compute status of this building's full solar analysis. */
+  solar_status: SolarBuildingSolarStatus
+}
+
+// ╔══════════════════════════════════════════════════════════════════╗
 // ║ 7. TOP-LEVEL ESTIMATE  (intake.ts orchestrator → solar_estimates) ║
 // ╚══════════════════════════════════════════════════════════════════╝
 

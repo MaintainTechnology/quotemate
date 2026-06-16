@@ -11,7 +11,8 @@
 // (falling back to the first priced tier), mirroring how the creation
 // route and persist-helpers pick the selected tier.
 
-import type { SolarPriceTier, SolarSystemTier } from './types'
+import type { DetectedBuilding, LatLng, SolarPriceTier, SolarSystemTier } from './types'
+import { resolveSolarOverlayCenter } from './static-map-center'
 
 /**
  * Lifecycle status of a solar estimate, in the tradie's mental model:
@@ -136,6 +137,17 @@ export type SolarEstimateRawRow = {
     deeming_period?: number | null
     verified?: boolean
   } | null
+  /** Detected structures on the property (multi-roof building picker,
+   *  2026-06-16). Null/[] on the single-building path. */
+  buildings?: DetectedBuilding[] | null
+  /** Which building the headline estimate currently reflects. */
+  selected_building_id?: string | null
+  /** Resolved roof centre, projected from estimate.roof + context.location,
+   *  so the dashboard picker's map framing matches the static-map image.
+   *  Projected via the `estimate->roof` / `estimate->context->location`
+   *  JSON-path aliases on the route's select. */
+  roof?: { panels?: Array<{ center: { lat: number; lng: number } }> | null; polygon_geojson: { type?: string; coordinates?: number[][][] } | null } | null
+  location?: { lat: number; lng: number } | null
 }
 
 /** The lean, client-safe view model the SolarTab renders per card. */
@@ -186,6 +198,14 @@ export type SolarEstimateViewModel = {
   feltMapUrl: string | null
   /** Static map thumbnail for the card preview. */
   feltThumbnailUrl: string | null
+  /** Structures detected on the property (multi-roof picker, 2026-06-16).
+   *  [] on the single-building path — the dashboard switcher then hides. */
+  buildings: DetectedBuilding[]
+  /** Which building the estimate currently reflects. */
+  selectedBuildingId: string | null
+  /** Roof centre the picker projects building outlines against — matches
+   *  the /api/solar/q/[token]/static-map framing. Null when unresolvable. */
+  buildingMapCenter: LatLng | null
 }
 
 /**
@@ -257,6 +277,11 @@ export function mapSolarEstimateRow(args: {
     feltStatus: row.felt?.status ?? null,
     feltMapUrl: row.felt?.map_url ?? null,
     feltThumbnailUrl: row.felt?.thumbnail_url ?? null,
+    buildings: Array.isArray(row.buildings) ? row.buildings : [],
+    selectedBuildingId: row.selected_building_id ?? null,
+    buildingMapCenter: row.roof
+      ? resolveSolarOverlayCenter({ roof: row.roof, location: row.location ?? null })
+      : null,
   }
 }
 

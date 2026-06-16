@@ -4,7 +4,7 @@
 //
 // CONFIRM GATE: prices + deposit CTA are hidden until the estimate is
 // confirmed (solar_estimates.confirmed_at set). A CLEAN estimate confirms
-// AUTOMATICALLY at creation (Path B, docs/strategy.md v12 2026-06-16); a
+// AUTOMATICALLY at creation (Path B, docs/strategy.md v10 2026-06-16); a
 // flagged estimate stays unconfirmed until the tradie reviews. The deferred
 // assets (heatmap, auto-confirm) land a few seconds after creation, so
 // HeatmapAutoRefresh re-renders the page until they arrive (no manual
@@ -51,7 +51,11 @@ import { loadSolarConfig } from '@/lib/solar/config'
 import type { SolarChart } from '@/lib/solar/charts'
 import { buildSolarHardwareCards } from '@/lib/solar/hardware-cards'
 import { buildSolarSunView } from '@/lib/solar/sun-view'
+import { resolveSolarOverlayCenter } from '@/lib/solar/static-map-center'
+import { OVERLAY_MAP_ZOOM, OVERLAY_MAP_WIDTH, OVERLAY_MAP_HEIGHT } from '@/lib/solar/layout-overlay'
+import type { DetectedBuilding } from '@/lib/solar/types'
 import { SunShadeOverlay } from './SunShadeOverlay'
+import { BuildingPickerSection } from './BuildingPickerSection'
 import { HeatmapAutoRefresh } from './HeatmapAutoRefresh'
 import { money, kwh, kw, paybackBand } from '@/lib/solar/quote-page-format'
 import {
@@ -75,6 +79,8 @@ type Row = {
   quote_variant: string | null
   felt: SolarFeltRecord | null
   ai_brief: SolarAiBriefRecord | null
+  buildings: DetectedBuilding[] | null
+  selected_building_id: string | null
 }
 
 const TIER_NAME: Record<'good' | 'better' | 'best', string> = {
@@ -98,7 +104,7 @@ export default async function SolarQuotePage({
 
   const { data, error } = await supabase
     .from('solar_estimates')
-    .select('address, state, estimate, confirmed_at, quote_variant, felt, ai_brief')
+    .select('address, state, estimate, confirmed_at, quote_variant, felt, ai_brief, buildings, selected_building_id')
     .eq('public_token', token)
     .maybeSingle()
 
@@ -146,6 +152,22 @@ export default async function SolarQuotePage({
   // Pylon hardware supplement (build 2026-06-13) — customer-facing
   // datasheet cards; empty array when the tenant nominated no SKUs.
   const hardwareCards = buildSolarHardwareCards(estimate.context)
+
+  // ── Multi-roof building picker (2026-06-16). When the property carries
+  // ≥2 detected buildings, let the viewer pick which roof the estimate is
+  // for. The picker projects each building.footprint onto the SAME static
+  // map the hero <img> shows — centred via resolveSolarOverlayCenter at
+  // zoom 20 / 640×480 — so the outlines are pixel-aligned. Read-only once
+  // the estimate is released/confirmed (no switching after the lock).
+  const buildings = row.buildings ?? []
+  const pickerCenter =
+    buildings.length >= 2
+      ? resolveSolarOverlayCenter({
+          roof: estimate.roof,
+          location: estimate.context.location ?? null,
+        })
+      : null
+  const showBuildingPicker = buildings.length >= 2 && pickerCenter != null
 
   // Deferred-asset auto-refresh (2026-06-16): the Sun & shade heatmap and
   // — for a clean estimate — the auto-release confirm land a few seconds
@@ -430,6 +452,33 @@ export default async function SolarQuotePage({
                 {premium.strings.caption}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ── Multi-roof building picker (2026-06-16). Lets the viewer
+            switch which structure the estimate is for. Read-only once the
+            estimate is released/confirmed. Hidden below 2 buildings. */}
+        {showBuildingPicker && pickerCenter && (
+          <div className={`mt-10 ${reveal(275)}`}>
+            <SectionHeading label="Which building?" />
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-text-sec">
+              We found more than one building on this property. The estimate
+              below is for the highlighted roof — tap another building to
+              re-estimate that one instead.
+            </p>
+            <BuildingPickerSection
+              token={token}
+              buildings={buildings}
+              selectedBuildingId={row.selected_building_id}
+              mapParams={{
+                center: pickerCenter,
+                zoom: OVERLAY_MAP_ZOOM,
+                width: OVERLAY_MAP_WIDTH,
+                height: OVERLAY_MAP_HEIGHT,
+              }}
+              imageUrl={`/api/solar/q/${token}/static-map`}
+              readOnly={view.confirmed}
+            />
           </div>
         )}
 

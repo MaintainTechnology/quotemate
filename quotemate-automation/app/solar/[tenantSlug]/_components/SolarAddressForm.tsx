@@ -13,6 +13,9 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowRight, Loader2, MapPin } from 'lucide-react'
 import { buildSolarFormPayload } from '@/lib/solar/form-payload'
 import type { AddressSuggestion, PlaceAddressDetails } from '@/lib/solar/places'
+import type { DetectedBuilding } from '@/lib/solar/types'
+import { OVERLAY_MAP_ZOOM, OVERLAY_MAP_WIDTH, OVERLAY_MAP_HEIGHT } from '@/lib/solar/layout-overlay'
+import { BuildingPicker } from '@/app/q/solar/[token]/BuildingPicker'
 
 const STATES = ['NSW', 'VIC', 'QLD', 'SA', 'WA', 'TAS', 'ACT', 'NT'] as const
 const ORIENTATIONS = [
@@ -70,6 +73,16 @@ export function SolarAddressForm({
   const [busy, setBusy] = useState(false)
   const [busyStep, setBusyStep] = useState(0)
   const [error, setError] = useState<string | null>(null)
+
+  // ── Multi-roof building picker (2026-06-16). After the customer fills an
+  // address, POST /detect; with ≥2 structures we render a local-mode picker
+  // so they pick which roof. The chosen building rides the estimate POST.
+  const [buildings, setBuildings] = useState<DetectedBuilding[]>([])
+  const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null)
+  const [detectBusy, setDetectBusy] = useState(false)
+  // Centre the detect preview map so all buildings sit on the same image —
+  // the mean of every building centroid (matches the picker projection).
+  const detectCenter = buildingsCentroid(buildings)
 
   // While submitting, walk the progress copy through the engine's real
   // stages so the wait reads as work, not a stall. The step counter is
@@ -186,17 +199,58 @@ export function SolarAddressForm({
     }
   }
 
+  // ── Detect buildings on the entered address (best-effort). Triggered on
+  // blur of the address field and by the "Find my roof" button. ≥2
+  // structures → render the local picker; otherwise stay on today's flow.
+  async function detectBuildings() {
+    const addr = address.trim()
+    if (addr.length < 3 || postcode.trim().length < 3) return
+    setDetectBusy(true)
+    try {
+      const res = await fetch(`/api/solar/${tenantSlug}/detect`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          address: { address: addr, postcode: postcode.trim(), state: stateCode },
+        }),
+      })
+      const body = (await res.json().catch(() => ({}))) as {
+        ok?: boolean
+        buildings?: DetectedBuilding[]
+      }
+      const list = body?.ok ? (body.buildings ?? []) : []
+      setBuildings(list)
+      // Default the selection to the primary structure (or the first).
+      const primary = list.find((b) => b.role === 'primary') ?? list[0] ?? null
+      setSelectedBuildingId(primary ? primary.building_id : null)
+    } catch {
+      // Detection is pure enrichment — a miss just hides the picker.
+      setBuildings([])
+      setSelectedBuildingId(null)
+    } finally {
+      setDetectBusy(false)
+    }
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     setBusy(true)
     setBusyStep(0)
     setError(null)
     try {
+      // Carry the picked building (if any) so the engine targets that roof.
+      const chosen =
+        buildings.length >= 2 && selectedBuildingId
+          ? buildings.find((b) => b.building_id === selectedBuildingId) ?? null
+          : null
       const payload = buildSolarFormPayload({
         address, postcode, state: stateCode, manualOpen,
         orientation, roofSize, storeys, panelType,
         customerName, customerMobile, quarterlyBill,
         variant,
+        targetBuilding: chosen
+          ? { building_id: chosen.building_id, centroid: chosen.centroid }
+          : null,
       })
       const res = await fetch(`/api/solar/${tenantSlug}/estimate`, {
         method: 'POST',
@@ -240,6 +294,7 @@ export function SolarAddressForm({
             }}
             onKeyDown={onAddressKeyDown}
             onFocus={() => suggestions.length > 0 && setDropdownOpen(true)}
+            onBlur={() => void detectBuildings()}
             required
             minLength={3}
             placeholder="Start typing your address…"
@@ -331,6 +386,40 @@ export function SolarAddressForm({
             {STATES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
+      </div>
+
+      {/* ── Multi-roof picker (2026-06-16). "Find my roof" detects the
+          structures on the property; ≥2 → pick which roof to estimate.
+          With <2 buildings nothing renders and the flow is unchanged. */}
+      <div className="flex flex-col gap-3">
+        <button
+          type="button"
+          data-testid="solar-detect"
+          onClick={() => void detectBuildings()}
+          disabled={detectBusy || address.trim().length < 3 || postcode.trim().length < 3}
+          className="self-start inline-flex items-center gap-2 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-accent transition-colors hover:text-accent-soft disabled:opacity-50"
+        >
+          {detectBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <MapPin className="h-3.5 w-3.5" aria-hidden />}
+          {detectBusy ? 'Finding buildings…' : 'Find my roof'}
+        </button>
+
+        {buildings.length >= 2 && detectCenter && (
+          <div data-testid="solar-building-picker">
+            <BuildingPicker
+              buildings={buildings}
+              selectedBuildingId={selectedBuildingId}
+              mapParams={{
+                center: detectCenter,
+                zoom: OVERLAY_MAP_ZOOM,
+                width: OVERLAY_MAP_WIDTH,
+                height: OVERLAY_MAP_HEIGHT,
+              }}
+              imageUrl={`/api/solar/${tenantSlug}/static-map?lat=${detectCenter.lat}&lng=${detectCenter.lng}`}
+              mode="local"
+              onSelect={(id) => setSelectedBuildingId(id)}
+            />
+          </div>
+        )}
       </div>
 
       {/* ── Optional contact — opt in to get the quote texted ──── */}
@@ -524,4 +613,24 @@ export function SolarAddressForm({
       </button>
     </form>
   )
+}
+
+/** Mean of every detected building's centroid — the centre the detect
+ *  preview map is rendered at (and the picker projects against), so all
+ *  structures sit on one image. Null when nothing has a finite centroid. */
+function buildingsCentroid(
+  buildings: DetectedBuilding[],
+): { lat: number; lng: number } | null {
+  let latSum = 0
+  let lngSum = 0
+  let n = 0
+  for (const b of buildings) {
+    const { lat, lng } = b.centroid
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      latSum += lat
+      lngSum += lng
+      n += 1
+    }
+  }
+  return n > 0 ? { lat: latSum / n, lng: lngSum / n } : null
 }

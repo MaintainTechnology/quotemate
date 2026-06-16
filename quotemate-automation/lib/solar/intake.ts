@@ -74,6 +74,16 @@ export function finaliseSolarEstimate(estimate: SolarEstimate): SolarEstimate {
 export type SolarEnrichmentOrchestratorOpts = {
   /** Resolve the address to a coordinate. */
   geocode: (input: SolarAddressInput) => Promise<LatLng>
+  /**
+   * Multi-roof building picker (approach A): when set, this coordinate
+   * (a detected building's footprint centroid) is used as the point fed to
+   * the coverage gate / Solar API / dataLayers INSTEAD of geocoding the
+   * address. Lets the engine re-estimate a specific building on the
+   * property without changing the stored address. Address validation and
+   * geocode are skipped when present. Absent ⇒ today's behaviour (estimate
+   * the building Google's findClosest snaps to at the geocoded address).
+   */
+  targetLocation?: LatLng | null
   /** Forwarded to the Solar API client (apiKey, fetchImpl, …). */
   solarOpts?: SolarEnrichmentOpts
   /** Install year for the STC deeming lookup. Defaults to current year. */
@@ -141,8 +151,10 @@ export async function runSolarEstimate(args: {
   //    Address Validation, when it returns a premise-level coordinate,
   //    is a more precise seed than a free-text geocode; otherwise we fall
   //    back to geocode. A missing/disabled API never blocks the path.
+  // Multi-roof: an explicit building centroid short-circuits address
+  // resolution entirely (we already know exactly which roof to estimate).
   let addressValidation: SolarAddressValidationInsight | null = null
-  if (opts.addressValidation) {
+  if (!opts.targetLocation && opts.addressValidation) {
     try {
       addressValidation = await opts.addressValidation(args.input)
     } catch {
@@ -151,9 +163,11 @@ export async function runSolarEstimate(args: {
   }
   context.address_validation = addressValidation
 
-  const location = addressValidationLocationUsable(addressValidation)
-    ? addressValidation.location
-    : await opts.geocode(args.input)
+  const location: LatLng = opts.targetLocation
+    ? opts.targetLocation
+    : addressValidationLocationUsable(addressValidation)
+      ? addressValidation.location
+      : await opts.geocode(args.input)
   context.location = location
 
   const solarOpts = resolveSolarOpts(opts.solarOpts)

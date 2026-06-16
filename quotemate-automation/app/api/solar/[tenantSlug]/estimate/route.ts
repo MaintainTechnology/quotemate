@@ -11,7 +11,7 @@
 //     sizing/production/pricing/economics → token. This route persists
 //     intake (trade='solar') + solar_estimates + quote, then — for a
 //     CLEAN estimate — auto-releases it to the customer (Path B,
-//     docs/strategy.md v12 2026-06-16) and notifies the tradie after the
+//     docs/strategy.md v10 2026-06-16) and notifies the tradie after the
 //     fact. A FLAGGED estimate is NOT auto-sent: it lands awaiting the
 //     tradie's confirm, since the publish gate hides prices on a flagged
 //     row regardless of confirmed_at.
@@ -39,6 +39,8 @@ import { applySolarFeltMap } from '@/lib/solar/felt-provision'
 import { applySolarAiBrief } from '@/lib/solar/ai-brief'
 import { feltTabEnabled } from '@/lib/felt/client'
 import { resolveNetworkFromPostcode } from '@/lib/solar/network-lookup'
+import { detectPropertyBuildings } from '@/lib/solar/buildings'
+import { updateBuildingStatus } from '@/lib/solar/building-cache'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -78,7 +80,7 @@ export async function POST(
       { status: 400 },
     )
   }
-  const { address, manual, panel_type, customer, energy } = parsed.data
+  const { address, manual, panel_type, customer, energy, target_building } = parsed.data
   // Felt tab spec 2026-06-13: a 'felt' submission runs the IDENTICAL
   // engine; the variant only selects the quote layout + map provisioning.
   // When the tab is disabled server-side, fall back to the instant
@@ -130,6 +132,11 @@ export async function POST(
               process.env.GOOGLE_SOLAR_API_KEY ?? process.env.GOOGLE_MAPS_API_KEY,
           }),
         network: resolvedNetwork,
+        // Multi-roof (approach A): when the customer picked a specific
+        // building on the address-form map, estimate THAT building's
+        // centroid directly (skips geocode/address-validation) instead of
+        // the building Google's findClosest snaps to. Absent ⇒ unchanged.
+        targetLocation: target_building?.centroid ?? null,
       },
     })
   } catch (e) {
@@ -231,6 +238,77 @@ export async function POST(
     after(() => applySolarSunAssets(supabase, { publicToken: estimate.token, location }))
   }
 
+  // ── Multi-roof detection → release decision → tradie/customer notify, in
+  // ONE ordered after() block so the detected building count deterministically
+  // gates auto-release (separate after()s could race). Best-effort: on a
+  // detection failure `held` stays false and we fall back to today's
+  // behaviour (release the clean estimate immediately).
+  //
+  // A property with ≥2 buildings is HELD unreleased so the customer/tradie can
+  // pick the right roof before the tradie confirms — auto-releasing would
+  // stamp confirmed_at and LOCK the building choice (the picker is read-only
+  // once released). The primary building is pre-selected + marked 'ready' (the
+  // row's `estimate` already reflects the building Google snapped to at the
+  // geocoded address, i.e. the primary dwelling). <2 buildings ⇒ buildings=[]
+  // / selected_building_id=null (picker hidden) and the normal release path.
+  after(async () => {
+    let held = false
+    try {
+      const buildings = await detectPropertyBuildings(address)
+      if (buildings.length >= 2) {
+        held = true
+        // The row's `estimate` reflects whichever building the engine used:
+        // the customer's address-form pick (target_building) when present,
+        // else the primary dwelling (findClosest at the geocoded address).
+        // Mark THAT building 'ready' and point selection at it so the picker
+        // highlight matches the headline numbers.
+        const chosen =
+          (target_building?.building_id &&
+            buildings.find((b) => b.building_id === target_building.building_id)) ||
+          buildings.find((b) => b.role === 'primary') ||
+          buildings[0]
+        const withReady = updateBuildingStatus(buildings, chosen.building_id, 'ready')
+        await supabase
+          .from('solar_estimates')
+          .update({ buildings: withReady, selected_building_id: chosen.building_id })
+          .eq('public_token', estimate.token)
+      }
+    } catch (e) {
+      console.warn(
+        '[solar/estimate] building detection failed (non-fatal)',
+        e instanceof Error ? e.message : String(e),
+      )
+    }
+
+    // Auto-release the clean estimate (Path B) UNLESS it is a multi-building
+    // property pending a roof choice. autoReleaseSolarEstimate re-checks
+    // eligibility on the freshly-read row, so a Pylon-appended guardrail flag
+    // from the cross-check above is still caught. No-op for flagged rows.
+    const released = eligibleForAutoRelease && !held
+    if (released) {
+      await autoReleaseSolarEstimate(supabase, { token: estimate.token })
+    }
+
+    // Notify the tradie (and, when released, confirm the customer send). The
+    // `released` flag drives the wording: "sent to your customer" vs "review
+    // and confirm before it goes live" (a held multi-building estimate uses
+    // the latter — the tradie picks/confirms the roof first).
+    await notifySolarEstimate({
+      tenant: {
+        owner_mobile: (tenant.owner_mobile as string | null) ?? null,
+        owner_first_name: (tenant.owner_first_name as string | null) ?? null,
+        twilio_sms_number: (tenant.twilio_sms_number as string | null) ?? null,
+      },
+      customerName: null,
+      systemKw: headline?.system_kw_dc ?? 0,
+      netIncGst: headline?.net_inc_gst ?? 0,
+      shareToken: estimate.token,
+      appUrl,
+      released,
+      dispatch: (opts) => dispatchQuoteMessage(opts),
+    })
+  })
+
   // ── Felt map provisioning (Felt tab spec 2026-06-13 §4.5): create the
   // per-estimate interactive map (satellite basemap, unlisted view_only),
   // upload the panel/plane GeoJSON + flux/DSM GeoTIFF layers, style with
@@ -247,33 +325,6 @@ export async function POST(
     // the brief; the page falls back to the sun-score copy. Best-effort.
     after(() => applySolarAiBrief(supabase, { publicToken: estimate.token }))
   }
-
-  // ── Auto-release the clean estimate to the customer (Path B). Runs
-  // after the enrichment above so a Pylon-appended guardrail flag is seen;
-  // re-checks eligibility on the freshly-read row, stamps confirmed_at and
-  // fires the customer SMS + CRM leads. No-op for flagged/inspection rows.
-  if (eligibleForAutoRelease) {
-    after(() => autoReleaseSolarEstimate(supabase, { token: estimate.token }))
-  }
-
-  after(async () => {
-    await notifySolarEstimate({
-      tenant: {
-        owner_mobile: (tenant.owner_mobile as string | null) ?? null,
-        owner_first_name: (tenant.owner_first_name as string | null) ?? null,
-        twilio_sms_number: (tenant.twilio_sms_number as string | null) ?? null,
-      },
-      customerName: null,
-      systemKw: headline?.system_kw_dc ?? 0,
-      netIncGst: headline?.net_inc_gst ?? 0,
-      shareToken: estimate.token,
-      appUrl,
-      // Clean estimate already auto-sent → "sent to your customer" wording;
-      // flagged estimate → "review and confirm before it goes live".
-      released: eligibleForAutoRelease,
-      dispatch: (opts) => dispatchQuoteMessage(opts),
-    })
-  })
 
   const shareUrl = `${appUrl}/q/solar/${estimate.token}`
   return Response.json(

@@ -51,6 +51,21 @@ export const SolarEstimateRequestSchema = z.object({
   // IDENTICAL engine but render the Felt interactive-map layout and get
   // a Felt map provisioned in after(). Defaults to 'instant'.
   variant: z.enum(['instant', 'felt']).optional(),
+  // Chosen building (multi-roof building picker, 2026-06-16). When the
+  // address resolves to ≥2 structures the entry form lets the customer
+  // pick which one; this carries that choice so the engine targets that
+  // building's centroid (targetLocation) instead of the default structure.
+  // Absent → single-building behaviour, the engine resolves the address
+  // as before. The id is opaque (Geoscape buildingId or synthetic).
+  target_building: z
+    .object({
+      building_id: z.string().min(1).max(120),
+      centroid: z.object({
+        lat: z.number().gte(-90).lte(90),
+        lng: z.number().gte(-180).lte(180),
+      }),
+    })
+    .optional(),
 })
 
 export type SolarEstimateRequestBody = z.infer<typeof SolarEstimateRequestSchema>

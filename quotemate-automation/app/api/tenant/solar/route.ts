@@ -72,6 +72,9 @@ export async function GET(req: Request) {
     .select(
       'public_token, address, state, postcode, intake_id, confirmed_at, ' +
         'guardrail_flags, routing, created_at, price, sizing, quote_variant, felt, ' +
+        'buildings, selected_building_id, ' +
+        'roof:estimate->roof, ' +
+        'location:estimate->context->location, ' +
         'pylon_opportunity:estimate->context->pylon_opportunity, ' +
         'opensolar_project:estimate->context->opensolar->project, ' +
         'pylon_stc_check:estimate->context->pylon_stc_check',
