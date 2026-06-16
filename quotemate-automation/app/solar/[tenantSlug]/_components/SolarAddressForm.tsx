@@ -26,6 +26,22 @@ const PANEL_GRADES = [
   { value: 'unknown', label: 'Not sure' },
 ] as const
 
+// Property electrical supply phase (design 2026-06-16). "Not sure" is the
+// default and is omitted from the payload (the engine assumes single-phase).
+const PHASE_OPTIONS = [
+  { value: 'unknown', label: 'Not sure' },
+  { value: 'single', label: 'Single-phase' },
+  { value: 'three', label: '3-phase' },
+] as const
+
+// Preferred system size presets (kW DC). "Recommend" (null) auto-sizes.
+const SIZE_PRESETS = [
+  { value: null, label: 'Recommend' },
+  { value: 6.6, label: '6.6 kW' },
+  { value: 10, label: '10 kW' },
+  { value: 13.2, label: '13.2 kW' },
+] as const
+
 const SUGGEST_DEBOUNCE_MS = 250
 const SUGGEST_MIN_CHARS = 4
 
@@ -67,6 +83,8 @@ export function SolarAddressForm({
   const [customerName, setCustomerName] = useState('')
   const [customerMobile, setCustomerMobile] = useState('')
   const [quarterlyBill, setQuarterlyBill] = useState('')
+  const [phase, setPhase] = useState<'unknown' | 'single' | 'three'>('unknown')
+  const [desiredKw, setDesiredKw] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [busyStep, setBusyStep] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -197,6 +215,8 @@ export function SolarAddressForm({
         orientation, roofSize, storeys, panelType,
         customerName, customerMobile, quarterlyBill,
         variant,
+        phase: phase === 'unknown' ? undefined : phase,
+        desiredKw: desiredKw ?? undefined,
       })
       const res = await fetch(`/api/solar/${tenantSlug}/estimate`, {
         method: 'POST',
@@ -416,6 +436,59 @@ export function SolarAddressForm({
               }`}
             >
               {g.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Power supply — segmented control ────────────────────── */}
+      <div className="flex flex-col gap-1.5">
+        <span className={labelClass}>Power supply</span>
+        <div className="grid grid-cols-3 border border-ink-line" role="radiogroup" aria-label="Power supply">
+          {PHASE_OPTIONS.map((p, i) => (
+            <button
+              key={p.value}
+              type="button"
+              role="radio"
+              aria-checked={phase === p.value}
+              onClick={() => setPhase(p.value)}
+              className={`px-3 py-3 text-sm font-semibold transition-colors ${
+                i > 0 ? 'border-l border-ink-line' : ''
+              } ${
+                phase === p.value
+                  ? 'bg-accent text-ink-deep'
+                  : 'bg-ink-deep text-text-sec hover:text-text-pri'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        <span className="text-xs text-text-dim">
+          Check your switchboard — most homes are single-phase. 3-phase allows a larger system.
+        </span>
+      </div>
+
+      {/* ── Preferred size — segmented control ──────────────────── */}
+      <div className="flex flex-col gap-1.5">
+        <span className={labelClass}>Preferred size (optional)</span>
+        <div className="grid grid-cols-4 border border-ink-line" role="radiogroup" aria-label="Preferred system size">
+          {SIZE_PRESETS.map((s, i) => (
+            <button
+              key={s.label}
+              type="button"
+              role="radio"
+              aria-checked={desiredKw === s.value}
+              onClick={() => setDesiredKw(s.value)}
+              className={`px-3 py-3 text-sm font-semibold transition-colors ${
+                i > 0 ? 'border-l border-ink-line' : ''
+              } ${
+                desiredKw === s.value
+                  ? 'bg-accent text-ink-deep'
+                  : 'bg-ink-deep text-text-sec hover:text-text-pri'
+              }`}
+            >
+              {s.label}
             </button>
           ))}
         </div>
