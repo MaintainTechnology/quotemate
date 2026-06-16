@@ -82,8 +82,8 @@ describe('buildSolarFormPayload — phase + preferred size', () => {
     expect('phase' in buildSolarFormPayload({ ...base })).toBe(false)
   })
 
-  it('includes a positive desired size and omits a missing one', () => {
-    expect(buildSolarFormPayload({ ...base, desiredKw: 10 }).desired_kw).toBe(10)
-    expect('desired_kw' in buildSolarFormPayload({ ...base })).toBe(false)
+  it('includes a positive preferred size and omits a missing one', () => {
+    expect(buildSolarFormPayload({ ...base, requestedSizeKw: '10' }).requested_size_kw).toBe(10)
+    expect('requested_size_kw' in buildSolarFormPayload({ ...base })).toBe(false)
   })
 })

@@ -21,7 +21,9 @@ import {
   analyzeHourlyShade,
   deriveMonthlyProductionWeights,
   estimateBuildingHeightFromDsm,
+  fluxRasterLatLngBounds,
   projectPlaneAnchors,
+  type FluxLatLngBounds,
   type PlaneAnchor,
   type RasterBand,
   type SolarShadeAnalysis,
@@ -43,6 +45,13 @@ export type SunAssetsOpts = {
   baseUrl?: string
   /** Skip the 12 hourly-shade downloads (the heaviest part). */
   skipHourlyShade?: boolean
+  /**
+   * Multi-roof building picker (approach A): when set, the cached heatmap
+   * PNG is namespaced under this building id (`solar/{id}/{buildingId}/…`)
+   * so each detected building keeps its own heatmap rather than clobbering
+   * a sibling's. Absent ⇒ the flat `solar/{id}/…` path (single-building).
+   */
+  buildingId?: string
 }
 
 /** PURE — the generation gate. On by default when a Solar key exists;
@@ -70,6 +79,7 @@ export function buildSunContext(args: {
   buildingHeight: SolarBuildingHeight | null
   imageryDate: string | null
   planeAnchors?: PlaneAnchor[] | null
+  fluxBounds?: FluxLatLngBounds | null
 }): NonNullable<SolarEstimateContext['sun']> {
   return {
     generated_at: args.now,
@@ -78,6 +88,7 @@ export function buildSunContext(args: {
     max_flux: args.flux?.max_flux ?? null,
     plane_anchors:
       args.planeAnchors && args.planeAnchors.length > 0 ? args.planeAnchors : null,
+    flux_bounds: args.fluxBounds ?? null,
     monthly_production_weights: args.monthlyWeights,
     shade: args.shade
       ? {
@@ -217,7 +228,8 @@ export async function applySolarSunAssets(
     // ── Cache the heatmap PNG. ────────────────────────────────────────
     let fluxImagePath: string | null = null
     if (flux) {
-      const path = `solar/${row.id}/flux-annual-${Date.now()}.png`
+      const ns = opts.buildingId ? `${encodeURIComponent(opts.buildingId)}/` : ''
+      const path = `solar/${row.id}/${ns}flux-annual-${Date.now()}.png`
       const { error: upErr } = await supabase.storage
         .from(BUCKET)
         .upload(path, Buffer.from(flux.png), { contentType: 'image/png', upsert: false })
@@ -235,6 +247,14 @@ export async function applySolarSunAssets(
         ? projectPlaneAnchors(estimate.roof.panels ?? [], annualFlux.bbox, args.location)
         : []
 
+    // Geographic extent of the rendered heatmap PNG, derived with the same
+    // north-up/centred model as the anchors — lets the quote page render it
+    // as a georeferenced raster on the interactive pan/zoom SunShadeMap.
+    const fluxBounds =
+      flux && annualFlux?.bbox
+        ? fluxRasterLatLngBounds(annualFlux.bbox, args.location)
+        : null
+
     const sun = buildSunContext({
       now: new Date().toISOString(),
       fluxImagePath,
@@ -244,6 +264,7 @@ export async function applySolarSunAssets(
       buildingHeight,
       imageryDate: summary.imagery_date,
       planeAnchors,
+      fluxBounds,
     })
     const nextEstimate: SolarEstimate = {
       ...estimate,

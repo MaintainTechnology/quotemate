@@ -13,6 +13,8 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowRight, Loader2, MapPin } from 'lucide-react'
 import { buildSolarFormPayload } from '@/lib/solar/form-payload'
 import type { AddressSuggestion, PlaceAddressDetails } from '@/lib/solar/places'
+import type { DetectedBuilding, LatLng } from '@/lib/solar/types'
+import { SolarRoofMap } from './SolarRoofMap'
 
 const STATES = ['NSW', 'VIC', 'QLD', 'SA', 'WA', 'TAS', 'ACT', 'NT'] as const
 const ORIENTATIONS = [
@@ -28,19 +30,15 @@ const PANEL_GRADES = [
 
 // Property electrical supply phase (design 2026-06-16). "Not sure" is the
 // default and is omitted from the payload (the engine assumes single-phase).
-const PHASE_OPTIONS = [
+const POWER_PHASES = [
   { value: 'unknown', label: 'Not sure' },
   { value: 'single', label: 'Single-phase' },
   { value: 'three', label: '3-phase' },
 ] as const
 
-// Preferred system size presets (kW DC). "Recommend" (null) auto-sizes.
-const SIZE_PRESETS = [
-  { value: null, label: 'Recommend' },
-  { value: 6.6, label: '6.6 kW' },
-  { value: 10, label: '10 kW' },
-  { value: 13.2, label: '13.2 kW' },
-] as const
+/** Quick-pick preferred-size chips, kW. The free-type input still accepts any
+ *  value — these are just one tap for the common system sizes. */
+const SIZE_CHIPS = [6, 10, 14] as const
 
 const SUGGEST_DEBOUNCE_MS = 250
 const SUGGEST_MIN_CHARS = 4
@@ -80,14 +78,30 @@ export function SolarAddressForm({
   const [storeys, setStoreys] = useState<1 | 2 | 3>(1)
   const [panelType, setPanelType] =
     useState<'standard_panels' | 'premium_panels' | 'unknown'>('standard_panels')
+  // Power-supply phase — drives the export ceiling (3-phase = larger system).
+  const [phase, setPhase] = useState<'single' | 'three' | 'unknown'>('unknown')
+  // Preferred system size, kW — free-type text; a quick-pick chip just fills
+  // it. Blank = no preference (tiers anchor to the roof max).
+  const [requestedSizeKw, setRequestedSizeKw] = useState('')
   const [customerName, setCustomerName] = useState('')
   const [customerMobile, setCustomerMobile] = useState('')
   const [quarterlyBill, setQuarterlyBill] = useState('')
-  const [phase, setPhase] = useState<'unknown' | 'single' | 'three'>('unknown')
-  const [desiredKw, setDesiredKw] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [busyStep, setBusyStep] = useState(0)
   const [error, setError] = useState<string | null>(null)
+
+  // ── Multi-roof building picker (2026-06-16). After the customer fills an
+  // address, POST /detect; with ≥2 structures we render a local-mode picker
+  // so they pick which roof. The chosen building rides the estimate POST.
+  const [buildings, setBuildings] = useState<DetectedBuilding[]>([])
+  const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null)
+  const [detectBusy, setDetectBusy] = useState(false)
+  // Map centre for the ALWAYS-ON picker: the geocoded address from /detect,
+  // or the mean building centroid as a fallback. The satellite map renders
+  // whenever this is set (even with 0–1 detected buildings). `freePick` is a
+  // roof the customer tapped that Geoscape did not outline.
+  const [mapCenter, setMapCenter] = useState<LatLng | null>(null)
+  const [freePick, setFreePick] = useState<LatLng | null>(null)
 
   // While submitting, walk the progress copy through the engine's real
   // stages so the wait reads as work, not a stall. The step counter is
@@ -180,6 +194,11 @@ export function SolarAddressForm({
         if (d.postcode) setPostcode(d.postcode)
         if (d.state) setStateCode(d.state)
         setAutoFilled(Boolean(d.postcode || d.state))
+        // Auto-reveal the roof map once we have a full address — no extra
+        // click. Pass the resolved values directly (state setters are async).
+        if (d.street_address && d.postcode && d.state) {
+          void detectBuildings({ address: d.street_address, postcode: d.postcode, state: d.state })
+        }
       }
     } catch {
       // Details miss — keep the suggestion text; customer fills the rest.
@@ -204,19 +223,70 @@ export function SolarAddressForm({
     }
   }
 
+  // ── Detect buildings on the entered address (best-effort). Triggered on
+  // blur of the address field and by the "Find my roof" button. ≥2
+  // structures → render the local picker; otherwise stay on today's flow.
+  async function detectBuildings(override?: { address: string; postcode: string; state: string }) {
+    const addr = (override?.address ?? address).trim()
+    const pc = (override?.postcode ?? postcode).trim()
+    const st = override?.state ?? stateCode
+    if (addr.length < 3 || pc.length < 3) return
+    setDetectBusy(true)
+    try {
+      const res = await fetch(`/api/solar/${tenantSlug}/detect`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ address: { address: addr, postcode: pc, state: st } }),
+      })
+      const body = (await res.json().catch(() => ({}))) as {
+        ok?: boolean
+        buildings?: DetectedBuilding[]
+        center?: LatLng | null
+      }
+      const list = body?.ok ? (body.buildings ?? []) : []
+      setBuildings(list)
+      // Default the selection to the primary structure (or the first).
+      const primary = list.find((b) => b.role === 'primary') ?? list[0] ?? null
+      setSelectedBuildingId(primary ? primary.building_id : null)
+      setFreePick(null)
+      // Always show the map when we have a centre — geocoded address, else a
+      // detected building's centroid. Null only when both are unavailable.
+      setMapCenter(body?.center ?? buildingsCentroid(list))
+    } catch {
+      // Detection is pure enrichment — a miss just hides the picker.
+      setBuildings([])
+      setSelectedBuildingId(null)
+      setMapCenter(null)
+      setFreePick(null)
+    } finally {
+      setDetectBusy(false)
+    }
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     setBusy(true)
     setBusyStep(0)
     setError(null)
     try {
+      // Carry the picked roof so the engine targets it: a free-tapped point
+      // wins, else the highlighted detected building (if any), else nothing
+      // (the engine resolves the address as before).
+      const chosenBuilding = selectedBuildingId
+        ? buildings.find((b) => b.building_id === selectedBuildingId) ?? null
+        : null
+      const targetBuilding = freePick
+        ? { building_id: 'custom', centroid: freePick }
+        : chosenBuilding
+          ? { building_id: chosenBuilding.building_id, centroid: chosenBuilding.centroid }
+          : null
       const payload = buildSolarFormPayload({
         address, postcode, state: stateCode, manualOpen,
         orientation, roofSize, storeys, panelType,
+        phase, requestedSizeKw,
         customerName, customerMobile, quarterlyBill,
         variant,
-        phase: phase === 'unknown' ? undefined : phase,
-        desiredKw: desiredKw ?? undefined,
+        targetBuilding,
       })
       const res = await fetch(`/api/solar/${tenantSlug}/estimate`, {
         method: 'POST',
@@ -260,6 +330,7 @@ export function SolarAddressForm({
             }}
             onKeyDown={onAddressKeyDown}
             onFocus={() => suggestions.length > 0 && setDropdownOpen(true)}
+            onBlur={() => void detectBuildings()}
             required
             minLength={3}
             placeholder="Start typing your address…"
@@ -353,6 +424,36 @@ export function SolarAddressForm({
         </div>
       </div>
 
+      {/* ── Roof picker (2026-06-16). "Show my roof" (or blurring the address)
+          drops a live satellite map under the address. Detected buildings are
+          outlined; the customer taps one — or free-taps ANY roof on the image
+          (a shed Geoscape missed) — and that roof is what gets estimated. */}
+      <div className="flex flex-col gap-3">
+        <button
+          type="button"
+          data-testid="solar-detect"
+          onClick={() => void detectBuildings()}
+          disabled={detectBusy || address.trim().length < 3 || postcode.trim().length < 3}
+          className="self-start inline-flex items-center gap-2 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-accent transition-colors hover:text-accent-soft disabled:opacity-50"
+        >
+          {detectBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <MapPin className="h-3.5 w-3.5" aria-hidden />}
+          {detectBusy ? 'Finding your roof…' : mapCenter ? 'Refresh map' : 'Show my roof'}
+        </button>
+
+        {mapCenter && (
+          <div data-testid="solar-building-picker">
+            <SolarRoofMap
+              center={mapCenter}
+              buildings={buildings}
+              selectedBuildingId={freePick ? null : selectedBuildingId}
+              freePick={freePick}
+              onSelectBuilding={(id) => { setSelectedBuildingId(id); setFreePick(null) }}
+              onFreePick={(c) => { setFreePick(c); setSelectedBuildingId(null) }}
+            />
+          </div>
+        )}
+      </div>
+
       {/* ── Optional contact — opt in to get the quote texted ──── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
@@ -441,15 +542,20 @@ export function SolarAddressForm({
         </div>
       </div>
 
-      {/* ── Power supply — segmented control ────────────────────── */}
+      {/* ── Power supply — drives the export ceiling (3-phase = bigger) ── */}
       <div className="flex flex-col gap-1.5">
         <span className={labelClass}>Power supply</span>
-        <div className="grid grid-cols-3 border border-ink-line" role="radiogroup" aria-label="Power supply">
-          {PHASE_OPTIONS.map((p, i) => (
+        <div
+          className="grid grid-cols-3 border border-ink-line"
+          role="radiogroup"
+          aria-label="Power supply phase"
+        >
+          {POWER_PHASES.map((p, i) => (
             <button
               key={p.value}
               type="button"
               role="radio"
+              data-testid={`solar-phase-${p.value}`}
               aria-checked={phase === p.value}
               onClick={() => setPhase(p.value)}
               className={`px-3 py-3 text-sm font-semibold transition-colors ${
@@ -464,33 +570,62 @@ export function SolarAddressForm({
             </button>
           ))}
         </div>
-        <span className="text-xs text-text-dim">
-          Check your switchboard — most homes are single-phase. 3-phase allows a larger system.
-        </span>
+        <p className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
+          3-phase allows a larger system.
+        </p>
       </div>
 
-      {/* ── Preferred size — segmented control ──────────────────── */}
+      {/* ── Preferred size — quick-pick chips + free-type kW (optional) ── */}
       <div className="flex flex-col gap-1.5">
-        <span className={labelClass}>Preferred size (optional)</span>
-        <div className="grid grid-cols-4 border border-ink-line" role="radiogroup" aria-label="Preferred system size">
-          {SIZE_PRESETS.map((s, i) => (
-            <button
-              key={s.label}
-              type="button"
-              role="radio"
-              aria-checked={desiredKw === s.value}
-              onClick={() => setDesiredKw(s.value)}
-              className={`px-3 py-3 text-sm font-semibold transition-colors ${
-                i > 0 ? 'border-l border-ink-line' : ''
-              } ${
-                desiredKw === s.value
-                  ? 'bg-accent text-ink-deep'
-                  : 'bg-ink-deep text-text-sec hover:text-text-pri'
-              }`}
+        <label htmlFor="solar-size-input" className={labelClass}>
+          Preferred size{' '}
+          <span className="normal-case tracking-normal text-text-dim">
+            · optional
+          </span>
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          {SIZE_CHIPS.map((kw) => {
+            const selected = requestedSizeKw.trim() === String(kw)
+            return (
+              <button
+                key={kw}
+                type="button"
+                data-testid={`solar-size-chip-${kw}`}
+                aria-pressed={selected}
+                onClick={() =>
+                  setRequestedSizeKw((prev) =>
+                    prev.trim() === String(kw) ? '' : String(kw),
+                  )
+                }
+                className={`border px-3 py-2 text-sm font-semibold transition-colors ${
+                  selected
+                    ? 'border-accent bg-accent text-ink-deep'
+                    : 'border-ink-line bg-ink-deep text-text-sec hover:text-text-pri'
+                }`}
+              >
+                {kw} kW
+              </button>
+            )
+          })}
+          <div className="relative min-w-28 flex-1">
+            <input
+              id="solar-size-input"
+              data-testid="solar-size"
+              value={requestedSizeKw}
+              onChange={(e) => setRequestedSizeKw(e.target.value)}
+              inputMode="decimal"
+              maxLength={6}
+              placeholder="or type kW"
+              aria-label="Preferred system size in kilowatts"
+              className={`${inputClass} pr-10`}
+            />
+            <span
+              className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-text-dim"
+              aria-hidden
             >
-              {s.label}
-            </button>
-          ))}
+              kW
+            </span>
+          </div>
         </div>
       </div>
 
@@ -597,4 +732,24 @@ export function SolarAddressForm({
       </button>
     </form>
   )
+}
+
+/** Mean of every detected building's centroid — the centre the detect
+ *  preview map is rendered at (and the picker projects against), so all
+ *  structures sit on one image. Null when nothing has a finite centroid. */
+function buildingsCentroid(
+  buildings: DetectedBuilding[],
+): { lat: number; lng: number } | null {
+  let latSum = 0
+  let lngSum = 0
+  let n = 0
+  for (const b of buildings) {
+    const { lat, lng } = b.centroid
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      latSum += lat
+      lngSum += lng
+      n += 1
+    }
+  }
+  return n > 0 ? { lat: latSum / n, lng: lngSum / n } : null
 }

@@ -132,9 +132,11 @@ export async function POST(
       input: inputs.input,
       manual: inputs.manual,
       panelType: inputs.panelType,
-      phase: inputs.phase,
-      desiredKw: inputs.desiredKw,
       quarterlyBillAud: inputs.quarterlyBillAud,
+      // Carry the prior estimate's phase + preferred size so a re-draft keeps
+      // the same export ceiling + tier anchor (reconstructed from context).
+      phase: inputs.phase,
+      requestedSizeKw: inputs.requestedSizeKw,
       config,
       opts: {
         geocode: async (input) => {

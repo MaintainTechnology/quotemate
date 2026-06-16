@@ -67,8 +67,12 @@ export type ReconstructedSolarInputs = {
   manual?: SolarManualRoofInput
   panelType: SolarPanelType
   quarterlyBillAud: number | null
+  /** Power-supply phase carried back from the prior estimate so a re-draft /
+   *  building-switch keeps the same export ceiling. 'unknown' when absent. */
   phase: SolarPhase
-  desiredKw: number | null
+  /** Preferred size carried back so re-estimates keep targeting it. Null when
+   *  the prior estimate had none. */
+  requestedSizeKw: number | null
 }
 
 /**
@@ -109,6 +113,31 @@ export function reconstructSolarInputs(args: {
       ? estimate.context.quarterly_bill_aud
       : null
 
+  // Power-supply phase + preferred size carried back from the prior estimate
+  // so re-draft AND the building-switch re-run with the same export ceiling
+  // and tier anchor. Missing/invalid → conservative defaults (unknown / null).
+  // A tradie-supplied override (dashboard re-draft, design 2026-06-16) wins
+  // over the persisted value; an explicit `desired_kw: null` clears a previous
+  // request (back to auto-sizing).
+  const persistedPhase: SolarPhase =
+    estimate.context.phase === 'single' ||
+    estimate.context.phase === 'three' ||
+    estimate.context.phase === 'unknown'
+      ? estimate.context.phase
+      : 'unknown'
+  const phase: SolarPhase = args.overrides?.phase ?? persistedPhase
+
+  const persistedSizeKw =
+    typeof estimate.context.requested_size_kw === 'number' &&
+    Number.isFinite(estimate.context.requested_size_kw) &&
+    estimate.context.requested_size_kw > 0
+      ? estimate.context.requested_size_kw
+      : null
+  const requestedSizeKw =
+    args.overrides && 'desired_kw' in args.overrides
+      ? args.overrides.desired_kw ?? null
+      : persistedSizeKw
+
   let manual: SolarManualRoofInput | undefined
   if (estimate.coverage_source === 'manual') {
     const storeysRaw = estimate.roof.storeys ?? 1
@@ -120,18 +149,5 @@ export function reconstructSolarInputs(args: {
     }
   }
 
-  const phase: SolarPhase =
-    args.overrides?.phase ??
-    (estimate.context.phase === 'three' ? 'three' : 'single')
-
-  const desiredKw =
-    args.overrides && 'desired_kw' in args.overrides
-      ? args.overrides.desired_kw ?? null
-      : typeof estimate.context.requested_system_kw === 'number' &&
-          Number.isFinite(estimate.context.requested_system_kw) &&
-          estimate.context.requested_system_kw > 0
-        ? estimate.context.requested_system_kw
-        : null
-
-  return { input, manual, panelType, quarterlyBillAud, phase, desiredKw }
+  return { input, manual, panelType, quarterlyBillAud, phase, requestedSizeKw }
 }

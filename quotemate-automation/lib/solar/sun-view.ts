@@ -64,6 +64,11 @@ export type SolarSunView = {
   markers: SolarSunMarker[]
   /** Hourly sun fractions (0–23) for a future hour-strip view. */
   hourly_sun_fraction: number[] | null
+  /** Geographic extent (EPSG:4326) of the flux heatmap PNG. Present only
+   *  on estimates re-drafted since the interactive map shipped; drives the
+   *  georeferenced SunShadeMap. Null ⇒ page falls back to the static
+   *  SunShadeOverlay (image-% positioning). */
+  flux_bounds: { west: number; south: number; east: number; north: number } | null
 }
 
 /** PURE — 24h hour → compact AU label (9 → '9am', 15 → '3pm'). */
@@ -184,5 +189,9 @@ export function buildSolarSunView(estimate: SolarEstimate): SolarSunView | null 
     flux_caption,
     markers,
     hourly_sun_fraction: sun?.shade?.hourly_sun_fraction ?? null,
+    // Only georeference the heatmap when BOTH the image and its bounds
+    // exist; otherwise the page keeps the static overlay (no regression
+    // for estimates drafted before the bounds were persisted).
+    flux_bounds: flux_image_available ? (sun?.flux_bounds ?? null) : null,
   }
 }

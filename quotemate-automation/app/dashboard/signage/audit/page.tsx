@@ -270,6 +270,7 @@ function AuditCard({ token, brand, brandSlug }: { token: string | null; brand: B
   const [busy, setBusy] = useState(false)
   const [report, setReport] = useState<Report | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const [pdfBusy, setPdfBusy] = useState(false)
 
   const total = Object.values(files).reduce((n, f) => n + f.length, 0)
 
@@ -294,6 +295,39 @@ function AuditCard({ token, brand, brandSlug }: { token: string | null; brand: B
       setBusy(false)
     }
   }, [token, files, brandSlug])
+
+  // Render the on-screen report to a PDF on demand (nothing is persisted,
+  // so we POST the report we already hold). Mirrors the aircon flow.
+  const downloadPdf = useCallback(async () => {
+    if (!token || !report) return
+    setPdfBusy(true)
+    setErr(null)
+    try {
+      const res = await fetch('/api/signage/audit/pdf', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brandName: brand?.name ?? null, report }),
+      })
+      if (!res.ok) {
+        const j = (await res.json().catch(() => null)) as { error?: string } | null
+        setErr(j?.error ?? `Couldn’t generate the PDF (HTTP ${res.status}).`)
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'signage-compliance.pdf'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch {
+      setErr('Couldn’t generate the PDF. Please try again.')
+    } finally {
+      setPdfBusy(false)
+    }
+  }, [token, report, brand])
 
   return (
     <div className="border border-ink-line bg-ink-card p-6 sm:p-7">
@@ -338,6 +372,19 @@ function AuditCard({ token, brand, brandSlug }: { token: string | null; brand: B
 
       {report && (
         <div className={`mt-6 ${REVEAL}`}>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+              Compliance report
+            </span>
+            <button
+              type="button"
+              onClick={() => void downloadPdf()}
+              disabled={pdfBusy}
+              className="inline-flex items-center gap-2 border border-ink-line px-4 py-2 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {pdfBusy ? 'Preparing…' : 'Download PDF ↓'}
+            </button>
+          </div>
           <div className="grid grid-cols-3 gap-2">
             <Tally label="Compliant" value={report.counts.compliant} tone="good" />
             <Tally label="To fix" value={report.counts.fix} tone="warn" />

@@ -30,6 +30,7 @@ const fakeTenant = {
 // Individual tests can override maybeSingleImpl to simulate 404.
 let maybySingleImpl = vi.fn().mockResolvedValue({ data: fakeTenant, error: null })
 
+const solarUpdateEqImpl = vi.fn().mockResolvedValue({ data: null, error: null })
 const insertSingleImpl = vi.fn().mockResolvedValue({ data: { id: 'intake-row-id' }, error: null })
 const insertNoSelectImpl = vi.fn().mockResolvedValue({ data: null, error: null })
 const quoteInsertSingleImpl = vi.fn().mockResolvedValue({
@@ -60,6 +61,8 @@ function buildQueryStub(tableName: string) {
   if (tableName === 'solar_estimates') {
     return {
       insert: insertNoSelectImpl,
+      // Multi-roof detection after() updates buildings + selected_building_id.
+      update: () => ({ eq: solarUpdateEqImpl }),
     }
   }
   if (tableName === 'quotes') {
@@ -115,6 +118,20 @@ vi.mock('@/lib/solar/release', () => ({
 vi.mock('next/server', () => ({
   after: (fn: () => Promise<void>) => { fn().catch(() => {}) },
 }))
+
+// Multi-roof detection (approach A): default to the single-building path
+// (no extra structures) so the route's combined detect→release→notify
+// after() block resolves quickly and deterministically. A test wanting the
+// multi-building HOLD behaviour can override this mock.
+vi.mock('@/lib/solar/buildings', () => ({
+  detectPropertyBuildings: vi.fn().mockResolvedValue([]),
+}))
+
+// Flush the pending after() continuation: the `after` mock is fire-and-
+// forget, and notify/auto-release now sit behind `await
+// detectPropertyBuildings(...)` in one ordered callback, so their calls
+// land on a later microtask. A macrotask tick drains them before asserting.
+const flushAfter = () => new Promise((r) => setTimeout(r, 0))
 
 // Mock buildSolarRowPayloads so we don't need a real estimate shape.
 vi.mock('@/lib/solar/persist-helpers', () => ({
@@ -293,6 +310,7 @@ describe('POST /api/solar/[tenantSlug]/estimate — unit (stubbed supabase)', ()
     const POST = await getPostHandler()
     const res = await POST(buildRequest(VALID_BODY), buildCtx())
     expect(res.status).toBe(200)
+    await flushAfter()
     expect(notifySolarEstimate).toHaveBeenCalledTimes(1)
     const args = vi.mocked(notifySolarEstimate).mock.calls[0][0]
     expect(args.systemKw).toBe(6.0) // last tier, NOT better's 4.8
@@ -309,10 +327,44 @@ describe('POST /api/solar/[tenantSlug]/estimate — unit (stubbed supabase)', ()
     const POST = await getPostHandler()
     const res = await POST(buildRequest(VALID_BODY), buildCtx())
     expect(res.status).toBe(200)
+    await flushAfter()
     expect(autoReleaseSolarEstimate).toHaveBeenCalledTimes(1)
     const relArgs = vi.mocked(autoReleaseSolarEstimate).mock.calls[0][1]
     expect(relArgs.token).toBe('tok_fake_estimate')
     const notifyArgs = vi.mocked(notifySolarEstimate).mock.calls[0][0]
     expect(notifyArgs.released).toBe(true)
+  })
+
+  it('HOLDS a multi-building property unreleased so the roof can be picked first', async () => {
+    // Approach A: when ≥2 structures are detected the clean estimate must
+    // NOT auto-release — releasing stamps confirmed_at and locks the building
+    // picker before anyone can choose the right roof. The tradie picks/
+    // confirms first; notify uses the "review before it goes live" wording.
+    maybySingleImpl = vi.fn().mockResolvedValue({ data: fakeTenant, error: null })
+    const { detectPropertyBuildings } = await import('@/lib/solar/buildings')
+    vi.mocked(detectPropertyBuildings).mockResolvedValueOnce([
+      {
+        building_id: 'house', role: 'primary', label: 'Main building',
+        centroid: { lat: -33.8, lng: 151.2 }, footprint: null,
+        area_m2: 180, roof_shape: 'hip', storeys: 1, solar_status: 'pending',
+      },
+      {
+        building_id: 'shed', role: 'secondary', label: 'Outbuilding 1',
+        centroid: { lat: -33.801, lng: 151.201 }, footprint: null,
+        area_m2: 25, roof_shape: 'skillion', storeys: 1, solar_status: 'pending',
+      },
+    ])
+    const { autoReleaseSolarEstimate } = await import('@/lib/solar/release')
+    const { notifySolarEstimate } = await import('@/lib/solar/notify')
+    const POST = await getPostHandler()
+    const res = await POST(buildRequest(VALID_BODY), buildCtx())
+    expect(res.status).toBe(200)
+    await flushAfter()
+    // Multi-building ⇒ held: no auto-release, notify wording is "not released".
+    expect(autoReleaseSolarEstimate).not.toHaveBeenCalled()
+    const notifyArgs = vi.mocked(notifySolarEstimate).mock.calls[0][0]
+    expect(notifyArgs.released).toBe(false)
+    // The detected list + primary selection were persisted on the row.
+    expect(solarUpdateEqImpl).toHaveBeenCalled()
   })
 })

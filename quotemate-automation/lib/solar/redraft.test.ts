@@ -20,13 +20,13 @@ describe('reconstructSolarInputs — phase + size override resolution', () => {
   const base = makeFixtureEstimate()
   const previous = {
     ...base,
-    context: { ...base.context, phase: 'single' as const, requested_system_kw: 6 },
+    context: { ...base.context, phase: 'single' as const, requested_size_kw: 6 },
   }
 
   it('falls back to the persisted context values when no override is given', () => {
     const out = reconstructSolarInputs({ row, estimate: previous })!
     expect(out.phase).toBe('single')
-    expect(out.desiredKw).toBe(6)
+    expect(out.requestedSizeKw).toBe(6)
   })
 
   it('lets the tradie override win', () => {
@@ -36,7 +36,7 @@ describe('reconstructSolarInputs — phase + size override resolution', () => {
       overrides: { phase: 'three', desired_kw: 12 },
     })!
     expect(out.phase).toBe('three')
-    expect(out.desiredKw).toBe(12)
+    expect(out.requestedSizeKw).toBe(12)
   })
 
   it('treats an explicit null desired_kw override as clear-to-auto-size', () => {
@@ -45,7 +45,7 @@ describe('reconstructSolarInputs — phase + size override resolution', () => {
       estimate: previous,
       overrides: { desired_kw: null },
     })!
-    expect(out.desiredKw).toBe(null)
+    expect(out.requestedSizeKw).toBe(null)
   })
 })
 

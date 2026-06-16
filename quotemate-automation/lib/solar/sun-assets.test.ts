@@ -62,8 +62,15 @@ describe('buildSunContext', () => {
       buildingHeight: { height_m: 6.5, storeys_hint: 2 },
       imageryDate: '2024-03-12',
       planeAnchors: [{ plane_index: 0, x_pct: 42.5, y_pct: 51.2 }],
+      fluxBounds: { west: 151.2105, south: -33.8684, east: 151.2115, north: -33.8674 },
     })
     expect(sun.plane_anchors).toEqual([{ plane_index: 0, x_pct: 42.5, y_pct: 51.2 }])
+    expect(sun.flux_bounds).toEqual({
+      west: 151.2105,
+      south: -33.8684,
+      east: 151.2115,
+      north: -33.8674,
+    })
     expect(sun.flux_image_path).toBe('solar/row/flux-annual-1.png')
     expect(sun.min_flux).toBe(800)
     expect(sun.max_flux).toBe(1800)
@@ -91,6 +98,7 @@ describe('buildSunContext', () => {
     expect(sun.building_height).toBeNull()
     expect(sun.imagery_date).toBeNull()
     expect(sun.plane_anchors).toBeNull()
+    expect(sun.flux_bounds).toBeNull()
     expect(sun.generated_at).toBe('2026-06-13T00:00:00.000Z')
   })
 })

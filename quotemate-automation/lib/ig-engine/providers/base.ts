@@ -52,6 +52,9 @@ export type TextRequest = {
   temperature?: number
   /** Override the provider's default model for this call. */
   model?: string
+  /** When set, forces application/json output constrained to this Gemini
+   *  responseSchema (structured output). Omit for free-text responses. */
+  responseSchema?: Record<string, unknown>
 }
 
 export type ProviderCapabilities = {

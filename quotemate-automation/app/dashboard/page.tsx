@@ -5551,13 +5551,28 @@ function QuoteCard({ q, isMultiTrade, accessToken }: { q: Quote; isMultiTrade: b
                 ))}
               </div>
               {url && (
-                <Link
-                  href={url}
-                  target="_blank"
-                  className="inline-flex items-center justify-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-4 py-3 text-xs uppercase tracking-wider transition-colors min-h-[44px] w-full sm:w-auto"
-                >
-                  View customer page →
-                </Link>
+                <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:items-center">
+                  {/* Download the full quote as a PDF. Hidden for inspection-
+                      routed quotes — the /api/q/[token]/pdf route 404s those
+                      (no committable price belongs in a final-looking doc). */}
+                  {!isInspection && (
+                    <a
+                      href={`/api/q/${q.share_token}/pdf`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+                    >
+                      Download PDF ↓
+                    </a>
+                  )}
+                  <Link
+                    href={url}
+                    target="_blank"
+                    className="inline-flex min-h-[44px] items-center justify-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-4 py-3 text-xs uppercase tracking-wider transition-colors"
+                  >
+                    View customer page →
+                  </Link>
+                </div>
               )}
             </div>
 
@@ -10911,6 +10926,16 @@ function PaintingHubTab({ accessToken }: { accessToken: string | null }) {
                     </div>
                     <div className="flex shrink-0 items-center gap-3">
                       <Pill tone={inspection ? 'warn' : 'ok'} label={inspection ? 'Inspection' : 'Quote'} />
+                      {j.public_token && !inspection && (
+                        <a
+                          href={`/api/q/paint/${j.public_token}/pdf`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-accent"
+                        >
+                          PDF ↓
+                        </a>
+                      )}
                     </div>
                   </div>
                 </li>
@@ -11077,6 +11102,16 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
                     </div>
                     <div className="flex shrink-0 items-center gap-3">
                       <Pill tone={inspection ? 'warn' : 'ok'} label={inspection ? 'Inspection' : 'Quote'} />
+                      {j.public_token && !inspection && (
+                        <a
+                          href={`/api/q/roof/${j.public_token}/pdf`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-accent"
+                        >
+                          PDF ↓
+                        </a>
+                      )}
                       {j.public_token && (
                         <a
                           href={`/q/roof/${j.public_token}`}

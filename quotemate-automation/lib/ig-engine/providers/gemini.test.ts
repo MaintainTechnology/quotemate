@@ -54,7 +54,7 @@ describe('geminiProvider.renderImage', () => {
     else process.env.GEMINI_API_KEY = prevKey
   })
 
-  it('sends systemInstruction + user text + low-temp image config', async () => {
+  it('sends systemInstruction + user text + Gemini-3 image config (temp 1.0 + high thinking)', async () => {
     await geminiProvider.renderImage({
       system: 'SYS',
       user: 'USER',
@@ -64,8 +64,11 @@ describe('geminiProvider.renderImage', () => {
     expect(body.systemInstruction.parts[0].text).toBe('SYS')
     expect(body.contents[0].role).toBe('user')
     expect(body.contents[0].parts[0]).toEqual({ text: 'USER' })
-    expect(body.generation_config.temperature).toBe(0.1)
+    // Gemini 3: default temperature 1.0 (lowering it degrades output) +
+    // thinkingLevel 'high' for instruction adherence on image renders.
+    expect(body.generation_config.temperature).toBe(1)
     expect(body.generation_config.response_modalities).toEqual(['IMAGE'])
+    expect(body.generation_config.thinking_config).toEqual({ thinking_level: 'high' })
     expect(body.generation_config.image_config).toBeUndefined()
   })
 
@@ -180,6 +183,21 @@ describe('geminiProvider.generateText', () => {
     )
     const out = await geminiProvider.generateText!({ prompt: 'x' })
     expect(out).toBe('')
+  })
+
+  it('forces application/json + response_schema when responseSchema is set', async () => {
+    const schema = {
+      type: 'OBJECT',
+      properties: { ok: { type: 'BOOLEAN' } },
+      required: ['ok'],
+    }
+    await geminiProvider.generateText!({ prompt: 'classify', responseSchema: schema })
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit]
+    const body = JSON.parse(init.body as string)
+    expect(body.generation_config.response_mime_type).toBe('application/json')
+    expect(body.generation_config.response_schema).toEqual(schema)
+    // JSON mode is text-only — response_modalities must not be sent.
+    expect(body.generation_config.response_modalities).toBeUndefined()
   })
 })
 

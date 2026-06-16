@@ -280,8 +280,13 @@ export function buildSolarPremiumQuote(args: {
   })
   const reqKw = estimate.context.requested_system_kw
   if (typeof reqKw === 'number' && reqKw > 0) {
-    const reqClamped = estimate.sizing.requested_kw_clamped === true
     const headlineKw = headlineTier?.system_kw_dc
+    // The request was clamped when the headline tier landed below the size the
+    // customer asked for — the roof or the DNSP export ceiling capped it. (The
+    // engine anchors the tiers to requested_size_kw, so a smaller headline kW
+    // than the request means a cap was hit.)
+    const reqClamped =
+      typeof headlineKw === 'number' && headlineKw + 0.05 < reqKw
     assumed_values.push({
       label: 'Requested size',
       value:

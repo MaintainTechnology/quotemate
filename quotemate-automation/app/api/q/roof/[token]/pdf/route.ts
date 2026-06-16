@@ -20,12 +20,18 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
 
   const { data: row } = await supabase
     .from('roofing_measurements')
-    .select('public_token, pdf_path')
+    .select('public_token, pdf_path, routing')
     .eq('public_token', token)
     .maybeSingle()
 
   if (!row) {
     return Response.json({ ok: false, error: 'Invalid or expired link' }, { status: 404 })
+  }
+  if (row.routing === 'inspection_required') {
+    return Response.json(
+      { ok: false, error: 'This roof needs a site visit first — no PDF until the price is confirmed' },
+      { status: 404 },
+    )
   }
 
   let path = row.pdf_path as string | null

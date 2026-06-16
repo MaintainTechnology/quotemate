@@ -75,6 +75,16 @@ export function finaliseSolarEstimate(estimate: SolarEstimate): SolarEstimate {
 export type SolarEnrichmentOrchestratorOpts = {
   /** Resolve the address to a coordinate. */
   geocode: (input: SolarAddressInput) => Promise<LatLng>
+  /**
+   * Multi-roof building picker (approach A): when set, this coordinate
+   * (a detected building's footprint centroid) is used as the point fed to
+   * the coverage gate / Solar API / dataLayers INSTEAD of geocoding the
+   * address. Lets the engine re-estimate a specific building on the
+   * property without changing the stored address. Address validation and
+   * geocode are skipped when present. Absent ⇒ today's behaviour (estimate
+   * the building Google's findClosest snaps to at the geocoded address).
+   */
+  targetLocation?: LatLng | null
   /** Forwarded to the Solar API client (apiKey, fetchImpl, …). */
   solarOpts?: SolarEnrichmentOpts
   /** Install year for the STC deeming lookup. Defaults to current year. */
@@ -104,13 +114,18 @@ export async function runSolarEstimate(args: {
   input: SolarAddressInput
   manual?: SolarManualRoofInput
   panelType?: SolarPanelType
-  /** Property electrical phase (design 2026-06-16). Absent → single-phase. */
-  phase?: SolarPhase
-  /** Customer/tradie-preferred system size in kW DC; null/absent → auto-size. */
-  desiredKw?: number | null
   /** Customer's optional quarterly electricity bill, AUD (premium quote
    *  §4.1) — persisted on context for utility-cost personalisation. */
   quarterlyBillAud?: number | null
+  /** Property power-supply phase (entry form). 'three' enlarges the export
+   *  ceiling 3× in sizing.ts. Undefined → 'unknown' (single-phase, no
+   *  multiplier). Persisted on context.phase. */
+  phase?: SolarPhase
+  /** Customer's preferred system size, kW DC (entry form). When finite and
+   *  positive, anchors the sizing tiers (still roof/export-capped). Persisted
+   *  on context.requested_size_kw AND context.requested_system_kw (the DB
+   *  column the dashboard reads back); non-finite/non-positive → null. */
+  requestedSizeKw?: number | null
   config: SolarConfig
   opts?: SolarEnrichmentOrchestratorOpts
 }): Promise<SolarEstimate> {
@@ -127,18 +142,24 @@ export async function runSolarEstimate(args: {
   }
   const config = validation.config
 
+  // Preferred size — only a finite positive value anchors the sizing tiers
+  // and persists; anything else degrades to null (tiers anchor to the roof
+  // max). The SAME value backs both context.requested_size_kw (the sizing
+  // anchor sizing.ts reads) and context.requested_system_kw (the DB column
+  // the dashboard / premium-quote / persist-helpers read back).
+  const requestedSizeKw =
+    typeof args.requestedSizeKw === 'number' &&
+    Number.isFinite(args.requestedSizeKw) &&
+    args.requestedSizeKw > 0
+      ? args.requestedSizeKw
+      : null
+
   const context: SolarEstimateContext = {
     postcode: args.input.postcode,
     state: args.input.state,
     install_year: installYear,
     network: opts.network,
-    phase: args.phase === 'three' ? 'three' : 'single',
-    requested_system_kw:
-      typeof args.desiredKw === 'number' &&
-      Number.isFinite(args.desiredKw) &&
-      args.desiredKw > 0
-        ? args.desiredKw
-        : null,
+    requested_system_kw: requestedSizeKw,
     // Optional bill — only a finite positive value is persisted; anything
     // else degrades to null (modelled utility costs downstream).
     quarterly_bill_aud:
@@ -147,14 +168,21 @@ export async function runSolarEstimate(args: {
       args.quarterlyBillAud > 0
         ? args.quarterlyBillAud
         : null,
+    // Power-supply phase — defaults to 'unknown' (single-phase, no export
+    // multiplier in sizing). Drives the export ceiling for three-phase.
+    phase: args.phase ?? 'unknown',
+    // Preferred size — anchors the sizing tiers (still roof/export-capped).
+    requested_size_kw: requestedSizeKw,
   }
 
   // 1. Address validation (best-effort) → geocode → coverage gate.
   //    Address Validation, when it returns a premise-level coordinate,
   //    is a more precise seed than a free-text geocode; otherwise we fall
   //    back to geocode. A missing/disabled API never blocks the path.
+  // Multi-roof: an explicit building centroid short-circuits address
+  // resolution entirely (we already know exactly which roof to estimate).
   let addressValidation: SolarAddressValidationInsight | null = null
-  if (opts.addressValidation) {
+  if (!opts.targetLocation && opts.addressValidation) {
     try {
       addressValidation = await opts.addressValidation(args.input)
     } catch {
@@ -163,9 +191,11 @@ export async function runSolarEstimate(args: {
   }
   context.address_validation = addressValidation
 
-  const location = addressValidationLocationUsable(addressValidation)
-    ? addressValidation.location
-    : await opts.geocode(args.input)
+  const location: LatLng = opts.targetLocation
+    ? opts.targetLocation
+    : addressValidationLocationUsable(addressValidation)
+      ? addressValidation.location
+      : await opts.geocode(args.input)
   context.location = location
 
   const solarOpts = resolveSolarOpts(opts.solarOpts)

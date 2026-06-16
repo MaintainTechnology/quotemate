@@ -30,6 +30,14 @@ export const SolarEstimateRequestSchema = z.object({
   panel_type: z
     .enum(['standard_panels', 'premium_panels', 'unknown'])
     .optional(),
+  // Property power-supply phase (entry form). A three-phase service lets the
+  // engine size the largest tier up to 3× the per-phase DNSP export limit.
+  // Optional — absent / 'unknown' is treated as single-phase (no multiplier).
+  phase: z.enum(['single', 'three', 'unknown']).optional(),
+  // Customer's preferred system size, kW DC (entry form, optional). Anchors
+  // the tier targets in sizing.ts (still roof- and export-capped). Bounded so
+  // a typo (e.g. 1000) can't blow past any realistic residential roof.
+  requested_size_kw: z.number().positive().max(100).optional(),
   // Optional customer contact — when a mobile is supplied the tradie-confirm
   // step texts the customer their quote (PDF link + best-effort MMS). Absent
   // → solar behaves as before (tradie-review only, customer views the page).
@@ -51,12 +59,21 @@ export const SolarEstimateRequestSchema = z.object({
   // IDENTICAL engine but render the Felt interactive-map layout and get
   // a Felt map provisioned in after(). Defaults to 'instant'.
   variant: z.enum(['instant', 'felt']).optional(),
-  // Property electrical phase (design 2026-06-16). Absent → single-phase.
-  // Scales the DNSP export cap (single ×1, 3-phase ×3) in the sizing engine.
-  phase: z.enum(['single', 'three']).optional(),
-  // Customer/tradie-preferred system size in kW DC. Anchors the headline tier;
-  // bounded so a typo can't request an implausible array.
-  desired_kw: z.number().positive().max(30).optional(),
+  // Chosen building (multi-roof building picker, 2026-06-16). When the
+  // address resolves to ≥2 structures the entry form lets the customer
+  // pick which one; this carries that choice so the engine targets that
+  // building's centroid (targetLocation) instead of the default structure.
+  // Absent → single-building behaviour, the engine resolves the address
+  // as before. The id is opaque (Geoscape buildingId or synthetic).
+  target_building: z
+    .object({
+      building_id: z.string().min(1).max(120),
+      centroid: z.object({
+        lat: z.number().gte(-90).lte(90),
+        lng: z.number().gte(-180).lte(180),
+      }),
+    })
+    .optional(),
 })
 
 export type SolarEstimateRequestBody = z.infer<typeof SolarEstimateRequestSchema>

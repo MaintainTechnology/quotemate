@@ -18,6 +18,7 @@ import {
   computeSolarAllowance,
   parseSolarDetection,
   solarAllowanceConfigFromCard,
+  SOLAR_DETECTION_SCHEMA,
 } from '@/lib/roofing/solar'
 import { DEFAULT_ROOFING_RATE_CARD } from '@/lib/roofing/pricing'
 
@@ -133,6 +134,7 @@ export async function POST(req: Request) {
       images: [{ base64: bytes.toString('base64'), mime }],
       temperature: 0,
       model: SOLAR_VISION_MODEL,
+      responseSchema: SOLAR_DETECTION_SCHEMA,
     })
     const detection = parseSolarDetection(text)
     if (!detection) {

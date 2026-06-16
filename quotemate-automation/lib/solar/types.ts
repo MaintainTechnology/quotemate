@@ -124,6 +124,15 @@ export type SolarPanelType =
   | 'premium_panels'
   | 'unknown'
 
+/**
+ * Property power-supply phase, customer-declared on the entry form.
+ * Single-phase services are capped at the per-phase DNSP export limit;
+ * three-phase services may export up to 3× that ceiling, enlarging the
+ * largest system the engine can size automatically. 'unknown' is the
+ * conservative default — treated as single-phase (no multiplier).
+ */
+export type SolarPhase = 'single' | 'three' | 'unknown'
+
 /** Routing outcome — identical shape to roofing/painting deciders. */
 export type SolarRoutingDecision =
   | { decision: 'auto_quote'; reason: string }
@@ -338,12 +347,16 @@ export type SolarSizingResult = {
   tiers: SolarSystemTier[]
   /** Largest system the roof can physically fit, kW DC. */
   roof_capacity_kw_dc: number
-  /** Export ceiling applied (default 5 kW/phase × phase count), kW AC. */
+  /**
+   * Export ceiling applied, kW AC. For three-phase services this is the
+   * per-phase DNSP limit × 3 (single/unknown ⇒ ×1). Display/debug.
+   */
   export_limit_kw_ac: number
-  /** Echo of the requested system size (kW DC), when one was supplied. */
-  requested_kw?: number | null
-  /** True when the requested size could not be met (roof/export limited it). */
-  requested_kw_clamped?: boolean
+  /** Power-supply phase used to size the export ceiling (display/debug). */
+  phase?: SolarPhase
+  /** Customer's preferred size that anchored the tiers, kW DC. Null when
+   *  none was supplied (tiers anchored to the roof max). Display/debug. */
+  requested_size_kw?: number | null
   routing: SolarRoutingDecision
 }
 
@@ -517,10 +530,6 @@ export type SolarFeedInConfig = {
   default_aud_per_kwh: number
 }
 
-/** Property electrical supply phase. Drives the DNSP export cap (single ×1,
- *  three ×3). Absent/legacy estimates are treated as single-phase. */
-export type SolarPhase = 'single' | 'three'
-
 /** Per-DNSP export-limit overrides; falls back to the default kW/phase. */
 export type SolarExportLimitConfig = {
   default_kw_per_phase: number
@@ -644,6 +653,58 @@ export type SolarConfigValidation =
     }
 
 // ╔══════════════════════════════════════════════════════════════════╗
+// ║ 6b. PROPERTY BUILDINGS  (building picker — approach A)            ║
+// ║     Multi-roof: one solar_estimates row is the PROPERTY record;  ║
+// ║     it lists every structure detected on the property and points ║
+// ║     `selected_building_id` at the one the headline estimate is    ║
+// ║     for. See 2026-06-16-solar-multi-roof-building-picker-design.  ║
+// ╚══════════════════════════════════════════════════════════════════╝
+
+/**
+ * Lazy-compute status of one detected building's full solar analysis.
+ *   pending     — detected/outlined, solar not computed yet
+ *   ready       — full SolarEstimate computed + cached
+ *   no_coverage — Google Solar has no usable imagery for this building
+ *   failed      — compute attempted and errored (transient; retryable)
+ */
+export type SolarBuildingSolarStatus =
+  | 'pending'
+  | 'ready'
+  | 'no_coverage'
+  | 'failed'
+
+/**
+ * One structure detected on the property (Geoscape `measureAll`) — the unit
+ * the building picker switches between. LIGHTWEIGHT metadata only; the full
+ * per-building SolarEstimate is computed lazily on selection and cached in
+ * `solar_building_cache`. Persisted as the `solar_estimates.buildings` jsonb
+ * array. Built by lib/solar/buildings.ts.
+ */
+export type DetectedBuilding = {
+  /** Stable id: Geoscape buildingId, or a synthetic `b<index>` when absent
+   *  (sub-polygons split from a MultiPolygon are suffixed `#1`, `#2`, …). */
+  building_id: string
+  /** Which structure on the parcel this is. */
+  role: 'primary' | 'secondary'
+  /** Friendly label for the picker, e.g. "Main house" / "Shed" /
+   *  "Secondary building 2". Derived from role + footprint area. */
+  label: string
+  /** Footprint centroid (EPSG:4326) — the point fed to Google
+   *  findClosest / dataLayers when this building is selected. */
+  centroid: LatLng
+  /** Building outline (EPSG:4326) for the picker overlay. Null when the
+   *  provider returned no polygon for this structure. */
+  footprint: GeoJSONPolygon | null
+  /** Planar footprint area in m² (ranking + label heuristics). */
+  area_m2: number | null
+  /** Geoscape roof shape string ('hip' | 'gable' | 'complex' | …). */
+  roof_shape: string | null
+  storeys: number | null
+  /** Lazy-compute status of this building's full solar analysis. */
+  solar_status: SolarBuildingSolarStatus
+}
+
+// ╔══════════════════════════════════════════════════════════════════╗
 // ║ 7. TOP-LEVEL ESTIMATE  (intake.ts orchestrator → solar_estimates) ║
 // ╚══════════════════════════════════════════════════════════════════╝
 
@@ -654,9 +715,9 @@ export type SolarEstimateContext = {
   install_year: number
   /** The network/DNSP resolved from postcode (for FiT + export limit). */
   network: string
-  /** Property electrical phase (design 2026-06-16). Absent → single-phase. */
-  phase?: SolarPhase
-  /** Customer/tradie-requested system size in kW DC; null when auto-sized. */
+  /** Customer/tradie-requested system size in kW DC; null when auto-sized.
+   *  Persisted to solar_estimates.requested_system_kw and read back by the
+   *  dashboard + premium-quote + redraft paths. */
   requested_system_kw?: number | null
   /** Resolved coordinate used for Solar/Maps calls. */
   location?: LatLng | null
@@ -669,6 +730,22 @@ export type SolarEstimateContext = {
    * charts fall back to config defaults labelled "modelled".
    */
   quarterly_bill_aud?: number | null
+  /**
+   * Property power-supply phase the customer declared (entry form).
+   * Drives the export-ceiling phase multiplier in sizing.ts: 'three' lets
+   * the largest tier target up to 3× the per-phase DNSP limit. Optional —
+   * estimates persisted before this field lack it (treated as 'unknown' →
+   * single-phase, no multiplier). Display/debug too.
+   */
+  phase?: SolarPhase
+  /**
+   * Customer's preferred system size, kW DC (entry form, optional). When a
+   * finite positive value is present, sizing.ts anchors the tier targets to
+   * this size (still capped by the roof AND the DNSP/phase export ceiling)
+   * instead of the roof maximum. Null/absent ⇒ tiers anchor to the roof max
+   * as before. Never a price input directly — only re-targets the tiers.
+   */
+  requested_size_kw?: number | null
   /**
    * Pylon STC cross-check result (premium quote §4.5), stamped by the
    * estimate route's after() when PYLON_ENABLED. Display-only ("STC
@@ -792,6 +869,17 @@ export type SolarEstimateContext = {
      * onto the heatmap deterministically. Absent on older estimates.
      */
     plane_anchors?: Array<{ plane_index: number; x_pct: number; y_pct: number }> | null
+    /**
+     * Geographic extent (EPSG:4326) of the rendered flux heatmap PNG, so
+     * it can be georeferenced as a raster on an interactive map (the
+     * pan/zoom SunShadeMap). Derived from the raster bbox + request centre
+     * via fluxRasterLatLngBounds — the SAME north-up/centred model as
+     * plane_anchors, so markers re-projected through these bounds land on
+     * the matching pixels. Absent on older estimates (they fall back to
+     * the static SunShadeOverlay) and null when the flux image/bbox are
+     * unavailable.
+     */
+    flux_bounds?: { west: number; south: number; east: number; north: number } | null
   } | null
 }
 

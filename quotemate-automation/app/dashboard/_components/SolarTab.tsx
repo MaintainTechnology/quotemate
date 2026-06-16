@@ -24,11 +24,13 @@
 // Maintain design system: dark navy, vibrant orange accent, all-caps mono.
 
 import { useCallback, useEffect, useState } from 'react'
-import { Copy, Check, Sun, ExternalLink, RefreshCw, Map as MapIcon } from 'lucide-react'
+import { Copy, Check, Sun, ExternalLink, RefreshCw, Download, Map as MapIcon } from 'lucide-react'
 import type {
   SolarEstimateStatus,
   SolarEstimateViewModel,
 } from '@/lib/solar/dashboard-view'
+import { OVERLAY_MAP_ZOOM, OVERLAY_MAP_WIDTH, OVERLAY_MAP_HEIGHT } from '@/lib/solar/layout-overlay'
+import { BuildingPicker } from '@/app/q/solar/[token]/BuildingPicker'
 import { PylonHardwareCard } from './PylonHardwareCard'
 
 type Props = {
@@ -158,6 +160,8 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
       },
     [overrideDraft],
   )
+  // Per-token building-switch state (multi-roof picker, 2026-06-16).
+  const [switchingBuilding, setSwitchingBuilding] = useState<Record<string, boolean>>({})
 
   const load = useCallback(async () => {
     if (!accessToken) {
@@ -319,6 +323,46 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
         }))
       } finally {
         setRedrafting((m) => {
+          const next = { ...m }
+          delete next[token]
+          return next
+        })
+      }
+    },
+    [accessToken, load],
+  )
+
+  // Switch which building a pre-release estimate is for (multi-roof picker).
+  // POSTs select-building with the tradie Bearer (same auth the other
+  // actions use), then reloads the list so the card re-prices for that roof.
+  // Throws on a non-2xx so the picker surfaces the 409/422 inline.
+  const switchBuilding = useCallback(
+    async (token: string, buildingId: string) => {
+      setSwitchingBuilding((m) => ({ ...m, [token]: true }))
+      try {
+        const res = await fetch(`/api/solar/q/${token}/select-building`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+          body: JSON.stringify({ building_id: buildingId }),
+        })
+        const json = (await res.json().catch(() => ({}))) as {
+          ok?: boolean
+          code?: string
+          error?: string
+        }
+        if (!res.ok || !json.ok) {
+          throw new Error(
+            json.code === 'no_coverage'
+              ? 'No solar data is available for that building yet.'
+              : json.error || `HTTP ${res.status}`,
+          )
+        }
+        await load()
+      } finally {
+        setSwitchingBuilding((m) => {
           const next = { ...m }
           delete next[token]
           return next
@@ -558,6 +602,34 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                     />
                   </div>
 
+                  {/* ── Multi-roof building switcher (2026-06-16). Pre-release
+                      cards with ≥2 detected buildings get a compact picker:
+                      tapping re-runs the estimate for that roof. Hidden once
+                      released/paid (no switching after the lock). */}
+                  {(e.status === 'awaiting_confirmation' || e.status === 'flagged') &&
+                    e.buildings.length >= 2 &&
+                    e.buildingMapCenter && (
+                      <div className="mt-4">
+                        <div className="mb-2 font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+                          Estimating which building?
+                        </div>
+                        <BuildingPicker
+                          buildings={e.buildings}
+                          selectedBuildingId={e.selectedBuildingId}
+                          mapParams={{
+                            center: e.buildingMapCenter,
+                            zoom: OVERLAY_MAP_ZOOM,
+                            width: OVERLAY_MAP_WIDTH,
+                            height: OVERLAY_MAP_HEIGHT,
+                          }}
+                          imageUrl={`/api/solar/q/${e.token}/static-map`}
+                          mode="select"
+                          onSelect={(id) => switchBuilding(e.token, id)}
+                          disabled={!!switchingBuilding[e.token]}
+                        />
+                      </div>
+                    )}
+
                   {e.status === 'flagged' && (
                     <div className="mt-4 border border-warning/40 border-l-4 border-l-warning bg-ink-card px-4 py-3">
                       <p className="text-sm font-semibold text-warning">
@@ -614,6 +686,20 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                       <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
                       View
                     </a>
+                    {/* Download the full solar quote as a PDF. Hidden for
+                        inspection-routed estimates (the /api route 404s those
+                        — no committable price to put in a document). */}
+                    {e.routing !== 'inspection_required' && (
+                      <a
+                        href={`/api/q/solar/${e.token}/pdf`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 border border-ink-line px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent"
+                      >
+                        <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                        PDF
+                      </a>
+                    )}
                     {/* Tradie-facing Felt editor link — annotate the map in
                         Felt; the customer embed updates automatically. */}
                     {e.quoteVariant === 'felt' && e.feltMapUrl && (

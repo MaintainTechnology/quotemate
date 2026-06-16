@@ -14,16 +14,25 @@ export function buildSolarFormPayload(state: {
   roofSize: 'small' | 'medium' | 'large'
   storeys: 1 | 2 | 3
   panelType: 'standard_panels' | 'premium_panels' | 'unknown'
+  /** Property power-supply phase (entry form). 'unknown' is omitted from the
+   *  payload, like the other "not sure" optional fields. */
+  phase?: 'single' | 'three' | 'unknown'
+  /** Raw preferred-size text from the optional kW field (e.g. "10"). Blank
+   *  or junk → no preference sent. */
+  requestedSizeKw?: string
   customerName?: string
   customerMobile?: string
   /** Raw quarterly-bill text from the optional form field (e.g. "850"). */
   quarterlyBill?: string
   /** Quote layout variant (Felt tab spec 2026-06-13). Omitted = instant. */
   variant?: 'instant' | 'felt'
-  /** Property electrical phase; omit when the customer is unsure. */
-  phase?: 'single' | 'three'
-  /** Preferred system size in kW DC; omit to auto-size. */
-  desiredKw?: number
+  /** Building chosen in the multi-roof picker (2026-06-16). Present only
+   *  when the address resolved to ≥2 structures and the customer tapped
+   *  one — carries the engine's target centroid. Omitted = single-roof. */
+  targetBuilding?: {
+    building_id: string
+    centroid: { lat: number; lng: number }
+  } | null
 }): SolarEstimateRequestBody {
   const payload: SolarEstimateRequestBody = {
     address: {
@@ -41,6 +50,21 @@ export function buildSolarFormPayload(state: {
   }
   if (state.panelType !== 'unknown') {
     payload.panel_type = state.panelType
+  }
+  // Power-supply phase — only send a definite single/three; 'unknown' (or
+  // absent) means no multiplier, matching the schema's optional default.
+  if (state.phase === 'single' || state.phase === 'three') {
+    payload.phase = state.phase
+  }
+  // Preferred size — parsed leniently ("10kW" / "10.5" both work); only a
+  // finite positive number within the schema bound is sent, so a blank or
+  // junk field never reaches the API (= no preference).
+  const sizeRaw = state.requestedSizeKw?.trim().replace(/[^0-9.]/g, '')
+  if (sizeRaw) {
+    const kw = Number.parseFloat(sizeRaw)
+    if (Number.isFinite(kw) && kw > 0 && kw <= 100) {
+      payload.requested_size_kw = kw
+    }
   }
   // Optional contact — only include keys the customer actually filled, so an
   // empty field never persists as a blank phone/name.
@@ -67,14 +91,19 @@ export function buildSolarFormPayload(state: {
   if (state.variant === 'felt') {
     payload.variant = 'felt'
   }
-  // Phase only ships when the customer actually chose one ("Not sure" → omit,
-  // engine defaults to single).
-  if (state.phase === 'single' || state.phase === 'three') {
-    payload.phase = state.phase
-  }
-  // Preferred size — only a finite positive value within the schema bound.
-  if (typeof state.desiredKw === 'number' && Number.isFinite(state.desiredKw) && state.desiredKw > 0) {
-    payload.desired_kw = state.desiredKw
+  // Chosen building (multi-roof picker) — only send a valid, finite
+  // centroid so a partial selection never reaches the engine.
+  const tb = state.targetBuilding
+  if (
+    tb &&
+    tb.building_id &&
+    Number.isFinite(tb.centroid?.lat) &&
+    Number.isFinite(tb.centroid?.lng)
+  ) {
+    payload.target_building = {
+      building_id: tb.building_id,
+      centroid: { lat: tb.centroid.lat, lng: tb.centroid.lng },
+    }
   }
   return payload
 }

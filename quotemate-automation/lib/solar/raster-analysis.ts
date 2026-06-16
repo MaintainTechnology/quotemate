@@ -312,6 +312,48 @@ export function projectPlaneAnchors(
   return anchors
 }
 
+/** Geographic extent of the rendered flux PNG (EPSG:4326). */
+export type FluxLatLngBounds = { west: number; south: number; east: number; north: number }
+
+/**
+ * PURE — the rendered flux PNG's lat/lng bounding box, for georeferencing
+ * it on a map. CRITICAL: this uses the SAME geometric model as
+ * `projectPlaneAnchors` — the raster is treated as north-up and CENTRED on
+ * the dataLayers request `center`, with the bbox giving only the true
+ * metre extents (Google Solar GeoTIFFs carry a PROJECTED UTM bbox, so its
+ * raw corners are NOT WGS84 and must never be used as lat/lng directly).
+ * Half the metre width/height are converted back to degrees around the
+ * centre, so the corners line up exactly with where x_pct/y_pct anchors
+ * land — markers re-projected through these bounds sit on the same pixels.
+ * When the bbox is already in degrees (|values| ≤ 360) the spans convert
+ * first. Returns null for a null/degenerate bbox or non-finite centre.
+ */
+export function fluxRasterLatLngBounds(
+  bbox: [number, number, number, number] | null,
+  center: { lat: number; lng: number },
+): FluxLatLngBounds | null {
+  if (!bbox) return null
+  if (!Number.isFinite(center.lat) || !Number.isFinite(center.lng)) return null
+  const [west, south, east, north] = bbox
+  if (![west, south, east, north].every((v) => Number.isFinite(v))) return null
+
+  const degreeBbox = Math.abs(west) <= 360 && Math.abs(east) <= 360 && Math.abs(north) <= 360
+  const cosLat = Math.cos((center.lat * Math.PI) / 180)
+  const widthM = degreeBbox ? (east - west) * M_PER_DEG_LNG * cosLat : east - west
+  const heightM = degreeBbox ? (north - south) * M_PER_DEG_LAT : north - south
+  if (!(widthM > 0) || !(heightM > 0) || !(cosLat > 0)) return null
+
+  // Half-extents in degrees around the request centre (north-up image).
+  const halfLng = widthM / 2 / (M_PER_DEG_LNG * cosLat)
+  const halfLat = heightM / 2 / M_PER_DEG_LAT
+  return {
+    west: center.lng - halfLng,
+    east: center.lng + halfLng,
+    south: center.lat - halfLat,
+    north: center.lat + halfLat,
+  }
+}
+
 // ── helpers ──────────────────────────────────────────────────────────
 
 /** Count set bits among the lowest `limit` bits of v. */

@@ -17,8 +17,10 @@ describe('solarPremiumQuoteEnabled', () => {
 describe('buildSolarPremiumQuote — phase + requested size rows', () => {
   it('shows the power supply and a clamped requested size', () => {
     const est = makeEstimate()
+    // Requested 14 kW but the fixture's headline tier is 10 kW → the engine
+    // capped the request (roof / connection limited), which premium-quote.ts
+    // surfaces as the "capped" callout (derived from headline kW < requested).
     est.context = { ...est.context, phase: 'three', requested_system_kw: 14 }
-    est.sizing = { ...est.sizing, requested_kw_clamped: true }
     const premium = buildSolarPremiumQuote({
       estimate: est,
       config: DEFAULT_SOLAR_CONFIG,

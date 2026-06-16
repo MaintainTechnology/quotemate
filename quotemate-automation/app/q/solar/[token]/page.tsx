@@ -51,7 +51,11 @@ import { loadSolarConfig } from '@/lib/solar/config'
 import type { SolarChart } from '@/lib/solar/charts'
 import { buildSolarHardwareCards } from '@/lib/solar/hardware-cards'
 import { buildSolarSunView } from '@/lib/solar/sun-view'
+import { resolveSolarOverlayCenter } from '@/lib/solar/static-map-center'
+import type { DetectedBuilding } from '@/lib/solar/types'
 import { SunShadeOverlay } from './SunShadeOverlay'
+import { SunShadeMap } from './SunShadeMap'
+import { BuildingPickerSection } from './BuildingPickerSection'
 import { HeatmapAutoRefresh } from './HeatmapAutoRefresh'
 import { money, kwh, kw, paybackBand } from '@/lib/solar/quote-page-format'
 import {
@@ -75,6 +79,8 @@ type Row = {
   quote_variant: string | null
   felt: SolarFeltRecord | null
   ai_brief: SolarAiBriefRecord | null
+  buildings: DetectedBuilding[] | null
+  selected_building_id: string | null
 }
 
 const TIER_NAME: Record<'good' | 'better' | 'best', string> = {
@@ -98,7 +104,7 @@ export default async function SolarQuotePage({
 
   const { data, error } = await supabase
     .from('solar_estimates')
-    .select('address, state, estimate, confirmed_at, quote_variant, felt, ai_brief')
+    .select('address, state, estimate, confirmed_at, quote_variant, felt, ai_brief, buildings, selected_building_id')
     .eq('public_token', token)
     .maybeSingle()
 
@@ -146,6 +152,22 @@ export default async function SolarQuotePage({
   // Pylon hardware supplement (build 2026-06-13) — customer-facing
   // datasheet cards; empty array when the tenant nominated no SKUs.
   const hardwareCards = buildSolarHardwareCards(estimate.context)
+
+  // ── Multi-roof building picker (2026-06-16). When the property carries
+  // ≥2 detected buildings, let the viewer pick which roof the estimate is
+  // for. The picker projects each building.footprint onto the SAME static
+  // map the hero <img> shows — centred via resolveSolarOverlayCenter at
+  // zoom 20 / 640×480 — so the outlines are pixel-aligned. Read-only once
+  // the estimate is released/confirmed (no switching after the lock).
+  const buildings = row.buildings ?? []
+  const pickerCenter =
+    buildings.length >= 2
+      ? resolveSolarOverlayCenter({
+          roof: estimate.roof,
+          location: estimate.context.location ?? null,
+        })
+      : null
+  const showBuildingPicker = buildings.length >= 2 && pickerCenter != null
 
   // Deferred-asset auto-refresh (2026-06-16): the Sun & shade heatmap and
   // — for a clean estimate — the auto-release confirm land a few seconds
@@ -433,6 +455,27 @@ export default async function SolarQuotePage({
           </div>
         )}
 
+        {/* ── Multi-roof building picker (2026-06-16). Lets the viewer
+            switch which structure the estimate is for. Read-only once the
+            estimate is released/confirmed. Hidden below 2 buildings. */}
+        {showBuildingPicker && pickerCenter && (
+          <div className={`mt-10 ${reveal(275)}`}>
+            <SectionHeading label="Which building?" />
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-text-sec">
+              We found more than one building on this property. The estimate
+              below is for the highlighted roof — tap another building to
+              re-estimate that one instead.
+            </p>
+            <BuildingPickerSection
+              token={token}
+              center={pickerCenter}
+              buildings={buildings}
+              selectedBuildingId={row.selected_building_id}
+              readOnly={view.confirmed}
+            />
+          </div>
+        )}
+
         {/* Sun & shade analysis (full-exploitation build 2026-06-13) —
             measured roof irradiance heatmap, sunshine hours, per-plane
             sun scores and the shade-free window. No dollars → renders
@@ -441,14 +484,28 @@ export default async function SolarQuotePage({
           <div className={`mt-10 ${reveal(280)}`}>
             <SectionHeading label="Sun & shade analysis" />
 
-            {sunView.flux_image_available && (
-              <SunShadeOverlay
-                heatmapSrc={`/api/solar/q/${token}/flux-heatmap`}
-                alt={`Roof irradiance heatmap for ${row.address ?? 'the property'} — brighter areas receive more annual sun`}
-                markers={sunView.markers}
-                caption={sunView.flux_caption}
-              />
-            )}
+            {sunView.flux_image_available &&
+              (sunView.flux_bounds ? (
+                // Georeferenced, pan/zoom heatmap — markers placed at real
+                // lat/lng, so off-centre buildings stay aligned. New / re-drafted
+                // estimates only (they carry flux_bounds).
+                <SunShadeMap
+                  heatmapSrc={`/api/solar/q/${token}/flux-heatmap`}
+                  alt={`Roof irradiance heatmap for ${row.address ?? 'the property'} — brighter areas receive more annual sun`}
+                  markers={sunView.markers}
+                  caption={sunView.flux_caption}
+                  bounds={sunView.flux_bounds}
+                />
+              ) : (
+                // Static fallback for estimates drafted before flux_bounds was
+                // persisted — image-% positioning, no regression.
+                <SunShadeOverlay
+                  heatmapSrc={`/api/solar/q/${token}/flux-heatmap`}
+                  alt={`Roof irradiance heatmap for ${row.address ?? 'the property'} — brighter areas receive more annual sun`}
+                  markers={sunView.markers}
+                  caption={sunView.flux_caption}
+                />
+              ))}
 
             {sunView.stats.length > 0 && (
               <div className="mt-5 grid gap-px overflow-hidden border border-ink-line bg-ink-line sm:grid-cols-2 lg:grid-cols-3">
