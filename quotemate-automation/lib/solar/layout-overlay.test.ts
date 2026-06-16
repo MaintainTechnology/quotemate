@@ -6,6 +6,7 @@ import {
   segmentColor,
   buildLayoutOverlay,
   OVERLAY_MAP_ZOOM,
+  MODULE_GUTTER,
   __test_only__,
 } from './layout-overlay'
 import type { SolarPanelPlacement, SolarRoofPlane } from './types'
@@ -161,6 +162,37 @@ describe('buildLayoutOverlay', () => {
     const w = Number(/width="([\d.]+)"/.exec(out.svg.split('<rect')[1])![1])
     const h = Number(/height="([\d.]+)"/.exec(out.svg.split('<rect')[1])![1])
     expect(w).toBeGreaterThan(h) // long side horizontal
+  })
+
+  it('insets each module by MODULE_GUTTER so neighbours keep a visible gap', () => {
+    const flatPlanes: SolarRoofPlane[] = [
+      { pitch_degrees: 0, azimuth_degrees: 0, area_m2: 60, orientation: 'flat' },
+    ]
+    const out = buildLayoutOverlay({
+      panels: makePanels(1),
+      panel_size_m: PANEL_SIZE,
+      planes: flatPlanes,
+      center: SYD,
+    })!
+    const mpp = metersPerPixel(SYD.lat, OVERLAY_MAP_ZOOM)
+    const fullShort = PANEL_SIZE.width_m / mpp // PORTRAIT → short side is the width
+    const w = Number(/width="([\d.]+)"/.exec(out.svg.split('<rect')[1])![1])
+    expect(MODULE_GUTTER).toBeGreaterThan(0)
+    expect(MODULE_GUTTER).toBeLessThan(1)
+    expect(w).toBeCloseTo(fullShort * MODULE_GUTTER, 1)
+    expect(w).toBeLessThan(fullShort) // strictly inset — leaves the walkway gap
+  })
+
+  it('renders one crisp white-edged module per panel (no translucent smear)', () => {
+    const out = buildLayoutOverlay({
+      panels: makePanels(4),
+      panel_size_m: PANEL_SIZE,
+      planes: PLANES,
+      center: SYD,
+    })!
+    expect(out.svg.match(/<rect /g)?.length).toBe(4) // still one rect per panel
+    expect(out.svg).toContain('stroke="#FFFFFF"')
+    expect(out.svg).not.toContain('fill-opacity="0.55"') // old smeary style gone
   })
 
   it('degrades to null: empty panels, missing dimensions, bad centre', () => {

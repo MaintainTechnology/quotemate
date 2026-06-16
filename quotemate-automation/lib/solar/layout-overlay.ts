@@ -50,6 +50,16 @@ export function segmentColor(segmentIndex: number): string {
   return SEGMENT_PALETTE[i]
 }
 
+// Fraction of each panel's true footprint actually painted. Google places
+// modules edge-to-edge, so drawing them at full size makes neighbours touch;
+// with translucent fills + hairline strokes the seams smear into one blob and
+// READ as overlapping (the #1 complaint). Insetting each module a little leaves
+// a thin "walkway" gap so every panel renders as a separate, crisp rectangle —
+// which is also physically honest (real arrays carry frame + row gaps). Purely
+// cosmetic: it scales the drawn rectangle, never the projected centre, so the
+// engineering geometry (centre, azimuth, foreshorten) is unchanged.
+export const MODULE_GUTTER = 0.82
+
 // ── Web-Mercator projection ──────────────────────────────────────────
 
 /** PURE — world-pixel coordinate at a zoom (256 × 2^z world). */
@@ -158,17 +168,22 @@ export function buildLayoutOverlay(input: LayoutOverlayInput): LayoutOverlay | n
     // LANDSCAPE: long side runs along the row (horizontal pre-rotation).
     const longPx = panel_size_m.height_m / mpp
     const shortPx = panel_size_m.width_m / mpp
-    const w = p.orientation === 'PORTRAIT' ? shortPx : longPx
-    const h = (p.orientation === 'PORTRAIT' ? longPx : shortPx) * foreshorten
+    // Inset by the module gutter so adjacent panels keep a visible gap.
+    const w = (p.orientation === 'PORTRAIT' ? shortPx : longPx) * MODULE_GUTTER
+    const h = (p.orientation === 'PORTRAIT' ? longPx : shortPx) * foreshorten * MODULE_GUTTER
 
     const color = segmentColor(p.segment_index)
     counts.set(p.segment_index, (counts.get(p.segment_index) ?? 0) + 1)
 
+    // Crisp, near-solid module with a thin white edge so each panel reads as a
+    // discrete rectangle against the satellite photo (vs the old translucent
+    // edge-touching fill that smeared neighbours together). One <rect> per
+    // panel; the gutter — not opacity — does the separating.
     rects.push(
       `<rect x="${round2(px.x - w / 2)}" y="${round2(px.y - h / 2)}" ` +
-        `width="${round2(w)}" height="${round2(h)}" ` +
+        `width="${round2(w)}" height="${round2(h)}" rx="0.5" ` +
         `transform="rotate(${round2(normaliseDeg(azimuth))} ${round2(px.x)} ${round2(px.y)})" ` +
-        `fill="${color}" fill-opacity="0.55" stroke="${color}" stroke-width="0.8"/>`,
+        `fill="${color}" fill-opacity="0.85" stroke="#FFFFFF" stroke-width="0.6" stroke-opacity="0.9"/>`,
     )
   }
 
