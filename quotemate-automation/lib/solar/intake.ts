@@ -36,6 +36,7 @@ import type {
   SolarAddressInput,
   SolarManualRoofInput,
   SolarPanelType,
+  SolarPhase,
   SolarConfig,
   LatLng,
   SolarEstimate,
@@ -103,6 +104,10 @@ export async function runSolarEstimate(args: {
   input: SolarAddressInput
   manual?: SolarManualRoofInput
   panelType?: SolarPanelType
+  /** Property electrical phase (design 2026-06-16). Absent → single-phase. */
+  phase?: SolarPhase
+  /** Customer/tradie-preferred system size in kW DC; null/absent → auto-size. */
+  desiredKw?: number | null
   /** Customer's optional quarterly electricity bill, AUD (premium quote
    *  §4.1) — persisted on context for utility-cost personalisation. */
   quarterlyBillAud?: number | null
@@ -127,6 +132,13 @@ export async function runSolarEstimate(args: {
     state: args.input.state,
     install_year: installYear,
     network: opts.network,
+    phase: args.phase === 'three' ? 'three' : 'single',
+    requested_system_kw:
+      typeof args.desiredKw === 'number' &&
+      Number.isFinite(args.desiredKw) &&
+      args.desiredKw > 0
+        ? args.desiredKw
+        : null,
     // Optional bill — only a finite positive value is persisted; anything
     // else degrades to null (modelled utility costs downstream).
     quarterly_bill_aud:
