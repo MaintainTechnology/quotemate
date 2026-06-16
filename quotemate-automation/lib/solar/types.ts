@@ -338,8 +338,12 @@ export type SolarSizingResult = {
   tiers: SolarSystemTier[]
   /** Largest system the roof can physically fit, kW DC. */
   roof_capacity_kw_dc: number
-  /** Export ceiling applied (default 5 kW/phase), kW AC. */
+  /** Export ceiling applied (default 5 kW/phase × phase count), kW AC. */
   export_limit_kw_ac: number
+  /** Echo of the requested system size (kW DC), when one was supplied. */
+  requested_kw?: number | null
+  /** True when the requested size could not be met (roof/export limited it). */
+  requested_kw_clamped?: boolean
   routing: SolarRoutingDecision
 }
 
@@ -513,6 +517,10 @@ export type SolarFeedInConfig = {
   default_aud_per_kwh: number
 }
 
+/** Property electrical supply phase. Drives the DNSP export cap (single ×1,
+ *  three ×3). Absent/legacy estimates are treated as single-phase. */
+export type SolarPhase = 'single' | 'three'
+
 /** Per-DNSP export-limit overrides; falls back to the default kW/phase. */
 export type SolarExportLimitConfig = {
   default_kw_per_phase: number
@@ -646,6 +654,10 @@ export type SolarEstimateContext = {
   install_year: number
   /** The network/DNSP resolved from postcode (for FiT + export limit). */
   network: string
+  /** Property electrical phase (design 2026-06-16). Absent → single-phase. */
+  phase?: SolarPhase
+  /** Customer/tradie-requested system size in kW DC; null when auto-sized. */
+  requested_system_kw?: number | null
   /** Resolved coordinate used for Solar/Maps calls. */
   location?: LatLng | null
   /** Best-effort Google Address Validation result for the input address. */
