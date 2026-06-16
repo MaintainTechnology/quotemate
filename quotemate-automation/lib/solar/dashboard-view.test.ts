@@ -136,6 +136,26 @@ describe('mapSolarEstimateRow', () => {
     expect(vm.quoteUrl).toBe('https://example.com/q/solar/tok_abc')
   })
 
+  it('surfaces electrical_phase and requested_system_kw', () => {
+    const vm = mapSolarEstimateRow({
+      row: { ...baseRow, electrical_phase: 'three', requested_system_kw: 10 },
+      customerName: null,
+      appUrl: 'https://example.com',
+    })
+    expect(vm.electricalPhase).toBe('three')
+    expect(vm.requestedSystemKw).toBe(10)
+  })
+
+  it('defaults phase to single and size to null when columns are absent', () => {
+    const vm = mapSolarEstimateRow({
+      row: baseRow,
+      customerName: null,
+      appUrl: 'https://example.com',
+    })
+    expect(vm.electricalPhase).toBe('single')
+    expect(vm.requestedSystemKw).toBe(null)
+  })
+
   it('falls back to the first tier when no better tier exists', () => {
     const vm = mapSolarEstimateRow({
       row: {

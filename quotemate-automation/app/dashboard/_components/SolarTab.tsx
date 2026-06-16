@@ -141,6 +141,20 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
   const [redrafting, setRedrafting] = useState<Record<string, boolean>>({})
   const [redraftError, setRedraftError] = useState<Record<string, string>>({})
   const [redraftDone, setRedraftDone] = useState<Record<string, string>>({})
+  // Per-token re-draft override draft (design 2026-06-16): the phase/size the
+  // tradie will re-run with. Initialised lazily from the card's current values.
+  const [overrideDraft, setOverrideDraft] = useState<
+    Record<string, { phase: 'single' | 'three'; desiredKw: string }>
+  >({})
+
+  const draftFor = useCallback(
+    (e: SolarEstimateViewModel) =>
+      overrideDraft[e.token] ?? {
+        phase: e.electricalPhase,
+        desiredKw: e.requestedSystemKw != null ? String(e.requestedSystemKw) : '',
+      },
+    [overrideDraft],
+  )
 
   const load = useCallback(async () => {
     if (!accessToken) {
@@ -254,7 +268,10 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
   )
 
   const redraftEstimate = useCallback(
-    async (token: string) => {
+    async (
+      token: string,
+      overrides?: { phase?: 'single' | 'three'; desired_kw?: number | null },
+    ) => {
       if (!accessToken) return
       setRedrafting((m) => ({ ...m, [token]: true }))
       setRedraftError((m) => {
@@ -270,7 +287,11 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
       try {
         const res = await fetch(`/api/solar/redraft/${token}`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify(overrides ?? {}),
         })
         const json = (await res.json().catch(() => ({}))) as {
           ok?: boolean
@@ -614,22 +635,80 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                       </button>
                     )}
                     {e.canRedraft && (
-                      <button
-                        type="button"
-                        onClick={() => void redraftEstimate(e.token)}
-                        disabled={!!redrafting[e.token]}
-                        className={`inline-flex items-center gap-2 px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] transition-colors disabled:opacity-60 ${
-                          e.status === 'flagged'
-                            ? 'bg-accent text-white hover:bg-accent-press'
-                            : 'border border-ink-line text-text-pri hover:border-accent hover:text-accent'
-                        }`}
-                      >
-                        <RefreshCw
-                          className={`h-3.5 w-3.5 ${redrafting[e.token] ? 'animate-spin' : ''}`}
-                          aria-hidden="true"
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div
+                          className="grid grid-cols-2 border border-ink-line"
+                          role="radiogroup"
+                          aria-label="Power supply"
+                        >
+                          {(['single', 'three'] as const).map((p, i) => {
+                            const active = draftFor(e).phase === p
+                            return (
+                              <button
+                                key={p}
+                                type="button"
+                                role="radio"
+                                aria-checked={active}
+                                onClick={() =>
+                                  setOverrideDraft((m) => ({
+                                    ...m,
+                                    [e.token]: { ...draftFor(e), phase: p },
+                                  }))
+                                }
+                                className={`px-3 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] transition-colors ${
+                                  i > 0 ? 'border-l border-ink-line' : ''
+                                } ${
+                                  active
+                                    ? 'bg-accent text-ink-deep'
+                                    : 'bg-ink-deep text-text-sec hover:text-text-pri'
+                                }`}
+                              >
+                                {p === 'three' ? '3-phase' : 'Single'}
+                              </button>
+                            )
+                          })}
+                        </div>
+                        <input
+                          type="number"
+                          min={1}
+                          max={30}
+                          step="0.1"
+                          inputMode="decimal"
+                          aria-label="Preferred size (kW)"
+                          placeholder="Size kW"
+                          value={draftFor(e).desiredKw}
+                          onChange={(ev) =>
+                            setOverrideDraft((m) => ({
+                              ...m,
+                              [e.token]: { ...draftFor(e), desiredKw: ev.target.value },
+                            }))
+                          }
+                          className="w-24 border border-ink-line bg-ink-deep px-3 py-2.5 font-mono text-xs tabular-nums text-text-pri"
                         />
-                        {redrafting[e.token] ? 'Re-drafting…' : 'Re-draft'}
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const d = draftFor(e)
+                            const kw = Number.parseFloat(d.desiredKw)
+                            void redraftEstimate(e.token, {
+                              phase: d.phase,
+                              desired_kw: Number.isFinite(kw) && kw > 0 ? kw : null,
+                            })
+                          }}
+                          disabled={!!redrafting[e.token]}
+                          className={`inline-flex items-center gap-2 px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] transition-colors disabled:opacity-60 ${
+                            e.status === 'flagged'
+                              ? 'bg-accent text-white hover:bg-accent-press'
+                              : 'border border-ink-line text-text-pri hover:border-accent hover:text-accent'
+                          }`}
+                        >
+                          <RefreshCw
+                            className={`h-3.5 w-3.5 ${redrafting[e.token] ? 'animate-spin' : ''}`}
+                            aria-hidden="true"
+                          />
+                          {redrafting[e.token] ? 'Re-drafting…' : 'Re-draft'}
+                        </button>
+                      </div>
                     )}
                   </div>
                 </li>

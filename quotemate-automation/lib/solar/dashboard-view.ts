@@ -118,6 +118,10 @@ export type SolarEstimateRawRow = {
   sizing: { tiers?: SolarSystemTier[] } | null
   /** Quote layout variant (migration 111). Missing on old rows = instant. */
   quote_variant?: string | null
+  /** Property electrical phase (migration 116). Missing on old rows = single. */
+  electrical_phase?: string | null
+  /** Tradie/customer-requested system size kW DC (migration 116); null = auto. */
+  requested_system_kw?: number | null
   /** Felt map provisioning record (felt-variant rows only). */
   felt?: SolarFeltRowSummary
   /**
@@ -180,6 +184,10 @@ export type SolarEstimateViewModel = {
   openSolarProjectUrl: string | null
   /** Quote layout variant (Felt tab spec 2026-06-13). */
   quoteVariant: 'instant' | 'felt'
+  /** Property electrical phase (design 2026-06-16). */
+  electricalPhase: 'single' | 'three'
+  /** Tradie/customer-requested system size in kW DC; null when auto-sized. */
+  requestedSystemKw: number | null
   /** Felt map provisioning status; null on instant rows / pre-provision. */
   feltStatus: 'pending' | 'provisioning' | 'ready' | 'partial' | 'failed' | null
   /** Tradie-facing "Open in Felt" editor link. */
@@ -254,6 +262,9 @@ export function mapSolarEstimateRow(args: {
     pylonLeadUrl: args.pylonStage?.url ?? null,
     openSolarProjectUrl: args.openSolarProjectUrl ?? null,
     quoteVariant: row.quote_variant === 'felt' ? 'felt' : 'instant',
+    electricalPhase: row.electrical_phase === 'three' ? 'three' : 'single',
+    requestedSystemKw:
+      typeof row.requested_system_kw === 'number' ? row.requested_system_kw : null,
     feltStatus: row.felt?.status ?? null,
     feltMapUrl: row.felt?.map_url ?? null,
     feltThumbnailUrl: row.felt?.thumbnail_url ?? null,
