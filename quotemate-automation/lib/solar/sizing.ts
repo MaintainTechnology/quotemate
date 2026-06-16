@@ -63,9 +63,14 @@ export function sizeSolarSystem(args: {
 
   // Export ceiling: kW AC limit per phase → an equivalent DC ceiling via
   // the derate (DC × derate = AC, so DC ceiling = AC limit / derate).
-  const export_limit_kw_ac =
+  // The per-phase cap (network override wins) is scaled by the property's
+  // phase count: single-phase = ×1, 3-phase = ×3. Absent/legacy phase →
+  // single, so every existing single-phase estimate keeps its exact numbers.
+  const perPhaseCapKw =
     config.export_limits.by_network[context.network] ??
     config.export_limits.default_kw_per_phase
+  const phaseCount = context.phase === 'three' ? 3 : 1
+  const export_limit_kw_ac = perPhaseCapKw * phaseCount
   const exportDcCeiling = round2(export_limit_kw_ac / config.derate_factor)
 
   // No usable roof → inspection (the only sizing failure mode).

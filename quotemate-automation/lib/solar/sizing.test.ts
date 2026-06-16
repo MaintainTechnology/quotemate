@@ -42,6 +42,33 @@ const ROOF: SolarRoofFacts = {
   ],
 }
 
+describe('sizeSolarSystem — phase-aware export cap', () => {
+  // CONTEXT.network = 'Ausgrid', whose per-phase cap in DEFAULT_SOLAR_CONFIG is 5.
+  it('single-phase (default) caps at the per-phase limit ×1', () => {
+    const res = sizeSolarSystem({
+      roof: ROOF, panelType: 'standard_panels', config: DEFAULT_SOLAR_CONFIG,
+      context: { ...CONTEXT, phase: 'single' },
+    })
+    expect(res.export_limit_kw_ac).toBe(5)
+  })
+
+  it('three-phase caps at the per-phase limit ×3', () => {
+    const res = sizeSolarSystem({
+      roof: ROOF, panelType: 'standard_panels', config: DEFAULT_SOLAR_CONFIG,
+      context: { ...CONTEXT, phase: 'three' },
+    })
+    expect(res.export_limit_kw_ac).toBe(15)
+  })
+
+  it('absent phase behaves as single-phase (no regression)', () => {
+    const res = sizeSolarSystem({
+      roof: ROOF, panelType: 'standard_panels', config: DEFAULT_SOLAR_CONFIG,
+      context: { ...CONTEXT },
+    })
+    expect(res.export_limit_kw_ac).toBe(5)
+  })
+})
+
 describe('sizeSolarSystem', () => {
   const result = sizeSolarSystem({
     roof: ROOF,
