@@ -53,6 +53,7 @@ import { RoofRatesEditor } from './_components/RoofRatesEditor'
 import { EstimatorBetaTab } from './_components/EstimatorBetaTab'
 import { SolarTab } from './_components/SolarTab'
 import CommercialPaintingTab from './_components/commercial-painting/CommercialPaintingTab'
+import { StatusPill, StatGrid, TONE_LEFT_RAIL, type Tone } from './_components/quote-ui'
 import { ErrorBanner, Field, INPUT } from '../signup/page'
 
 type NavIcon = ComponentType<LucideProps>
@@ -5198,6 +5199,18 @@ function quoteMatchesFilter(q: Quote, f: QuoteFilter): boolean {
   return ['drafted', 'awaiting_review', 'review', 'draft'].includes(s)
 }
 
+// Map a quote's badge tone to the shared StatusPill vocabulary — ONE
+// source of truth so the collapsed left-rail, the summary pill, and the
+// expanded badge set can never drift apart.
+type QuoteBadgeTone = 'paid' | 'inspect' | 'draft' | 'sent' | 'accepted'
+const QUOTE_BADGE_TONE: Record<QuoteBadgeTone, Tone> = {
+  paid: 'good',
+  accepted: 'good',
+  inspect: 'accent',
+  sent: 'default',
+  draft: 'warn',
+}
+
 function QuotesTab({ data, accessToken }: { data: DashboardData; accessToken: string | null }) {
   const isMultiTrade =
     Array.isArray(data.tenant.trades) && data.tenant.trades.length > 1
@@ -5229,8 +5242,49 @@ function QuotesTab({ data, accessToken }: { data: DashboardData; accessToken: st
   const visibleQuotes = filtered.slice(0, visible)
   const remaining = Math.max(0, total - visible)
 
+  // ── Money summary band. The Quotes tab is where a tradie manages
+  //    revenue, so it leads with the totals (mirrors the Overview KPI
+  //    framing) — answering "what's my pipeline + what needs me?" first. ──
+  const quotedValue = all.reduce((s, q) => s + (toNum(q.total_inc_gst) ?? 0), 0)
+  const acceptedQuotes = all.filter(
+    (q) => q.deposit_paid || (q.status ?? '').toLowerCase() === 'accepted',
+  )
+  const convertedValue = acceptedQuotes.reduce((s, q) => s + (toNum(q.total_inc_gst) ?? 0), 0)
+  const conversion = all.length > 0 ? Math.round((acceptedQuotes.length / all.length) * 100) : 0
+  const avgQuote = all.length > 0 ? quotedValue / all.length : 0
+  const needsReview = all.filter((q) => quoteMatchesFilter(q, 'review')).length
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      <StatGrid
+        cols={4}
+        stats={[
+          {
+            label: 'Quoted',
+            value: `$${formatMoney(quotedValue)}`,
+            hint: `${all.length} quote${all.length === 1 ? '' : 's'} · avg $${formatMoney(avgQuote)}`,
+            hero: true,
+          },
+          {
+            label: 'Converted',
+            value: `$${formatMoney(convertedValue)}`,
+            hint: `${acceptedQuotes.length} accepted`,
+            tone: acceptedQuotes.length > 0 ? 'good' : 'default',
+          },
+          {
+            label: 'Conversion',
+            value: `${conversion}%`,
+            tone: conversion > 0 ? 'good' : 'default',
+          },
+          {
+            label: 'Needs review',
+            value: String(needsReview),
+            tone: needsReview > 0 ? 'warn' : 'default',
+            hint: needsReview > 0 ? 'awaiting you' : 'all actioned',
+          },
+        ]}
+      />
+
       {/* Status filter rail — lets a tradie with a long history jump
           straight to what needs action (in-review) or what converted. */}
       <div className="flex flex-wrap gap-2">
@@ -5356,9 +5410,12 @@ function QuoteCard({ q, isMultiTrade, accessToken }: { q: Quote; isMultiTrade: b
   // draft) so the row stays one line. The full set is shown inside the
   // expanded body.
   const primaryBadge = badges[0]
+  // Left status rail — color-codes the row for at-a-glance triage and is
+  // the status signal that survives on mobile (where the pill is hidden).
+  const railTone: Tone = primaryBadge ? QUOTE_BADGE_TONE[primaryBadge.tone] : 'default'
 
   return (
-    <div className="border border-ink-line bg-ink-card motion-safe:animate-[fade-up_240ms_ease-out_both]">
+    <div className={`border border-ink-line border-l-2 ${TONE_LEFT_RAIL[railTone]} bg-ink-card motion-safe:animate-[fade-up_240ms_ease-out_both]`}>
       {/* ── Collapsed summary row (always visible — also the trigger) ─ */}
       <button
         type="button"
@@ -5402,20 +5459,13 @@ function QuoteCard({ q, isMultiTrade, accessToken }: { q: Quote; isMultiTrade: b
           {/* Primary status pill hidden < sm — kept inside the expanded
               body. Avoids the right rail outgrowing the price. */}
           {primaryBadge && (
-            <span
-              className={`hidden sm:inline-flex items-center font-mono text-[0.55rem] uppercase tracking-[0.14em] font-bold px-2 py-0.5 border ${
-                primaryBadge.tone === 'paid'
-                  ? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-300'
-                  : primaryBadge.tone === 'inspect'
-                    ? 'border-amber-500/60 bg-amber-500/10 text-amber-300'
-                    : primaryBadge.tone === 'accepted'
-                      ? 'border-accent/60 bg-accent/10 text-accent'
-                      : primaryBadge.tone === 'sent'
-                        ? 'border-text-sec/40 bg-text-sec/5 text-text-sec'
-                        : 'border-ink-line bg-ink-deep text-text-dim'
-              }`}
-            >
-              {primaryBadge.label}
+            <span className="hidden sm:inline-flex">
+              <StatusPill
+                label={primaryBadge.label}
+                tone={QUOTE_BADGE_TONE[primaryBadge.tone]}
+                compact
+                dot
+              />
             </span>
           )}
           <div className="text-right">
@@ -5497,22 +5547,7 @@ function QuoteCard({ q, isMultiTrade, accessToken }: { q: Quote; isMultiTrade: b
                   </span>
                 )}
                 {badges.map((b, i) => (
-                  <span
-                    key={i}
-                    className={`inline-flex items-center font-mono text-[0.6rem] uppercase tracking-[0.14em] font-bold px-2.5 py-1 border ${
-                      b.tone === 'paid'
-                        ? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-300'
-                        : b.tone === 'inspect'
-                          ? 'border-amber-500/60 bg-amber-500/10 text-amber-300'
-                          : b.tone === 'accepted'
-                            ? 'border-accent/60 bg-accent/10 text-accent'
-                            : b.tone === 'sent'
-                              ? 'border-text-sec/40 bg-text-sec/5 text-text-sec'
-                              : 'border-ink-line bg-ink-deep text-text-dim'
-                    }`}
-                  >
-                    {b.label}
-                  </span>
+                  <StatusPill key={i} label={b.label} tone={QUOTE_BADGE_TONE[b.tone]} />
                 ))}
               </div>
               {url && (
