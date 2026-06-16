@@ -25,6 +25,7 @@ import type { MeasurementLine } from '@/lib/commercial-painting/types'
 import { loadKbConfigFromEnv } from '@/lib/admin-loader/mt-filestore-kb'
 import { supplementTakeoffViaKb, type KbSupplementFile } from '@/lib/commercial-painting/kb-runner'
 import type { PaintSupplementFlag } from '@/lib/commercial-painting/kb-supplement'
+import { provisionSessionStore } from '@/lib/filestore/provision'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -260,6 +261,21 @@ export async function POST(req: Request) {
       .from('paint_runs')
       .update({ ...jobUpdates, status: 'ready', status_note: null, updated_at: new Date().toISOString() })
       .eq('id', paintRunId)
+
+    // Index the tradie's uploaded plans into this run's persistent store so the
+    // estimator chatbot can answer questions grounded in them. Runs after the
+    // response; de-dupes against anything already indexed for the run.
+    provisionSessionStore({
+      estimator: 'paint',
+      sessionId: paintRunId,
+      label: (run.job_name as string | null) ?? null,
+      documents: [
+        { name: planSet.filename || 'plan-set.pdf', bytes: planBytes, mime: 'application/pdf' },
+        ...(servicesBytes && servicesDoc
+          ? [{ name: servicesDoc.filename || 'services-layout.pdf', bytes: servicesBytes, mime: 'application/pdf' }]
+          : []),
+      ],
+    })
 
     log.ok('paint takeoff ready', {
       model: extraction.model,

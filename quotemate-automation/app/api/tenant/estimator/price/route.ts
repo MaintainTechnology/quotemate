@@ -10,6 +10,8 @@
 import { tenantFromBearer, estimatorSupabase as supabase } from '@/lib/estimation/auth'
 import { priceTakeoff, type TakeoffItem } from '@/lib/estimation/price'
 import { loadElectricalPricingContext } from '@/lib/estimation/pricing-context'
+import { provisionSessionStore } from '@/lib/filestore/provision'
+import { electricalEstimateSummaryText } from '@/lib/filestore/estimate-summary'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -64,6 +66,24 @@ export async function POST(req: Request) {
       .select('id')
       .maybeSingle()
     persisted = Boolean(saved)
+
+    // Index the priced result as a readable summary into this run's persistent
+    // store so the estimator chatbot can explain the numbers. The dashboard
+    // electrical flow renders no result PDF, so this text IS the result doc.
+    // Named per pricing pass so a re-price indexes the fresh result.
+    if (persisted) {
+      provisionSessionStore({
+        estimator: 'electrical',
+        sessionId: extractionId,
+        documents: [
+          {
+            name: `electrical-estimate-summary-${pricedAt.replace(/[:.]/g, '-')}.txt`,
+            bytes: Buffer.from(electricalEstimateSummaryText(bom, { pricedAt }), 'utf8'),
+            mime: 'text/plain',
+          },
+        ],
+      })
+    }
   }
 
   return Response.json({ ok: true, bom, catalogueSize: assemblies.length, pricingBookSource: bookSource, persisted })

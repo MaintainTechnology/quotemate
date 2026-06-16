@@ -19,6 +19,7 @@ import { dispatchQuoteWithPdf } from '@/lib/sms/send-quote-pdf'
 import { signQuotePdfUrl } from '@/lib/quote/pdf'
 import { generateShareToken } from '@/lib/stripe/checkout'
 import { pipelineLog } from '@/lib/log/pipeline'
+import { provisionSessionStore } from '@/lib/filestore/provision'
 import type { PricedPaintBom } from '@/lib/commercial-painting/types'
 
 /** Customer-delivery outcome returned to the dashboard (best-effort send). */
@@ -173,6 +174,14 @@ export async function POST(req: Request) {
       if (!upErr) {
         await estimatorSupabase.from('quotes').update({ pdf_path: path }).eq('id', quoteRow.id)
         pdfReady = true
+        // Index the finished tender PDF into the run's persistent store so the
+        // estimator chatbot can answer "why this price?" from the result itself.
+        provisionSessionStore({
+          estimator: 'paint',
+          sessionId: paintRunId,
+          label: customerName ?? (run.job_name as string | null) ?? null,
+          documents: [{ name: 'paint-quote.pdf', bytes: pdf, mime: 'application/pdf' }],
+        })
       } else {
         log.err('paint tender pdf upload failed', upErr, { quoteId: quoteRow.id })
       }

@@ -132,6 +132,22 @@ describe('kbSearch', () => {
     expect(body.metadataFilter).toBe('author="X"')
   })
 
+  it('forwards systemInstruction (trimmed) when provided, omits it when blank', async () => {
+    const withSys = mockOk({ answer: 'ok' })
+    await kbSearch(
+      config,
+      { store: 'abc', query: 'q', systemInstruction: '  You are an estimate helper.  ' },
+      withSys,
+    )
+    const withBody = JSON.parse((withSys as any).mock.calls[0][1].body as string)
+    expect(withBody.systemInstruction).toBe('You are an estimate helper.')
+
+    const blankSys = mockOk({ answer: 'ok' })
+    await kbSearch(config, { store: 'abc', query: 'q', systemInstruction: '   ' }, blankSys)
+    const blankBody = JSON.parse((blankSys as any).mock.calls[0][1].body as string)
+    expect(blankBody.systemInstruction).toBeUndefined()
+  })
+
   it('throws when store is missing', async () => {
     const f = mockOk({})
     await expect(kbSearch(config, { store: '', query: 'q' }, f)).rejects.toThrow('store is required')

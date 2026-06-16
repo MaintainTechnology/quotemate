@@ -16,6 +16,7 @@ import { RunStatusChip } from './badges'
 import { Methodology } from './Methodology'
 import { getPlanFile, stashPlanFile } from './plan-file-store'
 import { PricedSummary } from './PricedSummary'
+import EstimatorChatbot from '../EstimatorChatbot'
 import { StatStrip, type Stat } from './StatStrip'
 import { TakeoffTable } from './TakeoffTable'
 import {
@@ -478,6 +479,11 @@ export function RunWorkspace({ runId }: { runId: string }) {
           <PricedSummary bom={priced} info={priceInfo} pricedAt={pricedAt} onAddToCatalogue={addToCatalogue} />
         </section>
       )}
+
+      {/* ── Grounded chatbot — answers questions about this take-off from the
+            run's own File Search store (uploaded plan + result PDF). ──────── */}
+      <EstimatorChatbot estimator="electrical" sessionId={runId} accessToken={accessToken} />
+
 
       {/* ── Transparency ──────────────────────────────────────── */}
       <div className="motion-safe:animate-[fade-up_220ms_ease-out_180ms_both]">

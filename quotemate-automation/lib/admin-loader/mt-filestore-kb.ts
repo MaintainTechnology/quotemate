@@ -148,6 +148,10 @@ export type KbSearchInput = {
   query: string           // the prompt
   model?: string          // optional Gemini model override
   metadataFilter?: string // e.g. 'author="Dr Deepti"' — scope to one doc
+  /** Optional system instruction that frames how the model answers. When
+   *  omitted, the service applies its default (signage-compliance) persona —
+   *  unhelpful for estimate stores, so the estimator chatbot passes its own. */
+  systemInstruction?: string
 }
 
 /** Parse mt-filestore-kb's search response into a clean shape. The raw
@@ -197,6 +201,9 @@ export async function kbSearch(
   }
   if (input.model) body.model = input.model
   if (input.metadataFilter) body.metadataFilter = input.metadataFilter
+  if (input.systemInstruction?.trim()) {
+    body.systemInstruction = input.systemInstruction.trim()
+  }
   const res = await kbFetch(
     config,
     '/v1/search',

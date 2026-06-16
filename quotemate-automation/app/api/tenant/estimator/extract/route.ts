@@ -10,6 +10,7 @@ import { tenantFromBearer, estimatorSupabase as supabase } from '@/lib/estimatio
 import { runExtraction } from '@/lib/estimation/extract'
 import { resolveFileStoreConfig, createFileStoreClient } from '@/lib/estimation/filestore-client'
 import { supplementExtraction } from '@/lib/estimation/supplement'
+import { provisionSessionStore } from '@/lib/filestore/provision'
 
 /** File-store supplementation is opt-in (default off). */
 function supplementEnabled(): boolean {
@@ -123,6 +124,16 @@ export async function POST(req: Request) {
   if (exErr || !extraction) {
     return Response.json({ ok: false, error: exErr?.message ?? 'could not save extraction' }, { status: 500 })
   }
+
+  // Index the uploaded plan into this session's persistent store so the
+  // estimator chatbot can later answer questions grounded in it. The raw bytes
+  // are otherwise discarded after extraction — this is the only point they
+  // exist server-side. Runs after the response; never blocks the take-off.
+  provisionSessionStore({
+    estimator: 'electrical',
+    sessionId: extraction.id,
+    documents: [{ name: file.name || 'plan.pdf', bytes: pdf, mime: 'application/pdf' }],
+  })
 
   return Response.json({
     ok: true,
