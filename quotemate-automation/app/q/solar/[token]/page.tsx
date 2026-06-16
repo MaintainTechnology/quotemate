@@ -52,9 +52,9 @@ import type { SolarChart } from '@/lib/solar/charts'
 import { buildSolarHardwareCards } from '@/lib/solar/hardware-cards'
 import { buildSolarSunView } from '@/lib/solar/sun-view'
 import { resolveSolarOverlayCenter } from '@/lib/solar/static-map-center'
-import { OVERLAY_MAP_ZOOM, OVERLAY_MAP_WIDTH, OVERLAY_MAP_HEIGHT } from '@/lib/solar/layout-overlay'
 import type { DetectedBuilding } from '@/lib/solar/types'
 import { SunShadeOverlay } from './SunShadeOverlay'
+import { SunShadeMap } from './SunShadeMap'
 import { BuildingPickerSection } from './BuildingPickerSection'
 import { HeatmapAutoRefresh } from './HeatmapAutoRefresh'
 import { money, kwh, kw, paybackBand } from '@/lib/solar/quote-page-format'
@@ -468,15 +468,9 @@ export default async function SolarQuotePage({
             </p>
             <BuildingPickerSection
               token={token}
+              center={pickerCenter}
               buildings={buildings}
               selectedBuildingId={row.selected_building_id}
-              mapParams={{
-                center: pickerCenter,
-                zoom: OVERLAY_MAP_ZOOM,
-                width: OVERLAY_MAP_WIDTH,
-                height: OVERLAY_MAP_HEIGHT,
-              }}
-              imageUrl={`/api/solar/q/${token}/static-map`}
               readOnly={view.confirmed}
             />
           </div>
@@ -490,14 +484,28 @@ export default async function SolarQuotePage({
           <div className={`mt-10 ${reveal(280)}`}>
             <SectionHeading label="Sun & shade analysis" />
 
-            {sunView.flux_image_available && (
-              <SunShadeOverlay
-                heatmapSrc={`/api/solar/q/${token}/flux-heatmap`}
-                alt={`Roof irradiance heatmap for ${row.address ?? 'the property'} — brighter areas receive more annual sun`}
-                markers={sunView.markers}
-                caption={sunView.flux_caption}
-              />
-            )}
+            {sunView.flux_image_available &&
+              (sunView.flux_bounds ? (
+                // Georeferenced, pan/zoom heatmap — markers placed at real
+                // lat/lng, so off-centre buildings stay aligned. New / re-drafted
+                // estimates only (they carry flux_bounds).
+                <SunShadeMap
+                  heatmapSrc={`/api/solar/q/${token}/flux-heatmap`}
+                  alt={`Roof irradiance heatmap for ${row.address ?? 'the property'} — brighter areas receive more annual sun`}
+                  markers={sunView.markers}
+                  caption={sunView.flux_caption}
+                  bounds={sunView.flux_bounds}
+                />
+              ) : (
+                // Static fallback for estimates drafted before flux_bounds was
+                // persisted — image-% positioning, no regression.
+                <SunShadeOverlay
+                  heatmapSrc={`/api/solar/q/${token}/flux-heatmap`}
+                  alt={`Roof irradiance heatmap for ${row.address ?? 'the property'} — brighter areas receive more annual sun`}
+                  markers={sunView.markers}
+                  caption={sunView.flux_caption}
+                />
+              ))}
 
             {sunView.stats.length > 0 && (
               <div className="mt-5 grid gap-px overflow-hidden border border-ink-line bg-ink-line sm:grid-cols-2 lg:grid-cols-3">

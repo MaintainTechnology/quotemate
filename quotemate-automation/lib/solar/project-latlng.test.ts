@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   mercatorWorldPx,
   projectLatLngToImagePct,
+  imagePctToLatLng,
   polygonToImagePctPath,
   type StaticMapParams,
 } from './project-latlng'
@@ -48,6 +49,40 @@ describe('projectLatLngToImagePct', () => {
     const b = projectLatLngToImagePct(east, { ...MAP, scale: 2 })
     expect(a.x_pct).toBeCloseTo(b.x_pct, 9)
     expect(a.y_pct).toBeCloseTo(b.y_pct, 9)
+  })
+})
+
+describe('imagePctToLatLng (inverse of projectLatLngToImagePct)', () => {
+  it('the image centre (50%/50%) maps back to the map centre', () => {
+    const ll = imagePctToLatLng({ x_pct: 50, y_pct: 50 }, MAP)
+    expect(ll.lat).toBeCloseTo(SYD.lat, 9)
+    expect(ll.lng).toBeCloseTo(SYD.lng, 9)
+  })
+
+  it('round-trips: project a point then un-project returns the same point', () => {
+    const cases = [
+      { map: MAP, pt: { lat: SYD.lat + 0.0002, lng: SYD.lng - 0.0003 } },
+      { map: MAP, pt: { lat: SYD.lat - 0.00015, lng: SYD.lng + 0.00025 } },
+      // Brisbane centre — a different latitude band, to exercise the mercator y.
+      { map: { ...MAP, center: { lat: -27.47, lng: 153.02 } }, pt: { lat: -27.4698, lng: 153.0251 } },
+    ]
+    for (const { map, pt } of cases) {
+      const back = imagePctToLatLng(projectLatLngToImagePct(pt, map), map)
+      expect(back.lat).toBeCloseTo(pt.lat, 7)
+      expect(back.lng).toBeCloseTo(pt.lng, 7)
+    }
+  })
+
+  it('a tap right of centre resolves to a larger longitude (further east)', () => {
+    const ll = imagePctToLatLng({ x_pct: 75, y_pct: 50 }, MAP)
+    expect(ll.lng).toBeGreaterThan(SYD.lng)
+    expect(ll.lat).toBeCloseTo(SYD.lat, 6)
+  })
+
+  it('a tap above centre resolves to a larger latitude (further north)', () => {
+    const ll = imagePctToLatLng({ x_pct: 50, y_pct: 25 }, MAP)
+    expect(ll.lat).toBeGreaterThan(SYD.lat)
+    expect(ll.lng).toBeCloseTo(SYD.lng, 6)
   })
 })
 

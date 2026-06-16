@@ -20,6 +20,7 @@ import type {
   SolarSizingResult,
   SolarPanelConfig,
   SolarRoutingDecision,
+  SolarPhase,
 } from './types'
 
 /** Target panel-count fractions of the roof max for the good/middle tier.
@@ -35,6 +36,13 @@ export function sizeSolarSystem(args: {
 }): SolarSizingResult {
   const { roof, panelType, config, context } = args
 
+  // Phase multiplier on the export ceiling. A single-phase service is capped
+  // at the per-phase DNSP limit; a three-phase service may export across all
+  // three phases (≈3× the ceiling), enlarging the largest system the engine
+  // can size automatically. 'single' and 'unknown' stay at ×1 (conservative).
+  const phase: SolarPhase = context.phase ?? 'unknown'
+  const phaseMultiplier = phase === 'three' ? 3 : 1
+
   // Guard: a non-finite or non-positive derate_factor means the DC ceiling
   // calculation (AC limit / derate) would produce infinity or a negative
   // result, silently marking every tier export_limited. Route to inspection
@@ -43,13 +51,16 @@ export function sizeSolarSystem(args: {
     const roof_capacity_kw_dc_guard = round2(
       (roof.max_panels_count * roof.panel_capacity_watts) / 1000,
     )
-    const export_limit_kw_ac_guard =
+    const perPhaseLimitGuard =
       config.export_limits.by_network[context.network] ??
       config.export_limits.default_kw_per_phase
+    const export_limit_kw_ac_guard = perPhaseLimitGuard * phaseMultiplier
     return {
       tiers: [],
       roof_capacity_kw_dc: roof_capacity_kw_dc_guard,
       export_limit_kw_ac: export_limit_kw_ac_guard,
+      phase,
+      requested_size_kw: requestedSizeKw(context),
       routing: {
         decision: 'inspection_required',
         reason:
@@ -61,12 +72,17 @@ export function sizeSolarSystem(args: {
   const wattsPerPanel = roof.panel_capacity_watts
   const roof_capacity_kw_dc = round2((roof.max_panels_count * wattsPerPanel) / 1000)
 
-  // Export ceiling: kW AC limit per phase → an equivalent DC ceiling via
-  // the derate (DC × derate = AC, so DC ceiling = AC limit / derate).
-  const export_limit_kw_ac =
+  // Export ceiling: per-phase kW AC limit × phase count → an equivalent DC
+  // ceiling via the derate (DC × derate = AC, so DC ceiling = AC limit /
+  // derate). Everything downstream (exportCeilPanels, export_limited flags,
+  // the large-roof fallback) then uses the larger ceiling for three-phase.
+  const perPhaseLimit =
     config.export_limits.by_network[context.network] ??
     config.export_limits.default_kw_per_phase
+  const export_limit_kw_ac = perPhaseLimit * phaseMultiplier
   const exportDcCeiling = round2(export_limit_kw_ac / config.derate_factor)
+
+  const reqKw = requestedSizeKw(context)
 
   // No usable roof → inspection (the only sizing failure mode).
   if (roof.max_panels_count <= 0 || roof.panel_configs.length === 0) {
@@ -74,6 +90,8 @@ export function sizeSolarSystem(args: {
       tiers: [],
       roof_capacity_kw_dc,
       export_limit_kw_ac,
+      phase,
+      requested_size_kw: reqKw,
       routing: {
         decision: 'inspection_required',
         reason:
@@ -89,6 +107,8 @@ export function sizeSolarSystem(args: {
       tiers: [],
       roof_capacity_kw_dc,
       export_limit_kw_ac,
+      phase,
+      requested_size_kw: reqKw,
       routing: {
         decision: 'inspection_required',
         reason:
@@ -97,15 +117,27 @@ export function sizeSolarSystem(args: {
     }
   }
 
-  // Candidate panel counts, ascending, deduped, each capped by the roof.
+  // Anchor for the tier targets. Default = the roof's physical max. When the
+  // customer asked for a preferred size, convert it to a panel count and use
+  // the SMALLER of {requested, roof max} as the anchor — so the top tier
+  // targets the customer's preference, never beyond the roof. The DNSP/phase
+  // export ceiling is still applied below via the export-cap logic, so a
+  // request larger than the grid allows is clamped exactly like the roof max
+  // would be. roof_capacity_kw_dc stays the TRUE roof max (unchanged).
   const maxPanels = roof.max_panels_count
+  const anchorPanels =
+    reqKw !== null
+      ? Math.min(Math.round((reqKw * 1000) / wattsPerPanel), maxPanels)
+      : maxPanels
+
+  // Candidate panel counts, ascending, deduped, each capped by the anchor.
   const targets = [
-    Math.max(1, Math.round(maxPanels * GOOD_FRACTION)),
-    Math.max(1, Math.round(maxPanels * MIDDLE_FRACTION)),
-    maxPanels,
+    Math.max(1, Math.round(anchorPanels * GOOD_FRACTION)),
+    Math.max(1, Math.round(anchorPanels * MIDDLE_FRACTION)),
+    anchorPanels,
   ]
   const uniqueCounts = Array.from(new Set(targets))
-    .filter((n) => n >= 1 && n <= maxPanels)
+    .filter((n) => n >= 1 && n <= anchorPanels)
     .sort((a, b) => a - b)
 
   // A single unique count means the roof is too small to produce genuinely
@@ -117,6 +149,8 @@ export function sizeSolarSystem(args: {
       tiers: [],
       roof_capacity_kw_dc,
       export_limit_kw_ac,
+      phase,
+      requested_size_kw: reqKw,
       routing: {
         decision: 'inspection_required',
         reason:
@@ -148,12 +182,13 @@ export function sizeSolarSystem(args: {
     (a, b) => a.panels - b.panels,
   )
 
-  // On very large roofs, every roof-fraction target can exceed the DNSP cap
-  // and collapse to the same export-limited panel count. That is still a
-  // quoteable residential system: regenerate distinct tiers inside the capped
-  // maximum instead of returning an empty estimate.
-  if (dedupedCandidates.length < 2 && roof.max_panels_count > exportCeilPanels) {
-    const cappedMaxPanels = Math.min(roof.max_panels_count, exportCeilPanels)
+  // On very large roofs (or a large preferred size), every anchor-fraction
+  // target can exceed the DNSP cap and collapse to the same export-limited
+  // panel count. That is still a quoteable residential system: regenerate
+  // distinct tiers inside the capped maximum instead of returning an empty
+  // estimate. The cap is the smaller of the anchor and the export ceiling.
+  if (dedupedCandidates.length < 2 && anchorPanels > exportCeilPanels) {
+    const cappedMaxPanels = Math.min(anchorPanels, exportCeilPanels)
     const fallbackCounts = Array.from(
       new Set([
         Math.max(1, Math.round(cappedMaxPanels * GOOD_FRACTION)),
@@ -179,6 +214,8 @@ export function sizeSolarSystem(args: {
       tiers: [],
       roof_capacity_kw_dc,
       export_limit_kw_ac,
+      phase,
+      requested_size_kw: reqKw,
       routing: {
         decision: 'inspection_required',
         reason:
@@ -210,7 +247,14 @@ export function sizeSolarSystem(args: {
       'System sized automatically from roof analysis. Every solar quote requires accredited-installer sign-off before customer send.',
   }
 
-  return { tiers, roof_capacity_kw_dc, export_limit_kw_ac, routing }
+  return {
+    tiers,
+    roof_capacity_kw_dc,
+    export_limit_kw_ac,
+    phase,
+    requested_size_kw: reqKw,
+    routing,
+  }
 }
 
 /** PURE — name N tiers good→best (2 → [good,best]; 3 → [good,better,best]). */
@@ -251,4 +295,18 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100
 }
 
-export const __test_only__ = { GOOD_FRACTION, MIDDLE_FRACTION, pickTierNames, nearestConfig }
+/** PURE — the customer's preferred size in kW DC, or null when none / invalid.
+ *  Only a finite positive value anchors the tiers; anything else degrades to
+ *  null (tiers anchor to the roof max). */
+function requestedSizeKw(context: SolarEstimateContext): number | null {
+  const v = context.requested_size_kw
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null
+}
+
+export const __test_only__ = {
+  GOOD_FRACTION,
+  MIDDLE_FRACTION,
+  pickTierNames,
+  nearestConfig,
+  requestedSizeKw,
+}

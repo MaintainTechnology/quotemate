@@ -108,3 +108,29 @@ export function polygonToImagePctPath(
   }
   return out
 }
+
+/**
+ * PURE — the exact INVERSE of projectLatLngToImagePct: turn a position in
+ * the static-map image (x%/y% of width/height) back into a lat/lng. Used by
+ * the free-click picker so a tap anywhere on the satellite photo resolves to
+ * a real coordinate the engine can estimate (Google snaps to the building at
+ * that point). Round-trips with projectLatLngToImagePct to within FP error;
+ * the image centre (50%/50%) maps back to mapParams.center by construction.
+ */
+export function imagePctToLatLng(pct: ImagePct, mapParams: StaticMapParams): LatLng {
+  const { center, zoom, width, height } = mapParams
+  const worldSize = 256 * 2 ** zoom
+  const wc = mercatorWorldPx(center, zoom)
+  // Image-pct → logical pixel → world-pixel (offset from the centre's).
+  const px = (pct.x_pct / 100) * width
+  const py = (pct.y_pct / 100) * height
+  const worldX = wc.x + (px - width / 2)
+  const worldY = wc.y + (py - height / 2)
+  // Inverse Web Mercator. lng is linear; lat is the Gudermannian of the
+  // y-offset (gd(n) = 2·atan(eⁿ) − π/2), the analytic inverse of the
+  // ln((1+sinφ)/(1−sinφ))/(4π) term in mercatorWorldPx.
+  const lng = (worldX / worldSize) * 360 - 180
+  const n = Math.PI * (1 - (2 * worldY) / worldSize)
+  const lat = (2 * Math.atan(Math.exp(n)) - Math.PI / 2) * (180 / Math.PI)
+  return { lat, lng }
+}

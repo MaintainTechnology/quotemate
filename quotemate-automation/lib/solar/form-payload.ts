@@ -14,6 +14,12 @@ export function buildSolarFormPayload(state: {
   roofSize: 'small' | 'medium' | 'large'
   storeys: 1 | 2 | 3
   panelType: 'standard_panels' | 'premium_panels' | 'unknown'
+  /** Property power-supply phase (entry form). 'unknown' is omitted from the
+   *  payload, like the other "not sure" optional fields. */
+  phase?: 'single' | 'three' | 'unknown'
+  /** Raw preferred-size text from the optional kW field (e.g. "10"). Blank
+   *  or junk → no preference sent. */
+  requestedSizeKw?: string
   customerName?: string
   customerMobile?: string
   /** Raw quarterly-bill text from the optional form field (e.g. "850"). */
@@ -44,6 +50,21 @@ export function buildSolarFormPayload(state: {
   }
   if (state.panelType !== 'unknown') {
     payload.panel_type = state.panelType
+  }
+  // Power-supply phase — only send a definite single/three; 'unknown' (or
+  // absent) means no multiplier, matching the schema's optional default.
+  if (state.phase === 'single' || state.phase === 'three') {
+    payload.phase = state.phase
+  }
+  // Preferred size — parsed leniently ("10kW" / "10.5" both work); only a
+  // finite positive number within the schema bound is sent, so a blank or
+  // junk field never reaches the API (= no preference).
+  const sizeRaw = state.requestedSizeKw?.trim().replace(/[^0-9.]/g, '')
+  if (sizeRaw) {
+    const kw = Number.parseFloat(sizeRaw)
+    if (Number.isFinite(kw) && kw > 0 && kw <= 100) {
+      payload.requested_size_kw = kw
+    }
   }
   // Optional contact — only include keys the customer actually filled, so an
   // empty field never persists as a blank phone/name.

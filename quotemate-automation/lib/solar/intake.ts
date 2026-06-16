@@ -46,6 +46,7 @@ import type {
   SolarRoutingDecision,
   SolarAddressValidationInsight,
   SolarDataLayersSummary,
+  SolarPhase,
 } from './types'
 
 /**
@@ -116,6 +117,14 @@ export async function runSolarEstimate(args: {
   /** Customer's optional quarterly electricity bill, AUD (premium quote
    *  §4.1) — persisted on context for utility-cost personalisation. */
   quarterlyBillAud?: number | null
+  /** Property power-supply phase (entry form). 'three' enlarges the export
+   *  ceiling 3× in sizing.ts. Undefined → 'unknown' (single-phase, no
+   *  multiplier). Persisted on context.phase. */
+  phase?: SolarPhase
+  /** Customer's preferred system size, kW DC (entry form). When finite and
+   *  positive, anchors the sizing tiers (still roof/export-capped). Persisted
+   *  on context.requested_size_kw; non-finite/non-positive → null. */
+  requestedSizeKw?: number | null
   config: SolarConfig
   opts?: SolarEnrichmentOrchestratorOpts
 }): Promise<SolarEstimate> {
@@ -144,6 +153,17 @@ export async function runSolarEstimate(args: {
       Number.isFinite(args.quarterlyBillAud) &&
       args.quarterlyBillAud > 0
         ? args.quarterlyBillAud
+        : null,
+    // Power-supply phase — defaults to 'unknown' (single-phase, no export
+    // multiplier in sizing). Drives the export ceiling for three-phase.
+    phase: args.phase ?? 'unknown',
+    // Preferred size — only a finite positive value anchors the sizing tiers;
+    // anything else degrades to null (tiers anchor to the roof max).
+    requested_size_kw:
+      typeof args.requestedSizeKw === 'number' &&
+      Number.isFinite(args.requestedSizeKw) &&
+      args.requestedSizeKw > 0
+        ? args.requestedSizeKw
         : null,
   }
 

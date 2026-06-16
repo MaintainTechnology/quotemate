@@ -6,6 +6,7 @@ import {
   monthlyKwhFromWeights,
   analyzeHourlyShade,
   estimateBuildingHeightFromDsm,
+  fluxRasterLatLngBounds,
   projectPlaneAnchors,
   __test_only__,
   type RasterBand,
@@ -231,6 +232,62 @@ describe('projectPlaneAnchors', () => {
         CENTER,
       ),
     ).toEqual([])
+  })
+})
+
+describe('fluxRasterLatLngBounds', () => {
+  const CENTER = { lat: -33.8679, lng: 151.211 }
+  // Same UTM-metre bbox shape as projectPlaneAnchors: a 100 m × 100.5 m box.
+  const METRE_BBOX: [number, number, number, number] = [334474, 6251000.5, 334574, 6251101]
+
+  it('centres the bounds on the request centre regardless of bbox CRS', () => {
+    const b = fluxRasterLatLngBounds(METRE_BBOX, CENTER)
+    expect(b).not.toBeNull()
+    expect((b!.west + b!.east) / 2).toBeCloseTo(CENTER.lng, 9)
+    expect((b!.south + b!.north) / 2).toBeCloseTo(CENTER.lat, 9)
+    expect(b!.east).toBeGreaterThan(b!.west)
+    expect(b!.north).toBeGreaterThan(b!.south)
+  })
+
+  it('spans the bbox metre extents (≈100 m wide, ≈100.5 m tall)', () => {
+    const b = fluxRasterLatLngBounds(METRE_BBOX, CENTER)!
+    const cosLat = Math.cos((CENTER.lat * Math.PI) / 180)
+    const widthM = (b.east - b.west) * 111_320 * cosLat
+    const heightM = (b.north - b.south) * 111_132
+    expect(widthM).toBeCloseTo(100, 1)
+    expect(heightM).toBeCloseTo(100.5, 1)
+  })
+
+  it('round-trips an anchor back to its source coordinate', () => {
+    // A panel ~25 m east + ~25 m north of centre projects to an x_pct/y_pct;
+    // inverse-projecting that through the bounds must return the same coord.
+    const dLng = 25 / (111_320 * Math.cos((CENTER.lat * Math.PI) / 180))
+    const dLat = 25 / 111_132
+    const panel = { lat: CENTER.lat + dLat, lng: CENTER.lng + dLng }
+    const [anchor] = projectPlaneAnchors(
+      [{ center: panel, segment_index: 0 }],
+      METRE_BBOX,
+      CENTER,
+    )
+    const b = fluxRasterLatLngBounds(METRE_BBOX, CENTER)!
+    const lng = b.west + (anchor.x_pct / 100) * (b.east - b.west)
+    const lat = b.north - (anchor.y_pct / 100) * (b.north - b.south)
+    // anchors are rounded to 0.1% (~0.1 m here), so loose tolerance.
+    expect(lng).toBeCloseTo(panel.lng, 5)
+    expect(lat).toBeCloseTo(panel.lat, 5)
+  })
+
+  it('handles a degree-valued bbox', () => {
+    const degBbox: [number, number, number, number] = [151.2105, -33.8684, 151.2115, -33.8674]
+    const b = fluxRasterLatLngBounds(degBbox, CENTER)
+    expect(b).not.toBeNull()
+    expect((b!.west + b!.east) / 2).toBeCloseTo(CENTER.lng, 9)
+  })
+
+  it('returns null for a null/degenerate bbox or non-finite centre', () => {
+    expect(fluxRasterLatLngBounds(null, CENTER)).toBeNull()
+    expect(fluxRasterLatLngBounds([334474, 6251000, 334474, 6251000], CENTER)).toBeNull()
+    expect(fluxRasterLatLngBounds(METRE_BBOX, { lat: NaN, lng: 151 })).toBeNull()
   })
 })
 

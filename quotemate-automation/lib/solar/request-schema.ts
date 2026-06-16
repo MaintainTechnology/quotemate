@@ -30,6 +30,14 @@ export const SolarEstimateRequestSchema = z.object({
   panel_type: z
     .enum(['standard_panels', 'premium_panels', 'unknown'])
     .optional(),
+  // Property power-supply phase (entry form). A three-phase service lets the
+  // engine size the largest tier up to 3× the per-phase DNSP export limit.
+  // Optional — absent / 'unknown' is treated as single-phase (no multiplier).
+  phase: z.enum(['single', 'three', 'unknown']).optional(),
+  // Customer's preferred system size, kW DC (entry form, optional). Anchors
+  // the tier targets in sizing.ts (still roof- and export-capped). Bounded so
+  // a typo (e.g. 1000) can't blow past any realistic residential roof.
+  requested_size_kw: z.number().positive().max(100).optional(),
   // Optional customer contact — when a mobile is supplied the tradie-confirm
   // step texts the customer their quote (PDF link + best-effort MMS). Absent
   // → solar behaves as before (tradie-review only, customer views the page).

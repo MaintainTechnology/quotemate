@@ -17,7 +17,8 @@
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { detectPropertyBuildings } from '@/lib/solar/buildings'
-import type { DetectedBuilding } from '@/lib/solar/types'
+import { geocodeAddress } from '@/lib/solar/geocode'
+import type { DetectedBuilding, LatLng } from '@/lib/solar/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -77,5 +78,21 @@ export async function POST(
     buildings = []
   }
 
-  return Response.json({ ok: true, buildings })
+  // ── Map centre for the always-on address-form picker. The map must show
+  //    even with 0–1 detected buildings (so the customer can free-tap any
+  //    roof), so we geocode the address. Best-effort: fall back to a detected
+  //    building centroid, then null (the form then hides the map). ─────────
+  let center: LatLng | null = null
+  try {
+    const g = await geocodeAddress(
+      `${parsed.data.address.address}, ${parsed.data.address.state}`,
+      { apiKey: process.env.GOOGLE_GEOCODE_API_KEY ?? process.env.GOOGLE_MAPS_API_KEY },
+    )
+    if (g.ok) center = g.location
+  } catch {
+    center = null
+  }
+  if (!center && buildings.length > 0) center = buildings[0].centroid
+
+  return Response.json({ ok: true, buildings, center })
 }

@@ -124,6 +124,15 @@ export type SolarPanelType =
   | 'premium_panels'
   | 'unknown'
 
+/**
+ * Property power-supply phase, customer-declared on the entry form.
+ * Single-phase services are capped at the per-phase DNSP export limit;
+ * three-phase services may export up to 3× that ceiling, enlarging the
+ * largest system the engine can size automatically. 'unknown' is the
+ * conservative default — treated as single-phase (no multiplier).
+ */
+export type SolarPhase = 'single' | 'three' | 'unknown'
+
 /** Routing outcome — identical shape to roofing/painting deciders. */
 export type SolarRoutingDecision =
   | { decision: 'auto_quote'; reason: string }
@@ -338,8 +347,16 @@ export type SolarSizingResult = {
   tiers: SolarSystemTier[]
   /** Largest system the roof can physically fit, kW DC. */
   roof_capacity_kw_dc: number
-  /** Export ceiling applied (default 5 kW/phase), kW AC. */
+  /**
+   * Export ceiling applied, kW AC. For three-phase services this is the
+   * per-phase DNSP limit × 3 (single/unknown ⇒ ×1). Display/debug.
+   */
   export_limit_kw_ac: number
+  /** Power-supply phase used to size the export ceiling (display/debug). */
+  phase?: SolarPhase
+  /** Customer's preferred size that anchored the tiers, kW DC. Null when
+   *  none was supplied (tiers anchored to the roof max). Display/debug. */
+  requested_size_kw?: number | null
   routing: SolarRoutingDecision
 }
 
@@ -710,6 +727,22 @@ export type SolarEstimateContext = {
    */
   quarterly_bill_aud?: number | null
   /**
+   * Property power-supply phase the customer declared (entry form).
+   * Drives the export-ceiling phase multiplier in sizing.ts: 'three' lets
+   * the largest tier target up to 3× the per-phase DNSP limit. Optional —
+   * estimates persisted before this field lack it (treated as 'unknown' →
+   * single-phase, no multiplier). Display/debug too.
+   */
+  phase?: SolarPhase
+  /**
+   * Customer's preferred system size, kW DC (entry form, optional). When a
+   * finite positive value is present, sizing.ts anchors the tier targets to
+   * this size (still capped by the roof AND the DNSP/phase export ceiling)
+   * instead of the roof maximum. Null/absent ⇒ tiers anchor to the roof max
+   * as before. Never a price input directly — only re-targets the tiers.
+   */
+  requested_size_kw?: number | null
+  /**
    * Pylon STC cross-check result (premium quote §4.5), stamped by the
    * estimate route's after() when PYLON_ENABLED. Display-only ("STC
    * count verified against Pylon ✓" in the assumed-values table) — the
@@ -832,6 +865,17 @@ export type SolarEstimateContext = {
      * onto the heatmap deterministically. Absent on older estimates.
      */
     plane_anchors?: Array<{ plane_index: number; x_pct: number; y_pct: number }> | null
+    /**
+     * Geographic extent (EPSG:4326) of the rendered flux heatmap PNG, so
+     * it can be georeferenced as a raster on an interactive map (the
+     * pan/zoom SunShadeMap). Derived from the raster bbox + request centre
+     * via fluxRasterLatLngBounds — the SAME north-up/centred model as
+     * plane_anchors, so markers re-projected through these bounds land on
+     * the matching pixels. Absent on older estimates (they fall back to
+     * the static SunShadeOverlay) and null when the flux image/bbox are
+     * unavailable.
+     */
+    flux_bounds?: { west: number; south: number; east: number; north: number } | null
   } | null
 }
 

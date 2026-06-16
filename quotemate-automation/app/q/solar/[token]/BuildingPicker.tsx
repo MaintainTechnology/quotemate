@@ -26,10 +26,12 @@
 //
 // Maintain design system: deep navy, vibrant orange accent, all-caps mono.
 
-import { useState } from 'react'
-import type { DetectedBuilding } from '@/lib/solar/types'
+import { useRef, useState } from 'react'
+import type { DetectedBuilding, LatLng } from '@/lib/solar/types'
 import {
   polygonToImagePctPath,
+  projectLatLngToImagePct,
+  imagePctToLatLng,
   type StaticMapParams,
 } from '@/lib/solar/project-latlng'
 
@@ -43,6 +45,18 @@ type Props = {
   /** 'select' = onSelect POSTs + refreshes; 'local' = no network. */
   mode: 'select' | 'local'
   onSelect: (buildingId: string) => Promise<void> | void
+  /**
+   * Free-click (address-form, 2026-06-16): when true the map renders even
+   * with <2 detected buildings, and tapping anywhere on the satellite image
+   * resolves to a lat/lng via onFreePick — so the customer can estimate a
+   * roof Geoscape didn't auto-detect (a shed/granny flat). The chosen point
+   * is shown as a pin via `freePick`.
+   */
+  allowFreeClick?: boolean
+  /** The current free-clicked point, drawn as a pin. Null = none. */
+  freePick?: LatLng | null
+  /** Fired with the resolved coordinate when the user free-taps the image. */
+  onFreePick?: (centroid: LatLng) => void
   /** Read-only (released/confirmed estimate) — shows the selection only. */
   disabled?: boolean
 }
@@ -56,15 +70,36 @@ export function BuildingPicker({
   imageUrl,
   mode,
   onSelect,
+  allowFreeClick = false,
+  freePick = null,
+  onFreePick,
   disabled = false,
 }: Props) {
   // Which building is currently resolving an onSelect() call (spinner +
   // disabled), and the most recent inline error (409/422 message).
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const containerRef = useRef<HTMLDivElement | null>(null)
 
-  // Single-roof path is unchanged — the picker simply does not render.
-  if (buildings.length < 2) return null
+  // Free-click is live only when explicitly allowed, not read-only, and a
+  // handler is wired. When on, the map renders even with <2 buildings.
+  const freeClickEnabled = Boolean(allowFreeClick && !disabled && onFreePick)
+
+  // Single-roof path is unchanged UNLESS free-click is on (the address form
+  // always wants the map so the customer can tap any roof). The quote page /
+  // dashboard pass no allowFreeClick, so they keep the ≥2 gate.
+  if (buildings.length < 2 && !freeClickEnabled) return null
+
+  function handleFreeClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (!freeClickEnabled || !onFreePick) return
+    const el = containerRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) return
+    const x_pct = ((e.clientX - rect.left) / rect.width) * 100
+    const y_pct = ((e.clientY - rect.top) / rect.height) * 100
+    onFreePick(imagePctToLatLng({ x_pct, y_pct }, mapParams))
+  }
 
   async function handleSelect(building: DetectedBuilding) {
     if (disabled || pendingId) return
@@ -83,7 +118,11 @@ export function BuildingPicker({
 
   return (
     <div className="mt-5 border border-ink-line bg-ink-card">
-      <div className="relative">
+      <div
+        ref={containerRef}
+        onClick={freeClickEnabled ? handleFreeClick : undefined}
+        className={`relative ${freeClickEnabled ? 'cursor-crosshair' : ''}`}
+      >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={imageUrl} alt="Satellite view of the property with each detected building outlined" className="block w-full" />
 
@@ -109,7 +148,7 @@ export function BuildingPicker({
                 key={b.building_id}
                 points={points}
                 vectorEffect="non-scaling-stroke"
-                onClick={tappable ? () => void handleSelect(b) : undefined}
+                onClick={tappable ? (e) => { e.stopPropagation(); void handleSelect(b) } : undefined}
                 className={tappable ? 'cursor-pointer' : ''}
                 style={{
                   pointerEvents: tappable ? 'auto' : 'none',
@@ -143,7 +182,7 @@ export function BuildingPicker({
               key={b.building_id}
               type="button"
               disabled={!tappable}
-              onClick={tappable ? () => void handleSelect(b) : undefined}
+              onClick={tappable ? (e) => { e.stopPropagation(); void handleSelect(b) } : undefined}
               aria-pressed={isSelected}
               aria-label={
                 isSelected
@@ -177,6 +216,22 @@ export function BuildingPicker({
             </button>
           )
         })}
+
+        {/* Free-click pin — the roof the customer tapped that Geoscape did
+            not outline. Projected back to the image via the same Mercator
+            math, so it sits exactly under the tap. */}
+        {freePick && freeClickEnabled && (() => {
+          const p = projectLatLngToImagePct(freePick, mapParams)
+          return (
+            <div
+              className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2"
+              style={{ left: `${p.x_pct}%`, top: `${p.y_pct}%` }}
+              aria-hidden="true"
+            >
+              <span className="block h-4 w-4 rounded-full border-2 border-white bg-accent shadow-[0_0_0_4px_rgba(255,95,0,0.25)]" />
+            </div>
+          )
+        })()}
       </div>
 
       {/* Caption + inline error */}
@@ -184,9 +239,13 @@ export function BuildingPicker({
         <p className="font-mono text-[0.66rem] uppercase tracking-[0.14em] text-text-dim">
           {disabled
             ? 'This estimate is for the highlighted building.'
-            : mode === 'local'
-              ? 'Several buildings found — tap the one you want a solar estimate for.'
-              : 'This property has several buildings — tap another to re-estimate that roof.'}
+            : freeClickEnabled
+              ? buildings.length >= 2
+                ? 'Tap a highlighted roof — or tap any building on the map to estimate that one.'
+                : 'Tap the roof on the map you want a solar estimate for.'
+              : mode === 'local'
+                ? 'Several buildings found — tap the one you want a solar estimate for.'
+                : 'This property has several buildings — tap another to re-estimate that roof.'}
         </p>
         {error && (
           <p className="mt-2 border border-warning/40 bg-ink-deep px-3 py-2 text-xs text-warning" role="alert">

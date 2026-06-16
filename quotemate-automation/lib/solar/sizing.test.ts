@@ -321,3 +321,158 @@ describe('sizeSolarSystem', () => {
     expect(r.tiers.length).toBe(0)
   })
 })
+
+// ════════════════════════════════════════════════════════════════════
+// Phase multiplier + preferred-size anchor (money-path inputs).
+// ════════════════════════════════════════════════════════════════════
+
+describe('sizeSolarSystem — power-supply phase', () => {
+  // A big roof whose top tier is bound by the SINGLE-phase export ceiling.
+  // 40 panels × 400 W = 16 kW DC roof max. Single-phase ceiling = 5 kW AC /
+  // 0.81 ≈ 6.17 kW DC → 15 panels (6.0 kW). Three-phase ceiling = 15 kW AC /
+  // 0.81 ≈ 18.5 kW DC → 46 panels, so the roof max (40 = 16 kW) binds instead.
+  const BIG_ROOF: SolarRoofFacts = {
+    ...FULL_ROOF,
+    max_panels_count: 40,
+    panel_capacity_watts: 400,
+    panel_configs: [
+      { panels_count: 22, yearly_energy_dc_kwh: 13200 },
+      { panels_count: 32, yearly_energy_dc_kwh: 19200 },
+      { panels_count: 40, yearly_energy_dc_kwh: 24000 },
+    ],
+  }
+
+  const single = sizeSolarSystem({
+    roof: BIG_ROOF,
+    panelType: 'standard_panels',
+    config: DEFAULT_SOLAR_CONFIG,
+    context: { ...CONTEXT, phase: 'single' },
+  })
+  const three = sizeSolarSystem({
+    roof: BIG_ROOF,
+    panelType: 'standard_panels',
+    config: DEFAULT_SOLAR_CONFIG,
+    context: { ...CONTEXT, phase: 'three' },
+  })
+
+  it('(a) 3-phase yields a larger top tier than single-phase on a big roof', () => {
+    const singleTop = single.tiers[single.tiers.length - 1]
+    const threeTop = three.tiers[three.tiers.length - 1]
+    expect(threeTop.system_kw_dc).toBeGreaterThan(singleTop.system_kw_dc)
+    // Single-phase is bound by the 5 kW/phase ceiling → 15 panels (6.0 kW).
+    expect(singleTop.system_kw_dc).toBe(6)
+    // Three-phase lifts the ceiling 3× so the ROOF max binds → 40 panels (16 kW).
+    expect(threeTop.system_kw_dc).toBe(16)
+  })
+
+  it('multiplies the AC export ceiling by 3 for three-phase (×1 otherwise)', () => {
+    expect(single.export_limit_kw_ac).toBe(5)
+    expect(three.export_limit_kw_ac).toBe(15)
+    expect(three.phase).toBe('three')
+  })
+
+  it("(d) 'single' and 'unknown' size identically to today's no-phase behaviour", () => {
+    const noPhase = sizeSolarSystem({
+      roof: BIG_ROOF,
+      panelType: 'standard_panels',
+      config: DEFAULT_SOLAR_CONFIG,
+      context: CONTEXT, // phase undefined
+    })
+    const unknown = sizeSolarSystem({
+      roof: BIG_ROOF,
+      panelType: 'standard_panels',
+      config: DEFAULT_SOLAR_CONFIG,
+      context: { ...CONTEXT, phase: 'unknown' },
+    })
+    expect(unknown.tiers.map((t) => t.system_kw_dc)).toEqual(
+      noPhase.tiers.map((t) => t.system_kw_dc),
+    )
+    expect(single.tiers.map((t) => t.system_kw_dc)).toEqual(
+      noPhase.tiers.map((t) => t.system_kw_dc),
+    )
+    expect(noPhase.export_limit_kw_ac).toBe(5)
+  })
+})
+
+describe('sizeSolarSystem — preferred system size anchors the tiers', () => {
+  // Same 40-panel (16 kW) roof. Use three-phase so the export ceiling is large
+  // (18.5 kW DC) and the ANCHOR — not the grid — is the binding constraint, so
+  // the test isolates the requested-size behaviour.
+  const BIG_ROOF: SolarRoofFacts = {
+    ...FULL_ROOF,
+    max_panels_count: 40,
+    panel_capacity_watts: 400,
+    panel_configs: [
+      { panels_count: 22, yearly_energy_dc_kwh: 13200 },
+      { panels_count: 32, yearly_energy_dc_kwh: 19200 },
+      { panels_count: 40, yearly_energy_dc_kwh: 24000 },
+    ],
+  }
+
+  it('(b) a requested size below the roof max anchors the top tier near that size', () => {
+    // Request 10 kW DC → round(10000/400)=25 panels anchor (< 40 roof max).
+    // Top tier targets 25 panels = 10.0 kW (well under the 3-phase ceiling).
+    const r = sizeSolarSystem({
+      roof: BIG_ROOF,
+      panelType: 'standard_panels',
+      config: DEFAULT_SOLAR_CONFIG,
+      context: { ...CONTEXT, phase: 'three', requested_size_kw: 10 },
+    })
+    expect(r.routing.decision).toBe('tradie_review')
+    const top = r.tiers[r.tiers.length - 1]
+    expect(top.system_kw_dc).toBe(10)
+    expect(top.panels_count).toBe(25)
+    expect(r.requested_size_kw).toBe(10)
+    // The true roof max is unchanged — only the tier anchor moved.
+    expect(r.roof_capacity_kw_dc).toBe(16)
+  })
+
+  it('(c) a requested size above the roof max is still capped at the roof max', () => {
+    // Request 30 kW DC → round(30000/400)=75 panels → anchor=min(75,40)=40.
+    // Top tier = the roof max (40 panels, 16 kW), never above it.
+    const r = sizeSolarSystem({
+      roof: BIG_ROOF,
+      panelType: 'standard_panels',
+      config: DEFAULT_SOLAR_CONFIG,
+      context: { ...CONTEXT, phase: 'three', requested_size_kw: 30 },
+    })
+    expect(r.routing.decision).toBe('tradie_review')
+    const top = r.tiers[r.tiers.length - 1]
+    expect(top.system_kw_dc).toBe(16)
+    expect(top.panels_count).toBe(40)
+    expect(top.system_kw_dc).toBeLessThanOrEqual(r.roof_capacity_kw_dc)
+  })
+
+  it('still applies the DNSP/phase export cap on top of the requested anchor', () => {
+    // Request 12 kW DC (30 panels) on SINGLE phase: the anchor is 30 panels
+    // but the 5 kW/phase ceiling (15 panels, 6.0 kW) still binds the top tier.
+    const r = sizeSolarSystem({
+      roof: BIG_ROOF,
+      panelType: 'standard_panels',
+      config: DEFAULT_SOLAR_CONFIG,
+      context: { ...CONTEXT, phase: 'single', requested_size_kw: 12 },
+    })
+    const top = r.tiers[r.tiers.length - 1]
+    expect(top.system_kw_dc).toBe(6)
+    expect(top.export_limited).toBe(true)
+  })
+
+  it('an absent / invalid requested size leaves the anchor at the roof max', () => {
+    const baseline = sizeSolarSystem({
+      roof: BIG_ROOF,
+      panelType: 'standard_panels',
+      config: DEFAULT_SOLAR_CONFIG,
+      context: { ...CONTEXT, phase: 'three' },
+    })
+    const invalid = sizeSolarSystem({
+      roof: BIG_ROOF,
+      panelType: 'standard_panels',
+      config: DEFAULT_SOLAR_CONFIG,
+      context: { ...CONTEXT, phase: 'three', requested_size_kw: -5 },
+    })
+    expect(invalid.requested_size_kw).toBeNull()
+    expect(invalid.tiers.map((t) => t.system_kw_dc)).toEqual(
+      baseline.tiers.map((t) => t.system_kw_dc),
+    )
+  })
+})

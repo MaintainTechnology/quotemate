@@ -54,9 +54,22 @@ function getSupabase() {
   )
 }
 
-const SelectBuildingSchema = z.object({
-  building_id: z.string().min(1),
-})
+// Synthetic id for a free-clicked roof Geoscape never outlined. The custom
+// building is recomputed on every click (the point moves), so it is never
+// cache-read — only optionally cache-written.
+const CUSTOM_BUILDING_ID = 'custom'
+
+const SelectBuildingSchema = z
+  .object({
+    building_id: z.string().min(1).optional(),
+    centroid: z
+      .object({
+        lat: z.number().gte(-90).lte(90),
+        lng: z.number().gte(-180).lte(180),
+      })
+      .optional(),
+  })
+  .refine((d) => d.building_id || d.centroid, 'building_id or centroid required')
 
 export async function POST(
   req: Request,
@@ -80,7 +93,10 @@ export async function POST(
       { status: 400 },
     )
   }
-  const buildingId = parsed.data.building_id
+  // A free-click `centroid` (a roof Geoscape never outlined) wins over a
+  // detected `building_id` when both are sent — the explicit point is the
+  // most specific intent.
+  const isCustom = !!parsed.data.centroid
 
   const supabase = getSupabase()
   const { data: row, error } = await supabase
@@ -94,12 +110,52 @@ export async function POST(
     return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
   }
 
-  const buildings = (row.buildings as DetectedBuilding[] | null) ?? []
+  const persistedBuildings = (row.buildings as DetectedBuilding[] | null) ?? []
 
-  // ── Eligibility: building must exist + estimate must be unreleased. ──
+  // ── Working set + target differ by path. ─────────────────────────────
+  // Detected: the persisted list; target = the matched building.
+  // Custom (free-click): a synthetic 'custom' building at the clicked point,
+  // replacing any prior custom entry in the working list.
+  let buildingId: string
+  let buildings: DetectedBuilding[]
+  let target: DetectedBuilding
+  if (isCustom) {
+    buildingId = CUSTOM_BUILDING_ID
+    const custom: DetectedBuilding = {
+      building_id: CUSTOM_BUILDING_ID,
+      role: 'secondary',
+      label: 'Selected roof',
+      centroid: parsed.data.centroid!,
+      footprint: null,
+      area_m2: null,
+      roof_shape: null,
+      storeys: null,
+      solar_status: 'pending',
+    }
+    buildings = [
+      ...persistedBuildings.filter((b) => b.building_id !== CUSTOM_BUILDING_ID),
+      custom,
+    ]
+    target = custom
+  } else {
+    buildingId = parsed.data.building_id!
+    buildings = persistedBuildings
+    const found = findBuilding(buildings, buildingId)
+    if (!found) {
+      return Response.json(
+        { ok: false, error: 'No such building on this property.' },
+        { status: 404 },
+      )
+    }
+    target = found
+  }
+
+  // ── Eligibility: building must exist + estimate must be unreleased. The
+  //    custom path always "exists" (we just synthesised it) — the gate then
+  //    only enforces the released-lock (409). ──────────────────────────
   const eligibility = selectBuildingEligibility({
     confirmedAt: (row.confirmed_at as string | null) ?? null,
-    buildingExists: !!findBuilding(buildings, buildingId),
+    buildingExists: true,
   })
   if (!eligibility.ok) {
     return Response.json(
@@ -108,8 +164,10 @@ export async function POST(
     )
   }
 
-  // ── No-op: already pointed at this building. Return the current view. ──
-  if (buildingId === ((row.selected_building_id as string | null) ?? null)) {
+  // ── No-op: already pointed at this DETECTED building. Return the current
+  //    view. Never short-circuits the custom path — the clicked point moves
+  //    each time, so it must always recompute. ──────────────────────────
+  if (!isCustom && buildingId === ((row.selected_building_id as string | null) ?? null)) {
     const current = (row.estimate as SolarEstimate | null) ?? null
     return Response.json({
       ok: true,
@@ -123,8 +181,6 @@ export async function POST(
         : null,
     })
   }
-
-  const target = findBuilding(buildings, buildingId)!
 
   // ── Reconstruct the engine inputs from the persisted row + estimate
   //    (same address; the engine re-fetches the roof at the building's
@@ -151,16 +207,20 @@ export async function POST(
     )
   }
 
-  // ── CACHE HIT: a previously-computed estimate for this building. ─────
+  // ── CACHE HIT: a previously-computed estimate for this building. SKIPPED
+  //    for the custom path — the free-clicked point changes every click, so a
+  //    cached 'custom' estimate would be for a different roof. ────────────
   let computed: SolarEstimate | null = null
-  const { data: cached } = await supabase
-    .from('solar_building_cache')
-    .select('estimate')
-    .eq('estimate_id', row.id)
-    .eq('building_id', buildingId)
-    .maybeSingle()
-  if (cached?.estimate) {
-    computed = cached.estimate as SolarEstimate
+  if (!isCustom) {
+    const { data: cached } = await supabase
+      .from('solar_building_cache')
+      .select('estimate')
+      .eq('estimate_id', row.id)
+      .eq('building_id', buildingId)
+      .maybeSingle()
+    if (cached?.estimate) {
+      computed = cached.estimate as SolarEstimate
+    }
   }
 
   // ── CACHE MISS: run the engine at the building's centroid. Identical
@@ -175,6 +235,10 @@ export async function POST(
         manual: inputs.manual,
         panelType: inputs.panelType,
         quarterlyBillAud: inputs.quarterlyBillAud,
+        // Carry the prior estimate's phase + preferred size so switching the
+        // building keeps the same export ceiling + tier anchor.
+        phase: inputs.phase,
+        requestedSizeKw: inputs.requestedSizeKw,
         config,
         opts: {
           geocode: async (input) => {

@@ -17,6 +17,7 @@ import type {
   SolarEstimate,
   SolarManualRoofInput,
   SolarPanelType,
+  SolarPhase,
 } from './types'
 
 export type RedraftEligibility =
@@ -66,6 +67,12 @@ export type ReconstructedSolarInputs = {
   manual?: SolarManualRoofInput
   panelType: SolarPanelType
   quarterlyBillAud: number | null
+  /** Power-supply phase carried back from the prior estimate so a re-draft /
+   *  building-switch keeps the same export ceiling. 'unknown' when absent. */
+  phase: SolarPhase
+  /** Preferred size carried back so re-estimates keep targeting it. Null when
+   *  the prior estimate had none. */
+  requestedSizeKw: number | null
 }
 
 /**
@@ -102,6 +109,22 @@ export function reconstructSolarInputs(args: {
       ? estimate.context.quarterly_bill_aud
       : null
 
+  // Power-supply phase + preferred size carried back from the prior estimate
+  // so re-draft AND the building-switch re-run with the same export ceiling
+  // and tier anchor. Missing/invalid → conservative defaults (unknown / null).
+  const phase: SolarPhase =
+    estimate.context.phase === 'single' ||
+    estimate.context.phase === 'three' ||
+    estimate.context.phase === 'unknown'
+      ? estimate.context.phase
+      : 'unknown'
+  const requestedSizeKw =
+    typeof estimate.context.requested_size_kw === 'number' &&
+    Number.isFinite(estimate.context.requested_size_kw) &&
+    estimate.context.requested_size_kw > 0
+      ? estimate.context.requested_size_kw
+      : null
+
   let manual: SolarManualRoofInput | undefined
   if (estimate.coverage_source === 'manual') {
     const storeysRaw = estimate.roof.storeys ?? 1
@@ -113,5 +136,5 @@ export function reconstructSolarInputs(args: {
     }
   }
 
-  return { input, manual, panelType, quarterlyBillAud }
+  return { input, manual, panelType, quarterlyBillAud, phase, requestedSizeKw }
 }

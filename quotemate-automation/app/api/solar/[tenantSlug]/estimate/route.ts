@@ -80,7 +80,8 @@ export async function POST(
       { status: 400 },
     )
   }
-  const { address, manual, panel_type, customer, energy, target_building } = parsed.data
+  const { address, manual, panel_type, customer, energy, target_building, phase, requested_size_kw } =
+    parsed.data
   // Felt tab spec 2026-06-13: a 'felt' submission runs the IDENTICAL
   // engine; the variant only selects the quote layout + map provisioning.
   // When the tab is disabled server-side, fall back to the instant
@@ -103,6 +104,11 @@ export async function POST(
       // Optional quarterly bill (premium quote §4.1) — personalises the
       // utility-cost section; intake.ts guards non-finite/non-positive.
       quarterlyBillAud: energy?.quarterly_bill_aud ?? null,
+      // Power-supply phase + preferred size (entry form). phase 'three'
+      // enlarges the export ceiling; requested_size_kw anchors the tiers.
+      // Both intake.ts-guarded (phase defaults to 'unknown', size → null).
+      phase,
+      requestedSizeKw: requested_size_kw ?? null,
       config,
       opts: {
         geocode: async (input) => {
