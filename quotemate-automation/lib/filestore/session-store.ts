@@ -67,6 +67,8 @@ export type AddDocsResult = {
   storeName?: string
   uploaded: number
   skipped: number
+  /** Per-file failure reasons (store created but a doc failed to index). */
+  errors: string[]
   reason?: string
 }
 
@@ -149,10 +151,10 @@ export async function addDocumentsToSessionStore(args: {
   const { config, estimator, sessionId, label, documents, fetchImpl } = args
   const skipExisting = args.skipExistingByName !== false
   const docs = (documents ?? []).filter((d) => d && d.bytes && d.bytes.byteLength > 0)
-  if (docs.length === 0) return { ok: true, uploaded: 0, skipped: 0 }
+  if (docs.length === 0) return { ok: true, uploaded: 0, skipped: 0, errors: [] }
 
   const ensured = await ensureSessionStore(config, estimator, sessionId, label, fetchImpl)
-  if (!ensured.ok) return { ok: false, uploaded: 0, skipped: 0, reason: ensured.reason }
+  if (!ensured.ok) return { ok: false, uploaded: 0, skipped: 0, errors: [ensured.reason], reason: ensured.reason }
   const storeName = ensured.storeName
 
   let existingNames = new Set<string>()
@@ -169,6 +171,7 @@ export async function addDocumentsToSessionStore(args: {
 
   let uploaded = 0
   let skipped = 0
+  const errors: string[] = []
   for (const d of docs) {
     const name = (d.name || 'document.pdf').trim()
     if (skipExisting && existingNames.has(name)) {
@@ -184,11 +187,12 @@ export async function addDocumentsToSessionStore(args: {
       await kbUploadDocument(config, { storeId: storeName, file, displayName: name }, fetchImpl)
       uploaded++
       existingNames.add(name)
-    } catch {
-      // best-effort per file — keep going
+    } catch (e) {
+      // best-effort per file — keep going, but record why so the caller can log it
+      errors.push(`${name}: ${errMessage(e)}`)
     }
   }
-  return { ok: true, storeName, uploaded, skipped }
+  return { ok: true, storeName, uploaded, skipped, errors }
 }
 
 /**

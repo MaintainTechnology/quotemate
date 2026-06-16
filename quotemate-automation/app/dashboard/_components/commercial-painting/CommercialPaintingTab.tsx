@@ -31,6 +31,7 @@ import type {
 } from '@/lib/commercial-painting/types'
 import { PaintTakeoffEditor } from './PaintTakeoffEditor'
 import { PaintPricedSummary } from './PaintPricedSummary'
+import EstimatorChatbot from '../EstimatorChatbot'
 import { PaintPreviewPanel } from './PaintPreviewPanel'
 
 const API = '/api/tenant/commercial-painting'
@@ -886,6 +887,15 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
                 accessToken={accessToken}
                 paintRunId={runId}
                 hasSitePhoto={uploads.some((u) => u.doc_type === 'site_photo')}
+              />
+
+              {/* Grounded chatbot — answers customer/tradie questions about this
+                  estimate from the run's own File Search store (uploads + PDF). */}
+              <EstimatorChatbot
+                estimator="paint"
+                sessionId={runId}
+                accessToken={accessToken}
+                jobLabel={customerName.trim() || undefined}
               />
             </div>
           </div>
