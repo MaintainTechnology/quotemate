@@ -69,6 +69,44 @@ describe('sizeSolarSystem — phase-aware export cap', () => {
   })
 })
 
+describe('sizeSolarSystem — preferred system size', () => {
+  it('anchors the best tier at the requested size and steps lower tiers down', () => {
+    // 3-phase Ausgrid → 15 kW AC cap (DC ceiling ~46 panels), so a 6 kW
+    // request (15 panels @ 400 W) is bounded only by the 20-panel roof.
+    const res = sizeSolarSystem({
+      roof: ROOF, panelType: 'standard_panels', config: DEFAULT_SOLAR_CONFIG,
+      context: { ...CONTEXT, phase: 'three', requested_system_kw: 6 },
+    })
+    const best = res.tiers[res.tiers.length - 1]
+    expect(best.system_kw_dc).toBe(6) // 15 panels × 400 W
+    expect(res.requested_kw).toBe(6)
+    expect(res.requested_kw_clamped).toBe(false)
+    expect(res.tiers[0].system_kw_dc).toBeLessThan(best.system_kw_dc)
+  })
+
+  it('clamps a request the roof/export cannot meet and flags it', () => {
+    // Single-phase (5 kW AC, ~15-panel ceiling) but the customer asked 14 kW.
+    const res = sizeSolarSystem({
+      roof: ROOF, panelType: 'standard_panels', config: DEFAULT_SOLAR_CONFIG,
+      context: { ...CONTEXT, phase: 'single', requested_system_kw: 14 },
+    })
+    const best = res.tiers[res.tiers.length - 1]
+    expect(res.requested_kw).toBe(14)
+    expect(res.requested_kw_clamped).toBe(true)
+    expect(best.system_kw_dc).toBeLessThanOrEqual(6.2)
+  })
+
+  it('without a requested size, falls back to roof-fraction tiers (no regression)', () => {
+    const res = sizeSolarSystem({
+      roof: ROOF, panelType: 'standard_panels', config: DEFAULT_SOLAR_CONFIG,
+      context: { ...CONTEXT, phase: 'three' },
+    })
+    expect(res.requested_kw == null).toBe(true)
+    expect(res.requested_kw_clamped).toBeFalsy()
+    expect(res.tiers.length).toBeGreaterThanOrEqual(2)
+  })
+})
+
 describe('sizeSolarSystem', () => {
   const result = sizeSolarSystem({
     roof: ROOF,

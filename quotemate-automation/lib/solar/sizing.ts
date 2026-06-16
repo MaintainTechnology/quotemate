@@ -104,11 +104,38 @@ export function sizeSolarSystem(args: {
 
   // Candidate panel counts, ascending, deduped, each capped by the roof.
   const maxPanels = roof.max_panels_count
-  const targets = [
-    Math.max(1, Math.round(maxPanels * GOOD_FRACTION)),
-    Math.max(1, Math.round(maxPanels * MIDDLE_FRACTION)),
-    maxPanels,
-  ]
+
+  // Optional customer/tradie-preferred system size (kW DC). When present, anchor
+  // the headline ("best") tier at the requested size and step the lower tiers
+  // down (≈90% better, ≈75% good), still bounded by the roof and the phase
+  // export ceiling. requested_kw_clamped records that the full request could
+  // not be met (roof or export limited it) so the quote can say why.
+  const requestedKw =
+    typeof context.requested_system_kw === 'number' &&
+    Number.isFinite(context.requested_system_kw) &&
+    context.requested_system_kw > 0
+      ? context.requested_system_kw
+      : null
+
+  let requested_kw_clamped = false
+  let targets: number[]
+  if (requestedKw != null) {
+    const targetPanels = Math.max(1, Math.round((requestedKw * 1000) / wattsPerPanel))
+    const feasibleMax = Math.min(maxPanels, exportCeilPanels)
+    const effectiveBest = Math.min(targetPanels, feasibleMax)
+    requested_kw_clamped = targetPanels > feasibleMax
+    targets = [
+      Math.max(1, Math.ceil(effectiveBest * 0.75)),
+      Math.max(1, Math.ceil(effectiveBest * 0.9)),
+      effectiveBest,
+    ]
+  } else {
+    targets = [
+      Math.max(1, Math.round(maxPanels * GOOD_FRACTION)),
+      Math.max(1, Math.round(maxPanels * MIDDLE_FRACTION)),
+      maxPanels,
+    ]
+  }
   const uniqueCounts = Array.from(new Set(targets))
     .filter((n) => n >= 1 && n <= maxPanels)
     .sort((a, b) => a - b)
@@ -215,7 +242,14 @@ export function sizeSolarSystem(args: {
       'System sized automatically from roof analysis. Every solar quote requires accredited-installer sign-off before customer send.',
   }
 
-  return { tiers, roof_capacity_kw_dc, export_limit_kw_ac, routing }
+  return {
+    tiers,
+    roof_capacity_kw_dc,
+    export_limit_kw_ac,
+    routing,
+    requested_kw: requestedKw,
+    requested_kw_clamped,
+  }
 }
 
 /** PURE — name N tiers good→best (2 → [good,best]; 3 → [good,better,best]). */
