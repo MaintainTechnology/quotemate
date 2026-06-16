@@ -29,6 +29,7 @@ function describe(group, fn) {
 const { stcBreakdown } = (await import('../lib/solar/pricing.ts')).__test_only__
 const { DEFAULT_SOLAR_CONFIG } = await import('../lib/solar/config.ts')
 const { calculateSolarEconomics } = await import('../lib/solar/economics.ts')
+const { sizeSolarSystem } = await import('../lib/solar/sizing.ts')
 
 const CONTEXT = { postcode: '2000', state: 'NSW', install_year: 2026, network: 'Ausgrid' }
 
@@ -99,6 +100,36 @@ describe('payback band is plausible (2–12 yrs) for a 6.6 kW system', () => {
   })
   it('payback low < high', () => {
     assert.ok(t.payback_years_low < t.payback_years_high)
+  })
+})
+
+describe('phase scales the export cap (design 2026-06-16)', () => {
+  const ROOF = {
+    max_panels_count: 20,
+    panel_capacity_watts: 400,
+    panel_configs: [
+      { panels_count: 11, yearly_energy_dc_kwh: 6600 },
+      { panels_count: 15, yearly_energy_dc_kwh: 9000 },
+      { panels_count: 20, yearly_energy_dc_kwh: 12000 },
+    ],
+  }
+  const cap = (phase) =>
+    sizeSolarSystem({
+      roof: ROOF,
+      panelType: 'standard_panels',
+      config: DEFAULT_SOLAR_CONFIG,
+      context: { ...CONTEXT, phase },
+    }).export_limit_kw_ac
+
+  it('absent phase == single-phase export cap (no regression)', () => {
+    assert.equal(cap(undefined), cap('single'))
+  })
+  it('single-phase Ausgrid cap is 5 kW AC (unchanged)', () => {
+    assert.equal(cap('single'), 5)
+  })
+  it('three-phase cap is exactly 3× single (15 kW AC)', () => {
+    assert.equal(cap('three'), 15)
+    assert.equal(cap('three'), cap('single') * 3)
   })
 })
 
