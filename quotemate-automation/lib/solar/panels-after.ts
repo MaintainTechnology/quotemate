@@ -128,6 +128,7 @@ export async function generateSolarPanelsImage(
           planes: estimate.roof.planes,
           center,
           panel_limit: headlineTier.panels_count,
+          prefer_contiguous_layout: true,
           panel_size_m: estimate.roof.panel_size_m ?? null,
         })
       : []
@@ -146,6 +147,7 @@ export async function generateSolarPanelsImage(
           planes: estimate.roof.planes,
           panel_size_m: estimate.roof.panel_size_m ?? null,
           panel_limit: headlineTier.panels_count,
+          prefer_contiguous_layout: true,
         })
       : []
     if (markupPaths.length > 0 && center) {

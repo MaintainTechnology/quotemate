@@ -60,7 +60,7 @@ export function buildHeroOverlay(args: {
     // current photo with a stale date (e.g. "27 Oct 2017"), so we don't.
     // (The heatmap caption in sun-view.ts correctly keeps its Solar-API
     // date — that image genuinely IS that dataset.)
-    caption = 'Indicative layout based on the latest Google aerial imagery.'
+    caption = 'Indicative layout based on Google satellite imagery and Google Solar roof geometry.'
   }
 
   return { stats, caption }

@@ -146,13 +146,13 @@ describe('mapSolarEstimateRow', () => {
     expect(vm.requestedSystemKw).toBe(10)
   })
 
-  it('defaults phase to single and size to null when columns are absent', () => {
+  it('defaults phase to unknown and size to null when columns are absent', () => {
     const vm = mapSolarEstimateRow({
       row: baseRow,
       customerName: null,
       appUrl: 'https://example.com',
     })
-    expect(vm.electricalPhase).toBe('single')
+    expect(vm.electricalPhase).toBe('unknown')
     expect(vm.requestedSystemKw).toBe(null)
   })
 

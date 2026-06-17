@@ -40,6 +40,10 @@ export function buildSolarRowPayloads(args: {
 }) {
   const { estimate, tenantId, address, customer } = args
   const inspection = estimate.routing.decision === 'inspection_required'
+  const electricalPhase =
+    estimate.context.phase === 'single' || estimate.context.phase === 'three'
+      ? estimate.context.phase
+      : 'unknown'
 
   // The "selected" tier mirrors roofing: prefer 'better', else the
   // first priced tier. Solar tiers are 2–3, ascending good→best.
@@ -87,7 +91,7 @@ export function buildSolarRowPayloads(args: {
     postcode: address.postcode,
     install_year: estimate.context.install_year,
     network: estimate.context.network,
-    electrical_phase: estimate.context.phase ?? 'single',
+    electrical_phase: electricalPhase,
     requested_system_kw: estimate.context.requested_system_kw ?? null,
     coverage_source: estimate.coverage_source,
     imagery_quality: estimate.roof.imagery_quality,

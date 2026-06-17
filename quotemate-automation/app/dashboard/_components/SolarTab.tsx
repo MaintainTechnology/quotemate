@@ -155,7 +155,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
   const draftFor = useCallback(
     (e: SolarEstimateViewModel) =>
       overrideDraft[e.token] ?? {
-        phase: e.electricalPhase,
+        phase: e.electricalPhase === 'three' ? 'three' : 'single',
         desiredKw: e.requestedSystemKw != null ? String(e.requestedSystemKw) : '',
       },
     [overrideDraft],

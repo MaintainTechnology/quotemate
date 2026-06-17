@@ -8,11 +8,26 @@
 -- (painting quote PDF) were claimed by parallel work in flight.
 
 alter table public.solar_estimates
-  add column if not exists electrical_phase text not null default 'single'
+  add column if not exists electrical_phase text,
+  add column if not exists requested_system_kw numeric;
+
+alter table public.solar_estimates
+  drop constraint if exists solar_estimates_electrical_phase_check,
+  drop constraint if exists solar_estimates_requested_system_kw_check;
+
+update public.solar_estimates
+   set electrical_phase = 'single'
+ where electrical_phase is null
+    or electrical_phase not in ('single', 'three');
+
+alter table public.solar_estimates
+  alter column electrical_phase set default 'single',
+  alter column electrical_phase set not null,
+  add constraint solar_estimates_electrical_phase_check
     check (electrical_phase in ('single', 'three')),
-  add column if not exists requested_system_kw numeric
+  add constraint solar_estimates_requested_system_kw_check
     check (requested_system_kw is null
-           or (requested_system_kw > 0 and requested_system_kw <= 30));
+           or (requested_system_kw > 0 and requested_system_kw <= 100));
 
 -- Refresh PostgREST's schema cache so supabase-js routes read the new columns
 -- immediately (mirrors migrations 100/101/111).

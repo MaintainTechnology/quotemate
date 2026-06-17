@@ -74,6 +74,8 @@ describe('buildSolarSunView', () => {
     expect(view!.flux_image_available).toBe(true)
     expect(view!.flux_caption).toContain('820')
     expect(view!.flux_caption).toContain('2024-03-12')
+    expect(view!.flux_caption).toContain('Google Solar imagery')
+    expect(view!.flux_caption).toContain('background map tiles may be newer')
   })
 
   it('sorts plane scores sunniest first with copy + relative %', () => {
@@ -127,6 +129,7 @@ describe('buildSolarSunView', () => {
     expect(view!.markers[0].score_copy).toBe('Excellent sun')
     expect(view!.markers[1].is_best).toBe(false)
     expect(view!.markers[1].relative_pct).toBe(75)
+    expect(view!.flux_caption).toContain('one per Google-detected roof face (2 faces)')
   })
 
   it('skips markers for anchors without a scored plane and without an image', () => {

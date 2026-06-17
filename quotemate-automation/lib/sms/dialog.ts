@@ -1140,6 +1140,9 @@ export type CustomServiceScope = {
   name: string
   description: string | null
   always_inspection: boolean
+  /** Shared/category key when known. Used by deterministic readiness gates;
+   *  ignored by the prompt renderer so it does not bloat the SMS brain. */
+  category?: string | null
   /** Migration 032 — mandated MUST-ASK questions for this service,
    *  authored from its pricing shape. When present, the dialog must
    *  collect EVERY one (like an easy-5 per-job MUST-ASK) before it may

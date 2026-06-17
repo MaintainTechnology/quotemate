@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveSolarQuoteView } from './quote-page-row'
+import { resolveSolarQuoteView, resolveSolarSizeNote } from './quote-page-row'
 import type { SolarEstimate } from './types'
 
 const estimate = {
@@ -59,5 +59,95 @@ describe('resolveSolarQuoteView', () => {
     } as unknown as SolarEstimate
     const view = resolveSolarQuoteView({ estimate: empty, confirmedAt: null })
     expect(view.headlineTier).toBeNull()
+  })
+})
+
+describe('resolveSolarSizeNote', () => {
+  function withSizing(sizing: Record<string, unknown>): SolarEstimate {
+    return { ...estimate, sizing } as unknown as SolarEstimate
+  }
+
+  it('returns null when the system is not constrained below expectation', () => {
+    const e = withSizing({
+      tiers: [{ tier: 'best', system_kw_dc: 10, panels_count: 25, export_limited: false }],
+      phase: 'three',
+      export_limit_kw_ac: 15,
+      requested_size_kw: null,
+    })
+    expect(resolveSolarSizeNote(e)).toBeNull()
+  })
+
+  it('explains unknown supply as needing power/export confirmation', () => {
+    const e = withSizing({
+      tiers: [{ tier: 'best', system_kw_dc: 14, panels_count: 35, export_limited: true }],
+      phase: 'unknown',
+      export_limit_kw_ac: 5,
+      requested_size_kw: 14,
+    })
+    const note = resolveSolarSizeNote(e)
+    expect(note).not.toBeNull()
+    expect(note?.title).toMatch(/14 kW/)
+    expect(note?.title.toLowerCase()).toContain('confirmed')
+    expect(note?.body).toContain('preferred roof layout')
+    expect(note?.body).toMatch(/export limiting/)
+  })
+
+  it('explains a known single-phase export review', () => {
+    const e = withSizing({
+      tiers: [{ tier: 'best', system_kw_dc: 14, panels_count: 35, export_limited: true }],
+      phase: 'single',
+      export_limit_kw_ac: 5,
+      requested_size_kw: 14,
+    })
+    const note = resolveSolarSizeNote(e)
+    expect(note?.title.toLowerCase()).toContain('export-limit design review')
+    expect(note?.body).toMatch(/3-phase upgrade/)
+  })
+
+  it('explains a three-phase export review without the 3-phase upsell', () => {
+    const e = withSizing({
+      tiers: [{ tier: 'best', system_kw_dc: 18.4, panels_count: 42, export_limited: true }],
+      phase: 'three',
+      export_limit_kw_ac: 15,
+      requested_size_kw: 25,
+    })
+    const note = resolveSolarSizeNote(e)
+    expect(note?.body.toLowerCase()).not.toContain('whether your property is, or can be, 3-phase')
+    expect(note?.body).toMatch(/export/i)
+  })
+
+  it('mentions when an oversized request was limited by roof or quote max', () => {
+    const e = withSizing({
+      tiers: [{ tier: 'best', system_kw_dc: 40, panels_count: 100, export_limited: true }],
+      phase: 'unknown',
+      export_limit_kw_ac: 5,
+      requested_size_kw: 80,
+    })
+    const note = resolveSolarSizeNote(e)
+    expect(note?.title).toContain('40 kW')
+    expect(note?.body).toContain('80 kW')
+    expect(note?.body).toContain('public quote maximum')
+  })
+
+  it('explains a roof-fit limit when the request exceeds the roof (not export-capped)', () => {
+    const e = withSizing({
+      tiers: [{ tier: 'best', system_kw_dc: 8, panels_count: 20, export_limited: false }],
+      phase: 'three',
+      export_limit_kw_ac: 15,
+      requested_size_kw: 12,
+    })
+    const note = resolveSolarSizeNote(e)
+    expect(note?.title.toLowerCase()).toContain('roof fits')
+    expect(note?.body).toMatch(/12 kW/)
+  })
+
+  it('returns null when the customer got at least what they asked for', () => {
+    const e = withSizing({
+      tiers: [{ tier: 'best', system_kw_dc: 10, panels_count: 25, export_limited: false }],
+      phase: 'three',
+      export_limit_kw_ac: 15,
+      requested_size_kw: 9,
+    })
+    expect(resolveSolarSizeNote(e)).toBeNull()
   })
 })

@@ -15,11 +15,10 @@ describe('solarPremiumQuoteEnabled', () => {
 })
 
 describe('buildSolarPremiumQuote — phase + requested size rows', () => {
-  it('shows the power supply and a clamped requested size', () => {
+  it('shows the power supply and a limited requested size', () => {
     const est = makeEstimate()
-    // Requested 14 kW but the fixture's headline tier is 10 kW → the engine
-    // capped the request (roof / connection limited), which premium-quote.ts
-    // surfaces as the "capped" callout (derived from headline kW < requested).
+    // Requested 14 kW but the fixture's headline tier is 10 kW, so the view
+    // reports the proposed size after roof/public quote limits.
     est.context = { ...est.context, phase: 'three', requested_system_kw: 14 }
     const premium = buildSolarPremiumQuote({
       estimate: est,
@@ -32,10 +31,10 @@ describe('buildSolarPremiumQuote — phase + requested size rows', () => {
       premium.assumed_values.find((r) => r.label === 'Power supply')?.value,
     ).toBe('3-phase')
     const requested = premium.assumed_values.find((r) => r.label === 'Requested size')
-    expect(requested?.value).toContain('capped')
+    expect(requested?.value).toContain('proposed')
   })
 
-  it("defaults to 'Single-phase' and omits the size row when unset", () => {
+  it("defaults to 'Not sure' and omits the size row when unset", () => {
     const premium = buildSolarPremiumQuote({
       estimate: makeEstimate(),
       config: DEFAULT_SOLAR_CONFIG,
@@ -43,7 +42,7 @@ describe('buildSolarPremiumQuote — phase + requested size rows', () => {
     })
     expect(
       premium.assumed_values.find((r) => r.label === 'Power supply')?.value,
-    ).toBe('Single-phase')
+    ).toBe('Not sure (export / phase to confirm)')
     expect(premium.assumed_values.some((r) => r.label === 'Requested size')).toBe(false)
   })
 })

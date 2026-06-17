@@ -569,6 +569,7 @@ export async function POST(req: Request) {
         ?.review_threshold_inc_gst ?? null,
       totalIncGst: total,
       isInspection,
+      riskFlags,
     })
     log.ok('review-policy decided', {
       hold: reviewDecision.hold,

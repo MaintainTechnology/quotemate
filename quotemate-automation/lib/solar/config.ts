@@ -181,6 +181,12 @@ export const DEFAULT_SOLAR_CONFIG: SolarConfig = {
   },
   default_rate_card: DEFAULT_RATE_CARD,
   derate_factor: 0.81,
+  // DC:AC oversize lever (opt-in). LEFT ABSENT by default so live quotes are
+  // unchanged — sizing.ts falls back to `1 / derate ≈ 1.23`, the prior ceiling.
+  // Set to ~1.33 (the CEC inverter-oversize allowance) to quote larger DC
+  // arrays on export-limited supplies; see the money-path NOTE in sizing.ts
+  // before enabling (AC is not clipped, so it overstates ~8% at 1.33).
+  // dc_oversize_factor: 1.33,
   self_consumption_pct: 0.40,
   retail_rate_aud_per_kwh: 0.32,
   // Optional fields — config becomes single source of truth for constants
@@ -282,6 +288,24 @@ export function validateSolarConfig(
       ok: false,
       code: 'config_invalid',
       detail: 'derate_factor must be a fraction in (0,1).',
+    }
+  }
+
+  // Guard: dc_oversize_factor (optional) sizes the DC ceiling above the AC
+  // export limit. Must be in [1, 2] — below 1 would under-size the array
+  // beneath the inverter; above 2 is an implausible DC:AC ratio. Absent is
+  // valid (sizing.ts falls back to 1/derate, the prior behaviour).
+  if (
+    config.dc_oversize_factor != null &&
+    (!Number.isFinite(config.dc_oversize_factor) ||
+      config.dc_oversize_factor < 1 ||
+      config.dc_oversize_factor > 2)
+  ) {
+    return {
+      ok: false,
+      code: 'config_invalid',
+      detail: 'dc_oversize_factor must be a number in [1, 2]; found ' +
+        String(config.dc_oversize_factor) + '.',
     }
   }
 

@@ -295,6 +295,21 @@ export default async function SolarQuotePage({
           )}
         </div>
 
+        {/* ── Size explainer — why the headline system is the size it is.
+            Only renders when the largest tier came out below what the roof /
+            request implied (export-limit clamp or roof-fit), so a "6 kW"
+            result never looks like an unexplained shrink. */}
+        {view.sizeNote && (
+          <div className={`mt-8 border border-ink-line border-l-4 border-l-warning bg-ink-card p-5 sm:p-6 ${reveal(255)}`}>
+            <h3 className="font-mono text-[0.8rem] font-semibold uppercase tracking-[0.16em] text-warning">
+              {view.sizeNote.title}
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-text-sec">
+              {view.sizeNote.body}
+            </p>
+          </div>
+        )}
+
         {/* ── Felt interactive roof map (Felt tab spec 2026-06-13 §4.7).
             Live satellite map with the panel layout, sun-exposure heat
             map, roof-plane sun scores and elevation — toggled via Felt's
@@ -412,7 +427,7 @@ export default async function SolarQuotePage({
                 {premium.layout.legend.map((l) => (
                   <span key={l.segment_index} className="inline-flex items-center gap-2 font-mono text-[0.66rem] uppercase tracking-[0.14em] text-text-sec">
                     <span className="inline-block h-2.5 w-2.5" style={{ backgroundColor: l.color }} aria-hidden />
-                    {l.plane_label} · {l.panels_count} panels
+                    {l.plane_label} · {l.panels_count} {l.panels_count === 1 ? 'panel' : 'panels'}
                   </span>
                 ))}
               </div>
@@ -444,7 +459,8 @@ export default async function SolarQuotePage({
                 {premium.strings.strings.map((s) => (
                   <span key={s.string_number} className="inline-flex items-center gap-2 font-mono text-[0.66rem] uppercase tracking-[0.14em] text-text-sec">
                     <span className="inline-block h-2.5 w-2.5" style={{ backgroundColor: s.color }} aria-hidden />
-                    S{s.string_number} · {s.panels_count} panels
+                    S{s.string_number} · {s.panels_count}{' '}
+                    {s.panels_count === 1 ? 'panel' : 'panels'}
                   </span>
                 ))}
               </div>

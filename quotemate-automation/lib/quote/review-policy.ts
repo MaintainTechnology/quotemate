@@ -57,6 +57,9 @@ export interface ShouldHoldInput {
    * isn't ghosted on a routine inspection booking.
    */
   isInspection?: boolean;
+  /** Persisted quote risk flags. Only quote-integrity flags force review;
+   *  ordinary pricing notes (for example long-run cable risk) do not. */
+  riskFlags?: unknown;
 }
 
 /**
@@ -81,6 +84,11 @@ export function shouldHoldForReview(
   // Inspection quotes bypass the gate — see ShouldHoldInput docs.
   if (input.isInspection === true) {
     return { hold: false, reason: 'inspection_route_bypasses_gate' };
+  }
+
+  const safetyReasons = safetyReviewReasons(input.riskFlags);
+  if (safetyReasons.length > 0) {
+    return { hold: true, reason: `quote_integrity_${safetyReasons.join('_')}` };
   }
 
   if (policy === 'auto_send') {
@@ -114,6 +122,24 @@ export function shouldHoldForReview(
     return { hold: true, reason: `total_${total}_at_or_over_threshold_${threshold}` };
   }
   return { hold: false, reason: `total_${total}_under_threshold_${threshold}` };
+}
+
+export function safetyReviewReasons(riskFlags: unknown): string[] {
+  if (!Array.isArray(riskFlags)) return [];
+  const reasons = new Set<string>();
+  for (const raw of riskFlags) {
+    const text = typeof raw === 'string'
+      ? raw
+      : raw && typeof raw === 'object'
+        ? JSON.stringify(raw)
+        : '';
+    const flag = text.toLowerCase();
+    if (flag.includes('[spec-guard]')) reasons.add('spec_guard');
+    if (flag.includes('[reconcile]') && flag.includes('quantity')) {
+      reasons.add('quantity_mismatch');
+    }
+  }
+  return Array.from(reasons);
 }
 
 function toFiniteNumber(v: number | string | null | undefined): number | null {

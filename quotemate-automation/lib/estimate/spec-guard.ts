@@ -7,8 +7,8 @@
 // observed on real traffic before it ever touches the money path).
 //
 // Three guarantees (all proven in spec-guard.test.ts):
-//   • DEFAULT MODE = 'shadow' — no behaviour change until SPEC_GUARD_MODE is
-//     flipped to 'enforce'.
+//   • DEFAULT MODE = 'enforce' — customer-stated specs block bad product locks
+//     and force review flags unless SPEC_GUARD_MODE is explicitly relaxed.
 //   • DEGRADE-NEVER-BLOCK — only a positive same-key contradiction blocks;
 //     unknown / missing / unparseable never does.
 //   • NAME FALLBACK — when a product carries no structured spec for a
@@ -32,14 +32,14 @@ import { findHeadlineMaterialIndex } from './catalogue'
 
 export type SpecGuardMode = 'off' | 'shadow' | 'enforce'
 
-/** Resolve the guard mode from the environment. DEFAULT 'shadow' — log-only,
- *  no behaviour change. Only an explicit 'off' or 'enforce' departs from it. */
+/** Resolve the guard mode from the environment. DEFAULT 'enforce'. Use explicit
+ *  'shadow' for observe-only rollouts, or 'off' to disable. */
 export function specGuardMode(
   env: Record<string, string | undefined> = process.env,
 ): SpecGuardMode {
   const v = (env.SPEC_GUARD_MODE ?? '').trim().toLowerCase()
   if (v === 'off' || v === 'enforce' || v === 'shadow') return v
-  return 'shadow'
+  return 'enforce'
 }
 
 function isBlank(v: unknown): boolean {

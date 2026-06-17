@@ -5,6 +5,7 @@ import {
   metersPerPixel,
   segmentColor,
   buildLayoutOverlay,
+  selectPanelsForLayout,
   OVERLAY_MAP_ZOOM,
   MODULE_GUTTER,
   __test_only__,
@@ -225,5 +226,41 @@ describe('buildLayoutOverlay', () => {
       center: SYD,
     }
     expect(buildLayoutOverlay(args)!.svg).toBe(buildLayoutOverlay(args)!.svg)
+  })
+})
+
+describe('selectPanelsForLayout', () => {
+  function panel(segment: number, energy: number, i: number): SolarPanelPlacement {
+    return {
+      center: { lat: SYD.lat, lng: SYD.lng + i * 0.00002 },
+      orientation: 'PORTRAIT',
+      segment_index: segment,
+      yearly_energy_dc_kwh: energy,
+    }
+  }
+
+  it('prefers one clean roof face when a tiny orphan group adds negligible yield', () => {
+    const panels = [
+      ...Array.from({ length: 13 }, (_, i) => panel(0, 100, i)),
+      ...Array.from({ length: 2 }, (_, i) => panel(1, 101, i + 13)),
+      ...Array.from({ length: 2 }, (_, i) => panel(0, 99.9, i + 15)),
+    ]
+
+    const selected = selectPanelsForLayout(panels, 15, { prefer_contiguous_layout: true })
+
+    expect(selected).toHaveLength(15)
+    expect(new Set(selected.map((p) => p.segment_index))).toEqual(new Set([0]))
+  })
+
+  it('keeps the energy-ranked slice when the cleaner face loses too much yield', () => {
+    const panels = [
+      ...Array.from({ length: 13 }, (_, i) => panel(0, 100, i)),
+      ...Array.from({ length: 2 }, (_, i) => panel(1, 125, i + 13)),
+      ...Array.from({ length: 2 }, (_, i) => panel(0, 80, i + 15)),
+    ]
+
+    const selected = selectPanelsForLayout(panels, 15, { prefer_contiguous_layout: true })
+
+    expect(selected.filter((p) => p.segment_index === 1)).toHaveLength(2)
   })
 })

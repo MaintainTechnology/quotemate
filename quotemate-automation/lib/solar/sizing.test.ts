@@ -260,13 +260,6 @@ describe('sizeSolarSystem', () => {
     // Now use an export limit of 10 kW instead (override via by_network) to
     // verify that the cap REDUCES the best tier from 30→24 panels but leaves the
     // good tier (17 panels, 6.8 kW DC < 12.35 kW DC ceiling) uncapped.
-    const relaxedConfig = {
-      ...DEFAULT_SOLAR_CONFIG,
-      export_limits: {
-        ...DEFAULT_SOLAR_CONFIG.export_limits,
-        by_network: { ...DEFAULT_SOLAR_CONFIG.export_limits.by_network, Ausgrid: 10 },
-      },
-    }
     // exportDcCeiling = 10 / 0.81 ≈ 12.35 kW → exportCeilPanels = floor(12350/400) = 30
     // good=17 panels, 6.8 kW < 12.35 → NOT capped
     // middle=24 panels, 9.6 kW < 12.35 → NOT capped
@@ -470,9 +463,10 @@ describe('sizeSolarSystem — preferred system size anchors the tiers', () => {
     expect(top.system_kw_dc).toBeLessThanOrEqual(r.roof_capacity_kw_dc)
   })
 
-  it('still applies the DNSP/phase export cap on top of the requested anchor', () => {
+  it('keeps a preferred size as the proposed system and flags export review', () => {
     // Request 12 kW DC (30 panels) on SINGLE phase: the anchor is 30 panels
-    // but the 5 kW/phase ceiling (15 panels, 6.0 kW) still binds the top tier.
+    // and the 5 kW/phase ceiling is flagged for installer/connection review
+    // instead of silently shrinking the proposal to 6.0 kW.
     const r = sizeSolarSystem({
       roof: BIG_ROOF,
       panelType: 'standard_panels',
@@ -480,7 +474,30 @@ describe('sizeSolarSystem — preferred system size anchors the tiers', () => {
       context: { ...CONTEXT, phase: 'single', requested_size_kw: 12 },
     })
     const top = r.tiers[r.tiers.length - 1]
-    expect(top.system_kw_dc).toBe(6)
+    expect(top.system_kw_dc).toBe(12)
+    expect(top.panels_count).toBe(30)
+    expect(top.export_limited).toBe(true)
+  })
+
+  it('caps an oversized preferred request at the public quote maximum', () => {
+    const giantRoof: SolarRoofFacts = {
+      ...BIG_ROOF,
+      max_panels_count: 160,
+      panel_configs: [
+        { panels_count: 88, yearly_energy_dc_kwh: 52800 },
+        { panels_count: 128, yearly_energy_dc_kwh: 76800 },
+        { panels_count: 160, yearly_energy_dc_kwh: 96000 },
+      ],
+    }
+    const r = sizeSolarSystem({
+      roof: giantRoof,
+      panelType: 'standard_panels',
+      config: DEFAULT_SOLAR_CONFIG,
+      context: { ...CONTEXT, phase: 'unknown', requested_size_kw: 80 },
+    })
+    const top = r.tiers[r.tiers.length - 1]
+    expect(top.system_kw_dc).toBe(40)
+    expect(top.panels_count).toBe(100)
     expect(top.export_limited).toBe(true)
   })
 
@@ -501,5 +518,47 @@ describe('sizeSolarSystem — preferred system size anchors the tiers', () => {
     expect(invalid.tiers.map((t) => t.system_kw_dc)).toEqual(
       baseline.tiers.map((t) => t.system_kw_dc),
     )
+  })
+})
+
+describe('sizeSolarSystem — dc_oversize_factor lever', () => {
+  // 40-panel, 400 W roof so the export ceiling (not the roof) binds the top
+  // tier on a single-phase Ausgrid (5 kW/phase) supply.
+  const BIG_ROOF: SolarRoofFacts = {
+    ...FULL_ROOF,
+    max_panels_count: 40,
+    panel_capacity_watts: 400,
+    panel_configs: [
+      { panels_count: 22, yearly_energy_dc_kwh: 13200 },
+      { panels_count: 32, yearly_energy_dc_kwh: 19200 },
+      { panels_count: 40, yearly_energy_dc_kwh: 24000 },
+    ],
+  }
+
+  function topKw(config: typeof DEFAULT_SOLAR_CONFIG): number {
+    const r = sizeSolarSystem({
+      roof: BIG_ROOF,
+      panelType: 'standard_panels',
+      config,
+      context: { ...CONTEXT, phase: 'single' },
+    })
+    return r.tiers[r.tiers.length - 1].system_kw_dc
+  }
+
+  it('absent factor preserves the prior 1/derate ceiling (6.0 kW, 15 panels)', () => {
+    // DEFAULT_SOLAR_CONFIG ships WITHOUT dc_oversize_factor → 5 / 0.81 ≈ 6.17
+    // kW DC ceiling → floor(6170/400) = 15 panels = 6.0 kW. No live change.
+    expect(DEFAULT_SOLAR_CONFIG.dc_oversize_factor).toBeUndefined()
+    expect(topKw(DEFAULT_SOLAR_CONFIG)).toBe(6)
+  })
+
+  it('factor 1.33 raises the ceiling (5 × 1.33 = 6.65 kW → 16 panels = 6.4 kW)', () => {
+    const config = { ...DEFAULT_SOLAR_CONFIG, dc_oversize_factor: 1.33 }
+    expect(topKw(config)).toBe(6.4)
+  })
+
+  it('factor 1.0 is stricter than the default (caps DC at the AC limit, 5 kW → 12 panels = 4.8 kW)', () => {
+    const config = { ...DEFAULT_SOLAR_CONFIG, dc_oversize_factor: 1.0 }
+    expect(topKw(config)).toBe(4.8)
   })
 })

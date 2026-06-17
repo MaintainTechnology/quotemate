@@ -680,14 +680,14 @@ export async function runEstimation(
       )
     }
 
-    // Main-path spec guard (shadow-observe by default). The WP9 block above
+    // Main-path spec guard. The WP9 block above
     // already guards a customer-CHOSEN product; this covers the ~95% of quotes
     // where the model picked the product. It reconciles each tier's headline
     // product against the customer's agreed specs (intake.scope.specs.
     // requested_specs) — e.g. agreed 15A GPO vs a quoted 10A, using the
-    // backfilled catalogue amperage. SHADOW (default) only logs the rate;
-    // ENFORCE appends a [spec-guard] risk flag for tradie review (it does NOT
-    // re-pick or downgrade — that stronger action is a deliberate follow-up).
+    // backfilled catalogue amperage. SHADOW only logs the rate; ENFORCE
+    // appends a [spec-guard] risk flag that the dispatch route treats as
+    // tradie-review-only customer release.
     // Best-effort — never breaks an already-grounded quote.
     try {
       const guardMode = specGuardMode()

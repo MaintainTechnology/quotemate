@@ -73,9 +73,10 @@ describe('buildSolarFormPayload — phase + preferred size', () => {
     panelType: 'standard_panels' as const,
   }
 
-  it('includes phase when single or three', () => {
+  it('includes phase when single, three, or unknown', () => {
     expect(buildSolarFormPayload({ ...base, phase: 'three' }).phase).toBe('three')
     expect(buildSolarFormPayload({ ...base, phase: 'single' }).phase).toBe('single')
+    expect(buildSolarFormPayload({ ...base, phase: 'unknown' }).phase).toBe('unknown')
   })
 
   it('omits phase when unset', () => {
@@ -85,5 +86,9 @@ describe('buildSolarFormPayload — phase + preferred size', () => {
   it('includes a positive preferred size and omits a missing one', () => {
     expect(buildSolarFormPayload({ ...base, requestedSizeKw: '10' }).requested_size_kw).toBe(10)
     expect('requested_size_kw' in buildSolarFormPayload({ ...base })).toBe(false)
+  })
+
+  it('allows a 40 kW preferred size through to the API payload', () => {
+    expect(buildSolarFormPayload({ ...base, requestedSizeKw: '40' }).requested_size_kw).toBe(40)
   })
 })

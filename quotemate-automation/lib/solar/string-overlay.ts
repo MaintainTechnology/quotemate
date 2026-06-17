@@ -27,6 +27,7 @@ import {
   OVERLAY_MAP_ZOOM,
   OVERLAY_MAP_WIDTH,
   OVERLAY_MAP_HEIGHT,
+  selectPanelsForLayout,
 } from './layout-overlay'
 
 /** Mandatory caption (spec §4.2). Tests assert this verbatim. */
@@ -76,6 +77,8 @@ export type StringOverlayInput = {
   center: LatLng
   /** Headline tier panel count — strings are drawn for ONE system. */
   panel_limit?: number | null
+  /** Keep stringing aligned with the cleaner layout overlay selection. */
+  prefer_contiguous_layout?: boolean
   /** Max panels per run (config string_max_panels; default 14). */
   string_max_panels?: number | null
   zoom?: number
@@ -118,7 +121,9 @@ export function buildStringOverlay(input: StringOverlayInput): StringOverlay | n
     input.panel_limit != null && input.panel_limit > 0
       ? Math.min(panels.length, Math.floor(input.panel_limit))
       : panels.length
-  const used = panels.slice(0, limit)
+  const used = selectPanelsForLayout(panels, limit, {
+    prefer_contiguous_layout: input.prefer_contiguous_layout,
+  })
 
   // Project once; carry the source placement alongside its pixel.
   const projected = used.map((p) => ({

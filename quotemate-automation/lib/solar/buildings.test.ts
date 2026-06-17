@@ -67,6 +67,29 @@ describe('polygonCentroid', () => {
     expect(c!.lng).toBeCloseTo(151.2, 4)
   })
 
+  it('keeps an irregular Chandler roof centroid inside the footprint bbox', () => {
+    const roof: GeoJSONPolygon = {
+      type: 'Polygon',
+      coordinates: [[
+        [153.162290561, -27.502202762],
+        [153.162530794, -27.502237321],
+        [153.162535956, -27.502208777],
+        [153.162555881, -27.502098659],
+        [153.162315648, -27.5020641],
+        [153.162295723, -27.502174219],
+        [153.162290561, -27.502202762],
+      ]],
+    }
+    const c = polygonCentroid(roof)
+    expect(c).not.toBeNull()
+    expect(c!.lat).toBeGreaterThanOrEqual(-27.502237321)
+    expect(c!.lat).toBeLessThanOrEqual(-27.5020641)
+    expect(c!.lng).toBeGreaterThanOrEqual(153.162290561)
+    expect(c!.lng).toBeLessThanOrEqual(153.162555881)
+    expect(c!.lat).toBeCloseTo(-27.5021507, 6)
+    expect(c!.lng).toBeCloseTo(153.1624232, 6)
+  })
+
   it('returns null for a null polygon or a degenerate ring', () => {
     expect(polygonCentroid(null)).toBeNull()
     expect(

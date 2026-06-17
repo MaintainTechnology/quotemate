@@ -172,12 +172,20 @@ export function buildSolarSunView(estimate: SolarEstimate): SolarSunView | null 
     markers.sort((a, b) => Number(b.is_best) - Number(a.is_best))
   }
 
+  const markerCopy =
+    markers.length > 0
+      ? ` Dots are one per Google-detected roof face (${markers.length} face${markers.length === 1 ? '' : 's'}), not one per panel.`
+      : ''
+
   const flux_caption = flux_image_available
     ? 'Roof irradiance measured by Google Solar — brighter means more annual sun' +
       (sun?.min_flux != null && sun?.max_flux != null
         ? ` (${nf(Math.round(sun.min_flux))}–${nf(Math.round(sun.max_flux))} kWh/kW/yr)`
         : '') +
-      (sun?.imagery_date ? `. Imagery ${sun.imagery_date}.` : '.')
+      markerCopy +
+      (sun?.imagery_date
+        ? ` Google Solar imagery ${sun.imagery_date}; background map tiles may be newer. Your installer confirms current shade and obstructions on site.`
+        : '.')
     : null
 
   if (stats.length === 0 && planes.length === 0 && !flux_image_available) return null

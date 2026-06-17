@@ -6,6 +6,7 @@ import {
   asReviewPolicy,
   shouldHoldForReview,
   REVIEW_POLICIES,
+  safetyReviewReasons,
 } from './review-policy'
 
 describe('REVIEW_POLICIES', () => {
@@ -231,5 +232,56 @@ describe('shouldHoldForReview — bypass rules', () => {
     })
     expect(r.hold).toBe(false)
     expect(r.reason).toBe('inspection_route_bypasses_gate')
+  })
+})
+
+describe('shouldHoldForReview — quote integrity flags', () => {
+  it('holds auto_send quotes when spec guard flags a mismatch', () => {
+    const r = shouldHoldForReview({
+      policy: 'auto_send',
+      totalIncGst: 420,
+      riskFlags: ['[spec-guard] good: amperage: requested 15A but product is 10A'],
+    })
+    expect(r.hold).toBe(true)
+    expect(r.reason).toBe('quote_integrity_spec_guard')
+  })
+
+  it('holds auto_send quotes when headline quantity disagrees with item_count', () => {
+    const r = shouldHoldForReview({
+      policy: 'auto_send',
+      totalIncGst: 420,
+      riskFlags: ['[reconcile] good: headline quantity 4 != item_count 6 - confirm before sending'],
+    })
+    expect(r.hold).toBe(true)
+    expect(r.reason).toBe('quote_integrity_quantity_mismatch')
+  })
+
+  it('does not hold ordinary pricing risk notes', () => {
+    const r = shouldHoldForReview({
+      policy: 'auto_send',
+      totalIncGst: 420,
+      riskFlags: ['long run cable allowance included'],
+    })
+    expect(r.hold).toBe(false)
+    expect(r.reason).toBe('tenant_policy_auto_send')
+  })
+
+  it('keeps inspection bypass ahead of quote-integrity holds', () => {
+    const r = shouldHoldForReview({
+      policy: 'auto_send',
+      totalIncGst: 99,
+      isInspection: true,
+      riskFlags: ['[spec-guard] good: x'],
+    })
+    expect(r.hold).toBe(false)
+    expect(r.reason).toBe('inspection_route_bypasses_gate')
+  })
+
+  it('extracts multiple safety reasons deterministically', () => {
+    expect(safetyReviewReasons([
+      '[reconcile] good: headline quantity 4 != item_count 6 - confirm before sending',
+      '[spec-guard] better: ip_rating: requested IP56 but product is absent',
+      'normal note',
+    ])).toEqual(['quantity_mismatch', 'spec_guard'])
   })
 })

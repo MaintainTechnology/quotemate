@@ -46,6 +46,7 @@ import {
 import { isQuoteInflight } from '@/lib/sms/inflight'
 import { quoteAlreadyDrafted as computeQuoteAlreadyDrafted } from '@/lib/sms/quote-already-drafted'
 import { shouldSendPhotoRequest as computeShouldSendPhotoRequest } from '@/lib/sms/photo-request-trigger'
+import { evaluateQuoteReadiness } from '@/lib/sms/quote-readiness'
 import { extractAndStoreMmsPhotos } from '@/lib/sms/mms'
 import { buildPhotoRequestSms, buildQuoteFailureSms } from '@/lib/sms/templates'
 import { withRetry } from '@/lib/util/retry'
@@ -1432,6 +1433,7 @@ export async function POST(req: Request) {
             name: string
             description: string | null
             always_inspection: boolean
+            category?: string | null
             clarifying_questions?: string[] | null
           }>
         | undefined
@@ -1455,6 +1457,7 @@ export async function POST(req: Request) {
             name: r.name as string,
             description: (r.description as string | null) ?? null,
             always_inspection: !!r.always_inspection,
+            category: (r.category as string | null) ?? null,
             clarifying_questions: normaliseQuestions(
               (r as Record<string, unknown>).clarifying_questions,
             ),
@@ -1517,6 +1520,7 @@ export async function POST(req: Request) {
                   name: r.name as string,
                   description: (r.description as string | null) ?? null,
                   always_inspection: false,
+                  category: (r.category as string | null) ?? null,
                   clarifying_questions: normaliseQuestions(
                     (r as Record<string, unknown>).clarifying_questions,
                   ),
@@ -1570,6 +1574,7 @@ export async function POST(req: Request) {
               name: r.name as string,
               description: (r.description as string | null) ?? null,
               always_inspection: false,
+              category: (r.category as string | null) ?? null,
               clarifying_questions: normaliseQuestions(
                 (r as Record<string, unknown>).clarifying_questions,
               ),
@@ -1978,6 +1983,38 @@ export async function POST(req: Request) {
             quoteAlreadyDrafted,
           },
         )
+      }
+
+      // Deterministic quote-readiness gate. Sonnet can decide action='finish',
+      // but money-path handoff only proceeds when the slot state carries the
+      // price-critical facts for this job. If a required fact is missing, turn
+      // the finish into one more SMS question before any photo, product-choice,
+      // or intake/estimate side effect can fire.
+      if (!hasExistingIntake && decision.action === 'finish') {
+        const readiness = evaluateQuoteReadiness({
+          action: decision.action,
+          jobTypeGuess: decision.job_type_guess,
+          conversationState,
+          knownFirstName: customer?.first_name ?? null,
+          knownSuburb: customer?.suburb ?? null,
+          history: turns,
+          services: customAssemblies,
+        })
+        if (!readiness.ready) {
+          console.warn('[sms/inbound:after] quote-readiness gate blocked finish', {
+            conversationId,
+            missing: readiness.missing.map((m) => m.code),
+            firstReason: readiness.missing[0]?.reason ?? null,
+          })
+          decision = {
+            ...decision,
+            action: 'ask',
+            ready_for_intake: false,
+            request_photo_link: false,
+            offer_product_choice: false,
+            reply_to_send: readiness.reply ?? 'Quick one before I quote it - can you confirm the missing detail?',
+          }
+        }
       }
 
       // 8b. Photo-request SMS gate — computed early so we can send the photo

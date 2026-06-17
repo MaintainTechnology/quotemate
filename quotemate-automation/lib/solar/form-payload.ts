@@ -14,8 +14,8 @@ export function buildSolarFormPayload(state: {
   roofSize: 'small' | 'medium' | 'large'
   storeys: 1 | 2 | 3
   panelType: 'standard_panels' | 'premium_panels' | 'unknown'
-  /** Property power-supply phase (entry form). 'unknown' is omitted from the
-   *  payload, like the other "not sure" optional fields. */
+  /** Property power-supply phase (entry form). 'unknown' is sent explicitly
+   *  so persistence can keep the customer's "Not sure" selection. */
   phase?: 'single' | 'three' | 'unknown'
   /** Raw preferred-size text from the optional kW field (e.g. "10"). Blank
    *  or junk → no preference sent. */
@@ -51,9 +51,9 @@ export function buildSolarFormPayload(state: {
   if (state.panelType !== 'unknown') {
     payload.panel_type = state.panelType
   }
-  // Power-supply phase — only send a definite single/three; 'unknown' (or
-  // absent) means no multiplier, matching the schema's optional default.
-  if (state.phase === 'single' || state.phase === 'three') {
+  // Power-supply phase. 'unknown' keeps the same single-phase-safe sizing
+  // behaviour, but sending it makes the saved quote explain the cap honestly.
+  if (state.phase === 'single' || state.phase === 'three' || state.phase === 'unknown') {
     payload.phase = state.phase
   }
   // Preferred size — parsed leniently ("10kW" / "10.5" both work); only a

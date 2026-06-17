@@ -110,6 +110,7 @@ export function buildSolarPremiumQuote(args: {
           planes: roof.planes,
           center,
           panel_limit: panelLimit,
+          prefer_contiguous_layout: true,
         })
       : null
 
@@ -120,6 +121,7 @@ export function buildSolarPremiumQuote(args: {
           planes: roof.planes,
           center,
           panel_limit: panelLimit,
+          prefer_contiguous_layout: true,
           string_max_panels: config.string_max_panels ?? null,
         })
       : null
@@ -273,25 +275,30 @@ export function buildSolarPremiumQuote(args: {
   // Power supply + any customer/tradie-requested size (design 2026-06-16).
   // Phase explains the export ceiling; a clamped request is called out so the
   // customer understands why they didn't get the full kW they asked for.
-  const supplyPhase = estimate.context.phase ?? 'single'
+  const supplyPhase = estimate.context.phase ?? 'unknown'
   assumed_values.push({
     label: 'Power supply',
-    value: supplyPhase === 'three' ? '3-phase' : 'Single-phase',
+    value:
+      supplyPhase === 'three'
+        ? '3-phase'
+        : supplyPhase === 'single'
+          ? 'Single-phase'
+          : 'Not sure (export / phase to confirm)',
   })
   const reqKw = estimate.context.requested_system_kw
   if (typeof reqKw === 'number' && reqKw > 0) {
     const headlineKw = headlineTier?.system_kw_dc
-    // The request was clamped when the headline tier landed below the size the
-    // customer asked for — the roof or the DNSP export ceiling capped it. (The
-    // engine anchors the tiers to requested_size_kw, so a smaller headline kW
-    // than the request means a cap was hit.)
+    // The request was limited when the headline tier landed below the size the
+    // customer asked for — the roof or public quote maximum set the proposal.
     const reqClamped =
       typeof headlineKw === 'number' && headlineKw + 0.05 < reqKw
     assumed_values.push({
       label: 'Requested size',
       value:
         reqClamped && typeof headlineKw === 'number'
-          ? `${reqKw} kW — capped at ${headlineKw} kW by roof / connection`
+          ? `${reqKw} kW — proposed ${headlineKw} kW after roof / quote limit`
+          : headlineTier?.export_limited
+            ? `${reqKw} kW — export / phase to confirm`
           : `${reqKw} kW`,
     })
   }

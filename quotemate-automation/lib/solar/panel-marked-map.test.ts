@@ -156,4 +156,35 @@ describe('buildPanelMarkupPaths', () => {
     expect(parsed.searchParams.get('zoom')).toBe('20')
     expect(parsed.searchParams.get('size')).toBe('640x480')
   })
+
+  it('uses the same contiguous-panel selection as the quote overlay when requested', () => {
+    const northPlane = FLAT_PLANE
+    const eastPlane: SolarRoofPlane = { ...FLAT_PLANE, azimuth_degrees: 90, orientation: 'east' }
+    const northPanels = Array.from({ length: 15 }, (_, i) =>
+      panel({
+        center: { lat: SYD.lat, lng: SYD.lng + i * 0.00002 },
+        segment_index: 0,
+        yearly_energy_dc_kwh: 550,
+      }),
+    )
+    const eastPanels = Array.from({ length: 2 }, (_, i) =>
+      panel({
+        center: { lat: SYD.lat + 0.001, lng: SYD.lng + i * 0.00002 },
+        segment_index: 1,
+        yearly_energy_dc_kwh: 555,
+      }),
+    )
+    const paths = buildPanelMarkupPaths({
+      panels: [...northPanels.slice(0, 13), ...eastPanels, ...northPanels.slice(13)],
+      planes: [northPlane, eastPlane],
+      panel_size_m: PANEL_SIZE,
+      panel_limit: 15,
+      prefer_contiguous_layout: true,
+    })
+    expect(paths).toHaveLength(15)
+    for (const path of paths) {
+      const avgLat = path.points.slice(0, 4).reduce((sum, p) => sum + p.lat, 0) / 4
+      expect(avgLat).toBeCloseTo(SYD.lat, 6)
+    }
+  })
 })

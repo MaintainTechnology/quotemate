@@ -35,8 +35,8 @@ export const SolarEstimateRequestSchema = z.object({
   // Optional — absent / 'unknown' is treated as single-phase (no multiplier).
   phase: z.enum(['single', 'three', 'unknown']).optional(),
   // Customer's preferred system size, kW DC (entry form, optional). Anchors
-  // the tier targets in sizing.ts (still roof- and export-capped). Bounded so
-  // a typo (e.g. 1000) can't blow past any realistic residential roof.
+  // the tier targets in sizing.ts; roof fit and the public quote maximum still
+  // apply, while export/phase constraints are shown as installer review notes.
   requested_size_kw: z.number().positive().max(100).optional(),
   // Optional customer contact — when a mobile is supplied the tradie-confirm
   // step texts the customer their quote (PDF link + best-effort MMS). Absent

@@ -122,7 +122,7 @@ export async function runSolarEstimate(args: {
    *  multiplier). Persisted on context.phase. */
   phase?: SolarPhase
   /** Customer's preferred system size, kW DC (entry form). When finite and
-   *  positive, anchors the sizing tiers (still roof/export-capped). Persisted
+   *  positive, anchors the sizing tiers to the roof/public quote max. Persisted
    *  on context.requested_size_kw AND context.requested_system_kw (the DB
    *  column the dashboard reads back); non-finite/non-positive → null. */
   requestedSizeKw?: number | null
@@ -171,7 +171,7 @@ export async function runSolarEstimate(args: {
     // Power-supply phase — defaults to 'unknown' (single-phase, no export
     // multiplier in sizing). Drives the export ceiling for three-phase.
     phase: args.phase ?? 'unknown',
-    // Preferred size — anchors the sizing tiers (still roof/export-capped).
+    // Preferred size — anchors the sizing tiers to the roof/public quote max.
     requested_size_kw: requestedSizeKw,
   }
 

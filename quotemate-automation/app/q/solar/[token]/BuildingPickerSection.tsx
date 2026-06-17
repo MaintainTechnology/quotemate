@@ -43,6 +43,8 @@ export function BuildingPickerSection({
   const [freePick, setFreePick] = useState<LatLng | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const selectedCustomPoint =
+    buildings.find((b) => b.building_id === selectedBuildingId && !b.footprint)?.centroid ?? null
 
   // Shared POST → on ok refresh; on 409/422 surface the mapped message.
   async function select(payload: { building_id: string } | { centroid: LatLng }) {
@@ -88,7 +90,7 @@ export function BuildingPickerSection({
         center={center}
         buildings={buildings}
         selectedBuildingId={selectedBuildingId}
-        freePick={freePick}
+        freePick={freePick ?? selectedCustomPoint}
         fitToBuildings
         readOnly={readOnly || busy}
         onSelectBuilding={(id) => void select({ building_id: id })}

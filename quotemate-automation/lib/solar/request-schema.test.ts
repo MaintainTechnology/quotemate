@@ -47,4 +47,12 @@ describe('SolarEstimateRequestSchema', () => {
     })
     expect(r.success).toBe(false)
   })
+
+  it('accepts a 40 kW preferred system size', () => {
+    const r = SolarEstimateRequestSchema.safeParse({
+      address: { address: '1 Test St', postcode: '2000', state: 'NSW' },
+      requested_size_kw: 40,
+    })
+    expect(r.success).toBe(true)
+  })
 })

@@ -120,9 +120,65 @@ export type LayoutOverlayInput = {
   /** Cap drawn panels to the headline tier's count (Google orders
    *  solarPanels[] by energy, so the first N are the N-panel config). */
   panel_limit?: number | null
+  /** Prefer one clean roof face when avoiding a tiny orphan group costs <1%. */
+  prefer_contiguous_layout?: boolean
   zoom?: number
   width?: number
   height?: number
+}
+
+export type LayoutPanelSelectionOptions = {
+  prefer_contiguous_layout?: boolean
+  min_segment_panels?: number
+  max_loss_pct?: number
+}
+
+const DEFAULT_MIN_SEGMENT_PANELS = 3
+const DEFAULT_MAX_CONTIGUOUS_LOSS_PCT = 0.01
+
+export function selectPanelsForLayout(
+  panels: SolarPanelPlacement[],
+  panelLimit: number | null | undefined,
+  options: LayoutPanelSelectionOptions = {},
+): SolarPanelPlacement[] {
+  if (!panels || panels.length === 0) return []
+
+  const limit =
+    panelLimit != null && panelLimit > 0
+      ? Math.min(panels.length, Math.floor(panelLimit))
+      : panels.length
+  const baseline = panels.slice(0, limit)
+
+  if (!options.prefer_contiguous_layout || baseline.length === 0) return baseline
+
+  const minSegmentPanels = Math.max(
+    1,
+    Math.floor(options.min_segment_panels ?? DEFAULT_MIN_SEGMENT_PANELS),
+  )
+  const counts = new Map<number, number>()
+  for (const panel of baseline) {
+    counts.set(panel.segment_index, (counts.get(panel.segment_index) ?? 0) + 1)
+  }
+  const hasTinyOrphan = [...counts.values()].some((count) => count < minSegmentPanels)
+  if (!hasTinyOrphan) return baseline
+
+  const baselineEnergy = totalEnergy(baseline)
+  if (!(baselineEnergy > 0)) return baseline
+
+  const maxLossPct = Math.max(0, options.max_loss_pct ?? DEFAULT_MAX_CONTIGUOUS_LOSS_PCT)
+  let bestSinglePlane: { panels: SolarPanelPlacement[]; energy: number } | null = null
+  for (const segmentIndex of new Set(panels.map((panel) => panel.segment_index))) {
+    const candidate = panels.filter((panel) => panel.segment_index === segmentIndex).slice(0, limit)
+    if (candidate.length < limit) continue
+    const energy = totalEnergy(candidate)
+    if (!bestSinglePlane || energy > bestSinglePlane.energy) {
+      bestSinglePlane = { panels: candidate, energy }
+    }
+  }
+
+  if (!bestSinglePlane) return baseline
+  const lossPct = (baselineEnergy - bestSinglePlane.energy) / baselineEnergy
+  return lossPct <= maxLossPct ? bestSinglePlane.panels : baseline
 }
 
 /**
@@ -147,7 +203,9 @@ export function buildLayoutOverlay(input: LayoutOverlayInput): LayoutOverlay | n
     input.panel_limit != null && input.panel_limit > 0
       ? Math.min(panels.length, Math.floor(input.panel_limit))
       : panels.length
-  const drawn = panels.slice(0, limit)
+  const drawn = selectPanelsForLayout(panels, limit, {
+    prefer_contiguous_layout: input.prefer_contiguous_layout,
+  })
 
   const mpp = metersPerPixel(center.lat, zoom)
   if (!(mpp > 0)) return null
@@ -223,6 +281,10 @@ function normaliseDeg(d: number): number {
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100
+}
+
+function totalEnergy(panels: SolarPanelPlacement[]): number {
+  return panels.reduce((sum, panel) => sum + Math.max(0, panel.yearly_energy_dc_kwh ?? 0), 0)
 }
 
 export const __test_only__ = { SEGMENT_PALETTE, EARTH_METERS_PER_PX_Z0 }

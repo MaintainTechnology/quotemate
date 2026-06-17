@@ -337,7 +337,8 @@ export type SolarSystemTier = {
   panel_type: SolarPanelType
   /** The source config this tier was picked from. */
   source_config: SolarPanelConfig
-  /** True when the export limit (not the roof) capped this tier's size. */
+  /** True when this tier is above the standard export allowance or was shaped
+   *  by it, so installer connection/export confirmation is needed. */
   export_limited: boolean
 }
 
@@ -559,6 +560,17 @@ export type SolarConfig = {
   default_rate_card: SolarRateCard
   /** DC→AC derate factor (0.80–0.82). */
   derate_factor: number
+  /**
+   * Max DC array : AC export-limit ratio used to set the largest system the
+   * engine sizes automatically on an export-limited supply (the standard CEC
+   * inverter-oversize allowance, ~1.33). The DC ceiling is
+   * `export_limit_kw_ac × dc_oversize_factor`, letting a single-phase 5 kW
+   * service quote ~6.6 kW DC instead of the old `5 / derate ≈ 6.2 kW`.
+   * Optional — absent falls back to `1 / derate_factor` (prior behaviour, so
+   * existing configs are unchanged). Must be ≥ 1 (never under-size the array
+   * below the inverter) and ≤ 2 (a sane upper bound). See sizing.ts.
+   */
+  dc_oversize_factor?: number
   /** Assumed household self-consumption fraction (e.g. 0.40). */
   self_consumption_pct: number
   /** Retail electricity rate, $/kWh, for savings calc. */
@@ -741,8 +753,9 @@ export type SolarEstimateContext = {
   /**
    * Customer's preferred system size, kW DC (entry form, optional). When a
    * finite positive value is present, sizing.ts anchors the tier targets to
-   * this size (still capped by the roof AND the DNSP/phase export ceiling)
-   * instead of the roof maximum. Null/absent ⇒ tiers anchor to the roof max
+   * this size, still capped by the roof and public quote maximum. DNSP/phase
+   * constraints are surfaced as installer review notes instead of silently
+   * shrinking a stated preference. Null/absent ⇒ tiers anchor to the roof max
    * as before. Never a price input directly — only re-targets the tiers.
    */
   requested_size_kw?: number | null

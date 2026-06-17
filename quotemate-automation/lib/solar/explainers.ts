@@ -119,11 +119,11 @@ function buildSystemSizeExplainer(estimate: SolarEstimate): SolarStatExplainer {
       note: `${tier.panels_count} × ${roof.panel_capacity_watts} W panels`,
     },
     {
-      label: 'Capped by export limit',
-      value: tier.export_limited ? 'Yes' : 'No',
+      label: 'Export / connection review',
+      value: tier.export_limited ? 'Needed' : 'Not flagged',
       note: tier.export_limited
-        ? 'Your roof fits more, but the network limits what can be exported'
-        : 'The roof, not the network, set this size',
+        ? 'Installer confirms phase, export limiting, battery or network approval'
+        : 'Standard export allowance did not flag this size',
     },
   ]
 
@@ -132,25 +132,24 @@ function buildSystemSizeExplainer(estimate: SolarEstimate): SolarStatExplainer {
     `That area holds up to ${roof.max_panels_count} × ${roof.panel_capacity_watts} W panels — a physical ceiling of ${kw(sizing.roof_capacity_kw_dc)} kW DC.`,
   )
   if (prod && prod.derate_applied > 0) {
-    const dcCeiling = sizing.export_limit_kw_ac / prod.derate_applied
     steps.push(
-      `Your electricity network (${estimate.context.network}) allows ${kw(sizing.export_limit_kw_ac)} kW AC of export — about ${kw(dcCeiling)} kW of panels once inverter losses are counted.`,
+      `Your electricity network (${estimate.context.network}) has a standard ${kw(sizing.export_limit_kw_ac)} kW AC export allowance — larger arrays can still be designed with export limiting, a battery, phase confirmation or network approval.`,
     )
   } else {
     steps.push(
-      `Your electricity network (${estimate.context.network}) allows ${kw(sizing.export_limit_kw_ac)} kW AC of export, which also caps the system size.`,
+      `Your electricity network (${estimate.context.network}) has a standard ${kw(sizing.export_limit_kw_ac)} kW AC export allowance, so larger arrays need installer confirmation.`,
     )
   }
   const share =
     roof.max_panels_count > 0 ? tier.panels_count / roof.max_panels_count : null
   steps.push(
     tier.export_limited
-      ? `This option lands on ${kw(tier.system_kw_dc)} kW — the biggest system the export limit allows.`
+      ? `This option lands on ${kw(tier.system_kw_dc)} kW and is flagged for installer connection/export confirmation.`
       : `This option uses ${tier.panels_count} of those panels${share != null ? ` (${pct(share)} of the roof's maximum)` : ''} — ${kw(tier.system_kw_dc)} kW.`,
   )
 
   const answer = tier.export_limited
-    ? `${kw(tier.system_kw_dc)} kW is the largest system your network connection allows. Your roof could physically hold ${kw(sizing.roof_capacity_kw_dc)} kW, but ${estimate.context.network} caps export at ${kw(sizing.export_limit_kw_ac)} kW AC, so going bigger would mean giving away the extra power.`
+    ? `${kw(tier.system_kw_dc)} kW is the proposed DC array size. It is flagged for installer review because ${estimate.context.network}'s standard export allowance is ${kw(sizing.export_limit_kw_ac)} kW AC; the installer confirms phase, export limiting, battery or network approval before final design.`
     : `${kw(tier.system_kw_dc)} kW is what ${tier.panels_count} panels add up to on the usable part of your roof. The size comes from the measured roof, not from a one-size-fits-all package.`
 
   return {
@@ -201,7 +200,7 @@ function buildPanelsExplainer(estimate: SolarEstimate): SolarStatExplainer {
   if (tier) {
     steps.push(
       tier.export_limited
-        ? `${tier.panels_count} panels is the most the network export limit allows, even though more would fit.`
+        ? `${tier.panels_count} panels is the proposed layout; the installer confirms the export/connection design for this size.`
         : `This option places ${tier.panels_count} of them — the bigger options on this page step up toward the roof's maximum.`,
     )
   } else {
@@ -210,7 +209,7 @@ function buildPanelsExplainer(estimate: SolarEstimate): SolarStatExplainer {
 
   const answer = tier
     ? tier.export_limited
-      ? `${tier.panels_count} panels is the network-limited maximum for your connection — not a roof limit. Your roof could hold up to ${roof.max_panels_count}.`
+      ? `${tier.panels_count} panels is the proposed layout. Your roof could hold up to ${roof.max_panels_count}; the connection/export settings are confirmed before final design.`
       : `${tier.panels_count} panels is what this system size needs, out of a maximum of ${roof.max_panels_count} that physically fit on your measured roof.`
     : 'The roof could not be sized automatically, so an installer will confirm the panel count on site.'
 

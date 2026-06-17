@@ -11,7 +11,7 @@
 // key. MapLibre is loaded CLIENT-ONLY (dynamic import inside the effect) so the
 // SSR pass never touches `window`; the CSS is a build-time extracted import.
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Map as MlMap, Marker as MlMarker } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { DetectedBuilding, LatLng } from '@/lib/solar/types'
@@ -108,6 +108,10 @@ export function SolarRoofMap({
   const mapRef = useRef<MlMap | null>(null)
   const markerRef = useRef<MlMarker | null>(null)
   const readyRef = useRef(false)
+  const [mapReady, setMapReady] = useState(false)
+  const persistedFreePick =
+    buildings.find((b) => b.building_id === selectedBuildingId && !b.footprint)?.centroid ?? null
+  const selectedPoint = freePick ?? persistedFreePick
   // Latest callbacks for the once-bound click handler (avoid stale closures).
   const cbRef = useRef({ onSelectBuilding, onFreePick })
   useEffect(() => {
@@ -139,6 +143,7 @@ export function SolarRoofMap({
         zoom: INITIAL_ZOOM,
       })
       mapRef.current = map
+      setMapReady(true)
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
 
       map.on('load', () => {
@@ -166,6 +171,7 @@ export function SolarRoofMap({
           if (bounds) map.fitBounds(bounds, { padding: 40, maxZoom: 19 })
         }
         readyRef.current = true
+        setMapReady(true)
       })
 
       // Tap a building outline → select it; tap anywhere else → free-pick.
@@ -222,8 +228,8 @@ export function SolarRoofMap({
     let cancelled = false
     ;(async () => {
       const map = mapRef.current
-      if (!map) return
-      if (!freePick) {
+      if (!map || !mapReady) return
+      if (!selectedPoint) {
         markerRef.current?.remove()
         markerRef.current = null
         return
@@ -231,12 +237,12 @@ export function SolarRoofMap({
       const maplibregl = (await import('maplibre-gl')).default
       if (cancelled || !mapRef.current) return
       if (!markerRef.current) markerRef.current = new maplibregl.Marker({ color: ACCENT })
-      markerRef.current.setLngLat([freePick.lng, freePick.lat]).addTo(mapRef.current)
+      markerRef.current.setLngLat([selectedPoint.lng, selectedPoint.lat]).addTo(mapRef.current)
     })()
     return () => {
       cancelled = true
     }
-  }, [freePick])
+  }, [mapReady, selectedPoint])
 
   return (
     <div className="mt-5 border border-ink-line bg-ink-card">

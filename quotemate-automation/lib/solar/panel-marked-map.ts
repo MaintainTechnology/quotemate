@@ -14,6 +14,7 @@
 // ════════════════════════════════════════════════════════════════════
 
 import type { LatLng, SolarPanelPlacement, SolarRoofPlane } from './types'
+import { selectPanelsForLayout } from './layout-overlay'
 
 /** Metres per degree of latitude (WGS-84 mean). */
 const METERS_PER_DEG_LAT = 111_320
@@ -90,6 +91,8 @@ export function buildPanelMarkupPaths(args: {
   planes: SolarRoofPlane[]
   panel_size_m: { height_m: number; width_m: number } | null | undefined
   panel_limit?: number | null
+  /** Match the quote layout's cleaner one-face preference when safe. */
+  prefer_contiguous_layout?: boolean
 }): StaticMapPath[] {
   const { panels, planes, panel_size_m } = args
   if (!panels || panels.length === 0 || !panel_size_m) return []
@@ -99,8 +102,12 @@ export function buildPanelMarkupPaths(args: {
       ? Math.min(panels.length, Math.floor(args.panel_limit))
       : panels.length
 
+  const selected = selectPanelsForLayout(panels, limit, {
+    prefer_contiguous_layout: args.prefer_contiguous_layout,
+  })
+
   const paths: StaticMapPath[] = []
-  for (const panel of panels.slice(0, limit)) {
+  for (const panel of selected) {
     const corners = panelRectangleGeoCorners({
       panel,
       plane: planes[panel.segment_index],

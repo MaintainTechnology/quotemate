@@ -2,8 +2,11 @@
 // Solar — system sizing (spec §3).
 //
 // Pick 2–3 HONEST system-size tiers from the roof's real panel configs,
-// capped by BOTH the roof's physical capacity (max_panels_count) AND the
-// DNSP export limit (default 5 kW/phase, derated DC→AC). The tiers are
+// capped by the roof's physical capacity (max_panels_count). When the
+// customer does not request a size, the DNSP export limit keeps the auto-sized
+// option conservative. When the customer requests a preferred size, that
+// request becomes the design target and the export limit is flagged for
+// installer/connection review instead of silently shrinking the system. The tiers are
 // genuinely different sizes (good = smaller, best = roof-max), never a
 // discount on one size. Every solar quote is tradie-reviewed — sizing
 // only routes to inspection when the roof can't hold a single panel.
@@ -27,6 +30,7 @@ import type {
  *  The top tier is always the roof-or-export max. */
 const GOOD_FRACTION = 0.55
 const MIDDLE_FRACTION = 0.80
+const MAX_REQUESTED_SYSTEM_KW = 40
 
 export function sizeSolarSystem(args: {
   roof: SolarRoofFacts
@@ -72,15 +76,30 @@ export function sizeSolarSystem(args: {
   const wattsPerPanel = roof.panel_capacity_watts
   const roof_capacity_kw_dc = round2((roof.max_panels_count * wattsPerPanel) / 1000)
 
-  // Export ceiling: per-phase kW AC limit × phase count → an equivalent DC
-  // ceiling via the derate (DC × derate = AC, so DC ceiling = AC limit /
-  // derate). Everything downstream (exportCeilPanels, export_limited flags,
-  // the large-roof fallback) then uses the larger ceiling for three-phase.
+  // Export ceiling: per-phase kW AC limit × phase count → the DC array we will
+  // auto-size up to. The inverter is sized to the AC export limit; the DC array
+  // may be oversized against it by config.dc_oversize_factor (the standard CEC
+  // DC:AC allowance, ~1.33) — so a single-phase 5 kW service quotes ~6.6 kW DC
+  // rather than the old `5 / derate ≈ 6.2 kW`. When the factor is absent we
+  // fall back to `1 / derate` (the prior behaviour, so existing configs are
+  // byte-identical). Everything downstream (exportCeilPanels, export_limited
+  // flags, the large-roof fallback) uses this ceiling, which scales with phase.
+  //
+  // NOTE (money path): production.ts still models AC as DC × derate with no
+  // hard clip at the inverter, so an export-limited top tier overstates AC by
+  // ~(oversize × derate − 1) ≈ 8% at 1.33. That sits inside the ±20–30%
+  // confidence band the quote already shows, and self-consumed kWh (40%) are
+  // not export-bound. To be stricter, lower dc_oversize_factor toward 1.0.
   const perPhaseLimit =
     config.export_limits.by_network[context.network] ??
     config.export_limits.default_kw_per_phase
   const export_limit_kw_ac = perPhaseLimit * phaseMultiplier
-  const exportDcCeiling = round2(export_limit_kw_ac / config.derate_factor)
+  const oversizeFactor =
+    Number.isFinite(config.dc_oversize_factor) &&
+    (config.dc_oversize_factor as number) >= 1
+      ? (config.dc_oversize_factor as number)
+      : 1 / config.derate_factor
+  const exportDcCeiling = round2(export_limit_kw_ac * oversizeFactor)
 
   const reqKw = requestedSizeKw(context)
 
@@ -119,15 +138,17 @@ export function sizeSolarSystem(args: {
 
   // Anchor for the tier targets. Default = the roof's physical max. When the
   // customer asked for a preferred size, convert it to a panel count and use
-  // the SMALLER of {requested, roof max} as the anchor — so the top tier
-  // targets the customer's preference, never beyond the roof. The DNSP/phase
-  // export ceiling is still applied below via the export-cap logic, so a
-  // request larger than the grid allows is clamped exactly like the roof max
-  // would be. roof_capacity_kw_dc stays the TRUE roof max (unchanged).
+  // the SMALLER of {requested, configured max, roof max} as the anchor — so the
+  // top tier targets the customer's preference, never beyond a sane public
+  // quote size or the roof. The DNSP/phase export ceiling is NOT used to
+  // shrink a stated preference; instead those tiers are marked
+  // export_limited so the quote explains that phase/export approval must be
+  // confirmed by the installer.
   const maxPanels = roof.max_panels_count
+  const requestedTargetKw = reqKw !== null ? Math.min(reqKw, MAX_REQUESTED_SYSTEM_KW) : null
   const anchorPanels =
-    reqKw !== null
-      ? Math.min(Math.round((reqKw * 1000) / wattsPerPanel), maxPanels)
+    requestedTargetKw !== null
+      ? Math.min(Math.round((requestedTargetKw * 1000) / wattsPerPanel), maxPanels)
       : maxPanels
 
   // Candidate panel counts, ascending, deduped, each capped by the anchor.
@@ -163,9 +184,13 @@ export function sizeSolarSystem(args: {
   // export limit actually reduced it. Track the original (pre-cap) count so the
   // export_limited flag reflects the original intent, not the clamped value.
   type TierCandidate = { original: number; panels: number }
+  const hasExplicitPreferredSize = reqKw !== null
   const candidates: TierCandidate[] = uniqueCounts.map((count) => {
     const exceedsLimit = (count * wattsPerPanel) / 1000 > exportDcCeiling
-    return { original: count, panels: exceedsLimit ? exportCeilPanels : count }
+    return {
+      original: count,
+      panels: exceedsLimit && !hasExplicitPreferredSize ? exportCeilPanels : count,
+    }
   })
 
   // Deduplicate by final panels count (ascending). When two candidate counts
@@ -309,4 +334,5 @@ export const __test_only__ = {
   pickTierNames,
   nearestConfig,
   requestedSizeKw,
+  MAX_REQUESTED_SYSTEM_KW,
 }

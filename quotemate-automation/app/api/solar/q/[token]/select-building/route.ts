@@ -41,6 +41,7 @@ import {
   findBuilding,
   updateBuildingStatus,
 } from '@/lib/solar/building-cache'
+import { polygonCentroid } from '@/lib/solar/buildings'
 import { resolveSolarQuoteView } from '@/lib/solar/quote-page-row'
 import type { DetectedBuilding, SolarEstimate } from '@/lib/solar/types'
 
@@ -110,7 +111,9 @@ export async function POST(
     return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
   }
 
-  const persistedBuildings = (row.buildings as DetectedBuilding[] | null) ?? []
+  const persistedBuildings = normalisePersistedBuildingCentroids(
+    (row.buildings as DetectedBuilding[] | null) ?? [],
+  )
 
   // ── Working set + target differ by path. ─────────────────────────────
   // Detected: the persisted list; target = the matched building.
@@ -167,7 +170,11 @@ export async function POST(
   // ── No-op: already pointed at this DETECTED building. Return the current
   //    view. Never short-circuits the custom path — the clicked point moves
   //    each time, so it must always recompute. ──────────────────────────
-  if (!isCustom && buildingId === ((row.selected_building_id as string | null) ?? null)) {
+  if (
+    !isCustom &&
+    buildingId === ((row.selected_building_id as string | null) ?? null) &&
+    estimateLocationMatchesTarget(row.estimate as SolarEstimate | null, target.centroid)
+  ) {
     const current = (row.estimate as SolarEstimate | null) ?? null
     return Response.json({
       ok: true,
@@ -219,7 +226,10 @@ export async function POST(
       .eq('building_id', buildingId)
       .maybeSingle()
     if (cached?.estimate) {
-      computed = cached.estimate as SolarEstimate
+      const cachedEstimate = cached.estimate as SolarEstimate
+      if (estimateLocationMatchesTarget(cachedEstimate, target.centroid)) {
+        computed = cachedEstimate
+      }
     }
   }
 
@@ -317,14 +327,13 @@ export async function POST(
     buildings: nextBuildings,
     selectedBuildingId: buildingId,
   })
-  const {
-    tenant_id: _t,
-    public_token: _p,
-    address: _a,
-    state: _s,
-    postcode: _pc,
-    ...estimateUpdate
-  } = payloads.solarEstimate
+  const estimateUpdate = omitKeys(payloads.solarEstimate, [
+    'tenant_id',
+    'public_token',
+    'address',
+    'state',
+    'postcode',
+  ] as const)
 
   const { error: updErr } = await supabase
     .from('solar_estimates')
@@ -348,7 +357,11 @@ export async function POST(
   // Refresh the linked quotes row (same share_token) so the dashboard
   // pipeline shows the new totals. Best-effort — solar_estimates is the
   // source of truth for the customer page (mirrors redraft).
-  const { tenant_id: _qt, status: _qs, share_token: _qst, ...quoteUpdate } = payloads.quote
+  const quoteUpdate = omitKeys(payloads.quote, [
+    'tenant_id',
+    'status',
+    'share_token',
+  ] as const)
   const { error: quoteErr } = await supabase
     .from('quotes')
     .update(quoteUpdate)
@@ -382,4 +395,47 @@ export async function POST(
     selected_building_id: buildingId,
     view,
   })
+}
+
+function normalisePersistedBuildingCentroids(
+  buildings: DetectedBuilding[],
+): DetectedBuilding[] {
+  return buildings.map((building) => {
+    const centroid = building.footprint ? polygonCentroid(building.footprint) : null
+    return centroid ? { ...building, centroid } : building
+  })
+}
+
+function estimateLocationMatchesTarget(
+  estimate: SolarEstimate | null,
+  target: { lat: number; lng: number },
+): boolean {
+  const location = estimate?.context.location
+  if (!location) return false
+  return distanceMeters(location, target) <= 2
+}
+
+function distanceMeters(
+  a: { lat: number; lng: number },
+  b: { lat: number; lng: number },
+): number {
+  const radiusM = 6_371_000
+  const toRad = Math.PI / 180
+  const dLat = (b.lat - a.lat) * toRad
+  const dLng = (b.lng - a.lng) * toRad
+  const lat1 = a.lat * toRad
+  const lat2 = b.lat * toRad
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2
+  return 2 * radiusM * Math.asin(Math.sqrt(h))
+}
+
+function omitKeys<T extends Record<string, unknown>, K extends keyof T>(
+  obj: T,
+  keys: readonly K[],
+): Omit<T, K> {
+  const copy: Partial<T> = { ...obj }
+  for (const key of keys) delete copy[key]
+  return copy as Omit<T, K>
 }

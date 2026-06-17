@@ -137,6 +137,26 @@ describe('deriveSolarLayoutFacts', () => {
     expect(facts[0].panels_count).toBe(10)
   })
 
+  it('matches the quote overlay by dropping a tiny orphan group when the yield loss is negligible', () => {
+    const north = gridPanels({ rows: 3, cols: 5, segment: 0 })
+    const east = gridPanels({ rows: 1, cols: 2, segment: 1, lngOffset: 0.0003 }).map((p) => ({
+      ...p,
+      yearly_energy_dc_kwh: 555,
+    }))
+    const panels = [...north.slice(0, 13), ...east, ...north.slice(13)]
+    const facts = deriveSolarLayoutFacts({
+      panels,
+      planes: PLANES,
+      center: SYD,
+      panel_limit: 15,
+      panel_size_m: PANEL_SIZE,
+      prefer_contiguous_layout: true,
+    })
+    expect(facts).toHaveLength(1)
+    expect(facts[0].plane_label).toContain('north-facing')
+    expect(facts[0].panels_count).toBe(15)
+  })
+
   it('describes the cluster region of the photo frame', () => {
     // Panels north-west of centre → upper-left of the image.
     const facts = deriveSolarLayoutFacts({
@@ -252,6 +272,7 @@ describe('buildSolarBoxReplacementPrompt (direct box-replacement, 2026-06-13)', 
   it('pins the strict count and bans leftover orange', () => {
     expect(p.user).toContain('each of the 14 orange rectangles')
     expect(p.user).toContain('Exactly 14 panels total (5.6 kW)')
+    expect(p.user).toContain('no orange rectangle, leave it panel-free')
     expect(p.user).toContain('Remove every orange marking')
   })
 

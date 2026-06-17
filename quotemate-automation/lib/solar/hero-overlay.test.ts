@@ -50,7 +50,7 @@ describe('buildHeroOverlay', () => {
     ])
   })
 
-  it('captions a Google estimate as the latest imagery (no stale Solar-API date)', () => {
+  it('captions a Google estimate without overclaiming latest imagery', () => {
     const overlay = buildHeroOverlay({
       headlineTier,
       roof: googleRoof,
@@ -59,8 +59,9 @@ describe('buildHeroOverlay', () => {
     // Hero photo is Maps Static (Google's freshest tiles); we must NOT
     // print the older Solar-API imagery_date over it.
     expect(overlay.caption).toBe(
-      'Indicative layout based on the latest Google aerial imagery.',
+      'Indicative layout based on Google satellite imagery and Google Solar roof geometry.',
     )
+    expect(overlay.caption.toLowerCase()).not.toContain('latest')
     expect(overlay.caption).not.toContain('2025')
   })
 
@@ -75,7 +76,7 @@ describe('buildHeroOverlay', () => {
     )
   })
 
-  it('uses the same latest-imagery caption regardless of Solar-API date', () => {
+  it('uses the same neutral caption regardless of Solar-API date', () => {
     const overlay = buildHeroOverlay({
       headlineTier,
       roof: { ...googleRoof, imagery_date: null } as unknown as SolarRoofFacts,
@@ -84,7 +85,7 @@ describe('buildHeroOverlay', () => {
     // Caption no longer depends on imagery_date — a null date yields the
     // identical "latest imagery" line as a present one.
     expect(overlay.caption).toBe(
-      'Indicative layout based on the latest Google aerial imagery.',
+      'Indicative layout based on Google satellite imagery and Google Solar roof geometry.',
     )
   })
 

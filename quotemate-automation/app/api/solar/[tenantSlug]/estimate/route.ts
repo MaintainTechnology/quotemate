@@ -40,7 +40,7 @@ import { applySolarAiBrief } from '@/lib/solar/ai-brief'
 import { feltTabEnabled } from '@/lib/felt/client'
 import { resolveNetworkFromPostcode } from '@/lib/solar/network-lookup'
 import { detectPropertyBuildings } from '@/lib/solar/buildings'
-import { updateBuildingStatus } from '@/lib/solar/building-cache'
+import { resolveCreationSelection } from '@/lib/solar/building-cache'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -75,6 +75,12 @@ export async function POST(
   }
   const parsed = SolarEstimateRequestSchema.safeParse(body)
   if (!parsed.success) {
+    // Log the rejected shape so a client-side validation gap (e.g. the pilot's
+    // "40 kW → check your address" report) is diagnosable from production logs.
+    console.warn('[solar/estimate] invalid_request', {
+      tenant: tenantSlug,
+      issues: parsed.error.issues,
+    })
     return Response.json(
       { ok: false, error: 'invalid_request', issues: parsed.error.issues },
       { status: 400 },
@@ -146,6 +152,17 @@ export async function POST(
       },
     })
   } catch (e) {
+    // Surface the failing inputs so a Google geocode/Solar hiccup or a sizing
+    // edge case is diagnosable from production logs (the sym-1 investigation).
+    console.warn('[solar/estimate] engine_failed', {
+      tenant: tenantSlug,
+      postcode: address.postcode,
+      state: address.state,
+      phase,
+      requested_size_kw: requested_size_kw ?? null,
+      has_target_building: Boolean(target_building),
+      detail: e instanceof Error ? e.message : String(e),
+    })
     return Response.json(
       { ok: false, error: 'engine_failed', detail: e instanceof Error ? e.message : String(e) },
       { status: 502 },
@@ -171,6 +188,10 @@ export async function POST(
     .select('id')
     .single()
   if (intakeErr || !intakeRow) {
+    console.warn('[solar/estimate] intake_insert_failed', {
+      tenant: tenant.id,
+      detail: intakeErr?.message ?? 'no row',
+    })
     return Response.json(
       { ok: false, error: 'intake_insert_failed', detail: intakeErr?.message ?? 'no row' },
       { status: 500 },
@@ -181,6 +202,10 @@ export async function POST(
     .from('solar_estimates')
     .insert({ ...payloads.solarEstimate, intake_id: intakeRow.id })
   if (estErr) {
+    console.warn('[solar/estimate] estimate_insert_failed', {
+      tenant: tenant.id,
+      detail: estErr.message,
+    })
     return Response.json(
       { ok: false, error: 'estimate_insert_failed', detail: estErr.message },
       { status: 500 },
@@ -193,6 +218,10 @@ export async function POST(
     .select('id, share_token')
     .single()
   if (quoteErr || !quoteRow) {
+    console.warn('[solar/estimate] quote_insert_failed', {
+      tenant: tenant.id,
+      detail: quoteErr?.message ?? 'no row',
+    })
     return Response.json(
       { ok: false, error: 'quote_insert_failed', detail: quoteErr?.message ?? 'no row' },
       { status: 500 },
@@ -260,23 +289,22 @@ export async function POST(
   after(async () => {
     let held = false
     try {
-      const buildings = await detectPropertyBuildings(address)
-      if (buildings.length >= 2) {
+      const detected = await detectPropertyBuildings(address)
+      // Decide selection from the customer's explicit pick FIRST: the engine
+      // estimated whatever target_building.centroid pointed at, so selection
+      // must follow it — never snap back to the primary dwelling. A free-tap
+      // (building_id 'custom', or an id that did not survive re-detection) is
+      // appended as a custom building so the picker highlights the priced roof
+      // instead of jumping to the main house.
+      const sel = resolveCreationSelection({
+        detected,
+        target: target_building ?? null,
+      })
+      if (sel && sel.buildings.length >= 2) {
         held = true
-        // The row's `estimate` reflects whichever building the engine used:
-        // the customer's address-form pick (target_building) when present,
-        // else the primary dwelling (findClosest at the geocoded address).
-        // Mark THAT building 'ready' and point selection at it so the picker
-        // highlight matches the headline numbers.
-        const chosen =
-          (target_building?.building_id &&
-            buildings.find((b) => b.building_id === target_building.building_id)) ||
-          buildings.find((b) => b.role === 'primary') ||
-          buildings[0]
-        const withReady = updateBuildingStatus(buildings, chosen.building_id, 'ready')
         await supabase
           .from('solar_estimates')
-          .update({ buildings: withReady, selected_building_id: chosen.building_id })
+          .update({ buildings: sel.buildings, selected_building_id: sel.selectedBuildingId })
           .eq('public_token', estimate.token)
       }
     } catch (e) {

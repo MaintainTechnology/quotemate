@@ -157,18 +157,13 @@ export function polygonCentroid(polygon: GeoJSONPolygon | null): LatLng | null {
   const ring = polygon?.coordinates?.[0]
   if (!Array.isArray(ring) || ring.length < 3) return null
 
-  // Mean latitude → local metre scale (equirectangular, exact enough at a
-  // building's scale).
-  let latSum = 0
-  let n = 0
-  for (const pt of ring) {
-    if (Array.isArray(pt) && typeof pt[1] === 'number') {
-      latSum += pt[1]
-      n += 1
-    }
-  }
-  if (n === 0) return null
-  const lat0 = latSum / n
+  // Local-origin metre scale (equirectangular, exact enough at a building's
+  // scale). Keeping the origin near the roof avoids cancellation in the
+  // shoelace centroid calculation.
+  const origin = vertexMean(ring)
+  if (!origin) return null
+  const lat0 = origin.lat
+  const lng0 = origin.lng
   const cos = Math.cos((lat0 * Math.PI) / 180)
   const mPerDegLat = 110_574
   const mPerDegLng = 111_320 * cos
@@ -181,10 +176,22 @@ export function polygonCentroid(polygon: GeoJSONPolygon | null): LatLng | null {
     const a = ring[i]
     const b = ring[i + 1]
     if (!Array.isArray(a) || !Array.isArray(b)) return vertexMean(ring)
-    const x1 = a[0] * mPerDegLng
-    const y1 = a[1] * mPerDegLat
-    const x2 = b[0] * mPerDegLng
-    const y2 = b[1] * mPerDegLat
+    if (
+      typeof a[0] !== 'number' ||
+      typeof a[1] !== 'number' ||
+      typeof b[0] !== 'number' ||
+      typeof b[1] !== 'number' ||
+      !Number.isFinite(a[0]) ||
+      !Number.isFinite(a[1]) ||
+      !Number.isFinite(b[0]) ||
+      !Number.isFinite(b[1])
+    ) {
+      return vertexMean(ring)
+    }
+    const x1 = (a[0] - lng0) * mPerDegLng
+    const y1 = (a[1] - lat0) * mPerDegLat
+    const x2 = (b[0] - lng0) * mPerDegLng
+    const y2 = (b[1] - lat0) * mPerDegLat
     const cross = x1 * y2 - x2 * y1
     area2 += cross
     cx += (x1 + x2) * cross
@@ -194,7 +201,10 @@ export function polygonCentroid(polygon: GeoJSONPolygon | null): LatLng | null {
   if (Math.abs(area2) < 1e-9) return vertexMean(ring)
   const cxM = cx / (3 * area2)
   const cyM = cy / (3 * area2)
-  return { lat: cyM / mPerDegLat, lng: cxM / mPerDegLng }
+  return {
+    lat: lat0 + cyM / mPerDegLat,
+    lng: lng0 + cxM / mPerDegLng,
+  }
 }
 
 /** PURE — plain mean of ring vertices, the degenerate-ring fallback. */

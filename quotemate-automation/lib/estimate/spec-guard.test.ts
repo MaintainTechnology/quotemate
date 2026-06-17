@@ -7,13 +7,14 @@ import {
   evaluateSpecGuard,
   evaluateDraftSpecGuard,
   coverageGapConflicts,
+  type CategoryRow,
 } from './spec-guard'
 
 describe('specGuardMode', () => {
-  it('defaults to shadow', () => {
-    expect(specGuardMode({})).toBe('shadow')
-    expect(specGuardMode({ SPEC_GUARD_MODE: '' })).toBe('shadow')
-    expect(specGuardMode({ SPEC_GUARD_MODE: 'garbage' })).toBe('shadow')
+  it('defaults to enforce', () => {
+    expect(specGuardMode({})).toBe('enforce')
+    expect(specGuardMode({ SPEC_GUARD_MODE: '' })).toBe('enforce')
+    expect(specGuardMode({ SPEC_GUARD_MODE: 'garbage' })).toBe('enforce')
   })
   it('honours explicit off / enforce / shadow, case-insensitively', () => {
     expect(specGuardMode({ SPEC_GUARD_MODE: 'off' })).toBe('off')
@@ -195,7 +196,7 @@ describe('coverageGapConflicts (Phase 5 — catalogue-gap rule)', () => {
   })
 
   it('does NOT fire below the coverage fraction (sparse data is safe)', () => {
-    const sparse = [
+    const sparse: CategoryRow[] = [
       { properties: { amperage: '10A' }, name: 'A' },
       { properties: {}, name: 'plain GPO' },
       { properties: {}, name: 'plain GPO two' },

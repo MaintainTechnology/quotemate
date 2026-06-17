@@ -298,13 +298,27 @@ describe('buildSolarRowPayloads — phase + requested size columns', () => {
     expect(out.solarEstimate.requested_system_kw).toBe(10)
   })
 
-  it('defaults to single / null when context omits them', () => {
+  it('defaults to unknown / null when context omits them', () => {
     const out = buildSolarRowPayloads({
       estimate,
       tenantId: 'TENANT1',
       address: { address: '1 Test St, Sydney', postcode: '2000', state: 'NSW' },
     })
-    expect(out.solarEstimate.electrical_phase).toBe('single')
+    expect(out.solarEstimate.electrical_phase).toBe('unknown')
     expect(out.solarEstimate.requested_system_kw).toBe(null)
+  })
+
+  it('persists not-sure phase honestly and keeps a 40 kW request', () => {
+    const withUnknownPhase: SolarEstimate = {
+      ...estimate,
+      context: { ...estimate.context, phase: 'unknown', requested_system_kw: 40 },
+    }
+    const out = buildSolarRowPayloads({
+      estimate: withUnknownPhase,
+      tenantId: 'TENANT1',
+      address: { address: '1 Test St, Sydney', postcode: '2000', state: 'NSW' },
+    })
+    expect(out.solarEstimate.electrical_phase).toBe('unknown')
+    expect(out.solarEstimate.requested_system_kw).toBe(40)
   })
 })

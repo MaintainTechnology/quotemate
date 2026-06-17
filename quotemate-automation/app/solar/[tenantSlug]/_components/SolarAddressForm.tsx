@@ -29,7 +29,7 @@ const PANEL_GRADES = [
 ] as const
 
 // Property electrical supply phase (design 2026-06-16). "Not sure" is the
-// default and is omitted from the payload (the engine assumes single-phase).
+// default and uses a single-phase-safe export cap until confirmed.
 const POWER_PHASES = [
   { value: 'unknown', label: 'Not sure' },
   { value: 'single', label: 'Single-phase' },
@@ -293,16 +293,24 @@ export function SolarAddressForm({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(payload),
       })
-      const body = await res.json()
+      const body = await res.json().catch(() => ({}))
       if (!res.ok || !body.ok) {
-        setError(body?.error === 'engine_failed'
-          ? 'We could not generate an estimate just now. Please try again shortly.'
-          : 'Please check your address and try again.')
+        // Log the real cause so a misclassified failure (the pilot's "40 kW →
+        // check your address" report) is diagnosable from the browser console
+        // and can be relayed to us — the on-screen copy stays friendly.
+        console.warn('[solar/estimate] failed', {
+          status: res.status,
+          error: body?.error,
+          detail: body?.detail,
+          issues: body?.issues,
+        })
+        setError(messageForError(body?.error))
         setBusy(false)
         return
       }
       window.location.href = body.shareUrl as string
-    } catch {
+    } catch (e) {
+      console.warn('[solar/estimate] network error', e)
       setError('Something went wrong. Please try again.')
       setBusy(false)
     }
@@ -571,6 +579,7 @@ export function SolarAddressForm({
           ))}
         </div>
         <p className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
+          Not sure flags larger systems for installer confirmation.
           3-phase allows a larger system.
         </p>
       </div>
@@ -627,6 +636,10 @@ export function SolarAddressForm({
             </span>
           </div>
         </div>
+        <p className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
+          We target this size, then cap it by roof area, power supply, and
+          network export limits.
+        </p>
       </div>
 
       {/* ── Manual roof fallback ───────────────────────────────── */}
@@ -732,6 +745,28 @@ export function SolarAddressForm({
       </button>
     </form>
   )
+}
+
+/** Map a server error code to friendly copy. Distinguishes a genuine address
+ *  problem from an engine/save failure, so a transient server error is no
+ *  longer mislabelled "check your address" (the pilot's confusing 40 kW
+ *  report). Unknown codes fall back to a neutral retry message. */
+function messageForError(code: unknown): string {
+  switch (code) {
+    case 'engine_failed':
+      return 'We could not generate an estimate just now. Please try again shortly.'
+    case 'invalid_request':
+    case 'invalid_json':
+      return 'Some details look invalid — please check the form and try again.'
+    case 'intake_insert_failed':
+    case 'estimate_insert_failed':
+    case 'quote_insert_failed':
+      return 'We could not save your estimate just now. Please try again shortly.'
+    case 'tenant_not_found':
+      return 'This solar link is not active. Please contact the installer.'
+    default:
+      return 'Something went wrong generating your estimate. Please try again.'
+  }
 }
 
 /** Mean of every detected building's centroid — the centre the detect

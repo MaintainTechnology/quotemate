@@ -21,6 +21,7 @@ import { orientationLabel } from './hero-overlay'
 import {
   projectToPixel,
   metersPerPixel,
+  selectPanelsForLayout,
   OVERLAY_MAP_ZOOM,
   OVERLAY_MAP_WIDTH,
   OVERLAY_MAP_HEIGHT,
@@ -61,6 +62,8 @@ export function deriveSolarLayoutFacts(args: {
   center: LatLng
   /** Headline tier's count — Google orders solarPanels[] by energy. */
   panel_limit?: number | null
+  /** Match the quote layout's cleaner one-face preference when safe. */
+  prefer_contiguous_layout?: boolean
   panel_size_m?: { height_m: number; width_m: number } | null
   zoom?: number
   width?: number
@@ -77,7 +80,9 @@ export function deriveSolarLayoutFacts(args: {
     args.panel_limit != null && args.panel_limit > 0
       ? Math.min(panels.length, Math.floor(args.panel_limit))
       : panels.length
-  const used = panels.slice(0, limit)
+  const used = selectPanelsForLayout(panels, limit, {
+    prefer_contiguous_layout: args.prefer_contiguous_layout,
+  })
 
   // Row-gap threshold: just over half a panel's long side in pixels, so
   // adjacent rows split and intra-row jitter doesn't.
@@ -204,7 +209,7 @@ export function buildSolarBoxReplacementPrompt(args: {
     'Panel Layout for a house: the solar plan is drawn on the roof as ' +
     'orange rectangles. Make exactly ONE change: turn every orange ' +
     'rectangle into one photorealistic solar panel and remove all orange. ' +
-    'Nothing else in the photo may change.'
+    'Do not add panels anywhere unmarked. Nothing else in the photo may change.'
 
   const user =
     `Replace each of the ${count} orange rectangles with one realistic ` +
@@ -215,7 +220,7 @@ export function buildSolarBoxReplacementPrompt(args: {
     'panels must stay exactly that size: large, clearly visible modules ' +
     'with thin silver frames — NEVER tiny dots, never smaller than the ' +
     `rectangles. Exactly ${count} panels total (${args.systemKwDc.toFixed(1)} kW), ` +
-    'nowhere else on the roof or ground. Remove every orange marking. ' +
+    'nowhere else on the roof or ground. If a roof area has no orange rectangle, leave it panel-free. Remove every orange marking. ' +
     'Everything outside the rectangles stays identical to the original ' +
     'photo — same roof, ground, trees, vehicles, lighting and framing. ' +
     'No text, labels or watermarks.'
