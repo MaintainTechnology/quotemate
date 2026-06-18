@@ -7,8 +7,11 @@
 // observed on real traffic before it ever touches the money path).
 //
 // Three guarantees (all proven in spec-guard.test.ts):
-//   • DEFAULT MODE = 'enforce' — customer-stated specs block bad product locks
-//     and force review flags unless SPEC_GUARD_MODE is explicitly relaxed.
+//   • DEFAULT MODE = 'shadow' — the guard observes + flags but never blocks
+//     or routes by default; enforce (which can newly BLOCK a tier or route a
+//     quote to inspection in production) is OPT-IN via SPEC_GUARD_MODE=enforce.
+//     This keeps the new enforce path fully available + tested, but never
+//     silently on. (R15a — previously defaulted to 'enforce'.)
 //   • DEGRADE-NEVER-BLOCK — only a positive same-key contradiction blocks;
 //     unknown / missing / unparseable never does.
 //   • NAME FALLBACK — when a product carries no structured spec for a
@@ -32,14 +35,17 @@ import { findHeadlineMaterialIndex } from './catalogue'
 
 export type SpecGuardMode = 'off' | 'shadow' | 'enforce'
 
-/** Resolve the guard mode from the environment. DEFAULT 'enforce'. Use explicit
- *  'shadow' for observe-only rollouts, or 'off' to disable. */
+/** Resolve the guard mode from the environment. DEFAULT 'shadow' (observe +
+ *  flag only — never blocks or routes). Set SPEC_GUARD_MODE=enforce to opt
+ *  into the blocking/inspection-routing path, or 'off' to disable entirely.
+ *  (R15a — default was 'enforce', which would silently start blocking/routing
+ *  in production; enforce is now opt-in.) */
 export function specGuardMode(
   env: Record<string, string | undefined> = process.env,
 ): SpecGuardMode {
   const v = (env.SPEC_GUARD_MODE ?? '').trim().toLowerCase()
   if (v === 'off' || v === 'enforce' || v === 'shadow') return v
-  return 'enforce'
+  return 'shadow'
 }
 
 function isBlank(v: unknown): boolean {

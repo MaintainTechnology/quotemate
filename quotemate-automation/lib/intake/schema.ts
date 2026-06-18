@@ -58,6 +58,22 @@ export const IntakeSchema = z.object({
       smart: z.boolean().optional(),                  // Wi-Fi / app control / smart-home compatible
       weatherproof: z.boolean().optional(),           // IP-rated for outdoor / wet-area use
       supplied_by: z.enum(['tradie', 'customer']).optional(),  // who provides the fitting itself
+      // WP5 / R26 — hot-water energy source. PRICING-CRITICAL for plumbing
+      // hot_water jobs: it selects the HWS assembly family (electric vs gas
+      // vs heat pump) and therefore which catalogue row grounds the quote.
+      //   electric / heat_pump → auto-quoteable (always_inspection=false rows)
+      //   gas                  → legitimately inspection-routed (Install gas
+      //                          HWS is always_inspection=true; AS/NZS 5601)
+      //   omitted (unknown)    → E8: NEVER guessed. The structurer escalates
+      //                          hot_water to inspection rather than inventing
+      //                          a gas/electric assembly.
+      // CAP NOTE: this field is captured server-side via the structurer's
+      // REQUIRED requested_specs_json channel (see lib/intake/structure.ts),
+      // NOT as a discrete generateObject optional field — IntakeSchema is at
+      // the 24-optional cap and the StructureSchema deliberately omits this
+      // one to stay cap-safe. It is still a first-class field on the canonical
+      // intake, read by the estimator from intake.scope.specs.system_type.
+      system_type: z.enum(['electric', 'gas', 'heat_pump']).optional(),
     }).optional(),
   }),
   access: z.object({

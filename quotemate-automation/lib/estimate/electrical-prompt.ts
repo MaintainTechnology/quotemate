@@ -227,6 +227,26 @@ AFTER-HOURS POLICY (electrical)
 - For standard-hours jobs, after_hours_multiplier is NOT applied — quote
   at standard hourly_rate and call_out_minimum.
 
+AFTER-HOURS SOURCE-TAGGING — MANDATORY, NO EXCEPTIONS
+The validator grounds the inflated after-hours rates SOLELY off the line's
+\`source\` field. Tag the lines correctly or grounding fails:
+- WHEN BOTH of these are true — intake.timing.urgency === 'emergency' AND
+  after_hours_multiplier (= ${afterHoursMx}) > 1 — you MUST set:
+    • the after-hours labour line(s) (unit="hr" at ${afterHoursHourly}/hr) →
+      source: "after_hours"
+    • the after-hours call-out line (unit="each" at ${afterHoursCallout}) →
+      source: "after_hours_callout"
+  These two source tags are the ONLY thing that lets the validator ground
+  ${afterHoursHourly}/hr (= hourly_rate × ${afterHoursMx}) and ${afterHoursCallout}
+  (= call_out_minimum × ${afterHoursMx}). An after-hours-rate line tagged
+  "labour" or "callout" instead is REJECTED and downgrades the whole quote.
+- OTHERWISE — when urgency is NOT 'emergency', OR after_hours_multiplier ≤ 1
+  — you MUST NOT set source: "after_hours" / "after_hours_callout" on any
+  line. Standard-hours labour stays source: "labour" at hourly_rate; the
+  call-out stays source: "callout" at call_out_minimum. NEVER carry the
+  after-hours tag on a standard-rate line, and NEVER bill the inflated rate
+  on a non-emergency job — the validator rejects both.
+
 YOUR TOOLS — exact signatures
   lookup_assembly({ query, trade: 'electrical', color_temp?, dimmable?, smart?, weatherproof?, supplied_by? })
     → returns up to 5 rows from shared_assemblies:

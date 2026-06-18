@@ -16,6 +16,28 @@ import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { UpdateSchema } from '@/lib/tenant/update-schema'
 import { parseVapiTranscript } from '@/lib/voice/parse-transcript'
+import {
+  normalizeServiceDelta,
+  buildServiceWritePlan,
+  mergeWithLegacyDicts,
+  annotateNameCollisions,
+} from '@/lib/dashboard/service-delta'
+
+// R36 — per-service delta contract. Accepts a SINGLE entry or an ARRAY so the
+// dashboard can flip exactly one row without re-sending its whole in-memory
+// service snapshot (which lets a stale tab clobber a row a second tab just
+// changed). Parsed from the raw body separately from UpdateSchema so the
+// shared schema (consumed by other routes) stays untouched. `is_custom`
+// selects the table the route writes to; defaults to shared (false).
+const ServiceDeltaEntrySchema = z.object({
+  assembly_id: z.string().uuid(),
+  enabled: z.boolean(),
+  is_custom: z.boolean().optional(),
+})
+const ServiceDeltaSchema = z.union([
+  ServiceDeltaEntrySchema,
+  z.array(ServiceDeltaEntrySchema).max(200),
+])
 
 export const dynamic = 'force-dynamic'
 
@@ -251,7 +273,16 @@ export async function GET(req: Request) {
 
   // Final unified list: shared first (anchors the dashboard at the
   // curated catalogue), then custom (the tradie's own additions).
-  const services = [...sharedServices, ...customServices]
+  //
+  // R40 — shared + custom services share one flat namespace in the dashboard
+  // but live in different tables, so a tradie CAN create a custom service whose
+  // name equals a DISABLED shared service (the DB unique index only guards
+  // same-table dupes). Rather than reject the create after the fact (which
+  // would orphan a persisted row), we surface a `name_collision` discriminator
+  // on every row so the UI can badge the cross-table duplicate and the tradie
+  // can rename/merge. annotateNameCollisions flags a row TRUE iff a row in the
+  // OTHER table shares its normalised name within the SAME trade.
+  const services = annotateNameCollisions([...sharedServices, ...customServices])
 
   // Resolve job context by joining quotes → intakes. The intake holds
   // the customer-facing details the dashboard wants to surface for each
@@ -531,6 +562,27 @@ export async function PATCH(req: Request) {
     )
   }
 
+  // R36 — parse the optional per-service delta out of the RAW body (UpdateSchema
+  // strips unknown keys). A present-but-malformed delta is a hard 400 so the UI
+  // gets a clear signal rather than a silently-ignored toggle.
+  let serviceDeltaEntries: ReturnType<typeof normalizeServiceDelta> = []
+  if (
+    body !== null &&
+    typeof body === 'object' &&
+    'service_delta' in (body as Record<string, unknown>)
+  ) {
+    const deltaParsed = ServiceDeltaSchema.safeParse(
+      (body as Record<string, unknown>).service_delta,
+    )
+    if (!deltaParsed.success) {
+      return Response.json(
+        { error: 'invalid_payload', details: deltaParsed.error.flatten() },
+        { status: 400 },
+      )
+    }
+    serviceDeltaEntries = normalizeServiceDelta(deltaParsed.data)
+  }
+
   // Find the tradie's tenant
   const { data: tenant, error: tenantErr } = await supabase
     .from('tenants')
@@ -546,6 +598,15 @@ export async function PATCH(req: Request) {
 
   const updates = parsed.data
   const errors: string[] = []
+  // R31 — a DEFINED cache-invalidation lever for the SMS dialog. The dialog
+  // renders the tenant service list OUTSIDE its cached prefix and stamps it
+  // with serviceListVersion() (see lib/sms/dialog.ts), so a toggle is already
+  // read fresh on the next inbound. This flag additionally records an EXPLICIT
+  // bump (pricing_book.overlays.service_version) whenever the service set
+  // changes, so the invalidation is observable + queryable rather than relying
+  // on cache TTL. Set when any service-offering or custom-service toggle is
+  // written below; applied once at the end.
+  let serviceSetChanged = false
 
   // 1. Tenant identity fields
   if (updates.tenant && Object.keys(updates.tenant).length > 0) {
@@ -683,6 +744,18 @@ export async function PATCH(req: Request) {
     }
   }
 
+  // R36 — fold the per-service delta into the legacy full-dict maps so the
+  // DB-write code below has a SINGLE path. The delta is the more targeted,
+  // fresher signal, so it WINS on any key collision with a legacy dict in the
+  // same request. The delta's `is_custom` flag routes each row to the right
+  // table (shared → tenant_service_offerings, custom → tenant_custom_assemblies).
+  const deltaPlan = buildServiceWritePlan(serviceDeltaEntries)
+  const mergedServices = mergeWithLegacyDicts(
+    deltaPlan,
+    updates.services,
+    updates.custom_services,
+  )
+
   // 3. Service toggles — UPSERT so the same call works whether or not
   //    a tenant_service_offerings row already exists for this tradie +
   //    assembly. Catalogue-first dashboards mean the row often DOESN'T
@@ -690,9 +763,12 @@ export async function PATCH(req: Request) {
   //    for the trade regardless of offerings rows).
   //
   //    Bulk upsert handles all changes in one round-trip via the
-  //    composite (tenant_id, assembly_id) primary key.
-  if (updates.services) {
-    const rows = Object.entries(updates.services).map(([assembly_id, enabled]) => ({
+  //    composite (tenant_id, assembly_id) primary key. Because we upsert
+  //    ONLY the keys present (delta or legacy dict), an unrelated row that a
+  //    concurrent tab owns is never written — that's the R36 anti-clobber
+  //    guarantee.
+  if (Object.keys(mergedServices.shared).length > 0) {
+    const rows = Object.entries(mergedServices.shared).map(([assembly_id, enabled]) => ({
       tenant_id: tenant.id,
       assembly_id,
       enabled,
@@ -702,6 +778,7 @@ export async function PATCH(req: Request) {
         .from('tenant_service_offerings')
         .upsert(rows, { onConflict: 'tenant_id,assembly_id' })
       if (error) errors.push(`services: ${error.message}`)
+      else serviceSetChanged = true
     }
   }
 
@@ -710,10 +787,10 @@ export async function PATCH(req: Request) {
   //     table. So we UPDATE tenant_custom_assemblies for each flip. We
   //     batch by `.in('id', [...])` for ON and again for OFF so two
   //     SQL round-trips cover an arbitrary number of toggles.
-  if (updates.custom_services) {
+  if (Object.keys(mergedServices.custom).length > 0) {
     const enableIds: string[] = []
     const disableIds: string[] = []
-    for (const [id, enabled] of Object.entries(updates.custom_services)) {
+    for (const [id, enabled] of Object.entries(mergedServices.custom)) {
       ;(enabled ? enableIds : disableIds).push(id)
     }
     if (enableIds.length > 0) {
@@ -723,6 +800,7 @@ export async function PATCH(req: Request) {
         .eq('tenant_id', tenant.id)
         .in('id', enableIds)
       if (error) errors.push(`custom_services (enable): ${error.message}`)
+      else serviceSetChanged = true
     }
     if (disableIds.length > 0) {
       const { error } = await supabase
@@ -731,6 +809,7 @@ export async function PATCH(req: Request) {
         .eq('tenant_id', tenant.id)
         .in('id', disableIds)
       if (error) errors.push(`custom_services (disable): ${error.message}`)
+      else serviceSetChanged = true
     }
   }
 
@@ -765,10 +844,68 @@ export async function PATCH(req: Request) {
     }
   }
 
+  // R31 — DEFINED service-catalogue cache bump. When a service-offering or
+  // custom-service toggle was written above, stamp a fresh service_version
+  // into every pricing_book row's overlays jsonb (read-modify-write, mirrors
+  // the early_bird pattern so any other overlay keys are preserved). This is
+  // the explicit, queryable invalidation signal the SMS dialog's freshness
+  // contract is built on: the dialog renders the service list outside its
+  // cached prefix and version-stamps it (lib/sms/dialog.ts serviceListVersion),
+  // so a toggle is reflected on the next inbound regardless — but recording
+  // this bump makes the invalidation observable rather than relying on cache
+  // TTL. Best-effort: a failure here must not fail an otherwise-successful
+  // toggle PATCH, so it is logged, not pushed to `errors`.
+  if (serviceSetChanged) {
+    const stamp = newServiceVersionStamp()
+    const { data: books, error: readErr } = await supabase
+      .from('pricing_book')
+      .select('id, overlays')
+      .eq('tenant_id', tenant.id)
+    if (readErr) {
+      console.warn('[tenant/me] service_version bump skipped — overlays read failed', readErr.message)
+    } else {
+      for (const b of books ?? []) {
+        const next = withServiceVersion(b.overlays, stamp)
+        const { error } = await supabase
+          .from('pricing_book')
+          .update({ overlays: next })
+          .eq('id', b.id)
+        if (error) {
+          console.warn('[tenant/me] service_version bump write failed (non-fatal)', error.message)
+        }
+      }
+    }
+  }
+
   if (errors.length > 0) {
     return Response.json({ ok: false, errors }, { status: 500 })
   }
   return Response.json({ ok: true })
+}
+
+/** R31 — a fresh, monotonic-ish service-catalogue version stamp. Wall-clock
+ *  ms is enough: a toggle PATCH always lands after the prior one, and the
+ *  value only needs to CHANGE on each write so a cache-keyed consumer can
+ *  tell "the service set moved". Exported for the route-level test. */
+export function newServiceVersionStamp(): string {
+  return `v${Date.now()}`
+}
+
+/** R31 — pure read-modify-write of a pricing_book.overlays jsonb value that
+ *  sets `service_version` while preserving every other overlay key (e.g.
+ *  early_bird). Defensive against a null / non-object / array overlays value.
+ *  Exported so the bump is unit-testable without the route's Supabase
+ *  side-effects. */
+export function withServiceVersion(
+  overlays: unknown,
+  stamp: string,
+): Record<string, unknown> {
+  const base =
+    overlays && typeof overlays === 'object' && !Array.isArray(overlays)
+      ? { ...(overlays as Record<string, unknown>) }
+      : {}
+  base.service_version = stamp
+  return base
 }
 
 /** Coerce "" / undefined → null. Used when persisting optional text

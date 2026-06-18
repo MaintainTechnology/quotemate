@@ -61,6 +61,15 @@ export type DraftLineItem = {
   unit_price_ex_gst?: number | string
   source?: string
   total_ex_gst?: number | string
+  /** PHASE 1 (R7/R9 swap fix) — set true on EVERY line this merge created
+   *  or swapped in (the SWAP sundries/labour replacements and every
+   *  appended recipe extra). The positional preCount model is unsound for
+   *  the SWAP path because the merge PREPENDS new lines ([newSundries,
+   *  newLabour, ...preserved]); an index prefix can no longer separate
+   *  "Opus-drafted" from "recipe-created". The R7 dedup + R9 micro-validate
+   *  in run.ts key off this explicit marker instead, so they act on exactly
+   *  the lines the recipe touched and never on a legitimate Opus line. */
+  recipe_origin?: boolean
   [k: string]: unknown
 }
 
@@ -236,6 +245,7 @@ export function mergeRecipesIntoTier(
         unit_price_ex_gst: newSundriesPrice,
         total_ex_gst: newSundriesPrice,
         source: `assembly:${newAsm.id}`,
+        recipe_origin: true,
       }
       const newLabourLine: DraftLineItem = {
         description: `Labour — ${newAsm.name}`,
@@ -247,6 +257,7 @@ export function mergeRecipesIntoTier(
             ? round2(newLabourHours * hourly)
             : 0,
         source: 'labour',
+        recipe_origin: true,
       }
       workingLines = [newSundriesLine, newLabourLine, ...preserved]
       outcome.swapped_from.push(overrideSourceId!)
@@ -307,6 +318,10 @@ function bandLineToDraftLine(li: BandLineItem): DraftLineItem {
     unit_price_ex_gst: li.unit_price_ex_gst,
     total_ex_gst: round2(li.quantity * li.unit_price_ex_gst),
     source: li.source,
+    // PHASE 1 (R7/R9) — every appended recipe extra is recipe-created, so
+    // the run.ts dedup + micro-validate can target it via this marker
+    // (positional preCount alone is unsound once a SWAP prepends lines).
+    recipe_origin: true,
   }
 }
 

@@ -11,10 +11,14 @@ import {
 } from './spec-guard'
 
 describe('specGuardMode', () => {
-  it('defaults to enforce', () => {
-    expect(specGuardMode({})).toBe('enforce')
-    expect(specGuardMode({ SPEC_GUARD_MODE: '' })).toBe('enforce')
-    expect(specGuardMode({ SPEC_GUARD_MODE: 'garbage' })).toBe('enforce')
+  it('defaults to shadow (R15a — enforce is now opt-in, never silently on)', () => {
+    // The blocking/inspection-routing enforce path must be explicitly
+    // requested via SPEC_GUARD_MODE=enforce; absent/blank/garbage all
+    // resolve to the observe-only shadow mode so production never starts
+    // blocking or routing without an operator opting in.
+    expect(specGuardMode({})).toBe('shadow')
+    expect(specGuardMode({ SPEC_GUARD_MODE: '' })).toBe('shadow')
+    expect(specGuardMode({ SPEC_GUARD_MODE: 'garbage' })).toBe('shadow')
   })
   it('honours explicit off / enforce / shadow, case-insensitively', () => {
     expect(specGuardMode({ SPEC_GUARD_MODE: 'off' })).toBe('off')

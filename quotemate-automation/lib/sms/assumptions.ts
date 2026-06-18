@@ -92,7 +92,11 @@ export const ASSUMPTION_RULES: Record<JobType, AssumptionRule> = {
     mustAsk: [
       'how many GPOs',
       'which room',
-      'is it replacing existing GPOs, adding near existing power, or a brand-new run from the switchboard',
+      // Worded to avoid the removed inspection-trigger phrasing ("brand-new
+      // run from the switchboard") — that scope is now priced by the
+      // price-bands recipe, not escalated, so the question captures the
+      // distinction without re-introducing the trigger string.
+      'is it replacing existing GPOs, adding near existing power, or a new circuit from the board',
       'if the room is bathroom/ensuite/laundry/kitchen: is the GPO at least 600mm away from any basin, sink, shower or bath',
     ],
     inspectionTriggers: [
@@ -158,8 +162,16 @@ export const ASSUMPTION_RULES: Record<JobType, AssumptionRule> = {
       'property.pre_1970':   'false',
     },
     mustAsk: [
-      'how many alarms (or how many bedrooms if doing a full compliance install)',
-      'replacing existing alarms, or first installation',
+      // R25 — CLASSIFIER FIRST. Smoke-alarm jobs split into two very
+      // different scopes: a like-for-like swap of existing alarms (small,
+      // fixed) vs a whole-property compliance hardwire (count driven by
+      // bedrooms, much larger). Classify BEFORE anything else; the count
+      // question that follows depends entirely on the answer.
+      'is this a like-for-like swap of existing alarms, or a full-property compliance hardwire (all bedrooms + hallways)',
+      // CONDITIONAL FOLLOW-UP — phrased to cover both branches. For a swap:
+      // how many alarms. For a compliance install: how many bedrooms (the
+      // count is derived from bedrooms + hallways for AS 3786 compliance).
+      'how many alarms (or how many bedrooms if it is a full compliance install)',
     ],
     inspectionTriggers: [
       // Trimmed 2026-05-26 — removed 'no existing alarms anywhere' (now
@@ -380,24 +392,57 @@ export const UNIVERSAL_INSPECTION_TRIGGERS = [
 ]
 
 // Helper used by the dialog system prompt — produces a compact, readable
-// summary of the rules for a given job type. As of migration 065
-// (2026-05-26), the MUST ASK section is NOT emitted here — those
-// questions now live per-row on shared_assemblies.clarifying_questions
-// and are injected by customServicesDirective() in dialog.ts. We keep
-// safeDefaults + inspectionTriggers here because they are genuinely
-// job-type-level policy (assumption-fill + keyword routing) and don't
-// fit the per-row clarifying_questions shape. The `mustAsk` arrays on
-// ASSUMPTION_RULES are kept for now as a fallback / documentation but
-// are no longer surfaced to the AI through this function.
+// summary of the rules for a given job type.
+//
+// R24/R27 (2026-06-18) — the MUST-ASK section is now emitted AGAIN, as a
+// hard "ask every one before finish" block, mirroring how
+// customServicesDirective() renders tenant-service clarifying_questions.
+// Earlier (migration 065, 2026-05-26) the easy-set mustAsk lines were
+// dropped from this function on the assumption every easy-set request
+// would arrive as a matched custom service carrying its own
+// clarifying_questions — but the easy-5 job types are HARDCODED in the
+// dialog prompt and are NOT passed through customAssemblies, so dropping
+// them left the dialog with no per-job MUST-ASK injection for the most
+// common jobs. Re-emitting here closes that gap.
+//
+// safeDefaults + inspectionTriggers are job-type-level policy
+// (assumption-fill + keyword routing) and are rendered alongside.
 export function rulesAsText(jobType: JobType): string {
   const r = ASSUMPTION_RULES[jobType]
   const defaults = Object.entries(r.safeDefaults)
     .map(([k, v]) => `  - ${k}: ${v}`).join('\n')
-  return [
+  const lines = [
     `JOB TYPE: ${jobType}`,
-    `SAFE DEFAULTS (apply silently if customer didn't state otherwise):`,
+    `SAFE DEFAULTS (apply silently ONLY after you've offered the customer a`,
+    `chance to state otherwise — never skip a MUST-ASK to apply a default):`,
     defaults,
-    `INSPECTION TRIGGERS (force inspection_required=true if any of these match):`,
+  ]
+  const mustAsk = mustAskLines(jobType)
+  if (mustAsk.length > 0) {
+    lines.push(
+      `MUST ASK before any finish (one per turn, in order; do NOT finish,`,
+      `draft, or say the quote is on its way while ANY of these is`,
+      `unanswered — get a real answer to each):`,
+      ...mustAsk.map((q, i) => `  ${i + 1}. ${q}`),
+    )
+  }
+  lines.push(
+    `INSPECTION TRIGGERS (force action='escalate_inspection' /`,
+    `inspection_required=true if the customer mentions ANY of these, in`,
+    `addition to the universal trigger list):`,
     `  - ${r.inspectionTriggers.join('\n  - ')}`,
-  ].join('\n')
+  )
+  return lines.join('\n')
+}
+
+// R24 — the mandatory per-job questions for a job type, cleaned of empty
+// entries. Source of truth is ASSUMPTION_RULES[jobType].mustAsk. Exported
+// so the deterministic readiness gate (quote-readiness.ts) and the dialog
+// prompt render the SAME list — there is one canonical mandatory-question
+// set per easy-set job type, never two that can drift apart.
+export function mustAskLines(jobType: JobType): string[] {
+  const r = ASSUMPTION_RULES[jobType]
+  return (r?.mustAsk ?? [])
+    .filter((q): q is string => typeof q === 'string' && q.trim().length > 0)
+    .map((q) => q.trim())
 }

@@ -17,6 +17,7 @@
 // the tenant_id used for both the read and the writes.
 
 import { createClient } from '@supabase/supabase-js'
+import { normaliseCategory } from '@/lib/estimate/catalogue'
 
 export const dynamic = 'force-dynamic'
 
@@ -131,6 +132,52 @@ export async function POST(req: Request) {
     sort: Number(r.sort ?? 0),
   }))
 
+  // R33 — surface the Catalogue↔Recipe category gap instead of hiding it.
+  //
+  // The estimator joins each forked recipe line to a tenant catalogue
+  // product by matching their `material_category` strings (see
+  // lib/estimate/catalogue.ts categoryHasCatalogueProduct + the deterministic
+  // BOM resolver). When a forked line references a category the tenant has
+  // NO active catalogue product for, the estimator falls back to a GENERIC
+  // shared price — silently costing the tradie their real product/price. The
+  // fork itself is still useful (the rows are created so the tradie can edit
+  // them), so we DON'T fail; we RETURN which lines have no tenant catalogue
+  // product so the dashboard/UI can prompt the tradie to add the missing
+  // products. Best-effort: a catalogue read error never blocks the fork — it
+  // just means we can't compute gaps, so we report none (degrade-never-block,
+  // same philosophy as the estimator's catalogue hints).
+  let tenantCatalogueCategories: string[] = []
+  let gapDetectionFailed = false
+  {
+    let cq = supabase
+      .from('tenant_material_catalogue')
+      .select('category')
+      .eq('tenant_id', tenant.id)
+      .eq('active', true)
+    cq = cq.eq('trade', asm.trade as string)
+    const { data: catRows, error: catErr } = await cq
+    if (catErr) {
+      // Don't block the fork — just note we couldn't compute the gap.
+      gapDetectionFailed = true
+    } else {
+      tenantCatalogueCategories = (catRows ?? [])
+        .map((r) => normaliseCategory(r.category as string | null))
+        .filter((c) => c !== '')
+    }
+  }
+  const haveCategory = new Set(tenantCatalogueCategories)
+  // One {material_category, line} entry per forked baseline line whose
+  // category has no active tenant catalogue product. `line` is the 1-based
+  // position in the forked recipe (sort order) so the UI can point at the row.
+  const categoryGaps = gapDetectionFailed
+    ? []
+    : baseline
+        .map((r, i) => ({
+          material_category: r.material_category as string,
+          line: i + 1,
+        }))
+        .filter((g) => !haveCategory.has(normaliseCategory(g.material_category)))
+
   const { data: inserted, error: insErr } = await supabase
     .from('tenant_assembly_bom')
     .insert(rows)
@@ -144,5 +191,15 @@ export async function POST(req: Request) {
     ok: true,
     forked: inserted?.length ?? 0,
     lines: inserted ?? [],
+    // R33 — gap visibility. `has_category_gaps` is the at-a-glance flag;
+    // `category_gaps` is the actionable list of forked lines with no tenant
+    // catalogue product (each falls back to a generic price until the tradie
+    // adds a product in that category). Empty array when every line is
+    // catalogue-backed OR gap detection couldn't run.
+    has_category_gaps: categoryGaps.length > 0,
+    category_gaps: categoryGaps,
+    // True only when the catalogue read itself errored, so the caller can
+    // distinguish "no gaps" from "couldn't check". Defensive/observability.
+    gap_detection_failed: gapDetectionFailed,
   })
 }

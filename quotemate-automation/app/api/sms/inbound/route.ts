@@ -85,6 +85,38 @@ import {
 import type { TenantMaterial } from '@/lib/estimate/catalogue'
 import { deriveTradeFromJobType } from '@/lib/intake/schema'
 import { recordTrace } from '@/lib/log/trace'
+import {
+  getDeliveryKnobs,
+  retryWithBackoff,
+  logSendOutcome,
+  adaptiveDebounceMs,
+  type PipelineLoggerLike,
+} from '@/lib/sms/send-reliability'
+import {
+  decideSidDedup,
+  classifyInboundInsert,
+  decideConversationUpsert,
+  arrivalTimestampsFromTurns,
+  throwIfDispatchFailed,
+  sideEffectsAllowed,
+  isNearMaxDuration,
+} from '@/lib/sms/inbound-helpers'
+
+// R42/R44/R46/R49 — SMS delivery knobs resolved once at module load. These
+// are env-tunable (SMS_MAX_DURATION / SMS_DEBOUNCE_MS / SMS_SEND_*) with safe
+// defaults + clamps; see lib/sms/send-reliability.ts. maxDuration MUST be a
+// static module export (Next.js reads it at build/route-registration time, not
+// per-request), so we derive it here rather than inside the handler.
+const DELIVERY_KNOBS = getDeliveryKnobs(process.env)
+
+// Lightweight pipeline-logger shim for logSendOutcome — the inbound route logs
+// via console (no pipelineLog() instance threaded through here), so we adapt
+// console to the PipelineLoggerLike shape the helper expects.
+const sendLogger: PipelineLoggerLike = {
+  ok: (event, data) => console.log(`[sms/inbound:send] ${event}`, data ?? {}),
+  err: (event, error, data) => console.error(`[sms/inbound:send] ${event}`, { error: error instanceof Error ? error.message : error, ...(data ?? {}) }),
+  step: (event, data) => console.log(`[sms/inbound:send] ${event}`, data ?? {}),
+}
 
 // WP9 — mid-conversation product options. Every WP9 block in this route
 // is wrapped in this flag; OFF (default) ⇒ byte-identical behaviour.
@@ -243,6 +275,21 @@ function guessFirstName(turns: ConversationTurn[]): string | undefined {
 // with slot-extraction retries cleared the budget before step 6).
 // Vercel Pro serverless cap = 300s; Fluid Compute = 800s. The inline
 // path still returns TwiML in <500ms so Twilio is happy regardless.
+//
+// R42 — sourced from getDeliveryKnobs (env SMS_MAX_DURATION, default 300,
+// clamped to [5,800]) so the budget can be raised toward the Fluid-Compute
+// ceiling without a code change when the worst-case dialog+intake+estimate+
+// dispatch pipeline approaches the cap. The after() block also self-monitors
+// via isNearMaxDuration and emits an `after_near_max_duration` alert; that
+// alert firing repeatedly is the signal that a TRUE offload (durable queue /
+// QStash worker) — not just a bigger cap — is required, since a serverless
+// function can never exceed 800s. See the FLAGGED note in the task report.
+// Next requires route-segment configs to be STATICALLY-ANALYZABLE LITERALS —
+// a computed value (getDeliveryKnobs().maxDurationSec) is silently ignored
+// ("Invalid segment configuration export"). So the function budget is a literal
+// here (300s = the platform default ceiling; raise to up to 800 on Vercel
+// Pro/Fluid by editing this literal). The env knob (SMS_MAX_DURATION) still
+// drives the runtime near-timeout self-monitor + debounce/retry tuning below.
 export const maxDuration = 300
 
 const supabase = createClient(
@@ -654,6 +701,8 @@ export async function POST(req: Request) {
   // if we've already persisted an inbound row for this SID, ack with
   // 200 immediately and bail. SMS-without-SID (extremely rare) falls
   // through to normal processing rather than failing closed.
+  // R47 — the skip-vs-process decision is extracted to decideSidDedup
+  // (pure + unit-tested) so the idempotency contract can't silently regress.
   if (messageSid) {
     const { data: existingMsg } = await supabase
       .from('sms_messages')
@@ -661,11 +710,12 @@ export async function POST(req: Request) {
       .eq('twilio_message_sid', messageSid)
       .eq('direction', 'inbound')
       .maybeSingle()
-    if (existingMsg) {
+    const dedup = decideSidDedup(messageSid, existingMsg)
+    if (dedup.action === 'skip_duplicate') {
       console.warn('[sms/inbound] duplicate MessageSid — ignoring retry', {
         messageSid,
-        existingMessageId: existingMsg.id,
-        conversationId: existingMsg.conversation_id,
+        existingMessageId: dedup.existingId,
+        conversationId: existingMsg?.conversation_id,
       })
       return ackTwiml()
     }
@@ -911,26 +961,97 @@ export async function POST(req: Request) {
       address: customer?.address ?? null,
       email: customer?.email ?? null,
     })
-    const { data: created, error: createErr } = await supabase
-      .from('sms_conversations')
-      .insert({
-        from_number: fromNumber,
-        to_number: toNumber,
-        status: 'open',
-        customer_id: customer?.id ?? null,
+    // R43 — idempotent create. Two webhooks for a brand-new from_number can
+    // both reach this NEW branch within the same instant; a plain INSERT then
+    // produces TWO active conversations, each wins its OWN per-row lock, and
+    // BOTH run the dialog (duplicate replies / split-brain). Migration 122
+    // adds a partial unique index (at most one ACTIVE customer_quote
+    // conversation per (from_number, to_number)) and the RPC
+    // create_sms_conversation_idempotent, which does a predicate-qualified
+    // `ON CONFLICT DO NOTHING` (supabase-js's .upsert can't infer a PARTIAL
+    // index — verified: a bare column-list ON CONFLICT is rejected) and, on a
+    // lost race, RETURNS the existing active row. Either way the caller adopts
+    // ONE canonical conversation; the loser persists its inbound there and the
+    // per-conversation lock coalesces the two webhooks onto a single turn.
+    // The adopt-which-row decision is in decideConversationUpsert (tested).
+    let created: typeof prior = null
+    // The RPC resolves win-vs-lost-race server-side and always returns the
+    // canonical row as `created`, so raceWinner stays null here; it remains a
+    // parameter to decideConversationUpsert (the single tested adoption gate)
+    // for the legacy/edge case where only an existing row is available.
+    const raceWinner: typeof prior = null
+    const { data: rpcRow, error: rpcErr } = await supabase.rpc(
+      'create_sms_conversation_idempotent',
+      {
+        p_from_number: fromNumber,
+        p_to_number: toNumber,
+        p_status: 'open',
+        p_customer_id: customer?.id ?? null,
         // v6 multi-tenant: stamp the conversation with the tenant whose
         // destination number was texted. Null for legacy pre-v6 traffic.
-        tenant_id: tenant?.id ?? null,
-        photo_request_token: photoToken,
-        conversation_state: initialState,
-      })
-      .select()
-      .single()
-    if (createErr || !created) {
-      console.error('[sms/inbound] conversation create failed', createErr)
+        p_tenant_id: tenant?.id ?? null,
+        p_photo_request_token: photoToken,
+        p_conversation_state: initialState,
+      },
+    )
+    // supabase.rpc returns the SETOF/composite row; normalise array|object.
+    const rpcConversation = Array.isArray(rpcRow) ? rpcRow[0] : rpcRow
+    // Back-compat: if migration 122 hasn't been applied yet (function missing
+    // → PGRST202 / 42883), fall through to the legacy plain insert so the
+    // route keeps working un-hardened rather than failing the customer.
+    const rpcFnMissing =
+      !!rpcErr &&
+      ((rpcErr as { code?: string }).code === 'PGRST202' ||
+        (rpcErr as { code?: string }).code === '42883' ||
+        /function .*create_sms_conversation_idempotent.* does not exist/i.test(rpcErr.message ?? ''))
+    if (rpcErr && !rpcFnMissing) {
+      console.error('[sms/inbound] idempotent conversation create RPC failed', rpcErr)
       return new Response('DB error', { status: 500 })
     }
-    conversation = created
+    if (rpcFnMissing) {
+      // ALERTABLE (Phase 6 review fix): the route is running WITHOUT migration
+      // 122's idempotent-create RPC, so two concurrent first-messages can each
+      // create an active conversation → split-brain duplicate replies. This is
+      // fail-open for availability, but an operator must apply migration 122 to
+      // close the window — page on this, don't bury it as a warning.
+      console.error('[sms/inbound][ALERT] migration 122 RPC missing — using un-hardened plain insert; split-brain duplicate-reply risk until 122 is applied', {
+        code: (rpcErr as { code?: string }).code,
+        remediation: 'run scripts/run-migration-122.mjs against this environment',
+      })
+      const { data: legacyCreated, error: legacyErr } = await supabase
+        .from('sms_conversations')
+        .insert({
+          from_number: fromNumber,
+          to_number: toNumber,
+          status: 'open',
+          customer_id: customer?.id ?? null,
+          tenant_id: tenant?.id ?? null,
+          photo_request_token: photoToken,
+          conversation_state: initialState,
+        })
+        .select()
+        .single()
+      if (legacyErr || !legacyCreated) {
+        console.error('[sms/inbound] conversation create failed', legacyErr)
+        return new Response('DB error', { status: 500 })
+      }
+      created = legacyCreated
+    } else {
+      // The RPC already resolves win-vs-lost-race internally, so the row it
+      // returns is always the canonical one. We still route it through
+      // decideConversationUpsert for a single, tested adoption decision +
+      // structured logging of the lost-race branch.
+      created = rpcConversation ?? null
+    }
+    const upsertDecision = decideConversationUpsert(created, raceWinner)
+    if (upsertDecision.action === 'fail') {
+      console.error('[sms/inbound] conversation create failed — no row returned', {
+        fromNumber,
+        toNumber,
+      })
+      return new Response('DB error', { status: 500 })
+    }
+    conversation = created ?? raceWinner!
     customerHistoryHint = prior ? 'returning' : 'first_time'
     console.log('[sms/inbound] step 3 — NEW conversation', {
       conversationId: conversation.id,
@@ -1018,14 +1139,19 @@ export async function POST(req: Request) {
     photo_urls: inboundPhotoUrls,
     photo_paths: inboundPhotoPaths,
   })
-  if (insertErr) {
-    if (insertErr.code === '23505') {
-      console.warn('[sms/inbound] race lost — duplicate MessageSid landed concurrently', {
-        messageSid,
-        conversationId: conversation.id,
-      })
-      return ackTwiml()
-    }
+  // R47 — the 23505-vs-real-error classification is extracted to
+  // classifyInboundInsert (tested) so the same-millisecond retry race (caught
+  // by migration 004's unique partial index) is always acked as a duplicate
+  // and never mistaken for a generic DB failure.
+  const insertOutcome = classifyInboundInsert(insertErr)
+  if (insertOutcome.action === 'ack_duplicate') {
+    console.warn('[sms/inbound] race lost — duplicate MessageSid landed concurrently', {
+      messageSid,
+      conversationId: conversation.id,
+    })
+    return ackTwiml()
+  }
+  if (insertOutcome.action === 'db_error') {
     console.error('[sms/inbound] inbound persist failed', insertErr)
     return new Response('DB error', { status: 500 })
   }
@@ -1037,6 +1163,13 @@ export async function POST(req: Request) {
   // running Sonnet for this customer and we should bail without sending
   // a duplicate reply. The follower's inbound message is already persisted
   // (above) so the leader will see it when it loads conversation history.
+  //
+  // R43 ORDERING (persist-before-lock): the inbound INSERT above runs BEFORE
+  // this lock claim deliberately. A webhook that loses the lock has ALREADY
+  // persisted its inbound row, so the leader picks it up in the post-debounce
+  // history read — no inbound is ever left unprocessed. Combined with the
+  // migration-122 idempotent create, two concurrent first-messages now
+  // converge on ONE conversation row and ONE leader instead of split-brain.
   //
   // Lock auto-expires after 60s in case a function crashes mid-flow —
   // a customer is never permanently blocked.
@@ -1137,6 +1270,10 @@ export async function POST(req: Request) {
       : 'not_applicable'
 
   after(async () => {
+    // R42 — wall-clock at after() entry so we can detect (via isNearMaxDuration)
+    // when the heavy pipeline is approaching the maxDuration budget and emit the
+    // after_near_max_duration alert before sends get cut off mid-flight.
+    const afterStartedAt = Date.now()
     try {
       // ─────── In-flight continuation ───────
       // The customer texted while their PREVIOUS quote is still being
@@ -1150,19 +1287,43 @@ export async function POST(req: Request) {
       // their respective sites below, so this turn can never spawn a
       // second draft or clobber the in-flight quote's status.
 
-      // ─────── Debounce window ───────
-      // Wait briefly to let any rapid-fire follow-up messages land before we
-      // read history + run Sonnet. Customer firing "Hey there" + "Hi there"
-      // within ~1s lands both in DB; we then call Sonnet ONCE with both in
-      // history and reply ONCE. The follow-up webhook fails to claim the
-      // lock and bails (its message is already persisted).
-      const DEBOUNCE_MS = 1500
-      await new Promise(r => setTimeout(r, DEBOUNCE_MS))
+      // ─────── Debounce window (R44 — adaptive) ───────
+      // Wait to let any rapid-fire follow-up messages land before we read
+      // history + run Sonnet. Customer firing "Hey there" + "Hi there" within
+      // ~1s lands both in DB; we then call Sonnet ONCE with both in history and
+      // reply ONCE. The follow-up webhook fails to claim the lock and bails
+      // (its message is already persisted — so nothing is dropped).
+      //
+      // R44 — the window is no longer a fixed 1500ms. We first read the
+      // arrival timestamps of the current un-replied inbound burst and let
+      // adaptiveDebounceMs size the wait: a lone text replies promptly (base
+      // window), while a fast burst EXTENDS the wait (capped at ~4× base) so a
+      // trailing text isn't missed. Crucially this only sets a WAIT — every
+      // queued inbound is still read in the full history load below AFTER the
+      // wait, so coalescing never drops a message even when the leader read
+      // history "first" (the post-wait read is the authoritative one).
+      const { data: burstRows } = await supabase
+        .from('sms_messages')
+        .select('direction, created_at')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: true })
+      const debounceMs = adaptiveDebounceMs(
+        arrivalTimestampsFromTurns(burstRows),
+        DELIVERY_KNOBS,
+      )
+      console.log('[sms/inbound:after] step 5 — adaptive debounce', {
+        conversationId,
+        debounceMs,
+        baseMs: DELIVERY_KNOBS.debounceMs,
+        burstInbounds: arrivalTimestampsFromTurns(burstRows).length,
+      })
+      if (debounceMs > 0) await new Promise(r => setTimeout(r, debounceMs))
 
       console.log('[sms/inbound:after] step 5 — loading conversation history (post-debounce)', { conversationId })
       // 5. Load the full message history (oldest first) — including the inbound
       //    we just persisted AND any rapid-fire messages that landed during
-      //    the debounce window.
+      //    the debounce window. This read happens AFTER the adaptive wait so
+      //    every queued inbound is included (R44: no message dropped).
       const { data: historyRows } = await supabase
         .from('sms_messages')
         .select('direction, body, created_at')
@@ -2294,10 +2455,71 @@ export async function POST(req: Request) {
       // Step 7: quote confirmation (or any dialog reply). Fires after the
       // photo link when shouldSendPhotoRequest is true, immediately otherwise.
       console.log('[sms/inbound:after] step 7 — dispatching reply (SMS-first, WhatsApp fallback)')
-      const dispatch = await dispatchQuoteMessage({
-        to: fromNumber,
-        from: toNumber,
-        text: decision.reply_to_send,
+      // R46-inbound — the AI-reply send is the customer-facing payload of the
+      // whole turn, yet it had NO outer retry: it relied solely on dispatch.ts's
+      // code-based retry, which does NOT treat a thrown/aborted fetch
+      // (AbortError / TimeoutError on Vercel terminating an in-flight request,
+      // undici headersTimeout) as a first-class retryable class. Unlike the
+      // intake handoff below — where an aborted fetch is INTENTIONALLY
+      // non-retried because the server may still complete the pipeline and a
+      // retry would duplicate the quote — re-sending an SMS reply is idempotent
+      // at the dialog layer (a duplicate reply is benign vs. customer silence),
+      // so here we DO retry transient aborts/timeouts/network/429/5xx via the
+      // shared retryWithBackoff. throwIfDispatchFailed converts dispatch's
+      // returned {ok:false, smsAttempt} into a classifiable throw; terminal
+      // carrier codes (21610 STOP, etc.) are not retried. Every outcome is
+      // logged via logSendOutcome in an alertable shape.
+      const replySendStartedAt = Date.now()
+      const replyOutcome = await retryWithBackoff(
+        async () => {
+          const r = await dispatchQuoteMessage({
+            to: fromNumber,
+            from: toNumber,
+            text: decision.reply_to_send,
+          })
+          // Throw on a failed result so retryWithBackoff classifies + retries
+          // transient failures (abort/timeout/network/429/5xx); a successful
+          // result passes through unchanged.
+          return throwIfDispatchFailed(r)
+        },
+        {
+          retries: DELIVERY_KNOBS.sendRetries,
+          baseDelayMs: DELIVERY_KNOBS.sendBaseDelayMs,
+          maxDelayMs: DELIVERY_KNOBS.sendMaxDelayMs,
+          onRetry: (err, nextAttempt, delayMs) =>
+            console.warn('[sms/inbound:after] step 7 — reply send retrying', {
+              conversationId,
+              nextAttempt,
+              delayMs,
+              error: err instanceof Error ? err.message : String(err),
+            }),
+        },
+      )
+      // Recover the dispatch-shaped result for the unchanged downstream code.
+      // On success retryWithBackoff returns the original DispatchOk; on terminal
+      // failure we synthesise a DispatchFail from the thrown DispatchFailedError
+      // so the existing `dispatch.ok === false` branch (recordTrace err) runs.
+      const replySendError: unknown = replyOutcome.ok ? undefined : replyOutcome.error
+      const dispatch = replyOutcome.ok
+        ? replyOutcome.value
+        : ({
+            ok: false as const,
+            smsAttempt: {
+              code: (replySendError as { code?: string })?.code ?? 'UNKNOWN',
+              reason: (replySendError as Error)?.message ?? 'reply dispatch failed',
+            },
+            smsAttempts: replyOutcome.attempts,
+            waAttempt: (replySendError as { waCode?: string | null })?.waCode != null
+              ? { code: String((replySendError as { waCode?: string | null }).waCode), reason: 'whatsapp fallback failed' }
+              : undefined,
+          })
+      logSendOutcome(sendLogger, {
+        sendType: 'customer_reply',
+        status: dispatch.ok ? (dispatch.channel === 'whatsapp' ? 'fallback' : 'ok') : 'failed',
+        attempts: replyOutcome.attempts,
+        latencyMs: Date.now() - replySendStartedAt,
+        channel: dispatch.ok ? dispatch.channel : null,
+        error: replySendError,
       })
 
       let outboundSid: string | null = null
@@ -2440,11 +2662,17 @@ export async function POST(req: Request) {
       // conversation. Even if the dialog (mis)reasons 'finish' on a
       // continuation turn, NEVER fire a second handoff — that is the
       // exact duplicate-quote collision the in-flight window prevents.
+      // R47 — the four-signal "is the money path allowed to fire this turn?"
+      // rule is extracted to sideEffectsAllowed (tested) so the intake handoff
+      // and any future irreversible side effect share one definition and a
+      // duplicate-fired after() can't double-run the handoff.
       if (
-        decision.action === 'finish' &&
-        !hasExistingIntake &&
-        !wp9HoldingForChoice &&
-        !inflightContinuation
+        sideEffectsAllowed({
+          decisionIsFinish: decision.action === 'finish',
+          hasExistingIntake,
+          wp9HoldingForChoice,
+          inflightContinuation,
+        })
       ) {
         console.log('[sms/inbound:after] step 10 — firing intake/structure handoff', { conversationId })
         try {
@@ -2547,6 +2775,23 @@ export async function POST(req: Request) {
             })
           }
         }
+      }
+
+      // R42 — budget self-monitor. If the pipeline (dialog + intake + estimate
+      // + all sends) has consumed most of the maxDuration budget by the time we
+      // reach the end of after(), emit the alertable after_near_max_duration
+      // status. Repeated firing is the operational signal that raising
+      // SMS_MAX_DURATION is no longer enough and a true offload (durable queue)
+      // is needed — a serverless function cannot exceed the 800s hard ceiling.
+      const afterElapsedMs = Date.now() - afterStartedAt
+      if (isNearMaxDuration(afterElapsedMs, DELIVERY_KNOBS.maxDurationSec)) {
+        logSendOutcome(sendLogger, {
+          sendType: 'customer_reply',
+          status: 'after_near_max_duration',
+          attempts: 0,
+          latencyMs: afterElapsedMs,
+          error: `after() used ${Math.round(afterElapsedMs / 1000)}s of ${DELIVERY_KNOBS.maxDurationSec}s budget`,
+        })
       }
     } catch (e: any) {
       console.error('[sms/inbound:after] UNHANDLED in after()', {

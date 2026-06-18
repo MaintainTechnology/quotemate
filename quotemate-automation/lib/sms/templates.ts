@@ -351,7 +351,14 @@ export function buildTradieInspectionNotification(opts: {
 // safety net for the case where Sonnet skipped the universal must-asks
 // (e.g. on a returning-but-empty customer record) and reached 'finish'
 // with a transcript that doesn't contain the customer's name/suburb.
-export type MissingIntakeField = 'name' | 'suburb' | 'scope' | 'job_type'
+//
+// R28 (2026-06-18): 'count' added so a per-job STRUCTURED-field gap (e.g. a
+// downlights intake that quality.ts downgraded to 'empty' purely because no
+// count was captured) gets a focused "how many <fittings>?" question
+// instead of falling through to the generic "describe the work" wording —
+// which made the customer re-describe the job they'd already described,
+// looping. See lib/intake/quality.ts missingRequiredFields().
+export type MissingIntakeField = 'name' | 'suburb' | 'scope' | 'job_type' | 'count'
 
 export function buildIntakeRecoverySms(opts: {
   firstName?: string
@@ -360,6 +367,10 @@ export function buildIntakeRecoverySms(opts: {
    *  prompt so plumbing customers see plumbing options, not electrical
    *  ones. Defaults to electrical for legacy single-trade pilots. */
   trade?: 'electrical' | 'plumbing' | null
+  /** Job type of the intake — drives the 'count' recovery question's noun
+   *  ("How many downlights are we doing?"). Falls back to a trade-aware
+   *  generic noun ("fittings"/"items") when absent or unknown. */
+  jobType?: string | null
 }): string {
   const first = (opts.firstName ?? '').split(' ')[0] || ''
   const trade = opts.trade ?? 'electrical'
@@ -407,6 +418,24 @@ export function buildIntakeRecoverySms(opts: {
       `${lead}what kind of work did you need? ${capitaliseFirst(optionsList)}?`,
       `${named ? `Cheers ${first}, ` : 'Cheers, '}which one are we quoting - ${optionsList}?`,
       `${named ? `Hi ${first}, ` : 'Hi, '}can I check what type of work? ${capitaliseFirst(optionsList)}.`,
+    ]
+  } else if (opts.missing.includes('count')) {
+    // R28 — a per-job STRUCTURED field (the count) is the ONLY thing
+    // missing: the job type + scope are known, we just can't size labour
+    // or materials without the quantity. Ask the exact count question
+    // using the job's own noun ("downlights"/"power points"/…) so the
+    // customer answers in one tap instead of re-describing the work.
+    const lead = named ? `${first}, ` : ''
+    // Job-type label drives the noun. Falls back to a trade-aware generic
+    // ("fittings" for electrical, "items" otherwise) when the job type is
+    // unknown — never the bare word "things".
+    const noun =
+      (opts.jobType ? JOB_TYPE_LABEL[opts.jobType] : null) ??
+      (trade === 'plumbing' ? 'items' : 'fittings')
+    variants = [
+      `${lead}quick one - how many ${noun} are we doing? Just need the number to size the quote.`,
+      `${named ? `Cheers ${first}, ` : 'Cheers, '}how many ${noun} in total? Last bit and we're done.`,
+      `${named ? `Hi ${first}, ` : 'Hi, '}can I grab the number of ${noun}? Need it to finalise the quote.`,
     ]
   } else {
     variants = [

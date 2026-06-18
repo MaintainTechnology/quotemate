@@ -21,7 +21,17 @@ import {
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { CATEGORIES } from '@/lib/estimate/categories'
-import { categoryHasCatalogueProduct } from '@/lib/estimate/catalogue'
+import { resolveCatalogueBadge, badgeLabel } from '@/lib/dashboard/badge-state'
+import {
+  buildServiceTogglePayload,
+  nextEnabledFor,
+  applyOptimistic,
+  reconcilePending,
+  type PendingMap,
+} from '@/lib/dashboard/service-toggle'
+import { mapForkGaps, type ForkGapDisplay } from '@/lib/dashboard/fork-gaps'
+import { licenceFieldsetsForTrades } from '@/lib/dashboard/licence-fieldsets'
+import { collisionView } from '@/lib/dashboard/name-collision'
 import {
   LayoutDashboard,
   FileText,
@@ -145,6 +155,11 @@ type ServiceOffering = {
   /** Migration 029 — explicit grounding category. null on shared rows
    *  and on custom rows left to auto-detect from the name. */
   category?: string | null
+  /** R40 — set by /api/tenant/me GET (annotateNameCollisions): TRUE when a
+   *  row in the OTHER table (shared↔custom) shares this row's normalised name
+   *  within the SAME trade. Drives the disambiguation badge in ServicesTab.
+   *  Optional so older GET payloads / optimistic rows degrade to "no badge". */
+  name_collision?: boolean
 }
 
 // `EditingService` (the inline create/edit form state) is declared
@@ -2090,6 +2105,13 @@ function AccountTab({
 
       <LicencesCard
         licences={data.licences ?? []}
+        trades={
+          Array.isArray(data.tenant.trades) && data.tenant.trades.length > 0
+            ? (data.tenant.trades as string[])
+            : data.tenant.trade
+              ? [data.tenant.trade]
+              : []
+        }
         onSave={onSave}
         primaryState={data.tenant.state ?? null}
       />
@@ -2364,10 +2386,15 @@ function PayoutsTab({
 
 function LicencesCard({
   licences,
+  trades,
   onSave,
   primaryState,
 }: {
   licences: LicenceRow[]
+  /** R39 — the tenant's active trades. Used to back-fill a BLANK fieldset for
+   *  a just-activated trade even if the /api/tenant/me licences payload hasn't
+   *  caught up yet, so the new trade always has a fieldset to fill in. */
+  trades: string[]
   onSave: (payload: Record<string, unknown>) => Promise<void>
   primaryState: string | null
 }) {
@@ -2380,9 +2407,23 @@ function LicencesCard({
     licence_state: string
     licence_expiry: string
   }
+  // R39 — the ordered set of fieldsets to render: one per active trade, with a
+  // blank row back-filled for any trade the licences payload doesn't carry yet
+  // (lib/dashboard/licence-fieldsets.ts — pure + unit-tested). When `trades`
+  // is empty (legacy) this is just `licences` verbatim. Dep signatures are
+  // hoisted to plain consts so the memo deps stay simple expressions.
+  const tradesSig = trades.join('|')
+  const licencesSig = licences
+    .map((l) => `${l.trade}:${l.licence_number}:${l.licence_expiry}:${l.licence_state}:${l.licence_type}`)
+    .join('|')
+  const fieldsets = useMemo(
+    () => licenceFieldsetsForTrades(trades, licences, primaryState) as LicenceRow[],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tradesSig, licencesSig, primaryState],
+  )
   const initial: Record<string, LicenceForm> = useMemo(() => {
     const m: Record<string, LicenceForm> = {}
-    for (const l of licences) {
+    for (const l of fieldsets) {
       m[l.trade] = {
         licence_type: l.licence_type ?? '',
         licence_number: l.licence_number ?? '',
@@ -2391,8 +2432,7 @@ function LicencesCard({
       }
     }
     return m
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [licences.map((l) => `${l.trade}:${l.licence_number}:${l.licence_expiry}:${l.licence_state}:${l.licence_type}`).join('|'), primaryState])
+  }, [fieldsets, primaryState])
 
   const [form, setForm] = useState<Record<string, LicenceForm>>(initial)
   const [submitting, setSubmitting] = useState(false)
@@ -2432,11 +2472,11 @@ function LicencesCard({
     }
   }
 
-  if (licences.length === 0) {
+  if (fieldsets.length === 0) {
     return null
   }
 
-  const isMulti = licences.length > 1
+  const isMulti = fieldsets.length > 1
   return (
     <Card
       title={isMulti ? 'Trade licences' : 'Licence details'}
@@ -2447,7 +2487,7 @@ function LicencesCard({
       }
     >
       <form onSubmit={handleSubmit} className="space-y-6">
-        {licences.map((l) => {
+        {fieldsets.map((l) => {
           const f = form[l.trade] ?? initial[l.trade]
           if (!f) return null
           return (
@@ -3998,8 +4038,15 @@ function ServicesTab({
   onUpdateCustom: (id: string, payload: Record<string, unknown>) => Promise<unknown>
   onDeleteCustom: (id: string) => Promise<void>
 }) {
-  const [pending, setPending] = useState<Record<string, boolean>>({})
-  const [busy, setBusy] = useState(false)
+  // R36 — optimistic per-row override map (assembly_id → flipped value). Keyed
+  // per row so two overlapping toggles never share state. See lib/dashboard/
+  // service-toggle.ts for the pure reconcile logic this wires to.
+  const [pending, setPending] = useState<PendingMap>({})
+  // R36 — per-ROW in-flight set, not a single global flag. The old global
+  // `busy` dropped a second click while ANY save was in flight, so a quick
+  // toggle of a DIFFERENT row was silently swallowed. We now only guard the
+  // SAME row from a double-fire; unrelated rows toggle concurrently.
+  const [busyIds, setBusyIds] = useState<Set<string>>(new Set())
   const [error, setError] = useState<string | null>(null)
   const [savedAt, setSavedAt] = useState<number | null>(null)
   // When non-null → the inline create/edit form is visible. `null` =
@@ -4040,79 +4087,74 @@ function ServicesTab({
   }
 
   const dirty = Object.keys(pending).length > 0
+  // Any row currently saving — used only to gate the legacy "Save all"
+  // fallback button. Individual rows guard themselves via busyIds so
+  // unrelated rows stay independently toggleable.
+  const busy = busyIds.size > 0
 
-  // Persist EVERY toggle immediately (optimistic UI + write-through),
-  // exactly like the Catalogue tab. The old model buffered changes in
-  // `pending` and only wrote on a separate "Save" click, and a second
-  // toggle of the same service deleted the pending change — so the AI
-  // kept reading the stale DB state (the bug Jon hit: "I enabled it but
-  // it still says not offered"). Writing on each toggle removes that
-  // whole class of bug: what you see is what's saved.
-  async function toggle(assemblyId: string, current: boolean) {
-    if (busy) return // ignore rapid double-clicks while a save is in flight
+  function markBusy(id: string, on: boolean) {
+    setBusyIds((prev) => {
+      const next = new Set(prev)
+      if (on) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }
+
+  // R36 — persist EVERY toggle immediately as a PER-SERVICE DELTA (never the
+  // whole services dict). Sending `{ service_delta: { assembly_id, enabled } }`
+  // means the route upserts ONLY this row, so two overlapping toggles (two
+  // quick clicks, or two open tabs) can't clobber each other: settling row A
+  // never touches row B's in-flight optimistic value. The pure flip/payload/
+  // reconcile logic lives in lib/dashboard/service-toggle.ts so it's unit-
+  // tested in isolation (overlapping-toggle case included).
+  async function toggle(assemblyId: string) {
+    if (busyIds.has(assemblyId)) return // ignore double-fire of the SAME row only
     const svc = data.services.find((s) => s.assembly_id === assemblyId)
-    const liveNow =
-      pending[assemblyId] !== undefined ? pending[assemblyId] : current
-    const nextVal = !liveNow
-    // Optimistic flip so the switch responds instantly.
-    setPending((p) => ({ ...p, [assemblyId]: nextVal }))
+    if (!svc) return
+    const nextVal = nextEnabledFor(pending, svc)
+    // Optimistic flip — preserves every OTHER row's pending entry.
+    setPending((p) => applyOptimistic(p, assemblyId, nextVal))
     setError(null)
-    setBusy(true)
+    markBusy(assemblyId, true)
     try {
-      const payload: Record<string, unknown> = svc?.is_custom
-        ? { custom_services: { [assemblyId]: nextVal } }
-        : { services: { [assemblyId]: nextVal } }
-      await onSave(payload) // PATCH /api/tenant/me → upsert → re-fetch
-      // onSave re-fetched authoritative data; drop the optimistic entry
-      // so the switch now reflects the saved state.
-      setPending((p) => {
-        const n = { ...p }
-        delete n[assemblyId]
-        return n
-      })
+      // The route accepts a single-entry service_delta and routes shared vs
+      // custom via is_custom — one code path, one targeted upsert.
+      await onSave(buildServiceTogglePayload(svc, nextVal)) // PATCH → re-fetch
+      // Success: drop ONLY this row's optimistic entry. onSave re-fetched the
+      // authoritative data, so the switch now reflects the saved state; other
+      // rows' pending entries are left intact.
+      setPending((p) => reconcilePending(p, assemblyId))
       setSavedAt(Date.now())
     } catch (e: any) {
-      // Revert the optimistic flip.
-      setPending((p) => {
-        const n = { ...p }
-        delete n[assemblyId]
-        return n
-      })
+      // Failure: revert ONLY this row (drop its pending entry → reverts to the
+      // last server value). Concurrent rows are untouched.
+      setPending((p) => reconcilePending(p, assemblyId))
       setError(e?.message ?? 'Save failed')
     } finally {
-      setBusy(false)
+      markBusy(assemblyId, false)
     }
   }
 
+  // Legacy fallback — flush any rows still pending (e.g. a failed write the
+  // tradie wants to retry) as one batched delta array. Each entry still names
+  // exactly one row, so the anti-clobber guarantee holds for the batch too.
   async function saveAll() {
+    const entries = Object.entries(pending).map(([id, enabled]) => {
+      const svc = data.services.find((s) => s.assembly_id === id)
+      return { assembly_id: id, enabled, is_custom: !!svc?.is_custom }
+    })
+    if (entries.length === 0) return // nothing pending — don't send {}
     setError(null)
-    setBusy(true)
+    entries.forEach((e) => markBusy(e.assembly_id, true))
     try {
-      // Split pending toggles into shared (services key) vs custom
-      // (custom_services key). The API writes each to a different
-      // table — tenant_service_offerings for shared, the row itself
-      // for custom (migration 023).
-      const shared: Record<string, boolean> = {}
-      const custom: Record<string, boolean> = {}
-      for (const [id, enabled] of Object.entries(pending)) {
-        const svc = data.services.find((s) => s.assembly_id === id)
-        if (svc?.is_custom) custom[id] = enabled
-        else shared[id] = enabled
-      }
-      const payload: Record<string, unknown> = {}
-      if (Object.keys(shared).length > 0) payload.services = shared
-      if (Object.keys(custom).length > 0) payload.custom_services = custom
-      if (Object.keys(payload).length === 0) {
-        // Nothing pending — bail out cleanly instead of sending {}
-        return
-      }
-      await onSave(payload)
+      await onSave({ service_delta: entries })
       setPending({})
       setSavedAt(Date.now())
     } catch (err: any) {
       setError(err?.message ?? 'Save failed')
     } finally {
-      setBusy(false)
+      setBusyIds(new Set())
     }
   }
 
@@ -4280,6 +4322,17 @@ function ServicesTab({
                 pending[svc.assembly_id] !== undefined
                   ? pending[svc.assembly_id]
                   : svc.enabled
+              // R40 — cross-table name-collision view-model. Drives the
+              // disambiguation badge so a disabled shared service and a
+              // same-named custom service read differently.
+              const cv = collisionView({
+                assembly_id: svc.assembly_id,
+                name: svc.name,
+                trade: svc.trade,
+                is_custom: svc.is_custom,
+                name_collision: svc.name_collision ?? false,
+              })
+              const rowBusy = busyIds.has(svc.assembly_id)
               const price = toNum(svc.default_unit_price_ex_gst)
               const hours = toNum(svc.default_labour_hours)
               const isOpen = expanded.has(svc.assembly_id)
@@ -4335,6 +4388,23 @@ function ServicesTab({
                         >
                           {svc.name}
                         </span>
+                        {/* R40 — name-collision disambiguation. When a custom
+                            service and a shared service share a name in the same
+                            trade, BOTH rows carry a source tag so the list is
+                            never ambiguous. Custom rows get an accent tag,
+                            catalogue rows a neutral one. */}
+                        {cv.collides && cv.tag && (
+                          <span
+                            className={`font-mono text-[0.55rem] uppercase tracking-[0.18em] px-2 py-0.5 border shrink-0 ${
+                              cv.source === 'custom'
+                                ? 'border-accent/50 text-accent'
+                                : 'border-ink-line text-text-dim'
+                            }`}
+                            title={cv.hint ?? undefined}
+                          >
+                            {cv.tag}
+                          </span>
+                        )}
                         {isPending && (
                           <span
                             className="font-mono text-[0.55rem] uppercase tracking-[0.18em] text-accent shrink-0"
@@ -4379,17 +4449,18 @@ function ServicesTab({
                     <span
                       role="switch"
                       aria-checked={live}
+                      aria-busy={rowBusy}
                       aria-label={`${svc.name} — ${live ? 'enabled, click to turn off' : 'disabled, click to turn on'}`}
                       tabIndex={0}
                       onClick={(e) => {
                         e.stopPropagation()
-                        toggle(svc.assembly_id, svc.enabled)
+                        toggle(svc.assembly_id)
                       }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault()
                           e.stopPropagation()
-                          toggle(svc.assembly_id, svc.enabled)
+                          toggle(svc.assembly_id)
                         }
                       }}
                       className="shrink-0 inline-flex items-center gap-2.5 cursor-pointer group select-none"
@@ -8039,6 +8110,11 @@ function RecipesTab({ accessToken }: { accessToken: string | null }) {
   const [saving, setSaving] = useState(false)
   const [forking, setForking] = useState(false)
   const [forkErr, setForkErr] = useState<string | null>(null)
+  // R38 — catalogue gaps reported by the most recent fork, mapped to a
+  // per-line lookup (lib/dashboard/fork-gaps.ts). Drives the per-line
+  // "add a product" callout + the post-fork summary banner. Cleared when
+  // the selected job changes so a stale gap report can't bleed across jobs.
+  const [forkGaps, setForkGaps] = useState<ForkGapDisplay | null>(null)
   const [formErr, setFormErr] = useState<string | null>(null)
   const [draftQty, setDraftQty] = useState<Record<string, string>>({})
   // Categories this tradie has a priced, active Catalogue product for —
@@ -8087,6 +8163,12 @@ function RecipesTab({ accessToken }: { accessToken: string | null }) {
     void load()
   }, [load])
 
+  // R38 — a gap report belongs to ONE job's fork. Drop it when the tradie
+  // switches jobs so a previous job's gaps never paint the current list.
+  useEffect(() => {
+    setForkGaps(null)
+  }, [selectedId])
+
   const selectedAsm = assemblies.find((a) => a.id === selectedId) ?? null
   const jobPickerList = jobQuery.trim()
     ? assemblies.filter((a) =>
@@ -8118,8 +8200,15 @@ function RecipesTab({ accessToken }: { accessToken: string | null }) {
         ok?: boolean
         error?: string
         message?: string
+        category_gaps?: Array<{ material_category: string; line: number }>
+        has_category_gaps?: boolean
+        gap_detection_failed?: boolean
       }
       if (!res.ok) throw new Error(json.message || json.error || `HTTP ${res.status}`)
+      // R38 — capture which forked lines have no matching catalogue product so
+      // the per-line callout + summary banner can point at them. mapForkGaps is
+      // pure + unit-tested (defensive against missing/failed gap detection).
+      setForkGaps(mapForkGaps(json))
       await load()
     } catch (e) {
       setForkErr(e instanceof Error ? e.message : String(e))
@@ -8291,6 +8380,25 @@ function RecipesTab({ accessToken }: { accessToken: string | null }) {
             {selectedAsm.name} — recipe
           </div>
 
+          {/* R38 — post-fork catalogue-gap summary. Shown right after a fork so
+              the tradie knows up front how many copied lines fall back to a
+              generic price (or that we couldn't verify coverage). The per-line
+              callouts below pinpoint each one. */}
+          {forkGaps && (forkGaps.count > 0 || forkGaps.detectionFailed) && (
+            <div className="mb-3 border border-warning/50 bg-warning/5 px-4 py-3">
+              <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-warning mb-1">
+                {forkGaps.detectionFailed
+                  ? 'Catalogue check skipped'
+                  : `${forkGaps.count} line${forkGaps.count === 1 ? '' : 's'} need a catalogue product`}
+              </div>
+              <p className="text-xs text-text-sec leading-snug">
+                {forkGaps.detectionFailed
+                  ? "We couldn't check your catalogue for this recipe — some lines may fall back to a generic price."
+                  : 'These copied lines have no matching product in your catalogue, so the AI will use a generic price until you add one in the Catalogue tab. Look for the “add a product for this line” marker below.'}
+              </p>
+            </div>
+          )}
+
           {jobLines.length === 0 ? (
             jobBaseline.length > 0 ? (
               // Empty state WITH a shared baseline available — surface it
@@ -8360,9 +8468,23 @@ function RecipesTab({ accessToken }: { accessToken: string | null }) {
             )
           ) : (
             <div className="space-y-2">
-              {jobLines.map((l) => {
+              {jobLines.map((l, idx) => {
                 const qv = draftQty[l.id] ?? String(Number(l.quantity))
-                const priced = categoryHasCatalogueProduct(l.material_category, catalogueCats)
+                // R37 — single shared badge resolver so Catalogue/Estimating/
+                // Recipes can never disagree on "priced vs generic".
+                const badge = resolveCatalogueBadge(l.material_category, catalogueCats)
+                // R38 — overlay the just-forked catalogue gap. The fork route
+                // reports gaps by 1-based line (sort) position; jobLines is
+                // already sorted by `sort`, so idx+1 matches. We also accept a
+                // category match (defensive against a reorder between fork and
+                // render).
+                const forkGapHere =
+                  !!forkGaps &&
+                  (forkGaps.gapLines.has(idx + 1) ||
+                    forkGaps.gapCategories.has(
+                      l.material_category.trim().toLowerCase(),
+                    ))
+                const priced = badge === 'catalogue'
                 return (
                   <div
                     key={l.id}
@@ -8373,17 +8495,29 @@ function RecipesTab({ accessToken }: { accessToken: string | null }) {
                       {l.description && (
                         <div className="text-xs text-text-dim mt-0.5">{l.description}</div>
                       )}
-                      <div className="mt-1.5">
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
                         {priced ? (
                           <span className="inline-block px-1.5 py-0.5 border border-accent/40 text-accent font-mono text-[0.55rem] uppercase tracking-[0.15em]">
-                            ✓ priced from your catalogue
+                            {badgeLabel('catalogue', 'long')}
                           </span>
                         ) : (
                           <span
                             className="inline-block px-1.5 py-0.5 border border-warning/50 text-warning font-mono text-[0.55rem] uppercase tracking-[0.15em]"
                             title="No active Catalogue product in this category. The AI will fall back to a generic price (or inspection). Add a Catalogue product with this exact category to use your real product + price."
                           >
-                            ⚠ no catalogue product — generic price
+                            {badgeLabel('generic', 'long')}
+                          </span>
+                        )}
+                        {/* R38 — fresh-fork gap callout. Distinct from the
+                            steady-state badge so a tradie who just forked the
+                            baseline sees exactly which copied lines have no
+                            matching catalogue product yet. */}
+                        {forkGapHere && (
+                          <span
+                            className="inline-block px-1.5 py-0.5 border border-warning/60 bg-warning/10 text-warning font-mono text-[0.55rem] uppercase tracking-[0.15em]"
+                            title="This line was copied from the baseline but you have no catalogue product in its category — add one so the AI uses your real product + price instead of a generic one."
+                          >
+                            ⚠ add a product for this line
                           </span>
                         )}
                       </div>
@@ -8499,11 +8633,14 @@ function RecipesTab({ accessToken }: { accessToken: string | null }) {
   )
 }
 
-// ─── WP3 · "How each job is estimated" (read-only) ────────────────
+// ─── WP3 · "How each job is estimated" (effective values + overrides) ──
 // Per shared assembly that has a structured bill of materials, shows
-// the BOM + the EFFECTIVE labour-hours & markup, with a badge saying
-// whether each came from the global default or this tradie's local
-// override. Pure read — mirrors CatalogueTab's fetch/auth pattern.
+// the BOM + the EFFECTIVE labour-hours & markup actually used to quote,
+// with a badge saying whether each value came from the global default or
+// this tradie's own override. NOT read-only: each row exposes an inline
+// "Edit overrides" action that PATCHes tenant_assembly_overrides and a
+// "Reset to default" that DELETEs the override. Mirrors CatalogueTab's
+// fetch/auth pattern; the override writes go to /api/tenant/estimation/[id].
 type EstimationJob = {
   assembly_id: string
   name: string
@@ -8704,9 +8841,14 @@ function EstimatingTab({ accessToken }: { accessToken: string | null }) {
       <p className="text-xs text-text-dim leading-snug max-w-2xl">
         For every job, this shows the exact parts the AI quotes —{' '}
         <strong className="font-semibold text-text-sec">your own recipe</strong>{' '}
-        when you&apos;ve set one, otherwise the standard baseline — plus the labour &amp; markup it
+        when you&apos;ve set one, otherwise the standard baseline — plus the{' '}
+        <strong className="font-semibold text-text-sec">effective</strong> labour &amp; markup it
         uses and whether each value is the global default or your override. Each part shows whether
-        your catalogue prices it or it falls back to a generic price. Read‑only.
+        your catalogue prices it or it falls back to a generic price.{' '}
+        <strong className="font-semibold text-text-sec">Editable:</strong> use{' '}
+        <span className="font-mono text-text-sec">Edit overrides</span> on any row to set your own
+        labour hours or markup, or <span className="font-mono text-text-sec">Reset to default</span>{' '}
+        to clear it.
       </p>
 
       {list.length === 0 ? (
@@ -8743,7 +8885,10 @@ function EstimatingTab({ accessToken }: { accessToken: string | null }) {
                 </div>
                 <ul className="text-sm text-text-sec space-y-1">
                   {j.bom.map((b, i) => {
-                    const priced = categoryHasCatalogueProduct(b.material_category, catalogueCats)
+                    // R37 — shared resolver: this BOM badge agrees with the
+                    // Recipes + Catalogue tabs for the same category.
+                    const priced =
+                      resolveCatalogueBadge(b.material_category, catalogueCats) === 'catalogue'
                     return (
                       <li key={i} className="flex items-center gap-2 flex-wrap">
                         <span>
@@ -8753,14 +8898,14 @@ function EstimatingTab({ accessToken }: { accessToken: string | null }) {
                         </span>
                         {priced ? (
                           <span className="px-1.5 py-0.5 border border-accent/40 text-accent font-mono text-[0.5rem] uppercase tracking-[0.14em]">
-                            ✓ your catalogue
+                            {badgeLabel('catalogue', 'short')}
                           </span>
                         ) : (
                           <span
                             className="px-1.5 py-0.5 border border-warning/50 text-warning font-mono text-[0.5rem] uppercase tracking-[0.14em]"
                             title="No active Catalogue product in this category — the AI uses a generic price. Add a Catalogue product with this exact category to use your real product + price."
                           >
-                            ⚠ generic price
+                            {badgeLabel('generic', 'short')}
                           </span>
                         )}
                       </li>

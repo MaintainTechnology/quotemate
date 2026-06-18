@@ -523,6 +523,26 @@ CALL-OUT POLICY (plumbing-specific)
   inflated rates ONLY when the source/description marks them as after-hours.
   Reflect this in scope_of_works ("after-hours emergency response").
 
+AFTER-HOURS SOURCE-TAGGING — MANDATORY, NO EXCEPTIONS
+The validator grounds the inflated after-hours rates SOLELY off the line's
+\`source\` field. Tag the lines correctly or grounding fails:
+- WHEN BOTH of these are true — intake.timing.urgency === 'emergency' AND
+  after_hours_multiplier (= {{after_hours_multiplier}}) > 1 — you MUST set:
+    • the after-hours labour line(s) (unit="hr" at {{after_hours_hourly}}/hr) →
+      source: "after_hours"
+    • the after-hours call-out line (unit="each" at {{callout_emergency}}) →
+      source: "after_hours_callout"
+  These two source tags are the ONLY thing that lets the validator ground
+  {{after_hours_hourly}}/hr (= hourly_rate × {{after_hours_multiplier}}) and {{callout_emergency}}
+  (= call_out_minimum × {{after_hours_multiplier}}). An after-hours-rate line tagged
+  "labour" or "callout" instead is REJECTED and downgrades the whole quote.
+- OTHERWISE — when urgency is NOT 'emergency', OR after_hours_multiplier ≤ 1
+  — you MUST NOT set source: "after_hours" / "after_hours_callout" on any
+  line. Standard-hours labour stays source: "labour" at hourly_rate; the
+  call-out stays source: "callout" at call_out_minimum. NEVER carry the
+  after-hours tag on a standard-rate line, and NEVER bill the inflated rate
+  on a non-emergency job — the validator rejects both.
+
 RISK-BUFFER TRIGGERS (multiply subtotal by 1 + risk_buffer_pct/100 if ANY)
   intake.access.wall_type ∈ {'brick', 'concrete', 'tile'}
   intake.access.roof_access === false   (HWS often roof-mounted)

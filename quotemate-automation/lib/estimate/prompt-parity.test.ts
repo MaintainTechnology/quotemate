@@ -114,3 +114,55 @@ describe('estimator prompt parity — plumbing', () => {
     })
   })
 })
+
+// R11 (prompt half) — both estimator prompts must EXPLICITLY instruct the
+// model to set source:"after_hours" / "after_hours_callout" on emergency
+// after-hours lines (so the validator's after-hours accept branch can ground
+// hourly×multiplier + call_out_minimum×multiplier) AND to NOT carry the tag
+// on standard-hours lines. The validator's isAfterHours() only accepts those
+// exact source tags, so the instruction has to name them verbatim.
+describe('R11 — after-hours source-tag instruction present in both prompts', () => {
+  // Books #0 and #3 carry an after_hours_multiplier > 1, so the emergency
+  // branch renders concrete inflated rates; books #1/#2 leave it unset and
+  // fall back to 1.5. The directive must be present regardless.
+  BOOKS.forEach((book, i) => {
+    it(`book #${i}: electrical prompt names the source-tag rule`, () => {
+      const prompt = electricalSystemPrompt(book)
+      expect(prompt).toContain('AFTER-HOURS SOURCE-TAGGING')
+      // Names the EXACT source tags the validator's isAfterHours() accepts.
+      expect(prompt).toContain('source: "after_hours"')
+      expect(prompt).toContain('source: "after_hours_callout"')
+      // Conditional on emergency urgency AND a >1 multiplier.
+      expect(prompt).toContain("intake.timing.urgency === 'emergency'")
+      expect(prompt).toContain('after_hours_multiplier')
+      // Standard-hours lines must NOT carry the tag.
+      expect(prompt).toMatch(/MUST NOT set source: "after_hours"/)
+    })
+
+    it(`book #${i}: plumbing prompt names the source-tag rule`, () => {
+      const prompt = plumbingSystemPrompt(book)
+      expect(prompt).toContain('AFTER-HOURS SOURCE-TAGGING')
+      expect(prompt).toContain('source: "after_hours"')
+      expect(prompt).toContain('source: "after_hours_callout"')
+      expect(prompt).toContain("intake.timing.urgency === 'emergency'")
+      expect(prompt).toContain('after_hours_multiplier')
+      expect(prompt).toMatch(/MUST NOT set source: "after_hours"/)
+    })
+
+    it(`book #${i}: instruction is identical wording across both trades`, () => {
+      // Extract the inserted block from each prompt and assert byte-identity,
+      // so electrical + plumbing stay consistent (spec: "Keep it consistent
+      // across electrical + plumbing").
+      const grab = (p: string) => {
+        const start = p.indexOf('AFTER-HOURS SOURCE-TAGGING')
+        expect(start).toBeGreaterThan(-1)
+        const end = p.indexOf('the validator rejects both.', start)
+        expect(end).toBeGreaterThan(-1)
+        return p.slice(start, end)
+      }
+      expect(grab(electricalSystemPrompt(book))).toBe(
+        grab(plumbingSystemPrompt(book)),
+      )
+    })
+  })
+})

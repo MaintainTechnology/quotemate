@@ -37,6 +37,8 @@ import { resolveQuoteDisplayMode } from '@/lib/quote/display'
 import { loadCandidatePrices } from '@/lib/estimate/run'
 import {
   validateQuoteGrounding,
+  detectCrossTierDuplicates,
+  type GroundingFailure,
   type PricingBookForValidation,
 } from '@/lib/estimate/validate'
 
@@ -139,7 +141,18 @@ export async function POST(
   const { data: quote } = await supabase
     .from('quotes')
     .select(
-      'id, tenant_id, intake_id, share_token, status, paid_at, selected_tier, good, better, best, stripe_links, total_inc_gst, needs_inspection, inspection_reason, estimated_timeframe, risk_flags, applied_discount_pct',
+      // R8 (2026-06-18) — scope_of_works + assumptions are REAL quotes
+      // columns (sql/init.sql) and carry the customer-visible framing that
+      // detectCrossTierDuplicates reads to allow a legitimately-explained
+      // "3 vs 6" quantity difference across tiers. They were previously
+      // unselected, so fullDraft saw no framing and a framed multi-quantity
+      // quote got a spurious 422 the moment any tier was edited. NOTE:
+      // `scope_short` is NOT a quotes column — it only ever exists as an
+      // ephemeral LLM-draft field (see app/api/estimate/draft/route.ts: the
+      // insert persists scope_of_works + assumptions but not scope_short).
+      // Selecting it would 400 the whole row and break every edit, so we do
+      // NOT select it; fullDraft.scope_short stays null below.
+      'id, tenant_id, intake_id, share_token, status, paid_at, selected_tier, good, better, best, stripe_links, total_inc_gst, needs_inspection, inspection_reason, estimated_timeframe, risk_flags, applied_discount_pct, scope_of_works, assumptions',
     )
     .eq('id', quoteId)
     .maybeSingle()
@@ -321,19 +334,74 @@ export async function POST(
     )
     // Build a draft-shaped object containing ONLY the tiers the tradie
     // edited; untouched tiers are nulled out so the validator skips
-    // them. This keeps the gate surgical — an edit to "better" can't
-    // be rejected because "good" stopped grounding after a catalogue
-    // change.
+    // them. This keeps the per-line / within-tier gate surgical — an
+    // edit to "better" can't be rejected because "good" stopped grounding
+    // after a catalogue change.
     const editedDraft = {
       good: edits.good ? nextTiers.good : null,
       better: edits.better ? nextTiers.better : null,
       best: edits.best ? nextTiers.best : null,
     }
-    groundingFailures = validateQuoteGrounding(
+    const perTier = validateQuoteGrounding(
       editedDraft,
       pricingBookForValidation,
       candidates,
     )
+
+    // R8 (2026-06-18) — CROSS-TIER dedup must see ALL THREE tiers, not just
+    // the edited ones. The surgical per-tier gate above nulls untouched
+    // tiers, so a tradie adding a line in GOOD that duplicates a line still
+    // sitting in BETTER would slip through (the customer would be charged
+    // for the same catalogue row in whichever single tier they pick — the
+    // cross-tier shape R6 guards). Run detectCrossTierDuplicates over the
+    // FULL merged tier set (nextTiers) and fold any unframed cross-tier
+    // double/over-charge into the same failure list the 422/force/risk-flag
+    // path already handles.
+    //
+    // We carry forward the draft's existing scope_of_works / assumptions
+    // framing (an unedited quote keeps whatever framing it shipped with) so
+    // a legitimately framed "3 vs 6" tier difference is NOT flagged.
+    // scope_of_works + assumptions are now SELECTed on the quote row above
+    // (R8 fix, 2026-06-18) — they are top-level quote columns (sql/init.sql),
+    // NOT nested inside the tier JSONB, so we read them straight off the
+    // freshly-loaded row. detectCrossTierDuplicates expects scope_of_works as
+    // a string and assumptions as an array; null is tolerated for each.
+    // scope_short is NOT a quotes column (it's an ephemeral draft-only field),
+    // so it stays null here — the persisted scope_of_works carries the same
+    // framing text the validator scans.
+    const fullDraft = {
+      scope_of_works: (quote.scope_of_works as unknown) ?? null,
+      scope_short: null,
+      assumptions: (quote.assumptions as unknown) ?? null,
+      good: nextTiers.good,
+      better: nextTiers.better,
+      best: nextTiers.best,
+    }
+    const crossTier = detectCrossTierDuplicates(fullDraft, candidates)
+    const crossTierFailures: GroundingFailure[] = crossTier.map((dup) => {
+      const first = dup.occurrences[0]
+      const firstLi = (nextTiers[first.tier]?.line_items ?? [])[first.lineIndex]
+      const where = dup.occurrences.map((o) => `${o.tier}#${o.lineIndex}`).join(', ')
+      return {
+        tier: first.tier,
+        lineIndex: first.lineIndex,
+        description: String(firstLi?.description ?? dup.sourceName ?? '(no description)'),
+        unit: String(firstLi?.unit ?? '?'),
+        unit_price_ex_gst: Number(firstLi?.unit_price_ex_gst),
+        expected:
+          `cross-tier duplicate ${dup.anchor} ("${dup.sourceName}") appears at ${where} ` +
+          `with differing quantities and no scope framing the change. Same product at ` +
+          `different quantities across tiers is only allowed when the quantity difference ` +
+          `is documented in the quote scope.`,
+      }
+    })
+
+    const allFailures = [
+      ...(perTier.valid ? [] : perTier.failures),
+      ...crossTierFailures,
+    ]
+    groundingFailures =
+      allFailures.length === 0 ? { valid: true } : { valid: false, failures: allFailures }
   } catch (e: unknown) {
     // Genuine INFRA failure (DB unreachable mid-edit). Preserve the
     // pre-M-1 "fail open on infra" intent — edit proceeds, validator

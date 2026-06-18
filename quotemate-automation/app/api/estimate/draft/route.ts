@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { after } from 'next/server'
 import { runEstimation } from '@/lib/estimate/run'
+import { sanitizeInspectionReason } from '@/lib/estimate/inspection-reason'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { dispatchQuoteWithPdf } from '@/lib/sms/send-quote-pdf'
 import { ensureQuotePdf, quotePdfUrl, signQuotePdfUrl } from '@/lib/quote/pdf'
@@ -26,7 +27,22 @@ import {
   computeEarlyBirdOffer,
 } from '@/lib/quote/early-bird'
 import { asQuoteDisplayMode } from '@/lib/quote/display'
+import {
+  getDeliveryKnobs,
+  logSendOutcome,
+} from '@/lib/sms/send-reliability'
+import { sendWithRetry } from '@/lib/sms/send-quote-dispatch'
 
+// R42-draft — the after() block does the heavy sends (PDF render, customer
+// quote SMS + retries, tradie notify + retries). Derive the Vercel function
+// budget from the env knobs (getDeliveryKnobs) so ops can widen it without a
+// code change, rather than a hardcoded 300. `maxDuration` must be a static
+// number for Next's build-time analysis, so we read the knob at module load.
+// Next route-segment configs must be STATICALLY-ANALYZABLE LITERALS — a
+// computed value (getDeliveryKnobs().maxDurationSec) is silently ignored by
+// Next's segment analyser ("Invalid segment configuration export"). Keep it a
+// literal (300s default ceiling; raise to up to 800 on Vercel Pro/Fluid here).
+// getDeliveryKnobs() is still used at runtime below for send retry/backoff.
 export const maxDuration = 300
 
 const supabase = createClient(
@@ -302,6 +318,15 @@ export async function POST(req: Request) {
     const INSPECTION_SUBTOTAL_EX_GST = +(INSPECTION_TOTAL_INC_GST - INSPECTION_GST_AMOUNT).toFixed(2)
 
     const isInspection = draft.needs_inspection === true
+
+    // R13 — constrain the customer-facing inspection reason before it is
+    // persisted and sent. Strips invented price claims (an inspection quote
+    // has no grounded price) and calms sensational text; covers both the LLM
+    // self-report path and the WP1 pricing-book fallback reason. Pure +
+    // deterministic (see lib/estimate/inspection-reason.ts + its test).
+    if (isInspection) {
+      draft.inspection_reason = sanitizeInspectionReason(draft.inspection_reason)
+    }
 
     let goodTier: typeof draft.good   | null = null
     let betterTier: typeof draft.better | null = null
@@ -608,40 +633,69 @@ export async function POST(req: Request) {
 
     after(async () => {
       const dispatch = pipelineLog('dispatch', intake.call_id)
+      const knobs = getDeliveryKnobs()
+      // R45 — the WHOLE after() body is wrapped in this try/catch. Before, an
+      // unhandled throw anywhere outside the per-send inner try blocks (URL
+      // building, review branching, an unexpected null deref) killed EVERY
+      // send and left the customer in total silence. Now any such escape lands
+      // in the catch below, which fires a fallback "your quote is coming" SMS
+      // to the customer and a "quote failed" notice to the tradie.
+      try {
       // Best-effort: if we can't deliver the quote to the customer, make sure
-      // the tradie gets the link so the lead is never silently lost.
+      // the tradie gets the link so the lead is never silently lost. R46/R48 —
+      // retried independently and logged as a first-class send outcome.
       const notifyTradieUndelivered = async (why: string) => {
         if (!tenantOwnerMobile) {
-          dispatch.err('cannot notify tradie of undelivered quote — no owner_mobile', null, {
-            quote_id: quote!.id, why,
+          logSendOutcome(dispatch, {
+            sendType: 'tradie_notify',
+            status: 'skipped',
+            attempts: 0,
+            latencyMs: 0,
+            error: `no owner_mobile to notify of undelivered quote (${why})`,
           })
           return
         }
-        try {
-          const r = await dispatchQuoteMessage({
-            to: tenantOwnerMobile,
+        const r = await sendWithRetry(
+          'tradie_notify',
+          () => dispatchQuoteMessage({
+            to: tenantOwnerMobile!,
             from: tenantSmsNumber ?? undefined,
             text: `Heads up — we couldn't text the customer their quote (${why}). Quote ready: ${appUrl}/q/${shareToken}`,
-          })
-          if (r.ok) dispatch.ok('tradie notified of undelivered customer quote', { sid: r.sid })
-          else dispatch.err('tradie undelivered-notice failed (both SMS + WA)', null, { quote_id: quote!.id })
-        } catch (e: unknown) {
-          dispatch.err('tradie undelivered-notice threw', e instanceof Error ? e.message : String(e), { quote_id: quote!.id })
-        }
+          }),
+          { knobs },
+        )
+        logSendOutcome(dispatch, r.outcome)
       }
+      // R45/R46 review fix — when the customer send fails on both channels we
+      // notify the tradie via notifyTradieUndelivered(); this flag stops the
+      // Phase-4 "new quote drafted" SMS from ALSO firing (a confusing second
+      // tradie text that implies the send succeeded).
+      let tradieNotifiedUndelivered = false
       if (reviewDecision.hold) {
         // Customer SMS is held — tradie review path. We fall through to
         // the tradie-notify block below, which uses
         // buildTradieReviewNotification() (approve + edit links)
         // instead of the regular buildTradieDraftNotification().
-        dispatch.ok('customer SMS held pending tradie approval', {
-          quote_id: quote!.id,
-          reason: reviewDecision.reason,
+        // R48 — an intentional, non-alertable skip (the tradie WILL be
+        // notified to approve), logged as a first-class outcome.
+        logSendOutcome(dispatch, {
+          sendType: 'customer_quote',
+          status: 'skipped',
+          attempts: 0,
+          latencyMs: 0,
+          error: `held pending tradie approval (${reviewDecision.reason})`,
         })
       } else if (!callerNumber) {
-        dispatch.err('customer SMS skipped — no recipient', null, {
-          quote_id: quote!.id,
-          reason: 'no caller_number (voice call row, SMS convo, or intake.caller.phone all empty)',
+        // R48 — ALERTABLE: a quote row exists but no customer SMS can be sent
+        // (no phone on file). `quote_no_customer_sms` makes the "quote inserted
+        // but customer never texted" condition a paging-worthy status rather
+        // than a free-text err line.
+        logSendOutcome(dispatch, {
+          sendType: 'customer_quote',
+          status: 'quote_no_customer_sms',
+          attempts: 0,
+          latencyMs: 0,
+          error: 'no caller_number (voice call row, SMS convo, or intake.caller.phone all empty)',
         })
         await notifyTradieUndelivered('no customer phone on file')
         return
@@ -701,30 +755,46 @@ export async function POST(req: Request) {
           to: callerNumber,
           from: fromNumber ?? '(default TWILIO_PHONE_NUMBER)',
         })
+        // R46-sends — the customer quote SMS retries INDEPENDENTLY at the route
+        // level via retryWithBackoff (env-tuned exponential backoff). dispatch
+        // already retries the SMS leg + WhatsApp-falls-back; this outer retry
+        // adds backoff on a transient *whole-dispatch* failure (e.g. a 429 that
+        // survived dispatch's own short retries) and on the thrown-timeout case
+        // dispatch can't see. A failure here NEVER aborts the tradie-notify
+        // below — they're separate sequential blocks under the outer try.
         // Best-effort MMS attachment of the quote PDF — the shared helper
         // signs the media URL (best-effort) and dispatch retries as a plain
         // SMS automatically when the carrier rejects media; the body always
         // carries the download link.
-        const result = await dispatchQuoteWithPdf({
-          to: callerNumber,
-          text: body,
-          from: fromNumber,
-          pdfPath: quotePdfPath,
-          signMediaUrl: signQuotePdfUrl,
-        })
+        const sent = await sendWithRetry(
+          'customer_quote',
+          () => dispatchQuoteWithPdf({
+            to: callerNumber,
+            text: body,
+            from: fromNumber,
+            pdfPath: quotePdfPath,
+            signMediaUrl: signQuotePdfUrl,
+          }),
+          {
+            knobs,
+            onRetry: (err, nextAttempt, delayMs) =>
+              dispatch.step('customer quote retry scheduled', {
+                quote_id: quote!.id,
+                next_attempt: nextAttempt,
+                delay_ms: delayMs,
+                code: (err as { code?: unknown })?.code ?? null,
+              }),
+          },
+        )
+        // R48 — single structured outcome record for the customer quote send.
+        logSendOutcome(dispatch, sent.outcome)
 
-        if (result.ok) {
-          if (result.channel === 'sms') {
-            dispatch.ok('SMS delivered', { sid: result.sid, status: result.status })
-          } else {
-            dispatch.ok('SMS rejected, WhatsApp delivered as fallback', {
-              sid: result.sid,
-              status: result.status,
-              sms_failure_code: result.smsAttempt?.code,
-              sms_failure_reason: result.smsAttempt?.reason,
-            })
-          }
-          dispatch.done('quote dispatched to caller', { quote_id: quote!.id, channel: result.channel })
+        if (sent.dispatch?.ok) {
+          dispatch.done('quote dispatched to caller', {
+            quote_id: quote!.id,
+            channel: sent.dispatch.channel,
+            attempts: sent.attempts,
+          })
           // WP7 — the customer has now received the quote. Advance the
           // lifecycle to 'sent' so the follow-up queue can tell who got
           // a quote but hasn't acted. Monotonic + non-throwing: a
@@ -733,15 +803,24 @@ export async function POST(req: Request) {
           // quotes are still "sent" — the customer received something.
           await advanceQuoteStatus(supabase, quote!.id, 'sent')
         } else {
-          dispatch.err('both SMS and WhatsApp failed', null, {
-            sms_code: result.smsAttempt.code,
-            sms_reason: result.smsAttempt.reason,
-            wa_code: result.waAttempt?.code,
-            wa_reason: result.waAttempt?.reason,
-          })
+          // Both channels failed after retries — make sure the tradie still
+          // gets the link so the lead isn't silently lost. This IS the tradie
+          // notification for this quote; suppress the Phase-4 draft ping below
+          // so the tradie doesn't get a second, success-implying SMS.
+          await notifyTradieUndelivered('SMS + WhatsApp both failed after retries')
+          tradieNotifiedUndelivered = true
         }
       } catch (e) {
-        dispatch.err('dispatch threw', e)
+        // Inner guard kept as defence-in-depth (the outer R45 try also covers
+        // this) so a throw in the customer block still lets the tradie-notify
+        // block below run.
+        logSendOutcome(dispatch, {
+          sendType: 'customer_quote',
+          status: 'failed',
+          attempts: 1,
+          latencyMs: 0,
+          error: e,
+        })
       }
       } // end of: else branch (customer dispatch path — opposite of reviewDecision.hold)
 
@@ -754,6 +833,16 @@ export async function POST(req: Request) {
       //     joined-sandbox or registered-WABA WhatsApp identity)
       // Errors are logged but never block.
       if (!isSmsSource) {
+        // Voice path intentionally skips the tradie ping (unchanged behaviour).
+        // R48 — recorded as a non-alertable skip so the absence of a notify is
+        // explained, not silent.
+        logSendOutcome(dispatch, {
+          sendType: 'tradie_notify',
+          status: 'skipped',
+          attempts: 0,
+          latencyMs: 0,
+          error: 'voice-sourced quote — tradie ping skipped by design',
+        })
         return
       }
 
@@ -771,9 +860,12 @@ export async function POST(req: Request) {
           .split(',').map((s) => s.trim()).filter(Boolean),
       )
       if (callerNumber && testNumbers.has(callerNumber)) {
-        dispatch.ok('tradie notify skipped — test customer number', {
-          callerNumber,
-          test_numbers: Array.from(testNumbers),
+        logSendOutcome(dispatch, {
+          sendType: 'tradie_notify',
+          status: 'skipped',
+          attempts: 0,
+          latencyMs: 0,
+          error: `test customer number (${callerNumber}) — tradie spam guard`,
         })
         return
       }
@@ -788,7 +880,13 @@ export async function POST(req: Request) {
         tenantOwnerMobile ?? process.env.TRADIE_NOTIFY_NUMBER
       const notifyWhatsApp = process.env.TRADIE_NOTIFY_WHATSAPP
       if (!notifyMobile && !notifyWhatsApp) {
-        dispatch.ok('tradie notify skipped — tenant.owner_mobile + env both empty')
+        logSendOutcome(dispatch, {
+          sendType: 'tradie_notify',
+          status: 'skipped',
+          attempts: 0,
+          latencyMs: 0,
+          error: 'tenant.owner_mobile + TRADIE_NOTIFY_* env all empty — nobody to notify',
+        })
         return
       }
 
@@ -840,7 +938,7 @@ export async function POST(req: Request) {
                 dashboardUrl,
               })
 
-        if (notifyMobile) {
+        if (notifyMobile && !tradieNotifiedUndelivered) {
           // Send the tradie's "new quote drafted" SMS FROM the tenant's
           // own provisioned number so the message lands in the same
           // QuoteMate thread on their phone, not the shared dev line.
@@ -849,19 +947,28 @@ export async function POST(req: Request) {
             from: tenantSmsNumber ?? '(default TWILIO_PHONE_NUMBER)',
             tenantBusinessName,
           })
-          const r = await dispatchQuoteMessage({
-            to: notifyMobile,
-            text: tradieBody,
-            from: tenantSmsNumber ?? undefined,
-          })
-          if (r.ok) {
-            dispatch.ok('tradie SMS notify sent', { channel: r.channel, sid: r.sid })
-          } else {
-            dispatch.err('tradie SMS notify failed (both SMS + WA)', null, {
-              sms_code: r.smsAttempt.code,
-              wa_code: r.waAttempt?.code,
-            })
-          }
+          // R46-sends — the tradie notify retries INDEPENDENTLY of the customer
+          // quote send above. They share the outer try, but each has its own
+          // retryWithBackoff, so one failing never aborts the other.
+          const r = await sendWithRetry(
+            'tradie_notify',
+            () => dispatchQuoteMessage({
+              to: notifyMobile,
+              text: tradieBody,
+              from: tenantSmsNumber ?? undefined,
+            }),
+            {
+              knobs,
+              onRetry: (err, nextAttempt, delayMs) =>
+                dispatch.step('tradie notify retry scheduled', {
+                  quote_id: quote!.id,
+                  next_attempt: nextAttempt,
+                  delay_ms: delayMs,
+                  code: (err as { code?: unknown })?.code ?? null,
+                }),
+            },
+          )
+          logSendOutcome(dispatch, r.outcome)
         }
 
         // Multi-tenant guardrail (v6+): the explicit shared
@@ -894,6 +1001,88 @@ export async function POST(req: Request) {
         }
       } catch (e) {
         dispatch.err('tradie notify threw', e)
+      }
+      } catch (afterErr) {
+        // R45 — TOP-LEVEL after() guard. Any throw that escaped the per-send
+        // blocks above (review-branch logic, URL building, an unexpected null
+        // deref) lands here. Without this the whole after() died and the
+        // customer was left in silence. We:
+        //   1. log the escape as an alertable failure, then
+        //   2. fire a FALLBACK "your quote is coming" SMS to the customer
+        //      (best-effort, only when we actually hold their number and the
+        //      quote wasn't held for tradie review), and
+        //   3. notify the tradie the quote failed so the lead isn't lost.
+        // Each fallback is independently guarded so one failing can't abort
+        // the other or re-throw out of after().
+        logSendOutcome(dispatch, {
+          sendType: 'customer_quote',
+          status: 'failed',
+          attempts: 1,
+          latencyMs: 0,
+          error: afterErr,
+        })
+
+        const canTextCustomer = !!callerNumber && !reviewDecision.hold
+        if (canTextCustomer) {
+          try {
+            const fromNumber = isSmsSource
+              ? (tenantSmsNumber ?? process.env.TWILIO_SMS_NUMBER)
+              : undefined
+            const fb = await sendWithRetry(
+              'failure_notice',
+              () => dispatchQuoteMessage({
+                to: callerNumber!,
+                from: fromNumber,
+                text: 'Thanks — we hit a snag finalising your quote, but it’s on the way. We’ll text it through shortly.',
+              }),
+              { knobs },
+            )
+            logSendOutcome(dispatch, fb.outcome)
+          } catch (fbErr) {
+            logSendOutcome(dispatch, {
+              sendType: 'failure_notice',
+              status: 'failed',
+              attempts: 1,
+              latencyMs: 0,
+              error: fbErr,
+            })
+          }
+        } else {
+          logSendOutcome(dispatch, {
+            sendType: 'failure_notice',
+            status: 'skipped',
+            attempts: 0,
+            latencyMs: 0,
+            error: reviewDecision.hold
+              ? 'after() failed while quote held for review — no customer fallback sent'
+              : 'after() failed but no customer phone on file — no fallback possible',
+          })
+        }
+
+        // Tradie "quote failed" notice — independent of the customer fallback.
+        const tradieTo = tenantOwnerMobile ?? process.env.TRADIE_NOTIFY_NUMBER
+        if (tradieTo) {
+          try {
+            const tn = await sendWithRetry(
+              'tradie_notify',
+              () => dispatchQuoteMessage({
+                to: tradieTo,
+                from: tenantSmsNumber ?? undefined,
+                text: `Heads up — a quote draft hit an error while sending. Check it here: ${appUrl}/q/${shareToken}`,
+              }),
+              { knobs },
+            )
+            logSendOutcome(dispatch, tn.outcome)
+          } catch (tnErr) {
+            logSendOutcome(dispatch, {
+              sendType: 'tradie_notify',
+              status: 'failed',
+              attempts: 1,
+              latencyMs: 0,
+              error: tnErr,
+            })
+          }
+        }
       }
     })
 

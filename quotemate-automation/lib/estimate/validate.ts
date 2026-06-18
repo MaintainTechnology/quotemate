@@ -177,21 +177,517 @@ export function categorise(text: string): Set<Category> {
   return cats
 }
 
+// ─────────────────────────────────────────────────────────────────
+// R12 (2026-06-18) — SAFETY-CRITICAL category whitelist + cross-trade
+// mismatch guard.
+//
+// Why: the loose grounding path accepts a line when the line and a
+// same-priced candidate row share ANY tag. categorise() adds a tag only
+// when the *line text* matches a keyword regex, BUT a line whose text
+// trips no keyword falls back to ['general'] — and the catch-all
+// general∩sundry rule, plus a candidate row that *also* tags as the same
+// safety category by coincidence, could let a price ground a safety line
+// it does not actually describe. For ordinary categories (downlight, tap)
+// a near-miss is a pricing bug. For SAFETY-CRITICAL categories
+// (smoke_alarm, gas, switchboard, rcbo/safety-switch) a wrong-category
+// ground is a LIABILITY: a customer could be sold "smoke alarm work"
+// priced off a downlight row.
+//
+// The whitelist makes the contract one-directional and strict: a CANDIDATE
+// ROW that carries a safety-critical tag can only ground a line whose own
+// text genuinely carries that same safety tag. A line that does NOT mention
+// smoke/alarm can never ground against a smoke_alarm row, even at an exact
+// price match. This only ever makes grounding REJECT a wrong-category
+// safety line — a legitimate same-category safety line (line text + row
+// both carry the tag) is unaffected.
+// ─────────────────────────────────────────────────────────────────
+const SAFETY_CRITICAL: ReadonlySet<Category> = new Set<Category>([
+  'smoke_alarm',
+  'gas',
+  'switchboard',
+  'rcbo',
+])
+
+// Per-category trade ownership. Used to flag cross-trade mismatches — an
+// electrical price grounding a plumbing line (or vice versa). Shared tags
+// ('sundry', 'general') belong to neither trade and never trip the guard.
+const CATEGORY_TRADE: Partial<Record<Category, 'electrical' | 'plumbing'>> = {
+  // ── Electrical ──
+  downlight: 'electrical',
+  gpo: 'electrical',
+  smoke_alarm: 'electrical',
+  fan: 'electrical',
+  outdoor_light: 'electrical',
+  rcbo: 'electrical',
+  oven_cooktop: 'electrical',
+  ev_charger: 'electrical',
+  switchboard: 'electrical',
+  fault_find: 'electrical',
+  strip_light: 'electrical',
+  security_camera: 'electrical',
+  doorbell_intercom: 'electrical',
+  // ── Plumbing ──
+  drain: 'plumbing',
+  hot_water: 'plumbing',
+  tap: 'plumbing',
+  toilet: 'plumbing',
+  cctv: 'plumbing',
+  gas: 'plumbing',
+  prv: 'plumbing',
+  dishwasher: 'plumbing',
+  rainwater_tank: 'plumbing',
+  water_filter: 'plumbing',
+  leak_detection: 'plumbing',
+  shower: 'plumbing',
+}
+
+/** Which trade(s) a category set belongs to (excludes shared sundry/general). */
+function tradesOf(cats: Set<Category>): Set<'electrical' | 'plumbing'> {
+  const out = new Set<'electrical' | 'plumbing'>()
+  for (const c of cats) {
+    const trade = CATEGORY_TRADE[c]
+    if (trade) out.add(trade)
+  }
+  return out
+}
+
 /**
  * A line description and a candidate row "match categorically" when:
  *   - they share at least one specific tag (downlight ∩ downlight), OR
  *   - the line is purely 'general' AND the row is 'sundry' only — handles
  *     legitimate catch-all lines like "Disposal of old fittings" being
  *     priced from the Sundries row.
+ *
+ * R12 (2026-06-18) — two HARDENING rules applied on top:
+ *   1. SAFETY-CRITICAL whitelist. If the candidate ROW carries a
+ *      safety-critical tag (smoke_alarm/gas/switchboard/rcbo), the match
+ *      is only allowed when the LINE genuinely carries that SAME safety
+ *      tag. The shared tag must itself be the safety one — a coincidental
+ *      overlap on some other tag does not license grounding off a safety
+ *      row. This stops a wrong-category line grounding against a
+ *      same-priced safety row.
+ *   2. CROSS-TRADE guard. If the line and the row resolve to DIFFERENT
+ *      single trades (electrical line vs plumbing row, or vice versa)
+ *      with no shared specific tag, reject — an electrical price must
+ *      never ground a plumbing line. (This is mostly already enforced by
+ *      trade-scoped candidate loading, but the validator makes it a hard,
+ *      testable invariant rather than relying solely on the caller.)
  */
 function categoriesMatch(lineCats: Set<Category>, rowCats: Set<Category>): boolean {
+  // Collect the specific tags shared by both sides.
+  const shared: Category[] = []
   for (const lc of lineCats) {
-    for (const rc of rowCats) {
-      if (lc === rc) return true
+    if (rowCats.has(lc)) shared.push(lc)
+  }
+
+  // Specific (non-shared-sundry/general) tags both sides have in common,
+  // split into safety-critical and ordinary. A "specific" shared tag is any
+  // overlap other than the trade-neutral catch-alls.
+  const sharedSafety = shared.filter((c) => SAFETY_CRITICAL.has(c))
+  const sharedNonSafetySpecific = shared.filter(
+    (c) => !SAFETY_CRITICAL.has(c) && c !== 'sundry' && c !== 'general',
+  )
+
+  // R12.1 — row-side safety veto (false-positive fix, 2026-06-18).
+  //
+  // Old behaviour: if the candidate ROW carried ANY safety-critical tag, the
+  // ONLY way to ground was a shared safety tag — i.e. a row's safety tag
+  // vetoed every non-safety overlap. That over-rejected a legitimate
+  // non-safety line that shares a real non-safety specific tag with a
+  // MULTI-TAG row (safety + other), e.g. an [oven_cooktop] line grounding a
+  // catalogue row tagged [oven_cooktop, gas]: the genuine oven_cooktop
+  // overlap was discarded just because the row also happened to carry the
+  // safety `gas` tag.
+  //
+  // New behaviour (still strictly conservative):
+  //   - A row that is PURELY safety-critical (every tag ∈ SAFETY_CRITICAL)
+  //     can only be grounded by a SHARED safety tag — the line must
+  //     independently describe that same safety category. (Unchanged for the
+  //     pure-safety case: a [smoke_alarm]-only row never grounds a non-smoke
+  //     line.)
+  //   - A MIXED row (safety + at least one non-safety tag) may ground via a
+  //     genuine shared NON-SAFETY specific tag OR a shared safety tag; if
+  //     there is no shared specific tag of either kind, veto.
+  // Either way a wrong-category line off a safety row is still rejected — the
+  // only newly-allowed case is a real, independently-tagged non-safety match
+  // against a multi-tag row. This REMOVES a false positive without letting a
+  // genuinely-bad price through.
+  const rowSafety = [...rowCats].filter((c) => SAFETY_CRITICAL.has(c))
+  if (rowSafety.length > 0) {
+    const rowPurelySafety = [...rowCats].every((c) => SAFETY_CRITICAL.has(c))
+    if (rowPurelySafety) {
+      return sharedSafety.length > 0
+    }
+    return sharedSafety.length > 0 || sharedNonSafetySpecific.length > 0
+  }
+
+  // R12.2 — if the LINE is safety-critical but the row carries NONE of the
+  // line's safety tags, reject. A "smoke alarm" line must be priced from a
+  // smoke_alarm row, never from a generic same-priced row.
+  const lineSafety = [...lineCats].filter((c) => SAFETY_CRITICAL.has(c))
+  if (lineSafety.length > 0 && !lineSafety.some((s) => rowCats.has(s))) {
+    return false
+  }
+
+  if (shared.length > 0) return true
+
+  // Catch-all: a purely 'general' line may ground from a pure 'sundry' row.
+  if (lineCats.has('general') && rowCats.size === 1 && rowCats.has('sundry')) return true
+
+  // R12.2 (cross-trade) — no shared specific tag. If both sides resolve to
+  // a single, DIFFERENT trade, this is an electrical↔plumbing mismatch:
+  // reject regardless of a coincidental price match. (When either side is
+  // trade-neutral — only sundry/general — we fall through to the default
+  // reject below without singling it out as a cross-trade error.)
+  const lineTrades = tradesOf(lineCats)
+  const rowTrades = tradesOf(rowCats)
+  if (
+    lineTrades.size === 1 &&
+    rowTrades.size === 1 &&
+    [...lineTrades][0] !== [...rowTrades][0]
+  ) {
+    return false
+  }
+
+  return false
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Catalogue-row anchoring — shared by the within-tier dedup (D-1 / R5)
+// and the cross-tier dedup (R6). A line resolves to an "anchor" =
+// `"<type>:<id>"` of the catalogue row it maps to. This is the unit of
+// double-charge detection: two lines that map to the SAME catalogue row
+// are charging the customer for the same product twice.
+// ─────────────────────────────────────────────────────────────────
+
+type AnchorIndex = {
+  materialById: Map<string, CandidatePrice[]>
+  assemblyById: Map<string, CandidatePrice[]>
+}
+
+const PRICE_TOLERANCE_ANCHOR = PRICE_TOLERANCE
+const withinTol = (a: number, b: number) => Math.abs(a - b) <= PRICE_TOLERANCE_ANCHOR
+
+/** Build the per-id candidate index used by anchor resolution. */
+function buildAnchorIndex(candidates: CandidatePrices): AnchorIndex {
+  const materialById = new Map<string, CandidatePrice[]>()
+  const assemblyById = new Map<string, CandidatePrice[]>()
+  for (const c of candidates.material) {
+    if (c.sourceId) {
+      const list = materialById.get(c.sourceId) ?? []
+      list.push(c)
+      materialById.set(c.sourceId, list)
     }
   }
-  if (lineCats.has('general') && rowCats.size === 1 && rowCats.has('sundry')) return true
-  return false
+  for (const c of candidates.assembly) {
+    if (c.sourceId) {
+      const list = assemblyById.get(c.sourceId) ?? []
+      list.push(c)
+      assemblyById.set(c.sourceId, list)
+    }
+  }
+  return { materialById, assemblyById }
+}
+
+/** Parse `"material:<id>"` / `"assembly:<id>"` out of a line's source.
+ *  Mirrors validateQuoteGrounding's local extractRowRef so anchor
+ *  resolution and strict UUID grounding agree on what a typed ref is. */
+function parseRowRef(
+  source: unknown,
+): { type: 'material' | 'assembly'; id: string } | null {
+  const s = String(source ?? '').trim()
+  const m = s.match(/^(material|assembly):([A-Za-z0-9_-]+)$/)
+  if (!m) return null
+  const id = m[2]
+  if (!id || id.length < 4 || id.toLowerCase() === 'uuid') return null
+  return { type: m[1] as 'material' | 'assembly', id }
+}
+
+/**
+ * Resolve a line item to the catalogue row it represents, returned as
+ * `"<type>:<id>"`. Resolution order (R5 — sourceId FIRST):
+ *
+ *   1. EXPLICIT typed ref in `source` ("material:<id>" / "assembly:<id>")
+ *      — authoritative, by row id. This is the only signal Opus is
+ *      supposed to emit and is immune to description drift.
+ *   2. NAME + price reverse lookup — the line description aligns with a
+ *      catalogue row name (either direction, parenthetical tails stripped)
+ *      AND the price matches one of that row's markup variants.
+ *   3. R5 — PRICE-ONLY reverse lookup. When neither a typed ref nor a name
+ *      match resolves, but the price matches EXACTLY ONE catalogue row's
+ *      price-set (across all markup variants), anchor to that row. This is
+ *      what catches the harder duplicate: the same row emitted twice with
+ *      DIFFERENT descriptions ("Dux Proflo 315L" vs "Premium HWS 315L")
+ *      and/or in DIFFERENT markup bands (raw vs ×20% vs ×28%). It is
+ *      deliberately conservative — if the price is ambiguous (matches >1
+ *      distinct row id) we return null rather than guess, so we never
+ *      flag two genuinely different products that merely cost the same.
+ *
+ * Labour / call-out / fabricated lines resolve to null (no catalogue
+ * anchor) and are therefore never treated as duplicates of each other.
+ */
+function resolveLineAnchor(li: any, index: AnchorIndex): string | null {
+  const ref = parseRowRef(li?.source)
+  if (ref) return `${ref.type}:${ref.id}`
+
+  // R5 (2026-06-18, false-positive fix) — short-circuit NON-CATALOGUE lines
+  // to null BEFORE the loose name/price reverse lookups. A labour / call-out /
+  // after-hours line is NOT a catalogue product, so it must never anchor to a
+  // material/assembly row just because their dollar amounts happen to match
+  // (e.g. labour at $110/hr colliding with a same-priced $110 material row).
+  // Without this short-circuit the price-only fallback (3) below could anchor
+  // such a line to a coincidentally same-priced catalogue row, and the D-1
+  // within-tier dedup would then flag a genuine labour line as a duplicate →
+  // a clean quote needlessly downgraded to inspection. Typed `material:`/
+  // `assembly:` refs already returned above and keep their behaviour; this
+  // only narrows the loose path, so grounding can only ever REJECT FEWER
+  // false dupes — never accept a genuinely-bad price.
+  const unitNorm = String(li?.unit ?? '').toLowerCase().trim()
+  const sourceNorm = String(li?.source ?? '').toLowerCase().trim()
+  const NON_CATALOGUE_SOURCES = new Set([
+    'labour',
+    'callout',
+    'after_hours',
+    'after-hours',
+    'emergency',
+    'emergency_callout',
+    'after_hours_callout',
+  ])
+  if (unitNorm === 'hr' || NON_CATALOGUE_SOURCES.has(sourceNorm)) return null
+
+  const price = Number(li?.unit_price_ex_gst)
+  if (!Number.isFinite(price)) return null
+
+  const desc = String(li?.description ?? '').toLowerCase().trim()
+  const descBase = desc.split(/\s*\(/)[0].trim()
+
+  const entries = [
+    ['material', index.materialById],
+    ['assembly', index.assemblyById],
+  ] as const
+
+  // (2) name + price reverse lookup.
+  if (desc.length >= 4) {
+    for (const [type, byId] of entries) {
+      for (const [id, variants] of byId) {
+        const cName = variants[0]?.sourceName?.toLowerCase()
+        if (!cName || cName.length < 4) continue
+        const nameAligned =
+          desc.includes(cName) ||
+          (descBase.length >= 4 && (descBase.includes(cName) || cName.includes(descBase)))
+        if (!nameAligned) continue
+        if (variants.some((v) => withinTol(v.price, price))) {
+          return `${type}:${id}`
+        }
+      }
+    }
+  }
+
+  // (3) R5 — price-only reverse lookup. Collect EVERY distinct row id whose
+  // price-set contains this price. Only anchor when exactly one row matches
+  // (an unambiguous price → row mapping); otherwise stay null.
+  const priceMatchedIds = new Set<string>()
+  let firstAnchor: string | null = null
+  for (const [type, byId] of entries) {
+    for (const [id, variants] of byId) {
+      if (variants.some((v) => withinTol(v.price, price))) {
+        const anchor = `${type}:${id}`
+        if (!priceMatchedIds.has(anchor)) {
+          priceMatchedIds.add(anchor)
+          firstAnchor = firstAnchor ?? anchor
+        }
+      }
+    }
+  }
+  if (priceMatchedIds.size === 1) return firstAnchor
+  return null
+}
+
+/** Stripped (lower-cased, parenthetical-tail-removed) line description,
+ *  used by the cross-tier framing check. */
+function descKey(li: any): string {
+  return String(li?.description ?? '')
+    .toLowerCase()
+    .split(/\s*\(/)[0]
+    .trim()
+}
+
+export type CrossTierDuplicate = {
+  anchor: string
+  /** The catalogue row's name (for the failure message). */
+  sourceName: string
+  /** Tier → line index where this anchor appears. */
+  occurrences: Array<{ tier: 'good' | 'better' | 'best'; lineIndex: number }>
+  /** True when every occurrence quotes the SAME quantity (a verbatim
+   *  re-charge); false when quantities differ (tier-up via quantity). */
+  sameQuantity: boolean
+}
+
+/**
+ * R6 (2026-06-18) — CROSS-TIER duplicate detection.
+ *
+ * Good / Better / Best are PRESENTED to the customer as mutually exclusive
+ * options — the customer picks ONE tier and pays for it. So the same
+ * catalogue row legitimately appears in more than one tier (a downlight in
+ * Good, Better and Best is normal tier progression). The danger this guard
+ * addresses is a row appearing across tiers in a way that DOUBLE-CHARGES
+ * within whichever single tier the customer picks — i.e. the validator's
+ * within-tier dedup (D-1/R5) catches a row twice in one tier; this catches
+ * the cross-tier shape where the same row is charged in a way the
+ * scope/assumptions do not justify.
+ *
+ * Policy:
+ *   - Same row, SAME quantity in 2+ tiers → ALLOWED (ordinary tier
+ *     progression; the customer only ever pays one tier).
+ *   - Same row, DIFFERENT quantities across tiers ("3 downlights in Good,
+ *     6 in Best") → ALLOWED **only** when the differing quantity is
+ *     explicitly framed in scope_of_works / assumptions (the customer can
+ *     see why the count changes). Otherwise FLAG it — an unframed quantity
+ *     jump is exactly how a silent double/over-charge hides across tiers.
+ *
+ * Tiers that quote DIFFERENT products (Good = basic HWS, Better = premium
+ * HWS — different catalogue rows → different anchors) never collide, so
+ * legitimate tier differentiation is untouched.
+ *
+ * Returns the list of offending anchors. Empty array = no cross-tier
+ * double-charge detected.
+ */
+export function detectCrossTierDuplicates(
+  draft: any,
+  candidates: CandidatePrices,
+): CrossTierDuplicate[] {
+  const index = buildAnchorIndex(candidates)
+  const TIERS = ['good', 'better', 'best'] as const
+
+  // Free-text framing the customer can see. When a quantity difference is
+  // explained here, a differing-quantity cross-tier appearance is allowed.
+  const framingText = [
+    typeof draft?.scope_of_works === 'string' ? draft.scope_of_works : '',
+    typeof draft?.scope_short === 'string' ? draft.scope_short : '',
+    Array.isArray(draft?.assumptions) ? draft.assumptions.join(' ') : '',
+    // Per-tier framing too — a tier label/timeframe can carry the "6 vs 3"
+    // distinction ("Best — 6 downlights").
+    ...TIERS.map((t) =>
+      [draft?.[t]?.label, draft?.[t]?.timeframe, draft?.[t]?.scope_note]
+        .filter((x) => typeof x === 'string')
+        .join(' '),
+    ),
+  ]
+    .join(' ')
+    .toLowerCase()
+
+  // anchor → occurrences across tiers (one per tier max; the within-tier
+  // dedup already handles repeats inside a single tier).
+  type Occ = {
+    tier: 'good' | 'better' | 'best'
+    lineIndex: number
+    quantity: number
+    sourceName: string
+    descKey: string
+  }
+  const byAnchor = new Map<string, Occ[]>()
+
+  for (const tierKey of TIERS) {
+    const tier = draft?.[tierKey]
+    if (!tier || !Array.isArray(tier.line_items)) continue
+    // Only the FIRST occurrence of each anchor per tier counts here — a
+    // within-tier repeat is D-1/R5's job, not this function's.
+    const seenInTier = new Set<string>()
+    for (let i = 0; i < tier.line_items.length; i++) {
+      const li = tier.line_items[i]
+      const anchor = resolveLineAnchor(li, index)
+      if (!anchor) continue
+      if (seenInTier.has(anchor)) continue
+      seenInTier.add(anchor)
+      const ref = parseRowRef(li?.source)
+      const variants =
+        (ref?.type === 'assembly' ? index.assemblyById : index.materialById).get(
+          ref?.id ?? anchor.split(':')[1],
+        ) ?? []
+      const sourceName = variants[0]?.sourceName ?? anchor
+      const arr = byAnchor.get(anchor) ?? []
+      arr.push({
+        tier: tierKey,
+        lineIndex: i,
+        quantity: Number(li?.quantity) || 0,
+        sourceName,
+        descKey: descKey(li),
+      })
+      byAnchor.set(anchor, arr)
+    }
+  }
+
+  const out: CrossTierDuplicate[] = []
+  for (const [anchor, occs] of byAnchor) {
+    if (occs.length <= 1) continue
+    const quantities = new Set(occs.map((o) => o.quantity))
+    const sameQuantity = quantities.size === 1
+
+    if (sameQuantity) {
+      // Same row, same quantity in 2+ tiers — ordinary tier progression.
+      // The customer picks one tier and pays once. Allowed.
+      continue
+    }
+
+    // Different quantities across tiers. Allowed ONLY if explicitly framed
+    // so the customer can see why the count differs.
+    //
+    // R6 (2026-06-18, false-positive fix) — the framing match used to require
+    // the VERBATIM catalogue SKU name (or the line's descKey) in the framing
+    // text. Real quotes frame the difference in customer PROSE ("3 downlights
+    // in the lounge, 6 in the best option") that never repeats the exact SKU
+    // string, so legitimately-framed quotes were over-flagged → needless
+    // inspection. We now also accept a framing that mentions the line's
+    // product CATEGORY (reuse categorise() on the line description + source
+    // name and require the framing text to independently categorise into the
+    // SAME bucket) — plus a quantity-difference signal.
+    //
+    // This is deliberately conservative: it still requires BOTH an item
+    // reference (verbatim name/desc OR a shared product category) AND a
+    // quantity-difference signal. A genuine silent stack with NO framing at
+    // all (no item mention, or no quantity signal) is still flagged. So this
+    // only ever makes the guard REJECT FEWER framed quotes — it never lets an
+    // unframed cross-tier over-charge through.
+    const nameNeedle = (occs[0].sourceName || '').toLowerCase()
+    const descNeedle = occs[0].descKey
+    // Category overlap between the line and the framing prose. categorise()
+    // on the line text yields the product bucket(s); categorise() on the
+    // framing text must independently land in at least one of the SAME
+    // SPECIFIC buckets (the trade-neutral catch-alls sundry/general don't
+    // count as an item reference).
+    const lineCats = categorise(`${descNeedle} ${nameNeedle}`)
+    const framingCats = categorise(framingText)
+    const sharedFramingCat = [...lineCats].some(
+      (c) => c !== 'sundry' && c !== 'general' && framingCats.has(c),
+    )
+    const mentionsItem =
+      (nameNeedle.length >= 4 && framingText.includes(nameNeedle)) ||
+      (descNeedle.length >= 4 && framingText.includes(descNeedle)) ||
+      sharedFramingCat
+    // Quantity-difference signal: at least two of the differing quantities
+    // appear as bare numbers, OR explicit comparison/upgrade prose.
+    const quantitiesMentioned = [...quantities].filter(
+      (q) => q > 0 && new RegExp(`\\b${q}\\b`).test(framingText),
+    ).length
+    const quantityPhrase =
+      /\b\d+\s*(?:vs\.?|versus|→|to)\s*\d+\b/.test(framingText) ||
+      /\b(?:additional|extends?\s+to|upgrade\s+to|up\s+to|increases?\s+to|more)\b/.test(
+        framingText,
+      )
+    const quantitySignalled = quantitiesMentioned >= 2 || quantityPhrase
+    const framed = mentionsItem && quantitySignalled
+
+    if (!framed) {
+      out.push({
+        anchor,
+        sourceName: occs[0].sourceName,
+        occurrences: occs.map((o) => ({ tier: o.tier, lineIndex: o.lineIndex })),
+        sameQuantity: false,
+      })
+    }
+  }
+
+  return out
 }
 
 export function validateQuoteGrounding(
@@ -214,20 +710,43 @@ export function validateQuoteGrounding(
     ? n(pricingBook.min_labour_hours)
     : 2.0
   // P-1 — derived after-hours rates. Both default to null when the multiplier
-  // is unset/invalid (≤0), so the additional accept branches are dormant
-  // unless the tradie has explicitly configured a multiplier.
-  const afterHoursMx =
+  // is unset/invalid, so the additional accept branches are dormant unless
+  // the tradie has explicitly configured a VALID multiplier.
+  //
+  // R11 (2026-06-18) — multiplier TYPE + VALUE validation. The after-hours
+  // accept branches are the only place the validator will sign off on a
+  // labour/callout price ABOVE the standard rate. A forged or garbage
+  // multiplier must not be able to establish an arbitrarily inflated
+  // "accepted" rate. `n()` blindly parseFloat()s its input, so a string,
+  // a non-numeric value, or an absurd number could previously slip a
+  // mis-derived rate into the accept set. We now:
+  //   - reject anything that isn't a finite number (NaN, Infinity, "", a
+  //     non-numeric string → null, branch stays dormant);
+  //   - require strictly > 1 — an after-hours rate is a SURCHARGE, so a
+  //     multiplier of ≤ 1 is meaningless and never widens the accept set
+  //     (a ×1 would just duplicate the standard rate; a <1 would let an
+  //     UNDER-cost rate ground under an after-hours tag);
+  //   - cap at AFTER_HOURS_MAX_MULTIPLIER (2.5) — real after-hours/emergency
+  //     loadings in AU trades top out around ×2–2.5 (the documented AU
+  //     ceiling); anything beyond the cap is treated as forged/garbage and
+  //     the branch stays dormant so the inflated price falls through to a
+  //     normal grounding failure.
+  // A legitimately configured ×1.5 / ×2 multiplier still derives its rate
+  // and a correctly-tagged after-hours line still grounds.
+  const AFTER_HOURS_MAX_MULTIPLIER = 2.5
+  const rawAfterHoursMx =
     pricingBook.after_hours_multiplier != null && pricingBook.after_hours_multiplier !== ''
       ? n(pricingBook.after_hours_multiplier)
       : null
-  const afterHoursHourly =
-    afterHoursMx != null && Number.isFinite(afterHoursMx) && afterHoursMx > 0
-      ? hourly * afterHoursMx
+  const afterHoursMx =
+    rawAfterHoursMx != null &&
+    Number.isFinite(rawAfterHoursMx) &&
+    rawAfterHoursMx > 1 &&
+    rawAfterHoursMx <= AFTER_HOURS_MAX_MULTIPLIER
+      ? rawAfterHoursMx
       : null
-  const afterHoursCallout =
-    afterHoursMx != null && Number.isFinite(afterHoursMx) && afterHoursMx > 0
-      ? callOut * afterHoursMx
-      : null
+  const afterHoursHourly = afterHoursMx != null ? +(hourly * afterHoursMx).toFixed(2) : null
+  const afterHoursCallout = afterHoursMx != null ? +(callOut * afterHoursMx).toFixed(2) : null
 
   // A line item is "tagged after-hours" iff its `source` field explicitly
   // says so. Standard-hours lines at the inflated rate still fail grounding.
@@ -263,22 +782,12 @@ export function validateQuoteGrounding(
   // — buildCandidatePrices stamps the same sourceId on every variant of a
   // given row. The strict path matches against this full set, so the line
   // can use any valid markup of THE EXACT ROW Opus picked.
-  const materialById = new Map<string, CandidatePrice[]>()
-  const assemblyById = new Map<string, CandidatePrice[]>()
-  for (const c of candidates.material) {
-    if (c.sourceId) {
-      const list = materialById.get(c.sourceId) ?? []
-      list.push(c)
-      materialById.set(c.sourceId, list)
-    }
-  }
-  for (const c of candidates.assembly) {
-    if (c.sourceId) {
-      const list = assemblyById.get(c.sourceId) ?? []
-      list.push(c)
-      assemblyById.set(c.sourceId, list)
-    }
-  }
+  //
+  // R5 (2026-06-18) — the same index now also feeds resolveLineAnchor for
+  // the within-tier dedup pass below (and the cross-tier dedup, R6, which
+  // builds its own index from the same candidates).
+  const anchorIndex = buildAnchorIndex(candidates)
+  const { materialById, assemblyById } = anchorIndex
 
   /** Parse `"material:<id>"` / `"assembly:<id>"` out of a line's source.
    *  Returns null for anything that isn't a typed UUID reference (labour,
@@ -491,48 +1000,21 @@ export function validateQuoteGrounding(
     // for a Dux Proflo 315L at both $1645 (raw) AND $2237.20 (×1.36),
     // inflating the total by ~$1810 inc GST.
     //
-    // Each line resolves to an "anchor" — the catalogue row id it maps to.
-    // Lines with explicit UUID in source anchor directly. Lines without
-    // UUID try a reverse lookup by description + price match against the
-    // candidate set (stripping common parenthetical suffixes like
-    // "(supplied)" first so Opus's invented decorations don't dodge the
-    // check). Two lines with the same anchor in the same tier → flag the
-    // later one as a duplicate.
+    // Each line resolves to an "anchor" — the catalogue row id it maps to —
+    // via the shared resolveLineAnchor (R5). Resolution is sourceId-FIRST
+    // and falls back to name+price, then a conservative price-only lookup.
+    // Two lines with the same anchor in the same tier → flag the later one.
+    //
+    // R5 (2026-06-18) — the price-only fallback closes the harder shapes
+    // the old name-anchored resolver missed: the SAME catalogue row emitted
+    // twice with DIFFERENT descriptions ("Dux Proflo 315L" vs "Premium HWS
+    // 315L") and/or in DIFFERENT markup bands (raw vs ×20% vs ×28%). As long
+    // as each line's price unambiguously maps to one catalogue row, both
+    // anchor to it regardless of the description Opus invented.
     if (tier.line_items.length > 1) {
-      const resolveAnchor = (li: any): string | null => {
-        const ref = extractRowRef(li?.source)
-        if (ref) return `${ref.type}:${ref.id}`
-        const desc = String(li?.description ?? '').toLowerCase().trim()
-        const price = Number(li?.unit_price_ex_gst)
-        if (!Number.isFinite(price) || desc.length < 4) return null
-        const descBase = desc.split(/\s*\(/)[0].trim()
-        for (const [type, byId] of (
-          [
-            ['material', materialById],
-            ['assembly', assemblyById],
-          ] as const
-        )) {
-          for (const [id, variants] of byId) {
-            const cName = variants[0]?.sourceName?.toLowerCase()
-            if (!cName || cName.length < 4) continue
-            // Match the line text against the catalogue row name in either
-            // direction so we catch both "Catalogue name (supplied)" and
-            // "Catalogue name + extra prose" shapes.
-            const nameAligned =
-              desc.includes(cName) ||
-              descBase.includes(cName) ||
-              cName.includes(descBase)
-            if (!nameAligned) continue
-            if (variants.some((v) => within(v.price, price))) {
-              return `${type}:${id}`
-            }
-          }
-        }
-        return null
-      }
       const anchorToIndices = new Map<string, number[]>()
       for (let i = 0; i < tier.line_items.length; i++) {
-        const anchor = resolveAnchor(tier.line_items[i])
+        const anchor = resolveLineAnchor(tier.line_items[i], anchorIndex)
         if (!anchor) continue
         const arr = anchorToIndices.get(anchor) ?? []
         arr.push(i)
@@ -556,6 +1038,37 @@ export function validateQuoteGrounding(
         }
       }
     }
+  }
+
+  // R6 (2026-06-18) — CROSS-TIER duplicate detection. Runs once across all
+  // three tiers (after the per-tier passes above). The same catalogue row
+  // appearing across Good/Better/Best at the SAME quantity is ordinary tier
+  // progression and is allowed; a row appearing at DIFFERENT quantities
+  // across tiers is flagged unless scope_of_works/assumptions explicitly
+  // frame the quantity difference. Surfaced as a grounding failure (against
+  // the FIRST occurrence's tier+line) so an unframed cross-tier
+  // double/over-charge downgrades the quote to inspection like any other
+  // integrity violation.
+  const crossTier = detectCrossTierDuplicates(draft, candidates)
+  for (const dup of crossTier) {
+    const first = dup.occurrences[0]
+    const firstLi = draft?.[first.tier]?.line_items?.[first.lineIndex]
+    const where = dup.occurrences
+      .map((o) => `${o.tier}#${o.lineIndex}`)
+      .join(', ')
+    failures.push({
+      tier: first.tier,
+      lineIndex: first.lineIndex,
+      description: String(firstLi?.description ?? dup.sourceName ?? '(no description)'),
+      unit: String(firstLi?.unit ?? '?'),
+      unit_price_ex_gst: Number(firstLi?.unit_price_ex_gst),
+      expected:
+        `cross-tier duplicate ${dup.anchor} ("${dup.sourceName}") appears at ${where} ` +
+        `with differing quantities and no scope_of_works/assumptions framing the change. ` +
+        `Same product at different quantities across tiers (R6) is only allowed when the ` +
+        `quantity difference is explicitly explained to the customer; otherwise quote each ` +
+        `tier's quantity consistently or document the "N vs M" distinction in the scope.`,
+    })
   }
 
   return failures.length === 0 ? { valid: true } : { valid: false, failures }

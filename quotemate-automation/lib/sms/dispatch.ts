@@ -14,6 +14,7 @@
 // throttled send waits a beat and goes through cleanly.
 
 import { sendSms, sendWhatsApp, type TwilioSendResult } from './twilio'
+import { isRetryableSendError } from './send-reliability'
 
 export type DispatchOk = {
   ok: true
@@ -52,15 +53,32 @@ export type DispatchResult = DispatchOk | DispatchFail
 //   - 429:      Twilio rate limit — back off and retry
 //   - 5xx:      Twilio server error — back off and retry
 //   - 14107 / 14101: messaging-service rate limits (Twilio internal)
+//
+// R46-sends: delegate the classification to the shared `isRetryableSendError`
+// in send-reliability.ts so dispatch and the route-level retry agree on
+// exactly one policy. A Twilio failed-result is `{ ok:false, code }`, which
+// `isRetryableSendError` understands directly; this keeps the historical
+// NETWORK/429/5xx/14107/14101 set retryable and everything else terminal.
 function isRetryable(result: Extract<TwilioSendResult, { ok: false }>): boolean {
-  const c = result.code
-  if (c === 'NETWORK') return true
-  if (c === '429' || c === '14107' || c === '14101') return true
-  if (/^5\d\d$/.test(c)) return true
-  return false
+  return isRetryableSendError(result)
 }
 
 const RETRY_DELAYS_MS = [500, 1500, 3500] // total max ~5.5s before falling back
+
+// Map a thrown error from sendSms (AbortError / TimeoutError / generic
+// network throw that escaped postTwilioMessage's own try) into a synthetic
+// failed TwilioSendResult so the retry/fallback loop below has ONE code path.
+// Without this, a thrown AbortError would bubble out of sendSmsWithRetry and
+// (a) skip the WhatsApp fallback and (b) skip retrying a transient timeout —
+// the first-class case send-reliability.ts was built to close.
+function thrownToResult(e: unknown): Extract<TwilioSendResult, { ok: false }> {
+  const name = e instanceof Error ? e.name : undefined
+  const reason = e instanceof Error ? e.message : String(e)
+  // Preserve the thrown error's name as the `code` so isRetryableSendError
+  // classifies AbortError/TimeoutError as retryable; otherwise tag NETWORK.
+  const code = name === 'AbortError' || name === 'TimeoutError' ? name : 'NETWORK'
+  return { ok: false, code, reason, raw: null }
+}
 
 async function sendSmsWithRetry(opts: {
   to: string
@@ -72,7 +90,15 @@ async function sendSmsWithRetry(opts: {
   let last: TwilioSendResult | null = null
   for (let i = 0; i <= RETRY_DELAYS_MS.length; i++) {
     attempts++
-    const result = await sendSms(opts)
+    let result: TwilioSendResult
+    try {
+      result = await sendSms(opts)
+    } catch (e) {
+      // sendSms normally returns a failed result rather than throwing, but a
+      // Vercel function teardown / undici headers-timeout can surface as a
+      // thrown AbortError/TimeoutError. Treat it as a (retryable) transient.
+      result = thrownToResult(e)
+    }
     if (result.ok) {
       if (attempts > 1) {
         console.log(`[dispatch] sendSms succeeded on attempt ${attempts} to ${opts.to}`)
@@ -139,7 +165,16 @@ export async function dispatchQuoteMessage(opts: {
 
   const smsAttempt = { code: smsResult.code, reason: smsResult.reason }
 
-  const waResult = await sendWhatsApp({ to: opts.to, text: opts.text })
+  // WhatsApp fallback. Same teardown guard as the SMS path: a thrown
+  // AbortError/timeout here must NOT escape dispatchQuoteMessage (callers
+  // — the route's after() block included — rely on it returning a
+  // DispatchResult, never throwing), so degrade a throw to a failed result.
+  let waResult: TwilioSendResult
+  try {
+    waResult = await sendWhatsApp({ to: opts.to, text: opts.text })
+  } catch (e) {
+    waResult = thrownToResult(e)
+  }
   if (waResult.ok) {
     return {
       ok: true,

@@ -1,7 +1,7 @@
 import { anthropic } from '@ai-sdk/anthropic'
 import { generateObject } from 'ai'
 import { z } from 'zod'
-import { IntakeSchema, deriveTradeFromJobType } from './schema'
+import { IntakeSchema, deriveTradeFromJobType, type Intake } from './schema'
 
 // The structurer's generateObject schema = the canonical intake (minus the
 // derived `trade`) PLUS one REQUIRED string holding any product specs the
@@ -10,12 +10,63 @@ import { IntakeSchema, deriveTradeFromJobType } from './schema'
 // that limit (see schema.ts), so a required field is the only cap-safe way to
 // add capture — and a plain string is a proven shape (an open record is not).
 // We parse it server-side into scope.specs.requested_specs below.
+//
+// R26 / WP5: scope.specs.system_type (electric|gas|heat_pump) is a first-class
+// field on the canonical IntakeSchema but is DELIBERATELY OMITTED from the
+// generateObject schema here. Adding it as a discrete optional would push the
+// schema to 25 optional fields and break generateObject. Instead the model
+// emits it inside the REQUIRED requested_specs_json blob (as "system_type" or
+// the synonym "energy_source") and we promote it to a typed
+// scope.specs.system_type server-side below — the same cap-safe pattern as
+// requested_specs. We strip system_type from the specs shape the model sees so
+// the optional count stays at exactly 24.
+const StructureSpecsSchema = z
+  .object({
+    color_temp: z.enum(['warm_white', 'cool_white', 'tri_colour', 'unknown']).optional(),
+    dimmable: z.boolean().optional(),
+    smart: z.boolean().optional(),
+    weatherproof: z.boolean().optional(),
+    supplied_by: z.enum(['tradie', 'customer']).optional(),
+    // system_type intentionally absent — captured via requested_specs_json.
+  })
+  .optional()
 const StructureScopeSchema = IntakeSchema.shape.scope.extend({
+  specs: StructureSpecsSchema,
   requested_specs_json: z.string(),
 })
 const StructureSchema = IntakeSchema.omit({ trade: true }).extend({
   scope: StructureScopeSchema,
 })
+
+// Normalise free-text energy-source / system-type wording into the
+// scope.specs.system_type enum. Returns undefined for anything we can't
+// confidently map — E8: an unrecognised value is NEVER coerced to a guess.
+// Pure; exported for unit-testing.
+export function normaliseSystemType(raw: unknown): 'electric' | 'gas' | 'heat_pump' | undefined {
+  if (typeof raw !== 'string') return undefined
+  const s = raw.trim().toLowerCase()
+  if (s === '') return undefined
+  // Heat pump first — it contains "electric"-adjacent wording and must not be
+  // collapsed into plain electric.
+  if (s.includes('heat pump') || s.includes('heat_pump') || s === 'heatpump' || s.includes('heat-pump')) {
+    return 'heat_pump'
+  }
+  if (s.includes('gas') || s.includes('lpg') || s.includes('continuous flow') || s.includes('continuous-flow') || s.includes('instant')) {
+    return 'gas'
+  }
+  if (s.includes('electric') || s.includes('storage') || s === 'resistive') return 'electric'
+  return undefined
+}
+
+// Pull a system_type signal out of the structurer's parsed requested_specs
+// map. The model is told to emit it under "system_type"; we also accept the
+// long-standing synonym "energy_source" (already used by the SMS slot
+// extractor and the requested_specs examples). undefined when neither yields
+// a recognised value — the caller then treats hot_water as unknown (E8).
+// Pure; exported for unit-testing.
+export function deriveSystemType(specs: Record<string, string>): 'electric' | 'gas' | 'heat_pump' | undefined {
+  return normaliseSystemType(specs.system_type) ?? normaliseSystemType(specs.energy_source)
+}
 
 // Parse the structurer's requested_specs_json blob into a flat string map.
 // Robust by construction: any malformed / non-object / non-string-valued input
@@ -45,6 +96,81 @@ export function parseRequestedSpecs(raw: unknown): Record<string, string> {
     // nested objects / arrays / null are skipped — specs are flat scalars
   }
   return out
+}
+
+// Shape the structurer's generateObject returns: the canonical intake minus
+// `trade` (we derive it) plus scope.requested_specs_json (we parse it).
+type StructuredObject = z.infer<typeof StructureSchema>
+
+// Pure post-processing: turn the model's raw StructureSchema object into the
+// canonical intake. Three jobs, all deterministic (no LLM, no DB):
+//   1. parse requested_specs_json → scope.specs.requested_specs
+//   2. promote a stated hot-water fuel → typed scope.specs.system_type
+//      (E8: unknown fuels are NEVER coerced into a guess)
+//   3. E8 BACKSTOP — a plumbing hot_water job with no captured system_type
+//      is forced to inspection at LOW confidence so no electric/gas/heat-pump
+//      assembly is ever fabricated from an unknown fuel.
+// Exported for unit-testing; structureIntake() calls this after generateObject.
+// Returns the canonical Intake (schema.ts) — finaliseIntake's whole job is to
+// turn the model's raw StructureSchema object into a valid intake row.
+export function finaliseIntake(object: StructuredObject): Intake {
+  // Strip the raw JSON blob and attach the parsed map under scope.specs.
+  // Only attach when non-empty so an intake with no stated spec keeps its
+  // scope.specs exactly as before (no behaviour change for the common case).
+  const { requested_specs_json, ...scopeRest } = object.scope
+  const requested_specs = parseRequestedSpecs(requested_specs_json)
+
+  // R26 / WP5 — promote a stated hot-water system_type into a typed
+  // scope.specs.system_type field. The model emits it inside
+  // requested_specs_json (system_type or the energy_source synonym) because
+  // IntakeSchema is at the 24-optional cap and it has no discrete slot in the
+  // generateObject schema. deriveSystemType returns undefined for anything we
+  // can't confidently map — E8: an unknown fuel is never coerced to a guess.
+  const systemType = deriveSystemType(requested_specs)
+
+  // Merge requested_specs + system_type into scope.specs, dropping the
+  // raw blob. specs stays absent when there is genuinely nothing to attach,
+  // so a spec-free intake is byte-identical to the old behaviour.
+  const mergedSpecs = {
+    ...(scopeRest.specs ?? {}),
+    ...(Object.keys(requested_specs).length > 0 ? { requested_specs } : {}),
+    ...(systemType ? { system_type: systemType } : {}),
+  }
+  const scope =
+    Object.keys(mergedSpecs).length > 0
+      ? { ...scopeRest, specs: mergedSpecs }
+      : scopeRest
+
+  const trade = deriveTradeFromJobType(object.job_type)
+
+  // ★ E8 BACKSTOP — server-side, deterministic, never trusts the model alone.
+  // For a plumbing hot_water job with NO captured system_type, the energy
+  // source is unknown. We must NOT guess a fuel (that would ground the quote
+  // on the wrong HWS assembly). Force inspection_required=true and drop
+  // confidence to LOW with a reason that names the missing field, so the
+  // dialog/clarifying layer (R29) can ask for it and, failing that, the job
+  // safely escalates rather than fabricating an electric/gas/heat-pump line.
+  if (trade === 'plumbing' && object.job_type === 'hot_water' && !systemType) {
+    const reason = 'hot_water energy source (electric/gas/heat pump) not stated — cannot select HWS assembly without it'
+    // Keep the model's own reason only if it already names the missing fuel;
+    // otherwise replace it so the gap is explicit for the dialog/CRM layer.
+    const modelReason = (object.confidence_reason ?? '').toLowerCase()
+    const alreadyNamesGap =
+      modelReason.includes('system_type') ||
+      modelReason.includes('energy source') ||
+      modelReason.includes('fuel') ||
+      (modelReason.includes('hot') && (modelReason.includes('electric') || modelReason.includes('gas') || modelReason.includes('heat pump')))
+    return {
+      ...object,
+      scope,
+      trade,
+      inspection_required: true,
+      confidence: 'LOW' as const,
+      confidence_reason: alreadyNamesGap ? object.confidence_reason : reason,
+    }
+  }
+
+  return { ...object, scope, trade }
 }
 
 // v5 multi-trade: caller passes the trade detected from earlier dialog
@@ -97,9 +223,9 @@ export async function structureIntake(
 8. photo_urls is supplied as image attachments — never describe
    imagined photos in scope.description. If no images are attached,
    the photos contain nothing.
-9. scope.specs fields are PRICING-CRITICAL for electrical jobs. Extract
-   them when the caller mentions them, leave them undefined otherwise.
-   ${isPlumbing ? 'For PLUMBING jobs, the scope.specs fields below are NOT applicable — SKIP this section entirely and leave specs undefined. Plumbing-specific detail goes into scope.description.' : 'See "SPEC EXTRACTION" section below for explicit per-job_type rules.'}
+9. scope.specs fields are PRICING-CRITICAL. Extract them when the caller
+   mentions them, leave them undefined otherwise.
+   ${isPlumbing ? 'For PLUMBING jobs, the ELECTRICAL-ONLY spec fields (color_temp, dimmable, smart, weatherproof) are NOT applicable — leave them undefined; that detail goes into scope.description. BUT two structured fields DO apply to plumbing and MUST be captured when stated: scope.specs.supplied_by (who supplies taps/toilets/HWS/etc.) and the hot-water system_type (electric/gas/heat_pump) — see the PLUMBING SPEC CAPTURE block below.' : 'See "SPEC EXTRACTION" section below for explicit per-job_type rules.'}
 
 ${isPlumbing ? `TRADE: PLUMBING (QLD/QBCC pilot — v5)
 This is a plumbing intake. Auto-quoteable plumbing job_types:
@@ -136,8 +262,10 @@ Map customer language to job_type:
   "bathroom reno" / "renovating bathroom" / "ensuite renovation"
     → bathroom_renovation + inspection_required=true
 
-DO NOT populate scope.specs.* fields (color_temp, dimmable, smart,
-weatherproof) for plumbing intakes — those are electrical-only.
+PLUMBING SPEC CAPTURE — narrow, structured, pricing-critical
+The electrical-only spec fields (color_temp, dimmable, smart, weatherproof)
+do NOT apply to plumbing — leave them undefined. But the TWO fields below DO
+apply to plumbing and you MUST capture them from the caller's own words:
 
   scope.specs.supplied_by — WP5, applies to plumbing (taps, toilets,
   shower heads, dishwashers, garbage disposals, water filters, gas
@@ -147,6 +275,27 @@ weatherproof) for plumbing intakes — those are electrical-only.
     "you supply" / "can you provide" / "we want one"
     "include the unit" / "with a new one"            → 'tradie'
     not mentioned                                    → omit
+
+  HOT-WATER SYSTEM TYPE — for job_type=hot_water, the energy source of the
+  unit (electric vs gas vs heat pump) decides WHICH catalogue assembly prices
+  the job, so it is the single most pricing-critical fact for a HWS quote.
+  Emit it in the REQUIRED requested_specs_json field (it has no discrete
+  scope.specs slot) under the key "system_type":
+    "electric hot water" / "electric storage" / "element"   → {"system_type":"electric"}
+    "gas hot water" / "gas storage" / "continuous flow" /
+      "instant gas" / "LPG"                                 → {"system_type":"gas"}
+    "heat pump" / "heat-pump HWS" / "Reclaim/Sanden"        → {"system_type":"heat_pump"}
+  ★ E8 — NEVER GUESS THE SYSTEM TYPE ★
+  If the caller did NOT state the energy source (just "no hot water" / "HWS
+  died" / "hot water unit broken" with no fuel mentioned), you MUST:
+    - LEAVE system_type OUT of requested_specs_json (do not write a value), AND
+    - set inspection_required=true, AND
+    - set confidence=LOW with a confidence_reason that names the missing
+      hot-water system_type explicitly
+      (e.g. "hot_water energy source (electric/gas/heat pump) not stated").
+  Do NOT default to electric, gas, or heat pump. Picking a fuel the caller
+  never mentioned would ground the quote on the wrong assembly — exactly the
+  hallucination class we forbid. An unknown fuel is an inspection, not a guess.
 ` : `TRADE: ELECTRICAL (NSW/NECA pilot — v3)
 
 SPEC EXTRACTION — populate scope.specs.* from the caller's own words
@@ -201,7 +350,9 @@ stated in their own words, so the exact spec they asked for is never lost
 Use lowercase snake_case keys. Examples:
   "15 amp point" / "15A"               → {"amperage":"15A"}
   "weatherproof outdoor GPO" / "IP56"  → {"ip_rating":"IP56"}
-  "250 litre gas hot water"            → {"energy_source":"gas","litres":"250"}
+  "250 litre gas hot water"            → {"system_type":"gas","litres":"250"}
+  "heat pump hot water"                → {"system_type":"heat_pump"}
+  "electric storage hot water"         → {"system_type":"electric"}
   "double power point"                 → {"poles":"double"}
 Combine multiple specs into one object. If the caller stated NO concrete
 product spec, emit exactly "{}". NEVER invent a spec they didn't say. This is
@@ -264,15 +415,8 @@ no explicit safety/load/switchboard risk is stated.`}`,
       ],
     }],
   })
-  // Strip the raw JSON blob and attach the parsed map under scope.specs.
-  // Only attach when non-empty so an intake with no stated spec keeps its
-  // scope.specs exactly as before (no behaviour change for the common case).
-  const { requested_specs_json, ...scopeRest } = object.scope
-  const requested_specs = parseRequestedSpecs(requested_specs_json)
-  const scope =
-    Object.keys(requested_specs).length > 0
-      ? { ...scopeRest, specs: { ...(scopeRest.specs ?? {}), requested_specs } }
-      : scopeRest
-
-  return { ...object, scope, trade: deriveTradeFromJobType(object.job_type) }
+  // All post-processing (requested_specs parse, system_type promotion, the
+  // E8 hot_water backstop, and trade derivation) lives in the pure
+  // finaliseIntake() helper above so it is unit-testable without the SDK.
+  return finaliseIntake(object as unknown as StructuredObject)
 }

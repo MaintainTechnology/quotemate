@@ -3,11 +3,11 @@ import { after } from 'next/server'
 import { structureIntake } from '@/lib/intake/structure'
 import { deriveTradeFromJobType } from '@/lib/intake/schema'
 import { embedIntake } from '@/lib/intake/embed'
-import { evaluateIntakeQuality } from '@/lib/intake/quality'
+import { evaluateIntakeQuality, missingRequiredFields } from '@/lib/intake/quality'
 import { pipelineLog } from '@/lib/log/pipeline'
 import { withRetry } from '@/lib/util/retry'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
-import { buildIncompleteCallSms, buildIntakeRecoverySms, buildPhotoRequestSms, buildQuoteFailureSms } from '@/lib/sms/templates'
+import { buildIncompleteCallSms, buildIntakeRecoverySms, buildPhotoRequestSms, buildQuoteFailureSms, type MissingIntakeField } from '@/lib/sms/templates'
 import { findOrCreateCustomer, updateCustomerFromIntake } from '@/lib/customers/lookup'
 import {
   describeChosenProductDirective,
@@ -554,14 +554,31 @@ export async function POST(req: Request) {
 
   if (quality === 'empty') {
     // Empty intake — but we can do better than a generic "we didn't catch
-    // enough" SMS. Identify EXACTLY which universal must-ask field is
-    // missing and send a focused recovery question. Voice source still
-    // uses the original callback-request template since the call is over.
-    const missing: ('name' | 'suburb' | 'scope' | 'job_type')[] = []
+    // enough" SMS. Identify EXACTLY which must-ask field is missing and
+    // send a focused recovery question. Voice source still uses the
+    // original callback-request template since the call is over.
+    const missing: MissingIntakeField[] = []
     if (!intake.caller?.name) missing.push('name')
     if (!intake.suburb) missing.push('suburb')
     if (!intake.scope?.description || intake.scope.description.length < 10) missing.push('scope')
     if (intake.job_type === 'other') missing.push('job_type')
+
+    // R28 — a per-job STRUCTURED-field gap (e.g. a count-based easy-5 job
+    // that quality.ts downgraded to 'empty' purely because no count was
+    // captured) produces NO universal-field entry above, so without this
+    // the recovery path would fall through to the generic "describe the
+    // work" wording → the customer re-describes the job → ask-loop. Fold
+    // any structured-field gap reported by missingRequiredFields() into
+    // the recovery set so buildIntakeRecoverySms asks the exact question
+    // ("How many downlights are we doing?"). De-duplicated defensively.
+    for (const field of missingRequiredFields({
+      confidence: intake.confidence,
+      caller: intake.caller,
+      scope: intake.scope,
+      job_type: intake.job_type,
+    })) {
+      if (!missing.includes(field)) missing.push(field)
+    }
 
     // CRITICAL — reopen the conversation BEFORE we return the response and
     // before after() runs. The earlier link-back step (above) set status
@@ -605,6 +622,9 @@ export async function POST(req: Request) {
               firstName: callerFirstName,
               missing,
               trade: tradeHint,
+              // R28 — drives the 'count' recovery question's noun so the
+              // customer sees "how many downlights?" not a generic ask.
+              jobType: intake.job_type,
             })
           : buildIncompleteCallSms({ firstName: callerFirstName, source: sourceChannel })
 

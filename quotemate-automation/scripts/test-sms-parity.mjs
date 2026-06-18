@@ -10,6 +10,14 @@
 // Usage:  node --import tsx scripts/test-sms-parity.mjs
 // (or any TS-aware loader; project ships with tsx via next-dev)
 //
+// IMPORTANT: this harness imports lib/sms/templates.ts (and other lib/*
+// modules) which use the `@/lib/...` TS path alias. Raw `node` and
+// `node --test` CANNOT resolve that alias (ERR_MODULE_NOT_FOUND on '@/lib')
+// — you MUST run it through a TS-aware loader, i.e. `node --import tsx`.
+// The vitest suite (npx vitest run) covers the same behaviours via the
+// `@`→`.` alias in vitest.config.ts; this script is the cross-channel
+// (voice == SMS) parity self-check layered on top.
+//
 // Exits 0 when all assertions pass, 1 otherwise.
 // ═══════════════════════════════════════════════════════════════════
 
@@ -40,6 +48,10 @@ const templates = await import("../lib/sms/templates.ts");
 const quality = await import("../lib/intake/quality.ts");
 const assumptions = await import("../lib/sms/assumptions.ts");
 const dialog = await import("../lib/sms/dialog.ts");
+// R5/R6/R11 — money-path grounding guards (deterministic, no LLM).
+const validate = await import("../lib/estimate/validate.ts");
+// R13 — inspection-reason sanitiser (no-price-leak on a no-price quote).
+const inspectionReason = await import("../lib/estimate/inspection-reason.ts");
 
 // ─── Fixtures ────────────────────────────────────────────────────────
 const intakeDownlights = {
@@ -421,6 +433,227 @@ describe("TurnDecisionSchema — Zod-validated dialog output", () => {
       reason_for_escalation: null,
     });
     assert.equal(bad.success, false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// 7. DUPLICATE-CHARGE PREVENTION (R5 within-tier / R6 cross-tier)
+//
+// The grounding validator is the money-path backstop the SMS path shares
+// with voice: a draft that double-charges the same catalogue row — within
+// one tier (R5) or across tiers at an unframed quantity (R6) — must FAIL
+// grounding, which downgrades the whole quote to the $99 inspection route.
+// Exercised directly against validateQuoteGrounding /
+// detectCrossTierDuplicates — no LLM, fully deterministic.
+// ═══════════════════════════════════════════════════════════════════
+describe("validateQuoteGrounding — duplicate-charge prevention (R5/R6)", () => {
+  const pricingBook = {
+    hourly_rate: 110,
+    apprentice_rate: 80,
+    call_out_minimum: 150,
+    default_markup_pct: 28,
+    min_labour_hours: 2,
+  };
+  const candidates = validate.buildCandidatePrices(
+    [
+      { id: "mat-dux-315", name: "Dux Proflo 315L electric storage HWS", price: 1645, category: "hot_water" },
+      { id: "mat-downlight", name: "Brilliant 9W LED downlight", price: 20, category: "downlight" },
+    ],
+    [],
+    pricingBook,
+  );
+  const labour = (hours) => ({
+    description: "Labour",
+    quantity: hours,
+    unit: "hr",
+    unit_price_ex_gst: 110,
+    source: "labour",
+  });
+  // downlight at the 28% markup ($20 × 1.28 = $25.60).
+  const downlight = (qty) => ({
+    description: "Brilliant 9W LED downlight",
+    quantity: qty,
+    unit: "each",
+    unit_price_ex_gst: 25.6,
+    source: "material:mat-downlight",
+  });
+
+  it("R5: flags the SAME row charged twice in one tier (raw + marked-up, differing descriptions)", () => {
+    const r = validate.validateQuoteGrounding(
+      {
+        needs_inspection: false,
+        good: {
+          line_items: [
+            labour(3),
+            { description: "Premium HWS 315L (supply + install)", quantity: 1, unit: "each", unit_price_ex_gst: 2105.6, source: "material:mat-dux-315" },
+            { description: "Storage hot water unit 315 litre", quantity: 1, unit: "each", unit_price_ex_gst: 1645, source: "material" },
+          ],
+        },
+        better: null,
+        best: null,
+      },
+      pricingBook,
+      candidates,
+    );
+    assert.equal(r.valid, false, "within-tier dup should fail grounding");
+    assert.ok(
+      r.failures.some((f) => f.expected.includes("D-1 dedup")),
+      "expected a D-1 dedup failure",
+    );
+  });
+
+  it("R6: flags the same row stacked at DIFFERENT quantities across tiers with no framing", () => {
+    const draft = {
+      needs_inspection: false,
+      good: { label: "Good", line_items: [labour(2), downlight(3)] },
+      better: { label: "Better", line_items: [labour(2), downlight(6)] },
+      best: { label: "Best", line_items: [labour(2), downlight(9)] },
+    };
+    const dups = validate.detectCrossTierDuplicates(draft, candidates);
+    assert.equal(dups.length, 1, "one unframed cross-tier stack expected");
+    assert.equal(dups[0].anchor, "material:mat-downlight");
+    assert.equal(dups[0].sameQuantity, false);
+    const r = validate.validateQuoteGrounding(draft, pricingBook, candidates);
+    assert.equal(r.valid, false, "unframed cross-tier stack should fail grounding");
+    assert.ok(r.failures.some((f) => f.expected.includes("cross-tier duplicate")));
+  });
+
+  it("R6: does NOT flag a FRAMED quantity difference (scope_of_works explains the count change)", () => {
+    const draft = {
+      needs_inspection: false,
+      scope_of_works:
+        "Install Brilliant 9W LED downlight units: Good covers 3 downlights in the kitchen; " +
+        "Best extends to 6 downlights across the kitchen and hallway.",
+      good: { label: "Good", line_items: [labour(2), downlight(3)] },
+      better: null,
+      best: { label: "Best", line_items: [labour(2), downlight(6)] },
+    };
+    assert.equal(validate.detectCrossTierDuplicates(draft, candidates).length, 0);
+    assert.equal(validate.validateQuoteGrounding(draft, pricingBook, candidates).valid, true);
+  });
+
+  it("R6: does NOT flag the SAME row at the SAME quantity in every tier (ordinary progression)", () => {
+    const draft = {
+      needs_inspection: false,
+      good: { label: "Good", line_items: [labour(2), downlight(6)] },
+      better: { label: "Better", line_items: [labour(3), downlight(6)] },
+      best: { label: "Best", line_items: [labour(4), downlight(6)] },
+    };
+    assert.equal(validate.detectCrossTierDuplicates(draft, candidates).length, 0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// 8. AFTER-HOURS TAG (R11) — the validator only accepts an above-rate
+// labour/callout price when the LINE is tagged after-hours AND the
+// configured multiplier is a sane surcharge (finite, >1, ≤ the cap). A
+// forged tag or garbage multiplier must still fail grounding.
+// ═══════════════════════════════════════════════════════════════════
+describe("validateQuoteGrounding — after-hours surcharge tag (R11)", () => {
+  const baseBook = {
+    hourly_rate: 100,
+    apprentice_rate: 70,
+    call_out_minimum: 150,
+    default_markup_pct: 28,
+    min_labour_hours: 3,
+  };
+  const noCandidates = validate.buildCandidatePrices([], [], baseBook);
+  const callout = { description: "Call-out", quantity: 1, unit: "each", unit_price_ex_gst: 150, source: "callout" };
+  const tier = (lines) => ({ needs_inspection: false, good: { line_items: lines }, better: null, best: null });
+
+  it("ACCEPTS a TAGGED after-hours labour line at hourly × a valid multiplier (×1.5)", () => {
+    const r = validate.validateQuoteGrounding(
+      tier([callout, { description: "After-hours diagnostic", quantity: 3, unit: "hr", unit_price_ex_gst: 150, source: "after_hours" }]),
+      { ...baseBook, after_hours_multiplier: 1.5 },
+      noCandidates,
+    );
+    assert.equal(r.valid, true, "tagged after-hours line at a valid surcharge should ground");
+  });
+
+  it("REJECTS the SAME inflated rate on an UNTAGGED labour line (tag required)", () => {
+    const r = validate.validateQuoteGrounding(
+      tier([callout, { description: "Install labour", quantity: 3, unit: "hr", unit_price_ex_gst: 200, source: "labour" }]),
+      { ...baseBook, after_hours_multiplier: 2 },
+      noCandidates,
+    );
+    assert.equal(r.valid, false, "untagged inflated labour must fail grounding");
+  });
+
+  it("REJECTS a forged/garbage multiplier from establishing an inflated accepted rate", () => {
+    const r = validate.validateQuoteGrounding(
+      tier([callout, { description: "After-hours labour", quantity: 3, unit: "hr", unit_price_ex_gst: 5000, source: "after_hours" }]),
+      { ...baseBook, after_hours_multiplier: 50 },
+      noCandidates,
+    );
+    assert.equal(r.valid, false, "an absurd multiplier above the cap must not inflate the accepted rate");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// 9. QUESTION ENFORCEMENT (R24/R27) — the per-job MUST-ASK + inspection
+// triggers the SMS dialog injects. The deterministic readiness gate and
+// the dialog prompt render the SAME canonical list (mustAskLines), so the
+// agent can never finish/draft while a mandatory question is unanswered.
+// ═══════════════════════════════════════════════════════════════════
+describe("rulesAsText / mustAskLines — per-job question enforcement (R24/R27)", () => {
+  const EASY_SET = [
+    "downlights", "power_points", "ceiling_fans", "smoke_alarms", "outdoor_lighting",
+    "blocked_drain", "hot_water", "tap_repair", "tap_replace", "toilet_repair", "toilet_replace",
+  ];
+
+  for (const jt of EASY_SET) {
+    it(`${jt}: mustAskLines is non-empty + cleaned (one canonical mandatory set)`, () => {
+      const lines = assumptions.mustAskLines(jt);
+      assert.ok(lines.length > 0, `no MUST-ASK lines for ${jt}`);
+      for (const q of lines) {
+        assert.ok(q.trim().length > 0, "blank MUST-ASK entry leaked through");
+        assert.equal(q, q.trim(), "untrimmed MUST-ASK entry");
+      }
+    });
+    it(`${jt}: rulesAsText renders a HARD MUST-ASK gate that forbids finishing`, () => {
+      const t = assumptions.rulesAsText(jt);
+      assert.match(t, /MUST ASK before any finish/);
+      assert.match(t, /do NOT finish/);
+      // Every mandatory question is present and numbered in order.
+      assumptions.mustAskLines(jt).forEach((q, i) => {
+        assert.ok(t.includes(`${i + 1}. ${q}`), `missing numbered MUST-ASK "${q}" for ${jt}`);
+      });
+    });
+    it(`${jt}: rulesAsText renders inspection triggers as escalation rules`, () => {
+      const t = assumptions.rulesAsText(jt);
+      assert.match(t, /INSPECTION TRIGGERS/);
+      assert.match(t, /escalate_inspection/);
+      for (const trig of assumptions.ASSUMPTION_RULES[jt].inspectionTriggers) {
+        assert.ok(t.includes(trig), `missing inspection trigger "${trig}" for ${jt}`);
+      }
+    });
+  }
+
+  it("the dialog SYSTEM_PROMPT frames MUST-ASK as a hard pre-finish gate", () => {
+    assert.match(dialog.SYSTEM_PROMPT, /MUST-ASK questions are HARD per-job gates/i);
+    assert.match(dialog.SYSTEM_PROMPT, /BEFORE action='finish'/);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// 10. INSPECTION-REASON NO-PRICE-LEAK (R13) — the customer inspection SMS
+// renders the sanitised reason; it must never carry an invented price on a
+// quote that has no real price.
+// ═══════════════════════════════════════════════════════════════════
+describe("sanitizeInspectionReason — no price leaks onto a no-price quote (R13)", () => {
+  it("falls back to the safe default for empty / nullish / too-short input", () => {
+    assert.equal(inspectionReason.sanitizeInspectionReason(""), inspectionReason.SAFE_INSPECTION_REASON);
+    assert.equal(inspectionReason.sanitizeInspectionReason(null), inspectionReason.SAFE_INSPECTION_REASON);
+    assert.equal(inspectionReason.sanitizeInspectionReason("n/a"), inspectionReason.SAFE_INSPECTION_REASON);
+  });
+  it("strips an invented price claim but keeps the surrounding reason", () => {
+    const out = inspectionReason.sanitizeInspectionReason("Likely a $1,200 switchboard upgrade");
+    assert.equal(/\$|1,200|dollars/i.test(out), false, "price leaked into inspection reason");
+    assert.match(out, /switchboard upgrade/i);
+  });
+  it("passes a clean reason through essentially unchanged", () => {
+    const clean = "The meter box is in a hard-to-access location and needs an on-site check.";
+    assert.equal(inspectionReason.sanitizeInspectionReason(clean), clean);
   });
 });
 

@@ -83,7 +83,38 @@ async function postTwilioMessage(channel: 'sms' | 'whatsapp', opts: {
     return { ok: false, code: 'NETWORK', reason: e?.message ?? 'fetch failed', raw: null }
   }
 
-  const text = await res.text()
+  // The fetch above already returned a Response, so Twilio HAS received the
+  // request. Read the body DEFENSIVELY: if the read fails now (e.g. a Vercel
+  // teardown / undici headers-timeout firing AFTER Twilio accepted the
+  // message), we must NOT report a retryable NETWORK failure — that would let
+  // the retry layer resend an already-delivered SMS (duplicate customer text).
+  // Decide by the HTTP status, which is available on `res` regardless of the
+  // body read: 2xx ⇒ accepted (success, sid unknown), non-2xx ⇒ classify by
+  // status code (4xx terminal / 5xx retryable) — never blind NETWORK.
+  let text: string
+  try {
+    text = await res.text()
+  } catch (e: any) {
+    if (res.ok) {
+      return {
+        ok: true,
+        sid: '',
+        status: 'accepted',
+        to: toAddr,
+        raw: {
+          sid: '', status: 'accepted', to: toAddr, from: fromAddr,
+          body: opts.text, error_code: null, error_message: null,
+          price: null, price_unit: null, num_segments: '1', date_created: '',
+        },
+      }
+    }
+    return {
+      ok: false,
+      code: String(res.status),
+      reason: `HTTP ${res.status} (response body unreadable: ${e?.message ?? 'res.text() failed'})`,
+      raw: null,
+    }
+  }
   let parsed: any = null
   try { parsed = JSON.parse(text) } catch { parsed = { rawText: text } }
 

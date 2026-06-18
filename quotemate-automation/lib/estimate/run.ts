@@ -59,6 +59,17 @@ export type EstimationResult = {
    *  validation failed. The route handler should NOT create three-tier
    *  Stripe sessions in this case. */
   downgradedToInspection?: boolean
+  /** R15b — set when a HARD spec mismatch blocked SOME (not all) priced
+   *  tiers in enforce mode. The quote still ships with its spec-correct
+   *  tier(s) (so it is NOT an inspection downgrade), but the route handler
+   *  gets the same explicit, structured observability the grounding path
+   *  gets via groundingFailures — the blocked tiers are never silently
+   *  nulled. `null`/absent when no partial spec-block happened. */
+  specBlock?: {
+    partial: true
+    blocked_tiers: Array<'good' | 'better' | 'best'>
+    reasons: Array<{ tier: 'good' | 'better' | 'best'; reason: string }>
+  }
 }
 
 /** Phase 6 (2026-05-27) — optional conversation_state for the price-bands
@@ -345,6 +356,20 @@ export async function runEstimation(
     })
   }
 
+  // Auto-quote path: every line_item.unit_price_ex_gst MUST be derivable
+  // from pricing_book + shared_materials + shared_assemblies + the
+  // tenant's tenant_custom_assemblies (migration 023). v5 multi-trade:
+  // scope grounding to intake.trade so an electrical quote can never
+  // coincidentally validate against a plumbing price (or vice versa).
+  // Loaded HERE (before the recipe merge) so the R9 appended-extra
+  // micro-validation can reuse the SAME candidate set the main grounding
+  // pass uses below — one DB round-trip, identical safety semantics.
+  const candidates = await loadCandidatePrices(
+    pricingBook,
+    intake?.trade ?? null,
+    (intake?.tenant_id as string | null) ?? null,
+  )
+
   // ── Phase 3 — PRICE-BANDS RECIPE MERGE ─────────────────────────────
   // For each tier where Opus picked an assembly that carries a
   // price_recipe (jsonb), evaluate the recipe against the customer's
@@ -355,6 +380,17 @@ export async function runEstimation(
   // to a $99 inspection because the customer mentioned a non-default
   // distance or amperage. No-op when the assembly has no recipe; falls
   // back silently on load errors so the un-banded draft still ships.
+  //
+  // PHASE 1 integrity (R7 + R9): the merge APPENDS recipe extras to the
+  // END of a tier AFTER Opus drafted it. Two failure modes are closed
+  // here, both ENFORCED (not advisory):
+  //   • R7 — an appended extra that double-charges an Opus-drafted line
+  //     (same catalogue id / product, qty, unit) is DROPPED.
+  //   • R9 — the appended extras of a tier are micro-validated against
+  //     the grounding candidate set; if ANY appended line is un-grounded
+  //     the WHOLE tier's recipe result is reverted to its pre-merge
+  //     state (CRITICAL log) so a partial / un-grounded merge never
+  //     ships. A revert restores the exact Opus-drafted tier object.
   let mergedDraft: DraftWithTiers = draft
   try {
     const recipeCtx = await loadRecipeContext(
@@ -362,6 +398,19 @@ export async function runEstimation(
       (intake?.tenant_id as string | null) ?? null,
     )
     if (recipeCtx.recipesByAssemblyId.size > 0) {
+      // Snapshot the pre-merge tiers (deep-cloned) + per-tier Opus line
+      // counts BEFORE merge. The clones are the revert targets for R9;
+      // the counts mark the Opus-drafted prefix for R7/R9.
+      const preMergeTiers: Partial<Record<(typeof PHASE1_TIERS)[number], any>> = {}
+      const preCounts: Partial<Record<(typeof PHASE1_TIERS)[number], number>> = {}
+      for (const k of PHASE1_TIERS) {
+        const t = (draft as any)?.[k]
+        if (t && Array.isArray(t.line_items)) {
+          preMergeTiers[k] = JSON.parse(JSON.stringify(t))
+          preCounts[k] = t.line_items.length
+        }
+      }
+
       // Phase 6: SMS callers thread sms_conversations.conversation_state
       // through here. buildRecipeSlots gives conversation slots priority
       // over intake.scope (newer signal wins), so live customer answers
@@ -387,6 +436,66 @@ export async function runEstimation(
         // them. mergeRecipesIntoDraft is purely functional; we apply
         // its result onto the live draft here.
         Object.assign(draft, postMerge)
+
+        // R7 — drop appended recipe extras that duplicate an Opus line.
+        const r7 = dropDuplicateAppendedLines(draft, preCounts)
+        if (r7.dropped.length > 0) {
+          cacheLog.err(
+            'R7 recipe-dedup — dropped appended recipe line(s) that double-charged an Opus-drafted line',
+            null,
+            { dropped: r7.dropped },
+          )
+          trace('estimate', 'warn', {
+            substep: 'recipe_dedup',
+            message: `R7 dropped ${r7.dropped.length} duplicate appended line(s)`,
+            decisions: { dropped: r7.dropped },
+          })
+        }
+
+        // R9 — micro-validate ONLY the appended extras against the same
+        // grounding candidate set. A tier with an un-grounded appended
+        // line is reverted to its pre-merge (Opus-drafted) state so a
+        // partial / un-grounded merge can never reach the customer.
+        try {
+          const r9 = validateAppendedLines(draft, preCounts, pricingBook as PricingBookForValidation, candidates)
+          if (r9.failedTiers.size > 0) {
+            for (const k of r9.failedTiers) {
+              if (preMergeTiers[k] !== undefined) {
+                ;(draft as any)[k] = preMergeTiers[k]
+              }
+            }
+            cacheLog.err(
+              'R9 CRITICAL — recipe appended an un-grounded extra; reverted affected tier(s) to the pre-merge Opus draft',
+              null,
+              {
+                reverted_tiers: Array.from(r9.failedTiers),
+                failures: r9.failures.map((f) => ({
+                  tier: f.tier,
+                  lineIndex: f.lineIndex,
+                  description: f.description?.slice(0, 80),
+                  expected: f.expected,
+                })),
+              },
+            )
+            trace('estimate', 'err', {
+              substep: 'recipe_merge_isolation',
+              message: `R9 reverted ${r9.failedTiers.size} tier(s) — un-grounded appended extra`,
+              decisions: { reverted_tiers: Array.from(r9.failedTiers) },
+            })
+          }
+        } catch (r9Err: any) {
+          // Fail-closed on an isolation error: revert ALL tiers that the
+          // merge changed, so a crash in the micro-validator can't leave a
+          // partially-merged tier in the draft.
+          cacheLog.err(
+            'R9 isolation errored — reverting all merged tiers to the pre-merge Opus draft',
+            r9Err?.message ?? String(r9Err),
+          )
+          for (const k of PHASE1_TIERS) {
+            if (preMergeTiers[k] !== undefined) (draft as any)[k] = preMergeTiers[k]
+          }
+        }
+
         trace('estimate', 'ok', {
           substep: 'recipe_merge',
           message: 'price-bands recipe modifiers applied',
@@ -460,6 +569,21 @@ export async function runEstimation(
       },
     )
     if (kb) {
+      // R10 — KB apply-mode grounding integrity. When the KB rewrites a
+      // line's price, stamp the line with an explicit KB-origin marker and
+      // surface it via risk_flags so a stale/incorrect KB price cannot
+      // silently launder through the loose category grounding path: the
+      // main validateQuoteGrounding pass (which runs AFTER this) still
+      // re-checks every KB-rewritten price, and now its provenance is
+      // visible to operators. No-op in shadow/off (zero corrections).
+      if (kb.mode === 'apply' && kb.reconciliation.corrections.length > 0) {
+        const r10 = markKbRewrittenLines(draft, kb.reconciliation.corrections)
+        if (r10.stamped > 0) {
+          cacheLog.ok('R10 — stamped KB-rewritten prices with origin marker (re-ground + operator-visible)', {
+            stamped: r10.stamped,
+          })
+        }
+      }
       trace('estimate', kb.reconciliation.summary.mismatch > 0 ? 'warn' : 'ok', {
         substep: 'kb_verify',
         message: `MT-QM-PRICING-KB verification (${kb.mode})`,
@@ -478,17 +602,12 @@ export async function runEstimation(
     cacheLog.err('KB verification errored — continuing without it', e?.message ?? String(e))
   }
 
-  // Auto-quote path: every line_item.unit_price_ex_gst MUST be derivable
+  // Grounding pass: every line_item.unit_price_ex_gst MUST be derivable
   // from pricing_book + shared_materials + shared_assemblies + the
   // tenant's tenant_custom_assemblies (migration 023). If even one
   // line item fails grounding, downgrade the entire quote to inspection.
-  // v5 multi-trade: scope grounding to intake.trade so an electrical quote
-  // can never coincidentally validate against a plumbing price (or vice versa).
-  const candidates = await loadCandidatePrices(
-    pricingBook,
-    intake?.trade ?? null,
-    (intake?.tenant_id as string | null) ?? null,
-  )
+  // `candidates` was loaded above (before the recipe merge) so the R9
+  // appended-extra micro-validation and this pass share one candidate set.
   const validateSw = stopwatch()
   const check = validateQuoteGrounding(draft, pricingBook as PricingBookForValidation, candidates)
 
@@ -635,6 +754,20 @@ export async function runEstimation(
       }
     }
 
+    // Phase 1 — when set true by R14 (post-reconcile re-check) or R15
+    // (hard spec mismatch with no safe tier), the success branch returns
+    // the inspection downgrade instead of the auto-quote. Carries the
+    // observability payload for the route handler + logs.
+    let forcedInspection: {
+      reason: string
+      groundingFailures?: GroundingFailure[]
+    } | null = null
+
+    // R15b — populated when a partial spec-block removed some (not all)
+    // priced tiers. Threaded onto the success return so the route handler
+    // sees the structured downgrade signal (mirrors groundingFailures).
+    let partialSpecBlock: EstimationResult['specBlock'] | null = null
+
     // ── Deterministic quote-integrity backstops (post-grounding, pre-return) ──
     // Grounding proved each UNIT price; these make the BILL consistent with
     // those proven prices, collapse fake-identical tiers, and flag a quantity
@@ -672,6 +805,47 @@ export async function runEstimation(
           quantity_flags: qtyFlags.length,
           labour_corrections: labour.corrections.length,
         })
+      }
+
+      // R14 — POST-RECONCILIATION RE-CHECK. reconcileInflatedLabour +
+      // reconcileTierMath rewrite line totals / labour hours / subtotals
+      // AFTER the grounding pass already proved every unit price. Those
+      // helpers are arithmetic-only and reduce-only by design, but this
+      // is the deterministic backstop that PROVES it: re-run the grounding
+      // validator over the post-reconcile draft. If any priced line's
+      // (unit_price_ex_gst, unit) no longer matches a grounded candidate
+      // — i.e. reconciliation arithmetic somehow introduced an ungrounded
+      // number — downgrade the whole quote to inspection (existing
+      // behaviour) and log. Only runs when at least one reconcile op
+      // actually changed the draft, so a clean quote pays nothing.
+      if (corrections.length > 0 || labour.corrections.length > 0) {
+        const recheck = validateQuoteGrounding(
+          draft,
+          pricingBook as PricingBookForValidation,
+          candidates,
+        )
+        if (!recheck.valid) {
+          forcedInspection = {
+            reason:
+              `Pricing not yet available — ${recheck.failures.length} line item(s) failed the ` +
+              `post-reconciliation grounding re-check. A site visit is needed before we can quote accurately.`,
+            groundingFailures: recheck.failures,
+          }
+          cacheLog.err(
+            'R14 CRITICAL — post-reconcile re-check found an ungrounded price; downgrading to inspection',
+            null,
+            {
+              failure_count: recheck.failures.length,
+              failures: recheck.failures.slice(0, 10).map((f) => ({
+                tier: f.tier,
+                lineIndex: f.lineIndex,
+                description: f.description?.slice(0, 80),
+                price: f.unit_price_ex_gst,
+                expected: f.expected,
+              })),
+            },
+          )
+        }
       }
     } catch (err: any) {
       cacheLog.err(
@@ -716,10 +890,62 @@ export async function runEstimation(
           const mismatches = results.filter((r) => r.decision.verdict === 'mismatch')
           if (mismatches.length > 0) {
             cacheLog.err(
-              `spec guard [${guardMode}] main-path — ${mismatches.length} tier(s) contradict the requested spec (${guardMode === 'enforce' ? 'flagged for review' : 'shadow — observe only'})`,
+              `spec guard [${guardMode}] main-path — ${mismatches.length} tier(s) contradict the requested spec (${guardMode === 'enforce' ? 'BLOCKING bad tier(s)' : 'shadow — observe only'})`,
               mismatches.map((m) => `${m.tier}: ${m.decision.reason}`).join(' | '),
             )
+            // R15 — SPEC-MISMATCH HANDLING.
+            //   • SHADOW (and the old enforce behaviour): logging + risk_flag
+            //     only — never blocks. Unchanged.
+            //   • ENFORCE: a HARD spec mismatch must ACT, not ship silently.
+            //     A product that contradicts the customer's agreed spec
+            //     (e.g. customer said 15A GPO, model picked 10A) is removed:
+            //     partial mismatch → the offending tier(s) are nulled
+            //     (blocked); ALL priced tiers mismatch → the whole quote is
+            //     routed to inspection so a wrong-spec product never reaches
+            //     the customer.
             if (guardMode === 'enforce') {
+              const mismatchTiers = mismatches.map((m) => ({
+                tier: m.tier as 'good' | 'better' | 'best',
+                reason: m.decision.reason ?? 'spec mismatch',
+              }))
+              const r15 = enforceSpecMismatch(draft, mismatchTiers, guardMode)
+              if (r15.routeToInspection) {
+                forcedInspection = {
+                  reason:
+                    'Spec mismatch — every quoted option contradicts the specification you agreed to. ' +
+                    'A site visit is needed so we can confirm the right product before quoting.',
+                }
+                cacheLog.err(
+                  'R15 — all priced tiers contradict the agreed spec; downgrading to inspection',
+                  mismatchTiers.map((m) => `${m.tier}: ${m.reason}`).join(' | '),
+                )
+              } else if (r15.blockedTiers.length > 0) {
+                // R15b — surface the partial block the same way the grounding
+                // path surfaces its downgrade, so the route's routing +
+                // risk_flags treat it consistently (review-required) rather
+                // than seeing a tier that vanished with only a soft note.
+                // enforceSpecMismatch already stamped draft.spec_block +
+                // draft.needs_review; mirror it onto the result here.
+                partialSpecBlock = {
+                  partial: true,
+                  blocked_tiers: [...r15.blockedTiers],
+                  reasons: mismatchTiers.filter((m) =>
+                    r15.blockedTiers.includes(m.tier),
+                  ),
+                }
+                cacheLog.err(
+                  `R15 — blocked ${r15.blockedTiers.length} spec-contradicting tier(s); kept the spec-correct option(s)`,
+                  null,
+                  { blocked: r15.blockedTiers },
+                )
+                trace('estimate', 'warn', {
+                  substep: 'spec_block_partial',
+                  message: `R15 partial spec-block — ${r15.blockedTiers.length} tier(s) removed, spec-correct tier(s) kept`,
+                  decisions: { blocked_tiers: r15.blockedTiers, route: 'tradie_review' },
+                })
+              }
+            } else {
+              // Shadow — observe only (append risk flags, never block).
               draft.risk_flags = [
                 ...(Array.isArray(draft.risk_flags) ? draft.risk_flags : []),
                 ...mismatches.map((m) => `[spec-guard] ${m.tier}: ${m.decision.reason}`),
@@ -735,16 +961,54 @@ export async function runEstimation(
       )
     }
 
-    trace('estimate', 'ok', {
+    // Phase 1 (R14 / R15) — a post-grounding integrity step forced the
+    // whole quote to inspection (post-reconcile re-check found an
+    // ungrounded number, or every priced tier contradicted the agreed
+    // spec). Return the same inspection-downgrade shape the grounding-fail
+    // path uses so the route handler doesn't build three-tier Stripe
+    // sessions. This NEVER loosens grounding — it only adds reasons to
+    // route to the safe $99 inspection.
+    if (forcedInspection) {
+      const downgraded = {
+        ...draft,
+        good: null,
+        better: null,
+        best: null,
+        needs_inspection: true,
+        inspection_reason: forcedInspection.reason,
+        estimated_timeframe: 'After site visit (within 5 business days)',
+      }
+      trace('estimate', 'warn', {
+        substep: 'done',
+        message: 'returned inspection-downgrade (phase-1 integrity gate)',
+        decisions: { route: 'inspection', cause: 'phase1_integrity' },
+        duration_ms: totalSw.elapsed(),
+      })
+      return {
+        draft: downgraded,
+        ...(forcedInspection.groundingFailures
+          ? { groundingFailures: forcedInspection.groundingFailures }
+          : {}),
+        downgradedToInspection: true,
+      }
+    }
+
+    trace('estimate', partialSpecBlock ? 'warn' : 'ok', {
       substep: 'done',
-      message: 'auto-quote returned (grounded, enriched)',
+      message: partialSpecBlock
+        ? 'quote returned with partial spec-block (spec-correct tier(s) kept, review-required)'
+        : 'auto-quote returned (grounded, enriched)',
       decisions: {
-        route: 'auto_quote',
+        route: partialSpecBlock ? 'tradie_review' : 'auto_quote',
         tier_count: ['good', 'better', 'best'].filter((k) => draft?.[k]).length,
+        ...(partialSpecBlock ? { spec_blocked_tiers: partialSpecBlock.blocked_tiers } : {}),
       },
       duration_ms: totalSw.elapsed(),
     })
-    return { draft }
+    return {
+      draft,
+      ...(partialSpecBlock ? { specBlock: partialSpecBlock } : {}),
+    }
   }
 
   // Log every failure so the next-time diagnosis is one log query away.
@@ -1488,6 +1752,422 @@ async function loadCategorySpecRows(
     }
   }
   return rows
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PHASE 1 PRICE-INTEGRITY HELPERS (pure, no I/O — unit-tested in
+// run-phase1.test.ts). Each closes a specific way the recipe / KB /
+// reconcile post-processing could launder an ungrounded or double-charged
+// price PAST the grounding validator. They are deliberately fail-closed:
+// when in doubt they DROP/FLAG/DOWNGRADE, never accept. They STRENGTHEN
+// the price-integrity envelope; they never loosen validate.ts.
+// ═══════════════════════════════════════════════════════════════════════
+
+type AnyLine = Record<string, any>
+type AnyTier = { line_items?: AnyLine[]; subtotal_ex_gst?: number | string; [k: string]: unknown } | null | undefined
+const PHASE1_TIERS = ['good', 'better', 'best'] as const
+
+function p1Num(v: unknown): number {
+  if (v === null || v === undefined || v === '') return Number.NaN
+  return typeof v === 'string' ? parseFloat(v) : (v as number)
+}
+function p1Round2(n: number): number {
+  return Math.round(n * 100) / 100
+}
+
+/** True for a labour line (source === 'labour'). Labour lines are NEVER
+ *  deduped by R7 (see lineDuplicateKey / dropDuplicateAppendedLines): a
+ *  recipe's ADDITIONAL labour is additive work, not a duplicate, even when
+ *  it coincidentally totals the same hours/rate as an Opus base-labour
+ *  line. Dropping it would under-bill the tradie for real work. */
+function p1IsLabour(li: AnyLine): boolean {
+  return String(li?.source ?? '').trim().toLowerCase() === 'labour'
+}
+
+/** Identity key for a priced line, used to detect a recipe-appended line
+ *  that double-charges an Opus-drafted line. Keys on the catalogue anchor
+ *  when present (source `material:<id>`/`assembly:<id>`), else the
+ *  normalised description — combined with quantity + normalised unit.
+ *
+ *  R7 (2026-06-18): labour lines now also fold the normalised DESCRIPTION
+ *  into the key (`labour|<desc>|<unit>|<qty>`) instead of the bare
+ *  `labour|<unit>|<qty>`. The old key collapsed EVERY labour line that
+ *  shared hours+unit, so a recipe's distinct additional-labour line (e.g.
+ *  "Extra labour — long cable run", 2hr) was wrongly treated as a duplicate
+ *  of an unrelated Opus base-labour line (e.g. "Labour — install", 2hr) and
+ *  dropped, under-billing real work. Folding the description in makes two
+ *  genuinely-distinct labour lines distinct keys while still collapsing an
+ *  exact repeat. (dropDuplicateAppendedLines additionally SKIPS labour
+ *  lines entirely — this key change is defence-in-depth for any other
+ *  caller of lineDuplicateKey.) */
+export function lineDuplicateKey(li: AnyLine): string {
+  const srcRaw = String(li?.source ?? '').trim()
+  const refMatch = srcRaw.match(/^(material|assembly):([A-Za-z0-9_-]{4,})$/i)
+  const unit = String(li?.unit ?? '').toLowerCase().trim()
+  const qty = p1Num(li?.quantity)
+  const qtyKey = Number.isFinite(qty) ? String(qty) : ''
+  const normDesc = String(li?.description ?? '')
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/\s*\(.*$/, '') // strip parenthetical decorations like "(supplied)"
+  let anchor: string
+  if (refMatch) {
+    anchor = `${refMatch[1].toLowerCase()}:${refMatch[2].toLowerCase()}`
+  } else if (srcRaw.toLowerCase() === 'labour') {
+    // Description-aware so two distinct labour lines don't collide.
+    anchor = `labour:${normDesc}`
+  } else {
+    anchor = normDesc
+  }
+  return `${anchor}|${unit}|${qtyKey}`
+}
+
+/**
+ * Decide which line indices in a tier are "recipe-created" (and which are
+ * the Opus-drafted base). PREFERS the explicit `recipe_origin` marker that
+ * merge-recipes stamps on every line it created/swapped in; falls back to
+ * the positional `preCount` prefix only when NO line in the tier carries a
+ * marker (legacy callers / tests that pre-date the marker).
+ *
+ * R7/R9 SWAP FIX (2026-06-18): the positional index model is unsound for a
+ * recipe SWAP, because merge-recipes PREPENDS the new sundries+labour lines
+ * (`[newSundries, newLabour, ...preserved]`) — so "everything past preCount"
+ * no longer equals "the recipe lines". After a swap, the prefix indices hold
+ * recipe-created lines and a preserved Opus line can sit past preCount. Keying
+ * off the marker fixes both directions: R7 never drops a legit Opus line, and
+ * R9 validates exactly the recipe-created lines.
+ */
+function recipeOriginIndices(
+  lineItems: AnyLine[],
+  preCount: number | undefined,
+): { indices: Set<number>; source: 'marker' | 'precount' | 'none' } {
+  const markerIdx = new Set<number>()
+  for (let i = 0; i < lineItems.length; i++) {
+    if (lineItems[i]?.recipe_origin === true) markerIdx.add(i)
+  }
+  if (markerIdx.size > 0) return { indices: markerIdx, source: 'marker' }
+  // No markers → fall back to the positional prefix (legacy/test path).
+  if (typeof preCount === 'number' && preCount >= 0 && lineItems.length > preCount) {
+    const idx = new Set<number>()
+    for (let i = preCount; i < lineItems.length; i++) idx.add(i)
+    return { indices: idx, source: 'precount' }
+  }
+  return { indices: new Set<number>(), source: 'none' }
+}
+
+/**
+ * R7 — Recipe pre-emption / Opus-vs-recipe duplication.
+ *
+ * The recipe engine adds extras (extra cable runs, supply-line extensions,
+ * extra labour) to a tier AFTER Opus already drafted it, and on a SWAP it
+ * replaces the base sundries+labour. If Opus already drafted the same
+ * MATERIAL/ASSEMBLY extra, the recipe-created line double-charges the
+ * customer for the same thing. This is an ENFORCED check (not advisory
+ * prompt text): the recipe-created lines are identified by the explicit
+ * `recipe_origin` marker merge-recipes stamps (with a positional `preCount`
+ * fallback for legacy callers). Any recipe-created line whose duplicate-key
+ * collides with an Opus-drafted line (same catalogue id / product, same
+ * quantity, same unit) is DROPPED, and the tier subtotal is recomputed from
+ * the surviving lines.
+ *
+ * LABOUR IS NEVER DEDUPED (R7 fix, 2026-06-18): a recipe's additional labour
+ * is additive work, not a duplicate — even when it coincidentally totals the
+ * same hours/rate as an Opus base-labour line. Dropping it under-bills the
+ * tradie for real work. So `source:'labour'` lines are skipped entirely here;
+ * they always survive. (lineDuplicateKey is also description-aware for labour
+ * as defence-in-depth, but this skip is the primary guarantee.)
+ *
+ * Fail-closed: a true material/assembly duplicate is removed rather than
+ * shipped. Pure — mutates the passed draft in place and returns the dropped
+ * lines for logging. Idempotent: re-running finds nothing to drop.
+ */
+export function dropDuplicateAppendedLines(
+  draft: Record<string, any> | null | undefined,
+  preCounts: Partial<Record<(typeof PHASE1_TIERS)[number], number>>,
+): { dropped: Array<{ tier: string; description: string; key: string }> } {
+  const dropped: Array<{ tier: string; description: string; key: string }> = []
+  if (!draft) return { dropped }
+  for (const key of PHASE1_TIERS) {
+    const tier = draft[key] as AnyTier
+    if (!tier || !Array.isArray(tier.line_items)) continue
+    const items = tier.line_items
+    const { indices: recipeIdx } = recipeOriginIndices(items, preCounts[key])
+    if (recipeIdx.size === 0) continue // nothing recipe-created → nothing to dedupe
+
+    // The "base" set the recipe lines must not duplicate = every line that
+    // is NOT recipe-created (after a swap, an Opus material can sit anywhere,
+    // so we key off the marker rather than a positional prefix). Labour is
+    // excluded from BOTH sets — recipe labour is additive (never dropped),
+    // and an Opus labour line can never be a dedupe target for a material.
+    const baseKeys = new Set<string>()
+    for (let i = 0; i < items.length; i++) {
+      if (recipeIdx.has(i)) continue
+      if (p1IsLabour(items[i])) continue
+      baseKeys.add(lineDuplicateKey(items[i]))
+    }
+
+    const survivors: AnyLine[] = []
+    const keptRecipeKeys = new Set<string>()
+    for (let i = 0; i < items.length; i++) {
+      const li = items[i]
+      if (!recipeIdx.has(i)) {
+        survivors.push(li)
+        continue
+      }
+      // This is a recipe-created line. NEVER drop recipe labour — additive.
+      if (p1IsLabour(li)) {
+        survivors.push(li)
+        continue
+      }
+      const k = lineDuplicateKey(li)
+      if (baseKeys.has(k) || keptRecipeKeys.has(k)) {
+        dropped.push({ tier: key, description: String(li?.description ?? '(no description)'), key: k })
+        continue
+      }
+      keptRecipeKeys.add(k)
+      survivors.push(li)
+    }
+    if (survivors.length !== items.length) {
+      tier.line_items = survivors
+      // Recompute subtotal from surviving lines (qty × unit_price), 2dp —
+      // matches the merge module's recompute + validator tolerance.
+      const subtotal = survivors.reduce((s, li) => {
+        const q = p1Num(li?.quantity)
+        const up = p1Num(li?.unit_price_ex_gst)
+        if (!Number.isFinite(q) || !Number.isFinite(up)) return s
+        return s + q * up
+      }, 0)
+      tier.subtotal_ex_gst = p1Round2(subtotal)
+    }
+  }
+  return { dropped }
+}
+
+/**
+ * R9 — appended-extra micro-validation.
+ *
+ * After a recipe merge changes a tier, the recipe-created lines must be
+ * grounded just like Opus's lines. This builds a draft that contains ONLY
+ * the recipe-created lines per tier and runs the existing
+ * `validateQuoteGrounding` against it — so a recipe that adds an un-grounded
+ * extra is caught here, BEFORE the main grounding pass, and the offending
+ * tier's recipe result can be reverted. Returns the set of tiers whose
+ * recipe lines failed grounding.
+ *
+ * R7/R9 SWAP FIX (2026-06-18): the recipe-created lines are identified by the
+ * explicit `recipe_origin` marker merge-recipes stamps (positional `preCount`
+ * is only a fallback for legacy/test callers). The positional prefix is
+ * unsound after a SWAP — merge-recipes PREPENDS the new sundries+labour, so
+ * `slice(preCount)` would validate a preserved Opus line and miss the actual
+ * swapped-in recipe lines. Keying off the marker validates exactly the lines
+ * the recipe created/swapped in.
+ *
+ * R9 FRAMING FIX (2026-06-18): the sub-draft now carries the live draft's
+ * scope_of_works / scope_short / assumptions. The embedded cross-tier
+ * duplicate check (detectCrossTierDuplicates) reads those fields to decide
+ * whether a differing-quantity cross-tier appearance is legitimately FRAMED
+ * (e.g. "3 cable metres in Good, 6 in Best", explained in scope_of_works).
+ * Without the framing, a legitimately-framed cross-tier recipe extra was
+ * falsely reverted. Copying the framing makes the sub-draft check identical
+ * to what the full pass sees — this can only ADD precision, never loosen
+ * grounding (an UNframed cross-tier jump still fails, exactly as before).
+ *
+ * NOTE: this constructs a throwaway draft whose tiers hold only recipe lines.
+ * We pass a relaxed pricing book where min_labour_hours=0 so the "tier below
+ * labour floor" rule (a WHOLE-tier property, irrelevant to "are these extras
+ * grounded") cannot false-fail the extras-only sub-draft.
+ */
+export function validateAppendedLines(
+  draft: Record<string, any> | null | undefined,
+  preCounts: Partial<Record<(typeof PHASE1_TIERS)[number], number>>,
+  pricingBook: PricingBookForValidation,
+  candidates: Parameters<typeof validateQuoteGrounding>[2],
+): { failedTiers: Set<(typeof PHASE1_TIERS)[number]>; failures: GroundingFailure[] } {
+  const failedTiers = new Set<(typeof PHASE1_TIERS)[number]>()
+  const failures: GroundingFailure[] = []
+  if (!draft) return { failedTiers, failures }
+
+  // R9 framing fix — carry the live draft's top-level framing onto the
+  // sub-draft so detectCrossTierDuplicates sees the same scope/assumptions
+  // the full grounding pass sees. Copy the exact fields the cross-tier check
+  // reads (scope_of_works, scope_short, assumptions).
+  const subDraft: Record<string, any> = {
+    scope_of_works: draft.scope_of_works,
+    scope_short: draft.scope_short,
+    assumptions: draft.assumptions,
+  }
+  let anyAppended = false
+  for (const key of PHASE1_TIERS) {
+    const tier = draft[key] as AnyTier
+    if (!tier || !Array.isArray(tier.line_items)) continue
+    const { indices: recipeIdx } = recipeOriginIndices(tier.line_items, preCounts[key])
+    if (recipeIdx.size === 0) continue
+    const appended = tier.line_items.filter((_, i) => recipeIdx.has(i))
+    if (appended.length === 0) continue
+    anyAppended = true
+    subDraft[key] = { ...tier, line_items: appended }
+  }
+  if (!anyAppended) return { failedTiers, failures }
+
+  // Relax ONLY the per-tier labour-floor rule for the extras-only sub-draft
+  // (the floor is a whole-tier property, irrelevant to "are these extras
+  // grounded"). Every other grounding rule — price match, category match,
+  // strict-UUID, duplicates — runs unchanged, so this can only ADD
+  // rejections, never accept something the full pass wouldn't.
+  const relaxedBook: PricingBookForValidation = { ...pricingBook, min_labour_hours: 0 }
+  const res = validateQuoteGrounding(subDraft, relaxedBook, candidates)
+  if (!res.valid) {
+    for (const f of res.failures) {
+      failedTiers.add(f.tier)
+      failures.push(f)
+    }
+  }
+  return { failedTiers, failures }
+}
+
+/**
+ * R10 — KB apply-mode grounding integrity.
+ *
+ * When KB verification (apply mode) rewrites a line's price, stamp the
+ * line with an explicit KB-origin marker (`kb_origin: true`) and surface
+ * it to operators via a risk_flag. This means a stale/incorrect KB price
+ * can never silently launder through the loose category grounding path —
+ * the price is still re-checked by the main `validateQuoteGrounding` pass
+ * (KB runs before it), and now its KB provenance is visible on the line
+ * and in risk_flags for tradie review. Pure — mutates the draft in place;
+ * returns the count + flags added. No-op when there are zero KB
+ * corrections (KB off / shadow / no mismatch).
+ */
+export function markKbRewrittenLines(
+  draft: Record<string, any> | null | undefined,
+  corrections: ReadonlyArray<{ tier: 'good' | 'better' | 'best'; lineIndex: number; from: number; to: number }>,
+): { stamped: number; flags: string[] } {
+  const flags: string[] = []
+  let stamped = 0
+  if (!draft || !corrections || corrections.length === 0) return { stamped, flags }
+  for (const c of corrections) {
+    const tier = draft[c.tier] as AnyTier
+    const li = tier?.line_items?.[c.lineIndex]
+    if (!li || typeof li !== 'object') continue
+    li.kb_origin = true
+    li.kb_rewritten_from = c.from
+    stamped++
+    flags.push(
+      `[kb-origin] ${c.tier} line ${c.lineIndex}: price rewritten by MT-QM-PRICING-KB ` +
+        `from $${Number(c.from).toFixed(2)} to $${Number(c.to).toFixed(2)} — KB-sourced, ` +
+        `must still ground; verify before sending.`,
+    )
+  }
+  if (flags.length > 0) {
+    draft.risk_flags = [
+      ...(Array.isArray(draft.risk_flags) ? draft.risk_flags : []),
+      ...flags,
+    ]
+  }
+  return { stamped, flags }
+}
+
+/**
+ * R15 — Spec-mismatch handling (enforce mode).
+ *
+ * The spec guard's shadow mode logs/flags only (unchanged). In ENFORCE
+ * mode a HARD spec mismatch (a chosen product contradicting the
+ * customer's agreed specs — e.g. customer said 15A GPO, model picked 10A)
+ * must ACT, not ship silently:
+ *   • If only SOME priced tiers mismatch → BLOCK those tiers (null them)
+ *     so the customer only ever sees grounded, spec-correct options.
+ *   • If EVERY priced tier mismatches → there is no safe tier to show;
+ *     signal the caller to route the whole quote to inspection /
+ *     tradie-review.
+ * Pure — mutates the draft in place (nulling blocked tiers, appending
+ * risk_flags) and returns what it did. The caller decides the inspection
+ * downgrade based on `routeToInspection`.
+ */
+export function enforceSpecMismatch(
+  draft: Record<string, any> | null | undefined,
+  mismatchTiers: ReadonlyArray<{ tier: 'good' | 'better' | 'best'; reason: string }>,
+  mode: 'off' | 'shadow' | 'enforce',
+): { blockedTiers: Array<'good' | 'better' | 'best'>; routeToInspection: boolean; flags: string[] } {
+  const flags: string[] = []
+  if (!draft || mode !== 'enforce' || !mismatchTiers || mismatchTiers.length === 0) {
+    return { blockedTiers: [], routeToInspection: false, flags }
+  }
+  // R15b — clear any stale signal from a previous enforce pass so this is
+  // idempotent and a no-block re-run can't leave a phantom marker.
+  if ('spec_block' in draft) delete (draft as Record<string, unknown>).spec_block
+  // Which priced tiers exist at all?
+  const pricedTiers = PHASE1_TIERS.filter((k) => {
+    const t = draft[k] as AnyTier
+    return !!(t && Array.isArray(t.line_items) && t.line_items.length > 0)
+  })
+  const mismatchSet = new Set(mismatchTiers.map((m) => m.tier))
+  // Only count a mismatch tier that is actually a priced tier.
+  const blockedTiers = pricedTiers.filter((k) => mismatchSet.has(k))
+  if (blockedTiers.length === 0) {
+    return { blockedTiers: [], routeToInspection: false, flags }
+  }
+
+  const allPricedMismatch =
+    pricedTiers.length > 0 && blockedTiers.length >= pricedTiers.length
+  if (allPricedMismatch) {
+    // No safe tier remains → route the whole quote to inspection. Don't
+    // null tiers here; the caller owns the inspection-downgrade shape so
+    // the existing groundingFailures/downgrade path stays single-sourced.
+    for (const m of mismatchTiers) {
+      flags.push(`[spec-guard] ${m.tier}: ${m.reason} (BLOCKED — routed to inspection)`)
+    }
+    draft.risk_flags = [
+      ...(Array.isArray(draft.risk_flags) ? draft.risk_flags : []),
+      ...flags,
+    ]
+    return { blockedTiers, routeToInspection: true, flags }
+  }
+
+  // Partial mismatch → block (null) the offending tiers; keep the rest.
+  for (const k of blockedTiers) {
+    draft[k] = null
+    const reason = mismatchTiers.find((m) => m.tier === k)?.reason ?? 'spec mismatch'
+    flags.push(`[spec-guard] ${k}: ${reason} (BLOCKED — tier removed, spec contradiction)`)
+  }
+  // If the previously-selected tier was blocked, re-point to a survivor.
+  const sel = draft.selected_tier as string | null | undefined
+  if (sel && !draft[sel]) {
+    draft.selected_tier = draft.better
+      ? 'better'
+      : draft.good
+        ? 'good'
+        : draft.best
+          ? 'best'
+          : null
+  }
+  draft.risk_flags = [
+    ...(Array.isArray(draft.risk_flags) ? draft.risk_flags : []),
+    ...flags,
+  ]
+  // R15b — DON'T let a nulled tier ship silently. The grounding path makes
+  // its downgrade visible (downgradedToInspection + structured risk_flags);
+  // a partial spec-block keeps the spec-correct tier(s) priced, so it must
+  // NOT flip the whole quote to needs_inspection. Instead stamp an explicit,
+  // machine-readable signal that the route + routing read so the partial
+  // downgrade is treated consistently (review-required) rather than the route
+  // seeing a tier that vanished with only a soft note. The caller (runEstimation)
+  // mirrors this onto EstimationResult.specBlock — the same way it mirrors
+  // groundingFailures — so the route handler has identical observability.
+  draft.spec_block = {
+    partial: true,
+    blocked_tiers: [...blockedTiers],
+    reasons: blockedTiers.map((k) => ({
+      tier: k,
+      reason: mismatchTiers.find((m) => m.tier === k)?.reason ?? 'spec mismatch',
+    })),
+  }
+  // Review signal: a spec-blocked quote must be tradie-reviewed before the
+  // customer sees it (same posture as a grounding-flagged draft). This is
+  // additive — the route already defaults non-inspection quotes to
+  // tradie_review; this makes the intent explicit and queryable.
+  draft.needs_review = true
+  return { blockedTiers, routeToInspection: false, flags }
 }
 
 // Opus often prefixes its response with reasoning ("Calculation: ...", "Here is the quote:")

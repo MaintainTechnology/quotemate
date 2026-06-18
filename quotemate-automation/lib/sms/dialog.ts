@@ -9,6 +9,7 @@
 
 import { anthropic } from '@ai-sdk/anthropic'
 import { generateObject } from 'ai'
+import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import { withRetry } from '@/lib/util/retry'
 import {
@@ -681,6 +682,21 @@ email). When that block is present:
     name + suburb from scratch.
 
 PER-JOB-TYPE (only relevant once job_type is known):
+Each job type below carries a MUST-ASK list and an INSPECTION-TRIGGERS
+list. The MUST-ASK questions are HARD per-job gates — exactly like the
+TENANT SERVICES "MUST ASK" block: ask EVERY one (action='ask', ONE per
+turn, in the order shown) and get a real answer, THEN run the Rule 11
+verification handshake, BEFORE action='finish'. Do NOT finish, draft, or
+say the quote is on its way while ANY listed MUST-ASK question is still
+unanswered. These mandated questions also OVERRIDE Rule 7: a job with
+several MUST-ASK questions is EXPECTED to run several turns — keep asking
+the next one; that is progress, not a stuck chat. The INSPECTION-TRIGGERS
+list per job type is IN ADDITION to the UNIVERSAL INSPECTION TRIGGERS
+below: if the customer mentions any of a matched job's own triggers, set
+action='escalate_inspection'. SAFE-DEFAULT GUARD: never silently apply a
+safe default for a field that has a MUST-ASK question covering it — ask
+the question first; only apply the default if the customer declines to
+answer, and then declare the assumption (Rule 4).
 ${ALL_RULES_TEXT}
 
 UNIVERSAL INSPECTION TRIGGERS (any of these → escalate immediately)
@@ -1367,6 +1383,83 @@ function quoteInProgressDirective(on: boolean): string {
   ].join('\n')
 }
 
+// ═════════════════════════════════════════════════════════════════════
+// R30/R31 — service-toggle freshness + a DEFINED cache-invalidation lever.
+//
+// Root cause being fixed: the large STATIC dialog instructions (SYSTEM_PROMPT)
+// are an ideal Anthropic ephemeral-cache prefix, but the per-tenant SERVICE
+// list (which assemblies are switched ON/OFF) is DYNAMIC — a tradie toggling a
+// service in their dashboard must be reflected on the customer's NEXT inbound,
+// not 1–3 turns later when a cache breakpoint rolls. The fix keeps the static
+// block cacheable while rendering the dynamic service/catalogue list OUTSIDE
+// the cached prefix (in the per-turn user message), and stamps the rendered
+// block with a deterministic VERSION HASH of the live offerings so the change
+// is observable + testable (mechanism-level, not TTL reliance).
+//
+// `serviceListVersion` is a stable content hash over the in-scope service
+// list + declined list. Two builds with identical offerings produce the same
+// version; flipping ANY service ON/OFF (or changing its mandated questions)
+// produces a different version. PATCH /api/tenant/me touches the tenant's
+// updated_at on a service toggle (R31) so any TTL-keyed consumer is nudged
+// too, but the authoritative freshness mechanism is this: the service block
+// lives in the uncached user message and carries the version stamp, so the
+// model always reads the current state on the next inbound.
+
+type ServiceListVersionInput = {
+  customAssemblies?: ReadonlyArray<CustomServiceScope>
+  declinedServices?: ReadonlyArray<string>
+}
+
+/**
+ * Deterministic content hash of the tenant's live service offerings as the
+ * dialog will render them. Order-independent for the enabled list (sorted by
+ * name) so a pure reorder of the same rows is NOT treated as a change, but any
+ * add/remove/toggle, an always_inspection flip, or a mandated-question edit
+ * changes the hash. Returns a short hex digest. Empty input → stable 'none'.
+ */
+export function serviceListVersion(input: ServiceListVersionInput): string {
+  const enabled = (input.customAssemblies ?? [])
+    .map((s) => ({
+      name: s.name.trim().toLowerCase(),
+      always_inspection: !!s.always_inspection,
+      questions: (s.clarifying_questions ?? [])
+        .filter((q): q is string => typeof q === 'string' && q.trim().length > 0)
+        .map((q) => q.trim().toLowerCase()),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+  const declined = (input.declinedServices ?? [])
+    .map((n) => n.trim().toLowerCase())
+    .filter((n) => n.length > 0)
+    .sort((a, b) => a.localeCompare(b))
+  if (enabled.length === 0 && declined.length === 0) return 'none'
+  const canonical = JSON.stringify({ enabled, declined })
+  return createHash('sha256').update(canonical).digest('hex').slice(0, 16)
+}
+
+/**
+ * Renders the DYNAMIC tenant service/catalogue block for the dialog prompt.
+ * This is the part that must NOT live inside the cached prefix — it changes
+ * whenever the tradie toggles a service. It composes the enabled
+ * custom-services directive + the declined-services directive and prefixes
+ * a single SERVICE LIST VERSION line so the freshness is observable.
+ *
+ * Returns '' only when there is genuinely nothing dynamic to say (no enabled
+ * custom/catalogue services AND no declined services). When non-empty, the
+ * first line is always `SERVICE LIST VERSION: <hash>` so a toggle is provably
+ * reflected on the next build.
+ */
+export function buildDialogServiceBlock(input: ServiceListVersionInput): string {
+  const enabledBlock = customServicesDirective(input.customAssemblies)
+  const declinedBlock = declinedServicesDirective(input.declinedServices)
+  const parts = [enabledBlock, declinedBlock].filter(Boolean)
+  if (parts.length === 0) return ''
+  const version = serviceListVersion(input)
+  return [
+    `SERVICE LIST VERSION: ${version} (current as of this message — always read fresh, never cached).`,
+    ...parts,
+  ].join('\n')
+}
+
 export async function decideNextTurn(args: {
   history: ConversationTurn[]
   inboundCount: number      // number of customer messages so far (inclusive of latest)
@@ -1473,46 +1566,72 @@ export async function decideNextTurn(args: {
       // beats price here.
       model: anthropic('claude-sonnet-4-6'),
       schema: TurnDecisionSchema,
-      system: SYSTEM_PROMPT,
-      prompt: [
-        `INBOUND TURN COUNT (customer messages so far, including latest): ${args.inboundCount}`,
-        `CUSTOMER HISTORY: ${args.customerHistory ?? (args.inboundCount === 1 ? 'first_time' : 'continuing')}`,
-        customerHistoryDirective(args.customerHistory ?? (args.inboundCount === 1 ? 'first_time' : 'continuing')),
-        // Trade-scope directive must land BEFORE photo-link / memory /
-        // conversation history so it anchors every downstream decision
-        // (opener wording, job_type acceptance, off-trade redirect).
-        tradeScopeDirective(args.tenantTrades),
-        // Tenant's own enabled custom services. Placed AFTER the trade
-        // scope so it can override the wrong-trade redirect for services
-        // the tradie explicitly offers. Empty string when none → dropped
-        // by the .filter(Boolean) below.
-        customServicesDirective(args.customAssemblies),
-        // Services the tradie switched OFF. Placed AFTER the enabled
-        // custom-services block so the enabled list wins any name
-        // collision; overrides Rule 4/6's $99 fallback for OFF services
-        // so the customer gets a polite "we don't do that" + pivot.
-        declinedServicesDirective(args.declinedServices),
-        `PHOTO LINK STATE: ${args.photoLink ?? 'not_applicable'}`,
-        photoLinkDirective(args.photoLink ?? 'not_applicable'),
-        // Quote-in-progress — the customer texted again while their quote
-        // is still drafting. Keeps the dialog talking but blocks a second
-        // handoff. Empty string when not in-flight → dropped by .filter.
-        quoteInProgressDirective(args.quoteInProgress ?? false),
-        // Memory injection — state-based when PR-B's conversation_state
-        // is present, legacy customerContext block when not.
-        memoryBlock,
-        // Follow-up quote context — pins which existing quote a vague
-        // reply ("resend the quote") refers to. Empty string when this
-        // turn isn't tied to a follow-up → dropped by .filter(Boolean).
-        args.followupContext ?? '',
-        `CONVERSATION HISTORY (oldest first):`,
-        formatHistory(args.history),
-        ``,
-        `Decide the next action and produce the SMS reply. The TENANT TRADE`,
-        `SCOPE block above is authoritative — if it limits the tenant to one`,
-        `trade, you MUST refuse jobs from the other trade with a polite`,
-        `end_conversation redirect, not an inspection escalation.`,
-      ].filter(Boolean).join('\n'),
+      // R30 — cache ONLY the large STATIC instruction block. Anthropic
+      // caches the prefix up to (and including) the last cache_control
+      // breakpoint; by marking the system message ephemeral and putting
+      // NOTHING cacheable after it, the cached prefix is exactly the static
+      // SYSTEM_PROMPT. The dynamic per-turn content (incl. the tenant service
+      // list) lives in the user message below — strictly AFTER this
+      // breakpoint — so it is always read fresh. This is a NET cost WIN
+      // (the dialog previously cached nothing) and does not regress the
+      // static portion's hit-rate because SYSTEM_PROMPT is byte-identical
+      // across every call.
+      system: [
+        {
+          role: 'system' as const,
+          content: SYSTEM_PROMPT,
+          providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' as const } } },
+        },
+      ],
+      // Everything here is DYNAMIC and lives outside the cached prefix.
+      messages: [
+        {
+          role: 'user' as const,
+          content: [
+            `INBOUND TURN COUNT (customer messages so far, including latest): ${args.inboundCount}`,
+            `CUSTOMER HISTORY: ${args.customerHistory ?? (args.inboundCount === 1 ? 'first_time' : 'continuing')}`,
+            customerHistoryDirective(args.customerHistory ?? (args.inboundCount === 1 ? 'first_time' : 'continuing')),
+            // Trade-scope directive must land BEFORE photo-link / memory /
+            // conversation history so it anchors every downstream decision
+            // (opener wording, job_type acceptance, off-trade redirect).
+            tradeScopeDirective(args.tenantTrades),
+            // ─── DYNAMIC tenant service/catalogue list (R30) ───
+            // The single source of staleness this task fixes. Rendered fresh
+            // every turn from the route's live DB read and version-stamped so
+            // a dashboard toggle is provably reflected on the NEXT inbound.
+            // It sits in the uncached user message (never the cached system
+            // prefix), so an ON/OFF flip is sensed immediately — no waiting
+            // 1–3 turns for a cache breakpoint to roll. Placed AFTER trade
+            // scope so it still overrides the wrong-trade redirect for
+            // services the tradie explicitly offers. Empty string when there
+            // is nothing dynamic to say → dropped by .filter(Boolean).
+            buildDialogServiceBlock({
+              customAssemblies: args.customAssemblies,
+              declinedServices: args.declinedServices,
+            }),
+            `PHOTO LINK STATE: ${args.photoLink ?? 'not_applicable'}`,
+            photoLinkDirective(args.photoLink ?? 'not_applicable'),
+            // Quote-in-progress — the customer texted again while their quote
+            // is still drafting. Keeps the dialog talking but blocks a second
+            // handoff. Empty string when not in-flight → dropped by .filter.
+            quoteInProgressDirective(args.quoteInProgress ?? false),
+            // Memory injection — state-based when PR-B's conversation_state
+            // is present, legacy customerContext block when not.
+            memoryBlock,
+            // Follow-up quote context — pins which existing quote a vague
+            // reply ("resend the quote") refers to. Empty string when this
+            // turn isn't tied to a follow-up → dropped by .filter(Boolean).
+            args.followupContext ?? '',
+            `CONVERSATION HISTORY (oldest first):`,
+            formatHistory(args.history),
+            ``,
+            `Decide the next action and produce the SMS reply. The TENANT TRADE`,
+            `SCOPE block above is authoritative — if it limits the tenant to one`,
+            `trade, you MUST refuse jobs from the other trade with a polite`,
+            `end_conversation redirect, not an inspection escalation.`,
+          ].filter(Boolean).join('\n'),
+        },
+      ],
     }),
     {
       maxAttempts: 3,
