@@ -24,6 +24,9 @@ import {
   pushSolarLeadToPylon,
 } from '@/lib/solar/release'
 import { pushSolarLeadToOpenSolar } from '@/lib/solar/opensolar-leadpush'
+import { ensureSolarQuotePdf } from '@/lib/quote/pdf'
+import { archiveAndIngestQuote } from '@/lib/filestore/ingest-quote'
+import { buildQuoteKbText } from '@/lib/filestore/minimize'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,7 +60,7 @@ export async function POST(
   const { data: row, error } = await supabase
     .from('solar_estimates')
     .select(
-      'id, tenant_id, public_token, intake_id, routing, address, state, postcode, confirmed_at, guardrail_flags',
+      'id, tenant_id, public_token, intake_id, routing, address, state, postcode, confirmed_at, guardrail_flags, estimate',
     )
     .eq('public_token', token)
     .maybeSingle()
@@ -127,6 +130,27 @@ export async function POST(
         postcode: (row.postcode as string | null) ?? null,
       }),
     )
+    // Per-tenant file-store ingest (best-effort, never blocks confirm).
+    // Archive the confirmed solar quote PDF + minimized KB markdown.
+    after(async () => {
+      try {
+        const fullDocPath = await ensureSolarQuotePdf(row.public_token as string)
+        if (!fullDocPath) return
+        const { markdown, contentHash } = buildQuoteKbText({
+          quote: { estimate: row.estimate, routing_decision: (row.routing as string | null) ?? null },
+          trade: 'solar',
+        })
+        await archiveAndIngestQuote({
+          tenantId: (row.tenant_id as string | null) ?? null,
+          sourceKind: 'quote',
+          sourceId: row.public_token as string,
+          trade: 'solar',
+          fullDocPath,
+          kbText: markdown,
+          contentHash,
+        })
+      } catch { /* best-effort */ }
+    })
     return Response.json({ ok: true, confirmed_at: confirmedAt })
   }
 

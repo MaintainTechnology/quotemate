@@ -84,6 +84,20 @@ export function aud(n: number): string {
   return `$${n.toLocaleString("en-AU")}`
 }
 
+/** Length of the free trial, in days. */
+export const TRIAL_DAYS = 14
+
+/**
+ * The free trial is offered on **Starter Monthly only**. Every other
+ * plan/interval — Starter Annual, Pro (monthly + annual), Crew (monthly +
+ * annual) — bills immediately at checkout. Single source of truth for both
+ * the Stripe Checkout trial logic and the CTA copy, so the offer can never
+ * drift between what the page promises and what Stripe applies.
+ */
+export function hasFreeTrial(plan: string, interval: string): boolean {
+  return plan === "starter" && interval === "month"
+}
+
 export type CompRow = { label: string; values: [string, string, string] }
 
 // Order of `values` matches PLANS: [Starter, Pro, Crew].

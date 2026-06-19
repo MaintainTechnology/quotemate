@@ -521,8 +521,14 @@ export async function GET(req: Request) {
     material_preferences[p.category as string] = p.preferred_brand as string
   }
 
+  // Never expose the tenant's Gemini file-store id to the browser (spec
+  // 2026-06-19 tenant-file-store, R16 + Isolation constraint): the
+  // tenant→store mapping is server-side only. Strip it from the row before
+  // it goes over the wire (this route does `select('*')`).
+  const { file_store_id: _omitFileStoreId, ...tenantSafe } = tenant as Record<string, unknown>
+
   return Response.json({
-    tenant,
+    tenant: tenantSafe,
     pricing: pricingBooks[0] ?? null,
     pricing_books: pricingBooks,
     services,

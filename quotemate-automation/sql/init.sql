@@ -183,6 +183,35 @@ select 110, 28, 'NECA', 'NSW'
 where not exists (select 1 from pricing_book);
 
 -- ═══════════════════════════════════════════════════════════════════
+-- Per-tenant file store (migration 134) — representative snapshot.
+-- ═══════════════════════════════════════════════════════════════════
+alter table tenants add column if not exists file_store_id text unique;
+
+create table if not exists tenant_file_documents (
+  id            uuid primary key default gen_random_uuid(),
+  tenant_id     uuid not null references tenants(id) on delete cascade,
+  source_kind   text not null check (source_kind in ('quote','invoice')),
+  source_id     text not null,
+  trade         text,
+  display_name  text not null,
+  storage_path  text,
+  kb_document_id text,
+  state         text not null default 'pending'
+                  check (state in ('pending','active','failed','skipped')),
+  skip_reason   text,
+  bytes         int,
+  error         text,
+  attempts      int not null default 0,
+  content_hash  text,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz,
+  unique (tenant_id, display_name)
+);
+create index if not exists tenant_file_documents_tenant_idx on tenant_file_documents (tenant_id);
+create index if not exists tenant_file_documents_state_idx  on tenant_file_documents (state);
+alter table tenant_file_documents enable row level security;
+
+-- ═══════════════════════════════════════════════════════════════════
 -- RESET BLOCK — uncomment and run only if you want to wipe everything
 -- and start over from scratch.
 -- ═══════════════════════════════════════════════════════════════════

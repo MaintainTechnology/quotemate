@@ -12,6 +12,7 @@ import {
   annualPerMonth,
   annualSaving,
   aud,
+  hasFreeTrial,
   type Plan,
 } from '@/app/_components/pricing-data'
 import { readPlanIntent, clearPlanIntent } from '@/lib/billing/plan-intent'
@@ -158,8 +159,9 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
         Billing &amp; plan
       </h2>
       <p className="mt-2 text-sm leading-relaxed text-text-sec">
-        Your QuoteMate subscription. Start a 14-day free trial, switch plans, or
-        manage your card — prices are AUD, ex-GST.
+        Your QuoteMate subscription. Starter Monthly comes with a 14-day free
+        trial; every other plan starts right away. Switch plans or manage your
+        card anytime — prices are AUD, ex-GST.
       </p>
 
       {justSubscribed && (
@@ -218,7 +220,7 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
         <div className="mt-8 border border-ink-line bg-ink-card p-6">
           <p className="text-sm text-text-sec">
             You don&rsquo;t have an active subscription yet. Choose a plan below
-            to start your 14-day free trial.
+            to get started — Starter Monthly includes a 14-day free trial.
           </p>
           {status?.has_customer && (
             <button
@@ -328,7 +330,9 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
                     ? 'Starting…'
                     : hasActive
                       ? 'Switch plan'
-                      : 'Start free trial'}
+                      : hasFreeTrial(plan.id, annual ? 'year' : 'month')
+                        ? 'Start free trial'
+                        : 'Subscribe'}
               </button>
 
               <ul className="mt-5 grid gap-2">

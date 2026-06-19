@@ -7,6 +7,17 @@
 // the supabase update path so the test is hermetic.
 
 import { describe, expect, it, vi } from 'vitest'
+
+// runProvisioning defers the file-store step via next/server `after()`. Outside
+// a request scope `after` throws, so mock it to run the callback synchronously.
+// (provisionTenantStore STUBs when TENANT_FILESTORE_ENABLED !== 'true' — the
+// test default — so the callback is a harmless no-op that writes nothing.)
+vi.mock('next/server', () => ({
+  after: (fn: () => Promise<void> | void) => {
+    Promise.resolve(fn()).catch(() => {})
+  },
+}))
+
 import { runProvisioning } from './run-provisioning'
 
 /* ─── Mock builders ──────────────────────────────────────── */

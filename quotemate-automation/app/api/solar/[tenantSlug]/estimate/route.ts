@@ -41,6 +41,9 @@ import { feltTabEnabled } from '@/lib/felt/client'
 import { resolveNetworkFromPostcode } from '@/lib/solar/network-lookup'
 import { detectPropertyBuildings } from '@/lib/solar/buildings'
 import { resolveCreationSelection } from '@/lib/solar/building-cache'
+import { ensureSolarQuotePdf } from '@/lib/quote/pdf'
+import { archiveAndIngestQuote } from '@/lib/filestore/ingest-quote'
+import { buildQuoteKbText } from '@/lib/filestore/minimize'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -321,6 +324,30 @@ export async function POST(
     const released = eligibleForAutoRelease && !held
     if (released) {
       await autoReleaseSolarEstimate(supabase, { token: estimate.token })
+    }
+
+    // Per-tenant file-store ingest (best-effort, never blocks the notify).
+    // Only for an auto-released clean estimate — archive the solar quote
+    // PDF + minimized KB markdown for the tenant's file store.
+    if (released) {
+      try {
+        const fullDocPath = await ensureSolarQuotePdf(estimate.token)
+        if (fullDocPath) {
+          const { markdown, contentHash } = buildQuoteKbText({
+            quote: { estimate, routing_decision: estimate.routing?.decision ?? null },
+            trade: 'solar',
+          })
+          await archiveAndIngestQuote({
+            tenantId: tenant.id as string,
+            sourceKind: 'quote',
+            sourceId: estimate.token,
+            trade: 'solar',
+            fullDocPath,
+            kbText: markdown,
+            contentHash,
+          })
+        }
+      } catch { /* best-effort */ }
     }
 
     // Notify the tradie (and, when released, confirm the customer send). The

@@ -32,6 +32,8 @@ import {
 } from '@/lib/stripe/checkout'
 import { dispatchQuoteWithPdf } from '@/lib/sms/send-quote-pdf'
 import { ensureQuotePdf, quotePdfUrl, signQuotePdfUrl } from '@/lib/quote/pdf'
+import { archiveAndIngestQuote } from '@/lib/filestore/ingest-quote'
+import { buildQuoteKbText } from '@/lib/filestore/minimize'
 import { buildQuoteUpdatedSms } from '@/lib/sms/templates'
 import { resolveQuoteDisplayMode } from '@/lib/quote/display'
 import { loadCandidatePrices } from '@/lib/estimate/run'
@@ -733,6 +735,44 @@ export async function POST(
             sms_reason: result.smsAttempt.reason,
             wa_code: result.waAttempt?.code,
           })
+        }
+
+        // Per-tenant file-store ingest — best-effort, post-send. Runs only
+        // on this notify path (customer was notified / a tier price changed,
+        // i.e. a material re-draft), reusing the PDF just regenerated above.
+        // STUBs when TENANT_FILESTORE_ENABLED !== 'true' and no-ops on
+        // missing inputs, so it never blocks or alters the re-send.
+        try {
+          if (quotePdfPath) {
+            const ingestTrade =
+              (intake?.trade as string | null | undefined) ??
+              (pricingBook?.trade as string | null | undefined) ??
+              'electrical'
+            // Reflect the just-persisted edits in the KB text: merge the
+            // updated tiers + headline total onto the loaded quote row.
+            const ingestQuote = {
+              ...(quote as Record<string, unknown>),
+              good: nextTiers.good,
+              better: nextTiers.better,
+              best: nextTiers.best,
+              total_inc_gst: newTotalIncGst,
+            }
+            const { markdown, contentHash } = buildQuoteKbText({
+              quote: ingestQuote,
+              trade: ingestTrade,
+            })
+            await archiveAndIngestQuote({
+              tenantId: (quote.tenant_id as string | null) ?? null,
+              sourceKind: 'quote',
+              sourceId: quote.id as string,
+              trade: ingestTrade,
+              fullDocPath: quotePdfPath,
+              kbText: markdown,
+              contentHash,
+            })
+          }
+        } catch {
+          /* best-effort */
         }
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e)

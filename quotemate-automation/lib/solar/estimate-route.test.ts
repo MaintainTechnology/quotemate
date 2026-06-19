@@ -114,6 +114,20 @@ vi.mock('@/lib/solar/release', () => ({
   autoReleaseSolarEstimate: vi.fn().mockResolvedValue({ released: true }),
 }))
 
+// Per-tenant file-store hooks (spec 2026-06-19): the route's after() ingest
+// uses these. Mock them so the unit test doesn't cold-load the heavy
+// @/lib/quote/pdf render chain (which would blow the import timeout) and the
+// ingest is a clean no-op (ensureSolarQuotePdf → null short-circuits it).
+vi.mock('@/lib/quote/pdf', () => ({
+  ensureSolarQuotePdf: vi.fn().mockResolvedValue(null),
+}))
+vi.mock('@/lib/filestore/ingest-quote', () => ({
+  archiveAndIngestQuote: vi.fn().mockResolvedValue(undefined),
+}))
+vi.mock('@/lib/filestore/minimize', () => ({
+  buildQuoteKbText: vi.fn().mockReturnValue({ markdown: '', contentHash: 'x', bytes: new Uint8Array() }),
+}))
+
 // Mock next/server `after` to run the callback synchronously in tests.
 vi.mock('next/server', () => ({
   after: (fn: () => Promise<void>) => { fn().catch(() => {}) },

@@ -134,7 +134,7 @@ function TrustStrip() {
           <TrustChip>Electrical pilot · NSW</TrustChip>
           <TrustChip>Plumbing pilot · QLD</TrustChip>
           <TrustChip icon={<LockIcon />}>Stripe-secured deposits</TrustChip>
-          <TrustChip>14-day free trial</TrustChip>
+          <TrustChip>Free trial · Starter Monthly</TrustChip>
         </ul>
         <p className="shrink-0 font-mono text-xs uppercase tracking-[0.14em] text-text-dim">
           Runs on Twilio, Stripe and Claude
@@ -375,9 +375,10 @@ function Pricing() {
             <span className="text-accent">one missed job.</span>
           </h2>
           <p className="mt-6 max-w-2xl text-lg leading-relaxed text-text-sec">
-            Pick a plan and start a 14-day free trial — your AI receptionist is
-            quoting the same day. We never take a cut of your jobs. The only
-            fixed price is the $99 site visit, credited straight back to the job.
+            Pick a plan and your AI receptionist is quoting the same day —
+            Starter Monthly comes with a 14-day free trial. We never take a cut
+            of your jobs. The only fixed price is the $99 site visit, credited
+            straight back to the job.
           </p>
         </Reveal>
 
@@ -409,7 +410,7 @@ function Faq() {
     },
     {
       q: "What does it cost?",
-      a: "Plans start at $49/mo with a 14-day free trial — see the pricing page for the full breakdown. We never take a cut of your jobs; the only fixed price is the $99 site visit, credited back to the job.",
+      a: "Plans start at $49/mo, and the Starter Monthly plan comes with a 14-day free trial — see the pricing page for the full breakdown. We never take a cut of your jobs; the only fixed price is the $99 site visit, credited back to the job.",
     },
     {
       q: "Which trades are live?",

@@ -1,6 +1,7 @@
 // POST /api/billing/checkout — start a subscription Checkout for the authed
 // tradie. Body: { plan: 'starter'|'pro'|'crew', interval: 'month'|'year' }.
-// Returns { url } to redirect to Stripe Checkout (14-day trial applied).
+// Returns { url } to redirect to Stripe Checkout (14-day trial on Starter
+// Monthly only; every other plan/interval bills immediately).
 
 import { tenantFromBearer, billingAdmin } from '@/lib/billing/auth'
 import {

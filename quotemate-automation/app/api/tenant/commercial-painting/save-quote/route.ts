@@ -9,8 +9,11 @@
 //
 // Body: { paintRunId: string, extractionId: string }
 
+import { after } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { tenantFromBearer, estimatorSupabase } from '@/lib/estimation/auth'
+import { archiveAndIngestQuote } from '@/lib/filestore/ingest-quote'
+import { buildQuoteKbText } from '@/lib/filestore/minimize'
 import { buildPaintQuotePayloads } from '@/lib/commercial-painting/save-quote-helpers'
 import { buildPaintTenderReportHtml } from '@/lib/commercial-painting/report-html'
 import { buildPaintCustomerSms, normaliseAuMobile } from '@/lib/commercial-painting/notify'
@@ -261,6 +264,30 @@ export async function POST(req: Request) {
     pdfReady,
     delivered: delivery.attempted ? delivery.sent : 'not_attempted',
   })
+
+  // ── Per-tenant file-store archive + KB ingest (spec 2026-06-19). The full
+  //    tender PDF was already archived at quotes/<quoteId>.pdf above; here we
+  //    push ONLY the PII-minimized summary into the tenant's KB. Best-effort,
+  //    never throws, STUBs when TENANT_FILESTORE_ENABLED!=='true', and no-ops
+  //    when no PDF was produced (no fullDocPath). Tracking source_id for
+  //    painting is the painting public_token (== shareToken), not the quoteId.
+  if (pdfReady) {
+    after(async () => {
+      const { markdown, contentHash } = buildQuoteKbText({
+        quote: { estimate: bom },
+        trade: 'commercial-painting',
+      })
+      await archiveAndIngestQuote({
+        tenantId: tenant.id,
+        sourceKind: 'quote',
+        trade: 'commercial-painting',
+        sourceId: shareToken,
+        fullDocPath: `quotes/${quoteRow.id}.pdf`,
+        kbText: markdown,
+        contentHash,
+      })
+    })
+  }
 
   return Response.json({
     ok: true,

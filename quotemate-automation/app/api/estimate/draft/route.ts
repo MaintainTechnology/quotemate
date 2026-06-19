@@ -5,6 +5,8 @@ import { sanitizeInspectionReason } from '@/lib/estimate/inspection-reason'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { dispatchQuoteWithPdf } from '@/lib/sms/send-quote-pdf'
 import { ensureQuotePdf, quotePdfUrl, signQuotePdfUrl } from '@/lib/quote/pdf'
+import { archiveAndIngestQuote } from '@/lib/filestore/ingest-quote'
+import { buildQuoteKbText } from '@/lib/filestore/minimize'
 import { sendWhatsApp } from '@/lib/sms/twilio'
 import {
   buildQuoteSms,
@@ -876,6 +878,32 @@ export async function POST(req: Request) {
           // never undoes the (already-delivered) SMS. Inspection-routed
           // quotes are still "sent" — the customer received something.
           await advanceQuoteStatus(supabase, quote!.id, 'sent')
+
+          // Per-tenant file-store ingest — best-effort, post-send. Archives
+          // the rendered quote PDF + a minimized KB text doc for retrieval.
+          // STUBs when TENANT_FILESTORE_ENABLED !== 'true' and no-ops on
+          // missing inputs, so it never blocks or alters the customer send.
+          after(async () => {
+            try {
+              const fullDocPath = await ensureQuotePdf(quote!.id)
+              if (!fullDocPath) return
+              const { markdown, contentHash } = buildQuoteKbText({
+                quote: quote!,
+                trade: intakeTrade,
+              })
+              await archiveAndIngestQuote({
+                tenantId: quote!.tenant_id ?? null,
+                sourceKind: 'quote',
+                sourceId: quote!.id,
+                trade: intakeTrade,
+                fullDocPath,
+                kbText: markdown,
+                contentHash,
+              })
+            } catch {
+              /* best-effort */
+            }
+          })
         } else {
           // Both channels failed after retries — make sure the tradie still
           // gets the link so the lead isn't silently lost. This IS the tradie

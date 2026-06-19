@@ -33,6 +33,8 @@ import {
   narrowQuoteToStructures,
 } from '@/lib/sms/roofing-compose'
 import { ensureRoofQuotePdf, roofQuotePdfUrl, signQuotePdfUrl } from '@/lib/quote/pdf'
+import { archiveAndIngestQuote } from '@/lib/filestore/ingest-quote'
+import { buildQuoteKbText } from '@/lib/filestore/minimize'
 import { measureAndPriceRoofs } from '@/lib/roofing/measure'
 import { generateRoofAfterImage } from '@/lib/roofing/roof-after'
 import type { MultiRoofQuote } from '@/lib/roofing/types'
@@ -541,6 +543,29 @@ async function handleRoofingTurn(args: {
         pending_structure_count: totalStructures,
         last_served_structures: indices ?? Array.from({ length: totalStructures }, (_, i) => i + 1),
       }, 'open')
+      // Per-tenant file-store ingest (best-effort, never blocks the send).
+      // Archive the priced roofing quote PDF + minimized KB markdown.
+      // Skipped for inspection-routed quotes (no priced doc to ingest).
+      if (finalQuote.routing.decision !== 'inspection_required') {
+        try {
+          const fullDocPath = await ensureRoofQuotePdf(pending.token, { quote: finalQuote })
+          if (fullDocPath) {
+            const { markdown, contentHash } = buildQuoteKbText({
+              quote: { estimate: finalQuote, routing_decision: finalQuote.routing.decision },
+              trade: 'roofing',
+            })
+            await archiveAndIngestQuote({
+              tenantId,
+              sourceKind: 'quote',
+              sourceId: pending.token,
+              trade: 'roofing',
+              fullDocPath,
+              kbText: markdown,
+              contentHash,
+            })
+          }
+        } catch { /* best-effort */ }
+      }
       // Pre-warm the AI "after re-roof" preview now (best-effort) so it's
       // cached by the time the customer opens the link. We're inside the
       // webhook's after() with a 300s budget and the SMS is already sent,

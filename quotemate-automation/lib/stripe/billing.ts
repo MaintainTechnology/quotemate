@@ -7,13 +7,15 @@
 // customers live in app/_components/pricing-data.ts; the dollar figures in
 // the setup script must match it.
 //
-// 14-day free trial on every plan (card collected up front — standard
-// subscription Checkout). Self-service management goes through the Stripe
-// Customer Portal. Subscription state is mirrored onto tenants.* by the
-// webhook (see app/api/stripe/webhook/route.ts).
+// 14-day free trial on STARTER MONTHLY ONLY (see hasFreeTrial); every other
+// plan/interval bills immediately. Card collected up front either way
+// (standard subscription Checkout). Self-service management goes through the
+// Stripe Customer Portal. Subscription state is mirrored onto tenants.* by
+// the webhook (see app/api/stripe/webhook/route.ts).
 
 import { getStripe } from './client'
 import type Stripe from 'stripe'
+import { hasFreeTrial, TRIAL_DAYS } from '@/app/_components/pricing-data'
 
 export type PlanId = 'starter' | 'pro' | 'crew'
 export type BillingInterval = 'month' | 'year'
@@ -41,8 +43,6 @@ export function parseLookupKey(
   if (!m) return null
   return { plan: m[1] as PlanId, interval: m[2] as BillingInterval }
 }
-
-const TRIAL_DAYS = 14
 
 /** App base URL for Checkout / Portal return links, trailing slash stripped. */
 export const APP_URL = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '')
@@ -95,9 +95,10 @@ export async function getOrCreateCustomer(opts: {
 }
 
 /**
- * Create a subscription Checkout Session (14-day trial). Returns the hosted
- * URL to redirect the tradie to. No `payment_method_types` — Stripe picks
- * eligible methods dynamically (best practice).
+ * Create a subscription Checkout Session. A 14-day trial is applied ONLY to
+ * Starter Monthly (hasFreeTrial); every other plan/interval bills
+ * immediately. Returns the hosted URL to redirect the tradie to. No
+ * `payment_method_types` — Stripe picks eligible methods dynamically.
  */
 export async function createSubscriptionCheckout(opts: {
   tenantId: string
@@ -115,7 +116,10 @@ export async function createSubscriptionCheckout(opts: {
     allow_promotion_codes: true,
     billing_address_collection: 'auto',
     subscription_data: {
-      trial_period_days: TRIAL_DAYS,
+      // Trial on Starter Monthly only; every other plan/interval bills now.
+      ...(hasFreeTrial(opts.plan, opts.interval)
+        ? { trial_period_days: TRIAL_DAYS }
+        : {}),
       metadata: { tenant_id: opts.tenantId, plan: opts.plan, interval: opts.interval },
     },
     metadata: { tenant_id: opts.tenantId, plan: opts.plan, interval: opts.interval },

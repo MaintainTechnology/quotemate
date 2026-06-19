@@ -30,6 +30,8 @@ import {
 } from '@/lib/vapi/register-number'
 import { sendWelcomeSms, type WelcomeSmsResult } from '@/lib/twilio/welcome-sms'
 import { setTwilioSmsWebhook } from '@/lib/twilio/set-sms-webhook'
+import { provisionTenantStore } from '@/lib/filestore/tenant-provision'
+import { after } from 'next/server'
 
 export type ProvisioningInput = {
   tenantId: string
@@ -210,6 +212,28 @@ export async function runProvisioning(
       warning,
     }
   }
+
+  // ── 4b. Provision the tenant's file store (fire-and-forget, post-ack) ──
+  // Deferred via next/server after() (spec R6) so it never adds the KB
+  // round-trip to the activation request latency. STUBs (no-op, no network)
+  // when TENANT_FILESTORE_ENABLED !== 'true' — the pilot default. Never fatal:
+  // failures are logged, not surfaced, and the lazy ensure-on-first-quote +
+  // reconcile paths recover later if this misses.
+  after(async () => {
+    try {
+      const fs = await provisionTenantStore(
+        { tenantId: input.tenantId, businessName: input.businessName },
+        { supabase },
+      )
+      if (!fs.ok) {
+        console.warn(`[run-provisioning] file-store provisioning failed: ${fs.reason}`)
+      }
+    } catch (e) {
+      console.warn(
+        `[run-provisioning] file-store provisioning threw: ${e instanceof Error ? e.message : String(e)}`,
+      )
+    }
+  })
 
   // ── 5. Welcome SMS (non-fatal) ───────────────────────────────────
   const welcome = await welcomeSms({

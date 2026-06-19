@@ -13,11 +13,14 @@
 export type EstimatorKind = 'paint' | 'electrical'
 
 const PREFIX = 'qm'
-const MAX_DISPLAY_NAME = 128
+// Exported (per spec 2026-06-19 tenant-file-store, R3) so tenant-store-name.ts
+// can reuse the identical slug + cap as the single source of truth rather than
+// re-implementing them.
+export const MAX_DISPLAY_NAME = 128
 
 /** Lowercase, collapse to [a-z0-9-], trim dashes. Keeps ids/names URL- and
  *  console-friendly without losing their identity. */
-function slug(value: string): string {
+export function slug(value: string): string {
   return String(value ?? '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')

@@ -15,6 +15,7 @@ import {
   annualPerMonth,
   annualSaving,
   aud,
+  hasFreeTrial,
   type Plan,
   type PlanId,
 } from "./pricing-data"
@@ -37,8 +38,8 @@ export function PricingTiers({
       </div>
 
       <p className="mt-6 text-sm leading-relaxed text-text-dim">
-        All prices in AUD, ex-GST. 14-day free trial — no card to start the SMS
-        receptionist. Cancel anytime.
+        All prices in AUD, ex-GST. Starter Monthly includes a 14-day free
+        trial; every other plan starts straight away. Cancel anytime.
       </p>
 
       {variant === "home" && (
@@ -172,7 +173,11 @@ function CheckoutButton({
           : "border border-ink-line bg-transparent text-text-pri hover:border-text-dim hover:bg-ink"
       }`}
     >
-      {loading ? "Starting…" : "Start free trial"}
+      {loading
+        ? "Starting…"
+        : hasFreeTrial(plan, interval)
+          ? "Start free trial"
+          : "Get started"}
     </button>
   )
 }

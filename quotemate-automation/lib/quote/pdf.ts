@@ -71,6 +71,24 @@ async function storePdf(path: string, data: Buffer): Promise<string> {
   return path
 }
 
+/**
+ * Store an arbitrary asset (e.g. a raw uploaded invoice image) in the same
+ * private `quote-pdfs` bucket. Used by the per-tenant file-store archive
+ * (spec 2026-06-19, R10) so the FULL invoice document lives in access-controlled
+ * Supabase Storage — the KB only ever receives the PII-minimized text.
+ */
+export async function storeQuoteAsset(
+  path: string,
+  data: Buffer,
+  contentType: string,
+): Promise<string> {
+  const { error } = await supabase()
+    .storage.from(BUCKET)
+    .upload(path, data, { contentType, upsert: true })
+  if (error) throw new Error(`quote-asset upload failed: ${error.message}`)
+  return path
+}
+
 export async function downloadQuotePdf(path: string): Promise<Buffer> {
   const { data, error } = await supabase().storage.from(BUCKET).download(path)
   if (error || !data) throw new Error(`quote-pdf download failed: ${error?.message ?? 'no data'}`)

@@ -23,8 +23,11 @@
 // auth pattern in /api/quote/[id]/edit + /api/quote/[id]/check-owner.
 
 import { createClient } from '@supabase/supabase-js'
+import { after } from 'next/server'
 import { dispatchQuoteWithPdf } from '@/lib/sms/send-quote-pdf'
 import { ensureQuotePdf, quotePdfUrl, signQuotePdfUrl } from '@/lib/quote/pdf'
+import { archiveAndIngestQuote } from '@/lib/filestore/ingest-quote'
+import { buildQuoteKbText } from '@/lib/filestore/minimize'
 import {
   buildQuoteSms,
   buildQuoteUpdatedSms,
@@ -107,7 +110,7 @@ export async function POST(
   //      (display mode for the SMS template) ──
   const { data: intake } = await supabase
     .from('intakes')
-    .select('id, caller, suburb, job_type, scope, call_id')
+    .select('id, caller, suburb, job_type, scope, call_id, trade')
     .eq('id', quote.intake_id as string)
     .maybeSingle()
   const { data: pricingBook } = await supabase
@@ -217,6 +220,34 @@ export async function POST(
   // Mark as sent (uses the same monotonic lifecycle advancer the
   // estimator uses) so the follow-up queue + dashboard pick it up.
   await advanceQuoteStatus(supabase, quote.id as string, 'sent')
+
+  // Per-tenant file-store ingest — best-effort, post-send (after the
+  // customer SMS has gone out and the quote is 'sent'). Archives the
+  // rendered quote PDF + a minimized KB text doc for retrieval. STUBs
+  // when TENANT_FILESTORE_ENABLED !== 'true' and no-ops on missing
+  // inputs, so it never blocks or alters the approve-and-send response.
+  const ingestTrade = (intake?.trade as string | null | undefined) ?? 'electrical'
+  after(async () => {
+    try {
+      const fullDocPath = await ensureQuotePdf(quote.id as string)
+      if (!fullDocPath) return
+      const { markdown, contentHash } = buildQuoteKbText({
+        quote: quote as Record<string, unknown>,
+        trade: ingestTrade,
+      })
+      await archiveAndIngestQuote({
+        tenantId: (quote.tenant_id as string | null) ?? null,
+        sourceKind: 'quote',
+        sourceId: quote.id as string,
+        trade: ingestTrade,
+        fullDocPath,
+        kbText: markdown,
+        contentHash,
+      })
+    } catch {
+      /* best-effort */
+    }
+  })
 
   // Drop a row into quote_followup_events so the touch-log on the
   // dashboard shows "Tradie approved + sent" alongside the other

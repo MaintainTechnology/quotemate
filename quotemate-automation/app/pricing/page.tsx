@@ -21,11 +21,11 @@ import { COMPARISON, PLANS, PRICING_FAQ } from "../_components/pricing-data"
 export const metadata = {
   title: "Pricing — QuoteMate",
   description:
-    "Simple plans for Australian tradies. Starter $49, Pro $129, Crew $299 a month (save ~17% annually). 14-day free trial, no cut of your jobs, $99 site visit credited to the job.",
+    "Simple plans for Australian tradies. Starter $49, Pro $129, Crew $299 a month (save ~17% annually). Starter Monthly includes a 14-day free trial, no cut of your jobs, $99 site visit credited to the job.",
   openGraph: {
     title: "QuoteMate pricing — costs less than one missed job",
     description:
-      "Three plans for AU tradies. SMS + AI voice receptionist, Good / Better / Best quotes, Stripe deposits. Start a 14-day free trial.",
+      "Three plans for AU tradies. SMS + AI voice receptionist, Good / Better / Best quotes, Stripe deposits. Starter Monthly includes a 14-day free trial.",
     type: "website",
   },
 }
@@ -68,8 +68,8 @@ function Header() {
           <p className="mt-7 max-w-2xl text-lg leading-relaxed text-text-sec">
             Your AI receptionist answers every text and call, drafts Good /
             Better / Best quotes in under a minute, and takes the deposit. Pick a
-            plan, start a 14-day free trial, and you&rsquo;re quoting the same
-            day. We never take a cut of your jobs.
+            plan and you&rsquo;re quoting the same day — Starter Monthly comes
+            with a 14-day free trial. We never take a cut of your jobs.
           </p>
         </Reveal>
       </div>
@@ -402,10 +402,11 @@ function ClosingCta() {
           </h2>
           <p className="mt-6 max-w-2xl text-lg leading-relaxed text-text-sec">
             Connect your number, load your pricing book, and your AI receptionist
-            is live in about three minutes. No card to start the SMS plan.
+            is live in about three minutes. Starter Monthly comes with a 14-day
+            free trial.
           </p>
           <div className="mt-10 flex flex-wrap gap-3">
-            <PrimaryCTA href="/signup">Start 14-day free trial</PrimaryCTA>
+            <PrimaryCTA href="/signup">Get started</PrimaryCTA>
             <SecondaryCTA href="/#how">See how it works</SecondaryCTA>
           </div>
         </Reveal>

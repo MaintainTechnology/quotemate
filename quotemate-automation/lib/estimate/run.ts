@@ -42,6 +42,8 @@ import {
 import { buildDeterministicTiers, type DeterministicTierInput } from './deterministic-bom'
 import { fetchSimilarPastQuotesContext } from './rag'
 import { runKbEstimateVerification } from './kb-verify'
+import { searchTenantStore } from '@/lib/filestore/tenant-store'
+import type { KbSearchResult } from '@/lib/admin-loader/mt-filestore-kb'
 import { pipelineLog } from '@/lib/log/pipeline'
 import { createTracer, stopwatch } from '@/lib/log/trace'
 
@@ -185,12 +187,42 @@ export async function runEstimation(
         )
       : null
 
+  // Phase 3 (spec 2026-06-19) — per-tenant AI grounding. When enabled,
+  // retrieve relevant snippets from the DRAFTING TENANT'S OWN past
+  // jobs/invoices (their per-tenant Gemini File Search store) and append
+  // them to the user prompt as ADVISORY background only — exactly like the
+  // catalogue / BOM / price-history hints above. Three guarantees make this
+  // safe to add to the money path:
+  //   • Flag-gated (TENANT_FILESTORE_ENABLED): fully dormant + byte-identical
+  //     to today when the flag is off (the helper returns null without any
+  //     DB read or KB call).
+  //   • Best-effort, never-blocking: buildTenantGroundingHint wraps all work
+  //     in try/catch and returns null on any error/timeout — the pipeline
+  //     proceeds with the un-grounded prompt.
+  //   • Additive only: the retrieved text is appended to the user prompt's
+  //     contextual background. It is NEVER fed to the tools, the candidate
+  //     loader, or the grounding validator, so it cannot become a price
+  //     source — prices still come solely from tool-calling against
+  //     pricing_book/shared_*/tenant_custom_assemblies, and the grounding
+  //     validator remains the hard backstop. Scoped to THIS tenant's
+  //     file_store_id only (no cross-tenant data); indexed docs are already
+  //     PII-minimized so no extra redaction is needed.
+  const tenantGroundingBlock =
+    process.env.TENANT_FILESTORE_ENABLED === 'true'
+      ? await buildTenantGroundingHint(
+          (intake?.tenant_id as string | null) ?? null,
+          intake,
+          cacheLog,
+        )
+      : null
+
   const userPrompt =
     (ragContext ? `${ragContext}\n` : '') +
     (preferencesBlock ? `${preferencesBlock}\n` : '') +
     (catalogueBlock ? `${catalogueBlock}\n` : '') +
     (bomBlock ? `${bomBlock}\n` : '') +
     (priceHistoryBlock ? `${priceHistoryBlock}\n` : '') +
+    (tenantGroundingBlock ? `${tenantGroundingBlock}\n` : '') +
     `Draft a quote for this NEW intake:\n\n${JSON.stringify(intake, null, 2)}`
 
   // Tenant-scoped tool factory. lookupAssembly now reads BOTH
@@ -1651,6 +1683,165 @@ async function buildPriceHistoryHint(
     log.err('price-history hint build failed', e?.message ?? String(e))
     return null
   }
+}
+
+/**
+ * Phase 3 (spec 2026-06-19) — pure formatter for the per-tenant grounding
+ * block. Takes the KbSearchResult from searchTenantStore and renders a
+ * short, clearly-labelled ADVISORY block for the drafting prompt — or null
+ * when there's nothing useful to add.
+ *
+ * Extracted as a pure (no-I/O) helper so it is trivially unit-testable
+ * offline (see run.grounding.test.ts) and so the labelling / length-cap /
+ * "do-not-price" framing live in exactly one place.
+ *
+ * SAFETY: the returned text is appended ONLY to the user-prompt background
+ * (advisory). It is NEVER parsed for prices, never reaches the tools, the
+ * candidate loader, or the grounding validator — so it cannot become a
+ * price source. The block heading states this explicitly to the model.
+ */
+const TENANT_GROUNDING_MAX_CHARS = 1800
+
+export function buildTenantGroundingBlock(
+  result: KbSearchResult | null | undefined,
+): string | null {
+  if (!result) return null
+  const answer = typeof result.answer === 'string' ? result.answer.trim() : ''
+  const passages = Array.isArray(result.passages) ? result.passages : []
+
+  // Build short snippet lines from cited passages (text + the doc it came
+  // from), de-duplicated and individually length-capped so one huge passage
+  // can't blow the budget.
+  const seen = new Set<string>()
+  const snippetLines: string[] = []
+  for (const p of passages) {
+    const text = typeof p?.text === 'string' ? p.text.trim().replace(/\s+/g, ' ') : ''
+    if (!text) continue
+    const key = text.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    const title =
+      typeof p?.documentTitle === 'string' && p.documentTitle.trim() !== ''
+        ? p.documentTitle.trim()
+        : null
+    const clipped = text.length > 300 ? `${text.slice(0, 300)}…` : text
+    snippetLines.push(`  • ${clipped}${title ? ` (from: ${title})` : ''}`)
+  }
+
+  // Nothing grounded → no block (keeps the prompt clean / no empty heading).
+  if (!answer && snippetLines.length === 0) return null
+
+  const body: string[] = [
+    'Your past similar jobs (advisory only — do not use as a price source):',
+    'The following is background from THIS business\'s own past quotes/invoices,',
+    'retrieved from their private records. Use it ONLY to inform scope, wording,',
+    'and typical inclusions. It is NOT a price source — every price you output',
+    'must still come from the pricing tools, and a grounding validator runs',
+    'after your output regardless of anything written here.',
+  ]
+  if (answer) body.push('', answer.length > 700 ? `${answer.slice(0, 700)}…` : answer)
+  if (snippetLines.length > 0) body.push('', 'Cited records:', ...snippetLines)
+
+  const block = body.join('\n')
+  return block.length > TENANT_GROUNDING_MAX_CHARS
+    ? `${block.slice(0, TENANT_GROUNDING_MAX_CHARS)}…`
+    : block
+}
+
+/**
+ * Phase 3 (spec 2026-06-19) — per-tenant grounding hint.
+ *
+ * Resolves THIS tenant's own Gemini File Search store id (from
+ * tenants.file_store_id, server-side only — never accepted from a client),
+ * builds a query from the structured intake (job type + scope summary), and
+ * asks searchTenantStore for relevant snippets from the tenant's own past
+ * jobs/invoices. Returns a short advisory block (via buildTenantGroundingBlock)
+ * or null.
+ *
+ * Best-effort + never-blocking: ANY problem (no tenant_id, no store id yet,
+ * KB unavailable, query empty, error/timeout) → null, so the pipeline drafts
+ * with the un-grounded prompt exactly as it does today. NEVER throws.
+ *
+ * Scoped strictly to the caller's own file_store_id, so no cross-tenant data
+ * can enter the prompt. Indexed docs are PII-minimized at ingest, so the
+ * snippets carry no customer PII.
+ *
+ * Only ever invoked behind the TENANT_FILESTORE_ENABLED flag in
+ * runEstimation, so it is completely dormant until explicitly enabled.
+ */
+async function buildTenantGroundingHint(
+  tenantId: string | null,
+  intake: any,
+  log: ReturnType<typeof pipelineLog>,
+): Promise<string | null> {
+  if (!tenantId) return null
+  try {
+    // Resolve the tenant's store id server-side (same Supabase access this
+    // file already uses). null/empty → tenant has no store yet → no-op.
+    const { data, error } = await supabase
+      .from('tenants')
+      .select('file_store_id')
+      .eq('id', tenantId)
+      .maybeSingle<{ file_store_id: string | null }>()
+    if (error) {
+      log.err('tenant grounding store lookup failed — continuing without it', error.message)
+      return null
+    }
+    const storeId = data?.file_store_id ?? null
+    if (!storeId) return null
+
+    // Build a query from the structured intake: job type + a short scope
+    // summary. Kept compact; the KB does the relevance retrieval.
+    const query = buildTenantGroundingQuery(intake)
+    if (!query) return null
+
+    const result = await searchTenantStore({ storeId, query })
+    const block = buildTenantGroundingBlock(result)
+    if (block) {
+      // Observable per the spec — show grounding context was added (no
+      // snippet bodies in the log line; just that it fired + sizes).
+      log.ok('tenant grounding context attached (advisory — never a price source)', {
+        chars: block.length,
+        passages: Array.isArray(result?.passages) ? result.passages.length : 0,
+      })
+    } else {
+      log.ok('tenant grounding context skipped', { reason: 'no usable snippets' })
+    }
+    return block
+  } catch (e: any) {
+    // Grounding must NEVER block estimation. Log + carry on (un-grounded).
+    log.err('tenant grounding hint build failed — continuing without it', e?.message ?? String(e))
+    return null
+  }
+}
+
+/**
+ * Phase 3 — derive the retrieval query from the structured intake. Combines
+ * job_type with a short scope summary (free-text + item_count) so the KB can
+ * find the tenant's most similar past jobs. Returns null when there's nothing
+ * meaningful to query on. Pure (no I/O) — small enough to inline-test if needed.
+ */
+export function buildTenantGroundingQuery(intake: any): string | null {
+  const jobType =
+    typeof intake?.job_type === 'string' ? intake.job_type.replace(/_/g, ' ').trim() : ''
+  const scope = intake?.scope ?? null
+  const scopeBits: string[] = []
+  if (scope && typeof scope === 'object') {
+    const summary =
+      typeof scope.summary === 'string'
+        ? scope.summary
+        : typeof scope.description === 'string'
+          ? scope.description
+          : ''
+    if (summary.trim()) scopeBits.push(summary.trim())
+    const count = Number(scope.item_count)
+    if (Number.isFinite(count) && count > 0) scopeBits.push(`quantity ${count}`)
+  }
+  const parts = [jobType, ...scopeBits].filter((s) => s && s.length > 0)
+  if (parts.length === 0) return null
+  const q = `Past similar jobs for: ${parts.join(' — ')}. What did this business quote and include?`
+  // Cap the query length defensively.
+  return q.length > 500 ? q.slice(0, 500) : q
 }
 
 /**

@@ -56,6 +56,7 @@ import {
   AirVent,
   ScanLine,
   Sun,
+  FolderOpen,
   type LucideProps,
 } from 'lucide-react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
@@ -65,6 +66,7 @@ import { RoofRatesEditor } from './_components/RoofRatesEditor'
 import { EstimatorBetaTab } from './_components/EstimatorBetaTab'
 import { SolarTab } from './_components/SolarTab'
 import { BillingTab } from './_components/BillingTab'
+import { FilesTab } from './_components/FilesTab'
 import CommercialPaintingTab from './_components/commercial-painting/CommercialPaintingTab'
 import { StatusPill, StatGrid, TONE_LEFT_RAIL, type Tone } from './_components/quote-ui'
 import { ErrorBanner, Field, INPUT } from '../signup/page'
@@ -283,12 +285,14 @@ type Tab =
   | 'solar'
   /** Invitation codes — generate/manage onboarding allowlist + campaign codes. */
   | 'invites'
+  /** Files — per-tenant document store: archived quotes/invoices + ask-your-docs chat. */
+  | 'files'
 
 /** Tabs reachable via /dashboard?tab=… (e.g. the estimator run page's breadcrumb). */
 const DEEP_LINK_TABS: readonly Tab[] = [
   'overview', 'account', 'payouts', 'billing', 'pricing', 'services', 'catalogue', 'estimating',
   'recipes', 'quotes', 'chats', 'followups', 'roofing', 'signage', 'painting',
-  'commercial-painting', 'aircon', 'estimator', 'solar', 'invites',
+  'commercial-painting', 'aircon', 'estimator', 'solar', 'invites', 'files',
 ]
 
 /** SMS conversation summary returned by /api/tenant/chats. Drives the
@@ -662,6 +666,7 @@ export default function DashboardPage() {
               />
             )}
             {tab === 'billing' && <BillingTab accessToken={accessToken} />}
+            {tab === 'files' && <FilesTab accessToken={accessToken} />}
             {tab === 'catalogue' && <CatalogueTab accessToken={accessToken} />}
             {tab === 'estimating' && <EstimatingTab accessToken={accessToken} />}
             {tab === 'recipes' && <RecipesTab accessToken={accessToken} />}
@@ -993,6 +998,8 @@ function buildNav(quoteCount: number, hasRoofingTrade = false): NavItem[] {
   items.push({ tab: 'solar', label: 'Solar', icon: Sun })
   // Marketing — invite codes + QR codes. Not trade-gated.
   items.push({ tab: 'invites', label: 'Marketing', icon: Megaphone })
+  // Files — per-tenant document store (archived quotes/invoices + ask-your-docs).
+  items.push({ tab: 'files', label: 'Files', icon: FolderOpen })
   items.push(
     { tab: 'account', label: 'Account', icon: User },
     { tab: 'payouts', label: 'Payouts', icon: Banknote },
@@ -1019,7 +1026,7 @@ const SIDEBAR_GROUPS: { label: string; tabs: Tab[] }[] = [
   // tenants the byTab.get('roofing') lookup returns undefined and the
   // sidebar quietly skips the row. No tenant-specific filtering needed
   // in this layout list.
-  { label: 'Daily work', tabs: ['overview', 'quotes', 'followups', 'chats', 'roofing', 'signage', 'painting', 'commercial-painting', 'aircon', 'estimator', 'solar'] },
+  { label: 'Daily work', tabs: ['overview', 'quotes', 'followups', 'chats', 'files', 'roofing', 'signage', 'painting', 'commercial-painting', 'aircon', 'estimator', 'solar'] },
   {
     label: 'Setup',
     tabs: ['invites', 'account', 'payouts', 'billing', 'pricing', 'services', 'catalogue', 'estimating', 'recipes'],
@@ -1207,7 +1214,7 @@ const TAB_META: Record<
   },
   billing: {
     title: 'Billing & plan',
-    desc: 'Your QuoteMate subscription — start a 14-day free trial, switch plans, or manage your card. We never take a cut of your jobs.',
+    desc: 'Your QuoteMate subscription — start a plan, switch tiers, or manage your card. Starter Monthly includes a 14-day free trial; we never take a cut of your jobs.',
   },
   estimator: {
     title: 'Estimator (Beta)',
@@ -1220,6 +1227,10 @@ const TAB_META: Record<
   invites: {
     title: 'Marketing',
     desc: 'Invite codes gate who can onboard. QR codes turn printed flyers into AI-drafted quotes.',
+  },
+  files: {
+    title: 'Files',
+    desc: 'Your archived quotes and uploaded invoices — download any document, or ask a question grounded in your own pricing history.',
   },
   quotes: {
     title: 'Quotes',
@@ -10607,6 +10618,8 @@ function tabLabel(t: Tab): string {
       return 'AC'
     case 'invites':
       return 'Marketing'
+    case 'files':
+      return 'Files'
     case 'overview':
       return 'Overview'
     case 'account':
