@@ -4,6 +4,7 @@
 //   node --env-file=.env.local scripts/run-migration-122.mjs            # apply to prod (SUPABASE_DB_URL)
 //   node --env-file=.env.local scripts/run-migration-122.mjs --dev      # apply to dev (SUPABASE_DEVELOPMENT_DB_URL)
 //   node --env-file=.env.local scripts/run-migration-122.mjs --dev --dry # dev BEGIN; ... ROLLBACK; (no commit)
+//   node --env-file=.env.local scripts/run-migration-122.mjs --rollback  # reverse (run 122_down.sql; honours --dev/--dry)
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
@@ -12,9 +13,11 @@ import pg from 'pg'
 const { Client } = pg
 const here = dirname(fileURLToPath(import.meta.url))
 const sqlPath = join(here, '..', 'sql', 'migrations', '122_sms_conversation_active_unique.sql')
+const downSqlPath = join(here, '..', 'sql', 'migrations', '122_down.sql')
 
 const useDev = process.argv.includes('--dev')
 const dryRun = process.argv.includes('--dry')
+const rollback = process.argv.includes('--rollback')
 
 const dbUrl = useDev
   ? process.env.SUPABASE_DEVELOPMENT_DB_URL
@@ -77,12 +80,43 @@ async function proveRace(c) {
   return rows[0].n
 }
 
-const sql = readFileSync(sqlPath, 'utf8')
+const sql = readFileSync(rollback ? downSqlPath : sqlPath, 'utf8')
 const c = new Client({ connectionString: dbUrl, ssl: { rejectUnauthorized: false } })
 
 try {
   await c.connect()
   console.log(`Target DB: ${useDev ? 'DEVELOPMENT' : 'PROD'}${dryRun ? '  (DRY RUN — will ROLLBACK)' : ''}`)
+
+  if (rollback) {
+    // DDL-only migration: no data rows change, so there is no pre-apply
+    // snapshot to take (spec backup rule applies to data-correction
+    // migrations). Re-applying the forward SQL fully recreates both objects.
+    console.log('\nDDL-only migration — no data snapshot needed for rollback.')
+    console.log(`ROLLBACK — applying 122_down.sql (${sql.length.toLocaleString()} chars)...`)
+    await c.query('begin')
+    await c.query(sql)
+    const indexStillPresent = await indexPresent(c)
+    const functionStillPresent = await functionPresent(c)
+    if (indexStillPresent || functionStillPresent) {
+      console.error(
+        `\nFAIL — after rollback, index present=${indexStillPresent}, function present=${functionStillPresent} (expected both false).`,
+      )
+      await c.query('rollback')
+      process.exit(1)
+    }
+    if (dryRun) {
+      await c.query('rollback')
+      console.log('\nOK — rollback dry run verified (ROLLED BACK, nothing dropped).')
+    } else {
+      await c.query('commit')
+      console.log('\nOK — migration 122 rolled back (unique index + idempotent-create function dropped).')
+    }
+    process.exit(0)
+  }
+
+  // DDL-only migration: no data rows change, so the spec's pre-apply data
+  // snapshot is intentionally skipped here.
+  console.log('DDL-only migration — no data snapshot needed (schema objects only).')
 
   const { rows: dups } = await c.query(DUP_QUERY)
   if (dups.length > 0) {

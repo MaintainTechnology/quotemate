@@ -207,6 +207,71 @@ body {
 .link-underline:focus-visible {
   background-size: 100% 1px;
 }
+/* Keyboard focus on text links needs a real, visible indicator — the
+   1px underline draw alone is too faint (WCAG 2.4.7 / 2.4.13). */
+.link-underline:focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 3px;
+  border-radius: 1px;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   Premium reinvention layer (home marketing page).
+   Command-centre depth + film grain + lit edges — all inside the brand:
+   borders over shadows, square corners, orange + teal-glow only.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* Anchor links clear the sticky nav before settling. */
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 5rem;
+}
+
+/* The marketing canvas. A restrained twin glow at the top of the page —
+   cool slate-navy with a single warm ember — gives the flat dark base
+   the depth of an ops dashboard instead of a painted wall. */
+.marketing-canvas {
+  position: relative;
+  background-color: var(--ink-deep);
+  background-image:
+    radial-gradient(1180px 560px at 26% -12%, rgba(36, 49, 74, 0.85) 0%, rgba(36, 49, 74, 0) 60%),
+    radial-gradient(760px 420px at 88% -6%, rgba(255, 90, 31, 0.07) 0%, rgba(255, 90, 31, 0) 58%);
+  background-repeat: no-repeat;
+}
+
+/* Film grain. A fixed, non-interactive tile at ~4.5% kills the banding
+   that makes flat dark UIs read as cheap. Static, so reduced-motion is
+   irrelevant; pointer-events:none keeps clicks passing through. Sits
+   below the sticky nav (z-50) so chrome stays crisp. */
+.noise-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  opacity: 0.045;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Lit top edge — a 1px inner highlight so a bordered panel reads as a
+   lifted plate catching light from above. Not a drop shadow; the brand
+   stays shadow-free. */
+.edge-lit {
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Typing indicator dots in the live SMS demo — the receptionist is
+   "thinking" just before the quote drops. Motivated motion: it signals
+   work in progress, not decoration. */
+@keyframes typing-bounce {
+  0%, 70%, 100% { opacity: 0.25; transform: translateY(0); }
+  35%           { opacity: 1;    transform: translateY(-3px); }
+}
+
+/* The how-it-works timeline spine — a hairline that fades downward.
+   Connects sequential steps; reads as a path, not a column divider. */
+.timeline-spine {
+  background: linear-gradient(180deg, var(--accent) 0%, var(--ink-line) 72%, transparent 100%);
+}
 
 @media (prefers-reduced-motion: reduce) {
   *,

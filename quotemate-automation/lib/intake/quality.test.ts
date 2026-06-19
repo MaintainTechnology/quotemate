@@ -31,11 +31,21 @@ describe('evaluateIntakeQuality', () => {
     expect(evaluateIntakeQuality(baseLow)).toBe('usable')
   })
 
-  it('LOW + missing name is empty', () => {
-    expect(evaluateIntakeQuality({ ...baseLow, caller: { name: '' } })).toBe('empty')
-    expect(evaluateIntakeQuality({ ...baseLow, caller: null })).toBe('empty')
-    expect(evaluateIntakeQuality({ ...baseLow, caller: { name: 'unknown' } })).toBe('empty')
-    expect(evaluateIntakeQuality({ ...baseLow, caller: { name: 'J' } })).toBe('empty')
+  it('R18: LOW + missing name (but good scope) is USABLE — name is non-pricing', () => {
+    // The name no longer drops a quotable lead (we have the phone number; the
+    // name is collected at booking). Only a missing/thin scope or a missing
+    // price-critical structured field blocks. The dialog still asks the name.
+    expect(evaluateIntakeQuality({ ...baseLow, caller: { name: '' } })).toBe('usable')
+    expect(evaluateIntakeQuality({ ...baseLow, caller: null })).toBe('usable')
+    expect(evaluateIntakeQuality({ ...baseLow, caller: { name: 'unknown' } })).toBe('usable')
+    expect(evaluateIntakeQuality({ ...baseLow, caller: { name: 'J' } })).toBe('usable')
+  })
+
+  it('R18: a missing name does NOT rescue a missing price-critical field', () => {
+    // downlights with no count is still empty even though name is now ignored.
+    expect(
+      evaluateIntakeQuality({ ...baseLow, caller: null, job_type: 'downlights', scope: { description: 'downlights in the kitchen' } }),
+    ).toBe('empty')
   })
 
   it('LOW + scope shorter than 10 chars is empty', () => {
@@ -248,14 +258,25 @@ describe('evaluateIntakeQuality — R28 per-job gating', () => {
     ).toBe('usable')
   })
 
-  it('a missing universal field still wins over the per-job gate (no double-counting)', () => {
-    // Missing name → 'empty' from the universal gate regardless of count.
+  it('R18: a missing name no longer forces empty; the per-job gate still governs', () => {
+    // Was 'empty' under the old name gate; R18 makes name non-blocking, and the
+    // count is present, so a complete pricing intake is now usable.
     expect(
       evaluateIntakeQuality({
         confidence: 'LOW',
         caller: { name: '' },
         job_type: 'downlights',
         scope: { description: '6 downlights in the kitchen', item_count: 6 },
+      }),
+    ).toBe('usable')
+    // But a genuinely missing price-critical field (count) still blocks,
+    // name present or not.
+    expect(
+      evaluateIntakeQuality({
+        confidence: 'LOW',
+        caller: { name: '' },
+        job_type: 'downlights',
+        scope: { description: 'downlights in the kitchen' },
       }),
     ).toBe('empty')
   })

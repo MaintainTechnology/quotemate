@@ -4,6 +4,7 @@ import { structureIntake } from '@/lib/intake/structure'
 import { deriveTradeFromJobType } from '@/lib/intake/schema'
 import { embedIntake } from '@/lib/intake/embed'
 import { evaluateIntakeQuality, missingRequiredFields } from '@/lib/intake/quality'
+import { reconcileJobType } from '@/lib/intake/job-type-reconcile'
 import { pipelineLog } from '@/lib/log/pipeline'
 import { withRetry } from '@/lib/util/retry'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
@@ -85,6 +86,9 @@ export async function POST(req: Request) {
   // single-pricing-book pipeline — that branch keeps working since
   // /api/estimate/draft falls back when tenant_id is null.
   let tenantId: string | null = null
+  // R17 — the dialog/slot-extractor's job_type, captured at function scope so it
+  // can be reconciled against the structurer's job_type after structuring.
+  let dialogJobType: string | null = null
 
   if (sourceChannel === 'sms') {
     // ─────────────── SMS PATH ───────────────
@@ -202,6 +206,7 @@ export async function POST(req: Request) {
     if (slotJobType) {
       tradeHint = deriveTradeFromJobType(slotJobType)
     }
+    dialogJobType = slotJobType ?? null
 
     // Photos arrive on the SMS path through TWO surfaces — both feed
     // structureIntake the same way:
@@ -301,6 +306,27 @@ export async function POST(req: Request) {
     inspection_required: intake.inspection_required,
     risks: intake.risks?.length ?? 0,
   })
+
+  // R17 — reconcile the dialog's job_type against the structurer's. A genuine
+  // conflict (both classified, and they disagree) means one mis-read the job;
+  // rather than silently ground a quote against the WRONG assembly, downgrade
+  // confidence to LOW so the quality gate fires a focused clarifying SMS.
+  // Conservative + downgrade-only: never touches the agreeing/HIGH happy path.
+  {
+    const jt = reconcileJobType([
+      { source: 'dialog', jobType: dialogJobType },
+      { source: 'structure', jobType: intake.job_type },
+    ])
+    if (jt.agreement === 'conflict') {
+      log.err(
+        'job_type conflict — downgrading to LOW for a clarify (R17)',
+        `dialog=${dialogJobType ?? 'none'} vs structure=${intake.job_type ?? 'none'}`,
+      )
+      intake.confidence = 'LOW'
+      intake.confidence_reason =
+        `${intake.confidence_reason ?? ''} [R17 job_type conflict: dialog=${dialogJobType} vs structure=${intake.job_type} - clarify before quoting]`.trim()
+    }
+  }
 
   log.step('embedding intake (1536-dim) for similarity search')
   const embedding = await embedIntake(intake)

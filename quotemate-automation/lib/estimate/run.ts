@@ -23,6 +23,8 @@ import {
 import { applyMinLabourFloor } from './min-labour'
 import { reconcileTierMath, collapseDuplicateTiers, checkQuantityVsItemCount, reconcileInflatedLabour } from './reconcile'
 import { specGuardMode, evaluateSpecGuard, evaluateDraftSpecGuard } from './spec-guard'
+import { resolveInspectionReason } from './inspection-reason'
+import { carriedPricedTiers, forceInspectionTiers } from './inspection-normalize'
 import { categoryForJobType } from '@/lib/sms/product-options'
 import {
   mergeRecipesIntoDraft,
@@ -270,9 +272,21 @@ export async function runEstimation(
   // to validate — accept as-is. The route handler will force tier nulls and
   // the $99 inspection total.
   if (draft?.needs_inspection === true) {
+    // R13 — the self-report reason is free-form LLM text shown to the
+    // customer; resolve it to the closed enum before it leaves the engine.
+    draft.inspection_reason = resolveInspectionReason(draft.inspection_reason)
+    // R3/R7 — never trust the model to have nulled the tiers: a self-declared
+    // inspection must not ship priced tiers. Force them null + stamp the path
+    // centrally (lib/estimate/inspection-normalize.ts, unit-tested).
+    if (carriedPricedTiers(draft)) {
+      cacheLog.err('needs_inspection=true but draft carried priced tiers — force-nulling (R3)', null, {
+        had_good: !!draft.good, had_better: !!draft.better, had_best: !!draft.best,
+      })
+    }
+    forceInspectionTiers(draft)
     trace('estimate', 'warn', {
       substep: 'route_to_inspection',
-      message: 'draft self-reported needs_inspection=true; skipping validation',
+      message: 'draft self-reported needs_inspection=true; tiers nulled; skipping validation',
       decisions: { route: 'inspection', cause: 'llm_self_reported' },
       duration_ms: totalSw.elapsed(),
     })
@@ -307,6 +321,9 @@ export async function runEstimation(
             }
           }
           draft.needs_inspection = false
+          // R7 — this quote's prices were recomputed deterministically (LLM
+          // prices discarded), so it is auto-send eligible (subject to the gate).
+          draft.pricing_path = 'deterministic'
           cacheLog.ok('deterministic BOM applied (recipe × catalogue — same job, same price)', {
             assembly: loaded.assemblyName,
             good_subtotal: built.tiers.good.subtotal_ex_gst,
@@ -975,7 +992,8 @@ export async function runEstimation(
         better: null,
         best: null,
         needs_inspection: true,
-        inspection_reason: forcedInspection.reason,
+        inspection_reason: resolveInspectionReason(forcedInspection.reason),
+        pricing_path: 'inspection',
         estimated_timeframe: 'After site visit (within 5 business days)',
       }
       trace('estimate', 'warn', {
@@ -1055,7 +1073,8 @@ export async function runEstimation(
     better: null,
     best: null,
     needs_inspection: true,
-    inspection_reason: reason,
+    inspection_reason: resolveInspectionReason(reason),
+    pricing_path: 'inspection',
     estimated_timeframe: 'After site visit (within 5 business days)',
     // Preserve scope_short for the SMS, but null the assumptions if they
     // referenced fabricated prices/inclusions.

@@ -67,7 +67,6 @@ export type IntakeQualityInput = {
 }
 
 const MIN_SCOPE_CHARS = 10
-const MIN_NAME_CHARS = 2
 
 // ── Per-job mandatory structured fields ──────────────────────────────
 //
@@ -149,20 +148,19 @@ export function evaluateIntakeQuality(intake: IntakeQualityInput): IntakeQuality
   // safe because the recovery SMS now asks the exact missing question
   // (templates.ts buildIntakeRecoverySms 'count' branch).
   if (intake.confidence === 'LOW') {
-    const name = (intake.caller?.name ?? '').trim()
     const scope = (intake.scope?.description ?? '').trim()
-
-    const hasUsableName =
-      name.length >= MIN_NAME_CHARS && name.toLowerCase() !== 'unknown'
     const hasUsableScope = scope.length >= MIN_SCOPE_CHARS
 
-    // LOW confidence + missing name OR scope → empty (truly nothing to estimate
-    // against). job_type='other' alone is no longer a fail — the downstream
-    // estimator + grounding validator decide whether to quote or escalate to
-    // inspection. See the 2026-05-19 "bug zapper" incident for why this
-    // matters: a custom tenant assembly finished the dialog cleanly but the
-    // old gate sent the customer a generic "what kind of work?" recovery SMS.
-    if (!hasUsableName || !hasUsableScope) return 'empty'
+    // R18 — only PRICE-CRITICAL gaps may drop a quotable lead. A missing
+    // customer NAME is non-pricing (we already have their phone number; the
+    // name is collected at booking), so it no longer forces 'empty'. Only a
+    // missing/too-thin SCOPE — the job description the estimator actually needs
+    // to size a quote — fails the universal gate. (The dialog still politely
+    // asks for the name once in-conversation; this gate just stops *dropping*
+    // an otherwise-quotable lead for the lack of it.) The per-job count gate
+    // below still blocks on the one structured price-critical field.
+    // job_type='other' alone is not a fail (2026-05-19 "bug zapper" incident).
+    if (!hasUsableScope) return 'empty'
   }
 
   // ── Layer 2: per-job gate (R28) ────────────────────────────────────

@@ -74,3 +74,60 @@ export function sanitizeInspectionReason(raw: unknown): string {
 
   return s
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// R5 — CLOSED ENUM of customer-facing inspection reasons.
+//
+// The reason a customer sees when a job routes to the $99 inspection is ALWAYS
+// one of these pre-written strings. The model's free-form reason is used ONLY
+// to *select* which one (by keyword) — it is never shown verbatim. This makes
+// the customer-facing copy un-foolable: no invented price, no sensationalism,
+// no off-brand wording can reach the customer even if the sanitiser misses it.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const INSPECTION_REASONS = {
+  generic: SAFE_INSPECTION_REASON,
+  access:
+    'A site visit is needed to confirm access and scope before we can quote this accurately.',
+  switchboard:
+    'Switchboard or mains work needs an on-site assessment before we can quote it.',
+  safety:
+    'A licensed on-site inspection is required for safety and compliance before we can quote.',
+  hot_water:
+    'We need to confirm the hot water system type and location on-site before quoting.',
+  drainage:
+    'A drainage issue like this needs an on-site or camera check before we can price the fix.',
+  hidden_work:
+    'This job may involve hidden or variable work, so an inspection is needed to quote it accurately.',
+  out_of_scope:
+    'This one is best sorted with a quick site visit rather than over text.',
+} as const
+
+export type InspectionReasonKey = keyof typeof INSPECTION_REASONS
+
+// Keyword → enum mapping, most-specific first. Matched against the SANITISED
+// reason text, so price/shout artefacts are already gone before we map.
+const REASON_KEYWORDS: Array<[RegExp, InspectionReasonKey]> = [
+  [/switchboard|mains|meter\b|three[-\s]?phase|rewire|\brcd\b|safety switch/i, 'switchboard'],
+  [/asbestos|complian|licen[cs]|hazard|smoke[-\s]?alarm/i, 'safety'],
+  [/hot[-\s]?water|\bhws\b|heat[-\s]?pump|gas (storage|hot)/i, 'hot_water'],
+  [/drain|sewer|blockage|blocked|camera|cctv/i, 'drainage'],
+  [/access|manhole|roof|cavity|raked|cathedral|sub[-\s]?floor/i, 'access'],
+  [/out of scope|outside|too (big|complex)|renovat|commercial/i, 'out_of_scope'],
+  [/hidden|variable|unknown|not sure|depends|inspect|assess/i, 'hidden_work'],
+]
+
+/**
+ * R5 — resolve any raw/free-form inspection reason to a member of the closed
+ * {@link INSPECTION_REASONS} set. Sanitises first (defence in depth), then maps
+ * by keyword; falls back to the safe generic reason when nothing matches. The
+ * return value is always one of the enum strings — never model free text.
+ */
+export function resolveInspectionReason(raw: unknown): string {
+  const cleaned = sanitizeInspectionReason(raw)
+  if (cleaned === SAFE_INSPECTION_REASON) return INSPECTION_REASONS.generic
+  for (const [re, key] of REASON_KEYWORDS) {
+    if (re.test(cleaned)) return INSPECTION_REASONS[key]
+  }
+  return INSPECTION_REASONS.generic
+}

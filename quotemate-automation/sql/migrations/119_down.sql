@@ -1,0 +1,32 @@
+-- ════════════════════════════════════════════════════════════════════
+-- Migration 119 — DOWN (rollback of the pricing_book licence_expiry audit).
+--
+-- Reverses (conceptually): 119_pricing_book_audit.sql, which NULLed a single
+-- impossible licence_expiry (year 0008-05-22 on the Atomic Electrical row).
+--
+-- THIS IS A DOCUMENTED NO-OP — AND WHY:
+--   The forward migration is a ONE-WAY data-hygiene fix. It removed a value
+--   that was provably garbage (no AU electrical/plumbing licence expires in
+--   year 8 AD). The original garbage value CANNOT and SHOULD NOT be restored:
+--     • Re-writing the impossible date back would re-introduce fabricated-
+--       looking data — the exact thing the forward fix removed.
+--     • We do NOT know the tradie's REAL expiry, so "down" cannot
+--       reconstruct a correct value either.
+--   Therefore the correct, safe down is to do NOTHING to the live data.
+--
+-- IF A TRUE BYTE-FOR-BYTE RESTORE IS GENUINELY REQUIRED:
+--   The runner (scripts/run-migration-119.mjs) takes a pre-apply snapshot of
+--   the entire pricing_book table on the forward path:
+--       pricing_book_backup_mig119
+--   Restore the original licence_expiry for the affected row from there, e.g.:
+--       update public.pricing_book p
+--          set licence_expiry = b.licence_expiry
+--         from public.pricing_book_backup_mig119 b
+--        where b.id = p.id
+--          and p.licence_expiry is distinct from b.licence_expiry;
+--   (Run manually only if you have decided the original — impossible — value
+--   must come back; this is intentionally NOT automated here.)
+--
+-- Surface the snapshot table so an operator can confirm it exists before
+-- attempting any manual restore. Pure SELECT — changes no data.
+select to_regclass('public.pricing_book_backup_mig119') as restore_from_backup_table;

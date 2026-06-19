@@ -1,6 +1,8 @@
 // QuoteMate - run migration 118 (seed shared_assembly_bom for CORE
 // electrical + plumbing assemblies)
-// Usage: node --env-file=.env.local scripts/run-migration-118.mjs
+// Usage:
+//   node --env-file=.env.local scripts/run-migration-118.mjs            # forward (apply seed)
+//   node --env-file=.env.local scripts/run-migration-118.mjs --rollback # reverse (run 118_down.sql)
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
@@ -9,6 +11,9 @@ import pg from 'pg'
 const { Client } = pg
 const here = dirname(fileURLToPath(import.meta.url))
 const sqlPath = join(here, '..', 'sql', 'migrations', '118_shared_assembly_bom_seed.sql')
+const downSqlPath = join(here, '..', 'sql', 'migrations', '118_down.sql')
+
+const rollback = process.argv.includes('--rollback')
 
 const dbUrl = process.env.SUPABASE_DB_URL
 if (!dbUrl) {
@@ -16,11 +21,28 @@ if (!dbUrl) {
   process.exit(1)
 }
 
-const sql = readFileSync(sqlPath, 'utf8')
+const sql = readFileSync(rollback ? downSqlPath : sqlPath, 'utf8')
 const c = new Client({ connectionString: dbUrl, ssl: { rejectUnauthorized: false } })
 
 try {
   await c.connect()
+
+  if (rollback) {
+    console.log(`ROLLBACK — applying 118_down.sql (${sql.length.toLocaleString()} chars)...`)
+    await c.query(sql)
+    console.log('\nOK - migration 118 rolled back (seeded shared_assembly_bom rows deleted).')
+    process.exit(0)
+  }
+
+  // FORWARD: snapshot the table BEFORE applying, so a bad seed can be reverted
+  // without data loss (spec: Migration backup + rollback). Idempotent — never
+  // overwrites an existing snapshot.
+  await c.query(
+    `create table if not exists shared_assembly_bom_backup_mig118 as
+       select * from shared_assembly_bom`,
+  )
+  console.log('Pre-apply backup snapshot: shared_assembly_bom_backup_mig118')
+
   console.log(`Applying 118_shared_assembly_bom_seed.sql (${sql.length.toLocaleString()} chars)...`)
   await c.query(sql)
 

@@ -46,7 +46,12 @@ import {
 import { isQuoteInflight } from '@/lib/sms/inflight'
 import { quoteAlreadyDrafted as computeQuoteAlreadyDrafted } from '@/lib/sms/quote-already-drafted'
 import { shouldSendPhotoRequest as computeShouldSendPhotoRequest } from '@/lib/sms/photo-request-trigger'
-import { evaluateQuoteReadiness } from '@/lib/sms/quote-readiness'
+import {
+  evaluateQuoteReadiness,
+  clarifyingEnforcementEnabled,
+  clarifyingTurnCap,
+  decideClarifyGate,
+} from '@/lib/sms/quote-readiness'
 import { extractAndStoreMmsPhotos } from '@/lib/sms/mms'
 import { buildPhotoRequestSms, buildQuoteFailureSms } from '@/lib/sms/templates'
 import { withRetry } from '@/lib/util/retry'
@@ -2161,20 +2166,89 @@ export async function POST(req: Request) {
           history: turns,
           services: customAssemblies,
         })
+        const priorClarifyCount = Number(
+          (conversationState as Record<string, unknown>).clarify_gate_count ?? 0,
+        )
+        // R19 — only consecutive NO-PROGRESS turns count toward the cap. Compare
+        // this turn's missing required facts against the prior turn's snapshot;
+        // if the set shrank, the customer answered something → progress → reset.
+        const priorMissing = Array.isArray(
+          (conversationState as Record<string, unknown>).clarify_missing,
+        )
+          ? ((conversationState as Record<string, unknown>).clarify_missing as string[])
+          : []
+        const currentMissing = readiness.missing.map((m) => m.code)
+        const madeProgress =
+          priorMissing.length > 0 && currentMissing.length < priorMissing.length
         if (!readiness.ready) {
+          // R24 safety valve — gate the deterministic override behind the
+          // kill-switch flag and a clarifying-turn cap so it can be disabled
+          // instantly and can never loop a customer forever.
+          const gate = decideClarifyGate({
+            priorCount: priorClarifyCount,
+            enforcementEnabled: clarifyingEnforcementEnabled(),
+            cap: clarifyingTurnCap(),
+            madeProgress,
+          })
           console.warn('[sms/inbound:after] quote-readiness gate blocked finish', {
             conversationId,
-            missing: readiness.missing.map((m) => m.code),
+            missing: currentMissing,
             firstReason: readiness.missing[0]?.reason ?? null,
+            gateMode: gate.mode,
+            clarifyCount: gate.count,
+            madeProgress,
+            cap: clarifyingTurnCap(),
           })
-          decision = {
-            ...decision,
-            action: 'ask',
-            ready_for_intake: false,
-            request_photo_link: false,
-            offer_product_choice: false,
-            reply_to_send: readiness.reply ?? 'Quick one before I quote it - can you confirm the missing detail?',
+          if (gate.mode === 'allow') {
+            // Kill switch ON (SMS_ENFORCE_CLARIFYING_QUESTIONS disabled):
+            // leave the model's finish untouched.
+          } else if (gate.mode === 'escalate') {
+            // Cap reached — stop re-asking; route to the $99 inspection
+            // rather than trap the customer in a MUST-ASK loop.
+            decision = {
+              ...decision,
+              action: 'escalate_inspection',
+              ready_for_intake: false,
+              request_photo_link: false,
+              offer_product_choice: false,
+              reply_to_send:
+                "No worries - to quote this one accurately we'll need a quick on-site look. Want me to book a $99 inspection? It's credited toward the job if you go ahead.",
+            }
+          } else {
+            // gate.mode === 'ask' — block finish, ask one more question.
+            decision = {
+              ...decision,
+              action: 'ask',
+              ready_for_intake: false,
+              request_photo_link: false,
+              offer_product_choice: false,
+              reply_to_send: readiness.reply ?? 'Quick one before I quote it - can you confirm the missing detail?',
+            }
           }
+          // Persist the consecutive-blocked counter + the missing-fact snapshot
+          // on conversation_state so the cap + R19 progress check survive across
+          // turns (conversationUpdate below does not write conversation_state).
+          if (gate.mode !== 'allow') {
+            const nextState = {
+              ...conversationState,
+              clarify_gate_count: gate.count,
+              clarify_missing: currentMissing,
+            }
+            conversationState = nextState
+            await supabase
+              .from('sms_conversations')
+              .update({ conversation_state: nextState, updated_at: new Date().toISOString() })
+              .eq('id', conversationId)
+          }
+        } else if (priorClarifyCount !== 0 || priorMissing.length > 0) {
+          // Readiness satisfied — reset the cap counter + missing snapshot so a
+          // later, unrelated missing-fact run starts fresh.
+          const nextState = { ...conversationState, clarify_gate_count: 0, clarify_missing: [] }
+          conversationState = nextState
+          await supabase
+            .from('sms_conversations')
+            .update({ conversation_state: nextState, updated_at: new Date().toISOString() })
+            .eq('id', conversationId)
         }
       }
 

@@ -1,0 +1,117 @@
+{
+  "_README": [
+    "R15 hold-out eval set for scripts/eval-quotes.mjs.",
+    "Each entry is an (intake -> tradie-verified expected Good/Better/Best) pair.",
+    "",
+    "FLAG-NOT-FABRICATE: every pair below is a STARTER PLACEHOLDER. The expected",
+    "price bands, BOM line sets, and labour hours are NOT tradie-verified and were",
+    "NOT taken from any authoritative AU source. They exist only to exercise the",
+    "harness shape (rubric validation + scorecard skeleton). needs_grading=true on",
+    "every pair until a real tradie grades it against real AU buy prices + a real",
+    "BOM. The harness REFUSES to count a needs_grading pair toward an accuracy",
+    "score (it is a structure check only). Do NOT treat these numbers as ground",
+    "truth and do NOT let them gate a deploy.",
+    "",
+    "Target: >=30 graded pairs (target 100) sourced from the 157 real intakes +",
+    "tenants' past quotes, sampled across the top-5 job types (downlights,",
+    "hot_water, power_points, ceiling_fans, blocked_drain). See the spec R15/R16."
+  ],
+  "band_pct": 15,
+  "pairs": [
+    {
+      "id": "placeholder-downlights-01",
+      "needs_grading": true,
+      "provenance": "PLACEHOLDER - not tradie-verified, not from an AU source",
+      "intake": {
+        "trade": "electrical",
+        "job_type": "downlights",
+        "scope": {
+          "summary": "Replace 6 existing downlights with LED, same locations",
+          "specs": { "requested_specs": { "count": "6", "color_temp": "warm white", "dimmable": "false" } }
+        }
+      },
+      "expected": {
+        "good":   { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
+        "better": { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
+        "best":   { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
+        "route": "auto_send"
+      }
+    },
+    {
+      "id": "placeholder-hot_water-01",
+      "needs_grading": true,
+      "provenance": "PLACEHOLDER - not tradie-verified, not from an AU source",
+      "intake": {
+        "trade": "plumbing",
+        "job_type": "hot_water",
+        "scope": {
+          "summary": "Like-for-like replacement of a failed 250L electric storage HWS",
+          "specs": { "requested_specs": { "system_type": "electric", "capacity_l": "250" } }
+        }
+      },
+      "expected": {
+        "good":   { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
+        "better": { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
+        "best":   { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
+        "route": "auto_send"
+      }
+    },
+    {
+      "id": "placeholder-power_points-01",
+      "needs_grading": true,
+      "provenance": "PLACEHOLDER - not tradie-verified, not from an AU source",
+      "intake": {
+        "trade": "electrical",
+        "job_type": "power_points",
+        "scope": {
+          "summary": "Add 3 new double GPOs in a finished plasterboard wall",
+          "specs": { "requested_specs": { "count": "3", "amperage": "10A", "type": "double" } }
+        }
+      },
+      "expected": {
+        "good":   { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
+        "better": { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
+        "best":   { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
+        "route": "auto_send"
+      }
+    },
+    {
+      "id": "placeholder-ceiling_fans-01",
+      "needs_grading": true,
+      "provenance": "PLACEHOLDER - not tradie-verified, not from an AU source",
+      "intake": {
+        "trade": "electrical",
+        "job_type": "ceiling_fans",
+        "scope": {
+          "summary": "Supply and install 2 ceiling fans where light fittings already exist",
+          "specs": { "requested_specs": { "count": "2", "with_light": "true" } }
+        }
+      },
+      "expected": {
+        "good":   { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
+        "better": { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
+        "best":   { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
+        "route": "auto_send"
+      }
+    },
+    {
+      "id": "placeholder-blocked_drain-01",
+      "needs_grading": true,
+      "provenance": "PLACEHOLDER - not tradie-verified, not from an AU source",
+      "intake": {
+        "trade": "plumbing",
+        "job_type": "blocked_drain",
+        "scope": {
+          "summary": "Single blocked external stormwater drain, machine clear",
+          "specs": { "requested_specs": { "location": "external", "cctv": "false" } }
+        }
+      },
+      "expected": {
+        "good":   { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
+        "better": { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
+        "best":   { "total_ex_gst": null, "labour_hours": null, "line_items": [] },
+        "route": "inspection"
+      }
+    }
+  ]
+}

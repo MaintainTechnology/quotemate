@@ -33,6 +33,78 @@ export type QuoteReadinessInput = {
   services?: ReadonlyArray<QuoteReadinessService>
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// R24 SAFETY VALVE — feature flag + clarifying-turn cap.
+//
+// The deterministic readiness gate (evaluateQuoteReadiness, consumed in
+// app/api/sms/inbound/route.ts) can override Sonnet's `finish` into another
+// `ask` when a price-critical fact is still missing. Two guardrails keep that
+// override from misbehaving in production:
+//
+//   1. KILL SWITCH — SMS_ENFORCE_CLARIFYING_QUESTIONS. Default ON (the built
+//      + tested behaviour). Set to 0/off/false/no to instantly disable the
+//      override so the model's own finish/ask decision stands. Mirrors the
+//      SPEC_GUARD_MODE env-gating convention in lib/estimate/spec-guard.ts.
+//   2. TURN CAP — SMS_CLARIFYING_TURN_CAP (default 6). After this many
+//      consecutive blocked turns the gate STOPS re-asking and routes the job
+//      to the $99 inspection instead, so a customer who cannot answer is never
+//      trapped in an endless MUST-ASK loop.
+// ─────────────────────────────────────────────────────────────────────────
+
+/** R24 kill switch. Default ON; SMS_ENFORCE_CLARIFYING_QUESTIONS in
+ *  {0,off,false,no} disables the deterministic readiness override. */
+export function clarifyingEnforcementEnabled(
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  const v = String(env.SMS_ENFORCE_CLARIFYING_QUESTIONS ?? '').trim().toLowerCase()
+  if (v === '0' || v === 'off' || v === 'false' || v === 'no') return false
+  return true
+}
+
+/** R24 turn cap. Default 6; SMS_CLARIFYING_TURN_CAP overrides within [1,20]. */
+export function clarifyingTurnCap(
+  env: Record<string, string | undefined> = process.env,
+): number {
+  const raw = Number.parseInt(String(env.SMS_CLARIFYING_TURN_CAP ?? '').trim(), 10)
+  if (Number.isFinite(raw) && raw >= 1 && raw <= 20) return raw
+  return 6
+}
+
+export type ClarifyGateDecision = {
+  /** ask = block finish + re-ask; escalate = cap hit, route to inspection;
+   *  allow = enforcement disabled, let the model's finish stand. */
+  mode: 'ask' | 'escalate' | 'allow'
+  /** consecutive-blocked count to persist on the conversation (0 when allowed). */
+  count: number
+}
+
+/**
+ * Decide what the readiness gate should do when a required fact is still
+ * missing, given how many consecutive turns it has already blocked. Pure +
+ * deterministic so it is unit-tested without the route.
+ *
+ * - enforcement OFF  → 'allow' (kill switch), count reset to 0
+ * - count reaches cap → 'escalate' to inspection (stop looping)
+ * - otherwise         → 'ask' once more, count incremented
+ */
+export function decideClarifyGate(args: {
+  priorCount: number
+  enforcementEnabled: boolean
+  cap: number
+  /** R19 — true when THIS turn added a new required fact (the missing set
+   *  shrank). A cooperative-but-slow customer who keeps answering must never be
+   *  escalated; only consecutive NO-PROGRESS turns count toward the cap. */
+  madeProgress?: boolean
+}): ClarifyGateDecision {
+  if (!args.enforcementEnabled) return { mode: 'allow', count: 0 }
+  // R19 — a productive turn resets the stuck-counter; we only escalate a
+  // genuinely stuck conversation (cap consecutive turns with no new fact).
+  if (args.madeProgress) return { mode: 'ask', count: 0 }
+  const next = (Number.isFinite(args.priorCount) ? args.priorCount : 0) + 1
+  if (next >= args.cap) return { mode: 'escalate', count: next }
+  return { mode: 'ask', count: next }
+}
+
 const WET_ROOM_RE = /\b(bathroom|ensuite|laundry|kitchen|powder room|wet area)\b/i
 const WET_CLEARANCE_RE = /\b(600\s*mm|60\s*cm|basin|sink|shower|bath|wet-area|wet area|outside wet zone|away from)\b/i
 const SENSOR_RE = /\b(sensor|motion|always[-\s]?on|switched|switch|timer|manual)\b/i

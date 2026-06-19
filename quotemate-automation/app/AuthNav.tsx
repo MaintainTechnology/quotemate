@@ -58,34 +58,29 @@ export default function AuthNav({ variant = 'nav' }: { variant?: Variant }) {
   // height stays stable — avoids the "Sign in" flashing before the
   // dashboard buttons appear for an already-authed visitor.
   if (authed === null) {
-    return <span className={variant === 'hero' ? 'h-11 block' : 'h-9 block'} aria-hidden />
+    return <span className={variant === 'hero' ? 'h-11 block' : 'h-11 md:h-9 block'} aria-hidden />
   }
 
   if (variant === 'hero') {
+    // One primary in the hero (the page supplies the single secondary CTA).
+    // Sign-in lives in the nav. Square, focus-ringed, with an arrow that
+    // nudges forward on hover.
+    const heroPrimary =
+      'group inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-7 py-4 text-sm uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep'
     return authed ? (
-      <Link
-        href="/dashboard"
-        className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-4 text-sm uppercase tracking-wider transition-colors"
-      >
+      <Link href="/dashboard" className={heroPrimary}>
         Open my dashboard
-        <Arrow />
+        <span className="transition-transform duration-300 group-hover:translate-x-0.5">
+          <Arrow />
+        </span>
       </Link>
     ) : (
-      <>
-        <Link
-          href="/signup"
-          className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-4 text-sm uppercase tracking-wider transition-colors"
-        >
-          Get my QuoteMate
+      <Link href="/signup" className={heroPrimary}>
+        Get my QuoteMate
+        <span className="transition-transform duration-300 group-hover:translate-x-0.5">
           <Arrow />
-        </Link>
-        <Link
-          href="/signin"
-          className="inline-flex items-center gap-2 border border-ink-line bg-transparent hover:bg-ink-card text-text-pri font-semibold px-6 py-4 text-sm uppercase tracking-wider transition-colors"
-        >
-          Sign in
-        </Link>
-      </>
+        </span>
+      </Link>
     )
   }
 
@@ -94,7 +89,7 @@ export default function AuthNav({ variant = 'nav' }: { variant?: Variant }) {
     <>
       <Link
         href="/dashboard"
-        className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-4 py-2.5 text-xs uppercase tracking-wider transition-colors"
+        className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold min-h-11 md:min-h-0 px-4 py-2.5 text-xs uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
       >
         Dashboard
         <Arrow />
@@ -103,7 +98,7 @@ export default function AuthNav({ variant = 'nav' }: { variant?: Variant }) {
         type="button"
         onClick={handleSignOut}
         disabled={signingOut}
-        className="px-3 py-2 text-sm font-semibold uppercase tracking-wider text-text-sec hover:text-text-pri transition-colors disabled:opacity-50"
+        className="inline-flex items-center min-h-11 md:min-h-0 px-3 py-2 text-sm font-semibold uppercase tracking-wider text-text-sec hover:text-text-pri transition-colors disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
       >
         {signingOut ? 'Signing out…' : 'Sign out'}
       </button>
@@ -112,13 +107,13 @@ export default function AuthNav({ variant = 'nav' }: { variant?: Variant }) {
     <>
       <Link
         href="/signin"
-        className="px-3 py-2 text-sm font-semibold uppercase tracking-wider text-text-sec hover:text-text-pri transition-colors"
+        className="inline-flex items-center min-h-11 md:min-h-0 px-3 py-2 text-sm font-semibold uppercase tracking-wider text-text-sec hover:text-text-pri transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
       >
         Sign in
       </Link>
       <Link
         href="/signup"
-        className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-4 py-2.5 text-xs uppercase tracking-wider transition-colors"
+        className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold min-h-11 md:min-h-0 px-4 py-2.5 text-xs uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
       >
         Get started
         <Arrow />
