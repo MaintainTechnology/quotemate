@@ -23,7 +23,7 @@
   /* ─── TEXT ON DARK ──────────────────────────────────────── */
   --text-pri:     #FFFFFF;
   --text-sec:     #B8C2D1;
-  --text-dim:     #7A8699;
+  --text-dim:     #8793A6;   /* lifted from #7A8699 so dim labels clear 4.5:1 on ink-card too */
 
   /* ─── TEAL GLOW (topographic edge) ──────────────────────── */
   --teal-glow:    #14B8A6;
@@ -34,6 +34,66 @@
   --warning:      #B45309;   /* fill shade — behind white text only */
   --warning-bright: #F59E0B; /* text/border shade — readable on the dark canvas */
   --danger:       #B91C1C;
+
+  /* ─── THEME-AWARE EFFECT TOKENS (these flip in light mode) ── */
+  color-scheme: dark;
+  --glow-cool:     rgba(36, 49, 74, 0.85);   /* hero canvas cool glow */
+  --glow-warm:     rgba(255, 90, 31, 0.07);  /* hero canvas warm ember */
+  --lift:          inset 0 1px 0 0 rgba(255, 255, 255, 0.06); /* lit panel edge */
+  --noise-opacity: 0.045;                     /* film-grain strength */
+  --canvas-radial: #233048;                   /* dashboard app-canvas glow */
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   LIGHT THEME — "warm paper". Default follows the visitor's device via
+   the media query; a manual choice pins it through [data-theme] (set
+   pre-paint by the inline script in layout.tsx, so there is no flash).
+   The orange deepens to a burnt terracotta so it stays legible as text
+   on cream AND as white-on-fill — both pass WCAG AA, unlike #FF5A1F.
+   ════════════════════════════════════════════════════════════════════ */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+    --ink-deep: #F2EEE6;
+    --ink: #F8F4EC;
+    --ink-card: #FBF8F2;
+    --ink-line: #E4DCCE;
+    --accent: #B23A0B;
+    --accent-press: #8F2E08;
+    --accent-soft: #C2410C;
+    --text-pri: #1A2230;
+    --text-sec: #4C5562;
+    --text-dim: #5F6775;
+    --teal-glow: #0F766E;
+    --teal-deep: #0B5C55;
+    --warning-bright: #B45309;
+    --glow-cool: rgba(255, 250, 242, 0.9);
+    --glow-warm: rgba(178, 58, 11, 0.05);
+    --lift: 0 1px 2px rgba(26, 32, 46, 0.06), 0 1px 1px rgba(26, 32, 46, 0.04);
+    --noise-opacity: 0.03;
+    --canvas-radial: rgba(255, 247, 236, 0.85);
+  }
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --ink-deep: #F2EEE6;
+  --ink: #F8F4EC;
+  --ink-card: #FBF8F2;
+  --ink-line: #E4DCCE;
+  --accent: #B23A0B;
+  --accent-press: #8F2E08;
+  --accent-soft: #C2410C;
+  --text-pri: #1A2230;
+  --text-sec: #4C5562;
+  --text-dim: #5F6775;
+  --teal-glow: #0F766E;
+  --teal-deep: #0B5C55;
+  --warning-bright: #B45309;
+  --glow-cool: rgba(255, 250, 242, 0.9);
+  --glow-warm: rgba(178, 58, 11, 0.05);
+  --lift: 0 1px 2px rgba(26, 32, 46, 0.06), 0 1px 1px rgba(26, 32, 46, 0.04);
+  --noise-opacity: 0.03;
+  --canvas-radial: rgba(255, 247, 236, 0.85);
 }
 
 @theme inline {
@@ -74,8 +134,8 @@ body {
   background-color: var(--ink-deep);
   background-image: radial-gradient(
     1100px 520px at 50% 0,
-    #233048 0%,
-    rgba(35, 48, 72, 0) 72%
+    var(--canvas-radial) 0%,
+    transparent 72%
   );
   background-repeat: no-repeat;
 }
@@ -234,8 +294,8 @@ html {
   position: relative;
   background-color: var(--ink-deep);
   background-image:
-    radial-gradient(1180px 560px at 26% -12%, rgba(36, 49, 74, 0.85) 0%, rgba(36, 49, 74, 0) 60%),
-    radial-gradient(760px 420px at 88% -6%, rgba(255, 90, 31, 0.07) 0%, rgba(255, 90, 31, 0) 58%);
+    radial-gradient(1180px 560px at 26% -12%, var(--glow-cool) 0%, transparent 60%),
+    radial-gradient(760px 420px at 88% -6%, var(--glow-warm) 0%, transparent 58%);
   background-repeat: no-repeat;
 }
 
@@ -248,7 +308,7 @@ html {
   inset: 0;
   z-index: 30;
   pointer-events: none;
-  opacity: 0.045;
+  opacity: var(--noise-opacity, 0.045);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
@@ -256,7 +316,7 @@ html {
    lifted plate catching light from above. Not a drop shadow; the brand
    stays shadow-free. */
 .edge-lit {
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  box-shadow: var(--lift);
 }
 
 /* Typing indicator dots in the live SMS demo — the receptionist is
@@ -271,6 +331,16 @@ html {
    Connects sequential steps; reads as a path, not a column divider. */
 .timeline-spine {
   background: linear-gradient(180deg, var(--accent) 0%, var(--ink-line) 72%, transparent 100%);
+}
+
+/* Cross-fade surfaces, borders and text on the light/dark flip. Uses
+   :where() for zero specificity so any element with its own Tailwind
+   transition utility keeps it; box-shadow is excluded so keyboard focus
+   rings stay instant. Reduced-motion users get the instant swap below. */
+:where(*, *::before, *::after) {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-duration: 320ms;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @media (prefers-reduced-motion: reduce) {

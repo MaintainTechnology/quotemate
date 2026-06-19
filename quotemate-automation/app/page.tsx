@@ -4,10 +4,23 @@
 // + film grain + lit panel edges (see globals.css), never from drop
 // shadows. The hero carries a live SMS-thread demo so the product shows
 // itself rather than being described twice.
+//
+// Shared chrome (Nav/Footer/MarqueeBar/CTAs) lives in _components/site so
+// it stays identical to /pricing; the pricing cards come from the shared
+// PricingTiers client island.
 
-import Link from "next/link"
 import AuthNav from "./AuthNav"
 import { Reveal } from "./_components/Reveal"
+import {
+  Nav,
+  Footer,
+  MarqueeBar,
+  Topography,
+  Eyebrow,
+  PrimaryCTA,
+  SecondaryCTA,
+} from "./_components/site"
+import { PricingTiers } from "./_components/PricingTiers"
 
 /* Load-time choreography classes. Tailwind scans for literal strings,
    so these stay static; per-element stagger is an inline
@@ -48,40 +61,6 @@ export default function Home() {
       <Footer />
       <MarqueeBar />
     </div>
-  )
-}
-
-/* ─── Nav ─────────────────────────────────────────────────────── */
-
-function Nav() {
-  return (
-    <nav className="sticky top-0 z-50 border-b border-ink-line bg-ink-deep/85 backdrop-blur-md">
-      <div className="mx-auto flex max-w-[88rem] items-center justify-between px-6 py-4">
-        <Link href="/" className="flex items-center gap-2.5">
-          <Logo />
-          <span className="font-extrabold uppercase tracking-tight text-text-pri">
-            QuoteMate
-          </span>
-        </Link>
-        <div className="hidden gap-8 text-sm font-medium text-text-sec md:flex">
-          <a href="#how" className="link-underline pb-0.5 hover:text-text-pri">
-            How
-          </a>
-          <a href="#scope" className="link-underline pb-0.5 hover:text-text-pri">
-            Trades
-          </a>
-          <a href="#pricing" className="link-underline pb-0.5 hover:text-text-pri">
-            Pricing
-          </a>
-          <a href="#faq" className="link-underline pb-0.5 hover:text-text-pri">
-            FAQ
-          </a>
-        </div>
-        <div className="flex items-center gap-2 md:gap-3">
-          <AuthNav variant="nav" />
-        </div>
-      </div>
-    </nav>
   )
 }
 
@@ -155,7 +134,7 @@ function TrustStrip() {
           <TrustChip>Electrical pilot · NSW</TrustChip>
           <TrustChip>Plumbing pilot · QLD</TrustChip>
           <TrustChip icon={<LockIcon />}>Stripe-secured deposits</TrustChip>
-          <TrustChip>Test phase · no credit card</TrustChip>
+          <TrustChip>14-day free trial</TrustChip>
         </ul>
         <p className="shrink-0 font-mono text-xs uppercase tracking-[0.14em] text-text-dim">
           Runs on Twilio, Stripe and Claude
@@ -383,86 +362,32 @@ function Numbers() {
   )
 }
 
-/* ─── Pricing (honest test-phase framing) ─────────────────────── */
+/* ─── Pricing (3-tier teaser → full /pricing page) ────────────── */
 
 function Pricing() {
   return (
     <section id="pricing" className="border-b border-ink-line scroll-mt-20">
       <div className="mx-auto max-w-[88rem] px-6 py-24 md:py-32">
         <Reveal className="max-w-3xl">
-          <h2 className="font-extrabold uppercase leading-[1.05] tracking-[-0.03em] text-[clamp(1.9rem,3.6vw,2.9rem)]">
-            Honest pricing while we&rsquo;re in{" "}
-            <span className="text-accent">test phase.</span>
+          <Eyebrow>Pricing</Eyebrow>
+          <h2 className="mt-3 font-extrabold uppercase leading-[1.05] tracking-[-0.03em] text-[clamp(1.9rem,3.8vw,3rem)]">
+            Costs less than{" "}
+            <span className="text-accent">one missed job.</span>
           </h2>
           <p className="mt-6 max-w-2xl text-lg leading-relaxed text-text-sec">
-            No lock-in, no card to start. The only fixed price is the site
-            visit, and it&rsquo;s credited straight back to the job.
+            Pick a plan and start a 14-day free trial — your AI receptionist is
+            quoting the same day. We never take a cut of your jobs. The only
+            fixed price is the $99 site visit, credited straight back to the job.
           </p>
         </Reveal>
 
-        <div className="mt-14 grid gap-4 md:grid-cols-2">
-          <Reveal>
-            <PriceFact
-              value="$99"
-              unit="per site visit"
-              note="Locked price for the tricky jobs that book an inspection. Credited to the job when it goes ahead."
-            />
-          </Reveal>
-          <Reveal delay={120}>
-            <PriceFact
-              value="$0"
-              unit="platform, during test phase"
-              note="Your number, pricing book, and AI receptionist. No subscription and no credit card while we're piloting."
-              accent
-            />
-          </Reveal>
-        </div>
-
-        <Reveal delay={160}>
-          <div className="mt-8">
-            <PrimaryCTA href="/signup">Get my QuoteMate</PrimaryCTA>
+        <Reveal delay={120}>
+          <div className="mt-12">
+            <PricingTiers variant="home" />
           </div>
         </Reveal>
       </div>
     </section>
-  )
-}
-
-function PriceFact({
-  value,
-  unit,
-  note,
-  accent,
-}: {
-  value: string
-  unit: string
-  note: string
-  accent?: boolean
-}) {
-  return (
-    <div
-      className={`edge-lit card-sweep h-full border bg-ink-card p-6 transition-colors duration-300 md:p-8 ${
-        accent
-          ? "border-accent/40 hover:border-accent/60"
-          : "border-ink-line hover:border-text-dim"
-      }`}
-    >
-      <div className="flex items-baseline gap-3">
-        <span
-          className={`font-mono text-5xl font-bold tracking-tight tabular-nums md:text-6xl ${
-            accent ? "text-accent" : "text-text-pri"
-          }`}
-        >
-          {value}
-        </span>
-        <span className="font-mono text-xs uppercase tracking-[0.14em] text-text-dim">
-          {unit}
-        </span>
-      </div>
-      <p className="mt-5 max-w-md text-base leading-relaxed text-text-sec">
-        {note}
-      </p>
-    </div>
   )
 }
 
@@ -484,7 +409,7 @@ function Faq() {
     },
     {
       q: "What does it cost?",
-      a: "The platform is free during the test phase. The only fixed price is the $99 site visit, which is credited back to the job.",
+      a: "Plans start at $49/mo with a 14-day free trial — see the pricing page for the full breakdown. We never take a cut of your jobs; the only fixed price is the $99 site visit, credited back to the job.",
     },
     {
       q: "Which trades are live?",
@@ -707,172 +632,7 @@ function TierMini({
   )
 }
 
-/* ─── Footer ──────────────────────────────────────────────────── */
-
-function Footer() {
-  return (
-    <footer>
-      <div className="mx-auto grid max-w-[88rem] gap-10 px-6 py-16 md:grid-cols-[1.6fr_1fr_1fr]">
-        <div>
-          <Link href="/" className="flex items-center gap-2.5">
-            <Logo />
-            <span className="font-extrabold uppercase tracking-tight text-text-pri">
-              QuoteMate
-            </span>
-          </Link>
-          <p className="mt-4 max-w-xs text-sm leading-relaxed text-text-dim">
-            The AI receptionist that drafts Good / Better / Best quotes for
-            Australian electricians and plumbers.
-          </p>
-        </div>
-        <FooterCol
-          title="Product"
-          links={[
-            { label: "How it works", href: "#how" },
-            { label: "Trades & scope", href: "#scope" },
-            { label: "Pricing", href: "#pricing" },
-            { label: "FAQ", href: "#faq" },
-          ]}
-        />
-        <FooterCol
-          title="Account"
-          links={[
-            { label: "Sign in", href: "/signin" },
-            { label: "Get started", href: "/signup" },
-            { label: "The plan", href: "/docs/tradie-onboarding-plan" },
-          ]}
-        />
-      </div>
-      <div className="border-t border-ink-line">
-        <div className="mx-auto flex max-w-[88rem] flex-col gap-2 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-          <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
-            © 2026 QuoteMate
-          </span>
-          <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
-            Electrical NSW · Plumbing QLD · Test phase
-          </span>
-        </div>
-      </div>
-    </footer>
-  )
-}
-
-function FooterCol({
-  title,
-  links,
-}: {
-  title: string
-  links: { label: string; href: string }[]
-}) {
-  return (
-    <div>
-      <span className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
-        {title}
-      </span>
-      <ul className="mt-4 grid gap-2.5">
-        {links.map((l) => (
-          <li key={l.label}>
-            <Link
-              href={l.href}
-              className="link-underline pb-0.5 text-sm text-text-sec hover:text-text-pri"
-            >
-              {l.label}
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
-
-/* ─── Orange CTA marquee (signature) ──────────────────────────── */
-// A slow ticker on motion-safe browsers; the track holds the line twice
-// so the -50% loop is seamless. Reduced-motion (and no-JS) users see the
-// static leading copy.
-function MarqueeBar() {
-  return (
-    <div className="overflow-hidden bg-accent py-5 text-white">
-      <div className="flex w-max motion-safe:animate-[marquee_36s_linear_infinite]">
-        {[0, 1].map((copy) => (
-          <span
-            key={copy}
-            aria-hidden={copy === 1}
-            className="flex shrink-0 items-center font-mono text-xl font-bold uppercase tracking-[0.16em] md:text-2xl"
-          >
-            {[
-              "QuoteMate",
-              "Built in Australia",
-              "For tradies, by tradies",
-              "Quote drafted in under a minute",
-              "Electrical NSW",
-              "Plumbing QLD",
-            ].map((line) => (
-              <span key={line} className="flex items-center">
-                <span className="px-6">{line}</span>
-                <span aria-hidden="true">·</span>
-              </span>
-            ))}
-          </span>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-/* ─── Primitives ──────────────────────────────────────────────── */
-
-function Logo() {
-  return (
-    <span className="grid h-7 w-7 place-items-center bg-accent text-xs font-black text-white">
-      Q
-    </span>
-  )
-}
-
-function Eyebrow({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-text-dim">
-      {children}
-    </span>
-  )
-}
-
-function PrimaryCTA({
-  href,
-  children,
-}: {
-  href: string
-  children: React.ReactNode
-}) {
-  return (
-    <Link
-      href={href}
-      className="group inline-flex items-center gap-2 bg-accent px-7 py-3.5 text-sm font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
-    >
-      {children}
-      <span className="transition-transform duration-300 group-hover:translate-x-0.5">
-        <Arrow />
-      </span>
-    </Link>
-  )
-}
-
-function SecondaryCTA({
-  href,
-  children,
-}: {
-  href: string
-  children: React.ReactNode
-}) {
-  return (
-    <Link
-      href={href}
-      className="inline-flex items-center gap-2 border border-ink-line bg-transparent px-7 py-3.5 text-sm font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-text-dim hover:bg-ink-card focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
-    >
-      {children}
-    </Link>
-  )
-}
+/* ─── Page-specific building blocks ───────────────────────────── */
 
 function NumberedCard({
   num,
@@ -981,24 +741,6 @@ function Stat({ value, label }: { value: string; label: string }) {
 /* ─── Icons (hand-rolled to match the brand Arrow: square caps, 1.75
    stroke — kept minimal, the brand prefers restraint over iconography) */
 
-function Arrow() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="square"
-      strokeLinejoin="miter"
-      aria-hidden="true"
-    >
-      <path d="M5 12h14M13 5l7 7-7 7" />
-    </svg>
-  )
-}
-
 function PinIcon() {
   return (
     <svg
@@ -1033,53 +775,6 @@ function LockIcon() {
     >
       <rect x="5" y="11" width="14" height="9" />
       <path d="M8 11V8a4 4 0 0 1 8 0v3" />
-    </svg>
-  )
-}
-
-function Topography() {
-  // Two ridge groups drifting in opposite directions at glacial speed —
-  // the canvas reads as alive without ever announcing itself. The accent
-  // ridge is the one warm line in the teal field.
-  return (
-    <svg
-      className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.18]"
-      viewBox="0 0 1920 1080"
-      preserveAspectRatio="xMidYMid slice"
-      aria-hidden="true"
-    >
-      <g
-        fill="none"
-        stroke="var(--teal-glow)"
-        strokeWidth="1"
-        className="motion-safe:animate-[topo-drift_26s_ease-in-out_infinite_alternate]"
-      >
-        <path d="M0,820 Q240,700 480,760 T960,720 T1440,780 T1920,740 T2400,760" />
-        <path
-          d="M0,920 Q240,820 480,850 T960,830 T1440,880 T1920,850 T2400,870"
-          opacity="0.5"
-        />
-        <path
-          d="M0,1020 Q240,940 480,960 T960,940 T1440,980 T1920,960 T2400,970"
-          opacity="0.2"
-        />
-      </g>
-      <g
-        fill="none"
-        strokeWidth="1"
-        className="motion-safe:animate-[topo-drift_34s_ease-in-out_infinite_alternate-reverse]"
-      >
-        <path
-          d="M0,870 Q240,760 480,800 T960,780 T1440,830 T1920,800 T2400,820"
-          stroke="var(--accent)"
-          opacity="0.45"
-        />
-        <path
-          d="M0,970 Q240,880 480,900 T960,880 T1440,930 T1920,900 T2400,915"
-          stroke="var(--teal-glow)"
-          opacity="0.35"
-        />
-      </g>
     </svg>
   )
 }

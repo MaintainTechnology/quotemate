@@ -32,6 +32,12 @@ import {
   logSendOutcome,
 } from '@/lib/sms/send-reliability'
 import { sendWithRetry } from '@/lib/sms/send-quote-dispatch'
+import {
+  checkQuoteEntitlement,
+  checkVoiceEntitlement,
+  isEnforcementEnabled,
+} from '@/lib/billing/entitlements'
+import { getMonthlyUsage } from '@/lib/billing/usage'
 
 // R42-draft — the after() block does the heavy sends (PDF render, customer
 // quote SMS + retries, tradie notify + retries). Derive the Vercel function
@@ -64,6 +70,57 @@ export async function POST(req: Request) {
     // 'electrical' (the original NSW/NECA pilot trade).
     const intakeTrade = (intake?.trade as 'electrical' | 'plumbing' | undefined) ?? 'electrical'
     const intakeTenantId = (intake?.tenant_id as string | null) ?? null
+
+    // ── Billing enforcement gate (flag-gated by BILLING_ENFORCEMENT_ENABLED;
+    // OFF by default). One chokepoint covers BOTH channels — voice and SMS
+    // intakes both reach estimate/draft. Fails OPEN on any error so a
+    // billing-lookup hiccup never blocks a legitimate quote; billing_exempt
+    // tenants bypass entirely. Quotes are fair-use (soft flag on overage);
+    // voice is the hard, plan-gated, minute-capped channel.
+    let quoteOverFairUse = false
+    if (intakeTenantId && isEnforcementEnabled()) {
+      try {
+        const { data: billingRow } = await supabase
+          .from('tenants')
+          .select('subscription_status, subscription_plan, billing_exempt')
+          .eq('id', intakeTenantId)
+          .maybeSingle()
+        if (billingRow) {
+          const usage = await getMonthlyUsage(supabase, intakeTenantId)
+          if (intake.call_id != null) {
+            const v = checkVoiceEntitlement(billingRow, usage)
+            if (!v.allowed) {
+              log.err('billing gate — voice not entitled; skipping draft', null, {
+                tenant_id: intakeTenantId,
+                reason: v.reason,
+              })
+              return Response.json({ ok: false, skipped: 'voice_not_entitled', reason: v.reason })
+            }
+          }
+          const q = checkQuoteEntitlement(billingRow, usage)
+          if (!q.allowed) {
+            log.err('billing gate — tenant not entitled to auto-quote; skipping draft', null, {
+              tenant_id: intakeTenantId,
+              reason: q.reason,
+            })
+            return Response.json({ ok: false, skipped: 'not_entitled', reason: q.reason })
+          }
+          quoteOverFairUse = !!q.overFairUse
+          if (quoteOverFairUse) {
+            log.ok('billing gate — over fair-use quote allowance (soft; allowing)', {
+              tenant_id: intakeTenantId,
+              quotes_used: usage.quotesUsed,
+            })
+          }
+        }
+      } catch (e) {
+        log.err(
+          'billing gate errored — failing open (allowing draft)',
+          e instanceof Error ? e.message : String(e),
+          { tenant_id: intakeTenantId },
+        )
+      }
+    }
 
     // WP1 — tenant-scoped lookup ONLY. The old "no row for this tenant →
     // grab the oldest book for the trade" fallback is deliberately gone:
@@ -402,6 +459,11 @@ export async function POST(req: Request) {
     // future tooling can parse it; the human-readable description goes
     // first for at-a-glance debugging.
     const riskFlags = [...(draft.risk_flags ?? [])]
+    if (quoteOverFairUse) {
+      riskFlags.push(
+        '[billing] over fair-use quote allowance for this plan this month — usage is high; consider upgrading',
+      )
+    }
     if (estimation.downgradedToInspection) {
       for (const f of estimation.groundingFailures ?? []) {
         riskFlags.push(

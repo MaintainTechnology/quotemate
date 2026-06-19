@@ -48,6 +48,7 @@ import {
   Copy,
   Check,
   Banknote,
+  CreditCard,
   Shield,
   Home,
   Megaphone,
@@ -58,10 +59,12 @@ import {
   type LucideProps,
 } from 'lucide-react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
+import { hasPlanIntent } from '@/lib/billing/plan-intent'
 import { tenantHasRoofingTrade } from '@/lib/roofing/tenant'
 import { RoofRatesEditor } from './_components/RoofRatesEditor'
 import { EstimatorBetaTab } from './_components/EstimatorBetaTab'
 import { SolarTab } from './_components/SolarTab'
+import { BillingTab } from './_components/BillingTab'
 import CommercialPaintingTab from './_components/commercial-painting/CommercialPaintingTab'
 import { StatusPill, StatGrid, TONE_LEFT_RAIL, type Tone } from './_components/quote-ui'
 import { ErrorBanner, Field, INPUT } from '../signup/page'
@@ -255,6 +258,7 @@ type Tab =
   | 'overview'
   | 'account'
   | 'payouts'
+  | 'billing'
   | 'pricing'
   | 'services'
   | 'catalogue'
@@ -282,7 +286,7 @@ type Tab =
 
 /** Tabs reachable via /dashboard?tab=… (e.g. the estimator run page's breadcrumb). */
 const DEEP_LINK_TABS: readonly Tab[] = [
-  'overview', 'account', 'payouts', 'pricing', 'services', 'catalogue', 'estimating',
+  'overview', 'account', 'payouts', 'billing', 'pricing', 'services', 'catalogue', 'estimating',
   'recipes', 'quotes', 'chats', 'followups', 'roofing', 'signage', 'painting',
   'commercial-painting', 'aircon', 'estimator', 'solar', 'invites',
 ]
@@ -338,7 +342,13 @@ export default function DashboardPage() {
       // Deep-link: /dashboard?tab=estimator lands straight on that tab (used
       // by the estimator run page's breadcrumb).
       const want = new URLSearchParams(window.location.search).get('tab')
-      if (want && (DEEP_LINK_TABS as readonly string[]).includes(want)) setTab(want as Tab)
+      if (want && (DEEP_LINK_TABS as readonly string[]).includes(want)) {
+        setTab(want as Tab)
+      } else if (hasPlanIntent()) {
+        // A plan was chosen on /pricing before signup — land on Billing so
+        // the tab resumes that plan's Checkout (plan-intent hand-off).
+        setTab('billing')
+      }
       await refresh(token)
     })()
     return () => {
@@ -651,6 +661,7 @@ export default function DashboardPage() {
                 onDeleteCustom={deleteCustomService}
               />
             )}
+            {tab === 'billing' && <BillingTab accessToken={accessToken} />}
             {tab === 'catalogue' && <CatalogueTab accessToken={accessToken} />}
             {tab === 'estimating' && <EstimatingTab accessToken={accessToken} />}
             {tab === 'recipes' && <RecipesTab accessToken={accessToken} />}
@@ -985,6 +996,7 @@ function buildNav(quoteCount: number, hasRoofingTrade = false): NavItem[] {
   items.push(
     { tab: 'account', label: 'Account', icon: User },
     { tab: 'payouts', label: 'Payouts', icon: Banknote },
+    { tab: 'billing', label: 'Billing', icon: CreditCard },
     { tab: 'pricing', label: 'Pricing', icon: DollarSign },
     { tab: 'services', label: 'Services', icon: Wrench },
     { tab: 'catalogue', label: 'Catalogue', icon: Package },
@@ -1010,7 +1022,7 @@ const SIDEBAR_GROUPS: { label: string; tabs: Tab[] }[] = [
   { label: 'Daily work', tabs: ['overview', 'quotes', 'followups', 'chats', 'roofing', 'signage', 'painting', 'commercial-painting', 'aircon', 'estimator', 'solar'] },
   {
     label: 'Setup',
-    tabs: ['invites', 'account', 'payouts', 'pricing', 'services', 'catalogue', 'estimating', 'recipes'],
+    tabs: ['invites', 'account', 'payouts', 'billing', 'pricing', 'services', 'catalogue', 'estimating', 'recipes'],
   },
 ]
 
@@ -1192,6 +1204,10 @@ const TAB_META: Record<
   aircon: {
     title: 'AC recommender',
     desc: 'Indicative ducted-vs-split air-conditioning sizing and price ranges from a few questions.',
+  },
+  billing: {
+    title: 'Billing & plan',
+    desc: 'Your QuoteMate subscription — start a 14-day free trial, switch plans, or manage your card. We never take a cut of your jobs.',
   },
   estimator: {
     title: 'Estimator (Beta)',
@@ -10597,6 +10613,8 @@ function tabLabel(t: Tab): string {
       return 'Account'
     case 'payouts':
       return 'Payouts'
+    case 'billing':
+      return 'Billing'
     case 'pricing':
       return 'Pricing'
     case 'services':
