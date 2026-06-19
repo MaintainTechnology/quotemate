@@ -385,8 +385,14 @@ export async function POST(req: Request) {
       intake: {
         confidence: intake.confidence,
         inspection_required: intake.inspection_required ?? false,
+        job_type: (intake.job_type as string | null) ?? null, // R2 allowlist
       },
       quote: { needs_inspection: isInspection },
+      // R7 — only a deterministically-priced quote may auto-send.
+      pricingPath: (draft as { pricing_path?: string }).pricing_path ?? null,
+      // R23 — deployGate intentionally omitted: auto-send stays FAIL-CLOSED
+      // until the per-tenant/per-job-type deploy gate is wired with real
+      // measured metrics, so this computes 'tradie_review' until then.
     })
     log.ok('routing decided', { routing_decision })
 
@@ -434,6 +440,12 @@ export async function POST(req: Request) {
       total_inc_gst:       total,
       share_token:         shareToken,
       routing_decision,
+      // R7/R27 — observability: how this quote was priced + the intended send
+      // decision + a grounding summary. (auto_sent records the gated INTENT;
+      // the live dispatch flip to honour it is the conscious go-live step.)
+      pricing_path:        (draft as { pricing_path?: string }).pricing_path ?? 'opus_fallback',
+      auto_sent:           routing_decision === 'auto_send',
+      grounding_result:    { ok: !isInspection, downgraded: !!estimation.downgradedToInspection },
     }).select().single()
     log.ok('quote inserted', { quote_id: quote!.id, total_inc_gst: total, routing: routing_decision, inspection: isInspection, share_token: shareToken.slice(0, 8) + '…' })
 

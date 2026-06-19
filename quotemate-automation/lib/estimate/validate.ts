@@ -1105,6 +1105,7 @@ export function buildCandidatePrices(
   rawMaterialRows: RawCandidateRow[],
   rawAssemblyRows: RawCandidateRow[],
   pricingBook: PricingBookForValidation,
+  opts: { strictMarkup?: boolean } = {},
 ): CandidatePrices {
   // MARKUP POLICY (relaxed 2026-05-13):
   // Accept the tradie's configured default_markup_pct PLUS a ±5pp band
@@ -1123,7 +1124,13 @@ export function buildCandidatePrices(
   // a 15%-configured book, strict enough that 30%-tradie prices can't
   // sneak through on a 15%-tradie's book (those differ by 15pp).
   const defaultMarkup = n(pricingBook.default_markup_pct)
-  const MARKUP_DRIFT_PP = 5
+  // R10 — when the quote was priced DETERMINISTICALLY, the markup is exactly
+  // pricing_book.default_markup_pct by construction, so the ±5pp drift band
+  // (needed only to forgive Opus's rounding/anchor bias) is dropped: any drift
+  // is then a real bug, not rounding. strictMarkup defaults OFF, so the Opus
+  // path keeps the ±5pp band exactly as before (zero behaviour change until a
+  // quote is deterministically priced).
+  const MARKUP_DRIFT_PP = opts.strictMarkup ? 0 : 5
   const standardMarkups = new Set<number>([
     0,
     Math.max(0, defaultMarkup - MARKUP_DRIFT_PP),

@@ -1,7 +1,7 @@
 # SMS AI Receptionist — Accuracy, Correctness & Reliability Overhaul — Spec
 
 > Make QuoteMate's SMS AI Receptionist quote pipeline (SMS conversation → Intake → Estimate → Full Quote) as accurate, correct, and reliable as possible across electrical (NSW/NECA) and plumbing (QLD/QBCC) for real customer traffic — by fixing price integrity, the materials/services catalog data, the tradie↔catalog wiring, the dashboard surfaces, and Twilio message delivery. For the QuoteMate team / tradie tenants.
-> Status: Draft · 2026-06-18
+> Status: Draft (hardened via plan-optimizer) · 2026-06-18
 > **Supersedes** [`specs/sms-quote-accuracy-revamp.md`](sms-quote-accuracy-revamp.md) — that spec's quote-engine work is folded into Phase 0–1 + Phase 7 here and broadened.
 
 ## Objective
@@ -29,15 +29,42 @@ Success = a representative set of real jobs replays end-to-end and produces corr
 
 The build runs in phases. Phase 0 produces the evidence; Phases 1–6 are the fixes; Phase 7 proves them. Requirements are numbered for reference in review/commits. **A "wrong" value or behavior is only treated as wrong after confirming against the docs or code — never against training-data defaults.**
 
+### Sequencing, dependencies & phase gates
+
+Build order and what each phase must satisfy before the next begins. Phases 1–6 may run in parallel where independent, but each is gated by Phase 0 and by its own exit condition.
+
+- **Phase 0 gates everything.** No fix in Phases 1–6 starts until R1–R4 (pipeline map + representative fixtures + root-cause inventory + before-state baseline) exist and the seeded findings are confirmed against current code. The R4 inventory is the contract; if a finding doesn't reproduce, mark it void rather than "fixing" a non-bug.
+- **Dependencies.**
+  - Phase 1 (price integrity) is independent of Phases 2–3 and can land first.
+  - Phase 2 (catalog data) must finish its A-pass before its B-pass, before Phase 3's data-dependent questions, and before Phase 7 replay can assert grounded prices.
+  - Phase 3 (questions) depends on Phase 2 for the `clarifying_questions` columns; the dialog-enforcement code (R24) can be built in parallel but is verified only after the data lands.
+  - Phase 4 (wiring/toggle) depends on the service-list read path mapped in R2 and on Phase 2/3 service rows existing.
+  - Phase 5 (dashboard) is independent except R37/R38, which depend on the catalogue/recipe wiring in Phase 4.
+  - Phase 6 (Twilio) is independent of 1–5 and can land in parallel.
+  - Phase 7 (verification) runs last and gates "done".
+- **Per-phase exit condition.** A phase is complete only when (a) its DoD items are checked, (b) its targeted tests pass (`vitest` + relevant parity assertions), and (c) for data phases, the migration + runner verify clean against a local copy. A phase that can't meet its exit condition surfaces the blocker in the coverage report (R53) rather than being silently skipped.
+- **/build ↔ /review loop.** Each phase is implemented by `/build` and checked by `/review` against the R/E items it claims. `/review` returns PASS for a phase only at 100% of that phase's DoD; fixes round-trip until the phase passes, then the next phase begins.
+- **Loop convergence guard.** The build/review loop is not unbounded: if a phase still fails `/review` after 3 round-trips, stop looping on it and escalate to the user with the exact failing R/E items and the blocker (e.g. an unverifiable price needing a decision, a platform-plan limit), rather than thrashing. Phases that pass are committed so progress is never lost when the loop pauses for a decision.
+
+### Measurable targets (set + record in Phase 0)
+
+Concrete acceptance numbers are set once, in Phase 0, and recorded in the baseline so before/after is objective. Do not invent these from training defaults — derive each from the live data / platform limits and record the source:
+
+- **Price accuracy tolerance** — the ± band a replayed quote total must fall within vs the real-tradie reference range (proposed default ±10%; confirm against sampled quotes).
+- **Catalog column-completeness** — target % of meant-to-carry-data columns populated per table (target 100% of meant-to-carry; reserved columns excluded by the R16 matrix).
+- **SMS delivery success** — target success rate for each of the three sends under the three failure conditions (proposed ≥99% on the replay/stress harness; record the measured baseline first).
+- **Latency / timeout budget** — the `maxDuration` value (and the platform plan that allows it) plus the R48 alert thresholds.
+- **Clarifying-turn cap** — the max number of MUST-ASK turns before the dialog stops asking and routes to inspection (R24), so enforcement can't loop forever.
+
 ### Phase 0 — Understand & baseline
 
 1. **R1 — Read the reference docs.** Read all reference docs (PRIMARY first) and extract how the quote is meant to be built, priced, grounded, and routed. Produce a short written map noting where the running code has drifted from the PRIMARY doc.
 
 2. **R2 — Trace the live pipeline in code.** Map the actual SMS quote path end-to-end and record, by file:line, every point that can (a) trigger an inspection downgrade, (b) emit an inaccurate/invented price, (c) duplicate a line item, or (d) drop an SMS: `app/api/sms/inbound/route.ts` + `lib/sms/*` (dialog, assumptions, dispatch) → `lib/intake/structure.ts` + `lib/intake/quality.ts` → `lib/estimate/run.ts` + `tools.ts` + `merge-recipes.ts` + `reconcile.ts` → `lib/estimate/prompt.ts`/`electrical-prompt.ts`/`plumbing-prompt.ts` → `lib/estimate/validate.ts` → `lib/routing/decide.ts` → `app/api/estimate/draft/route.ts` (after() sends) and `app/api/quote/[id]/edit/route.ts`.
 
-3. **R3 — Build the representative job set from real data.** Assemble replayable intake fixtures from the live DB: top job types by volume (downlights, hot water, power points, ceiling fans, blocked drain, plus the rest), the full set of distinct job types in `shared_assemblies` for both trades, and historical `intakes`/`quotes` that routed to `inspection_required`. Each fixture must be replayable through the real estimate → grounding → routing pipeline.
+3. **R3 — Build the representative job set from real data.** Assemble replayable intake fixtures from the live DB: top job types by volume (downlights, hot water, power points, ceiling fans, blocked drain, plus the rest), the full set of distinct job types in `shared_assemblies` for both trades, and historical `intakes`/`quotes` that routed to `inspection_required`. Each fixture must be replayable through the real estimate → grounding → routing pipeline. Minimum coverage: every distinct `shared_assemblies` job type for both trades, the top-10 job types by volume, and at least 20 historical `inspection_required` cases (or all of them if fewer than 20).
 
-4. **R4 — Root-cause inventory.** Produce a single inventory that, for every distinct way a job currently produces a wrong/invented/duplicated price, a missed delivery, a stale toggle, or an avoidable inspection, records: trigger (file:line), layer (`data` | `dialog/flow` | `wiring` | `dashboard` | `delivery`), affected trade(s)/tenant(s), avoidable vs legitimate, and the proposed fix. The grounded findings below (R5–R49) seed this inventory; the build must confirm each against current code before acting. This inventory is the contract the rest of the build is checked against.
+4. **R4 — Root-cause inventory.** Produce a single inventory that, for every distinct way a job currently produces a wrong/invented/duplicated price, a missed delivery, a stale toggle, or an avoidable inspection, records: trigger (file:line), layer (`data` | `dialog/flow` | `wiring` | `dashboard` | `delivery`), affected trade(s)/tenant(s), avoidable vs legitimate, and the proposed fix. The grounded findings below (R5–R49) seed this inventory; the build must confirm each against current code before acting. This inventory is the contract the rest of the build is checked against. **Also capture a before-state baseline now** — record the current values of the R53 metrics (avoidable-inspection job types, catalog column-completeness %, count of flagged rows, and a measured SMS-delivery success rate from the replay/stress harness) so "before/after" is measured against recorded numbers, not memory.
 
 ### Phase 1 — Estimation correctness & price integrity (no invented prices, no duplicate charges)
 
@@ -89,7 +116,7 @@ The build runs in phases. Phase 0 produces the evidence; Phases 1–6 are the fi
 
 23. **R23 — Migrate `mustAsk` → DB `clarifying_questions`.** Every SMS-auto-quoteable job type (electrical + plumbing easy-set: downlights, power_points, ceiling_fans, smoke_alarms, outdoor_lighting, blocked_drain, hot_water, tap_repair, tap_replace, toilet_repair, toilet_replace, plus the rest in `shared_assemblies`) must carry a populated `clarifying_questions` derived from the corresponding `assumptions.ts` `mustAsk`. Verification target: zero auto-quote job types with NULL `clarifying_questions`.
 
-24. **R24 — Inject + enforce questions in the dialog.** The dialog system prompt must render each matched job type's `clarifying_questions` as a MUST-ASK block and **block `action=finish` until all are answered** (one question per turn). Today only custom-service rows get this via `customServicesDirective()`; the easy-set must too.
+24. **R24 — Inject + enforce questions in the dialog.** The dialog system prompt must render each matched job type's `clarifying_questions` as a MUST-ASK block and **block `action=finish` until all are answered** (one question per turn). Today only custom-service rows get this via `customServicesDirective()`; the easy-set must too. **Safety valve:** enforcement respects the Phase-0 clarifying-turn cap — after that many unanswered MUST-ASK turns the dialog stops asking and routes to inspection (it must never loop forever) — and the whole enforcement path ships behind a feature flag so it can be disabled instantly if it over-triggers in production.
 
 25. **R25 — Conditional questions.** Encode context-dependent questions: power_points 600mm-from-water question only when room ∈ {bathroom, ensuite, laundry, kitchen}; smoke_alarms must classify like-for-like vs full-property compliance hardwire before finishing. Ask the classifier first, then the conditional follow-up.
 
@@ -135,7 +162,7 @@ The build runs in phases. Phase 0 produces the evidence; Phases 1–6 are the fi
 
 > Symptom: the AI reply, the quote/quote-link SMS, and the tradie notification all sometimes never arrive, clustering on (a) long/complex jobs, (b) the first message in a fresh conversation, (c) rapid back-to-back texts.
 
-42. **R42 — No sends lost to timeout.** Worst-case Sonnet dialog + Opus intake/estimation + dispatch can exceed `maxDuration=300s` on `/api/sms/inbound` (`route.ts:246`), so the `after()` work and all three sends never complete. Fix by raising `maxDuration` with a safety margin and/or offloading heavy work so the webhook fast-acks and the sends are guaranteed to run to completion.
+42. **R42 — No sends lost to timeout.** Worst-case Sonnet dialog + Opus intake/estimation + dispatch can exceed `maxDuration=300s` on `/api/sms/inbound` (`route.ts:246`), so the `after()` work and all three sends never complete. Fix by raising `maxDuration` with a safety margin **and/or** offloading the heavy work so the webhook fast-acks and the sends are guaranteed to complete. Note the platform ceiling: Vercel Hobby caps function duration (per CLAUDE.md) — a large `maxDuration` needs Vercel Pro or Railway, so record which plan the chosen value assumes. Offloading heavy work to a durable async path (queue / background job) is the robust fix and the preferred direction wherever simply raising the number isn't safe within the plan limit.
 
 43. **R43 — First-message conversation-create race.** Two webhooks for a brand-new `from_number` can race the `sms_conversations` INSERT, orphaning the loser's inbound (`route.ts:914–928`, persist-before-lock at `1013–1020`). Use an idempotent create (`INSERT ... ON CONFLICT DO NOTHING` / upsert) and order lock-claim vs inbound-persist so no inbound is left unprocessed.
 
@@ -147,7 +174,7 @@ The build runs in phases. Phase 0 produces the evidence; Phases 1–6 are the fi
 
 47. **R47 — MessageSid idempotency hardening.** Ensure Twilio webhook retries and concurrent retries can't create duplicate inbounds or fire the intake handoff / photo SMS twice (`route.ts:657–672`, `1937–1986`), beyond the unique-index backstop.
 
-48. **R48 — Observability.** Log every send outcome (AI reply, photo, quote, tradie) and every skip path to the pipeline log, and add alerts for: a message type not dispatched within a latency budget of inbound receipt; a quote inserted but customer SMS never sent; an `after()` block nearing `maxDuration`.
+48. **R48 — Observability.** Log every send outcome (AI reply, photo, quote, tradie) and every skip path to the pipeline log, and add alerts for: a message type not dispatched within the latency budget of inbound receipt; a quote inserted but customer SMS never sent; an `after()` block nearing `maxDuration`. Record concrete thresholds (proposed: alert if any send is >120s after inbound; if a quote row exists but the customer SMS isn't sent within 180s; if an `after()` block exceeds 80% of `maxDuration`).
 
 49. **R49 — Configurable knobs + migration discipline.** Make `maxDuration`, debounce, retry counts/delays configurable via env so they can be tuned without a code change. All DB changes throughout this spec ship as a new `sql/migrations/NNN_*.sql` + matching `scripts/run-migration-NNN.mjs`, verified locally/against a copy, with `sql/init.sql` kept representative.
 
@@ -155,7 +182,7 @@ The build runs in phases. Phase 0 produces the evidence; Phases 1–6 are the fi
 
 50. **R50 — Replay the representative job set end-to-end.** Run every R3 fixture through the real estimate → grounding → routing pipeline against the corrected data and confirm: correct material selection, grounded prices (no invention), **no duplicate line items within or across tiers**, internally-consistent ex-GST/inc-GST math, and that avoidable inspections now quote while legitimate ones still route to inspection.
 
-51. **R51 — Lock wins into automated tests.** Extend `vitest` unit tests and `scripts/test-sms-parity.mjs` to assert: the duplicate-charge regression suite (R5–R8), grounding-integrity cases (R9–R15), data coverage (R17–R21), question enforcement (R23–R28), toggle/wiring (R30–R34), and Twilio reliability (R42–R47 via stress/slow-LLM/rate-limit/recovery tests). Suite passes.
+51. **R51 — Lock wins into automated tests.** Extend `vitest` unit tests and `scripts/test-sms-parity.mjs` to assert: the duplicate-charge regression suite (R5–R8), grounding-integrity cases (R9–R15), data coverage (R17–R21), question enforcement (R23–R28), toggle/wiring (R30–R34), and Twilio reliability (R42–R47 via stress/slow-LLM/rate-limit/recovery tests). Suite passes. **Non-regression:** the full pre-existing `vitest` suite (captured as a Phase-0 baseline run) stays green — no fix introduces a new failing test; any test already failing at baseline is recorded and explicitly excluded so it can't mask a regression.
 
 52. **R52 — Live smoke on the dev server.** Drive each dashboard tab and replay a representative SMS conversation on the dev server (browser + SMS path) to confirm the fixes behave in the running app, not just in unit tests.
 
@@ -170,9 +197,23 @@ The build runs in phases. Phase 0 produces the evidence; Phases 1–6 are the fi
 - **SMS scope** — changes to shared estimate/pricing/routing libs that other channels depend on must stay neutral for voice/solar; do not build new voice/solar/onboarding behavior.
 - **DB application is the user's** — the build produces migration files + runner scripts and verifies them locally/against a copy; **the build never writes to prod**. The user reviews and runs `node --env-file=.env.local scripts/run-migration-NNN.mjs`.
 - **Migration discipline** — new `sql/migrations/NNN_*.sql` + `scripts/run-migration-NNN.mjs` per change; keep `sql/init.sql` representative; never commit or paste `.env.local` secrets.
+- **Never overwrite tenant-entered values** — the A-pass fills *empty* columns and corrects the *shared* library; a tradie's own entries in `tenant_*` tables (a price set in `tenant_material_catalogue`, a custom recipe, a custom service) are never overwritten by research values. Tenant-table corrections are limited to filling nulls or, where a real defect is found, applied only with a per-row backup and a flag for the user's review.
+- **Migration backup + rollback** — every data-correction migration first snapshots the rows it will change (backup table or exported SQL) and ships a documented rollback (down migration), so any bad correction can be reverted without data loss.
+- **Feature-flag risky behavioral changes** — changes that alter live dialog/delivery behavior (question-enforcement R24, prompt-cache restructure R30, `maxDuration`/offload R42) ship behind env flags with a safe default and a documented kill-switch, so they can be disabled instantly if they regress in production.
 - **Next 16 caveat** — before writing any Next.js code, follow `quotemate-automation/AGENTS.md` and the relevant `node_modules/next/dist/docs/` guide.
 - **Confirm before judging** — treat a value/behavior as wrong only after confirming against docs or code, not training-data defaults.
 - **Assumptions baked in (interview):** the catalog *and* services data each get the exhaustive A-pass then the accuracy B-pass; reserved/unwired columns are documented, not filled; verification is both automated (vitest + parity harness) and live (dev-server dashboard + replayed SMS).
+
+## Risks & mitigations
+
+- **A-pass clobbers real tradie data.** Overwriting tenant-entered prices/recipes with research values would corrupt live tenant config. → Never-overwrite-tenant constraint; A-pass touches empties + shared library only; tenant-table corrections get per-row backup + review flag (R17/R22).
+- **Question-enforcement over-triggers.** A strict MUST-ASK gate could loop forever or make the agent never finish, driving customer drop-off. → Phase-0 clarifying-turn cap + inspection fallback + feature flag with kill-switch (R24); verify with fixtures that easy jobs still finish.
+- **Prompt-cache restructure regresses cost/latency.** Moving the service list out of the cached prefix could pay full input tokens every turn. → Keep static instructions cached; only the service-list block busts; measure token/latency before/after and record it (R30).
+- **`maxDuration` exceeds the platform plan.** Bumping the number may not be allowed on the current Vercel plan. → Record the plan the value assumes; prefer durable async offload where the number isn't safe; alert near the ceiling (R42/R48).
+- **Web-researched AU prices are wrong at scale.** Bad sourcing could ground quotes on wrong numbers. → Per-row provenance; flag-not-fabricate; B-pass replay must land within the price tolerance vs the real-tradie reference; spot-audit a sample (R17/R21/R50).
+- **Strengthened grounding becomes too strict.** Tightening D-1/category/spec-mismatch could push avoidable jobs back to inspection. → Tie every tightening to a specific R4 case; R50 replay must confirm avoidable jobs still quote; spec-mismatch routes to tradie-review rather than hard-fail where uncertain (R12/R15/R50).
+- **Migration data loss / partial apply.** A failed correction could leave data inconsistent. → Idempotent + backup + documented rollback; verify on a local copy; user applies to prod (R49, Constraints).
+- **Behavioral fixes break other channels.** Shared estimate/pricing/routing libs feed voice/solar too. → Keep shared-lib changes channel-neutral; SMS-only scope; regression via parity harness (Constraints, R51).
 
 ## Out of scope
 
@@ -242,8 +283,13 @@ The build runs in phases. Phase 0 produces the evidence; Phases 1–6 are the fi
 - [ ] R51: vitest + parity harness extended to cover duplicates, grounding integrity, data coverage, question enforcement, wiring, and Twilio reliability; suite passes.
 - [ ] R52: live dev-server smoke (dashboard tabs + replayed SMS) confirms fixes in the running app.
 - [ ] R53: final coverage report maps every R + R4 item to fix + verification, with before/after metrics.
+- [ ] Sequencing: each phase has a stated exit condition and dependency order; Phase 0 gates all fixes; `/review` passes a phase only at 100% of that phase's DoD.
+- [ ] Phase 0 baseline & targets: before-state metrics and the Measurable Targets (price tolerance, completeness %, delivery %, latency budget, clarifying-turn cap) are recorded with their sources.
+- [ ] Tenant data safety: no tradie-entered value overwritten; tenant-table corrections only fill nulls or apply with per-row backup + review flag.
+- [ ] Reversibility: every data-correction migration ships a row snapshot + documented rollback; risky behavioral changes (R24/R30/R42) are behind kill-switch flags with safe defaults.
+- [ ] Risks: each item in "Risks & mitigations" has its mitigation implemented or explicitly accepted.
 - [ ] All edge cases E1–E18 demonstrably handled (test or documented behavior).
-- [ ] Constraints honored: grounding validator intact, tool-calling-only pricing, ex/inc-GST convention, research integrity (flag-not-fabricate), SMS-only scope, migration discipline, no secrets committed, no prod writes by the build.
+- [ ] Constraints honored: grounding validator intact, tool-calling-only pricing, ex/inc-GST convention, research integrity (flag-not-fabricate), never-overwrite-tenant-data, migration backup+rollback, feature-flagged risky changes, SMS-only scope, migration discipline, no secrets committed, no prod writes by the build.
 
 ## Open questions
 

@@ -25,6 +25,7 @@ import { reconcileTierMath, collapseDuplicateTiers, checkQuantityVsItemCount, re
 import { specGuardMode, evaluateSpecGuard, evaluateDraftSpecGuard } from './spec-guard'
 import { resolveInspectionReason } from './inspection-reason'
 import { carriedPricedTiers, forceInspectionTiers } from './inspection-normalize'
+import { checkSanityBounds, boundForJob, type JobTypeBound } from './sanity-bounds'
 import { categoryForJobType } from '@/lib/sms/product-options'
 import {
   mergeRecipesIntoDraft,
@@ -385,6 +386,10 @@ export async function runEstimation(
     pricingBook,
     intake?.trade ?? null,
     (intake?.tenant_id as string | null) ?? null,
+    // R10 — when this quote was priced deterministically, ground with EXACT
+    // markup (no ±5pp band): the deterministic builder marks up at exactly
+    // default_markup_pct, so any drift is a real bug, not Opus rounding.
+    draft?.pricing_path === 'deterministic',
   )
 
   // ── Phase 3 — PRICE-BANDS RECIPE MERGE ─────────────────────────────
@@ -1011,6 +1016,29 @@ export async function runEstimation(
       }
     }
 
+    // R9 — deterministic sanity-bounds backstop. A fully-grounded quote can
+    // still be grossly mis-sized (the 6-downlight-17.5h class) — per-line
+    // grounding can't see the total. If the quote is outside its
+    // per-(trade,job_type) band, route to the $99 inspection (NOT auto-
+    // corrected; an out-of-band total signals a misread scope). Opt-in: only
+    // job types with a job_type_bounds row are checked; table-missing / no row
+    // → no-op, so this is inert where bounds aren't seeded.
+    const sanity = await checkDraftSanityBounds(draft, intake)
+    if (!sanity.ok) {
+      cacheLog.err('sanity-bounds out of band — routing to inspection (R9)', null, { failures: sanity.failures })
+      const downgraded = forceInspectionTiers({ ...draft }) as typeof draft
+      downgraded.needs_inspection = true
+      downgraded.inspection_reason = resolveInspectionReason('on-site check needed to confirm scope and quantities')
+      downgraded.estimated_timeframe = 'After site visit (within 5 business days)'
+      trace('estimate', 'warn', {
+        substep: 'done',
+        message: 'sanity-bounds out of band → inspection (R9)',
+        decisions: { route: 'inspection', cause: 'sanity_bounds', failures: sanity.failures },
+        duration_ms: totalSw.elapsed(),
+      })
+      return { draft: downgraded, downgradedToInspection: true }
+    }
+
     trace('estimate', partialSpecBlock ? 'warn' : 'ok', {
       substep: 'done',
       message: partialSpecBlock
@@ -1200,6 +1228,7 @@ export async function loadCandidatePrices(
   pricingBook: any,
   trade: string | null,
   tenantId: string | null,
+  strictMarkup = false,
 ) {
   const materialsQuery = supabase
     .from('shared_materials')
@@ -1320,7 +1349,51 @@ export async function loadCandidatePrices(
       category: r.category ?? null,
     })),
     pricingBook,
+    { strictMarkup },
   )
+}
+
+// R9 — load the per-(trade, job_type) sanity band and check a built draft
+// against it. Defensive: any DB/shape problem → no bound → ok (a bounds-load
+// failure must never block a quote). Bounds are opt-in — only job types with a
+// job_type_bounds row are gated; everything else is a clean no-op.
+async function checkDraftSanityBounds(
+  draft: any,
+  intake: any,
+): Promise<{ ok: true } | { ok: false; failures: string[] }> {
+  const trade = intake?.trade
+  const jobType = intake?.job_type
+  if (!trade || !jobType) return { ok: true }
+  let bounds: JobTypeBound[] = []
+  try {
+    const { data } = await supabase
+      .from('job_type_bounds')
+      .select('*')
+      .eq('trade', trade)
+      .eq('job_type', jobType)
+    bounds = (data ?? []) as JobTypeBound[]
+  } catch {
+    return { ok: true }
+  }
+  const bound = boundForJob(bounds, trade, jobType)
+  if (!bound) return { ok: true }
+  const qty = Number(intake?.scope?.item_count) || null
+  for (const tier of ['good', 'better', 'best'] as const) {
+    const t = draft?.[tier]
+    if (!t || !Array.isArray(t.line_items)) continue
+    const totalLabourHours = t.line_items
+      .filter((l: any) => l.source === 'labour' || l.unit === 'hr')
+      .reduce((s: number, l: any) => s + (Number(l.quantity) || 0), 0)
+    const totalExGst =
+      Number(t.subtotal_ex_gst) ||
+      t.line_items.reduce((s: number, l: any) => s + (Number(l.total_ex_gst) || 0), 0)
+    const v = checkSanityBounds(
+      { jobType, trade, quantity: qty, totalLabourHours, totalExGst },
+      bound,
+    )
+    if (!v.ok) return v
+  }
+  return { ok: true }
 }
 
 /**
