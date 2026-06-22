@@ -1,13 +1,3 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "crons": [
-    {
-      "path": "/api/cron/sms-cleanup",
-      "schedule": "0 17 * * *"
-    },
-    {
-      "path": "/api/cron/tenant-filestore-reconcile",
-      "schedule": "0 */6 * * *"
-    }
-  ]
+  "$schema": "https://openapi.vercel.sh/vercel.json"
 }
