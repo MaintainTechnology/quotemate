@@ -94,6 +94,41 @@ describe('addDocumentToTenantStore', () => {
     )
     expect(out).toBeNull()
   })
+
+  it('recovers the doc id + state by displayName when the upload omits the name', async () => {
+    // The real mt-filestore-kb upload returns size/mime only (no document name).
+    // First documents GET = dedup (empty); second = post-upload recovery (the doc).
+    let listCalls = 0
+    const fetchImpl = mkFetch({
+      'GET /v1/stores/s1/documents': () => {
+        listCalls += 1
+        if (listCalls === 1) return json({ documents: [] })
+        return json({
+          documents: [
+            { name: 'fileSearchStores/s1/documents/recovered', displayName: 'quote-electrical-x', state: 'STATE_ACTIVE' },
+          ],
+        })
+      },
+      'POST /v1/stores/s1/upload': () => json({ indexed: true, document: { sizeBytes: '65', mimeType: 'text/markdown' } }),
+    })
+    const out = await addDocumentToTenantStore(
+      { tenantId: TID, storeId: 's1', fileBytes: new TextEncoder().encode('# md'), displayName: 'quote-electrical-x' },
+      { config: CONFIG, fetchImpl },
+    )
+    expect(out).toEqual({ kbDocumentId: 'fileSearchStores/s1/documents/recovered', state: 'STATE_ACTIVE' })
+  })
+
+  it('returns null when the upload omits the name and recovery finds no match', async () => {
+    const fetchImpl = mkFetch({
+      'GET /v1/stores/s1/documents': () => json({ documents: [] }),
+      'POST /v1/stores/s1/upload': () => json({ indexed: true, document: { sizeBytes: '65' } }),
+    })
+    const out = await addDocumentToTenantStore(
+      { tenantId: TID, storeId: 's1', fileBytes: new TextEncoder().encode('# md'), displayName: 'quote-electrical-x' },
+      { config: CONFIG, fetchImpl },
+    )
+    expect(out).toBeNull()
+  })
 })
 
 describe('searchTenantStore', () => {

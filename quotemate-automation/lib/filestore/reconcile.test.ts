@@ -44,6 +44,19 @@ describe('reconcileTenantFileDocs', () => {
     expect(stats.activated).toBe(1)
   })
 
+  it('(a) flips a pending row to active on the real STATE_ACTIVE wire format', async () => {
+    const markActive = vi.fn(async () => {})
+    const stats = await reconcileTenantFileDocs(
+      ports({
+        listPending: async () => [row()],
+        kbDocState: async () => 'STATE_ACTIVE',
+        markActive,
+      }),
+    )
+    expect(markActive).toHaveBeenCalledWith('r1')
+    expect(stats.activated).toBe(1)
+  })
+
   it('(a) leaves a still-processing row pending', async () => {
     const markActive = vi.fn(async () => {})
     const stats = await reconcileTenantFileDocs(

@@ -104,8 +104,32 @@ describe('archiveAndIngestQuote', () => {
     expect(row).toBeTruthy()
     expect(row!.storage_path).toBe('quotes/q-123.pdf')
     expect(row!.kb_document_id).toBe('fileSearchStores/store1/documents/doc1')
-    expect(row!.state).toBe('pending') // async indexing; reconcile flips to active
+    expect(row!.state).toBe('pending') // upload returned no state ⇒ pending; reconcile flips to active
     expect(row!.content_hash).toBe('hash-v1')
+  })
+
+  it('marks the row active directly when the upload reports STATE_ACTIVE', async () => {
+    const repo = memRepo()
+    // Real service behaviour: the upload omits the doc name. First documents GET
+    // = dedup (empty), second = post-upload recovery (doc, STATE_ACTIVE) → ingest
+    // records 'active' without waiting on the reconcile cron.
+    let listCalls = 0
+    const fetchImpl = mkFetch({
+      'GET /v1/stores': () => json({ stores: [] }),
+      'POST /v1/stores': () => json({ name: 'store1' }),
+      'GET /v1/stores/store1/documents': () => {
+        listCalls += 1
+        if (listCalls === 1) return json({ documents: [] })
+        return json({
+          documents: [{ name: 'fileSearchStores/store1/documents/doc1', displayName: 'quote-electrical-q-123', state: 'STATE_ACTIVE' }],
+        })
+      },
+      'POST /v1/stores/store1/upload': () => json({ indexed: true, document: { sizeBytes: '42', mimeType: 'text/markdown' } }),
+    }).fetchImpl
+    await archiveAndIngestQuote(baseArgs, { repo, env: ENABLED, config: CONFIG, fetchImpl })
+    const row = repo.rows.get(`${TID}|quote-electrical-q-123`)
+    expect(row!.kb_document_id).toBe('fileSearchStores/store1/documents/doc1')
+    expect(row!.state).toBe('active')
   })
 
   it('never throws and marks the row failed when KB upload errors', async () => {

@@ -13,10 +13,30 @@ import {
   kbUploadDocument,
   kbDeleteDocument,
   kbDeleteStore,
+  isKbActiveState,
   KB_UPLOAD_MAX_BYTES,
   type KbConfig,
   type KbFetch,
 } from './mt-filestore-kb'
+
+describe('isKbActiveState', () => {
+  it('matches the Gemini enum form STATE_ACTIVE (the real wire format)', () => {
+    expect(isKbActiveState('STATE_ACTIVE')).toBe(true)
+  })
+  it('matches the bare ACTIVE form and is case-insensitive', () => {
+    expect(isKbActiveState('ACTIVE')).toBe(true)
+    expect(isKbActiveState('active')).toBe(true)
+    expect(isKbActiveState(' state_active ')).toBe(true)
+  })
+  it('is false for pending/failed/empty', () => {
+    expect(isKbActiveState('STATE_PENDING')).toBe(false)
+    expect(isKbActiveState('PROCESSING')).toBe(false)
+    expect(isKbActiveState('STATE_FAILED')).toBe(false)
+    expect(isKbActiveState(undefined)).toBe(false)
+    expect(isKbActiveState(null)).toBe(false)
+    expect(isKbActiveState('')).toBe(false)
+  })
+})
 
 const config: KbConfig = {
   url: 'https://kb.example.com',

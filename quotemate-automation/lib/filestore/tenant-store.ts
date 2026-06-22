@@ -91,7 +91,7 @@ export async function ensureTenantStore(
   }
 }
 
-export type AddTenantDocResult = { kbDocumentId: string } | null
+export type AddTenantDocResult = { kbDocumentId: string; state?: string } | null
 
 /**
  * Upload one PII-minimized markdown doc into the tenant's store, de-duplicating
@@ -124,7 +124,7 @@ export async function addDocumentToTenantStore(
       try {
         const docs = await kbListDocuments(config, storeId, deps?.fetchImpl)
         const match = docs.find((d) => (d.displayName ?? '').trim() === displayName)
-        if (match?.name) return { kbDocumentId: match.name }
+        if (match?.name) return { kbDocumentId: match.name, ...(match.state ? { state: match.state } : {}) }
       } catch {
         // dedup is best-effort — fall through and upload (risk a dup over a drop)
       }
@@ -134,7 +134,24 @@ export async function addDocumentToTenantStore(
       type: args.mimeType ?? 'text/markdown',
     })
     const doc = await kbUploadDocument(config, { storeId, file, displayName }, deps?.fetchImpl)
-    return doc?.name ? { kbDocumentId: doc.name } : null
+    if (doc?.name) return { kbDocumentId: doc.name, ...(doc.state ? { state: doc.state } : {}) }
+
+    // The mt-filestore-kb upload endpoint frequently returns NO document
+    // resource name — Gemini's `uploadToFileSearchStore` operation responds with
+    // size/mime metadata only, and the Document's `name` is assigned internally.
+    // The doc IS uploaded + indexed; recover its name (and state) by matching our
+    // unique displayName in the store's document list. Without this every ingest
+    // looked like a failure (no id ⇒ row marked failed) even though the upload
+    // succeeded. Eventual-consistency safe: the upload polled to completion, so
+    // the doc is listable by the time we get here.
+    try {
+      const docs = await kbListDocuments(config, storeId, deps?.fetchImpl)
+      const match = docs.find((d) => (d.displayName ?? '').trim() === displayName)
+      if (match?.name) return { kbDocumentId: match.name, ...(match.state ? { state: match.state } : {}) }
+    } catch {
+      // best-effort — fall through; reconcile/backfill can still recover by id later
+    }
+    return null
   } catch (e) {
     console.error('[filestore/tenant-store] addDocumentToTenantStore failed (non-fatal):', errMsg(e))
     return null

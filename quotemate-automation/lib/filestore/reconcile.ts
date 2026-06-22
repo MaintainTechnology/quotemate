@@ -14,6 +14,7 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import {
+  isKbActiveState,
   kbDeleteDocument,
   kbListDocuments,
   loadKbConfigFromEnv,
@@ -80,7 +81,7 @@ export async function reconcileTenantFileDocs(
     } catch {
       // best-effort — leave pending for next run
     }
-    if (state && state.toLowerCase() === 'active') {
+    if (isKbActiveState(state)) {
       await ports.markActive(row.id)
       activated++
     } else {

@@ -45,6 +45,22 @@ export type KbDocumentSummary = {
   customMetadata?: Record<string, string>
 }
 
+/**
+ * Is a KB document's indexing state "active" (chunked + embedded + searchable)?
+ *
+ * Gemini File Search returns the state as the protobuf enum form `STATE_ACTIVE`
+ * (also `STATE_PENDING` / `STATE_FAILED`); some shapes/SDK versions use the bare
+ * `ACTIVE`. Normalise both so callers (reconcile pending→active, ingest's
+ * mark-active) don't have to know the wire format. Comparing the raw string to
+ * `'active'` silently never matches `STATE_ACTIVE` — that exact bug stranded
+ * every ingested doc as non-active.
+ */
+export function isKbActiveState(state?: string | null): boolean {
+  if (!state) return false
+  const s = state.trim().toUpperCase()
+  return s === 'ACTIVE' || s === 'STATE_ACTIVE'
+}
+
 /** A single grounding passage Gemini cited when answering. */
 export type KbGroundingPassage = {
   text?: string

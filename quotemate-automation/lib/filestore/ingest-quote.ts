@@ -21,6 +21,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { pipelineLog } from '@/lib/log/pipeline'
 import {
+  isKbActiveState,
   kbDeleteDocument,
   loadKbConfigFromEnv,
   type KbConfig,
@@ -260,13 +261,17 @@ export async function archiveAndIngestQuote(
   )
 
   if (res?.kbDocumentId) {
-    // Stays 'pending' until the reconcile cron confirms indexing 'active'.
+    // The upload (and name-recovery) polls Gemini's operation to completion, so
+    // a small markdown doc is usually already STATE_ACTIVE here — record that
+    // directly. If it's still indexing, stay 'pending' and let the reconcile
+    // cron flip it once kbListDocuments reports active.
+    const state = isKbActiveState(res.state) ? 'active' : 'pending'
     try {
-      await repo.save({ ...base, kb_document_id: res.kbDocumentId, state: 'pending', updated_at: nowIso })
+      await repo.save({ ...base, kb_document_id: res.kbDocumentId, state, updated_at: nowIso })
     } catch (e) {
       log.err('row save (uploaded) failed', e, { displayName })
     }
-    log.ok('ingested', { displayName, bytes: bytes.byteLength })
+    log.ok('ingested', { displayName, bytes: bytes.byteLength, state })
   } else {
     try {
       await repo.save({ ...base, state: 'failed', error: 'kb upload failed', updated_at: nowIso })
