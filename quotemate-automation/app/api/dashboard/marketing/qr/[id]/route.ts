@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 
 const PatchBody = z.object({
   label: z.string().trim().min(1).max(60).optional(),
-  destination_type: z.enum(['sms', 'landing']).optional(),
+  destination_type: z.enum(['sms', 'landing', 'signup']).optional(),
   prefill_body: z.string().trim().max(140).nullable().optional(),
   status: z.enum(['active', 'paused', 'archived']).optional(),
 })

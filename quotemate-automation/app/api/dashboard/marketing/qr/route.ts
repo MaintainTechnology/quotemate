@@ -27,7 +27,9 @@ export async function GET(req: Request) {
 
 const CreateBody = z.object({
   label: z.string().trim().min(1).max(60),
-  destination_type: z.enum(['sms', 'landing']),
+  // 'signup' routes a prospective tradie to the QuoteMax signup page; it
+  // needs neither a tenant slug nor a provisioned SMS number.
+  destination_type: z.enum(['sms', 'landing', 'signup']),
   prefill_body: z.string().trim().max(140).optional().or(z.literal('')),
   campaign: z.string().trim().max(40).optional().or(z.literal('')),
 })

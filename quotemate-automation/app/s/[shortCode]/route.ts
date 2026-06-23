@@ -2,6 +2,7 @@
 //
 // Resolves a marketing_qrs row, logs the scan (non-blocking), then routes:
 //   • landing  → 302 to /t/<slug>?qr=<shortCode>
+//   • signup   → 302 to SIGNUP_URL?ref=<shortCode> (tradie recruitment)
 //   • sms      → interstitial HTML that auto-launches sms:<number>?body=…
 //               (302-to-sms: is unreliable across browsers, so we serve a
 //                tiny page that triggers the link + shows a tap button).
@@ -72,7 +73,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ shortCode: stri
     origin,
   )
 
-  if (dest.kind === 'landing') {
+  // landing + signup are both a plain 302 to an https URL.
+  if (dest.kind === 'landing' || dest.kind === 'signup') {
     return Response.redirect(dest.url, 302)
   }
 

@@ -26,7 +26,7 @@ type Qr = {
   short_code: string
   label: string
   campaign: string | null
-  destination_type: 'sms' | 'landing'
+  destination_type: 'sms' | 'landing' | 'signup'
   destination_config: { prefill_body?: string }
   status: 'active' | 'paused' | 'archived'
   scan_count: number
@@ -111,6 +111,10 @@ export default function MarketingPage() {
   const [qrPrefill, setQrPrefill] = useState('Hi, I’d like a quote')
   const [qrGenerating, setQrGenerating] = useState(false)
 
+  // ── Signup QRs (03 · Onboard as a tradie) ─────────────────────
+  const [signupLabel, setSignupLabel] = useState('')
+  const [signupGenerating, setSignupGenerating] = useState(false)
+
   const loadQrs = useCallback(async () => {
     try {
       const res = await fetch('/api/dashboard/marketing/qr', { headers: await authHeader() })
@@ -172,7 +176,27 @@ export default function MarketingPage() {
     else { const d = await res.json().catch(() => ({})); setError(d.message ?? d.error ?? 'Update failed') }
   }
 
+  async function generateSignupQr() {
+    if (!signupLabel.trim()) { setError('Signup QR label required'); return }
+    setSignupGenerating(true); setError(null)
+    try {
+      const res = await fetch('/api/dashboard/marketing/qr', {
+        method: 'POST', headers: await authHeader(),
+        body: JSON.stringify({ label: signupLabel.trim(), destination_type: 'signup' }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.message ?? data.error ?? 'Generate failed')
+      setSignupLabel(''); await loadQrs()
+    } catch (e: any) {
+      setError(e?.message ?? 'Generate failed')
+    } finally { setSignupGenerating(false) }
+  }
+
+  // Section 01 shows customer-facing QRs; section 03 shows signup QRs.
+  const customerQrs = qrs.filter((q) => q.destination_type !== 'signup')
+  const signupQrs = qrs.filter((q) => q.destination_type === 'signup')
   const activeQrScans = qrs.reduce((n, q) => n + q.scan_count, 0)
+  const signupScans = signupQrs.reduce((n, q) => n + q.scan_count, 0)
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-ink-deep text-text-pri">
@@ -218,6 +242,7 @@ export default function MarketingPage() {
           <div className="mt-8 flex flex-wrap gap-x-10 gap-y-4">
             <Stat n={qrs.length} label="QR codes" />
             <Stat n={activeQrScans} label="Total scans" />
+            <Stat n={signupScans} label="Tradie scans" />
             <Stat n={codes.length} label="Invite codes" />
           </div>
         </header>
@@ -270,11 +295,11 @@ export default function MarketingPage() {
           {/* QR list */}
           <TableShell
             loading={loading}
-            empty={qrs.length === 0}
+            empty={customerQrs.length === 0}
             emptyText="No QR codes yet. Generate one above."
             head={<tr>{['Label', 'Sends to', 'Scans', 'Status', 'Actions'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr>}
           >
-            {qrs.map((q) => (
+            {customerQrs.map((q) => (
               <tr key={q.id} className="border-b border-ink-line/50 align-top last:border-0">
                 <td className="px-4 py-3.5 text-text-pri">{q.label}<div className="mt-0.5 font-mono text-[0.62rem] text-text-dim">/s/{q.short_code}</div></td>
                 <td className="px-4 py-3.5 text-text-sec">{q.destination_type === 'sms' ? 'SMS' : 'Landing page'}</td>
@@ -341,6 +366,47 @@ export default function MarketingPage() {
                     {c.status === 'active' ? <ActionBtn onClick={() => patchCode(c.id, { status: 'paused' })}>Pause</ActionBtn>
                       : c.status === 'paused' ? <ActionBtn onClick={() => patchCode(c.id, { status: 'active' })}>Resume</ActionBtn> : null}
                     {c.status !== 'revoked' && <ActionBtn danger onClick={() => patchCode(c.id, { status: 'revoked' })}>Revoke</ActionBtn>}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </TableShell>
+        </Section>
+
+        {/* ───────── 03 · ONBOARD AS A TRADIE ───────── */}
+        <Section num="03" title="Onboard as a tradie" blurb="A recruitment QR. Print it on your van, job-site signage, or socials — a scan opens the QuoteMax signup page so another tradie can onboard. Every scan is tracked here." delay={240}>
+          <Panel>
+            <span className={EYEBROW}>New signup QR</span>
+            <div className="mt-3 grid gap-4 md:grid-cols-3">
+              <Field label="Label">
+                <input value={signupLabel} onChange={(e) => setSignupLabel(e.target.value)} placeholder="Van decal · QR" className={INPUT} />
+              </Field>
+            </div>
+            <button type="button" onClick={generateSignupQr} disabled={signupGenerating} className={`mt-5 ${PRIMARY}`}>
+              {signupGenerating ? 'Generating…' : 'Generate signup QR'} <span aria-hidden>→</span>
+            </button>
+            <p className="mt-2.5 text-xs text-text-dim">Scans open your QuoteMax signup page with a referral tag for attribution.</p>
+          </Panel>
+
+          <TableShell
+            loading={loading}
+            empty={signupQrs.length === 0}
+            emptyText="No signup QR codes yet. Generate one above."
+            head={<tr>{['Label', 'Scans', 'Status', 'Actions'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr>}
+          >
+            {signupQrs.map((q) => (
+              <tr key={q.id} className="border-b border-ink-line/50 align-top last:border-0">
+                <td className="px-4 py-3.5 text-text-pri">{q.label}<div className="mt-0.5 font-mono text-[0.62rem] text-text-dim">/s/{q.short_code}</div></td>
+                <td className="px-4 py-3.5"><span className="font-mono text-base font-bold text-accent">{q.scan_count}</span></td>
+                <td className="px-4 py-3.5"><StatusPill status={q.status} /></td>
+                <td className="px-4 py-3.5">
+                  <div className="flex flex-wrap gap-x-3 gap-y-1.5 text-xs">
+                    <a href={`/api/dashboard/marketing/qr/${q.id}/image?format=png`} download className="text-accent hover:text-accent-soft">PNG</a>
+                    <a href={`/api/dashboard/marketing/qr/${q.id}/image?format=svg`} download className="text-accent hover:text-accent-soft">SVG</a>
+                    <ActionBtn onClick={() => navigator.clipboard.writeText(`${origin}/s/${q.short_code}`)}>Copy link</ActionBtn>
+                    {q.status === 'active' ? <ActionBtn onClick={() => patchQr(q.id, { status: 'paused' })}>Pause</ActionBtn>
+                      : q.status === 'paused' ? <ActionBtn onClick={() => patchQr(q.id, { status: 'active' })}>Resume</ActionBtn> : null}
+                    {q.status !== 'archived' && <ActionBtn danger onClick={() => patchQr(q.id, { status: 'archived' })}>Archive</ActionBtn>}
                   </div>
                 </td>
               </tr>

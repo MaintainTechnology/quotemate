@@ -17,6 +17,19 @@ export function generateShortCode(len = 6): string {
   return out
 }
 
+/** Where a 'signup' QR sends a prospective tradie. Branded public domain by
+ *  default; overridable per-environment. */
+export const SIGNUP_URL = process.env.SIGNUP_URL ?? 'https://www.quotemax.com.au/signup'
+
+/** signup URL with ?ref=<shortCode> attribution. Uses ? or & correctly even
+ *  if the base already carries a query string. `base` is injectable for tests;
+ *  callers use the SIGNUP_URL default. */
+export function signupUrlWithRef(shortCode: string, base: string = SIGNUP_URL): string {
+  const u = new URL(base)
+  u.searchParams.set('ref', shortCode)
+  return u.toString()
+}
+
 /** Business name → url-safe base slug (caller adds a uniqueness suffix). */
 export function slugifyBusinessName(name: string): string {
   const slug = (name ?? '')
@@ -33,7 +46,7 @@ export function slugifyBusinessName(name: string): string {
 
 export type QrRow = {
   short_code: string
-  destination_type: 'sms' | 'landing'
+  destination_type: 'sms' | 'landing' | 'signup'
   destination_config: { prefill_body?: string } | Record<string, unknown>
 }
 export type TenantDest = { slug: string | null; twilio_sms_number: string | null }
@@ -41,18 +54,24 @@ export type TenantDest = { slug: string | null; twilio_sms_number: string | null
 export type ResolvedDestination =
   | { kind: 'landing'; url: string }
   | { kind: 'sms'; number: string; smsUri: string }
+  | { kind: 'signup'; url: string }
 
 /**
  * Resolve a QR to where a scan should go.
  *   landing → an https /t/<slug> URL (302 target), with ?qr= attribution.
  *             Falls back to appUrl home when the tenant has no slug.
  *   sms     → an sms: URI for the interstitial to auto-launch.
+ *   signup  → the QuoteMax signup page (302 target), with ?ref= attribution.
+ *             Independent of the tenant's slug / SMS number.
  */
 export function resolveDestination(
   qr: QrRow,
   tenant: TenantDest,
   appUrl: string,
 ): ResolvedDestination {
+  if (qr.destination_type === 'signup') {
+    return { kind: 'signup', url: signupUrlWithRef(qr.short_code) }
+  }
   if (qr.destination_type === 'sms') {
     const number = tenant.twilio_sms_number ?? ''
     const prefill = (qr.destination_config as { prefill_body?: string }).prefill_body

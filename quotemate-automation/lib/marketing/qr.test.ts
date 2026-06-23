@@ -3,6 +3,7 @@ import {
   generateShortCode,
   slugifyBusinessName,
   resolveDestination,
+  signupUrlWithRef,
   SHORT_CODE_ALPHABET,
 } from './qr'
 
@@ -65,5 +66,26 @@ describe('resolveDestination', () => {
     const qr = { short_code: 'x', destination_type: 'landing' as const, destination_config: {} }
     const r = resolveDestination(qr, { slug: null, twilio_sms_number: null }, appUrl)
     expect(r).toEqual({ kind: 'landing', url: appUrl })
+  })
+
+  it('signup → a 302-able signup url with ref attribution, ignoring tenant', () => {
+    const qr = { short_code: 'aB3xK9', destination_type: 'signup' as const, destination_config: {} }
+    const r = resolveDestination(qr, { slug: null, twilio_sms_number: null }, appUrl)
+    expect(r.kind).toBe('signup')
+    if (r.kind === 'signup') {
+      expect(r.url).toBe(signupUrlWithRef('aB3xK9'))
+      expect(r.url).toContain('ref=aB3xK9')
+    }
+  })
+})
+
+describe('signupUrlWithRef', () => {
+  it('appends ?ref to a bare url', () => {
+    expect(signupUrlWithRef('aB3xK9', 'https://www.quotemax.com.au/signup'))
+      .toBe('https://www.quotemax.com.au/signup?ref=aB3xK9')
+  })
+  it('appends &ref when the base already has a query string', () => {
+    expect(signupUrlWithRef('aB3xK9', 'https://www.quotemax.com.au/signup?utm=van'))
+      .toBe('https://www.quotemax.com.au/signup?utm=van&ref=aB3xK9')
   })
 })
