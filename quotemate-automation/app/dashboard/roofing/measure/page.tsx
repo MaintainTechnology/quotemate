@@ -109,6 +109,10 @@ function RoofingMeasurePageInner() {
   const [quoteState, setQuoteState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [quoteShareUrl, setQuoteShareUrl] = useState<string | null>(null)
   const [quoteShareToken, setQuoteShareToken] = useState<string | null>(null)
+  // The /q/roof customer-quote link auto-produced on measure (the rich
+  // satellite + per-structure breakdown + AI-preview page, full prices,
+  // no approval). Distinct from the optional /q/[token] deposit page above.
+  const [custUrl, setCustUrl] = useState<string | null>(null)
 
   useEffect(() => {
     const sb = getBrowserSupabase()
@@ -146,6 +150,7 @@ function RoofingMeasurePageInner() {
       setQuoteState('idle')
       setQuoteShareUrl(null)
       setQuoteShareToken(null)
+      setCustUrl(null)
       try {
         const res = await fetch('/api/roofing/measure-all', {
           method: 'POST',
@@ -324,23 +329,6 @@ function RoofingMeasurePageInner() {
     }
   }, [token, resp, included, address, postcode, state])
 
-  // Auto-generate the customer quote the moment a measurement completes —
-  // no tradie approval step. The full Good/Better/Best quote is created and
-  // its shareable /q/[token] link surfaces on its own.
-  //   • Re-fires on every fresh measurement: runMeasure() resets quoteState
-  //     to 'idle' and sets a new `resp`, so this effect runs again.
-  //   • The `!busy` guard stops it firing on a STALE resp while a new
-  //     measurement is still in flight (runMeasure clears quoteState but not
-  //     resp at the start of a re-measure).
-  //   • The `quoteState === 'idle'` guard makes it fire exactly once per
-  //     measurement — onSendAsQuote flips it to 'saving' immediately, and an
-  //     'error' result leaves the manual button as a retry rather than looping.
-  useEffect(() => {
-    if (resp?.ok === true && quoteState === 'idle' && !busy) {
-      void onSendAsQuote()
-    }
-  }, [resp, quoteState, busy, onSendAsQuote])
-
   const onSave = useCallback(async () => {
     if (!token || !resp || resp.ok !== true) return
     const includedStructures = resp.quote.structures.filter((s, i) => included[structureKey(s, i)] !== false)
@@ -366,10 +354,20 @@ function RoofingMeasurePageInner() {
           quote: resp.quote,
         }),
       })
-      const json = (await res.json()) as { ok: true; id: string } | { ok: false; error: string; detail?: string }
+      const json = (await res.json()) as
+        | { ok: true; id: string; public_token: string }
+        | { ok: false; error: string; detail?: string }
       if (json.ok) {
         setSavedId(json.id)
         setSaveState('saved')
+        // Surface the customer-facing /q/roof page — full prices shown, no
+        // approval. `?s=` pins it to exactly the structures the tradie
+        // included, reusing the page's existing narrowing logic.
+        const includedIdx = resp.quote.structures
+          .map((s, i) => (included[structureKey(s, i)] !== false ? i + 1 : 0))
+          .filter((n) => n > 0)
+        const qs = includedIdx.length > 0 ? `?s=${includedIdx.join(',')}` : ''
+        setCustUrl(`${window.location.origin}/q/roof/${json.public_token}${qs}`)
       } else {
         setSaveState('error')
         setErrMsg(json.detail ?? json.error)
@@ -379,6 +377,23 @@ function RoofingMeasurePageInner() {
       setErrMsg(e instanceof Error ? e.message : String(e))
     }
   }, [token, resp, included, address, postcode, state])
+
+  // Auto-generate the customer quote the moment a measurement completes —
+  // no tradie approval step. onSave persists the measurement and produces
+  // the rich /q/roof customer page (full prices + AI preview); the link
+  // surfaces on its own below.
+  //   • Re-fires on every fresh measurement: runMeasure() resets saveState
+  //     to 'idle' and sets a new `resp`, so this effect runs again.
+  //   • The `!busy` guard stops it firing on a STALE resp while a new
+  //     measurement is still in flight.
+  //   • The `saveState === 'idle'` guard makes it fire exactly once per
+  //     measurement — onSave flips it to 'saving' immediately, and an
+  //     'error' result leaves the manual button as a retry rather than looping.
+  useEffect(() => {
+    if (resp?.ok === true && saveState === 'idle' && !busy) {
+      void onSave()
+    }
+  }, [resp, saveState, busy, onSave])
 
   return (
     <main className="min-h-screen bg-ink-deep text-text-pri">
@@ -393,8 +408,8 @@ function RoofingMeasurePageInner() {
           <p className="max-w-md text-base leading-relaxed text-text-sec md:text-lg">
             Type an address and we measure every structure on the property —
             the house plus any sheds or garages. Price each one its own way,
-            include or drop structures, and get a combined total. Every
-            roofing quote needs your sign-off before send.
+            include or drop structures, and get a combined total. The
+            customer quote is generated automatically — no sign-off needed.
           </p>
         </div>
         <AuthBadge state={authState} />
@@ -518,6 +533,56 @@ function RoofingMeasurePageInner() {
           quoteShareToken={quoteShareToken}
           onMaterialDetected={setMaterial}
         />
+      )}
+
+      {(custUrl || saveState === 'saving') && (
+        <section className="relative z-10 mx-auto mt-6 max-w-6xl px-6 sm:px-10">
+          <div className="border border-ink-line border-l-4 border-l-teal-glow bg-ink-card p-6 sm:p-7">
+            {custUrl ? (
+              <>
+                <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-teal-glow">
+                  ✓ Customer quote ready · full prices, no approval needed
+                </div>
+                <p className="mt-2 text-base text-text-sec">
+                  Auto-generated the moment you measured — the customer page shows the
+                  satellite overlay, every structure&rsquo;s breakdown, the Good / Better /
+                  Best prices and the AI &ldquo;after re-roof&rdquo; preview. Share it as-is:
+                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <a
+                    href={custUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono text-sm text-accent underline-offset-4 hover:underline break-all"
+                  >
+                    {custUrl}
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(custUrl)
+                    }}
+                    className="inline-flex items-center gap-2 border border-ink-line px-3 py-1.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text-sec hover:border-accent hover:text-accent"
+                  >
+                    Copy
+                  </button>
+                  <a
+                    href={custUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 bg-accent px-3 py-1.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-white hover:bg-accent-press"
+                  >
+                    Open <span aria-hidden="true">&rarr;</span>
+                  </a>
+                </div>
+              </>
+            ) : (
+              <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+                Generating customer quote…
+              </div>
+            )}
+          </div>
+        </section>
       )}
 
       {quote && solarTotals && (
@@ -725,19 +790,19 @@ function MultiResultBlock({
             className="inline-flex items-center gap-2 border border-ink-line px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
           >
             {quoteState === 'saving'
-              ? (<><Spinner /> Generating quote…</>)
+              ? (<><Spinner /> Creating deposit page…</>)
               : quoteState === 'saved'
-                ? (<>Regenerate quote</>)
-                : (<>Generate customer quote <span aria-hidden="true">&rarr;</span></>)}
+                ? (<>Deposit checkout page ready ✓</>)
+                : (<>Optional: add a deposit checkout page</>)}
           </button>
         </div>
         {quoteState === 'saved' && quoteShareUrl && (
           <div className="mt-4 border border-ink-line border-l-4 border-l-teal-glow bg-ink-deep p-5">
             <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-teal-glow">
-              ✓ Customer quote created
+              ✓ Deposit checkout page created
             </div>
             <p className="mt-2 text-base text-text-sec">
-              Share this link with the customer — it shows the polygon overlay, the tier prices, and the deposit CTAs:
+              Optional alternative to the roof quote above — this page lets the customer pay a per-tier deposit via Stripe:
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <a

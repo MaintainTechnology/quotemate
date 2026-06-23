@@ -96,6 +96,13 @@ export async function POST(req: Request) {
     // Unguessable share token so the saved job has a customer-facing page
     // at /q/roof/[token] (same surface the SMS receptionist links to).
     public_token: randomBytes(16).toString('hex'),
+    // Dashboard saves are bearer-authed (the tradie) and the tradie has
+    // already picked the structures — so the quote is confirmed at save
+    // time. Stamping confirmed_at lets /q/roof show full prices immediately
+    // with NO customer SMS-confirm step. This route is dashboard-only; the
+    // SMS receptionist writes roofing_measurements through its own path, so
+    // its confirm gate is untouched.
+    confirmed_at: new Date().toISOString(),
   }
 
   const { data, error } = await supabase
