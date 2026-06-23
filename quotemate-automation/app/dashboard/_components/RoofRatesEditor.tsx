@@ -17,7 +17,9 @@
 import { useCallback, useEffect, useState } from 'react'
 
 const MATERIALS = [
+  ['colorbond_corrugated', 'Colorbond Corrugated'],
   ['colorbond_trimdek',  'Colorbond Trimdek'],
+  ['colorbond_spandek',  'Colorbond Spandek'],
   ['colorbond_kliplok',  'Colorbond Klip-Lok 700'],
   ['concrete_tile',      'Concrete tile'],
   ['terracotta_tile',    'Terracotta tile'],
@@ -57,7 +59,9 @@ type Props = { accessToken: string | null }
 export function RoofRatesEditor({ accessToken }: Props) {
   const [defaults, setDefaults] = useState<Defaults | null>(null)
   const [rates, setRates] = useState<Record<MaterialKey, string>>({
+    colorbond_corrugated: '',
     colorbond_trimdek: '',
+    colorbond_spandek: '',
     colorbond_kliplok: '',
     concrete_tile: '',
     terracotta_tile: '',
@@ -93,7 +97,9 @@ export function RoofRatesEditor({ accessToken }: Props) {
       setHasPricingBook(json.has_pricing_book)
       const o = json.overrides
       setRates({
+        colorbond_corrugated: stringify(o.reroof_rate_per_m2.colorbond_corrugated),
         colorbond_trimdek: stringify(o.reroof_rate_per_m2.colorbond_trimdek),
+        colorbond_spandek: stringify(o.reroof_rate_per_m2.colorbond_spandek),
         colorbond_kliplok: stringify(o.reroof_rate_per_m2.colorbond_kliplok),
         concrete_tile: stringify(o.reroof_rate_per_m2.concrete_tile),
         terracotta_tile: stringify(o.reroof_rate_per_m2.terracotta_tile),
@@ -127,7 +133,9 @@ export function RoofRatesEditor({ accessToken }: Props) {
       try {
         const body = {
           reroof_rate_per_m2: {
+            colorbond_corrugated: rates.colorbond_corrugated === '' ? null : rates.colorbond_corrugated,
             colorbond_trimdek: rates.colorbond_trimdek === '' ? null : rates.colorbond_trimdek,
+            colorbond_spandek: rates.colorbond_spandek === '' ? null : rates.colorbond_spandek,
             colorbond_kliplok: rates.colorbond_kliplok === '' ? null : rates.colorbond_kliplok,
             concrete_tile: rates.concrete_tile === '' ? null : rates.concrete_tile,
             terracotta_tile: rates.terracotta_tile === '' ? null : rates.terracotta_tile,
@@ -346,7 +354,9 @@ export function RoofRatesEditor({ accessToken }: Props) {
           type="button"
           onClick={() => {
             setRates({
+              colorbond_corrugated: '',
               colorbond_trimdek: '',
+              colorbond_spandek: '',
               colorbond_kliplok: '',
               concrete_tile: '',
               terracotta_tile: '',

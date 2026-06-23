@@ -41,7 +41,9 @@ type MultiResponse =
   | { ok: false; error: string }
 
 const MATERIALS = [
+  ['colorbond_corrugated', 'Colorbond Corrugated'],
   ['colorbond_trimdek', 'Colorbond Trimdek'],
+  ['colorbond_spandek', 'Colorbond Spandek'],
   ['colorbond_kliplok', 'Colorbond Klip-Lok 700'],
   ['concrete_tile', 'Concrete tile'],
   ['terracotta_tile', 'Terracotta tile'],

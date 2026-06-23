@@ -15,7 +15,9 @@
 
 /** Roofing materials we price for. Phase 1 — adds-only. */
 export type RoofMaterial =
+  | 'colorbond_corrugated'
   | 'colorbond_trimdek'
+  | 'colorbond_spandek'
   | 'colorbond_kliplok'
   | 'concrete_tile'
   | 'terracotta_tile'

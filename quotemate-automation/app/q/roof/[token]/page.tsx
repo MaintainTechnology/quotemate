@@ -57,7 +57,9 @@ function money(n: number | null | undefined): string {
 }
 
 const MATERIAL_LABEL: Record<RoofMaterial, string> = {
+  colorbond_corrugated: 'Colorbond Corrugated',
   colorbond_trimdek: 'Colorbond Trimdek',
+  colorbond_spandek: 'Colorbond Spandek',
   colorbond_kliplok: 'Colorbond Klip-Lok 700',
   concrete_tile: 'Concrete tile',
   terracotta_tile: 'Terracotta tile',

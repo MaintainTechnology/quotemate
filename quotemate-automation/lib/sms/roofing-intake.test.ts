@@ -60,10 +60,19 @@ describe('looksLikeRoofingEnquiry', () => {
 })
 
 describe('mapMaterial', () => {
-  it('maps metal/colorbond synonyms to colorbond_trimdek', () => {
-    for (const s of ['colorbond', 'metal roof', 'tin', 'corrugated', 'zincalume', 'colourbond']) {
+  it('maps generic metal/colorbond synonyms to colorbond_trimdek', () => {
+    for (const s of ['colorbond', 'metal roof', 'tin', 'zincalume', 'colourbond']) {
       expect(mapMaterial(s)).toBe('colorbond_trimdek')
     }
+  })
+  it('maps corrugated synonyms to colorbond_corrugated', () => {
+    for (const s of ['corrugated', 'corro', 'custom orb', 'corrugated iron']) {
+      expect(mapMaterial(s)).toBe('colorbond_corrugated')
+    }
+  })
+  it('maps spandek to colorbond_spandek', () => {
+    expect(mapMaterial('spandek')).toBe('colorbond_spandek')
+    expect(mapMaterial('span deck roof')).toBe('colorbond_spandek')
   })
   it('maps klip-lok / standing seam to colorbond_kliplok', () => {
     expect(mapMaterial('klip-lok')).toBe('colorbond_kliplok')

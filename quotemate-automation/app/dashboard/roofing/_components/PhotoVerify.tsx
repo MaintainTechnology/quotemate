@@ -316,7 +316,9 @@ function StatusLine({ label, tone }: { label: string; tone: 'accent' }) {
 
 function materialLabel(m: RoofMaterial): string {
   switch (m) {
+    case 'colorbond_corrugated': return 'Colorbond Corrugated'
     case 'colorbond_trimdek': return 'Colorbond Trimdek (corrugated metal)'
+    case 'colorbond_spandek': return 'Colorbond Spandek'
     case 'colorbond_kliplok': return 'Colorbond Klip-Lok 700'
     case 'concrete_tile':     return 'Concrete tile'
     case 'terracotta_tile':   return 'Terracotta tile'

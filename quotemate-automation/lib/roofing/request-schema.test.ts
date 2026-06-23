@@ -34,6 +34,14 @@ describe('MeasureRequestSchema', () => {
     ).toThrow()
   })
 
+  it('accepts the new Corrugated and Spandek COLORBOND materials', () => {
+    for (const material of ['colorbond_corrugated', 'colorbond_spandek'] as const) {
+      expect(() =>
+        MeasureRequestSchema.parse({ ...VALID, inputs: { ...VALID.inputs, material } }),
+      ).not.toThrow()
+    }
+  })
+
   it('rejects unknown state codes', () => {
     expect(() =>
       MeasureRequestSchema.parse({

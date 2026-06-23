@@ -251,6 +251,44 @@ describe('formLabel', () => {
   })
 })
 
+describe('roof types — Corrugated + Spandek COLORBOND (roof-types spec)', () => {
+  it('defines the two new installed $/m² rates', () => {
+    expect(DEFAULT_ROOFING_RATE_CARD.reroof_rate_per_m2.colorbond_corrugated).toBe(90)
+    expect(DEFAULT_ROOFING_RATE_CARD.reroof_rate_per_m2.colorbond_spandek).toBe(105)
+  })
+
+  it('prices the Better tier on each new material at area × its rate', () => {
+    // baseMetrics → sloped_area 220 m², single-storey standard pitch → no loadings.
+    const corrugated = calculateRoofingPrice({
+      metrics: baseMetrics(),
+      inputs: baseInputs({ material: 'colorbond_corrugated' }),
+    })
+    const spandek = calculateRoofingPrice({
+      metrics: baseMetrics(),
+      inputs: baseInputs({ material: 'colorbond_spandek' }),
+    })
+    expect(corrugated.tiers[1].ex_gst).toBe(220 * 90)
+    expect(spandek.tiers[1].ex_gst).toBe(220 * 105)
+  })
+
+  it('orders the metal profiles Corrugated < Trimdek < Spandek < Klip-Lok by Better-tier price', () => {
+    const better = (material: RoofUserInputs['material']) =>
+      calculateRoofingPrice({ metrics: baseMetrics(), inputs: baseInputs({ material }) }).tiers[1].ex_gst
+    expect(better('colorbond_corrugated')).toBeLessThan(better('colorbond_trimdek'))
+    expect(better('colorbond_trimdek')).toBeLessThan(better('colorbond_spandek'))
+    expect(better('colorbond_spandek')).toBeLessThan(better('colorbond_kliplok'))
+  })
+
+  it('keeps Klip-Lok as the Best-tier upgrade material for a Corrugated job', () => {
+    const q = calculateRoofingPrice({
+      metrics: baseMetrics(),
+      inputs: baseInputs({ material: 'colorbond_corrugated' }),
+    })
+    // Best uses upgrade_material (colorbond_kliplok, $115) → area × 115.
+    expect(q.tiers[2].ex_gst).toBe(220 * 115)
+  })
+})
+
 describe('roundTo helper', () => {
   it('rounds to N decimal places without surprises', () => {
     const { roundTo } = __test_only__

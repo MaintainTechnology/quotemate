@@ -212,9 +212,11 @@ describe('buildOverlayFromInputs — dashboard PATCH validator', () => {
 })
 
 describe('EDITABLE_MATERIALS — phase 1 scope', () => {
-  it('contains exactly the five materials the spec names', () => {
+  it('contains exactly the seven materials the spec names', () => {
     expect(EDITABLE_MATERIALS).toEqual([
+      'colorbond_corrugated',
       'colorbond_trimdek',
+      'colorbond_spandek',
       'colorbond_kliplok',
       'concrete_tile',
       'terracotta_tile',
@@ -223,5 +225,36 @@ describe('EDITABLE_MATERIALS — phase 1 scope', () => {
   })
   it('does not include `unknown` (never user-selected)', () => {
     expect(EDITABLE_MATERIALS).not.toContain('unknown')
+  })
+})
+
+describe('overlay — Corrugated + Spandek rates (roof-types spec)', () => {
+  it('lets a tenant override the two new metal rates', () => {
+    const merged = mergeRoofingRateCard(DEFAULT_ROOFING_RATE_CARD, {
+      reroof_rate_per_m2: { colorbond_corrugated: 88, colorbond_spandek: 112 },
+    })
+    expect(merged.reroof_rate_per_m2.colorbond_corrugated).toBe(88)
+    expect(merged.reroof_rate_per_m2.colorbond_spandek).toBe(112)
+  })
+  it('falls back to defaults when the new rates are not overridden', () => {
+    const merged = mergeRoofingRateCard(DEFAULT_ROOFING_RATE_CARD, {
+      reroof_rate_per_m2: { colorbond_trimdek: 110 },
+    })
+    expect(merged.reroof_rate_per_m2.colorbond_corrugated).toBe(
+      DEFAULT_ROOFING_RATE_CARD.reroof_rate_per_m2.colorbond_corrugated,
+    )
+    expect(merged.reroof_rate_per_m2.colorbond_spandek).toBe(
+      DEFAULT_ROOFING_RATE_CARD.reroof_rate_per_m2.colorbond_spandek,
+    )
+  })
+  it('round-trips the two new rates through buildOverlayFromInputs (PATCH path)', () => {
+    const r = buildOverlayFromInputs({
+      reroof_rate_per_m2: { colorbond_corrugated: '90', colorbond_spandek: '105' },
+    })
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.overlay.reroof_rate_per_m2?.colorbond_corrugated).toBe(90)
+      expect(r.overlay.reroof_rate_per_m2?.colorbond_spandek).toBe(105)
+    }
   })
 })

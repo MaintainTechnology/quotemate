@@ -50,7 +50,9 @@ export const MAX_SOLAR_ALLOWANCE = 20000
 /** Materials the editor exposes. Phase 1 covers every key in the
  *  rate card except `unknown` (which is never user-selected). */
 export const EDITABLE_MATERIALS: ReadonlyArray<RoofMaterial> = [
+  'colorbond_corrugated',
   'colorbond_trimdek',
+  'colorbond_spandek',
   'colorbond_kliplok',
   'concrete_tile',
   'terracotta_tile',
@@ -73,7 +75,9 @@ const LoadingPct = z
 export const RoofingRateOverlaySchema = z.object({
   reroof_rate_per_m2: z
     .object({
+      colorbond_corrugated: RatePerM2.optional().nullable(),
       colorbond_trimdek: RatePerM2.optional().nullable(),
+      colorbond_spandek: RatePerM2.optional().nullable(),
       colorbond_kliplok: RatePerM2.optional().nullable(),
       concrete_tile:     RatePerM2.optional().nullable(),
       terracotta_tile:   RatePerM2.optional().nullable(),

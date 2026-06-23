@@ -110,7 +110,9 @@ export function mapMaterial(text: string): RoofMaterial | null {
   // Asbestos-suspect first — safety wins over any metal/tile token.
   if (/\b(asbestos|fibro|cement sheet|super ?six|fibrolite|ac sheet)\b/.test(t)) return 'cement_sheet'
   if (/\b(klip-?lok|kliplok|standing seam|concealed fix)\b/.test(t)) return 'colorbond_kliplok'
-  if (/\b(colorbond|colourbond|metal|tin|steel|corro|corrugated|zincalume|trimdek|custom orb)\b/.test(t)) return 'colorbond_trimdek'
+  if (/\b(spandek|span ?deck)\b/.test(t)) return 'colorbond_spandek'
+  if (/\b(corro|corrugated|custom ?orb)\b/.test(t)) return 'colorbond_corrugated'
+  if (/\b(colorbond|colourbond|metal|tin|steel|zincalume|trimdek)\b/.test(t)) return 'colorbond_trimdek'
   if (/\b(terracotta|terra ?cotta|clay tile|clay tiles)\b/.test(t)) return 'terracotta_tile'
   if (/\b(concrete tile|cement tile|concrete tiles)\b/.test(t)) return 'concrete_tile'
   // Generic "tiles" → concrete (the common AU default); document this.

@@ -9,7 +9,9 @@ import type { RoofMaterial } from '@/lib/roofing/types'
 
 /** Natural-language material name for the render brief. */
 export const MATERIAL_PHRASE: Record<RoofMaterial, string> = {
+  colorbond_corrugated: 'brand-new Colorbond Corrugated steel sheeting in a clean charcoal finish',
   colorbond_trimdek: 'brand-new Colorbond Trimdek steel sheeting in a clean charcoal finish',
+  colorbond_spandek: 'brand-new Colorbond Spandek steel sheeting in a clean charcoal finish',
   colorbond_kliplok: 'brand-new Colorbond Klip-Lok standing-seam steel sheeting in a clean charcoal finish',
   concrete_tile: 'brand-new concrete roof tiles in a clean uniform finish',
   terracotta_tile: 'brand-new terracotta roof tiles in a clean uniform finish',

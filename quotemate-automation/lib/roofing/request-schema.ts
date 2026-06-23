@@ -17,7 +17,9 @@ export const MeasureAddressSchema = z.object({
 
 export const MeasureInputsSchema = z.object({
   material: z.enum([
+    'colorbond_corrugated',
     'colorbond_trimdek',
+    'colorbond_spandek',
     'colorbond_kliplok',
     'concrete_tile',
     'terracotta_tile',

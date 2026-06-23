@@ -126,7 +126,9 @@ export function requiresInspection(args: {
 
 export const DEFAULT_ROOFING_RATE_CARD: RoofingRateCard = {
   reroof_rate_per_m2: {
+    colorbond_corrugated: 90, // budget baseline metal; supply ≈ Trimdek, simplest pierce-fix
     colorbond_trimdek: 95,
+    colorbond_spandek: 105, // supply +37% over Trimdek; sits between Trimdek and Klip-Lok
     colorbond_kliplok: 115,
     concrete_tile: 95,
     terracotta_tile: 130,
@@ -232,7 +234,9 @@ function tierScopeLine(
   area_m2: number,
 ): string {
   const materialWords: Record<RoofMaterial, string> = {
+    colorbond_corrugated: 'Colorbond Corrugated',
     colorbond_trimdek: 'Colorbond Trimdek',
+    colorbond_spandek: 'Colorbond Spandek',
     colorbond_kliplok: 'Colorbond Klip-Lok 700',
     concrete_tile: 'concrete tile',
     terracotta_tile: 'terracotta tile',
