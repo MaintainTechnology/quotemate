@@ -7,10 +7,11 @@
 // dashboard, where live status is shown.
 
 import Link from 'next/link'
+import { BrandMark } from "@/app/_components/BrandMark"
 
 export const metadata = {
-  title: 'Payout account · QuoteMate',
-  description: 'Your QuoteMate payout account is being verified.',
+  title: 'Payout account · QuoteMax',
+  description: 'Your QuoteMax payout account is being verified.',
 }
 
 export default function StripeConnectReturn() {
@@ -19,11 +20,9 @@ export default function StripeConnectReturn() {
       <nav className="border-b border-ink-line">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
           <Link href="/" className="flex items-center gap-2.5">
-            <span className="grid h-7 w-7 place-items-center bg-accent font-black text-white text-xs">
-              Q
-            </span>
+            <BrandMark className="h-7 w-7" />
             <span className="font-extrabold uppercase tracking-tight text-text-pri">
-              QuoteMate
+              QuoteMax
             </span>
           </Link>
           <span className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent">

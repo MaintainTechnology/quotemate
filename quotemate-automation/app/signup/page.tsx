@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 import { normaliseAuMobile } from '@/lib/onboard/schema'
+import { BrandMark } from "@/app/_components/BrandMark"
 
 // Next.js 16 disallows prerendering pages whose default export reads
 // useSearchParams() without a Suspense boundary. The signup page reads
@@ -160,7 +161,7 @@ function SignUpInner() {
       step="01 / 04"
       title={
         <>
-          Create your <span className="text-accent">QuoteMate</span>
+          Create your <span className="text-accent">QuoteMax</span>
         </>
       }
       subtitle="Takes 30 seconds. The next 3 steps are your trade, pricing, and a quick review."
@@ -304,11 +305,9 @@ export function AuthShell({
       <nav className="border-b border-ink-line">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
           <Link href="/" className="flex items-center gap-2.5">
-            <span className="grid h-7 w-7 place-items-center bg-accent font-black text-white text-xs">
-              Q
-            </span>
+            <BrandMark className="h-7 w-7" />
             <span className="font-extrabold uppercase tracking-tight text-text-pri">
-              QuoteMate
+              QuoteMax
             </span>
           </Link>
           {footer && (

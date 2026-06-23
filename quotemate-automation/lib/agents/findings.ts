@@ -1,6 +1,6 @@
 // Pure shaping functions for the admin review queue.
 //
-// The findings tables live in QuoteMate's Supabase, written by the
+// The findings tables live in QuoteMax's Supabase, written by the
 // mt-qm-quality-agents service. The admin UI reads them and lets a
 // human approve/reject. These helpers turn raw rows into UI-friendly
 // shapes (sort order, status guards, value-extraction from jsonb).

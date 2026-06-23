@@ -1,4 +1,4 @@
-// c:/Users/dalig/Downloads/QuoteMate/quoteMate/.claude/worktrees/solar-estimate/quotemate-automation/lib/solar/compliance-copy.test.ts
+// c:/Users/dalig/Downloads/QuoteMax/quoteMate/.claude/worktrees/solar-estimate/quotemate-automation/lib/solar/compliance-copy.test.ts
 import { describe, expect, it } from 'vitest'
 import {
   SOLAR_COMPLIANCE_COPY,

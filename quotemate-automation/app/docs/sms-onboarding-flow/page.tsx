@@ -24,9 +24,9 @@ const jbMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'SMS Onboarding Flow · QuoteMate',
+  title: 'SMS Onboarding Flow · QuoteMax',
   description:
-    'SMS-initiated tradie onboarding for QuoteMate. A tradie texts the shared number, AI replies with a link, signup completes on the web. Same end state as web signup.',
+    'SMS-initiated tradie onboarding for QuoteMax. A tradie texts the shared number, AI replies with a link, signup completes on the web. Same end state as web signup.',
 }
 
 type CheckStep = {
@@ -150,7 +150,7 @@ export default function SmsOnboardingFlowDoc() {
           </g>
         </svg>
         <div className={styles.container}>
-          <span className={styles.eyebrow}>QuoteMate · v6 · SMS Onboarding</span>
+          <span className={styles.eyebrow}>QuoteMax · v6 · SMS Onboarding</span>
           <h1 className={styles.display}>
             Tradie texts.
             <br />
@@ -158,7 +158,7 @@ export default function SmsOnboardingFlowDoc() {
           </h1>
           <p className={styles.lede}>
             Same end state as web signup — own tenant, own AU phone number, own AI
-            receptionist — but kicked off with a single SMS to the shared QuoteMate number.
+            receptionist — but kicked off with a single SMS to the shared QuoteMax number.
             Two SMS turns, then the tradie finishes on the web wizard. Mobile is verified
             automatically.
           </p>
@@ -192,7 +192,7 @@ export default function SmsOnboardingFlowDoc() {
             Two turns, <span className={styles.hi}>one link</span>.
           </h2>
           <p className={styles.sectionLead}>
-            Tradie texts the shared QuoteMate number (the same one customers use for
+            Tradie texts the shared QuoteMax number (the same one customers use for
             quotes — the intent classifier decides which path to take on turn 1).
           </p>
 
@@ -202,8 +202,8 @@ export default function SmsOnboardingFlowDoc() {
               I want to register as a tradie
             </div>
             <div className={`${styles.bubble} ${styles.bubbleOut}`}>
-              <span className={styles.bubbleWho}>QuoteMate AI</span>
-              G&rsquo;day! Welcome to QuoteMate. Tap the link to set up your AI
+              <span className={styles.bubbleWho}>QuoteMax AI</span>
+              G&rsquo;day! Welcome to QuoteMax. Tap the link to set up your AI
               receptionist. Takes about 4 minutes.
               <br />
               <br />
@@ -214,7 +214,7 @@ export default function SmsOnboardingFlowDoc() {
               <br />
               Your mobile is already saved.
               <br />
-              <br />- QuoteMate
+              <br />- QuoteMax
             </div>
           </div>
         </div>
@@ -230,7 +230,7 @@ export default function SmsOnboardingFlowDoc() {
           <p className={styles.sectionLead}>
             The first two steps run on SMS in seconds. Steps 3–7 happen on the web after
             the tradie taps the link. Step 8 closes the loop by texting the tradie&rsquo;s
-            new QuoteMate number to itself.
+            new QuoteMax number to itself.
           </p>
 
           <div className={styles.checklist}>

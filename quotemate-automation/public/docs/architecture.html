@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QuoteMate · Architecture · Stages 01 → 10 · Voice + SMS</title>
+  <title>QuoteMax · Architecture · Stages 01 → 10 · Voice + SMS</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -304,7 +304,7 @@
     <div class="header">
       <div class="header-row">
         <div class="pulse-dot"></div>
-        <h1>QuoteMate <em>Automation Pipeline</em> · Stages 01 → 10 · Voice + SMS</h1>
+        <h1>QuoteMax <em>Automation Pipeline</em> · Stages 01 → 10 · Voice + SMS</h1>
       </div>
       <p class="subtitle">From inbound contact to booked job. Two channels (voice + SMS), one shared intake/estimation pipeline, end-to-end shipped in production.</p>
       <div class="tag-row">
@@ -429,7 +429,7 @@
           <text x="280" y="142" fill="#cbd5e1" font-size="9" text-anchor="middle" font-style="italic">"G'day, I need 6 downlights..."</text>
 
           <text x="430" y="105" fill="#94a3b8" font-size="9.5" font-family="'JetBrains Mono', monospace">Stage 01 — call origination</text>
-          <text x="430" y="120" fill="#64748b" font-size="9" font-family="'JetBrains Mono', monospace">Tradie's QuoteMate-provisioned number</text>
+          <text x="430" y="120" fill="#64748b" font-size="9" font-family="'JetBrains Mono', monospace">Tradie's QuoteMax-provisioned number</text>
           <text x="430" y="135" fill="#64748b" font-size="9" font-family="'JetBrains Mono', monospace">Same number 24/7 — no off-hours fallback needed</text>
 
           <!-- ═══ STAGE 02 — Twilio ═══ -->
@@ -639,7 +639,7 @@
           <div class="stage-card-num">Stage · 01</div>
           <h3>Customer call origination</h3>
           <div class="stage-card-meta">no infrastructure</div>
-          <p>A homeowner reaches for their phone and dials the tradie's QuoteMate-provisioned number. Same number every day, no after-hours fallback, no IVR menu.</p>
+          <p>A homeowner reaches for their phone and dials the tradie's QuoteMax-provisioned number. Same number every day, no after-hours fallback, no IVR menu.</p>
           <div class="label">tools</div>
           <ul class="stack-list">
             <li>customer's mobile / landline</li>
@@ -809,7 +809,7 @@
           <h3>Haiku 4.5 dialog turn</h3>
           <div class="stage-card-meta">Anthropic Haiku 4.5 · ~$0.001/turn</div>
           <p>One <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">generateObject</code> call per inbound. Returns Zod-validated <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">{action: 'ask' | 'finish' | 'escalate_inspection'}</code> with reply text capped at 320 chars. 8-step decision guide: inspection trigger → off-topic redirect → no job_type → out-of-scope job → name → suburb → per-job mustAsk → finish. Capped at 4 turns.</p>
-          <p>First turn includes greeting + gratitude ("G'day, thanks for messaging QuoteMate — I'm the AI quoting assistant…"); follow-up turns drop the intro and stay direct. On <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">finish</code>, fires the channel-agnostic intake handler with <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">{conversationId, sourceChannel:'sms'}</code>.</p>
+          <p>First turn includes greeting + gratitude ("G'day, thanks for messaging QuoteMax — I'm the AI quoting assistant…"); follow-up turns drop the intro and stay direct. On <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">finish</code>, fires the channel-agnostic intake handler with <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:rgba(2,6,23,0.6);padding:0.05em 0.35em;border:1px solid #334155;border-radius:3px;color:#e2e8f0;">{conversationId, sourceChannel:'sms'}</code>.</p>
         </div>
 
         <div class="stage-card sms">
@@ -1261,7 +1261,7 @@
 
     <!-- ═══════════════ FOOTER ═══════════════ -->
     <div class="footer">
-      QuoteMate · automation pipeline architecture · references <a href="build-guide.html">build-guide.html</a> · <a href="strategy.md">strategy.md</a>
+      QuoteMax · automation pipeline architecture · references <a href="build-guide.html">build-guide.html</a> · <a href="strategy.md">strategy.md</a>
     </div>
 
   </div>

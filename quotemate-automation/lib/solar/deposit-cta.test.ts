@@ -1,4 +1,4 @@
-// c:/Users/dalig/Downloads/QuoteMate/quoteMate/.claude/worktrees/solar-estimate/quotemate-automation/lib/solar/deposit-cta.test.ts
+// c:/Users/dalig/Downloads/QuoteMax/quoteMate/.claude/worktrees/solar-estimate/quotemate-automation/lib/solar/deposit-cta.test.ts
 import { describe, expect, it } from 'vitest'
 import { resolveSolarDepositCta } from './deposit-cta'
 

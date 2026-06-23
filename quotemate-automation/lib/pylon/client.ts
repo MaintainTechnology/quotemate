@@ -200,7 +200,7 @@ export type PylonOpportunityLead = {
   postcode?: string | null
   /** Lead title shown in Pylon's UI. */
   title?: string | null
-  /** Free-text system summary, e.g. "10 kW solar — QuoteMate estimate". */
+  /** Free-text system summary, e.g. "10 kW solar — QuoteMax estimate". */
   summary?: string | null
   /** Estimated opportunity value in WHOLE DOLLARS (per Pylon's docs). */
   valueDollars?: number | null
@@ -214,7 +214,7 @@ export type PylonOpportunityRef = {
 }
 
 /**
- * POST /v1/opportunities_form — push a confirmed QuoteMate estimate into
+ * POST /v1/opportunities_form — push a confirmed QuoteMax estimate into
  * the tenant's Pylon pipeline as a lead. Returns the created
  * opportunity's id + in-app URL so the dashboard can read its pipeline
  * stage back later. Fire-and-forget; never throws.
@@ -238,7 +238,7 @@ export async function pushPylonOpportunity(
     {
       method: 'POST',
       body: JSON.stringify({
-        first_name: first || 'QuoteMate',
+        first_name: first || 'QuoteMax',
         last_name: rest.length > 0 ? rest.join(' ') : undefined,
         phone_number: lead.phone ?? undefined,
         email_address: lead.email ?? undefined,

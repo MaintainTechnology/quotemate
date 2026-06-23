@@ -168,7 +168,7 @@ describe('provisionTwilioNumber — real-API mode end-to-end (mocked fetch)', ()
 
     const result = await provisionTwilioNumber({
       tenantId: SAMPLE_TENANT,
-      friendlyName: 'Acme — QuoteMate',
+      friendlyName: 'Acme — QuoteMax',
     })
 
     expect(result.ok).toBe(true)

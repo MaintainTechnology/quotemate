@@ -25,9 +25,9 @@ const jbMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Tradie Onboarding Architecture · QuoteMate',
+  title: 'Tradie Onboarding Architecture · QuoteMax',
   description:
-    'End-to-end architecture of the QuoteMate tradie onboarding flow: signup, email verify, wizard, activate, AI live. Includes database schema and external service integrations.',
+    'End-to-end architecture of the QuoteMax tradie onboarding flow: signup, email verify, wizard, activate, AI live. Includes database schema and external service integrations.',
 }
 
 /* ─── Content ─────────────────────────────────────────────── */
@@ -40,7 +40,7 @@ const FLOW: FlowStep[] = [
     label: 'Home',
     desc: (
       <>
-        Tradie lands on <span className={styles.mono}>/</span>, clicks &ldquo;Get my QuoteMate&rdquo;.
+        Tradie lands on <span className={styles.mono}>/</span>, clicks &ldquo;Get my QuoteMax&rdquo;.
       </>
     ),
   },
@@ -194,7 +194,7 @@ const CHECKLIST: CheckStep[] = [
     title: 'Send welcome SMS',
     body: (
       <>
-        From the new QuoteMate number to the owner&rsquo;s personal mobile. Closes the loop visibly —
+        From the new QuoteMax number to the owner&rsquo;s personal mobile. Closes the loop visibly —
         they physically receive a text seconds after activation.
       </>
     ),
@@ -265,14 +265,14 @@ export default function TradieOnboardingArchitecture() {
           </g>
         </svg>
         <div className={styles.container}>
-          <span className={styles.eyebrow}>QuoteMate · v6 · Onboarding Architecture</span>
+          <span className={styles.eyebrow}>QuoteMax · v6 · Onboarding Architecture</span>
           <h1 className={styles.display}>
             Tradie signs up →
             <br />
             AI <span className={styles.hi}>live</span> in 4 minutes.
           </h1>
           <p className={styles.lede}>
-            Full view of how a new tradie goes from &ldquo;Get my QuoteMate&rdquo; on the
+            Full view of how a new tradie goes from &ldquo;Get my QuoteMax&rdquo; on the
             homepage to receiving real customer calls + SMS on their own dedicated AU
             number, with their own pricing book and AI receptionist. Schema, services,
             flags, all in one screen.
@@ -303,7 +303,7 @@ export default function TradieOnboardingArchitecture() {
             Six steps, <span className={styles.hi}>one button click</span> at the end.
           </h2>
           <p className={styles.sectionLead}>
-            Each node below is a real page or process. Hitting &ldquo;Activate my QuoteMate&rdquo;
+            Each node below is a real page or process. Hitting &ldquo;Activate my QuoteMax&rdquo;
             on step 5 fires every backend integration in parallel.
           </p>
 

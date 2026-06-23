@@ -23,7 +23,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-const MAINTAIN_ORANGE = '#FF5A1F'
+const MAINTAIN_ORANGE = '#FFC400'
 
 // Static, hoisted — a low-opacity topographic line motif (Maintain
 // signature). Coordinates kept coarse (rendering-svg-precision).
@@ -79,7 +79,7 @@ export default async function TenantLandingPage({
     },
     {
       title: 'We draft the quote',
-      body: `${businessName} uses QuoteMate AI to price it against their real rates — itemised, not a guess.`,
+      body: `${businessName} uses QuoteMax AI to price it against their real rates — itemised, not a guess.`,
     },
     {
       title: 'You get a text',
@@ -118,7 +118,7 @@ export default async function TenantLandingPage({
         <div className="relative z-10 mx-auto grid max-w-5xl gap-10 px-5 py-16 md:grid-cols-[1.7fr_1fr] md:py-24">
           <div>
             <span className="font-mono text-[0.66rem] uppercase tracking-[0.18em] text-text-dim">
-              {businessName} · powered by QuoteMate&nbsp;AI
+              {businessName} · powered by QuoteMax&nbsp;AI
             </span>
             <h1 className="mt-5 text-[clamp(2.6rem,7vw,4.75rem)] font-extrabold uppercase leading-[0.96] tracking-[-0.035em]">
               A real quote in{' '}
@@ -276,7 +276,7 @@ export default async function TenantLandingPage({
       </div>
       <footer className="mx-auto max-w-5xl px-5 py-8 text-center">
         <p className="font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
-          Powered by QuoteMate · Your details are only used to prepare your quote
+          Powered by QuoteMax · Your details are only used to prepare your quote
         </p>
       </footer>
     </main>

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QuoteMate · SMS Channel SOP · Build Guide</title>
+  <title>QuoteMax · SMS Channel SOP · Build Guide</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -298,7 +298,7 @@
 
   <nav class="nav">
     <div class="nav-inner">
-      <a href="#" class="brand"><span class="brand-mark">Q</span>QuoteMate</a>
+      <a href="#" class="brand"><span class="brand-mark">Q</span>QuoteMax</a>
       <div class="nav-meta">SMS Channel SOP · <strong>Build Guide</strong></div>
     </div>
   </nav>
@@ -306,7 +306,7 @@
   <header class="hero">
     <div class="container">
       <span class="hero-eyebrow">SMS quoting agent · Step-by-step build · v1 channel</span>
-      <h1>Add SMS to QuoteMate, <em>one step at a time</em>.</h1>
+      <h1>Add SMS to QuoteMax, <em>one step at a time</em>.</h1>
       <p class="hero-lede">
         This SOP walks you through building the SMS quoting channel — from a customer's first text message to a draft quote landing in the database. Same level of detail as <a href="stage1-05-sop.html">stage1-05-sop.html</a>: every file, every line of code, every Twilio click. <strong>Read line by line; don't skip.</strong>
       </p>
@@ -331,7 +331,7 @@
 
       <h2>Before you start, read this once.</h2>
       <p>
-        QuoteMate already has a working <strong>voice channel</strong>: a customer dials our Vapi number, has a conversation with an AI receptionist, and a draft quote appears in the database. That voice flow lives in <code>app/api/vapi/webhook/route.ts</code> and feeds the <em>Quote Drafter</em> agent (the first of <a href="strategy.md">our four agents</a>).
+        QuoteMax already has a working <strong>voice channel</strong>: a customer dials our Vapi number, has a conversation with an AI receptionist, and a draft quote appears in the database. That voice flow lives in <code>app/api/vapi/webhook/route.ts</code> and feeds the <em>Quote Drafter</em> agent (the first of <a href="strategy.md">our four agents</a>).
       </p>
       <p>
         This SOP adds a second channel: <strong>SMS</strong>. A customer texts our Twilio mobile number, has a short back-and-forth (capped at ~4 turns), and the same Quote Drafter produces the draft quote. The Twilio webhook, dialog agent, and assumption rules are <em>new</em>. Everything downstream — intake structuring, embedding, estimation, GST calc, quote write — is <em>reused, unchanged</em>.
@@ -399,7 +399,7 @@
 
       <h3>Voice doesn't go away. SMS becomes the default.</h3>
       <p>
-        After this SOP ships, the same QuoteMate phone setup supports <strong>two channels</strong>:
+        After this SOP ships, the same QuoteMax phone setup supports <strong>two channels</strong>:
       </p>
       <ul>
         <li><strong>Voice</strong> on the existing Vapi number — for customers who prefer to call</li>
@@ -733,7 +733,7 @@ APP_URL=http://localhost:3000      <span class="c"># Vercel sets this to the pro
         </li>
         <li><span class="click-title">Paste this SQL</span>
           <pre><code><span class="c">-- ═══════════════════════════════════════════════════════════════════</span>
-<span class="c">-- QuoteMate · SMS conversation state</span>
+<span class="c">-- QuoteMax · SMS conversation state</span>
 <span class="c">-- Adds two tables for the SMS quoting channel:</span>
 <span class="c">--   - sms_conversations — one row per ongoing dialog with a customer</span>
 <span class="c">--   - sms_messages      — one row per inbound or outbound SMS, in order</span>
@@ -1055,7 +1055,7 @@ export function rulesAsText(jobType: JobType): string {
       <div class="callout tip">
         <div class="callout-label">Future-proofing</div>
         <p>
-          When QuoteMate adds a second trade (plumbing, painting, etc.), <code>assumptions.ts</code> grows a second top-level export keyed by trade. The <code>JobType</code> union stays small per trade. Don't generalise prematurely — duplicate the file shape per trade only when there's a second trade to onboard.
+          When QuoteMax adds a second trade (plumbing, painting, etc.), <code>assumptions.ts</code> grows a second top-level export keyed by trade. The <code>JobType</code> union stays small per trade. Don't generalise prematurely — duplicate the file shape per trade only when there's a second trade to onboard.
         </p>
       </div>
 
@@ -1632,7 +1632,7 @@ export async function POST(req: Request) {
         </li>
         <li><span class="click-title">Paste this code</span>
           <pre><code><span class="c">// ═════════════════════════════════════════════════════════════════════</span>
-<span class="c">// QuoteMate · simulate an SMS conversation against the local dev server</span>
+<span class="c">// QuoteMax · simulate an SMS conversation against the local dev server</span>
 <span class="c">//</span>
 <span class="c">// Usage:</span>
 <span class="c">//   1. terminal 1: pnpm dev</span>
@@ -1930,7 +1930,7 @@ console.log('\nDone. Check Supabase → sms_messages and sms_conversations.')</c
   </section>
 
   <p class="foot">
-    QuoteMate · SMS Channel SOP · drafted 2026-05-05 · pairs with <a href="stage1-05-sop.html">stage1-05-sop.html</a>, <a href="stage6-10-sop.html">stage6-10-sop.html</a>, <a href="architecture.html">architecture.html</a>, <a href="build-guide.html">build-guide.html</a>
+    QuoteMax · SMS Channel SOP · drafted 2026-05-05 · pairs with <a href="stage1-05-sop.html">stage1-05-sop.html</a>, <a href="stage6-10-sop.html">stage6-10-sop.html</a>, <a href="architecture.html">architecture.html</a>, <a href="build-guide.html">build-guide.html</a>
   </p>
 
 </body>

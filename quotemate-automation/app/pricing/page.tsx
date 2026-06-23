@@ -19,11 +19,11 @@ import { PricingTiers } from "../_components/PricingTiers"
 import { COMPARISON, PLANS, PRICING_FAQ } from "../_components/pricing-data"
 
 export const metadata = {
-  title: "Pricing — QuoteMate",
+  title: "Pricing — QuoteMax",
   description:
     "Simple plans for Australian tradies. Starter $49, Pro $129, Crew $299 a month (save ~17% annually). Starter Monthly includes a 14-day free trial, no cut of your jobs, $99 site visit credited to the job.",
   openGraph: {
-    title: "QuoteMate pricing — costs less than one missed job",
+    title: "QuoteMax pricing — costs less than one missed job",
     description:
       "Three plans for AU tradies. SMS + AI voice receptionist, Good / Better / Best quotes, Stripe deposits. Starter Monthly includes a 14-day free trial.",
     type: "website",
@@ -274,7 +274,7 @@ function SiteVisit() {
     {
       num: "03",
       title: "It’s credited to the job",
-      body: "When the job goes ahead, the $99 comes off the final invoice. You keep it. QuoteMate never takes a cut of your work.",
+      body: "When the job goes ahead, the $99 comes off the final invoice. You keep it. QuoteMax never takes a cut of your work.",
     },
   ]
   return (
@@ -321,7 +321,7 @@ function RoiBand() {
           </h2>
           <p className="mt-6 max-w-2xl text-base leading-relaxed text-text-sec">
             Most jobs a tradie wins carry $300–$2,000+ in margin. Pro is $129 a
-            month. If QuoteMate catches one lead you&rsquo;d otherwise have
+            month. If QuoteMax catches one lead you&rsquo;d otherwise have
             missed up a ladder, it&rsquo;s already paid for itself — usually many
             times over.
           </p>

@@ -25,9 +25,9 @@ const jbMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Tradie Onboarding Plan · QuoteMate',
+  title: 'Tradie Onboarding Plan · QuoteMax',
   description:
-    'How a tradie signs up, fills the form, and gets a live AI receptionist on their own QuoteMate number. End to end, fully automated.',
+    'How a tradie signs up, fills the form, and gets a live AI receptionist on their own QuoteMax number. End to end, fully automated.',
 }
 
 type Step = { num: string; label: string; desc: string }
@@ -65,7 +65,7 @@ const FORM_CARDS: Card[] = [
   {
     num: '04',
     title: 'Review and activate',
-    body: 'Summary of every field. Services pre-ticked. Big orange button: Activate my QuoteMate.',
+    body: 'Summary of every field. Services pre-ticked. Big orange button: Activate my QuoteMax.',
     meta: '→ /api/onboard/activate',
   },
 ]
@@ -80,7 +80,7 @@ const ACTIVATE_CARDS: Card[] = [
   {
     num: '02',
     title: 'Buy phone number',
-    body: 'New AU mobile long code purchased via Twilio API. SMS and voice webhooks pointed at QuoteMate.',
+    body: 'New AU mobile long code purchased via Twilio API. SMS and voice webhooks pointed at QuoteMax.',
     meta: 'Twilio API',
   },
   {
@@ -98,7 +98,7 @@ const ACTIVATE_CARDS: Card[] = [
   {
     num: '05',
     title: 'Send welcome SMS',
-    body: 'Tradie gets a text from their new QuoteMate number on their personal mobile. Closes the loop visibly.',
+    body: 'Tradie gets a text from their new QuoteMax number on their personal mobile. Closes the loop visibly.',
     meta: 'Twilio outbound',
   },
   {
@@ -128,7 +128,7 @@ export default function TradieOnboardingPlan() {
           </g>
         </svg>
         <div className={styles.container}>
-          <span className={styles.eyebrow}>QuoteMate · v6 Architecture Plan</span>
+          <span className={styles.eyebrow}>QuoteMax · v6 Architecture Plan</span>
           <h1 className={styles.display}>
             Tradie <span className={styles.hi}>Onboarding</span>
             <br />
@@ -136,12 +136,12 @@ export default function TradieOnboardingPlan() {
           </h1>
           <p className={styles.lede}>
             How a tradie signs up, fills the form, and gets a live AI receptionist on
-            their own QuoteMate number. End to end, fully automated, four pages on the
+            their own QuoteMax number. End to end, fully automated, four pages on the
             front, six steps on the back.
           </p>
           <p className={styles.lede} style={{ marginTop: '0.75rem', fontSize: '0.92rem' }}>
             <Link href="/" className={styles.inlineLink}>
-              ← Back to QuoteMate home
+              ← Back to QuoteMax home
             </Link>
           </p>
         </div>
@@ -238,7 +238,7 @@ export default function TradieOnboardingPlan() {
           <div className={styles.outcome}>
             <div>
               <h3 className={styles.outcomeTitle}>You&rsquo;re live</h3>
-              <p className={styles.outcomeCopy}>Your QuoteMate line:</p>
+              <p className={styles.outcomeCopy}>Your QuoteMax line:</p>
               <div className={styles.phone}>+61 482 123 456</div>
               <p className={styles.outcomeCopy} style={{ marginTop: '1rem' }}>
                 Send any text to that number now to try your AI receptionist. We just

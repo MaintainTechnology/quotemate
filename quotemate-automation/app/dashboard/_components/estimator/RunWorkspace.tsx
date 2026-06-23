@@ -360,7 +360,7 @@ export function RunWorkspace({ runId }: { runId: string }) {
       <header className="motion-safe:animate-[fade-up_220ms_ease-out_both]">
         <nav aria-label="Breadcrumb" className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
           <Link href="/dashboard?tab=estimator" className="transition-colors hover:text-accent focus-visible:outline-2 focus-visible:outline-accent">
-            QuoteMate · Estimator
+            QuoteMax · Estimator
           </Link>
           <span aria-hidden="true"> / </span>
           <span className="text-text-sec">Run</span>

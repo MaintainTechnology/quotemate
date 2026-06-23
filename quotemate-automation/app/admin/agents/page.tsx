@@ -3,7 +3,7 @@
 // /admin/agents — Quality Agents overview.
 //
 // Three offline agents that score, audit, and learn from the live
-// QuoteMate quote pipeline. Findings land here for review — nothing
+// QuoteMax quote pipeline. Findings land here for review — nothing
 // is auto-applied. Approving an item readies it for the live
 // catalogue or prompts.
 //
@@ -139,7 +139,7 @@ export default function AgentsOverviewPage() {
           </h1>
           <p className="max-w-md text-base leading-relaxed text-text-sec md:text-lg">
             Three offline agents measure, audit, and learn from the live
-            QuoteMate pipeline. Findings land here for review — nothing
+            QuoteMax pipeline. Findings land here for review — nothing
             is auto-applied. Approve an item to ready it for the live
             catalogue or prompts.
           </p>
@@ -292,7 +292,7 @@ export default function AgentsOverviewPage() {
       {/* ── Closing accent bar ───────────────────────────────────── */}
       <div className="relative z-10 bg-accent px-6 py-5 text-center text-white">
         <span className="font-mono text-sm font-semibold uppercase tracking-[0.16em]">
-          QuoteMate Admin · Quality Agents
+          QuoteMax Admin · Quality Agents
         </span>
       </div>
     </main>
@@ -305,7 +305,7 @@ function Breadcrumb() {
   return (
     <div className="flex items-center gap-3 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
       <Link href="/admin" className="transition-colors hover:text-text-pri">
-        QuoteMate Admin
+        QuoteMax Admin
       </Link>
       <span className="text-ink-line">/</span>
       <span className="text-text-pri">Quality agents</span>

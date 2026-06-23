@@ -1,4 +1,4 @@
-// c:/Users/dalig/Downloads/QuoteMate/quoteMate/.claude/worktrees/solar-estimate/quotemate-automation/lib/solar/compliance-copy.ts
+// c:/Users/dalig/Downloads/QuoteMax/quoteMate/.claude/worktrees/solar-estimate/quotemate-automation/lib/solar/compliance-copy.ts
 // Mandatory compliance copy for /q/solar/[token] (spec §6). This text is
 // a regulatory requirement — keep it verbatim. compliance-copy.test.ts
 // asserts each mandated fragment so a weakening edit fails CI.

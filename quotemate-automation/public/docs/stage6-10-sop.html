@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QuoteMate · Beginner Walkthrough · Stages 06 → 10</title>
+  <title>QuoteMax · Beginner Walkthrough · Stages 06 → 10</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -121,7 +121,7 @@
 
   <nav class="nav">
     <div class="nav-inner">
-      <a href="#" class="brand"><span class="brand-mark">Q</span>QuoteMate</a>
+      <a href="#" class="brand"><span class="brand-mark">Q</span>QuoteMax</a>
       <div class="nav-meta">Beginner Walkthrough · <strong>Stages 06 → 10</strong></div>
     </div>
   </nav>
@@ -159,7 +159,7 @@
         You already have the pipeline that drafts quotes (<a href="stage1-05-sop.html">Stages 01–05</a>). What you don't have yet: a way to <em>show</em> a quote to a customer, take their money, and put the job in the diary. This SOP fills that gap.
       </p>
       <p>
-        <strong>What you'll have at the end:</strong> a customer can open a tradie's QuoteMate-provisioned quote URL on their phone, see Good / Better / Best tiers with line items, pick one, pay a deposit through Stripe (which routes to the tradie's bank via Stripe Connect Express), and pick a slot from the tradie's available times. The booked slot is recorded on the quote and removed from the tradie's <code>available_slots</code> JSONB (real Google/iCloud calendar API integration is v2 — see <a href="#s10">Stage 10's deferred-items callout</a> and the wireframe's Layer-5 Calendar entry).
+        <strong>What you'll have at the end:</strong> a customer can open a tradie's QuoteMax-provisioned quote URL on their phone, see Good / Better / Best tiers with line items, pick one, pay a deposit through Stripe (which routes to the tradie's bank via Stripe Connect Express), and pick a slot from the tradie's available times. The booked slot is recorded on the quote and removed from the tradie's <code>available_slots</code> JSONB (real Google/iCloud calendar API integration is v2 — see <a href="#s10">Stage 10's deferred-items callout</a> and the wireframe's Layer-5 Calendar entry).
       </p>
       <p>
         <strong>Three reference docs pair with this one:</strong> <a href="architecture.html">architecture.html</a> (system shape), <a href="build-guide.html">build-guide.html</a> (full code blocks), <a href="wireframe.html">wireframe.html</a> (10-stage product flow + 4-agent decomposition). Open them in adjacent tabs and switch as needed.
@@ -199,7 +199,7 @@
       <header class="phase-header">
         <div class="phase-num">Pre-flight C · <strong>New service accounts</strong></div>
         <h2 class="phase-title">Sign up for two more services.</h2>
-        <p class="phase-summary">Stripe handles money (Connect Express routes deposits to each tradie's own bank account, with QuoteMate taking a platform fee). Resend handles transactional emails (the share-link the customer clicks). Both have free tiers that easily cover testing.</p>
+        <p class="phase-summary">Stripe handles money (Connect Express routes deposits to each tradie's own bank account, with QuoteMax taking a platform fee). Resend handles transactional emails (the share-link the customer clicks). Both have free tiers that easily cover testing.</p>
       </header>
 
       <h3>C.1 — Stripe (payments + Stripe Connect Express)</h3>
@@ -213,7 +213,7 @@
           </ul>
         </li>
         <li><span class="click-title">Enable Connect</span>Left sidebar → <span class="ui-path">Connect</span> → click <span class="ui">Get started</span>. Pick <span class="field">Platform or marketplace</span>. Stripe will ask you a few questions about your business model — answer "I'm building a marketplace where service providers earn money".</li>
-        <li><span class="click-title">Configure Connect platform settings</span><span class="ui-path">Connect → Settings</span>. Under <strong>Account types</strong>, enable <span class="field">Express</span>. Under <strong>Branding</strong>, upload your QuoteMate logo + brand colour — this is what tradies see when they onboard.</li>
+        <li><span class="click-title">Configure Connect platform settings</span><span class="ui-path">Connect → Settings</span>. Under <strong>Account types</strong>, enable <span class="field">Express</span>. Under <strong>Branding</strong>, upload your QuoteMax logo + brand colour — this is what tradies see when they onboard.</li>
         <li><span class="click-title">Note your Connect Client ID</span>Same settings page → <strong>Integration</strong> → copy the <strong>Client ID</strong> (starts with <code>ca_…</code>) → <span class="field">STRIPE_CONNECT_CLIENT_ID</span>.</li>
       </ol>
 
@@ -304,7 +304,7 @@
   stripe_payment_intent_id <span class="k">text unique</span>,             <span class="c">-- 'pi_…'</span>
   stripe_charge_id <span class="k">text</span>,                            <span class="c">-- 'ch_…' once captured</span>
   amount_inc_gst <span class="k">numeric</span>(12,2),                       <span class="c">-- in dollars (Stripe stores cents; we store dollars for display)</span>
-  platform_fee_inc_gst <span class="k">numeric</span>(12,2),                  <span class="c">-- QuoteMate's cut</span>
+  platform_fee_inc_gst <span class="k">numeric</span>(12,2),                  <span class="c">-- QuoteMax's cut</span>
   status <span class="k">text</span>,                                       <span class="c">-- 'pending' | 'succeeded' | 'failed' | 'refunded'</span>
   created_at <span class="k">timestamptz default now</span>(),
   succeeded_at <span class="k">timestamptz</span>,
@@ -886,7 +886,7 @@ pnpm add stripe resend</code></pre>
       </header>
 
       <h3>S10.1 — Onboard the test tradie to Stripe Connect</h3>
-      <p>Before any customer can pay, the tradie needs a Stripe Connect Express account so the deposit gets routed to them (minus QuoteMate's platform fee). For v1 you onboard one test tradie manually.</p>
+      <p>Before any customer can pay, the tradie needs a Stripe Connect Express account so the deposit gets routed to them (minus QuoteMax's platform fee). For v1 you onboard one test tradie manually.</p>
       <ol class="clicks">
         <li><span class="click-title">Create the onboarding API route</span><code>app/api/stripe/connect/onboard/route.ts</code>:
           <pre><code><span class="k">import</span> Stripe <span class="k">from</span> <span class="s">'stripe'</span>
@@ -977,7 +977,7 @@ pnpm add stripe resend</code></pre>
   <span class="k">const</span> subtotalExGst = <span class="v">Number</span>(tierData?.subtotal_ex_gst ?? 0)
   <span class="k">const</span> totalIncGst = subtotalExGst * 1.10
   <span class="k">const</span> depositAmount = Math.round(totalIncGst * (tradie.default_deposit_pct ?? 30) / 100 * 100) <span class="c">// in cents</span>
-  <span class="k">const</span> platformFee = Math.round(depositAmount * 0.05) <span class="c">// QuoteMate keeps 5% of the deposit</span>
+  <span class="k">const</span> platformFee = Math.round(depositAmount * 0.05) <span class="c">// QuoteMax keeps 5% of the deposit</span>
 
   <span class="c">// Mark accepted tier before creating session — if Stripe fails we still know what they picked</span>
   <span class="k">await</span> supabase.from(<span class="s">'quotes'</span>).update({ accepted_tier: tier, selected_tier: tier }).eq(<span class="s">'id'</span>, quote.id)
@@ -1318,7 +1318,7 @@ pnpm add stripe resend</code></pre>
   </section>
 
   <p class="foot">
-    QuoteMate · stages 06–10 SOP · pairs with <a href="stage1-05-sop.html">stage1-05-sop.html</a>, <a href="architecture.html">architecture.html</a>, <a href="build-guide.html">build-guide.html</a>, <a href="wireframe.html">wireframe.html</a>
+    QuoteMax · stages 06–10 SOP · pairs with <a href="stage1-05-sop.html">stage1-05-sop.html</a>, <a href="architecture.html">architecture.html</a>, <a href="build-guide.html">build-guide.html</a>, <a href="wireframe.html">wireframe.html</a>
   </p>
 
 </body>

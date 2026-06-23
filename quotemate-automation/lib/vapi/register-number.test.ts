@@ -101,7 +101,7 @@ describe('registerNumberWithVapi — real-API mode', () => {
     const result = await registerNumberWithVapi({
       phoneNumber: '+61412345678',
       assistantId: 'asst_abc',
-      name: 'Acme — QuoteMate',
+      name: 'Acme — QuoteMax',
     })
     expect(result.ok).toBe(true)
     if (!result.ok) return

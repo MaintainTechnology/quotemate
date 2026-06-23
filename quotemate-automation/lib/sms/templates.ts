@@ -135,7 +135,7 @@ export function buildQuoteUpdatedSms(intake: Intake, quote: Quote, options?: Quo
 
   lines.push('Reply or call back if anything looks off.')
   lines.push('')
-  lines.push('- QuoteMate')
+  lines.push('- QuoteMax')
 
   return gsm7Safe(lines.join('\n'))
 }
@@ -159,7 +159,7 @@ function buildInspectionQuoteUpdatedSms(intake: Intake, quote: Quote): string {
     lines.push('Call us back to lock in the site visit.')
   }
   lines.push('')
-  lines.push('- QuoteMate')
+  lines.push('- QuoteMax')
   return gsm7Safe(lines.join('\n'))
 }
 
@@ -178,8 +178,8 @@ export function buildTradieWelcomeSms(opts: {
 }): string {
   const link = `${opts.appUrl}/signup?intent=${opts.token}${opts.code ? `&code=${encodeURIComponent(opts.code)}` : ''}`
   const body =
-    `G'day! Welcome to QuoteMate. Tap the link to set up your AI receptionist. ` +
-    `Takes about 4 minutes.\n\n${link}\n\nYour mobile is already saved.\n\n- QuoteMate`
+    `G'day! Welcome to QuoteMax. Tap the link to set up your AI receptionist. ` +
+    `Takes about 4 minutes.\n\n${link}\n\nYour mobile is already saved.\n\n- QuoteMax`
   return gsm7Safe(body)
 }
 
@@ -195,7 +195,7 @@ export function buildTradieIntentStillOpenSms(opts: {
   const link = `${opts.appUrl}/signup?intent=${opts.token}${opts.code ? `&code=${encodeURIComponent(opts.code)}` : ''}`
   const body =
     `Still got your signup link open? Tap it here:\n\n${link}\n\n` +
-    `Replies here won't progress your signup — finish on the web.\n\n- QuoteMate`
+    `Replies here won't progress your signup — finish on the web.\n\n- QuoteMax`
   return gsm7Safe(body)
 }
 
@@ -210,7 +210,7 @@ export function buildTradieIntentExpiredSms(opts: {
 }): string {
   const link = `${opts.appUrl}/signup?intent=${opts.token}`
   const body =
-    `Your earlier signup link expired (24h). Fresh one:\n\n${link}\n\n- QuoteMate`
+    `Your earlier signup link expired (24h). Fresh one:\n\n${link}\n\n- QuoteMax`
   return gsm7Safe(body)
 }
 
@@ -274,7 +274,7 @@ export function buildTradieWebLeadAlert(opts: {
   const desc = opts.description.trim().replace(/\s+/g, ' ').slice(0, 140)
   const body =
     `${hi}new web lead - ${who} in ${opts.suburb}: "${desc}". ` +
-    `We're texting them now to finalise the quote. - QuoteMate`
+    `We're texting them now to finalise the quote. - QuoteMax`
   return scrubForGsm7(body).slice(0, 320)
 }
 
@@ -443,7 +443,7 @@ export function buildIntakeRecoverySms(opts: {
     ]
   }
 
-  // Footer — no "- QuoteMate" sign-off here; the recovery thread feels
+  // Footer — no "- QuoteMax" sign-off here; the recovery thread feels
   // more human-typed without it (and the customer already knows who we
   // are because they're mid-conversation).
   return gsm7Safe(pickVariant(variants))
@@ -467,8 +467,8 @@ export function buildIncompleteCallSms(opts: {
   const first = (opts.firstName ?? '').split(' ')[0] || ''
   const greeting = first ? `Hi ${first}, ` : 'Hi, '
   const body = opts.source === 'sms'
-    ? `${greeting}thanks for messaging QuoteMate. We didn't quite catch enough to put a quote together - reply with a quick description of the work and we'll get back to you.\n\n- QuoteMate`
-    : `${greeting}thanks for calling QuoteMate. We didn't quite catch enough on that call to put a quote together - please give us a quick callback when you've got a moment.\n\n- QuoteMate`
+    ? `${greeting}thanks for messaging QuoteMax. We didn't quite catch enough to put a quote together - reply with a quick description of the work and we'll get back to you.\n\n- QuoteMax`
+    : `${greeting}thanks for calling QuoteMax. We didn't quite catch enough on that call to put a quote together - please give us a quick callback when you've got a moment.\n\n- QuoteMax`
   return body
     .replace(/[‐-―−]/g, '-').replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
     .replace(/…/g, '...').replace(/·/g, '-').replace(/[^\x20-\x7E\n]/g, '')
@@ -540,7 +540,7 @@ export function buildBookingConfirmationSms(opts: {
 }): string {
   const first = (opts.firstName ?? '').split(' ')[0] || 'there'
   const when = fmtSlotShort(opts.scheduledAt)
-  const body = `Hi ${first}, you're locked in for ${when}. The tradie will text the day before to confirm.\n\nView booking: ${opts.bookingUrl}\n\n- QuoteMate`
+  const body = `Hi ${first}, you're locked in for ${when}. The tradie will text the day before to confirm.\n\nView booking: ${opts.bookingUrl}\n\n- QuoteMax`
   return body
     .replace(/[‐-―−]/g, '-').replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
     .replace(/…/g, '...').replace(/·/g, '-').replace(/[^\x20-\x7E\n]/g, '')
@@ -585,7 +585,7 @@ export function buildTradieBookingNotification(opts: {
 // segment.
 //
 // 4 wording variants picked at random per call. The "Hi <name>, thanks
-// for messaging QuoteMate" lead-in was repetitive when the dialog already
+// for messaging QuoteMax" lead-in was repetitive when the dialog already
 // said "Welcome back" or "G'day" two messages ago, so the variants ditch
 // the formal preamble and lead with the actual action ("here's a link").
 //
@@ -619,7 +619,7 @@ export function buildPhotoRequestSms(opts: {
   if (opts.source === 'voice') {
     // Voice flows always lead with the call-context greeting so the
     // photo SMS doesn't feel like it came out of nowhere.
-    const body = `Hi ${first || 'there'}, thanks for calling QuoteMate. Here's a quick photo upload to help finalise your quote, tap to add 1-2 pics: ${opts.uploadUrl}\n\nOptional but helps a lot.`
+    const body = `Hi ${first || 'there'}, thanks for calling QuoteMax. Here's a quick photo upload to help finalise your quote, tap to add 1-2 pics: ${opts.uploadUrl}\n\nOptional but helps a lot.`
     return gsm7Safe(body)
   }
 
@@ -910,7 +910,7 @@ export function buildQuoteSms(intake: Intake, quote: Quote, options?: QuoteSmsOp
   const lines: string[] = []
   lines.push(`Hi ${firstName},`)
   lines.push('')
-  lines.push(`Your QuoteMate quote for ${job}${timeframe ? ` (${timeframe})` : ''}.`)
+  lines.push(`Your QuoteMax quote for ${job}${timeframe ? ` (${timeframe})` : ''}.`)
   lines.push('')
   if (quote.quote_view_url) {
     lines.push(`View full quote: ${quote.quote_view_url}`)
@@ -969,7 +969,7 @@ export function buildQuoteSms(intake: Intake, quote: Quote, options?: QuoteSmsOp
 
   lines.push('Reply or call back to confirm a tier and we will book you in.')
   lines.push('')
-  lines.push('- QuoteMate')
+  lines.push('- QuoteMax')
 
   return gsm7Safe(lines.join('\n'))
 }
@@ -992,7 +992,7 @@ function buildInspectionQuoteSms(intake: Intake, quote: Quote): string {
   const lines: string[] = []
   lines.push(`Hi ${firstName},`)
   lines.push('')
-  lines.push(`Your QuoteMate quote for ${job} needs a quick site visit before we can give you a real price.`)
+  lines.push(`Your QuoteMax quote for ${job} needs a quick site visit before we can give you a real price.`)
   lines.push('')
   if (quote.quote_view_url) {
     lines.push(`View full quote: ${quote.quote_view_url}`)
@@ -1020,7 +1020,7 @@ function buildInspectionQuoteSms(intake: Intake, quote: Quote): string {
     lines.push('')
   }
 
-  lines.push('- QuoteMate')
+  lines.push('- QuoteMax')
 
   return gsm7Safe(lines.join('\n'))
 }

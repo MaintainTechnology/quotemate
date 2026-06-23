@@ -13,6 +13,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
+import { FeatureGate } from '@/app/dashboard/_components/FeatureGate'
 import type {
   MultiRoofQuote,
   RoofMaterial,
@@ -74,6 +75,14 @@ function structureKey(s: RoofStructurePrice, i: number): string {
 }
 
 export default function RoofingMeasurePage() {
+  return (
+    <FeatureGate slug="roofing" featureLabel="Roof measure">
+      <RoofingMeasurePageInner />
+    </FeatureGate>
+  )
+}
+
+function RoofingMeasurePageInner() {
   const [token, setToken] = useState<string | null>(null)
   const [authState, setAuthState] = useState<'loading' | 'signed-out' | 'ready'>('loading')
 
@@ -514,7 +523,7 @@ export default function RoofingMeasurePage() {
 
       <div className="relative z-10 bg-accent px-6 py-5 text-center text-white">
         <span className="font-mono text-sm font-semibold uppercase tracking-[0.16em]">
-          QuoteMate · Roof measure · multi-structure
+          QuoteMax · Roof measure · multi-structure
         </span>
       </div>
     </main>

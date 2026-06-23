@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QuoteMate · Weekly Progress · 2026-05-06</title>
+  <title>QuoteMax · Weekly Progress · 2026-05-06</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -305,7 +305,7 @@
 
   <nav class="nav">
     <div class="nav-inner">
-      <a href="#" class="brand"><span class="brand-mark">Q</span>QuoteMate</a>
+      <a href="#" class="brand"><span class="brand-mark">Q</span>QuoteMax</a>
       <div class="nav-meta">Weekly Progress · <strong>2026-05-06</strong></div>
     </div>
   </nav>
@@ -614,7 +614,7 @@
         <div class="card done">
           <span class="check">✓</span>
           <h4>First-turn intro + gratitude</h4>
-          <p><strong>NEW THIS WEEK.</strong> On the customer's very first message Haiku opens with <em>"G'day, thanks for messaging QuoteMate — I'm the AI quoting assistant…"</em> before transitioning to the question. Subsequent turns drop the intro and stay direct. Enforced via Rule 9 in the SYSTEM_PROMPT plus a turn-marker in the user prompt.</p>
+          <p><strong>NEW THIS WEEK.</strong> On the customer's very first message Haiku opens with <em>"G'day, thanks for messaging QuoteMax — I'm the AI quoting assistant…"</em> before transitioning to the question. Subsequent turns drop the intro and stay direct. Enforced via Rule 9 in the SYSTEM_PROMPT plus a turn-marker in the user prompt.</p>
         </div>
         <div class="card done">
           <span class="check">✓</span>
@@ -820,7 +820,7 @@
       <ul class="timeline">
         <li><span class="when">today</span><span class="what"><strong>Phase 5 fully shipped</strong> — migrations 003 / 004 / 005 applied to prod Supabase + <code>CRON_SECRET</code> set in Vercel Production env + <code>TRADIE_NOTIFY_NUMBER</code> + <code>TRADIE_NOTIFY_WHATSAPP</code> set in Vercel Production env. Redeployed. SMS Agent is fully operational.</span></li>
         <li><span class="when">today</span><span class="what"><strong>Photo-request SMS parity</strong> — SMS Agent now sends <code>${'${APP_URL}'}/upload/${'${token}'}</code> link when easy-5 job_type is identified, same as voice agent's <code>send_sms_photo_link</code>. Migration 005 + token generation + dual-source aggregation in <code>structureIntake</code>.</span></li>
-        <li><span class="when">today</span><span class="what"><strong>First-turn intro + gratitude</strong> — Haiku now opens with "G'day, thanks for messaging QuoteMate — I'm the AI quoting assistant…" before the first question. Subsequent turns stay direct.</span></li>
+        <li><span class="when">today</span><span class="what"><strong>First-turn intro + gratitude</strong> — Haiku now opens with "G'day, thanks for messaging QuoteMax — I'm the AI quoting assistant…" before the first question. Subsequent turns stay direct.</span></li>
         <li><span class="when">today</span><span class="what"><strong>Migration 004</strong> — unique partial index on inbound <code>MessageSid</code> (defence-in-depth for the duplicate-reply fix)</span></li>
         <li><span class="when">today</span><span class="what">Inbound route hardened — application-layer idempotency check + fast-ack via <code>after()</code> + <code>maxDuration=60</code> + race-loser <code>23505</code> handling</span></li>
         <li><span class="when">today</span><span class="what"><strong>Mocked tier photos</strong> — <code>lib/quote/tier-photos.ts</code> + <code>TierCard</code> hero on <code>/q/[token]</code></span></li>
@@ -920,7 +920,7 @@
   </section>
 
   <p class="foot">
-    QuoteMate · weekly progress · last updated <strong>2026-05-06</strong> · pairs with <a href="sms-sop.html">sms-sop.html</a>, <a href="onboarding-bundle.html">onboarding-bundle.html</a>, <a href="stage1-05-sop.html">stage1-05-sop.html</a>, <a href="stage6-10-sop.html">stage6-10-sop.html</a>
+    QuoteMax · weekly progress · last updated <strong>2026-05-06</strong> · pairs with <a href="sms-sop.html">sms-sop.html</a>, <a href="onboarding-bundle.html">onboarding-bundle.html</a>, <a href="stage1-05-sop.html">stage1-05-sop.html</a>, <a href="stage6-10-sop.html">stage6-10-sop.html</a>
   </p>
 
 </body>

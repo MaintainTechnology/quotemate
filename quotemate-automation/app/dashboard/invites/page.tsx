@@ -6,6 +6,7 @@
 import { useEffect, useState, useCallback, type ReactNode } from 'react'
 import Link from 'next/link'
 import { getBrowserSupabase } from '@/lib/supabase/client'
+import { BrandMark } from "@/app/_components/BrandMark"
 
 type Code = {
   id: string
@@ -184,7 +185,7 @@ export default function MarketingPage() {
       {/* atmosphere — faint orange glow + hairline grid, not a solid flat fill */}
       <div aria-hidden className="pointer-events-none absolute inset-0">
         <div className="absolute -top-40 right-[-10%] h-[480px] w-[480px] rounded-full opacity-[0.10] blur-3xl"
-             style={{ background: 'radial-gradient(circle, #FF5A1F 0%, transparent 70%)' }} />
+             style={{ background: 'radial-gradient(circle, #FFC400 0%, transparent 70%)' }} />
         <div className="absolute inset-0 opacity-[0.04]"
              style={{ backgroundImage: 'linear-gradient(#2D3A4F 1px, transparent 1px), linear-gradient(90deg, #2D3A4F 1px, transparent 1px)', backgroundSize: '64px 64px' }} />
       </div>
@@ -193,8 +194,8 @@ export default function MarketingPage() {
       <nav className="relative z-10 border-b border-ink-line">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-5">
           <div className="flex items-center gap-2.5">
-            <span className="grid h-7 w-7 place-items-center bg-accent font-black text-white text-xs">Q</span>
-            <span className="font-extrabold uppercase tracking-tight">QuoteMate</span>
+            <BrandMark className="h-7 w-7" />
+            <span className="font-extrabold uppercase tracking-tight">QuoteMax</span>
           </div>
           <Link href="/dashboard" className="flex items-center gap-2 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-text-pri">
             <span aria-hidden>←</span> Dashboard
@@ -352,7 +353,7 @@ export default function MarketingPage() {
       <div className="relative z-10 bg-accent">
         <div className="mx-auto max-w-5xl px-6 py-4 text-center">
           <span className="font-mono text-xs uppercase tracking-[0.16em] text-white">
-            Every scan is a lead · QuoteMate
+            Every scan is a lead · QuoteMax
           </span>
         </div>
       </div>

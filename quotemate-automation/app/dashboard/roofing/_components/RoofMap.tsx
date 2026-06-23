@@ -33,13 +33,13 @@ import {
 } from '@/lib/roofing/map-utils'
 
 // ── Edge / fill colours (Maintain palette) ──────────────────────────
-const FILL_COLOUR = '#FF5A1F' // accent
+const FILL_COLOUR = '#FFC400' // accent
 const FILL_OPACITY = 0.18
-const OUTLINE_COLOUR = '#FF5A1F'
+const OUTLINE_COLOUR = '#FFC400'
 const EDGE_COLOURS: Record<EdgeKind, string> = {
   eave: '#FFFFFF',
-  ridge: '#FF7A45',
-  hip: '#FF5A1F',
+  ridge: '#FFD23D',
+  hip: '#FFC400',
   valley: '#14B8A6',
   unknown: '#7A8699',
 }
@@ -53,9 +53,9 @@ const EDGE_SWATCH_CLASS: Record<EdgeKind, string> = {
 }
 
 // Per-building fill/outline colours in MULTI mode.
-const SELECTED_FILL = '#FF5A1F'
+const SELECTED_FILL = '#FFC400'
 const PRIMARY_FILL = '#14B8A6'
-const SECONDARY_FILL = '#FF7A45'
+const SECONDARY_FILL = '#FFD23D'
 const EXCLUDED_FILL = '#7A8699'
 
 const ESRI_TILE_URL =

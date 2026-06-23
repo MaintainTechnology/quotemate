@@ -39,15 +39,15 @@ describe('buildQuoteSms — WP6 price-hold line', () => {
     const body = buildQuoteSms(intake, baseQuote)
     expect(body).not.toMatch(/Price held until/)
     expect(body).not.toMatch(/this price expired/)
-    expect(body).toMatch(/- QuoteMate$/)
+    expect(body).toMatch(/- QuoteMax$/)
   })
 
   it('adds a "Price held until" line for a future hold, before the sign-off', () => {
     const future = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString()
     const body = buildQuoteSms(intake, { ...baseQuote, price_hold_until: future })
     expect(body).toMatch(/Price held until .+ - lock in a tier to secure it\./)
-    expect(body).toMatch(/- QuoteMate$/)
-    expect(body.indexOf('Price held until')).toBeLessThan(body.indexOf('- QuoteMate'))
+    expect(body).toMatch(/- QuoteMax$/)
+    expect(body.indexOf('Price held until')).toBeLessThan(body.indexOf('- QuoteMax'))
   })
 
   it('adds an expiry warning when the hold has passed', () => {
@@ -65,7 +65,7 @@ describe('buildQuoteSms — WP6 price-hold line', () => {
   it('ignores an unparseable price_hold_until (no line, no throw)', () => {
     const body = buildQuoteSms(intake, { ...baseQuote, price_hold_until: 'not-a-date' })
     expect(body).not.toMatch(/Price held until/)
-    expect(body).toMatch(/- QuoteMate$/)
+    expect(body).toMatch(/- QuoteMax$/)
   })
 })
 
@@ -164,7 +164,7 @@ describe('buildQuoteSms — displayMode (Phase A)', () => {
   it('displayMode=summary preserves the SCOPE line + sign-off + GST framing', () => {
     const body = buildQuoteSms(sixDownlights, productQuote, { displayMode: 'summary' })
     expect(body).toMatch(/SCOPE:/)
-    expect(body).toMatch(/- QuoteMate$/)
+    expect(body).toMatch(/- QuoteMax$/)
     expect(body).toMatch(/inc 10% GST/)
   })
 

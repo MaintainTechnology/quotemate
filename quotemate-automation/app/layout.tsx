@@ -16,7 +16,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "QuoteMate: AI receptionist for Australian tradies",
+  title: "QuoteMax: We will do the quoting for you. You will never quote again",
   description:
     "Customer texts. AI drafts your Good / Better / Best quote. You review, tweak, send. Built for AU sparkies and plumbers who'd rather be on the tools.",
 };

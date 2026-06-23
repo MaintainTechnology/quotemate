@@ -190,7 +190,7 @@ alter table tenants add column if not exists file_store_id text unique;
 create table if not exists tenant_file_documents (
   id            uuid primary key default gen_random_uuid(),
   tenant_id     uuid not null references tenants(id) on delete cascade,
-  source_kind   text not null check (source_kind in ('quote','invoice')),
+  source_kind   text not null check (source_kind in ('quote','invoice','historical_quote')),
   source_id     text not null,
   trade         text,
   display_name  text not null,
@@ -210,6 +210,122 @@ create table if not exists tenant_file_documents (
 create index if not exists tenant_file_documents_tenant_idx on tenant_file_documents (tenant_id);
 create index if not exists tenant_file_documents_state_idx  on tenant_file_documents (state);
 alter table tenant_file_documents enable row level security;
+
+-- Files tab commenting (migration 136). A flat, two-party (tenant ↔ QuoteMate
+-- staff) comment thread per archived document, plus a per-document resolved
+-- state on tenant_file_documents. RLS posture matches the documents table.
+alter table tenant_file_documents add column if not exists comments_resolved_at timestamptz;
+alter table tenant_file_documents add column if not exists comments_resolved_by text;
+
+create table if not exists tenant_file_comments (
+  id               uuid primary key default gen_random_uuid(),
+  file_document_id uuid not null references tenant_file_documents(id) on delete cascade,
+  tenant_id        uuid not null references tenants(id) on delete cascade,
+  author_role      text not null check (author_role in ('tenant','admin')),
+  author_user_id   uuid not null,
+  body             text not null,
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz,
+  deleted_at       timestamptz
+);
+create index if not exists tenant_file_comments_doc_idx    on tenant_file_comments (file_document_id);
+create index if not exists tenant_file_comments_tenant_idx on tenant_file_comments (tenant_id);
+alter table tenant_file_comments enable row level security;
+
+-- ───────────────────────────────────────────────────────────────────
+-- tenant_historical_import_batches + tenant_historical_quotes
+-- (migration 137). A tradie imports their existing quote history (CSV
+-- exports + PDF quote docs); the system categorises it against the
+-- canonical job_type taxonomy and surfaces pricing analytics / hints /
+-- pricing-book calibration. Both tables tenant-scoped, RLS on, no client
+-- policy (service role bypasses; tenancy enforced app-layer).
+-- ───────────────────────────────────────────────────────────────────
+create table if not exists tenant_historical_import_batches (
+  id             uuid primary key default gen_random_uuid(),
+  tenant_id      uuid not null references tenants(id) on delete cascade,
+  source_kind    text not null check (source_kind in ('csv','pdf')),
+  filename       text,
+  status         text not null default 'parsing'
+                   check (status in ('parsing','categorizing','awaiting_review','committed','failed')),
+  column_mapping jsonb not null default '{}'::jsonb,
+  row_count      int not null default 0,
+  error          text,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz
+);
+create index if not exists tenant_historical_import_batches_tenant_idx
+  on tenant_historical_import_batches (tenant_id);
+alter table tenant_historical_import_batches enable row level security;
+
+create table if not exists tenant_historical_quotes (
+  id                  uuid primary key default gen_random_uuid(),
+  tenant_id           uuid not null references tenants(id) on delete cascade,
+  batch_id            uuid references tenant_historical_import_batches(id) on delete cascade,
+  source_kind         text not null check (source_kind in ('csv','pdf')),
+  trade               text,
+  job_type            text,
+  job_type_confidence text check (job_type_confidence in ('high','medium','low')),
+  raw_description     text,
+  quoted_at           date,
+  price_ex_gst        numeric(12,2),
+  price_inc_gst       numeric(12,2),
+  gst_basis           text not null default 'unknown' check (gst_basis in ('inc','ex','unknown')),
+  currency            text not null default 'AUD',
+  status              text not null default 'pending_review'
+                        check (status in ('pending_review','confirmed','rejected')),
+  file_document_id    uuid references tenant_file_documents(id) on delete set null,
+  content_hash        text,
+  raw_row             jsonb,
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz
+);
+create index if not exists tenant_historical_quotes_tenant_idx   on tenant_historical_quotes (tenant_id);
+create index if not exists tenant_historical_quotes_job_type_idx on tenant_historical_quotes (tenant_id, job_type);
+create index if not exists tenant_historical_quotes_status_idx   on tenant_historical_quotes (tenant_id, status);
+create unique index if not exists tenant_historical_quotes_dedup_idx
+  on tenant_historical_quotes (tenant_id, content_hash);
+alter table tenant_historical_quotes enable row level security;
+
+-- ───────────────────────────────────────────────────────────────────
+-- admin_audit_log — append-only trail for the admin customer console
+-- (migration 135). Self-contained: no hard FKs (mirrors admin_users /
+-- import_batches, which live only in migrations). The tenants/admin
+-- tables are migration-only; this block keeps init.sql representative of
+-- the audit table itself. Written only via service-role from admin routes.
+-- ───────────────────────────────────────────────────────────────────
+create table if not exists admin_audit_log (
+  id uuid primary key default gen_random_uuid(),
+  admin_user_id uuid not null,
+  tenant_id uuid not null,
+  action text not null check (action in (
+    'suspend', 'reactivate', 'set_billing_exempt',
+    'update_trades', 'change_plan', 'start_subscription'
+  )),
+  before jsonb not null default '{}'::jsonb,
+  after  jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists admin_audit_log_tenant_idx
+  on admin_audit_log (tenant_id, created_at desc);
+alter table admin_audit_log enable row level security;
+
+-- ───────────────────────────────────────────────────────────────────
+-- tenant_feature_sources (migration 138) — provenance for per-tenant
+-- feature toggles. tenants.trades[] is the runtime gate; this records WHY a
+-- slug is on (manual/plan/onboarding) so the plan-tier seeding layer strips
+-- only its own 'plan' grants on a downgrade. Written via service-role from the
+-- admin console, onboarding, and the Stripe webhook.
+-- ───────────────────────────────────────────────────────────────────
+create table if not exists tenant_feature_sources (
+  tenant_id  uuid not null references tenants(id) on delete cascade,
+  feature    text not null,
+  source     text not null check (source in ('manual', 'plan', 'onboarding')),
+  updated_by uuid,
+  updated_at timestamptz not null default now(),
+  primary key (tenant_id, feature)
+);
+create index if not exists tenant_feature_sources_tenant_idx
+  on tenant_feature_sources (tenant_id);
 
 -- ═══════════════════════════════════════════════════════════════════
 -- RESET BLOCK — uncomment and run only if you want to wipe everything

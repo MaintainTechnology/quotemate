@@ -40,6 +40,13 @@ function provLabel(p: RuleProvenance | undefined): string | null {
   }
 }
 
+/** A rule is "unscored" when no verdict was returned for it — its shot wasn't
+ *  photographed, or the vision call returned nothing. Both backstop variants
+ *  start with "No verdict returned". These are pure noise on the report. */
+function isUnscored(v: RuleVerdict): boolean {
+  return v.status === 'cannot_determine' && v.evidence.trim().startsWith('No verdict returned')
+}
+
 export type ReportGroup = {
   group: string
   items: ReportItem[]
@@ -92,17 +99,22 @@ export function composeReport(
 
   for (const rule of rules) {
     const v = verdictByKey.get(rule.rule_key)
-    const state: ReportItemState = v ? stateOf(v) : 'review'
+    // Omit rules that weren't actually assessed (no photo for their shot, or
+    // the model returned no verdict) — otherwise the report is a wall of
+    // "No verdict returned — routed to HQ review." rows. HQ still sees them in
+    // the raw assessment; this only trims the franchisee + instant-audit report.
+    if (!v || isUnscored(v)) continue
+    const state: ReportItemState = stateOf(v)
     if (state === 'compliant') compliant += 1
     else if (state === 'fix') fix += 1
     else review += 1
 
     const detail =
       state === 'compliant'
-        ? v?.evidence?.trim() || 'Looks right in your photo.'
+        ? v.evidence.trim() || 'Looks right in your photo.'
         : state === 'fix'
-          ? `${v?.evidence?.trim() || 'Does not meet the standard.'} — ${rule.rule_text}`
-          : v?.evidence?.trim() || 'Needs an HQ reviewer to confirm.'
+          ? `${v.evidence.trim() || 'Does not meet the standard.'} — ${rule.rule_text}`
+          : v.evidence.trim() || 'Needs an HQ reviewer to confirm.'
 
     const prov = provByKey.get(rule.rule_key)
     const item: ReportItem = {

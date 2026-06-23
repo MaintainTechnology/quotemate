@@ -50,7 +50,7 @@ const REASON_BY_CODE: Record<string, string> = {
 export async function sendSms(opts: {
   to: string                 // E.164, e.g. "+61412345678"
   text: string
-  from?: string              // sender ID; defaults to env SEVEN_FROM or "QuoteMate"
+  from?: string              // sender ID; defaults to env SEVEN_FROM or "QuoteMax"
   foreignId?: string         // your tracking id; ≤64 chars [a-zA-Z0-9.\-_@]
   label?: string             // bucket for stats; ≤100 chars [a-zA-Z0-9.\-_@]
 }): Promise<SevenSendResult> {
@@ -62,7 +62,7 @@ export async function sendSms(opts: {
   const body = new URLSearchParams()
   body.set('to', opts.to)
   body.set('text', opts.text)
-  body.set('from', opts.from ?? process.env.SEVEN_FROM ?? 'QuoteMate')
+  body.set('from', opts.from ?? process.env.SEVEN_FROM ?? 'QuoteMax')
   if (opts.foreignId) body.set('foreign_id', opts.foreignId)
   if (opts.label) body.set('label', opts.label)
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QuoteMate — Automation Build Guide (Stages 01 → 05)</title>
+  <title>QuoteMax — Automation Build Guide (Stages 01 → 05)</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -553,7 +553,7 @@
     <div class="container-wide nav-inner">
       <a href="#" class="brand">
         <span class="brand-mark">Q</span>
-        QuoteMate
+        QuoteMax
       </a>
       <div class="nav-meta">
         Automation Build Guide · <strong>Stages 01 → 05</strong>
@@ -567,7 +567,7 @@
       <span class="hero-eyebrow">Beginner Guide · Voice Automation Pipeline</span>
       <h1>From the moment a customer dials, to a fully <em>drafted quote</em>.</h1>
       <p class="hero-lede">
-        A step-by-step walkthrough for building the <strong>QuoteMate automation pipeline</strong> — the part that picks up an inbound phone call, has an AI conversation with the caller, structures what was said, and produces a real quote. Stages <strong>01 through 05</strong> of the wireframe, in plain English.
+        A step-by-step walkthrough for building the <strong>QuoteMax automation pipeline</strong> — the part that picks up an inbound phone call, has an AI conversation with the caller, structures what was said, and produces a real quote. Stages <strong>01 through 05</strong> of the wireframe, in plain English.
       </p>
       <div class="hero-meta">
         <div class="hero-meta-item">
@@ -593,7 +593,7 @@
       <div class="callout warn" style="margin-bottom: 2rem;">
         <div class="callout-label">v3+ scope · Read before building</div>
         <p>
-          <strong>This guide describes the voice-first pipeline.</strong> Per <a href="strategy.md">docs/strategy.md</a> and <a href="../CLAUDE.md">CLAUDE.md</a>, the QuoteMate <strong>v1 wedge is portal-first</strong> (typed intake on a webpage) — voice is deferred to the v3+ premium tier on COGS grounds (~$0.50–0.75 per call vs ~$0.07 for typed). The good news: <strong>Stages 04 (Intake Engine) and 05 (Estimation Engine) are stack-identical for portal and voice</strong> — the only thing that changes is Stage 03. Build the engines first; plug Vapi in front later when voice unit economics make sense.
+          <strong>This guide describes the voice-first pipeline.</strong> Per <a href="strategy.md">docs/strategy.md</a> and <a href="../CLAUDE.md">CLAUDE.md</a>, the QuoteMax <strong>v1 wedge is portal-first</strong> (typed intake on a webpage) — voice is deferred to the v3+ premium tier on COGS grounds (~$0.50–0.75 per call vs ~$0.07 for typed). The good news: <strong>Stages 04 (Intake Engine) and 05 (Estimation Engine) are stack-identical for portal and voice</strong> — the only thing that changes is Stage 03. Build the engines first; plug Vapi in front later when voice unit economics make sense.
         </p>
         <p style="margin-top: 0.6rem;">
           <strong>If you're building v1 right now,</strong> follow Foundation 1 + 2 + Stages 04 and 05 in this guide, but skip Stage 02 (Twilio) and Stage 03 (Vapi). Replace them with a typed-intake form that POSTs to <code>/api/intake/structure</code> directly. See the <a href="architecture.html">architecture diagram</a> for the portal-vs-voice path comparison.
@@ -602,7 +602,7 @@
 
       <h2>What we're building, in one paragraph.</h2>
       <p>
-        A homeowner picks up the phone and calls a tradie's QuoteMate-provisioned number. <strong>An AI receptionist answers.</strong> It has a natural conversation: "What kind of job?" → "Where?" → "When?" → asks for photos via SMS if helpful. The conversation ends. A second AI <strong>structures everything that was said</strong> into clean fields — measurements, scope, risks, confidence score. A third AI <strong>looks up assemblies and prices</strong> and writes a draft quote with line items and exclusions.
+        A homeowner picks up the phone and calls a tradie's QuoteMax-provisioned number. <strong>An AI receptionist answers.</strong> It has a natural conversation: "What kind of job?" → "Where?" → "When?" → asks for photos via SMS if helpful. The conversation ends. A second AI <strong>structures everything that was said</strong> into clean fields — measurements, scope, risks, confidence score. A third AI <strong>looks up assemblies and prices</strong> and writes a draft quote with line items and exclusions.
       </p>
       <p>
         That's the pipeline. The tradie doesn't even need to be near their phone for any of this to happen.
@@ -2561,7 +2561,7 @@ CONSISTENCY CHECK BEFORE EMITTING
 
   <footer class="foot">
     <div class="container">
-      QuoteMate · Automation Build Guide · Wireframe stages 01 → 05
+      QuoteMax · Automation Build Guide · Wireframe stages 01 → 05
     </div>
   </footer>
 

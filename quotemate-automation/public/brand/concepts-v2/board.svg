@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1200" height="560" viewBox="0 0 1200 560" role="img" aria-label="QuoteMax logo directions">
+  <title>QuoteMax logo directions</title>
+  <defs>
+    <!-- 1. Ascent: Q ring + rising up-right arrow (keeps the letter, signals MAX/growth) -->
+    <g id="ascent">
+      <rect width="64" height="64" fill="#FF5A1F"/>
+      <circle cx="26" cy="35" r="13" fill="none" stroke="#FFFFFF" stroke-width="8"/>
+      <path d="M31 40 L45 24" fill="none" stroke="#FFFFFF" stroke-width="8" stroke-linecap="butt"/>
+      <path d="M53 16 L50 29 L40 19 Z" fill="#FFFFFF"/>
+    </g>
+    <!-- 2. Reply: Q built as a speech bubble (the AI receptionist that quotes by text) -->
+    <g id="reply">
+      <rect width="64" height="64" fill="#FF5A1F"/>
+      <circle cx="31" cy="28" r="17" fill="#FFFFFF"/>
+      <circle cx="31" cy="28" r="7.5" fill="#FF5A1F"/>
+      <path d="M21 39 L37 39 L21 52 Z" fill="#FFFFFF"/>
+    </g>
+    <!-- 3. Peak: ascending bars topped by an arrow (max, growth, the voice waveform) -->
+    <g id="peak">
+      <rect width="64" height="64" fill="#FF5A1F"/>
+      <rect x="12" y="38" width="9" height="14" fill="#FFFFFF"/>
+      <rect x="26" y="30" width="9" height="22" fill="#FFFFFF"/>
+      <rect x="40" y="24" width="9" height="28" fill="#FFFFFF"/>
+      <path d="M37 24 L52 24 L44.5 12 Z" fill="#FFFFFF"/>
+    </g>
+  </defs>
+
+  <rect width="1200" height="560" fill="#0E1622"/>
+  <rect x="0" y="0" width="1200" height="8" fill="#FF5A1F"/>
+  <text x="600" y="58" text-anchor="middle" font-family="'Segoe UI', Arial, sans-serif" font-size="34" font-weight="800" letter-spacing="-0.5" fill="#F4F1EB">QuoteMax &#183; three stronger logo directions</text>
+
+  <!-- Recommended pill over column 1 -->
+  <rect x="527" y="80" width="146" height="28" rx="14" fill="#FF5A1F"/>
+  <text x="600" y="99" text-anchor="middle" font-family="'Segoe UI', Arial, sans-serif" font-size="15" font-weight="700" letter-spacing="0.5" fill="#FFFFFF">RECOMMENDED</text>
+
+  <!-- Tiles -->
+  <use xlink:href="#ascent" transform="translate(145,124) scale(2.969)"/>
+  <use xlink:href="#reply"  transform="translate(505,124) scale(2.969)"/>
+  <use xlink:href="#peak"   transform="translate(865,124) scale(2.969)"/>
+
+  <!-- Names -->
+  <text x="240" y="360" text-anchor="middle" font-family="'Segoe UI', Arial, sans-serif" font-size="30" font-weight="800" fill="#F4F1EB">Ascent</text>
+  <text x="600" y="360" text-anchor="middle" font-family="'Segoe UI', Arial, sans-serif" font-size="30" font-weight="800" fill="#F4F1EB">Reply</text>
+  <text x="960" y="360" text-anchor="middle" font-family="'Segoe UI', Arial, sans-serif" font-size="30" font-weight="800" fill="#F4F1EB">Peak</text>
+
+  <!-- One-line ideas -->
+  <text x="240" y="392" text-anchor="middle" font-family="'Segoe UI', Arial, sans-serif" font-size="18" font-weight="500" fill="#9FB0C3">Q + rising arrow = more revenue</text>
+  <text x="600" y="392" text-anchor="middle" font-family="'Segoe UI', Arial, sans-serif" font-size="18" font-weight="500" fill="#9FB0C3">Q as a chat bubble = quote by text</text>
+  <text x="960" y="392" text-anchor="middle" font-family="'Segoe UI', Arial, sans-serif" font-size="18" font-weight="500" fill="#9FB0C3">Ascending bars = maxed-out growth</text>
+
+  <!-- Divider -->
+  <rect x="80" y="432" width="1040" height="1.5" fill="#2D3A4F"/>
+
+  <!-- Recommended lockup -->
+  <text x="80" y="470" font-family="'Consolas','Courier New',monospace" font-size="14" font-weight="600" letter-spacing="3" fill="#5E7186">RECOMMENDED LOCKUP</text>
+  <use xlink:href="#reply" transform="translate(430,486) scale(0.875)"/>
+  <text x="500" y="532" font-family="'Segoe UI', Arial, sans-serif" font-size="52" font-weight="800" letter-spacing="-2"><tspan fill="#F4F1EB">QUOTE</tspan><tspan fill="#FF5A1F">MAX</tspan></text>
+</svg>

@@ -65,7 +65,7 @@ export default async function ApprovePage(props: {
       <header className="border-b border-ink-line bg-ink-deep/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4 sm:px-6">
           <Link href="/" className="font-extrabold uppercase tracking-tight text-accent">
-            QuoteMate
+            QuoteMax
           </Link>
           <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-text-dim">
             Review &amp; send
@@ -149,7 +149,7 @@ export default async function ApprovePage(props: {
         <div className="mt-12 text-center font-mono text-[0.6rem] uppercase tracking-[0.2em] text-text-dim">
           Powered by{' '}
           <Link href="/" className="text-text-sec hover:text-accent transition-colors">
-            QuoteMate
+            QuoteMax
           </Link>{' '}
           · Built in Australia
         </div>

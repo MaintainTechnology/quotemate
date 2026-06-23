@@ -7,27 +7,28 @@
    ════════════════════════════════════════════════════════════════════ */
 
 :root {
-  /* ─── INK / SURFACE (dark canvas — 2026 deep slate-navy) ────
-     A deep, slate-tinted navy scale. Kept dark so the canvas reads
-     rich; cards and borders still lift clearly above the base. */
-  --ink-deep:     #0E1622;   /* page background — primary canvas */
-  --ink:          #141C29;   /* secondary surface */
-  --ink-card:     #1B2433;   /* card / panel */
-  --ink-line:     #2D3A4F;   /* subtle border on dark */
+  /* ─── INK / SURFACE (dark canvas — warm Caterpillar charcoal) ────
+     A warm near-black charcoal scale. Cards lift to the #2B2422 palette
+     charcoal; borders stay warm so the canvas reads premium, not flat. */
+  --ink-deep:     #16120F;   /* page background — primary canvas */
+  --ink:          #1E1813;   /* secondary surface */
+  --ink-card:     #2B2422;   /* card / panel — palette charcoal */
+  --ink-line:     #3A322C;   /* subtle border on dark */
 
-  /* ─── ACCENT (the Maintain orange) ──────────────────────── */
-  --accent:       #FF5A1F;
-  --accent-press: #E8470F;
-  --accent-soft:  #FF7A45;
+  /* ─── ACCENT (Caterpillar yellow) ───────────────────────── */
+  --accent:       #FFC400;
+  --accent-press: #E6AC00;
+  --accent-soft:  #FFD23D;
+  --accent-ink:   #1C1812;   /* text/icons ON an accent fill — yellow takes dark ink, never white */
 
   /* ─── TEXT ON DARK ──────────────────────────────────────── */
-  --text-pri:     #FFFFFF;
-  --text-sec:     #B8C2D1;
-  --text-dim:     #8793A6;   /* lifted from #7A8699 so dim labels clear 4.5:1 on ink-card too */
+  --text-pri:     #F6F1EA;
+  --text-sec:     #C3B8AC;
+  --text-dim:     #A2968A;   /* keeps dim labels ≥4.5:1 on ink-card */
 
-  /* ─── TEAL GLOW (topographic edge) ──────────────────────── */
-  --teal-glow:    #14B8A6;
-  --teal-deep:    #0F766E;
+  /* ─── WARM EDGE GLOW (topographic edge; was teal) ───────── */
+  --teal-glow:    #6E6354;
+  --teal-deep:    #4A4136;
 
   /* ─── STATE COLOURS ─────────────────────────────────────── */
   --success:      #15803D;
@@ -37,11 +38,11 @@
 
   /* ─── THEME-AWARE EFFECT TOKENS (these flip in light mode) ── */
   color-scheme: dark;
-  --glow-cool:     rgba(36, 49, 74, 0.85);   /* hero canvas cool glow */
-  --glow-warm:     rgba(255, 90, 31, 0.07);  /* hero canvas warm ember */
+  --glow-cool:     rgba(43, 36, 34, 0.85);   /* hero canvas warm charcoal glow */
+  --glow-warm:     rgba(255, 196, 0, 0.07);  /* hero canvas yellow ember */
   --lift:          inset 0 1px 0 0 rgba(255, 255, 255, 0.06); /* lit panel edge */
   --noise-opacity: 0.045;                     /* film-grain strength */
-  --canvas-radial: #233048;                   /* dashboard app-canvas glow */
+  --canvas-radial: #2B2422;                   /* dashboard app-canvas glow */
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -54,46 +55,48 @@
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) {
     color-scheme: light;
-    --ink-deep: #F2EEE6;
-    --ink: #F8F4EC;
-    --ink-card: #FBF8F2;
-    --ink-line: #E4DCCE;
-    --accent: #B23A0B;
-    --accent-press: #8F2E08;
-    --accent-soft: #C2410C;
-    --text-pri: #1A2230;
-    --text-sec: #4C5562;
-    --text-dim: #5F6775;
-    --teal-glow: #0F766E;
-    --teal-deep: #0B5C55;
+    --ink-deep: #FAF8F4;
+    --ink: #FFFFFF;
+    --ink-card: #FFFFFF;
+    --ink-line: #E9E3DC;
+    --accent: #FFC400;
+    --accent-press: #E6AC00;
+    --accent-soft: #FFD23D;
+    --accent-ink: #2B2422;
+    --text-pri: #241E1B;
+    --text-sec: #5E544E;
+    --text-dim: #837870;
+    --teal-glow: #8A7D6A;
+    --teal-deep: #6E6354;
     --warning-bright: #B45309;
-    --glow-cool: rgba(255, 250, 242, 0.9);
-    --glow-warm: rgba(178, 58, 11, 0.05);
-    --lift: 0 1px 2px rgba(26, 32, 46, 0.06), 0 1px 1px rgba(26, 32, 46, 0.04);
+    --glow-cool: rgba(255, 253, 250, 0.9);
+    --glow-warm: rgba(255, 196, 0, 0.05);
+    --lift: 0 1px 2px rgba(43, 36, 34, 0.06), 0 1px 1px rgba(43, 36, 34, 0.04);
     --noise-opacity: 0.03;
-    --canvas-radial: rgba(255, 247, 236, 0.85);
+    --canvas-radial: rgba(255, 248, 235, 0.85);
   }
 }
 :root[data-theme="light"] {
   color-scheme: light;
-  --ink-deep: #F2EEE6;
-  --ink: #F8F4EC;
-  --ink-card: #FBF8F2;
-  --ink-line: #E4DCCE;
-  --accent: #B23A0B;
-  --accent-press: #8F2E08;
-  --accent-soft: #C2410C;
-  --text-pri: #1A2230;
-  --text-sec: #4C5562;
-  --text-dim: #5F6775;
-  --teal-glow: #0F766E;
-  --teal-deep: #0B5C55;
+  --ink-deep: #FAF8F4;
+  --ink: #FFFFFF;
+  --ink-card: #FFFFFF;
+  --ink-line: #E9E3DC;
+  --accent: #FFC400;
+  --accent-press: #E6AC00;
+  --accent-soft: #FFD23D;
+  --accent-ink: #2B2422;
+  --text-pri: #241E1B;
+  --text-sec: #5E544E;
+  --text-dim: #837870;
+  --teal-glow: #8A7D6A;
+  --teal-deep: #6E6354;
   --warning-bright: #B45309;
-  --glow-cool: rgba(255, 250, 242, 0.9);
-  --glow-warm: rgba(178, 58, 11, 0.05);
-  --lift: 0 1px 2px rgba(26, 32, 46, 0.06), 0 1px 1px rgba(26, 32, 46, 0.04);
+  --glow-cool: rgba(255, 253, 250, 0.9);
+  --glow-warm: rgba(255, 196, 0, 0.05);
+  --lift: 0 1px 2px rgba(43, 36, 34, 0.06), 0 1px 1px rgba(43, 36, 34, 0.04);
   --noise-opacity: 0.03;
-  --canvas-radial: rgba(255, 247, 236, 0.85);
+  --canvas-radial: rgba(255, 248, 235, 0.85);
 }
 
 @theme inline {
@@ -104,6 +107,7 @@
   --color-accent:       var(--accent);
   --color-accent-press: var(--accent-press);
   --color-accent-soft:  var(--accent-soft);
+  --color-accent-ink:   var(--accent-ink);
   --color-text-pri:     var(--text-pri);
   --color-text-sec:     var(--text-sec);
   --color-text-dim:     var(--text-dim);
@@ -352,4 +356,21 @@ html {
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   Accent foreground contrast (Caterpillar yellow).
+   The accent is a bright yellow FILL, so text/icons on it must be charcoal
+   — never white (white-on-yellow fails WCAG ~1.4:1). And yellow as an
+   on-surface TEXT colour is unreadable on light surfaces, so in light mode
+   accent text resolves to charcoal; yellow stays for fills, buttons and
+   highlighter blocks. These rules recolour the whole app at the token
+   layer with no per-component edits.
+   ─ .bg-accent.text-white wins over .text-white on specificity (2 vs 1).
+   ════════════════════════════════════════════════════════════════════ */
+.bg-accent { color: var(--accent-ink); }
+.bg-accent.text-white { color: var(--accent-ink); }
+:root[data-theme="light"] .text-accent { color: var(--accent-ink); }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .text-accent { color: var(--accent-ink); }
 }

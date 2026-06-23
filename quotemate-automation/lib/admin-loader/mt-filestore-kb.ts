@@ -2,11 +2,11 @@
 //
 // Thin wrapper over the Railway-hosted mt-filestore-kb service
 // (https://mt-filestore-kb-production.up.railway.app, source at
-// C:/Users/dalig/Downloads/QuoteMate/mt-filestore-kb). All requests
+// C:/Users/dalig/Downloads/QuoteMax/mt-filestore-kb). All requests
 // authenticate with the x-api-key header (KB_API_KEY env var). The
 // fetch implementation is injected so tests can mock the network.
 //
-// Only the endpoints QuoteMate's trade-book extraction needs are
+// Only the endpoints QuoteMax's trade-book extraction needs are
 // exposed here:
 //   • listStores  — GET  /v1/stores         (sanity / config check)
 //   • listDocs    — GET  /v1/stores/:id/documents
@@ -292,7 +292,7 @@ export async function kbCreateStore(
 // kbUploadDocument — POST /v1/stores/:storeId/upload (multipart)
 //
 // Streams a PDF up to mt-filestore-kb so the admin doesn't need to leave
-// QuoteMate. The service performs the Gemini File Search upload + chunk
+// QuoteMax. The service performs the Gemini File Search upload + chunk
 // + embed + index pipeline; the indexed document is returned with its
 // state ('processing' | 'active' | 'failed'). Document indexing can take
 // 10-60s for a real trade book — callers should poll kbListDocuments

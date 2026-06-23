@@ -11,6 +11,7 @@ import { pipelineLog } from '@/lib/log/pipeline'
 import { bookingStateOnPaid, shouldFinaliseBookingOnPaid } from '@/lib/quote/booking'
 import { notifyBookingConfirmed } from '@/lib/quote/booking-notify'
 import { advanceQuoteStatus } from '@/lib/quote/lifecycle'
+import { applyPlanFeatures } from '@/lib/features/access'
 import type Stripe from 'stripe'
 
 export const maxDuration = 300
@@ -42,7 +43,7 @@ export async function POST(req: Request) {
 
   log.ok('event verified', { type: event.type, id: event.id })
 
-  // ── Subscription / billing lifecycle (the tradie pays QuoteMate) ─────
+  // ── Subscription / billing lifecycle (the tradie pays QuoteMax) ─────
   // Kept in this same endpoint (one webhook secret) but handled entirely
   // separately from the quote-deposit path below. The subscription.*
   // events keep tenants.* in sync after the initial Checkout.
@@ -243,18 +244,42 @@ async function applyTenantSubscription(
     return
   }
 
-  const { error } = await q
+  const { data: updatedRows, error } = await q.select('id')
   if (error) {
     log.err('subscription sync update failed', error.message, {
       tenant_id: opts.tenantId,
       customer: opts.customerId,
     })
-  } else {
-    log.ok('subscription synced to tenant', {
-      tenant_id: opts.tenantId,
-      status: patch.subscription_status,
-      plan: patch.subscription_plan,
-    })
+    return
+  }
+  log.ok('subscription synced to tenant', {
+    tenant_id: opts.tenantId,
+    status: patch.subscription_status,
+    plan: patch.subscription_plan,
+  })
+
+  // Apply the plan→features map to trades[] when the plan changes (feature
+  // toggles, migration 138). Best-effort + idempotent: adds the plan's granted
+  // tool slugs and strips only plan-sourced ones on a downgrade — never an
+  // admin-granted or onboarding slug. A failure here must not fail the webhook.
+  const tenantId = opts.tenantId ?? (updatedRows?.[0]?.id as string | undefined) ?? null
+  const plan = patch.subscription_plan as string | undefined
+  if (tenantId && plan) {
+    try {
+      const r = await applyPlanFeatures(supabase, tenantId, plan)
+      if (r.ok && (r.added.length > 0 || r.removed.length > 0)) {
+        log.ok('plan features applied to trades[]', {
+          tenant_id: tenantId,
+          plan,
+          added: r.added,
+          removed: r.removed,
+        })
+      }
+    } catch (e: any) {
+      log.err('plan features apply threw (non-fatal)', e?.message ?? String(e), {
+        tenant_id: tenantId,
+      })
+    }
   }
 }
 

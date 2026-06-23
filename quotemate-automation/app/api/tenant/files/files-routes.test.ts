@@ -8,11 +8,23 @@ let getUserImpl = vi.fn()
 let tenantsRow: { id: string } | null = { id: 'tenant-A' }
 let fileDocRow: Record<string, unknown> | null = null
 let fileDocList: Array<Record<string, unknown>> = []
+let commentRows: Array<Record<string, unknown>> = []
 let lastSelectCols = ''
 
 function buildFrom(table: string) {
   if (table === 'tenants') {
     return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: tenantsRow, error: null }) }) }) }
+  }
+  if (table === 'tenant_file_comments') {
+    // comment-count decoration query: .select('file_document_id').eq().is() then awaited.
+    // Kept on its own chain so it never pollutes the documents-projection capture.
+    const c: Record<string, unknown> = {
+      select: () => c,
+      eq: () => c,
+      is: () => c,
+      then: (resolve: (v: unknown) => unknown) => resolve({ data: commentRows, error: null }),
+    }
+    return c
   }
   // tenant_file_documents — supports both download (.eq(id).maybeSingle())
   // and list (.eq(tenant_id).order() then awaited).
@@ -59,6 +71,7 @@ beforeEach(() => {
   tenantsRow = { id: 'tenant-A' }
   fileDocRow = null
   fileDocList = []
+  commentRows = []
   lastSelectCols = ''
 })
 

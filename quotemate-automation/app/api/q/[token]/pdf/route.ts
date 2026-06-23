@@ -4,8 +4,10 @@
 // quotes sent before the PDF feature, or a Gotenberg blip at send time)
 // and streams from the private quote-pdfs bucket so the link is stable.
 
+import { after } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { ensureQuotePdf, downloadQuotePdf } from '@/lib/quote/pdf'
+import { archiveQuoteOnDownload } from '@/lib/filestore/archive-on-download'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -21,7 +23,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
 
   const { data: quote } = await supabase
     .from('quotes')
-    .select('id, pdf_path, needs_inspection')
+    .select('id, intake_id, pdf_path, needs_inspection')
     .eq('share_token', token)
     .maybeSingle()
 
@@ -50,6 +52,28 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     console.error('[q/pdf] storage download failed', e instanceof Error ? e.message : e)
     return Response.json({ ok: false, error: 'PDF unavailable' }, { status: 500 })
   }
+
+  // Land this document in the tradie's Files tab (best-effort, post-response).
+  // The quote's trade lives on its intake (electrical | plumbing); default to
+  // electrical when unavailable. archiveQuoteOnDownload no-ops when the flag is
+  // off or the quote is orphaned, so this never affects the download.
+  after(async () => {
+    if (process.env.TENANT_FILESTORE_ENABLED !== 'true') return
+    let trade = 'electrical'
+    try {
+      if (quote.intake_id) {
+        const { data: intake } = await supabase
+          .from('intakes')
+          .select('trade')
+          .eq('id', quote.intake_id as string)
+          .maybeSingle()
+        if (intake?.trade) trade = String(intake.trade)
+      }
+    } catch {
+      /* fall back to electrical */
+    }
+    await archiveQuoteOnDownload({ sourceKind: 'quote', sourceId: quote.id as string, trade })
+  })
 
   return new Response(new Uint8Array(pdf), {
     status: 200,

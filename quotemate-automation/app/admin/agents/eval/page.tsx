@@ -149,7 +149,7 @@ export default function EvalAgentPage() {
     <main className="mx-auto min-h-screen max-w-6xl bg-ink-deep px-5 pb-24 pt-12 text-text-pri sm:px-8">
       <div className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-text-dim">
         <Link href="/admin/agents" className="hover:text-accent transition-colors">
-          QuoteMate &rarr; Admin &rarr; Quality Agents
+          QuoteMax &rarr; Admin &rarr; Quality Agents
         </Link>{' '}
         &rarr; Eval
       </div>
@@ -167,7 +167,7 @@ export default function EvalAgentPage() {
         </button>
       </div>
       <p className="mt-3 max-w-2xl text-sm leading-relaxed text-text-sec">
-        Each run scores the live QuoteMate estimator against a hold-out
+        Each run scores the live QuoteMax estimator against a hold-out
         fixture set. Drill into a run for per-fixture dimension scores.
       </p>
 

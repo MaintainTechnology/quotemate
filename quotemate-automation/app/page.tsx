@@ -1,4 +1,4 @@
-// QuoteMate home — Maintain design system, premium "command-centre"
+// QuoteMax home — Maintain design system, premium "command-centre"
 // reinvention. Deep navy canvas, orange accent, all-caps display, square
 // corners, borders over shadows. Depth comes from a restrained twin glow
 // + film grain + lit panel edges (see globals.css), never from drop
@@ -31,11 +31,11 @@ const POP =
   "motion-safe:animate-[pop-in_420ms_cubic-bezier(0.22,1,0.36,1)_both]"
 
 export const metadata = {
-  title: "QuoteMate: AI receptionist for Australian tradies",
+  title: "QuoteMax: We will do the quoting for you. You will never quote again",
   description:
     "Customer texts. AI drafts a Good / Better / Best quote in under a minute. You review, tweak, send. Built for AU sparkies and plumbers who'd rather be on the tools.",
   openGraph: {
-    title: "QuoteMate: AI receptionist for Australian tradies",
+    title: "QuoteMax: We will do the quoting for you. You will never quote again",
     description:
       "Customer texts your number. AI asks the right questions, applies your pricing book, and drafts a Good / Better / Best quote in under a minute.",
     type: "website",
@@ -78,7 +78,7 @@ function Hero() {
       <div className="relative z-10 mx-auto grid max-w-[88rem] items-center gap-12 px-6 py-20 md:py-28 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16">
         <div>
           <div className={RISE}>
-            <Eyebrow>AI receptionist for Australian tradies</Eyebrow>
+            <Eyebrow>QuoteMax: We will do the quoting for you. You will never quote again</Eyebrow>
           </div>
           <h1
             className={`mt-6 font-extrabold uppercase leading-[0.95] tracking-[-0.04em] text-[clamp(2.6rem,6.5vw,5.5rem)] [overflow-wrap:anywhere] ${RISE}`}
@@ -92,7 +92,7 @@ function Hero() {
             className={`mt-7 max-w-xl text-lg leading-relaxed text-text-sec ${RISE}`}
             style={{ animationDelay: "240ms" }}
           >
-            Customers text your QuoteMate number. The AI asks the right
+            Customers text your QuoteMax number. The AI asks the right
             questions, applies your pricing book, and drafts a clean Good /
             Better / Best quote in under a minute. You review, tweak, send.
           </p>
@@ -310,7 +310,7 @@ function Shift() {
             </span>
             <span aria-hidden="true" />
             <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-accent">
-              With QuoteMate
+              With QuoteMax
             </span>
           </div>
           {rows.map((r, i) => (
@@ -327,7 +327,7 @@ function Shift() {
                   →
                 </span>
                 <p className="text-base font-medium leading-snug text-text-pri md:text-lg">
-                  <span className="sr-only">With QuoteMate: </span>
+                  <span className="sr-only">With QuoteMax: </span>
                   {r.now}
                 </p>
               </div>
@@ -467,7 +467,7 @@ function ClosingCta() {
             voice. Setup takes about three minutes.
           </p>
           <div className="mt-10 flex flex-wrap gap-3">
-            <PrimaryCTA href="/signup">Get my QuoteMate</PrimaryCTA>
+            <PrimaryCTA href="/signup">Get my QuoteMax</PrimaryCTA>
             <SecondaryCTA href="#how">See how it works</SecondaryCTA>
           </div>
         </Reveal>
@@ -556,7 +556,7 @@ function Bubble({
       >
         {!inbound && (
           <span className="mb-1 block font-mono text-[0.55rem] font-semibold uppercase tracking-[0.16em] text-accent">
-            QuoteMate AI
+            QuoteMax AI
           </span>
         )}
         {children}
@@ -576,7 +576,7 @@ function TypingBubble({ at }: { at: number }) {
       <div
         className="flex items-center gap-1.5 border border-accent/35 bg-accent/10 px-3.5 py-3"
         role="status"
-        aria-label="QuoteMate is drafting the quote"
+        aria-label="QuoteMax is drafting the quote"
       >
         {[0, 1, 2].map((d) => (
           <span

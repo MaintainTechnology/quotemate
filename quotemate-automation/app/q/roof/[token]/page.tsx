@@ -156,7 +156,7 @@ export default async function RoofingQuotePage({
     <main className="min-h-screen bg-ink-deep text-text-pri">
       <section className="mx-auto max-w-4xl px-6 pt-14 pb-10 sm:px-10">
         <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
-          QuoteMate · Roofing
+          QuoteMax · Roofing
         </div>
         <h1 className="mt-3 font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2rem,5vw,3.5rem)]">
           Your roof <span className="text-accent">{confirmed ? 'quote' : 'measurement'}</span>
@@ -273,7 +273,7 @@ export default async function RoofingQuotePage({
 
       <div className="bg-accent px-6 py-5 text-center text-white">
         <span className="font-mono text-sm font-semibold uppercase tracking-[0.16em]">
-          QuoteMate · Roofing
+          QuoteMax · Roofing
         </span>
       </div>
     </main>

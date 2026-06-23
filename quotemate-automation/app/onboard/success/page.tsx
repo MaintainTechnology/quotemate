@@ -1,6 +1,7 @@
 // /onboard/success — Maintain design. Dramatic phone number reveal.
 
 import Link from 'next/link'
+import { BrandMark } from '@/app/_components/BrandMark'
 import { RetryPanel } from './RetryPanel'
 
 type Props = {
@@ -13,7 +14,7 @@ type Props = {
 }
 
 export const metadata = {
-  title: "You're live · QuoteMate",
+  title: "You're live · QuoteMax",
   description: 'Your AI receptionist is up and ready for customer messages.',
 }
 
@@ -31,11 +32,9 @@ export default async function OnboardSuccess({ searchParams }: Props) {
       <nav className="border-b border-ink-line">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
           <Link href="/" className="flex items-center gap-2.5">
-            <span className="grid h-7 w-7 place-items-center bg-accent font-black text-white text-xs">
-              Q
-            </span>
+            <BrandMark className="h-7 w-7" />
             <span className="font-extrabold uppercase tracking-tight text-text-pri">
-              QuoteMate
+              QuoteMax
             </span>
           </Link>
           <span className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent">
@@ -58,7 +57,7 @@ export default async function OnboardSuccess({ searchParams }: Props) {
           {/* Big phone number reveal */}
           <div className="mt-14">
             <span className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-text-dim">
-              Your QuoteMate number
+              Your QuoteMax number
             </span>
             {phoneNumber ? (
               <div
@@ -118,7 +117,7 @@ export default async function OnboardSuccess({ searchParams }: Props) {
             items={[
               'Account + pricing book saved',
               'Auto-quote services enabled',
-              'QuoteMate number assigned',
+              'QuoteMax number assigned',
               'AI receptionist linked',
             ]}
             tone="active"
@@ -156,7 +155,7 @@ export default async function OnboardSuccess({ searchParams }: Props) {
       {/* Orange CTA bar */}
       <div className="bg-accent text-white text-center py-4 px-6">
         <span className="font-mono text-xs md:text-sm uppercase tracking-[0.16em] font-semibold">
-          QuoteMate · You&rsquo;re live · Tradies, by tradies
+          QuoteMax · You&rsquo;re live · Tradies, by tradies
         </span>
       </div>
     </main>

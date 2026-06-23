@@ -4,7 +4,10 @@
 //
 // Two halves:
 //   (a) the tradie's archived documents (quotes + uploaded invoices), each
-//       with a download that streams the FULL doc from /api/tenant/files/[id]/download
+//       with a "View" button that previews the doc inline on the site (PDF in
+//       an <iframe>, images in an <img>) and a "Download". Both stream the FULL
+//       doc from /api/tenant/files/[id]/download, fetched as a blob so the
+//       bearer token can be attached; the viewer renders that blob's object URL.
 //   (b) an "Ask your documents" chat box → /api/tenant/files/chat, which
 //       renders the grounded answer plus its citations. Each citation
 //       deep-links to the matching document's download where the cited
@@ -16,8 +19,9 @@
 // kb document id. Downloads are fetched as blobs (not plain <a href>) so the
 // bearer token can be attached.
 
-import { useEffect, useState, type FormEvent } from 'react'
-import { FileText, ReceiptText, Download, Search, Loader2 } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { FileText, ReceiptText, Download, Eye, Search, Loader2, X, MessageSquare } from 'lucide-react'
+import { CommentsThread } from '../../_components/CommentsThread'
 
 type FileDoc = {
   id: string
@@ -27,6 +31,8 @@ type FileDoc = {
   state: 'pending' | 'active' | 'failed' | 'skipped' | string
   created_at: string
   bytes: number | null
+  comment_count?: number
+  resolved?: boolean
 }
 
 type Citation = { title: string | null; snippet: string | null }
@@ -85,11 +91,25 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
   const [error, setError] = useState<string | null>(null)
   const [downloading, setDownloading] = useState<string | null>(null)
 
+  // Inline viewer state — see the viewer effects + modal below.
+  const [viewerDoc, setViewerDoc] = useState<FileDoc | null>(null)
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null)
+  const [viewerType, setViewerType] = useState<string>('')
+  const [viewerState, setViewerState] = useState<'loading' | 'ready' | 'error'>('loading')
+  const viewerUrlRef = useRef<string | null>(null)
+  // Monotonic token: a fetch only applies if it's still the latest request,
+  // so a slow doc that resolves after the user switched docs (or closed) is
+  // dropped instead of clobbering the current view / leaking an object URL.
+  const viewReqRef = useRef(0)
+
   // Chat state
   const [query, setQuery] = useState('')
   const [asking, setAsking] = useState(false)
   const [answer, setAnswer] = useState<ChatAnswer | null>(null)
   const [chatError, setChatError] = useState<string | null>(null)
+
+  // Comments drawer state
+  const [commentsDoc, setCommentsDoc] = useState<FileDoc | null>(null)
 
   useEffect(() => {
     if (!accessToken) return
@@ -117,17 +137,79 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
     }
   }, [accessToken])
 
-  // Stream a full document. We fetch as a blob (rather than navigating to a
-  // plain href) so the bearer token can be sent on the request.
+  // Re-fetch the list (best-effort) so the comment indicators stay current
+  // after the comments drawer closes.
+  const refreshDocs = useCallback(async () => {
+    if (!accessToken) return
+    try {
+      const res = await fetch('/api/tenant/files', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: 'no-store',
+      })
+      if (!res.ok) return
+      const json = (await res.json()) as { documents: FileDoc[] }
+      setDocs(json.documents ?? [])
+    } catch {
+      /* best-effort */
+    }
+  }, [accessToken])
+
+  const closeComments = useCallback(() => {
+    setCommentsDoc(null)
+    void refreshDocs()
+  }, [refreshDocs])
+
+  // Close the inline viewer and revoke its object URL exactly once.
+  const closeViewer = useCallback(() => {
+    viewReqRef.current += 1 // invalidate any in-flight fetch
+    if (viewerUrlRef.current) URL.revokeObjectURL(viewerUrlRef.current)
+    viewerUrlRef.current = null
+    setViewerUrl(null)
+    setViewerType('')
+    setViewerState('loading')
+    setViewerDoc(null)
+  }, [])
+
+  // While the viewer is open: Esc closes it and the body scroll is locked.
+  useEffect(() => {
+    if (!viewerDoc) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeViewer()
+    }
+    document.addEventListener('keydown', onKey)
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prevOverflow
+    }
+  }, [viewerDoc, closeViewer])
+
+  // Revoke any outstanding object URL if we unmount mid-view.
+  useEffect(
+    () => () => {
+      if (viewerUrlRef.current) URL.revokeObjectURL(viewerUrlRef.current)
+    },
+    [],
+  )
+
+  // Fetch the full document as a blob (bearer-authenticated). Shared by both
+  // the download and the inline viewer so the auth contract stays in one place.
+  async function fetchDocBlob(doc: FileDoc): Promise<Blob> {
+    const res = await fetch(`/api/tenant/files/${doc.id}/download`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (!res.ok) throw new Error(`status ${res.status}`)
+    return res.blob()
+  }
+
+  // Save the full document to the device. We fetch as a blob (rather than
+  // navigating to a plain href) so the bearer token can be sent on the request.
   async function download(doc: FileDoc) {
     if (!accessToken) return
     setDownloading(doc.id)
     try {
-      const res = await fetch(`/api/tenant/files/${doc.id}/download`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
-      if (!res.ok) throw new Error(`status ${res.status}`)
-      const blob = await res.blob()
+      const blob = await fetchDocBlob(doc)
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -140,6 +222,35 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
       setError('Could not download that document — try again shortly.')
     } finally {
       setDownloading(null)
+    }
+  }
+
+  // Preview the document inline, without leaving the dashboard. The modal
+  // opens immediately (showing a spinner) and fills in once the blob loads;
+  // PDFs render in an <iframe>, images in an <img>. Anything else falls back
+  // to a download. The object URL is tracked in viewerUrlRef so it is revoked
+  // exactly once (on close, on switching docs, or on unmount).
+  async function view(doc: FileDoc) {
+    if (!accessToken) return
+    const req = ++viewReqRef.current
+    // Drop any URL from a previously-open doc before fetching the next one.
+    if (viewerUrlRef.current) URL.revokeObjectURL(viewerUrlRef.current)
+    viewerUrlRef.current = null
+    setViewerUrl(null)
+    setViewerType('')
+    setViewerState('loading')
+    setViewerDoc(doc)
+    try {
+      const blob = await fetchDocBlob(doc)
+      if (viewReqRef.current !== req) return // superseded by a newer view/close
+      const url = URL.createObjectURL(blob)
+      viewerUrlRef.current = url
+      setViewerUrl(url)
+      setViewerType(blob.type || '')
+      setViewerState('ready')
+    } catch {
+      if (viewReqRef.current !== req) return
+      setViewerState('error')
     }
   }
 
@@ -193,6 +304,7 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
   }
 
   return (
+    <>
     <div className="max-w-4xl">
       {/* ── Ask your documents ──────────────────────────────────── */}
       <section>
@@ -347,8 +459,16 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
                       </div>
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-3">
+                  <div className="flex shrink-0 items-center gap-2">
                     <StatePill state={doc.state} />
+                    <button
+                      type="button"
+                      onClick={() => view(doc)}
+                      className="inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+                    >
+                      <Eye size={13} />
+                      View
+                    </button>
                     <button
                       type="button"
                       onClick={() => download(doc)}
@@ -362,6 +482,20 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
                       )}
                       {downloading === doc.id ? 'Getting…' : 'Download'}
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setCommentsDoc(doc)}
+                      className="inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+                    >
+                      <MessageSquare size={13} />
+                      Comments{doc.comment_count ? ` (${doc.comment_count})` : ''}
+                      {doc.resolved ? (
+                        <span
+                          className="ml-0.5 inline-block h-1.5 w-1.5 rounded-full bg-success"
+                          aria-label="resolved"
+                        />
+                      ) : null}
+                    </button>
                   </div>
                 </li>
               )
@@ -370,5 +504,153 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
         )}
       </section>
     </div>
+
+      {/* ── Inline document viewer (preview on the site itself) ──── */}
+      {viewerDoc && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={viewerDoc.display_name ?? 'Document'}
+          onClick={closeViewer}
+          className="fixed inset-0 z-[120] flex flex-col bg-black/85 p-4 sm:p-6"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="mx-auto flex h-full w-full max-w-5xl flex-col border border-ink-line bg-ink-card shadow-2xl"
+          >
+            {/* Header: title + download + close */}
+            <div className="flex items-center justify-between gap-3 border-b border-ink-line px-4 py-3">
+              <div className="flex min-w-0 items-center gap-2.5">
+                {viewerDoc.source_kind === 'invoice' ? (
+                  <ReceiptText size={16} className="shrink-0 text-text-dim" aria-hidden="true" />
+                ) : (
+                  <FileText size={16} className="shrink-0 text-text-dim" aria-hidden="true" />
+                )}
+                <span className="truncate text-sm font-semibold text-text-pri">
+                  {viewerDoc.display_name ?? 'Untitled document'}
+                </span>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => download(viewerDoc)}
+                  disabled={downloading === viewerDoc.id}
+                  className="inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+                >
+                  {downloading === viewerDoc.id ? (
+                    <Loader2 size={13} className="animate-spin" />
+                  ) : (
+                    <Download size={13} />
+                  )}
+                  Download
+                </button>
+                <button
+                  type="button"
+                  onClick={closeViewer}
+                  aria-label="Close"
+                  className="inline-flex h-8 w-8 items-center justify-center border border-ink-line text-text-pri transition-colors hover:border-accent hover:text-accent"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Body: spinner → content → graceful fallback */}
+            <div className="relative flex flex-1 items-center justify-center overflow-auto bg-ink-card">
+              {viewerState === 'loading' && (
+                <Loader2
+                  size={22}
+                  className="animate-spin text-text-dim"
+                  aria-label="Loading document"
+                />
+              )}
+
+              {viewerState === 'error' && (
+                <div className="flex flex-col items-center gap-4 p-8 text-center">
+                  <p className="text-sm text-text-sec">
+                    This document can&apos;t be previewed right now.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => download(viewerDoc)}
+                    className="inline-flex items-center gap-1.5 bg-accent px-4 py-2 text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press"
+                  >
+                    <Download size={13} /> Download instead
+                  </button>
+                </div>
+              )}
+
+              {viewerState === 'ready' &&
+                viewerUrl &&
+                (viewerType.startsWith('image/') ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={viewerUrl}
+                    alt={viewerDoc.display_name ?? 'Document'}
+                    className="max-h-full max-w-full object-contain"
+                  />
+                ) : viewerType === 'application/pdf' ||
+                  viewerType === '' ||
+                  viewerDoc.source_kind === 'quote' ? (
+                  <iframe
+                    src={viewerUrl}
+                    title={viewerDoc.display_name ?? 'Document'}
+                    className="h-full w-full border-0"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center gap-4 p-8 text-center">
+                    <p className="text-sm text-text-sec">
+                      Preview isn&apos;t available for this file type.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => download(viewerDoc)}
+                      className="inline-flex items-center gap-1.5 bg-accent px-4 py-2 text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press"
+                    >
+                      <Download size={13} /> Download instead
+                    </button>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Comments drawer ───────────────────────────────────────── */}
+      {commentsDoc && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Comments — ${commentsDoc.display_name ?? 'document'}`}
+          onClick={closeComments}
+          className="fixed inset-0 z-[130] flex justify-end bg-black/70"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="flex h-full w-full max-w-md flex-col border-l border-ink-line bg-ink-card shadow-2xl"
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-ink-line px-4 py-3">
+              <span className="truncate text-sm font-semibold text-text-pri">
+                {commentsDoc.display_name ?? 'Document'}
+              </span>
+              <button
+                type="button"
+                onClick={closeComments}
+                aria-label="Close"
+                className="inline-flex h-8 w-8 items-center justify-center border border-ink-line text-text-pri transition-colors hover:border-accent hover:text-accent"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1">
+              <CommentsThread
+                apiBase={`/api/tenant/files/${commentsDoc.id}`}
+                accessToken={accessToken}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }

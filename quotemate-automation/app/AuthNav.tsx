@@ -76,7 +76,7 @@ export default function AuthNav({ variant = 'nav' }: { variant?: Variant }) {
       </Link>
     ) : (
       <Link href="/signup" className={heroPrimary}>
-        Get my QuoteMate
+        Get my QuoteMax
         <span className="transition-transform duration-300 group-hover:translate-x-0.5">
           <Arrow />
         </span>

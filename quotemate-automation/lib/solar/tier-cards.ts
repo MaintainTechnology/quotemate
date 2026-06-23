@@ -1,4 +1,4 @@
-// c:/Users/dalig/Downloads/QuoteMate/quoteMate/.claude/worktrees/solar-estimate/quotemate-automation/lib/solar/tier-cards.ts
+// c:/Users/dalig/Downloads/QuoteMax/quoteMate/.claude/worktrees/solar-estimate/quotemate-automation/lib/solar/tier-cards.ts
 // Pure view-model builder for the /q/solar/[token] tier cards.
 //
 // The contract returns three parallel structures: price.tiers (gross →

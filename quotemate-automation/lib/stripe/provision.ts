@@ -3,9 +3,9 @@
 // Two operations, mirroring the Twilio/Vapi provisioning pattern:
 //   1. provisionStripeConnectAccount() — create a connected account
 //      (`acct_…`) for a tenant. Express-equivalent: Stripe hosts the
-//      onboarding form and runs KYC. The platform (QuoteMate) carries
+//      onboarding form and runs KYC. The platform (QuoteMax) carries
 //      fee + dispute liability; the connected account is on a MANUAL
-//      payout schedule so QuoteMate controls when funds reach the
+//      payout schedule so QuoteMax controls when funds reach the
 //      tradie's bank (released on job completion).
 //   2. createConnectOnboardingLink() — a single-use, short-lived hosted
 //      onboarding URL the tradie is redirected to.
@@ -18,7 +18,7 @@
 //
 // Charge type this account is built for: DESTINATION CHARGES with
 // `on_behalf_of` the connected account (tradie = merchant of record for
-// AU GST) + an `application_fee_amount` (QuoteMate's 2%). See
+// AU GST) + an `application_fee_amount` (QuoteMax's 2%). See
 // lib/stripe/checkout.ts for the charge side.
 
 import { getStripe } from './client'
@@ -51,14 +51,14 @@ export async function provisionStripeConnectAccount(opts: {
       // Controller properties — the modern replacement for the legacy
       // `type: 'express'` preset. This combination IS "Express":
       //   stripe_dashboard.type='express' → Stripe-hosted tradie dashboard
-      //   fees.payer='application'        → QuoteMate's account is billed Stripe fees
-      //   losses.payments='application'   → QuoteMate carries dispute liability
+      //   fees.payer='application'        → QuoteMax's account is billed Stripe fees
+      //   losses.payments='application'   → QuoteMax carries dispute liability
       //   requirement_collection='stripe' → Stripe runs KYC onboarding
       //
       // ⚠️ Do NOT change losses.payments to 'stripe' or fees.payer to
       // 'account'. Stripe explicitly forbids both with an Express
       // dashboard — Express REQUIRES platform-borne liability + fees.
-      // This is the only valid Express controller combination. QuoteMate
+      // This is the only valid Express controller combination. QuoteMax
       // recoups Stripe's processing fee inside application_fee_amount on
       // the charge (see lib/stripe/checkout.ts), not via fees.payer.
       controller: {
@@ -72,7 +72,7 @@ export async function provisionStripeConnectAccount(opts: {
         transfers: { requested: true },
       },
       business_type: 'individual',
-      // Manual payout schedule — QuoteMate releases funds to the tradie's
+      // Manual payout schedule — QuoteMax releases funds to the tradie's
       // bank on job completion (the disbursement gate), not automatically.
       settings: {
         payouts: { schedule: { interval: 'manual' } },

@@ -155,13 +155,13 @@ type IntakePdfRow = {
 }
 
 async function tenantBusinessName(tenantId: string | null): Promise<string> {
-  if (!tenantId) return 'QuoteMate'
+  if (!tenantId) return 'QuoteMax'
   const { data } = await supabase()
     .from('tenants')
     .select('business_name')
     .eq('id', tenantId)
     .maybeSingle<{ business_name: string | null }>()
-  return data?.business_name ?? 'QuoteMate'
+  return data?.business_name ?? 'QuoteMax'
 }
 
 /**

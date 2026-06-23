@@ -486,7 +486,7 @@ export async function downloadOpenSolarAsset(
 
 // ── document generation (quote appendices + install pack) ────────────
 
-/** The only document types QuoteMate ever requests — a whitelist so a
+/** The only document types QuoteMax ever requests — a whitelist so a
  *  bad caller can never trigger arbitrary OpenSolar document renders. */
 export const OPENSOLAR_DOCUMENT_TYPES = [
   'shade_report',
@@ -735,7 +735,7 @@ export async function createOpenSolarProject(
 }
 
 /** Supported usage_data_source values (docs: Updating a Project's Energy
- *  Consumption). QuoteMate primarily pushes bill_quarterly. */
+ *  Consumption). QuoteMax primarily pushes bill_quarterly. */
 export type OpenSolarUsagePayload = {
   usage_data_source:
     | 'kwh_annual'

@@ -155,7 +155,7 @@ export async function reverseGeocode(
     `${baseUrl}?lat=${encodeURIComponent(input.lat.toFixed(6))}` +
     `&lon=${encodeURIComponent(input.lng.toFixed(6))}` +
     `&format=jsonv2&addressdetails=1&countrycodes=au`
-  const ua = opts.userAgent ?? 'QuoteMate/1.0 (https://quote-mate-rho.vercel.app)'
+  const ua = opts.userAgent ?? 'QuoteMax/1.0 (https://quote-mate-rho.vercel.app)'
   const fetchImpl = opts.fetchImpl ?? ((u, init) => fetch(u, init))
 
   let res: Response

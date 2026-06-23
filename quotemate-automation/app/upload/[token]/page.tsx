@@ -50,7 +50,7 @@ export default async function UploadPage(props: { params: Promise<{ token: strin
         <StateCard
           eyebrow="Invalid link"
           title="LINK NOT FOUND"
-          body="This upload link is invalid or has expired. Reply to your QuoteMate SMS if you need a fresh one."
+          body="This upload link is invalid or has expired. Reply to your QuoteMax SMS if you need a fresh one."
           tone="warning"
         />
       </Shell>
@@ -76,7 +76,7 @@ export default async function UploadPage(props: { params: Promise<{ token: strin
     <Shell>
       <section>
         <span className="font-mono text-[0.7rem] uppercase tracking-[0.15em] text-text-dim">
-          Photos · QuoteMate intake
+          Photos · QuoteMax intake
         </span>
         <h1 className="mt-4 font-extrabold uppercase tracking-[-0.03em] text-[clamp(1.75rem,5vw,3rem)] leading-none">
           Add <span className="text-accent">photos</span><br />
@@ -170,7 +170,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         {children}
 
         <p className="mt-12 text-center font-mono text-[0.65rem] uppercase tracking-[0.2em] text-text-dim">
-          Powered by <Link href="/" className="text-text-sec hover:text-accent transition-colors">QuoteMate</Link> · Built in Australia
+          Powered by <Link href="/" className="text-text-sec hover:text-accent transition-colors">QuoteMax</Link> · Built in Australia
         </p>
       </div>
 

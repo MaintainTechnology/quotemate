@@ -772,7 +772,7 @@ export async function POST(req: Request) {
 
   // ─────── Tradie-registration short-circuit (v6) ───────
   // When the destination number has no tenant match (e.g. the shared
-  // QuoteMate admin number), check if the inbound message is a tradie
+  // QuoteMax admin number), check if the inbound message is a tradie
   // wanting to sign up. If so, branch to a slimmer flow: generate a
   // signup token, send a link, persist the conversation as
   // 'tradie_registration'. Customer-quote flow is untouched.
@@ -2041,7 +2041,7 @@ export async function POST(req: Request) {
       // BUG D fix: if Sonnet's CURRENT reply (this turn) is already asking
       // for the name or suburb, the guard should stand down. Without this
       // check, the guard overwrites Sonnet's correct first-time intro
-      // ("G'day, thanks for messaging QuoteMate, I'm the AI quoting
+      // ("G'day, thanks for messaging QuoteMax, I'm the AI quoting
       // assistant. What's your first name?") with the bare guard text
       // ("No worries - quick one, what's your first name?"), losing the
       // personalised greeting on turn 1.
@@ -3047,7 +3047,7 @@ async function maybeHandleTradieRegistration(args: {
       sendSms({
         to: args.fromNumber,
         from: args.toNumber,
-        text: 'Welcome to QuoteMate! To start, reply with your invitation code, e.g. JOIN YOUR-CODE',
+        text: 'Welcome to QuoteMax! To start, reply with your invitation code, e.g. JOIN YOUR-CODE',
       }),
     )
     return ackTwiml()

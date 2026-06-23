@@ -5,7 +5,7 @@
 // the browser — the API key stays server-side. The dashboard talks to
 // /api/admin/agents/* which talks to this client.
 //
-// Configuration comes from two env vars on the QuoteMate Vercel app:
+// Configuration comes from two env vars on the QuoteMax Vercel app:
 //   QM_AGENTS_URL      — Railway base URL, e.g.
 //                        https://mt-qm-quality-agents-production.up.railway.app
 //   QM_AGENTS_API_KEY  — same value as the agent service's QM_AGENTS_API_KEY

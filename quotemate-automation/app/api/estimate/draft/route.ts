@@ -952,7 +952,7 @@ export async function POST(req: Request) {
       // sender (n8n harness, internal QA mobile), do NOT fire the tradie
       // notification SMS. Without this, every stress-test run spams the
       // real tradie owner. Added 2026-05-14 after Jeph received two
-      // unexpected "[QuoteMate] New SMS quote drafted" SMSes on his
+      // unexpected "[QuoteMax] New SMS quote drafted" SMSes on his
       // personal mobile during a debug session.
       //
       // Configure via env: TEST_CUSTOMER_NUMBERS=+61489083371,+61400000000
@@ -975,8 +975,8 @@ export async function POST(req: Request) {
       // v6 multi-tenant: notify the actual TENANT owner, not a shared
       // env-var mobile. The tradie's personal mobile + the from-number
       // used for that notify both come from the tenant row so each
-      // tradie sees the message land from their own QuoteMate number
-      // ("Sparky — QuoteMate: new quote drafted for Jon · $820"). Env
+      // tradie sees the message land from their own QuoteMax number
+      // ("Sparky — QuoteMax: new quote drafted for Jon · $820"). Env
       // fallback (TRADIE_NOTIFY_*) keeps the legacy pilot working.
       const notifyMobile =
         tenantOwnerMobile ?? process.env.TRADIE_NOTIFY_NUMBER
@@ -1043,7 +1043,7 @@ export async function POST(req: Request) {
         if (notifyMobile && !tradieNotifiedUndelivered) {
           // Send the tradie's "new quote drafted" SMS FROM the tenant's
           // own provisioned number so the message lands in the same
-          // QuoteMate thread on their phone, not the shared dev line.
+          // QuoteMax thread on their phone, not the shared dev line.
           dispatch.step('tradie notify — SMS (with WhatsApp fallback)', {
             to: notifyMobile,
             from: tenantSmsNumber ?? '(default TWILIO_PHONE_NUMBER)',

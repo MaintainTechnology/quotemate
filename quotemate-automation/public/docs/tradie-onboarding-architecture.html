@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Tradie Onboarding Architecture — QuoteMate</title>
+  <title>Tradie Onboarding Architecture — QuoteMax</title>
   <meta
     name="description"
-    content="End-to-end architecture of the QuoteMate tradie onboarding flow: signup → email verify → wizard → activate → AI live. Includes database schema, activation checklist, and external service integrations."
+    content="End-to-end architecture of the QuoteMax tradie onboarding flow: signup → email verify → wizard → activate → AI live. Includes database schema, activation checklist, and external service integrations."
   />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -322,13 +322,13 @@
       </g>
     </svg>
     <div class="container">
-      <span class="eyebrow">QuoteMate · v6 · Onboarding Architecture</span>
+      <span class="eyebrow">QuoteMax · v6 · Onboarding Architecture</span>
       <h1 class="display">
         Tradie signs up →<br />
         AI <span class="hi">live</span> in 4 minutes.
       </h1>
       <p class="lede">
-        Full view of how a new tradie goes from "Get my QuoteMate" on the homepage
+        Full view of how a new tradie goes from "Get my QuoteMax" on the homepage
         to receiving real customer calls + SMS on their own dedicated AU number,
         with their own pricing book and AI receptionist. Schema, services, flags,
         all in one screen.
@@ -342,7 +342,7 @@
       <span class="eyebrow section-eyebrow">The Flow</span>
       <h2 class="section-title">Six steps, <span class="hi">one button click</span> at the end.</h2>
       <p class="section-lead">
-        Each node below is a real page or process. Hitting "Activate my QuoteMate"
+        Each node below is a real page or process. Hitting "Activate my QuoteMax"
         on step 5 fires every backend integration in parallel.
       </p>
 
@@ -350,7 +350,7 @@
         <div class="node">
           <span class="num">01</span>
           <span class="label">Home</span>
-          <span class="desc">Tradie lands on <span class="mono">/</span>, clicks "Get my QuoteMate".</span>
+          <span class="desc">Tradie lands on <span class="mono">/</span>, clicks "Get my QuoteMax".</span>
         </div>
         <div class="node">
           <span class="num">02</span>
@@ -460,7 +460,7 @@
           <span class="step-n">07</span>
           <div>
             <h3>Send welcome SMS</h3>
-            <p>From the new QuoteMate number to the owner's personal mobile. Closes the loop visibly — they physically receive a text seconds after activation.</p>
+            <p>From the new QuoteMax number to the owner's personal mobile. Closes the loop visibly — they physically receive a text seconds after activation.</p>
           </div>
           <span class="tag gated">TWILIO_PROVISIONING_ENABLED</span>
         </div>

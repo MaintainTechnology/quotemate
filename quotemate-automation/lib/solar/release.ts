@@ -209,16 +209,16 @@ export async function pushSolarLeadToPylon(
       : null
 
     const result = await pushPylonOpportunity({
-      name: caller?.name?.trim() || 'QuoteMate solar lead',
+      name: caller?.name?.trim() || 'QuoteMax solar lead',
       phone: caller?.phone?.trim() || null,
       email: caller?.email?.trim() || null,
       address: row.address,
       state: row.state,
       postcode: row.postcode,
-      title: headline ? `${headline.system_kw_dc} kW solar — QuoteMate` : 'QuoteMate solar estimate',
+      title: headline ? `${headline.system_kw_dc} kW solar — QuoteMax` : 'QuoteMax solar estimate',
       summary: headline
-        ? `${headline.system_kw_dc} kW solar — confirmed QuoteMate estimate ($${Math.round(headline.net_inc_gst).toLocaleString('en-AU')} net inc GST)`
-        : 'Confirmed QuoteMate solar estimate',
+        ? `${headline.system_kw_dc} kW solar — confirmed QuoteMax estimate ($${Math.round(headline.net_inc_gst).toLocaleString('en-AU')} net inc GST)`
+        : 'Confirmed QuoteMax solar estimate',
       valueDollars: headline?.net_inc_gst ?? null,
       sourceLinkedId: row.publicToken,
     })

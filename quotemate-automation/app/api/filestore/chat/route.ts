@@ -3,7 +3,7 @@
 // Answers a customer/tradie question about ONE estimator session, grounded in
 // that session's dedicated File Search store (their uploaded files + the
 // estimate result PDF). Uses the free Gemini 2.5 model via the mt-filestore-kb
-// search tool with the QuoteMate estimate-assistant framing.
+// search tool with the QuoteMax estimate-assistant framing.
 //
 // Tenant-scoped (Bearer): the caller must own the session (paint_runs /
 // plan_extractions row with a matching tenant_id), so one tenant can never

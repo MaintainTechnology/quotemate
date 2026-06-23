@@ -4,8 +4,10 @@
 // estimates created before the PDF feature, or a Gotenberg blip at confirm
 // time) and streams from the private quote-pdfs bucket so the link is stable.
 
+import { after } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { ensureSolarQuotePdf, downloadQuotePdf } from '@/lib/quote/pdf'
+import { archiveQuoteOnDownload } from '@/lib/filestore/archive-on-download'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -50,6 +52,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     console.error('[q/solar/pdf] storage download failed', e instanceof Error ? e.message : e)
     return Response.json({ ok: false, error: 'PDF unavailable' }, { status: 500 })
   }
+
+  // Land this document in the tradie's Files tab (best-effort, post-response).
+  after(() => archiveQuoteOnDownload({ sourceKind: 'quote', sourceId: token, trade: 'solar' }))
 
   return new Response(new Uint8Array(pdf), {
     status: 200,

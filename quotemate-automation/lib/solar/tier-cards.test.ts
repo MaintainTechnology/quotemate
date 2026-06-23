@@ -1,4 +1,4 @@
-// c:/Users/dalig/Downloads/QuoteMate/quoteMate/.claude/worktrees/solar-estimate/quotemate-automation/lib/solar/tier-cards.test.ts
+// c:/Users/dalig/Downloads/QuoteMax/quoteMate/.claude/worktrees/solar-estimate/quotemate-automation/lib/solar/tier-cards.test.ts
 import { describe, expect, it } from 'vitest'
 import { buildSolarTierCards } from './tier-cards'
 import type {

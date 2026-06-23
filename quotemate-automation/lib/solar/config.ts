@@ -4,7 +4,7 @@
 // NO MAGIC NUMBERS IN CODE: every STC / FiT / rate input lives in a dated
 // SolarConfig the whole engine reads. DEFAULT_SOLAR_CONFIG is the shipped
 // v1 default; tenants override the rate card via pricing_book.overlays and
-// QuoteMate admin can later swap the whole config for a DB-backed one.
+// QuoteMax admin can later swap the whole config for a DB-backed one.
 //
 // validateSolarConfig is the freshness gate: it runs before any publish
 // and blocks (with an admin-actionable code) when the config is missing,

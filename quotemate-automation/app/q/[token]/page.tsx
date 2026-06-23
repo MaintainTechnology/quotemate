@@ -668,13 +668,13 @@ export default async function PublicQuotePage(props: {
             </div>
           </dl>
           <p className="mt-5 text-xs leading-relaxed text-text-dim">
-            This quote is a draft prepared via QuoteMate. Final scope is confirmed by your tradie before any work commences.
+            This quote is a draft prepared via QuoteMax. Final scope is confirmed by your tradie before any work commences.
             Australian Consumer Law applies.
           </p>
         </section>
 
         <p className="mt-12 text-center font-mono text-[0.65rem] uppercase tracking-[0.2em] text-text-dim">
-          Powered by <Link href="/" className="text-text-sec hover:text-accent transition-colors">QuoteMate</Link> · Built in Australia
+          Powered by <Link href="/" className="text-text-sec hover:text-accent transition-colors">QuoteMax</Link> · Built in Australia
         </p>
       </div>
 

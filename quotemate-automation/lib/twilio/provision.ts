@@ -87,7 +87,7 @@ export async function provisionTwilioNumber(opts: {
   const appUrl = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL
   // AU numbers require an AddressSid at purchase time (Twilio regulatory
   // bundle). We attach the single platform-level address registered on
-  // QuoteMate's Twilio account to every tradie's number. The tradie's own
+  // QuoteMax's Twilio account to every tradie's number. The tradie's own
   // address isn't required here — Twilio only needs a verifiable address
   // for the account doing the purchase, which is us. Set this in Vercel
   // to the SID shown under Twilio Console → Phone Numbers → Regulatory

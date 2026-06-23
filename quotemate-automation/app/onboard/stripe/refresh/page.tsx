@@ -84,7 +84,7 @@ export default function StripeConnectRefresh() {
             <span className="text-accent">continue</span>
           </h1>
           <p className="mt-6 max-w-md text-text-dim">
-            Sign in to your QuoteMate account, then restart payout setup from the dashboard.
+            Sign in to your QuoteMax account, then restart payout setup from the dashboard.
           </p>
           <Link
             href="/signin"

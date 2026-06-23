@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>SMS Onboarding Architecture — QuoteMate</title>
+  <title>SMS Onboarding Architecture — QuoteMax</title>
   <meta
     name="description"
-    content="End-to-end architecture of QuoteMate's SMS-initiated tradie onboarding flow: hybrid intent classifier, signup intent tokens, magic-link handoff to web, activation chain, AI live. Full Supabase schema."
+    content="End-to-end architecture of QuoteMax's SMS-initiated tradie onboarding flow: hybrid intent classifier, signup intent tokens, magic-link handoff to web, activation chain, AI live. Full Supabase schema."
   />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -336,7 +336,7 @@
       </g>
     </svg>
     <div class="container">
-      <span class="eyebrow">QuoteMate · v6 · SMS Onboarding Architecture</span>
+      <span class="eyebrow">QuoteMax · v6 · SMS Onboarding Architecture</span>
       <h1 class="display">
         One SMS in →<br />
         AI <span class="hi">live</span> in 5 minutes.
@@ -372,7 +372,7 @@
         <div class="node">
           <span class="node-num">01</span>
           <span class="node-label">SMS in</span>
-          <span class="node-desc">Tradie texts <span class="mono">+61 481 613 464</span> (shared QuoteMate number).</span>
+          <span class="node-desc">Tradie texts <span class="mono">+61 481 613 464</span> (shared QuoteMax number).</span>
         </div>
         <div class="node">
           <span class="node-num">02</span>
@@ -547,7 +547,7 @@
           <span class="step-n">08</span>
           <div>
             <h3 class="check-title">Send welcome SMS</h3>
-            <p class="check-body">From the new tenant's QuoteMate number to their personal mobile. Closes the loop — they get a text from THEIR number seconds after activation.</p>
+            <p class="check-body">From the new tenant's QuoteMax number to their personal mobile. Closes the loop — they get a text from THEIR number seconds after activation.</p>
           </div>
           <span class="tag tag-gated">TWILIO_PROVISIONING_ENABLED</span>
         </div>
@@ -795,7 +795,7 @@ POST /api/onboard/activate
       <h2 class="section-title">Four integrations, <span class="hi">zero manual config</span>.</h2>
       <p class="section-lead">
         One more than the web flow: Anthropic Haiku 4.5 sits on the SMS-inbound hot path as
-        the regex fallback. Twilio plays a double role — first the shared QuoteMate number
+        the regex fallback. Twilio plays a double role — first the shared QuoteMax number
         that catches the inbound, then the per-tenant number purchased on activate.
       </p>
 
@@ -814,7 +814,7 @@ POST /api/onboard/activate
 
         <div class="svc">
           <div class="svc-name">Twilio</div>
-          <div class="svc-role">Receives the inbound SMS on the shared QuoteMate number, posts to /api/sms/inbound. Later, buys the tenant's own AU number. Sends the welcome SMS link from the shared number AND the post-activation welcome from the new tenant number.</div>
+          <div class="svc-role">Receives the inbound SMS on the shared QuoteMax number, posts to /api/sms/inbound. Later, buys the tenant's own AU number. Sends the welcome SMS link from the shared number AND the post-activation welcome from the new tenant number.</div>
           <div class="svc-creds">
             <strong>Env:</strong><br />
             TWILIO_ACCOUNT_SID<br />
@@ -857,7 +857,7 @@ POST /api/onboard/activate
       <h2 class="section-title">Same wiring as <span class="hi">web onboarding</span>.</h2>
       <p class="section-lead">
         New tenant numbers arrive with both webhooks pre-configured at Twilio purchase time.
-        The shared QuoteMate number that catches the inbound is wired once, manually, in the
+        The shared QuoteMax number that catches the inbound is wired once, manually, in the
         Twilio console — it's the only number that isn't auto-provisioned.
       </p>
 
@@ -879,7 +879,7 @@ POST /api/onboard/activate
         </div>
 
         <div class="schema-card">
-          <h3>Shared QuoteMate number (manual)</h3>
+          <h3>Shared QuoteMax number (manual)</h3>
           <p class="note">The +61 481 613 464 line that catches inbound tradie texts. Wired once in the Twilio console — points to the SAME /api/sms/inbound endpoint as per-tenant numbers. The route disambiguates by checking tenant_id on the conversation.</p>
 <pre><span class="kw">SMS:</span>  https://quote-mate-rho.vercel.app
       /api/sms/inbound
@@ -888,7 +888,7 @@ POST /api/onboard/activate
 
         <div class="schema-card">
           <h3>Tenant resolution priority</h3>
-          <p class="note">When an SMS arrives at /api/sms/inbound, the route looks up the tenant in this order. Falling all the way through to legacy_pilot_trade is what makes the shared QuoteMate number a valid "inbound" surface.</p>
+          <p class="note">When an SMS arrives at /api/sms/inbound, the route looks up the tenant in this order. Falling all the way through to legacy_pilot_trade is what makes the shared QuoteMax number a valid "inbound" surface.</p>
 <pre>1. tenantByDestinationSms(To)
 2. tenantByOwnerUser(authed)
 3. tenantByLegacyPilotTrade()

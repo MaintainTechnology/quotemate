@@ -327,7 +327,7 @@ describe('pushPylonOpportunity', () => {
         address: '12 Test St, Sydney',
         state: 'NSW',
         postcode: '2000',
-        title: '10 kW solar — QuoteMate',
+        title: '10 kW solar — QuoteMax',
         summary: '10 kW solar',
         valueDollars: 12345.6,
         sourceLinkedId: 'tok123',
@@ -354,7 +354,7 @@ describe('pushPylonOpportunity', () => {
       zip: '2000',
       country: 'Australia',
     })
-    expect(body.title).toBe('10 kW solar — QuoteMate')
+    expect(body.title).toBe('10 kW solar — QuoteMax')
     expect(body.notes).toBe('10 kW solar')
     expect(body.value).toBe(12346) // whole dollars, rounded
     expect(body.source_name).toBe('quotemate')

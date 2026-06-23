@@ -159,7 +159,7 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
         Billing &amp; plan
       </h2>
       <p className="mt-2 text-sm leading-relaxed text-text-sec">
-        Your QuoteMate subscription. Starter Monthly comes with a 14-day free
+        Your QuoteMax subscription. Starter Monthly comes with a 14-day free
         trial; every other plan starts right away. Switch plans or manage your
         card anytime — prices are AUD, ex-GST.
       </p>

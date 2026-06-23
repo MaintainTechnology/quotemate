@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>KB File-Store Supplement · Commercial Paint Estimator · QuoteMate</title>
+<title>KB File-Store Supplement · Commercial Paint Estimator · QuoteMax</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
@@ -172,7 +172,7 @@
   <div class="wrap">
     <span class="eyebrow">02 · What it is</span>
     <h2>A per-job, <span class="accent">throwaway</span> knowledge store</h2>
-    <p class="lede">The <b>mt-filestore-kb</b> service (a Gemini File Search wrapper) already powers QuoteMate's static trade-book knowledge. This system uses it differently: instead of a permanent library, it creates a <span class="teal">temporary store from the tradie's own uploaded PDFs</span>, queries it once to audit the takeoff, and tears it down. Nothing about the customer's documents persists in the KB after the run.</p>
+    <p class="lede">The <b>mt-filestore-kb</b> service (a Gemini File Search wrapper) already powers QuoteMax's static trade-book knowledge. This system uses it differently: instead of a permanent library, it creates a <span class="teal">temporary store from the tradie's own uploaded PDFs</span>, queries it once to audit the takeoff, and tears it down. Nothing about the customer's documents persists in the KB after the run.</p>
     <ul class="clean" style="margin-top:18px">
       <li><b>Grounded.</b> Every answer is retrieved from the uploaded plans and must cite a page — it can't invent areas the documents don't show.</li>
       <li><b>Private &amp; ephemeral.</b> The store is named per run, lives only for the extraction, and is deleted in a <code>finally</code> — including when something fails.</li>
@@ -220,7 +220,7 @@
 <section style="background:var(--ink)">
   <div class="wrap">
     <span class="eyebrow">04 · The connections</span>
-    <h2>QuoteMate ⇄ <span class="accent">mt-filestore-kb</span> ⇄ Gemini</h2>
+    <h2>QuoteMax ⇄ <span class="accent">mt-filestore-kb</span> ⇄ Gemini</h2>
     <p class="lede">Five HTTP calls over the existing typed client (<code>lib/admin-loader/mt-filestore-kb.ts</code>). The route never touches Gemini directly — the node brokers it. The teardown call (orange) is guaranteed to run.</p>
 
     <figure style="margin-top:26px">
@@ -439,7 +439,7 @@
   </div>
 </section>
 
-<div class="ctabar">QuoteMate · Commercial Paint Estimator · KB File-Store Supplement</div>
+<div class="ctabar">QuoteMax · Commercial Paint Estimator · KB File-Store Supplement</div>
 
 </body>
 </html>

@@ -9,6 +9,7 @@ import { Suspense, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { getBrowserSupabase } from '@/lib/supabase/client'
+import { BrandMark } from "@/app/_components/BrandMark"
 
 // Next.js 16 disallows prerendering pages whose default export reads
 // useSearchParams() without a Suspense boundary. Inner component owns
@@ -61,11 +62,9 @@ function CheckEmailInner() {
       <nav className="border-b border-ink-line">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
           <Link href="/" className="flex items-center gap-2.5">
-            <span className="grid h-7 w-7 place-items-center bg-accent font-black text-white text-xs">
-              Q
-            </span>
+            <BrandMark className="h-7 w-7" />
             <span className="font-extrabold uppercase tracking-tight text-text-pri">
-              QuoteMate
+              QuoteMax
             </span>
           </Link>
           <Link
@@ -100,7 +99,7 @@ function CheckEmailInner() {
               Why this step?
             </span>
             <p className="mt-3 text-sm text-text-sec leading-relaxed">
-              Customers will text and call <em>your</em> QuoteMate number — we
+              Customers will text and call <em>your</em> QuoteMax number — we
               need to be sure the email on file is yours so we can route quote
               notifications and password resets correctly.
             </p>

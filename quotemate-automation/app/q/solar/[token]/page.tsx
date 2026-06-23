@@ -221,7 +221,7 @@ export default async function SolarQuotePage({
 
       <section className="relative z-10 mx-auto max-w-4xl px-6 pt-14 pb-10 sm:px-10">
         <div className={`font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent ${reveal(0)}`}>
-          QuoteMate · Solar
+          QuoteMax · Solar
         </div>
         <h1 className={`mt-3 font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2rem,5vw,3.5rem)] ${reveal(60)}`}>
           Your solar <span className="text-accent">estimate</span>
@@ -850,7 +850,7 @@ export default async function SolarQuotePage({
 
       <div className="relative z-10 bg-accent px-6 py-5 text-center text-white">
         <span className="font-mono text-sm font-semibold uppercase tracking-[0.16em]">
-          QuoteMate · Solar
+          QuoteMax · Solar
         </span>
       </div>
     </main>

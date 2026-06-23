@@ -17,6 +17,7 @@
 // step rail, same patterns the /admin/loader page already established.
 
 import { useCallback, useEffect, useState } from 'react'
+import { BrandMark } from '@/app/_components/BrandMark'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 import {
   buildPatchPayload,
@@ -307,7 +308,7 @@ export default function PricingWizardPage() {
     <Layout>
       <header>
         <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-text-dim">
-          QuoteMate · {loaded.tenant.business_name ?? 'Tradie'}
+          QuoteMax · {loaded.tenant.business_name ?? 'Tradie'}
         </span>
         <h1 className="mt-4 font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2.25rem,5vw,3.5rem)]">
           Pricing <span className="text-accent">wizard</span>
@@ -384,7 +385,7 @@ export default function PricingWizardPage() {
 
           {loaded.assemblies.length === 0 ? (
             <p className="mt-5 text-sm text-text-dim">
-              No services in your trade catalogue yet — talk to QuoteMate support.
+              No services in your trade catalogue yet — talk to QuoteMax support.
             </p>
           ) : (
             <div className="mt-5 grid gap-2 sm:grid-cols-2">
@@ -399,7 +400,7 @@ export default function PricingWizardPage() {
                     onChange={(e) =>
                       setServices((s) => ({ ...s, [a.id]: e.target.checked }))
                     }
-                    className="mt-0.5 h-4 w-4 shrink-0 accent-[#FF5A1F]"
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-[#FFC400]"
                   />
                   <span>
                     <span className="block text-sm font-semibold text-text-pri">
@@ -507,10 +508,8 @@ function Layout({ children }: { children: React.ReactNode }) {
       <nav className="relative z-10 border-b border-ink-line bg-ink-deep/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-4">
           <a href="/dashboard" className="flex min-w-0 items-center gap-2.5">
-            <span className="grid h-7 w-7 shrink-0 place-items-center bg-accent text-xs font-black text-white">
-              Q
-            </span>
-            <span className="font-extrabold uppercase tracking-tight">QuoteMate</span>
+            <BrandMark className="h-7 w-7" />
+            <span className="font-extrabold uppercase tracking-tight">QuoteMax</span>
             <span className="text-text-dim">/</span>
             <span className="font-mono text-xs uppercase tracking-[0.14em] text-text-sec">
               Wizard

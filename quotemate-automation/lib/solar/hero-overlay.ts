@@ -1,4 +1,4 @@
-// c:/Users/dalig/Downloads/QuoteMate/quoteMate/.claude/worktrees/solar-estimate/quotemate-automation/lib/solar/hero-overlay.ts
+// c:/Users/dalig/Downloads/QuoteMax/quoteMate/.claude/worktrees/solar-estimate/quotemate-automation/lib/solar/hero-overlay.ts
 // Pure builder for the satellite-hero stats overlay + imagery caption on
 // /q/solar/[token] (spec §6). The overlay sits over the REAL Google
 // satellite photo (no generative panels). Caption carries the imagery

@@ -69,7 +69,7 @@ export function shouldFinaliseBookingOnPaid(
 // ── Off-platform "book directly on the tradie's calendar" option ────
 //
 // A Google Appointment link (calendar.app.google/…) has no callback, so
-// bookings made there are invisible to QuoteMate and the deposit is
+// bookings made there are invisible to QuoteMax and the deposit is
 // arranged by the tradie directly (decision: "DB = pay-last; Google =
 // off-platform"). We surface the link ONLY when it is a real https URL
 // so a blank/typo'd env var can never render a broken or non-secure

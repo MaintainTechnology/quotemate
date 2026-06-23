@@ -11,6 +11,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { LICENCE_BODIES } from '@/lib/onboard/schema'
 import { Field, INPUT, ErrorBanner, Arrow } from '../signup/page'
+import { BrandMark } from "@/app/_components/BrandMark"
 
 type Trade = 'electrical' | 'plumbing'
 
@@ -77,7 +78,7 @@ function OnboardWizardInner() {
   // Mobile lock — set when the tradie's mobile has already been
   // verified before reaching the wizard. Two upstream sources:
   //
-  //   1. SMS-initiated path: tradie texted the shared QuoteMate
+  //   1. SMS-initiated path: tradie texted the shared QuoteMax
   //      number, mobile proven by physical possession. intent token
   //      is present; flipped on activate via markIntentUsed.
   //
@@ -314,11 +315,9 @@ function OnboardWizardInner() {
       <nav className="border-b border-ink-line">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
           <Link href="/" className="flex items-center gap-2.5">
-            <span className="grid h-7 w-7 place-items-center bg-accent font-black text-white text-xs">
-              Q
-            </span>
+            <BrandMark className="h-7 w-7" />
             <span className="font-extrabold uppercase tracking-tight text-text-pri">
-              QuoteMate
+              QuoteMax
             </span>
           </Link>
           <span className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
@@ -442,7 +441,7 @@ function OnboardWizardInner() {
                   disabled={submitting}
                   className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-7 py-3.5 text-sm uppercase tracking-wider transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-accent-soft focus:ring-offset-2 focus:ring-offset-ink-deep"
                 >
-                  {submitting ? 'Activating…' : 'Activate my QuoteMate'}
+                  {submitting ? 'Activating…' : 'Activate my QuoteMax'}
                   {!submitting && <Arrow />}
                 </button>
               </form>

@@ -1,4 +1,4 @@
-// c:/Users/dalig/Downloads/QuoteMate/quoteMate/.claude/worktrees/solar-estimate/quotemate-automation/lib/solar/deposit-cta.ts
+// c:/Users/dalig/Downloads/QuoteMax/quoteMate/.claude/worktrees/solar-estimate/quotemate-automation/lib/solar/deposit-cta.ts
 // Pure deposit-CTA gate for /q/solar/[token] (spec §6). The deposit is
 // the existing per-tier short-link /r/[token]/[tier] (lib/quote/booking
 // + app/r/[token]/[tier]/route.ts). It only renders once the tradie has

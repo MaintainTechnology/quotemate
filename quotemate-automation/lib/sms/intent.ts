@@ -1,6 +1,6 @@
 // SMS first-turn intent classifier.
 //
-// Decides whether an inbound SMS on the shared QuoteMate number is:
+// Decides whether an inbound SMS on the shared QuoteMax number is:
 //   • 'tradie_registration' — a tradie wanting to sign up
 //   • 'customer_quote'      — a homeowner / customer wanting a quote
 //   • 'ambiguous'           — neither pattern matched cleanly
@@ -141,10 +141,10 @@ export async function classifyIntent(
 // Lazy-imported so the regex sync path stays free of the AI SDK
 // bundle when callers only need classifyIntentSync.
 
-const SONNET_SYSTEM_PROMPT = `You classify Australian SMS messages received by QuoteMate, an AI quoting platform for tradies.
+const SONNET_SYSTEM_PROMPT = `You classify Australian SMS messages received by QuoteMax, an AI quoting platform for tradies.
 
-QuoteMate's number is shared between:
-  • Tradies who want to register and use QuoteMate for their business
+QuoteMax's number is shared between:
+  • Tradies who want to register and use QuoteMax for their business
   • Customers (homeowners) who want a quote for a job
 
 Classify the message as one of:
@@ -169,7 +169,7 @@ CRITICAL DISAMBIGUATION RULES
 EXAMPLES OF tradie_registration (HIGH)
   - "I want to register as a tradie"
   - "Can you sign me up? I'm a sparky in Bondi"
-  - "How do I become a QuoteMate tradie?"
+  - "How do I become a QuoteMax tradie?"
   - "List my plumbing business please"
   - "I'm a tradesman looking to use your platform"
 

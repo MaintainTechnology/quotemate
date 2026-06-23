@@ -13,7 +13,7 @@
 // "standard" / "full_reroof". We map those, and when a customer genuinely
 // can't tell us the material or pitch we route to the on-site inspection
 // rather than guessing a price — the same inspection-fallback discipline
-// the rest of QuoteMate uses.
+// the rest of QuoteMax uses.
 //
 // PURE — no I/O, no SDK. Fully unit-tested.
 // ════════════════════════════════════════════════════════════════════

@@ -35,7 +35,7 @@ export default async function ChoosePage(props: {
       <header className="border-b border-ink-line bg-ink-deep/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4 sm:px-6">
           <Link href="/" className="font-extrabold uppercase tracking-tight text-accent">
-            QuoteMate
+            QuoteMax
           </Link>
           <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-text-dim">
             Choose your product
@@ -50,7 +50,7 @@ export default async function ChoosePage(props: {
               Link not found
             </div>
             <p className="text-text-sec">
-              This link is invalid or has expired. Reply to your QuoteMate SMS
+              This link is invalid or has expired. Reply to your QuoteMax SMS
               if you need a fresh one.
             </p>
           </section>
@@ -90,7 +90,7 @@ export default async function ChoosePage(props: {
         <p className="mt-12 text-center font-mono text-[0.65rem] uppercase tracking-[0.2em] text-text-dim">
           Powered by{' '}
           <Link href="/" className="text-text-sec hover:text-accent transition-colors">
-            QuoteMate
+            QuoteMax
           </Link>{' '}
           · Built in Australia
         </p>

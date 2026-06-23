@@ -26,15 +26,15 @@ const jbMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Tradie Onboarding via SMS · QuoteMate',
+  title: 'Tradie Onboarding via SMS · QuoteMax',
   description:
-    'SMS-initiated tradie onboarding for QuoteMate. Tradie texts, AI sends a link, signup completes on the web. Same end state as web signup, kicked off from any phone.',
+    'SMS-initiated tradie onboarding for QuoteMax. Tradie texts, AI sends a link, signup completes on the web. Same end state as web signup, kicked off from any phone.',
 }
 
 type FlowStep = { num: string; label: string; desc: string }
 
 const FLOW: FlowStep[] = [
-  { num: '01', label: 'Text',       desc: "Tradie texts the shared QuoteMate number with 'register' intent" },
+  { num: '01', label: 'Text',       desc: "Tradie texts the shared QuoteMax number with 'register' intent" },
   { num: '02', label: 'AI replies', desc: 'Welcome message with a personalised signup link (token + 24h TTL)' },
   { num: '03', label: 'Tap link',   desc: "Lands on /signup with the tradie's mobile pre-filled and verified" },
   { num: '04', label: 'Signup',     desc: 'Business name, email, password. Supabase Auth verifies email.' },
@@ -129,7 +129,7 @@ export default function TradieOnboardingPlanSms() {
           </g>
         </svg>
         <div className={styles.container}>
-          <span className={styles.eyebrow}>QuoteMate · v6 · SMS Onboarding Plan</span>
+          <span className={styles.eyebrow}>QuoteMax · v6 · SMS Onboarding Plan</span>
           <h1 className={styles.display}>
             Tradie <span className={styles.hi}>texts.</span>
             <br />
@@ -137,7 +137,7 @@ export default function TradieOnboardingPlanSms() {
           </h1>
           <p className={styles.lede}>
             Same end state as web signup — own tenant, own AU phone number, own AI
-            receptionist. Kicked off with a single SMS to the shared QuoteMate number.
+            receptionist. Kicked off with a single SMS to the shared QuoteMax number.
             Two SMS turns, then the tradie finishes on the web wizard.
           </p>
           <p className={styles.lede} style={{ marginTop: '0.75rem', fontSize: '0.92rem' }}>
@@ -205,8 +205,8 @@ export default function TradieOnboardingPlanSms() {
               I want to register as a tradie
             </div>
             <div className={`${styles.bubble} ${styles.bubbleOut}`}>
-              <span className={styles.bubbleWho}>QuoteMate AI</span>
-              G&rsquo;day! Welcome to QuoteMate. Tap the link to set up your AI
+              <span className={styles.bubbleWho}>QuoteMax AI</span>
+              G&rsquo;day! Welcome to QuoteMax. Tap the link to set up your AI
               receptionist. Takes about 4 minutes.
               <br />
               <br />
@@ -217,7 +217,7 @@ export default function TradieOnboardingPlanSms() {
               <br />
               Your mobile is already saved.
               <br />
-              <br />- QuoteMate
+              <br />- QuoteMax
             </div>
           </div>
         </div>
@@ -291,7 +291,7 @@ export default function TradieOnboardingPlanSms() {
           <div className={styles.outcome}>
             <div>
               <h3 className={styles.outcomeTitle}>You&rsquo;re live</h3>
-              <p className={styles.outcomeCopy}>Your QuoteMate line:</p>
+              <p className={styles.outcomeCopy}>Your QuoteMax line:</p>
               <div className={styles.phone}>+61 482 123 456</div>
               <p className={styles.outcomeCopy} style={{ marginTop: '1rem' }}>
                 Send any text to that number now. Customers calling will reach your AI

@@ -1,4 +1,4 @@
-// Welcome SMS dispatched from the tenant's brand-new QuoteMate number to
+// Welcome SMS dispatched from the tenant's brand-new QuoteMax number to
 // their personal mobile. Closes the activation loop visibly — the tradie
 // physically receives a text seconds after hitting "Activate".
 //
@@ -14,7 +14,7 @@ export type WelcomeSmsResult =
   | { ok: false; reason: string }
 
 export async function sendWelcomeSms(opts: {
-  fromNumber: string       // the tenant's freshly-provisioned QuoteMate number
+  fromNumber: string       // the tenant's freshly-provisioned QuoteMax number
   toMobile: string         // owner's personal mobile (E.164)
   firstName: string
   businessName: string
@@ -45,9 +45,9 @@ export async function sendWelcomeSms(opts: {
 function buildWelcomeBody(opts: { firstName: string; businessName: string; fromNumber: string }): string {
   // GSM-7-safe ASCII so it lands in a single segment whenever possible.
   return (
-    `G'day ${opts.firstName}, your QuoteMate line is live. ` +
+    `G'day ${opts.firstName}, your QuoteMax line is live. ` +
     `Send any text to this number to try your AI receptionist. ` +
     `Quotes drafted for ${opts.businessName} customers will land in your inbox in under a minute. ` +
-    `- QuoteMate`
+    `- QuoteMax`
   )
 }

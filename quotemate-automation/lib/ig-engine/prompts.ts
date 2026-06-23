@@ -588,7 +588,7 @@ function buildCustomerPrefsBlock(ctx: PromptContext): string {
     (intake as { trade?: string }).trade === 'plumbing' ? 'plumbing'
     : (intake as { trade?: string }).trade === 'electrical' ? 'electrical'
     : 'trade'
-  lines.push(`You are rendering an image for ${callerLabel}, a real Australian customer who requested ${tradeFlavour} work via an SMS conversation with the QuoteMate team${tierLabel}. ${callerName ?? 'They'} confirmed every preference below on SMS — your job is to render exactly what ${callerName ?? 'the customer'} asked for, nothing more.`)
+  lines.push(`You are rendering an image for ${callerLabel}, a real Australian customer who requested ${tradeFlavour} work via an SMS conversation with the QuoteMax team${tierLabel}. ${callerName ?? 'They'} confirmed every preference below on SMS — your job is to render exactly what ${callerName ?? 'the customer'} asked for, nothing more.`)
   lines.push(``)
 
   // ── Verbatim customer words ──

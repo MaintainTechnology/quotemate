@@ -2,7 +2,7 @@
 // stores the admin can extract from. Admin-only.
 //
 // POST /api/admin/loader/trade-book/stores — create a NEW store inline,
-// without leaving QuoteMate. Body: { displayName: string,
+// without leaving QuoteMax. Body: { displayName: string,
 // embeddingModel?: string }. Admin-only. Used by the 01·b StepCard's
 // "+ New store" button so the admin can spin up a store right before
 // uploading the first PDF.

@@ -79,9 +79,24 @@ describe('composeReport', () => {
     expect(r2.disclaimer).toContain("not McDonald's Corporate approval")
   })
 
-  it('treats a rule with no verdict as review', () => {
+  it('omits rules that have no verdict at all (not assessed)', () => {
     const r = composeReport(rules, verdicts.slice(0, 1))
-    expect(r.counts.review).toBe(2)
+    expect(r.counts).toEqual({ compliant: 1, fix: 0, review: 0 })
+    expect(r.groups.flatMap((g) => g.items).map((i) => i.rule_key)).toEqual(['wall-logo-required'])
+  })
+
+  it('hides "No verdict returned" placeholders but keeps real review reasons', () => {
+    const vs: RuleVerdict[] = [
+      { rule_key: 'wall-logo-required', status: 'compliant', confidence: 'high', evidence: 'logo present', red_flags: [] },
+      { rule_key: 'red-stripe', status: 'cannot_determine', confidence: 'low', evidence: 'No verdict returned — routed to HQ review.', red_flags: [] },
+      { rule_key: 'paint-sku', status: 'cannot_determine', confidence: 'low', evidence: 'Subjective or legal determination — routed to HQ review.', red_flags: [] },
+    ]
+    const r = composeReport(rules, vs)
+    const keys = r.groups.flatMap((g) => g.items).map((i) => i.rule_key)
+    expect(keys).toContain('wall-logo-required') // real verdict shown
+    expect(keys).toContain('paint-sku') // meaningful review reason kept
+    expect(keys).not.toContain('red-stripe') // unscored placeholder hidden
+    expect(r.counts).toEqual({ compliant: 1, fix: 0, review: 1 })
   })
 
   it('defaults note/kb_citation to null with no provenance', () => {

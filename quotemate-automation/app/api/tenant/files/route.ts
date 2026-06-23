@@ -12,6 +12,7 @@
 // file_store_id NEVER reach the browser.
 
 import { createClient } from '@supabase/supabase-js'
+import { commentCounts } from '@/lib/filestore/comments'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,7 +48,7 @@ export async function GET(req: Request) {
   // Safe projection only — never select storage_path / kb_document_id.
   const { data, error } = await supabase
     .from('tenant_file_documents')
-    .select('id, display_name, source_kind, trade, state, created_at, bytes')
+    .select('id, display_name, source_kind, trade, state, created_at, bytes, comments_resolved_at')
     .eq('tenant_id', tenant.id)
     .order('created_at', { ascending: false })
 
@@ -55,5 +56,25 @@ export async function GET(req: Request) {
     return Response.json({ error: error.message }, { status: 500 })
   }
 
-  return Response.json({ documents: data ?? [] })
+  // Decorate with the comment thread state for the list indicators (R15).
+  // Best-effort: a failure to load counts must never break the documents list.
+  let counts = new Map<string, number>()
+  try {
+    counts = await commentCounts(tenant.id)
+  } catch {
+    /* counts stay empty — the list still renders */
+  }
+  const documents = (data ?? []).map((d) => ({
+    id: d.id as string,
+    display_name: (d.display_name as string | null) ?? null,
+    source_kind: (d.source_kind as string | null) ?? null,
+    trade: (d.trade as string | null) ?? null,
+    state: (d.state as string | null) ?? null,
+    created_at: (d.created_at as string | null) ?? null,
+    bytes: (d.bytes as number | null) ?? null,
+    comment_count: counts.get(d.id as string) ?? 0,
+    resolved: !!d.comments_resolved_at,
+  }))
+
+  return Response.json({ documents })
 }

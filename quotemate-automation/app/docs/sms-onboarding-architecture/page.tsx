@@ -28,9 +28,9 @@ const jbMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'SMS Onboarding Architecture · QuoteMate',
+  title: 'SMS Onboarding Architecture · QuoteMax',
   description:
-    'End-to-end architecture of QuoteMate\'s SMS-initiated tradie onboarding flow: hybrid intent classifier, signup intent tokens, magic-link handoff to web, activation chain, AI live. Includes full Supabase schema.',
+    'End-to-end architecture of QuoteMax\'s SMS-initiated tradie onboarding flow: hybrid intent classifier, signup intent tokens, magic-link handoff to web, activation chain, AI live. Includes full Supabase schema.',
 }
 
 /* ─── Content ─────────────────────────────────────────────── */
@@ -43,7 +43,7 @@ const FLOW: FlowStep[] = [
     label: 'SMS in',
     desc: (
       <>
-        Tradie texts <span className={styles.mono}>+61 481 613 464</span> (shared QuoteMate number).
+        Tradie texts <span className={styles.mono}>+61 481 613 464</span> (shared QuoteMax number).
       </>
     ),
   },
@@ -235,7 +235,7 @@ const CHECKLIST: CheckStep[] = [
     title: 'Send welcome SMS',
     body: (
       <>
-        From the new tenant&rsquo;s QuoteMate number to their personal mobile. Closes
+        From the new tenant&rsquo;s QuoteMax number to their personal mobile. Closes
         the loop — they get a text from THEIR number seconds after activation.
       </>
     ),
@@ -265,7 +265,7 @@ const SERVICES: Service[] = [
   {
     name: 'Twilio',
     role:
-      'Receives the inbound SMS on the shared QuoteMate number, posts to /api/sms/inbound. Later, buys the tenant\'s own AU number. Sends the welcome SMS link from the shared number AND the post-activation welcome from the new tenant number.',
+      'Receives the inbound SMS on the shared QuoteMax number, posts to /api/sms/inbound. Later, buys the tenant\'s own AU number. Sends the welcome SMS link from the shared number AND the post-activation welcome from the new tenant number.',
     env: [
       'TWILIO_ACCOUNT_SID',
       'TWILIO_AUTH_TOKEN',
@@ -317,7 +317,7 @@ export default function SmsOnboardingArchitecture() {
           </g>
         </svg>
         <div className={styles.container}>
-          <span className={styles.eyebrow}>QuoteMate · v6 · SMS Onboarding Architecture</span>
+          <span className={styles.eyebrow}>QuoteMax · v6 · SMS Onboarding Architecture</span>
           <h1 className={styles.display}>
             One SMS in →
             <br />
@@ -686,7 +686,7 @@ export default function SmsOnboardingArchitecture() {
           </h2>
           <p className={styles.sectionLead}>
             One more than the web flow: Anthropic Haiku 4.5 sits on the SMS-inbound hot path
-            as the regex fallback. Twilio plays a double role — first the shared QuoteMate
+            as the regex fallback. Twilio plays a double role — first the shared QuoteMax
             number that catches the inbound, then the per-tenant number purchased on activate.
           </p>
 
@@ -720,7 +720,7 @@ export default function SmsOnboardingArchitecture() {
           </h2>
           <p className={styles.sectionLead}>
             New tenant numbers arrive with both webhooks pre-configured at Twilio purchase
-            time. The shared QuoteMate number that catches the inbound is wired once,
+            time. The shared QuoteMax number that catches the inbound is wired once,
             manually, in the Twilio console — it&rsquo;s the only number that isn&rsquo;t
             auto-provisioned.
           </p>
@@ -760,7 +760,7 @@ export default function SmsOnboardingArchitecture() {
             </div>
 
             <div className={styles.schemaCard}>
-              <h3 className={styles.schemaTitle}>Shared QuoteMate number (manual)</h3>
+              <h3 className={styles.schemaTitle}>Shared QuoteMax number (manual)</h3>
               <p className={styles.schemaNote}>
                 The +61 481 613 464 line that catches inbound tradie texts. Wired once in
                 the Twilio console — points to the SAME /api/sms/inbound endpoint as
@@ -781,7 +781,7 @@ export default function SmsOnboardingArchitecture() {
               <p className={styles.schemaNote}>
                 When an SMS arrives at /api/sms/inbound, the route looks up the tenant in
                 this order. Falling all the way through to legacy_pilot_trade is what makes
-                the shared QuoteMate number a valid &ldquo;inbound&rdquo; surface.
+                the shared QuoteMax number a valid &ldquo;inbound&rdquo; surface.
               </p>
               <pre className={styles.schemaPre}>
                 <code>

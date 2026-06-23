@@ -9,6 +9,7 @@
 // accent, numbered 3-step flow (.claude/skills/maintain-design-system).
 
 import { useCallback, useState, type ReactNode } from 'react'
+import { BrandMark } from "@/app/_components/BrandMark"
 import { getBrowserSupabase } from '@/lib/supabase/client'
 
 type StagedRow = {
@@ -857,11 +858,9 @@ export default function AdminLoaderPage() {
       <nav className="relative z-10 border-b border-ink-line bg-ink-deep/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-4">
           <a href="/dashboard" className="flex min-w-0 items-center gap-2.5">
-            <span className="grid h-7 w-7 shrink-0 place-items-center bg-accent text-xs font-black text-white">
-              Q
-            </span>
+            <BrandMark className="h-7 w-7" />
             <span className="font-extrabold uppercase tracking-tight">
-              QuoteMate
+              QuoteMax
             </span>
             <span className="text-text-dim">/</span>
             <span className="font-mono text-xs uppercase tracking-[0.14em] text-text-sec">
@@ -881,7 +880,7 @@ export default function AdminLoaderPage() {
         {/* ── Header ──────────────────────────────────────────────── */}
         <header>
           <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-text-dim">
-            QuoteMate · Admin
+            QuoteMax · Admin
           </span>
           <h1 className="mt-4 font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2.25rem,5vw,3.5rem)]">
             Bulk service <span className="text-accent">loader</span>
@@ -929,7 +928,7 @@ export default function AdminLoaderPage() {
                   type="checkbox"
                   checked={newTradeOpen}
                   onChange={(e) => setNewTradeOpen(e.target.checked)}
-                  className="h-4 w-4 accent-[#FF5A1F]"
+                  className="h-4 w-4 accent-[#FFC400]"
                 />
                 <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
                   Create a new trade with this upload
@@ -964,7 +963,7 @@ export default function AdminLoaderPage() {
                       type="checkbox"
                       checked={tradeJobBased}
                       onChange={(e) => setTradeJobBased(e.target.checked)}
-                      className="mt-0.5 h-4 w-4 shrink-0 accent-[#FF5A1F]"
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-[#FFC400]"
                     />
                     <span>
                       <span className="font-semibold text-text-pri">§2.1 gate —</span>{' '}
@@ -1034,7 +1033,7 @@ export default function AdminLoaderPage() {
                         type="checkbox"
                         checked={tradeGstRegistered}
                         onChange={(e) => setTradeGstRegistered(e.target.checked)}
-                        className="h-4 w-4 accent-[#FF5A1F]"
+                        className="h-4 w-4 accent-[#FFC400]"
                       />
                       <span>GST registered</span>
                     </label>
@@ -1047,7 +1046,7 @@ export default function AdminLoaderPage() {
                         type="checkbox"
                         checked={promptPackOpen}
                         onChange={(e) => setPromptPackOpen(e.target.checked)}
-                        className="h-4 w-4 accent-[#FF5A1F]"
+                        className="h-4 w-4 accent-[#FFC400]"
                       />
                       <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
                         Author the prompt pack now · §6
@@ -1157,7 +1156,7 @@ export default function AdminLoaderPage() {
             </p>
             <div className="mt-3 text-xs text-text-dim">
               <span className="font-mono uppercase tracking-[0.14em]">
-                Upload a PDF directly below — no need to leave QuoteMate.
+                Upload a PDF directly below — no need to leave QuoteMax.
               </span>
             </div>
 

@@ -316,7 +316,7 @@ export function formatCustomerContext(c: CustomerProfile | null): string | null 
         `  ✓ "Welcome back ${nameExample}, what can I help you with this time?"`,
         `  ✓ "G'day again ${nameExample}, what did you need quoted this time?"`,
         `  ✓ "Hey ${nameExample}, good to hear from you again. What's the new job?"`,
-        `Avoid the formal first-time intro ("thanks for messaging QuoteMate, I'm`,
+        `Avoid the formal first-time intro ("thanks for messaging QuoteMax, I'm`,
         `the AI quoting assistant...") — they already know us. Stay warm and brief.`,
         // v5 multi-trade: do NOT name the trade ("electrical work") in the`,
         // greeting — we now do both electrical and plumbing, and the customer`,

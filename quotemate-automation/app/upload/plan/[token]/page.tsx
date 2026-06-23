@@ -152,8 +152,8 @@ function Shell({ children }: { children: React.ReactNode }) {
     <main className="min-h-screen bg-ink-deep text-text-pri relative">
       <header className="relative z-10 border-b border-ink-line bg-ink-deep/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4 sm:px-6">
-          <Link href="/" className="font-extrabold uppercase tracking-tight text-lg" aria-label="QuoteMate">
-            Quote<span className="text-accent">Mate</span>
+          <Link href="/" className="font-extrabold uppercase tracking-tight text-lg" aria-label="QuoteMax">
+            Quote<span className="text-accent">Max</span>
           </Link>
           <div className="text-right">
             <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-text-dim">Plan upload</div>
@@ -164,7 +164,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       <div className="relative z-10 mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-16">
         {children}
         <p className="mt-12 text-center font-mono text-[0.65rem] uppercase tracking-[0.2em] text-text-dim">
-          Powered by <Link href="/" className="text-text-sec hover:text-accent transition-colors">QuoteMate</Link> · Built in Australia
+          Powered by <Link href="/" className="text-text-sec hover:text-accent transition-colors">QuoteMax</Link> · Built in Australia
         </p>
       </div>
     </main>

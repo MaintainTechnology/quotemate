@@ -57,7 +57,7 @@ export async function provisionVapiAssistant(opts: {
   const systemPrompt = buildVoiceSystemPrompt(opts.businessName, trades)
 
   const body = {
-    name: `${opts.businessName} — QuoteMate`,
+    name: `${opts.businessName} — QuoteMax`,
     metadata: { tenant_id: opts.tenantId, trade: opts.trade, trades },
     firstMessage,
     model: {

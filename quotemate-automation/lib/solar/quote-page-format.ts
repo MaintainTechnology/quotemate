@@ -1,4 +1,4 @@
-// c:/Users/dalig/Downloads/QuoteMate/quoteMate/.claude/worktrees/solar-estimate/quotemate-automation/lib/solar/quote-page-format.ts
+// c:/Users/dalig/Downloads/QuoteMax/quoteMate/.claude/worktrees/solar-estimate/quotemate-automation/lib/solar/quote-page-format.ts
 // Pure display formatters for the /q/solar/[token] customer page.
 // No I/O, no React — fully unit-testable. Mirrors the roofing page's
 // inline `money()` helper but centralised so every solar number rounds

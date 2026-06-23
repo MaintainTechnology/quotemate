@@ -57,18 +57,23 @@ import {
   ScanLine,
   Sun,
   FolderOpen,
+  History,
   type LucideProps,
 } from 'lucide-react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 import { hasPlanIntent } from '@/lib/billing/plan-intent'
 import { tenantHasRoofingTrade } from '@/lib/roofing/tenant'
+import { isFeatureTab, isTabEnabled } from '@/lib/features/catalog'
 import { RoofRatesEditor } from './_components/RoofRatesEditor'
 import { EstimatorBetaTab } from './_components/EstimatorBetaTab'
 import { SolarTab } from './_components/SolarTab'
 import { BillingTab } from './_components/BillingTab'
 import { FilesTab } from './_components/FilesTab'
+import { HistoricalQuotesTab } from './_components/HistoricalQuotesTab'
+import { HistoricalHint } from './_components/HistoricalHint'
 import CommercialPaintingTab from './_components/commercial-painting/CommercialPaintingTab'
 import { StatusPill, StatGrid, TONE_LEFT_RAIL, type Tone } from './_components/quote-ui'
+import { BrandMark } from '@/app/_components/BrandMark'
 import { ErrorBanner, Field, INPUT } from '../signup/page'
 
 type NavIcon = ComponentType<LucideProps>
@@ -287,12 +292,14 @@ type Tab =
   | 'invites'
   /** Files — per-tenant document store: archived quotes/invoices + ask-your-docs chat. */
   | 'files'
+  /** Historical quotes — import + analyse the tradie's own past pricing. */
+  | 'historical-quotes'
 
 /** Tabs reachable via /dashboard?tab=… (e.g. the estimator run page's breadcrumb). */
 const DEEP_LINK_TABS: readonly Tab[] = [
   'overview', 'account', 'payouts', 'billing', 'pricing', 'services', 'catalogue', 'estimating',
   'recipes', 'quotes', 'chats', 'followups', 'roofing', 'signage', 'painting',
-  'commercial-painting', 'aircon', 'estimator', 'solar', 'invites', 'files',
+  'commercial-painting', 'aircon', 'estimator', 'solar', 'invites', 'files', 'historical-quotes',
 ]
 
 /** SMS conversation summary returned by /api/tenant/chats. Drives the
@@ -360,6 +367,16 @@ export default function DashboardPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // If a deep-link (?tab=) or a remembered tab points at a feature the tenant
+  // doesn't have (no gating slug in trades[]), fall back to overview once the
+  // tenant payload loads. buildNav already hides the tab; this covers the
+  // direct-URL path so a disabled feature never renders its tool.
+  useEffect(() => {
+    if (!data) return
+    const trades = (data.tenant.trades as unknown as string[]) ?? []
+    if (isFeatureTab(tab) && !isTabEnabled(tab, trades)) setTab('overview')
+  }, [data, tab])
 
   // Lazily probe is_admin once the access token lands. Fails CLOSED — any
   // network/server hiccup leaves isAdmin false so the link stays hidden.
@@ -612,7 +629,7 @@ export default function DashboardPage() {
         tab={tab}
         setTab={setTab}
         quoteCount={data.quotes.length}
-        hasRoofingTrade={tenantHasRoofingTrade(data.tenant.trades as unknown as string[])}
+        trades={data.tenant.trades as unknown as string[]}
       />
 
       {/* Desktop two-column grid: sidebar | content. On mobile this
@@ -626,7 +643,7 @@ export default function DashboardPage() {
           setTab={setTab}
           quoteCount={data.quotes.length}
           isAdmin={isAdmin}
-          hasRoofingTrade={tenantHasRoofingTrade(data.tenant.trades as unknown as string[])}
+          trades={data.tenant.trades as unknown as string[]}
         />
         <section className="mt-6 lg:mt-0 pb-20 min-w-0">
           {/* `key={tab}` forces a tear-down + remount when the user
@@ -667,6 +684,7 @@ export default function DashboardPage() {
             )}
             {tab === 'billing' && <BillingTab accessToken={accessToken} />}
             {tab === 'files' && <FilesTab accessToken={accessToken} />}
+            {tab === 'historical-quotes' && <HistoricalQuotesTab accessToken={accessToken} />}
             {tab === 'catalogue' && <CatalogueTab accessToken={accessToken} />}
             {tab === 'estimating' && <EstimatingTab accessToken={accessToken} />}
             {tab === 'recipes' && <RecipesTab accessToken={accessToken} />}
@@ -817,14 +835,12 @@ function Shell({
           }`}
         >
           <Link href="/dashboard" className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <span className="grid h-9 w-9 place-items-center bg-accent font-black text-white text-base shrink-0">
-              Q
-            </span>
+            <BrandMark className="h-9 w-9" />
             {/* Brand wordmark hidden on the smallest screens — the
                 Q-logo carries the brand and we need the row for the
                 business name + profile chip + sign-out. */}
             <span className="hidden sm:inline font-extrabold uppercase tracking-tight text-text-pri shrink-0">
-              QuoteMate
+              QuoteMax
             </span>
             {businessName && (
               <>
@@ -905,7 +921,7 @@ function ProfileChip({
   return (
     <div className="flex items-stretch border border-ink-line bg-ink-card/70">
       {/* Avatar — solid accent square, the same mark language as the
-          QuoteMate logo so the identity reads as part of the system. */}
+          QuoteMax logo so the identity reads as part of the system. */}
       <span
         aria-hidden="true"
         className="grid h-9 w-9 shrink-0 place-items-center bg-accent font-mono text-[0.95rem] font-extrabold text-white"
@@ -973,33 +989,31 @@ type NavItem = {
   count?: number | null
 }
 
-function buildNav(quoteCount: number, hasRoofingTrade = false): NavItem[] {
+function buildNav(quoteCount: number, trades: ReadonlyArray<string> = []): NavItem[] {
   const items: NavItem[] = [
     { tab: 'overview', label: 'Overview', icon: LayoutDashboard },
     { tab: 'quotes', label: 'Quotes', icon: FileText, count: quoteCount },
     { tab: 'followups', label: 'Follow-ups', icon: PhoneCall },
     { tab: 'chats', label: 'Chats', icon: MessageSquare },
   ]
-  if (hasRoofingTrade) {
-    items.push({ tab: 'roofing', label: 'Roof', icon: Home })
-  }
-  // Signage compliance is a separate HQ product (not trade-gated) — always shown.
-  items.push({ tab: 'signage', label: 'Signage', icon: Megaphone })
-  // Painting estimate (Phase 1 scaffold) — not trade-gated yet so it's
-  // discoverable while painting isn't a live tenant trade.
-  items.push({ tab: 'painting', label: 'Paint', icon: Paintbrush })
-  // Commercial painting (strategy v11) — plan-set takeoff → tender quote.
-  items.push({ tab: 'commercial-painting', label: 'Comm. paint', icon: Building2 })
-  // AC recommender (Phase 1) — not trade-gated yet so it's discoverable.
-  items.push({ tab: 'aircon', label: 'AC', icon: AirVent })
-  // Estimator (Beta) — electrical plan take-off. Not trade-gated yet.
-  items.push({ tab: 'estimator', label: 'Estimator', icon: ScanLine })
-  // Solar — AI solar PV estimates. Not trade-gated yet so it's discoverable.
-  items.push({ tab: 'solar', label: 'Solar', icon: Sun })
-  // Marketing — invite codes + QR codes. Not trade-gated.
+  // Feature tabs — each shown only when its gating slug is in tenants.trades[]
+  // (see lib/features/catalog FEATURE_TAB_SLUGS). New tenants are provisioned
+  // with their trade(s) only; admins grant more via /admin/customers/[id], and
+  // the subscription plan map can grant tools. isTabEnabled returns true for
+  // core tabs, so here it only filters these feature entries.
+  if (isTabEnabled('roofing', trades)) items.push({ tab: 'roofing', label: 'Roof', icon: Home })
+  if (isTabEnabled('signage', trades)) items.push({ tab: 'signage', label: 'Signage', icon: Megaphone })
+  if (isTabEnabled('painting', trades)) items.push({ tab: 'painting', label: 'Paint', icon: Paintbrush })
+  if (isTabEnabled('commercial-painting', trades)) items.push({ tab: 'commercial-painting', label: 'Comm. paint', icon: Building2 })
+  if (isTabEnabled('aircon', trades)) items.push({ tab: 'aircon', label: 'AC', icon: AirVent })
+  if (isTabEnabled('estimator', trades)) items.push({ tab: 'estimator', label: 'Estimator', icon: ScanLine })
+  if (isTabEnabled('solar', trades)) items.push({ tab: 'solar', label: 'Solar', icon: Sun })
+  // Marketing — invite codes + QR codes. Core (not a gated feature).
   items.push({ tab: 'invites', label: 'Marketing', icon: Megaphone })
   // Files — per-tenant document store (archived quotes/invoices + ask-your-docs).
   items.push({ tab: 'files', label: 'Files', icon: FolderOpen })
+  // Historical quotes — import + analyse the tradie's own past pricing.
+  items.push({ tab: 'historical-quotes', label: 'History', icon: History })
   items.push(
     { tab: 'account', label: 'Account', icon: User },
     { tab: 'payouts', label: 'Payouts', icon: Banknote },
@@ -1026,7 +1040,7 @@ const SIDEBAR_GROUPS: { label: string; tabs: Tab[] }[] = [
   // tenants the byTab.get('roofing') lookup returns undefined and the
   // sidebar quietly skips the row. No tenant-specific filtering needed
   // in this layout list.
-  { label: 'Daily work', tabs: ['overview', 'quotes', 'followups', 'chats', 'files', 'roofing', 'signage', 'painting', 'commercial-painting', 'aircon', 'estimator', 'solar'] },
+  { label: 'Daily work', tabs: ['overview', 'quotes', 'followups', 'chats', 'files', 'historical-quotes', 'roofing', 'signage', 'painting', 'commercial-painting', 'aircon', 'estimator', 'solar'] },
   {
     label: 'Setup',
     tabs: ['invites', 'account', 'payouts', 'billing', 'pricing', 'services', 'catalogue', 'estimating', 'recipes'],
@@ -1038,15 +1052,15 @@ function Sidebar({
   setTab,
   quoteCount,
   isAdmin,
-  hasRoofingTrade = false,
+  trades = [],
 }: {
   tab: Tab
   setTab: (t: Tab) => void
   quoteCount: number
   isAdmin: boolean
-  hasRoofingTrade?: boolean
+  trades?: ReadonlyArray<string>
 }) {
-  const items = buildNav(quoteCount, hasRoofingTrade)
+  const items = buildNav(quoteCount, trades)
   const byTab = new Map(items.map((i) => [i.tab, i]))
   return (
     <aside className="hidden lg:block">
@@ -1151,14 +1165,14 @@ function MobileTabBar({
   tab,
   setTab,
   quoteCount,
-  hasRoofingTrade = false,
+  trades = [],
 }: {
   tab: Tab
   setTab: (t: Tab) => void
   quoteCount: number
-  hasRoofingTrade?: boolean
+  trades?: ReadonlyArray<string>
 }) {
-  const items = buildNav(quoteCount, hasRoofingTrade)
+  const items = buildNav(quoteCount, trades)
   return (
     <nav
       // Horizontal-scroll bar keeps all six tabs on one line on
@@ -1214,7 +1228,7 @@ const TAB_META: Record<
   },
   billing: {
     title: 'Billing & plan',
-    desc: 'Your QuoteMate subscription — start a plan, switch tiers, or manage your card. Starter Monthly includes a 14-day free trial; we never take a cut of your jobs.',
+    desc: 'Your QuoteMax subscription — start a plan, switch tiers, or manage your card. Starter Monthly includes a 14-day free trial; we never take a cut of your jobs.',
   },
   estimator: {
     title: 'Estimator (Beta)',
@@ -1231,6 +1245,10 @@ const TAB_META: Record<
   files: {
     title: 'Files',
     desc: 'Your archived quotes and uploaded invoices — download any document, or ask a question grounded in your own pricing history.',
+  },
+  'historical-quotes': {
+    title: 'Historical quotes',
+    desc: 'Import your past quotes (CSV or PDF), see what you’ve charged before, and calibrate your pricing book to your own history.',
   },
   quotes: {
     title: 'Quotes',
@@ -1250,7 +1268,7 @@ const TAB_META: Record<
   },
   payouts: {
     title: 'Payouts',
-    desc: 'Set up the secure account QuoteMate pays your completed-job money into.',
+    desc: 'Set up the secure account QuoteMax pays your completed-job money into.',
   },
   pricing: {
     title: 'Pricing book',
@@ -1295,7 +1313,7 @@ function TabHeader({ tab }: { tab: Exclude<Tab, 'overview'> }) {
   return (
     <header className="mb-6">
       <div className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-text-dim">
-        QuoteMate · Dashboard
+        QuoteMax · Dashboard
       </div>
       <h1 className="mt-1.5 font-extrabold uppercase tracking-tight text-text-pri text-[clamp(1.5rem,3vw,2rem)]">
         {meta.title}
@@ -1409,13 +1427,13 @@ function OverviewTab({
       {/* PAGE HEADER — orients the tradie: who they are, what day it is. */}
       <OverviewHeader firstName={tenant.owner_first_name ?? 'Tradie'} />
 
-      {/* HERO — your QuoteMate number, the tradie's lifeline. Copy
+      {/* HERO — your QuoteMax number, the tradie's lifeline. Copy
           action + voice line make it the one card to hand a customer. */}
       <div className="bg-ink-card border border-ink-line p-4 sm:p-5 md:p-6 motion-safe:animate-[fade-up_380ms_cubic-bezier(0.22,1,0.36,1)_both]">
         <div className="flex flex-wrap items-start justify-between gap-3 sm:gap-4">
           <div className="min-w-0">
             <div className="font-mono text-[0.6rem] sm:text-[0.65rem] uppercase tracking-[0.18em] text-text-dim">
-              Your QuoteMate number
+              Your QuoteMax number
             </div>
             {smsNumber ? (
               <>
@@ -1465,7 +1483,7 @@ function OverviewTab({
       </div>
 
       {/* PIPELINE — money view. Lifted to the top (right under the
-          QuoteMate number hero) because revenue + conversion are what
+          QuoteMax number hero) because revenue + conversion are what
           the tradie actually opens the dashboard to check first. */}
       <section
         className="bg-ink-card border border-ink-line motion-safe:animate-[fade-up_380ms_cubic-bezier(0.22,1,0.36,1)_both]"
@@ -1607,7 +1625,7 @@ function OverviewTab({
 
 /** Slim Overview page header — time-of-day greeting + today's date.
  *  Sits inside the content column so the sidebar still aligns flush
- *  with the QuoteMate-number hero below it. */
+ *  with the QuoteMax-number hero below it. */
 function OverviewHeader({ firstName }: { firstName: string }) {
   const now = new Date()
   const hour = now.getHours()
@@ -1622,7 +1640,7 @@ function OverviewHeader({ firstName }: { firstName: string }) {
     <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
       <div className="min-w-0">
         <div className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-text-dim">
-          QuoteMate · Dashboard
+          QuoteMax · Dashboard
         </div>
         <h1 className="mt-1.5 font-extrabold uppercase tracking-tight text-text-pri text-[clamp(1.5rem,3vw,2rem)]">
           {greeting}, <span className="text-accent">{firstName}</span>
@@ -1635,7 +1653,7 @@ function OverviewHeader({ firstName }: { firstName: string }) {
   )
 }
 
-/** Copy-to-clipboard control for the QuoteMate number. Silent success —
+/** Copy-to-clipboard control for the QuoteMax number. Silent success —
  *  the label flips to "Copied" for ~1.6s, no toast. */
 function CopyNumberButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false)
@@ -2034,7 +2052,7 @@ function SmsEstimatorCard({
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="max-w-xl text-sm leading-relaxed text-text-sec">
           <p>
-            When on, a customer texting {tenant.twilio_sms_number ?? 'your QuoteMate number'} about an
+            When on, a customer texting {tenant.twilio_sms_number ?? 'your QuoteMax number'} about an
             electrical plan receives a secure upload link. The take-off runs automatically and the customer
             gets a results link plus a downloadable PDF report — the run also appears in your Estimator
             history for review.
@@ -2232,7 +2250,7 @@ function AccountTab({
 // ─── Payouts tab — Stripe Connect (Express) onboarding ───────────
 //
 // Lets a tradie set up (or resume) the Stripe Connect account that
-// QuoteMate pays completed-job money into. Live status comes straight
+// QuoteMax pays completed-job money into. Live status comes straight
 // from the tenant row's stripe_connect_* columns (migration 056),
 // kept current by /api/stripe/connect-webhook. The action button
 // POSTs /api/stripe/connect/start and redirects to Stripe-hosted
@@ -2257,7 +2275,7 @@ function PayoutsTab({
   //   not_started — no connected account yet
   //   incomplete  — account exists, tradie hasn't finished the form
   //   verifying   — form submitted, Stripe still checking identity/bank
-  //   ready       — payouts_enabled: QuoteMate can pay this tradie
+  //   ready       — payouts_enabled: QuoteMax can pay this tradie
   const status: 'ready' | 'verifying' | 'incomplete' | 'not_started' =
     payoutsReady
       ? 'ready'
@@ -2287,7 +2305,7 @@ function PayoutsTab({
       }
       if (json?.error === 'provisioning_disabled') {
         setErr(
-          'Payout setup isn’t switched on yet — QuoteMate is finishing the rollout. Check back shortly.',
+          'Payout setup isn’t switched on yet — QuoteMax is finishing the rollout. Check back shortly.',
         )
       } else {
         setErr(
@@ -2329,7 +2347,7 @@ function PayoutsTab({
 
           {status === 'ready' && (
             <p className="text-sm leading-relaxed text-text-sec">
-              You’re all set. When a customer pays for a job, QuoteMate releases
+              You’re all set. When a customer pays for a job, QuoteMax releases
               your share to your bank account once the job is marked complete.
             </p>
           )}
@@ -2348,7 +2366,7 @@ function PayoutsTab({
           )}
           {status === 'not_started' && (
             <p className="text-sm leading-relaxed text-text-sec">
-              Set up your secure payout account so QuoteMate can pay you for
+              Set up your secure payout account so QuoteMax can pay you for
               completed jobs. Stripe handles your bank details and identity
               checks — it takes about 5 minutes.
             </p>
@@ -2389,7 +2407,7 @@ function PayoutsTab({
             <span className="font-mono text-accent shrink-0">1</span>
             <span>
               The customer pays their deposit and final balance through
-              QuoteMate.
+              QuoteMax.
             </span>
           </li>
           <li className="flex gap-3">
@@ -2399,7 +2417,7 @@ function PayoutsTab({
           <li className="flex gap-3">
             <span className="font-mono text-accent shrink-0">3</span>
             <span>
-              QuoteMate releases your share straight to your bank — a 2%
+              QuoteMax releases your share straight to your bank — a 2%
               platform fee is kept, the rest is yours.
             </span>
           </li>
@@ -2872,7 +2890,7 @@ function ActivateTradeCard({
   return (
     <Card
       title="Add a specialist trade"
-      subtitle="Switch on a trade QuoteMate now supports. Activating seeds your pricing book and catalogue automatically — nothing else to set up."
+      subtitle="Switch on a trade QuoteMax now supports. Activating seeds your pricing book and catalogue automatically — nothing else to set up."
     >
       {loadError && <ErrorBanner>{loadError}</ErrorBanner>}
 
@@ -2885,7 +2903,7 @@ function ActivateTradeCard({
       {!loadError && available !== null && available.length === 0 && (
         <p className="text-sm text-text-sec">
           No additional trades are available right now. New trades appear
-          here as soon as QuoteMate adds them.
+          here as soon as QuoteMax adds them.
         </p>
       )}
 
@@ -3071,7 +3089,7 @@ function ReviewPolicyCard({
   return (
     <Card
       title="Review before send"
-      subtitle="How quotes leave your QuoteMate number after the AI drafts them. Default is auto-send so the customer never waits on you."
+      subtitle="How quotes leave your QuoteMax number after the AI drafts them. Default is auto-send so the customer never waits on you."
     >
       <form onSubmit={handleSubmit} className="space-y-5">
         <Field label="Policy">
@@ -5321,7 +5339,7 @@ function QuotesTab({ data, accessToken }: { data: DashboardData; accessToken: st
     return (
       <Card>
         <p className="text-sm text-text-dim">
-          No quotes drafted yet. Customers texting your QuoteMate number will
+          No quotes drafted yet. Customers texting your QuoteMax number will
           appear here once their first quote is drafted.
         </p>
       </Card>
@@ -5624,6 +5642,10 @@ function QuoteCard({ q, isMultiTrade, accessToken }: { q: Quote; isMultiTrade: b
                 value={q.routing_decision ? formatJobType(q.routing_decision) : '—'}
               />
             </div>
+
+            {/* Tradie-facing historical pricing hint (informational only — does
+                not change the drafted customer price). */}
+            <HistoricalHint jobType={q.job_type} trade={trade} accessToken={accessToken} />
 
             {/* Tier ladder */}
             {hasTierLadder && (
@@ -6635,7 +6657,7 @@ function BrowseSupplierPanel({
         <div className="bg-ink-card/40 border border-dashed border-ink-line p-6">
           <p className="text-sm text-text-sec">
             The supplier catalogue is empty for your trade(s). Upload a CSV above to
-            populate it, or ask QuoteMate to add a brand.
+            populate it, or ask QuoteMax to add a brand.
           </p>
         </div>
       </div>
@@ -9933,7 +9955,7 @@ function FollowupTextModal({
               Text {item.customer.full_name || 'customer'}
             </h3>
             <p className="mt-1 font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
-              From your QuoteMate number · {item.customer.phone ?? 'no number'}
+              From your QuoteMax number · {item.customer.phone ?? 'no number'}
             </p>
           </div>
           <button
@@ -10225,7 +10247,7 @@ function ChatsTab({
     return (
       <Card>
         <p className="text-sm text-text-dim">
-          No conversations yet. Customers who text your QuoteMate number
+          No conversations yet. Customers who text your QuoteMax number
           will appear here.
         </p>
       </Card>
@@ -10620,6 +10642,8 @@ function tabLabel(t: Tab): string {
       return 'Marketing'
     case 'files':
       return 'Files'
+    case 'historical-quotes':
+      return 'History'
     case 'overview':
       return 'Overview'
     case 'account':

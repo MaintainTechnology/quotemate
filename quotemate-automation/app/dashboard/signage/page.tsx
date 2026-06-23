@@ -10,6 +10,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
+import { FeatureGate } from '@/app/dashboard/_components/FeatureGate'
 import type { ShotSlot } from '@/lib/signage/types'
 import { distinctRegions, regionMatches } from '@/lib/signage/region'
 import { BrandTabs, withBrand, brandFromUrl, syncBrandInUrl, type BrandTab } from './_components/BrandTabs'
@@ -65,6 +66,14 @@ type ShotDef = { slot: string; label: string; instruction: string }
 type Brand = { slug: string; name: string; location_noun: string; location_noun_plural: string; shots: ShotDef[] }
 
 export default function SignageHubPage() {
+  return (
+    <FeatureGate slug="signage" featureLabel="Signage compliance">
+      <SignageHubPageInner />
+    </FeatureGate>
+  )
+}
+
+function SignageHubPageInner() {
   const [token, setToken] = useState<string | null>(null)
   const [authState, setAuthState] = useState<'loading' | 'signed-out' | 'ready' | 'no-org' | 'error'>('loading')
   const [studios, setStudios] = useState<Studio[]>([])
@@ -347,7 +356,7 @@ export default function SignageHubPage() {
 
       <div className="relative z-10 bg-accent px-6 py-5 text-center text-white">
         <span className="font-mono text-sm font-semibold uppercase tracking-[0.16em]">
-          QuoteMate · Signage compliance · pre-check, not HQ approval
+          QuoteMax · Signage compliance · pre-check, not HQ approval
         </span>
       </div>
     </main>

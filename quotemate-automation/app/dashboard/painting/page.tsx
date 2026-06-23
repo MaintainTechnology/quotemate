@@ -16,6 +16,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
+import { FeatureGate } from '@/app/dashboard/_components/FeatureGate'
 import { AddressAutocomplete } from '../roofing/_components/AddressAutocomplete'
 import { PaintRatesEditor } from '../_components/PaintRatesEditor'
 import { MaterialCheck } from './_components/MaterialCheck'
@@ -57,6 +58,14 @@ const CEILINGS = [
 ] as const
 
 export default function PaintingEstimatePage() {
+  return (
+    <FeatureGate slug="painting" featureLabel="Paint estimate">
+      <PaintingEstimatePageInner />
+    </FeatureGate>
+  )
+}
+
+function PaintingEstimatePageInner() {
   const [token, setToken] = useState<string | null>(null)
   const [authState, setAuthState] = useState<'loading' | 'signed-out' | 'ready'>('loading')
 
@@ -456,7 +465,7 @@ export default function PaintingEstimatePage() {
       )}
 
       <div className="relative z-10 mt-16 bg-accent px-6 py-5 text-center text-white">
-        <span className="font-mono text-sm font-semibold uppercase tracking-[0.16em]">QuoteMate · Paint estimate · two-tab</span>
+        <span className="font-mono text-sm font-semibold uppercase tracking-[0.16em]">QuoteMax · Paint estimate · two-tab</span>
       </div>
     </main>
   )

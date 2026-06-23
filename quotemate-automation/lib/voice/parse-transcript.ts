@@ -4,7 +4,7 @@
 // in `calls.transcript` with a regular `Role: text` format on each line.
 // The exact role label varies by Vapi assistant config — common shapes:
 //
-//   "AI: G'day, thanks for calling QuoteMate...\n
+//   "AI: G'day, thanks for calling QuoteMax...\n
 //    User: Yeah I need a quote for downlights\n
 //    AI: Easy - how many?\n
 //    User: Six in the lounge"

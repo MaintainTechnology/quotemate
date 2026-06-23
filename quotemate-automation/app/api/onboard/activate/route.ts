@@ -23,6 +23,7 @@ import { runProvisioning } from '@/lib/onboard/run-provisioning'
 import { markIntentUsed } from '@/lib/onboard/intent-tokens'
 import { seedTenantServiceOfferings } from '@/lib/onboard/seed-tenant-defaults'
 import { checkInvitationCode, consumeInvitationCode } from '@/lib/onboard/invitation-codes'
+import { stampFeatureProvenance } from '@/lib/features/access'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -197,6 +198,16 @@ export async function POST(req: Request) {
         message: seedErr?.message ?? String(seedErr),
       })
     }
+
+    // ─── 3b. Stamp feature provenance (migration 138) ──────────────
+    // The tenant's selected trades become 'onboarding'-sourced grants so a
+    // later plan downgrade never strips the trade they signed up with. trades[]
+    // itself was set on the tenants insert above; this only records provenance.
+    await stampFeatureProvenance(supabase, {
+      tenantId: id,
+      features: form.trades,
+      source: 'onboarding',
+    })
 
     // ─── Consume the invitation code (idempotent, once per tenant) ──
     // Done after the tenant row exists so the redemption ledger has a

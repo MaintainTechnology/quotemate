@@ -17,6 +17,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
+import { FeatureGate } from '@/app/dashboard/_components/FeatureGate'
 import { AddressAutocomplete } from '../roofing/_components/AddressAutocomplete'
 import { RoofTilesViewer } from '../roofing/_components/RoofTilesViewer'
 import { ZoomableImage } from '../_components/ZoomableImage'
@@ -111,6 +112,14 @@ const SUMMARY_TOGGLE =
   'cursor-pointer select-none font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-accent hover:text-accent-press'
 
 export default function AirconRecommendPage() {
+  return (
+    <FeatureGate slug="aircon" featureLabel="the AC recommender">
+      <AirconRecommendPageInner />
+    </FeatureGate>
+  )
+}
+
+function AirconRecommendPageInner() {
   const [token, setToken] = useState<string | null>(null)
   const [authState, setAuthState] = useState<'loading' | 'signed-out' | 'ready'>('loading')
 

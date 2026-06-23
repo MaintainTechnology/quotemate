@@ -2,7 +2,7 @@
 // Each Session charges the deposit (default 30% of inc-GST tier total).
 // Returns a { good, better, best } map of Session URLs ready to embed in SMS.
 //
-// Platform-direct charging (NOT Stripe Connect) — money lands in QuoteMate's
+// Platform-direct charging (NOT Stripe Connect) — money lands in QuoteMax's
 // Stripe account. When tradie #2 onboards, switch to Connect by adding
 // `stripeAccount` and `application_fee_amount` to the call.
 
@@ -145,7 +145,7 @@ function buildProductName(intake: IntakeForCheckout, tierKey: string, tier: NonN
   const job = intake.job_type.replace(/_/g, ' ')
   const lead = count ? `${count} ${job}` : job
   const tierLabel = tier.label || tierKey
-  return `QuoteMate — ${lead} · ${tierLabel}`
+  return `QuoteMax — ${lead} · ${tierLabel}`
 }
 
 /**
@@ -271,7 +271,7 @@ export async function createInspectionCheckoutSession(opts: {
         price_data: {
           currency: 'aud',
           product_data: {
-            name: `QuoteMate — site visit (${job})`,
+            name: `QuoteMax — site visit (${job})`,
             description: 'Refundable site-visit deposit. Credited toward your final quote when accepted.',
           },
           unit_amount: INSPECTION_FEE_AUD_CENTS,

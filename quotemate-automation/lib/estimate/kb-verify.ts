@@ -168,7 +168,7 @@ export function buildKbVerifyQuery(intake: unknown, draft: unknown): string {
   }
 
   const header = [
-    'You are the QuoteMate pricing knowledge base (MT-QM-PRICING-KB), which mirrors the',
+    'You are the QuoteMax pricing knowledge base (MT-QM-PRICING-KB), which mirrors the',
     'authoritative Supabase pricing and materials tables.',
     trade ? `Trade: ${trade}.` : '',
     jobType ? `Job type: ${jobType}.` : '',

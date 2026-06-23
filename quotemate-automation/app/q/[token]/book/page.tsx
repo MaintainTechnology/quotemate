@@ -22,6 +22,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { resolveGoogleBookingUrl } from '@/lib/quote/booking'
 import { resolveBookableSlots } from '@/lib/quote/slots'
+import { BrandMark } from '@/app/_components/BrandMark'
 import { SlotPicker } from './SlotPicker'
 
 export const dynamic = 'force-dynamic'
@@ -236,11 +237,9 @@ export default async function BookingPage(props: {
       <header className="relative z-10 border-b border-ink-line">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-5 py-5 sm:px-6">
           <Link href="/" className="flex items-center gap-2.5">
-            <span className="grid h-7 w-7 place-items-center bg-accent text-sm font-black text-white">
-              Q
-            </span>
+            <BrandMark className="h-7 w-7" />
             <span className="font-extrabold uppercase tracking-tight">
-              QuoteMate
+              QuoteMax
             </span>
           </Link>
           <Link
@@ -258,7 +257,7 @@ export default async function BookingPage(props: {
 
       <div className="relative z-10 bg-accent px-6 py-4 text-center">
         <span className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-white">
-          QuoteMate · Book · Pay · Done
+          QuoteMax · Book · Pay · Done
         </span>
       </div>
     </main>
@@ -350,7 +349,7 @@ function ReservedPayState({
 // Off-platform alternative: book straight into the tradie's own Google
 // calendar. Renders nothing unless a valid https link is configured.
 // Copy is explicit that this path is arranged with the tradie directly
-// (no QuoteMate deposit/confirmation on it) so the customer isn't
+// (no QuoteMax deposit/confirmation on it) so the customer isn't
 // surprised — matches the "DB = pay-last; Google = off-platform" call.
 function GoogleBookingOption({
   googleUrl,

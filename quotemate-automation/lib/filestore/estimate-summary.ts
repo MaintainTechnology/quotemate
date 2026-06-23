@@ -19,7 +19,7 @@ export function electricalEstimateSummaryText(
   opts?: { jobLabel?: string | null; pricedAt?: string | null },
 ): string {
   const out: string[] = []
-  out.push('QuoteMate electrical estimate — result summary')
+  out.push('QuoteMax electrical estimate — result summary')
   if (opts?.jobLabel) out.push(`Job: ${opts.jobLabel}`)
   if (opts?.pricedAt) out.push(`Priced at: ${opts.pricedAt}`)
   out.push('')

@@ -1,4 +1,4 @@
-// c:/Users/dalig/Downloads/QuoteMate/quoteMate/.claude/worktrees/solar-estimate/quotemate-automation/lib/solar/hero-overlay.test.ts
+// c:/Users/dalig/Downloads/QuoteMax/quoteMate/.claude/worktrees/solar-estimate/quotemate-automation/lib/solar/hero-overlay.test.ts
 import { describe, expect, it } from 'vitest'
 import { buildHeroOverlay, orientationLabel } from './hero-overlay'
 import type { SolarRoofFacts, SolarSystemTier } from './types'

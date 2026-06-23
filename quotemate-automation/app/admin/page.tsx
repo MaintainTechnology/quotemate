@@ -2,7 +2,7 @@
 
 // /admin — Admin command-centre landing.
 //
-// Every admin destination in QuoteMate hangs off this page. Tiles
+// Every admin destination in QuoteMax hangs off this page. Tiles
 // link to the Bulk Loader (CSV + trade-book extraction), the three
 // Quality Agents (Eval / Catalogue / Tradie-Learn), and the
 // operator dashboard.
@@ -18,7 +18,6 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
-import { RoofingActivation } from './_components/RoofingActivation'
 
 type WhoAmI = {
   ok: boolean
@@ -95,6 +94,15 @@ const SECONDARY_TILES: Tile[] = [
     cta: 'Open dashboard',
     href: '/dashboard',
   },
+  {
+    num: '07',
+    eyebrow: 'Customer management',
+    title: 'Customers',
+    blurb:
+      'Every tradie business on the platform in one list — enabled trades, subscription plan, and account status. Open a customer to suspend/reactivate, comp billing, toggle trades, or change their Stripe plan. Every action is audited.',
+    cta: 'Open customers',
+    href: '/admin/customers',
+  },
 ]
 
 export default function AdminHomePage() {
@@ -133,7 +141,7 @@ export default function AdminHomePage() {
       {/* ── Hero ─────────────────────────────────────────────────── */}
       <section className="relative z-10 mx-auto max-w-7xl px-6 pt-16 pb-12 sm:px-10 md:pt-24 md:pb-16">
         <div className="flex items-center gap-3 font-mono text-[0.75rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
-          <span>QuoteMate</span>
+          <span>QuoteMax</span>
           <span className="text-ink-line">/</span>
           <span className="text-text-pri">Admin</span>
         </div>
@@ -144,7 +152,7 @@ export default function AdminHomePage() {
             for the quote engine.
           </h1>
           <p className="max-w-md text-base leading-relaxed text-text-sec md:text-lg">
-            Every back-office surface for QuoteMate lives here — pricing
+            Every back-office surface for QuoteMax lives here — pricing
             catalogue, evaluation runs, agent findings, tenant tools.
             Pick a destination below.
           </p>
@@ -173,13 +181,14 @@ export default function AdminHomePage() {
         </div>
       </section>
 
-      {/* ── Roofing activation panel ──────────────────────────────── */}
-      <RoofingActivation />
+      {/* Per-tenant feature toggles live on the customer console
+          (/admin/customers/[id] → Features panel), which supersedes the
+          old one-off roofing activation panel. */}
 
       {/* ── Closing accent bar ───────────────────────────────────── */}
       <div className="relative z-10 bg-accent px-6 py-5 text-center text-white">
         <span className="font-mono text-sm font-semibold uppercase tracking-[0.16em]">
-          QuoteMate Admin · v1
+          QuoteMax Admin · v1
         </span>
       </div>
     </main>

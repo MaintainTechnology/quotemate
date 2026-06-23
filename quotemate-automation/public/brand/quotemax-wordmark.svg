@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="80" viewBox="0 0 300 80" role="img" aria-label="QuoteMax">
+  <title>QuoteMax</title>
+  <text x="6" y="56" font-family="Manrope, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Arial, sans-serif" font-size="46" font-weight="800" letter-spacing="-1.5">
+    <tspan fill="#F4F1EB">QUOTE</tspan><tspan fill="#FF5A1F">MAX</tspan>
+  </text>
+</svg>

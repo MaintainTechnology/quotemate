@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="QuoteMax — AI receptionist for Australian tradies">
+  <title>QuoteMax</title>
+  <rect width="1200" height="630" fill="#0E1622"/>
+  <!-- top accent bar (signature Maintain orange) -->
+  <rect x="0" y="0" width="1200" height="10" fill="#FF5A1F"/>
+  <!-- icon mark, centered near top -->
+  <g transform="translate(530,140)">
+    <rect width="140" height="140" fill="#FF5A1F"/>
+    <g transform="scale(2.1875)">
+      <circle cx="31" cy="28" r="17" fill="#FFFFFF"/>
+      <circle cx="31" cy="28" r="7.5" fill="#FF5A1F"/>
+      <path d="M21 39 L37 39 L21 52 Z" fill="#FFFFFF"/>
+    </g>
+  </g>
+  <!-- wordmark -->
+  <text x="600" y="410" text-anchor="middle" font-family="'Segoe UI', Arial, Manrope, sans-serif" font-size="104" font-weight="800" letter-spacing="-3">
+    <tspan fill="#F4F1EB">QUOTE</tspan><tspan fill="#FF5A1F">MAX</tspan>
+  </text>
+  <!-- tagline -->
+  <text x="600" y="468" text-anchor="middle" font-family="'Segoe UI', Arial, Manrope, sans-serif" font-size="30" font-weight="500" letter-spacing="0.5" fill="#9FB0C3">AI receptionist for Australian tradies</text>
+  <!-- footer caption -->
+  <text x="600" y="556" text-anchor="middle" font-family="'Consolas','Courier New',monospace" font-size="22" font-weight="600" letter-spacing="3" fill="#5E7186">ELECTRICAL NSW · PLUMBING QLD</text>
+</svg>

@@ -103,7 +103,7 @@ export async function runProvisioning(
   if (!phoneNumber) {
     const twilio: TwilioProvisionResult = await buyTwilio({
       tenantId: input.tenantId,
-      friendlyName: `${input.businessName} — QuoteMate`,
+      friendlyName: `${input.businessName} — QuoteMax`,
     })
     if (!twilio.ok) {
       return {
@@ -159,7 +159,7 @@ export async function runProvisioning(
   const register: VapiRegisterResult = await registerVapi({
     phoneNumber,
     assistantId: vapiAssistantId,
-    name: `${input.businessName} — QuoteMate`,
+    name: `${input.businessName} — QuoteMax`,
   })
   if (!register.ok) {
     warning = `Vapi number registration failed: ${register.reason}`

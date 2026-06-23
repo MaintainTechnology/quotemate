@@ -174,7 +174,7 @@ export function buildPaintTenderReportHtml(input: {
     <ul>${list(bom.exclusions)}</ul>
 
     <div class="foot">
-      Quote prepared with QuoteMate.${input.quoteViewUrl ? ` View online: ${esc(input.quoteViewUrl)}` : ''}
+      Quote prepared with QuoteMax.${input.quoteViewUrl ? ` View online: ${esc(input.quoteViewUrl)}` : ''}
       This tender is valid for 30 days and subject to site verification of access and substrate condition.
     </div>
   </div>

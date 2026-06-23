@@ -82,7 +82,7 @@ export async function pushSolarLeadToOpenSolar(
       ...(estimate?.context.location
         ? { lat: estimate.context.location.lat, lon: estimate.context.location.lng }
         : {}),
-      notes: `Pushed from confirmed QuoteMate solar estimate ${row.publicToken}`,
+      notes: `Pushed from confirmed QuoteMax solar estimate ${row.publicToken}`,
       ...(contactUrl ? { contacts: [contactUrl] } : {}),
     })
     if (!projectRes.ok) {

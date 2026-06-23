@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>QuoteMate · Intake &amp; Estimation Engine — how a price is actually built</title>
-<meta name="description" content="Traced-from-source diagrams of the QuoteMate intake and estimation engines: where prices come from, how materials are chosen, how every line is grounded against the database, and a full worked quote." />
+<title>QuoteMax · Intake &amp; Estimation Engine — how a price is actually built</title>
+<meta name="description" content="Traced-from-source diagrams of the QuoteMax intake and estimation engines: where prices come from, how materials are chosen, how every line is grounded against the database, and a full worked quote." />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
@@ -184,7 +184,7 @@
   </svg>
   <div class="wrap hero-grid">
     <div>
-      <span class="stamp">QuoteMate · Engine Internals</span>
+      <span class="stamp">QuoteMax · Engine Internals</span>
       <h1 style="margin-top:22px">The <span class="accent">Quote</span> Engine,<br/>traced from <span class="accent">source</span></h1>
     </div>
     <aside>
@@ -210,7 +210,7 @@
 <section id="overview"><div class="wrap">
   <span class="eyebrow">01 · What you are looking at</span>
   <h2>Two engines, one money path</h2>
-  <p class="lede">QuoteMate runs every job through two stages. The <span class="accent">Intake Engine</span> turns a voice or SMS conversation (plus any photos) into one structured <span class="mono">intakes</span> row. The <span class="accent">Estimation Engine</span> turns that row into a priced quote — drafting with Claude, but forcing <strong>every price to derive from the database</strong> and bouncing anything it can't prove to a flat $99 inspection.</p>
+  <p class="lede">QuoteMax runs every job through two stages. The <span class="accent">Intake Engine</span> turns a voice or SMS conversation (plus any photos) into one structured <span class="mono">intakes</span> row. The <span class="accent">Estimation Engine</span> turns that row into a priced quote — drafting with Claude, but forcing <strong>every price to derive from the database</strong> and bouncing anything it can't prove to a flat $99 inspection.</p>
 
   <div class="legend">
     <span class="key"><span class="dot" style="background:var(--c-rate)"></span> pricing_book · the rate card</span>
@@ -560,7 +560,7 @@
 
 <!-- ░░ WORKED EXAMPLE ░░ -->
 <section id="example"><div class="wrap">
-  <span class="eyebrow">08 · Customer X meets QuoteMate</span>
+  <span class="eyebrow">08 · Customer X meets QuoteMax</span>
   <h2>One job, end to end</h2>
   <p class="lede">An electrical tenant ("Sparky", rate card: <span class="mono">$110/hr · 28% markup · min 2.0 h · GST-registered</span>). The customer texts about downlights. Watch it flow through both engines into a real Good/Better/Best.</p>
 
@@ -701,7 +701,7 @@
   <p class="small">Traced from source on 2026-06-01 across <span class="mono">lib/intake/{structure,schema,embed,quality}.ts</span>, <span class="mono">lib/estimate/{run,tools,validate,pricing-book,catalogue,merge-recipes,min-labour,rag,rerank}.ts</span>, <span class="mono">lib/routing/decide.ts</span> and <span class="mono">app/api/{intake/structure,estimate/draft}/route.ts</span>, cross-checked against <span class="mono">sql/init.sql</span> + migrations 022–074. Six subsystems mapped and adversarially re-verified; all reported accurate.</p>
 </div></section>
 
-<footer>Maintain Technology · QuoteMate engine internals · accurate by grounding, safe by inspection</footer>
+<footer>Maintain Technology · QuoteMax engine internals · accurate by grounding, safe by inspection</footer>
 
 </body>
 </html>
