@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QuoteMax — Caterpillar Brand Mockup Set (3 palettes)</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap');
+*{box-sizing:border-box;}
+body{margin:0;background:#EAEAE7;font-family:'Manrope',system-ui,-apple-system,sans-serif;color:#16140F;}
+.wrap{max-width:1080px;margin:0 auto;padding:20px 14px 70px;}
+
+.intro .eyebrow{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#8A847A;}
+.intro h1{font-size:clamp(1.5rem,3vw,2.3rem);font-weight:900;letter-spacing:-.03em;text-transform:uppercase;margin:7px 0 0;}
+.intro p{color:#5C564C;max-width:70ch;margin:8px 0 0;font-size:13.5px;line-height:1.55;}
+
+.legend{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:16px 0 6px;}
+.lg{border:1px solid #D9D6CF;border-radius:10px;overflow:hidden;background:#fff;}
+.lg .sw{display:flex;height:46px;}
+.lg .sw i{flex:1;}
+.lg .meta{padding:9px 11px;}
+.lg .meta b{font-size:12px;font-weight:800;}
+.lg .meta div{font-family:'JetBrains Mono',monospace;font-size:9px;color:#8A847A;margin-top:3px;}
+.lg .use{margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;border:1px solid #16140F;background:#16140F;color:#fff;padding:6px 10px;border-radius:7px;cursor:pointer;}
+
+/* per-palette divider */
+.palette-title{display:flex;align-items:center;gap:12px;margin:40px 0 16px;padding:14px 16px;background:#15130F;border-radius:12px;}
+.palette-title h2{margin:0;font-size:1.05rem;font-weight:900;letter-spacing:.03em;text-transform:uppercase;color:#fff;}
+.palette-title .sws{display:flex;gap:5px;}
+.palette-title .sws i{width:18px;height:18px;border-radius:4px;border:1px solid rgba(255,255,255,.25);}
+.palette-title .hx{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:10px;color:#B9B2A4;}
+.mode-band{display:inline-flex;align-items:center;gap:7px;margin:20px 2px 8px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#16140F;}
+.mode-band::before{content:"";width:11px;height:11px;border-radius:50%;border:2px solid #16140F;}
+.mode-band.mode-dark::before{background:#16140F;}
+
+/* themed sets */
+/* CAT Classic */
+.paletteset[data-pal="classic"][data-mode="light"]{ --accent:#FFC400; --accent-ink:#1A1A1A; --ink:#111111; --sec:#5A5A5A; --surface:#FFFFFF; --s2:#F6F6F4; --line:#E4E4E1; --bar:#000000; --bar-ink:#FFFFFF; --chrome:#F1EFEA; --chrome-line:#E4E1D9; --url:#A39C8E; --dot:#CFCCC3; --devborder:#D9D6CF; }
+.paletteset[data-pal="classic"][data-mode="dark"]{ --accent:#FFC400; --accent-ink:#1A1A1A; --ink:#FFFFFF; --sec:#9C9C96; --surface:#0C0C0C; --s2:#171717; --line:#2A2A2A; --bar:#000000; --bar-ink:#FFFFFF; --chrome:#161616; --chrome-line:#262626; --url:#6E6E68; --dot:#3A3A3A; --devborder:#262626; }
+/* Machine Yellow */
+.paletteset[data-pal="machine"][data-mode="light"]{ --accent:#E2A52C; --accent-ink:#1A1308; --ink:#1C1A15; --sec:#6B6457; --surface:#FFFFFF; --s2:#F4EFE6; --line:#E7E0D2; --bar:#1C1A15; --bar-ink:#FBF7EF; --chrome:#F1EEE7; --chrome-line:#E4DFD3; --url:#A89E8C; --dot:#D2CBBB; --devborder:#DED7C8; }
+.paletteset[data-pal="machine"][data-mode="dark"]{ --accent:#E2A52C; --accent-ink:#1A1308; --ink:#F7F2E8; --sec:#A89E8C; --surface:#14120D; --s2:#1F1B14; --line:#332D22; --bar:#0E0C08; --bar-ink:#F7F2E8; --chrome:#1B1810; --chrome-line:#2C2719; --url:#807763; --dot:#3A3326; --devborder:#2C2719; }
+/* Yellow + Charcoal */
+.paletteset[data-pal="charcoal"][data-mode="light"]{ --accent:#FFC400; --accent-ink:#2B2422; --ink:#2B2422; --sec:#6E645F; --surface:#FFFFFF; --s2:#F7F4F2; --line:#E8E2DE; --bar:#2B2422; --bar-ink:#FFFFFF; --chrome:#F2EEEC; --chrome-line:#E6E0DC; --url:#A89E98; --dot:#D6CEC9; --devborder:#E2DAD5; }
+.paletteset[data-pal="charcoal"][data-mode="dark"]{ --accent:#FFC400; --accent-ink:#2B2422; --ink:#F4F0EE; --sec:#A89E98; --surface:#1A1614; --s2:#251F1C; --line:#382F2B; --bar:#2B2422; --bar-ink:#FFFFFF; --chrome:#221C1A; --chrome-line:#332B27; --url:#7E726C; --dot:#3C322E; --devborder:#332B27; }
+
+.block{margin:26px 0;}
+.block > .tag{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#8A847A;margin:0 2px 10px;display:flex;align-items:center;gap:8px;}
+.block > .tag b{color:#16140F;font-weight:800;}
+
+.device{border:1px solid var(--devborder);border-radius:14px;overflow:hidden;background:var(--surface);box-shadow:0 20px 44px -26px rgba(20,18,12,.5);}
+.winbar{display:flex;align-items:center;gap:6px;padding:9px 12px;background:var(--chrome);border-bottom:1px solid var(--chrome-line);}
+.winbar i{width:9px;height:9px;border-radius:50%;background:var(--dot);}
+.winbar .url{margin-left:10px;font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--url);}
+
+.logo{display:inline-flex;align-items:center;gap:8px;}
+.mark{display:grid;place-items:center;width:26px;height:26px;border-radius:6px;background:var(--ink);}
+.mark svg{width:62%;height:62%;}
+.mark .b1{fill:var(--accent);} .mark .b2{fill:var(--ink);} .mark .b3{fill:var(--accent);}
+.wordmark{font-weight:800;text-transform:uppercase;letter-spacing:-.01em;font-size:15px;color:var(--ink);}
+.on-dark .mark{background:var(--accent);}
+.on-dark .mark .b1{fill:var(--bar);} .on-dark .mark .b2{fill:var(--accent);} .on-dark .mark .b3{fill:var(--bar);}
+.on-dark .wordmark{color:var(--bar-ink);}
+
+.screen{background:var(--surface);color:var(--ink);font-size:12px;}
+.btn{display:inline-flex;align-items:center;gap:6px;background:var(--accent);color:var(--accent-ink);font-weight:800;font-size:11px;padding:8px 13px;border-radius:8px;text-transform:uppercase;letter-spacing:.04em;border:none;cursor:pointer;font-family:inherit;}
+.btn.dark{background:var(--ink);color:var(--surface);}
+.btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--ink);}
+.eyebrow{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--sec);}
+
+.nav{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:2px solid var(--ink);}
+.nav .links{display:flex;gap:13px;margin-left:8px;font-size:11px;font-weight:600;color:var(--sec);}
+.nav .btn{margin-left:auto;}
+.hero{padding:20px 16px;display:grid;grid-template-columns:1.3fr .9fr;gap:16px;align-items:center;background:var(--s2);}
+.hero h1{font-size:26px;line-height:1.0;font-weight:900;letter-spacing:-.03em;margin:8px 0 0;text-transform:uppercase;}
+.hero h1 .y{color:var(--accent-ink);background:var(--accent);padding:0 4px;}
+.hero p{color:var(--sec);font-size:11.5px;line-height:1.5;margin:10px 0 0;}
+.hero .row{display:flex;gap:8px;margin-top:13px;}
+.sms{background:var(--surface);border:2px solid var(--ink);border-radius:12px;padding:11px;}
+.bub{font-size:10px;line-height:1.35;padding:7px 9px;border-radius:9px;margin-bottom:6px;max-width:92%;}
+.bub.in{background:var(--s2);border:1px solid var(--line);}
+.bub.out{background:var(--accent);color:var(--accent-ink);margin-left:auto;font-weight:600;}
+.sms .tg{font-family:'JetBrains Mono',monospace;font-size:8px;text-transform:uppercase;letter-spacing:.1em;color:var(--sec);margin:7px 0 6px;}
+.chips{display:flex;gap:5px;}
+.chips span{flex:1;text-align:center;font-size:9px;font-weight:800;padding:6px 3px;border-radius:6px;background:var(--accent);color:var(--accent-ink);}
+.chips span.alt{background:var(--s2);color:var(--ink);border:1px solid var(--line);}
+.strip{display:flex;flex-wrap:wrap;gap:12px;padding:9px 16px;background:var(--ink);color:var(--bar-ink);font-family:'JetBrains Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:.08em;}
+.strip .y{color:var(--accent);}
+.how{padding:16px;}
+.how h2{font-size:16px;font-weight:900;text-transform:uppercase;letter-spacing:-.02em;margin:6px 0 12px;}
+.ncards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.ncard{border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:0 8px 8px 0;padding:11px;}
+.ncard .n{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:var(--accent);line-height:1;}
+.ncard b{display:block;font-size:11px;font-weight:800;margin-top:6px;}
+.ncard p{font-size:9.5px;color:var(--sec);line-height:1.4;margin:3px 0 0;}
+.nums{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border-top:1px solid var(--line);}
+.nums .num{background:var(--surface);text-align:center;padding:14px 6px;}
+.nums .num b{display:block;font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:var(--ink);}
+.nums .num span{font-size:8px;color:var(--sec);text-transform:uppercase;letter-spacing:.06em;}
+.cta-bar{background:var(--accent);color:var(--accent-ink);text-align:center;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;padding:11px;}
+
+.dash{display:grid;grid-template-columns:150px 1fr;min-height:300px;}
+.dbar{grid-column:1/3;display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bar);}
+.dbar .biz{margin-left:6px;font-size:11px;font-weight:700;color:var(--bar-ink);opacity:.85;}
+.dbar .btn{margin-left:auto;}
+.dbar .av{width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-size:10px;font-weight:800;}
+.side{border-right:1px solid var(--line);padding:12px 8px;background:var(--s2);}
+.side a{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:7px;font-size:11px;font-weight:600;color:var(--sec);margin-bottom:2px;}
+.side a .ic{width:7px;height:7px;border-radius:2px;background:var(--line);}
+.side a.on{background:var(--surface);color:var(--ink);font-weight:800;box-shadow:inset 3px 0 0 var(--accent);}
+.side a.on .ic{background:var(--accent);}
+.main{padding:14px;}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+.kpi{border:1px solid var(--line);border-radius:9px;padding:10px;}
+.kpi .k{font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--sec);font-family:'JetBrains Mono',monospace;}
+.kpi .v{font-size:20px;font-weight:900;margin-top:4px;}
+.kpi .v .u{font-size:11px;color:var(--accent);font-weight:800;}
+.funnel{display:flex;gap:6px;margin:14px 0;}
+.fstep{flex:1;background:var(--s2);border:1px solid var(--line);border-radius:7px;padding:9px;text-align:center;}
+.fstep b{display:block;font-family:'JetBrains Mono',monospace;font-size:16px;color:var(--ink);}
+.fstep.acc{background:var(--accent);border-color:var(--accent);}
+.fstep.acc b{color:var(--accent-ink);}
+.fstep span{font-size:8px;text-transform:uppercase;letter-spacing:.05em;color:var(--sec);}
+.fstep.acc span{color:var(--accent-ink);}
+table.qt{width:100%;border-collapse:collapse;font-size:10px;margin-top:6px;}
+table.qt th{text-align:left;font-family:'JetBrains Mono',monospace;font-size:8.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--sec);padding:7px 6px;border-bottom:2px solid var(--ink);}
+table.qt td{padding:7px 6px;border-bottom:1px solid var(--line);}
+table.qt td .mn{font-family:'JetBrains Mono',monospace;font-weight:600;}
+.chip{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:700;padding:3px 7px;border-radius:5px;text-transform:uppercase;letter-spacing:.05em;}
+.chip.draft{background:var(--s2);color:var(--sec);border:1px solid var(--line);}
+.chip.sent{background:var(--ink);color:var(--surface);}
+.chip.paid{background:var(--accent);color:var(--accent-ink);}
+.chip.insp{background:transparent;color:var(--ink);border:1.5px solid var(--accent);}
+
+.qhead{display:flex;align-items:center;padding:11px 16px;border-bottom:2px solid var(--ink);}
+.qhead .ref{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--sec);text-transform:uppercase;letter-spacing:.06em;}
+.qhero{padding:15px 16px;background:var(--s2);}
+.statuschip{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:8.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;background:var(--accent);color:var(--accent-ink);padding:4px 9px;border-radius:5px;}
+.qhero h1{font-size:20px;font-weight:900;letter-spacing:-.02em;margin:9px 0 0;text-transform:uppercase;}
+.qhero h1 .y{background:var(--accent);color:var(--accent-ink);padding:0 4px;}
+.qhero p{color:var(--sec);font-size:11px;margin:8px 0 0;line-height:1.5;}
+.tiers{padding:14px 16px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.tier{border:1px solid var(--line);border-radius:10px;padding:11px;position:relative;}
+.tier.rec{border:2px solid var(--accent);}
+.tier .rb{position:absolute;top:-9px;left:11px;background:var(--accent);color:var(--accent-ink);font-family:'JetBrains Mono',monospace;font-size:7.5px;font-weight:700;padding:3px 7px;border-radius:5px;text-transform:uppercase;}
+.tier .th{display:flex;align-items:baseline;gap:6px;}
+.tier .th .n{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--accent);}
+.tier .th .lab{font-size:12px;font-weight:900;text-transform:uppercase;}
+.tier .ex{font-size:8.5px;color:var(--sec);margin-top:8px;}
+.tier .inc{font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:700;}
+.tier .dep{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:8.5px;background:var(--accent);color:var(--accent-ink);padding:3px 7px;border-radius:5px;margin:7px 0;}
+.tier .li{display:flex;justify-content:space-between;font-size:9px;color:var(--sec);padding:3px 0;border-top:1px dashed var(--line);}
+.tier .pay{display:block;text-align:center;background:var(--accent);color:var(--accent-ink);font-weight:800;font-size:10px;padding:8px;border-radius:7px;margin-top:8px;text-transform:uppercase;}
+.qfoot{display:flex;flex-wrap:wrap;gap:9px;align-items:center;padding:11px 16px;border-top:1px solid var(--line);font-family:'JetBrains Mono',monospace;font-size:8.5px;color:var(--sec);text-transform:uppercase;letter-spacing:.05em;}
+.qfoot .trade{background:var(--ink);color:var(--surface);padding:3px 8px;border-radius:5px;font-weight:700;}
+
+.paperwrap{display:flex;justify-content:center;padding:18px;background:repeating-linear-gradient(45deg,#E4E1DA,#E4E1DA 10px,#E9E6DF 10px,#E9E6DF 20px);border-radius:14px;border:1px solid #D9D6CF;}
+.paper{width:520px;max-width:100%;background:#fff;color:#14110c;box-shadow:0 16px 40px -18px rgba(0,0,0,.4);}
+.paper .lh{display:flex;align-items:center;padding:16px 22px;background:var(--bar);}
+.paper .lh .biz{margin-left:auto;text-align:right;color:var(--bar-ink);font-size:9px;line-height:1.5;font-family:'JetBrains Mono',monospace;}
+.paper .accentrule{height:5px;background:var(--accent);}
+.paper .body{padding:18px 22px;}
+.paper .title{font-size:16px;font-weight:900;text-transform:uppercase;letter-spacing:.02em;}
+.paper .meta{display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:9px;color:#6a6256;margin-top:8px;border-bottom:1px solid #eee;padding-bottom:10px;}
+.paper .two{display:flex;justify-content:space-between;gap:20px;margin:12px 0;font-size:10px;}
+.paper .two .h{font-family:'JetBrains Mono',monospace;font-size:8px;text-transform:uppercase;letter-spacing:.1em;color:#9a9286;margin-bottom:3px;}
+.paper table{width:100%;border-collapse:collapse;font-size:10px;margin-top:6px;}
+.paper table th{text-align:left;background:var(--ink);color:var(--surface);font-family:'JetBrains Mono',monospace;font-size:8px;text-transform:uppercase;letter-spacing:.06em;padding:7px 8px;}
+.paper table th.r,.paper table td.r{text-align:right;}
+.paper table td{padding:7px 8px;border-bottom:1px solid #eee;}
+.paper table td .mn{font-family:'JetBrains Mono',monospace;}
+.paper .totals{margin-left:auto;width:55%;font-size:10px;margin-top:10px;}
+.paper .totals .r{display:flex;justify-content:space-between;padding:4px 0;font-family:'JetBrains Mono',monospace;}
+.paper .totals .grand{border-top:2px solid var(--ink);margin-top:4px;padding-top:7px;font-weight:800;font-size:13px;}
+.paper .depbox{margin-top:12px;background:var(--accent);color:var(--accent-ink);padding:10px 12px;border-radius:6px;display:flex;justify-content:space-between;align-items:center;font-weight:800;font-size:11px;text-transform:uppercase;}
+.paper .terms{margin-top:14px;font-size:8.5px;color:#8a8276;line-height:1.5;border-top:1px solid #eee;padding-top:10px;}
+
+.cardgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;}
+.cc{border:1px solid var(--line);border-radius:10px;padding:13px;background:var(--surface);color:var(--ink);}
+.cc .ct{font-family:'JetBrains Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--sec);margin-bottom:10px;}
+.cc .rowg{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.swrow{display:flex;border-radius:8px;overflow:hidden;border:1px solid var(--line);width:100%;}
+.swrow i{flex:1;height:38px;display:flex;align-items:flex-end;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:7.5px;padding-bottom:3px;}
+.alert{display:flex;gap:8px;align-items:center;background:var(--accent);color:var(--accent-ink);border-radius:8px;padding:9px 11px;font-size:10px;font-weight:700;}
+.field{border:1.5px solid var(--ink);border-radius:8px;padding:8px 10px;font-size:11px;color:var(--sec);}
+.toggle{width:38px;height:20px;border-radius:999px;background:var(--accent);position:relative;}
+.toggle::after{content:"";position:absolute;top:2px;right:2px;width:16px;height:16px;border-radius:50%;background:var(--ink);}
+.stat{border:1px solid var(--line);border-radius:9px;padding:11px;}
+.stat .k{font-size:9px;color:var(--sec);font-family:'JetBrains Mono',monospace;text-transform:uppercase;}
+.stat .v{font-size:22px;font-weight:900;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="intro">
+    <div class="eyebrow">QuoteMax · Caterpillar brand study</div>
+    <h1>Industrial yellow. Built for the trade.</h1>
+    <p>Your real QuoteMax logo on three Caterpillar-derived palettes, each shown across the full product — marketing site, tradie dashboard, customer quote, printable PDF quote, and a component sheet. All three palettes are laid out top-to-bottom so you can scroll and compare.</p>
+  </div>
+
+  <div class="legend">
+    <div class="lg"><div class="sw"><i style="background:#FFC400"></i><i style="background:#000"></i><i style="background:#fff"></i></div><div class="meta"><b>CAT Classic</b><div>#FFC400 · #000000 · #FFF</div><button class="use" data-name="CAT Classic">Use this set</button></div></div>
+    <div class="lg"><div class="sw"><i style="background:#E2A52C"></i><i style="background:#1C1A15"></i><i style="background:#F4EFE6"></i></div><div class="meta"><b>Machine Yellow</b><div>#E2A52C · #1C1A15</div><button class="use" data-name="Machine Yellow">Use this set</button></div></div>
+    <div class="lg"><div class="sw"><i style="background:#FFC400"></i><i style="background:#2B2422"></i><i style="background:#fff"></i></div><div class="meta"><b>Yellow + Charcoal</b><div>#FFC400 · #2B2422</div><button class="use" data-name="Yellow + Charcoal">Use this set</button></div></div>
+  </div>
+
+  <div id="root"></div>
+</div>
+<script>
+(function(){
+  var LOGO='<span class="logo"><span class="mark"><svg viewBox="0 0 64 64"><circle class="b1" cx="31" cy="28" r="17"/><circle class="b2" cx="31" cy="28" r="7.5"/><path class="b3" d="M21 39 L37 39 L21 52 Z"/></svg></span><span class="wordmark">QuoteMax</span></span>';
+
+  var SET =
+  '<div class="block"><div class="tag"><b>1 · Marketing site</b> — quotemax.com.au</div>'
+  +'<div class="device"><div class="winbar"><i></i><i></i><i></i><span class="url">quotemax.com.au</span></div><div class="screen">'
+    +'<div class="nav">'+LOGO+'<span class="links"><span>How</span><span>Trades</span><span>Pricing</span><span>FAQ</span></span><button class="btn">Get started</button></div>'
+    +'<div class="hero"><div><div class="eyebrow">AI receptionist for Australian tradies</div><h1>Drafts your <span class="y">quote</span> before they hang up.</h1><p>Customers text your QuoteMax number. The AI applies your pricing book and drafts a clean quote in under a minute.</p><div class="row"><button class="btn">Get my QuoteMax</button><button class="btn ghost">See how it works</button></div></div>'
+      +'<div class="sms"><div class="bub in">Need 6 downlights in the lounge mate</div><div class="bub out">Easy. Ceiling access ok? Price coming now.</div><div class="tg">Quote drafted · under a minute</div><div class="chips"><span class="alt">Good $680</span><span>Better $890</span><span class="alt">Best $1,150</span></div></div></div>'
+    +'<div class="strip"><span>Built in Australia</span><span>Electrical · NSW</span><span>Plumbing · QLD</span><span class="y">Stripe-secured deposits</span></div>'
+    +'<div class="how"><div class="eyebrow">How it works</div><h2>Three steps. You stay on the tools.</h2><div class="ncards">'
+      +'<div class="ncard"><div class="n">01</div><b>Customer texts your number</b><p>A dedicated AU number feeds the AI receptionist.</p></div>'
+      +'<div class="ncard"><div class="n">02</div><b>AI drafts the quote</b><p>Your pricing book, written into line items.</p></div>'
+      +'<div class="ncard"><div class="n">03</div><b>Review, send, get paid</b><p>Customer pays a Stripe deposit, job booked.</p></div></div></div>'
+    +'<div class="nums"><div class="num"><b>&lt; 1 min</b><span>Per quote</span></div><div class="num"><b>24/7</b><span>Line answered</span></div><div class="num"><b>3</b><span>Tiers / quote</span></div><div class="num"><b>$99</b><span>Site visit</span></div></div>'
+    +'<div class="cta-bar">QuoteMax · Built in Australia · Quote drafted in under a minute · Electrical NSW · Plumbing QLD</div>'
+  +'</div></div></div>'
+
+  +'<div class="block"><div class="tag"><b>2 · Tradie dashboard</b> — quotemax.com.au/dashboard</div>'
+  +'<div class="device"><div class="winbar"><i></i><i></i><i></i><span class="url">quotemax.com.au/dashboard</span></div><div class="screen dash">'
+    +'<div class="dbar on-dark">'+LOGO+'<span class="biz">Sparky Electrical Co</span><button class="btn">+ New quote</button><span class="av">DS</span></div>'
+    +'<div class="side"><a class="on"><span class="ic"></span>Overview</a><a><span class="ic"></span>Quotes</a><a><span class="ic"></span>Chats</a><a><span class="ic"></span>Pricing</a><a><span class="ic"></span>Billing</a><a><span class="ic"></span>Files</a></div>'
+    +'<div class="main"><div class="kpis"><div class="kpi"><div class="k">Quotes sent</div><div class="v">137</div></div><div class="kpi"><div class="k">Conversion</div><div class="v">32<span class="u">%</span></div></div><div class="kpi"><div class="k">Revenue (mo)</div><div class="v"><span class="u">$</span>18.4k</div></div><div class="kpi"><div class="k">Avg quote</div><div class="v"><span class="u">$</span>890</div></div></div>'
+      +'<div class="funnel"><div class="fstep"><b>137</b><span>Drafted</span></div><div class="fstep"><b>121</b><span>Sent</span></div><div class="fstep"><b>84</b><span>Viewed</span></div><div class="fstep acc"><b>44</b><span>Paid</span></div></div>'
+      +'<table class="qt"><thead><tr><th>Ref</th><th>Customer</th><th>Job</th><th>Amount</th><th>Status</th></tr></thead><tbody>'
+        +'<tr><td class="mn">A1B2C3D4</td><td>Dave R.</td><td>Downlights ×6</td><td class="mn">$890</td><td><span class="chip paid">Paid</span></td></tr>'
+        +'<tr><td class="mn">E5F6G7H8</td><td>Mia L.</td><td>Hot water swap</td><td class="mn">$1,420</td><td><span class="chip sent">Sent</span></td></tr>'
+        +'<tr><td class="mn">J9K0L1M2</td><td>Sam T.</td><td>Switchboard</td><td class="mn">$99</td><td><span class="chip insp">Inspection</span></td></tr>'
+        +'<tr><td class="mn">N3P4Q5R6</td><td>Anne W.</td><td>Power points ×4</td><td class="mn">$540</td><td><span class="chip draft">Draft</span></td></tr>'
+      +'</tbody></table></div>'
+  +'</div></div></div>'
+
+  +'<div class="block"><div class="tag"><b>3 · Customer quote</b> — quotemax.com.au/q/a1b2c3d4</div>'
+  +'<div class="device"><div class="winbar"><i></i><i></i><i></i><span class="url">quotemax.com.au/q/a1b2c3d4</span></div><div class="screen">'
+    +'<div class="qhead">'+LOGO+'<span class="ref">Quote ref · A1B2C3D4</span></div>'
+    +'<div class="qhero"><span class="statuschip">Draft</span><h1>G\'day Dave, your <span class="y">downlights</span> quote</h1><p>Three options below — all prices include 10% GST. Tap any tier to lock it in with a 30% deposit.</p></div>'
+    +'<div class="tiers">'
+      +'<div class="tier"><div class="th"><span class="n">01</span><span class="lab">Good</span></div><div class="ex">$618 ex GST</div><div class="inc">$680</div><div class="dep">30% dep — $204</div><div class="li"><span>6× LED downlight</span><span>$540</span></div><div class="li"><span>Standard ceiling</span><span>$78</span></div><span class="pay">Pay $204</span></div>'
+      +'<div class="tier rec"><span class="rb">Recommended</span><div class="th"><span class="n">02</span><span class="lab">Better</span></div><div class="ex">$809 ex GST</div><div class="inc">$890</div><div class="dep">30% dep — $267</div><div class="li"><span>6× dimmable LED</span><span>$690</span></div><div class="li"><span>New dimmer</span><span>$119</span></div><span class="pay">Pay $267</span></div>'
+      +'<div class="tier"><div class="th"><span class="n">03</span><span class="lab">Best</span></div><div class="ex">$1,045 ex GST</div><div class="inc">$1,150</div><div class="dep">30% dep — $345</div><div class="li"><span>8× tunable LED</span><span>$920</span></div><div class="li"><span>Smart dimmer</span><span>$125</span></div><span class="pay">Pay $345</span></div>'
+    +'</div>'
+    +'<div class="qfoot"><span class="trade">Electrical</span><span>Lic. NSW 123456C</span><span>GST registered</span><span>ABN 12 345 678 901</span></div>'
+  +'</div></div></div>'
+
+  +'<div class="block"><div class="tag"><b>4 · PDF quote (printable)</b> — generated document</div>'
+  +'<div class="paperwrap"><div class="paper"><div class="lh on-dark">'+LOGO+'<span class="biz">Sparky Electrical Co<br>ABN 12 345 678 901<br>Lic. NSW 123456C</span></div><div class="accentrule"></div>'
+    +'<div class="body"><div class="title">Quote · Tax Invoice</div><div class="meta"><span>Ref A1B2C3D4</span><span>Issued 22 Jun 2026</span><span>Valid 14 days</span></div>'
+    +'<div class="two"><div><div class="h">Prepared for</div>Dave Robinson<br>14 George St, Parramatta NSW 2150<br>0412 345 678</div><div style="text-align:right"><div class="h">Job</div>Supply &amp; install — LED downlights<br>Lounge · standard ceiling access</div></div>'
+    +'<table><thead><tr><th>Description</th><th class="r">Qty</th><th class="r">Unit</th><th class="r">Amount</th></tr></thead><tbody>'
+      +'<tr><td>Dimmable LED downlight — supply &amp; install</td><td class="r mn">6</td><td class="r mn">$115.00</td><td class="r mn">$690.00</td></tr>'
+      +'<tr><td>New dimmer switch + make-good</td><td class="r mn">1</td><td class="r mn">$119.00</td><td class="r mn">$119.00</td></tr>'
+      +'<tr><td>Test &amp; certificate of compliance</td><td class="r mn">1</td><td class="r mn">$0.00</td><td class="r mn">incl.</td></tr>'
+    +'</tbody></table>'
+    +'<div class="totals"><div class="r"><span>Subtotal (ex GST)</span><span>$809.00</span></div><div class="r"><span>GST 10%</span><span>$81.00</span></div><div class="r grand"><span>Total (inc GST)</span><span>$890.00</span></div></div>'
+    +'<div class="depbox"><span>Deposit to lock in (30%)</span><span>$267.00</span></div>'
+    +'<div class="terms">Quote valid 14 days from issue. Prices include 10% GST. Deposit secures your booking and is credited to the final invoice. Work carried out under NSW electrical licence 123456C. Payment via secure Stripe link on your quote page.</div>'
+  +'</div></div></div></div>'
+
+  +'<div class="block"><div class="tag"><b>5 · Component &amp; card sheet</b> — design system</div>'
+  +'<div class="cardgrid">'
+    +'<div class="cc"><div class="ct">Buttons</div><div class="rowg"><button class="btn">Pay deposit</button><button class="btn dark">View quote</button><button class="btn ghost">Edit</button></div></div>'
+    +'<div class="cc"><div class="ct">Status chips</div><div class="rowg"><span class="chip draft">Draft</span><span class="chip sent">Sent</span><span class="chip paid">Paid</span><span class="chip insp">Inspection</span></div></div>'
+    +'<div class="cc"><div class="ct">Palette</div><div class="swrow"><i style="background:var(--accent);color:var(--accent-ink)">accent</i><i style="background:var(--ink);color:var(--surface)">ink</i><i style="background:var(--s2);color:var(--sec)">surface</i></div></div>'
+    +'<div class="cc"><div class="ct">Stat card</div><div class="stat"><div class="k">Revenue (mo)</div><div class="v">$18.4k</div></div></div>'
+    +'<div class="cc"><div class="ct">Alert / banner</div><div class="alert"><span>⚡</span> Deposit received — job booked for Thu 9am.</div></div>'
+    +'<div class="cc"><div class="ct">Form</div><div class="rowg" style="flex-direction:column;align-items:stretch;gap:9px"><div class="field">dave@email.com</div><div class="rowg"><span style="font-size:11px;font-weight:700">Auto-send quotes</span><span class="toggle" style="margin-left:auto"></span></div></div></div>'
+  +'</div></div>';
+
+  var P=[
+    {id:'classic',name:'CAT Classic',hex:'#FFC400 / #000000 / #FFF',sw:['#FFC400','#000000','#FFFFFF']},
+    {id:'machine',name:'Machine Yellow',hex:'#E2A52C / #1C1A15 / warm white',sw:['#E2A52C','#1C1A15','#F4EFE6']},
+    {id:'charcoal',name:'Yellow + Charcoal',hex:'#FFC400 / #2B2422 / #FFF',sw:['#FFC400','#2B2422','#FFFFFF']}
+  ];
+  var root=document.getElementById('root');
+  P.forEach(function(p){
+    var title='<div class="palette-title"><h2>'+p.name+'</h2><div class="sws">'+p.sw.map(function(h){return '<i style="background:'+h+'"></i>';}).join('')+'</div><span class="hx">'+p.hex+'</span></div>';
+    var body=title;
+    [['light','Light mode'],['dark','Dark mode']].forEach(function(m){
+      body+='<div class="mode-band mode-'+m[0]+'">'+m[1]+'</div><div class="paletteset" data-pal="'+p.id+'" data-mode="'+m[0]+'">'+SET+'</div>';
+    });
+    var sec=document.createElement('div');
+    sec.innerHTML=body;
+    root.appendChild(sec);
+  });
+  document.querySelectorAll('.use').forEach(function(b){
+    b.addEventListener('click',function(){ if(typeof sendPrompt==='function') sendPrompt('Use the '+b.getAttribute('data-name')+' Caterpillar palette for the QuoteMax site.'); });
+  });
+})();
+</script>
+</body>
+</html>
