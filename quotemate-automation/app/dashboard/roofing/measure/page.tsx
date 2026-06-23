@@ -324,6 +324,23 @@ function RoofingMeasurePageInner() {
     }
   }, [token, resp, included, address, postcode, state])
 
+  // Auto-generate the customer quote the moment a measurement completes —
+  // no tradie approval step. The full Good/Better/Best quote is created and
+  // its shareable /q/[token] link surfaces on its own.
+  //   • Re-fires on every fresh measurement: runMeasure() resets quoteState
+  //     to 'idle' and sets a new `resp`, so this effect runs again.
+  //   • The `!busy` guard stops it firing on a STALE resp while a new
+  //     measurement is still in flight (runMeasure clears quoteState but not
+  //     resp at the start of a re-measure).
+  //   • The `quoteState === 'idle'` guard makes it fire exactly once per
+  //     measurement — onSendAsQuote flips it to 'saving' immediately, and an
+  //     'error' result leaves the manual button as a retry rather than looping.
+  useEffect(() => {
+    if (resp?.ok === true && quoteState === 'idle' && !busy) {
+      void onSendAsQuote()
+    }
+  }, [resp, quoteState, busy, onSendAsQuote])
+
   const onSave = useCallback(async () => {
     if (!token || !resp || resp.ok !== true) return
     const includedStructures = resp.quote.structures.filter((s, i) => included[structureKey(s, i)] !== false)
@@ -707,7 +724,11 @@ function MultiResultBlock({
             disabled={quoteState === 'saving' || combined.count === 0}
             className="inline-flex items-center gap-2 border border-ink-line px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {quoteState === 'saving' ? (<><Spinner /> Sending…</>) : (<>Send as customer quote <span aria-hidden="true">&rarr;</span></>)}
+            {quoteState === 'saving'
+              ? (<><Spinner /> Generating quote…</>)
+              : quoteState === 'saved'
+                ? (<>Regenerate quote</>)
+                : (<>Generate customer quote <span aria-hidden="true">&rarr;</span></>)}
           </button>
         </div>
         {quoteState === 'saved' && quoteShareUrl && (
