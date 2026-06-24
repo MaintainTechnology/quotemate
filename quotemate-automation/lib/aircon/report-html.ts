@@ -1,27 +1,32 @@
 // Self-contained HTML for the indicative air-conditioning recommendation
-// PDF, rendered by Gotenberg (lib/pdf/gotenberg.ts). Same print-friendly
-// light theme as the roofing / painting / trade-quote reports. Pure — no
-// I/O, unit-tested.
+// PDF, rendered by Gotenberg (lib/pdf/gotenberg.ts). White-label Caterpillar
+// chrome shared with every trade (lib/pdf/report-chrome.ts).
 //
 // Aircon is a RECOMMENDER, not a committable quote: it returns two options
 // (ducted vs split) each with an indicative inc-GST price RANGE, plus the
 // volumetric sizing. Every aircon result routes to "book an assessment",
 // so the document is framed as indicative throughout — never a final price.
+// Pure — no I/O, unit-tested.
 
 import type { AcRecommendation, AcOption, AcSystemType } from './types'
+import {
+  renderReportDocument,
+  renderBullets,
+  brandingFromName,
+  esc,
+  aud0,
+  type TenantBranding,
+} from '../pdf/report-chrome'
 
 export type AirconReportInput = {
   businessName: string
+  /** Full white-label branding; when omitted, derived from businessName. */
+  branding?: TenantBranding
   address: string
   recommendation: AcRecommendation
   climateZone?: string | null
   generatedAt?: Date
 }
-
-const esc = (s: unknown) =>
-  String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-
-const aud0 = (n: number) => '$' + Math.round(Number.isFinite(n) ? n : 0).toLocaleString('en-AU')
 
 /** Finite-or-zero — guards .toFixed / arithmetic against a malformed payload. */
 const num = (v: number) => (Number.isFinite(v) ? v : 0)
@@ -31,28 +36,40 @@ const SYSTEM_LABELS: Record<AcSystemType, string> = {
   split: 'Split system',
 }
 
+/** One option card — capacity, indicative inc-GST range, why-it-fits / trade-offs. */
 function optionBlock(o: AcOption): string {
-  const pros = (o.pros ?? []).map((p) => `<li>${esc(p)}</li>`).join('')
-  const cons = (o.cons ?? []).map((c) => `<li>${esc(c)}</li>`).join('')
+  const label = esc(SYSTEM_LABELS[o.system_type] ?? o.system_type)
+  const chip = o.best_fit ? ' <span class="chip">Best fit</span>' : ''
   return `
-  <div class="opt ${o.best_fit ? 'opt-best' : ''}">
-    <div class="opt-head">
-      <span class="opt-title">${esc(SYSTEM_LABELS[o.system_type] ?? o.system_type)}${o.best_fit ? ' <span class="badge">Best fit</span>' : ''}</span>
-      <span class="opt-cap">${num(o.capacity_kw).toFixed(1)} kW</span>
+  <section class="part${o.best_fit ? ' stat-selected' : ''}">
+    <div class="part-head" style="justify-content:space-between;">
+      <h2 class="part-title">${label}${chip}</h2>
+      <span class="mono" style="color:var(--dim);font-size:11px;">${num(o.capacity_kw).toFixed(1)} kW</span>
     </div>
-    <div class="opt-price">${aud0(o.price.low)} – ${aud0(o.price.high)} <small>inc GST (indicative)</small></div>
-    <div class="opt-cols">
-      <div>
-        <div class="opt-l">Why it fits</div>
-        <ul>${pros || '<li>—</li>'}</ul>
+    <div class="price" style="font-size:18px;margin-top:8px;">${aud0(o.price.low)} – ${aud0(
+      o.price.high,
+    )} <span class="caveat" style="font-size:10px;">inc GST (indicative)</span></div>
+    <div class="opt-cols" style="display:flex;gap:18px;margin-top:8px;">
+      <div style="flex:1;">
+        <div class="mono" style="font-size:8.5px;letter-spacing:0.12em;text-transform:uppercase;color:var(--dim);">Why it fits</div>
+        ${o.pros && o.pros.length ? renderBullets(o.pros) : '<ul class="bullets"><li>—</li></ul>'}
       </div>
-      <div>
-        <div class="opt-l">Trade-offs</div>
-        <ul>${cons || '<li>—</li>'}</ul>
+      <div style="flex:1;">
+        <div class="mono" style="font-size:8.5px;letter-spacing:0.12em;text-transform:uppercase;color:var(--dim);">Trade-offs</div>
+        ${o.cons && o.cons.length ? renderBullets(o.cons) : '<ul class="bullets"><li>—</li></ul>'}
       </div>
     </div>
-  </div>`
+  </section>`
 }
+
+/** Per-trade default "Please Note" disclaimers — every aircon result is indicative. */
+const AIRCON_PLEASE_NOTE = [
+  'These figures are indicative only — sizing and pricing are derived from property data and your inputs, not a fixed quote.',
+  'Final system, exact capacity and price are confirmed on site before any work is booked.',
+  'Prices shown include 10% GST and cover indicative supply and installation; electrical, switchboard or building works are quoted separately if required.',
+  'Indicative ranges assume standard access and mounting; roof-space, height or access constraints may change the final price.',
+  'An installer reviews every recommendation and completes an on-site assessment before any work proceeds.',
+]
 
 export function buildAirconReportHtml(input: AirconReportInput): string {
   const date = (input.generatedAt ?? new Date()).toLocaleDateString('en-AU', {
@@ -60,55 +77,15 @@ export function buildAirconReportHtml(input: AirconReportInput): string {
     month: 'long',
     year: 'numeric',
   })
+  const branding = input.branding ?? brandingFromName(input.businessName)
   const r = input.recommendation
   const s = r.sizing
   const zone = input.climateZone ? `${esc(input.climateZone)} climate · ` : ''
 
-  return `<!doctype html>
-<html lang="en-AU">
-<head>
-<meta charset="utf-8">
-<title>Air-conditioning recommendation — ${esc(input.businessName)}</title>
-<style>
-  * { box-sizing: border-box; }
-  body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #16202b; margin: 0; font-size: 12px; line-height: 1.5; }
-  header { border-bottom: 3px solid #FF5F00; padding-bottom: 14px; margin-bottom: 18px; }
-  .eyebrow { font-family: 'Courier New', monospace; font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: #6b7683; }
-  h1 { font-size: 24px; text-transform: uppercase; letter-spacing: -0.02em; margin: 6px 0 2px; }
-  h1 .accent { color: #FF5F00; }
-  .meta { color: #6b7683; font-size: 11px; }
-  h2 { font-size: 13px; text-transform: uppercase; margin: 22px 0 6px; letter-spacing: 0.02em; }
-  .statgrid { display: flex; gap: 12px; margin: 14px 0 4px; }
-  .stat { flex: 1; border: 1px solid #dde3e9; padding: 10px 12px; }
-  .stat .v { font-size: 19px; font-weight: 800; }
-  .stat .v small { font-size: 10px; font-weight: 400; color: #6b7683; }
-  .stat .l { font-family: 'Courier New', monospace; font-size: 8.5px; letter-spacing: 0.15em; text-transform: uppercase; color: #6b7683; margin-top: 4px; }
-  .opt { border: 1px solid #dde3e9; padding: 12px 14px; margin-top: 10px; }
-  .opt-best { border: 2px solid #FF5F00; }
-  .opt-head { display: flex; justify-content: space-between; align-items: baseline; }
-  .opt-title { font-size: 14px; font-weight: 800; text-transform: uppercase; }
-  .badge { font-family: 'Courier New', monospace; font-size: 8px; letter-spacing: 0.12em; color: #fff; background: #FF5F00; padding: 1px 6px; vertical-align: middle; }
-  .opt-cap { font-family: 'Courier New', monospace; font-size: 11px; color: #6b7683; }
-  .opt-price { font-size: 18px; font-weight: 800; margin: 6px 0 8px; }
-  .opt-price small { font-size: 10px; font-weight: 400; color: #6b7683; }
-  .opt-cols { display: flex; gap: 18px; }
-  .opt-cols > div { flex: 1; }
-  .opt-l { font-family: 'Courier New', monospace; font-size: 8.5px; letter-spacing: 0.12em; text-transform: uppercase; color: #6b7683; margin-bottom: 2px; }
-  ul { margin: 2px 0; padding-left: 16px; }
-  li { margin: 1px 0; }
-  .scope { border-left: 3px solid #FF5F00; padding: 8px 12px; background: #f7f8fa; margin-top: 6px; }
-  .note { color: #6b7683; font-size: 11px; }
-  footer { margin-top: 26px; padding-top: 10px; border-top: 1px solid #dde3e9; font-family: 'Courier New', monospace; font-size: 8.5px; letter-spacing: 0.15em; text-transform: uppercase; color: #6b7683; }
-</style>
-</head>
-<body>
-  <header>
-    <div class="eyebrow">Air-conditioning recommendation · Indicative</div>
-    <h1>${esc(input.businessName)} <span class="accent">×</span> QuoteMax</h1>
-    <div class="meta">${esc(input.address)} · ${zone}${esc(s.confidence)} confidence · ${date}</div>
-  </header>
+  let body = ''
 
-  <h2>Sizing</h2>
+  // ── Sizing — the volumetric load basis as a stat grid ──
+  body += `<h2>Sizing</h2>
   <div class="statgrid">
     <div class="stat">
       <div class="v">${Math.round(num(s.total_floor_area_m2))}<small> m²</small></div>
@@ -119,24 +96,38 @@ export function buildAirconReportHtml(input: AirconReportInput): string {
       <div class="l">Conditioned zones</div>
     </div>
     <div class="stat">
-      <div class="v">${num(s.connected_kw).toFixed(1)}<small> kW (${num(s.connected_kw_low).toFixed(1)}–${num(s.connected_kw_high).toFixed(1)})</small></div>
+      <div class="v">${num(s.connected_kw).toFixed(1)}<small> kW (${num(s.connected_kw_low).toFixed(
+        1,
+      )}–${num(s.connected_kw_high).toFixed(1)})</small></div>
       <div class="l">Connected load</div>
     </div>
     <div class="stat">
       <div class="v">${num(s.ducted_kw).toFixed(1)}<small> kW</small></div>
       <div class="l">Central unit (ducted)</div>
     </div>
-  </div>
+  </div>`
 
-  <h2>Your options (inc GST, indicative)</h2>
-  ${r.options.map(optionBlock).join('')}
+  // ── Options (inc GST, indicative) — always two, ordered [ducted, split] ──
+  body += `<h2>Your options (inc GST, indicative)</h2>`
+  body += r.options.map(optionBlock).join('')
 
-  <h2>Next step</h2>
-  <div class="scope">${esc(r.routing.reason ?? 'These figures are indicative — an on-site assessment confirms the system, exact capacity and final price.')}</div>
+  // ── Next step — always an on-site assessment ──
+  body += `<h2>Next step</h2>
+  <div class="scope">${esc(
+    r.routing.reason ??
+      'These figures are indicative — an on-site assessment confirms the system, exact capacity and final price.',
+  )}</div>`
 
-  <p class="note">Indicative sizing and pricing from property data and your inputs — an installer confirms everything on site before any work is booked. Not a fixed quote.</p>
-
-  <footer>Generated by QuoteMax · Prices include 10% GST · Indicative only — confirmed after a site assessment</footer>
-</body>
-</html>`
+  return renderReportDocument(branding, {
+    docTitle: `Air-conditioning recommendation — ${branding.businessName}`,
+    eyebrow: 'Air-conditioning recommendation · Indicative',
+    dateLabel: `${zone}${esc(s.confidence)} confidence · ${date}`,
+    siteAddress: input.address,
+    introHtml: `Thank you for the opportunity to recommend air-conditioning for <strong>${esc(
+      input.address,
+    )}</strong>. Below is the indicative sizing and two system options (ducted and split) — an on-site assessment confirms everything before any work is booked.`,
+    bodyHtml: body,
+    pleaseNote: AIRCON_PLEASE_NOTE,
+    closingLine: null,
+  })
 }

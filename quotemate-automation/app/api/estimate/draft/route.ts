@@ -29,6 +29,7 @@ import {
   computeEarlyBirdOffer,
 } from '@/lib/quote/early-bird'
 import { asQuoteDisplayMode } from '@/lib/quote/display'
+import { asQuoteTierMode } from '@/lib/quote/tier-visibility'
 import {
   getDeliveryKnobs,
   logSendOutcome,
@@ -805,7 +806,12 @@ export async function POST(req: Request) {
           (pricingBook as { quote_display?: string | null } | null)?.quote_display ?? null,
           'itemised',
         )
-        const body = buildQuoteSms(intake, quoteForSms, { displayMode })
+        // Mig 142 — thread the tenant/feature tier mode so single-price tradies
+        // get one option in the customer SMS, not the full Good/Better/Best list.
+        const tierMode = asQuoteTierMode(
+          (pricingBook as { quote_tier_mode?: string | null } | null)?.quote_tier_mode ?? null,
+        )
+        const body = buildQuoteSms(intake, quoteForSms, { displayMode, tierMode })
         const segs = body.length <= 160 ? 1 : Math.ceil(body.length / 153)
         dispatch.ok('body built', { chars: body.length, sms_segments: segs })
 

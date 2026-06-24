@@ -6,6 +6,7 @@
 // noticeable across customers, not within a single thread.
 import { priceHoldStatus, fmtHoldUntilAU } from '@/lib/quote/hold'
 import { asQuoteDisplayMode, type QuoteDisplayMode } from '@/lib/quote/display'
+import { asQuoteTierMode, resolveVisibleTiers, type QuoteTierMode } from '@/lib/quote/tier-visibility'
 
 /** Phase A — caller-supplied display mode flag. 'summary' suppresses the
  *  per-tier "X items + Yhr labour" component line so the SMS reads as a
@@ -14,6 +15,12 @@ import { asQuoteDisplayMode, type QuoteDisplayMode } from '@/lib/quote/display'
  *  doesn't yet thread this through. */
 export interface QuoteSmsOptions {
   displayMode?: QuoteDisplayMode
+  /** Mig 142 — per-feature tier presentation mode. Controls WHICH tiers the
+   *  customer SMS lists. Internal fallback is 'good_better_best' (all priced
+   *  tiers) when omitted, so callers that don't thread it keep the legacy
+   *  behaviour; production callers pass the tenant's resolved pricing_book
+   *  mode (which defaults to 'single'). */
+  tierMode?: QuoteTierMode
 }
 
 function pickVariant<T>(variants: readonly T[]): T {
@@ -95,7 +102,16 @@ export function buildQuoteUpdatedSms(intake: Intake, quote: Quote, options?: Quo
     lines.push('')
   }
 
-  const tierCount = ([quote.good, quote.better, quote.best].filter(Boolean) as Tier[]).length
+  // Mig 142 — list only the tiers this feature's mode surfaces to the
+  // customer. Internal fallback 'good_better_best' preserves legacy all-tiers
+  // behaviour for callers that don't thread a mode.
+  const visibleTierKeys = resolveVisibleTiers({
+    mode: asQuoteTierMode(options?.tierMode, 'good_better_best'),
+    present: { good: !!quote.good, better: !!quote.better, best: !!quote.best },
+    selectedTier: quote.selected_tier ?? null,
+  })
+  const visibleTierSet = new Set<'good' | 'better' | 'best'>(visibleTierKeys)
+  const tierCount = visibleTierKeys.length
   const heading =
     tierCount === 1 ? 'YOUR OPTION' :
     tierCount === 2 ? '2 OPTIONS' :
@@ -110,10 +126,12 @@ export function buildQuoteUpdatedSms(intake: Intake, quote: Quote, options?: Quo
 
   for (const key of ['good', 'better', 'best'] as const) {
     const tier = quote[key]
-    if (!tier) continue
+    // Mig 142 — skip tiers the resolved mode hides.
+    if (!tier || !visibleTierSet.has(key)) continue
     const price = incGst(tier.subtotal_ex_gst)
     const deposit = depositPct > 0 ? Math.round(price * depositPct / 100) : null
-    const recommended = quote.selected_tier === key ? ' (recommended)' : ''
+    // No "recommended" badge when only one option is shown — it IS the offer.
+    const recommended = visibleTierKeys.length > 1 && quote.selected_tier === key ? ' (recommended)' : ''
 
     const headerSuffix = deposit ? ` (deposit $${deposit})` : ''
     lines.push(`${key.toUpperCase()}: $${price}${recommended}${headerSuffix}`)
@@ -923,7 +941,16 @@ export function buildQuoteSms(intake: Intake, quote: Quote, options?: QuoteSmsOp
   // Count actual non-null tiers — don't say "3 OPTIONS" if BEST dropped
   // because no premium catalogue match for the customer's spec preference
   // (see migration 008 + assumptions.ts note about catalogue gaps).
-  const tierCount = ([quote.good, quote.better, quote.best].filter(Boolean) as Tier[]).length
+  // Mig 142 — list only the tiers this feature's mode surfaces to the
+  // customer. Internal fallback 'good_better_best' preserves legacy all-tiers
+  // behaviour for callers that don't thread a mode.
+  const visibleTierKeys = resolveVisibleTiers({
+    mode: asQuoteTierMode(options?.tierMode, 'good_better_best'),
+    present: { good: !!quote.good, better: !!quote.better, best: !!quote.best },
+    selectedTier: quote.selected_tier ?? null,
+  })
+  const visibleTierSet = new Set<'good' | 'better' | 'best'>(visibleTierKeys)
+  const tierCount = visibleTierKeys.length
   const heading =
     tierCount === 1 ? 'YOUR OPTION' :
     tierCount === 2 ? '2 OPTIONS' :
@@ -938,10 +965,12 @@ export function buildQuoteSms(intake: Intake, quote: Quote, options?: QuoteSmsOp
 
   for (const key of ['good', 'better', 'best'] as const) {
     const tier = quote[key]
-    if (!tier) continue
+    // Mig 142 — skip tiers the resolved mode hides.
+    if (!tier || !visibleTierSet.has(key)) continue
     const price = incGst(tier.subtotal_ex_gst)
     const deposit = depositPct > 0 ? Math.round(price * depositPct / 100) : null
-    const recommended = quote.selected_tier === key ? ' (recommended)' : ''
+    // No "recommended" badge when only one option is shown — it IS the offer.
+    const recommended = visibleTierKeys.length > 1 && quote.selected_tier === key ? ' (recommended)' : ''
 
     const headerSuffix = deposit ? ` (deposit $${deposit})` : ''
     lines.push(`${key.toUpperCase()}: $${price}${recommended}${headerSuffix}`)

@@ -21,6 +21,7 @@ import {
   SecondaryCTA,
 } from "./_components/site"
 import { PricingTiers } from "./_components/PricingTiers"
+import { DuotoneImage } from "./_components/DuotoneImage"
 
 /* Load-time choreography classes. Tailwind scans for literal strings,
    so these stay static; per-element stagger is an inline
@@ -108,6 +109,31 @@ function Hero() {
               See how it works
             </a>
           </div>
+
+          {/* Brand-tinted trade filmstrip — introduces the real tradies the
+              product is built for without crowding the headline. The first
+              tile is the hero LCP image (preloaded); the rest lazy-load. */}
+          <div
+            className={`mt-10 grid grid-cols-3 gap-2 sm:gap-3 ${RISE}`}
+            style={{ animationDelay: "470ms" }}
+          >
+            <HeroTile
+              src="/marketing/trade-electrical.jpg"
+              alt="Smiling Australian electrician in a yellow hard hat working at a power box"
+              caption="Electrical"
+              priority
+            />
+            <HeroTile
+              src="/marketing/trade-plumbing-2.jpg"
+              alt="Plumber working under a sink to fix a pipe"
+              caption="Plumbing"
+            />
+            <HeroTile
+              src="/marketing/trade-solar.jpg"
+              alt="Two installers fitting solar panels on a rooftop array"
+              caption="Solar"
+            />
+          </div>
         </div>
 
         <div
@@ -118,6 +144,36 @@ function Hero() {
         </div>
       </div>
     </section>
+  )
+}
+
+// A single tile in the hero filmstrip — a brand-tinted trade photo with a
+// small all-caps caption welded to the lower edge by the duotone scrim.
+function HeroTile({
+  src,
+  alt,
+  caption,
+  priority = false,
+}: {
+  src: string
+  alt: string
+  caption: string
+  priority?: boolean
+}) {
+  return (
+    <figure className="edge-lit relative border border-ink-line">
+      <DuotoneImage
+        src={src}
+        alt={alt}
+        aspect="aspect-[3/4] sm:aspect-[4/5]"
+        sizes="(max-width: 1024px) 30vw, 16vw"
+        priority={priority}
+        tone="hero"
+      />
+      <figcaption className="photo-caption absolute inset-x-0 bottom-0 px-2.5 pb-2 pt-6 font-mono text-[0.6rem] font-semibold uppercase tracking-[0.16em] text-white">
+        {caption}
+      </figcaption>
+    </figure>
   )
 }
 
@@ -177,32 +233,54 @@ function HowItWorks() {
           </h2>
         </Reveal>
 
-        {/* The spine sits behind the number column and connects the steps. */}
-        <div className="relative mt-14 grid gap-4">
-          <div
-            className="timeline-spine pointer-events-none absolute left-[2.1rem] top-10 bottom-10 hidden w-px md:block"
-            aria-hidden="true"
-          />
-          <Reveal>
-            <NumberedCard
-              num="01"
-              title="Customer texts your number"
-              body="Each tradie gets a dedicated AU number. Voice or SMS, both feed the same AI receptionist while you stay on the tools."
+        <div className="mt-14 grid items-start gap-10 lg:grid-cols-[1.4fr_1fr] lg:gap-14">
+          {/* The spine sits behind the number column and connects the steps. */}
+          <div className="relative grid gap-4">
+            <div
+              className="timeline-spine pointer-events-none absolute left-[2.1rem] top-10 bottom-10 hidden w-px md:block"
+              aria-hidden="true"
             />
-          </Reveal>
-          <Reveal delay={110}>
-            <NumberedCard
-              num="02"
-              title="AI drafts the quote"
-              body="Claude asks the right questions for the job type, applies your pricing book, and writes Good / Better / Best line items in under a minute."
-            />
-          </Reveal>
-          <Reveal delay={220}>
-            <NumberedCard
-              num="03"
-              title="You review, send, get paid"
-              body="The quote lands in your dashboard. Approve as-is or tweak it. The customer pays a deposit via Stripe and the job is booked."
-            />
+            <Reveal>
+              <NumberedCard
+                num="01"
+                title="Customer texts your number"
+                body="Each tradie gets a dedicated AU number. Voice or SMS, both feed the same AI receptionist while you stay on the tools."
+              />
+            </Reveal>
+            <Reveal delay={110}>
+              <NumberedCard
+                num="02"
+                title="AI drafts the quote"
+                body="Claude asks the right questions for the job type, applies your pricing book, and writes Good / Better / Best line items in under a minute."
+              />
+            </Reveal>
+            <Reveal delay={220}>
+              <NumberedCard
+                num="03"
+                title="You review, send, get paid"
+                body="The quote lands in your dashboard. Approve as-is or tweak it. The customer pays a deposit via Stripe and the job is booked."
+              />
+            </Reveal>
+          </div>
+
+          {/* A real tradesperson at the bench — the quoting runs itself so the
+              work stays where it belongs. Hidden on small screens to keep the
+              timeline the focus. */}
+          <Reveal delay={120} className="hidden lg:block">
+            <figure className="edge-lit relative border border-ink-line">
+              <DuotoneImage
+                src="/marketing/trade-carpentry.jpg"
+                alt="Tradesperson working with hand tools at a tidy workshop bench"
+                aspect="aspect-[3/4]"
+                sizes="(max-width: 1024px) 0px, 32vw"
+                position="center 30%"
+              />
+              <figcaption className="photo-caption absolute inset-x-0 bottom-0 p-5 pt-12">
+                <span className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-white">
+                  You stay on the tools
+                </span>
+              </figcaption>
+            </figure>
           </Reveal>
         </div>
       </div>
@@ -229,6 +307,11 @@ function Trades() {
             <TradePanel
               label="Electrical"
               state="NSW · Electrical pilot"
+              image={{
+                src: "/marketing/trade-electrical.jpg",
+                alt: "Australian electrician in a yellow hard hat smiling while working at a power box",
+                position: "center 25%",
+              }}
               auto={[
                 "Downlights",
                 "Power points (GPOs)",
@@ -249,6 +332,11 @@ function Trades() {
             <TradePanel
               label="Plumbing"
               state="QLD · Plumbing pilot"
+              image={{
+                src: "/marketing/trade-plumbing.jpg",
+                alt: "Plumber fixing a leaky faucet under a kitchen sink",
+                position: "center 30%",
+              }}
               auto={[
                 "Blocked drains",
                 "Hot water replacement",
@@ -262,13 +350,56 @@ function Trades() {
           </Reveal>
         </div>
 
+        {/* Next in line — roofing, solar and painting are being wired now,
+            shown as upcoming (not yet pilot-live) so the imagery stays honest. */}
         <Reveal delay={120}>
-          <div className="edge-lit mt-8 flex flex-col items-start justify-between gap-5 border border-ink-line bg-ink-card p-6 md:flex-row md:items-center md:p-8">
-            <p className="max-w-2xl text-base leading-relaxed text-text-sec md:text-lg">
-              Carpenters, painters, roofers and HVAC: tell us your trade and
-              we&rsquo;ll line you up for the next pilot.
-            </p>
-            <SecondaryCTA href="/signup">Request your trade</SecondaryCTA>
+          <div className="mt-8">
+            <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+              Next in line
+            </span>
+            <div className="mt-4 grid gap-4 sm:grid-cols-3">
+              <UpcomingTrade
+                src="/marketing/trade-roofing.jpg"
+                alt="Roofer using a cordless drill while working on a metal roof"
+                label="Roofing"
+                position="center 35%"
+              />
+              <UpcomingTrade
+                src="/marketing/trade-solar.jpg"
+                alt="Installers mounting solar panels at a rooftop power station"
+                label="Solar"
+                position="center 40%"
+              />
+              <UpcomingTrade
+                src="/marketing/trade-painting.jpg"
+                alt="Two painters rolling fresh paint onto an interior wall"
+                label="Painting"
+                position="center 30%"
+              />
+            </div>
+          </div>
+        </Reveal>
+
+        {/* Generic "request your trade" prompt. The workshop photo adds warmth
+            without claiming a trade we don't yet support. */}
+        <Reveal delay={180}>
+          <div className="edge-lit mt-6 grid items-stretch gap-0 overflow-hidden border border-ink-line bg-ink-card md:grid-cols-[1fr_1.3fr]">
+            <DuotoneImage
+              src="/marketing/workshop.jpg"
+              alt="Tradesperson inspecting their work at a well-kept workshop bench"
+              aspect="aspect-[4/3] md:aspect-auto md:h-full"
+              sizes="(max-width: 768px) 100vw, 38vw"
+              position="center 35%"
+              className="md:border-r md:border-ink-line"
+            />
+            <div className="flex flex-col items-start justify-center gap-5 p-6 md:p-8">
+              <p className="max-w-2xl text-base leading-relaxed text-text-sec md:text-lg">
+                Not on the list yet? Carpenters, cabinetmakers, HVAC and the
+                rest &mdash; tell us your trade and we&rsquo;ll line you up for
+                the next pilot.
+              </p>
+              <SecondaryCTA href="/signup">Request your trade</SecondaryCTA>
+            </div>
           </div>
         </Reveal>
       </div>
@@ -666,26 +797,51 @@ function NumberedCard({
 function TradePanel({
   label,
   state,
+  image,
   auto,
   inspection,
 }: {
   label: string
   state: string
+  image?: { src: string; alt: string; position?: string }
   auto: string[]
   inspection: string[]
 }) {
   return (
-    <div className="card-sweep edge-lit h-full border border-ink-line bg-ink-card p-6 transition-colors duration-300 hover:border-accent/30 md:p-8">
-      <div className="flex items-baseline justify-between gap-3">
-        <h3 className="font-extrabold uppercase tracking-tight text-2xl md:text-3xl">
-          {label}
-        </h3>
-        <span className="shrink-0 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
-          {state}
-        </span>
-      </div>
+    <div className="card-sweep edge-lit group h-full overflow-hidden border border-ink-line bg-ink-card transition-colors duration-300 hover:border-accent/30">
+      {image ? (
+        <div className="relative">
+          <DuotoneImage
+            src={image.src}
+            alt={image.alt}
+            aspect="aspect-[16/9]"
+            sizes="(max-width: 768px) 100vw, 44vw"
+            position={image.position}
+            className="border-b border-ink-line"
+          />
+          {/* Trade name + pilot state sit over the lower edge of the photo,
+              where the .photo-caption gradient guarantees AA-contrast text. */}
+          <div className="photo-caption absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-5 pt-12 md:p-6 md:pt-14">
+            <h3 className="font-extrabold uppercase tracking-tight text-white text-2xl md:text-3xl">
+              {label}
+            </h3>
+            <span className="shrink-0 pb-1 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-white/90">
+              {state}
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-baseline justify-between gap-3 p-6 pb-0 md:p-8 md:pb-0">
+          <h3 className="font-extrabold uppercase tracking-tight text-2xl md:text-3xl">
+            {label}
+          </h3>
+          <span className="shrink-0 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
+            {state}
+          </span>
+        </div>
+      )}
 
-      <div className="mt-8">
+      <div className="p-6 md:p-8">
         <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-accent">
           Auto-quoted
         </span>
@@ -702,27 +858,61 @@ function TradePanel({
             </li>
           ))}
         </ul>
-      </div>
 
-      <div className="mt-7 border-t border-ink-line pt-7">
-        <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
-          $99 site visit
-        </span>
-        <ul className="mt-3 grid gap-2">
-          {inspection.map((it) => (
-            <li
-              key={it}
-              className="flex items-baseline gap-3 text-sm text-text-sec md:text-base"
-            >
-              <span className="font-mono text-xs text-text-dim" aria-hidden="true">
-                ○
-              </span>
-              {it}
-            </li>
-          ))}
-        </ul>
+        <div className="mt-7 border-t border-ink-line pt-7">
+          <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+            $99 site visit
+          </span>
+          <ul className="mt-3 grid gap-2">
+            {inspection.map((it) => (
+              <li
+                key={it}
+                className="flex items-baseline gap-3 text-sm text-text-sec md:text-base"
+              >
+                <span className="font-mono text-xs text-text-dim" aria-hidden="true">
+                  ○
+                </span>
+                {it}
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
     </div>
+  )
+}
+
+// A compact upcoming-trade card — a brand-tinted photo with the trade name
+// and an honest "Coming soon" marker so it never reads as a live pilot.
+function UpcomingTrade({
+  src,
+  alt,
+  label,
+  position,
+}: {
+  src: string
+  alt: string
+  label: string
+  position?: string
+}) {
+  return (
+    <figure className="edge-lit relative overflow-hidden border border-ink-line">
+      <DuotoneImage
+        src={src}
+        alt={alt}
+        aspect="aspect-[4/3]"
+        sizes="(max-width: 640px) 100vw, 28vw"
+        position={position}
+      />
+      <figcaption className="photo-caption absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 p-4 pt-10">
+        <span className="font-extrabold uppercase tracking-tight text-white text-lg">
+          {label}
+        </span>
+        <span className="shrink-0 pb-0.5 font-mono text-[0.58rem] font-semibold uppercase tracking-[0.16em] text-white/90">
+          Coming soon
+        </span>
+      </figcaption>
+    </figure>
   )
 }
 

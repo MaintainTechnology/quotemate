@@ -21,6 +21,10 @@ const baseValidPayload = {
   call_out_minimum: '150',
   default_markup_pct: '15',
   invitation_code: 'ACME-TEST-7K2P',
+  // A logo is required for web onboarding (migration 141). The base payload
+  // models a completed web wizard, so it carries one; SMS-flow specifics are
+  // exercised in the "tradie identity fields" block below.
+  logo_url: 'https://cdn.example.com/tenant-logos/abc/logo.png',
 }
 
 describe('OnboardActivateSchema — optional advanced-pricing fields', () => {
@@ -403,6 +407,50 @@ describe('OnboardActivateSchema — invitation_code (required)', () => {
 
   it('accepts a non-empty invitation_code', () => {
     const result = OnboardActivateSchema.safeParse({ ...baseValidPayload, invitation_code: 'JON-JUNE-7K2P' })
+    expect(result.success).toBe(true)
+  })
+})
+
+describe('OnboardActivateSchema — tradie identity fields (migration 141)', () => {
+  it('rejects a web payload (no intent_token) with no logo_url', () => {
+    const { logo_url, ...withoutLogo } = baseValidPayload
+    void logo_url
+    const result = OnboardActivateSchema.safeParse(withoutLogo)
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error.flatten().fieldErrors.logo_url).toBeDefined()
+    }
+  })
+
+  it('accepts an SMS payload (intent_token present) with no logo_url', () => {
+    const { logo_url, ...withoutLogo } = baseValidPayload
+    void logo_url
+    const result = OnboardActivateSchema.safeParse({ ...withoutLogo, intent_token: 'abc123' })
+    expect(result.success).toBe(true)
+  })
+
+  it('accepts a scheme-less website (normalised for display downstream)', () => {
+    const result = OnboardActivateSchema.safeParse({
+      ...baseValidPayload,
+      website_url: 'rooroofing.com.au',
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects an obviously invalid website', () => {
+    const result = OnboardActivateSchema.safeParse({
+      ...baseValidPayload,
+      website_url: 'not a website',
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('accepts the optional contact_name + business_address', () => {
+    const result = OnboardActivateSchema.safeParse({
+      ...baseValidPayload,
+      contact_name: 'Matthew',
+      business_address: '670 London Rd, Chandler QLD 4155',
+    })
     expect(result.success).toBe(true)
   })
 })

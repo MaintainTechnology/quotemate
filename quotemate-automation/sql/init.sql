@@ -52,7 +52,13 @@ create table if not exists pricing_book (
   licence_number text,
   licence_state text,
   licence_expiry date,
-  overlays jsonb default '{}'::jsonb
+  overlays jsonb default '{}'::jsonb,
+  -- Per-feature customer-quote tier presentation mode (migration 142).
+  -- 'single' (default) shows one price = the recommended tier; 'good_better_best'
+  -- shows all priced tiers; 'good'|'better'|'best' force one tier. Per-row
+  -- (per-trade). Resolver: lib/quote/tier-visibility.ts.
+  quote_tier_mode text not null default 'single'
+    check (quote_tier_mode in ('good_better_best', 'single', 'good', 'better', 'best'))
 );
 
 -- ──────────────────────────────────────────────
@@ -326,6 +332,18 @@ create table if not exists tenant_feature_sources (
 );
 create index if not exists tenant_feature_sources_tenant_idx
   on tenant_feature_sources (tenant_id);
+
+-- ═══════════════════════════════════════════════════════════════════
+-- Tradie identity fields (migration 141) — representative snapshot.
+-- Business-identity fields surfaced on the customer quote letterhead.
+-- business_name / owner_mobile / owner_email already exist on tenants;
+-- licence + GST live on pricing_book. logo_path (storage object path)
+-- predates this; logo_url is the public URL the quote page renders.
+-- ═══════════════════════════════════════════════════════════════════
+alter table tenants add column if not exists contact_name      text;
+alter table tenants add column if not exists website_url       text;
+alter table tenants add column if not exists business_address  text;
+alter table tenants add column if not exists logo_url          text;
 
 -- ═══════════════════════════════════════════════════════════════════
 -- RESET BLOCK — uncomment and run only if you want to wipe everything

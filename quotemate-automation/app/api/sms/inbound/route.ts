@@ -32,6 +32,7 @@ import {
   composeConfirmMessage,
   narrowQuoteToStructures,
 } from '@/lib/sms/roofing-compose'
+import { asQuoteTierMode, type QuoteTierMode } from '@/lib/quote/tier-visibility'
 import { ensureRoofQuotePdf, roofQuotePdfUrl, signQuotePdfUrl } from '@/lib/quote/pdf'
 import { archiveAndIngestQuote } from '@/lib/filestore/ingest-quote'
 import { buildQuoteKbText } from '@/lib/filestore/minimize'
@@ -528,8 +529,22 @@ async function handleRoofingTurn(args: {
           }
         }
       }
+      // Mig 142 — roofing tier presentation mode for this tenant (single-price
+      // tradies get one option in the estimate SMS, not all three tiers).
+      let roofingTierMode: QuoteTierMode = 'good_better_best'
+      if (tenantId) {
+        const { data: rb } = await supabase
+          .from('pricing_book')
+          .select('quote_tier_mode')
+          .eq('tenant_id', tenantId)
+          .eq('trade', 'roofing')
+          .maybeSingle()
+        roofingTierMode = asQuoteTierMode(
+          (rb as { quote_tier_mode?: string | null } | null)?.quote_tier_mode ?? null,
+        )
+      }
       await sendReply(
-        buildRoofingReplyMessage({ quote: finalQuote, address: pending.address, quoteUrl: servedUrl, firstName, pdfUrl: roofPdfUrl }),
+        buildRoofingReplyMessage({ quote: finalQuote, address: pending.address, quoteUrl: servedUrl, firstName, pdfUrl: roofPdfUrl, tierMode: roofingTierMode }),
         roofPdfMedia,
       )
       // Quote delivered → WARM 'quoted' state (status stays 'open', token

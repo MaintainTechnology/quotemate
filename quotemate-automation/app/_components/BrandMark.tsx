@@ -1,18 +1,31 @@
-// Shared QuoteMax brand mark — the chat-bubble "Q" on the Maintain orange tile.
-// Single source of truth for the in-app logo so every header matches the favicon
-// (app/icon.svg), the marketing nav, and the social card. The bubble's hole uses
-// var(--accent) so it stays seamless on both the dark- and light-theme accent.
-// Server-safe (no hooks); size the orange tile via `className` (defaults h-7 w-7).
-export function BrandMark({ className = "h-7 w-7" }: { className?: string }) {
+// Shared QuoteMax brand mark — a quote/approval speech bubble with a tick,
+// on the Maintain accent tile. Single source of truth for the in-app logo so
+// every header matches the favicon (app/icon.svg) and the social card
+// (app/opengraph-image.png). The bubble uses var(--accent-ink) so it reads as
+// the dark command-centre ink on the accent tile in both themes; the tick is
+// var(--accent) so the brand colour pops inside the bubble.
+//
+// The glyph coordinates below are drawn on a 64×64 canvas with the padding
+// baked in (so the inner SVG fills the tile) — this keeps it pixel-identical
+// to app/icon.svg and the OG card, which reuse the same coordinates.
+// Server-safe (no hooks); size the accent tile via `className` (defaults h-10 w-10 ≈ 40px).
+export function BrandMark({ className = "h-10 w-10" }: { className?: string }) {
   return (
     <span
       className={`grid shrink-0 place-items-center bg-accent ${className}`}
       aria-hidden="true"
     >
-      <svg viewBox="0 0 64 64" className="h-[62%] w-[62%]">
-        <circle cx="31" cy="28" r="17" fill="#fff" />
-        <circle cx="31" cy="28" r="7.5" fill="var(--accent)" />
-        <path d="M21 39 L37 39 L21 52 Z" fill="#fff" />
+      <svg viewBox="0 0 64 64" className="h-full w-full">
+        <rect x="13" y="14" width="38" height="26" rx="7" fill="var(--accent-ink)" />
+        <path d="M20 39 L20 50 L31 40 Z" fill="var(--accent-ink)" />
+        <path
+          d="M23 27 L29.5 33.5 L41 21"
+          fill="none"
+          stroke="var(--accent)"
+          strokeWidth="5.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     </span>
   )

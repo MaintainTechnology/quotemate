@@ -12,6 +12,16 @@ import { CATEGORY_ENUM_TUPLE } from '@/lib/estimate/categories'
 export const TRADE_ENUM = z.enum(['electrical', 'plumbing'])
 export const STATE_ENUM = z.enum(['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'ACT', 'NT'])
 
+// Migration 142 — customer-quote tier presentation mode (single source of
+// truth mirrored in lib/quote/tier-visibility.ts QUOTE_TIER_MODES).
+export const QUOTE_TIER_MODE_ENUM = z.enum([
+  'good_better_best',
+  'single',
+  'good',
+  'better',
+  'best',
+])
+
 export const PricingFields = z.object({
   hourly_rate: z.coerce.number().positive().optional(),
   call_out_minimum: z.coerce.number().nonnegative().optional(),
@@ -108,6 +118,15 @@ export const UpdateSchema = z.object({
   // 'itemised' = today's per-line breakdown (default). 'summary' = single
   // scope paragraph + total (lump-sum read).
   quote_display: z.enum(['itemised', 'summary']).optional(),
+  // Migration 142 — per-feature (per-trade) customer-quote tier presentation
+  // mode. Keys are trade names (electrical, plumbing, roofing, painting,
+  // commercial_painting, solar). UNLIKE quote_display (fanned out to every
+  // pricing_book row), each entry here updates ONLY that trade's pricing_book
+  // row, so a tradie can run e.g. three-tier painting and single-price solar
+  // at the same time. Values constrained to the closed mode set.
+  quote_tier_mode_by_trade: z
+    .record(z.string().trim().min(1).max(40), QUOTE_TIER_MODE_ENUM)
+    .optional(),
   // Migration 078 — tradie review-before-send policy. Trade-agnostic;
   // fanned out to every pricing_book row by /api/tenant/me PATCH.
   //   'auto_send'              — current default behaviour

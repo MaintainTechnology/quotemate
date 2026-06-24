@@ -24,6 +24,12 @@ import { markIntentUsed } from '@/lib/onboard/intent-tokens'
 import { seedTenantServiceOfferings } from '@/lib/onboard/seed-tenant-defaults'
 import { checkInvitationCode, consumeInvitationCode } from '@/lib/onboard/invitation-codes'
 import { stampFeatureProvenance } from '@/lib/features/access'
+import { computePreflight } from '@/lib/onboard/preflight-logic'
+
+// A step result in the activation chain — collected so the response (and the
+// /admin tenant-health view) can show exactly what succeeded vs failed,
+// instead of swallowing failures silently. (spec A1)
+type StepResult = { step: string; ok: boolean; detail?: string }
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -32,6 +38,7 @@ const supabase = createClient(
 
 export async function POST(req: Request) {
   let tenantId: string | null = null
+  const steps: StepResult[] = []
   try {
     const raw = await req.json()
     const parsed = OnboardActivateSchema.safeParse(raw)
@@ -84,6 +91,22 @@ export async function POST(req: Request) {
       }
     }
 
+    // A9 — guarantee a sign-in-able tenant for web onboarding. SMS-initiated
+    // onboarding (intent_token present) legitimately has no auth user yet, so
+    // it stays exempt; every other path must resolve an owner_user_id or we
+    // refuse, rather than create a tenant the tradie can never sign into.
+    if (!resolvedOwnerUserId && !form.intent_token) {
+      return Response.json(
+        {
+          ok: false,
+          error: 'owner_user_id_unresolved',
+          message:
+            'Could not link this onboarding to a signed-in account. Sign in again and retry.',
+        },
+        { status: 422 },
+      )
+    }
+
     // ─── 1. Insert tenants row ─────────────────────────────────
     // Note: `trade` (singular) is kept in sync with trades[0] so legacy
     // pipeline code that still reads tenant.trade keeps working.
@@ -103,6 +126,12 @@ export async function POST(req: Request) {
         licence_type: form.licence_type || null,
         licence_number: form.licence_number || null,
         licence_expiry: form.licence_expiry || null,
+        // ── Brand / identity (migration 141) — surfaced on the quote letterhead ──
+        contact_name: form.contact_name || null,
+        website_url: form.website_url || null,
+        business_address: form.business_address || null,
+        logo_url: form.logo_url || null,
+        logo_path: form.logo_path || null,
         status: 'onboarding',
       })
       .select('id')
@@ -117,6 +146,7 @@ export async function POST(req: Request) {
     }
     const id: string = tenant.id
     tenantId = id
+    steps.push({ step: 'tenant', ok: true })
 
     // ─── 2. Insert pricing_book row(s) ────────────────────────
     // One row per selected trade. The wizard collects a single shared
@@ -154,6 +184,7 @@ export async function POST(req: Request) {
         { status: 500 },
       )
     }
+    steps.push({ step: 'pricing_book', ok: true })
 
     // ─── 2b. Seed tenant_licences (per-trade licence rows) ────────
     // Wizard only collects ONE licence triple in v1, so we copy it to
@@ -182,32 +213,72 @@ export async function POST(req: Request) {
         message: licErr.message,
       })
     }
+    steps.push({ step: 'licences', ok: !licErr, detail: licErr?.message })
 
     // ─── 3. Seed service offerings for ALL selected trades ─────────
     // v7 Phase 1: the seed logic is shared with the backfill script via
     // seedTenantServiceOfferings() so a backfilled tenant lands with
     // identical defaults to a fresh activate. The helper preserves the
     // pre-v7 semantics (default_enabled per assembly, fallback to true).
-    try {
-      await seedTenantServiceOfferings({ supabase, tenantId: id, trades: form.trades })
-    } catch (seedErr: any) {
-      // Non-fatal — the dashboard's safety-net fallback in /api/tenant/me
-      // still resolves enabled per assembly when no offerings rows exist.
-      console.warn('[activate] seedTenantServiceOfferings failed (non-fatal)', {
-        tenantId: id,
-        message: seedErr?.message ?? String(seedErr),
-      })
+    // A1: service offerings is a REQUIRED step — a tenant must never go live
+    // with an empty service catalogue. Retry once on a transient failure; if
+    // it still fails, stop BEFORE provisioning so the tenant stays in
+    // 'onboarding' (clearly Incomplete) for repair, rather than going active
+    // half-configured. The seed is idempotent (upsert on tenant+assembly).
+    let offeringsSeeded = false
+    let offeringsErr: string | undefined
+    for (let attempt = 1; attempt <= 2 && !offeringsSeeded; attempt++) {
+      try {
+        await seedTenantServiceOfferings({ supabase, tenantId: id, trades: form.trades })
+        offeringsSeeded = true
+      } catch (seedErr: any) {
+        offeringsErr = seedErr?.message ?? String(seedErr)
+        console.warn(`[activate] seedTenantServiceOfferings attempt ${attempt} failed`, {
+          tenantId: id,
+          message: offeringsErr,
+        })
+      }
+    }
+    steps.push({ step: 'service_offerings', ok: offeringsSeeded, detail: offeringsErr })
+    if (!offeringsSeeded) {
+      // Required step failed — leave the tenant Incomplete (status stays
+      // 'onboarding', provisioning not run). Repair re-seeds via
+      // scripts/verify-tenant.mjs --apply or /admin/tenants.
+      return Response.json(
+        {
+          ok: true,
+          tenantId: id,
+          setupComplete: false,
+          steps,
+          warning: `Service catalogue seed failed: ${offeringsErr}. Tenant left incomplete — repair from /admin/tenants.`,
+          retryable: true,
+        },
+        { status: 200 },
+      )
     }
 
     // ─── 3b. Stamp feature provenance (migration 138) ──────────────
     // The tenant's selected trades become 'onboarding'-sourced grants so a
     // later plan downgrade never strips the trade they signed up with. trades[]
     // itself was set on the tenants insert above; this only records provenance.
-    await stampFeatureProvenance(supabase, {
-      tenantId: id,
-      features: form.trades,
-      source: 'onboarding',
-    })
+    // Non-fatal: wrapped so a provenance failure never rolls back the tenant.
+    let provenanceOk = true
+    let provenanceErr: string | undefined
+    try {
+      await stampFeatureProvenance(supabase, {
+        tenantId: id,
+        features: form.trades,
+        source: 'onboarding',
+      })
+    } catch (e: any) {
+      provenanceOk = false
+      provenanceErr = e?.message ?? String(e)
+      console.warn('[activate] stampFeatureProvenance failed (non-fatal)', {
+        tenantId: id,
+        message: provenanceErr,
+      })
+    }
+    steps.push({ step: 'feature_provenance', ok: provenanceOk, detail: provenanceErr })
 
     // ─── Consume the invitation code (idempotent, once per tenant) ──
     // Done after the tenant row exists so the redemption ledger has a
@@ -264,13 +335,22 @@ export async function POST(req: Request) {
       ownerMobile: normalisedMobile,
     })
 
+    // Provisioning mode (live vs stub) — surfaced on every response so the
+    // caller/admin can never mistake a stub tenant for production-ready.
+    const { summary } = computePreflight(process.env)
+    const provisioningMode = { twilio: summary.twilio_mode, vapi: summary.vapi_mode }
+
     if (!result.ok) {
       // Tenant + pricing rows still exist. Client should redirect to the
       // dashboard which surfaces a Retry provisioning button.
+      steps.push({ step: 'provisioning', ok: false, detail: result.error })
       return Response.json(
         {
           ok: true,
           tenantId: id,
+          setupComplete: false,
+          provisioningMode,
+          steps,
           phoneNumber: result.phoneNumber,
           vapiAssistantId: result.vapiAssistantId,
           warning: `${result.error}. Retry from the dashboard.`,
@@ -280,16 +360,38 @@ export async function POST(req: Request) {
       )
     }
 
+    // A2: never report success with stub artifacts. A stub number/assistant
+    // means provisioning ran in stub mode (flag off) and the tenant cannot
+    // receive real calls/SMS — so setupComplete is false even though the row
+    // is technically 'active'. A non-fatal warning (registration / SMS
+    // webhook reclaim failed) also blocks setupComplete because those are
+    // required for the line to actually work. The /admin tenant-health view
+    // + banner make any such gap visible so no stub tenant looks ready.
+    const stubbed = result.stubbedTwilio || result.stubbedVapi
+    const setupComplete = result.ok && !stubbed && !result.warning
+    steps.push({
+      step: 'provisioning',
+      ok: setupComplete,
+      detail: stubbed ? 'stub mode' : result.warning,
+    })
+
     return Response.json({
       ok: true,
       tenantId: id,
+      setupComplete,
+      provisioningMode,
+      steps,
       phoneNumber: result.phoneNumber,
       stubbed: result.stubbedTwilio,
       stubbedVapi: result.stubbedVapi,
       welcomeSent:
         result.welcome?.ok === true &&
         !('stubbed' in result.welcome && result.welcome.stubbed),
-      warning: result.warning,
+      warning:
+        result.warning ??
+        (stubbed
+          ? 'Provisioning ran in STUB mode — this tenant has no real phone line. Enable live provisioning (TWILIO/VAPI_PROVISIONING_ENABLED) and retry.'
+          : undefined),
     })
   } catch (err: any) {
     // Catch-all rollback if we created a tenant but threw afterwards.

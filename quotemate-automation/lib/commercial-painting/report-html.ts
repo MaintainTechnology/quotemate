@@ -1,21 +1,33 @@
-// Tender-quote PDF HTML for commercial painting (Gotenberg renders it
-// to A4 via lib/pdf/gotenberg). Pure string builder, fully escaped,
-// inline styles only — same conventions as lib/roofing/report-html.ts.
-// AU formatting throughout.
+// Self-contained HTML for the commercial-painting customer TENDER PDF,
+// rendered by Gotenberg (lib/pdf/gotenberg.ts). White-label Caterpillar
+// chrome shared with every trade (lib/pdf/report-chrome.ts). The body keeps
+// its native tender shape: crew stat grid + scope/materials/equipment/
+// separate-price tables + the priced-economics totals + assumptions /
+// exclusions (spec specs/quote-pdf-branding.md). AU formatting. Pure —
+// unit-tested.
 
 import type { PricedPaintBom } from './types'
+import {
+  renderReportDocument,
+  brandingFromName,
+  esc,
+  type TenantBranding,
+} from '../pdf/report-chrome'
 
-function esc(s: string): string {
-  return s
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-}
-
+/** Full AU currency, matching the tender's historic ex/inc-GST formatting. */
 function aud(n: number): string {
   return n.toLocaleString('en-AU', { style: 'currency', currency: 'AUD' })
 }
+
+/** Per-trade default "Please Note" disclaimers for a commercial paint tender. */
+const PAINT_PLEASE_NOTE = [
+  'This tender is valid for 30 days and is subject to site verification of access and substrate condition.',
+  'Prices include 10% GST; the line tables above are shown ex GST.',
+  'Quantities are taken off the supplied plans and measurements; final pricing is confirmed on site and variations to the scope are quoted separately.',
+  'Paint products are supplied to equivalent specification where a named brand or colour is unavailable.',
+  'Separate prices listed are optional and are NOT included in the tender total unless accepted in writing.',
+  'No making-good of other trades, no asbestos handling and no structural or substrate repair is included unless expressly stated.',
+]
 
 export function buildPaintTenderReportHtml(input: {
   businessName: string
@@ -24,8 +36,11 @@ export function buildPaintTenderReportHtml(input: {
   bom: PricedPaintBom
   quoteViewUrl?: string | null
   generatedAt?: Date
+  /** Full white-label branding; when omitted, derived from businessName. */
+  branding?: TenantBranding
 }): string {
-  const { businessName, jobName, siteAddress, bom } = input
+  const { jobName, siteAddress, bom } = input
+  const branding = input.branding ?? brandingFromName(input.businessName)
   const date = (input.generatedAt ?? new Date()).toLocaleDateString('en-AU', {
     day: 'numeric',
     month: 'long',
@@ -60,7 +75,7 @@ export function buildPaintTenderReportHtml(input: {
     .map(
       (e) => `
       <tr>
-        <td>${esc(e.label)}<br /><span class="dim">${esc(e.reason)}</span></td>
+        <td>${esc(e.label)}<br /><span class="note">${esc(e.reason)}</span></td>
         <td class="num">${e.days} day${e.days === 1 ? '' : 's'}</td>
         <td class="num">${aud(e.dayRate)}/day</td>
         <td class="num">${aud(e.costExGst)}</td>
@@ -82,102 +97,88 @@ export function buildPaintTenderReportHtml(input: {
 
   const list = (items: string[]) => items.map((i) => `<li>${esc(i)}</li>`).join('')
 
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<title>Painting tender — ${esc(jobName ?? siteAddress ?? 'Commercial job')}</title>
-<style>
-  * { box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; color: #16202e; margin: 0; font-size: 12px; line-height: 1.5; }
-  .head { background: #0e1622; color: #fff; padding: 26px 32px; }
-  .head .biz { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #ff5a1f; font-weight: 700; }
-  .head h1 { margin: 6px 0 2px; font-size: 24px; text-transform: uppercase; letter-spacing: -0.01em; }
-  .head .sub { color: #b8c2d1; font-size: 12px; }
-  .wrap { padding: 24px 32px; }
-  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em; color: #0e1622; border-bottom: 2px solid #ff5a1f; padding-bottom: 4px; margin: 22px 0 8px; }
-  table { width: 100%; border-collapse: collapse; }
-  th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #7a8699; padding: 4px 8px 4px 0; border-bottom: 1px solid #d8dee8; }
-  td { padding: 5px 8px 5px 0; border-bottom: 1px solid #eef1f6; vertical-align: top; }
-  .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  th.num { text-align: right; }
-  .dim { color: #7a8699; font-size: 10px; }
-  .totals { margin-top: 14px; margin-left: auto; width: 280px; }
-  .totals td { border: 0; padding: 3px 0; }
-  .totals .grand td { border-top: 2px solid #0e1622; font-weight: 700; font-size: 15px; padding-top: 7px; }
-  .grand .amt { color: #ff5a1f; }
-  ul { margin: 6px 0 0; padding-left: 18px; }
-  li { margin: 2px 0; }
-  .foot { margin-top: 26px; padding-top: 10px; border-top: 1px solid #d8dee8; color: #7a8699; font-size: 10px; }
-  .crew { display: table; width: 100%; margin-top: 4px; }
-  .crew > div { display: table-cell; width: 25%; padding: 10px 12px; border: 1px solid #d8dee8; }
-  .crew .k { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #7a8699; }
-  .crew .v { font-size: 16px; font-weight: 700; margin-top: 2px; }
-</style>
-</head>
-<body>
-  <div class="head">
-    <div class="biz">${esc(businessName)}</div>
-    <h1>Painting tender</h1>
-    <div class="sub">${esc(jobName ?? '')}${jobName && siteAddress ? ' · ' : ''}${esc(siteAddress ?? '')} · ${esc(date)}</div>
-  </div>
-  <div class="wrap">
+  let body = ''
 
-    <div class="crew">
-      <div><div class="k">Labour</div><div class="v">${bom.labour.hours} h</div></div>
-      <div><div class="k">Crew</div><div class="v">${bom.labour.crewSize} painters</div></div>
-      <div><div class="k">On site</div><div class="v">≈ ${bom.labour.estimatedDays} day${bom.labour.estimatedDays === 1 ? '' : 's'}</div></div>
-      <div><div class="k">Tender inc GST</div><div class="v" style="color:#ff5a1f">${aud(bom.totalIncGst)}</div></div>
-    </div>
+  // Crew / tender headline stat grid.
+  body += `
+  <div class="statgrid">
+    <div class="stat"><div class="v">${bom.labour.hours} <small>h</small></div><div class="l">Labour</div></div>
+    <div class="stat"><div class="v">${bom.labour.crewSize} painters</div><div class="l">Crew</div></div>
+    <div class="stat"><div class="v">≈ ${bom.labour.estimatedDays} <small>day${bom.labour.estimatedDays === 1 ? '' : 's'}</small></div><div class="l">On site</div></div>
+    <div class="stat stat-selected"><div class="v">${aud(bom.totalIncGst)}</div><div class="l">Tender inc GST</div></div>
+  </div>`
 
-    <h2>Scope of works</h2>
-    <table>
-      <thead><tr><th>Surface</th><th class="num">Quantity</th><th class="num">Labour</th><th class="num">Line ex GST</th></tr></thead>
-      <tbody>${lineRows}</tbody>
-    </table>
+  // Scope of works.
+  body += `
+  <h2>Scope of works</h2>
+  <table>
+    <thead><tr><th>Surface</th><th class="num">Quantity</th><th class="num">Labour</th><th class="num">Line ex GST</th></tr></thead>
+    <tbody>${lineRows}</tbody>
+  </table>`
 
-    <h2>Materials</h2>
-    <table>
-      <thead><tr><th>Product</th><th class="num">Litres</th><th class="num">Rate</th><th class="num">Cost ex GST</th></tr></thead>
-      <tbody>${materialRows}</tbody>
-    </table>
+  // Materials.
+  body += `
+  <h2>Materials</h2>
+  <table>
+    <thead><tr><th>Product</th><th class="num">Litres</th><th class="num">Rate</th><th class="num">Cost ex GST</th></tr></thead>
+    <tbody>${materialRows}</tbody>
+  </table>`
 
-    ${bom.equipment.length > 0 ? `
-    <h2>Equipment &amp; access</h2>
-    <table>
-      <thead><tr><th>Item</th><th class="num">Duration</th><th class="num">Rate</th><th class="num">Cost ex GST</th></tr></thead>
-      <tbody>${equipmentRows}</tbody>
-    </table>` : ''}
+  // Equipment & access (optional).
+  if (bom.equipment.length > 0) {
+    body += `
+  <h2>Equipment &amp; access</h2>
+  <table>
+    <thead><tr><th>Item</th><th class="num">Duration</th><th class="num">Rate</th><th class="num">Cost ex GST</th></tr></thead>
+    <tbody>${equipmentRows}</tbody>
+  </table>`
+  }
 
-    ${bom.separate.lines.length > 0 ? `
-    <h2>Separate prices (optional, not in the tender total)</h2>
-    <table>
-      <thead><tr><th>Surface</th><th class="num">Quantity</th><th class="num">Labour</th><th class="num">Price ex GST</th></tr></thead>
-      <tbody>${separateRows}</tbody>
-    </table>` : ''}
+  // Separate prices (optional, not in the tender total).
+  if (bom.separate.lines.length > 0) {
+    body += `
+  <h2>Separate prices (optional, not in the tender total)</h2>
+  <table>
+    <thead><tr><th>Surface</th><th class="num">Quantity</th><th class="num">Labour</th><th class="num">Price ex GST</th></tr></thead>
+    <tbody>${separateRows}</tbody>
+  </table>`
+  }
 
-    <table class="totals">
-      <tbody>
-        <tr><td>Labour</td><td class="num">${aud(bom.labour.costExGst)}</td></tr>
-        <tr><td>Materials</td><td class="num">${aud(bom.materialsExGst)}</td></tr>
-        <tr><td>Equipment</td><td class="num">${aud(bom.equipmentExGst)}</td></tr>
-        <tr><td>Subtotal ex GST</td><td class="num">${aud(bom.subtotalExGst)}</td></tr>
-        <tr><td>GST</td><td class="num">${aud(bom.gst)}</td></tr>
-        <tr class="grand"><td>Tender total inc GST</td><td class="num amt">${aud(bom.totalIncGst)}</td></tr>
-      </tbody>
-    </table>
+  // Tender economics — the rolled-up totals.
+  body += `
+  <h2>Tender summary</h2>
+  <table>
+    <tbody>
+      <tr><td>Labour</td><td class="num">${aud(bom.labour.costExGst)}</td></tr>
+      <tr><td>Materials</td><td class="num">${aud(bom.materialsExGst)}</td></tr>
+      <tr><td>Equipment</td><td class="num">${aud(bom.equipmentExGst)}</td></tr>
+      <tr><td>Subtotal ex GST</td><td class="num">${aud(bom.subtotalExGst)}</td></tr>
+      <tr><td>GST</td><td class="num">${aud(bom.gst)}</td></tr>
+      <tr><td><strong>Tender total inc GST</strong></td><td class="num"><strong>${aud(bom.totalIncGst)}</strong></td></tr>
+    </tbody>
+  </table>`
 
-    <h2>Assumptions</h2>
-    <ul>${list(bom.assumptions)}</ul>
+  // Assumptions & exclusions.
+  body += `<h2>Assumptions</h2><ul class="bullets">${list(bom.assumptions)}</ul>`
+  body += `<h2>Exclusions</h2><ul class="bullets">${list(bom.exclusions)}</ul>`
 
-    <h2>Exclusions</h2>
-    <ul>${list(bom.exclusions)}</ul>
+  const jobLabel = jobName ?? siteAddress ?? 'Commercial job'
 
-    <div class="foot">
-      Quote prepared with QuoteMax.${input.quoteViewUrl ? ` View online: ${esc(input.quoteViewUrl)}` : ''}
-      This tender is valid for 30 days and subject to site verification of access and substrate condition.
-    </div>
-  </div>
-</body>
-</html>`
+  const closingLine = input.quoteViewUrl
+    ? `View this tender online: ${input.quoteViewUrl}`
+    : null
+
+  return renderReportDocument(branding, {
+    docTitle: `Painting tender — ${jobLabel}`,
+    eyebrow: 'Commercial painting · Tender',
+    dateLabel: date,
+    customerName: jobName ?? null,
+    siteAddress: siteAddress ?? null,
+    introHtml: `Thank you for the opportunity to tender for the painting works at <strong>${esc(
+      jobLabel,
+    )}</strong>. The scope of works, materials, access and priced summary for this <strong>Painting tender</strong> are set out below.`,
+    bodyHtml: body,
+    pleaseNote: PAINT_PLEASE_NOTE,
+    closingLine,
+  })
 }

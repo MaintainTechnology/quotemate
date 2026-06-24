@@ -78,6 +78,13 @@ export const SaveRoofMeasurementSchema = z.object({
   structures: z.array(SaveStructureSchema).min(1).max(12),
   /** Whole-measurement payload as returned by measure-all, stored verbatim. */
   quote: z.unknown().optional(),
+  /**
+   * The tradie's 1-based structure selection from the dashboard include
+   * toggles. Persisted as the authoritative `included_indices` so the saved
+   * quote, customer page and PDF all reflect exactly what was checked. Omitted
+   * ⇒ the server defaults to roof-only (the primary structure).
+   */
+  included_indices: z.array(z.number().int()).max(64).optional(),
   customer_name: z.string().max(160).optional().nullable(),
   customer_phone: z.string().max(40).optional().nullable(),
 })

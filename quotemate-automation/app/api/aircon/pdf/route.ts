@@ -14,6 +14,7 @@ import { renderPdfFromHtml, gotenbergConfigured } from '@/lib/pdf/gotenberg'
 import { storeQuoteAsset } from '@/lib/quote/pdf'
 import { archiveAndIngestQuote } from '@/lib/filestore/ingest-quote'
 import { buildAirconReportHtml } from '@/lib/aircon/report-html'
+import { loadTenantBranding } from '@/lib/pdf/branding'
 import type { AcRecommendation } from '@/lib/aircon/types'
 
 export const dynamic = 'force-dynamic'
@@ -41,7 +42,7 @@ async function tenantFromBearer(
     .maybeSingle()
   return {
     id: (tenant?.id as string | undefined) ?? null,
-    businessName: (tenant?.business_name as string | undefined) ?? 'QuoteMax',
+    businessName: (tenant?.business_name as string | undefined) ?? 'Your installer',
   }
 }
 
@@ -112,8 +113,12 @@ export async function POST(req: Request) {
 
   let pdf: Buffer
   try {
+    const branding = tenant.id
+      ? await loadTenantBranding(supabase, tenant.id, 'aircon')
+      : undefined
     const html = buildAirconReportHtml({
-      businessName: tenant.businessName,
+      businessName: branding?.businessName ?? tenant.businessName,
+      branding,
       address: typeof b.address === 'string' ? b.address : '',
       recommendation: b.recommendation,
       climateZone: typeof b.climateZone === 'string' ? b.climateZone : null,

@@ -14,6 +14,7 @@
 // ════════════════════════════════════════════════════════════════════
 
 import type { MultiRoofQuote, RoofingPriceTier, RoofStructurePrice } from '@/lib/roofing/types'
+import { asQuoteTierMode, resolveVisibleTiers, type QuoteTierMode } from '@/lib/quote/tier-visibility'
 
 export type RoofingReplyContext = {
   quote: MultiRoofQuote
@@ -27,6 +28,10 @@ export type RoofingReplyContext = {
    *  Rendered on the priced estimate message only (never the inspection
    *  or confirm messages — no committed numbers to put in a document). */
   pdfUrl?: string | null
+  /** Migration 142 — per-feature tier presentation mode. Controls WHICH tiers
+   *  the estimate SMS lists. Omitted ⇒ 'good_better_best' (legacy all-tiers);
+   *  the inbound route passes the tenant's roofing pricing_book mode. */
+  tierMode?: QuoteTierMode
 }
 
 /** One best-effort MMS roof photo: a public image URL + a short caption. */
@@ -77,7 +82,11 @@ function nameSuffix(firstName?: string | null): string {
   return f ? ` ${f}` : ''
 }
 
-const TIER_LABELS: [string, string, string] = ['Patch / repair', 'Re-roof', 'Upgrade']
+const ROOF_TIER_LABEL_BY_KEY: Record<'good' | 'better' | 'best', string> = {
+  good: 'Patch / repair',
+  better: 'Re-roof',
+  best: 'Upgrade',
+}
 
 /**
  * PURE — the quotable estimate message. Uses quote.combined.tiers
@@ -95,7 +104,21 @@ export function composeEstimateMessage(ctx: RoofingReplyContext): string {
       ? `${quotableCount} structures, ~${area} m² total`
       : `~${area} m² of roof`
 
-  const lines = quote.combined.tiers.map((t, i) => `• ${TIER_LABELS[i]}: ${fmtAud(t.inc_gst)}`)
+  // Mig 142 — list only the tiers this feature's mode surfaces. Roofing has no
+  // per-SMS selected tier; the resolver's better → good → best fallback picks
+  // the recommended one for 'single' mode (matches save-as-quote's default).
+  const visibleTierKeys = resolveVisibleTiers({
+    mode: asQuoteTierMode(ctx.tierMode, 'good_better_best'),
+    present: {
+      good: quote.combined.tiers.some((t) => t.tier === 'good'),
+      better: quote.combined.tiers.some((t) => t.tier === 'better'),
+      best: quote.combined.tiers.some((t) => t.tier === 'best'),
+    },
+    selectedTier: null,
+  })
+  const lines = quote.combined.tiers
+    .filter((t) => visibleTierKeys.includes(t.tier))
+    .map((t) => `• ${ROOF_TIER_LABEL_BY_KEY[t.tier]}: ${fmtAud(t.inc_gst)}`)
 
   const out = [
     `${greeting(ctx.firstName)}here's your roofing estimate for ${ctx.address} (${scope}):`,

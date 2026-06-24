@@ -37,6 +37,7 @@ import {
   asQuoteDisplayMode,
   resolveQuoteDisplayMode,
 } from '@/lib/quote/display'
+import { asQuoteTierMode } from '@/lib/quote/tier-visibility'
 
 export const dynamic = 'force-dynamic'
 
@@ -115,7 +116,7 @@ export async function POST(
     .maybeSingle()
   const { data: pricingBook } = await supabase
     .from('pricing_book')
-    .select('quote_display, gst_registered')
+    .select('quote_display, gst_registered, quote_tier_mode')
     .eq('tenant_id', quote.tenant_id)
     .limit(1)
     .maybeSingle()
@@ -190,7 +191,14 @@ export async function POST(
     scope: (intake?.scope as { item_count?: number; description?: string } | null) ?? null,
   }
 
-  const body = buildQuoteSms(intakeForSms, quoteForSms, { displayMode: asQuoteDisplayMode(displayMode) })
+  // Mig 142 — per-feature tier mode (single-price tradies get one option).
+  const tierMode = asQuoteTierMode(
+    (pricingBook as { quote_tier_mode?: string | null } | null)?.quote_tier_mode ?? null,
+  )
+  const body = buildQuoteSms(intakeForSms, quoteForSms, {
+    displayMode: asQuoteDisplayMode(displayMode),
+    tierMode,
+  })
   const fromNumber = tenant.twilio_sms_number ?? process.env.TWILIO_SMS_NUMBER ?? undefined
   // Best-effort MMS attach of the PDF — the shared helper signs the media
   // URL (best-effort) and dispatch auto-falls back to a plain SMS when the

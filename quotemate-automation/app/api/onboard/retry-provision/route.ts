@@ -17,6 +17,8 @@
 import { createClient } from '@supabase/supabase-js'
 import { runProvisioning } from '@/lib/onboard/run-provisioning'
 import { setTwilioSmsWebhook } from '@/lib/twilio/set-sms-webhook'
+import { isStubTwilioNumber, isStubVapiId } from '@/lib/onboard/health'
+import { computePreflight } from '@/lib/onboard/preflight-logic'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,6 +42,11 @@ export async function POST(req: Request) {
   if (!user) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
+
+  // Provisioning mode (live vs stub) — surfaced on every response so a stub
+  // retry is never mistaken for a production-ready tenant (spec A2).
+  const { summary } = computePreflight(process.env)
+  const provisioningMode = { twilio: summary.twilio_mode, vapi: summary.vapi_mode }
 
   const { data: tenant, error: tErr } = await supabase
     .from('tenants')
@@ -78,13 +85,23 @@ export async function POST(req: Request) {
       smsWarning =
         'APP_URL / NEXT_PUBLIC_APP_URL not set — cannot reclaim SMS webhook.'
     }
+    // A2: even on the fast path, a pre-existing stub number/assistant means
+    // the tenant is NOT production-ready — never report it as complete.
+    const stubbed =
+      isStubTwilioNumber(tenant.twilio_sms_number) || isStubVapiId(tenant.vapi_assistant_id)
     return Response.json({
       ok: true,
       tenantId: tenant.id,
+      setupComplete: !stubbed && !smsWarning,
+      provisioningMode,
       phoneNumber: tenant.twilio_sms_number,
       vapiAssistantId: tenant.vapi_assistant_id,
       alreadyProvisioned: true,
-      warning: smsWarning,
+      warning:
+        smsWarning ??
+        (stubbed
+          ? 'Existing number/assistant is a STUB — enable live provisioning and re-provision.'
+          : undefined),
     })
   }
 
@@ -113,6 +130,8 @@ export async function POST(req: Request) {
       {
         ok: false,
         tenantId: tenant.id,
+        setupComplete: false,
+        provisioningMode,
         phoneNumber: result.phoneNumber,
         vapiAssistantId: result.vapiAssistantId,
         error: result.error ?? 'provisioning_failed',
@@ -121,13 +140,22 @@ export async function POST(req: Request) {
     )
   }
 
+  // A2: a stub result, or a non-fatal warning (registration / SMS webhook
+  // reclaim failed), means the line isn't fully working — not "complete".
+  const stubbed = result.stubbedTwilio || result.stubbedVapi
   return Response.json({
     ok: true,
     tenantId: tenant.id,
+    setupComplete: result.ok && !stubbed && !result.warning,
+    provisioningMode,
     phoneNumber: result.phoneNumber,
     vapiAssistantId: result.vapiAssistantId,
     stubbedTwilio: result.stubbedTwilio,
     stubbedVapi: result.stubbedVapi,
-    warning: result.warning,
+    warning:
+      result.warning ??
+      (stubbed
+        ? 'Provisioning ran in STUB mode — enable live provisioning (TWILIO/VAPI_PROVISIONING_ENABLED) and retry.'
+        : undefined),
   })
 }

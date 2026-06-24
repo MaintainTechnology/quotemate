@@ -555,52 +555,27 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
               </div>
             </div>
 
-            {/* Body: spinner → content → graceful fallback */}
-            <div className="relative flex flex-1 items-center justify-center overflow-auto bg-ink-card">
+            {/* Body: spinner → content → graceful fallback.
+                flex-col + min-h-0 so the child can own the full remaining
+                height; the PDF iframe grows via flex-1 (not height:100%, which
+                collapses for replaced elements in a centered flex parent) so
+                its built-in scroll works. */}
+            <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-ink-card">
               {viewerState === 'loading' && (
-                <Loader2
-                  size={22}
-                  className="animate-spin text-text-dim"
-                  aria-label="Loading document"
-                />
-              )}
-
-              {viewerState === 'error' && (
-                <div className="flex flex-col items-center gap-4 p-8 text-center">
-                  <p className="text-sm text-text-sec">
-                    This document can&apos;t be previewed right now.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => download(viewerDoc)}
-                    className="inline-flex items-center gap-1.5 bg-accent px-4 py-2 text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press"
-                  >
-                    <Download size={13} /> Download instead
-                  </button>
+                <div className="flex flex-1 items-center justify-center">
+                  <Loader2
+                    size={22}
+                    className="animate-spin text-text-dim"
+                    aria-label="Loading document"
+                  />
                 </div>
               )}
 
-              {viewerState === 'ready' &&
-                viewerUrl &&
-                (viewerType.startsWith('image/') ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={viewerUrl}
-                    alt={viewerDoc.display_name ?? 'Document'}
-                    className="max-h-full max-w-full object-contain"
-                  />
-                ) : viewerType === 'application/pdf' ||
-                  viewerType === '' ||
-                  viewerDoc.source_kind === 'quote' ? (
-                  <iframe
-                    src={viewerUrl}
-                    title={viewerDoc.display_name ?? 'Document'}
-                    className="h-full w-full border-0"
-                  />
-                ) : (
+              {viewerState === 'error' && (
+                <div className="flex flex-1 items-center justify-center">
                   <div className="flex flex-col items-center gap-4 p-8 text-center">
                     <p className="text-sm text-text-sec">
-                      Preview isn&apos;t available for this file type.
+                      This document can&apos;t be previewed right now.
                     </p>
                     <button
                       type="button"
@@ -609,6 +584,44 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
                     >
                       <Download size={13} /> Download instead
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {viewerState === 'ready' &&
+                viewerUrl &&
+                (viewerType.startsWith('image/') ? (
+                  // Tall images scroll within their own scrollable, padded box.
+                  <div className="flex flex-1 items-center justify-center overflow-auto p-4">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={viewerUrl}
+                      alt={viewerDoc.display_name ?? 'Document'}
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  </div>
+                ) : viewerType === 'application/pdf' ||
+                  viewerType === '' ||
+                  viewerDoc.source_kind === 'quote' ? (
+                  <iframe
+                    src={viewerUrl}
+                    title={viewerDoc.display_name ?? 'Document'}
+                    className="min-h-0 w-full flex-1 border-0"
+                  />
+                ) : (
+                  <div className="flex flex-1 items-center justify-center">
+                    <div className="flex flex-col items-center gap-4 p-8 text-center">
+                      <p className="text-sm text-text-sec">
+                        Preview isn&apos;t available for this file type.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => download(viewerDoc)}
+                        className="inline-flex items-center gap-1.5 bg-accent px-4 py-2 text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press"
+                      >
+                        <Download size={13} /> Download instead
+                      </button>
+                    </div>
                   </div>
                 ))}
             </div>

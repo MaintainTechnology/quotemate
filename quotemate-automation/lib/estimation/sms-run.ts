@@ -19,6 +19,7 @@ import { runExtraction, type ExtractionItem } from './extract'
 import { priceTakeoff, type PricedBom } from './price'
 import { loadElectricalPricingContext } from './pricing-context'
 import { buildPlanReportHtml } from './report-html'
+import { loadTenantBranding } from '@/lib/pdf/branding'
 import {
   buildPlanResultsSms,
   buildPlanFailureSms,
@@ -125,6 +126,7 @@ export async function runSmsPlanAnalysis(requestId: string): Promise<void> {
     customerFirstName(req.customer_phone, req.tenant_id),
   ])
   const businessName = (tenant?.business_name as string | undefined) ?? 'Your tradie'
+  const branding = await loadTenantBranding(supabase, req.tenant_id, 'electrical')
 
   const fail = async (error: string) => {
     console.error('[sms-run] analysis failed', { requestId, error })
@@ -206,7 +208,8 @@ export async function runSmsPlanAnalysis(requestId: string): Promise<void> {
   if (gotenbergConfigured()) {
     try {
       const html = buildPlanReportHtml({
-        businessName,
+        businessName: branding.businessName,
+        branding,
         filename: (upload.filename as string) ?? 'plan.pdf',
         items: extraction.parsed.items as ExtractionItem[],
         sheetsUsed: extraction.parsed.sheets_used,

@@ -16,6 +16,7 @@ import { archiveAndIngestQuote } from '@/lib/filestore/ingest-quote'
 import { buildQuoteKbText } from '@/lib/filestore/minimize'
 import { buildPaintQuotePayloads } from '@/lib/commercial-painting/save-quote-helpers'
 import { buildPaintTenderReportHtml } from '@/lib/commercial-painting/report-html'
+import { loadTenantBranding } from '@/lib/pdf/branding'
 import { buildPaintCustomerSms, normaliseAuMobile } from '@/lib/commercial-painting/notify'
 import { gotenbergConfigured, renderPdfFromHtml } from '@/lib/pdf/gotenberg'
 import { dispatchQuoteWithPdf } from '@/lib/sms/send-quote-pdf'
@@ -118,6 +119,7 @@ export async function POST(req: Request) {
     .maybeSingle()
   const businessName = (tenantRow?.business_name as string | null) ?? 'Your painter'
   const twilioFrom = (tenantRow?.twilio_sms_number as string | null) ?? null
+  const branding = await loadTenantBranding(estimatorSupabase, tenant.id, 'commercial-painting')
 
   const shareToken = generateShareToken()
   const payloads = buildPaintQuotePayloads({
@@ -152,6 +154,20 @@ export async function POST(req: Request) {
     )
   }
 
+  // Mint the paint_run's public_token (best-effort, non-blocking) so the rich
+  // commercial-paint takeoff page /q/commercial-paint/[token] and the dashboard
+  // "saved jobs" link-out card work. Only sets it when absent (idempotent), and
+  // a failure here never affects the quote save outcome.
+  try {
+    await estimatorSupabase
+      .from('paint_runs')
+      .update({ public_token: generateShareToken() })
+      .eq('id', paintRunId)
+      .is('public_token', null)
+  } catch {
+    /* best-effort — the quote + /q/[token] view stand without the rich page */
+  }
+
   // Absolute URL only for the PRINTED footer of the tender PDF (a PDF
   // can't use a relative link); the dashboard's clickable links below
   // are relative so they work on any origin, dev included.
@@ -163,7 +179,8 @@ export async function POST(req: Request) {
   if (gotenbergConfigured()) {
     try {
       const html = buildPaintTenderReportHtml({
-        businessName,
+        businessName: branding.businessName,
+        branding,
         jobName: run.job_name as string | null,
         siteAddress: run.site_address as string | null,
         bom,

@@ -30,6 +30,14 @@ type FormState = {
   licence_type: string
   licence_number: string
   licence_expiry: string
+  // Brand / identity — shown on the customer quote letterhead. Logo is
+  // required; the rest are optional. business_name/owner_email/owner_mobile
+  // (collected at /signup + Step 1) cover the quote's name/email/phone.
+  contact_name: string
+  website_url: string
+  business_address: string
+  logo_url: string
+  logo_path: string
   hourly_rate: string
   call_out_minimum: string
   default_markup_pct: string
@@ -102,6 +110,10 @@ function OnboardWizardInner() {
   const [codeError, setCodeError] = useState<string | null>(null)
   const [codeNote, setCodeNote] = useState<string | null>(null)
 
+  // Trade-readiness gate (spec A4): which trades the quote pipeline actually
+  // supports. null = not loaded yet (show the pilot defaults).
+  const [onboardableTrades, setOnboardableTrades] = useState<string[] | null>(null)
+
   const [form, setForm] = useState<FormState>({
     business_name: '',
     owner_first_name: '',
@@ -114,6 +126,11 @@ function OnboardWizardInner() {
     licence_type: '',
     licence_number: '',
     licence_expiry: '',
+    contact_name: '',
+    website_url: '',
+    business_address: '',
+    logo_url: '',
+    logo_path: '',
     hourly_rate: '',
     call_out_minimum: '',
     default_markup_pct: '',
@@ -190,11 +207,37 @@ function OnboardWizardInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Trade-readiness gate (spec A4): only offer trades the whole quote
+  // pipeline supports. Falls back to the two pilot trades if the readiness
+  // endpoint is unreachable, so onboarding is never blocked by it.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/onboard/trades', { cache: 'no-store' })
+        const json = await res.json()
+        if (!cancelled && json?.ok && Array.isArray(json.onboardable)) {
+          setOnboardableTrades(json.onboardable as string[])
+        }
+      } catch {
+        // Non-fatal — keep the default pilot trades visible.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }))
   }
 
-  const canContinueStep1 = !!(form.owner_mobile && form.trades.length > 0 && form.state)
+  // A trade pill is shown only when readiness hasn't loaded yet (null) or the
+  // gate marks it onboardable.
+  const tradeAvailable = (t: Trade) =>
+    onboardableTrades === null || onboardableTrades.includes(t)
+
+  const canContinueStep1 = !!(form.owner_mobile && form.trades.length > 0 && form.state && form.logo_url)
   const canContinueStep2 = !!(form.hourly_rate && form.call_out_minimum && form.default_markup_pct)
 
   // Helper: toggle a trade in/out of form.trades. Two-button design
@@ -315,7 +358,7 @@ function OnboardWizardInner() {
       <nav className="border-b border-ink-line">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
           <Link href="/" className="flex items-center gap-2.5">
-            <BrandMark className="h-7 w-7" />
+            <BrandMark className="h-10 w-10" />
             <span className="font-extrabold uppercase tracking-tight text-text-pri">
               QuoteMax
             </span>
@@ -384,6 +427,7 @@ function OnboardWizardInner() {
                 form={form}
                 update={update}
                 toggleTrade={toggleTrade}
+                tradeAvailable={tradeAvailable}
                 fieldErrors={fieldErrors}
                 mobileLocked={mobileLocked}
                 showLicence={showLicence}
@@ -461,6 +505,7 @@ function Step1({
   form,
   update,
   toggleTrade,
+  tradeAvailable,
   fieldErrors,
   mobileLocked,
   showLicence,
@@ -469,6 +514,7 @@ function Step1({
   form: FormState
   update: <K extends keyof FormState>(k: K, v: FormState[K]) => void
   toggleTrade: (v: Trade) => void
+  tradeAvailable: (t: Trade) => boolean
   fieldErrors: Record<string, string[]>
   mobileLocked: boolean
   showLicence: boolean
@@ -481,6 +527,55 @@ function Step1({
   const primaryTrade: Trade | '' = form.trades[0] ?? ''
   return (
     <>
+      {/* ─── Your brand — shown on every customer quote ───────────── */}
+      <div className="space-y-5">
+        <LogoUpload
+          ownerUserId={form.owner_user_id}
+          logoUrl={form.logo_url}
+          onUploaded={(url, path) => {
+            update('logo_url', url)
+            update('logo_path', path)
+          }}
+        />
+        <div className="grid gap-5 md:grid-cols-2">
+          <Field label="Contact name" hint="Optional — who customers ask for">
+            <input
+              type="text"
+              value={form.contact_name}
+              onChange={(e) => update('contact_name', e.target.value)}
+              placeholder={form.owner_first_name || 'e.g. Matthew'}
+              className={INPUT}
+              maxLength={80}
+              autoComplete="name"
+            />
+          </Field>
+          <Field label="Website" hint="Optional" error={fieldErrors.website_url?.[0]}>
+            <input
+              type="text"
+              value={form.website_url}
+              onChange={(e) => update('website_url', e.target.value)}
+              placeholder="rooroofing.com.au"
+              className={INPUT}
+              maxLength={200}
+              inputMode="url"
+            />
+          </Field>
+        </div>
+        <Field label="Business address" hint="Optional — shows on your quotes">
+          <input
+            type="text"
+            value={form.business_address}
+            onChange={(e) => update('business_address', e.target.value)}
+            placeholder="123 Trade St, Brisbane QLD 4000"
+            className={INPUT}
+            maxLength={200}
+            autoComplete="street-address"
+          />
+        </Field>
+      </div>
+
+      <div className="mt-6 pt-6 border-t border-ink-line" />
+
       {/* Required + commonly-asked fields */}
       <div className="grid gap-5 md:grid-cols-2">
         <Field
@@ -506,18 +601,22 @@ function Step1({
           error={fieldErrors.trades?.[0]}
         >
           <div className="grid grid-cols-2 gap-2">
-            <TradePill
-              value="electrical"
-              label="Electrical"
-              selected={form.trades.includes('electrical')}
-              onToggle={toggleTrade}
-            />
-            <TradePill
-              value="plumbing"
-              label="Plumbing"
-              selected={form.trades.includes('plumbing')}
-              onToggle={toggleTrade}
-            />
+            {tradeAvailable('electrical') && (
+              <TradePill
+                value="electrical"
+                label="Electrical"
+                selected={form.trades.includes('electrical')}
+                onToggle={toggleTrade}
+              />
+            )}
+            {tradeAvailable('plumbing') && (
+              <TradePill
+                value="plumbing"
+                label="Plumbing"
+                selected={form.trades.includes('plumbing')}
+                onToggle={toggleTrade}
+              />
+            )}
           </div>
         </Field>
 
@@ -744,6 +843,21 @@ function Step3({ form }: { form: FormState }) {
         <ReviewRow k="Mobile" v={form.owner_mobile} />
       </ReviewBlock>
 
+      <ReviewBlock label="Brand">
+        {form.logo_url ? (
+          <div className="flex items-center justify-between gap-4 border-b border-ink-line/60 py-2">
+            <dt className="text-sm text-text-dim">Logo</dt>
+            <dd className="text-right">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={form.logo_url} alt="Your logo" className="inline-block h-10 w-auto" />
+            </dd>
+          </div>
+        ) : null}
+        <ReviewRow k="Contact" v={form.contact_name || form.owner_first_name} />
+        {form.website_url ? <ReviewRow k="Website" v={form.website_url} /> : null}
+        {form.business_address ? <ReviewRow k="Address" v={form.business_address} /> : null}
+      </ReviewBlock>
+
       <ReviewBlock label="Trade">
         <ReviewRow
           k={form.trades.length > 1 ? 'Trades' : 'Trade'}
@@ -935,4 +1049,86 @@ function ReviewRow({ k, v }: { k: string; v: string }) {
 
 function titleCase(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
+// Logo upload — required brand field. Validates type/size client-side for a
+// fast error, then POSTs the file to /api/onboard/logo (which re-validates +
+// sanitises SVGs server-side) and stores the returned public URL + path on the
+// form. The object is keyed by the owner's auth user_id since the tenant row
+// doesn't exist yet at this point in the wizard.
+const LOGO_ACCEPT = 'image/png,image/jpeg,image/webp,image/svg+xml'
+const LOGO_ALLOWED = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']
+const LOGO_MAX_BYTES = 2 * 1024 * 1024
+
+function LogoUpload({
+  ownerUserId,
+  logoUrl,
+  onUploaded,
+}: {
+  ownerUserId: string
+  logoUrl: string
+  onUploaded: (url: string, path: string) => void
+}) {
+  const [uploading, setUploading] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function handleFile(file: File | null) {
+    if (!file) return
+    setErr(null)
+    const mime = (file.type || '').split(';')[0].trim().toLowerCase()
+    if (!LOGO_ALLOWED.includes(mime)) {
+      setErr('Logo must be a PNG, JPG, WEBP, or SVG image.')
+      return
+    }
+    if (file.size > LOGO_MAX_BYTES) {
+      setErr('Logo must be 2 MB or smaller.')
+      return
+    }
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('owner_user_id', ownerUserId)
+      const res = await fetch('/api/onboard/logo', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (!res.ok || !data.ok) throw new Error(data.error ?? 'Logo upload failed')
+      onUploaded(data.publicUrl as string, data.path as string)
+    } catch (e: any) {
+      setErr(e?.message ?? 'Logo upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <Field label="Business logo" hint="Required — shows on every quote" error={err ?? undefined}>
+      <div className="flex items-center gap-4">
+        <div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden border border-ink-line bg-ink-deep">
+          {logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logoUrl} alt="Your logo" className="h-full w-full object-contain" />
+          ) : (
+            <span className="font-mono text-[0.55rem] uppercase tracking-[0.12em] text-text-dim">
+              Logo
+            </span>
+          )}
+        </div>
+        <div className="flex-1">
+          <label className="inline-flex cursor-pointer items-center gap-2 border border-ink-line bg-ink-deep px-4 py-2.5 text-sm font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent-soft">
+            <input
+              type="file"
+              accept={LOGO_ACCEPT}
+              className="sr-only"
+              onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
+              disabled={uploading}
+            />
+            {uploading ? 'Uploading…' : logoUrl ? 'Change logo' : 'Upload logo'}
+          </label>
+          <p className="mt-2 font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">
+            PNG, JPG, WEBP or SVG · max 2 MB
+          </p>
+        </div>
+      </div>
+    </Field>
+  )
 }

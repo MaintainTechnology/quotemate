@@ -61,7 +61,8 @@ describe('loadAndBuildKbDoc', () => {
       roofing_measurements: { tenant_id: 't2', public_token: 'tok', quote: { combined: { tiers: [{ tier: 'std', inc_gst: 9000 }] } }, routing: 'tradie_review' },
     })
     const out = await loadAndBuildKbDoc(sb, { sourceKind: 'quote', sourceId: 'tok', trade: 'roofing' })
-    expect(ensureRoofQuotePdf).toHaveBeenCalledWith('tok')
+    // Now narrows to the persisted selection (same as the customer PDF route).
+    expect(ensureRoofQuotePdf).toHaveBeenCalledWith('tok', expect.objectContaining({ quote: expect.anything() }))
     expect(out).toMatchObject({ tenantId: 't2', trade: 'roofing', fullDocPath: 'roofs/tok.pdf' })
     expect(out!.kbText).toContain('9000')
   })

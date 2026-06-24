@@ -359,6 +359,114 @@ html {
 }
 
 /* ════════════════════════════════════════════════════════════════════
+   Brand-tinted DUOTONE photo treatment (marketing home page).
+   Stock trade photos are warmed toward the Maintain palette so they read
+   as native to the cream LIGHT theme rather than dropped-in: the photo is
+   desaturated + warmed via a CSS filter, then a two-pass scrim tints the
+   shadows toward warm charcoal (multiply) and lifts the highlights toward
+   the accent (soft-light). Tuned for the light background by default; the
+   dark-theme override deepens the scrim so photos sit in the dark canvas.
+   Decorative only — all meaning lives in each <Image alt>.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* The framed photo. Default tokens are the LIGHT-theme (primary) tuning —
+   a lighter key, gentle warm shift. */
+.duotone-frame {
+  /* duotone endpoints + blend amounts, overridden per theme below */
+  --duo-shadow:    rgba(43, 36, 34, 0.42);  /* warm charcoal floor   */
+  --duo-highlight: rgba(255, 196, 0, 0.20); /* accent-warm ceiling   */
+  --duo-edge:      rgba(43, 36, 34, 0.30);  /* lower-edge scrim floor */
+}
+
+.duotone-img {
+  /* Desaturate, warm, and add a touch of contrast so the brand tint reads.
+     Light tuning keeps brightness up so faces stay friendly, not murky. */
+  filter: grayscale(0.55) sepia(0.22) saturate(1.05) contrast(1.04)
+    brightness(1.02);
+}
+
+/* Two-layer scrim: a multiply tint over the whole frame welds the photo to
+   the brand; a bottom-anchored gradient guarantees AA contrast for any text
+   or caption laid over the lower edge. */
+.duotone-scrim {
+  background:
+    linear-gradient(
+      180deg,
+      transparent 38%,
+      var(--duo-edge) 100%
+    );
+  mix-blend-mode: normal;
+}
+.duotone-scrim::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--duo-shadow);
+  mix-blend-mode: multiply;
+}
+.duotone-scrim::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    160deg,
+    var(--duo-highlight) 0%,
+    transparent 55%
+  );
+  mix-blend-mode: soft-light;
+}
+
+/* Hero feature image — a touch lighter so the headline column stays the
+   focal point and the SMS demo beside it reads first. */
+.duotone-hero .duotone-img {
+  filter: grayscale(0.45) sepia(0.18) saturate(1.06) contrast(1.03)
+    brightness(1.04);
+}
+.duotone-hero {
+  --duo-shadow: rgba(43, 36, 34, 0.30);
+  --duo-edge: rgba(43, 36, 34, 0.24);
+}
+
+/* Caption legibility — any text laid over a photo's lower edge sits on a
+   guaranteed dark gradient + soft shadow so white copy clears WCAG AA in
+   both themes regardless of the duotone tuning. Apply to the caption's
+   container (the figcaption/overlay). */
+.photo-caption {
+  background: linear-gradient(
+    0deg,
+    rgba(15, 12, 10, 0.78) 0%,
+    rgba(15, 12, 10, 0.4) 45%,
+    transparent 100%
+  );
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+}
+
+/* DARK theme — deepen the scrim toward the ink canvas and pull more colour
+   out so the photos belong to the dark surface instead of glowing. Both the
+   media-query default (no stored choice) and the explicit toggle are
+   covered. The home page defaults to light, so this is the secondary path. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .duotone-frame {
+    --duo-shadow: rgba(22, 18, 15, 0.55);
+    --duo-highlight: rgba(255, 196, 0, 0.16);
+    --duo-edge: rgba(22, 18, 15, 0.62);
+  }
+  :root:not([data-theme]) .duotone-img {
+    filter: grayscale(0.62) sepia(0.18) saturate(0.95) contrast(1.05)
+      brightness(0.9);
+  }
+}
+:root[data-theme="dark"] .duotone-frame {
+  --duo-shadow: rgba(22, 18, 15, 0.55);
+  --duo-highlight: rgba(255, 196, 0, 0.16);
+  --duo-edge: rgba(22, 18, 15, 0.62);
+}
+:root[data-theme="dark"] .duotone-img {
+  filter: grayscale(0.62) sepia(0.18) saturate(0.95) contrast(1.05)
+    brightness(0.9);
+}
+
+/* ════════════════════════════════════════════════════════════════════
    Accent foreground contrast (Caterpillar yellow).
    The accent is a bright yellow FILL, so text/icons on it must be charcoal
    — never white (white-on-yellow fails WCAG ~1.4:1). And yellow as an

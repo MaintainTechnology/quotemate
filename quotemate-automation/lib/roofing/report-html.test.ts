@@ -3,6 +3,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildRoofQuoteReportHtml } from './report-html'
 import type { MultiRoofQuote } from './types'
+import type { RoofDisplayRow } from './selection'
 
 const tiers = [
   { tier: 'good', label: 'Patch / repair', ex_gst: 2000, inc_gst: 2200, scope: 'Patch the damaged sections.' },
@@ -68,5 +69,22 @@ describe('buildRoofQuoteReportHtml', () => {
     })
     expect(inspection).toContain('Inspection required')
     expect(inspection).toContain('Steep pitch needs a look.')
+  })
+
+  it('lists an EXCLUDED structure without pricing it when displayRows are provided', () => {
+    // The tradie kept only the main dwelling; the shed is excluded — it must
+    // still appear, marked "not included", and never carry a price.
+    const displayRows = [
+      { index1Based: 1, structure: baseQuote.structures[0], state: 'priced', included: true },
+      { index1Based: 2, structure: baseQuote.structures[1], state: 'excluded', included: false },
+    ] as unknown as RoofDisplayRow[]
+    const html = buildRoofQuoteReportHtml({
+      businessName: 'Apex Roofing',
+      address: '12 Sample St',
+      quote: baseQuote,
+      displayRows,
+    })
+    expect(html).toContain('Shed')
+    expect(html).toContain('not included in this quote')
   })
 })

@@ -1,8 +1,8 @@
 // Self-contained HTML for the customer SOLAR quote PDF, rendered by
-// Gotenberg (lib/pdf/gotenberg.ts). Brings solar to PDF parity with the
-// electrical/plumbing quote report (lib/quote/report-html.ts) and the
-// roofing report: same print-friendly light theme (mono eyebrows, orange
-// accent, uppercase display headings, inline styles).
+// Gotenberg (lib/pdf/gotenberg.ts). White-label Caterpillar chrome shared
+// with every trade (lib/pdf/report-chrome.ts): branded header, thank-you
+// intro, the trade-native body (premium proposal, static map, flux heatmap,
+// felt map, AI brief, economics tiers) and the "Please Note" + footer.
 //
 // Money convention: SolarPriceTier already carries inc-GST figures
 // (net_inc_gst, gross_inc_gst) and the STC rebate, all computed by the
@@ -18,18 +18,22 @@ import {
   SOLAR_LAYOUT_COPY,
   SOLAR_ENVIRONMENTAL_COPY,
 } from './compliance-copy'
-
-const esc = (s: string) =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-
-const aud0 = (n: number) =>
-  '$' + Math.round(Number.isFinite(n) ? n : 0).toLocaleString('en-AU')
+import {
+  renderReportDocument,
+  renderFigure,
+  brandingFromName,
+  esc,
+  aud0,
+  type TenantBranding,
+} from '../pdf/report-chrome'
 
 const kw = (n: number) =>
   (Number.isFinite(n) ? n : 0).toLocaleString('en-AU', { maximumFractionDigits: 1 })
 
 export type SolarReportInput = {
   businessName: string
+  /** Full white-label branding; when omitted, derived from businessName. */
+  branding?: TenantBranding
   address: string
   estimate: SolarEstimate
   quoteViewUrl?: string | null
@@ -68,23 +72,23 @@ function tierSection(
 ): string {
   const panels = panelsCount != null ? ` · ${panelsCount} panels` : ''
   return `
-  <section class="tier ${recommended ? 'tier-selected' : ''}">
-    <div class="tier-head">
-      <span class="tier-name">${price.tier.toUpperCase()}${recommended ? ' · RECOMMENDED' : ''}</span>
-      <span class="tier-price">${aud0(price.net_inc_gst)} <small>net inc GST</small></span>
+  <section class="part${recommended ? ' stat-selected' : ''}">
+    <div class="tier-head" style="display:flex;justify-content:space-between;align-items:baseline;">
+      <span class="marker" style="padding:4px 10px;font-size:11px;letter-spacing:0.12em;">${price.tier.toUpperCase()}${recommended ? ' · RECOMMENDED' : ''}</span>
+      <span class="tier-price" style="font-size:20px;font-weight:800;">${aud0(price.net_inc_gst)} <small style="font-size:10px;font-weight:400;color:var(--dim);">net inc GST</small></span>
     </div>
-    <div class="tier-label">${kw(price.system_kw_dc)} kW${panels} — ${esc(price.label ?? '')}</div>
-    ${price.scope ? `<div class="tier-scope">${esc(price.scope)}</div>` : ''}
+    <div class="tier-label" style="margin-top:6px;color:var(--sec);font-weight:600;">${kw(price.system_kw_dc)} kW${panels} — ${esc(price.label ?? '')}</div>
+    ${price.scope ? `<div class="note" style="margin-top:4px;">${esc(price.scope)}</div>` : ''}
     <table>
       <tbody>
         <tr><td>System price (inc GST)</td><td class="num">${aud0(price.gross_inc_gst)}</td></tr>
         <tr><td>Less STC rebate (${price.stc.certificates} certificates @ ${aud0(price.stc.stc_price_aud)})</td><td class="num">&minus;${aud0(price.stc.rebate_aud)}</td></tr>
-        <tr class="net"><td>Your price after rebate (inc GST)</td><td class="num">${aud0(price.net_inc_gst)}</td></tr>
+        <tr><td style="border-bottom:none;border-top:2px solid var(--pri);font-weight:800;">Your price after rebate (inc GST)</td><td class="num" style="border-bottom:none;border-top:2px solid var(--pri);font-weight:800;">${aud0(price.net_inc_gst)}</td></tr>
       </tbody>
     </table>
     ${
       econ
-        ? `<div class="econ">Est. first-year savings <b>${aud0(econ.annual_savings_aud)}/yr</b> · Payback <b>${paybackText(econ.payback_years_low, econ.payback_years_high)}</b></div>`
+        ? `<div class="note" style="margin-top:8px;">Est. first-year savings <b style="color:var(--pri);">${aud0(econ.annual_savings_aud)}/yr</b> · Payback <b style="color:var(--pri);">${paybackText(econ.payback_years_low, econ.payback_years_high)}</b></div>`
         : ''
     }
   </section>`
@@ -105,9 +109,9 @@ function overlayFigure(args: {
   return `
   <h2>${esc(args.heading)}</h2>
   <div class="figure">
-    <div class="overlay-frame">${img}<div class="overlay-svg">${args.svg}</div></div>
-    ${args.legendHtml ? `<div class="legend">${args.legendHtml}</div>` : ''}
-    <div class="fig-caption">${esc(args.captionText)}</div>
+    <div style="position:relative;width:100%;aspect-ratio:4 / 3;background:var(--pri);overflow:hidden;border:1px solid var(--line);">${img}<div style="position:absolute;inset:0;">${args.svg}</div></div>
+    ${args.legendHtml ? `<div style="display:flex;flex-wrap:wrap;gap:6px 16px;padding:6px 10px;border-top:1px solid var(--line);">${args.legendHtml}</div>` : ''}
+    <figcaption>${esc(args.captionText)}</figcaption>
   </div>`
 }
 
@@ -115,20 +119,23 @@ function chartFigure(heading: string, chart: { svg: string; caption: string }): 
   return `
   <h2>${esc(heading)}</h2>
   <div class="figure">
-    <div class="chart">${chart.svg}</div>
-    <div class="fig-caption">${esc(chart.caption)}</div>
+    <div style="padding:8px;border:1px solid var(--line);">${chart.svg}</div>
+    <figcaption>${esc(chart.caption)}</figcaption>
   </div>`
 }
 
+/** A label/value (+ optional hint) stat grid, mapped onto the chrome's
+ *  card vocabulary with brand vars. Kept as a 4-up grid for density. */
 function statGrid(rows: Array<{ label: string; value: string; hint?: string }>): string {
   return (
-    '<div class="stats">' +
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);page-break-inside:avoid;margin:12px 0 4px;">' +
     rows
       .map(
         (r) =>
-          `<div class="stat"><div class="stat-label">${esc(r.label)}</div>` +
-          `<div class="stat-value">${esc(r.value)}</div>` +
-          (r.hint ? `<div class="stat-hint">${esc(r.hint)}</div>` : '') +
+          '<div class="stat" style="border:none;">' +
+          `<div class="l">${esc(r.label)}</div>` +
+          `<div class="v">${esc(r.value)}</div>` +
+          (r.hint ? `<div class="note" style="font-size:8.5px;margin-top:1px;">${esc(r.hint)}</div>` : '') +
           '</div>',
       )
       .join('') +
@@ -148,7 +155,8 @@ function premiumSections(input: SolarReportInput): string {
     const legend = p.layout.legend
       .map(
         (l) =>
-          `<span class="legend-item"><span class="swatch" style="background:${l.color}"></span>` +
+          `<span class="l" style="display:inline-flex;align-items:center;gap:5px;">` +
+          `<span style="display:inline-block;width:8px;height:8px;background:${l.color}"></span>` +
           `${esc(l.plane_label)} · ${l.panels_count} panels</span>`,
       )
       .join('')
@@ -168,7 +176,8 @@ function premiumSections(input: SolarReportInput): string {
     const legend = p.strings.strings
       .map(
         (s) =>
-          `<span class="legend-item"><span class="swatch" style="background:${s.color}"></span>` +
+          `<span class="l" style="display:inline-flex;align-items:center;gap:5px;">` +
+          `<span style="display:inline-block;width:8px;height:8px;background:${s.color}"></span>` +
           `S${s.string_number} · ${s.panels_count} panels</span>`,
       )
       .join('')
@@ -196,15 +205,16 @@ function premiumSections(input: SolarReportInput): string {
       // anchors the quote page uses) — best face highlighted.
       const markers = p.sun.markers
         .map((m) => {
-          const bg = m.is_best ? '#FF5F00' : 'rgba(22,32,43,0.85)'
-          const sub = m.is_best ? 'rgba(255,255,255,0.85)' : '#9aa6b2'
+          const bg = m.is_best ? 'var(--accent)' : 'rgba(36,30,27,0.85)'
+          const fg = m.is_best ? 'var(--accent-ink)' : '#fff'
+          const sub = m.is_best ? 'var(--accent-ink)' : '#cbbfb5'
           return (
             `<div style="position:absolute;left:${m.x_pct}%;top:${m.y_pct}%;transform:translate(-50%,-50%);` +
-            `background:${bg};color:#fff;border:1px solid ${m.is_best ? '#FF5F00' : '#3a4654'};` +
+            `background:${bg};color:${fg};border:1px solid ${m.is_best ? 'var(--accent)' : '#5E544E'};` +
             `padding:3px 7px;text-align:center;white-space:nowrap;z-index:${m.is_best ? 2 : 1};">` +
-            `<div style="font-family:'Courier New',monospace;font-size:7.5px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;">` +
+            `<div style="font-family:'JetBrains Mono','Courier New',monospace;font-size:7.5px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;">` +
             `${m.is_best ? '★ BEST SPOT — ' : ''}${esc(m.orientation)} FACE</div>` +
-            `<div style="font-family:'Courier New',monospace;font-size:7px;letter-spacing:0.08em;text-transform:uppercase;color:${sub};">` +
+            `<div style="font-family:'JetBrains Mono','Courier New',monospace;font-size:7px;letter-spacing:0.08em;text-transform:uppercase;color:${sub};">` +
             `${esc(m.score_copy)} · ${m.area_m2.toLocaleString('en-AU')} m²</div></div>`
           )
         })
@@ -218,7 +228,7 @@ function premiumSections(input: SolarReportInput): string {
           `<img src="${esc(input.fluxImageUrl)}" alt="" style="width:100%;display:block;image-rendering:pixelated;">` +
           markers +
           '</div>' +
-          (caption ? `<div class="fig-caption">${esc(caption)}</div>` : '') +
+          (caption ? `<figcaption>${esc(caption)}</figcaption>` : '') +
           '</div>',
       )
       markersRendered = p.sun.markers.length > 0
@@ -331,16 +341,15 @@ function feltSections(input: SolarReportInput): string {
   const parts: string[] = []
 
   if (input.feltMap?.thumbnailUrl) {
+    const caption =
+      `Snapshot of your interactive roof map — panel layout, sun-exposure heat map and elevation.` +
+      (input.feltMap.mapUrl
+        ? ` Explore it live: ${input.feltMap.mapUrl}`
+        : input.quoteViewUrl
+          ? ` Explore it live on your quote page: ${input.quoteViewUrl}`
+          : '')
     parts.push(
-      '<h2>Your roof — interactive map</h2>' +
-        `<div class="figure"><img src="${esc(input.feltMap.thumbnailUrl)}" alt="" style="width:100%;display:block;">` +
-        `<div class="fig-caption">Snapshot of your interactive roof map — panel layout, sun-exposure heat map and elevation.` +
-        (input.feltMap.mapUrl
-          ? ` Explore it live: ${esc(input.feltMap.mapUrl)}`
-          : input.quoteViewUrl
-            ? ` Explore it live on your quote page: ${esc(input.quoteViewUrl)}`
-            : '') +
-        '</div></div>',
+      '<h2>Your roof — interactive map</h2>' + renderFigure(input.feltMap.thumbnailUrl, caption),
     )
   }
 
@@ -348,11 +357,11 @@ function feltSections(input: SolarReportInput): string {
   if (b) {
     const caveats =
       b.caveats.length > 0
-        ? `<ul>${b.caveats.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>`
+        ? `<ul class="bullets">${b.caveats.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>`
         : ''
     parts.push(
       '<h2>Roof intelligence — AI-generated summary</h2>' +
-        `<div class="summary"><b>${esc(b.headline)}</b>` +
+        `<div class="scope"><b>${esc(b.headline)}</b>` +
         `<p>${esc(b.layout_rationale)}</p>` +
         `<p><b>Best roof face.</b> ${esc(b.best_plane_note)}</p>` +
         `<p><b>Across the seasons.</b> ${esc(b.seasonal_note)}</p>` +
@@ -364,6 +373,15 @@ function feltSections(input: SolarReportInput): string {
   return parts.join('\n')
 }
 
+/** Per-trade default "Please Note" disclaimers for the solar PDF. */
+const SOLAR_PLEASE_NOTE = [
+  'Indicative estimate — final price is confirmed by your installer after review.',
+  'Tier prices are net of the STC rebate and include GST; the rebate is point-of-sale and assigned to the installer using a conservative certificate price.',
+  'System sizing is capped to your network’s export limit and based on aerial imagery; on-site conditions (switchboard, roof structure, shading) may vary the final design.',
+  'Savings, payback and 20-year projections are estimates based on the assumptions shown and current tariffs — actual results depend on your usage and future energy prices.',
+  'Final design, panel and inverter selection are confirmed on site before installation.',
+]
+
 export function buildSolarQuoteReportHtml(input: SolarReportInput): string {
   const e = input.estimate
   const date = (input.generatedAt ?? new Date()).toLocaleDateString('en-AU', {
@@ -371,6 +389,7 @@ export function buildSolarQuoteReportHtml(input: SolarReportInput): string {
     month: 'long',
     year: 'numeric',
   })
+  const branding = input.branding ?? brandingFromName(input.businessName)
 
   // Align the price tiers with their panel count (sizing) + economics by tier key.
   const panelsByTier = new Map(e.sizing.tiers.map((t) => [t.tier, t.panels_count]))
@@ -392,91 +411,41 @@ export function buildSolarQuoteReportHtml(input: SolarReportInput): string {
   const a = e.economics.assumptions
   const bandLabel = e.confidence_band === 'tight' ? '±20% (good imagery)' : '±30% (indicative)'
 
-  return `<!doctype html>
-<html lang="en-AU">
-<head>
-<meta charset="utf-8">
-<title>Solar estimate — ${esc(input.businessName)}</title>
-<style>
-  * { box-sizing: border-box; }
-  body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #16202b; margin: 0; font-size: 12px; line-height: 1.5; }
-  header { border-bottom: 3px solid #FF5F00; padding-bottom: 14px; margin-bottom: 18px; }
-  .eyebrow { font-family: 'Courier New', monospace; font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: #6b7683; }
-  h1 { font-size: 24px; text-transform: uppercase; letter-spacing: -0.02em; margin: 6px 0 2px; }
-  h1 .accent { color: #FF5F00; }
-  .meta { color: #6b7683; font-size: 11px; }
-  h2 { font-size: 13px; text-transform: uppercase; margin: 22px 0 6px; letter-spacing: 0.02em; }
-  .summary { border-left: 3px solid #FF5F00; padding: 8px 12px; background: #f7f8fa; }
-  .tier { border: 1px solid #dde3e9; margin-top: 14px; padding: 12px 14px; page-break-inside: avoid; }
-  .tier-selected { border: 2px solid #FF5F00; }
-  .tier-head { display: flex; justify-content: space-between; align-items: baseline; }
-  .tier-name { font-family: 'Courier New', monospace; font-size: 11px; font-weight: 700; letter-spacing: 0.15em; color: #FF5F00; }
-  .tier-price { font-size: 20px; font-weight: 800; }
-  .tier-price small { font-size: 10px; font-weight: 400; color: #6b7683; }
-  .tier-label { margin-top: 2px; color: #3a4654; font-weight: 600; }
-  .tier-scope { margin-top: 4px; color: #4a5562; font-size: 11px; }
-  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-  td { border-bottom: 1px solid #e6ebf0; padding: 5px 6px; vertical-align: top; }
-  tr.net td { border-bottom: none; border-top: 2px solid #16202b; font-weight: 800; }
-  .num { text-align: right; white-space: nowrap; }
-  .econ { margin-top: 8px; font-size: 11px; color: #3a4654; }
-  .econ b { color: #16202b; }
-  ul { margin: 6px 0 0; padding-left: 18px; }
-  li { margin-bottom: 3px; }
-  .note { color: #6b7683; font-size: 11px; }
-  footer { margin-top: 26px; padding-top: 10px; border-top: 1px solid #dde3e9; font-family: 'Courier New', monospace; font-size: 8.5px; letter-spacing: 0.15em; text-transform: uppercase; color: #6b7683; }
-  /* ── Premium proposal sections (spec 2026-06-12 §4.4) ─────────── */
-  .figure { border: 1px solid #dde3e9; page-break-inside: avoid; }
-  .overlay-frame { position: relative; width: 100%; aspect-ratio: 4 / 3; background: #16202b; overflow: hidden; }
-  .overlay-svg { position: absolute; inset: 0; }
-  .overlay-svg svg { width: 100%; height: 100%; }
-  .chart { padding: 8px; }
-  .chart svg { width: 100%; height: auto; }
-  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 6px 10px; border-top: 1px solid #dde3e9; }
-  .legend-item { font-family: 'Courier New', monospace; font-size: 8.5px; letter-spacing: 0.1em; text-transform: uppercase; color: #3a4654; display: inline-flex; align-items: center; gap: 5px; }
-  .swatch { display: inline-block; width: 8px; height: 8px; }
-  .fig-caption { padding: 6px 10px; border-top: 1px solid #dde3e9; color: #6b7683; font-size: 9.5px; }
-  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: #dde3e9; border: 1px solid #dde3e9; page-break-inside: avoid; }
-  .stat { background: #f7f8fa; padding: 8px 10px; }
-  .stat-label { font-family: 'Courier New', monospace; font-size: 8px; letter-spacing: 0.12em; text-transform: uppercase; color: #6b7683; }
-  .stat-value { font-size: 14px; font-weight: 800; margin-top: 2px; }
-  .stat-hint { font-size: 8.5px; color: #6b7683; margin-top: 1px; }
-</style>
-</head>
-<body>
-  <header>
-    <div class="eyebrow">Solar estimate · indicative</div>
-    <h1>${esc(input.businessName)} <span class="accent">×</span> QuoteMax</h1>
-    <div class="meta">${esc(input.address)} · ${date} · Confidence ${bandLabel}</div>
-  </header>
+  let body = ''
 
-  <h2>Your system</h2>
-  <div class="summary">
-    Estimate for a ${kw(e.price.tiers[e.price.tiers.length - 1]?.system_kw_dc ?? 0)} kW solar system,
-    sized to your roof and capped to your network's export limit. Prices are net of the STC rebate
-    and include GST.
-  </div>
+  body += `<h2>Your system</h2>`
+  body += `<div class="scope">Estimate for a ${kw(
+    e.price.tiers[e.price.tiers.length - 1]?.system_kw_dc ?? 0,
+  )} kW solar system, sized to your roof and capped to your network's export limit. Prices are net of the STC rebate and include GST.</div>`
 
-  ${feltSections(input)}
+  body += feltSections(input)
 
-  ${premiumSections(input)}
+  body += premiumSections(input)
 
-  <h2>Your options</h2>
-  ${tiers}
+  body += `<h2>Your options</h2>`
+  body += tiers
 
-  <h2>Assumptions</h2>
-  <ul>
+  body += `<h2>Assumptions</h2>`
+  body += `<ul class="bullets">
     <li>Self-consumption ${Math.round((a.self_consumption_pct ?? 0) * 100)}% of generation used on-site.</li>
     <li>Retail rate ${aud0(a.retail_rate_aud_per_kwh)}/kWh · Feed-in tariff ${aud0(a.feed_in_tariff_aud_per_kwh)}/kWh (${esc(a.feed_in_network)}).</li>
     <li>STC rebate is point-of-sale and assigned to the installer; figures use a conservative certificate price.</li>
-  </ul>
+  </ul>`
 
-  <p class="note">Indicative estimate — final price is confirmed by ${esc(input.businessName)} after review.
-  ${input.quoteViewUrl ? `Live version of this quote: ${esc(input.quoteViewUrl)}` : ''}</p>
+  const closingLine = input.quoteViewUrl
+    ? `Live version of this quote: ${input.quoteViewUrl}`
+    : null
 
-  <footer>Generated by QuoteMax${
-    input.licenceLine ? ` · ${esc(input.licenceLine)}` : ''
-  } · Reply to your SMS or call to go ahead</footer>
-</body>
-</html>`
+  return renderReportDocument(branding, {
+    docTitle: `Solar estimate — ${branding.businessName}`,
+    eyebrow: `Solar estimate · indicative · Confidence ${bandLabel}`,
+    dateLabel: date,
+    siteAddress: input.address,
+    introHtml: `Thank you for the opportunity to quote for a solar system at <strong>${esc(
+      input.address,
+    )}</strong>. Your sizing options and full proposal are set out below — prices are net of the STC rebate and include GST.`,
+    bodyHtml: body,
+    pleaseNote: SOLAR_PLEASE_NOTE,
+    closingLine,
+  })
 }

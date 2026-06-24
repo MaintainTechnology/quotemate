@@ -29,7 +29,7 @@ import type {
   RoofMetrics,
   RoofStructurePrice,
 } from '@/lib/roofing/types'
-import { narrowQuoteToStructures } from '@/lib/sms/roofing-compose'
+import { partitionRoofQuote, resolveEffectiveIndices } from '@/lib/roofing/selection'
 import { RoofMap, type RoofMapBuilding } from '@/app/dashboard/roofing/_components/RoofMap'
 
 export const dynamic = 'force-dynamic'
@@ -49,6 +49,7 @@ type Row = {
   public_token: string
   confirmed_at: string | null
   confirmed_structure: number | null
+  included_indices: number[] | null
 }
 
 function money(n: number | null | undefined): string {
@@ -108,7 +109,7 @@ export default async function RoofingQuotePage({
 
   const { data, error } = await supabase
     .from('roofing_measurements')
-    .select('address, state, provider, routing, combined_area_m2, quote, public_token, confirmed_at, confirmed_structure')
+    .select('address, state, provider, routing, combined_area_m2, quote, public_token, confirmed_at, confirmed_structure, included_indices')
     .eq('public_token', token)
     .maybeSingle()
 
@@ -120,28 +121,43 @@ export default async function RoofingQuotePage({
   // Confirm gate — prices show only after the customer confirms over SMS.
   const confirmed = row.confirmed_at != null
 
-  // Which structures to show on the priced view: ?s= link wins, else the
-  // single pick stamped at confirm time, else all.
+  // Which structures to show on the priced view. The tradie's persisted
+  // selection (included_indices) is the source of truth; a ?s= link or the
+  // single pick stamped at confirm time can only NARROW it further, never
+  // widen past what the tradie included.
   const paramIndices = parseIndices((await searchParams).s, allStructures.length)
-  const effectiveIndices = paramIndices ?? (row.confirmed_structure != null ? [row.confirmed_structure] : null)
+  const effectiveIndices = resolveEffectiveIndices(
+    {
+      included: row.included_indices,
+      confirmedStructure: row.confirmed_structure,
+      paramIndices,
+    },
+    allStructures.length,
+  )
 
-  // On the priced view, narrow to the chosen structures; the picker view
-  // always shows every measured building so the customer can pick.
-  const quote: MultiRoofQuote | null =
-    confirmed && fullQuote ? narrowQuoteToStructures(fullQuote, effectiveIndices) : fullQuote
-  const structures: RoofStructurePrice[] = confirmed
-    ? (Array.isArray(quote?.structures) ? quote!.structures : [])
-    : allStructures
+  // On the priced view, the headline total covers only the INCLUDED quotable
+  // structures (partition.narrowed) — but we still LIST every detected
+  // structure, marking excluded ones "not included" and inspection-routed ones
+  // "on inspection", neither priced into the total. The picker view always
+  // shows every measured building so the customer can pick.
+  const partition = confirmed && fullQuote ? partitionRoofQuote(fullQuote, effectiveIndices) : null
+  const quote: MultiRoofQuote | null = partition ? partition.narrowed : fullQuote
+  // Per-structure cards: every structure (with its state) on the priced view;
+  // every measured building on the picker view.
+  const structureCards: Array<{ structure: RoofStructurePrice; excluded: boolean }> = confirmed
+    ? (partition?.rows ?? []).map((r) => ({ structure: r.structure, excluded: r.state === 'excluded' }))
+    : allStructures.map((s) => ({ structure: s, excluded: false }))
+  const structures: RoofStructurePrice[] = structureCards.map((c) => c.structure)
 
   const isInspection = row.routing === 'inspection_required' || quote?.routing?.decision === 'inspection_required'
   const flagged = new Set(quote?.inspection_structures ?? [])
   const showPrices = confirmed && !isInspection
 
-  const mapBuildings: RoofMapBuilding[] = structures.map((s, i) => ({
+  const mapBuildings: RoofMapBuilding[] = structureCards.map(({ structure: s, excluded }, i) => ({
     id: s.buildingId ?? `s-${i}`,
     polygon: s.metrics?.polygon_geojson ?? null,
     role: s.role,
-    included: true,
+    included: !excluded,
   }))
   const primary = structures.find((s) => s.role === 'primary') ?? structures[0]
   const primaryStats = primary
@@ -243,8 +259,8 @@ export default async function RoofingQuotePage({
           <div className="font-mono text-[0.8rem] font-semibold uppercase tracking-[0.18em] text-accent">
             {showPrices ? 'Detailed breakdown' : 'Measured buildings'} · {structures.length} structure{structures.length === 1 ? '' : 's'}
           </div>
-          {structures.map((s, i) => (
-            <StructureBreakdown key={s.buildingId ?? i} structure={s} index={i} flagged={flagged.has(s.label)} showPrices={showPrices} />
+          {structureCards.map(({ structure: s, excluded }, i) => (
+            <StructureBreakdown key={s.buildingId ?? i} structure={s} index={i} flagged={flagged.has(s.label)} showPrices={showPrices} excluded={excluded} />
           ))}
         </div>
 
@@ -287,21 +303,24 @@ function StructureBreakdown({
   index,
   flagged,
   showPrices,
+  excluded = false,
 }: {
   structure: RoofStructurePrice
   index: number
   flagged: boolean
   showPrices: boolean
+  excluded?: boolean
 }) {
   const m = structure.metrics
   const p = structure.price
   const inspection = p.routing?.decision === 'inspection_required' || flagged
   return (
-    <article className="border border-ink-line bg-ink-card p-6 sm:p-7">
+    <article className={`border border-ink-line bg-ink-card p-6 sm:p-7 ${excluded ? 'opacity-60' : ''}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
             {structure.role === 'primary' ? 'Main dwelling' : 'Secondary structure'} · {String(index + 1).padStart(2, '0')}
+            {excluded ? ' · Not included' : ''}
           </div>
           <h3 className="mt-1.5 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri">{structure.label}</h3>
         </div>
@@ -318,7 +337,11 @@ function StructureBreakdown({
           : <MiniStat label="Area" value={p.area_m2 ? `${Math.round(p.area_m2)} m²` : '-'} hint="sloped" />}
       </div>
 
-      {!showPrices ? (
+      {excluded ? (
+        <div className="mt-5 border border-ink-line border-l-4 border-l-text-dim bg-ink-deep px-4 py-3 text-sm text-text-sec">
+          Not included in this quote — leave it out, or ask us to add it.
+        </div>
+      ) : !showPrices ? (
         inspection ? (
           <div className="mt-5 border border-ink-line border-l-4 border-l-warning bg-ink-deep px-4 py-3 text-sm text-text-sec">
             This structure needs a quick look on site before we can price it.

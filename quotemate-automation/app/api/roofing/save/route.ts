@@ -10,6 +10,13 @@
 import { createClient } from '@supabase/supabase-js'
 import { randomBytes } from 'node:crypto'
 import { SaveRoofMeasurementSchema } from '@/lib/roofing/request-schema'
+import type { MultiRoofQuote } from '@/lib/roofing/types'
+import {
+  denormFromSelection,
+  primaryStructureIndices,
+  sanitizeIndices,
+  structureCount,
+} from '@/lib/roofing/selection'
 
 export const dynamic = 'force-dynamic'
 
@@ -76,7 +83,27 @@ export async function POST(req: Request) {
     )
   }
 
-  const { address, provider, structures, quote, customer_name, customer_phone } = parsed.data
+  const { address, provider, structures, quote, included_indices, customer_name, customer_phone } =
+    parsed.data
+
+  // A freshly-saved measurement defaults to ROOF-ONLY: just the primary
+  // structure is in the job, so the tradie opts secondary structures
+  // (sheds/garages) IN rather than out. When the dashboard sends an explicit
+  // selection (its include toggles), that wins. included_indices is 1-based;
+  // the denormalised summary is derived from it so list views stay in sync.
+  const fullQuote = (quote ?? null) as MultiRoofQuote | null
+  const count = structureCount(fullQuote)
+  const provided = sanitizeIndices(included_indices, count)
+  const includedIndices =
+    provided.length > 0 ? provided : count > 0 ? primaryStructureIndices(fullQuote) : null
+  const denorm =
+    fullQuote && includedIndices
+      ? denormFromSelection(fullQuote, includedIndices)
+      : {
+          combined_area_m2: numOrNull(readPath(quote, ['combined', 'area_m2'])),
+          combined_better_inc_gst: numOrNull(readPath(quote, ['combined', 'tiers', 1, 'inc_gst'])),
+          structure_count: structures.length,
+        }
 
   const row = {
     tenant_id: auth.tenantId,
@@ -87,15 +114,22 @@ export async function POST(req: Request) {
     provider,
     customer_name: customer_name ?? null,
     customer_phone: customer_phone ?? null,
-    structure_count: structures.length,
-    combined_area_m2: numOrNull(readPath(quote, ['combined', 'area_m2'])),
-    combined_better_inc_gst: numOrNull(readPath(quote, ['combined', 'tiers', 1, 'inc_gst'])),
+    structure_count: denorm.structure_count,
+    combined_area_m2: denorm.combined_area_m2,
+    combined_better_inc_gst: denorm.combined_better_inc_gst,
     routing: strOrNull(readPath(quote, ['routing', 'decision'])),
     structures,
     quote: quote ?? null,
+    // Authoritative structure selection (migration 140) — the customer quote
+    // page + PDF narrow to this. Defaults to roof-only (the primary structure)
+    // unless the dashboard sent the tradie's explicit include toggles.
+    included_indices: includedIndices,
     // Unguessable share token so the saved job has a customer-facing page
     // at /q/roof/[token] (same surface the SMS receptionist links to).
     public_token: randomBytes(16).toString('hex'),
+    // Second unguessable token for the tradie-facing Measurement Results
+    // page at /m/[measure_token] — distinct link from the customer page.
+    measure_token: randomBytes(16).toString('hex'),
     // Dashboard saves are bearer-authed (the tradie) and the tradie has
     // already picked the structures — so the quote is confirmed at save
     // time. Stamping confirmed_at lets /q/roof show full prices immediately
@@ -108,7 +142,7 @@ export async function POST(req: Request) {
   const { data, error } = await supabase
     .from('roofing_measurements')
     .insert(row)
-    .select('id, public_token')
+    .select('id, public_token, measure_token')
     .single()
 
   if (error) {
@@ -119,7 +153,12 @@ export async function POST(req: Request) {
   }
 
   return Response.json(
-    { ok: true, id: data.id as string, public_token: data.public_token as string },
+    {
+      ok: true,
+      id: data.id as string,
+      public_token: data.public_token as string,
+      measure_token: data.measure_token as string,
+    },
     { status: 200 },
   )
 }
@@ -137,7 +176,7 @@ export async function GET(req: Request) {
   let q = supabase
     .from('roofing_measurements')
     .select(
-      'id, address, postcode, state, customer_name, structure_count, combined_area_m2, combined_better_inc_gst, routing, public_token, created_at',
+      'id, address, postcode, state, customer_name, structure_count, combined_area_m2, combined_better_inc_gst, routing, public_token, measure_token, created_at',
     )
     .order('created_at', { ascending: false })
     .limit(100)

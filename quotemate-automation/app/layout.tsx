@@ -21,11 +21,13 @@ export const metadata: Metadata = {
     "Customer texts. AI drafts your Good / Better / Best quote. You review, tweak, send. Built for AU sparkies and plumbers who'd rather be on the tools.",
 };
 
-// Browser chrome (mobile address bar) matches each theme.
+// Browser chrome (mobile address bar). The site defaults to the Maintain
+// LIGHT palette on first visit, so the warm-cream tone is the default; the
+// dark tone still applies for visitors whose device prefers dark.
 export const viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#0E1622" },
-    { media: "(prefers-color-scheme: light)", color: "#F2EEE6" },
+    { media: "(prefers-color-scheme: dark)", color: "#16120F" },
+    { color: "#FAF8F4" },
   ],
 };
 
@@ -46,11 +48,13 @@ export default function RootLayout({
         suppressHydrationWarning
         className="min-h-full flex flex-col bg-ink-deep text-text-pri"
       >
-        {/* Apply a stored theme choice before first paint so there is no
-            flash. No stored choice falls through to the prefers-color-scheme
-            default in globals.css. Static string, no user input. */}
+        {/* Apply the effective theme before first paint so there is no flash.
+            A stored choice wins; with no stored choice the site defaults to
+            the Maintain LIGHT palette (the primary design target). The
+            ThemeToggle reads this data-theme on mount and persists any flip,
+            so dark mode stays one click away. Static string, no user input. */}
         <Script id="qm-theme" strategy="beforeInteractive">
-          {`(function(){try{var t=localStorage.getItem('qm-theme');if(t==='light'||t==='dark'){var e=document.documentElement;e.setAttribute('data-theme',t);e.style.colorScheme=t;}}catch(e){}})();`}
+          {`(function(){try{var t=localStorage.getItem('qm-theme');var e=document.documentElement;var m=(t==='light'||t==='dark')?t:'light';e.setAttribute('data-theme',m);e.style.colorScheme=m;}catch(e){var el=document.documentElement;el.setAttribute('data-theme','light');el.style.colorScheme='light';}})();`}
         </Script>
         {children}
       </body>

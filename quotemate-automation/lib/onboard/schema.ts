@@ -68,6 +68,27 @@ export const OnboardActivateSchema = z.object({
   licence_number: z.string().trim().max(40).optional().or(z.literal('')),
   licence_expiry: z.string().optional().or(z.literal('')),  // ISO date
 
+  // ── Brand / identity (shown on the customer quote letterhead) ──
+  // business_name / owner_email / owner_mobile above already cover the
+  // quote's name + email + phone. These add the remaining sample-quote
+  // fields: a contact-person name, website, address, and the uploaded
+  // logo's public URL + storage path. Logo is required for web onboarding
+  // (enforced by the superRefine below); SMS onboarding has no logo step.
+  contact_name: z.string().trim().max(80).optional().or(z.literal('')),
+  website_url: z
+    .string()
+    .trim()
+    .max(200)
+    .refine(
+      (v) => v === '' || /^(https?:\/\/)?([\w-]+\.)+[\w-]{2,}(\/\S*)?$/i.test(v),
+      'Enter a valid website (e.g. rooroofing.com.au)',
+    )
+    .optional()
+    .or(z.literal('')),
+  business_address: z.string().trim().max(200).optional().or(z.literal('')),
+  logo_url: z.string().trim().max(500).optional().or(z.literal('')),
+  logo_path: z.string().trim().max(300).optional().or(z.literal('')),
+
   // ── Page 3: Pricing (required) ─────────────────────────────
   hourly_rate: positiveMoney,
   call_out_minimum: positiveMoney,
@@ -100,6 +121,19 @@ export const OnboardActivateSchema = z.object({
   // Consumed once at activate via consumeInvitationCode().
   invitation_code: z.string().trim().min(1, 'Invitation code required').max(60),
 })
+  // Logo is a required field of the web onboarding wizard. SMS-initiated
+  // onboarding (intent_token present) has no logo step, so it stays optional
+  // there — the tradie adds a logo later from the dashboard. This keeps the
+  // server-side gate aligned with the wizard without breaking the SMS path.
+  .superRefine((data, ctx) => {
+    if (!data.intent_token && !data.logo_url) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['logo_url'],
+        message: 'A business logo is required.',
+      })
+    }
+  })
 
 export type OnboardActivatePayload = z.infer<typeof OnboardActivateSchema>
 
@@ -113,6 +147,23 @@ export const LICENCE_BODIES: Record<string, { electrical: string; plumbing: stri
   TAS: { electrical: 'CBOS',        plumbing: 'CBOS' },
   ACT: { electrical: 'ACT ESA',     plumbing: 'Access Canberra' },
   NT:  { electrical: 'NT Electrical Workers Licensing', plumbing: 'NT Plumbers and Drainers Licensing' },
+}
+
+// Trades the self-serve onboarding pipeline fully supports today. The
+// OnboardActivateSchema.trades enum above mirrors this list. Kept as a
+// separate exported constant so the trade-readiness gate
+// (lib/onboard/trade-readiness.ts) has a single source of truth for
+// "does onboarding have pricing defaults + intake support for this trade".
+export const ONBOARDING_TRADES = ['electrical', 'plumbing'] as const
+
+/** True when defaultsForTrade() + the onboarding schema support this trade. */
+export function hasOnboardingPricingDefaults(trade: string): boolean {
+  return (ONBOARDING_TRADES as readonly string[]).includes(trade)
+}
+
+/** True when a per-state licence body label exists for this trade. */
+export function hasLicenceSchema(trade: string): boolean {
+  return Object.values(LICENCE_BODIES).some((bodies) => trade in bodies)
 }
 
 // Service-defaults helper — gives sensible per-trade defaults that the

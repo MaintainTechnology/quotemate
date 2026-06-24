@@ -35,6 +35,7 @@ import { ensureQuotePdf, quotePdfUrl, signQuotePdfUrl } from '@/lib/quote/pdf'
 import { archiveAndIngestQuote } from '@/lib/filestore/ingest-quote'
 import { buildQuoteKbText } from '@/lib/filestore/minimize'
 import { buildQuoteUpdatedSms } from '@/lib/sms/templates'
+import { asQuoteTierMode } from '@/lib/quote/tier-visibility'
 import { resolveQuoteDisplayMode } from '@/lib/quote/display'
 import { loadCandidatePrices } from '@/lib/estimate/run'
 import {
@@ -199,7 +200,7 @@ export async function POST(
   const { data: pricingBook } = await supabase
     .from('pricing_book')
     .select(
-      'gst_registered, trade, hourly_rate, apprentice_rate, senior_rate, call_out_minimum, default_markup_pct, min_labour_hours, after_hours_multiplier, quote_display',
+      'gst_registered, trade, hourly_rate, apprentice_rate, senior_rate, call_out_minimum, default_markup_pct, min_labour_hours, after_hours_multiplier, quote_display, quote_tier_mode',
     )
     .eq('tenant_id', quote.tenant_id)
     .limit(1)
@@ -711,6 +712,10 @@ export async function POST(
               tenantPreference:
                 (pricingBook as { quote_display?: string | null } | null)?.quote_display ?? null,
             }),
+            // Mig 142 — per-feature tier mode (single-price tradies get one option).
+            tierMode: asQuoteTierMode(
+              (pricingBook as { quote_tier_mode?: string | null } | null)?.quote_tier_mode ?? null,
+            ),
           },
         )
         // Best-effort MMS attach of the refreshed PDF (shared helper signs

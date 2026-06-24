@@ -213,3 +213,49 @@ describe('UpdateSchema — quote_display (Phase A, mig 071)', () => {
     expect(r.success).toBe(true)
   })
 })
+
+describe('UpdateSchema — quote_tier_mode_by_trade (mig 142)', () => {
+  it('accepts a single feature set to single price', () => {
+    const r = UpdateSchema.safeParse({
+      quote_tier_mode_by_trade: { solar: 'single' },
+    })
+    expect(r.success).toBe(true)
+  })
+
+  it('accepts different modes per feature in one call (per-row, not fan-out)', () => {
+    const r = UpdateSchema.safeParse({
+      quote_tier_mode_by_trade: {
+        painting: 'good_better_best',
+        solar: 'single',
+        roofing: 'better',
+      },
+    })
+    expect(r.success).toBe(true)
+  })
+
+  it('accepts every valid mode value', () => {
+    for (const mode of ['good_better_best', 'single', 'good', 'better', 'best']) {
+      const r = UpdateSchema.safeParse({ quote_tier_mode_by_trade: { electrical: mode } })
+      expect(r.success, mode).toBe(true)
+    }
+  })
+
+  it('rejects an unknown mode — never silently coerces', () => {
+    const r = UpdateSchema.safeParse({
+      quote_tier_mode_by_trade: { electrical: 'gbb' },
+    })
+    expect(r.success).toBe(false)
+  })
+
+  it('rejects an empty trade key', () => {
+    const r = UpdateSchema.safeParse({
+      quote_tier_mode_by_trade: { '': 'single' },
+    })
+    expect(r.success).toBe(false)
+  })
+
+  it('is optional — omitting it is fine', () => {
+    const r = UpdateSchema.safeParse({ quote_display: 'summary' })
+    expect(r.success).toBe(true)
+  })
+})

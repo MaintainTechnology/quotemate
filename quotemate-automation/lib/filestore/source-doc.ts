@@ -17,6 +17,8 @@ import {
 } from '@/lib/quote/pdf'
 import { buildInvoiceKbText, buildQuoteKbText } from './minimize'
 import { normalizeTradeForDoc } from './tenant-store-name'
+import { partitionRoofQuote, resolveEffectiveIndices, structureCount } from '@/lib/roofing/selection'
+import type { MultiRoofQuote } from '@/lib/roofing/types'
 
 export type SourceRef = {
   sourceKind: 'quote' | 'invoice'
@@ -56,11 +58,26 @@ export async function loadAndBuildKbDoc(
     if (trade === 'roofing') {
       const { data: r } = await supabase
         .from('roofing_measurements')
-        .select('tenant_id, public_token, quote, routing')
+        .select('tenant_id, public_token, quote, routing, included_indices, confirmed_structure')
         .eq('public_token', ref.sourceId)
         .maybeSingle<Record<string, any>>()
       if (!r) return null
-      const fullDocPath = await ensureRoofQuotePdf(r.public_token)
+      // Render the archived/KB PDF from the tradie's structure selection — the
+      // SAME narrowing the customer download route uses — so this path can
+      // never materialize a full-quote (over-counted) PDF or poison the cache.
+      const fullQuote = (r.quote ?? null) as MultiRoofQuote | null
+      const effective = resolveEffectiveIndices(
+        {
+          included: r.included_indices as number[] | null,
+          confirmedStructure: r.confirmed_structure as number | null,
+        },
+        structureCount(fullQuote),
+      )
+      const partition = fullQuote ? partitionRoofQuote(fullQuote, effective) : null
+      const fullDocPath = await ensureRoofQuotePdf(
+        r.public_token,
+        partition ? { quote: partition.narrowed, displayRows: partition.rows } : {},
+      )
       if (!fullDocPath) return null
       const { markdown, contentHash } = buildQuoteKbText({
         quote: { estimate: r.quote, routing_decision: r.routing },

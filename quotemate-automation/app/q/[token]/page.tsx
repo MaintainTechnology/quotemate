@@ -15,9 +15,12 @@ import { after } from 'next/server'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getTierPhoto } from '@/lib/quote/tier-photos'
+import { asQuoteTierMode, resolveVisibleTiers } from '@/lib/quote/tier-visibility'
 import { refreshSignedUrl } from '@/lib/storage/upload'
 import { CustomerPhotosBlock } from './CustomerPhotosBlock'
 import { RoofHeroStrip } from './RoofHeroStrip'
+import { TradeTiers } from './TradeTiers'
+import { resolveTradeFormat, tierLabelsForTrade } from '@/lib/quote/trade-format'
 import { generatePreviewImage } from '@/lib/ig-engine/generate'
 import { generateSampleImages } from '@/lib/ig-engine/samples'
 import { PreviewSection } from './PreviewSection'
@@ -59,6 +62,21 @@ type Tier = {
 } | null
 
 type StripeLinks = Partial<Record<'good' | 'better' | 'best' | 'inspection', string>>
+
+// Tradie identity for the quote letterhead (migration 141). business_name +
+// owner_* are always present; contact_name/website_url/business_address/logo_url
+// arrive with migration 141 (best-effort select degrades gracefully if absent).
+type TenantIdentity = {
+  business_name: string | null
+  contact_name: string | null
+  owner_first_name: string | null
+  owner_last_name: string | null
+  owner_mobile: string | null
+  owner_email: string | null
+  website_url: string | null
+  business_address: string | null
+  logo_url: string | null
+}
 
 const JOB_TYPE_LABEL: Record<string, string> = {
   // ── Electrical ──────────────────────────────
@@ -149,8 +167,13 @@ export default async function PublicQuotePage(props: {
     .select('id, call_id, job_type, scope, caller, address, suburb, photo_paths, trade')
     .eq('id', quote.intake_id)
     .maybeSingle()
-  const intakeTrade = ((intake as { trade?: string } | null)?.trade as 'electrical' | 'plumbing' | 'roofing' | undefined) ?? 'electrical'
-  const isRoofing = intakeTrade === 'roofing'
+  const intakeTrade = ((intake as { trade?: string } | null)?.trade as string | undefined) ?? 'electrical'
+  // Single source of truth for which renderer this trade uses (spec R1–R3).
+  // Electrical/plumbing keep the generic Good/Better/Best card; every other
+  // trade renders the non-electrical TradeTiers; unknown trades fall back to
+  // the generic card AND log a warning here on the customer surface.
+  const tradeFormat = resolveTradeFormat(intakeTrade)
+  const isRoofing = tradeFormat.key === 'roofing'
   // Pull the roof-hero stats off the intake scope when this IS a roofing
   // job. The roofing save-as-quote route stamps these into intake.scope
   // verbatim (see app/api/roofing/save-as-quote/route.ts).
@@ -180,12 +203,47 @@ export default async function PublicQuotePage(props: {
   const quoteTenantId = (quote as { tenant_id?: string | null }).tenant_id ?? null
   let pricingBookQuery = supabase
     .from('pricing_book')
-    .select('licence_type, licence_number, licence_state, gst_registered, quote_display')
+    .select('licence_type, licence_number, licence_state, gst_registered, quote_display, quote_tier_mode')
     .eq('trade', intakeTrade)
   pricingBookQuery = quoteTenantId
     ? pricingBookQuery.eq('tenant_id', quoteTenantId)
     : pricingBookQuery.order('id', { ascending: true }).limit(1)
   const { data: pricingBook } = await pricingBookQuery.maybeSingle()
+
+  // ─── Tradie identity (letterhead) ───────────────────────────────
+  // Scope strictly by the quote's tenant_id (same compliance reasoning as the
+  // licence lookup) so a customer never sees another tradie's branding. Two
+  // selects: the base identity columns (always present) + a best-effort select
+  // for the migration-141 columns so a pre-141 deploy degrades to null rather
+  // than 500-ing this public page.
+  let tenantIdentity: TenantIdentity | null = null
+  if (quoteTenantId) {
+    const { data: base } = await supabase
+      .from('tenants')
+      .select('business_name, owner_first_name, owner_last_name, owner_mobile, owner_email')
+      .eq('id', quoteTenantId)
+      .maybeSingle()
+    if (base) {
+      const b = base as Record<string, string | null>
+      const { data: ex } = await supabase
+        .from('tenants')
+        .select('contact_name, website_url, business_address, logo_url')
+        .eq('id', quoteTenantId)
+        .maybeSingle()
+      const e = (ex ?? {}) as Record<string, string | null>
+      tenantIdentity = {
+        business_name: b.business_name ?? null,
+        owner_first_name: b.owner_first_name ?? null,
+        owner_last_name: b.owner_last_name ?? null,
+        owner_mobile: b.owner_mobile ?? null,
+        owner_email: b.owner_email ?? null,
+        contact_name: e.contact_name ?? null,
+        website_url: e.website_url ?? null,
+        business_address: e.business_address ?? null,
+        logo_url: e.logo_url ?? null,
+      }
+    }
+  }
 
   // Phase A: tenant-level itemised-vs-summary preference. Phase B will add
   // a per-quote override on quotes.display_mode; the resolver already
@@ -386,7 +444,22 @@ export default async function PublicQuotePage(props: {
   const showEarlyBirdOffer =
     !isPaid && !isInspection && !ebApplied && ebStatus.state === 'live'
 
-  const tierCount = ([quote.good, quote.better, quote.best].filter(Boolean) as Tier[]).length
+  // Mig 142 — resolve which tier(s) the customer sees for THIS feature's mode.
+  // Presentation-only: the full good/better/best stays persisted for the tradie
+  // (the TradieEditor overlay below still gets all three). selected_tier drives
+  // the 'single' mode; an inspection quote has no priced tiers so this is [].
+  const tierMode = asQuoteTierMode(
+    (pricingBook as { quote_tier_mode?: string | null } | null)?.quote_tier_mode,
+  )
+  const visibleTierKeys = resolveVisibleTiers({
+    mode: tierMode,
+    present: { good: !!quote.good, better: !!quote.better, best: !!quote.best },
+    selectedTier: (quote.selected_tier as string | null) ?? null,
+  })
+  const visibleTierSet = new Set<'good' | 'better' | 'best'>(visibleTierKeys)
+  const tierCount = visibleTierKeys.length
+  // When only one option is shown it IS the offer — no "recommended" badge.
+  const showRecommendedBadge = visibleTierKeys.length > 1
 
   return (
     <main className="min-h-screen bg-ink-deep text-text-pri relative">
@@ -450,6 +523,9 @@ export default async function PublicQuotePage(props: {
       </header>
 
       <div className="relative z-10 mx-auto max-w-5xl px-4 py-10 sm:px-6 sm:py-16">
+        {/* ─── Tradie letterhead (the quote's owning tradie) ─── */}
+        <TradieLetterhead identity={tenantIdentity} />
+
         {/* ─── Hero ─────────────────────────────────────── */}
         <section>
           <StatusChip
@@ -540,12 +616,43 @@ export default async function PublicQuotePage(props: {
         )}
 
         {/* ─── Inspection-only block OR tier cards ──────── */}
+        {/* Roofing quotes render the roofing-framed options (patch/repair ·
+            re-roof · upgrade) instead of the generic electrical TierCard grid
+            so a roofing customer never sees the electrical line-item card
+            (spec R2/R9/R18). */}
         {isInspection ? (
           <InspectionBlock
             reason={quote.inspection_reason}
             link={stripeLinks.inspection}
             shareToken={token}
             paid={isPaid}
+          />
+        ) : !tradeFormat.usesGenericCard ? (
+          <TradeTiers
+            tiers={{
+              good: visibleTierSet.has('good') ? (quote.good as Tier) : null,
+              better: visibleTierSet.has('better') ? (quote.better as Tier) : null,
+              best: visibleTierSet.has('best') ? (quote.best as Tier) : null,
+            }}
+            token={token}
+            stripeLinks={stripeLinks}
+            depositPct={depositPct}
+            selectedTier={showRecommendedBadge ? ((quote.selected_tier as string | null) ?? null) : null}
+            appliedDiscountPct={ebApplied ? ebAppliedPct : 0}
+            isPaid={isPaid}
+            paidTier={(quote.paid_tier as string | null) ?? null}
+            // Roofing keeps its roofing-specific copy (component default);
+            // any other non-generic trade that lands here gets neutral
+            // labels so it still avoids the electrical line-item card (R2).
+            {...(isRoofing
+              ? {}
+              : {
+                  heading: `Your ${tradeFormat.label.toLowerCase()} options`,
+                  labels: tierLabelsForTrade(intakeTrade),
+                  blurbs: { good: '', better: '', best: '' },
+                  footnote:
+                    'Final price is confirmed after our on-site visit. This estimate is based on the information provided so far.',
+                })}
           />
         ) : (
           <section className="mt-12">
@@ -555,18 +662,19 @@ export default async function PublicQuotePage(props: {
             <div className="grid gap-5 sm:gap-6">
               {(['good','better','best'] as const).map((key, idx) => {
                 const tier = quote[key] as Tier
-                if (!tier) return null
-                // Compute sequential 01/02/03 against actual non-null tiers.
+                // Mig 142 — hide tiers the resolved mode doesn't surface.
+                if (!tier || !visibleTierSet.has(key)) return null
+                // Compute sequential 01/02/03 against the VISIBLE tiers.
                 const seqIndex = (['good','better','best'] as const)
                   .slice(0, idx)
-                  .filter(k => quote[k]).length + 1
+                  .filter(k => visibleTierSet.has(k)).length + 1
                 return (
                   <TierCard
                     key={key}
                     keyName={key}
                     seq={String(seqIndex).padStart(2, '0')}
                     tier={tier}
-                    recommended={quote.selected_tier === key}
+                    recommended={showRecommendedBadge && quote.selected_tier === key}
                     link={stripeLinks[key] ? `/r/${token}/${key}` : null}
                     depositPct={depositPct}
                     appliedDiscountPct={ebApplied ? ebAppliedPct : 0}
@@ -741,6 +849,104 @@ function MaintainLogo({ className }: { className?: string }) {
         </clipPath>
       </defs>
     </svg>
+  )
+}
+
+// Normalise a tradie-entered website to a working link + clean display label.
+// Tradies often type "rooroofing.com.au" with no scheme; without https:// the
+// browser would treat it as a relative path and 404.
+function normalizeWebsiteUrl(raw: string): { href: string; label: string } {
+  const trimmed = raw.trim().replace(/\/+$/, '')
+  const href = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+  const label = trimmed.replace(/^https?:\/\//i, '')
+  return { href, label }
+}
+
+// The quote's owning tradie, rendered as a letterhead at the top of the quote
+// (modelled on a real tradie quote like Roo Roofing's). Logo sits on a white
+// tile so transparent/dark logos stay visible on the navy canvas. Optional
+// fields are omitted cleanly when absent; a legacy quote with no tenant (or a
+// tenant with no business name) renders nothing.
+function TradieLetterhead({ identity }: { identity: TenantIdentity | null }) {
+  if (!identity || !identity.business_name) return null
+  const contact =
+    (identity.contact_name ?? '').trim() ||
+    [identity.owner_first_name, identity.owner_last_name].filter(Boolean).join(' ').trim()
+  const phone = (identity.owner_mobile ?? '').trim()
+  const email = (identity.owner_email ?? '').trim()
+  const website = (identity.website_url ?? '').trim()
+  const address = (identity.business_address ?? '').trim()
+  const web = website ? normalizeWebsiteUrl(website) : null
+  return (
+    <section className="mb-8 flex flex-col gap-5 border border-ink-line bg-ink-card p-6 sm:mb-10 sm:flex-row sm:items-center sm:gap-6 sm:p-7">
+      {identity.logo_url ? (
+        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden bg-white sm:h-20 sm:w-20">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={identity.logo_url}
+            alt={`${identity.business_name} logo`}
+            className="h-full w-full object-contain"
+          />
+        </div>
+      ) : null}
+      <div className="min-w-0 flex-1">
+        <div className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">
+          Your tradie
+        </div>
+        <h2 className="mt-1 font-extrabold uppercase tracking-tight text-text-pri text-lg sm:text-xl">
+          {identity.business_name}
+        </h2>
+        <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
+          {contact ? (
+            <div>
+              <dt className="inline text-text-dim">Contact </dt>
+              <dd className="inline font-medium text-text-pri">{contact}</dd>
+            </div>
+          ) : null}
+          {phone ? (
+            <div>
+              <dt className="inline text-text-dim">Phone </dt>
+              <dd className="inline">
+                <a href={`tel:${phone.replace(/\s+/g, '')}`} className="font-medium text-text-pri hover:text-accent">
+                  {phone}
+                </a>
+              </dd>
+            </div>
+          ) : null}
+          {email ? (
+            <div>
+              <dt className="inline text-text-dim">Email </dt>
+              <dd className="inline">
+                <a href={`mailto:${email}`} className="font-medium text-text-pri hover:text-accent">
+                  {email}
+                </a>
+              </dd>
+            </div>
+          ) : null}
+          {web ? (
+            <div>
+              <dt className="inline text-text-dim">Web </dt>
+              <dd className="inline">
+                <a
+                  href={web.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-text-pri hover:text-accent"
+                >
+                  {web.label}
+                </a>
+              </dd>
+            </div>
+          ) : null}
+          {address ? (
+            <div>
+              <dt className="inline text-text-dim">Address </dt>
+              <dd className="inline font-medium text-text-pri">{address}</dd>
+            </div>
+          ) : null}
+        </dl>
+      </div>
+    </section>
   )
 }
 

@@ -40,6 +40,14 @@ const BUNDLED_ESTIMATOR_TEMPLATES: Record<string, string> = {
   plumbing: PLUMBING_ESTIMATOR_TEMPLATE,
 }
 
+/** True when a bundled estimator template ships for this trade
+ *  (electrical / plumbing). The trade-readiness gate uses this to know a
+ *  trade can always render a quote prompt even when its DB `trade_prompts`
+ *  row is absent — i.e. the estimate pipeline is wired for it. */
+export function hasBundledEstimatorTemplate(trade: string): boolean {
+  return Object.prototype.hasOwnProperty.call(BUNDLED_ESTIMATOR_TEMPLATES, trade)
+}
+
 // Hand-written oracle modules — last-resort fallback if even the bundled
 // template fails to render. Unknown trades default to electrical, exactly
 // as the pre-Phase-0 binary router did.

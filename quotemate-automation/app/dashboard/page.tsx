@@ -21,6 +21,8 @@ import {
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { CATEGORIES } from '@/lib/estimate/categories'
+import { resolveTradeFormat, tierLabelsForTrade } from '@/lib/quote/trade-format'
+import { asQuoteTierMode, type QuoteTierMode } from '@/lib/quote/tier-visibility'
 import { resolveCatalogueBadge, badgeLabel } from '@/lib/dashboard/badge-state'
 import {
   buildServiceTogglePayload,
@@ -110,6 +112,10 @@ type Tenant = {
   stripe_connect_onboarded_at: string | null
   /** Migration 104 — SMS electrical-plan estimation opt-in (Account tab). */
   sms_estimator_enabled: boolean | null
+  /** Migration 141 — business logo shown on the customer quote letterhead.
+   *  Changeable from the Account tab; the quote page reads logo_url live. */
+  logo_url: string | null
+  logo_path: string | null
 }
 
 type Pricing = {
@@ -142,6 +148,12 @@ type Pricing = {
    *  owns by /api/tenant/me PATCH (same shape as quote_display +
    *  review_policy). Default false. */
   followup_2h_enabled?: boolean | null
+  /** Migration 142 — per-feature customer-quote tier presentation mode.
+   *  'single' (default) shows one price = the recommended tier;
+   *  'good_better_best' shows all three; 'good'|'better'|'best' force one
+   *  tier. PER-ROW (per-trade) — not fanned out. Resolver:
+   *  lib/quote/tier-visibility.ts. */
+  quote_tier_mode?: QuoteTierMode | null
 } | null
 
 type ServiceOffering = {
@@ -446,6 +458,26 @@ export default function DashboardPage() {
     await refresh(accessToken)
   }
 
+  // Logo change (migration 141). Uploads the new file to /api/tenant/logo
+  // (authenticated, multipart) which stores it + writes tenants.logo_url,
+  // then re-fetches so the Account-tab preview — and every customer quote
+  // letterhead — reflects the new logo.
+  async function uploadLogo(file: File): Promise<void> {
+    if (!accessToken) throw new Error('not signed in')
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await fetch('/api/tenant/logo', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: fd,
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok || !body.ok) {
+      throw new Error(body?.error ?? `Logo upload failed (HTTP ${res.status})`)
+    }
+    await refresh(accessToken)
+  }
+
   // ── Custom-service helpers (migration 023) ───────────────────────
   // POST/PATCH/DELETE against /api/tenant/services. Each helper
   // re-fetches the dashboard payload on success so the list reflects
@@ -665,6 +697,7 @@ export default function DashboardPage() {
                 onSaveTrades={saveTrades}
                 onListAvailableTrades={listAvailableTrades}
                 onActivateTrade={activateTrade}
+                onUploadLogo={uploadLogo}
               />
             )}
             {tab === 'payouts' && (
@@ -835,7 +868,7 @@ function Shell({
           }`}
         >
           <Link href="/dashboard" className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <BrandMark className="h-9 w-9" />
+            <BrandMark className="h-10 w-10" />
             {/* Brand wordmark hidden on the smallest screens — the
                 Q-logo carries the brand and we need the row for the
                 business name + profile chip + sign-out. */}
@@ -2080,12 +2113,106 @@ function SmsEstimatorCard({
   )
 }
 
+// Business-logo card (migration 141). Shows the current logo and lets the
+// tradie replace it. The upload + DB write happen in onUploadLogo (→
+// /api/tenant/logo); on success the parent re-fetches, so `tenant.logo_url`
+// updates here and on every customer quote letterhead. Validates type/size
+// client-side for a fast error before hitting the network.
+const LOGO_ACCEPT = 'image/png,image/jpeg,image/webp,image/svg+xml'
+const LOGO_ALLOWED_MIME = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']
+const LOGO_MAX_BYTES = 2 * 1024 * 1024
+
+function LogoCard({
+  tenant,
+  onUploadLogo,
+}: {
+  tenant: Tenant
+  onUploadLogo: (file: File) => Promise<void>
+}) {
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [savedAt, setSavedAt] = useState<number | null>(null)
+
+  async function handleFile(file: File | null) {
+    if (!file) return
+    setError(null)
+    const mime = (file.type || '').split(';')[0].trim().toLowerCase()
+    if (!LOGO_ALLOWED_MIME.includes(mime)) {
+      setError('Logo must be a PNG, JPG, WEBP, or SVG image.')
+      return
+    }
+    if (file.size > LOGO_MAX_BYTES) {
+      setError('Logo must be 2 MB or smaller.')
+      return
+    }
+    setUploading(true)
+    try {
+      await onUploadLogo(file)
+      setSavedAt(Date.now())
+    } catch (err: any) {
+      setError(err?.message ?? 'Logo upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <Card
+      title="Business logo"
+      subtitle="Shown on every customer quote — updating it changes the logo on all your quotes."
+    >
+      <div className="flex items-center gap-5">
+        <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden border border-ink-line bg-white">
+          {tenant.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={tenant.logo_url}
+              alt="Your logo"
+              className="h-full w-full object-contain"
+            />
+          ) : (
+            <span className="font-mono text-[0.55rem] uppercase tracking-[0.12em] text-text-dim">
+              No logo
+            </span>
+          )}
+        </div>
+        <div className="flex-1">
+          <label className="inline-flex cursor-pointer items-center gap-2 border border-ink-line bg-ink-deep px-4 py-2.5 text-sm font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent-soft">
+            <input
+              type="file"
+              accept={LOGO_ACCEPT}
+              className="sr-only"
+              onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
+              disabled={uploading}
+            />
+            {uploading ? 'Uploading…' : tenant.logo_url ? 'Change logo' : 'Upload logo'}
+          </label>
+          <p className="mt-2 font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">
+            PNG, JPG, WEBP or SVG · max 2 MB
+          </p>
+          {error && (
+            <div className="mt-3">
+              <ErrorBanner>{error}</ErrorBanner>
+            </div>
+          )}
+          {savedAt && !error ? (
+            <div className="mt-3">
+              <SaveHint savedAt={savedAt} />
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
 function AccountTab({
   data,
   onSave,
   onSaveTrades,
   onListAvailableTrades,
   onActivateTrade,
+  onUploadLogo,
 }: {
   data: DashboardData
   onSave: (payload: Record<string, unknown>) => Promise<void>
@@ -2104,6 +2231,7 @@ function AccountTab({
   onActivateTrade: (
     trade: string,
   ) => Promise<{ ok: true; trade: string; warning?: string }>
+  onUploadLogo: (file: File) => Promise<void>
 }) {
   const [form, setForm] = useState({
     business_name: data.tenant.business_name ?? '',
@@ -2160,6 +2288,8 @@ function AccountTab({
         onSave={onSave}
         primaryState={data.tenant.state ?? null}
       />
+
+      <LogoCard tenant={data.tenant} onUploadLogo={onUploadLogo} />
 
       <Card
         title="Account details"
@@ -2986,6 +3116,11 @@ function PricingTab({
       {/* v8 — early-booking discount. One card per tenant (the offer is
           trade-agnostic, written to every pricing_book row). */}
       <EarlyBirdCard books={books} onSave={onSave} />
+      {/* Mig 142 — per-feature quote tier presentation mode (single price vs
+          Good/Better/Best vs a forced tier). PER-FEATURE: each trade keeps its
+          own mode. Sits above the layout card — "how many options" then "how
+          much detail per option". */}
+      <QuoteTierModeCard books={books} onSave={onSave} />
       {/* Phase A — customer-quote display preference (itemised vs summary).
           Trade-agnostic, written to every pricing_book row by /api/tenant/me. */}
       <QuoteDisplayCard books={books} onSave={onSave} />
@@ -3253,6 +3388,157 @@ function Followup2hCard({
             </span>
           </label>
         </Field>
+
+        {error ? (
+          <div className="bg-warning/10 border border-warning/40 px-3 py-2 text-xs text-warning">
+            {error}
+          </div>
+        ) : null}
+
+        <div className="flex items-center gap-3">
+          <button
+            type="submit"
+            disabled={submitting || !dirty}
+            className="font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-4 py-2 border border-accent text-accent hover:bg-accent/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {submitting ? 'Saving…' : 'Save'}
+          </button>
+          {savedAt && Date.now() - savedAt < 4000 && (
+            <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-accent">
+              ✓ Saved
+            </span>
+          )}
+        </div>
+      </form>
+    </Card>
+  )
+}
+
+/**
+ * Migration 142 — per-feature quote tier presentation mode.
+ *
+ * Controls HOW MANY price options the customer sees, per feature:
+ *   • Single price (recommended option) — DEFAULT
+ *   • Good / Better / Best — the full three-tier layout
+ *   • Good only / Better only / Best only — force one tier
+ *
+ * Unlike the layout + review cards (fanned out to every pricing_book row),
+ * this is PER-FEATURE (per-trade): a tradie can run three-tier painting and
+ * single-price solar at once. Renders one selector per tier-capable feature
+ * the tenant has. Saves via PATCH { quote_tier_mode_by_trade: { trade: mode } },
+ * sending only the rows that actually changed.
+ *
+ * Orthogonal to the layout card (itemised vs summary): "how many options"
+ * here, "how much detail per option" there. The two combine freely.
+ */
+const TIER_MODE_FEATURE_LABELS: Record<string, string> = {
+  electrical: 'Electrical',
+  plumbing: 'Plumbing',
+  roofing: 'Roofing',
+  painting: 'Painting',
+  commercial_painting: 'Commercial painting',
+  solar: 'Solar',
+}
+
+const TIER_MODE_OPTIONS: { value: QuoteTierMode; label: string; hint: string }[] = [
+  {
+    value: 'single',
+    label: 'Single price (recommended option)',
+    hint: 'One price only — your recommended option. Cleanest read; no line-by-line tier comparison. (Default.)',
+  },
+  {
+    value: 'good_better_best',
+    label: 'Good / Better / Best',
+    hint: 'Show all three options side by side so the customer picks their level.',
+  },
+  { value: 'good', label: 'Good only', hint: 'Show only your Good option, as a single price.' },
+  { value: 'better', label: 'Better only', hint: 'Show only your Better option, as a single price.' },
+  { value: 'best', label: 'Best only', hint: 'Show only your Best option, as a single price.' },
+]
+
+function QuoteTierModeCard({
+  books,
+  onSave,
+}: {
+  books: PricingBook[]
+  onSave: (payload: Record<string, unknown>) => Promise<void>
+}) {
+  // Only tier-capable features get a selector (electrical/plumbing/roofing/
+  // painting/commercial_painting/solar). Aircon + signage are excluded — they
+  // don't produce a Good/Better/Best quote.
+  const features = useMemo(
+    () => books.filter((b) => b.trade && TIER_MODE_FEATURE_LABELS[b.trade as string]),
+    [books],
+  )
+
+  const current = useMemo<Record<string, QuoteTierMode>>(() => {
+    const m: Record<string, QuoteTierMode> = {}
+    for (const b of features) m[b.trade as string] = asQuoteTierMode(b.quote_tier_mode)
+    return m
+  }, [features])
+
+  const [modes, setModes] = useState<Record<string, QuoteTierMode>>(current)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [savedAt, setSavedAt] = useState<number | null>(null)
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setError(null)
+    setSubmitting(true)
+    try {
+      const changed: Record<string, QuoteTierMode> = {}
+      for (const b of features) {
+        const trade = b.trade as string
+        if (modes[trade] && modes[trade] !== current[trade]) changed[trade] = modes[trade]
+      }
+      if (Object.keys(changed).length > 0) {
+        await onSave({ quote_tier_mode_by_trade: changed })
+      }
+      setSavedAt(Date.now())
+    } catch (err: any) {
+      setError(err?.message ?? 'Save failed')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (features.length === 0) return null
+  const dirty = features.some((b) => modes[b.trade as string] !== current[b.trade as string])
+  const multi = features.length > 1
+
+  return (
+    <Card
+      title="Quote pricing options"
+      subtitle="How many price options the customer sees. Single price shows just your recommended option; Good / Better / Best shows all three. Set it per feature."
+    >
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {features.map((b) => {
+          const trade = b.trade as string
+          const sel = modes[trade] ?? 'single'
+          return (
+            <Field key={trade} label={multi ? TIER_MODE_FEATURE_LABELS[trade] : 'Pricing options'}>
+              <div className="mt-2 space-y-3">
+                {TIER_MODE_OPTIONS.map((opt) => (
+                  <label key={opt.value} className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="radio"
+                      name={`quote_tier_mode_${trade}`}
+                      value={opt.value}
+                      checked={sel === opt.value}
+                      onChange={() => setModes((m) => ({ ...m, [trade]: opt.value }))}
+                      className="mt-1 h-4 w-4 accent-accent"
+                    />
+                    <span className="text-sm">
+                      <span className="font-semibold text-text-pri">{opt.label}</span>
+                      <span className="block text-xs text-text-dim mt-0.5">{opt.hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </Field>
+          )
+        })}
 
         {error ? (
           <div className="bg-warning/10 border border-warning/40 px-3 py-2 text-xs text-warning">
@@ -5327,6 +5613,105 @@ const QUOTE_BADGE_TONE: Record<QuoteBadgeTone, Tone> = {
   draft: 'warn',
 }
 
+// Lightweight summary of a saved trade-specific job (roofing/solar/painting)
+// returned by /api/tenant/trade-jobs. Mirrors the route's TradeJobSummary.
+type TradeJobSummary = {
+  id: string
+  trade: 'roofing' | 'solar' | 'painting' | 'commercial-painting'
+  address: string | null
+  headline: string | null
+  status: 'confirmed' | 'inspection' | 'draft'
+  href: string | null
+  createdAt: string | null
+}
+
+const TRADE_JOB_LABEL: Record<TradeJobSummary['trade'], string> = {
+  roofing: 'Roof',
+  solar: 'Solar',
+  painting: 'Paint',
+  'commercial-painting': 'Commercial',
+}
+
+/**
+ * Quotes-tab "saved jobs" strip (spec R4/R8/R19, link-out variant). Roofing,
+ * solar and painting jobs live in their own tables — not the quotes table — so
+ * they never appeared in this list. This fetches their summaries and renders a
+ * trade-styled card that links to the rich customer page (/q/roof, /q/solar,
+ * /q/paint) the customer sees, instead of the electrical card. Renders nothing
+ * until the fetch resolves with at least one job.
+ */
+function TradeJobsSection({ accessToken }: { accessToken: string | null }) {
+  const [jobs, setJobs] = useState<TradeJobSummary[] | null>(null)
+  useEffect(() => {
+    if (!accessToken) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch('/api/tenant/trade-jobs', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+        if (!res.ok) return
+        const json = (await res.json()) as { jobs?: TradeJobSummary[] }
+        if (!cancelled) setJobs(Array.isArray(json.jobs) ? json.jobs : [])
+      } catch {
+        /* network error — leave hidden */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken])
+
+  if (!jobs || jobs.length === 0) return null
+
+  return (
+    <section className="border border-ink-line bg-ink-card p-5">
+      <div className="mb-3 font-mono text-[0.7rem] uppercase tracking-[0.16em] text-text-dim">
+        Saved jobs · roofing · solar · painting
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {jobs.map((j) => (
+          <TradeJobCard key={`${j.trade}-${j.id}`} job={j} />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function TradeJobCard({ job }: { job: TradeJobSummary }) {
+  const inner = (
+    <div className="flex items-center justify-between gap-3 border border-ink-line bg-ink-deep/30 px-4 py-3 transition-colors group-hover:border-accent">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center bg-accent/15 px-1.5 py-0.5 font-mono text-[0.55rem] font-bold uppercase tracking-[0.16em] text-accent">
+            {TRADE_JOB_LABEL[job.trade]}
+          </span>
+          <span className="truncate font-semibold text-text-pri">{job.address ?? '—'}</span>
+        </div>
+        <div className="mt-1 font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
+          {[job.headline, job.status].filter(Boolean).join(' · ')}
+        </div>
+      </div>
+      {job.href ? (
+        <span className="shrink-0 font-mono text-[0.62rem] font-bold uppercase tracking-[0.14em] text-accent">
+          View →
+        </span>
+      ) : (
+        <span className="shrink-0 font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
+          No link yet
+        </span>
+      )}
+    </div>
+  )
+  return job.href ? (
+    <Link href={job.href} target="_blank" className="group block">
+      {inner}
+    </Link>
+  ) : (
+    <div className="group">{inner}</div>
+  )
+}
+
 function QuotesTab({ data, accessToken }: { data: DashboardData; accessToken: string | null }) {
   const isMultiTrade =
     Array.isArray(data.tenant.trades) && data.tenant.trades.length > 1
@@ -5337,12 +5722,15 @@ function QuotesTab({ data, accessToken }: { data: DashboardData; accessToken: st
 
   if (all.length === 0) {
     return (
-      <Card>
-        <p className="text-sm text-text-dim">
-          No quotes drafted yet. Customers texting your QuoteMax number will
-          appear here once their first quote is drafted.
-        </p>
-      </Card>
+      <div className="space-y-5">
+        <TradeJobsSection accessToken={accessToken} />
+        <Card>
+          <p className="text-sm text-text-dim">
+            No quotes drafted yet. Customers texting your QuoteMax number will
+            appear here once their first quote is drafted.
+          </p>
+        </Card>
+      </div>
     )
   }
 
@@ -5372,6 +5760,7 @@ function QuotesTab({ data, accessToken }: { data: DashboardData; accessToken: st
 
   return (
     <div className="space-y-5">
+      <TradeJobsSection accessToken={accessToken} />
       <StatGrid
         cols={4}
         stats={[
@@ -5499,6 +5888,11 @@ function QuoteCard({ q, isMultiTrade, accessToken }: { q: Quote; isMultiTrade: b
   // at /q/[token] via RoofHeroStrip — extending the dashboard data
   // model to include intake.scope here is a follow-up.
   const isRoofingTrade = trade === 'roofing'
+  // Trade-aware rendering (spec R4–R8): non-generic trades get their own tier
+  // framing + a trade label instead of the bare electrical Good/Better/Best.
+  const tradeFormat = resolveTradeFormat(trade)
+  const tierLabels = tierLabelsForTrade(trade)
+  const isBespokeTrade = !tradeFormat.usesGenericCard
   const isInspection = !!(q.needs_inspection || q.inspection_required)
   const hasTierLadder =
     goodTotal !== null || betterTotal !== null || bestTotal !== null
@@ -5647,13 +6041,20 @@ function QuoteCard({ q, isMultiTrade, accessToken }: { q: Quote; isMultiTrade: b
                 not change the drafted customer price). */}
             <HistoricalHint jobType={q.job_type} trade={trade} accessToken={accessToken} />
 
-            {/* Tier ladder */}
+            {/* Tier ladder — trade-aware labels (roofing → patch/re-roof/
+                upgrade) so the tradie sees the same framing the customer gets,
+                not the electrical Good/Better/Best (spec R4). */}
             {hasTierLadder && (
               <div className="mt-4 px-5">
+                {isBespokeTrade && (
+                  <div className="mb-2 font-mono text-[0.6rem] uppercase tracking-[0.16em] text-accent font-bold">
+                    {tradeFormat.label} options
+                  </div>
+                )}
                 <div className="grid grid-cols-3 gap-2">
-                  <TierCell label="Good" amount={goodTotal} selected={q.selected_tier === 'good'} />
-                  <TierCell label="Better" amount={betterTotal} selected={q.selected_tier === 'better'} />
-                  <TierCell label="Best" amount={bestTotal} selected={q.selected_tier === 'best'} />
+                  <TierCell label={tierLabels.good} amount={goodTotal} selected={q.selected_tier === 'good'} />
+                  <TierCell label={tierLabels.better} amount={betterTotal} selected={q.selected_tier === 'better'} />
+                  <TierCell label={tierLabels.best} amount={bestTotal} selected={q.selected_tier === 'best'} />
                 </div>
               </div>
             )}
@@ -5672,6 +6073,13 @@ function QuoteCard({ q, isMultiTrade, accessToken }: { q: Quote; isMultiTrade: b
               </div>
               {url && (
                 <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:items-center">
+                  {/* Share the customer's deposit link (spec R7). This copies
+                      the /r/{token}/{tier} short-link — it never charges from
+                      the dashboard; the real Pay Deposit button lives on the
+                      customer page. Hidden for inspection-routed quotes. */}
+                  {!isInspection && q.share_token && (
+                    <CopyDepositLink token={q.share_token} tier={q.selected_tier} />
+                  )}
                   {/* Download the full quote as a PDF. Hidden for inspection-
                       routed quotes — the /api/q/[token]/pdf route 404s those
                       (no committable price belongs in a final-looking doc). */}
@@ -5738,6 +6146,37 @@ function QuoteCard({ q, isMultiTrade, accessToken }: { q: Quote; isMultiTrade: b
         </div>
       </div>
     </div>
+  )
+}
+
+/**
+ * Deposit-link share button (spec R7). Copies the customer's per-tier deposit
+ * short-link (`/r/{token}/{tier}`) to the clipboard so the tradie can send it.
+ * It deliberately does NOT open Stripe from the dashboard — the live Pay
+ * Deposit button is on the customer page. Falls back silently if the clipboard
+ * API is unavailable (e.g. insecure context).
+ */
+function CopyDepositLink({ token, tier }: { token: string; tier: string | null }) {
+  const [copied, setCopied] = useState(false)
+  const onCopy = async () => {
+    const t = tier === 'good' || tier === 'better' || tier === 'best' ? tier : 'better'
+    const origin = typeof window !== 'undefined' ? window.location.origin : ''
+    try {
+      await navigator.clipboard.writeText(`${origin}/r/${token}/${t}`)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1800)
+    } catch {
+      /* clipboard unavailable — no-op */
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={onCopy}
+      className="inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+    >
+      {copied ? 'Copied ✓' : 'Copy deposit link'}
+    </button>
   )
 }
 
@@ -11167,6 +11606,7 @@ type SavedRoofJob = {
   combined_better_inc_gst: number | null
   routing: string | null
   public_token: string | null
+  measure_token: string | null
   created_at: string
 }
 
@@ -11300,28 +11740,66 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
                         {` · ${formatDate(j.created_at)}`}
                       </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-3">
-                      <Pill tone={inspection ? 'warn' : 'ok'} label={inspection ? 'Inspection' : 'Quote'} />
-                      {j.public_token && !inspection && (
-                        <a
-                          href={`/api/q/roof/${j.public_token}/pdf`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-accent"
-                        >
-                          PDF ↓
-                        </a>
-                      )}
-                      {j.public_token && (
-                        <a
-                          href={`/q/roof/${j.public_token}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-accent hover:underline"
-                        >
-                          View &rarr;
-                        </a>
-                      )}
+                    <Pill tone={inspection ? 'warn' : 'ok'} label={inspection ? 'Inspection' : 'Quote'} />
+                  </div>
+
+                  {/* Two cards per job — the customer-facing saved quote (+PDF)
+                      and the tradie-facing measurement review page (/m/[token]). */}
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div className="border border-ink-line bg-ink-card p-4">
+                      <div className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-accent">
+                        Saved roofing job
+                      </div>
+                      <p className="mt-1 text-xs text-text-dim">
+                        Customer quote page{inspection ? '' : ' + PDF'}
+                      </p>
+                      <div className="mt-3 flex items-center gap-4">
+                        {j.public_token && (
+                          <a
+                            href={`/q/roof/${j.public_token}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-accent hover:underline"
+                          >
+                            View &rarr;
+                          </a>
+                        )}
+                        {j.public_token && !inspection && (
+                          <a
+                            href={`/api/q/roof/${j.public_token}/pdf`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-accent"
+                          >
+                            PDF ↓
+                          </a>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="border border-ink-line bg-ink-card p-4">
+                      <div className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-teal-glow">
+                        Measurement results
+                      </div>
+                      <p className="mt-1 text-xs text-text-dim">
+                        {`${structures} structure${structures === 1 ? '' : 's'}`}
+                        {j.combined_area_m2 ? ` · ${Math.round(j.combined_area_m2)} m²` : ''}
+                        {!inspection ? ` · ${fmtAUD(j.combined_better_inc_gst)}` : ''}
+                      </p>
+                      <div className="mt-3 flex items-center gap-4">
+                        {j.measure_token ? (
+                          <a
+                            href={`/m/${j.measure_token}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-accent hover:underline"
+                          >
+                            Open &rarr;
+                          </a>
+                        ) : (
+                          <span className="font-mono text-xs text-text-dim">Re-measure to enable</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </li>

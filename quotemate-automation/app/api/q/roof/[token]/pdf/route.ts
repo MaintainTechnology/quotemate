@@ -7,6 +7,8 @@ import { after } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { ensureRoofQuotePdf, downloadQuotePdf } from '@/lib/quote/pdf'
 import { archiveQuoteOnDownload } from '@/lib/filestore/archive-on-download'
+import { partitionRoofQuote, resolveEffectiveIndices, structureCount } from '@/lib/roofing/selection'
+import type { MultiRoofQuote } from '@/lib/roofing/types'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -22,7 +24,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
 
   const { data: row } = await supabase
     .from('roofing_measurements')
-    .select('public_token, pdf_path, routing')
+    .select('public_token, pdf_path, routing, quote, included_indices, confirmed_structure')
     .eq('public_token', token)
     .maybeSingle()
 
@@ -38,7 +40,26 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
 
   let path = row.pdf_path as string | null
   if (!path) {
-    path = await ensureRoofQuotePdf(token)
+    // Render the PDF from the tradie's persisted structure selection
+    // (included_indices), not the full quote — this is the fix for the PDF
+    // summing ALL detected structures regardless of what was checked. The
+    // headline total covers the INCLUDED quotable structures only; excluded
+    // and inspection-routed structures are LISTED (displayRows) but never
+    // priced into the total. The selection-update route nulls pdf_path on
+    // change, so this regenerates.
+    const fullQuote = (row.quote ?? null) as MultiRoofQuote | null
+    const effective = resolveEffectiveIndices(
+      {
+        included: row.included_indices as number[] | null,
+        confirmedStructure: row.confirmed_structure as number | null,
+      },
+      structureCount(fullQuote),
+    )
+    const partition = fullQuote ? partitionRoofQuote(fullQuote, effective) : null
+    path = await ensureRoofQuotePdf(
+      token,
+      partition ? { quote: partition.narrowed, displayRows: partition.rows } : {},
+    )
   }
   if (!path) {
     return Response.json({ ok: false, error: 'PDF unavailable right now — try again shortly' }, { status: 503 })

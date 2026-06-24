@@ -858,7 +858,7 @@ export default function AdminLoaderPage() {
       <nav className="relative z-10 border-b border-ink-line bg-ink-deep/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-4">
           <a href="/dashboard" className="flex min-w-0 items-center gap-2.5">
-            <BrandMark className="h-7 w-7" />
+            <BrandMark className="h-10 w-10" />
             <span className="font-extrabold uppercase tracking-tight">
               QuoteMax
             </span>

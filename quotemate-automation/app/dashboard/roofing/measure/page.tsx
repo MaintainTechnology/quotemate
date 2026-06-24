@@ -11,6 +11,7 @@
 // total sums only the included structures. Maintain Technology design.
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 import { FeatureGate } from '@/app/dashboard/_components/FeatureGate'
@@ -21,6 +22,8 @@ import type {
   RoofStructurePrice,
   RoofingRoutingDecision,
 } from '@/lib/roofing/types'
+import { combinedTotalsForIndices } from '@/lib/roofing/selection'
+import { narrowQuoteToStructures } from '@/lib/sms/roofing-compose'
 import { RoofMap, type RoofMapBuilding } from '../_components/RoofMap'
 import { AddressAutocomplete } from '../_components/AddressAutocomplete'
 import { GoogleStaticMap } from '../_components/GoogleStaticMap'
@@ -76,6 +79,15 @@ function structureKey(s: RoofStructurePrice, i: number): string {
   return s.buildingId ?? `__idx_${i}`
 }
 
+/** The tradie's include toggles as a 1-based index list (the saved selection). */
+function includedIndices1Based(quote: MultiRoofQuote, included: Record<string, boolean>): number[] {
+  const idx: number[] = []
+  quote.structures.forEach((s, i) => {
+    if (included[structureKey(s, i)] !== false) idx.push(i + 1)
+  })
+  return idx
+}
+
 export default function RoofingMeasurePage() {
   return (
     <FeatureGate slug="roofing" featureLabel="Roof measure">
@@ -85,6 +97,7 @@ export default function RoofingMeasurePage() {
 }
 
 function RoofingMeasurePageInner() {
+  const router = useRouter()
   const [token, setToken] = useState<string | null>(null)
   const [authState, setAuthState] = useState<'loading' | 'signed-out' | 'ready'>('loading')
 
@@ -111,10 +124,6 @@ function RoofingMeasurePageInner() {
   const [quoteState, setQuoteState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [quoteShareUrl, setQuoteShareUrl] = useState<string | null>(null)
   const [quoteShareToken, setQuoteShareToken] = useState<string | null>(null)
-  // The /q/roof customer-quote link auto-produced on measure (the rich
-  // satellite + per-structure breakdown + AI-preview page, full prices,
-  // no approval). Distinct from the optional /q/[token] deposit page above.
-  const [custUrl, setCustUrl] = useState<string | null>(null)
 
   useEffect(() => {
     const sb = getBrowserSupabase()
@@ -152,7 +161,6 @@ function RoofingMeasurePageInner() {
       setQuoteState('idle')
       setQuoteShareUrl(null)
       setQuoteShareToken(null)
-      setCustUrl(null)
       try {
         const res = await fetch('/api/roofing/measure-all', {
           method: 'POST',
@@ -167,12 +175,19 @@ function RoofingMeasurePageInner() {
         const json = (await res.json()) as MultiResponse
         setResp(json)
         if (json.ok === true) {
-          // Initialise / preserve include + selection state by key.
+          // Initialise / preserve include + selection state by key. Default is
+          // ROOF-ONLY: the primary structure starts in the job, secondary
+          // structures (sheds/garages) start OUT so the tradie opts them in.
+          // A prior explicit choice for the same structure is preserved across
+          // re-measures.
           setIncluded((prev) => {
+            const structures = json.quote.structures
+            const hasPrimary = structures.some((s) => s.role === 'primary')
             const next: Record<string, boolean> = {}
-            json.quote.structures.forEach((s, i) => {
+            structures.forEach((s, i) => {
               const k = structureKey(s, i)
-              next[k] = prev[k] ?? true
+              const roofOnlyDefault = hasPrimary ? s.role === 'primary' : i === 0
+              next[k] = prev[k] ?? roofOnlyDefault
             })
             return next
           })
@@ -261,15 +276,17 @@ function RoofingMeasurePageInner() {
    *  structure (the "primary" one). */
   const onSendAsQuote = useCallback(async () => {
     if (!token || !resp || resp.ok !== true) return
-    const includedStructures = resp.quote.structures.filter(
-      (s, i) => included[structureKey(s, i)] !== false,
-    )
-    if (includedStructures.length === 0) {
+    // Narrow to the tradie's include toggles so the deposit page total matches
+    // the combined preview, the customer quote page and the PDF — never the
+    // full all-structures total.
+    const indices = includedIndices1Based(resp.quote, included)
+    if (indices.length === 0) {
       setErrMsg('Include at least one structure before saving.')
       return
     }
-    const primary = includedStructures[0]
-    const combined = resp.quote.combined
+    const includedStructures = indices.map((i) => resp.quote.structures[i - 1])
+    const primary = includedStructures.find((s) => s.role === 'primary') ?? includedStructures[0]
+    const combined = narrowQuoteToStructures(resp.quote, indices).combined
     setQuoteState('saving')
     setQuoteShareUrl(null)
     setQuoteShareToken(null)
@@ -333,9 +350,9 @@ function RoofingMeasurePageInner() {
 
   const onSave = useCallback(async () => {
     if (!token || !resp || resp.ok !== true) return
-    const includedStructures = resp.quote.structures.filter((s, i) => included[structureKey(s, i)] !== false)
-    if (includedStructures.length === 0) {
-      setErrMsg('Include at least one structure before saving.')
+    const allStructures = resp.quote.structures
+    if (allStructures.length === 0) {
+      setErrMsg('Measure a property before saving.')
       return
     }
     setSaveState('saving')
@@ -347,29 +364,29 @@ function RoofingMeasurePageInner() {
         body: JSON.stringify({
           address: { address, postcode, state },
           provider: resp.provider,
-          structures: includedStructures.map((s) => ({
+          // Persist EVERY measured structure in the payload, but record the
+          // tradie's include toggles as the authoritative included_indices so
+          // the saved quote, customer page and PDF reflect exactly what was
+          // checked (roof-only by default; the tradie can adjust on /m later).
+          structures: allStructures.map((s) => ({
             buildingId: s.buildingId,
             role: s.role,
             label: s.label,
             inputs: s.inputs,
           })),
           quote: resp.quote,
+          included_indices: includedIndices1Based(resp.quote, included),
         }),
       })
       const json = (await res.json()) as
-        | { ok: true; id: string; public_token: string }
+        | { ok: true; id: string; public_token: string; measure_token: string }
         | { ok: false; error: string; detail?: string }
       if (json.ok) {
         setSavedId(json.id)
         setSaveState('saved')
-        // Surface the customer-facing /q/roof page — full prices shown, no
-        // approval. `?s=` pins it to exactly the structures the tradie
-        // included, reusing the page's existing narrowing logic.
-        const includedIdx = resp.quote.structures
-          .map((s, i) => (included[structureKey(s, i)] !== false ? i + 1 : 0))
-          .filter((n) => n > 0)
-        const qs = includedIdx.length > 0 ? `?s=${includedIdx.join(',')}` : ''
-        setCustUrl(`${window.location.origin}/q/roof/${json.public_token}${qs}`)
+        // The measurement is now its own first-class entity — open its review
+        // page so the tradie can see every structure on its own link.
+        router.push(`/m/${json.measure_token}`)
       } else {
         setSaveState('error')
         setErrMsg(json.detail ?? json.error)
@@ -378,7 +395,7 @@ function RoofingMeasurePageInner() {
       setSaveState('error')
       setErrMsg(e instanceof Error ? e.message : String(e))
     }
-  }, [token, resp, included, address, postcode, state])
+  }, [token, resp, included, address, postcode, state, router])
 
   // Auto-generate the customer quote the moment a measurement completes —
   // no tradie approval step. onSave persists the measurement and produces
@@ -511,8 +528,28 @@ function RoofingMeasurePageInner() {
         {errMsg && <Notice tone="warn" label="Measurement could not complete">{errMsg}</Notice>}
       </section>
 
-      {/* ── Results ────────────────────────────────────────────── */}
-      {quote && resp && resp.ok === true && (
+      {/* ── Measuring / saving — one loading state until the measurement is
+            persisted, then we navigate to its own page (/m/[measure_token]).
+            The measurement is no longer rendered inline below the form. ── */}
+      {(busy || (resp?.ok === true && saveState !== 'error')) && (
+        <section className="relative z-10 mx-auto mt-10 max-w-6xl px-6 sm:px-10">
+          <div className="border border-ink-line border-l-4 border-l-accent bg-ink-card p-7 sm:p-9">
+            <div className="flex items-center gap-3 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
+              <Spinner />
+              {busy ? 'Measuring all structures…' : 'Saving measurement & opening its page…'}
+            </div>
+            <p className="mt-3 text-base text-text-sec">
+              We&rsquo;re measuring every structure at this property and saving the
+              result as its own measurement. You&rsquo;ll be taken to the measurement
+              page to review each structure and choose which to include in the quote.
+            </p>
+          </div>
+        </section>
+      )}
+
+      {/* ── Results (fallback) — shown only if persistence failed, so the
+            tradie still sees the measured structures and can retry Save. ── */}
+      {quote && resp && resp.ok === true && saveState === 'error' && (
         <MultiResultBlock
           quote={quote}
           provider={resp.provider}
@@ -537,57 +574,7 @@ function RoofingMeasurePageInner() {
         />
       )}
 
-      {(custUrl || saveState === 'saving') && (
-        <section className="relative z-10 mx-auto mt-6 max-w-6xl px-6 sm:px-10">
-          <div className="border border-ink-line border-l-4 border-l-teal-glow bg-ink-card p-6 sm:p-7">
-            {custUrl ? (
-              <>
-                <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-teal-glow">
-                  ✓ Customer quote ready · full prices, no approval needed
-                </div>
-                <p className="mt-2 text-base text-text-sec">
-                  Auto-generated the moment you measured — the customer page shows the
-                  satellite overlay, every structure&rsquo;s breakdown, the Good / Better /
-                  Best prices and the AI &ldquo;after re-roof&rdquo; preview. Share it as-is:
-                </p>
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <a
-                    href={custUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-mono text-sm text-accent underline-offset-4 hover:underline break-all"
-                  >
-                    {custUrl}
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void navigator.clipboard.writeText(custUrl)
-                    }}
-                    className="inline-flex items-center gap-2 border border-ink-line px-3 py-1.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text-sec hover:border-accent hover:text-accent"
-                  >
-                    Copy
-                  </button>
-                  <a
-                    href={custUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 bg-accent px-3 py-1.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-white hover:bg-accent-press"
-                  >
-                    Open <span aria-hidden="true">&rarr;</span>
-                  </a>
-                </div>
-              </>
-            ) : (
-              <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
-                Generating customer quote…
-              </div>
-            )}
-          </div>
-        </section>
-      )}
-
-      {quote && solarTotals && (
+      {quote && solarTotals && saveState === 'error' && (
         <section className="relative z-10 mx-auto mt-6 max-w-6xl px-6 pb-8 sm:px-10">
           <SolarCheck
             accessToken={token}
@@ -599,7 +586,7 @@ function RoofingMeasurePageInner() {
         </section>
       )}
 
-      {quote && (
+      {quote && saveState === 'error' && (
         <section className="relative z-10 mx-auto mt-6 max-w-6xl px-6 pb-8 sm:px-10">
           <RoofTilesViewer token={token} address={address} postcode={postcode} state={state} />
         </section>
@@ -977,30 +964,14 @@ function RoutingStrip({ routing }: { routing: RoofingRoutingDecision }) {
 }
 
 /** PURE — sum the included structures' tiers for the combined total. */
+// The pre-save preview total — derived from THE canonical helper
+// (combinedTotalsForIndices) so it matches the customer page + PDF exactly,
+// including dropping inspection-routed structures from the headline total.
 function combinedIncludedTotals(
   quote: MultiRoofQuote,
   included: Record<string, boolean>,
 ): { count: number; area: number; exGst: [number, number, number]; incGst: [number, number, number] } {
-  const exGst: [number, number, number] = [0, 0, 0]
-  const incGst: [number, number, number] = [0, 0, 0]
-  let area = 0
-  let count = 0
-  quote.structures.forEach((s, i) => {
-    if (included[structureKey(s, i)] === false) return
-    count += 1
-    area += s.price.area_m2
-    for (let t = 0; t < 3; t++) {
-      exGst[t] += s.price.tiers[t].ex_gst
-      incGst[t] += s.price.tiers[t].inc_gst
-    }
-  })
-  const round2 = (n: number) => Math.round(n * 100) / 100
-  return {
-    count,
-    area: Math.round(area * 10) / 10,
-    exGst: [round2(exGst[0]), round2(exGst[1]), round2(exGst[2])],
-    incGst: [round2(incGst[0]), round2(incGst[1]), round2(incGst[2])],
-  }
+  return combinedTotalsForIndices(quote, includedIndices1Based(quote, included))
 }
 
 // ─── Small UI bits ──────────────────────────────────────────────────

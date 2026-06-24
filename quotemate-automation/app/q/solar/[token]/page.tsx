@@ -30,6 +30,7 @@ import { notFound } from 'next/navigation'
 import type { SolarEstimate } from '@/lib/solar/types'
 import { resolveSolarQuoteView } from '@/lib/solar/quote-page-row'
 import { buildSolarTierCards } from '@/lib/solar/tier-cards'
+import { asQuoteTierMode, resolveVisibleTiers, type QuoteTierMode } from '@/lib/quote/tier-visibility'
 import { buildHeroOverlay } from '@/lib/solar/hero-overlay'
 import { buildSolarStatExplainers, type SolarStatExplainer } from '@/lib/solar/explainers'
 import { buildSolarAssumptionsView, type SolarAssumptionRow } from '@/lib/solar/assumptions-view'
@@ -81,6 +82,7 @@ type Row = {
   ai_brief: SolarAiBriefRecord | null
   buildings: DetectedBuilding[] | null
   selected_building_id: string | null
+  tenant_id: string | null
 }
 
 const TIER_NAME: Record<'good' | 'better' | 'best', string> = {
@@ -104,7 +106,7 @@ export default async function SolarQuotePage({
 
   const { data, error } = await supabase
     .from('solar_estimates')
-    .select('address, state, estimate, confirmed_at, quote_variant, felt, ai_brief, buildings, selected_building_id')
+    .select('address, state, estimate, confirmed_at, quote_variant, felt, ai_brief, buildings, selected_building_id, tenant_id')
     .eq('public_token', token)
     .maybeSingle()
 
@@ -137,6 +139,33 @@ export default async function SolarQuotePage({
     production: estimate.production,
     economics: estimate.economics,
   })
+  // Mig 142 — per-feature tier presentation mode for solar. Solar has no
+  // quotes.selected_tier; its "recommended" is the headline (largest) tier, so
+  // 'single' collapses to that. Read the tenant's solar pricing_book mode.
+  const solarHeadlineTierKey =
+    view.headlineTier?.tier ?? cards[cards.length - 1]?.tier ?? null
+  let solarTierMode: QuoteTierMode = 'single'
+  if (row.tenant_id) {
+    const { data: pb } = await supabase
+      .from('pricing_book')
+      .select('quote_tier_mode')
+      .eq('tenant_id', row.tenant_id)
+      .eq('trade', 'solar')
+      .maybeSingle()
+    solarTierMode = asQuoteTierMode(
+      (pb as { quote_tier_mode?: string | null } | null)?.quote_tier_mode,
+    )
+  }
+  const visibleSolarTierKeys = resolveVisibleTiers({
+    mode: solarTierMode,
+    present: {
+      good: cards.some((c) => c.tier === 'good'),
+      better: cards.some((c) => c.tier === 'better'),
+      best: cards.some((c) => c.tier === 'best'),
+    },
+    selectedTier: solarHeadlineTierKey,
+  })
+  const visibleCards = cards.filter((c) => visibleSolarTierKeys.includes(c.tier))
   const headlineProd = estimate.production[estimate.production.length - 1]
   const overlay = buildHeroOverlay({
     headlineTier: view.headlineTier,
@@ -747,12 +776,12 @@ export default async function SolarQuotePage({
           <div className="mt-10 space-y-6">
             <div className="flex items-center gap-4">
               <span className="font-mono text-[0.8rem] font-semibold uppercase tracking-[0.18em] text-accent">
-                System options · {cards.length} size{cards.length === 1 ? '' : 's'}
+                System options · {visibleCards.length} size{visibleCards.length === 1 ? '' : 's'}
               </span>
               <span className="h-px flex-1 bg-ink-line" aria-hidden />
             </div>
             <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-              {cards.map((c, i) => {
+              {visibleCards.map((c, i) => {
                 const cta = resolveSolarDepositCta({
                   confirmed: view.confirmed,
                   token,

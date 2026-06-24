@@ -103,6 +103,24 @@ const SECONDARY_TILES: Tile[] = [
     cta: 'Open customers',
     href: '/admin/customers',
   },
+  {
+    num: '08',
+    eyebrow: 'Reference',
+    title: 'Documentation',
+    blurb:
+      'Every QuoteMax doc in one searchable place — the platform walkthrough, architecture maps, pricing explainers, SMS specs, onboarding plans and the investor pack. Admin-only.',
+    cta: 'Open docs',
+    href: '/admin/docs',
+  },
+  {
+    num: '09',
+    eyebrow: 'Onboarding QA',
+    title: 'Tenant health',
+    blurb:
+      'Per-tenant green/red setup checks (owner link, pricing book, service offerings, real Twilio number + Vapi assistant, trade readiness) with an overall Ready/Incomplete verdict, plus a live-vs-stub provisioning banner. Confirm every tradie is set up correctly before — and after — onboarding.',
+    cta: 'Open tenant health',
+    href: '/admin/tenants',
+  },
 ]
 
 export default function AdminHomePage() {

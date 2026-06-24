@@ -15,8 +15,10 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { renderPdfFromHtml, gotenbergConfigured } from '@/lib/pdf/gotenberg'
 import { buildQuoteReportHtml, type QuoteReportTier } from './report-html'
+import { asQuoteTierMode, resolveVisibleTiers, type QuoteTierMode } from './tier-visibility'
 import { buildRoofQuoteReportHtml } from '@/lib/roofing/report-html'
 import type { MultiRoofQuote } from '@/lib/roofing/types'
+import type { RoofDisplayRow } from '@/lib/roofing/selection'
 import { buildSolarQuoteReportHtml } from '@/lib/solar/report-html'
 import {
   buildSolarPremiumQuote,
@@ -27,6 +29,8 @@ import { loadSolarConfig } from '@/lib/solar/config'
 import type { SolarEstimate } from '@/lib/solar/types'
 import { buildPaintingQuoteReportHtml } from '@/lib/painting/report-html'
 import type { PaintingEstimate } from '@/lib/painting/types'
+import { loadTenantBranding } from '@/lib/pdf/branding'
+import { prepareImage } from '@/lib/pdf/image'
 
 const BUCKET = 'quote-pdfs'
 const APP_URL = (process.env.APP_URL ?? 'https://quote-mate-rho.vercel.app').replace(/\/$/, '')
@@ -152,16 +156,27 @@ type PaintingPdfRow = {
 type IntakePdfRow = {
   job_type: string | null
   caller: { name?: string } | null
+  trade: string | null
 }
 
-async function tenantBusinessName(tenantId: string | null): Promise<string> {
-  if (!tenantId) return 'QuoteMax'
-  const { data } = await supabase()
-    .from('tenants')
-    .select('business_name')
-    .eq('id', tenantId)
-    .maybeSingle<{ business_name: string | null }>()
-  return data?.business_name ?? 'QuoteMax'
+/**
+ * Render HTML → PDF, enforcing the 5 MB MMS hard cap (spec
+ * specs/quote-pdf-branding.md R11/D5). If the first render is over cap,
+ * re-render with <img> tags stripped and log it — the SMS still gets a
+ * (lighter) PDF rather than one Twilio would reject for size.
+ */
+const PDF_HARD_CAP_BYTES = 5 * 1024 * 1024
+async function renderQuotePdfCapped(html: string, label: string): Promise<Buffer> {
+  const pdf = await renderPdfFromHtml(html)
+  if (pdf.length <= PDF_HARD_CAP_BYTES) return pdf
+  const stripped = html.replace(/<img\b[^>]*>/gi, '')
+  const fallback = await renderPdfFromHtml(stripped)
+  console.warn('[quote-pdf] over 5MB cap — re-rendered without images', {
+    label,
+    firstBytes: pdf.length,
+    strippedBytes: fallback.length,
+  })
+  return fallback.length < pdf.length ? fallback : pdf
 }
 
 /**
@@ -189,32 +204,52 @@ export async function ensureQuotePdf(
     if (quote.needs_inspection) return null
     if (quote.pdf_path && !opts.regenerate) return quote.pdf_path
 
-    const [intakeRes, businessName] = await Promise.all([
-      quote.intake_id
-        ? supabase()
-            .from('intakes')
-            .select('job_type, caller')
-            .eq('id', quote.intake_id)
-            .maybeSingle<IntakePdfRow>()
-        : Promise.resolve({ data: null as IntakePdfRow | null }),
-      tenantBusinessName(quote.tenant_id),
-    ])
+    const intakeRes = quote.intake_id
+      ? await supabase()
+          .from('intakes')
+          .select('job_type, caller, trade')
+          .eq('id', quote.intake_id)
+          .maybeSingle<IntakePdfRow>()
+      : { data: null as IntakePdfRow | null }
     const intake = intakeRes.data
 
+    // Mig 142 — render only the tier(s) this feature's mode surfaces. The full
+    // good/better/best stays persisted; the PDF mirrors the customer page.
+    const intakeTrade = (intake?.trade as string | null) ?? 'electrical'
+    let tierMode: QuoteTierMode = 'single'
+    if (quote.tenant_id) {
+      const { data: pb } = await supabase()
+        .from('pricing_book')
+        .select('quote_tier_mode')
+        .eq('tenant_id', quote.tenant_id)
+        .eq('trade', intakeTrade)
+        .maybeSingle<{ quote_tier_mode: string | null }>()
+      tierMode = asQuoteTierMode(pb?.quote_tier_mode ?? null)
+    }
+    const visibleTierKeys = resolveVisibleTiers({
+      mode: tierMode,
+      present: { good: !!quote.good, better: !!quote.better, best: !!quote.best },
+      selectedTier: quote.selected_tier,
+    })
+    const visibleTierSet = new Set(visibleTierKeys)
+    const showRecommended = visibleTierKeys.length > 1
+
+    const branding = await loadTenantBranding(supabase(), quote.tenant_id, intakeTrade)
     const html = buildQuoteReportHtml({
-      businessName,
+      businessName: branding.businessName,
+      branding,
       customerName: intake?.caller?.name ?? null,
       jobType: intake?.job_type ?? 'job',
       scopeOfWorks: quote.scope_of_works,
       assumptions: quote.assumptions,
       estimatedTimeframe: quote.estimated_timeframe,
-      good: quote.good,
-      better: quote.better,
-      best: quote.best,
-      selectedTier: quote.selected_tier,
+      good: visibleTierSet.has('good') ? quote.good : null,
+      better: visibleTierSet.has('better') ? quote.better : null,
+      best: visibleTierSet.has('best') ? quote.best : null,
+      selectedTier: showRecommended ? quote.selected_tier : null,
       quoteViewUrl: `${APP_URL}/q/${quote.share_token}`,
     })
-    const pdf = await renderPdfFromHtml(html)
+    const pdf = await renderQuotePdfCapped(html, `quote:${quoteId}`)
     const path = await storePdf(`quotes/${quoteId}.pdf`, pdf)
     await supabase().from('quotes').update({ pdf_path: path }).eq('id', quoteId)
     return path
@@ -234,7 +269,7 @@ export async function ensureQuotePdf(
  */
 export async function ensureRoofQuotePdf(
   publicToken: string,
-  opts: { regenerate?: boolean; quote?: MultiRoofQuote } = {},
+  opts: { regenerate?: boolean; quote?: MultiRoofQuote; displayRows?: RoofDisplayRow[] } = {},
 ): Promise<string | null> {
   try {
     if (!gotenbergConfigured()) return null
@@ -251,15 +286,23 @@ export async function ensureRoofQuotePdf(
 
     const quote = opts.quote ?? row.quote
     if (!quote) return null
-    const businessName = await tenantBusinessName(row.tenant_id)
+    const branding = await loadTenantBranding(supabase(), row.tenant_id, 'roofing')
+    // Aerial/outline image — fetched + compressed to a compact data URI
+    // (spec R6/R11); null (e.g. Gotenberg/dev or no imagery) omits the figure.
+    const mapImageSrc = await prepareImage(
+      `${APP_URL}/api/roofing/q/${publicToken}/static-map`,
+    )
 
     const html = buildRoofQuoteReportHtml({
-      businessName,
+      businessName: branding.businessName,
+      branding,
       address: row.address ?? '',
       quote,
+      displayRows: opts.displayRows,
+      mapImageSrc,
       quoteViewUrl: `${APP_URL}/q/roof/${publicToken}`,
     })
-    const pdf = await renderPdfFromHtml(html)
+    const pdf = await renderQuotePdfCapped(html, `roof:${publicToken}`)
     const path = await storePdf(`roofs/${publicToken}.pdf`, pdf)
     await supabase().from('roofing_measurements').update({ pdf_path: path }).eq('public_token', publicToken)
     return path
@@ -296,7 +339,7 @@ export async function ensureSolarQuotePdf(
 
     const estimate = row.estimate
     if (!estimate) return null
-    const businessName = await tenantBusinessName(row.tenant_id)
+    const branding = await loadTenantBranding(supabase(), row.tenant_id, 'solar')
 
     // Premium proposal sections (spec 2026-06-12 §4.4), behind the same
     // SOLAR_PREMIUM_QUOTE flag the page uses. theme 'light' = print
@@ -309,7 +352,8 @@ export async function ensureSolarQuotePdf(
     }
 
     const html = buildSolarQuoteReportHtml({
-      businessName,
+      businessName: branding.businessName,
+      branding,
       address: row.address ?? '',
       estimate,
       quoteViewUrl: `${APP_URL}/q/solar/${publicToken}`,
@@ -332,7 +376,7 @@ export async function ensureSolarQuotePdf(
           : null,
       aiBrief: row.quote_variant === 'felt' ? (row.ai_brief ?? null) : null,
     })
-    const pdf = await renderPdfFromHtml(html)
+    const pdf = await renderQuotePdfCapped(html, `solar:${publicToken}`)
     const path = await storePdf(`solar/${publicToken}.pdf`, pdf)
     await supabase().from('solar_estimates').update({ pdf_path: path }).eq('public_token', publicToken)
     return path
@@ -369,17 +413,18 @@ export async function ensurePaintingPdf(
 
     const estimate = row.estimate
     if (!estimate) return null
-    const businessName = await tenantBusinessName(row.tenant_id)
+    const branding = await loadTenantBranding(supabase(), row.tenant_id, 'painting')
 
     const html = buildPaintingQuoteReportHtml({
-      businessName,
+      businessName: branding.businessName,
+      branding,
       address: row.address ?? '',
       estimate,
       // No /q/paint/[token] customer page exists yet — omit the live link
       // so the PDF footer never points at a 404.
       quoteViewUrl: null,
     })
-    const pdf = await renderPdfFromHtml(html)
+    const pdf = await renderQuotePdfCapped(html, `paint:${publicToken}`)
     const path = await storePdf(`paint/${publicToken}.pdf`, pdf)
     await supabase().from('painting_measurements').update({ pdf_path: path }).eq('public_token', publicToken)
     return path

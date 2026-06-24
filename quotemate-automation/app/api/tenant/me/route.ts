@@ -691,6 +691,23 @@ export async function PATCH(req: Request) {
     if (error) errors.push(`followup_2h_enabled: ${error.message}`)
   }
 
+  // 2bg. Migration 142 — per-feature (per-trade) quote tier presentation
+  //      mode. PER-ROW, NOT fanned out: each entry writes only the named
+  //      trade's pricing_book row, so a tradie can run three-tier painting
+  //      and single-price solar at once. The customer quote page + SMS + PDF
+  //      read this column via lib/quote/tier-visibility.ts.
+  if (updates.quote_tier_mode_by_trade) {
+    for (const [trade, mode] of Object.entries(updates.quote_tier_mode_by_trade)) {
+      if (!mode) continue
+      const { error } = await supabase
+        .from('pricing_book')
+        .update({ quote_tier_mode: mode })
+        .eq('tenant_id', tenant.id)
+        .eq('trade', trade)
+      if (error) errors.push(`quote_tier_mode[${trade}]: ${error.message}`)
+    }
+  }
+
   // 2bb. v8 Phase A — early-booking discount config. Stored in
   //     pricing_book.overlays.early_bird jsonb (no schema migration for
   //     config). The discount is per-TENANT, so it is written uniformly

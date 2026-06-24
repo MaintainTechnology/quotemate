@@ -218,7 +218,7 @@ export default function MarketingPage() {
       <nav className="relative z-10 border-b border-ink-line">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-5">
           <div className="flex items-center gap-2.5">
-            <BrandMark className="h-7 w-7" />
+            <BrandMark className="h-10 w-10" />
             <span className="font-extrabold uppercase tracking-tight">QuoteMax</span>
           </div>
           <Link href="/dashboard" className="flex items-center gap-2 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-text-pri">

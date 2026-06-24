@@ -237,7 +237,7 @@ export default async function BookingPage(props: {
       <header className="relative z-10 border-b border-ink-line">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-5 py-5 sm:px-6">
           <Link href="/" className="flex items-center gap-2.5">
-            <BrandMark className="h-7 w-7" />
+            <BrandMark className="h-10 w-10" />
             <span className="font-extrabold uppercase tracking-tight">
               QuoteMax
             </span>
