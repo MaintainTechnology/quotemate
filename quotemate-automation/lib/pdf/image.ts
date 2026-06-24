@@ -33,9 +33,15 @@ export async function prepareImage(
     const input = Buffer.from(await res.arrayBuffer())
     if (input.byteLength === 0) return null
     try {
-      // sharp is bundled with Next 16; import defensively so a missing
-      // binary degrades to embedding the original bytes rather than throwing.
-      const sharp = (await import('sharp')).default
+      // sharp is an OPTIONAL native dep (only used to shrink the embedded
+      // image). Resolve the specifier indirectly (typed `string`, not a
+      // literal) so neither the TypeScript type-checker nor the bundler
+      // hard-requires it — when the binary isn't installed in the
+      // deployment, the dynamic import throws at runtime and the catch
+      // below embeds the original bytes instead. Keeps `next build` green
+      // without pinning a heavy native dependency into the lockfile.
+      const sharpModule: string = 'sharp'
+      const sharp = (await import(sharpModule)).default
       const pipeline = sharp(input)
         .rotate()
         .resize({ width: maxEdge, height: maxEdge, fit: 'inside', withoutEnlargement: true })
