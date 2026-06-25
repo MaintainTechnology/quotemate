@@ -9,6 +9,7 @@
 // it stays identical to /pricing; the pricing cards come from the shared
 // PricingTiers client island.
 
+import Link from "next/link"
 import AuthNav from "./AuthNav"
 import { Reveal } from "./_components/Reveal"
 import {
@@ -54,10 +55,13 @@ export default function Home() {
       <TrustStrip />
       <PoweredBy />
       <HowItWorks />
+      <OnTheTools />
       <Trades />
       <Shift />
+      <CoveredTrades />
       <Numbers />
       <Pricing />
+      <BuiltForAustralia />
       <Faq />
       <ClosingCta />
       <Footer />
@@ -231,12 +235,12 @@ const POWERED_BY: { name: string; logo: string; wordmark?: boolean }[] = [
 function PoweredBy() {
   return (
     <section className="border-b border-ink-line">
-      <div className="mx-auto max-w-[88rem] px-6 py-10">
-        <p className="text-center font-mono text-[0.7rem] font-semibold uppercase tracking-[0.22em] text-text-dim">
+      <div className="mx-auto max-w-[88rem] px-6 py-14">
+        <p className="text-center font-mono text-[0.72rem] font-semibold uppercase tracking-[0.24em] text-text-dim">
           Powered by
         </p>
-        <div className="mt-7 overflow-hidden [mask-image:linear-gradient(to_right,transparent,#000_8%,#000_92%,transparent)] [-webkit-mask-image:linear-gradient(to_right,transparent,#000_8%,#000_92%,transparent)]">
-          <div className="flex w-max items-center motion-safe:animate-[marquee_42s_linear_infinite] hover:[animation-play-state:paused]">
+        <div className="mt-8 overflow-hidden [mask-image:linear-gradient(to_right,transparent,#000_8%,#000_92%,transparent)] [-webkit-mask-image:linear-gradient(to_right,transparent,#000_8%,#000_92%,transparent)]">
+          <div className="flex w-max items-center motion-safe:animate-[marquee_44s_linear_infinite] hover:[animation-play-state:paused]">
             {[0, 1].map((copy) => (
               <div
                 key={copy}
@@ -246,14 +250,14 @@ function PoweredBy() {
                 {POWERED_BY.map((tool) => (
                   <span
                     key={tool.name}
-                    className="group flex items-center px-6 sm:px-9"
+                    className="group flex items-center px-7 sm:px-12"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={tool.logo}
                       alt={tool.name}
-                      className={`w-auto opacity-50 [filter:brightness(0)] transition duration-200 group-hover:opacity-100 group-hover:[filter:none] ${
-                        tool.wordmark ? "h-4 sm:h-[1.15rem]" : "h-6 sm:h-7"
+                      className={`w-auto opacity-60 [filter:brightness(0)] transition duration-200 group-hover:opacity-100 group-hover:[filter:none] ${
+                        tool.wordmark ? "h-5 sm:h-6" : "h-7 sm:h-9"
                       }`}
                       loading="lazy"
                       decoding="async"
@@ -552,7 +556,7 @@ function Numbers() {
           <Stat value="24/7" label="Line always answered" />
         </Reveal>
         <Reveal delay={180}>
-          <Stat value="3" label="Tiers per quote" />
+          <Stat value="$0" label="Cut of your jobs" />
         </Reveal>
         <Reveal delay={270}>
           <Stat value="$99" label="Locked site-visit price" />
@@ -965,6 +969,156 @@ function Stat({ value, label }: { value: string; label: string }) {
         {label}
       </div>
     </div>
+  )
+}
+
+/* ─── On the tools (image feature band) ───────────────────────── */
+
+function OnTheTools() {
+  return (
+    <section className="border-b border-ink-line">
+      <div className="mx-auto grid max-w-[88rem] items-center gap-10 px-6 py-24 md:grid-cols-2 md:gap-16 md:py-32">
+        <Reveal>
+          <DuotoneImage
+            src="/marketing/home-on-the-tools.jpg"
+            alt="Tradesperson drafting a quote on a tablet at the back of the ute"
+            aspect="aspect-[4/3]"
+            sizes="(max-width: 768px) 100vw, 50vw"
+            position="center 40%"
+            className="edge-lit border border-ink-line"
+          />
+        </Reveal>
+        <Reveal delay={120}>
+          <Eyebrow>From the field</Eyebrow>
+          <h2 className="mt-6 font-extrabold uppercase leading-[1.02] tracking-[-0.03em] text-[clamp(1.9rem,3.6vw,3rem)]">
+            Stay on the <span className="text-accent">tools</span>. QuoteMax does
+            the quoting.
+          </h2>
+          <p className="mt-6 max-w-md text-lg leading-relaxed text-text-sec">
+            The text lands while you&rsquo;re up a ladder. QuoteMax asks the
+            questions, prices the job against your book, and has a clean quote
+            waiting in your dashboard by the time you&rsquo;re back in the ute.
+          </p>
+        </Reveal>
+      </div>
+    </section>
+  )
+}
+
+/* ─── Covered trades (links to the trade detail pages) ────────── */
+
+const COVERED_TRADES = [
+  {
+    href: "/trades/electrical",
+    label: "Electrical",
+    img: "/marketing/home-electrical.jpg",
+    blurb: "Downlights to switchboards, priced to NSW conventions.",
+  },
+  {
+    href: "/trades/plumbing",
+    label: "Plumbing",
+    img: "/marketing/home-plumbing.jpg",
+    blurb: "Drains to hot water, priced to QLD conventions.",
+  },
+  {
+    href: "/trades/roofing",
+    label: "Roofing",
+    img: "/marketing/home-roofing.jpg",
+    blurb: "Re-roofs and repairs, measured per structure.",
+  },
+  {
+    href: "/trades/solar",
+    label: "Solar",
+    img: "/marketing/home-solar.jpg",
+    blurb: "Systems sized from the address, before you drive out.",
+  },
+]
+
+function CoveredTrades() {
+  return (
+    <section className="border-b border-ink-line">
+      <div className="mx-auto max-w-[88rem] px-6 py-24 md:py-32">
+        <Reveal className="max-w-3xl">
+          <Eyebrow>Built for your trade</Eyebrow>
+          <h2 className="mt-6 font-extrabold uppercase leading-[1] tracking-[-0.035em] text-[clamp(2rem,4vw,3.25rem)]">
+            One number. <span className="text-accent">Every trade</span> you run.
+          </h2>
+          <p className="mt-6 max-w-xl text-lg leading-relaxed text-text-sec">
+            QuoteMax prices each trade against its own book and conventions. See
+            how it quotes yours.
+          </p>
+        </Reveal>
+        <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {COVERED_TRADES.map((t, i) => (
+            <Reveal key={t.href} delay={i * 90}>
+              <Link
+                href={t.href}
+                className="edge-lit group block border border-ink-line bg-ink-card transition-colors hover:border-text-dim focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
+              >
+                <DuotoneImage
+                  src={t.img}
+                  alt={`${t.label} work in Australia`}
+                  aspect="aspect-[4/5]"
+                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 22vw"
+                />
+                <div className="flex items-start justify-between gap-3 p-5">
+                  <div>
+                    <h3 className="font-extrabold uppercase tracking-tight text-text-pri">
+                      {t.label}
+                    </h3>
+                    <p className="mt-1.5 text-sm leading-relaxed text-text-sec">
+                      {t.blurb}
+                    </p>
+                  </div>
+                  <span
+                    className="mt-1 shrink-0 font-mono text-accent transition-transform duration-300 group-hover:translate-x-0.5"
+                    aria-hidden="true"
+                  >
+                    &rarr;
+                  </span>
+                </div>
+              </Link>
+            </Reveal>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ─── Built in Australia (image feature band) ─────────────────── */
+
+function BuiltForAustralia() {
+  return (
+    <section className="border-b border-ink-line">
+      <div className="mx-auto grid max-w-[88rem] items-center gap-10 px-6 py-24 md:grid-cols-2 md:gap-16 md:py-32">
+        <Reveal>
+          <Eyebrow>Built in Australia</Eyebrow>
+          <h2 className="mt-6 font-extrabold uppercase leading-[1.02] tracking-[-0.03em] text-[clamp(1.9rem,3.6vw,3rem)]">
+            Made for the way <span className="text-accent">AU tradies</span>{" "}
+            quote.
+          </h2>
+          <p className="mt-6 max-w-md text-lg leading-relaxed text-text-sec">
+            GST handled, licence details on every quote, NSW and QLD conventions
+            baked in. Built with sparkies and plumbers &mdash; for the crews
+            who&rsquo;d rather be on site than chasing paperwork at 11pm.
+          </p>
+          <div className="mt-8">
+            <PrimaryCTA href="/signup">Get started</PrimaryCTA>
+          </div>
+        </Reveal>
+        <Reveal delay={120}>
+          <DuotoneImage
+            src="/marketing/home-crew.jpg"
+            alt="A crew of Australian tradies on site"
+            aspect="aspect-[4/3]"
+            sizes="(max-width: 768px) 100vw, 50vw"
+            position="center 30%"
+            className="edge-lit border border-ink-line"
+          />
+        </Reveal>
+      </div>
+    </section>
   )
 }
 
