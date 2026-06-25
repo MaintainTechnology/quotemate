@@ -1,13 +1,18 @@
 "use client"
 
-// Mobile navigation — a hamburger that opens a full-screen menu below the
-// sticky nav bar. Desktop (md+) keeps the inline links + controls and this
-// component is hidden. Built as a client island (toggle state) so the rest
-// of the Nav stays server-rendered. Theme-aware via Maintain tokens.
+// Mobile navigation — a hamburger that expands a dropdown panel directly
+// under the sticky nav bar (not a full-screen overlay), sized to its
+// content so there is no inner scrollbar. Desktop (md+) keeps the inline
+// links + controls and this component is hidden. Client island (toggle
+// state) so the rest of the Nav stays server-rendered. Theme-aware via
+// Maintain tokens.
 //
-// The sticky <nav> sits at z-50; this overlay is z-40, so the bar (logo +
-// the morphing hamburger/X) stays on top and tappable while the menu is
-// open. Escape closes it and body scroll is locked while open.
+// Layering: the sticky <nav> is z-50 (the bar + the morphing hamburger/X
+// stay on top); the panel is z-40 directly below it; a dim backdrop is
+// z-30. Escape or a backdrop tap closes it, and body scroll is locked
+// while open. iOS tap reliability: touch-manipulation on the button and
+// pointer-events-none on the decorative icon so the tap always lands on
+// the button.
 
 import Link from "next/link"
 import { useEffect, useState } from "react"
@@ -29,6 +34,7 @@ const TRADE_LINKS = [
 
 export function MobileNav() {
   const [open, setOpen] = useState(false)
+  const close = () => setOpen(false)
 
   useEffect(() => {
     if (!open) return
@@ -76,25 +82,32 @@ export function MobileNav() {
         </span>
       </button>
 
+      {/* Dim backdrop — a tap anywhere outside the panel closes the menu. */}
+      <div
+        aria-hidden="true"
+        onClick={close}
+        className={`fixed inset-0 z-30 bg-black/30 transition-opacity duration-200 ${
+          open ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+      />
+
+      {/* Dropdown panel, anchored directly under the bar; content height. */}
       <div
         id="mobile-menu"
-        className={`fixed inset-0 z-40 bg-ink-deep/95 backdrop-blur-md transition-opacity duration-300 ${
+        className={`absolute inset-x-0 top-full z-40 origin-top border-b border-ink-line bg-ink-deep transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] ${
           open
-            ? "visible opacity-100"
-            : "pointer-events-none invisible opacity-0"
+            ? "visible translate-y-0 opacity-100"
+            : "pointer-events-none invisible -translate-y-1 opacity-0"
         }`}
       >
-        <div className="flex h-full flex-col overflow-y-auto px-6 pb-12 pt-24">
+        <nav aria-label="Mobile" className="max-h-[80vh] overflow-y-auto px-5 py-3">
           <ul className="flex flex-col">
-            {SECTION_LINKS.map((l, i) => (
+            {SECTION_LINKS.map((l) => (
               <li key={l.href}>
                 <Link
                   href={l.href}
-                  onClick={() => setOpen(false)}
-                  style={{ transitionDelay: open ? `${80 + i * 50}ms` : "0ms" }}
-                  className={`block border-b border-ink-line py-4 text-2xl font-extrabold uppercase tracking-tight text-text-pri transition-all duration-300 hover:text-accent ${
-                    open ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"
-                  }`}
+                  onClick={close}
+                  className="block border-b border-ink-line/70 py-3.5 text-base font-semibold uppercase tracking-tight text-text-pri transition-colors hover:text-accent"
                 >
                   {l.label}
                 </Link>
@@ -102,22 +115,17 @@ export function MobileNav() {
             ))}
           </ul>
 
-          <div
-            style={{ transitionDelay: open ? "260ms" : "0ms" }}
-            className={`mt-7 transition-all duration-300 ${
-              open ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"
-            }`}
-          >
-            <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
+          <div className="border-b border-ink-line/70 py-4">
+            <span className="font-mono text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
               Trades
             </span>
-            <ul className="mt-3 grid grid-cols-2 gap-2.5">
+            <ul className="mt-2.5 grid grid-cols-2 gap-2">
               {TRADE_LINKS.map((t) => (
                 <li key={t.href}>
                   <Link
                     href={t.href}
-                    onClick={() => setOpen(false)}
-                    className="block border border-ink-line px-4 py-3 font-semibold uppercase tracking-tight text-text-pri transition-colors hover:border-text-dim hover:bg-ink-card hover:text-accent"
+                    onClick={close}
+                    className="block border border-ink-line px-3 py-2 text-sm font-semibold uppercase tracking-tight text-text-pri transition-colors hover:border-text-dim hover:bg-ink-card hover:text-accent"
                   >
                     {t.label}
                   </Link>
@@ -126,26 +134,13 @@ export function MobileNav() {
             </ul>
           </div>
 
-          <div
-            style={{ transitionDelay: open ? "320ms" : "0ms" }}
-            className={`mt-auto flex flex-col gap-5 pt-10 transition-all duration-300 ${
-              open ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"
-            }`}
-          >
-            <div
-              className="flex items-center gap-4"
-              onClick={() => setOpen(false)}
-            >
+          <div className="flex items-center justify-between gap-4 pt-4">
+            <div className="flex items-center gap-3" onClick={close}>
               <AuthNav variant="nav" />
             </div>
-            <div className="flex items-center gap-3 border-t border-ink-line pt-5">
-              <span className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-text-dim">
-                Theme
-              </span>
-              <ThemeToggle />
-            </div>
+            <ThemeToggle />
           </div>
-        </div>
+        </nav>
       </div>
     </div>
   )
