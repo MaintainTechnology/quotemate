@@ -86,12 +86,21 @@ describe('roofing estimate pdfUrl', () => {
     expect(body).not.toContain('PDF copy:')
   })
 
-  it('never renders the line on the inspection message', () => {
+  it('never renders the line on a whole-job inspection message', () => {
+    // Realistic whole-job on-site quote: the structure itself is
+    // inspection-routed (nothing quotable), so buildRoofingReplyMessage uses
+    // the inspection message, which never carries a PDF line. (In production
+    // the inbound route also withholds pdfUrl for any inspection-routed job.)
+    const inspectionStructure = {
+      ...(roofQuote.structures[0] as Record<string, unknown>),
+      price: { tiers, routing: { decision: 'inspection_required', reason: 'steep pitch' } },
+    }
     const body = buildRoofingReplyMessage({
       quote: {
         ...roofQuote,
+        structures: [inspectionStructure],
         routing: { decision: 'inspection_required', reason: 'steep pitch' },
-      } as MultiRoofQuote,
+      } as unknown as MultiRoofQuote,
       address: '12 Sample St',
       quoteUrl: 'https://example.com/q/roof/tok',
       pdfUrl: 'https://example.com/api/q/roof/tok/pdf',
