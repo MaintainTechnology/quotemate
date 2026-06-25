@@ -45,6 +45,7 @@ import {
   type GroundingFailure,
   type PricingBookForValidation,
 } from '@/lib/estimate/validate'
+import { tradeGroundingMode } from '@/lib/quote/report-adapters/registry'
 import { shouldNotifyOnEdit } from '@/lib/quote/notify-policy'
 
 export const dynamic = 'force-dynamic'
@@ -219,6 +220,15 @@ export async function POST(
     .eq('id', quote.intake_id)
     .maybeSingle()
 
+  // Per-trade grounding posture: catalogue trades (electrical/plumbing) are
+  // gated by the grounding validator; tradie-authored trades (solar/roof/paint)
+  // have no catalogue, so the tradie owns the prices and the gate is skipped.
+  const groundingMode = tradeGroundingMode(
+    (intake?.trade as string | null | undefined) ??
+      (pricingBook?.trade as string | null | undefined) ??
+      null,
+  )
+
   // ─── Apply per-tier edits ──────────────────────────────────
   type TierJson = {
     label?: string
@@ -303,7 +313,13 @@ export async function POST(
   // failures — WP1 (the draft path) blocks them on create, so by the
   // time an edit lands the row must already be complete. If it isn't,
   // the right move is a 409 the operator can see, not a silent bypass.
-  if (!pricingBook || pricingBook.hourly_rate == null || pricingBook.default_markup_pct == null) {
+  // Catalogue trades MUST have a complete pricing_book (the grounding validator
+  // grades edits against it). Tradie-authored trades (solar/roof/paint) don't
+  // ground against a catalogue, so a sparse book is acceptable.
+  if (
+    groundingMode === 'catalogue' &&
+    (!pricingBook || pricingBook.hourly_rate == null || pricingBook.default_markup_pct == null)
+  ) {
     return Response.json(
       {
         ok: false,
@@ -317,17 +333,22 @@ export async function POST(
     )
   }
   const pricingBookForValidation: PricingBookForValidation = {
-    hourly_rate: pricingBook.hourly_rate as number | string,
-    apprentice_rate: (pricingBook.apprentice_rate ?? pricingBook.hourly_rate) as number | string,
-    senior_rate: pricingBook.senior_rate as number | string | null | undefined,
-    call_out_minimum: (pricingBook.call_out_minimum ?? 0) as number | string,
-    default_markup_pct: pricingBook.default_markup_pct as number | string,
-    min_labour_hours: pricingBook.min_labour_hours as number | string | undefined,
-    after_hours_multiplier: pricingBook.after_hours_multiplier as number | string | null | undefined,
+    hourly_rate: (pricingBook?.hourly_rate ?? 0) as number | string,
+    apprentice_rate: (pricingBook?.apprentice_rate ?? pricingBook?.hourly_rate ?? 0) as number | string,
+    senior_rate: pricingBook?.senior_rate as number | string | null | undefined,
+    call_out_minimum: (pricingBook?.call_out_minimum ?? 0) as number | string,
+    default_markup_pct: (pricingBook?.default_markup_pct ?? 0) as number | string,
+    min_labour_hours: pricingBook?.min_labour_hours as number | string | undefined,
+    after_hours_multiplier: pricingBook?.after_hours_multiplier as number | string | null | undefined,
   }
 
   let groundingFailures: ReturnType<typeof validateQuoteGrounding> = { valid: true }
-  try {
+  // Grounding gate runs ONLY for catalogue trades (electrical/plumbing).
+  // Tradie-authored trades (solar/roof/paint) have no catalogue to validate
+  // against — the edit saves as the tradie's own prices, with the dashboard
+  // diff-review + Save as the human backstop.
+  if (groundingMode === 'catalogue') {
+   try {
     const trade =
       (intake?.trade as string | null | undefined) ??
       (pricingBook?.trade as string | null | undefined) ??
@@ -417,6 +438,7 @@ export async function POST(
       quoteId,
       error: msg,
     })
+   }
   }
 
   if (!groundingFailures.valid && edits.force !== true) {

@@ -18,9 +18,17 @@ export type ReportBodyMode =
   /** No inline preview yet — show a card + a Download button. */
   | 'download-only'
 
-/** Which in-shell editor the toolbar mounts. Phase A only has the
- *  electrical/plumbing line-item editor; future trades add their own. */
+/** Which in-shell editor the toolbar mounts. All editable trades use the
+ *  Good/Better/Best line-item editor today. */
 export type EditorKind = 'line-items' | null
+
+/** How edits to this trade's prices are validated on save.
+ *  - 'catalogue': prices must derive from the tenant's priced catalogue +
+ *    pricing book (electrical/plumbing) — the grounding validator gates it.
+ *  - 'tradie-authored': the trade has no fixed catalogue (solar/roof/paint),
+ *    so the tradie/AI set the prices directly and the diff-review + Save is the
+ *    backstop. No catalogue grounding is applied. */
+export type GroundingMode = 'catalogue' | 'tradie-authored'
 
 export interface ReportToolbarCapabilities {
   /** Manual structured edit is available for this trade. */
@@ -38,4 +46,5 @@ export interface QuoteReportAdapter {
   pdfPath: (shareToken: string) => string
   capabilities: ReportToolbarCapabilities
   editorKind: EditorKind
+  groundingMode: GroundingMode
 }

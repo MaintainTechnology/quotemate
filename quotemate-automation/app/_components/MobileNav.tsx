@@ -52,9 +52,12 @@ export function MobileNav() {
         aria-expanded={open}
         aria-controls="mobile-menu"
         onClick={() => setOpen((o) => !o)}
-        className="relative z-50 inline-flex h-11 w-11 items-center justify-center border border-ink-line text-text-pri transition-colors hover:border-text-dim hover:bg-ink-card focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+        className="relative z-50 inline-flex h-11 w-11 touch-manipulation items-center justify-center border border-ink-line text-text-pri transition-colors hover:border-text-dim hover:bg-ink-card focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
       >
-        <span className="relative block h-3.5 w-5" aria-hidden="true">
+        <span
+          className="pointer-events-none relative block h-3.5 w-5"
+          aria-hidden="true"
+        >
           <span
             className={`absolute left-0 h-[2px] w-5 bg-current transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
               open ? "top-1/2 -translate-y-1/2 rotate-45" : "top-0"
@@ -76,7 +79,9 @@ export function MobileNav() {
       <div
         id="mobile-menu"
         className={`fixed inset-0 z-40 bg-ink-deep/95 backdrop-blur-md transition-opacity duration-300 ${
-          open ? "visible opacity-100" : "invisible opacity-0"
+          open
+            ? "visible opacity-100"
+            : "pointer-events-none invisible opacity-0"
         }`}
       >
         <div className="flex h-full flex-col overflow-y-auto px-6 pb-12 pt-24">

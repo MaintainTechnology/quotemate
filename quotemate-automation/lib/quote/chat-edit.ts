@@ -312,20 +312,32 @@ export function buildEditDiff(
 
 // ── Pure: prompt construction ─────────────────────────────────────────
 
-export function buildSystemPrompt(trade: string, markupPct: number | string): string {
-  return `You are QuoteMate's quote-editing assistant for a licensed Australian ${trade} tradie. You edit an EXISTING, already-priced quote with up to three pricing tiers (good / better / best). The tradie tells you in plain English how to change it.
-
-HARD RULES — money safety:
+export function buildSystemPrompt(
+  trade: string,
+  markupPct: number | string,
+  groundingMode: 'catalogue' | 'tradie-authored' = 'catalogue',
+): string {
+  const pricingRules =
+    groundingMode === 'catalogue'
+      ? `HARD RULES — money safety:
 - This quote is legally binding and carries live payment links. NEVER invent a price. Every unit_price_ex_gst you output MUST come from one of:
   (a) a price returned by the lookupAssembly or lookupMaterial tools,
   (b) the tenant's pricing_book labour rate (hourly_rate / apprentice_rate / senior_rate) for labour lines,
   (c) a line already present on the quote (when you keep or simply move it).
   For materials, run applyMarkup with markupPct = ${markupPct} on the looked-up base price.
-- ALWAYS pass trade: "${trade}" to the lookup tools.
+- ALWAYS pass trade: "${trade}" to the lookup tools.`
+      : `PRICING — this is a ${trade} quote with NO fixed price catalogue. The prices on this quote are the tradie's own (from their ${trade} estimator):
+- Keep every existing line's price EXACTLY as-is unless the tradie explicitly asks to change that price.
+- When the tradie specifies a price or quantity, use the number they give.
+- When they ask to add an item without a price, propose a sensible price based on the existing lines and clearly describe it — the tradie reviews and approves every change before it saves.
+- Do NOT call the lookup tools (this trade has no catalogue).`
+
+  return `You are QuoteMate's quote-editing assistant for a licensed Australian ${trade} tradie. You edit an EXISTING, already-priced quote with up to three pricing tiers (good / better / best). The tradie tells you in plain English how to change it.
+
+${pricingRules}
 - Change ONLY what the instruction asks for. Keep every other line item exactly as it is.
 - Every tier must keep at least one line item — never empty a tier.
 - If the instruction is ambiguous or needs information you don't have, do not guess: return an empty "tiers" object and use "message" to ask the tradie one clarifying question.
-- If a needed price cannot be grounded with the tools or pricing_book, still include the line with your best estimate (it will be flagged for the tradie), but prefer a grounded price wherever possible.
 
 OUTPUT — return ONLY a JSON object, no prose outside it:
 {
@@ -379,6 +391,10 @@ export async function proposeQuoteEdit(args: {
   tenantId: string | null
   pricingBook: PricingBookForValidation
   candidates: CandidatePrices
+  /** 'catalogue' (electrical/plumbing) runs the grounding validator;
+   *  'tradie-authored' (solar/roof/paint) skips it — the tradie owns the
+   *  prices. Defaults to catalogue (the safe gate). */
+  groundingMode?: 'catalogue' | 'tradie-authored'
   scopeOfWorks?: string | null
   assumptions?: unknown
   model?: string
@@ -390,6 +406,7 @@ export async function proposeQuoteEdit(args: {
     tenantId,
     pricingBook,
     candidates,
+    groundingMode = 'catalogue',
     scopeOfWorks = null,
     assumptions = null,
     model = CHAT_EDIT_MODEL,
@@ -406,7 +423,7 @@ export async function proposeQuoteEdit(args: {
   const result = await generateText({
     model: anthropic(model),
     messages: [
-      { role: 'system', content: buildSystemPrompt(trade, pricingBook.default_markup_pct) },
+      { role: 'system', content: buildSystemPrompt(trade, pricingBook.default_markup_pct, groundingMode) },
       { role: 'user', content: buildUserPrompt(instruction, currentTiers, pricingBook, trade) },
     ],
     tools,
@@ -443,41 +460,49 @@ export async function proposeQuoteEdit(args: {
     }
   }
 
-  // Per-tier grounding: validate ONLY the changed tiers (untouched tiers were
-  // already grounded at draft/last-edit time), exactly like /edit's editedDraft.
-  const editedDraft = {
-    good: 'good' in proposedTiers ? proposedTiers.good : null,
-    better: 'better' in proposedTiers ? proposedTiers.better : null,
-    best: 'best' in proposedTiers ? proposedTiers.best : null,
-  }
-  const perTier = validateQuoteGrounding(editedDraft, pricingBook, candidates)
-  const failures: GroundingFailure[] = perTier.valid ? [] : perTier.failures
+  // Grounding only applies to catalogue trades (electrical/plumbing). For
+  // tradie-authored trades (solar/roof/paint) there's no catalogue to ground
+  // against — the tradie owns the prices — so the gate is skipped and nothing
+  // is flagged ungrounded. The /edit endpoint applies the same per-trade rule
+  // on Save.
+  let ungrounded = new Set<string>()
+  if (groundingMode === 'catalogue') {
+    // Per-tier grounding: validate ONLY the changed tiers (untouched tiers were
+    // already grounded at draft/last-edit time), exactly like /edit's editedDraft.
+    const editedDraft = {
+      good: 'good' in proposedTiers ? proposedTiers.good : null,
+      better: 'better' in proposedTiers ? proposedTiers.better : null,
+      best: 'best' in proposedTiers ? proposedTiers.best : null,
+    }
+    const perTier = validateQuoteGrounding(editedDraft, pricingBook, candidates)
+    const failures: GroundingFailure[] = perTier.valid ? [] : perTier.failures
 
-  // Cross-tier duplicate check sees the FULL merged tier set (proposed over
-  // current), matching what /edit checks on Save. Only occurrences that land
-  // inside a proposed tier are markable in this preview.
-  const merged = {
-    scope_of_works: scopeOfWorks,
-    scope_short: null,
-    assumptions,
-    good: 'good' in proposedTiers ? proposedTiers.good : (currentTiers.good ?? null),
-    better: 'better' in proposedTiers ? proposedTiers.better : (currentTiers.better ?? null),
-    best: 'best' in proposedTiers ? proposedTiers.best : (currentTiers.best ?? null),
-  }
-  let crossTierOccurrences: Array<{ tier: TierKey; lineIndex: number }> = []
-  try {
-    const dups = detectCrossTierDuplicates(merged, candidates)
-    crossTierOccurrences = dups
-      .flatMap((d) => d.occurrences)
-      .filter((o) => o.tier in proposedTiers)
-      .map((o) => ({ tier: o.tier as TierKey, lineIndex: o.lineIndex }))
-  } catch {
-    // A cross-tier check failure must never block the preview — the edit
-    // endpoint runs the authoritative gate again on Save.
-    crossTierOccurrences = []
+    // Cross-tier duplicate check sees the FULL merged tier set (proposed over
+    // current), matching what /edit checks on Save. Only occurrences that land
+    // inside a proposed tier are markable in this preview.
+    const merged = {
+      scope_of_works: scopeOfWorks,
+      scope_short: null,
+      assumptions,
+      good: 'good' in proposedTiers ? proposedTiers.good : (currentTiers.good ?? null),
+      better: 'better' in proposedTiers ? proposedTiers.better : (currentTiers.better ?? null),
+      best: 'best' in proposedTiers ? proposedTiers.best : (currentTiers.best ?? null),
+    }
+    let crossTierOccurrences: Array<{ tier: TierKey; lineIndex: number }> = []
+    try {
+      const dups = detectCrossTierDuplicates(merged, candidates)
+      crossTierOccurrences = dups
+        .flatMap((d) => d.occurrences)
+        .filter((o) => o.tier in proposedTiers)
+        .map((o) => ({ tier: o.tier as TierKey, lineIndex: o.lineIndex }))
+    } catch {
+      // A cross-tier check failure must never block the preview — the edit
+      // endpoint runs the authoritative gate again on Save.
+      crossTierOccurrences = []
+    }
+    ungrounded = ungroundedKeys(failures, crossTierOccurrences)
   }
 
-  const ungrounded = ungroundedKeys(failures, crossTierOccurrences)
   const diff = buildEditDiff(currentTiers, proposedTiers, ungrounded)
 
   return {

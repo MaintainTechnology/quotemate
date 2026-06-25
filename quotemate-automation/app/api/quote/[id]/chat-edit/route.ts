@@ -16,7 +16,8 @@
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { loadCandidatePrices } from '@/lib/estimate/run'
-import type { PricingBookForValidation } from '@/lib/estimate/validate'
+import type { PricingBookForValidation, CandidatePrices } from '@/lib/estimate/validate'
+import { tradeGroundingMode } from '@/lib/quote/report-adapters/registry'
 import {
   proposeQuoteEdit,
   type ChatEditTier,
@@ -169,7 +170,13 @@ export async function POST(
     return Response.json({ ok: false, error: 'not_owner' }, { status: 403 })
   }
 
-  // ─── Pricing context (GST handling + grounding) ────────────
+  // ─── Trade + grounding mode ────────────────────────────────
+  const { data: intake } = await supabase
+    .from('intakes')
+    .select('trade')
+    .eq('id', quote.intake_id)
+    .maybeSingle()
+
   const { data: pricingBook } = await supabase
     .from('pricing_book')
     .select(
@@ -178,7 +185,20 @@ export async function POST(
     .eq('tenant_id', quote.tenant_id)
     .limit(1)
     .maybeSingle()
-  if (!pricingBook || pricingBook.hourly_rate == null || pricingBook.default_markup_pct == null) {
+
+  const trade =
+    (intake?.trade as string | null | undefined) ??
+    (pricingBook?.trade as string | null | undefined) ??
+    'electrical'
+  const groundingMode = tradeGroundingMode(trade)
+
+  // Catalogue trades (electrical/plumbing) need a complete pricing_book for the
+  // grounding validator. Tradie-authored trades (solar/roof/paint) don't ground
+  // against a catalogue, so a sparse pricing_book is fine.
+  if (
+    groundingMode === 'catalogue' &&
+    (!pricingBook || pricingBook.hourly_rate == null || pricingBook.default_markup_pct == null)
+  ) {
     return Response.json(
       {
         ok: false,
@@ -191,25 +211,14 @@ export async function POST(
     )
   }
 
-  const { data: intake } = await supabase
-    .from('intakes')
-    .select('trade')
-    .eq('id', quote.intake_id)
-    .maybeSingle()
-
-  const trade =
-    (intake?.trade as string | null | undefined) ??
-    (pricingBook.trade as string | null | undefined) ??
-    'electrical'
-
   const pricingBookForValidation: PricingBookForValidation = {
-    hourly_rate: pricingBook.hourly_rate as number | string,
-    apprentice_rate: (pricingBook.apprentice_rate ?? pricingBook.hourly_rate) as number | string,
-    senior_rate: pricingBook.senior_rate as number | string | null | undefined,
-    call_out_minimum: (pricingBook.call_out_minimum ?? 0) as number | string,
-    default_markup_pct: pricingBook.default_markup_pct as number | string,
-    min_labour_hours: pricingBook.min_labour_hours as number | string | undefined,
-    after_hours_multiplier: pricingBook.after_hours_multiplier as
+    hourly_rate: (pricingBook?.hourly_rate ?? 0) as number | string,
+    apprentice_rate: (pricingBook?.apprentice_rate ?? pricingBook?.hourly_rate ?? 0) as number | string,
+    senior_rate: pricingBook?.senior_rate as number | string | null | undefined,
+    call_out_minimum: (pricingBook?.call_out_minimum ?? 0) as number | string,
+    default_markup_pct: (pricingBook?.default_markup_pct ?? 0) as number | string,
+    min_labour_hours: pricingBook?.min_labour_hours as number | string | undefined,
+    after_hours_multiplier: pricingBook?.after_hours_multiplier as
       | number
       | string
       | null
@@ -231,11 +240,12 @@ export async function POST(
 
   // ─── Candidates + propose ──────────────────────────────────
   try {
-    const candidates = await loadCandidatePrices(
-      pricingBookForValidation,
-      trade,
-      quote.tenant_id as string,
-    )
+    // Catalogue trades load their priced catalogue for grounding; tradie-
+    // authored trades have none, so pass an empty set (grounding is skipped).
+    const candidates: CandidatePrices =
+      groundingMode === 'catalogue'
+        ? await loadCandidatePrices(pricingBookForValidation, trade, quote.tenant_id as string)
+        : { material: [], assembly: [] }
     const result = await proposeQuoteEdit({
       instruction,
       currentTiers,
@@ -243,6 +253,7 @@ export async function POST(
       tenantId: quote.tenant_id as string,
       pricingBook: pricingBookForValidation,
       candidates,
+      groundingMode,
       scopeOfWorks: (quote.scope_of_works as string | null) ?? null,
       assumptions: (quote.assumptions as unknown) ?? null,
     })

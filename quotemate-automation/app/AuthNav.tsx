@@ -28,17 +28,31 @@ export default function AuthNav({ variant = 'nav' }: { variant?: Variant }) {
   // immediately if the tradie signs in/out in another tab.
   useEffect(() => {
     let cancelled = false
-    const supabase = getBrowserSupabase()
-    ;(async () => {
-      const { data } = await supabase.auth.getSession()
-      if (!cancelled) setAuthed(!!data.session)
-    })()
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setAuthed(!!session)
-    })
+    let unsub: (() => void) | undefined
+    // iOS Safari in private / locked-storage mode can throw when the
+    // Supabase client touches localStorage. Guard every access so a
+    // failure resolves to the signed-out state instead of leaving
+    // `authed` stuck at null (which would hide the nav buttons forever).
+    try {
+      const supabase = getBrowserSupabase()
+      ;(async () => {
+        try {
+          const { data } = await supabase.auth.getSession()
+          if (!cancelled) setAuthed(!!data.session)
+        } catch {
+          if (!cancelled) setAuthed(false)
+        }
+      })()
+      const { data: sub } = supabase.auth.onAuthStateChange(
+        (_event, session) => setAuthed(!!session),
+      )
+      unsub = () => sub.subscription.unsubscribe()
+    } catch {
+      if (!cancelled) setAuthed(false)
+    }
     return () => {
       cancelled = true
-      sub.subscription.unsubscribe()
+      unsub?.()
     }
   }, [])
 

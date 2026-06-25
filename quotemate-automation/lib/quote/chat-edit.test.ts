@@ -301,6 +301,34 @@ describe('proposeQuoteEdit — never leaks an ungrounded price', () => {
     expect(result.anyUngrounded).toBe(true)
   })
 
+  it('tradie-authored mode never flags ungrounded (no catalogue to ground against)', async () => {
+    generateTextMock.mockResolvedValue({
+      text: JSON.stringify({
+        message: 'Set the system price.',
+        tiers: {
+          better: {
+            label: 'Better',
+            line_items: [{ description: '6.6kW solar system', quantity: 1, unit: 'ea', unit_price_ex_gst: 9999 }],
+          },
+        },
+      }),
+    })
+    const result = await proposeQuoteEdit({
+      instruction: 'set the system price to 9999',
+      currentTiers: {
+        better: { label: 'Better', line_items: [{ description: '6.6kW solar system', quantity: 1, unit_price_ex_gst: 5000 }] },
+      },
+      trade: 'solar',
+      tenantId: 'tenant-1',
+      pricingBook,
+      candidates: emptyCandidates,
+      groundingMode: 'tradie-authored',
+    })
+    expect(result.anyUngrounded).toBe(false)
+    const change = result.diff.find((d) => d.op === 'change')
+    expect(change?.grounded).toBe(true)
+  })
+
   it('drops a proposal that would empty a tier', async () => {
     generateTextMock.mockResolvedValue({
       text: JSON.stringify({ message: 'Removed everything.', tiers: { better: { label: 'Better', line_items: [] } } }),
