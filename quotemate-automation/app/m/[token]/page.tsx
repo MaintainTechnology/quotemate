@@ -18,7 +18,12 @@
 import { createClient } from '@supabase/supabase-js'
 import { notFound } from 'next/navigation'
 import type { MultiRoofQuote } from '@/lib/roofing/types'
-import { allStructureIndices, sanitizeIndices, structureCount } from '@/lib/roofing/selection'
+import {
+  defaultStructureIndices,
+  primaryStructureIndices,
+  sanitizeIndices,
+  structureCount,
+} from '@/lib/roofing/selection'
 import { MeasurementReview } from './MeasurementReview'
 
 export const dynamic = 'force-dynamic'
@@ -59,8 +64,15 @@ export default async function MeasurementResultsPage({
   const count = structureCount(quote)
   if (!quote || count === 0) notFound()
 
+  // A persisted selection wins; an untouched (NULL/empty) record falls back to
+  // the roof-only default (main dwelling) — never "all structures". We pass the
+  // persisted-ness + the primary index down so the review UI can word its
+  // "saved selection" notice honestly and compute the secondaries' contribution.
   const sanitized = sanitizeIndices(row.included_indices, count)
-  const included = sanitized.length > 0 ? sanitized : allStructureIndices(count)
+  const selectionWasPersisted =
+    Array.isArray(row.included_indices) && row.included_indices.length > 0
+  const included = sanitized.length > 0 ? sanitized : defaultStructureIndices(quote)
+  const primaryIndices = primaryStructureIndices(quote)
 
   return (
     <main className="min-h-screen bg-ink-deep text-text-pri">
@@ -98,7 +110,10 @@ export default async function MeasurementResultsPage({
           publicToken={row.public_token}
           routing={row.routing}
           structures={quote.structures}
+          solar={quote.solar ?? null}
           initialIncluded={included}
+          primaryIndices={primaryIndices}
+          selectionWasPersisted={selectionWasPersisted}
         />
       </section>
 

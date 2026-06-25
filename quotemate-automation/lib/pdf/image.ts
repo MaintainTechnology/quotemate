@@ -29,9 +29,23 @@ export async function prepareImage(
   const format = opts.format ?? 'jpeg'
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(15_000) })
-    if (!res.ok) return null
+    if (!res.ok) {
+      // Spec quote-pdf-logo-fix (edge case) — a 404 / not-public / wrong URL is
+      // the most common silent cause of a missing logo and never reaches the
+      // catch below. Log it; the wordmark fallback still applies downstream.
+      console.warn('[pdf/image] non-OK response — omitting image (logo falls back to wordmark)', {
+        url,
+        reason: `HTTP ${res.status}`,
+      })
+      return null
+    }
     const input = Buffer.from(await res.arrayBuffer())
-    if (input.byteLength === 0) return null
+    if (input.byteLength === 0) {
+      console.warn('[pdf/image] empty response body — omitting image (logo falls back to wordmark)', {
+        url,
+      })
+      return null
+    }
     try {
       // sharp is an OPTIONAL native dep (only used to shrink the embedded
       // image). Resolve the specifier indirectly (typed `string`, not a
@@ -51,13 +65,25 @@ export async function prepareImage(
           : await pipeline.jpeg({ quality, mozjpeg: true }).toBuffer()
       const mime = format === 'png' ? 'image/png' : 'image/jpeg'
       return `data:${mime};base64,${out.toString('base64')}`
-    } catch {
+    } catch (e) {
       // sharp unavailable — embed the original bytes; the post-render size
       // guard in lib/quote/pdf.ts still enforces the 5 MB hard cap.
+      // Spec quote-pdf-logo-fix R9 — surface the degraded path so a missing
+      // native dep is visible rather than silent.
+      console.warn('[pdf/image] sharp unavailable — embedding original bytes undownscaled', {
+        url,
+        reason: e instanceof Error ? e.message : String(e),
+      })
       const ct = res.headers.get('content-type') || 'image/jpeg'
       return `data:${ct};base64,${input.toString('base64')}`
     }
-  } catch {
+  } catch (e) {
+    // Spec quote-pdf-logo-fix R9 — a fetch/prepare failure here is the silent
+    // source of a missing logo (it returns null → wordmark fallback). Log it.
+    console.warn('[pdf/image] fetch/prepare failed — omitting image (logo falls back to wordmark)', {
+      url,
+      reason: e instanceof Error ? e.message : String(e),
+    })
     return null
   }
 }

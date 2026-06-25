@@ -68,6 +68,18 @@ const SaveRequestSchema = z.object({
         ex_gst: z.number(),
         inc_gst: z.number(),
         scope: z.string(),
+        line_items: z
+          .array(
+            z.object({
+              unit: z.string(),
+              quantity: z.number(),
+              description: z.string(),
+              unit_price_ex_gst: z.number(),
+              total_ex_gst: z.number(),
+              source: z.string(),
+            }),
+          )
+          .optional(),
       }),
     ).length(3),
     loadings_applied: z.array(
@@ -174,6 +186,16 @@ export async function POST(req: Request) {
   }
 
   // ── 2. Insert quote ──────────────────────────────────────────────
+  // INTENTIONAL: roofing keeps the REAL computed tiers in good/better/best
+  // even when the job routes to inspection. The roofing engine is
+  // deterministic (priced from the satellite measurement), so an on-site-
+  // flagged roof still has grounded numbers — the customer quote pages show
+  // them as an INDICATIVE estimate ("subject to on-site confirmation") rather
+  // than a blank/$0 quote. Do NOT null these tiers on inspection the way the
+  // ungroundable-estimate path (estimate/draft → forceInspectionTiers) does —
+  // that would re-introduce the blank-roofing-quote bug. (Genuinely unpriceable
+  // roofs — asbestos / unknown material — already compute $0 tiers from the
+  // pricer, and the pages fall back to the $99 inspection-only state for those.)
   const tiers = buildTierObjects(p)
   const shareToken = generateShareToken()
   const inspection = p.routing.decision === 'inspection_required'

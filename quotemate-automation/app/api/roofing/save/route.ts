@@ -10,15 +10,21 @@
 import { createClient } from '@supabase/supabase-js'
 import { randomBytes } from 'node:crypto'
 import { SaveRoofMeasurementSchema } from '@/lib/roofing/request-schema'
-import type { MultiRoofQuote } from '@/lib/roofing/types'
+import type { MultiRoofQuote, RoofJobIntent } from '@/lib/roofing/types'
 import {
   denormFromSelection,
   primaryStructureIndices,
   sanitizeIndices,
   structureCount,
 } from '@/lib/roofing/selection'
+import type { SolarQuoteAddon } from '@/lib/roofing/solar'
+import { detectSolarForJob, loadRoofingRateCard } from '@/lib/roofing/solar-detect'
 
 export const dynamic = 'force-dynamic'
+// Server-side solar/skylight vision (Gemini aerial per structure + an optional
+// Anthropic photo pass) runs inline before the insert, so the allowance is
+// persisted onto the saved quote. Raise the function ceiling.
+export const maxDuration = 60
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,7 +33,7 @@ const supabase = createClient(
 
 async function userAndTenantFromBearer(
   req: Request,
-): Promise<{ userId: string; tenantId: string | null } | null> {
+): Promise<{ userId: string; tenantId: string | null; primaryTrade: string | null } | null> {
   const auth = req.headers.get('authorization') ?? ''
   if (!auth.toLowerCase().startsWith('bearer ')) return null
   const token = auth.slice(7).trim()
@@ -36,10 +42,14 @@ async function userAndTenantFromBearer(
   if (error || !data.user) return null
   const { data: tenant } = await supabase
     .from('tenants')
-    .select('id')
+    .select('id, trade')
     .eq('owner_user_id', data.user.id)
     .maybeSingle()
-  return { userId: data.user.id, tenantId: (tenant?.id as string | undefined) ?? null }
+  return {
+    userId: data.user.id,
+    tenantId: (tenant?.id as string | undefined) ?? null,
+    primaryTrade: (tenant?.trade as string | null | undefined) ?? null,
+  }
 }
 
 /** Read a nested value off an unknown payload without `any`. */
@@ -83,8 +93,16 @@ export async function POST(req: Request) {
     )
   }
 
-  const { address, provider, structures, quote, included_indices, customer_name, customer_phone } =
-    parsed.data
+  const {
+    address,
+    provider,
+    structures,
+    quote,
+    included_indices,
+    customer_name,
+    customer_phone,
+    solar_photos,
+  } = parsed.data
 
   // A freshly-saved measurement defaults to ROOF-ONLY: just the primary
   // structure is in the job, so the tradie opts secondary structures
@@ -105,6 +123,29 @@ export async function POST(req: Request) {
           structure_count: structures.length,
         }
 
+  // ── Solar / skylight detection (best-effort, persisted on the quote) ──
+  // The job's primary intent gates whether the allowance applies (re-roof
+  // only). Detection runs server-side here because the dashboard auto-saves
+  // and redirects — there's no later client step to attach it.
+  const primaryIntent = ((structures.find((s) => s.role === 'primary') ?? structures[0])?.inputs
+    ?.intent ?? 'full_reroof') as RoofJobIntent
+  const rateCard = await loadRoofingRateCard(supabase, auth.tenantId, auth.primaryTrade)
+  let solarAddon: SolarQuoteAddon | null = null
+  try {
+    solarAddon = await detectSolarForJob({
+      quote: fullQuote,
+      provider,
+      primaryIntent,
+      rateCard,
+      photos: solar_photos,
+    })
+  } catch {
+    solarAddon = null
+  }
+  // Attach to the stored quote (additive — older payloads simply omit it).
+  const quoteToStore =
+    fullQuote && solarAddon ? { ...fullQuote, solar: solarAddon } : (quote ?? null)
+
   const row = {
     tenant_id: auth.tenantId,
     created_by: auth.userId,
@@ -119,7 +160,7 @@ export async function POST(req: Request) {
     combined_better_inc_gst: denorm.combined_better_inc_gst,
     routing: strOrNull(readPath(quote, ['routing', 'decision'])),
     structures,
-    quote: quote ?? null,
+    quote: quoteToStore,
     // Authoritative structure selection (migration 140) — the customer quote
     // page + PDF narrow to this. Defaults to roof-only (the primary structure)
     // unless the dashboard sent the tradie's explicit include toggles.

@@ -63,4 +63,34 @@ describe('buildTierObjects', () => {
     const t = buildTierObjects({ ...price, area_m2: 220.6789 })
     expect(t.better.line_items[0].quantity).toBe(220.7)
   })
+
+  it('renders a tier’s itemised line_items (edge works) when present, else falls back', () => {
+    const priced = {
+      area_m2: 220,
+      effective_rate_per_m2: 95,
+      tiers: [
+        {
+          tier: 'good' as const,
+          label: 'Patch',
+          ex_gst: 4549.6,
+          inc_gst: 5004.56,
+          scope: 'Spot patches.',
+          line_items: [
+            { unit: 'sqm', quantity: 220, description: 'Spot patches.', unit_price_ex_gst: 95, total_ex_gst: 4180, source: 'labour' },
+            { unit: 'lm', quantity: 30.8, description: 'Repoint ridge and hip caps.', unit_price_ex_gst: 12, total_ex_gst: 369.6, source: 'material' },
+          ],
+        },
+        { tier: 'better' as const, label: 'Re-roof', ex_gst: 20900, inc_gst: 22990, scope: 'Full re-roof.' },
+        { tier: 'best' as const, label: 'Upgrade', ex_gst: 25300, inc_gst: 27830, scope: 'Upgrade.' },
+      ],
+    }
+    const t = buildTierObjects(priced)
+    // good carries its two itemised lines verbatim
+    expect(t.good.line_items).toHaveLength(2)
+    expect(t.good.line_items[1].unit).toBe('lm')
+    expect(t.good.line_items[1].total_ex_gst).toBe(369.6)
+    // better has no line_items → single sqm fallback
+    expect(t.better.line_items).toHaveLength(1)
+    expect(t.better.line_items[0].unit).toBe('sqm')
+  })
 })

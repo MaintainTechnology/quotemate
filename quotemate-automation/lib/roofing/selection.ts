@@ -8,7 +8,12 @@
 // flows straight through to pricing and the document — fixing the old bug
 // where the PDF summed ALL detected structures regardless of selection.
 //
-// NULL / empty selection means "all structures" (back-compat).
+// A NULL / empty selection resolves to the ROOF-ONLY default — just the main
+// dwelling — via defaultStructureIndices(), matching the save-time default so
+// an untouched record prices the primary structure, not every detected
+// shed/garage. (Supersedes the old "NULL = all structures" back-compat default;
+// see docs/strategy.md. Explicitly-saved selections — including migration 140's
+// backfilled all-structures arrays — are still honoured verbatim.)
 //
 // PURE — no I/O. Indices are 1-based throughout (matches narrowQuoteToStructures
 // and the legacy `?s=` / confirmed_structure conventions).
@@ -60,13 +65,30 @@ export function primaryStructureIndices(quote: MultiRoofQuote | null | undefined
 }
 
 /**
+ * The selection to fall back to when NOTHING is persisted (included_indices is
+ * NULL/empty): the roof-only default — just the main dwelling. This is THE one
+ * decision point for the default, so every reader agrees; it matches the
+ * save-time default (primaryStructureIndices) so a never-touched record prices
+ * the primary structure rather than every detected shed/garage. SUPERSEDES the
+ * old "NULL/empty = all structures" back-compat default; explicitly-saved
+ * selections (including migration-140's backfilled all-structures arrays) are
+ * still honoured verbatim. See docs/strategy.md (roofing selection default).
+ */
+export function defaultStructureIndices(quote: MultiRoofQuote | null | undefined): number[] {
+  return primaryStructureIndices(quote)
+}
+
+/**
  * The structures to actually price/render, as 1-based indices. Starts from
- * the tradie's persisted selection (all when null/empty) and only ever
- * NARROWS it:
+ * the tradie's persisted selection (the roof-only default when null/empty) and
+ * only ever NARROWS it:
  *   • a `?s=` link intersects (legacy links must not widen past the selection)
  *   • a customer single-pick (`confirmedStructure`) intersects (customer view)
  * An intersection that would empty the set is ignored — we keep the wider set
  * rather than show nothing. Returns a non-empty array whenever count > 0.
+ *
+ * Takes the quote (not a bare count) so the empty-fallback can resolve the
+ * roof-only default via defaultStructureIndices.
  */
 export function resolveEffectiveIndices(
   opts: {
@@ -74,11 +96,11 @@ export function resolveEffectiveIndices(
     confirmedStructure?: number | null
     paramIndices?: readonly number[] | null
   },
-  count: number,
+  quote: MultiRoofQuote | null | undefined,
 ): number[] {
-  const all = allStructureIndices(count)
+  const count = structureCount(quote)
   let eff = sanitizeIndices(opts.included, count)
-  if (eff.length === 0) eff = all
+  if (eff.length === 0) eff = defaultStructureIndices(quote)
   const param = sanitizeIndices(opts.paramIndices, count)
   if (param.length > 0) {
     const inter = eff.filter((i) => param.includes(i))
@@ -104,7 +126,7 @@ export function denormFromSelection(
   const eff = sanitizeIndices(includedIndices, count)
   const narrowed = narrowQuoteToStructures(
     quote,
-    eff.length > 0 ? eff : allStructureIndices(count),
+    eff.length > 0 ? eff : defaultStructureIndices(quote),
   )
   return {
     combined_area_m2: narrowed.combined.area_m2,
@@ -163,14 +185,17 @@ export type RoofQuotePartition = {
  * tagged priced / inspection / excluded. The renderers list excluded and
  * inspection structures for transparency without ever adding them to the
  * total. `effectiveIndices1Based` is the resolved selection
- * (resolveEffectiveIndices); an empty selection is treated as "all".
+ * (resolveEffectiveIndices); an empty selection falls back to the roof-only
+ * default (main dwelling), and the display rows are tagged against that same
+ * resolved set so they stay consistent with the narrowed total.
  */
 export function partitionRoofQuote(
   fullQuote: MultiRoofQuote,
   effectiveIndices1Based: readonly number[],
 ): RoofQuotePartition {
   const count = structureCount(fullQuote)
-  const eff = sanitizeIndices(effectiveIndices1Based, count)
+  const eff0 = sanitizeIndices(effectiveIndices1Based, count)
+  const eff = eff0.length > 0 ? eff0 : defaultStructureIndices(fullQuote)
   const includedSet = new Set(eff)
   const structures = Array.isArray(fullQuote?.structures) ? fullQuote.structures : []
   const rows: RoofDisplayRow[] = structures.map((structure, i) => {

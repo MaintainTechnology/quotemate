@@ -87,6 +87,16 @@ export const SaveRoofMeasurementSchema = z.object({
   included_indices: z.array(z.number().int()).max(64).optional(),
   customer_name: z.string().max(160).optional().nullable(),
   customer_phone: z.string().max(40).optional().nullable(),
+  /**
+   * Optional close-up roof photos (customer- or tradie-supplied) for the
+   * Anthropic solar/skylight pass at save time. base64 (no data: prefix) +
+   * mime. The save route also runs the per-structure aerial pass; photos,
+   * when present, are merged in. Capped to keep the payload bounded.
+   */
+  solar_photos: z
+    .array(z.object({ base64: z.string().min(1), mime: z.string().min(3).max(60) }))
+    .max(6)
+    .optional(),
 })
 
 export type SaveRoofMeasurementRequest = z.infer<typeof SaveRoofMeasurementSchema>

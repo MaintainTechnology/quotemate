@@ -10,10 +10,15 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
-import type { MultiRoofQuote } from '@/lib/roofing/types'
+import type { MultiRoofQuote, RoofJobIntent } from '@/lib/roofing/types'
+import type { SolarQuoteAddon } from '@/lib/roofing/solar'
 import { denormFromSelection, sanitizeIndices, structureCount } from '@/lib/roofing/selection'
+import { detectSolarForJob, loadRoofingRateCard } from '@/lib/roofing/solar-detect'
 
 export const dynamic = 'force-dynamic'
+// The POST re-scan runs Gemini (per structure) + an Anthropic photo pass
+// inline before persisting, so raise the function ceiling like the save route.
+export const maxDuration = 60
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -86,4 +91,102 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ token: string
   }
 
   return Response.json({ ok: true, included_indices: included, ...denorm }, { status: 200 })
+}
+
+// POST /api/roofing/measurement/[token] — re-scan this measurement for existing
+// solar/skylights using tradie-attached close-up roof PHOTOS, merged with the
+// per-structure aerial pass, and persist the result onto
+// roofing_measurements.quote.solar. Same measure_token capability model as the
+// PATCH above (link-shareable, no bearer). This is the tradie-attached-photo
+// source for R2; customer /upload/[token] photo sourcing is gated on the spec's
+// open question (roofing jobs don't yet collect customer photos) and not wired.
+const RescanBodySchema = z.object({
+  photos: z
+    .array(z.object({ base64: z.string().min(1), mime: z.string().min(3).max(60) }))
+    .min(1)
+    .max(6),
+})
+
+type RescanRow = {
+  id: string
+  quote: MultiRoofQuote | null
+  tenant_id: string | null
+  provider: string | null
+}
+
+export async function POST(req: Request, ctx: { params: Promise<{ token: string }> }) {
+  const { token } = await ctx.params
+  if (!token || token.length < 8) {
+    return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
+  }
+
+  let body: unknown
+  try {
+    body = await req.json()
+  } catch {
+    return Response.json({ ok: false, error: 'invalid_json' }, { status: 400 })
+  }
+  const parsed = RescanBodySchema.safeParse(body)
+  if (!parsed.success) {
+    return Response.json(
+      { ok: false, error: 'invalid_request', issues: parsed.error.issues },
+      { status: 400 },
+    )
+  }
+
+  const { data: row, error: readErr } = await supabase
+    .from('roofing_measurements')
+    .select('id, quote, tenant_id, provider')
+    .eq('measure_token', token)
+    .maybeSingle<RescanRow>()
+  if (readErr || !row) {
+    return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
+  }
+
+  const fullQuote = row.quote
+  if (!fullQuote || structureCount(fullQuote) === 0) {
+    return Response.json({ ok: false, error: 'no_quote' }, { status: 400 })
+  }
+
+  const primary =
+    fullQuote.structures.find((s) => s.role === 'primary') ?? fullQuote.structures[0]
+  const primaryIntent = (primary?.inputs?.intent ?? 'full_reroof') as RoofJobIntent
+  const rateCard = await loadRoofingRateCard(supabase, row.tenant_id, null)
+
+  let solarAddon: SolarQuoteAddon | null = null
+  try {
+    solarAddon = await detectSolarForJob({
+      quote: fullQuote,
+      // Re-scan always runs (the tradie explicitly attached photos) — pass a
+      // non-mock provider so the orchestrator's demo short-circuit is bypassed.
+      provider: row.provider === 'mock' ? 'manual' : row.provider ?? 'geoscape',
+      primaryIntent,
+      rateCard,
+      photos: parsed.data.photos,
+    })
+  } catch {
+    solarAddon = null
+  }
+
+  if (!solarAddon) {
+    return Response.json(
+      { ok: true, solar: null, detail: 'No existing solar or skylights detected from the photos.' },
+      { status: 200 },
+    )
+  }
+
+  const updatedQuote = { ...fullQuote, solar: solarAddon }
+  const { error: updErr } = await supabase
+    .from('roofing_measurements')
+    .update({
+      quote: updatedQuote,
+      // Invalidate the cached PDF so it regenerates with the solar line.
+      pdf_path: null,
+    })
+    .eq('id', row.id)
+  if (updErr) {
+    return Response.json({ ok: false, error: 'update_failed', detail: updErr.message }, { status: 200 })
+  }
+
+  return Response.json({ ok: true, solar: solarAddon }, { status: 200 })
 }

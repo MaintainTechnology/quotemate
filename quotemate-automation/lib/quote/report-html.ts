@@ -17,6 +17,18 @@ import {
   type TenantBranding,
 } from '../pdf/report-chrome'
 
+/**
+ * Bump whenever buildQuoteReportHtml's output changes in a way that should
+ * invalidate already-cached PDFs (mig 146 self-heal). lib/quote/pdf.ts stamps
+ * this into quotes.pdf_signature; a mismatch on download/send regenerates the
+ * PDF so a tradie's tier-mode change (or a template edit) is reflected without
+ * a manual/bulk job.
+ *
+ *   v2 (2026-06-25): tier-count-aware eyebrow / intro / heading — a single-tier
+ *   quote no longer prints "Good / Better / Best".
+ */
+export const REPORT_TEMPLATE_VERSION = 2
+
 export type QuoteReportLineItem = {
   description: string
   quantity: number
@@ -121,13 +133,22 @@ export function buildQuoteReportHtml(input: QuoteReportInput): string {
     .map((key) => tierSection(key, input[key], input.selectedTier === key))
     .join('')
 
+  // Mig 146 — eyebrow / intro / heading wording follows how many tiers are
+  // actually visible. The caller (lib/quote/pdf.ts) has already filtered
+  // good/better/best to the tenant's tier mode, so a single-tier quote reads
+  // as one quote — not "Good / Better / Best"; two or more keeps the tiered
+  // framing. Count-driven so it is correct for every mode (single, forced-one,
+  // and a good_better_best quote that only ended up with one priced tier).
+  const visibleTierCount = (['good', 'better', 'best'] as const).filter((k) => input[k]).length
+  const multiTier = visibleTierCount >= 2
+
   const assumptions = (input.assumptions ?? []).filter((a) => a && a.trim()) as string[]
 
   let body = ''
   if (input.scopeOfWorks) {
     body += `<h2>Scope of works</h2><div class="scope">${esc(input.scopeOfWorks)}</div>`
   }
-  body += `<h2>Your options</h2>${tiers}`
+  body += `<h2>${multiTier ? 'Your options' : 'Your quote'}</h2>${tiers}`
   if (assumptions.length > 0) {
     body += `<h2>Assumptions</h2><ul class="bullets">${assumptions
       .map((a) => `<li>${esc(a)}</li>`)
@@ -140,13 +161,15 @@ export function buildQuoteReportHtml(input: QuoteReportInput): string {
 
   return renderReportDocument(branding, {
     docTitle: `Quote — ${branding.businessName}`,
-    eyebrow: 'Customer quote · Good / Better / Best',
+    eyebrow: multiTier ? 'Customer quote · Good / Better / Best' : 'Customer quote',
     dateLabel: date,
     customerName: input.customerName ?? null,
     customerContact: input.estimatedTimeframe ? `Est. timeframe: ${input.estimatedTimeframe}` : null,
     introHtml: `Thank you for the opportunity to quote for <strong>${esc(
       job,
-    )}</strong>. Your Good / Better / Best options are set out below.`,
+    )}</strong>. ${
+      multiTier ? 'Your Good / Better / Best options are' : 'Your quote is'
+    } set out below.`,
     bodyHtml: body,
     pleaseNote: QUOTE_PLEASE_NOTE,
     closingLine,

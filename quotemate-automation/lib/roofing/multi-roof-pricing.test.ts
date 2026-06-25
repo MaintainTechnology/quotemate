@@ -43,8 +43,9 @@ function inputs(overrides: Partial<RoofUserInputs> = {}): RoofUserInputs {
 describe('call-out minimum floor', () => {
   it('raises a tiny shed Good tier to the floor and flags it', () => {
     // 12 m² shed → better = 12 × 95 = 1140; good = 1140 × 0.20 = 228.
+    // Gable shed → no hip/valley edge works, so the floor is tested alone.
     const r = calculateRoofingPrice({
-      metrics: metrics({ footprint_m2: 11, sloped_area_m2: 12, storeys: 1, form: 'gable', buildingId: 'b-shed' }),
+      metrics: metrics({ footprint_m2: 11, sloped_area_m2: 12, storeys: 1, form: 'gable', hips: 0, valleys: 0, buildingId: 'b-shed' }),
       inputs: inputs(),
     })
     expect(r.tiers[0].ex_gst).toBe(550) // good floored from 228 → 550
@@ -53,7 +54,8 @@ describe('call-out minimum floor', () => {
   })
 
   it('does NOT bind on a full-size house (no flag, exact tier maths preserved)', () => {
-    const r = calculateRoofingPrice({ metrics: metrics(), inputs: inputs() })
+    // Gable so the good = better × 0.20 relationship is isolated from edge works.
+    const r = calculateRoofingPrice({ metrics: metrics({ form: 'gable', hips: 0, valleys: 0 }), inputs: inputs() })
     expect(r.tiers[1].ex_gst).toBe(20_900) // 220 × 95
     expect(r.tiers[0].ex_gst).toBeCloseTo(20_900 * 0.2, 1) // good = better × 0.20, NOT floored
     expect(r.call_out_minimum_applied).toBe(false)
@@ -169,5 +171,45 @@ describe('priceMultiRoof — per-structure pricing + aggregation', () => {
     const card = { ...DEFAULT_ROOFING_RATE_CARD, reroof_rate_per_m2: { ...DEFAULT_ROOFING_RATE_CARD.reroof_rate_per_m2, colorbond_trimdek: 100 } }
     const q = priceMultiRoof({ structures: [shed], rateCard: card })
     expect(q.structures[0].price.tiers[1].ex_gst).toBe(50 * 100) // 5,000
+  })
+})
+
+describe('tier ordering invariant — combined multi-roof (tier-ordering-fix spec)', () => {
+  it('combined terracotta dwelling + corrugated shed stays monotonic (Re-roof ≤ Upgrade)', () => {
+    const terracottaHouse: RoofStructureInput = {
+      buildingId: 'b-house',
+      role: 'primary',
+      metrics: metrics({ footprint_m2: 200, sloped_area_m2: 220, buildingId: 'b-house' }),
+      inputs: inputs({ material: 'terracotta_tile' }),
+    }
+    const corrugatedShed: RoofStructureInput = {
+      buildingId: 'b-shed',
+      role: 'secondary',
+      metrics: metrics({ footprint_m2: 45, sloped_area_m2: 50, form: 'gable', hips: 0, valleys: 0, buildingId: 'b-shed' }),
+      inputs: inputs({ material: 'colorbond_corrugated' }),
+    }
+    const c = priceMultiRoof({ structures: [terracottaHouse, corrugatedShed] }).combined.tiers
+    expect(c[0].ex_gst).toBeLessThanOrEqual(c[1].ex_gst)
+    expect(c[1].ex_gst).toBeLessThanOrEqual(c[2].ex_gst)
+    // Re-roof = terracotta 220×130 + corrugated 50×90 = 33,100
+    expect(c[1].ex_gst).toBe(220 * 130 + 50 * 90)
+    // Upgrade = terracotta backstop 220×130 + corrugated→Klip-Lok 50×115 = 34,350
+    expect(c[2].ex_gst).toBe(220 * 130 + 50 * 115)
+  })
+
+  it('a rate-card overlay that lifts a material above its upgrade target stays monotonic', () => {
+    // Spandek overlaid to $200/m² — above the Klip-Lok upgrade ($115). The
+    // backstop must keep Upgrade ≥ Re-roof rather than inverting.
+    const card = {
+      ...DEFAULT_ROOFING_RATE_CARD,
+      reroof_rate_per_m2: { ...DEFAULT_ROOFING_RATE_CARD.reroof_rate_per_m2, colorbond_spandek: 200 },
+    }
+    const t = calculateRoofingPrice({
+      metrics: metrics({ form: 'gable', hips: 0, valleys: 0 }),
+      inputs: inputs({ material: 'colorbond_spandek' }),
+      rateCard: card,
+    }).tiers
+    expect(t[1].ex_gst).toBe(220 * 200) // Re-roof at the overlaid rate
+    expect(t[2].ex_gst).toBeGreaterThanOrEqual(t[1].ex_gst) // Upgrade not below
   })
 })

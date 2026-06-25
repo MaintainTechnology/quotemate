@@ -16,6 +16,8 @@ import { geminiProvider } from '@/lib/ig-engine/providers/gemini'
 import {
   buildSolarDetectPrompt,
   computeSolarAllowance,
+  detectSolarFromPhotos,
+  mergeSolarDetections,
   parseSolarDetection,
   solarAllowanceConfigFromCard,
   SOLAR_DETECTION_SCHEMA,
@@ -37,6 +39,13 @@ const BodySchema = z.object({
   center: z.object({ lat: z.number(), lng: z.number() }).optional(),
   intent: z
     .enum(['full_reroof', 'patch_repair', 'leak_trace', 'gutter_replace', 'ridge_cap', 'flashing_repair', 'unknown'])
+    .optional(),
+  /** Optional close-up roof photos (customer- or tradie-supplied) — when
+   *  present we run the Anthropic photo pass and merge it with the aerial
+   *  read. base64 (no data: prefix) + mime. Capped server-side. */
+  photos: z
+    .array(z.object({ base64: z.string().min(1), mime: z.string().min(3).max(60) }))
+    .max(6)
     .optional(),
 })
 
@@ -95,7 +104,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return Response.json({ ok: false, error: 'invalid_request', issues: parsed.error.issues }, { status: 400 })
   }
-  const { address, center, intent } = parsed.data
+  const { address, center, intent, photos } = parsed.data
 
   // Resolve the tenant's rate card for the (configurable) allowance.
   let rateCard = DEFAULT_ROOFING_RATE_CARD
@@ -136,7 +145,17 @@ export async function POST(req: Request) {
       model: SOLAR_VISION_MODEL,
       responseSchema: SOLAR_DETECTION_SCHEMA,
     })
-    const detection = parseSolarDetection(text)
+    const aerial = parseSolarDetection(text, 'aerial')
+
+    // 2b. Optional Anthropic photo pass — close-up customer/tradie photos.
+    // Best-effort: a null result (no key / parse fail) just leaves the
+    // aerial read to stand on its own via the merge.
+    const photo =
+      photos && photos.length > 0
+        ? await detectSolarFromPhotos(photos.map((p) => ({ base64: p.base64, mime: p.mime })))
+        : null
+
+    const detection = mergeSolarDetections(aerial, photo)
     if (!detection) {
       return Response.json({ ok: false, code: 'vision_unparsable' }, { status: 200 })
     }

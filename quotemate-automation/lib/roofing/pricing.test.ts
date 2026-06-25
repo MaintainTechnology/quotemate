@@ -6,7 +6,9 @@ import {
   DEFAULT_ROOFING_RATE_CARD,
   applicableLoadings,
   calculateRoofingPrice,
+  deriveEdgeWorks,
   formLabel,
+  perEdgeLength,
   requiresInspection,
   slopedAreaFromFootprint,
   __test_only__,
@@ -14,6 +16,7 @@ import {
 import type {
   RoofMetrics,
   RoofUserInputs,
+  RoofingPriceTier,
   RoofingRateCard,
 } from './types'
 
@@ -174,8 +177,14 @@ describe('calculateRoofingPrice — happy path full re-roof', () => {
     expect(result.tiers[2].ex_gst).toBe(25_300)
   })
 
-  it('good-tier = better × 0.20 (patch scope)', () => {
-    expect(result.tiers[0].ex_gst).toBeCloseTo(result.tiers[1].ex_gst * 0.20, 1)
+  it('good-tier = better × 0.20 (patch scope) on a gable roof with no edge works', () => {
+    // Isolate the scope-fraction relationship on a roof with no hips/valleys
+    // so charged edge works on the good tier don't perturb the ratio.
+    const gable = calculateRoofingPrice({
+      metrics: baseMetrics({ form: 'gable', hips: 0, valleys: 0 }),
+      inputs: baseInputs(),
+    })
+    expect(gable.tiers[0].ex_gst).toBeCloseTo(gable.tiers[1].ex_gst * 0.20, 1)
   })
 
   it('has no loadings applied for a single-storey Colorbond job', () => {
@@ -286,6 +295,232 @@ describe('roof types — Corrugated + Spandek COLORBOND (roof-types spec)', () =
     })
     // Best uses upgrade_material (colorbond_kliplok, $115) → area × 115.
     expect(q.tiers[2].ex_gst).toBe(220 * 115)
+  })
+})
+
+describe('tier ordering invariant — Patch ≤ Re-roof ≤ Upgrade (tier-ordering-fix spec)', () => {
+  const PRICEABLE_MATERIALS: RoofUserInputs['material'][] = [
+    'colorbond_corrugated',
+    'colorbond_trimdek',
+    'colorbond_spandek',
+    'colorbond_kliplok',
+    'concrete_tile',
+    'terracotta_tile',
+  ]
+
+  it('keeps every priceable material monotonic good ≤ better ≤ best (ex + inc GST)', () => {
+    for (const material of PRICEABLE_MATERIALS) {
+      const t = calculateRoofingPrice({ metrics: baseMetrics(), inputs: baseInputs({ material }) }).tiers
+      expect(t[0].ex_gst, `${material} good≤better`).toBeLessThanOrEqual(t[1].ex_gst)
+      expect(t[1].ex_gst, `${material} better≤best`).toBeLessThanOrEqual(t[2].ex_gst)
+      expect(t[0].inc_gst).toBeLessThanOrEqual(t[1].inc_gst)
+      expect(t[1].inc_gst).toBeLessThanOrEqual(t[2].inc_gst)
+    }
+  })
+
+  it('terracotta no longer inverts: Upgrade is not cheaper than Re-roof (the reported bug)', () => {
+    // Existing terracotta rate ($130) exceeds the old fixed upgrade ($115).
+    // Pre-fix this made Re-roof ($130) > Upgrade ($115). Now Upgrade
+    // backstops to the dearer of the two, so it is never below Re-roof.
+    const t = calculateRoofingPrice({
+      metrics: baseMetrics(),
+      inputs: baseInputs({ material: 'terracotta_tile' }),
+    }).tiers
+    expect(t[1].ex_gst).toBe(220 * 130) // Re-roof in terracotta
+    expect(t[2].ex_gst).toBeGreaterThanOrEqual(t[1].ex_gst) // Upgrade ≥ Re-roof
+  })
+
+  it('concrete tile upgrades to terracotta — a genuinely dearer Best tier', () => {
+    const t = calculateRoofingPrice({
+      metrics: baseMetrics(),
+      inputs: baseInputs({ material: 'concrete_tile' }),
+    }).tiers
+    expect(t[1].ex_gst).toBe(220 * 95) // Re-roof in concrete tile
+    expect(t[2].ex_gst).toBe(220 * 130) // Upgrade to terracotta
+  })
+
+  it('resolves the upgrade ladder within material families', () => {
+    const { upgradeMaterialFor } = __test_only__
+    expect(upgradeMaterialFor('colorbond_corrugated', DEFAULT_ROOFING_RATE_CARD)).toBe('colorbond_kliplok')
+    expect(upgradeMaterialFor('concrete_tile', DEFAULT_ROOFING_RATE_CARD)).toBe('terracotta_tile')
+    // Top-of-family materials map to themselves (backstop keeps Best ≥ Better).
+    expect(upgradeMaterialFor('terracotta_tile', DEFAULT_ROOFING_RATE_CARD)).toBe('terracotta_tile')
+    expect(upgradeMaterialFor('colorbond_kliplok', DEFAULT_ROOFING_RATE_CARD)).toBe('colorbond_kliplok')
+  })
+
+  it('keeps honest copy when Upgrade is the same material (terracotta)', () => {
+    const best = calculateRoofingPrice({
+      metrics: baseMetrics(),
+      inputs: baseInputs({ material: 'terracotta_tile' }),
+    }).tiers[2]
+    expect(best.label).toMatch(/premium grade/i)
+    expect(best.label).not.toMatch(/upgrade material/i)
+    // Scope must not claim a different "upgrade material".
+    expect(best.scope).not.toMatch(/as a material upgrade/i)
+    expect(best.scope).toMatch(/premium-grade terracotta/i)
+  })
+
+  it('keeps the genuine-upgrade copy when Upgrade is a different material (corrugated → Klip-Lok)', () => {
+    const best = calculateRoofingPrice({
+      metrics: baseMetrics(),
+      inputs: baseInputs({ material: 'colorbond_corrugated' }),
+    }).tiers[2]
+    expect(best.label).toMatch(/upgrade material/i)
+    expect(best.scope).toMatch(/klip-lok/i)
+    expect(best.scope).toMatch(/as a material upgrade/i)
+  })
+
+  it('tripwire throws on a synthetically inverted (better > best) tier set', () => {
+    const { assertTierMonotonic } = __test_only__
+    const ordered = [
+      { tier: 'good', ex_gst: 100 },
+      { tier: 'better', ex_gst: 200 },
+      { tier: 'best', ex_gst: 300 },
+    ] as unknown as RoofingPriceTier[]
+    const inverted = [
+      { tier: 'good', ex_gst: 100 },
+      { tier: 'better', ex_gst: 300 },
+      { tier: 'best', ex_gst: 200 },
+    ] as unknown as RoofingPriceTier[]
+    expect(() => assertTierMonotonic(ordered, 'test')).not.toThrow()
+    expect(() => assertTierMonotonic(inverted, 'test')).toThrow(/inversion/i)
+  })
+})
+
+describe('perEdgeLength + deriveEdgeWorks — geometry derivation', () => {
+  it('derives per-edge length from footprint + declared pitch (geometry source)', () => {
+    // s=√200=14.14, /2=7.07, ×1/cos(22.5°)=×1.082 ≈ 7.7 m
+    const { lengthM, source } = perEdgeLength(baseMetrics({ footprint_m2: 200 }), 'standard')
+    expect(source).toBe('geometry')
+    expect(lengthM).toBeCloseTo(7.7, 1)
+  })
+
+  it('prefers measured pitch_degrees over the declared bucket', () => {
+    // 45° → factor 1/cos(45°)=1.414 → 7.07 × 1.414 ≈ 10.0 m
+    const measured = perEdgeLength(baseMetrics({ footprint_m2: 200, pitch_degrees: 45 }), 'standard')
+    expect(measured.lengthM).toBeCloseTo(10.0, 1)
+  })
+
+  it('clamps to the [3, 20] m range', () => {
+    expect(perEdgeLength(baseMetrics({ footprint_m2: 10000 }), 'standard').lengthM).toBe(20)
+    expect(perEdgeLength(baseMetrics({ footprint_m2: 4 }), 'shallow').lengthM).toBe(3)
+  })
+
+  it('falls back to the fixed average when footprint is unusable', () => {
+    const { lengthM, source } = perEdgeLength(baseMetrics({ footprint_m2: 0 }), 'standard')
+    expect(source).toBe('fallback')
+    expect(lengthM).toBe(6.0)
+  })
+
+  it('falls back when the pitch has no representative angle (unknown)', () => {
+    expect(perEdgeLength(baseMetrics({ footprint_m2: 200 }), 'unknown').source).toBe('fallback')
+  })
+
+  it('derives lm from counts; 0 → 0 lm, null → null lm (never fabricated)', () => {
+    const hip = deriveEdgeWorks(baseMetrics({ footprint_m2: 200, hips: 4, valleys: 0 }), 'standard')
+    expect(hip.hips_lm).toBeCloseTo(30.8, 1) // 4 × 7.7
+    expect(hip.valleys_lm).toBe(0)
+    const unknown = deriveEdgeWorks(baseMetrics({ hips: null, valleys: null }), 'standard')
+    expect(unknown.hips_lm).toBeNull()
+    expect(unknown.valleys_lm).toBeNull()
+  })
+})
+
+describe('calculateRoofingPrice — edge works (hips/valleys)', () => {
+  const { roundTo } = __test_only__
+  const sumLineItems = (t: { line_items?: { total_ex_gst: number }[] }) =>
+    roundTo((t.line_items ?? []).reduce((a, li) => a + li.total_ex_gst, 0), 2)
+
+  it('charges hip repointing on the good tier of a full re-roof and adds it to ex_gst', () => {
+    const r = calculateRoofingPrice({ metrics: baseMetrics({ hips: 4, valleys: 0 }), inputs: baseInputs() })
+    const good = r.tiers[0]
+    const hipLine = good.line_items?.find((li) => li.unit === 'lm')
+    expect(hipLine).toBeDefined()
+    expect(hipLine?.quantity).toBeCloseTo(30.8, 1)
+    expect(hipLine?.total_ex_gst).toBeCloseTo(30.8 * 12, 1)
+    // good = better×0.20 (4180) + hip cost
+    expect(good.ex_gst).toBeCloseTo(4180 + 30.8 * 12, 1)
+  })
+
+  it('shows hip/valley lines at $0 (included) on full re-roof better/best, totals unchanged', () => {
+    const r = calculateRoofingPrice({ metrics: baseMetrics({ hips: 4, valleys: 0 }), inputs: baseInputs() })
+    const better = r.tiers[1]
+    const hipLine = better.line_items?.find((li) => li.unit === 'lm')
+    expect(hipLine).toBeDefined()
+    expect(hipLine?.total_ex_gst).toBe(0)
+    expect(hipLine?.description).toMatch(/included/i)
+    expect(better.ex_gst).toBe(20_900) // unchanged from the no-edge-works baseline
+  })
+
+  it('charges edge works on ALL tiers for a repair intent', () => {
+    const r = calculateRoofingPrice({
+      metrics: baseMetrics({ hips: 4, valleys: 0 }),
+      inputs: baseInputs({ intent: 'patch_repair' }),
+    })
+    for (const t of r.tiers) {
+      const hipLine = t.line_items?.find((li) => li.unit === 'lm')
+      expect(hipLine?.total_ex_gst).toBeGreaterThan(0)
+    }
+  })
+
+  it('prices valley flashing at $45/lm where charged (gable_hip)', () => {
+    const r = calculateRoofingPrice({
+      metrics: baseMetrics({ form: 'gable_hip', hips: 2, valleys: 1 }),
+      inputs: baseInputs({ intent: 'flashing_repair' }),
+    })
+    const valleyLine = r.tiers[0].line_items?.find((li) => /valley/i.test(li.description))
+    expect(valleyLine).toBeDefined()
+    expect(valleyLine?.unit_price_ex_gst).toBe(45)
+  })
+
+  it('keeps sum(line_items.total_ex_gst) === tier.ex_gst for every tier', () => {
+    for (const intent of ['full_reroof', 'patch_repair'] as const) {
+      const r = calculateRoofingPrice({
+        metrics: baseMetrics({ form: 'gable_hip', hips: 2, valleys: 1 }),
+        inputs: baseInputs({ intent }),
+      })
+      for (const t of r.tiers) {
+        expect(sumLineItems(t)).toBe(t.ex_gst)
+      }
+    }
+  })
+
+  it('exposes edge_works with counts, lm and length_source', () => {
+    const r = calculateRoofingPrice({ metrics: baseMetrics({ hips: 4, valleys: 0 }), inputs: baseInputs() })
+    expect(r.edge_works?.hips_count).toBe(4)
+    expect(r.edge_works?.hips_lm).toBeCloseTo(30.8, 1)
+    expect(r.edge_works?.length_source).toBe('geometry')
+  })
+
+  it('does not fabricate edge works for unknown-form roofs (null counts)', () => {
+    const r = calculateRoofingPrice({
+      metrics: baseMetrics({ form: 'unknown', hips: null, valleys: null }),
+      inputs: baseInputs(),
+    })
+    expect(r.edge_works?.hips_count).toBeNull()
+    for (const t of r.tiers) {
+      expect(t.line_items?.some((li) => li.unit === 'lm')).toBe(false)
+    }
+  })
+
+  it('price_edge_works:false reproduces the pre-edge-works totals and a single line', () => {
+    const card: RoofingRateCard = { ...DEFAULT_ROOFING_RATE_CARD, price_edge_works: false }
+    const r = calculateRoofingPrice({
+      metrics: baseMetrics({ hips: 4 }),
+      inputs: baseInputs(),
+      rateCard: card,
+    })
+    expect(r.tiers[0].ex_gst).toBeCloseTo(4180, 1) // good = better×0.20, no edge
+    for (const t of r.tiers) expect(t.line_items).toHaveLength(1)
+    expect(r.edge_works).toBeUndefined()
+  })
+
+  it('gable roof (no hips/valleys) produces a single line per tier', () => {
+    const r = calculateRoofingPrice({
+      metrics: baseMetrics({ form: 'gable', hips: 0, valleys: 0 }),
+      inputs: baseInputs(),
+    })
+    for (const t of r.tiers) expect(t.line_items).toHaveLength(1)
   })
 })
 

@@ -14,9 +14,12 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { renderPdfFromHtml, gotenbergConfigured } from '@/lib/pdf/gotenberg'
-import { buildQuoteReportHtml, type QuoteReportTier } from './report-html'
+import { buildQuoteReportHtml, REPORT_TEMPLATE_VERSION, type QuoteReportTier } from './report-html'
 import { asQuoteTierMode, resolveVisibleTiers, type QuoteTierMode } from './tier-visibility'
+import { quotePdfIsStale, quotePdfSignature } from './pdf-signature'
 import { buildRoofQuoteReportHtml } from '@/lib/roofing/report-html'
+import { roofOutlineImageSrc, type RoofOutlineStructure } from '@/lib/roofing/roof-outline-svg'
+import { structureImageRefs, structureStaticMapPath } from '@/lib/roofing/structure-images'
 import type { MultiRoofQuote } from '@/lib/roofing/types'
 import type { RoofDisplayRow } from '@/lib/roofing/selection'
 import { buildSolarQuoteReportHtml } from '@/lib/solar/report-html'
@@ -120,6 +123,7 @@ type QuotePdfRow = {
   estimated_timeframe: string | null
   needs_inspection: boolean | null
   pdf_path: string | null
+  pdf_signature: string | null
 }
 
 type RoofPdfRow = {
@@ -194,7 +198,7 @@ export async function ensureQuotePdf(
     const { data: quote } = await supabase()
       .from('quotes')
       .select(
-        'id, tenant_id, intake_id, share_token, good, better, best, selected_tier, scope_of_works, assumptions, estimated_timeframe, needs_inspection, pdf_path',
+        'id, tenant_id, intake_id, share_token, good, better, best, selected_tier, scope_of_works, assumptions, estimated_timeframe, needs_inspection, pdf_path, pdf_signature',
       )
       .eq('id', quoteId)
       .maybeSingle<QuotePdfRow>()
@@ -202,7 +206,6 @@ export async function ensureQuotePdf(
     // Inspection-routed quotes carry no committable prices — a "quote PDF"
     // would put indicative numbers in a document that reads as final.
     if (quote.needs_inspection) return null
-    if (quote.pdf_path && !opts.regenerate) return quote.pdf_path
 
     const intakeRes = quote.intake_id
       ? await supabase()
@@ -233,6 +236,29 @@ export async function ensureQuotePdf(
     })
     const visibleTierSet = new Set(visibleTierKeys)
     const showRecommended = visibleTierKeys.length > 1
+    const recommendedTier = showRecommended ? quote.selected_tier : null
+
+    // Mig 146 — self-heal: serve the cached PDF only when it was rendered from
+    // the SAME template version + tier mode + visible tiers + recommended tier.
+    // A tradie flipping the Pricing-settings tier mode (or a template bump)
+    // changes the signature, so the next download/send regenerates instead of
+    // serving a stale Good/Better/Best PDF.
+    const freshSignature = quotePdfSignature({
+      templateVersion: REPORT_TEMPLATE_VERSION,
+      tierMode,
+      visibleTierKeys,
+      recommendedTier,
+    })
+    if (
+      !quotePdfIsStale({
+        pdfPath: quote.pdf_path,
+        storedSignature: quote.pdf_signature,
+        freshSignature,
+        regenerate: opts.regenerate,
+      })
+    ) {
+      return quote.pdf_path
+    }
 
     const branding = await loadTenantBranding(supabase(), quote.tenant_id, intakeTrade)
     const html = buildQuoteReportHtml({
@@ -246,12 +272,15 @@ export async function ensureQuotePdf(
       good: visibleTierSet.has('good') ? quote.good : null,
       better: visibleTierSet.has('better') ? quote.better : null,
       best: visibleTierSet.has('best') ? quote.best : null,
-      selectedTier: showRecommended ? quote.selected_tier : null,
+      selectedTier: recommendedTier,
       quoteViewUrl: `${APP_URL}/q/${quote.share_token}`,
     })
     const pdf = await renderQuotePdfCapped(html, `quote:${quoteId}`)
     const path = await storePdf(`quotes/${quoteId}.pdf`, pdf)
-    await supabase().from('quotes').update({ pdf_path: path }).eq('id', quoteId)
+    await supabase()
+      .from('quotes')
+      .update({ pdf_path: path, pdf_signature: freshSignature })
+      .eq('id', quoteId)
     return path
   } catch (e) {
     console.error('[quote-pdf] ensureQuotePdf failed (non-fatal)', {
@@ -287,11 +316,50 @@ export async function ensureRoofQuotePdf(
     const quote = opts.quote ?? row.quote
     if (!quote) return null
     const branding = await loadTenantBranding(supabase(), row.tenant_id, 'roofing')
-    // Aerial/outline image — fetched + compressed to a compact data URI
-    // (spec R6/R11); null (e.g. Gotenberg/dev or no imagery) omits the figure.
-    const mapImageSrc = await prepareImage(
-      `${APP_URL}/api/roofing/q/${publicToken}/static-map`,
-    )
+    // Hero figure — the coloured roof outline tracing on a plain white
+    // background, drawn from the stored footprint polygon(s) (spec
+    // roof-pdf-outline-tracing). Draw EVERY detected structure when displayRows
+    // is supplied (included solid, excluded faint/dashed); else the narrowed
+    // quote's structures, all included. Self-contained data URI — no fetch.
+    const outlineStructures: RoofOutlineStructure[] =
+      opts.displayRows && opts.displayRows.length
+        ? opts.displayRows.map((r) => ({
+            polygon: r.structure.metrics?.polygon_geojson,
+            form: r.structure.metrics?.form ?? 'unknown',
+            included: r.included,
+          }))
+        : quote.structures.map((s) => ({
+            polygon: s.metrics?.polygon_geojson,
+            form: s.metrics?.form ?? 'unknown',
+            included: true,
+          }))
+    const outlineImageSrc = roofOutlineImageSrc(outlineStructures, { width: 1000, height: 750 })
+
+    // Aerial photo(s). One per INCLUDED structure, each centred on its building
+    // via static-map ?b=. Map the rendered (narrowed/included) structures back
+    // to their 1-based index in the FULL stored quote (row.quote) by buildingId,
+    // because the static-map endpoint indexes the full quote and the rendered
+    // quote may be a re-ordered subset from a separate DB read. Deriving this
+    // INSIDE ensureRoofQuotePdf means every entry point (download route, SMS
+    // send, file-store) gets the multi-structure aerials, even those that pass a
+    // narrowed `quote` and no `displayRows`. Single structure → keep the legacy
+    // single no-?b aerial as the figure-pair thumb (byte-identical to before).
+    // (spec roofing-pdf-multi-structure-images R2)
+    const imageRefs = structureImageRefs(row.quote?.structures, quote.structures)
+    let structureImages: { label: string; src: string | null }[] | undefined
+    let mapImageSrc: string | null = null
+    if (imageRefs.length > 1) {
+      structureImages = await Promise.all(
+        imageRefs.map(async (r) => ({
+          label: r.label,
+          src: await prepareImage(`${APP_URL}${structureStaticMapPath(publicToken, r.index1Based)}`),
+        })),
+      )
+    } else {
+      mapImageSrc = await prepareImage(
+        `${APP_URL}/api/roofing/q/${publicToken}/static-map`,
+      )
+    }
 
     const html = buildRoofQuoteReportHtml({
       businessName: branding.businessName,
@@ -299,7 +367,9 @@ export async function ensureRoofQuotePdf(
       address: row.address ?? '',
       quote,
       displayRows: opts.displayRows,
+      outlineImageSrc,
       mapImageSrc,
+      structureImages,
       quoteViewUrl: `${APP_URL}/q/roof/${publicToken}`,
     })
     const pdf = await renderQuotePdfCapped(html, `roof:${publicToken}`)

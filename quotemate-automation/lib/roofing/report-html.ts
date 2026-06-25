@@ -11,6 +11,7 @@ import {
   renderReportDocument,
   renderPart,
   renderFigure,
+  renderFigurePair,
   brandingFromName,
   esc,
   aud0,
@@ -32,8 +33,24 @@ export type RoofReportInput = {
    */
   displayRows?: RoofDisplayRow[]
   quoteViewUrl?: string | null
-  /** Optional aerial/outline image (already a data: URI or fetchable URL). */
+  /**
+   * Hero roof figure: the coloured outline tracing on a plain background as a
+   * data: URI (built by lib/roofing/roof-outline-svg.ts). Null ⇒ no usable
+   * geometry; the figure falls back to the aerial reference alone.
+   */
+  outlineImageSrc?: string | null
+  /** Secondary aerial reference thumbnail (already a data: URI or fetchable URL). */
   mapImageSrc?: string | null
+  /**
+   * One AERIAL image per INCLUDED structure (the caller omits excluded ones),
+   * each centred on its building, captioned with the structure label. When 2+
+   * are supplied the report shows the combined outline hero followed by one
+   * captioned aerial per structure — fixing the old behaviour where only the
+   * first structure's aerial appeared. 0–1 entries fall back to the existing
+   * outline-hero + single aerial-thumb pair, so single-structure quotes are
+   * unchanged. (spec specs/roofing-pdf-multi-structure-images.md R3)
+   */
+  structureImages?: { label: string; src: string | null }[]
   generatedAt?: Date
 }
 
@@ -195,11 +212,27 @@ export function buildRoofQuoteReportHtml(input: RoofReportInput): string {
     body += renderPart({ marker: 'B', title: 'Measured roof detail', bullets: measurementBullets(q) })
   }
 
-  // Optional aerial/outline figure (R6).
-  body += renderFigure(
-    input.mapImageSrc,
-    'Roof areas measured for this quote — outlined from aerial imagery.',
-  )
+  // Roof figure(s). The coloured outline tracing (hero) already draws EVERY
+  // structure; the AERIAL photo was the single-structure one (the bug Jon
+  // raised). With 2+ per-structure aerials, show the outline hero then one
+  // captioned aerial per included structure; with 0–1, keep the existing
+  // outline-hero + aerial-thumb pair byte-for-byte so single-structure quotes
+  // are unchanged (spec roofing-pdf-multi-structure-images R3; the outline
+  // caption no longer claims the aerial photo itself is the outline).
+  const aerials = (input.structureImages ?? []).filter((f) => f.src)
+  if (aerials.length > 1) {
+    body += renderFigure(input.outlineImageSrc, 'Roof outline traced from your measured roof areas.')
+    for (const f of aerials) {
+      body += renderFigure(f.src, `${f.label} — aerial reference, measured from satellite imagery.`)
+    }
+  } else {
+    body += renderFigurePair({
+      heroSrc: input.outlineImageSrc,
+      heroCaption: 'Roof outline traced from your measured roof areas.',
+      thumbSrc: input.mapImageSrc,
+      thumbCaption: 'Aerial reference — measured from satellite imagery.',
+    })
+  }
 
   // Per-structure breakdown table (kept from the prior report).
   body += `

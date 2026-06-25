@@ -48,7 +48,9 @@ describe('fmtAud', () => {
 
 describe('composeEstimateMessage', () => {
   const quote = priceMultiRoof({ structures: [house, shed] })
-  const msg = composeEstimateMessage({ ...CTX, quote })
+  // Opt into all tiers (mig 146 flipped the no-mode fallback to 'single'); this
+  // block asserts the verbatim multi-tier price passthrough.
+  const msg = composeEstimateMessage({ ...CTX, quote, tierMode: 'good_better_best' })
 
   it('uses the deterministic combined tier prices verbatim (inc GST)', () => {
     expect(msg).toContain(fmtAud(quote.combined.tiers[0].inc_gst))
@@ -77,24 +79,74 @@ describe('composeEstimateMessage', () => {
 })
 
 describe('composeInspectionMessage + routing', () => {
-  // The PRIMARY (cement_sheet house) forces the whole job to inspection.
+  // A cement_sheet (asbestos) roof zeroes the patch/re-roof tiers but prices the
+  // Upgrade tier as a Colorbond strip-and-replace, so it DOES carry an indicative
+  // figure; it always routes to inspection. (A roof with no measurable area is the
+  // genuinely-unpriceable case below — all-zero tiers, price-free.)
   const asbestosHouse: RoofStructureInput = { ...house, inputs: inputs({ material: 'cement_sheet' }) }
-  const quote = priceMultiRoof({ structures: [asbestosHouse, shed] })
+  // A complex-form Colorbond roof routes to inspection too, but HAS real tiers.
+  const complexHouse: RoofStructureInput = {
+    ...house,
+    metrics: metrics({ buildingId: 'house', form: 'complex' }),
+  }
 
   it('routes to inspection when the PRIMARY needs it', () => {
+    const quote = priceMultiRoof({ structures: [asbestosHouse, shed] })
     expect(quote.routing.decision).toBe('inspection_required')
   })
-  it('the message states the next step + reason, with no tier price', () => {
+
+  it('inspection message states the next step + reason + link', () => {
+    const quote = priceMultiRoof({ structures: [asbestosHouse] })
     const msg = composeInspectionMessage({ ...CTX, quote })
     expect(msg).toMatch(/inspection on site/i)
     expect(msg).toContain(quote.routing.reason)
     expect(msg).toContain(CTX.quoteUrl)
     expect(msg).toMatch(/reply yes/i)
   })
-  it('buildRoofingReplyMessage dispatches by routing decision', () => {
+
+  it('a roof with no measurable area (all-zero tiers) carries NO dollar figure', () => {
+    // sloped_area null + zero footprint → every tier is $0 → genuinely
+    // unpriceable → the message stays price-free (page falls back to the
+    // $99 inspection-only state, never a $0 quote).
+    const noAreaHouse: RoofStructureInput = {
+      ...house,
+      metrics: metrics({ buildingId: 'house', sloped_area_m2: null, footprint_m2: 0 }),
+    }
+    const quote = priceMultiRoof({ structures: [noAreaHouse] })
+    const msg = composeInspectionMessage({ ...CTX, quote })
+    expect(msg).not.toMatch(/\$\d/)
+  })
+
+  it('an asbestos roof still shows its upgrade tier as an indicative number', () => {
+    // cement_sheet zeroes the patch/re-roof tiers but the UPGRADE tier prices
+    // a Colorbond replacement (a real rate), so there IS an indicative figure.
+    const quote = priceMultiRoof({ structures: [asbestosHouse] })
+    const best = quote.structures[0].price.tiers[2].inc_gst
+    expect(best).toBeGreaterThan(0)
+    const msg = composeInspectionMessage({ ...CTX, quote })
+    expect(msg).toMatch(/indicative/i)
+    expect(msg).toContain(fmtAud(best))
+  })
+
+  it('a complex (real-material) roof shows an INDICATIVE range, not a blank quote', () => {
+    const quote = priceMultiRoof({ structures: [complexHouse] })
+    expect(quote.routing.decision).toBe('inspection_required')
+    const better = quote.structures[0].price.tiers[1].inc_gst
+    expect(better).toBeGreaterThan(0)
+    const msg = composeInspectionMessage({ ...CTX, quote })
+    expect(msg).toMatch(/indicative/i)
+    expect(msg).toContain(fmtAud(better))
+  })
+
+  it('buildRoofingReplyMessage leads with a firm price whenever anything is quotable', () => {
     const clean = priceMultiRoof({ structures: [house, shed] })
     expect(buildRoofingReplyMessage({ ...CTX, quote: clean })).toMatch(/here's your roofing estimate/)
-    expect(buildRoofingReplyMessage({ ...CTX, quote })).toMatch(/inspection on site/i)
+    // Primary needs inspection but the shed is quotable → firm shed price.
+    const mixed = priceMultiRoof({ structures: [asbestosHouse, shed] })
+    expect(buildRoofingReplyMessage({ ...CTX, quote: mixed })).toMatch(/here's your roofing estimate/)
+    // Nothing quotable → the inspection message.
+    const allOnSite = priceMultiRoof({ structures: [asbestosHouse] })
+    expect(buildRoofingReplyMessage({ ...CTX, quote: allOnSite })).toMatch(/inspection on site/i)
   })
 })
 

@@ -3,6 +3,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { buildQuoteReportHtml, incGst, type QuoteReportTier } from './report-html'
+import { resolveVisibleTiers, type QuoteTierMode } from './tier-visibility'
 
 const tier = (label: string, exGst: number): QuoteReportTier => ({
   label,
@@ -72,4 +73,111 @@ describe('buildQuoteReportHtml', () => {
     expect(single).not.toContain('BEST')
     expect(single).toContain('hot water')
   })
+})
+
+// Spec quote-pdf-logo-fix — the electrical/plumbing builder must surface the
+// tenant logo (it flows branding → renderReportDocument) and fall back to the
+// business-name wordmark when no logo is configured, without throwing.
+describe('buildQuoteReportHtml — tenant logo (electrical/plumbing)', () => {
+  it('renders the tenant logo when branding.logoSrc is set', () => {
+    const html = buildQuoteReportHtml({
+      businessName: 'Atomic Electrical',
+      branding: { businessName: 'Atomic Electrical', logoSrc: 'data:image/png;base64,BBBB' },
+      jobType: 'downlights',
+      good: tier('Budget', 498),
+      better: null,
+      best: null,
+    })
+    expect(html).toContain('class="logo"')
+    expect(html).toContain('data:image/png;base64,BBBB')
+    expect(html).not.toContain('class="wordmark"')
+  })
+
+  it('falls back to the business-name wordmark when no logo is set', () => {
+    const html = buildQuoteReportHtml({
+      businessName: 'Oakcrest Electrical',
+      jobType: 'downlights',
+      good: tier('Budget', 498),
+      better: null,
+      best: null,
+    })
+    expect(html).toContain('class="wordmark"')
+    expect(html).toContain('Oakcrest Electrical')
+    expect(html).not.toContain('class="logo"')
+  })
+})
+
+// Mig 146 — the eyebrow / intro / heading wording follows the number of VISIBLE
+// tiers (the PDF service has already filtered good/better/best to the tenant's
+// Pricing-settings tier mode). One tier reads as a single quote with NO
+// "Good / Better / Best"; two or more keeps the tiered framing.
+describe('buildQuoteReportHtml — tier-count-aware wording (mig 146)', () => {
+  it('a single visible tier drops all "Good / Better / Best" wording', () => {
+    const html = buildQuoteReportHtml({
+      businessName: 'Oakcrest Electrical',
+      jobType: 'downlights',
+      good: tier('Standard LED', 558),
+      better: null,
+      best: null,
+    })
+    // Headline still shows the one priced tier...
+    expect(html).toContain('GOOD')
+    // ...but none of the multi-tier framing.
+    expect(html).not.toContain('Good / Better / Best')
+    expect(html).toContain('<h2>Your quote</h2>')
+    expect(html).not.toContain('<h2>Your options</h2>')
+  })
+
+  it('two or more visible tiers keep the Good / Better / Best framing', () => {
+    const html = buildQuoteReportHtml({
+      businessName: 'Oakcrest Electrical',
+      jobType: 'downlights',
+      good: tier('Standard LED', 558),
+      better: tier('Tri-colour LED', 720),
+      best: null,
+      selectedTier: 'better',
+    })
+    expect(html).toContain('Good / Better / Best')
+    expect(html).toContain('<h2>Your options</h2>')
+    expect(html).not.toContain('<h2>Your quote</h2>')
+  })
+})
+
+// Mig 146 — the PDF must render EXACTLY the tiers the tenant's mode resolves to.
+// This mirrors how lib/quote/pdf.ts filters good/better/best by
+// resolveVisibleTiers before calling the builder, across every tier mode.
+describe('buildQuoteReportHtml — renders exactly resolveVisibleTiers(...) (mig 146)', () => {
+  const priced = {
+    good: tier('Standard', 600),
+    better: tier('Mid', 800),
+    best: tier('Premium', 1100),
+  }
+  const present = { good: true, better: true, best: true }
+  const cases: Array<{
+    mode: QuoteTierMode
+    selected: 'good' | 'better' | 'best'
+    show: string[]
+    hide: string[]
+  }> = [
+    { mode: 'single', selected: 'better', show: ['BETTER'], hide: ['GOOD', 'BEST'] },
+    { mode: 'good', selected: 'better', show: ['GOOD'], hide: ['BETTER', 'BEST'] },
+    { mode: 'best', selected: 'better', show: ['BEST'], hide: ['GOOD', 'BETTER'] },
+    { mode: 'good_better_best', selected: 'better', show: ['GOOD', 'BETTER', 'BEST'], hide: [] },
+  ]
+  for (const c of cases) {
+    it(`mode '${c.mode}' renders exactly ${JSON.stringify(c.show)}`, () => {
+      const keys = resolveVisibleTiers({ mode: c.mode, present, selectedTier: c.selected })
+      const set = new Set(keys)
+      const html = buildQuoteReportHtml({
+        businessName: 'T',
+        jobType: 'downlights',
+        good: set.has('good') ? priced.good : null,
+        better: set.has('better') ? priced.better : null,
+        best: set.has('best') ? priced.best : null,
+        selectedTier: keys.length > 1 ? c.selected : null,
+      })
+      for (const marker of c.show) expect(html).toContain(marker)
+      for (const marker of c.hide) expect(html).not.toContain(marker)
+    })
+  }
 })
