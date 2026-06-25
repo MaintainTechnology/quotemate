@@ -58,6 +58,7 @@ import type {
   RoofingMultiMeasurementResult,
 } from '../types'
 import { slopedAreaFromFootprint } from '../pricing'
+import { fillEdgesFromGeometry } from '../geometry-edges'
 
 /** Max buildings fetched per address — bounds Geoscape credit cost
  *  (each building = a 4-call sub-resource fan-out). */
@@ -864,7 +865,10 @@ export function buildingDetailsToMetrics(
     d.planarArea && d.planarArea > 0 ? d.planarArea : Math.round(computed * 10) / 10
   if (!footprint || footprint <= 0) return null
   const form = normaliseGeoscapeRoofForm(d.roofShape)
-  return {
+  // Fill hip/valley counts from the footprint polygon when the form
+  // classifier can't (form 'unknown'/'complex' → null counts), so the
+  // measurement always carries real numbers instead of "?" on the UI.
+  return fillEdgesFromGeometry({
     footprint_m2: Math.round(footprint * 10) / 10,
     sloped_area_m2: slopedAreaFromFootprint(footprint, defaultPitch),
     storeys: d.storeys ?? null,
@@ -875,7 +879,7 @@ export function buildingDetailsToMetrics(
     polygon_geojson: polygon,
     capture_date: d.captureDate ?? null,
     buildingId: d.buildingId,
-  }
+  })
 }
 
 export function estimateHipsFromForm(form: RoofForm): number | null {

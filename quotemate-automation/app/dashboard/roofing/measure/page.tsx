@@ -23,6 +23,7 @@ import type {
   RoofingRoutingDecision,
 } from '@/lib/roofing/types'
 import { combinedTotalsForIndices } from '@/lib/roofing/selection'
+import { edgeStat } from '@/lib/roofing/geometry-edges'
 import { narrowQuoteToStructures } from '@/lib/sms/roofing-compose'
 import { RoofMap, type RoofMapBuilding } from '../_components/RoofMap'
 import { AddressAutocomplete } from '../_components/AddressAutocomplete'
@@ -879,6 +880,7 @@ function StructureCard({
   const m = structure.metrics
   const p = structure.price
   const inspection = p.routing.decision === 'inspection_required'
+  const edges = edgeStat(m, structure.inputs.pitch)
   return (
     <article
       onClick={onSelect}
@@ -902,7 +904,7 @@ function StructureCard({
       <div className="mt-5 grid gap-4 sm:grid-cols-3">
         <MiniStat label="Sloped area" value={m.sloped_area_m2 !== null ? `${m.sloped_area_m2.toFixed(0)} m²` : '—'} hint={m.footprint_m2 ? `Footprint ${m.footprint_m2.toFixed(0)} m²` : ''} />
         <MiniStat label="Roof form" value={m.form} hint={m.storeys !== null ? `${m.storeys}-storey` : ''} />
-        <MiniStat label="Hips · valleys" value={`${m.hips ?? '?'} · ${m.valleys ?? '?'}`} hint={m.buildingId ? `ID ${String(m.buildingId).slice(0, 10)}` : ''} />
+        <MiniStat label="Hips · valleys" value={`${edges.hips ?? '?'} · ${edges.valleys ?? '?'}`} hint={`≈ ${Math.round(edges.hips_lm ?? 0)} · ${Math.round(edges.valleys_lm ?? 0)} m`} />
       </div>
 
       <PitchProvenance metrics={m} declaredPitch={structure.inputs.pitch} />

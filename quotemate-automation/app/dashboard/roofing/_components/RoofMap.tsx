@@ -22,6 +22,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { GeoJSONPolygon, RoofForm, RoofMetrics } from '@/lib/roofing/types'
+import { edgesFromGeometry } from '@/lib/roofing/geometry-edges'
 import {
   classifyEdges,
   paddedBBox,
@@ -224,8 +225,8 @@ export function RoofMap({
               label="Sloped area"
               value={stats.sloped_area_m2 !== null ? `${stats.sloped_area_m2.toFixed(0)} m²` : '—'}
             />
-            <StatRow label="Hips" value={fmtCount(stats.hips)} />
-            <StatRow label="Valleys" value={fmtCount(stats.valleys)} />
+            <StatRow label="Hips" value={fmtCount(stats.hips ?? edgesFromGeometry(polygon, form).hips)} />
+            <StatRow label="Valleys" value={fmtCount(stats.valleys ?? edgesFromGeometry(polygon, form).valleys)} />
             <StatRow label="Storeys" value={fmtCount(stats.storeys)} />
           </ul>
         </div>

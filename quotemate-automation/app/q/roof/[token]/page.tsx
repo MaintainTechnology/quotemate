@@ -31,6 +31,7 @@ import type {
 } from '@/lib/roofing/types'
 import { partitionRoofQuote, resolveEffectiveIndices } from '@/lib/roofing/selection'
 import { structureStaticMapPath } from '@/lib/roofing/structure-images'
+import { edgeStat } from '@/lib/roofing/geometry-edges'
 import { indicativeCombinedTiers } from '@/lib/sms/roofing-compose'
 import { RoofMap, type RoofMapBuilding } from '@/app/dashboard/roofing/_components/RoofMap'
 
@@ -402,6 +403,7 @@ function StructureBreakdown({
 }) {
   const m = structure.metrics
   const p = structure.price
+  const edges = edgeStat(m, structure.inputs.pitch)
   const inspection = p.routing?.decision === 'inspection_required' || flagged
   return (
     <article className={`border border-ink-line bg-ink-card p-6 sm:p-7 ${excluded ? 'opacity-60' : ''}`}>
@@ -420,7 +422,7 @@ function StructureBreakdown({
       <div className="mt-5 grid gap-4 sm:grid-cols-4">
         <MiniStat label="Sloped area" value={m.sloped_area_m2 != null ? `${Math.round(m.sloped_area_m2)} m²` : '-'} hint={m.footprint_m2 ? `Footprint ${Math.round(m.footprint_m2)} m²` : ''} />
         <MiniStat label="Roof form" value={formLabel(m.form)} hint={m.storeys != null ? `${m.storeys}-storey` : ''} />
-        <MiniStat label="Hips · valleys" value={`${m.hips ?? '?'} · ${m.valleys ?? '?'}`} />
+        <MiniStat label="Hips · valleys" value={`${edges.hips ?? '?'} · ${edges.valleys ?? '?'}`} hint={`≈ ${Math.round(edges.hips_lm ?? 0)} · ${Math.round(edges.valleys_lm ?? 0)} m`} />
         {showPrices
           ? <MiniStat label="Rate" value={p.effective_rate_per_m2 ? `$${money(p.effective_rate_per_m2)}/m²` : '-'} hint={p.area_m2 ? `over ${Math.round(p.area_m2)} m²` : ''} />
           : <MiniStat label="Area" value={p.area_m2 ? `${Math.round(p.area_m2)} m²` : '-'} hint="sloped" />}
