@@ -88,6 +88,7 @@ export default function QuoteEditChat({
   accessToken,
   getCurrentTiers,
   onApplyProposal,
+  defaultOpen = false,
 }: {
   quoteId: string
   accessToken: string | null
@@ -95,8 +96,10 @@ export default function QuoteEditChat({
   getCurrentTiers: () => ProposedTiers
   /** Merge an accepted proposal into the structured editor state. */
   onApplyProposal: (proposed: ProposedTiers) => void
+  /** Start expanded — used when the viewer opens the editor via "Edit with AI". */
+  defaultOpen?: boolean
 }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(defaultOpen)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])

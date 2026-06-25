@@ -6165,6 +6165,17 @@ function QuoteCard({ q, isMultiTrade, accessToken }: { q: Quote; isMultiTrade: b
                   {!isInspection && q.share_token && (
                     <CopyDepositLink token={q.share_token} tier={q.selected_tier} />
                   )}
+                  {/* Open the in-dashboard PDF viewer where the tradie can edit
+                      the quote manually or with AI, then re-download. Hidden for
+                      inspection quotes (no priced PDF / nothing to edit). */}
+                  {!isInspection && q.share_token && (
+                    <Link
+                      href={`/dashboard/quote/${q.share_token}`}
+                      className="inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+                    >
+                      View PDF · Edit
+                    </Link>
+                  )}
                   {/* Download the full quote as a PDF. Hidden for inspection-
                       routed quotes — the /api/q/[token]/pdf route 404s those
                       (no committable price belongs in a final-looking doc). */}

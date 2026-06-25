@@ -10,6 +10,7 @@ import AuthNav from "../AuthNav"
 import ThemeToggle from "./ThemeToggle"
 import { BrandMark } from "./BrandMark"
 import { TradesMenu } from "./TradesMenu"
+import { MobileNav } from "./MobileNav"
 
 /* ─── Nav ─────────────────────────────────────────────────────── */
 // Section links resolve to the homepage (`/#…`) so they work from any
@@ -45,10 +46,11 @@ export function Nav() {
             FAQ
           </Link>
         </div>
-        <div className="flex items-center gap-2 md:gap-3">
+        <div className="hidden items-center gap-2 md:flex md:gap-3">
           <ThemeToggle />
           <AuthNav variant="nav" />
         </div>
+        <MobileNav />
       </div>
     </nav>
   )

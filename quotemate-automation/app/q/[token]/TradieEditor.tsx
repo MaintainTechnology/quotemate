@@ -55,6 +55,20 @@ type Props = {
   quoteId: string
   initialTiers: Tiers
   gstRegistered: boolean
+  // Embedded mode (dashboard PDF viewer): suppress the floating "Edit pricing"
+  // banner (the viewer's toolbar drives the editor instead) and expose an
+  // imperative open handle + a save callback. All optional — /q/[token] mounts
+  // TradieEditor with none of them and behaves exactly as before.
+  hideBanner?: boolean
+  onReady?: (api: EditorApi) => void
+  onSaved?: () => void
+}
+
+/** Imperative handle the dashboard viewer uses to open the editor from its
+ *  toolbar. `canEdit` is true only for the signed-in owner of an unpaid quote. */
+export type EditorApi = {
+  openEditor: (opts?: { chat?: boolean }) => void
+  canEdit: boolean
 }
 
 type EditableLine = {
@@ -101,7 +115,14 @@ type GroundingFailure = {
 const TIER_KEYS = ['good', 'better', 'best'] as const
 type TierKey = (typeof TIER_KEYS)[number]
 
-export default function TradieEditor({ quoteId, initialTiers, gstRegistered }: Props) {
+export default function TradieEditor({
+  quoteId,
+  initialTiers,
+  gstRegistered,
+  hideBanner = false,
+  onReady,
+  onSaved,
+}: Props) {
   const router = useRouter()
   // ?edit=1 is the auto-open hint set by the "Edit first" SMS link
   // (buildTradieReviewNotification) and the approve-page Edit button.
@@ -131,6 +152,9 @@ export default function TradieEditor({ quoteId, initialTiers, gstRegistered }: P
   // notify choice from the confirm modal so the forced re-POST keeps it.
   const [groundingFailures, setGroundingFailures] = useState<GroundingFailure[] | null>(null)
   const [pendingNotify, setPendingNotify] = useState(false)
+  // Embedded mode: when the viewer opens the editor via "Edit with AI", start
+  // the in-modal chat panel expanded.
+  const [chatAutoOpen, setChatAutoOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -172,6 +196,25 @@ export default function TradieEditor({ quoteId, initialTiers, gstRegistered }: P
       setAutoOpened(true)
     }
   }, [check, wantsEdit, autoOpened])
+
+  // Embedded mode: hand the parent (dashboard viewer) an imperative open handle
+  // once the owner check resolves, so its toolbar can drive Edit / Edit-with-AI.
+  useEffect(() => {
+    if (!onReady || !check) return
+    onReady({
+      openEditor: (opts) => {
+        if (opts?.chat) setChatAutoOpen(true)
+        setOpen(true)
+      },
+      canEdit: check.owner === true && !check.paid,
+    })
+  }, [check, onReady])
+
+  // Reset the chat auto-open hint once the modal is closed so the next plain
+  // "Edit" open doesn't inherit an expanded chat.
+  useEffect(() => {
+    if (!open) setChatAutoOpen(false)
+  }, [open])
 
   // Visitor came with explicit edit intent but isn't signed in (or is
   // signed in to a different tenant) — instead of rendering nothing
@@ -299,6 +342,8 @@ export default function TradieEditor({ quoteId, initialTiers, gstRegistered }: P
       setConfirmOpen(false)
       setOpen(false)
       router.refresh()
+      // Embedded viewer: let the parent refresh the inline PDF after a save.
+      onSaved?.()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -394,7 +439,8 @@ export default function TradieEditor({ quoteId, initialTiers, gstRegistered }: P
 
   return (
     <>
-      {/* ─── Floating tradie-mode banner ─────────────────────────── */}
+      {/* ─── Floating tradie-mode banner (suppressed in embedded viewer) ─── */}
+      {!hideBanner && (
       <div className="fixed top-3 right-3 z-40 max-w-[90vw]">
         <div className="flex items-center gap-3 bg-accent text-white px-4 py-2.5 shadow-lg">
           <span className="font-mono text-[0.6rem] uppercase tracking-[0.18em] font-bold">
@@ -415,6 +461,7 @@ export default function TradieEditor({ quoteId, initialTiers, gstRegistered }: P
           )}
         </div>
       </div>
+      )}
 
       {/* ─── Edit modal ─────────────────────────────────────────── */}
       {open && (
@@ -469,6 +516,7 @@ export default function TradieEditor({ quoteId, initialTiers, gstRegistered }: P
                   return out
                 }}
                 onApplyProposal={applyProposal}
+                defaultOpen={chatAutoOpen}
               />
               {TIER_KEYS.map((key) => {
                 const t = tiers[key]

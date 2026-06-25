@@ -25,6 +25,13 @@ export type RoofReportInput = {
   address: string
   quote: MultiRoofQuote
   /**
+   * Mig 148 — which tier keys to render, from the tenant's quote_tier_mode
+   * (dashboard Pricing settings) resolved by resolveVisibleTiers. Omitted ⇒ all
+   * of quote.combined.tiers (back-compat). A single visible tier drops the
+   * "Good / Better / Best" framing from the eyebrow + intro.
+   */
+  visibleTierKeys?: ('good' | 'better' | 'best')[]
+  /**
    * EVERY detected structure, annotated priced / inspection / excluded
    * (partitionRoofQuote). When supplied, the "Structures measured" table also
    * lists structures the tradie EXCLUDED — marked "not included", never priced
@@ -177,7 +184,13 @@ export function buildRoofQuoteReportHtml(input: RoofReportInput): string {
   const branding = input.branding ?? brandingFromName(input.businessName)
   const q = input.quote
   const isInspection = q.routing.decision === 'inspection_required'
-  const tiers = q.combined.tiers
+  // Mig 148 — render only the tier(s) the tenant's mode surfaces (single-price
+  // roofers get one option). The full combined.tiers stays in the stored quote.
+  const tiers = input.visibleTierKeys
+    ? q.combined.tiers.filter((t) => input.visibleTierKeys!.includes(t.tier))
+    : q.combined.tiers
+  // The "Good / Better / Best" framing only applies when 2+ options are shown.
+  const multiTier = tiers.length >= 2
 
   let body = ''
 
@@ -257,12 +270,20 @@ export function buildRoofQuoteReportHtml(input: RoofReportInput): string {
 
   return renderReportDocument(branding, {
     docTitle: `Roofing quote — ${branding.businessName}`,
-    eyebrow: `Roofing quote · ${isInspection ? 'Inspection required' : 'Good / Better / Best'}`,
+    eyebrow: isInspection
+      ? 'Roofing quote · Inspection required'
+      : multiTier
+        ? 'Roofing quote · Good / Better / Best'
+        : 'Roofing quote',
     dateLabel: date,
     siteAddress: input.address,
     introHtml: `Thank you for the opportunity to quote for roof works at <strong>${esc(
       input.address,
-    )}</strong>. See below the scope of works and your re-roof options — the first option is the included re-roof, with the dearer tiers offered as optional upgrades priced separately, and notes to guide you through them.`,
+    )}</strong>. ${
+      multiTier
+        ? 'See below the scope of works and your re-roof options — the first option is the included re-roof, with the dearer tiers offered as optional upgrades priced separately, and notes to guide you through them.'
+        : 'See below the scope of works and your re-roof quote.'
+    }`,
     bodyHtml: body,
     pleaseNote,
     closingLine,

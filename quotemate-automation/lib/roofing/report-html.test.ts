@@ -142,3 +142,49 @@ describe('buildRoofQuoteReportHtml', () => {
     expect(html).not.toContain('Shed — aerial reference, measured from satellite imagery.')
   })
 })
+
+// Mig 148 — the customer roofing PDF honours the tenant's tier mode (dashboard
+// Pricing settings). ensureRoofQuotePdf passes visibleTierKeys resolved from the
+// mode; a single-price roofer gets one option and the "Good / Better / Best"
+// header is dropped. Passing all three keeps the tiered framing.
+describe('buildRoofQuoteReportHtml — tier mode (mig 148)', () => {
+  it('a single visible tier drops the Good / Better / Best header + multi-tier intro', () => {
+    const html = buildRoofQuoteReportHtml({
+      businessName: 'Apex Roofing',
+      address: '12 Sample St',
+      quote: baseQuote,
+      visibleTierKeys: ['better'],
+    })
+    // The exact header Jon flagged is gone, and the single-tier intro is used.
+    expect(html).not.toContain('Good / Better / Best')
+    expect(html).not.toContain('optional upgrades')
+    // Only the chosen tier's option line renders; the other two are dropped.
+    expect(html).toContain('= $19,800 including GST') // Re-roof (better)
+    expect(html).not.toContain('= $2,200 including GST') // Patch/repair (good)
+    expect(html).not.toContain('= $26,400 including GST') // Upgrade (best)
+  })
+
+  it('two or more visible tiers keep the Good / Better / Best framing', () => {
+    const html = buildRoofQuoteReportHtml({
+      businessName: 'Apex Roofing',
+      address: '12 Sample St',
+      quote: baseQuote,
+      visibleTierKeys: ['good', 'better', 'best'],
+    })
+    expect(html).toContain('Good / Better / Best')
+    expect(html).toContain('= $2,200 including GST')
+    expect(html).toContain('= $19,800 including GST')
+    expect(html).toContain('= $26,400 including GST')
+  })
+
+  it('omitting visibleTierKeys renders all tiers (back-compat)', () => {
+    const html = buildRoofQuoteReportHtml({
+      businessName: 'Apex Roofing',
+      address: '12 Sample St',
+      quote: baseQuote,
+    })
+    expect(html).toContain('Good / Better / Best')
+    expect(html).toContain('= $2,200 including GST')
+    expect(html).toContain('= $26,400 including GST')
+  })
+})

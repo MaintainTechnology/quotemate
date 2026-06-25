@@ -315,6 +315,31 @@ export async function ensureRoofQuotePdf(
 
     const quote = opts.quote ?? row.quote
     if (!quote) return null
+
+    // Mig 148 — honour the tenant's roofing tier mode (dashboard Pricing
+    // settings) so a single-price roofer's PDF shows one option, not the full
+    // Good/Better/Best layout. Mirrors the roofing SMS path
+    // (app/api/sms/inbound/route.ts) and ensureQuotePdf for electrical/plumbing.
+    let roofTierMode: QuoteTierMode = 'single'
+    if (row.tenant_id) {
+      const { data: rb } = await supabase()
+        .from('pricing_book')
+        .select('quote_tier_mode')
+        .eq('tenant_id', row.tenant_id)
+        .eq('trade', 'roofing')
+        .maybeSingle<{ quote_tier_mode: string | null }>()
+      roofTierMode = asQuoteTierMode(rb?.quote_tier_mode ?? null)
+    }
+    const visibleTierKeys = resolveVisibleTiers({
+      mode: roofTierMode,
+      present: {
+        good: quote.combined.tiers.some((t) => t.tier === 'good'),
+        better: quote.combined.tiers.some((t) => t.tier === 'better'),
+        best: quote.combined.tiers.some((t) => t.tier === 'best'),
+      },
+      selectedTier: null,
+    })
+
     const branding = await loadTenantBranding(supabase(), row.tenant_id, 'roofing')
     // Hero figure — the coloured roof outline tracing on a plain white
     // background, drawn from the stored footprint polygon(s) (spec
@@ -366,6 +391,7 @@ export async function ensureRoofQuotePdf(
       branding,
       address: row.address ?? '',
       quote,
+      visibleTierKeys,
       displayRows: opts.displayRows,
       outlineImageSrc,
       mapImageSrc,

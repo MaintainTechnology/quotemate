@@ -18,8 +18,12 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-export async function GET(_req: Request, ctx: { params: Promise<{ token: string }> }) {
+export async function GET(req: Request, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params
+  // The dashboard viewer embeds the PDF with ?disposition=inline so it renders
+  // in an <iframe> instead of forcing a download. Default stays `attachment`
+  // (the Download button + every existing link/SMS keep their behaviour).
+  const inline = new URL(req.url).searchParams.get('disposition') === 'inline'
 
   const { data: quote } = await supabase
     .from('quotes')
@@ -82,7 +86,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     status: 200,
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="quote-${token.slice(0, 8)}.pdf"`,
+      'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename="quote-${token.slice(0, 8)}.pdf"`,
       'Cache-Control': 'private, max-age=300',
     },
   })
