@@ -29,9 +29,29 @@ if (!TENANT) {
   process.exit(1)
 }
 
-// ── stub detection (mirror lib/onboard/health.ts) ─────────────────────────
+// ── stub detection (mirror lib/onboard/stub-detect.ts) ────────────────────
+// HINT ONLY for Twilio — the authoritative real-vs-stub signal is the persisted
+// twilio_number_sid (see twilioVerdict below + lib/onboard/health.ts). The
+// Twilio shape overlaps the live AU mobile band, so it must not be a verdict
+// on its own (BUG-15). The Vapi `vapi-stub-` prefix is safe as a verdict.
 const isStubTwilio = (n) => !!n && /^\+614820\d{5}$/.test(n)
 const isStubVapi = (id) => !!id && String(id).startsWith('vapi-stub-')
+
+// Twilio real-vs-stub verdict from the AUTHORITATIVE signal (twilio_number_sid),
+// mirroring health.ts check #5: SID present → real; no SID + stub shape →
+// confirmed stub (blocks); no SID + real shape → unverified (neutral, non-blocking).
+function twilioVerdict(t) {
+  if (!t.twilio_sms_number) return { level: 'required', ok: false, detail: 'none' }
+  if (t.twilio_number_sid) return { level: 'required', ok: true, detail: t.twilio_sms_number }
+  if (isStubTwilio(t.twilio_sms_number)) {
+    return { level: 'required', ok: false, detail: `stub ${t.twilio_sms_number} (no Twilio SID)` }
+  }
+  return {
+    level: 'info',
+    ok: true,
+    detail: `unverified — no Twilio SID for ${t.twilio_sms_number} (run backfill-twilio-sid.mjs)`,
+  }
+}
 
 // Mirror of ONBOARDING_TRADES / LICENCE_BODIES / bundled estimator trades.
 const ONBOARDING_TRADES = new Set(['electrical', 'plumbing'])
@@ -126,7 +146,7 @@ try {
   const where = isUuid(TENANT) ? 'id = $1' : 'lower(owner_email) = lower($1)'
   const tRes = await client.query(
     `select id, business_name, status, activated_at, owner_user_id, trade, trades,
-            twilio_sms_number, vapi_assistant_id
+            twilio_sms_number, twilio_number_sid, vapi_assistant_id
        from tenants where ${where} limit 1`,
     [TENANT],
   )
@@ -175,9 +195,11 @@ try {
   let missingOff = missingOfferingTrades()
   record('required', 'Service offerings per trade', missingOff.length === 0, missingOff.length ? `no offerings: ${missingOff.join(', ')}` : '')
 
-  // twilio / vapi
+  // twilio / vapi — Twilio verdict from the persisted SID (not the digits).
+  // `twilioStub` is kept only as a hint to skip the live webhook check below.
   const twilioStub = isStubTwilio(tenant.twilio_sms_number)
-  record('required', 'Real Twilio number', !!tenant.twilio_sms_number && !twilioStub, !tenant.twilio_sms_number ? 'none' : twilioStub ? `stub ${tenant.twilio_sms_number}` : tenant.twilio_sms_number)
+  const tv = twilioVerdict(tenant)
+  record(tv.level, 'Real Twilio number', tv.ok, tv.detail)
   const vapiStub = isStubVapi(tenant.vapi_assistant_id)
   record('required', 'Real Vapi assistant', !!tenant.vapi_assistant_id && !vapiStub, !tenant.vapi_assistant_id ? 'none' : vapiStub ? `stub ${tenant.vapi_assistant_id}` : tenant.vapi_assistant_id)
 
@@ -294,7 +316,8 @@ try {
       return true
     })
     record('required', 'Service offerings per trade', missingOff2.length === 0, missingOff2.length ? `still missing: ${missingOff2.join(', ')}` : '')
-    record('required', 'Real Twilio number', !!tenant.twilio_sms_number && !twilioStub, '')
+    const tv2 = twilioVerdict(tenant)
+    record(tv2.level, 'Real Twilio number', tv2.ok, tv2.detail)
     record('required', 'Real Vapi assistant', !!tenant.vapi_assistant_id && !vapiStub, '')
     const notReady2 = []
     for (const t of trades) if (!(await tradeReady(t))) notReady2.push(t)

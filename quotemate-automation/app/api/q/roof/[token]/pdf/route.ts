@@ -7,7 +7,7 @@ import { after } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { ensureRoofQuotePdf, downloadQuotePdf } from '@/lib/quote/pdf'
 import { archiveQuoteOnDownload } from '@/lib/filestore/archive-on-download'
-import { partitionRoofQuote, resolveEffectiveIndices, structureCount } from '@/lib/roofing/selection'
+import { partitionRoofQuote, resolveEffectiveIndices } from '@/lib/roofing/selection'
 import type { MultiRoofQuote } from '@/lib/roofing/types'
 
 export const dynamic = 'force-dynamic'
@@ -53,7 +53,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
         included: row.included_indices as number[] | null,
         confirmedStructure: row.confirmed_structure as number | null,
       },
-      structureCount(fullQuote),
+      fullQuote,
     )
     const partition = fullQuote ? partitionRoofQuote(fullQuote, effective) : null
     path = await ensureRoofQuotePdf(

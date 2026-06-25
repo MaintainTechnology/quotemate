@@ -7,7 +7,7 @@ import { GET } from '@/app/api/cron/kb-sync/route'
 
 const OLD = { ...process.env }
 beforeEach(() => {
-  process.env.NODE_ENV = 'production'
+  vi.stubEnv('NODE_ENV', 'production')
   process.env.CRON_SECRET = 'secret'
   process.env.SUPABASE_DB_URL = 'postgres://x'
   process.env.KB_PRICING_STORE_ID = 'fileSearchStores/s'
@@ -15,6 +15,7 @@ beforeEach(() => {
   process.env.KB_API_KEY = 'k'
 })
 afterEach(() => {
+  vi.unstubAllEnvs()
   process.env = { ...OLD }
   vi.restoreAllMocks()
 })

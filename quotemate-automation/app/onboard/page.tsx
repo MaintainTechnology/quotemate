@@ -10,6 +10,12 @@ import { Suspense, useState, useEffect, type FormEvent } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { LICENCE_BODIES } from '@/lib/onboard/schema'
+import {
+  defaultAvailability,
+  tzForState,
+  type WeeklyAvailability,
+} from '@/lib/quote/availability'
+import { AvailabilityEditor } from '@/app/_components/AvailabilityEditor'
 import { Field, INPUT, ErrorBanner, Arrow } from '../signup/page'
 import { BrandMark } from "@/app/_components/BrandMark"
 
@@ -47,6 +53,9 @@ type FormState = {
   min_labour_hours: string
   risk_buffer_pct: string
   gst_registered: boolean
+  // Default schedule availability (migration 147). Pre-filled with the
+  // Mon–Fri default; the tradie can edit or skip it. Optional in the wizard.
+  default_availability: WeeklyAvailability
 }
 
 const STATES = ['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'ACT', 'NT'] as const
@@ -140,6 +149,7 @@ function OnboardWizardInner() {
     min_labour_hours: '',
     risk_buffer_pct: '',
     gst_registered: true,
+    default_availability: defaultAvailability(),
   })
 
   // Hydrate identity fields. Source priority:
@@ -263,6 +273,13 @@ function OnboardWizardInner() {
         ...form,
         trades: form.trades,
         state: form.state as 'NSW',
+        // Stamp the availability timezone from the chosen state so the
+        // stored template's zone matches where the tradie works, regardless
+        // of when they edited the hours.
+        default_availability: {
+          ...form.default_availability,
+          timezone: tzForState(form.state),
+        },
         // Pass through the SMS intent token so the API marks it used
         // and back-links the originating SMS conversation.
         intent_token: intentToken || undefined,
@@ -829,6 +846,25 @@ function Step2({
           </Field>
         </div>
       )}
+
+      {/* Booking availability — optional. Pre-filled with the Mon–Fri default
+          so the tradie is bookable immediately; fully editable here or later
+          from the dashboard Account tab. */}
+      <div className="pt-6 border-t border-ink-line">
+        <div className="mb-3">
+          <h3 className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent">
+            Booking availability (optional)
+          </h3>
+          <p className="mt-1.5 text-sm leading-relaxed text-text-sec">
+            The hours you work each week. Customers pick a morning or afternoon
+            slot on these days. You can change this anytime from your dashboard.
+          </p>
+        </div>
+        <AvailabilityEditor
+          value={form.default_availability}
+          onChange={(next) => update('default_availability', next)}
+        />
+      </div>
     </div>
   )
 }

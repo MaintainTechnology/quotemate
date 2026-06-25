@@ -25,7 +25,7 @@ export const metadata = {
   openGraph: {
     title: "QuoteMax pricing — costs less than one missed job",
     description:
-      "Three plans for AU tradies. SMS + AI voice receptionist, Good / Better / Best quotes, Stripe deposits. Starter Monthly includes a 14-day free trial.",
+      "Three plans for AU tradies. SMS + voice quoting, clean quotes, deposits collected. Starter Monthly includes a 14-day free trial.",
     type: "website",
   },
 }
@@ -66,10 +66,10 @@ function Header() {
             <span className="text-accent">one extra job a month.</span>
           </h1>
           <p className="mt-7 max-w-2xl text-lg leading-relaxed text-text-sec">
-            Your AI receptionist answers every text and call, drafts Good /
-            Better / Best quotes in under a minute, and takes the deposit. Pick a
-            plan and you&rsquo;re quoting the same day — Starter Monthly comes
-            with a 14-day free trial. We never take a cut of your jobs.
+            QuoteMax answers every text and call, drafts clean quotes in under a
+            minute, and takes the deposit. Pick a plan and you&rsquo;re quoting
+            the same day — Starter Monthly comes with a 14-day free trial. We
+            never take a cut of your jobs.
           </p>
         </Reveal>
       </div>
@@ -269,7 +269,7 @@ function SiteVisit() {
     {
       num: "02",
       title: "Customer pays $99 to lock a slot",
-      body: "A real deposit filters tyre-kickers and confirms intent. It’s collected through Stripe on the quote page before you drive out.",
+      body: "A real deposit filters tyre-kickers and confirms intent. It’s collected on the quote page before you drive out.",
     },
     {
       num: "03",
@@ -401,7 +401,7 @@ function ClosingCta() {
             <span className="text-accent">Quoting the same day.</span>
           </h2>
           <p className="mt-6 max-w-2xl text-lg leading-relaxed text-text-sec">
-            Connect your number, load your pricing book, and your AI receptionist
+            Connect your number, load your pricing book, and QuoteMax
             is live in about three minutes. Starter Monthly comes with a 14-day
             free trial.
           </p>

@@ -13,6 +13,10 @@
 //   • app/dashboard/roofing/* (UI)
 // ════════════════════════════════════════════════════════════════════
 
+// Type-only import — erased at compile time, so the types.ts ↔ solar.ts
+// cycle is purely structural and never a runtime dependency.
+import type { SolarQuoteAddon } from './solar'
+
 /** Roofing materials we price for. Phase 1 — adds-only. */
 export type RoofMaterial =
   | 'colorbond_corrugated'
@@ -207,6 +211,58 @@ export type RoofingRateCard = {
    * least this value. Optional; absent/0 means no floor.
    */
   call_out_minimum_ex_gst?: number
+  /**
+   * Per-linear-metre rate to repoint ridge and hip caps. Mirrors the
+   * seeded `Repoint ridge and hip caps` assembly (migration 080,
+   * $12.00/lm ex-GST). Optional; the default rate card supplies it.
+   */
+  ridge_hip_repoint_rate_per_lm?: number
+  /**
+   * Per-linear-metre rate to replace valley flashing. Mirrors the seeded
+   * `Valley flashing replacement` assembly (migration 080, $45.00/lm
+   * ex-GST). Optional; the default rate card supplies it.
+   */
+  valley_flashing_rate_per_lm?: number
+  /**
+   * Master switch — itemise hip/valley edge works on the quote. When
+   * false, no edge line items are produced and tiers reproduce the
+   * pre-edge-works output exactly. Optional; defaults to true.
+   */
+  price_edge_works?: boolean
+}
+
+/**
+ * One itemised line on a roofing price tier. The shape matches what the
+ * customer quote page (/q/[token]) expects in `good/better/best.line_items`.
+ * Across a tier, the sum of `total_ex_gst` equals the tier's `ex_gst`.
+ */
+export type RoofingLineItem = {
+  /** Unit of measure for the quantity. */
+  unit: 'sqm' | 'lm' | 'each'
+  quantity: number
+  /** Single-line scope, sentence case. */
+  description: string
+  unit_price_ex_gst: number
+  total_ex_gst: number
+  /** Where the cost sits — labour-led (sqm works) or material-led (edge works). */
+  source: 'labour' | 'material'
+}
+
+/**
+ * Derived hip/valley edge-works summary. Surfaced so display surfaces can
+ * show the same hips/valleys figures pricing used — never "0 shown but
+ * charged". Counts are the raw metric counts (null when the roof form
+ * could not classify them); the `_lm` figures are the derived lengths.
+ */
+export type RoofingEdgeWorks = {
+  hips_count: number | null
+  valleys_count: number | null
+  hips_lm: number | null
+  valleys_lm: number | null
+  /** The per-edge length applied to the counts. */
+  per_edge_length_m: number
+  /** Whether per-edge length came from roof geometry or the fallback. */
+  length_source: 'geometry' | 'fallback'
 }
 
 /** A single price tier on the customer quote. */
@@ -217,6 +273,13 @@ export type RoofingPriceTier = {
   inc_gst: number
   /** Single-line scope of works, sentence case. */
   scope: string
+  /**
+   * Itemised breakdown of this tier. When present, the sum of
+   * `line_items[].total_ex_gst` equals `ex_gst`. Optional for back-compat
+   * with callers/tiers that don't decompose (they fall back to a single
+   * sqm line at render time).
+   */
+  line_items?: RoofingLineItem[]
 }
 
 /** The full price breakdown returned to the dashboard / customer page. */
@@ -237,6 +300,12 @@ export type RoofingQuotePrice = {
   routing: RoofingRoutingDecision
   /** True when the call-out minimum raised one or more tiers. */
   call_out_minimum_applied?: boolean
+  /**
+   * Derived hip/valley edge-works summary (counts + linear metres) used to
+   * build the edge line items. Exposed for display consistency. Absent when
+   * edge-works pricing is disabled on the rate card.
+   */
+  edge_works?: RoofingEdgeWorks
 }
 
 // ── Multi-structure pricing ──────────────────────────────────────────
@@ -274,4 +343,12 @@ export type MultiRoofQuote = {
   routing: RoofingRoutingDecision
   /** buildingIds (or labels) of the structures that triggered inspection. */
   inspection_structures: string[]
+  /**
+   * Existing-solar / skylight detection + the detach & reinstate allowance,
+   * attached at save time (lib/roofing/solar.ts). Optional + additive — older
+   * persisted payloads omit it and render exactly as before. The allowance is
+   * a deterministic add-on on the roofing money path; it never flows through
+   * the estimator grounding validator.
+   */
+  solar?: SolarQuoteAddon
 }

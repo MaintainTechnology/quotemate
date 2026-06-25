@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en-AU"><head><meta charset="utf-8">
+<title>Roof outline tracing — preview</title>
+<style>
+  :root{ --paper:#FAF8F4; --card:#FFFFFF; --line:#E9E3DC; --pri:#241E1B; --sec:#5E544E; --dim:#837870; }
+  body{ background:var(--paper); color:var(--pri); margin:0; padding:32px;
+    font-family:'Manrope','Segoe UI',system-ui,Arial,sans-serif; }
+  h1{ text-transform:uppercase; letter-spacing:-0.02em; }
+  .lead{ color:var(--sec); max-width:70ch; }
+  .card{ background:var(--card); border:1px solid var(--line); padding:18px 20px; margin:20px 0; }
+  .card h2{ font-size:15px; text-transform:uppercase; letter-spacing:-0.01em; margin:0 0 4px; }
+  .card .note{ color:var(--sec); font-size:12px; margin:0 0 12px; }
+  /* mirrors lib/pdf/report-chrome.ts .figure / .figure-pair */
+  .figure{ margin:0; }
+  .figure-pair .hero{ width:100%; }
+  .figure-pair .hero svg{ width:100%; max-height:420px; object-fit:contain;
+    border:1px solid var(--line); display:block; }
+  .figure figcaption{ text-align:center; color:var(--sec); font-style:italic; font-size:11px; margin-top:6px; }
+  .empty{ color:#B45309; font-style:italic; }
+</style></head>
+<body>
+  <h1>Roof outline tracing — preview</h1>
+  <p class="lead">Rendered by the real <code>buildRoofOutlineSvg</code> at 1000×750, on the PDF's
+  warm-paper background and figure border. This is the hero figure that replaces the satellite photo
+  on the roofing quote PDF.</p>
+  
+  <section class="card">
+    <h2>Single structure — hip</h2>
+    <p class="note">All four edges classify as eaves (#FFFFFF) — watch the dark casing keep them legible on white.</p>
+    <figure class="figure figure-pair"><div class="hero"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 750" width="1000" height="750"><rect x="0" y="0" width="1000" height="750" fill="#FFFFFF"/><polygon points="198.83,675 801.17,675 801.17,75 198.83,75 198.83,675" fill="#FFC400" fill-opacity="0.18" stroke="#FFC400" stroke-width="2.5" stroke-linejoin="round"/><line x1="198.83" y1="675" x2="801.17" y2="675" stroke="#2B2422" stroke-width="5.5" stroke-linecap="round"/><line x1="198.83" y1="675" x2="801.17" y2="675" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/><line x1="801.17" y1="675" x2="801.17" y2="75" stroke="#2B2422" stroke-width="5.5" stroke-linecap="round"/><line x1="801.17" y1="675" x2="801.17" y2="75" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/><line x1="801.17" y1="75" x2="198.83" y2="75" stroke="#2B2422" stroke-width="5.5" stroke-linecap="round"/><line x1="801.17" y1="75" x2="198.83" y2="75" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/><line x1="198.83" y1="75" x2="198.83" y2="675" stroke="#2B2422" stroke-width="5.5" stroke-linecap="round"/><line x1="198.83" y1="75" x2="198.83" y2="675" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/></svg></div><figcaption>Roof outline traced from your measured roof areas.</figcaption></figure>
+  </section>
+
+  <section class="card">
+    <h2>Single structure — gable</h2>
+    <p class="note">Two long edges = eaves (white); the short gable ends pop in ridge yellow (#FFD23D).</p>
+    <figure class="figure figure-pair"><div class="hero"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 750" width="1000" height="750"><rect x="0" y="0" width="1000" height="750" fill="#FFFFFF"/><polygon points="100,570.6 900,570.6 900,179.4 100,179.4 100,570.6" fill="#FFC400" fill-opacity="0.18" stroke="#FFC400" stroke-width="2.5" stroke-linejoin="round"/><line x1="100" y1="570.6" x2="900" y2="570.6" stroke="#2B2422" stroke-width="5.5" stroke-linecap="round"/><line x1="100" y1="570.6" x2="900" y2="570.6" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/><line x1="900" y1="570.6" x2="900" y2="179.4" stroke="#2B2422" stroke-width="5.5" stroke-linecap="round"/><line x1="900" y1="570.6" x2="900" y2="179.4" stroke="#FFD23D" stroke-width="4" stroke-linecap="round"/><line x1="900" y1="179.4" x2="100" y2="179.4" stroke="#2B2422" stroke-width="5.5" stroke-linecap="round"/><line x1="900" y1="179.4" x2="100" y2="179.4" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/><line x1="100" y1="179.4" x2="100" y2="570.6" stroke="#2B2422" stroke-width="5.5" stroke-linecap="round"/><line x1="100" y1="179.4" x2="100" y2="570.6" stroke="#FFD23D" stroke-width="4" stroke-linecap="round"/></svg></div><figcaption>Roof outline traced from your measured roof areas.</figcaption></figure>
+  </section>
+
+  <section class="card">
+    <h2>Multi-structure — dwelling + secondary + EXCLUDED shed</h2>
+    <p class="note">Two included structures solid; the excluded shed is faint + dashed grey (#7A8699). All share one frame at correct relative scale.</p>
+    <figure class="figure figure-pair"><div class="hero"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 750" width="1000" height="750"><rect x="0" y="0" width="1000" height="750" fill="#FFFFFF"/><polygon points="249.02,675 370.18,675 370.18,550.86 249.02,550.86 249.02,675" fill="#7A8699" fill-opacity="0.05" stroke="#7A8699" stroke-width="1.5" stroke-dasharray="6 5" stroke-linejoin="round" opacity="0.7"/><polygon points="214.41,343.97 525.96,343.97 525.96,95.69 214.41,95.69 214.41,343.97" fill="#FFC400" fill-opacity="0.18" stroke="#FFC400" stroke-width="2.5" stroke-linejoin="round"/><line x1="214.41" y1="343.97" x2="525.96" y2="343.97" stroke="#2B2422" stroke-width="5.5" stroke-linecap="round"/><line x1="214.41" y1="343.97" x2="525.96" y2="343.97" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/><line x1="525.96" y1="343.97" x2="525.96" y2="95.69" stroke="#2B2422" stroke-width="5.5" stroke-linecap="round"/><line x1="525.96" y1="343.97" x2="525.96" y2="95.69" stroke="#FFD23D" stroke-width="4" stroke-linecap="round"/><line x1="525.96" y1="95.69" x2="214.41" y2="95.69" stroke="#2B2422" stroke-width="5.5" stroke-linecap="round"/><line x1="525.96" y1="95.69" x2="214.41" y2="95.69" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/><line x1="214.41" y1="95.69" x2="214.41" y2="343.97" stroke="#2B2422" stroke-width="5.5" stroke-linecap="round"/><line x1="214.41" y1="95.69" x2="214.41" y2="343.97" stroke="#FFD23D" stroke-width="4" stroke-linecap="round"/><polygon points="629.82,261.21 785.59,261.21 785.59,75 629.82,75 629.82,261.21" fill="#FFC400" fill-opacity="0.18" stroke="#FFC400" stroke-width="2.5" stroke-linejoin="round"/><line x1="629.82" y1="261.21" x2="785.59" y2="261.21" stroke="#2B2422" stroke-width="5.5" stroke-linecap="round"/><line x1="629.82" y1="261.21" x2="785.59" y2="261.21" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/><line x1="785.59" y1="261.21" x2="785.59" y2="75" stroke="#2B2422" stroke-width="5.5" stroke-linecap="round"/><line x1="785.59" y1="261.21" x2="785.59" y2="75" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/><line x1="785.59" y1="75" x2="629.82" y2="75" stroke="#2B2422" stroke-width="5.5" stroke-linecap="round"/><line x1="785.59" y1="75" x2="629.82" y2="75" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/><line x1="629.82" y1="75" x2="629.82" y2="261.21" stroke="#2B2422" stroke-width="5.5" stroke-linecap="round"/><line x1="629.82" y1="75" x2="629.82" y2="261.21" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/></svg></div><figcaption>Roof outline traced from your measured roof areas.</figcaption></figure>
+  </section>
+
+  <section class="card">
+    <h2>Complex (L-shaped) footprint</h2>
+    <p class="note">form 'complex' → every edge neutral grey (#7A8699): no claim about which edge is what.</p>
+    <figure class="figure figure-pair"><div class="hero"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 750" width="1000" height="750"><rect x="0" y="0" width="1000" height="750" fill="#FFFFFF"/><polygon points="154.91,75 845.09,75 845.09,375 468.63,375 468.63,675 154.91,675 154.91,75" fill="#FFC400" fill-opacity="0.18" stroke="#FFC400" stroke-width="2.5" stroke-linejoin="round"/><line x1="154.91" y1="75" x2="845.09" y2="75" stroke="#2B2422" stroke-width="5.5" stroke-linecap="round"/><line x1="154.91" y1="75" x2="845.09" y2="75" stroke="#7A8699" stroke-width="4" stroke-linecap="round"/><line x1="845.09" y1="75" x2="845.09" y2="375" stroke="#2B2422" stroke-width="5.5" stroke-linecap="round"/><line x1="845.09" y1="75" x2="845.09" y2="375" stroke="#7A8699" stroke-width="4" stroke-linecap="round"/><line x1="845.09" y1="375" x2="468.63" y2="375" stroke="#2B2422" stroke-width="5.5" stroke-linecap="round"/><line x1="845.09" y1="375" x2="468.63" y2="375" stroke="#7A8699" stroke-width="4" stroke-linecap="round"/><line x1="468.63" y1="375" x2="468.63" y2="675" stroke="#2B2422" stroke-width="5.5" stroke-linecap="round"/><line x1="468.63" y1="375" x2="468.63" y2="675" stroke="#7A8699" stroke-width="4" stroke-linecap="round"/><line x1="468.63" y1="675" x2="154.91" y2="675" stroke="#2B2422" stroke-width="5.5" stroke-linecap="round"/><line x1="468.63" y1="675" x2="154.91" y2="675" stroke="#7A8699" stroke-width="4" stroke-linecap="round"/><line x1="154.91" y1="675" x2="154.91" y2="75" stroke="#2B2422" stroke-width="5.5" stroke-linecap="round"/><line x1="154.91" y1="675" x2="154.91" y2="75" stroke="#7A8699" stroke-width="4" stroke-linecap="round"/></svg></div><figcaption>Roof outline traced from your measured roof areas.</figcaption></figure>
+  </section>
+</body></html>

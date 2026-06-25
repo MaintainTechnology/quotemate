@@ -9,6 +9,7 @@ import Link from "next/link"
 import AuthNav from "../AuthNav"
 import ThemeToggle from "./ThemeToggle"
 import { BrandMark } from "./BrandMark"
+import { TradesMenu } from "./TradesMenu"
 
 /* ─── Nav ─────────────────────────────────────────────────────── */
 // Section links resolve to the homepage (`/#…`) so they work from any
@@ -30,12 +31,7 @@ export function Nav() {
           >
             How
           </Link>
-          <Link
-            href="/#scope"
-            className="link-underline pb-0.5 hover:text-text-pri"
-          >
-            Trades
-          </Link>
+          <TradesMenu />
           <Link
             href="/pricing"
             className="link-underline pb-0.5 hover:text-text-pri"
@@ -63,7 +59,7 @@ export function Nav() {
 export function Footer() {
   return (
     <footer>
-      <div className="mx-auto grid max-w-[88rem] gap-10 px-6 py-16 md:grid-cols-[1.6fr_1fr_1fr]">
+      <div className="mx-auto grid max-w-[88rem] gap-10 px-6 py-16 md:grid-cols-[1.6fr_1fr_1fr_1fr]">
         <div>
           <Link href="/" className="flex items-center gap-2.5">
             <Logo />
@@ -72,17 +68,25 @@ export function Footer() {
             </span>
           </Link>
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-text-dim">
-            The AI receptionist that drafts Good / Better / Best quotes for
-            Australian electricians and plumbers.
+            QuoteMax drafts clean quotes for Australian electricians and
+            plumbers.
           </p>
         </div>
         <FooterCol
           title="Product"
           links={[
             { label: "How it works", href: "/#how" },
-            { label: "Trades & scope", href: "/#scope" },
             { label: "Pricing", href: "/pricing" },
             { label: "FAQ", href: "/#faq" },
+          ]}
+        />
+        <FooterCol
+          title="Trades"
+          links={[
+            { label: "Electrical", href: "/trades/electrical" },
+            { label: "Plumbing", href: "/trades/plumbing" },
+            { label: "Roofing", href: "/trades/roofing" },
+            { label: "Solar", href: "/trades/solar" },
           ]}
         />
         <FooterCol

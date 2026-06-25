@@ -11,8 +11,11 @@ import {
   DEFAULT_SLOT_OPTS,
   futureStoredSlots,
   resolveBookableSlots,
+  resolveBookingOptions,
+  buildBookedKeys,
   rollingSlots,
 } from './slots'
+import { defaultAvailability } from './availability'
 
 // A fixed reference instant: Fri 2026-06-05, 04:00 UTC (14:00 Sydney).
 const NOW = Date.parse('2026-06-05T04:00:00.000Z')
@@ -159,5 +162,66 @@ describe('resolveBookableSlots — the fix', () => {
     const apiList = resolveBookableSlots([], NOW)
     expect(pageList).toEqual(apiList)
     for (const picked of pageList) expect(apiList).toContain(picked)
+  })
+})
+
+describe('resolveBookingOptions (availability template vs legacy)', () => {
+  it('uses the weekly template → AM/PM windows when availability is set', () => {
+    const opts = resolveBookingOptions({
+      availability: defaultAvailability('Australia/Sydney'),
+      availableSlots: [],
+      now: NOW,
+    })
+    expect(opts.length).toBeGreaterThan(0)
+    for (const o of opts) {
+      expect(o.period === 'am' || o.period === 'pm').toBe(true)
+      expect(o.chipLabel.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('falls back to legacy exact-time slots when no template is set', () => {
+    const opts = resolveBookingOptions({ availability: null, availableSlots: [], now: NOW })
+    expect(opts.length).toBeGreaterThan(0)
+    for (const o of opts) expect(o.period).toBeNull()
+  })
+
+  it('falls back when the template is malformed', () => {
+    const opts = resolveBookingOptions({
+      availability: { version: 1, timezone: 'X', days: {} },
+      availableSlots: [],
+      now: NOW,
+    })
+    expect(opts.every((o) => o.period === null)).toBe(true)
+  })
+
+  it('page and API agree (same inputs → identical options)', () => {
+    const args = { availability: defaultAvailability('Australia/Sydney'), availableSlots: [], now: NOW }
+    expect(resolveBookingOptions(args)).toEqual(resolveBookingOptions(args))
+  })
+
+  it('excludes a window already booked by another quote', () => {
+    const av = defaultAvailability('Australia/Sydney')
+    const all = resolveBookingOptions({ availability: av, availableSlots: [], now: NOW })
+    const target = all[0]
+    const bookedKeys = buildBookedKeys(
+      [{ scheduled_at: target.iso, scheduled_window: target.period }],
+      'Australia/Sydney',
+    )
+    const filtered = resolveBookingOptions({ availability: av, availableSlots: [], now: NOW, bookedKeys })
+    expect(filtered.find((o) => o.iso === target.iso)).toBeUndefined()
+  })
+})
+
+describe('buildBookedKeys', () => {
+  it('builds keys from booked rows and skips null/unparseable slots', () => {
+    const keys = buildBookedKeys(
+      [
+        { scheduled_at: '2026-06-08T23:00:00Z', scheduled_window: 'am' },
+        { scheduled_at: null, scheduled_window: 'pm' },
+        { scheduled_at: 'nope', scheduled_window: null },
+      ],
+      'Australia/Sydney',
+    )
+    expect(keys.size).toBe(1)
   })
 })

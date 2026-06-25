@@ -33,8 +33,8 @@ export const PLANS: Plan[] = [
     annual: 490,
     highlights: [
       "SMS & WhatsApp receptionist",
-      "~40 AI quotes a month",
-      "Good / Better / Best quotes + Stripe deposits",
+      "~40 quotes a month",
+      "Clean quotes + deposits collected",
       "1 trade · 1 dedicated AU number",
     ],
   },
@@ -47,8 +47,8 @@ export const PLANS: Plan[] = [
     featured: true,
     inheritsFrom: "Starter",
     highlights: [
-      "AI voice receptionist — 300 mins / mo",
-      "~150 AI quotes a month",
+      "Voice receptionist — 300 mins / mo",
+      "~150 quotes a month",
       "Up to 2 trades · 2 dashboard seats",
       "Your branding + 1 specialised estimator",
     ],
@@ -62,7 +62,7 @@ export const PLANS: Plan[] = [
     inheritsFrom: "Pro",
     highlights: [
       "Voice receptionist — 1,000 mins / mo",
-      "~400 AI quotes a month",
+      "~400 quotes a month",
       "Up to 4 trades · 5 seats · 3 numbers",
       "All estimators, custom domain & priority support",
     ],
@@ -104,16 +104,16 @@ export type CompRow = { label: string; values: [string, string, string] }
 export const COMPARISON: CompRow[] = [
   { label: "Channels", values: ["SMS / WhatsApp", "SMS + Voice", "SMS + Voice"] },
   {
-    label: "AI quotes / month",
+    label: "Quotes / month",
     values: ["~40 (fair use)", "~150 (fair use)", "~400 (fair use)"],
   },
-  { label: "AI voice minutes / month", values: ["Add-on", "300", "1,000"] },
+  { label: "Voice minutes / month", values: ["Add-on", "300", "1,000"] },
   { label: "Dedicated AU number", values: ["1", "1", "Up to 3"] },
   { label: "Trades", values: ["1", "Up to 2", "Up to 4"] },
   { label: "Dashboard seats", values: ["1", "2", "5"] },
-  { label: "Good / Better / Best quotes", values: ["✓", "✓", "✓"] },
-  { label: "AI preview & sample images", values: ["✓", "✓", "✓"] },
-  { label: "Stripe deposit collection", values: ["✓", "✓", "✓"] },
+  { label: "Clean quotes drafted for you", values: ["✓", "✓", "✓"] },
+  { label: "Preview & sample images", values: ["✓", "✓", "✓"] },
+  { label: "Deposit collection", values: ["✓", "✓", "✓"] },
   {
     label: "Specialised estimators (solar / roof / paint)",
     values: ["—", "1 module", "All"],
@@ -131,7 +131,7 @@ export type PricingFaqItem = { q: string; a: string }
 export const PRICING_FAQ: PricingFaqItem[] = [
   {
     q: "What counts as a “quote”?",
-    a: "Every Good / Better / Best draft the AI sends a customer is one quote. Texted quotes are generous fair-use — quote as much as you like; we only ever flag genuine abuse, never normal busy weeks.",
+    a: "Every quote QuoteMax sends a customer is one quote. Texted quotes are generous fair-use — quote as much as you like; we only ever flag genuine abuse, never normal busy weeks.",
   },
   {
     q: "What if I go over my voice minutes?",

@@ -3,6 +3,7 @@
 // type inference, and a single source of truth for what the form sends.
 
 import { z } from 'zod'
+import { AvailabilitySchema } from '@/lib/quote/availability'
 
 // AU mobile in E.164 (+614xxxxxxxx) or local 04xx format
 const auMobile = z
@@ -101,6 +102,12 @@ export const OnboardActivateSchema = z.object({
   min_labour_hours: optionalNumber(z.coerce.number().min(0).max(8)),
   risk_buffer_pct: optionalNumber(positivePct),
   gst_registered: z.boolean().optional(),
+
+  // ── Default schedule availability (optional — pre-filled in the wizard) ──
+  // The tradie's recurring weekly working hours. Optional: when omitted the
+  // activate route stamps a state-derived default (Mon–Fri 07:00–15:00) so
+  // every new tenant lands bookable. Migration 147.
+  default_availability: AvailabilitySchema.optional(),
 
   // ── SMS-initiated onboarding (optional) ────────────────────
   // Present when the tradie reached /onboard via the SMS magic-link

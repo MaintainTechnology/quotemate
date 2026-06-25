@@ -65,7 +65,7 @@ describe('runAgent', () => {
   })
 
   it('POSTs to the right path with the API key header', async () => {
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn<typeof fetch>(async () =>
       new Response(JSON.stringify({ ok: true, total_score: 87 }), { status: 200 }),
     )
     const r = await runAgent('eval', cfg, { foo: 'bar' }, fetchMock as unknown as typeof fetch)

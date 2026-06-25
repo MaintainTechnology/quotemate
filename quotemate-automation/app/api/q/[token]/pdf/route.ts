@@ -37,10 +37,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     )
   }
 
-  let path = quote.pdf_path as string | null
-  if (!path) {
-    path = await ensureQuotePdf(quote.id as string)
-  }
+  // Mig 146 — always run the self-healing generator: it serves the cached PDF
+  // when the signature still matches the tenant's current tier mode + template,
+  // and regenerates when the tradie has since changed the Pricing-settings tier
+  // mode (or the template was bumped). Falls back to the last-known cached PDF
+  // if generation is unavailable (e.g. Gotenberg down) so the link never breaks.
+  let path = await ensureQuotePdf(quote.id as string)
+  if (!path) path = quote.pdf_path as string | null
   if (!path) {
     return Response.json({ ok: false, error: 'PDF unavailable right now — try again shortly' }, { status: 503 })
   }

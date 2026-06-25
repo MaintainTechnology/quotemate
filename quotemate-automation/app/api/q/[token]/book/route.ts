@@ -21,11 +21,14 @@
 //   - slot must be a published slot in tradies.available_slots
 //   - slot must be a parseable ISO timestamp in the future
 
+import { after } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { pipelineLog } from '@/lib/log/pipeline'
 import { BOOKING_STATE } from '@/lib/quote/hold'
 import { earlyBirdStatus } from '@/lib/quote/early-bird'
-import { resolveBookableSlots } from '@/lib/quote/slots'
+import { resolveBookingOptions, buildBookedKeys } from '@/lib/quote/slots'
+import { tzForState } from '@/lib/quote/availability'
+import { notifyBookingConfirmed } from '@/lib/quote/booking-notify'
 import {
   createCheckoutSessionForTier,
   expireCheckoutSession,
@@ -100,7 +103,7 @@ export async function POST(
   }
   const { data: tenantSlots, error: slotsErr } = await supabase
     .from('tenants')
-    .select('id, available_slots')
+    .select('id, available_slots, default_availability, state')
     .eq('id', quote.tenant_id)
     .maybeSingle()
 
@@ -113,39 +116,95 @@ export async function POST(
   }
 
   // The bookable set MUST be derived the same way the booking page renders
-  // it: the tenant's own FUTURE curated slots, or a generated rolling
-  // window when those are empty/stale. Validating against the raw stored
-  // list would 409 every customer once the static seed decayed to all-past
-  // (the bug) and would reject the rolling slots the page now offers.
-  const bookableSlots = resolveBookableSlots(tenantSlots.available_slots)
+  // it (resolveBookingOptions): AM/PM half-day windows from the tenant's
+  // weekly availability template when set — with already-booked windows
+  // excluded — otherwise the legacy curated/rolling exact-time slots.
+  // Validating against the raw stored list would 409 every customer once a
+  // static seed decayed to all-past, and would reject the windows the page
+  // now offers.
+  const tz = tzForState(tenantSlots.state as string | null)
+  const { data: bookedRows } = await supabase
+    .from('quotes')
+    .select('scheduled_at, scheduled_window')
+    .eq('tenant_id', quote.tenant_id)
+    .in('booking_state', ['reserved', 'booked'])
+    .not('scheduled_at', 'is', null)
+    .neq('id', quote.id)
+  const bookedKeys = buildBookedKeys(bookedRows ?? [], tz)
 
-  if (!bookableSlots.includes(slot)) {
+  const options = resolveBookingOptions({
+    availability: tenantSlots.default_availability ?? null,
+    availableSlots: tenantSlots.available_slots,
+    timezone: tz,
+    bookedKeys,
+  })
+  const chosen = options.find((o) => o.iso === slot)
+
+  if (!chosen) {
     log.err('slot not available', null, {
       slot,
-      bookableSlots: bookableSlots.slice(0, 10),
+      bookable: options.slice(0, 10).map((o) => o.iso),
     })
     return Response.json({ ok: false, error: 'That slot is no longer available' }, { status: 409 })
   }
 
   const nowIso = new Date().toISOString()
 
-  // Reserve the time on the quote. We deliberately do NOT set
-  // status='accepted'/accepted_at and do NOT prune the tradie's
-  // available_slots — the booking is only CONFIRMED on payment (the
-  // Stripe webhook). booking_state='reserved' surfaces "time picked,
-  // awaiting deposit" on the dashboard.
+  // Book-first / pay-last: normally we only RESERVE here (the booking is
+  // confirmed when the deposit is paid, in the Stripe webhook). But the
+  // legacy recovery path — a customer who paid WITHOUT a slot then comes
+  // back to pick a time — has no second payment to trigger the webhook, so
+  // we must finalise the booking right here (spec R2): booked + accepted,
+  // prune the slot, and send the confirmation SMS.
+  const alreadyPaid = !!quote.paid_at
+  const patch: Record<string, unknown> = {
+    scheduled_at: slot,
+    scheduled_window: chosen.period, // 'am' | 'pm' | null (legacy exact-time)
+    booking_state: alreadyPaid ? BOOKING_STATE.BOOKED : BOOKING_STATE.RESERVED,
+    last_status_at: nowIso,
+  }
+  if (alreadyPaid) {
+    patch.status = 'accepted'
+    patch.accepted_at = nowIso
+  }
+
   const { error: quoteUpdateErr } = await supabase
     .from('quotes')
-    .update({
-      scheduled_at: slot,
-      booking_state: BOOKING_STATE.RESERVED,
-      last_status_at: nowIso,
-    })
+    .update(patch)
     .eq('id', quote.id)
 
   if (quoteUpdateErr) {
     log.err('quote reserve failed', quoteUpdateErr.message, { quote_id: quote.id })
     return Response.json({ ok: false, error: 'Failed to reserve that time' }, { status: 500 })
+  }
+
+  // Legacy paid-then-pick: prune the chosen slot from the tenant's curated
+  // list (if present) and fire the confirmation SMS, mirroring the webhook's
+  // finalise path. Best-effort — the booking is already recorded above.
+  if (alreadyPaid) {
+    try {
+      const stored = Array.isArray(tenantSlots.available_slots)
+        ? (tenantSlots.available_slots as string[])
+        : []
+      if (stored.includes(slot)) {
+        await supabase
+          .from('tenants')
+          .update({ available_slots: stored.filter((s) => s !== slot) })
+          .eq('id', tenantSlots.id)
+      }
+    } catch (e: unknown) {
+      log.err('slot prune failed (non-fatal — booking IS confirmed)',
+        e instanceof Error ? e.message : String(e), { quote_id: quote.id })
+    }
+    after(() =>
+      notifyBookingConfirmed(supabase, {
+        quoteId: quote.id as string,
+        intakeId: (quote.intake_id as string | null) ?? null,
+        tenantId: (quote.tenant_id as string | null) ?? null,
+        shareToken: token,
+        slotIso: slot,
+      }),
+    )
   }
 
   // Resolve which tier's deposit to charge: the tier the customer chose
@@ -158,7 +217,9 @@ export async function POST(
       : PAY_TIERS.has(String(quote.selected_tier))
         ? String(quote.selected_tier)
         : 'better'
-  const next = `/r/${token}/${tier}`
+  // Already-paid (legacy recovery) → booking is confirmed above, so send
+  // them to the thank-you page rather than back through the deposit step.
+  const next = alreadyPaid ? `/q/${token}/paid?tier=${tier}` : `/r/${token}/${tier}`
 
   // ─── v8 Phase A — apply the early-booking discount ──────────────────
   //
@@ -174,7 +235,7 @@ export async function POST(
   // The early_bird_* columns land via migration 044; the select is its
   // own try so a pre-migration deploy simply finds no offer.
   let appliedDiscountPct = 0
-  if (PAY_TIERS.has(tier)) {
+  if (!alreadyPaid && PAY_TIERS.has(tier)) {
     try {
       const { data: eb, error: ebErr } = await supabase
         .from('quotes')

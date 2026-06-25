@@ -142,6 +142,33 @@ export function renderFigure(src: string | null | undefined, caption?: string | 
 }
 
 /**
+ * A two-image figure: a hero image plus a smaller secondary thumbnail (e.g. the
+ * roof outline tracing as the hero with a small aerial reference beneath it —
+ * spec roof-pdf-outline-tracing R6/R8). Falls back to a single captioned figure
+ * when only one source is present, and '' when neither is.
+ */
+export function renderFigurePair(opts: {
+  heroSrc?: string | null
+  heroCaption?: string | null
+  thumbSrc?: string | null
+  thumbCaption?: string | null
+}): string {
+  const { heroSrc, heroCaption, thumbSrc, thumbCaption } = opts
+  if (!heroSrc && !thumbSrc) return ''
+  if (heroSrc && !thumbSrc) return renderFigure(heroSrc, heroCaption)
+  if (!heroSrc && thumbSrc) return renderFigure(thumbSrc, thumbCaption)
+  return `
+  <figure class="figure figure-pair">
+    <img class="hero" src="${esc(heroSrc!)}" alt="${esc(heroCaption ?? 'Roof outline')}">
+    ${heroCaption ? `<figcaption>${esc(heroCaption)}</figcaption>` : ''}
+    <div class="thumb">
+      <img src="${esc(thumbSrc!)}" alt="${esc(thumbCaption ?? 'Aerial reference')}">
+      ${thumbCaption ? `<figcaption>${esc(thumbCaption)}</figcaption>` : ''}
+    </div>
+  </figure>`
+}
+
+/**
  * The whole document. Composes the white-label header, intro, body slot,
  * "Please Note" and the repeating footer into a single print-safe A4 HTML
  * string. The trade builders only assemble `bodyHtml` + slots.
@@ -260,6 +287,11 @@ export function renderReportDocument(branding: TenantBranding, doc: ReportDocume
   .figure{ margin:14px 0; page-break-inside:avoid; }
   .figure img{ width:100%; max-height:420px; object-fit:contain; border:1px solid var(--line); }
   .figure figcaption{ text-align:center; color:var(--sec); font-style:italic; font-size:11px; margin-top:6px; }
+  /* two-image figure: hero outline tracing + small aerial reference thumbnail */
+  .figure-pair .hero{ width:100%; max-height:420px; object-fit:contain; border:1px solid var(--line); background:#fff; }
+  .figure-pair .thumb{ width:42%; max-width:280px; margin:10px auto 0; }
+  .figure-pair .thumb img{ display:block; width:100%; max-height:170px; object-fit:contain; border:1px solid var(--line); }
+  .figure-pair .thumb figcaption{ text-align:center; color:var(--dim); font-style:italic; font-size:9.5px; margin-top:4px; }
 
   /* ── Please Note ── */
   .please{ margin-top:24px; border:1px solid var(--line); background:var(--card); padding:14px 16px; page-break-inside:avoid; }

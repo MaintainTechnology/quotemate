@@ -55,7 +55,16 @@ export async function loadTenantBranding(
   tenantId: string | null,
   trade?: string | null,
 ): Promise<TenantBranding> {
-  if (!tenantId) return { businessName: FALLBACK_BUSINESS_NAME }
+  if (!tenantId) {
+    // Spec quote-pdf-logo-fix R6 — a null tenantId is the #1 reason a quote PDF
+    // ships with no logo (e.g. SMS/voice traffic on an unprovisioned number).
+    // Log it so a logo-less PDF is traceable to "no tenant" vs "no logo".
+    console.warn(
+      '[pdf/branding] loadTenantBranding called with null tenantId — PDF uses the wordmark fallback (no logo)',
+      { trade: trade ?? null },
+    )
+    return { businessName: FALLBACK_BUSINESS_NAME }
+  }
 
   try {
     const [{ data: t }, licRes] = await Promise.all([

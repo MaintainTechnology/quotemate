@@ -21,6 +21,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { getBrowserSupabase } from '@/lib/supabase/client'
+import QuoteEditChat, { type ProposedTiers } from './QuoteEditChat'
 
 type LineItem = {
   description: string
@@ -61,6 +62,12 @@ type EditableLine = {
   quantity: string
   unit: string
   unit_price_ex_gst: string
+  // Round-tripped so an edit preserves each line's provenance: catalogue
+  // anchors (`material:<id>`/`assembly:<id>`), `labour`/`callout`, and the
+  // `tradie_manual` sentinel marking a tradie-entered custom line. Dropping it
+  // (the old behaviour) re-stamped every line `tradie_edit` on save and
+  // stripped the strict-grounding anchors.
+  source?: string
   // WP5 — opaque-passthrough fields. Not edited in the dashboard today;
   // round-tripped so save() doesn't clobber them.
   supplied_by?: 'tradie' | 'customer'
@@ -77,6 +84,18 @@ type OwnerCheck = {
   owner: boolean
   paid?: boolean
   tenantBusinessName?: string
+}
+
+// A grounding failure echoed back by POST /api/quote/<id>/edit (status 422)
+// when an edited line doesn't derive from the tenant's catalogue. Surfaced so
+// the tradie can correct the price or consciously force the save through.
+type GroundingFailure = {
+  tier: 'good' | 'better' | 'best'
+  lineIndex: number
+  description: string
+  unit: string
+  unit_price_ex_gst: number
+  expected: string
 }
 
 const TIER_KEYS = ['good', 'better', 'best'] as const
@@ -105,6 +124,13 @@ export default function TradieEditor({ quoteId, initialTiers, gstRegistered }: P
   // saves silently. Smart-default = notify if any tier headline
   // subtotal changed, silent if only labels/descriptions moved.
   const [confirmOpen, setConfirmOpen] = useState(false)
+  // Override modal — opens when a save returns 422 grounding_failed (an
+  // existing catalogue line edited to an off-catalogue price; tradie-added
+  // manual lines are exempt server-side). Lists the offending lines and lets
+  // the tradie consciously force the save through. pendingNotify remembers the
+  // notify choice from the confirm modal so the forced re-POST keeps it.
+  const [groundingFailures, setGroundingFailures] = useState<GroundingFailure[] | null>(null)
+  const [pendingNotify, setPendingNotify] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -212,12 +238,13 @@ export default function TradieEditor({ quoteId, initialTiers, gstRegistered }: P
   // Step 2 — chosen from the confirm modal. POSTs the edit with
   // notify_customer flag set to the tradie's pick, then closes
   // everything and refreshes the server-rendered page.
-  async function handleSave(notifyCustomer: boolean) {
+  async function handleSave(notifyCustomer: boolean, force = false) {
     if (!accessToken) {
       setError('Session expired — refresh and sign in again.')
       return
     }
     setError(null)
+    setPendingNotify(notifyCustomer)
     setSubmitting(true)
     try {
       const payload: Record<string, unknown> = {}
@@ -230,14 +257,22 @@ export default function TradieEditor({ quoteId, initialTiers, gstRegistered }: P
           line_items: t.lines.map((l) => ({
             description: l.description,
             quantity: Number(l.quantity || 0),
-            unit: l.unit || 'hr',
+            unit: l.unit || 'item',
             unit_price_ex_gst: Number(l.unit_price_ex_gst || 0),
+            // Preserve provenance so catalogue anchors (`material:<id>`) survive
+            // the round-trip and tradie-added custom lines keep their
+            // `tradie_manual` tag (which the edit route exempts from grounding).
+            ...(l.source ? { source: l.source } : {}),
             ...(l.supplied_by ? { supplied_by: l.supplied_by } : {}),
             ...(l.safety_note ? { safety_note: l.safety_note } : {}),
           })),
         }
       }
       payload.notify_customer = notifyCustomer
+      // H-2 — when the tradie has chosen to override the grounding gate, the
+      // edit endpoint accepts force:true and persists the ungrounded line
+      // under a tradie_edit_ungrounded audit flag.
+      if (force) payload.force = true
 
       const res = await fetch(`/api/quote/${quoteId}/edit`, {
         method: 'POST',
@@ -248,11 +283,19 @@ export default function TradieEditor({ quoteId, initialTiers, gstRegistered }: P
         body: JSON.stringify(payload),
       })
       const body = await res.json().catch(() => ({}))
+      // Grounding gate (422). Surface the failing lines and let the tradie
+      // either correct them or consciously force the save (spec R12 / E5).
+      if (res.status === 422 && body?.error === 'grounding_failed') {
+        setGroundingFailures(Array.isArray(body.failures) ? body.failures : [])
+        setError(null)
+        return
+      }
       if (!res.ok || body?.ok === false) {
         throw new Error(body?.error ?? `HTTP ${res.status}`)
       }
       // Force a server re-render so the page reflects the new tier
       // subtotals, headline total, and Stripe URLs.
+      setGroundingFailures(null)
       setConfirmOpen(false)
       setOpen(false)
       router.refresh()
@@ -261,6 +304,34 @@ export default function TradieEditor({ quoteId, initialTiers, gstRegistered }: P
     } finally {
       setSubmitting(false)
     }
+  }
+
+  // Merge an AI-proposed edit into the structured editor state. Only tiers the
+  // proposal actually changed are present; each replaces that tier's lines so
+  // the form (the diff-review surface) reflects the proposal for the tradie to
+  // review and Save.
+  function applyProposal(proposed: ProposedTiers) {
+    setTiers((cur) => {
+      const next = { ...cur }
+      for (const k of TIER_KEYS) {
+        const pt = proposed[k]
+        if (pt === undefined || pt === null) continue
+        next[k] = {
+          label: pt.label ?? cur[k]?.label ?? `${k} option`,
+          timeframe: pt.timeframe ?? cur[k]?.timeframe ?? '',
+          lines: (pt.line_items ?? []).map((li) => ({
+            description: li.description ?? '',
+            quantity: String(li.quantity ?? 1),
+            unit: li.unit ?? 'hr',
+            unit_price_ex_gst: String(li.unit_price_ex_gst ?? 0),
+            // Carry the reconciled source so a saved AI edit preserves catalogue
+            // anchors / the tradie_manual exemption through /edit.
+            ...(li.source ? { source: li.source } : {}),
+          })),
+        }
+      }
+      return next
+    })
   }
 
   function updateLine(
@@ -286,7 +357,17 @@ export default function TradieEditor({ quoteId, initialTiers, gstRegistered }: P
           ...t,
           lines: [
             ...t.lines,
-            { description: '', quantity: '1', unit: 'hr', unit_price_ex_gst: '0' },
+            // Tradie-entered custom line: grounded by the human, not the
+            // catalogue (source 'tradie_manual' → exempt from the edit-route
+            // grounding gate). Defaults to a non-'hr' unit and $0 so removals
+            // / inclusions can be added as-is.
+            {
+              description: '',
+              quantity: '1',
+              unit: 'item',
+              unit_price_ex_gst: '0',
+              source: 'tradie_manual',
+            },
           ],
         },
       }
@@ -362,6 +443,33 @@ export default function TradieEditor({ quoteId, initialTiers, gstRegistered }: P
             </div>
 
             <div className="px-5 py-5 space-y-6">
+              {/* ─── AI chat-edit · type a change in plain English ─── */}
+              <QuoteEditChat
+                quoteId={quoteId}
+                accessToken={accessToken}
+                getCurrentTiers={() => {
+                  const out: ProposedTiers = {}
+                  for (const k of TIER_KEYS) {
+                    const t = tiers[k]
+                    if (!t) continue
+                    out[k] = {
+                      label: t.label,
+                      timeframe: t.timeframe || undefined,
+                      line_items: t.lines.map((l) => ({
+                        description: l.description,
+                        quantity: Number(l.quantity || 0),
+                        unit: l.unit || 'hr',
+                        unit_price_ex_gst: Number(l.unit_price_ex_gst || 0),
+                        // Send provenance so chat-edit can reconcile sources
+                        // (keep tradie_manual exempt, validate everything else).
+                        ...(l.source ? { source: l.source } : {}),
+                      })),
+                    }
+                  }
+                  return out
+                }}
+                onApplyProposal={applyProposal}
+              />
               {TIER_KEYS.map((key) => {
                 const t = tiers[key]
                 if (!t) return null
@@ -405,8 +513,13 @@ export default function TradieEditor({ quoteId, initialTiers, gstRegistered }: P
                         return (
                           <div key={idx} className="px-4 py-3 grid grid-cols-12 gap-2 items-end">
                             <div className="col-span-12 md:col-span-6">
-                              <label className="font-mono text-[0.55rem] uppercase tracking-[0.14em] text-text-dim block mb-1">
-                                Description
+                              <label className="font-mono text-[0.55rem] uppercase tracking-[0.14em] text-text-dim mb-1 flex items-center gap-2">
+                                <span>Description</span>
+                                {line.source === 'tradie_manual' && (
+                                  <span className="bg-accent/15 text-accent px-1.5 py-0.5 text-[0.5rem] font-bold tracking-[0.12em]">
+                                    Custom
+                                  </span>
+                                )}
                               </label>
                               <input
                                 type="text"
@@ -474,7 +587,7 @@ export default function TradieEditor({ quoteId, initialTiers, gstRegistered }: P
                         onClick={() => addLine(key)}
                         className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-accent hover:text-accent-press transition-colors"
                       >
-                        + Add line item
+                        + Add custom line
                       </button>
                     </div>
                   </div>
@@ -518,52 +631,106 @@ export default function TradieEditor({ quoteId, initialTiers, gstRegistered }: P
           className="fixed inset-0 z-60 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
         >
           <div className="w-full max-w-md bg-ink-card border border-ink-line shadow-2xl">
-            <div className="px-6 pt-6 pb-4 border-b border-ink-line">
-              <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-text-dim">
-                Confirm save
-              </div>
-              <h3 className="mt-2 font-extrabold uppercase tracking-tight text-lg text-text-pri">
-                Send the updated quote<br />to the customer?
-              </h3>
-              <p className="mt-3 text-sm text-text-sec leading-relaxed">
-                {anyTierPriceChanged()
-                  ? 'Prices have changed — the customer should get the new numbers as an SMS.'
-                  : 'Only labels or descriptions changed. You can save quietly if you don\'t want to ping the customer.'}
-              </p>
-            </div>
-
-            <div className="px-6 py-5 flex flex-col gap-3">
-              <button
-                type="button"
-                onClick={() => handleSave(true)}
-                disabled={submitting}
-                className="w-full inline-flex items-center justify-center gap-2 bg-accent hover:bg-accent-press text-white font-bold px-4 py-3 text-xs uppercase tracking-[0.14em] transition-colors disabled:opacity-50"
-              >
-                {submitting ? 'Sending…' : 'Send update · full quote SMS'}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSave(false)}
-                disabled={submitting}
-                className="w-full inline-flex items-center justify-center bg-transparent border border-ink-line hover:border-text-sec text-text-pri font-mono text-[0.7rem] uppercase tracking-[0.14em] px-4 py-3 transition-colors disabled:opacity-50"
-              >
-                Save quietly · no SMS
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirmOpen(false)}
-                disabled={submitting}
-                className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim hover:text-text-sec mt-1 disabled:opacity-50"
-              >
-                Back to edits
-              </button>
-
-              {error && (
-                <div className="mt-2 border border-rose-900/70 bg-rose-950/50 text-rose-200 px-3 py-2 text-xs">
-                  {error}
+            {groundingFailures && groundingFailures.length > 0 ? (
+              <>
+                <div className="px-6 pt-6 pb-4 border-b border-ink-line">
+                  <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-warning">
+                    Not grounded
+                  </div>
+                  <h3 className="mt-2 font-extrabold uppercase tracking-tight text-lg text-text-pri">
+                    Some prices aren&apos;t<br />in your catalogue
+                  </h3>
+                  <p className="mt-3 text-sm text-text-sec leading-relaxed">
+                    These lines don&apos;t match a real price in your pricing book or catalogue. Correct them to a
+                    catalogue price, or save anyway — forced lines are flagged on the quote for audit.
+                  </p>
+                  <ul className="mt-4 space-y-2 text-xs">
+                    {groundingFailures.map((f, i) => (
+                      <li key={i} className="border-l-2 border-l-warning bg-ink-deep/40 px-3 py-2">
+                        <div className="font-mono text-[0.6rem] uppercase tracking-[0.12em] text-text-dim">
+                          {f.tier} · line {f.lineIndex + 1}
+                        </div>
+                        <div className="text-text-pri mt-0.5">{f.description}</div>
+                        <div className="text-text-dim mt-1">{f.expected}</div>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-              )}
-            </div>
+
+                <div className="px-6 py-5 flex flex-col gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleSave(pendingNotify, true)}
+                    disabled={submitting}
+                    className="w-full inline-flex items-center justify-center bg-warning/90 hover:bg-warning text-ink-deep font-bold px-4 py-3 text-xs uppercase tracking-[0.14em] transition-colors disabled:opacity-50"
+                  >
+                    {submitting ? 'Saving…' : 'Save anyway · ungrounded'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGroundingFailures(null)}
+                    disabled={submitting}
+                    className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim hover:text-text-sec mt-1 disabled:opacity-50"
+                  >
+                    Back to fix the prices
+                  </button>
+                  {error && (
+                    <div className="mt-2 border border-rose-900/70 bg-rose-950/50 text-rose-200 px-3 py-2 text-xs">
+                      {error}
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="px-6 pt-6 pb-4 border-b border-ink-line">
+                  <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-text-dim">
+                    Confirm save
+                  </div>
+                  <h3 className="mt-2 font-extrabold uppercase tracking-tight text-lg text-text-pri">
+                    Send the updated quote<br />to the customer?
+                  </h3>
+                  <p className="mt-3 text-sm text-text-sec leading-relaxed">
+                    {anyTierPriceChanged()
+                      ? 'Prices have changed — the customer should get the new numbers as an SMS.'
+                      : 'Only labels or descriptions changed. You can save quietly if you don\'t want to ping the customer.'}
+                  </p>
+                </div>
+
+                <div className="px-6 py-5 flex flex-col gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleSave(true)}
+                    disabled={submitting}
+                    className="w-full inline-flex items-center justify-center gap-2 bg-accent hover:bg-accent-press text-white font-bold px-4 py-3 text-xs uppercase tracking-[0.14em] transition-colors disabled:opacity-50"
+                  >
+                    {submitting ? 'Sending…' : 'Send update · full quote SMS'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSave(false)}
+                    disabled={submitting}
+                    className="w-full inline-flex items-center justify-center bg-transparent border border-ink-line hover:border-text-sec text-text-pri font-mono text-[0.7rem] uppercase tracking-[0.14em] px-4 py-3 transition-colors disabled:opacity-50"
+                  >
+                    Save quietly · no SMS
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmOpen(false)}
+                    disabled={submitting}
+                    className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim hover:text-text-sec mt-1 disabled:opacity-50"
+                  >
+                    Back to edits
+                  </button>
+
+                  {error && (
+                    <div className="mt-2 border border-rose-900/70 bg-rose-950/50 text-rose-200 px-3 py-2 text-xs">
+                      {error}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -590,6 +757,10 @@ function materialise(initial: Tiers): Record<TierKey, EditableTier | null> {
         quantity: String(li.quantity ?? 1),
         unit: li.unit ?? 'hr',
         unit_price_ex_gst: String(li.unit_price_ex_gst ?? 0),
+        // Carry provenance so a save round-trips it: catalogue anchors and the
+        // `tradie_manual` tag survive an edit instead of being re-stamped
+        // `tradie_edit` (which stripped the strict-grounding anchors).
+        ...(li.source ? { source: li.source } : {}),
         ...(li.supplied_by ? { supplied_by: li.supplied_by } : {}),
         ...(li.safety_note ? { safety_note: li.safety_note } : {}),
       })),

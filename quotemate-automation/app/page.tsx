@@ -34,11 +34,11 @@ const POP =
 export const metadata = {
   title: "QuoteMax: We will do the quoting for you. You will never quote again",
   description:
-    "Customer texts. AI drafts a Good / Better / Best quote in under a minute. You review, tweak, send. Built for AU sparkies and plumbers who'd rather be on the tools.",
+    "Customer texts. QuoteMax drafts a quote in under a minute. You review, tweak, send. Built for AU sparkies and plumbers who'd rather be on the tools.",
   openGraph: {
     title: "QuoteMax: We will do the quoting for you. You will never quote again",
     description:
-      "Customer texts your number. AI asks the right questions, applies your pricing book, and drafts a Good / Better / Best quote in under a minute.",
+      "Customer texts your number. QuoteMax asks the right questions, applies your pricing book, and drafts a quote in under a minute.",
     type: "website",
   },
 }
@@ -52,6 +52,7 @@ export default function Home() {
       <Nav />
       <Hero />
       <TrustStrip />
+      <PoweredBy />
       <HowItWorks />
       <Trades />
       <Shift />
@@ -78,6 +79,17 @@ function Hero() {
       </noscript>
       <div className="relative z-10 mx-auto grid max-w-[88rem] items-center gap-12 px-6 py-20 md:py-28 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16">
         <div>
+          <div className={`mb-5 ${RISE}`}>
+            <span className="inline-flex items-center gap-2 border border-ink-line bg-ink/40 px-3 py-1.5 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-text-sec">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/brand/au-flag.svg"
+                alt="Australia"
+                className="h-3.5 w-auto border border-ink-line/60"
+              />
+              Built for Australian tradies
+            </span>
+          </div>
           <div className={RISE}>
             <Eyebrow>QuoteMax: We will do the quoting for you. You will never quote again</Eyebrow>
           </div>
@@ -93,9 +105,9 @@ function Hero() {
             className={`mt-7 max-w-xl text-lg leading-relaxed text-text-sec ${RISE}`}
             style={{ animationDelay: "240ms" }}
           >
-            Customers text your QuoteMax number. The AI asks the right
-            questions, applies your pricing book, and drafts a clean Good /
-            Better / Best quote in under a minute. You review, tweak, send.
+            Customers text your QuoteMax number. QuoteMax asks the right
+            questions, applies your pricing book, and drafts a clean quote in
+            under a minute. You review, tweak, send.
           </p>
           <div
             className={`mt-9 flex flex-wrap items-center gap-3 ${RISE}`}
@@ -189,12 +201,69 @@ function TrustStrip() {
           <TrustChip icon={<PinIcon />}>Built in Australia</TrustChip>
           <TrustChip>Electrical pilot · NSW</TrustChip>
           <TrustChip>Plumbing pilot · QLD</TrustChip>
-          <TrustChip icon={<LockIcon />}>Stripe-secured deposits</TrustChip>
           <TrustChip>Free trial · Starter Monthly</TrustChip>
         </ul>
         <p className="shrink-0 font-mono text-xs uppercase tracking-[0.14em] text-text-dim">
-          Runs on Twilio, Stripe and Claude
+          Runs on Twilio
         </p>
+      </div>
+    </section>
+  )
+}
+
+/* ─── Powered-by logo marquee ─────────────────────────────────── */
+// The real stack that drafts the quotes and runs the voice agent,
+// shown as a slow, monochrome ticker that reveals each brand's colour
+// on hover. Logos are real brand SVGs under /public/brand — swap a
+// file (same name) to update a mark. The track holds the set twice so
+// the `marquee` keyframe (-50%) loops seamlessly; reduced-motion users
+// see the static leading set.
+const POWERED_BY: { name: string; logo: string; wordmark?: boolean }[] = [
+  { name: "Anthropic", logo: "/brand/anthropic.svg" },
+  { name: "Gemini", logo: "/brand/gemini.svg" },
+  { name: "Twilio", logo: "/brand/twilio.svg" },
+  { name: "ElevenLabs", logo: "/brand/elevenlabs.svg", wordmark: true },
+  { name: "Deepgram", logo: "/brand/deepgram.svg" },
+  { name: "Vapi", logo: "/brand/vapi.svg" },
+  { name: "Voyage", logo: "/brand/voyage.svg" },
+]
+
+function PoweredBy() {
+  return (
+    <section className="border-b border-ink-line">
+      <div className="mx-auto max-w-[88rem] px-6 py-10">
+        <p className="text-center font-mono text-[0.7rem] font-semibold uppercase tracking-[0.22em] text-text-dim">
+          Powered by
+        </p>
+        <div className="mt-7 overflow-hidden [mask-image:linear-gradient(to_right,transparent,#000_8%,#000_92%,transparent)] [-webkit-mask-image:linear-gradient(to_right,transparent,#000_8%,#000_92%,transparent)]">
+          <div className="flex w-max items-center motion-safe:animate-[marquee_42s_linear_infinite] hover:[animation-play-state:paused]">
+            {[0, 1].map((copy) => (
+              <div
+                key={copy}
+                aria-hidden={copy === 1}
+                className="flex shrink-0 items-center"
+              >
+                {POWERED_BY.map((tool) => (
+                  <span
+                    key={tool.name}
+                    className="group flex items-center px-6 sm:px-9"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={tool.logo}
+                      alt={tool.name}
+                      className={`w-auto opacity-50 [filter:brightness(0)] transition duration-200 group-hover:opacity-100 group-hover:[filter:none] ${
+                        tool.wordmark ? "h-4 sm:h-[1.15rem]" : "h-6 sm:h-7"
+                      }`}
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </section>
   )
@@ -244,21 +313,21 @@ function HowItWorks() {
               <NumberedCard
                 num="01"
                 title="Customer texts your number"
-                body="Each tradie gets a dedicated AU number. Voice or SMS, both feed the same AI receptionist while you stay on the tools."
+                body="Each tradie gets a dedicated AU number. Voice or SMS, both feed QuoteMax while you stay on the tools."
               />
             </Reveal>
             <Reveal delay={110}>
               <NumberedCard
                 num="02"
-                title="AI drafts the quote"
-                body="Claude asks the right questions for the job type, applies your pricing book, and writes Good / Better / Best line items in under a minute."
+                title="QuoteMax drafts the quote"
+                body="QuoteMax asks the right questions for the job type, applies your pricing book, and writes the line items in under a minute."
               />
             </Reveal>
             <Reveal delay={220}>
               <NumberedCard
                 num="03"
                 title="You review, send, get paid"
-                body="The quote lands in your dashboard. Approve as-is or tweak it. The customer pays a deposit via Stripe and the job is booked."
+                body="The quote lands in your dashboard. Approve as-is or tweak it. The customer pays a deposit and the job is booked."
               />
             </Reveal>
           </div>
@@ -417,7 +486,7 @@ function Shift() {
     },
     {
       old: "Quotes typed up at 11pm, after dinner",
-      now: "Good / Better / Best drafted in under a minute",
+      now: "A clean quote drafted in under a minute",
     },
     {
       old: "Job goes to whoever's free to reply",
@@ -506,7 +575,7 @@ function Pricing() {
             <span className="text-accent">one missed job.</span>
           </h2>
           <p className="mt-6 max-w-2xl text-lg leading-relaxed text-text-sec">
-            Pick a plan and your AI receptionist is quoting the same day —
+            Pick a plan and QuoteMax is quoting the same day —
             Starter Monthly comes with a 14-day free trial. We never take a cut
             of your jobs. The only fixed price is the $99 site visit, credited
             straight back to the job.
@@ -529,7 +598,7 @@ function Faq() {
   const items = [
     {
       q: "Do I lose control of my pricing?",
-      a: "No. The AI only ever uses your pricing book. Every quote lands in your dashboard for you to approve or tweak before it goes out.",
+      a: "No. QuoteMax only ever uses your pricing book. Every quote lands in your dashboard for you to approve or tweak before it goes out.",
     },
     {
       q: "What about complex jobs?",
@@ -594,7 +663,7 @@ function ClosingCta() {
           </h2>
           <p className="mt-6 max-w-2xl text-lg leading-relaxed text-text-sec">
             Both pilots run on the same platform. Each tradie gets their own
-            number, pricing book, and AI receptionist tuned to their brand
+            number, pricing book, and QuoteMax tuned to their brand
             voice. Setup takes about three minutes.
           </p>
           <div className="mt-10 flex flex-wrap gap-3">
@@ -652,10 +721,22 @@ function SmsDemo() {
             Sample
           </span>
         </div>
-        <div className="mt-3 grid grid-cols-3 gap-px border border-ink-line bg-ink-line">
-          <TierMini name="Good" price="$680" at={4150} />
-          <TierMini name="Better" price="$890" at={4300} />
-          <TierMini name="Best" price="$1,150" best at={4450} />
+        <div className="mt-3 border border-ink-line bg-ink-card">
+          <div
+            className={`relative px-3 py-4 text-center ${POP}`}
+            style={{ animationDelay: "4150ms" }}
+          >
+            <span
+              className="absolute inset-x-0 top-0 h-0.5 bg-accent"
+              aria-hidden="true"
+            />
+            <div className="font-mono text-[0.55rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+              Sample quote
+            </div>
+            <div className="mt-1.5 font-mono text-xl font-bold tabular-nums text-accent">
+              $890
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -687,7 +768,7 @@ function Bubble({
       >
         {!inbound && (
           <span className="mb-1 block font-mono text-[0.55rem] font-semibold uppercase tracking-[0.16em] text-accent">
-            QuoteMax AI
+            QuoteMax
           </span>
         )}
         {children}
@@ -696,7 +777,7 @@ function Bubble({
   )
 }
 
-// The receptionist "thinking" just before the quote drops — three dots
+// QuoteMax "thinking" just before the quote drops — three dots
 // bouncing in sequence. Pops onto the timeline, then bounces in place.
 function TypingBubble({ at }: { at: number }) {
   return (
@@ -718,48 +799,6 @@ function TypingBubble({ at }: { at: number }) {
           />
         ))}
       </div>
-    </div>
-  )
-}
-
-function TierMini({
-  name,
-  price,
-  best,
-  at,
-}: {
-  name: string
-  price: string
-  best?: boolean
-  /** Demo-timeline arrival (ms after load) — tiers land one by one. */
-  at?: number
-}) {
-  return (
-    <div
-      className={`relative bg-ink-card px-3 py-3 text-center ${at ? POP : ""}`}
-      style={at ? { animationDelay: `${at}ms` } : undefined}
-    >
-      {best && (
-        <span
-          className="absolute inset-x-0 top-0 h-0.5 bg-accent"
-          aria-hidden="true"
-        />
-      )}
-      <div className="font-mono text-[0.55rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
-        {name}
-      </div>
-      <div
-        className={`mt-1.5 font-mono text-base font-bold tabular-nums ${
-          best ? "text-accent" : "text-text-pri"
-        }`}
-      >
-        {price}
-      </div>
-      {best && (
-        <div className="mt-1 font-mono text-[0.5rem] font-semibold uppercase tracking-[0.14em] text-accent-soft">
-          Best value
-        </div>
-      )}
     </div>
   )
 }
@@ -947,25 +986,6 @@ function PinIcon() {
     >
       <path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11Z" />
       <circle cx="12" cy="10" r="2.4" />
-    </svg>
-  )
-}
-
-function LockIcon() {
-  return (
-    <svg
-      width="13"
-      height="13"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      strokeLinecap="square"
-      strokeLinejoin="miter"
-      aria-hidden="true"
-    >
-      <rect x="5" y="11" width="14" height="9" />
-      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
     </svg>
   )
 }

@@ -18,7 +18,7 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "QuoteMax: We will do the quoting for you. You will never quote again",
   description:
-    "Customer texts. AI drafts your Good / Better / Best quote. You review, tweak, send. Built for AU sparkies and plumbers who'd rather be on the tools.",
+    "Customer texts. QuoteMax drafts your quote in under a minute. You review, tweak, send. Built for AU sparkies and plumbers who'd rather be on the tools.",
 };
 
 // Browser chrome (mobile address bar). The site defaults to the Maintain

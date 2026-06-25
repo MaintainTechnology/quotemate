@@ -105,14 +105,14 @@ export function SolarCheck({ accessToken, address, intent, betterIncGst, bestInc
 
       {stage === 'done' && detection && (
         <div className="mt-6 space-y-5">
-          {!detection.has_solar ? (
-            <div className="flex items-baseline gap-3">
-              <span className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-teal-glow">
-                ✓ No existing solar detected
-              </span>
-              <span className="font-mono text-xs uppercase tracking-[0.14em] text-text-dim">{detection.confidence} confidence</span>
-            </div>
-          ) : (
+          {/* Confidence-aware human-readable line — what the AI saw. */}
+          <div className={`flex items-baseline gap-3 ${detection.has_solar || detection.has_skylight ? '' : 'text-teal-glow'}`}>
+            <span className={`font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] ${detection.has_solar || detection.has_skylight ? 'text-accent' : 'text-teal-glow'}`}>
+              {detection.has_solar || detection.has_skylight ? '◳ ' : '✓ '}{detection.summary_note}
+            </span>
+          </div>
+
+          {detection.has_solar && (
             <>
               <div className="grid gap-4 sm:grid-cols-3">
                 <Stat label="Arrays" value={String(detection.array_count)} />
@@ -146,11 +146,24 @@ export function SolarCheck({ accessToken, address, intent, betterIncGst, bestInc
                   <TotalCard label="Upgrade incl. solar" value={bestWithSolar} sub={`was $${formatMoney(bestIncGst)}`} />
                 </div>
               )}
-
-              {detection.notes && (
-                <p className="text-xs text-text-dim">{detection.notes}</p>
-              )}
             </>
+          )}
+
+          {/* Skylights — SURFACED ONLY. Never auto-priced; the tradie adds a
+              re-flash line manually if needed. */}
+          {detection.has_skylight && (
+            <div className="border border-ink-line border-l-4 border-l-warning bg-ink-deep p-5">
+              <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-warning">
+                {detection.skylight_count} skylight{detection.skylight_count === 1 ? '' : 's'} flagged
+              </div>
+              <p className="mt-1 text-sm text-text-sec">
+                Not priced automatically — add a re-flash / reinstate line for the skylight{detection.skylight_count === 1 ? '' : 's'} if the re-roof disturbs {detection.skylight_count === 1 ? 'it' : 'them'}.
+              </p>
+            </div>
+          )}
+
+          {detection.notes && (
+            <p className="text-xs text-text-dim">{detection.notes}</p>
           )}
         </div>
       )}

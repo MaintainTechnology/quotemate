@@ -28,9 +28,9 @@ export type RoofingReplyContext = {
    *  Rendered on the priced estimate message only (never the inspection
    *  or confirm messages — no committed numbers to put in a document). */
   pdfUrl?: string | null
-  /** Migration 142 — per-feature tier presentation mode. Controls WHICH tiers
-   *  the estimate SMS lists. Omitted ⇒ 'good_better_best' (legacy all-tiers);
-   *  the inbound route passes the tenant's roofing pricing_book mode. */
+  /** Migration 142/146 — per-feature tier presentation mode. Controls WHICH
+   *  tiers the estimate SMS lists. Omitted ⇒ 'single' (the platform default,
+   *  mig 146); the inbound route passes the tenant's roofing pricing_book mode. */
   tierMode?: QuoteTierMode
 }
 
@@ -108,7 +108,7 @@ export function composeEstimateMessage(ctx: RoofingReplyContext): string {
   // per-SMS selected tier; the resolver's better → good → best fallback picks
   // the recommended one for 'single' mode (matches save-as-quote's default).
   const visibleTierKeys = resolveVisibleTiers({
-    mode: asQuoteTierMode(ctx.tierMode, 'good_better_best'),
+    mode: asQuoteTierMode(ctx.tierMode, 'single'),
     present: {
       good: quote.combined.tiers.some((t) => t.tier === 'good'),
       better: quote.combined.tiers.some((t) => t.tier === 'better'),
@@ -141,20 +141,42 @@ export function composeEstimateMessage(ctx: RoofingReplyContext): string {
  * roof + location.
  */
 export function composeInspectionMessage(ctx: RoofingReplyContext): string {
-  return [
+  const out = [
     `${greeting(ctx.firstName)}for your roof at ${ctx.address} we'll need a quick inspection on site before we can quote accurately.`,
     ctx.quote.routing.reason,
+  ]
+  // Indicative range — when the roof has real (non-zero) per-structure numbers
+  // we show them as a ballpark, clearly labelled "confirmed on site", so the
+  // customer never gets a price-free quote. A genuinely unpriceable roof
+  // (asbestos / unknown material → $0 tiers) yields no lines and the message
+  // stays price-free, as before.
+  const indic = indicativeCombinedTiers(ctx.quote.structures ?? [])
+  const tierLines = indic.tiers
+    .filter((t) => t.inc_gst > 0)
+    .map((t) => `• ${ROOF_TIER_LABEL_BY_KEY[t.tier]}: ${fmtAud(t.inc_gst)}`)
+  if (tierLines.length > 0) {
+    out.push('Indicative estimate (confirmed on site):', ...tierLines)
+  }
+  out.push(
     `See the roof and location here: ${ctx.quoteUrl}`,
     `Reply YES and we'll book a time that suits you.`,
-  ].join('\n')
+  )
+  return out.join('\n')
 }
 
 /**
- * PURE — pick the right message for the quote's routing decision.
- * inspection_required → inspection message; otherwise the tiered estimate.
+ * PURE — pick the right message for the quote. Lead with a FIRM price whenever
+ * any structure is quotable (the estimate message already lists the firm
+ * secondaries and flags any inspection-needed structure as "needs a look on
+ * site"). Only a job with NOTHING quotable — a whole-job on-site quote — uses
+ * the inspection message (which now carries an indicative range when the roof
+ * has real numbers). This mirrors the customer quote page: firm secondaries
+ * when present, an indicative range when the whole job is on-site.
  */
 export function buildRoofingReplyMessage(ctx: RoofingReplyContext): string {
-  if (ctx.quote.routing.decision === 'inspection_required') {
+  const structures = ctx.quote.structures ?? []
+  const anyQuotable = structures.some((s) => s.price.routing.decision !== 'inspection_required')
+  if (!anyQuotable) {
     return composeInspectionMessage(ctx)
   }
   return composeEstimateMessage(ctx)
@@ -275,4 +297,37 @@ export function narrowQuoteToStructures(
  */
 export function narrowQuoteToStructure(quote: MultiRoofQuote, index1Based: number): MultiRoofQuote {
   return narrowQuoteToStructures(quote, [index1Based])
+}
+
+/**
+ * PURE — indicative combined tiers over ALL given structures, INCLUDING
+ * inspection-routed ones, summed verbatim from the stored per-structure tier
+ * numbers. Mirrors narrowQuoteToStructures' summation but WITHOUT the quotable
+ * filter.
+ *
+ * Used ONLY when a roofing job has no firm-priced (quotable) structure at all
+ * (a whole-job on-site quote): instead of the quotable-only headline — which is
+ * $0 there — the customer sees a real INDICATIVE range, clearly labelled
+ * "subject to on-site confirmation", so an on-site-flagged roof never reads as
+ * blank/$0. Never re-derives prices. A genuinely unpriceable roof (asbestos /
+ * unknown material → $0 tiers from the pricer) sums to all-zero tiers, which
+ * the caller treats as "no indicative numbers" and falls back to the
+ * inspection-only state rather than showing a $0 quote.
+ */
+export function indicativeCombinedTiers(
+  structures: readonly RoofStructurePrice[],
+): { area_m2: number; tiers: [RoofingPriceTier, RoofingPriceTier, RoofingPriceTier] } {
+  const tiers = ([0, 1, 2] as const).map((i): RoofingPriceTier => {
+    const tierName = (['good', 'better', 'best'] as const)[i]
+    const labelWord = tierName === 'good' ? 'Patch / repair' : tierName === 'better' ? 'Re-roof' : 'Upgrade'
+    return {
+      tier: tierName,
+      label: `${labelWord}, indicative`,
+      ex_gst: round2(structures.reduce((a, s) => a + (s.price.tiers[i]?.ex_gst ?? 0), 0)),
+      inc_gst: round2(structures.reduce((a, s) => a + (s.price.tiers[i]?.inc_gst ?? 0), 0)),
+      scope: `${labelWord} indicative estimate across ${structures.length} structure${structures.length === 1 ? '' : 's'}, confirmed on site.`,
+    }
+  }) as [RoofingPriceTier, RoofingPriceTier, RoofingPriceTier]
+  const area_m2 = round2(structures.reduce((a, s) => a + (s.price.area_m2 ?? 0), 0))
+  return { area_m2, tiers }
 }

@@ -31,6 +31,7 @@ import {
 import { sendWelcomeSms, type WelcomeSmsResult } from '@/lib/twilio/welcome-sms'
 import { setTwilioSmsWebhook } from '@/lib/twilio/set-sms-webhook'
 import { provisionTenantStore } from '@/lib/filestore/tenant-provision'
+import { isStubTwilioNumber, isStubVapiId } from './stub-detect'
 import { after } from 'next/server'
 
 export type ProvisioningInput = {
@@ -95,9 +96,17 @@ export async function runProvisioning(
 
   let phoneNumber: string | null = input.existing?.twilioSmsNumber ?? null
   let vapiAssistantId: string | null = input.existing?.vapiAssistantId ?? null
-  let stubbedTwilio = isStubTwilio(phoneNumber)
-  let stubbedVapi = isStubVapi(vapiAssistantId)
+  let stubbedTwilio = isStubTwilioNumber(phoneNumber)
+  let stubbedVapi = isStubVapiId(vapiAssistantId)
   let warning: string | undefined
+
+  // Twilio Phone Number SID — the authoritative real-vs-stub signal we persist
+  // so the Tenant Health monitor never has to guess from the number's digits
+  // (BUG-15). Only known when we provision a number in THIS call; for a
+  // pre-existing number we leave the stored value untouched (the backfill
+  // heals it). `freshTwilio` gates whether we write the column at all.
+  let twilioNumberSid: string | null = null
+  let freshTwilio = false
 
   // ── 1. Provision Twilio number (skip if already on file) ─────────
   if (!phoneNumber) {
@@ -118,6 +127,9 @@ export async function runProvisioning(
     }
     phoneNumber = twilio.phoneNumber
     stubbedTwilio = 'stubbed' in twilio ? twilio.stubbed : false
+    freshTwilio = true
+    // Real provision → capture the SID; stub provision → leave it null.
+    if ('stubbed' in twilio && !twilio.stubbed) twilioNumberSid = twilio.twilioSid
   }
 
   // ── 2. Provision Vapi assistant (skip if already on file) ────────
@@ -137,6 +149,7 @@ export async function runProvisioning(
         .update({
           twilio_sms_number: phoneNumber,
           twilio_voice_number: phoneNumber,
+          ...(freshTwilio ? { twilio_number_sid: twilioNumberSid } : {}),
         })
         .eq('id', input.tenantId)
       return {
@@ -197,6 +210,7 @@ export async function runProvisioning(
       vapi_assistant_id: vapiAssistantId,
       status: 'active',
       activated_at: new Date().toISOString(),
+      ...(freshTwilio ? { twilio_number_sid: twilioNumberSid } : {}),
     })
     .eq('id', input.tenantId)
 
@@ -253,14 +267,4 @@ export async function runProvisioning(
     welcome,
     warning,
   }
-}
-
-/** Detects the deterministic stub number shape `+614820xxxxx`. */
-function isStubTwilio(n: string | null | undefined): boolean {
-  return !!n && /^\+614820\d{5}$/.test(n)
-}
-
-/** Detects the deterministic stub assistant id `vapi-stub-...`. */
-function isStubVapi(id: string | null | undefined): boolean {
-  return !!id && id.startsWith('vapi-stub-')
 }

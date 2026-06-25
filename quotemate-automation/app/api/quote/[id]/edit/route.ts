@@ -41,9 +41,11 @@ import { loadCandidatePrices } from '@/lib/estimate/run'
 import {
   validateQuoteGrounding,
   detectCrossTierDuplicates,
+  isManualLine,
   type GroundingFailure,
   type PricingBookForValidation,
 } from '@/lib/estimate/validate'
+import { shouldNotifyOnEdit } from '@/lib/quote/notify-policy'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -518,20 +520,35 @@ export async function POST(
         : quote.status,
   }
 
-  // H-2 — if the tradie forced a save through a failed grounding check,
-  // append an audit risk_flag so the failure is traceable. We never
-  // OVERWRITE existing risk_flags; we append, dedup, and persist.
+  // Audit risk_flags. Two append-only sources, merged + deduped onto the
+  // quote's existing flags (we never OVERWRITE):
+  //   - every tradie-entered manual line (`tradie_manual_line:<tier>#<idx>`)
+  //     — an ungrounded human-entered price the customer can see, kept
+  //     traceable even though the grounding gate exempts it.
+  //   - H-2: a forced save through a failed grounding check
+  //     (`tradie_edit_ungrounded:<tier>#<idx>,...`).
+  const existingFlags = Array.isArray(quote.risk_flags) ? (quote.risk_flags as string[]) : []
+  const flagsToAdd: string[] = []
+  for (const key of tierKeys) {
+    const items = nextTiers[key]?.line_items ?? []
+    for (let i = 0; i < items.length; i++) {
+      if (isManualLine(items[i])) flagsToAdd.push(`tradie_manual_line:${key}#${i}`)
+    }
+  }
   if (!groundingFailures.valid && edits.force === true) {
-    const existing = Array.isArray(quote.risk_flags) ? (quote.risk_flags as string[]) : []
     const summary = groundingFailures.failures
       .map((f) => `${f.tier}#${f.lineIndex}`)
       .join(',')
-    const flag = `tradie_edit_ungrounded:${summary || 'unknown'}`
-    updateBody.risk_flags = existing.includes(flag) ? existing : [...existing, flag]
+    flagsToAdd.push(`tradie_edit_ungrounded:${summary || 'unknown'}`)
     console.warn('[quote/edit] persisting ungrounded edit under force=true', {
       quoteId,
       failures: groundingFailures.failures,
     })
+  }
+  if (flagsToAdd.length > 0) {
+    const merged = [...existingFlags]
+    for (const f of flagsToAdd) if (!merged.includes(f)) merged.push(f)
+    updateBody.risk_flags = merged
   }
 
   const { error: updErr } = await supabase
@@ -560,9 +577,15 @@ export async function POST(
   //
   // We always fire AFTER the response returns so the tradie's UI update
   // isn't blocked on SMS dispatch.
-  const shouldNotify =
-    edits.notify_customer === true ||
-    (edits.notify_customer === undefined && changedTiers.length > 0)
+  // A quote still held for tradie approval has NOT been shown to the customer;
+  // an edit must not be their first contact (only Approve releases it).
+  // shouldNotifyOnEdit suppresses the SMS while held, otherwise applies the
+  // explicit-opt-in / legacy-price-change rule.
+  const shouldNotify = shouldNotifyOnEdit({
+    status: quote.status as string | null | undefined,
+    notifyCustomer: edits.notify_customer,
+    changedTiersCount: changedTiers.length,
+  })
 
   if (shouldNotify) {
     after(async () => {

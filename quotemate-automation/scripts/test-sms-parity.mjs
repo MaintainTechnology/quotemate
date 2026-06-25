@@ -121,7 +121,9 @@ const quoteInspection = {
 // 1. CUSTOMER SMS BODY — must include all key UX surfaces
 // ═══════════════════════════════════════════════════════════════════
 describe("buildQuoteSms — auto-quote customer message (matches voice format)", () => {
-  const body = templates.buildQuoteSms(intakeDownlights, quoteAuto);
+  // Mig 146 flipped the no-mode fallback to 'single'; this fixture asserts the
+  // full Good/Better/Best SMS format, so opt into it explicitly.
+  const body = templates.buildQuoteSms(intakeDownlights, quoteAuto, { tierMode: "good_better_best" });
 
   it("greets the customer by first name", () => {
     assert.match(body, /^Hi Mike,/);

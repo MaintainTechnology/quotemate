@@ -11,7 +11,11 @@ export default defineConfig({
     include: ['lib/**/*.test.ts', 'tests/**/*.test.ts', 'app/**/*.test.ts'],
     // E2E specs live in tests/e2e/*.spec.ts and are driven by Playwright,
     // not vitest. Exclude them so `npm test` stays node-only and fast.
-    exclude: ['node_modules/**', 'tests/e2e/**'],
+    // Also exclude any sibling git worktrees (.claude/worktrees/*) — those are
+    // separate full checkouts of feature branches; vitest must never collect
+    // their *.test.ts (they have their own module resolution and would fail
+    // here) even if it's invoked from the repo root with a broader scan scope.
+    exclude: ['node_modules/**', 'tests/e2e/**', '**/.claude/**', '**/worktrees/**'],
     globals: false,
     reporters: ['default'],
   },

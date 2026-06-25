@@ -11,8 +11,11 @@
 --   • included_indices int[] — the AUTHORITATIVE set of structures (1-based
 --     indices into quote->'structures') the tradie keeps in the job. This
 --     is the single source of truth the customer quote page AND the quote
---     PDF narrow to, replacing the fragile `?s=` query-param carrier. NULL
---     means "all structures" (back-compat for any reader before backfill).
+--     PDF narrow to, replacing the fragile `?s=` query-param carrier. A NULL/
+--     empty selection now resolves to the ROOF-ONLY default (main dwelling)
+--     at read time — see lib/roofing/selection.ts defaultStructureIndices and
+--     docs/strategy.md. This backfill still writes explicit all-structures
+--     arrays for legacy rows, so they keep rendering exactly as before.
 --
 -- Additive only. Does NOT touch existing columns, rows' meaning, or the
 -- intake enum. Backfills every existing row so measure_token is unique and
@@ -36,7 +39,7 @@ update public.roofing_measurements
 
 -- Backfill included_indices = all structures in the stored quote, so the
 -- existing rows render exactly as they do today (nothing hidden). Rows with
--- no usable quote stay NULL (readers treat NULL as "all").
+-- no usable quote stay NULL (readers fall back to the roof-only default).
 update public.roofing_measurements
    set included_indices = (
      select array_agg(g order by g)

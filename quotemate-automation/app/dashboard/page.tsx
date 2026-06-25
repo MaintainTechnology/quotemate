@@ -21,6 +21,12 @@ import {
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { CATEGORIES } from '@/lib/estimate/categories'
+import {
+  defaultAvailabilityForState,
+  parseAvailability,
+  type WeeklyAvailability,
+} from '@/lib/quote/availability'
+import { AvailabilityEditor } from '@/app/_components/AvailabilityEditor'
 import { resolveTradeFormat, tierLabelsForTrade } from '@/lib/quote/trade-format'
 import { asQuoteTierMode, type QuoteTierMode } from '@/lib/quote/tier-visibility'
 import { resolveCatalogueBadge, badgeLabel } from '@/lib/dashboard/badge-state'
@@ -60,6 +66,7 @@ import {
   Sun,
   FolderOpen,
   History,
+  CalendarDays,
   type LucideProps,
 } from 'lucide-react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
@@ -72,6 +79,7 @@ import { SolarTab } from './_components/SolarTab'
 import { BillingTab } from './_components/BillingTab'
 import { FilesTab } from './_components/FilesTab'
 import { HistoricalQuotesTab } from './_components/HistoricalQuotesTab'
+import { CalendarTab } from './_components/CalendarTab'
 import { HistoricalHint } from './_components/HistoricalHint'
 import CommercialPaintingTab from './_components/commercial-painting/CommercialPaintingTab'
 import { StatusPill, StatGrid, TONE_LEFT_RAIL, type Tone } from './_components/quote-ui'
@@ -116,6 +124,10 @@ type Tenant = {
    *  Changeable from the Account tab; the quote page reads logo_url live. */
   logo_url: string | null
   logo_path: string | null
+  /** Migration 147 — default schedule availability (weekly working-hours
+   *  template). Drives the customer-facing AM/PM booking windows. NULL for
+   *  legacy tenants (falls back to available_slots / rolling window). */
+  default_availability: WeeklyAvailability | null
 }
 
 type Pricing = {
@@ -286,6 +298,8 @@ type Tab =
   | 'quotes'
   | 'chats'
   | 'followups'
+  /** Calendar — every booking (self-serve request, reserved, confirmed, booked). Core tab. */
+  | 'calendar'
   /** v10 — only rendered when tenant.trades includes 'roofing'. */
   | 'roofing'
   /** Signage compliance (HQ product) — links to standalone /dashboard/signage routes. */
@@ -310,7 +324,7 @@ type Tab =
 /** Tabs reachable via /dashboard?tab=… (e.g. the estimator run page's breadcrumb). */
 const DEEP_LINK_TABS: readonly Tab[] = [
   'overview', 'account', 'payouts', 'billing', 'pricing', 'services', 'catalogue', 'estimating',
-  'recipes', 'quotes', 'chats', 'followups', 'roofing', 'signage', 'painting',
+  'recipes', 'quotes', 'chats', 'followups', 'calendar', 'roofing', 'signage', 'painting',
   'commercial-painting', 'aircon', 'estimator', 'solar', 'invites', 'files', 'historical-quotes',
 ]
 
@@ -722,6 +736,7 @@ export default function DashboardPage() {
             {tab === 'estimating' && <EstimatingTab accessToken={accessToken} />}
             {tab === 'recipes' && <RecipesTab accessToken={accessToken} />}
             {tab === 'quotes' && <QuotesTab data={data} accessToken={accessToken} />}
+            {tab === 'calendar' && <CalendarTab accessToken={accessToken} />}
             {tab === 'followups' && (
               <FollowupsTab accessToken={accessToken} />
             )}
@@ -1028,6 +1043,8 @@ function buildNav(quoteCount: number, trades: ReadonlyArray<string> = []): NavIt
     { tab: 'quotes', label: 'Quotes', icon: FileText, count: quoteCount },
     { tab: 'followups', label: 'Follow-ups', icon: PhoneCall },
     { tab: 'chats', label: 'Chats', icon: MessageSquare },
+    // Calendar — core tab (every tenant). Shows all bookings + self-serve requests.
+    { tab: 'calendar', label: 'Calendar', icon: CalendarDays },
   ]
   // Feature tabs — each shown only when its gating slug is in tenants.trades[]
   // (see lib/features/catalog FEATURE_TAB_SLUGS). New tenants are provisioned
@@ -1073,7 +1090,7 @@ const SIDEBAR_GROUPS: { label: string; tabs: Tab[] }[] = [
   // tenants the byTab.get('roofing') lookup returns undefined and the
   // sidebar quietly skips the row. No tenant-specific filtering needed
   // in this layout list.
-  { label: 'Daily work', tabs: ['overview', 'quotes', 'followups', 'chats', 'files', 'historical-quotes', 'roofing', 'signage', 'painting', 'commercial-painting', 'aircon', 'estimator', 'solar'] },
+  { label: 'Daily work', tabs: ['overview', 'quotes', 'followups', 'chats', 'calendar', 'files', 'historical-quotes', 'roofing', 'signage', 'painting', 'commercial-painting', 'aircon', 'estimator', 'solar'] },
   {
     label: 'Setup',
     tabs: ['invites', 'account', 'payouts', 'billing', 'pricing', 'services', 'catalogue', 'estimating', 'recipes'],
@@ -1294,6 +1311,10 @@ const TAB_META: Record<
   chats: {
     title: 'Chats',
     desc: 'Customer conversations across SMS and voice — including the leads that never became a quote.',
+  },
+  calendar: {
+    title: 'Calendar',
+    desc: 'Every booking in one place — self-serve requests, reserved holds, and confirmed jobs. Confirm new requests as they come in.',
   },
   account: {
     title: 'Account',
@@ -2206,6 +2227,68 @@ function LogoCard({
   )
 }
 
+// Default schedule availability card (migration 147). Lets the tradie set
+// their recurring weekly working hours; customers then book a morning or
+// afternoon slot on those days. Saves to tenants.default_availability via
+// PATCH /api/tenant/me. Falls back to a state-derived default when the tenant
+// has none yet (legacy rows).
+function DefaultScheduleCard({
+  tenant,
+  onSave,
+}: {
+  tenant: Tenant
+  onSave: (payload: Record<string, unknown>) => Promise<void>
+}) {
+  const initial =
+    parseAvailability(tenant.default_availability) ??
+    defaultAvailabilityForState(tenant.state)
+  const [value, setValue] = useState<WeeklyAvailability>(initial)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [savedAt, setSavedAt] = useState<number | null>(null)
+
+  const valid = parseAvailability(value) !== null
+
+  async function save() {
+    if (!valid) {
+      setError('Each working day needs a start time before its end time.')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    setSavedAt(null)
+    try {
+      await onSave({ tenant: { default_availability: value } })
+      setSavedAt(Date.now())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card
+      title="Booking availability"
+      subtitle="The hours you work each week. Customers pick a morning or afternoon slot on these days."
+    >
+      <AvailabilityEditor value={value} onChange={setValue} disabled={busy} />
+      <div className="mt-4 flex items-center gap-4">
+        <button
+          type="button"
+          onClick={save}
+          disabled={busy || !valid}
+          className="inline-flex items-center gap-2 border border-ink-line bg-ink-deep px-5 py-2.5 text-sm font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent-soft disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {busy ? 'Saving…' : 'Save availability'}
+        </button>
+        {error && <span className="text-sm text-warning">{error}</span>}
+        {savedAt && !error ? <SaveHint savedAt={savedAt} /> : null}
+      </div>
+    </Card>
+  )
+}
+
 function AccountTab({
   data,
   onSave,
@@ -2275,6 +2358,8 @@ function AccountTab({
       />
 
       <SmsEstimatorCard tenant={data.tenant} onSave={onSave} />
+
+      <DefaultScheduleCard tenant={data.tenant} onSave={onSave} />
 
       <LicencesCard
         licences={data.licences ?? []}
@@ -11099,6 +11184,8 @@ function tabLabel(t: Tab): string {
       return 'Quotes'
     case 'chats':
       return 'Chats'
+    case 'calendar':
+      return 'Calendar'
     case 'followups':
       return 'Follow-ups'
     case 'catalogue':

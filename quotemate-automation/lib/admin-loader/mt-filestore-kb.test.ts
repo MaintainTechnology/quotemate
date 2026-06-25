@@ -240,7 +240,7 @@ describe('loadKbConfigFromEnv', () => {
     const cfg = loadKbConfigFromEnv({
       KB_API_URL: 'https://kb.example.com',
       KB_API_KEY: 'k',
-    })
+    } as unknown as NodeJS.ProcessEnv)
     expect(cfg.url).toBe('https://kb.example.com')
     expect(cfg.apiKey).toBe('k')
   })
@@ -249,7 +249,7 @@ describe('loadKbConfigFromEnv', () => {
     const cfg = loadKbConfigFromEnv({
       MT_FILESTORE_KB_URL: 'https://alt.example.com',
       MT_FILESTORE_KB_API_KEY: 'alt',
-    })
+    } as unknown as NodeJS.ProcessEnv)
     expect(cfg.url).toBe('https://alt.example.com')
     expect(cfg.apiKey).toBe('alt')
   })

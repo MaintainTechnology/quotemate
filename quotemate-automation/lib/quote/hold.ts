@@ -96,10 +96,16 @@ export function fmtHoldUntilAU(iso: string | null | undefined): string {
 
 // ── Post-deposit booking-state model ────────────────────────────────
 //   null/undefined -> quote drafted, no deposit yet
+//   'requested'    -> self-serve customer booking request, awaiting tradie
+//                     confirmation (no estimate, no deposit) — see
+//                     specs/dashboard-calendar-tab.md
 //   'reserved'     -> deposit paid, slot not yet chosen (locked-in intent)
+//   'confirmed'    -> tradie accepted a self-serve request (no deposit taken)
 //   'booked'       -> slot chosen / job scheduled (terminal)
 export const BOOKING_STATE = {
+  REQUESTED: 'requested',
   RESERVED: 'reserved',
+  CONFIRMED: 'confirmed',
   BOOKED: 'booked',
 } as const
 
@@ -124,6 +130,8 @@ export function bookingStateAfterSlotPicked(): BookingState {
 /** Human label for the customer-facing status chip. */
 export function bookingStateLabel(state: string | null | undefined): string {
   if (state === BOOKING_STATE.BOOKED) return 'Booked'
+  if (state === BOOKING_STATE.CONFIRMED) return 'Confirmed'
   if (state === BOOKING_STATE.RESERVED) return 'Reserved'
+  if (state === BOOKING_STATE.REQUESTED) return 'Requested'
   return 'Draft'
 }

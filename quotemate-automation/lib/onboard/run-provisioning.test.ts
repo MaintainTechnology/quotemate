@@ -122,6 +122,8 @@ describe('runProvisioning — happy path', () => {
     expect(persist.payload.vapi_assistant_id).toBe('asst_test_real')
     expect(persist.payload.status).toBe('active')
     expect(typeof persist.payload.activated_at).toBe('string')
+    // A live provision persists the authoritative Twilio Phone Number SID.
+    expect(persist.payload.twilio_number_sid).toBe('PN-test')
 
     // All provisioners called exactly once
     expect(provisioners.twilio).toHaveBeenCalledTimes(1)
@@ -161,6 +163,9 @@ describe('runProvisioning — happy path', () => {
     expect(updateCalls[0].payload.twilio_sms_number).toBe('+61482012345')
     expect(updateCalls[0].payload.vapi_assistant_id).toBe('vapi-stub-11111111')
     expect(updateCalls[0].payload.status).toBe('active')
+    // A stub provision writes a NULL SID — the health check must read it as
+    // "no SID", never a fabricated real number.
+    expect(updateCalls[0].payload.twilio_number_sid).toBeNull()
   })
 })
 

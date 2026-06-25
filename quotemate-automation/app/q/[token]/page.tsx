@@ -417,6 +417,26 @@ export default async function PublicQuotePage(props: {
 
   const stripeLinks: StripeLinks = (quote.stripe_links as StripeLinks) ?? {}
   const isInspection = !!quote.needs_inspection
+  // Roofing inspection quotes keep REAL computed tiers in good/better/best
+  // (the deterministic roofing engine prices from the satellite measurement,
+  // then flags the job for an on-site visit). So instead of hiding all prices
+  // behind the $99-only InspectionBlock — which read as a blank/$0 quote — we
+  // show those tiers as an INDICATIVE estimate, with the $99 booking CTA. This
+  // is scoped to roofing only; every other trade's inspection quote has null
+  // tiers and keeps the InspectionBlock. The guard requires at least one tier
+  // with a real dollar value so a genuinely unpriceable roof (e.g. asbestos →
+  // $0 tiers) still falls back to the InspectionBlock, never a $0 quote.
+  const roofTierValue = (t: unknown): number => {
+    const v = (t as { total_inc_gst?: number } | null)?.total_inc_gst
+    return typeof v === 'number' ? v : 0
+  }
+  const roofingTierHasValue =
+    isRoofing && [quote.good, quote.better, quote.best].some((t) => roofTierValue(t) > 0)
+  const roofingIndicative = isInspection && roofingTierHasValue
+  // In indicative mode, hide any $0 tier (e.g. asbestos has no patch/re-roof
+  // price, only an upgrade price) so the customer never sees a "$0" option.
+  const roofTierIfPositive = (t: unknown): Tier =>
+    !roofingIndicative || roofTierValue(t) > 0 ? (t as Tier) : null
   const isPaid = !!quote.paid_at
   const quoteRef = quote.id.slice(0, 8).toUpperCase()
   const issuedDate = quote.created_at
@@ -620,7 +640,7 @@ export default async function PublicQuotePage(props: {
             re-roof · upgrade) instead of the generic electrical TierCard grid
             so a roofing customer never sees the electrical line-item card
             (spec R2/R9/R18). */}
-        {isInspection ? (
+        {isInspection && !roofingIndicative ? (
           <InspectionBlock
             reason={quote.inspection_reason}
             link={stripeLinks.inspection}
@@ -628,32 +648,52 @@ export default async function PublicQuotePage(props: {
             paid={isPaid}
           />
         ) : !tradeFormat.usesGenericCard ? (
-          <TradeTiers
-            tiers={{
-              good: visibleTierSet.has('good') ? (quote.good as Tier) : null,
-              better: visibleTierSet.has('better') ? (quote.better as Tier) : null,
-              best: visibleTierSet.has('best') ? (quote.best as Tier) : null,
-            }}
-            token={token}
-            stripeLinks={stripeLinks}
-            depositPct={depositPct}
-            selectedTier={showRecommendedBadge ? ((quote.selected_tier as string | null) ?? null) : null}
-            appliedDiscountPct={ebApplied ? ebAppliedPct : 0}
-            isPaid={isPaid}
-            paidTier={(quote.paid_tier as string | null) ?? null}
-            // Roofing keeps its roofing-specific copy (component default);
-            // any other non-generic trade that lands here gets neutral
-            // labels so it still avoids the electrical line-item card (R2).
-            {...(isRoofing
-              ? {}
-              : {
-                  heading: `Your ${tradeFormat.label.toLowerCase()} options`,
-                  labels: tierLabelsForTrade(intakeTrade),
-                  blurbs: { good: '', better: '', best: '' },
-                  footnote:
-                    'Final price is confirmed after our on-site visit. This estimate is based on the information provided so far.',
-                })}
-          />
+          <>
+            {/* Roofing on-site quote: the deterministic engine DID price the
+                roof from the satellite measurement; show those tiers as an
+                indicative estimate plus the $99 booking CTA, rather than the
+                price-free InspectionBlock (which read as a blank/$0 quote). */}
+            {roofingIndicative ? (
+              <RoofingIndicativeBanner
+                reason={quote.inspection_reason}
+                link={stripeLinks.inspection}
+                shareToken={token}
+                paid={isPaid}
+              />
+            ) : null}
+            <TradeTiers
+              tiers={{
+                good: visibleTierSet.has('good') ? roofTierIfPositive(quote.good) : null,
+                better: visibleTierSet.has('better') ? roofTierIfPositive(quote.better) : null,
+                best: visibleTierSet.has('best') ? roofTierIfPositive(quote.best) : null,
+              }}
+              token={token}
+              stripeLinks={stripeLinks}
+              depositPct={depositPct}
+              selectedTier={showRecommendedBadge ? ((quote.selected_tier as string | null) ?? null) : null}
+              appliedDiscountPct={ebApplied ? ebAppliedPct : 0}
+              isPaid={isPaid}
+              paidTier={(quote.paid_tier as string | null) ?? null}
+              // Roofing keeps its roofing-specific copy (component default), but
+              // an on-site (indicative) roofing quote gets an indicative footnote.
+              // Any other non-generic trade gets neutral labels so it still
+              // avoids the electrical line-item card (R2).
+              {...(isRoofing
+                ? roofingIndicative
+                  ? {
+                      footnote:
+                        'Indicative estimate from your satellite measurement. Your final price is confirmed at a quick on-site visit ($99, refundable and credited to your job).',
+                    }
+                  : {}
+                : {
+                    heading: `Your ${tradeFormat.label.toLowerCase()} options`,
+                    labels: tierLabelsForTrade(intakeTrade),
+                    blurbs: { good: '', better: '', best: '' },
+                    footnote:
+                      'Final price is confirmed after our on-site visit. This estimate is based on the information provided so far.',
+                  })}
+            />
+          </>
         ) : (
           <section className="mt-12">
             <h2 className="font-mono text-xs uppercase tracking-[0.15em] text-text-dim mb-6">
@@ -1404,6 +1444,72 @@ function TierSummary({
           directly; tenants who want detail visible by default should
           switch their quote_display setting to 'itemised'. */}
     </div>
+  )
+}
+
+// Roofing on-site (indicative) banner. The indicative tier prices render below
+// this (TradeTiers); here we frame them as an estimate and carry the $99
+// on-site booking CTA — so an on-site-flagged roofing quote shows a real number
+// AND a clear next step, instead of the price-free InspectionBlock.
+function RoofingIndicativeBanner({
+  reason,
+  link,
+  shareToken,
+  paid,
+}: {
+  reason: string | null
+  link: string | undefined
+  shareToken: string
+  paid: boolean
+}) {
+  return (
+    <section className="mt-12 bg-ink-card border-2 border-warning/50 p-6 sm:p-8 relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-1.5 h-full bg-warning" aria-hidden />
+      <div className="relative">
+        <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-warning mb-3">
+          Indicative estimate · on-site visit confirms it
+        </div>
+        <p className="text-base leading-relaxed text-text-pri sm:text-lg">
+          The prices below are an estimate from your roof measurement. We confirm the final price with a quick on-site visit before any work is booked.
+        </p>
+
+        {reason ? (
+          <p className="mt-5 bg-ink-deep border border-ink-line p-4 text-sm text-text-sec">
+            <span className="font-semibold text-text-pri">Why a visit:</span> {reason}
+          </p>
+        ) : null}
+
+        <div className="mt-7 flex items-baseline gap-3">
+          <span className="text-text-pri font-extrabold tracking-tight text-4xl sm:text-5xl">$99</span>
+          <span className="text-sm text-text-sec">
+            refundable site visit · credited toward your final quote
+          </span>
+        </div>
+
+        <div className="mt-6">
+          {paid ? (
+            <div className="bg-success/10 border border-success/30 px-5 py-4 text-center">
+              <span className="font-mono text-xs uppercase tracking-[0.12em] font-semibold text-[#4ade80]">
+                Site visit booked — tradie will be in touch
+              </span>
+            </div>
+          ) : link ? (
+            <a
+              href={`/r/${shareToken}/inspection`}
+              className="block bg-accent hover:bg-accent-press text-white px-5 py-4 text-center transition-colors font-mono text-xs sm:text-sm uppercase tracking-[0.15em] font-bold"
+            >
+              Lock in your site visit · $99 →
+            </a>
+          ) : (
+            <div className="bg-ink-deep border border-ink-line px-5 py-4 text-center">
+              <span className="font-mono text-xs uppercase tracking-[0.12em] text-text-dim">
+                Reply to your tradie&apos;s SMS to book
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
   )
 }
 

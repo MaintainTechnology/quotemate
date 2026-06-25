@@ -26,6 +26,8 @@ import type {
   RoofStructurePrice,
   RoofStructureRole,
   RoofUserInputs,
+  RoofingEdgeWorks,
+  RoofingLineItem,
   RoofingPriceTier,
   RoofingQuotePrice,
   RoofingRateCard,
@@ -144,6 +146,10 @@ export const DEFAULT_ROOFING_RATE_CARD: RoofingRateCard = {
   // roofer would attend for. Well below any whole-house tier, so it
   // only binds on small structures.
   call_out_minimum_ex_gst: 550,
+  // Edge-works rates — mirror the seeded assemblies in migration 080.
+  ridge_hip_repoint_rate_per_lm: 12.0, // 'Repoint ridge and hip caps' (lm)
+  valley_flashing_rate_per_lm: 45.0, // 'Valley flashing replacement' (lm)
+  price_edge_works: true,
 }
 
 // ── Loadings ────────────────────────────────────────────────────────
@@ -194,10 +200,108 @@ export function applicableLoadings(
   return out
 }
 
+// ── Edge works (hips + valleys) ──────────────────────────────────────
+// Hips/valleys are stored as COUNTS. To price the seeded per-lm edge
+// assemblies (repoint ridge & hip caps, replace valley flashing) we
+// derive a linear-metre length per edge from the roof geometry, with a
+// fixed-average fallback when geometry is too thin.
+
+/** Representative pitch angle (degrees) for each bucket, for the geometry
+ *  derivation. unknown/very_steep have none (those route to inspection). */
+const REPRESENTATIVE_PITCH_DEGREES: Record<PitchBucket, number | null> = {
+  shallow: 15,
+  standard: 22.5,
+  steep: 30,
+  very_steep: null,
+  unknown: null,
+}
+
+/** Fixed-average per-edge length when geometry can't derive one. */
+const DEFAULT_EDGE_LENGTH_M = 6.0
+const MIN_EDGE_LENGTH_M = 3
+const MAX_EDGE_LENGTH_M = 20
+
+/** Repair intents — edge works are charged on every tier (no full re-roof
+ *  rate to bundle them into). full_reroof / gutter_replace / unknown only
+ *  charge edge works on the patch-scoped `good` tier. */
+const REPAIR_INTENTS: ReadonlySet<RoofJobIntent> = new Set<RoofJobIntent>([
+  'patch_repair',
+  'flashing_repair',
+  'ridge_cap',
+  'leak_trace',
+])
+
+function clampRange(n: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, n))
+}
+
+/** PURE — usable pitch angle in degrees, preferring measured pitch. */
+function resolvePitchDegrees(metrics: RoofMetrics, pitch: PitchBucket): number | null {
+  const pd = metrics.pitch_degrees
+  if (typeof pd === 'number' && Number.isFinite(pd) && pd > 0 && pd < 80) return pd
+  return REPRESENTATIVE_PITCH_DEGREES[pitch]
+}
+
+/**
+ * PURE — per-edge (hip/valley) length in metres. Derived from the roof
+ * geometry — a hip/valley runs from an eave corner to the ridge, so its
+ * plan run ≈ half the characteristic plan dimension (√footprint / 2),
+ * lifted to true length by the pitch factor 1/cos(θ) and clamped to a
+ * sane range. Falls back to a fixed average when footprint or pitch are
+ * unusable.
+ */
+export function perEdgeLength(
+  metrics: RoofMetrics,
+  pitch: PitchBucket,
+): { lengthM: number; source: 'geometry' | 'fallback' } {
+  const fp = metrics.footprint_m2
+  const deg = resolvePitchDegrees(metrics, pitch)
+  if (Number.isFinite(fp) && fp > 0 && deg !== null && deg !== undefined) {
+    const s = Math.sqrt(fp)
+    const pitchFactor = 1 / Math.cos((deg * Math.PI) / 180)
+    const raw = (s / 2) * pitchFactor
+    return {
+      lengthM: roundTo(clampRange(raw, MIN_EDGE_LENGTH_M, MAX_EDGE_LENGTH_M), 1),
+      source: 'geometry',
+    }
+  }
+  return { lengthM: DEFAULT_EDGE_LENGTH_M, source: 'fallback' }
+}
+
+/**
+ * PURE — derive the hip/valley edge-works summary (counts + linear
+ * metres). Null counts (unknown/complex form) stay null — we never
+ * fabricate a count. A count of 0 derives 0 lm (no edge line).
+ */
+export function deriveEdgeWorks(metrics: RoofMetrics, pitch: PitchBucket): RoofingEdgeWorks {
+  const { lengthM, source } = perEdgeLength(metrics, pitch)
+  const toLm = (count: number | null | undefined): number | null => {
+    if (count === null || count === undefined || !Number.isFinite(count)) return null
+    if (count <= 0) return 0
+    return roundTo(count * lengthM, 1)
+  }
+  return {
+    hips_count: metrics.hips ?? null,
+    valleys_count: metrics.valleys ?? null,
+    hips_lm: toLm(metrics.hips),
+    valleys_lm: toLm(metrics.valleys),
+    per_edge_length_m: lengthM,
+    length_source: source,
+  }
+}
+
+/** PURE — are edge works charged on this tier (repair scope) vs already
+ *  bundled in the full re-roof per-m² rate (shown at $0)? */
+function edgeChargedForTier(intent: RoofJobIntent, tier: 'good' | 'better' | 'best'): boolean {
+  if (tier === 'good') return true // good is always patch / repair scope
+  return REPAIR_INTENTS.has(intent)
+}
+
 // ── Tier rates ──────────────────────────────────────────────────────
 // Tier-to-multiplier mapping. Good = patch (20% of full re-roof typical
-// scope), Better = re-roof same material (full rate), Best = upgrade
-// material (the rateCard's upgrade_material rate).
+// scope), Better = re-roof same material (full rate), Best = re-roof in
+// the per-material upgrade target (DEFAULT_UPGRADE_PATH), rate-floored to
+// never sit below the Better tier (the monotonic backstop).
 //
 // The 'good' tier intentionally is NOT a discount on the full re-roof
 // rate — it's a different scope (patch / leak repair only). Tradies
@@ -205,7 +309,68 @@ export function applicableLoadings(
 
 const GOOD_TIER_SCOPE_FRACTION = 0.20
 
-function tierLabel(intent: RoofJobIntent, tier: 'good' | 'better' | 'best'): string {
+// ── Upgrade ladder ──────────────────────────────────────────────────
+// Per-material upgrade target for the Best tier. Upgrades stay within the
+// same material family; the top of each family maps to ITSELF (it has no
+// dearer in-card target), and the monotonic backstop in
+// calculateRoofingPrice keeps Best ≥ Better in that case. Sourcing
+// genuinely dearer premium rates (slate, premium terracotta / colorbond)
+// for the top-of-ladder materials is a future enhancement — see
+// specs/roofing-tier-ordering-fix.md.
+const DEFAULT_UPGRADE_PATH: Record<RoofMaterial, RoofMaterial> = {
+  colorbond_corrugated: 'colorbond_kliplok',
+  colorbond_trimdek: 'colorbond_kliplok',
+  colorbond_spandek: 'colorbond_kliplok',
+  colorbond_kliplok: 'colorbond_kliplok', // top of the metal family
+  concrete_tile: 'terracotta_tile',
+  terracotta_tile: 'terracotta_tile', // top of the tile family
+  cement_sheet: 'colorbond_kliplok', // asbestos can't be patched/re-roofed in-kind (good+better stay $0), but Upgrade prices a Colorbond strip-and-replace — an indicative figure; still always inspection-routed
+  unknown: 'unknown', // genuinely unpriceable → routes to inspection, never priced
+}
+
+/**
+ * PURE — resolve the Best-tier upgrade material for an existing material.
+ * Consults the per-material ladder, falling back to the rate card's
+ * `upgrade_material` field if a material has no ladder entry (the field
+ * is retained for backward-compat / tenant overlay).
+ */
+function upgradeMaterialFor(
+  material: RoofMaterial,
+  rateCard: RoofingRateCard,
+): RoofMaterial {
+  return DEFAULT_UPGRADE_PATH[material] ?? rateCard.upgrade_material
+}
+
+/**
+ * PURE — invariant tripwire for the reported bug: the Upgrade (best) tier
+ * must never price below the Re-roof (better) tier. The upgrade-rate
+ * ladder + backstop guarantee this by construction, so a violation means
+ * a regression upstream — we throw rather than ship an out-of-order quote
+ * (matching this module's programmer-error style).
+ *
+ * We deliberately do NOT assert good ≤ better here: the edge-works feature
+ * legitimately charges ridge/valley works on the patch-scoped good tier,
+ * which on a very small roof can lift good above the tiny better tier — a
+ * benign state that must not crash pricing.
+ */
+function assertTierMonotonic(
+  tiers: readonly RoofingPriceTier[],
+  where: string,
+): void {
+  const better = tiers.find((t) => t.tier === 'better')
+  const best = tiers.find((t) => t.tier === 'best')
+  if (better && best && best.ex_gst < better.ex_gst) {
+    throw new Error(
+      `${where}: tier price inversion — better ($${better.ex_gst}) > best ($${best.ex_gst})`,
+    )
+  }
+}
+
+function tierLabel(
+  intent: RoofJobIntent,
+  tier: 'good' | 'better' | 'best',
+  upgradeIsSameMaterial = false,
+): string {
   if (intent === 'leak_trace') {
     if (tier === 'good') return 'Leak trace + minor repair'
     if (tier === 'better') return 'Leak trace + flashing rework'
@@ -223,7 +388,9 @@ function tierLabel(intent: RoofJobIntent, tier: 'good' | 'better' | 'best'): str
   }
   if (tier === 'good') return 'Patch / spot repair'
   if (tier === 'better') return 'Full re-roof, same material'
-  return 'Full re-roof, upgrade material'
+  return upgradeIsSameMaterial
+    ? 'Full re-roof, premium grade'
+    : 'Full re-roof, upgrade material'
 }
 
 function tierScopeLine(
@@ -251,6 +418,9 @@ function tierScopeLine(
     }
     if (tier === 'better') {
       return `Full re-roof of approximately ${area_m2.toFixed(0)} m² using ${m}, including ridge caps and flashings.`
+    }
+    if (upgradeMaterial === material) {
+      return `Full re-roof of approximately ${area_m2.toFixed(0)} m² in premium-grade ${m}, including ridge caps and flashings. A bespoke material upgrade can be priced on inspection.`
     }
     return `Full re-roof of approximately ${area_m2.toFixed(0)} m² using ${u} as a material upgrade, including ridge caps and flashings.`
   }
@@ -299,7 +469,17 @@ export function calculateRoofingPrice(args: {
     (metrics.footprint_m2 > 0 ? roundTo(metrics.footprint_m2 * 1.10, 1) : 0)
 
   const baseRate = rateCard.reroof_rate_per_m2[inputs.material] ?? 0
-  const upgradeRate = rateCard.reroof_rate_per_m2[rateCard.upgrade_material] ?? 0
+  // Best tier re-roofs in the per-material upgrade target, with the rate
+  // floored to the existing material's rate so "Upgrade" never prices
+  // under "Re-roof" when the existing material is already premium (e.g.
+  // terracotta $130 vs the colorbond upgrade $115). See
+  // specs/roofing-tier-ordering-fix.md.
+  const upgradeMaterial = upgradeMaterialFor(inputs.material, rateCard)
+  const upgradeIsSameMaterial = upgradeMaterial === inputs.material
+  const upgradeRate = Math.max(
+    rateCard.reroof_rate_per_m2[upgradeMaterial] ?? 0,
+    baseRate,
+  )
 
   const loadings = applicableLoadings(metrics, inputs, rateCard)
   const loadingMultiplier = loadings.reduce((acc, l) => acc * (1 + l.pct), 1)
@@ -316,7 +496,9 @@ export function calculateRoofingPrice(args: {
   const applyFloor = (n: number) => (floor > 0 && n > 0 ? Math.max(n, floor) : n)
   const goodEx = applyFloor(goodRaw)
   const betterEx = applyFloor(betterRaw)
-  const bestEx = applyFloor(bestRaw)
+  // Monotonic backstop (belt-and-suspenders with the upgrade-rate floor):
+  // Best is never below Better after the call-out floor is applied.
+  const bestEx = Math.max(applyFloor(bestRaw), betterEx)
   const callOutMinimumApplied =
     floor > 0 &&
     ((goodRaw > 0 && goodRaw < floor) ||
@@ -328,47 +510,92 @@ export function calculateRoofingPrice(args: {
 
   const effectiveRate = baseRate * loadingMultiplier
 
+  // Edge works (hip/ridge capping + valley flashing). Derived once; the
+  // per-tier builder decides whether they are charged (repair scope) or
+  // shown at $0 because the full re-roof per-m² rate already bundles them.
+  const edgeEnabled = rateCard.price_edge_works !== false
+  const edge = deriveEdgeWorks(metrics, inputs.pitch)
+  const hipRate = rateCard.ridge_hip_repoint_rate_per_lm ?? 0
+  const valleyRate = rateCard.valley_flashing_rate_per_lm ?? 0
+
+  const buildTier = (tier: 'good' | 'better' | 'best', baseEx: number): RoofingPriceTier => {
+    const scope = tierScopeLine(
+      inputs.intent,
+      tier,
+      inputs.material,
+      upgradeMaterial,
+      area_m2,
+    )
+    const sqmEx = roundTo(baseEx, 2)
+    const line_items: RoofingLineItem[] = [
+      {
+        unit: 'sqm',
+        quantity: roundTo(area_m2, 1),
+        description: scope,
+        unit_price_ex_gst: roundTo(effectiveRate, 2),
+        total_ex_gst: sqmEx,
+        source: 'labour',
+      },
+    ]
+
+    // Only itemise edge works when the tier has a priceable base (sqmEx > 0).
+    // A $0 base rate (cement_sheet / unknown material → inspection) must stay
+    // at 0 rather than fabricating a partial number from edge works alone.
+    if (edgeEnabled && sqmEx > 0) {
+      const charged = edgeChargedForTier(inputs.intent, tier)
+      const pushEdge = (
+        lm: number | null,
+        rate: number,
+        chargedDesc: string,
+        includedDesc: string,
+      ) => {
+        if (lm === null || lm <= 0) return
+        const total = charged ? roundTo(lm * rate, 2) : 0
+        line_items.push({
+          unit: 'lm',
+          quantity: lm,
+          description: charged ? chargedDesc : includedDesc,
+          unit_price_ex_gst: charged ? roundTo(rate, 2) : 0,
+          total_ex_gst: total,
+          source: 'material',
+        })
+      }
+      pushEdge(
+        edge.hips_lm,
+        hipRate,
+        'Repoint ridge and hip caps.',
+        'Ridge and hip caps (included in the re-roof scope).',
+      )
+      pushEdge(
+        edge.valleys_lm,
+        valleyRate,
+        'Valley flashing replacement.',
+        'Valley flashing (included in the re-roof scope).',
+      )
+    }
+
+    // Tier total is the sum of its line items — keeps the invariant
+    // sum(line_items) === ex_gst exact by construction.
+    const tierEx = roundTo(
+      line_items.reduce((acc, li) => acc + li.total_ex_gst, 0),
+      2,
+    )
+    return {
+      tier,
+      label: tierLabel(inputs.intent, tier, upgradeIsSameMaterial),
+      ex_gst: tierEx,
+      inc_gst: toIncGst(tierEx),
+      scope,
+      line_items,
+    }
+  }
+
   const tiers: [RoofingPriceTier, RoofingPriceTier, RoofingPriceTier] = [
-    {
-      tier: 'good',
-      label: tierLabel(inputs.intent, 'good'),
-      ex_gst: roundTo(goodEx, 2),
-      inc_gst: toIncGst(goodEx),
-      scope: tierScopeLine(
-        inputs.intent,
-        'good',
-        inputs.material,
-        rateCard.upgrade_material,
-        area_m2,
-      ),
-    },
-    {
-      tier: 'better',
-      label: tierLabel(inputs.intent, 'better'),
-      ex_gst: roundTo(betterEx, 2),
-      inc_gst: toIncGst(betterEx),
-      scope: tierScopeLine(
-        inputs.intent,
-        'better',
-        inputs.material,
-        rateCard.upgrade_material,
-        area_m2,
-      ),
-    },
-    {
-      tier: 'best',
-      label: tierLabel(inputs.intent, 'best'),
-      ex_gst: roundTo(bestEx, 2),
-      inc_gst: toIncGst(bestEx),
-      scope: tierScopeLine(
-        inputs.intent,
-        'best',
-        inputs.material,
-        rateCard.upgrade_material,
-        area_m2,
-      ),
-    },
+    buildTier('good', goodEx),
+    buildTier('better', betterEx),
+    buildTier('best', bestEx),
   ]
+  assertTierMonotonic(tiers, 'calculateRoofingPrice')
 
   return {
     area_m2,
@@ -377,6 +604,7 @@ export function calculateRoofingPrice(args: {
     loadings_applied: loadings,
     routing,
     call_out_minimum_applied: callOutMinimumApplied,
+    edge_works: edgeEnabled ? edge : undefined,
   }
 }
 
@@ -464,6 +692,7 @@ export function priceMultiRoof(args: {
       scope: `${labelWord} priced across ${quotable.length} structure${quotable.length === 1 ? '' : 's'}.`,
     }
   }) as [RoofingPriceTier, RoofingPriceTier, RoofingPriceTier]
+  assertTierMonotonic(combinedTiers, 'priceMultiRoof')
 
   const combinedArea = roundTo(
     quotable.reduce((acc, st) => acc + st.price.area_m2, 0),
@@ -509,7 +738,14 @@ function roundTo(n: number, dp: number): number {
 }
 
 // Re-export the small helpers for tests + callers that want them direct.
-export const __test_only__ = { roundTo, GOOD_TIER_SCOPE_FRACTION, PITCH_CORRECTION }
+export const __test_only__ = {
+  roundTo,
+  GOOD_TIER_SCOPE_FRACTION,
+  PITCH_CORRECTION,
+  assertTierMonotonic,
+  upgradeMaterialFor,
+  DEFAULT_UPGRADE_PATH,
+}
 
 /** Map a RoofForm value to a human-readable label for UI. */
 export function formLabel(form: RoofForm): string {

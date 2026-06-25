@@ -19,6 +19,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { OnboardActivateSchema, defaultsForTrade } from '@/lib/onboard/schema'
+import { defaultAvailabilityForState } from '@/lib/quote/availability'
 import { runProvisioning } from '@/lib/onboard/run-provisioning'
 import { markIntentUsed } from '@/lib/onboard/intent-tokens'
 import { seedTenantServiceOfferings } from '@/lib/onboard/seed-tenant-defaults'
@@ -132,6 +133,11 @@ export async function POST(req: Request) {
         business_address: form.business_address || null,
         logo_url: form.logo_url || null,
         logo_path: form.logo_path || null,
+        // Default schedule availability (mig 147). Use the tradie's chosen
+        // hours from the wizard, else a state-derived default so every new
+        // tenant is immediately bookable.
+        default_availability:
+          form.default_availability ?? defaultAvailabilityForState(form.state),
         status: 'onboarding',
       })
       .select('id')

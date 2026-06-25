@@ -87,4 +87,58 @@ describe('buildRoofQuoteReportHtml', () => {
     expect(html).toContain('Shed')
     expect(html).toContain('not included in this quote')
   })
+
+  // ── Per-structure aerial images (spec roofing-pdf-multi-structure-images) ──
+
+  it('renders the outline hero + one captioned aerial per included structure (2 structures)', () => {
+    const html = buildRoofQuoteReportHtml({
+      businessName: 'Apex Roofing',
+      address: '12 Sample St',
+      quote: baseQuote,
+      outlineImageSrc: 'data:image/svg+xml;base64,OUTLINE',
+      structureImages: [
+        { label: 'Main dwelling', src: 'data:image/jpeg;base64,AAA' },
+        { label: 'Shed', src: 'data:image/jpeg;base64,BBB' },
+      ],
+    })
+    expect(html).toContain('Roof outline traced from your measured roof areas.')
+    expect(html).toContain('Main dwelling — aerial reference, measured from satellite imagery.')
+    expect(html).toContain('Shed — aerial reference, measured from satellite imagery.')
+    // Two per-structure aerial <img> data URIs are embedded.
+    expect(html).toContain('data:image/jpeg;base64,AAA')
+    expect(html).toContain('data:image/jpeg;base64,BBB')
+  })
+
+  it('keeps the unchanged outline-hero + aerial-thumb pair for a single structure', () => {
+    const html = buildRoofQuoteReportHtml({
+      businessName: 'Apex Roofing',
+      address: '12 Sample St',
+      quote: baseQuote,
+      outlineImageSrc: 'data:image/svg+xml;base64,OUTLINE',
+      mapImageSrc: 'data:image/jpeg;base64,AERIAL',
+      structureImages: [{ label: 'Main dwelling', src: 'data:image/jpeg;base64,AAA' }],
+    })
+    // The figure-pair thumb caption is used; no per-structure aerial caption.
+    expect(html).toContain('Aerial reference — measured from satellite imagery.')
+    expect(html).not.toContain('— aerial reference, measured from satellite imagery.')
+    expect(html).toContain('class="figure figure-pair"')
+  })
+
+  it('does not render an aerial figcaption for a structure that was excluded', () => {
+    // Only the included structures are passed as aerials; the excluded Shed is
+    // absent, so its label never appears as an aerial caption.
+    const html = buildRoofQuoteReportHtml({
+      businessName: 'Apex Roofing',
+      address: '12 Sample St',
+      quote: baseQuote,
+      outlineImageSrc: 'data:image/svg+xml;base64,OUTLINE',
+      structureImages: [
+        { label: 'Main dwelling', src: 'data:image/jpeg;base64,AAA' },
+        { label: 'Garage', src: 'data:image/jpeg;base64,CCC' },
+      ],
+    })
+    expect(html).toContain('Main dwelling — aerial reference, measured from satellite imagery.')
+    expect(html).toContain('Garage — aerial reference, measured from satellite imagery.')
+    expect(html).not.toContain('Shed — aerial reference, measured from satellite imagery.')
+  })
 })
