@@ -174,7 +174,11 @@ export async function POST(
   // generation at draft time (the customer SMS was held), so this is
   // usually the first render. Best-effort: a failure never blocks the
   // approve-and-send.
-  const quotePdfPath = quote.needs_inspection ? null : await ensureQuotePdf(quote.id as string)
+  // Mig 146 — force a fresh render on the human send action so the PDF always
+  // reflects the tenant's current Pricing-settings tier mode at send time.
+  const quotePdfPath = quote.needs_inspection
+    ? null
+    : await ensureQuotePdf(quote.id as string, { regenerate: true })
 
   const quoteForSms = {
     ...quote,

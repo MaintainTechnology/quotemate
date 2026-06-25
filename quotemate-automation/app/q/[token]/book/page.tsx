@@ -21,7 +21,8 @@ import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { resolveGoogleBookingUrl } from '@/lib/quote/booking'
-import { resolveBookableSlots } from '@/lib/quote/slots'
+import { resolveBookingOptions, buildBookedKeys, type BookingOption } from '@/lib/quote/slots'
+import { tzForState } from '@/lib/quote/availability'
 import { BrandMark } from '@/app/_components/BrandMark'
 import { SlotPicker } from './SlotPicker'
 
@@ -34,17 +35,26 @@ const supabase = createClient(
 
 const PAY_TIERS = new Set(['good', 'better', 'best'])
 
-function formatSlot(iso: string): string {
+// Label for a chosen booking. An AM/PM window shows the half-day ("Mon 6 Jul
+// (morning)"); a legacy exact-time slot shows the time.
+function formatScheduled(iso: string, window?: string | null): string {
   try {
-    return new Date(iso).toLocaleString('en-AU', {
+    const dayLabel = new Date(iso).toLocaleString('en-AU', {
       weekday: 'long',
       day: 'numeric',
       month: 'short',
+      timeZone: 'Australia/Sydney',
+    })
+    if (window === 'am' || window === 'pm') {
+      return `${dayLabel} (${window === 'am' ? 'morning' : 'afternoon'})`
+    }
+    const time = new Date(iso).toLocaleString('en-AU', {
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
       timeZone: 'Australia/Sydney',
     })
+    return `${dayLabel}, ${time}`
   } catch {
     return iso
   }
@@ -120,7 +130,7 @@ export default async function BookingPage(props: {
 
   const { data: quote } = await supabase
     .from('quotes')
-    .select('id, paid_at, paid_tier, selected_tier, scheduled_at, share_token, intake_id, tenant_id')
+    .select('id, paid_at, paid_tier, selected_tier, scheduled_at, scheduled_window, share_token, intake_id, tenant_id')
     .eq('share_token', token)
     .maybeSingle()
 
@@ -144,19 +154,37 @@ export default async function BookingPage(props: {
   const { data: tenantRow } = quote.tenant_id
     ? await supabase
         .from('tenants')
-        .select('id, business_name, available_slots')
+        .select('id, business_name, available_slots, default_availability, state')
         .eq('id', quote.tenant_id)
         .maybeSingle()
     : { data: null }
 
-  // Bookable slots = the tenant's own FUTURE curated slots when they have
-  // any, otherwise a generated rolling window. This is the fix for the
-  // "no upcoming slots" dead-end: a static available_slots list decays to
-  // all-past over time (the May pilot seed had fully elapsed for every
-  // tenant), and resolveBookableSlots self-renews so the picker is never
-  // empty. The booking API derives the same list, so a picked generated
-  // slot always validates.
-  const slots: string[] = resolveBookableSlots(tenantRow?.available_slots)
+  // Already-booked windows on this tenant (other quotes) so a generated
+  // AM/PM window can't be double-booked (spec R15/R16). Excludes this quote.
+  const tz = tzForState(tenantRow?.state as string | null)
+  let bookedKeys = new Set<string>()
+  if (quote.tenant_id) {
+    const { data: bookedRows } = await supabase
+      .from('quotes')
+      .select('scheduled_at, scheduled_window')
+      .eq('tenant_id', quote.tenant_id)
+      .in('booking_state', ['reserved', 'booked'])
+      .not('scheduled_at', 'is', null)
+      .neq('id', quote.id)
+    bookedKeys = buildBookedKeys(bookedRows ?? [], tz)
+  }
+
+  // Bookable options = AM/PM half-day windows generated from the tenant's
+  // weekly availability template when set; otherwise the legacy curated /
+  // rolling exact-time slots (self-renewing so the picker is never empty).
+  // The booking API derives the SAME list, so a picked option always
+  // validates.
+  const options: BookingOption[] = resolveBookingOptions({
+    availability: tenantRow?.default_availability ?? null,
+    availableSlots: tenantRow?.available_slots,
+    timezone: tz,
+    bookedKeys,
+  })
 
   const isPaid = !!quote.paid_at
   const isScheduled = !!quote.scheduled_at
@@ -182,6 +210,7 @@ export default async function BookingPage(props: {
     content = (
       <AlreadyScheduledState
         scheduledAt={quote.scheduled_at!}
+        scheduledWindow={quote.scheduled_window as string | null}
         tradieName={tradieName}
       />
     )
@@ -191,20 +220,21 @@ export default async function BookingPage(props: {
         token={token}
         tier={tier}
         scheduledAt={quote.scheduled_at!}
+        scheduledWindow={quote.scheduled_window as string | null}
         appliedDiscountPct={appliedDiscountPct}
       />
     )
-  } else if (!isPaid && !isScheduled && slots.length > 0) {
+  } else if (!isPaid && !isScheduled && options.length > 0) {
     content = (
       <PickState
         token={token}
-        slots={slots}
+        options={options}
         tier={tier}
         tradieName={tradieName}
         googleUrl={googleUrl}
       />
     )
-  } else if (!isPaid && !isScheduled && slots.length === 0) {
+  } else if (!isPaid && !isScheduled && options.length === 0) {
     content = (
       <NoSlotsPayState
         token={token}
@@ -213,12 +243,12 @@ export default async function BookingPage(props: {
         googleUrl={googleUrl}
       />
     )
-  } else if (isPaid && !isScheduled && slots.length > 0) {
+  } else if (isPaid && !isScheduled && options.length > 0) {
     // Legacy: paid before this reorder shipped, now needs to pick a time.
     content = (
       <PickState
         token={token}
-        slots={slots}
+        options={options}
         tier={tier}
         tradieName={tradieName}
         googleUrl={googleUrl}
@@ -266,9 +296,11 @@ export default async function BookingPage(props: {
 
 function AlreadyScheduledState({
   scheduledAt,
+  scheduledWindow,
   tradieName,
 }: {
   scheduledAt: string
+  scheduledWindow: string | null
   tradieName: string | null
 }) {
   return (
@@ -279,7 +311,7 @@ function AlreadyScheduledState({
       </span>
       <h1 className="mt-6 text-[clamp(2rem,5vw,3.25rem)] font-extrabold uppercase leading-[1.02] tracking-[-0.03em]">
         You&apos;re <span className="text-accent">locked in</span> for{' '}
-        {formatSlot(scheduledAt)}.
+        {formatScheduled(scheduledAt, scheduledWindow)}.
       </h1>
       <p className="mt-5 max-w-[60ch] text-base leading-relaxed text-text-sec">
         Deposit received and your time is confirmed.{' '}
@@ -296,11 +328,13 @@ function ReservedPayState({
   token,
   tier,
   scheduledAt,
+  scheduledWindow,
   appliedDiscountPct,
 }: {
   token: string
   tier: string
   scheduledAt: string
+  scheduledWindow: string | null
   /** v8 — realised early-booking discount %. 0 = none. */
   appliedDiscountPct: number
 }) {
@@ -312,8 +346,8 @@ function ReservedPayState({
         Time held
       </span>
       <h1 className="mt-6 text-[clamp(2rem,5vw,3.25rem)] font-extrabold uppercase leading-[1.02] tracking-[-0.03em]">
-        {formatSlot(scheduledAt)} is <span className="text-accent">held</span>{' '}
-        for you.
+        {formatScheduled(scheduledAt, scheduledWindow)} is{' '}
+        <span className="text-accent">held</span> for you.
       </h1>
       {discounted ? (
         <p className="mt-5 inline-flex items-center bg-teal-glow/15 px-3 py-1.5 font-mono text-[0.7rem] font-bold uppercase tracking-[0.14em] text-teal-glow">
@@ -449,13 +483,13 @@ function NoSlotsPayState({
 
 function PickState({
   token,
-  slots,
+  options,
   tier,
   tradieName,
   googleUrl,
 }: {
   token: string
-  slots: string[]
+  options: BookingOption[]
   tier: string
   tradieName: string | null
   googleUrl: string | null
@@ -474,7 +508,7 @@ function PickState({
         pick one, then pay your deposit to lock it in (last step).
       </p>
       <div className="mt-6">
-        <SlotPicker token={token} slots={slots} tier={tier} />
+        <SlotPicker token={token} options={options} tier={tier} />
       </div>
       <GoogleBookingOption googleUrl={googleUrl} tradieName={tradieName} />
     </section>

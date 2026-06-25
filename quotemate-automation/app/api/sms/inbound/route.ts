@@ -717,9 +717,12 @@ export async function POST(req: Request) {
       status: tenant.status,
     })
   } else {
-    console.log('[sms/inbound] step 2a — no tenant match for destination', {
+    // Spec quote-pdf-logo-fix R5 — the destination number maps to no tenant
+    // (e.g. the shared dev number). Expected, but warn-level so the resulting
+    // null tenant_id (→ logo-less PDF) is traceable. Fail-soft below.
+    console.warn('[sms/inbound] step 2a — no tenant match for destination', {
       toNumber,
-      note: 'falling back to legacy single-pricing-book pipeline',
+      note: 'falling back to legacy single-pricing-book pipeline (quote PDF will have no logo)',
     })
   }
 

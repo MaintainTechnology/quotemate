@@ -8,6 +8,7 @@
 
 import { z } from 'zod'
 import { CATEGORY_ENUM_TUPLE } from '@/lib/estimate/categories'
+import { AvailabilitySchema } from '@/lib/quote/availability'
 
 export const TRADE_ENUM = z.enum(['electrical', 'plumbing'])
 export const STATE_ENUM = z.enum(['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'ACT', 'NT'])
@@ -68,6 +69,11 @@ export const UpdateSchema = z.object({
       // Migration 104 — SMS plan-estimation opt-in. When true, the SMS agent
       // offers the electrical-plan take-off flow on this tenant's number.
       sms_estimator_enabled: z.boolean().optional(),
+      // Migration 147 — default schedule availability (weekly working-hours
+      // template). Drives the customer-facing AM/PM booking windows. Validated
+      // by AvailabilitySchema (enabled days need start<end) and written as
+      // jsonb to tenants.default_availability.
+      default_availability: AvailabilitySchema.optional(),
     })
     .optional(),
   // Legacy single-pricing payload: applies the same fields to EVERY

@@ -127,7 +127,15 @@ create table if not exists quotes (
   -- price_hold_until: when the quoted price stops being held (urgency).
   -- booking_state: null | 'reserved' (deposit paid) | 'booked' (slot chosen).
   price_hold_until timestamptz,
-  booking_state text
+  booking_state text,
+
+  -- Gotenberg customer quote PDF cache (migrations 105 + 146). pdf_path is the
+  -- stored object in the private quote-pdfs bucket; pdf_signature fingerprints
+  -- the report template version + resolved tier mode the PDF was rendered from,
+  -- so a tradie's Pricing-settings tier-mode change self-heals the cache
+  -- (lib/quote/pdf.ts).
+  pdf_path text,
+  pdf_signature text
 );
 
 create table if not exists quote_line_items (
@@ -344,6 +352,16 @@ alter table tenants add column if not exists contact_name      text;
 alter table tenants add column if not exists website_url       text;
 alter table tenants add column if not exists business_address  text;
 alter table tenants add column if not exists logo_url          text;
+
+-- ═══════════════════════════════════════════════════════════════════
+-- Twilio number SID (migration 145) — representative snapshot.
+-- Authoritative real-vs-stub signal for the Tenant Health monitor. A live
+-- Twilio provision returns a Phone Number SID (PN…); a deterministic stub
+-- never does. The health check classifies from SID presence, not the number's
+-- digit shape (which overlaps the live AU mobile band, so a real number can
+-- look like a stub — BUG-15). NULL = stub or not-yet-verified.
+-- ═══════════════════════════════════════════════════════════════════
+alter table tenants add column if not exists twilio_number_sid text;
 
 -- ═══════════════════════════════════════════════════════════════════
 -- RESET BLOCK — uncomment and run only if you want to wipe everything

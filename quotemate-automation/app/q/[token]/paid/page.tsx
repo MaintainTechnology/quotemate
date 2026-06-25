@@ -19,26 +19,37 @@ export default async function PaidPage(props: {
 
   const { data: quote } = await supabase
     .from('quotes')
-    .select('id, paid_at, paid_tier, total_inc_gst, scheduled_at')
+    .select('id, paid_at, paid_tier, total_inc_gst, scheduled_at, scheduled_window')
     .eq('share_token', token)
     .single()
 
   const scheduledAt = (quote?.scheduled_at as string | null) ?? null
+  const scheduledWindow = (quote?.scheduled_window as string | null) ?? null
   const isBooked = !!(quote && quote.paid_at && scheduledAt)
   const showBookCta = quote && quote.paid_at && !scheduledAt && sp.tier !== 'inspection'
 
   let bookedLabel = ''
   if (scheduledAt) {
     try {
-      bookedLabel = new Date(scheduledAt).toLocaleString('en-AU', {
+      const dayLabel = new Date(scheduledAt).toLocaleString('en-AU', {
         weekday: 'long',
         day: 'numeric',
         month: 'short',
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
         timeZone: 'Australia/Sydney',
       })
+      if (scheduledWindow === 'am' || scheduledWindow === 'pm') {
+        // AM/PM half-day window — show the window, not a misleading exact time.
+        bookedLabel = `${dayLabel} (${scheduledWindow === 'am' ? 'morning' : 'afternoon'})`
+      } else {
+        // Legacy exact-time booking.
+        const time = new Date(scheduledAt).toLocaleString('en-AU', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+          timeZone: 'Australia/Sydney',
+        })
+        bookedLabel = `${dayLabel}, ${time}`
+      }
     } catch {
       bookedLabel = scheduledAt
     }

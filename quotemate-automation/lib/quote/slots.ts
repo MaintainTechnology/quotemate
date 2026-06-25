@@ -20,6 +20,13 @@
 // derive the IDENTICAL slot list and never disagree on what's bookable.
 // DST-correct via Intl — no hardcoded +10:00 (which is wrong Oct–Apr).
 
+import {
+  parseAvailability,
+  generateAvailabilityWindows,
+  bookedWindowKey,
+  type Period,
+} from './availability'
+
 const TZ = 'Australia/Sydney'
 
 export const DEFAULT_SLOT_OPTS = {
@@ -155,4 +162,92 @@ export function resolveBookableSlots(
   const curated = futureStoredSlots(stored, now)
   if (curated.length > 0) return curated
   return rollingSlots(now, opts)
+}
+
+// ── Default-availability integration (spec post-payment-scheduling) ──
+//
+// A single resolver the booking PAGE and the booking API both call so
+// render + validation never disagree on what's bookable. When the tenant
+// has a valid weekly availability template, the customer picks an AM/PM
+// half-day WINDOW generated from it (with already-booked windows excluded);
+// otherwise we fall back to the legacy raw-slot list (exact-time picks).
+
+export interface BookingOption {
+  /** Canonical instant the customer books (stored on quotes.scheduled_at). */
+  iso: string
+  /** 'am' | 'pm' for template windows; null for legacy exact-time slots. */
+  period: Period | null
+  /** Date heading the picker groups by, e.g. 'Mon 7 Jul'. */
+  dayLabel: string
+  /** Chip text, e.g. 'Morning (7am–12pm)' or '9:00 am'. */
+  chipLabel: string
+}
+
+// Exact-time label for a legacy raw slot (no availability template).
+function exactSlotLabels(iso: string, timeZone: string): { dayLabel: string; chipLabel: string } {
+  const t = Date.parse(iso)
+  if (!Number.isFinite(t)) return { dayLabel: iso, chipLabel: iso }
+  const d = new Date(t)
+  const dayLabel = d
+    .toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone })
+    .replace(/\s+/g, ' ')
+    .trim()
+  const chipLabel = d
+    .toLocaleString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone })
+    .replace(/\s+/g, ' ')
+    .trim()
+  return { dayLabel, chipLabel }
+}
+
+/**
+ * The customer-bookable options for a tenant. With a valid availability
+ * template → generated AM/PM windows (already-booked windows in `bookedKeys`
+ * excluded). Without one → the legacy curated/rolling slot list as exact-time
+ * options. Pure + deterministic given `now`.
+ */
+export function resolveBookingOptions(args: {
+  availability: unknown
+  availableSlots: unknown
+  /** Tenant timezone for legacy exact-time labels; defaults to Sydney. */
+  timezone?: string
+  bookedKeys?: ReadonlySet<string>
+  now?: number
+  opts?: SlotOpts
+}): BookingOption[] {
+  const now = args.now ?? Date.now()
+  const av = parseAvailability(args.availability)
+  if (av) {
+    return generateAvailabilityWindows(av, now, args.bookedKeys ?? new Set()).map((w) => ({
+      iso: w.iso,
+      period: w.period,
+      dayLabel: w.dayLabel,
+      chipLabel: w.chipLabel,
+    }))
+  }
+  const tz = args.timezone || TZ
+  return resolveBookableSlots(args.availableSlots, now, args.opts).map((iso) => {
+    const { dayLabel, chipLabel } = exactSlotLabels(iso, tz)
+    return { iso, period: null as Period | null, dayLabel, chipLabel }
+  })
+}
+
+/**
+ * Build the set of already-booked window keys for a tenant from existing
+ * active bookings, so generated windows can exclude them (one booking per
+ * window, spec R16). Rows are other quotes with a chosen slot.
+ */
+export function buildBookedKeys(
+  rows: Array<{ scheduled_at: string | null; scheduled_window: string | null }>,
+  timeZone: string,
+): Set<string> {
+  const keys = new Set<string>()
+  for (const r of rows) {
+    const k = bookedWindowKey(
+      r.scheduled_at,
+      (r.scheduled_window as Period | null) ?? null,
+      timeZone,
+    )
+    if (k) keys.add(k)
+  }
+  return keys
 }

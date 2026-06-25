@@ -102,11 +102,12 @@ export function buildQuoteUpdatedSms(intake: Intake, quote: Quote, options?: Quo
     lines.push('')
   }
 
-  // Mig 142 — list only the tiers this feature's mode surfaces to the
-  // customer. Internal fallback 'good_better_best' preserves legacy all-tiers
-  // behaviour for callers that don't thread a mode.
+  // Mig 142/146 — list only the tiers this feature's mode surfaces to the
+  // customer. Internal fallback 'single' matches the platform default (and the
+  // PDF + quote page), so a caller that doesn't thread a mode shows one option
+  // rather than the full Good/Better/Best list.
   const visibleTierKeys = resolveVisibleTiers({
-    mode: asQuoteTierMode(options?.tierMode, 'good_better_best'),
+    mode: asQuoteTierMode(options?.tierMode, 'single'),
     present: { good: !!quote.good, better: !!quote.better, best: !!quote.best },
     selectedTier: quote.selected_tier ?? null,
   })
@@ -941,11 +942,12 @@ export function buildQuoteSms(intake: Intake, quote: Quote, options?: QuoteSmsOp
   // Count actual non-null tiers — don't say "3 OPTIONS" if BEST dropped
   // because no premium catalogue match for the customer's spec preference
   // (see migration 008 + assumptions.ts note about catalogue gaps).
-  // Mig 142 — list only the tiers this feature's mode surfaces to the
-  // customer. Internal fallback 'good_better_best' preserves legacy all-tiers
-  // behaviour for callers that don't thread a mode.
+  // Mig 142/146 — list only the tiers this feature's mode surfaces to the
+  // customer. Internal fallback 'single' matches the platform default (and the
+  // PDF + quote page), so a caller that doesn't thread a mode shows one option
+  // rather than the full Good/Better/Best list.
   const visibleTierKeys = resolveVisibleTiers({
-    mode: asQuoteTierMode(options?.tierMode, 'good_better_best'),
+    mode: asQuoteTierMode(options?.tierMode, 'single'),
     present: { good: !!quote.good, better: !!quote.better, best: !!quote.best },
     selectedTier: quote.selected_tier ?? null,
   })

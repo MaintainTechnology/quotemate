@@ -10,21 +10,20 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkTradeReadiness } from './trade-readiness'
+import { isStubTwilioNumber, isStubVapiId } from './stub-detect'
 
 // ── Stub artifact detection ────────────────────────────────────────────
-// Mirrors lib/onboard/run-provisioning.ts (isStubTwilio/isStubVapi). A stub
-// number/assistant means provisioning ran in stub mode (flag off) and the
-// tenant CANNOT receive real calls/SMS — never treat it as production-ready.
-
-/** Deterministic stub Twilio number shape: +614820xxxxx. */
-export function isStubTwilioNumber(n: string | null | undefined): boolean {
-  return !!n && /^\+614820\d{5}$/.test(n)
-}
-
-/** Deterministic stub Vapi assistant id shape: vapi-stub-xxxxxxxx. */
-export function isStubVapiId(id: string | null | undefined): boolean {
-  return !!id && id.startsWith('vapi-stub-')
-}
+// The shape detectors now live in one shared module (./stub-detect) so
+// health.ts, run-provisioning.ts and the retry-provision route share a single
+// definition. Re-exported here for back-compat with existing importers
+// (app/api/onboard/retry-provision/route.ts) and the unit tests.
+//
+// The Twilio shape is a HINT, never the authoritative real-vs-stub verdict:
+// the stub generator mints placeholders inside the live AU mobile band, so a
+// real number can match the stub shape (BUG-15). The authoritative signal is
+// tenants.twilio_number_sid — a live Twilio provision returns a Phone Number
+// SID; a stub never does. See check #5 below.
+export { isStubTwilioNumber, isStubVapiId } from './stub-detect'
 
 export type HealthLevel = 'required' | 'info'
 
@@ -63,6 +62,9 @@ interface TenantRow {
   trade: string | null
   trades: string[] | null
   twilio_sms_number: string | null
+  /** Twilio Phone Number SID (PN…) — authoritative real-vs-stub signal.
+   *  Present only for numbers a live Twilio provision (or the backfill) confirmed. */
+  twilio_number_sid: string | null
   vapi_assistant_id: string | null
 }
 
@@ -87,7 +89,7 @@ export async function checkTenantHealth(
     const { data, error } = await supabase
       .from('tenants')
       .select(
-        'id, business_name, status, activated_at, owner_user_id, trade, trades, twilio_sms_number, vapi_assistant_id',
+        'id, business_name, status, activated_at, owner_user_id, trade, trades, twilio_sms_number, twilio_number_sid, vapi_assistant_id',
       )
       .eq('id', tenantOrId)
       .single()
@@ -178,19 +180,52 @@ export async function checkTenantHealth(
     detail: missingOfferings.length ? `no offerings for: ${missingOfferings.join(', ')}` : undefined,
   })
 
-  // 5. Twilio number present and NOT a stub
-  const twilioStub = isStubTwilioNumber(tenant.twilio_sms_number)
-  checks.push({
-    key: 'twilio_number',
-    label: 'Real Twilio number (not a stub)',
-    level: 'required',
-    ok: !!tenant.twilio_sms_number && !twilioStub,
-    detail: !tenant.twilio_sms_number
-      ? 'no twilio_sms_number'
-      : twilioStub
-        ? `stub number ${tenant.twilio_sms_number} — provisioning ran in stub mode`
-        : undefined,
-  })
+  // 5. Twilio number — REAL iff a Twilio Phone Number SID is on file.
+  //
+  //    The SID (tenants.twilio_number_sid) is the authoritative signal: a live
+  //    Twilio provision returns one; a deterministic stub never does. We do NOT
+  //    infer stub-ness from the number's digits — the stub generator mints into
+  //    the live AU mobile band, so a real number can share the stub shape
+  //    (BUG-15). The digit shape is used ONLY to tell a *confirmed* stub
+  //    (no SID + matches the deterministic placeholder) apart from an
+  //    *unverified* number (no SID + real-shaped). Because a real number always
+  //    carries a SID, the shape branch can never fail a genuine number — and
+  //    deleting the regex entirely would only soften a stub into "unverified",
+  //    never reintroduce the false positive.
+  const twilioNumber = tenant.twilio_sms_number
+  const twilioSid = tenant.twilio_number_sid?.trim() || null
+  if (!twilioNumber) {
+    checks.push({
+      key: 'twilio_number',
+      label: 'Real Twilio number',
+      level: 'required',
+      ok: false,
+      detail: 'no twilio_sms_number',
+    })
+  } else if (twilioSid) {
+    checks.push({
+      key: 'twilio_number',
+      label: 'Real Twilio number',
+      level: 'required',
+      ok: true,
+    })
+  } else if (isStubTwilioNumber(twilioNumber)) {
+    checks.push({
+      key: 'twilio_number',
+      label: 'Real Twilio number',
+      level: 'required',
+      ok: false,
+      detail: `stub number ${twilioNumber} — provisioned in stub mode (no Twilio SID)`,
+    })
+  } else {
+    checks.push({
+      key: 'twilio_number',
+      label: 'Twilio number unverified',
+      level: 'info',
+      ok: true,
+      detail: `no Twilio SID on file for ${twilioNumber} — run scripts/backfill-twilio-sid.mjs (or verify-tenant.mjs) to confirm`,
+    })
+  }
 
   // 6. Vapi assistant present and NOT a stub
   const vapiStub = isStubVapiId(tenant.vapi_assistant_id)
@@ -207,11 +242,13 @@ export async function checkTenantHealth(
   })
 
   // 7. SMS webhook → /api/sms/inbound (best-effort; only when asked + verifiable)
+  //    Skip the live Twilio call for an obvious stub number — the shape is used
+  //    here only to avoid a pointless API round-trip, never as a verdict.
   const appUrl = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL
   const canCheckWebhook =
     !!opts.checkWebhook &&
     !!tenant.twilio_sms_number &&
-    !twilioStub &&
+    !isStubTwilioNumber(tenant.twilio_sms_number) &&
     !!process.env.TWILIO_ACCOUNT_SID &&
     !!process.env.TWILIO_AUTH_TOKEN &&
     !!appUrl

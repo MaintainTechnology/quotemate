@@ -74,6 +74,16 @@ export async function POST(req: Request) {
     tenantId = (t?.id as string | null) ?? null
   }
 
+  if (!tenantId) {
+    // Spec quote-pdf-logo-fix R5 — voice equivalent of the SMS no-tenant case:
+    // the assistant maps to no tenant, so the call (→ intake → quote) gets a
+    // null tenant_id and the quote PDF ships with no logo. Expected for legacy
+    // pre-v6 assistants; warn so it's traceable. Null is still acceptable below.
+    console.warn('[vapi/webhook] no tenant match for assistant — voice quote PDF will have no logo', {
+      assistantId: call.assistantId ?? null,
+    })
+  }
+
   log.step('upserting calls row', {
     vapi_call_id: call.id,
     caller_number: call.customer?.number ?? 'null',

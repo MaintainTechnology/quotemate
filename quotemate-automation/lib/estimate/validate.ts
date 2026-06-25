@@ -91,6 +91,22 @@ function n(v: number | string): number {
   return typeof v === 'string' ? parseFloat(v) : v
 }
 
+/** The `source` sentinel for a line item the tradie explicitly added as a
+ *  custom/manual line (e.g. "Remove existing hot water system", "Supply &
+ *  install 2x skylights"). Such lines are grounded by the human who typed
+ *  them, not the catalogue: `validateQuoteGrounding` exempts them from the
+ *  per-line price/unit/category check, and `resolveLineAnchor` refuses to
+ *  anchor them so a coincidental price match never trips duplicate
+ *  detection. The exemption is scoped STRICTLY to this sentinel — every
+ *  other source (catalogue `material:`/`assembly:`, labour, callout,
+ *  after-hours, tradie_edit) validates exactly as before. */
+export const MANUAL_LINE_SOURCE = 'tradie_manual'
+
+/** True when a line item is a tradie-entered manual/custom line. */
+export function isManualLine(li: any): boolean {
+  return String(li?.source ?? '').trim().toLowerCase() === MANUAL_LINE_SOURCE
+}
+
 // ─────────────────────────────────────────────────────────────────
 // Category extraction — keyword tags applied to both candidate rows
 // and line descriptions. Validation passes only when at least one
@@ -452,6 +468,10 @@ function resolveLineAnchor(li: any, index: AnchorIndex): string | null {
     'emergency',
     'emergency_callout',
     'after_hours_callout',
+    // Tradie-entered manual/custom lines are not catalogue products — they
+    // must never anchor to a coincidentally same-priced row and so can never
+    // be flagged as a within-tier (D-1) or cross-tier (R6) duplicate.
+    MANUAL_LINE_SOURCE,
   ])
   if (unitNorm === 'hr' || NON_CATALOGUE_SOURCES.has(sourceNorm)) return null
 
@@ -838,6 +858,12 @@ export function validateQuoteGrounding(
 
     for (let i = 0; i < tier.line_items.length; i++) {
       const li = tier.line_items[i]
+      // Manual lines are grounded by the human who typed them, not the
+      // catalogue — skip the per-line price/unit/category gate. The line
+      // still counts toward the tier subtotal (recomputed by the caller),
+      // and the per-tier labour-hours floor above is unaffected: a manual
+      // material/scope line does not substitute for required labour.
+      if (isManualLine(li)) continue
       const price = Number(li?.unit_price_ex_gst)
       const description = String(li?.description ?? '(no description)')
       const unit = String(li?.unit ?? '?')

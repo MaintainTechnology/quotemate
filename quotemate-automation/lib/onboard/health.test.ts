@@ -80,7 +80,7 @@ function mockSupabase(tenant: Record<string, any>, opts: {
 }
 
 describe('checkTenantHealth', () => {
-  it('reports a stub-number tenant as Incomplete (A2 backstop)', async () => {
+  it('reports a true stub tenant (no Twilio SID) as Incomplete (A2 backstop)', async () => {
     const tenant = {
       id: 't1',
       business_name: 'Stub Co',
@@ -89,7 +89,8 @@ describe('checkTenantHealth', () => {
       owner_user_id: 'u1',
       trade: 'electrical',
       trades: ['electrical'],
-      twilio_sms_number: '+61482012345', // stub
+      twilio_sms_number: '+61482012345', // stub-shaped...
+      twilio_number_sid: null, // ...and no SID → confirmed stub
       vapi_assistant_id: 'vapi-stub-abcd1234', // stub
     }
     const sb = mockSupabase(tenant)
@@ -101,5 +102,50 @@ describe('checkTenantHealth', () => {
         expect.stringContaining('Vapi'),
       ]),
     )
+  })
+
+  it('treats a real number in the stub band as real when a Twilio SID is on file (BUG-15)', async () => {
+    const tenant = {
+      id: 't2',
+      business_name: 'Oak Crest',
+      status: 'active',
+      activated_at: '2026-06-01T00:00:00Z',
+      owner_user_id: 'u1',
+      trade: 'electrical',
+      trades: ['electrical'],
+      twilio_sms_number: '+61482012345', // stub-SHAPED, but...
+      twilio_number_sid: 'PN0123456789abcdef0123456789abcdef', // ...a real Twilio SID is on file
+      vapi_assistant_id: 'asst_real_123',
+    }
+    const sb = mockSupabase(tenant)
+    const health = await checkTenantHealth(sb, 't2', { checkWebhook: false })
+    const twilio = health.checks.find((c) => c.key === 'twilio_number')!
+    expect(twilio.level).toBe('required')
+    expect(twilio.ok).toBe(true)
+    expect(health.requiredFailures).not.toContain('Real Twilio number')
+  })
+
+  it('marks a no-SID, real-shaped number as unverified (neutral, non-blocking) — never stub', async () => {
+    const tenant = {
+      id: 't3',
+      business_name: 'Unverified Co',
+      status: 'active',
+      activated_at: '2026-06-01T00:00:00Z',
+      owner_user_id: 'u1',
+      trade: 'electrical',
+      trades: ['electrical'],
+      twilio_sms_number: '+61412345678', // real-shaped, NOT the stub band
+      twilio_number_sid: null, // no SID yet (e.g. backfill not run)
+      vapi_assistant_id: 'asst_real_123',
+    }
+    const sb = mockSupabase(tenant)
+    const health = await checkTenantHealth(sb, 't3', { checkWebhook: false })
+    const twilio = health.checks.find((c) => c.key === 'twilio_number')!
+    expect(twilio.level).toBe('info') // neutral, non-blocking
+    expect(twilio.ok).toBe(true)
+    expect(twilio.detail).toMatch(/unverified|no Twilio SID/i)
+    // Not asserted as a stub, and does not block readiness.
+    expect(health.requiredFailures).not.toContain('Twilio number unverified')
+    expect(health.requiredFailures).not.toContain('Real Twilio number')
   })
 })

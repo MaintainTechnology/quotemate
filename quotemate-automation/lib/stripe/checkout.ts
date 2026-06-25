@@ -5,6 +5,22 @@
 // Platform-direct charging (NOT Stripe Connect) — money lands in QuoteMax's
 // Stripe account. When tradie #2 onboards, switch to Connect by adding
 // `stripeAccount` and `application_fee_amount` to the call.
+//
+// ── AU-only checkout (spec post-payment-scheduling-checkout, Task 2) ──
+// QuoteMax serves Australian tradies + their customers only, so every Session
+// below is priced in AUD (`currency: 'aud'`) and we never collect a billing
+// address (`billing_address_collection` left at its 'auto' default → no
+// billing-country dropdown rendered for AUD card payments).
+//
+// IMPORTANT: the "United States / Country or region" selector a tradie reported
+// on the hosted Checkout page is Stripe **Adaptive Pricing**, which is an
+// ACCOUNT-LEVEL Dashboard setting (Settings → Payments → Checkout/Adaptive
+// Pricing) — there is NO Checkout Session parameter to disable it or to limit
+// the billing-country list per session (`shipping_address_collection.
+// allowed_countries` only constrains SHIPPING, which we don't collect). To
+// remove the US option, turn Adaptive Pricing OFF in the Stripe Dashboard for
+// this account. Code keeps the sessions AUD-only and address-free so nothing
+// here re-introduces a country picker.
 
 import { getStripe } from './client'
 import { randomBytes } from 'node:crypto'

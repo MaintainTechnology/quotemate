@@ -40,7 +40,7 @@ export async function GET(req: Request) {
   const { data, error } = await supabase
     .from('tenants')
     .select(
-      'id, business_name, status, activated_at, owner_user_id, trade, trades, twilio_sms_number, vapi_assistant_id',
+      'id, business_name, status, activated_at, owner_user_id, trade, trades, twilio_sms_number, twilio_number_sid, vapi_assistant_id',
     )
     .order('created_at', { ascending: false })
 

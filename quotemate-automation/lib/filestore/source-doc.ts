@@ -17,7 +17,7 @@ import {
 } from '@/lib/quote/pdf'
 import { buildInvoiceKbText, buildQuoteKbText } from './minimize'
 import { normalizeTradeForDoc } from './tenant-store-name'
-import { partitionRoofQuote, resolveEffectiveIndices, structureCount } from '@/lib/roofing/selection'
+import { partitionRoofQuote, resolveEffectiveIndices } from '@/lib/roofing/selection'
 import type { MultiRoofQuote } from '@/lib/roofing/types'
 
 export type SourceRef = {
@@ -71,7 +71,7 @@ export async function loadAndBuildKbDoc(
           included: r.included_indices as number[] | null,
           confirmedStructure: r.confirmed_structure as number | null,
         },
-        structureCount(fullQuote),
+        fullQuote,
       )
       const partition = fullQuote ? partitionRoofQuote(fullQuote, effective) : null
       const fullDocPath = await ensureRoofQuotePdf(

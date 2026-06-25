@@ -1,33 +1,19 @@
 'use client'
 
 import { useState } from 'react'
+import type { BookingOption } from '@/lib/quote/slots'
 
 type Status = 'idle' | 'submitting' | 'done' | 'error'
 
-function formatSlot(iso: string): { day: string; time: string } {
-  const d = new Date(iso)
-  const day = d.toLocaleString('en-AU', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    timeZone: 'Australia/Sydney',
-  })
-  const time = d.toLocaleString('en-AU', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-    timeZone: 'Australia/Sydney',
-  })
-  return { day, time }
-}
-
 export function SlotPicker({
   token,
-  slots,
+  options,
   tier,
 }: {
   token: string
-  slots: string[]
+  /** AM/PM half-day windows (or legacy exact-time slots) to choose from.
+   *  Each carries the canonical instant (`iso`) posted to the book API. */
+  options: BookingOption[]
   /** Tier the customer chose on the quote page — passed to the book API
    *  so the deposit step at the end charges the right amount. */
   tier?: string
@@ -36,28 +22,18 @@ export function SlotPicker({
   const [status, setStatus] = useState<Status>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  // Sort by time ascending; future slots only.
-  const now = Date.now()
-  const visible = [...slots]
-    .filter((s) => {
-      const t = Date.parse(s)
-      return Number.isFinite(t) && t > now
-    })
-    .sort((a, b) => Date.parse(a) - Date.parse(b))
-
-  // Group by calendar day so the whole fortnight fits on one screen:
-  // one compact block per day, times as small chips, blocks flow into a
-  // responsive multi-column grid (no long scroll of tall cards).
-  // `visible` is already date-sorted, so groups + chips stay in order.
-  const groups: { day: string; items: { iso: string; time: string }[] }[] = []
-  for (const iso of visible) {
-    const { day, time } = formatSlot(iso)
-    let g = groups.find((x) => x.day === day)
+  // Group by day heading so the whole fortnight fits on one screen: one
+  // compact block per day, AM/PM windows as chips, blocks flow into a
+  // responsive multi-column grid. `options` are already future-only and
+  // date-sorted by the server (resolveBookingOptions), so no client filter.
+  const groups: { day: string; items: { iso: string; chip: string }[] }[] = []
+  for (const o of options) {
+    let g = groups.find((x) => x.day === o.dayLabel)
     if (!g) {
-      g = { day, items: [] }
+      g = { day: o.dayLabel, items: [] }
       groups.push(g)
     }
-    g.items.push({ iso, time })
+    g.items.push({ iso: o.iso, chip: o.chipLabel })
   }
 
   async function onConfirm() {
@@ -92,7 +68,7 @@ export function SlotPicker({
     }
   }
 
-  if (visible.length === 0) {
+  if (options.length === 0) {
     return (
       <p className="border border-ink-line bg-ink-card p-5 font-mono text-[0.8rem] uppercase tracking-[0.12em] text-text-dim">
         No upcoming slots are open. Your tradie will SMS you to arrange a time.
@@ -114,7 +90,7 @@ export function SlotPicker({
               {g.day}
             </div>
             <div className="mt-2 flex flex-wrap gap-2">
-              {g.items.map(({ iso, time }) => {
+              {g.items.map(({ iso, chip }) => {
                 const isPicked = picked === iso
                 return (
                   <button
@@ -129,7 +105,7 @@ export function SlotPicker({
                         : 'border-ink-line text-text-pri hover:border-accent/60'
                     } ${locked ? 'cursor-not-allowed opacity-50' : ''}`}
                   >
-                    {time}
+                    {chip}
                   </button>
                 )
               })}

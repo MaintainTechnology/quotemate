@@ -29,15 +29,18 @@ const baseQuote = {
   deposit_pct: 30,
 }
 
-describe('buildQuoteSms — tier mode (mig 142)', () => {
-  it('omitting tierMode keeps the legacy all-tiers behaviour (no regression)', () => {
+describe('buildQuoteSms — tier mode (mig 142/146)', () => {
+  it('omitting tierMode now defaults to single price (mig 146 platform default)', () => {
     const body = buildQuoteSms(intake, baseQuote)
-    expect(body).toMatch(/3 OPTIONS/)
-    expect(body).toMatch(/GOOD: \$660/)
+    // The internal fallback flipped from 'good_better_best' to 'single',
+    // matching the PDF + quote page: one option = the recommended tier, no
+    // Good/Better/Best list for a caller that doesn't thread a mode.
+    expect(body).toMatch(/YOUR OPTION/)
+    expect(body).not.toMatch(/\bOPTIONS\b/)
     expect(body).toMatch(/BETTER: \$880/)
-    expect(body).toMatch(/BEST: \$1,?210/)
-    // recommended tier still flagged when more than one option shows.
-    expect(body).toMatch(/BETTER: \$880 \(recommended\)/)
+    expect(body).not.toMatch(/GOOD:/)
+    expect(body).not.toMatch(/BEST:/)
+    expect(body).not.toMatch(/\(recommended\)/)
   })
 
   it("single mode shows ONE price (the recommended tier) under 'YOUR OPTION'", () => {
@@ -59,11 +62,14 @@ describe('buildQuoteSms — tier mode (mig 142)', () => {
     expect(body).not.toMatch(/BEST:/)
   })
 
-  it("explicit 'good_better_best' shows all three", () => {
+  it("explicit 'good_better_best' shows all three with the 3 OPTIONS header + recommended badge", () => {
     const body = buildQuoteSms(intake, baseQuote, { tierMode: 'good_better_best' })
+    expect(body).toMatch(/3 OPTIONS/)
     expect(body).toMatch(/GOOD: \$660/)
     expect(body).toMatch(/BETTER: \$880/)
     expect(body).toMatch(/BEST: \$1,?210/)
+    // recommended tier still flagged when more than one option shows.
+    expect(body).toMatch(/BETTER: \$880 \(recommended\)/)
   })
 })
 
