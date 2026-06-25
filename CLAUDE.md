@@ -78,7 +78,7 @@ Key API routes: `/api/vapi/webhook`, `/api/vapi/tools/send-sms-photo-link`, `/ap
 | SMS / WhatsApp | Twilio AU long codes; SMS-first with WhatsApp fallback (`lib/sms/dispatch.ts`). Dev SMS number `+61481613464`. |
 | Payments | Stripe **test mode** (Checkout + webhook). Connect Express **not** implemented. |
 | Email | Resend. |
-| PDF | **None** — customer quote is an HTML page at `/q/[token]`, no react-pdf. |
+| PDF | **Gotenberg HTML→PDF** (`lib/pdf/gotenberg.ts`) renders the customer quote PDF from `lib/quote/report-html.ts`; cached at `quotes.pdf_path` and lazily regenerated when the tenant's tier mode or the report template changes (`quotes.pdf_signature`, mig 146). The live HTML quote page still exists at `/q/[token]`; no react-pdf. |
 | Analytics / errors | **No PostHog, no Sentry** yet (strategy plan only). Observability = `lib/log/pipeline.ts` + platform logs + `scripts/`. |
 | Deploy | Vercel (prod, cron) and/or Railway (Docker). See `quotemate-automation/DEPLOY.md`. |
 

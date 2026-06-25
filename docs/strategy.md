@@ -1,6 +1,6 @@
 # QuoteMate — Strategy & Re-evaluation
 
-> **Current iteration: v11 (2026-06-12).** v1 trade pivoted from **painting** to **electrical** in v3; v5 expanded to **multi-trade** (electrical + plumbing); v10 added roofing; v11 adds **commercial painting** as a document-driven estimator extension. The prose in §1–§12 below is the v2 painting analysis, kept as audit-log record. See [Iteration history](#iteration-history) at the bottom for the full v3–v11 rationale.
+> **Current iteration: v13 (2026-06-25).** v1 trade pivoted from **painting** to **electrical** in v3; v5 expanded to **multi-trade** (electrical + plumbing); v10 added roofing; v11 adds **commercial painting** as a document-driven estimator extension; v12 extended **solar** to Path B auto-send; v13 refines **roofing multi-structure selection** (roof-only read-time default + clearer Measurement Results UI). The prose in §1–§12 below is the v2 painting analysis, kept as audit-log record. See [Iteration history](#iteration-history) at the bottom for the full v3–v13 rationale.
 
 > Status: living document. Each iteration sharpens the analysis against the project assets and prior reasoning.
 
@@ -934,5 +934,33 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
   - A clean estimate auto-sends with a number a tradie would have corrected → tighten the synchronous guardrails (or reconsider the clean-only line), and record the miss.
   - Pylon-appended flags arrive *after* auto-send often enough to flip prices off post-send for a real tenant → move auto-release behind the awaited enrichment instead of a synchronous decision.
   - The heatmap `after()` job routinely exceeds the auto-refresh cap → make heatmap generation faster or lazily on-demand, rather than widening the poll window.
+
+- **v13** (2026-06-25): **roofing multi-structure selection — the read-time default becomes roof-only (main dwelling), and the Measurement Results page makes the included set unmistakable.**
+
+  **What's settled:**
+
+  A roofing measurement with **no persisted selection** (`included_indices` NULL/empty) now resolves to the **roof-only default — just the main dwelling** — at read time, instead of silently expanding to ALL detected structures. This aligns the reader with the save-time default (`primaryStructureIndices`), which already opted secondaries IN rather than out. The decision lives in one helper, `defaultStructureIndices` in `lib/roofing/selection.ts`, used by every reader (`resolveEffectiveIndices` — now takes the quote, not a bare count — `denormFromSelection`, `partitionRoofQuote`, and the `/m` + customer-page feeders). Explicitly-saved selections, **including migration-140's backfilled all-structures arrays**, are honoured verbatim — only a genuine NULL changes behaviour, so it is a no-op on real backfilled rows and a defensive correction on quote-less/edge rows. No schema or data migration; stored values are untouched.
+
+  Alongside the default fix, the tradie Measurement Results page (`/m/[token]`) gains three display-only clarity affordances so a returning tradie is never surprised by a summed total: (1) an explicit `In job` / `Not in job` text pill on every structure card (state legible from text, not just card opacity); (2) when ≥1 secondary is included, the Combined-total block names the secondary count and their **marginal $ contribution per tier**, derived as `combined(included) − combined(included ∩ primary)` through the canonical `combinedTotalsForIndices` — never a second summation; (3) a non-blocking "showing your saved selection" notice that fires only when the set differs from primary-only. The read-only customer quote page (`/q/roof/[token]`) gains the included-structure count in its Combined-estimate header for parity (count only — no customer-facing $ breakdown).
+
+  **Why this is a clarity + correctness change, not a money-path change:**
+
+  This came out of a tradie (Jon) confusion review: a combined estimate summed multiple structures and read as a bug. Investigation confirmed the summation, persistence, and at-least-one-structure guard are all working-as-designed — the only true defect was the latent "NULL = all" reader default (a never-touched record over-counted) plus the absence of any UI signal of which structures fed the total. So the money path is untouched: `combinedTotalsForIndices` → `narrowQuoteToStructures` remains the single source of truth, dashboard ↔ customer ↔ PDF parity is preserved byte-for-byte, inspection-routed structures stay listed-but-$0, and the PATCH route's denorm recompute + `pdf_path` busting are unchanged.
+
+  | Area | Prior roofing | v13 roofing |
+  |---|---|---|
+  | NULL/empty `included_indices` at read time | Expands to ALL structures | Roof-only default (main dwelling) via `defaultStructureIndices` |
+  | Explicitly-saved selection (incl. backfilled "all") | Honoured | **Unchanged** — honoured verbatim |
+  | `/m` per-structure state cue | Card opacity only | Explicit `In job` / `Not in job` pill (+ opacity) |
+  | `/m` combined total | Count + area | Count + area + secondary count + per-tier marginal $ |
+  | Customer combined header | Area only | Area + included-structure count (still read-only) |
+  | Summation source of truth | `combinedTotalsForIndices` | **Unchanged** |
+
+  **What stays unchanged:** money-path grounding discipline (no new reducer; the marginal-$ figure is two calls to the canonical helper); the save-time primary-only default; persistence side-effects; the at-least-one-structure guard (client + server 400 `no_structures`); the customer page staying read-only (narrowable only by `?s=`/SMS, never widenable); Maintain design system on all surfaces.
+
+  **Trigger for the next iteration:**
+
+  - A tradie wants the customer page to also show the secondaries' $ contribution (currently count-only) → flip the customer-facing breakdown on and widen the test matrix.
+  - The roof-only read default surprises anyone relying on the old "NULL = all" behaviour on a quote-less row → reconsider, but the fix is to persist an explicit selection, not to restore the silent all-default.
 
 - *Future iterations:* drill into specific phases (eval rubric details, onboarding flow design, hipages partnership terms, voice tier economics, full multi-tenancy refactor).
