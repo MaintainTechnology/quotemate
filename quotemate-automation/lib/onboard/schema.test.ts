@@ -373,6 +373,13 @@ describe('OnboardActivateSchema — class-of-bug guard', () => {
     'after_hours_multiplier',
     'min_labour_hours',
     'risk_buffer_pct',
+    // Painting rate-card fields are optional too — blank falls back to the
+    // DEFAULT_PAINTING_RATE_CARD, so an empty string must parse as undefined.
+    'painting_walls_rate',
+    'painting_ceilings_rate',
+    'painting_trim_rate',
+    'painting_exterior_rate',
+    'painting_call_out_minimum',
   ] as const
 
   for (const field of OPTIONAL_NUMERIC_FIELDS) {
@@ -387,6 +394,109 @@ describe('OnboardActivateSchema — class-of-bug guard', () => {
       }
     })
   }
+})
+
+describe('OnboardActivateSchema — painting trade (multi-select + rate card)', () => {
+  // A painting-only payload omits the labour rates entirely (painting prices
+  // from a $/m² rate card). Strip them off the base payload to model that.
+  const paintingBase = (() => {
+    const { hourly_rate, call_out_minimum, default_markup_pct, ...rest } = baseValidPayload
+    void hourly_rate
+    void call_out_minimum
+    void default_markup_pct
+    return rest
+  })()
+
+  it('accepts a painting-only payload with NO labour rates (rate card optional)', () => {
+    const result = OnboardActivateSchema.safeParse({ ...paintingBase, trades: ['painting'] })
+    expect(result.success).toBe(true)
+  })
+
+  it('accepts a painting-only payload with custom rate-card rates and coerces them', () => {
+    const result = OnboardActivateSchema.safeParse({
+      ...paintingBase,
+      trades: ['painting'],
+      painting_walls_rate: '32',
+      painting_ceilings_rate: '22',
+      painting_trim_rate: '14',
+      painting_exterior_rate: '50',
+      painting_call_out_minimum: '500',
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.painting_walls_rate).toBe(32)
+      expect(result.data.painting_exterior_rate).toBe(50)
+      expect(result.data.painting_call_out_minimum).toBe(500)
+    }
+  })
+
+  it('rejects a painting rate above the $200/unit ceiling', () => {
+    const result = OnboardActivateSchema.safeParse({
+      ...paintingBase,
+      trades: ['painting'],
+      painting_walls_rate: '250',
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('treats blank painting rates as undefined (fall back to defaults)', () => {
+    const result = OnboardActivateSchema.safeParse({
+      ...paintingBase,
+      trades: ['painting'],
+      painting_walls_rate: '',
+      painting_ceilings_rate: '',
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.painting_walls_rate).toBeUndefined()
+    }
+  })
+
+  it('accepts the three-trade combo electrical + plumbing + painting', () => {
+    const result = OnboardActivateSchema.safeParse({
+      ...baseValidPayload,
+      trades: ['electrical', 'plumbing', 'painting'],
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('STILL requires labour rates when a labour trade rides alongside painting', () => {
+    const { hourly_rate, ...rest } = baseValidPayload
+    void hourly_rate
+    const result = OnboardActivateSchema.safeParse({ ...rest, trades: ['electrical', 'painting'] })
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error.flatten().fieldErrors.hourly_rate).toBeDefined()
+    }
+  })
+
+  it('rejects an unknown trade slug', () => {
+    const result = OnboardActivateSchema.safeParse({
+      ...baseValidPayload,
+      trades: ['carpentry'],
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('painting defaults pass the schema as a complete painting payload', () => {
+    const defaults = defaultsForTrade('painting')
+    const result = OnboardActivateSchema.safeParse({
+      ...paintingBase,
+      trades: ['painting'],
+      ...defaults,
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('painting after_hours/min_labour/risk defaults lie inside their schema bounds', () => {
+    const d = defaultsForTrade('painting')
+    expect(d.after_hours_multiplier).toBeGreaterThanOrEqual(1)
+    expect(d.after_hours_multiplier).toBeLessThanOrEqual(3)
+    expect(d.min_labour_hours).toBeGreaterThanOrEqual(0)
+    expect(d.min_labour_hours).toBeLessThanOrEqual(8)
+    expect(d.risk_buffer_pct).toBeGreaterThanOrEqual(0)
+    expect(d.risk_buffer_pct).toBeLessThanOrEqual(100)
+  })
 })
 
 describe('OnboardActivateSchema — invitation_code (required)', () => {

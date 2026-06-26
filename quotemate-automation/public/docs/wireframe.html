@@ -9,29 +9,30 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #ffffff;
-      --bg-soft: #fafafa;
-      --bg-section: #f5f5f5;
-      --ink: #0a0a0a;
-      --ink-2: #262626;
-      --muted: #6b7280;
-      --muted-2: #9ca3af;
-      --line: #e5e7eb;
-      --line-strong: #d4d4d8;
-      --accent: #14b8a6;
-      --accent-deep: #0f766e;
+      --bg: #16120F;
+      --bg-soft: #1E1813;
+      --bg-section: #2B2422;
+      --ink: #F6F1EA;
+      --ink-2: #C3B8AC;
+      --muted: #A2968A;
+      --muted-2: #8a7e72;
+      --line: #3A322C;
+      --line-strong: #4a3f37;
+      --accent: #FFC400;
+      --accent-deep: #FFC400;
+      --accent-ink: #1C1812;
 
       /* Component category accents (used for borders + label dots) */
-      --c-customer: #0891b2;
-      --c-tradie: #2563eb;
+      --c-customer: #7BDCA0;
+      --c-tradie: #FFC400;
       --c-agents: #f59e0b;
-      --c-llm: #7c3aed;
+      --c-llm: #A2968A;
       --c-data: #059669;
       --c-payments: #16a34a;
       --c-comms: #ea580c;
-      --c-obs: #64748b;
-      --c-deferred: #94a3b8;
-      --c-external: #475569;
+      --c-obs: #6E6354;
+      --c-deferred: #A2968A;
+      --c-external: #6E6354;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -63,7 +64,7 @@
       top: 0;
       z-index: 50;
       backdrop-filter: blur(8px);
-      background: rgba(255, 255, 255, 0.92);
+      background: rgba(22, 18, 15, 0.92);
     }
     .topbar-inner {
       display: flex;
@@ -102,13 +103,13 @@
       height: 8px;
       background: var(--accent);
       border-radius: 50%;
-      box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.7);
+      box-shadow: 0 0 0 0 rgba(255, 196, 0, 0.7);
       animation: pulse 2s infinite;
     }
     @keyframes pulse {
-      0%   { box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.7); }
-      70%  { box-shadow: 0 0 0 8px rgba(20, 184, 166, 0); }
-      100% { box-shadow: 0 0 0 0 rgba(20, 184, 166, 0); }
+      0%   { box-shadow: 0 0 0 0 rgba(255, 196, 0, 0.7); }
+      70%  { box-shadow: 0 0 0 8px rgba(255, 196, 0, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(255, 196, 0, 0); }
     }
 
     /* ═══════════════ HERO ═══════════════ */
@@ -625,9 +626,9 @@
       margin-top: 0.25rem;
       width: fit-content;
     }
-    .tech-tag.phase-1 { color: #166534; border-color: #bbf7d0; background: #f0fdf4; }
-    .tech-tag.phase-2 { color: #92400e; border-color: #fde68a; background: #fffbeb; }
-    .tech-tag.phase-3 { color: #6b21a8; border-color: #e9d5ff; background: #faf5ff; }
+    .tech-tag.phase-1 { color: #7BDCA0; border-color: #2f4538; background: #1a241d; }
+    .tech-tag.phase-2 { color: #FFD23D; border-color: #4a3f2a; background: #241f12; }
+    .tech-tag.phase-3 { color: #A2968A; border-color: #4a3f37; background: #2B2422; }
 
     /* ─── 3-branch confidence router ─── */
     .flow-branches {
@@ -653,9 +654,9 @@
       border: 1px solid var(--line);
       border-top: 3px solid;
     }
-    .branch.high { border-top-color: #16a34a; }
+    .branch.high { border-top-color: #7BDCA0; }
     .branch.med { border-top-color: #f59e0b; }
-    .branch.low { border-top-color: #dc2626; }
+    .branch.low { border-top-color: #F08A8A; }
     .branch-label {
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.68rem;
@@ -664,9 +665,9 @@
       font-weight: 700;
       margin-bottom: 0.4rem;
     }
-    .branch.high .branch-label { color: #16a34a; }
-    .branch.med .branch-label { color: #92400e; }
-    .branch.low .branch-label { color: #b91c1c; }
+    .branch.high .branch-label { color: #7BDCA0; }
+    .branch.med .branch-label { color: #FFD23D; }
+    .branch.low .branch-label { color: #E08B8B; }
     .branch-name {
       font-size: 0.95rem;
       font-weight: 700;
@@ -681,8 +682,8 @@
     .branch ul li {
       padding: 0.2rem 0;
     }
-    .branch ul li.caution { color: #b91c1c; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; }
-    .branch ul li.recommended { color: #16a34a; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600; }
+    .branch ul li.caution { color: #E08B8B; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; }
+    .branch ul li.recommended { color: #7BDCA0; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600; }
 
     /* ═══════════════ BUILD OPTIONS ═══════════════ */
     .options-grid {
@@ -702,8 +703,8 @@
       transition: all 0.15s ease;
     }
     .option.recommended {
-      border-color: var(--ink);
-      box-shadow: 0 4px 0 var(--ink);
+      border-color: var(--accent);
+      box-shadow: 0 4px 0 var(--accent);
       transform: translateY(-2px);
     }
     .option-head {
@@ -711,8 +712,8 @@
       border-bottom: 1px solid var(--line);
     }
     .option.recommended .option-head {
-      background: var(--ink);
-      color: var(--bg);
+      background: var(--accent);
+      color: var(--accent-ink);
     }
     .option-tag {
       font-family: 'JetBrains Mono', monospace;
@@ -722,7 +723,7 @@
       text-transform: uppercase;
       margin-bottom: 0.4rem;
     }
-    .option.recommended .option-tag { color: var(--accent); }
+    .option.recommended .option-tag { color: var(--accent-ink); opacity: 0.7; }
     .option-name {
       font-size: 1.15rem;
       font-weight: 800;
@@ -778,8 +779,8 @@
       gap: 0.5rem;
       line-height: 1.5;
     }
-    .option-body ul.pros li::before { content: "✓"; color: #16a34a; font-weight: 700; }
-    .option-body ul.cons li::before { content: "×"; color: #dc2626; font-weight: 700; }
+    .option-body ul.pros li::before { content: "✓"; color: #7BDCA0; font-weight: 700; }
+    .option-body ul.cons li::before { content: "×"; color: #F08A8A; font-weight: 700; }
     .option-foot {
       padding: 1rem 1.5rem;
       border-top: 1px solid var(--line);
@@ -789,7 +790,7 @@
     }
     .option.recommended .option-foot {
       background: var(--accent);
-      color: white;
+      color: var(--accent-ink);
       font-weight: 600;
     }
 
@@ -811,9 +812,9 @@
       flex-direction: column;
       gap: 0.875rem;
     }
-    .pv-col.pain { border-top-color: #dc2626; }
+    .pv-col.pain { border-top-color: #F08A8A; }
     .pv-col.fix  { border-top-color: var(--accent); }
-    .pv-col.win  { border-top-color: #16a34a; }
+    .pv-col.win  { border-top-color: #7BDCA0; }
     .pv-tag {
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.72rem;
@@ -960,7 +961,7 @@
     @media (max-width: 720px) {
       .risk { grid-template-columns: 1fr; gap: 0.5rem; }
     }
-    .risk.severity-high { border-left-color: #dc2626; }
+    .risk.severity-high { border-left-color: #F08A8A; }
     .risk.severity-med  { border-left-color: #f59e0b; }
     .risk.severity-low  { border-left-color: #84cc16; }
     .risk-rank {
@@ -983,9 +984,9 @@
       letter-spacing: 0.1em;
       margin-top: 0.4rem;
     }
-    .severity-high .risk-severity { color: #dc2626; }
-    .severity-med .risk-severity  { color: #92400e; }
-    .severity-low .risk-severity  { color: #65a30d; }
+    .severity-high .risk-severity { color: #F08A8A; }
+    .severity-med .risk-severity  { color: #FFD23D; }
+    .severity-low .risk-severity  { color: #9FD356; }
     .risk-mitigation {
       font-size: 0.85rem;
       color: var(--ink-2);
@@ -998,8 +999,9 @@
     .verdict {
       margin-top: 2.5rem;
       padding: 2rem 2.25rem;
-      background: var(--ink);
-      color: var(--bg);
+      background: #2B2422;
+      border: 1px solid var(--line);
+      color: var(--ink);
     }
     .verdict-tag {
       font-family: 'JetBrains Mono', monospace;
@@ -1019,14 +1021,14 @@
     }
     .verdict-body {
       font-size: 0.95rem;
-      color: rgba(255,255,255,0.86);
+      color: var(--ink-2);
       line-height: 1.65;
       max-width: 72ch;
     }
     .verdict-body p { margin-bottom: 1rem; }
     .verdict-body p:last-child { margin-bottom: 0; }
     .verdict-body strong {
-      color: var(--bg);
+      color: var(--ink);
       font-weight: 700;
     }
   </style>
@@ -1331,7 +1333,7 @@
                 <div class="branch-name">Auto Quote</div>
                 <ul>
                   <li>Sent DIRECT to customer</li>
-                  <li>Good / Better / Best options</li>
+                  <li>One clear fixed price · no haggling</li>
                   <li>No tradie review</li>
                   <li class="caution">caution: AU Consumer Law — auto-sent quotes are binding</li>
                 </ul>
@@ -1376,12 +1378,12 @@
           <div>
             <div class="flow-card">
               <div class="flow-stage">Customer view</div>
-              <div class="flow-name">Good / Better / Best Quote Experience</div>
+              <div class="flow-name">Single Fixed-Price Quote Experience</div>
               <p>What the customer actually opens on their phone:</p>
               <ul>
                 <li>Visual, clean, mobile-first</li>
                 <li>Clear inclusions / exclusions</li>
-                <li>Upsells embedded (Better → Best ladder)</li>
+                <li>One clear fixed price · no haggling</li>
                 <li>Accept + deposit button</li>
               </ul>
             </div>
@@ -1525,7 +1527,7 @@
             </div>
             <div class="component">
               <div class="component-name">Customer quote view</div>
-              <div class="component-tech">Public, token-protected • Good/Better/Best</div>
+              <div class="component-tech">Public, token-protected • single fixed price</div>
             </div>
             <div class="component">
               <div class="component-name">On-site capture (mobile)</div>
@@ -1767,28 +1769,28 @@
           <svg class="architecture" viewBox="0 0 1280 1100" xmlns="http://www.w3.org/2000/svg">
             <defs>
               <marker id="arrow" markerWidth="9" markerHeight="6" refX="8" refY="3" orient="auto">
-                <polygon points="0 0, 9 3, 0 6" fill="#1f2937"/>
+                <polygon points="0 0, 9 3, 0 6" fill="#A2968A"/>
               </marker>
               <marker id="arrow-cyan" markerWidth="9" markerHeight="6" refX="8" refY="3" orient="auto">
-                <polygon points="0 0, 9 3, 0 6" fill="#0891b2"/>
+                <polygon points="0 0, 9 3, 0 6" fill="#7BDCA0"/>
               </marker>
               <marker id="arrow-blue" markerWidth="9" markerHeight="6" refX="8" refY="3" orient="auto">
-                <polygon points="0 0, 9 3, 0 6" fill="#2563eb"/>
+                <polygon points="0 0, 9 3, 0 6" fill="#FFD23D"/>
               </marker>
               <marker id="arrow-violet" markerWidth="9" markerHeight="6" refX="8" refY="3" orient="auto">
-                <polygon points="0 0, 9 3, 0 6" fill="#7c3aed"/>
+                <polygon points="0 0, 9 3, 0 6" fill="#A2968A"/>
               </marker>
               <marker id="arrow-emerald" markerWidth="9" markerHeight="6" refX="8" refY="3" orient="auto">
-                <polygon points="0 0, 9 3, 0 6" fill="#059669"/>
+                <polygon points="0 0, 9 3, 0 6" fill="#34C99A"/>
               </marker>
               <marker id="arrow-green" markerWidth="9" markerHeight="6" refX="8" refY="3" orient="auto">
-                <polygon points="0 0, 9 3, 0 6" fill="#16a34a"/>
+                <polygon points="0 0, 9 3, 0 6" fill="#7BDCA0"/>
               </marker>
               <marker id="arrow-orange" markerWidth="9" markerHeight="6" refX="8" refY="3" orient="auto">
-                <polygon points="0 0, 9 3, 0 6" fill="#ea580c"/>
+                <polygon points="0 0, 9 3, 0 6" fill="#FF9A5C"/>
               </marker>
               <pattern id="dotgrid" width="24" height="24" patternUnits="userSpaceOnUse">
-                <circle cx="1" cy="1" r="0.7" fill="#e5e7eb"/>
+                <circle cx="1" cy="1" r="0.7" fill="#3A322C"/>
               </pattern>
             </defs>
 
@@ -1798,281 +1800,281 @@
             <!-- ═══════════════════════════════════════════════════════════════
                  ROW 1 — ENTRY (y=40-180)
                  ═══════════════════════════════════════════════════════════════ -->
-            <text x="60" y="32" font-family="JetBrains Mono" font-size="10" fill="#6b7280" letter-spacing="0.1em">01 / ENTRY</text>
+            <text x="60" y="32" font-family="JetBrains Mono" font-size="10" fill="#A2968A" letter-spacing="0.1em">01 / ENTRY</text>
 
             <!-- Customer cluster (col 1) -->
-            <rect x="60" y="48" width="280" height="120" rx="2" fill="#ffffff" stroke="#0891b2" stroke-width="1.5"/>
-            <text x="76" y="72" font-family="Inter" font-size="11" font-weight="700" fill="#0891b2">CUSTOMER</text>
-            <text x="76" y="96" font-family="Inter" font-size="13" font-weight="600" fill="#0a0a0a">Existing-platform enquiry</text>
-            <text x="76" y="112" font-family="JetBrains Mono" font-size="10" fill="#6b7280">hipages · Airtasker · referral</text>
-            <text x="76" y="134" font-family="Inter" font-size="13" font-weight="600" fill="#0a0a0a">Direct quote-link click</text>
-            <text x="76" y="150" font-family="JetBrains Mono" font-size="10" fill="#6b7280">tokenised public URL · no auth</text>
+            <rect x="60" y="48" width="280" height="120" rx="2" fill="#2B2422" stroke="#7BDCA0" stroke-width="1.5"/>
+            <text x="76" y="72" font-family="Inter" font-size="11" font-weight="700" fill="#7BDCA0">CUSTOMER</text>
+            <text x="76" y="96" font-family="Inter" font-size="13" font-weight="600" fill="#F6F1EA">Existing-platform enquiry</text>
+            <text x="76" y="112" font-family="JetBrains Mono" font-size="10" fill="#A2968A">hipages · Airtasker · referral</text>
+            <text x="76" y="134" font-family="Inter" font-size="13" font-weight="600" fill="#F6F1EA">Direct quote-link click</text>
+            <text x="76" y="150" font-family="JetBrains Mono" font-size="10" fill="#A2968A">tokenised public URL · no auth</text>
 
             <!-- Tradie cluster (col 4) -->
-            <rect x="960" y="48" width="280" height="120" rx="2" fill="#ffffff" stroke="#2563eb" stroke-width="1.5"/>
-            <text x="976" y="72" font-family="Inter" font-size="11" font-weight="700" fill="#2563eb">TRADIE</text>
-            <text x="976" y="96" font-family="Inter" font-size="13" font-weight="600" fill="#0a0a0a">Mobile portal (PWA)</text>
-            <text x="976" y="112" font-family="JetBrains Mono" font-size="10" fill="#6b7280">drafts · review · approve · send</text>
-            <text x="976" y="134" font-family="Inter" font-size="13" font-weight="600" fill="#0a0a0a">On-site capture</text>
-            <text x="976" y="150" font-family="JetBrains Mono" font-size="10" fill="#6b7280">voice memo + photo prompts</text>
+            <rect x="960" y="48" width="280" height="120" rx="2" fill="#2B2422" stroke="#FFC400" stroke-width="1.5"/>
+            <text x="976" y="72" font-family="Inter" font-size="11" font-weight="700" fill="#FFD23D">TRADIE</text>
+            <text x="976" y="96" font-family="Inter" font-size="13" font-weight="600" fill="#F6F1EA">Mobile portal (PWA)</text>
+            <text x="976" y="112" font-family="JetBrains Mono" font-size="10" fill="#A2968A">drafts · review · approve · send</text>
+            <text x="976" y="134" font-family="Inter" font-size="13" font-weight="600" fill="#F6F1EA">On-site capture</text>
+            <text x="976" y="150" font-family="JetBrains Mono" font-size="10" fill="#A2968A">voice memo + photo prompts</text>
 
             <!-- ═══════════════════════════════════════════════════════════════
                  ROW 2 — VERCEL APPLICATION BOUNDARY (y=200-640)
                  contains surfaces (240-340) + agents (400-600)
                  ═══════════════════════════════════════════════════════════════ -->
-            <text x="60" y="194" font-family="JetBrains Mono" font-size="10" fill="#6b7280" letter-spacing="0.1em">02 / APPLICATION · NEXT.JS ON VERCEL</text>
+            <text x="60" y="194" font-family="JetBrains Mono" font-size="10" fill="#A2968A" letter-spacing="0.1em">02 / APPLICATION · NEXT.JS ON VERCEL</text>
 
-            <rect x="40" y="208" width="1200" height="432" rx="3" fill="#fef3c7" fill-opacity="0.18" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="6,4"/>
-            <text x="56" y="228" font-family="Inter" font-size="11" font-weight="700" fill="#92400e">VERCEL BOUNDARY · App Router · Server Actions · Edge</text>
+            <rect x="40" y="208" width="1200" height="432" rx="3" fill="#4a3f2a" fill-opacity="0.18" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="6,4"/>
+            <text x="56" y="228" font-family="Inter" font-size="11" font-weight="700" fill="#FFD23D">VERCEL BOUNDARY · App Router · Server Actions · Edge</text>
 
             <!-- ─── SURFACES (y=240-340) ─── -->
 
             <!-- Customer Quote View — col 1 -->
-            <rect x="60" y="248" width="280" height="92" rx="2" fill="#ffffff" stroke="#0891b2" stroke-width="1.2"/>
-            <text x="76" y="270" font-family="Inter" font-size="12" font-weight="700" fill="#0a0a0a">Customer quote view</text>
-            <text x="76" y="288" font-family="JetBrains Mono" font-size="9" fill="#6b7280">/q/[token] · public · mobile-first</text>
-            <text x="76" y="308" font-family="Inter" font-size="10" font-weight="600" fill="#0891b2">Good · Better · Best</text>
-            <text x="76" y="324" font-family="JetBrains Mono" font-size="9" fill="#6b7280">accept + deposit (Stripe Element)</text>
+            <rect x="60" y="248" width="280" height="92" rx="2" fill="#2B2422" stroke="#7BDCA0" stroke-width="1.2"/>
+            <text x="76" y="270" font-family="Inter" font-size="12" font-weight="700" fill="#F6F1EA">Customer quote view</text>
+            <text x="76" y="288" font-family="JetBrains Mono" font-size="9" fill="#A2968A">/q/[token] · public · mobile-first</text>
+            <text x="76" y="308" font-family="Inter" font-size="10" font-weight="600" fill="#7BDCA0">Single fixed price</text>
+            <text x="76" y="324" font-family="JetBrains Mono" font-size="9" fill="#A2968A">accept + deposit (Stripe Element)</text>
 
             <!-- Tradie Portal — col 4 -->
-            <rect x="960" y="248" width="280" height="92" rx="2" fill="#ffffff" stroke="#2563eb" stroke-width="1.2"/>
-            <text x="976" y="270" font-family="Inter" font-size="12" font-weight="700" fill="#0a0a0a">Tradie portal</text>
-            <text x="976" y="288" font-family="JetBrains Mono" font-size="9" fill="#6b7280">/app · auth · mobile-first</text>
-            <text x="976" y="308" font-family="Inter" font-size="10" font-weight="600" fill="#2563eb">intake · review · send · calendar</text>
-            <text x="976" y="324" font-family="JetBrains Mono" font-size="9" fill="#6b7280">operates all 4 agents below</text>
+            <rect x="960" y="248" width="280" height="92" rx="2" fill="#2B2422" stroke="#FFC400" stroke-width="1.2"/>
+            <text x="976" y="270" font-family="Inter" font-size="12" font-weight="700" fill="#F6F1EA">Tradie portal</text>
+            <text x="976" y="288" font-family="JetBrains Mono" font-size="9" fill="#A2968A">/app · auth · mobile-first</text>
+            <text x="976" y="308" font-family="Inter" font-size="10" font-weight="600" fill="#FFD23D">intake · review · send · calendar</text>
+            <text x="976" y="324" font-family="JetBrains Mono" font-size="9" fill="#A2968A">operates all 4 agents below</text>
 
             <!-- ─── AGENT LAYER LABEL (y=372) ─── -->
-            <text x="60" y="392" font-family="JetBrains Mono" font-size="10" fill="#92400e" letter-spacing="0.1em">03 / AI AGENT LAYER (THE FOUR) · sequential left → right</text>
+            <text x="60" y="392" font-family="JetBrains Mono" font-size="10" fill="#FFD23D" letter-spacing="0.1em">03 / AI AGENT LAYER (THE FOUR) · sequential left → right</text>
 
             <!-- ─── AGENTS (y=404-600) ─── -->
 
             <!-- ① Drafter — col 1 -->
-            <rect x="60" y="404" width="280" height="196" rx="2" fill="#ffffff" stroke="#f59e0b" stroke-width="1.5"/>
+            <rect x="60" y="404" width="280" height="196" rx="2" fill="#2B2422" stroke="#f59e0b" stroke-width="1.5"/>
             <text x="78" y="426" font-family="Inter" font-size="11" font-weight="800" fill="#f59e0b">① QUOTE DRAFTER</text>
-            <text x="78" y="444" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Drafts scope, line items,</text>
-            <text x="78" y="458" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">three options, exclusions</text>
-            <line x1="78" y1="470" x2="320" y2="470" stroke="#e5e7eb"/>
-            <text x="78" y="488" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Model · Claude Opus 4.7</text>
-            <text x="78" y="502" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Tools · lookup_assembly,</text>
-            <text x="78" y="514" font-family="JetBrains Mono" font-size="9" fill="#6b7280">          lookup_material, markup,</text>
-            <text x="78" y="526" font-family="JetBrains Mono" font-size="9" fill="#6b7280">          flag_inspection</text>
-            <text x="78" y="544" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Reads · pricing book + 5</text>
-            <text x="78" y="556" font-family="JetBrains Mono" font-size="9" fill="#6b7280">          similar past quotes (RAG)</text>
+            <text x="78" y="444" font-family="Inter" font-size="11" font-weight="600" fill="#F6F1EA">Drafts scope, line items,</text>
+            <text x="78" y="458" font-family="Inter" font-size="11" font-weight="600" fill="#F6F1EA">fixed price, exclusions</text>
+            <line x1="78" y1="470" x2="320" y2="470" stroke="#3A322C"/>
+            <text x="78" y="488" font-family="JetBrains Mono" font-size="9" fill="#A2968A">Model · Claude Opus 4.7</text>
+            <text x="78" y="502" font-family="JetBrains Mono" font-size="9" fill="#A2968A">Tools · lookup_assembly,</text>
+            <text x="78" y="514" font-family="JetBrains Mono" font-size="9" fill="#A2968A">          lookup_material, markup,</text>
+            <text x="78" y="526" font-family="JetBrains Mono" font-size="9" fill="#A2968A">          flag_inspection</text>
+            <text x="78" y="544" font-family="JetBrains Mono" font-size="9" fill="#A2968A">Reads · pricing book + 5</text>
+            <text x="78" y="556" font-family="JetBrains Mono" font-size="9" fill="#A2968A">          similar past quotes (RAG)</text>
             <text x="78" y="578" font-family="Inter" font-size="9" font-weight="600" fill="#f59e0b">~$0.05 / quote (cached)</text>
 
             <!-- ② Reviewer — col 2 -->
-            <rect x="360" y="404" width="280" height="196" rx="2" fill="#ffffff" stroke="#f59e0b" stroke-width="1.5"/>
+            <rect x="360" y="404" width="280" height="196" rx="2" fill="#2B2422" stroke="#f59e0b" stroke-width="1.5"/>
             <text x="378" y="426" font-family="Inter" font-size="11" font-weight="800" fill="#f59e0b">② QUOTE REVIEWER</text>
-            <text x="378" y="444" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Surfaces draft to tradie</text>
-            <text x="378" y="458" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">with "check this" annotations</text>
-            <line x1="378" y1="470" x2="620" y2="470" stroke="#e5e7eb"/>
-            <text x="378" y="488" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Model · Haiku (annotations)</text>
-            <text x="378" y="502" font-family="JetBrains Mono" font-size="9" fill="#6b7280">          Sonnet (cover note)</text>
-            <text x="378" y="520" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Output · approved quote +</text>
-            <text x="378" y="532" font-family="JetBrains Mono" font-size="9" fill="#6b7280">           customer portal page +</text>
-            <text x="378" y="544" font-family="JetBrains Mono" font-size="9" fill="#6b7280">           react-pdf document</text>
+            <text x="378" y="444" font-family="Inter" font-size="11" font-weight="600" fill="#F6F1EA">Surfaces draft to tradie</text>
+            <text x="378" y="458" font-family="Inter" font-size="11" font-weight="600" fill="#F6F1EA">with "check this" annotations</text>
+            <line x1="378" y1="470" x2="620" y2="470" stroke="#3A322C"/>
+            <text x="378" y="488" font-family="JetBrains Mono" font-size="9" fill="#A2968A">Model · Haiku (annotations)</text>
+            <text x="378" y="502" font-family="JetBrains Mono" font-size="9" fill="#A2968A">          Sonnet (cover note)</text>
+            <text x="378" y="520" font-family="JetBrains Mono" font-size="9" fill="#A2968A">Output · approved quote +</text>
+            <text x="378" y="532" font-family="JetBrains Mono" font-size="9" fill="#A2968A">           customer portal page +</text>
+            <text x="378" y="544" font-family="JetBrains Mono" font-size="9" fill="#A2968A">           react-pdf document</text>
             <text x="378" y="578" font-family="Inter" font-size="9" font-weight="600" fill="#f59e0b">v1: human-in-loop · no auto-send</text>
 
             <!-- ③ Inspection — col 3 -->
-            <rect x="660" y="404" width="280" height="196" rx="2" fill="#ffffff" stroke="#f59e0b" stroke-width="1.5"/>
+            <rect x="660" y="404" width="280" height="196" rx="2" fill="#2B2422" stroke="#f59e0b" stroke-width="1.5"/>
             <text x="678" y="426" font-family="Inter" font-size="11" font-weight="800" fill="#f59e0b">③ INSPECTION COORD.</text>
-            <text x="678" y="444" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Paid site visit + on-site</text>
-            <text x="678" y="458" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">capture + post-acceptance</text>
-            <line x1="678" y1="470" x2="920" y2="470" stroke="#e5e7eb"/>
-            <text x="678" y="488" font-family="JetBrains Mono" font-size="9" fill="#6b7280">State · pending · paid · scheduled</text>
-            <text x="678" y="500" font-family="JetBrains Mono" font-size="9" fill="#6b7280">          on-site · completed · refunded</text>
-            <text x="678" y="518" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Captures · voice memo, photos,</text>
-            <text x="678" y="530" font-family="JetBrains Mono" font-size="9" fill="#6b7280">             measurements + risks</text>
-            <text x="678" y="548" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Conditional · only when complex</text>
+            <text x="678" y="444" font-family="Inter" font-size="11" font-weight="600" fill="#F6F1EA">Paid site visit + on-site</text>
+            <text x="678" y="458" font-family="Inter" font-size="11" font-weight="600" fill="#F6F1EA">capture + post-acceptance</text>
+            <line x1="678" y1="470" x2="920" y2="470" stroke="#3A322C"/>
+            <text x="678" y="488" font-family="JetBrains Mono" font-size="9" fill="#A2968A">State · pending · paid · scheduled</text>
+            <text x="678" y="500" font-family="JetBrains Mono" font-size="9" fill="#A2968A">          on-site · completed · refunded</text>
+            <text x="678" y="518" font-family="JetBrains Mono" font-size="9" fill="#A2968A">Captures · voice memo, photos,</text>
+            <text x="678" y="530" font-family="JetBrains Mono" font-size="9" fill="#A2968A">             measurements + risks</text>
+            <text x="678" y="548" font-family="JetBrains Mono" font-size="9" fill="#A2968A">Conditional · only when complex</text>
             <text x="678" y="578" font-family="Inter" font-size="9" font-weight="600" fill="#f59e0b">$99 fee · refundable on win</text>
 
             <!-- ④ Conversion — col 4 -->
-            <rect x="960" y="404" width="280" height="196" rx="2" fill="#ffffff" stroke="#f59e0b" stroke-width="1.5"/>
+            <rect x="960" y="404" width="280" height="196" rx="2" fill="#2B2422" stroke="#f59e0b" stroke-width="1.5"/>
             <text x="978" y="426" font-family="Inter" font-size="11" font-weight="800" fill="#f59e0b">④ CONVERSION ENGINE</text>
-            <text x="978" y="444" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Availability nudges +</text>
-            <text x="978" y="458" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">SMS follow-up sequence</text>
-            <line x1="978" y1="470" x2="1220" y2="470" stroke="#e5e7eb"/>
-            <text x="978" y="488" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Cadence · Day 1 · Day 3 · Day 7</text>
-            <text x="978" y="502" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Triggers · time + state + calendar</text>
-            <text x="978" y="520" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Pause · on customer reply</text>
-            <text x="978" y="532" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Backed by · Vercel Workflow</text>
-            <text x="978" y="544" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Output · SMS via Twilio</text>
+            <text x="978" y="444" font-family="Inter" font-size="11" font-weight="600" fill="#F6F1EA">Availability nudges +</text>
+            <text x="978" y="458" font-family="Inter" font-size="11" font-weight="600" fill="#F6F1EA">SMS follow-up sequence</text>
+            <line x1="978" y1="470" x2="1220" y2="470" stroke="#3A322C"/>
+            <text x="978" y="488" font-family="JetBrains Mono" font-size="9" fill="#A2968A">Cadence · Day 1 · Day 3 · Day 7</text>
+            <text x="978" y="502" font-family="JetBrains Mono" font-size="9" fill="#A2968A">Triggers · time + state + calendar</text>
+            <text x="978" y="520" font-family="JetBrains Mono" font-size="9" fill="#A2968A">Pause · on customer reply</text>
+            <text x="978" y="532" font-family="JetBrains Mono" font-size="9" fill="#A2968A">Backed by · Vercel Workflow</text>
+            <text x="978" y="544" font-family="JetBrains Mono" font-size="9" fill="#A2968A">Output · SMS via Twilio</text>
             <text x="978" y="578" font-family="Inter" font-size="9" font-weight="600" fill="#f59e0b">durable · survives restarts</text>
 
             <!-- ═══════════════════════════════════════════════════════════════
                  BACKEND SERVICE BUS (y=664)
                  single horizontal rail — replaces 16 crossing diagonals
                  ═══════════════════════════════════════════════════════════════ -->
-            <line x1="200" y1="664" x2="1100" y2="664" stroke="#94a3b8" stroke-width="1.5"/>
-            <text x="650" y="658" font-family="JetBrains Mono" font-size="9" fill="#94a3b8" text-anchor="middle">BACKEND SERVICE BUS · routed via App Router server actions</text>
+            <line x1="200" y1="664" x2="1100" y2="664" stroke="#A2968A" stroke-width="1.5"/>
+            <text x="650" y="658" font-family="JetBrains Mono" font-size="9" fill="#A2968A" text-anchor="middle">BACKEND SERVICE BUS · routed via App Router server actions</text>
 
             <!-- ═══════════════════════════════════════════════════════════════
                  ROW 3 — BACKEND SERVICES (y=688-868)
                  column-aligned with agents above
                  ═══════════════════════════════════════════════════════════════ -->
-            <text x="60" y="682" font-family="JetBrains Mono" font-size="10" fill="#6b7280" letter-spacing="0.1em">04 / LLM        05 / DATA       06 / PAYMENTS    07 / COMMS</text>
+            <text x="60" y="682" font-family="JetBrains Mono" font-size="10" fill="#A2968A" letter-spacing="0.1em">04 / LLM        05 / DATA       06 / PAYMENTS    07 / COMMS</text>
 
             <!-- LLM — col 1 -->
-            <rect x="60" y="688" width="280" height="180" rx="2" fill="#ffffff" stroke="#7c3aed" stroke-width="1.5"/>
-            <text x="76" y="710" font-family="Inter" font-size="11" font-weight="800" fill="#7c3aed">LLM INFRASTRUCTURE</text>
-            <text x="76" y="732" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Vercel AI Gateway</text>
-            <text x="76" y="746" font-family="JetBrains Mono" font-size="9" fill="#6b7280">failover · cost tracking</text>
-            <line x1="76" y1="758" x2="320" y2="758" stroke="#e5e7eb"/>
-            <text x="76" y="776" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Claude Opus 4.7</text>
-            <text x="76" y="790" font-family="JetBrains Mono" font-size="9" fill="#6b7280">heavy reasoning · vision</text>
-            <text x="76" y="810" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Claude Haiku 4.5</text>
-            <text x="76" y="824" font-family="JetBrains Mono" font-size="9" fill="#6b7280">routing · annotations · SMS</text>
-            <text x="76" y="850" font-family="JetBrains Mono" font-size="9" fill="#7c3aed">prompt cache · &gt; 90% hit rate</text>
+            <rect x="60" y="688" width="280" height="180" rx="2" fill="#2B2422" stroke="#A2968A" stroke-width="1.5"/>
+            <text x="76" y="710" font-family="Inter" font-size="11" font-weight="800" fill="#A2968A">LLM INFRASTRUCTURE</text>
+            <text x="76" y="732" font-family="Inter" font-size="11" font-weight="600" fill="#F6F1EA">Vercel AI Gateway</text>
+            <text x="76" y="746" font-family="JetBrains Mono" font-size="9" fill="#A2968A">failover · cost tracking</text>
+            <line x1="76" y1="758" x2="320" y2="758" stroke="#3A322C"/>
+            <text x="76" y="776" font-family="Inter" font-size="11" font-weight="600" fill="#F6F1EA">Claude Opus 4.7</text>
+            <text x="76" y="790" font-family="JetBrains Mono" font-size="9" fill="#A2968A">heavy reasoning · vision</text>
+            <text x="76" y="810" font-family="Inter" font-size="11" font-weight="600" fill="#F6F1EA">Claude Haiku 4.5</text>
+            <text x="76" y="824" font-family="JetBrains Mono" font-size="9" fill="#A2968A">routing · annotations · SMS</text>
+            <text x="76" y="850" font-family="JetBrains Mono" font-size="9" fill="#A2968A">prompt cache · &gt; 90% hit rate</text>
 
             <!-- Data — col 2 -->
-            <rect x="360" y="688" width="280" height="180" rx="2" fill="#ffffff" stroke="#059669" stroke-width="1.5"/>
-            <text x="376" y="710" font-family="Inter" font-size="11" font-weight="800" fill="#059669">DATA PLANE · SUPABASE</text>
-            <text x="376" y="732" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Postgres + RLS</text>
-            <text x="376" y="746" font-family="JetBrains Mono" font-size="9" fill="#6b7280">organizations · pricing_books</text>
-            <text x="376" y="758" font-family="JetBrains Mono" font-size="9" fill="#6b7280">quotes · line_items · inspections</text>
-            <text x="376" y="776" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">pgvector</text>
-            <text x="376" y="790" font-family="JetBrains Mono" font-size="9" fill="#6b7280">RAG over similar past quotes</text>
-            <text x="376" y="808" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Storage</text>
-            <text x="376" y="822" font-family="JetBrains Mono" font-size="9" fill="#6b7280">photos · branding · PDFs</text>
-            <text x="376" y="842" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Auth · magic link</text>
-            <text x="376" y="856" font-family="JetBrains Mono" font-size="9" fill="#6b7280">tradies only</text>
+            <rect x="360" y="688" width="280" height="180" rx="2" fill="#2B2422" stroke="#059669" stroke-width="1.5"/>
+            <text x="376" y="710" font-family="Inter" font-size="11" font-weight="800" fill="#34C99A">DATA PLANE · SUPABASE</text>
+            <text x="376" y="732" font-family="Inter" font-size="11" font-weight="600" fill="#F6F1EA">Postgres + RLS</text>
+            <text x="376" y="746" font-family="JetBrains Mono" font-size="9" fill="#A2968A">organizations · pricing_books</text>
+            <text x="376" y="758" font-family="JetBrains Mono" font-size="9" fill="#A2968A">quotes · line_items · inspections</text>
+            <text x="376" y="776" font-family="Inter" font-size="11" font-weight="600" fill="#F6F1EA">pgvector</text>
+            <text x="376" y="790" font-family="JetBrains Mono" font-size="9" fill="#A2968A">RAG over similar past quotes</text>
+            <text x="376" y="808" font-family="Inter" font-size="11" font-weight="600" fill="#F6F1EA">Storage</text>
+            <text x="376" y="822" font-family="JetBrains Mono" font-size="9" fill="#A2968A">photos · branding · PDFs</text>
+            <text x="376" y="842" font-family="Inter" font-size="11" font-weight="600" fill="#F6F1EA">Auth · magic link</text>
+            <text x="376" y="856" font-family="JetBrains Mono" font-size="9" fill="#A2968A">tradies only</text>
 
             <!-- Payments — col 3 -->
-            <rect x="660" y="688" width="280" height="180" rx="2" fill="#ffffff" stroke="#16a34a" stroke-width="1.5"/>
-            <text x="676" y="710" font-family="Inter" font-size="11" font-weight="800" fill="#16a34a">PAYMENTS · STRIPE AU</text>
-            <text x="676" y="732" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Stripe Connect Express</text>
-            <text x="676" y="746" font-family="JetBrains Mono" font-size="9" fill="#6b7280">per-tradie account · platform fee</text>
-            <line x1="676" y1="758" x2="920" y2="758" stroke="#e5e7eb"/>
-            <text x="676" y="776" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Deposit on accept</text>
-            <text x="676" y="790" font-family="JetBrains Mono" font-size="9" fill="#6b7280">~20% · webhook → calendar</text>
-            <text x="676" y="808" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">$99 inspection fee</text>
-            <text x="676" y="822" font-family="JetBrains Mono" font-size="9" fill="#6b7280">refunded automatically on win</text>
-            <text x="676" y="842" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Stripe Tax (GST)</text>
-            <text x="676" y="856" font-family="JetBrains Mono" font-size="9" fill="#6b7280">10% · per-tradie ABN</text>
+            <rect x="660" y="688" width="280" height="180" rx="2" fill="#2B2422" stroke="#16a34a" stroke-width="1.5"/>
+            <text x="676" y="710" font-family="Inter" font-size="11" font-weight="800" fill="#7BDCA0">PAYMENTS · STRIPE AU</text>
+            <text x="676" y="732" font-family="Inter" font-size="11" font-weight="600" fill="#F6F1EA">Stripe Connect Express</text>
+            <text x="676" y="746" font-family="JetBrains Mono" font-size="9" fill="#A2968A">per-tradie account · platform fee</text>
+            <line x1="676" y1="758" x2="920" y2="758" stroke="#3A322C"/>
+            <text x="676" y="776" font-family="Inter" font-size="11" font-weight="600" fill="#F6F1EA">Deposit on accept</text>
+            <text x="676" y="790" font-family="JetBrains Mono" font-size="9" fill="#A2968A">~20% · webhook → calendar</text>
+            <text x="676" y="808" font-family="Inter" font-size="11" font-weight="600" fill="#F6F1EA">$99 inspection fee</text>
+            <text x="676" y="822" font-family="JetBrains Mono" font-size="9" fill="#A2968A">refunded automatically on win</text>
+            <text x="676" y="842" font-family="Inter" font-size="11" font-weight="600" fill="#F6F1EA">Stripe Tax (GST)</text>
+            <text x="676" y="856" font-family="JetBrains Mono" font-size="9" fill="#A2968A">10% · per-tradie ABN</text>
 
             <!-- Comms — col 4 -->
-            <rect x="960" y="688" width="280" height="180" rx="2" fill="#ffffff" stroke="#ea580c" stroke-width="1.5"/>
-            <text x="976" y="710" font-family="Inter" font-size="11" font-weight="800" fill="#ea580c">COMMUNICATIONS</text>
-            <text x="976" y="732" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Twilio (AU long codes)</text>
-            <text x="976" y="746" font-family="JetBrains Mono" font-size="9" fill="#6b7280">photo links · follow-ups · status</text>
-            <line x1="976" y1="758" x2="1220" y2="758" stroke="#e5e7eb"/>
-            <text x="976" y="776" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Resend</text>
-            <text x="976" y="790" font-family="JetBrains Mono" font-size="9" fill="#6b7280">quote delivery · receipts</text>
-            <text x="976" y="808" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Calendar integration</text>
-            <text x="976" y="822" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Google + iCloud · auto-block</text>
-            <text x="976" y="842" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Stripe webhooks</text>
-            <text x="976" y="856" font-family="JetBrains Mono" font-size="9" fill="#6b7280">durable retries · Vercel Workflow</text>
+            <rect x="960" y="688" width="280" height="180" rx="2" fill="#2B2422" stroke="#ea580c" stroke-width="1.5"/>
+            <text x="976" y="710" font-family="Inter" font-size="11" font-weight="800" fill="#FF9A5C">COMMUNICATIONS</text>
+            <text x="976" y="732" font-family="Inter" font-size="11" font-weight="600" fill="#F6F1EA">Twilio (AU long codes)</text>
+            <text x="976" y="746" font-family="JetBrains Mono" font-size="9" fill="#A2968A">photo links · follow-ups · status</text>
+            <line x1="976" y1="758" x2="1220" y2="758" stroke="#3A322C"/>
+            <text x="976" y="776" font-family="Inter" font-size="11" font-weight="600" fill="#F6F1EA">Resend</text>
+            <text x="976" y="790" font-family="JetBrains Mono" font-size="9" fill="#A2968A">quote delivery · receipts</text>
+            <text x="976" y="808" font-family="Inter" font-size="11" font-weight="600" fill="#F6F1EA">Calendar integration</text>
+            <text x="976" y="822" font-family="JetBrains Mono" font-size="9" fill="#A2968A">Google + iCloud · auto-block</text>
+            <text x="976" y="842" font-family="Inter" font-size="11" font-weight="600" fill="#F6F1EA">Stripe webhooks</text>
+            <text x="976" y="856" font-family="JetBrains Mono" font-size="9" fill="#A2968A">durable retries · Vercel Workflow</text>
 
             <!-- ═══════════════════════════════════════════════════════════════
                  ROW 4 — OBSERVABILITY + DEFERRED (y=900-1000)
                  ═══════════════════════════════════════════════════════════════ -->
 
-            <rect x="60" y="900" width="540" height="100" rx="2" fill="#ffffff" stroke="#64748b" stroke-width="1.5"/>
-            <text x="76" y="922" font-family="Inter" font-size="11" font-weight="800" fill="#64748b">08 / OBSERVABILITY &amp; OPS</text>
-            <text x="76" y="944" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">PostHog · Sentry · Eval harness · Vercel Workflow</text>
-            <text x="76" y="962" font-family="JetBrains Mono" font-size="9" fill="#6b7280">PostHog — funnel + session replay (tradie drop-off)</text>
-            <text x="76" y="976" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Sentry — error spikes · Stripe webhook failures</text>
-            <text x="76" y="990" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Eval — 100 hold-out (intake → quote) pairs · 5-dim rubric</text>
+            <rect x="60" y="900" width="540" height="100" rx="2" fill="#2B2422" stroke="#6E6354" stroke-width="1.5"/>
+            <text x="76" y="922" font-family="Inter" font-size="11" font-weight="800" fill="#C3B8AC">08 / OBSERVABILITY &amp; OPS</text>
+            <text x="76" y="944" font-family="Inter" font-size="11" font-weight="600" fill="#F6F1EA">PostHog · Sentry · Eval harness · Vercel Workflow</text>
+            <text x="76" y="962" font-family="JetBrains Mono" font-size="9" fill="#A2968A">PostHog — funnel + session replay (tradie drop-off)</text>
+            <text x="76" y="976" font-family="JetBrains Mono" font-size="9" fill="#A2968A">Sentry — error spikes · Stripe webhook failures</text>
+            <text x="76" y="990" font-family="JetBrains Mono" font-size="9" fill="#A2968A">Eval — 100 hold-out (intake → quote) pairs · 5-dim rubric</text>
 
-            <rect x="620" y="900" width="620" height="100" rx="2" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6,4"/>
-            <text x="636" y="922" font-family="Inter" font-size="11" font-weight="800" fill="#94a3b8">09 / DEFERRED · v3+</text>
-            <text x="636" y="944" font-family="Inter" font-size="11" font-weight="600" fill="#0a0a0a">Vapi voice agent · Deepgram · ElevenLabs · hipages · Xero/MYOB · Bunnings</text>
-            <text x="636" y="962" font-family="JetBrains Mono" font-size="9" fill="#94a3b8">Voice — premium tier @ $299/mo (per-call cost destroys $99/mo SaaS pricing)</text>
-            <text x="636" y="976" font-family="JetBrains Mono" font-size="9" fill="#94a3b8">hipages — direct enquiry-to-quote handoff (v3 partnership)</text>
-            <text x="636" y="990" font-family="JetBrains Mono" font-size="9" fill="#94a3b8">Trade expansion — landscaping + carpentry (Phase 4) · plumb/elec (v3)</text>
+            <rect x="620" y="900" width="620" height="100" rx="2" fill="#2B2422" stroke="#A2968A" stroke-width="1.5" stroke-dasharray="6,4"/>
+            <text x="636" y="922" font-family="Inter" font-size="11" font-weight="800" fill="#A2968A">09 / DEFERRED · v3+</text>
+            <text x="636" y="944" font-family="Inter" font-size="11" font-weight="600" fill="#F6F1EA">Vapi voice agent · Deepgram · ElevenLabs · hipages · Xero/MYOB · Bunnings</text>
+            <text x="636" y="962" font-family="JetBrains Mono" font-size="9" fill="#A2968A">Voice — premium tier @ $299/mo (per-call cost destroys $99/mo SaaS pricing)</text>
+            <text x="636" y="976" font-family="JetBrains Mono" font-size="9" fill="#A2968A">hipages — direct enquiry-to-quote handoff (v3 partnership)</text>
+            <text x="636" y="990" font-family="JetBrains Mono" font-size="9" fill="#A2968A">Trade expansion — landscaping + carpentry (Phase 4) · plumb/elec (v3)</text>
 
             <!-- ═══════════════════════════════════════════════════════════════
                  ARROWS — orthogonal routing only · service bus pattern
                  ═══════════════════════════════════════════════════════════════ -->
 
             <!-- 1. Customer → Customer Quote View (col 1, vertical) -->
-            <line x1="200" y1="168" x2="200" y2="246" stroke="#0891b2" stroke-width="1.8" marker-end="url(#arrow-cyan)"/>
-            <text x="208" y="212" font-family="JetBrains Mono" font-size="9" fill="#0891b2">view + accept</text>
+            <line x1="200" y1="168" x2="200" y2="246" stroke="#7BDCA0" stroke-width="1.8" marker-end="url(#arrow-cyan)"/>
+            <text x="208" y="212" font-family="JetBrains Mono" font-size="9" fill="#7BDCA0">view + accept</text>
 
             <!-- 2. Tradie → Tradie Portal (col 4, vertical) -->
-            <line x1="1100" y1="168" x2="1100" y2="246" stroke="#2563eb" stroke-width="1.8" marker-end="url(#arrow-blue)"/>
-            <text x="1108" y="212" font-family="JetBrains Mono" font-size="9" fill="#2563eb">login · review</text>
+            <line x1="1100" y1="168" x2="1100" y2="246" stroke="#FFC400" stroke-width="1.8" marker-end="url(#arrow-blue)"/>
+            <text x="1108" y="212" font-family="JetBrains Mono" font-size="9" fill="#FFD23D">login · review</text>
 
             <!-- 3. Tradie Portal → Drafter (intake submit) — L-shape via y=358 -->
-            <path d="M 1100 340 V 358 H 200 V 402" fill="none" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
-            <rect x="540" y="350" width="200" height="16" fill="#ffffff"/>
-            <text x="640" y="362" font-family="JetBrains Mono" font-size="9" fill="#2563eb" text-anchor="middle">intake submit · server action</text>
+            <path d="M 1100 340 V 358 H 200 V 402" fill="none" stroke="#FFC400" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+            <rect x="540" y="350" width="200" height="16" fill="#2B2422"/>
+            <text x="640" y="362" font-family="JetBrains Mono" font-size="9" fill="#FFD23D" text-anchor="middle">intake submit · server action</text>
 
             <!-- 4. Reviewer → Customer Quote View (publish) — L-shape via y=380 (uses Reviewer's left edge) -->
-            <path d="M 380 404 V 380 H 220 V 342" fill="none" stroke="#0891b2" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
-            <rect x="244" y="372" width="120" height="16" fill="#ffffff"/>
-            <text x="304" y="384" font-family="JetBrains Mono" font-size="9" fill="#0891b2" text-anchor="middle">publish quote</text>
+            <path d="M 380 404 V 380 H 220 V 342" fill="none" stroke="#7BDCA0" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+            <rect x="244" y="372" width="120" height="16" fill="#2B2422"/>
+            <text x="304" y="384" font-family="JetBrains Mono" font-size="9" fill="#7BDCA0" text-anchor="middle">publish quote</text>
 
             <!-- 5. Drafter → Reviewer (right) -->
-            <line x1="340" y1="502" x2="358" y2="502" stroke="#1f2937" stroke-width="1.6" marker-end="url(#arrow)"/>
+            <line x1="340" y1="502" x2="358" y2="502" stroke="#A2968A" stroke-width="1.6" marker-end="url(#arrow)"/>
             <!-- 6. Reviewer → Inspection (right, dashed - conditional) -->
-            <line x1="640" y1="502" x2="658" y2="502" stroke="#1f2937" stroke-width="1.6" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+            <line x1="640" y1="502" x2="658" y2="502" stroke="#A2968A" stroke-width="1.6" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
             <!-- 7. Inspection → Conversion (right) -->
-            <line x1="940" y1="502" x2="958" y2="502" stroke="#1f2937" stroke-width="1.6" marker-end="url(#arrow)"/>
+            <line x1="940" y1="502" x2="958" y2="502" stroke="#A2968A" stroke-width="1.6" marker-end="url(#arrow)"/>
 
             <!-- ═══ Service-bus drops (replaces 16 crossing diagonals) ═══ -->
 
             <!-- 4 agent drops to bus (light grey verticals, column-aligned) -->
-            <line x1="200" y1="600" x2="200" y2="664" stroke="#94a3b8" stroke-width="1"/>
-            <line x1="500" y1="600" x2="500" y2="664" stroke="#94a3b8" stroke-width="1"/>
-            <line x1="800" y1="600" x2="800" y2="664" stroke="#94a3b8" stroke-width="1"/>
-            <line x1="1100" y1="600" x2="1100" y2="664" stroke="#94a3b8" stroke-width="1"/>
+            <line x1="200" y1="600" x2="200" y2="664" stroke="#A2968A" stroke-width="1"/>
+            <line x1="500" y1="600" x2="500" y2="664" stroke="#A2968A" stroke-width="1"/>
+            <line x1="800" y1="600" x2="800" y2="664" stroke="#A2968A" stroke-width="1"/>
+            <line x1="1100" y1="600" x2="1100" y2="664" stroke="#A2968A" stroke-width="1"/>
 
             <!-- 4 service receives from bus (color-coded verticals with arrows) -->
-            <line x1="200" y1="664" x2="200" y2="686" stroke="#7c3aed" stroke-width="1.6" marker-end="url(#arrow-violet)"/>
+            <line x1="200" y1="664" x2="200" y2="686" stroke="#A2968A" stroke-width="1.6" marker-end="url(#arrow-violet)"/>
             <line x1="500" y1="664" x2="500" y2="686" stroke="#059669" stroke-width="1.6" marker-end="url(#arrow-emerald)"/>
             <line x1="800" y1="664" x2="800" y2="686" stroke="#16a34a" stroke-width="1.6" marker-end="url(#arrow-green)"/>
             <line x1="1100" y1="664" x2="1100" y2="686" stroke="#ea580c" stroke-width="1.6" marker-end="url(#arrow-orange)"/>
 
             <!-- Subtle column labels at bus (which agent calls which service) -->
-            <text x="200" y="678" font-family="JetBrains Mono" font-size="8" fill="#94a3b8" text-anchor="middle">↓ tool-use</text>
-            <text x="500" y="678" font-family="JetBrains Mono" font-size="8" fill="#94a3b8" text-anchor="middle">↓ RAG · CRUD</text>
-            <text x="800" y="678" font-family="JetBrains Mono" font-size="8" fill="#94a3b8" text-anchor="middle">↓ charge · refund</text>
-            <text x="1100" y="678" font-family="JetBrains Mono" font-size="8" fill="#94a3b8" text-anchor="middle">↓ SMS · email</text>
+            <text x="200" y="678" font-family="JetBrains Mono" font-size="8" fill="#A2968A" text-anchor="middle">↓ tool-use</text>
+            <text x="500" y="678" font-family="JetBrains Mono" font-size="8" fill="#A2968A" text-anchor="middle">↓ RAG · CRUD</text>
+            <text x="800" y="678" font-family="JetBrains Mono" font-size="8" fill="#A2968A" text-anchor="middle">↓ charge · refund</text>
+            <text x="1100" y="678" font-family="JetBrains Mono" font-size="8" fill="#A2968A" text-anchor="middle">↓ SMS · email</text>
 
             <!-- ═══════════════════════════════════════════════════════════════
                  LEGEND (y=1030-1090)
                  ═══════════════════════════════════════════════════════════════ -->
-            <rect x="60" y="1030" width="1180" height="60" rx="2" fill="#fafafa" stroke="#e5e7eb"/>
-            <text x="76" y="1052" font-family="JetBrains Mono" font-size="10" font-weight="700" fill="#0a0a0a">LEGEND</text>
+            <rect x="60" y="1030" width="1180" height="60" rx="2" fill="#1E1813" stroke="#3A322C"/>
+            <text x="76" y="1052" font-family="JetBrains Mono" font-size="10" font-weight="700" fill="#F6F1EA">LEGEND</text>
 
-            <line x1="140" y1="1048" x2="168" y2="1048" stroke="#1f2937" stroke-width="1.6" marker-end="url(#arrow)"/>
-            <text x="176" y="1052" font-family="JetBrains Mono" font-size="9" fill="#6b7280">runtime call</text>
+            <line x1="140" y1="1048" x2="168" y2="1048" stroke="#A2968A" stroke-width="1.6" marker-end="url(#arrow)"/>
+            <text x="176" y="1052" font-family="JetBrains Mono" font-size="9" fill="#A2968A">runtime call</text>
 
-            <line x1="260" y1="1048" x2="288" y2="1048" stroke="#1f2937" stroke-width="1.6" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
-            <text x="296" y="1052" font-family="JetBrains Mono" font-size="9" fill="#6b7280">conditional / async</text>
+            <line x1="260" y1="1048" x2="288" y2="1048" stroke="#A2968A" stroke-width="1.6" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+            <text x="296" y="1052" font-family="JetBrains Mono" font-size="9" fill="#A2968A">conditional / async</text>
 
-            <line x1="408" y1="1048" x2="436" y2="1048" stroke="#94a3b8" stroke-width="1"/>
-            <text x="444" y="1052" font-family="JetBrains Mono" font-size="9" fill="#6b7280">service bus</text>
+            <line x1="408" y1="1048" x2="436" y2="1048" stroke="#A2968A" stroke-width="1"/>
+            <text x="444" y="1052" font-family="JetBrains Mono" font-size="9" fill="#A2968A">service bus</text>
 
-            <rect x="528" y="1043" width="14" height="10" rx="1" fill="#ffffff" stroke="#f59e0b" stroke-width="1.2"/>
-            <text x="548" y="1052" font-family="JetBrains Mono" font-size="9" fill="#6b7280">AI agent</text>
+            <rect x="528" y="1043" width="14" height="10" rx="1" fill="#2B2422" stroke="#f59e0b" stroke-width="1.2"/>
+            <text x="548" y="1052" font-family="JetBrains Mono" font-size="9" fill="#A2968A">AI agent</text>
 
-            <rect x="608" y="1043" width="14" height="10" rx="1" fill="#ffffff" stroke="#7c3aed" stroke-width="1.2"/>
-            <text x="628" y="1052" font-family="JetBrains Mono" font-size="9" fill="#6b7280">LLM</text>
+            <rect x="608" y="1043" width="14" height="10" rx="1" fill="#2B2422" stroke="#A2968A" stroke-width="1.2"/>
+            <text x="628" y="1052" font-family="JetBrains Mono" font-size="9" fill="#A2968A">LLM</text>
 
-            <rect x="668" y="1043" width="14" height="10" rx="1" fill="#ffffff" stroke="#059669" stroke-width="1.2"/>
-            <text x="688" y="1052" font-family="JetBrains Mono" font-size="9" fill="#6b7280">data</text>
+            <rect x="668" y="1043" width="14" height="10" rx="1" fill="#2B2422" stroke="#059669" stroke-width="1.2"/>
+            <text x="688" y="1052" font-family="JetBrains Mono" font-size="9" fill="#A2968A">data</text>
 
-            <rect x="730" y="1043" width="14" height="10" rx="1" fill="#ffffff" stroke="#16a34a" stroke-width="1.2"/>
-            <text x="750" y="1052" font-family="JetBrains Mono" font-size="9" fill="#6b7280">payments</text>
+            <rect x="730" y="1043" width="14" height="10" rx="1" fill="#2B2422" stroke="#16a34a" stroke-width="1.2"/>
+            <text x="750" y="1052" font-family="JetBrains Mono" font-size="9" fill="#A2968A">payments</text>
 
-            <rect x="810" y="1043" width="14" height="10" rx="1" fill="#ffffff" stroke="#ea580c" stroke-width="1.2"/>
-            <text x="830" y="1052" font-family="JetBrains Mono" font-size="9" fill="#6b7280">comms</text>
+            <rect x="810" y="1043" width="14" height="10" rx="1" fill="#2B2422" stroke="#ea580c" stroke-width="1.2"/>
+            <text x="830" y="1052" font-family="JetBrains Mono" font-size="9" fill="#A2968A">comms</text>
 
-            <rect x="888" y="1043" width="14" height="10" rx="1" fill="#ffffff" stroke="#0891b2" stroke-width="1.2"/>
-            <text x="908" y="1052" font-family="JetBrains Mono" font-size="9" fill="#6b7280">customer</text>
+            <rect x="888" y="1043" width="14" height="10" rx="1" fill="#2B2422" stroke="#7BDCA0" stroke-width="1.2"/>
+            <text x="908" y="1052" font-family="JetBrains Mono" font-size="9" fill="#A2968A">customer</text>
 
-            <rect x="968" y="1043" width="14" height="10" rx="1" fill="#ffffff" stroke="#2563eb" stroke-width="1.2"/>
-            <text x="988" y="1052" font-family="JetBrains Mono" font-size="9" fill="#6b7280">tradie</text>
+            <rect x="968" y="1043" width="14" height="10" rx="1" fill="#2B2422" stroke="#FFC400" stroke-width="1.2"/>
+            <text x="988" y="1052" font-family="JetBrains Mono" font-size="9" fill="#A2968A">tradie</text>
 
-            <rect x="1040" y="1043" width="14" height="10" rx="1" fill="transparent" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="3,3"/>
-            <text x="1060" y="1052" font-family="JetBrains Mono" font-size="9" fill="#6b7280">deferred (v3)</text>
+            <rect x="1040" y="1043" width="14" height="10" rx="1" fill="transparent" stroke="#A2968A" stroke-width="1.2" stroke-dasharray="3,3"/>
+            <text x="1060" y="1052" font-family="JetBrains Mono" font-size="9" fill="#A2968A">deferred (v3)</text>
 
             <rect x="1140" y="1043" width="14" height="10" rx="1" fill="transparent" stroke="#f59e0b" stroke-width="1.2" stroke-dasharray="6,4"/>
-            <text x="1160" y="1052" font-family="JetBrains Mono" font-size="9" fill="#6b7280">Vercel</text>
+            <text x="1160" y="1052" font-family="JetBrains Mono" font-size="9" fill="#A2968A">Vercel</text>
 
-            <text x="76" y="1078" font-family="JetBrains Mono" font-size="9" fill="#94a3b8">Each agent column (1–4) stacks above its primary backend service. The grey bus represents server-action routing — every agent can call every backend service.</text>
+            <text x="76" y="1078" font-family="JetBrains Mono" font-size="9" fill="#A2968A">Each agent column (1–4) stacks above its primary backend service. The grey bus represents server-action routing — every agent can call every backend service.</text>
           </svg>
         </div>
       </div>
@@ -2101,7 +2103,7 @@
             <li>Tradie types intake on mobile portal</li>
             <li>Quote Drafter (Opus) reads pricing book + RAG</li>
             <li>Tradie reviews, adjusts one price, hits send</li>
-            <li>Customer opens token URL, picks Better, taps accept</li>
+            <li>Customer opens token URL, taps accept on the fixed price</li>
             <li>Stripe Connect deposit → tradie account, calendar blocked</li>
           </ul>
         </div>

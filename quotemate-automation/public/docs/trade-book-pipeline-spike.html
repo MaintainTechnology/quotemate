@@ -10,10 +10,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800;900&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --ink-deep:#0E1622; --ink:#141C29; --ink-card:#1B2433; --ink-line:#2D3A4F;
-      --accent:#FF5A1F; --accent-soft:#FF7A45;
-      --text-pri:#FFFFFF; --text-sec:#C8D2E1; --text-dim:#8995A8;
-      --green:#34D399; --rose:#F87171; --amber:#FBBF24; --sky:#38BDF8; --violet:#A78BFA; --teal:#14B8A6;
+      --ink-deep:#16120F; --ink:#1E1813; --ink-card:#2B2422; --ink-line:#3A322C;
+      --accent:#FFC400; --accent-soft:#FFD23D; --accent-ink:#1C1812;
+      --text-pri:#F6F1EA; --text-sec:#C3B8AC; --text-dim:#A2968A;
+      --green:#7BDCA0; --rose:#F87171; --amber:#FFD23D; --sky:#6E6354; --violet:#FFD23D; --teal:#6E6354;
     }
     *,*::before,*::after { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
@@ -77,8 +77,8 @@
       font-weight: 700;
       letter-spacing: 0.02em;
       color: var(--accent);
-      background: rgba(255,90,31,0.1);
-      border: 1px solid rgba(255,90,31,0.32);
+      background: rgba(255,196,0,0.1);
+      border: 1px solid rgba(255,196,0,0.32);
       border-radius: 3px;
       vertical-align: baseline;
       line-height: 1.3;
@@ -178,7 +178,7 @@
     }
     .step-num {
       background: var(--accent);
-      color: #000;
+      color: var(--accent-ink);
       display: flex; align-items: center; justify-content: center;
       font-weight: 900; font-size: 1.25rem;
       font-family: 'JetBrains Mono', ui-monospace, monospace;
@@ -194,11 +194,11 @@
       font-size: 0.68rem;
       font-weight: 700;
       color: var(--accent);
-      background: rgba(255,90,31,0.1);
-      border: 1px solid rgba(255,90,31,0.35);
+      background: rgba(255,196,0,0.1);
+      border: 1px solid rgba(255,196,0,0.35);
       border-radius: 3px;
     }
-    .step-tag.new { color: var(--amber); background: rgba(251,191,36,0.1); border-color: rgba(251,191,36,0.35); }
+    .step-tag.new { color: var(--amber); background: rgba(255,210,61,0.1); border-color: rgba(255,210,61,0.35); }
 
     .cost-card {
       background: var(--ink);

@@ -15,6 +15,7 @@ const TRADE_LINKS = [
   { href: "/trades/plumbing", label: "Plumbing", region: "QLD" },
   { href: "/trades/roofing", label: "Roofing", region: "" },
   { href: "/trades/solar", label: "Solar", region: "" },
+  { href: "/trades/painting", label: "Painting", region: "" },
 ]
 
 export function TradesMenu() {

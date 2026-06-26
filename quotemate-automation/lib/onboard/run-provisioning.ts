@@ -37,12 +37,14 @@ import { after } from 'next/server'
 export type ProvisioningInput = {
   tenantId: string
   businessName: string
-  /** Primary trade — used for back-compat fields. */
-  trade: 'electrical' | 'plumbing'
-  /** Full set of trades this tenant operates in (length 1 or 2). When
-   *  provided, the Vapi assistant prompt mentions both. Defaults to
-   *  `[trade]` so older callers keep working. */
-  trades?: Array<'electrical' | 'plumbing'>
+  /** Primary trade — used for back-compat fields. Any registered trade
+   *  name (electrical / plumbing / painting / …); the Vapi layer is
+   *  data-driven and speaks new trades verbatim. */
+  trade: string
+  /** Full set of trades this tenant operates in. When provided, the Vapi
+   *  assistant prompt mentions each. Defaults to `[trade]` so older
+   *  callers keep working. */
+  trades?: string[]
   ownerFirstName: string
   ownerMobile: string // E.164
   /** Pre-existing values on the tenant row — lets us skip steps we already did. */

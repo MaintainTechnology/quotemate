@@ -22,7 +22,7 @@ export function Nav() {
         <Link href="/" className="flex items-center gap-2.5">
           <Logo />
           <span className="font-extrabold uppercase tracking-tight text-text-pri">
-            QuoteMax
+            QuoteMate
           </span>
         </Link>
         <div className="hidden gap-8 text-sm font-medium text-text-sec md:flex">
@@ -61,16 +61,16 @@ export function Nav() {
 export function Footer() {
   return (
     <footer>
-      <div className="mx-auto grid max-w-[88rem] gap-10 px-6 py-16 md:grid-cols-[1.6fr_1fr_1fr_1fr]">
+      <div className="mx-auto grid max-w-[88rem] gap-10 px-6 py-16 md:grid-cols-[1.6fr_1fr_1fr_1fr_1fr]">
         <div>
           <Link href="/" className="flex items-center gap-2.5">
             <Logo />
             <span className="font-extrabold uppercase tracking-tight text-text-pri">
-              QuoteMax
+              QuoteMate
             </span>
           </Link>
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-text-dim">
-            QuoteMax drafts clean quotes for Australian electricians and
+            QuoteMate drafts clean quotes for Australian electricians and
             plumbers.
           </p>
         </div>
@@ -89,6 +89,7 @@ export function Footer() {
             { label: "Plumbing", href: "/trades/plumbing" },
             { label: "Roofing", href: "/trades/roofing" },
             { label: "Solar", href: "/trades/solar" },
+            { label: "Painting", href: "/trades/painting" },
           ]}
         />
         <FooterCol
@@ -99,11 +100,19 @@ export function Footer() {
             { label: "The plan", href: "/docs/tradie-onboarding-plan" },
           ]}
         />
+        <FooterCol
+          title="Legal"
+          links={[
+            { label: "Privacy policy", href: "/legal/privacy" },
+            { label: "Terms & conditions", href: "/legal/terms" },
+            { label: "Cookie policy", href: "/legal/cookies" },
+          ]}
+        />
       </div>
       <div className="border-t border-ink-line">
         <div className="mx-auto flex max-w-[88rem] flex-col gap-2 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
           <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
-            © 2026 QuoteMax
+            © 2026 QuoteMate
           </span>
           <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
             Electrical NSW · Plumbing QLD
@@ -157,7 +166,7 @@ export function MarqueeBar() {
             className="flex shrink-0 items-center font-mono text-xl font-bold uppercase tracking-[0.16em] md:text-2xl"
           >
             {[
-              "QuoteMax",
+              "QuoteMate",
               "Built in Australia",
               "For tradies, by tradies",
               "Quote drafted in under a minute",

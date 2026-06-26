@@ -24,6 +24,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
+import { passwordSchema } from '@/lib/auth/password'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,7 +43,7 @@ const supabaseAdmin = createClient(
 
 const SignupSchema = z.object({
   email: z.string().trim().email().max(120).transform((s) => s.toLowerCase()),
-  password: z.string().min(8).max(72),
+  password: passwordSchema,
   business_name: z.string().trim().min(2).max(80),
   owner_first_name: z.string().trim().min(1).max(40),
   // E.164 already-normalised on the client; allow optional in case the

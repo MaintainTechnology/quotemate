@@ -46,20 +46,36 @@ async function userAndTenantFromBearer(
 
 /** Best-effort — fetch the per-tenant painting rate-card overlay from
  *  pricing_book.overlays.painting_rate_card and shallow-merge it onto the
- *  default. Returns null on any miss so the caller uses the default. */
+ *  default. Returns null on any miss so the caller uses the default.
+ *
+ *  A multi-trade tenant (e.g. electrical + painting) carries one
+ *  pricing_book row per trade, and the painting rate card lives on the
+ *  PAINTING row — but the tenant's primary (scalar) trade may be
+ *  electrical. So we read every row for the tenant and prefer the
+ *  painting row's card, then the primary-trade row's, then any row that
+ *  happens to carry one. */
 async function loadPaintingOverlay(
   tenantId: string,
   primaryTrade: string | null,
 ): Promise<unknown> {
   try {
-    let q = supabase
+    const { data } = await supabase
       .from('pricing_book')
-      .select('overlays')
+      .select('trade, overlays')
       .eq('tenant_id', tenantId)
-    if (primaryTrade) q = q.eq('trade', primaryTrade)
-    const { data } = await q.limit(1).maybeSingle()
-    const overlays = (data?.overlays as Record<string, unknown> | null | undefined) ?? null
-    return overlays?.painting_rate_card ?? null
+    if (!Array.isArray(data) || data.length === 0) return null
+    const cardOf = (row: { overlays?: unknown } | undefined): unknown => {
+      const overlays = (row?.overlays as Record<string, unknown> | null | undefined) ?? null
+      return overlays?.painting_rate_card ?? null
+    }
+    const byTrade = (t: string) =>
+      data.find((r) => (r as { trade?: string }).trade === t)
+    return (
+      cardOf(byTrade('painting')) ??
+      (primaryTrade ? cardOf(byTrade(primaryTrade)) : null) ??
+      cardOf(data.find((r) => cardOf(r) != null)) ??
+      null
+    )
   } catch {
     return null
   }

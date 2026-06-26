@@ -9,11 +9,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
 <style>
   :root{
-    --ink-deep:#0E1622; --ink:#141C29; --ink-card:#1B2433; --ink-line:#2D3A4F;
-    --accent:#FF5A1F; --accent-press:#E8470F; --accent-soft:#FF7A45;
-    --text-pri:#FFFFFF; --text-sec:#B8C2D1; --text-dim:#7A8699;
-    --teal-glow:#14B8A6; --teal-deep:#0F766E;
-    --success:#15803D; --warning:#B45309; --danger:#B91C1C;
+    --ink-deep:#16120F; --ink:#1E1813; --ink-card:#2B2422; --ink-line:#3A322C;
+    --accent:#FFC400; --accent-press:#E6AC00; --accent-soft:#FFD23D; --accent-ink:#1C1812;
+    --text-pri:#F6F1EA; --text-sec:#C3B8AC; --text-dim:#A2968A;
+    --teal-glow:#6E6354; --teal-deep:#6E6354;
+    --success:#7BDCA0; --warning:#B45309; --danger:#B91C1C;
   }
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
@@ -46,7 +46,7 @@
   .topo{position:absolute; inset:0; width:100%; height:100%; opacity:.35; z-index:1; pointer-events:none}
 
   /* ── chips ── */
-  .chip{display:inline-flex; align-items:center; gap:.4em; background:var(--accent); color:#fff;
+  .chip{display:inline-flex; align-items:center; gap:.4em; background:var(--accent); color:var(--accent-ink);
     padding:5px 11px; font-family:'JetBrains Mono',monospace; font-size:.68rem; font-weight:600;
     text-transform:uppercase; letter-spacing:.12em}
   .chip.ghost{background:transparent; color:var(--text-dim); border:1px solid var(--ink-line)}
@@ -77,7 +77,7 @@
   .connector{width:2px; height:26px; background:var(--ink-line); position:relative}
   .connector::after{content:""; position:absolute; left:-4px; bottom:0; border:5px solid transparent;
     border-top-color:var(--ink-line)}
-  .kbblock{width:100%; max-width:760px; border:2px dashed var(--accent); background:rgba(255,90,31,.05);
+  .kbblock{width:100%; max-width:760px; border:2px dashed var(--accent); background:rgba(255,196,0,.05);
     padding:18px; position:relative}
   .kbblock .kbhead{font-family:'JetBrains Mono',monospace; font-size:.7rem; letter-spacing:.12em;
     text-transform:uppercase; color:var(--accent); margin-bottom:14px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px}
@@ -114,7 +114,7 @@
   .files td:last-child{color:var(--text-sec)}
 
   /* ── CTA bar ── */
-  .ctabar{background:var(--accent); color:#fff; text-align:center; padding:18px 24px;
+  .ctabar{background:var(--accent); color:var(--accent-ink); text-align:center; padding:18px 24px;
     font-family:'JetBrains Mono',monospace; font-size:.82rem; text-transform:uppercase; letter-spacing:.14em}
   .sub{color:var(--text-dim); font-family:'JetBrains Mono',monospace; font-size:.72rem; letter-spacing:.08em; text-transform:uppercase}
 </style>
@@ -124,13 +124,13 @@
 <!-- ════════ HERO ════════ -->
 <header class="hero">
   <svg class="topo" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-    <g fill="none" stroke="#14B8A6" stroke-width="1">
+    <g fill="none" stroke="#6E6354" stroke-width="1">
       <path d="M0,820 Q240,660 480,740 T960,700 T1440,760 T1920,690"/>
       <path d="M0,880 Q240,740 480,800 T960,770 T1440,820 T1920,760" stroke-opacity=".7"/>
       <path d="M0,940 Q240,820 480,870 T960,840 T1440,890 T1920,830" stroke-opacity=".5"/>
       <path d="M0,760 Q240,600 480,690 T960,640 T1440,700 T1920,620" stroke-opacity=".4"/>
     </g>
-    <g fill="none" stroke="#FF5A1F" stroke-width="1" stroke-opacity=".25">
+    <g fill="none" stroke="#FFC400" stroke-width="1" stroke-opacity=".25">
       <path d="M0,1000 Q240,900 480,950 T960,920 T1440,960 T1920,910"/>
     </g>
   </svg>
@@ -221,74 +221,74 @@
   <div class="wrap">
     <span class="eyebrow">04 · The connections</span>
     <h2>QuoteMax ⇄ <span class="accent">mt-filestore-kb</span> ⇄ Gemini</h2>
-    <p class="lede">Five HTTP calls over the existing typed client (<code>lib/admin-loader/mt-filestore-kb.ts</code>). The route never touches Gemini directly — the node brokers it. The teardown call (orange) is guaranteed to run.</p>
+    <p class="lede">Five HTTP calls over the existing typed client (<code>lib/admin-loader/mt-filestore-kb.ts</code>). The route never touches Gemini directly — the node brokers it. The teardown call (yellow) is guaranteed to run.</p>
 
     <figure style="margin-top:26px">
       <div class="fig">
         <svg viewBox="0 0 980 430" role="img" aria-label="Connection map between the extract route, the mt-filestore-kb service endpoints, and the Gemini File Search temporary store">
           <defs>
             <marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="3.2" orient="auto">
-              <path d="M0,0 L7,3.2 L0,6.4 Z" fill="#7A8699"/>
+              <path d="M0,0 L7,3.2 L0,6.4 Z" fill="#A2968A"/>
             </marker>
             <marker id="arrT" markerWidth="9" markerHeight="9" refX="7" refY="3.2" orient="auto">
-              <path d="M0,0 L7,3.2 L0,6.4 Z" fill="#14B8A6"/>
+              <path d="M0,0 L7,3.2 L0,6.4 Z" fill="#6E6354"/>
             </marker>
             <marker id="arrO" markerWidth="9" markerHeight="9" refX="7" refY="3.2" orient="auto">
-              <path d="M0,0 L7,3.2 L0,6.4 Z" fill="#FF5A1F"/>
+              <path d="M0,0 L7,3.2 L0,6.4 Z" fill="#FFC400"/>
             </marker>
           </defs>
 
           <!-- left: route -->
-          <rect x="20" y="150" width="210" height="130" fill="#1B2433" stroke="#2D3A4F"/>
-          <text x="36" y="180" fill="#FF5A1F" font-size="11" letter-spacing="1">QUOTEMATE</text>
-          <text x="36" y="202" fill="#FFFFFF" font-size="13">extract/route.ts</text>
-          <text x="36" y="224" fill="#B8C2D1" font-size="11">supplementTakeoffViaKb()</text>
-          <text x="36" y="250" fill="#7A8699" font-size="10">best-effort orchestrator</text>
-          <text x="36" y="266" fill="#7A8699" font-size="10">+ hybrid merge (pure)</text>
+          <rect x="20" y="150" width="210" height="130" fill="#2B2422" stroke="#3A322C"/>
+          <text x="36" y="180" fill="#FFC400" font-size="11" letter-spacing="1">QUOTEMATE</text>
+          <text x="36" y="202" fill="#F6F1EA" font-size="13">extract/route.ts</text>
+          <text x="36" y="224" fill="#C3B8AC" font-size="11">supplementTakeoffViaKb()</text>
+          <text x="36" y="250" fill="#A2968A" font-size="10">best-effort orchestrator</text>
+          <text x="36" y="266" fill="#A2968A" font-size="10">+ hybrid merge (pure)</text>
 
           <!-- middle: service endpoints -->
-          <rect x="380" y="40" width="270" height="350" fill="#141C29" stroke="#2D3A4F"/>
-          <text x="396" y="66" fill="#14B8A6" font-size="11" letter-spacing="1">mt-filestore-kb · NEST</text>
+          <rect x="380" y="40" width="270" height="350" fill="#1E1813" stroke="#3A322C"/>
+          <text x="396" y="66" fill="#6E6354" font-size="11" letter-spacing="1">mt-filestore-kb · NEST</text>
           <!-- endpoint rows -->
           <g font-size="11">
-            <rect x="396" y="82"  width="238" height="44" fill="#1B2433" stroke="#2D3A4F"/>
-            <text x="408" y="100" fill="#FFFFFF">1 · POST /v1/stores</text><text x="408" y="116" fill="#7A8699">create temp store</text>
-            <rect x="396" y="134" width="238" height="44" fill="#1B2433" stroke="#2D3A4F"/>
-            <text x="408" y="152" fill="#FFFFFF">2 · POST /:id/upload</text><text x="408" y="168" fill="#7A8699">multipart PDF → index</text>
-            <rect x="396" y="186" width="238" height="44" fill="#1B2433" stroke="#2D3A4F"/>
-            <text x="408" y="204" fill="#FFFFFF">3 · GET /:id/documents</text><text x="408" y="220" fill="#7A8699">poll until indexed</text>
-            <rect x="396" y="238" width="238" height="44" fill="#1B2433" stroke="#2D3A4F"/>
-            <text x="408" y="256" fill="#FFFFFF">4 · POST /v1/search</text><text x="408" y="272" fill="#7A8699">grounded retrieval QA</text>
-            <rect x="396" y="306" width="238" height="44" fill="#231a17" stroke="#FF5A1F"/>
-            <text x="408" y="324" fill="#FF7A45">5 · DELETE /:id?force=true</text><text x="408" y="340" fill="#FF7A45">finally · teardown</text>
+            <rect x="396" y="82"  width="238" height="44" fill="#2B2422" stroke="#3A322C"/>
+            <text x="408" y="100" fill="#F6F1EA">1 · POST /v1/stores</text><text x="408" y="116" fill="#A2968A">create temp store</text>
+            <rect x="396" y="134" width="238" height="44" fill="#2B2422" stroke="#3A322C"/>
+            <text x="408" y="152" fill="#F6F1EA">2 · POST /:id/upload</text><text x="408" y="168" fill="#A2968A">multipart PDF → index</text>
+            <rect x="396" y="186" width="238" height="44" fill="#2B2422" stroke="#3A322C"/>
+            <text x="408" y="204" fill="#F6F1EA">3 · GET /:id/documents</text><text x="408" y="220" fill="#A2968A">poll until indexed</text>
+            <rect x="396" y="238" width="238" height="44" fill="#2B2422" stroke="#3A322C"/>
+            <text x="408" y="256" fill="#F6F1EA">4 · POST /v1/search</text><text x="408" y="272" fill="#A2968A">grounded retrieval QA</text>
+            <rect x="396" y="306" width="238" height="44" fill="#2B2422" stroke="#FFC400"/>
+            <text x="408" y="324" fill="#FFD23D">5 · DELETE /:id?force=true</text><text x="408" y="340" fill="#FFD23D">finally · teardown</text>
           </g>
 
           <!-- right: gemini store -->
-          <rect x="760" y="120" width="200" height="190" fill="#1B2433" stroke="#14B8A6"/>
-          <text x="776" y="146" fill="#14B8A6" font-size="11" letter-spacing="1">GEMINI</text>
-          <text x="776" y="168" fill="#FFFFFF" font-size="12">File Search store</text>
-          <text x="776" y="190" fill="#B8C2D1" font-size="11">the tradie's PDFs</text>
-          <text x="776" y="212" fill="#B8C2D1" font-size="11">chunked · embedded</text>
-          <text x="776" y="240" fill="#7A8699" font-size="10">EPHEMERAL —</text>
-          <text x="776" y="256" fill="#7A8699" font-size="10">created &amp; destroyed</text>
-          <text x="776" y="272" fill="#7A8699" font-size="10">within one run</text>
+          <rect x="760" y="120" width="200" height="190" fill="#2B2422" stroke="#6E6354"/>
+          <text x="776" y="146" fill="#6E6354" font-size="11" letter-spacing="1">GEMINI</text>
+          <text x="776" y="168" fill="#F6F1EA" font-size="12">File Search store</text>
+          <text x="776" y="190" fill="#C3B8AC" font-size="11">the tradie's PDFs</text>
+          <text x="776" y="212" fill="#C3B8AC" font-size="11">chunked · embedded</text>
+          <text x="776" y="240" fill="#A2968A" font-size="10">EPHEMERAL —</text>
+          <text x="776" y="256" fill="#A2968A" font-size="10">created &amp; destroyed</text>
+          <text x="776" y="272" fill="#A2968A" font-size="10">within one run</text>
 
           <!-- arrows route -> endpoints -->
-          <line x1="230" y1="200" x2="396" y2="104" stroke="#7A8699" stroke-width="1.4" marker-end="url(#arr)"/>
-          <line x1="230" y1="205" x2="396" y2="156" stroke="#7A8699" stroke-width="1.4" marker-end="url(#arr)"/>
-          <line x1="230" y1="212" x2="396" y2="208" stroke="#7A8699" stroke-width="1.4" marker-end="url(#arr)"/>
-          <line x1="230" y1="220" x2="396" y2="260" stroke="#7A8699" stroke-width="1.4" marker-end="url(#arr)"/>
-          <line x1="230" y1="250" x2="396" y2="328" stroke="#FF5A1F" stroke-width="1.6" marker-end="url(#arrO)"/>
+          <line x1="230" y1="200" x2="396" y2="104" stroke="#A2968A" stroke-width="1.4" marker-end="url(#arr)"/>
+          <line x1="230" y1="205" x2="396" y2="156" stroke="#A2968A" stroke-width="1.4" marker-end="url(#arr)"/>
+          <line x1="230" y1="212" x2="396" y2="208" stroke="#A2968A" stroke-width="1.4" marker-end="url(#arr)"/>
+          <line x1="230" y1="220" x2="396" y2="260" stroke="#A2968A" stroke-width="1.4" marker-end="url(#arr)"/>
+          <line x1="230" y1="250" x2="396" y2="328" stroke="#FFC400" stroke-width="1.6" marker-end="url(#arrO)"/>
 
           <!-- arrows endpoints -> gemini -->
-          <line x1="634" y1="104" x2="760" y2="150" stroke="#14B8A6" stroke-width="1.4" marker-end="url(#arrT)"/>
-          <line x1="634" y1="156" x2="760" y2="175" stroke="#14B8A6" stroke-width="1.4" marker-end="url(#arrT)"/>
-          <line x1="634" y1="208" x2="760" y2="205" stroke="#14B8A6" stroke-width="1.4" marker-end="url(#arrT)"/>
-          <line x1="634" y1="260" x2="760" y2="235" stroke="#14B8A6" stroke-width="1.4" marker-end="url(#arrT)"/>
-          <line x1="634" y1="328" x2="760" y2="295" stroke="#FF5A1F" stroke-width="1.6" marker-end="url(#arrO)"/>
+          <line x1="634" y1="104" x2="760" y2="150" stroke="#6E6354" stroke-width="1.4" marker-end="url(#arrT)"/>
+          <line x1="634" y1="156" x2="760" y2="175" stroke="#6E6354" stroke-width="1.4" marker-end="url(#arrT)"/>
+          <line x1="634" y1="208" x2="760" y2="205" stroke="#6E6354" stroke-width="1.4" marker-end="url(#arrT)"/>
+          <line x1="634" y1="260" x2="760" y2="235" stroke="#6E6354" stroke-width="1.4" marker-end="url(#arrT)"/>
+          <line x1="634" y1="328" x2="760" y2="295" stroke="#FFC400" stroke-width="1.6" marker-end="url(#arrO)"/>
         </svg>
       </div>
-      <figcaption>Fig 1 — five brokered calls; the orange DELETE is the guaranteed teardown</figcaption>
+      <figcaption>Fig 1 — five brokered calls; the yellow DELETE is the guaranteed teardown</figcaption>
     </figure>
   </div>
 </section>
@@ -310,64 +310,64 @@
       <div class="fig">
         <svg viewBox="0 0 980 430" role="img" aria-label="Decision tree for applying a KB finding to the takeoff under hybrid rules">
           <defs>
-            <marker id="d" markerWidth="9" markerHeight="9" refX="7" refY="3.2" orient="auto"><path d="M0,0 L7,3.2 L0,6.4 Z" fill="#7A8699"/></marker>
+            <marker id="d" markerWidth="9" markerHeight="9" refX="7" refY="3.2" orient="auto"><path d="M0,0 L7,3.2 L0,6.4 Z" fill="#A2968A"/></marker>
           </defs>
           <!-- root -->
-          <rect x="400" y="20" width="180" height="48" fill="#1B2433" stroke="#FF5A1F"/>
-          <text x="490" y="42" fill="#FF5A1F" font-size="11" text-anchor="middle">KB FINDING</text>
-          <text x="490" y="58" fill="#7A8699" font-size="10" text-anchor="middle">grounded · page-cited</text>
+          <rect x="400" y="20" width="180" height="48" fill="#2B2422" stroke="#FFC400"/>
+          <text x="490" y="42" fill="#FFC400" font-size="11" text-anchor="middle">KB FINDING</text>
+          <text x="490" y="58" fill="#A2968A" font-size="10" text-anchor="middle">grounded · page-cited</text>
 
           <!-- two branches -->
-          <line x1="445" y1="68" x2="250" y2="110" stroke="#7A8699" stroke-width="1.4" marker-end="url(#d)"/>
-          <line x1="535" y1="68" x2="730" y2="110" stroke="#7A8699" stroke-width="1.4" marker-end="url(#d)"/>
-          <text x="320" y="92" fill="#B8C2D1" font-size="10">correction</text>
-          <text x="640" y="92" fill="#B8C2D1" font-size="10">missing item</text>
+          <line x1="445" y1="68" x2="250" y2="110" stroke="#A2968A" stroke-width="1.4" marker-end="url(#d)"/>
+          <line x1="535" y1="68" x2="730" y2="110" stroke="#A2968A" stroke-width="1.4" marker-end="url(#d)"/>
+          <text x="320" y="92" fill="#C3B8AC" font-size="10">correction</text>
+          <text x="640" y="92" fill="#C3B8AC" font-size="10">missing item</text>
 
           <!-- LEFT: correction decision 1 -->
-          <rect x="120" y="112" width="260" height="50" fill="#141C29" stroke="#2D3A4F"/>
-          <text x="250" y="133" fill="#FFFFFF" font-size="11" text-anchor="middle">field empty OR line low-conf?</text>
-          <text x="250" y="150" fill="#7A8699" font-size="9" text-anchor="middle">is it safe to fill?</text>
+          <rect x="120" y="112" width="260" height="50" fill="#1E1813" stroke="#3A322C"/>
+          <text x="250" y="133" fill="#F6F1EA" font-size="11" text-anchor="middle">field empty OR line low-conf?</text>
+          <text x="250" y="150" fill="#A2968A" font-size="9" text-anchor="middle">is it safe to fill?</text>
 
           <!-- yes -> fill -->
-          <line x1="180" y1="162" x2="150" y2="210" stroke="#7A8699" stroke-width="1.4" marker-end="url(#d)"/>
-          <text x="150" y="190" fill="#14B8A6" font-size="10" text-anchor="middle">yes</text>
-          <rect x="40" y="212" width="190" height="58" fill="#1B2433" stroke="#14B8A6"/>
-          <text x="135" y="236" fill="#14B8A6" font-size="11" text-anchor="middle">FILL value</text>
-          <text x="135" y="254" fill="#B8C2D1" font-size="10" text-anchor="middle">flag kb_filled</text>
+          <line x1="180" y1="162" x2="150" y2="210" stroke="#A2968A" stroke-width="1.4" marker-end="url(#d)"/>
+          <text x="150" y="190" fill="#7BDCA0" font-size="10" text-anchor="middle">yes</text>
+          <rect x="40" y="212" width="190" height="58" fill="#2B2422" stroke="#7BDCA0"/>
+          <text x="135" y="236" fill="#7BDCA0" font-size="11" text-anchor="middle">FILL value</text>
+          <text x="135" y="254" fill="#C3B8AC" font-size="10" text-anchor="middle">flag kb_filled</text>
 
           <!-- no -> differs? -->
-          <line x1="320" y1="162" x2="350" y2="210" stroke="#7A8699" stroke-width="1.4" marker-end="url(#d)"/>
+          <line x1="320" y1="162" x2="350" y2="210" stroke="#A2968A" stroke-width="1.4" marker-end="url(#d)"/>
           <text x="350" y="190" fill="#B45309" font-size="10" text-anchor="middle">no</text>
-          <rect x="260" y="212" width="190" height="50" fill="#141C29" stroke="#2D3A4F"/>
-          <text x="355" y="240" fill="#FFFFFF" font-size="11" text-anchor="middle">value differs?</text>
+          <rect x="260" y="212" width="190" height="50" fill="#1E1813" stroke="#3A322C"/>
+          <text x="355" y="240" fill="#F6F1EA" font-size="11" text-anchor="middle">value differs?</text>
 
-          <line x1="300" y1="262" x2="280" y2="304" stroke="#7A8699" stroke-width="1.4" marker-end="url(#d)"/>
+          <line x1="300" y1="262" x2="280" y2="304" stroke="#A2968A" stroke-width="1.4" marker-end="url(#d)"/>
           <text x="268" y="290" fill="#B45309" font-size="10" text-anchor="middle">yes</text>
-          <rect x="170" y="306" width="220" height="58" fill="#231a17" stroke="#B45309"/>
+          <rect x="170" y="306" width="220" height="58" fill="#2B2422" stroke="#B45309"/>
           <text x="280" y="330" fill="#FBBF77" font-size="11" text-anchor="middle">KEEP original value</text>
-          <text x="280" y="348" fill="#B8C2D1" font-size="10" text-anchor="middle">flag kb_conflict · for review</text>
+          <text x="280" y="348" fill="#C3B8AC" font-size="10" text-anchor="middle">flag kb_conflict · for review</text>
 
-          <line x1="410" y1="262" x2="430" y2="304" stroke="#7A8699" stroke-width="1.4" marker-end="url(#d)"/>
-          <text x="440" y="290" fill="#14B8A6" font-size="10" text-anchor="middle">no</text>
-          <rect x="410" y="306" width="150" height="58" fill="#141C29" stroke="#2D3A4F"/>
-          <text x="485" y="330" fill="#FFFFFF" font-size="11" text-anchor="middle">no-op</text>
-          <text x="485" y="348" fill="#7A8699" font-size="10" text-anchor="middle">confirmed</text>
+          <line x1="410" y1="262" x2="430" y2="304" stroke="#A2968A" stroke-width="1.4" marker-end="url(#d)"/>
+          <text x="440" y="290" fill="#7BDCA0" font-size="10" text-anchor="middle">no</text>
+          <rect x="410" y="306" width="150" height="58" fill="#1E1813" stroke="#3A322C"/>
+          <text x="485" y="330" fill="#F6F1EA" font-size="11" text-anchor="middle">no-op</text>
+          <text x="485" y="348" fill="#A2968A" font-size="10" text-anchor="middle">confirmed</text>
 
           <!-- RIGHT: missing item -->
-          <rect x="620" y="112" width="240" height="50" fill="#141C29" stroke="#2D3A4F"/>
-          <text x="740" y="133" fill="#FFFFFF" font-size="11" text-anchor="middle">already in takeoff?</text>
-          <text x="740" y="150" fill="#7A8699" font-size="9" text-anchor="middle">match by surface + room</text>
+          <rect x="620" y="112" width="240" height="50" fill="#1E1813" stroke="#3A322C"/>
+          <text x="740" y="133" fill="#F6F1EA" font-size="11" text-anchor="middle">already in takeoff?</text>
+          <text x="740" y="150" fill="#A2968A" font-size="9" text-anchor="middle">match by surface + room</text>
 
-          <line x1="690" y1="162" x2="660" y2="210" stroke="#7A8699" stroke-width="1.4" marker-end="url(#d)"/>
+          <line x1="690" y1="162" x2="660" y2="210" stroke="#A2968A" stroke-width="1.4" marker-end="url(#d)"/>
           <text x="650" y="190" fill="#B45309" font-size="10" text-anchor="middle">yes</text>
-          <rect x="560" y="212" width="160" height="50" fill="#141C29" stroke="#2D3A4F"/>
-          <text x="640" y="240" fill="#7A8699" font-size="11" text-anchor="middle">skip (not missing)</text>
+          <rect x="560" y="212" width="160" height="50" fill="#1E1813" stroke="#3A322C"/>
+          <text x="640" y="240" fill="#A2968A" font-size="11" text-anchor="middle">skip (not missing)</text>
 
-          <line x1="800" y1="162" x2="820" y2="210" stroke="#7A8699" stroke-width="1.4" marker-end="url(#d)"/>
-          <text x="828" y="190" fill="#14B8A6" font-size="10" text-anchor="middle">no</text>
-          <rect x="740" y="212" width="200" height="58" fill="#1B2433" stroke="#FF5A1F"/>
-          <text x="840" y="236" fill="#FF7A45" font-size="11" text-anchor="middle">APPEND line</text>
-          <text x="840" y="254" fill="#B8C2D1" font-size="10" text-anchor="middle">flag kb_added · low-conf</text>
+          <line x1="800" y1="162" x2="820" y2="210" stroke="#A2968A" stroke-width="1.4" marker-end="url(#d)"/>
+          <text x="828" y="190" fill="#7BDCA0" font-size="10" text-anchor="middle">no</text>
+          <rect x="740" y="212" width="200" height="58" fill="#2B2422" stroke="#FFC400"/>
+          <text x="840" y="236" fill="#FFD23D" font-size="11" text-anchor="middle">APPEND line</text>
+          <text x="840" y="254" fill="#C3B8AC" font-size="10" text-anchor="middle">flag kb_added · low-conf</text>
         </svg>
       </div>
       <figcaption>Fig 2 — every path is non-destructive to a confident, quoted value</figcaption>

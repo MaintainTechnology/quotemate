@@ -16,18 +16,19 @@
   />
   <style>
     :root {
-      --ink-deep: #0a1628;
-      --ink: #131c2d;
-      --ink-card: #1a2332;
-      --ink-line: #2a3548;
-      --accent: #ff5a1f;
-      --accent-press: #e8470f;
-      --text-pri: #ffffff;
-      --text-sec: #b8c2d1;
-      --text-dim: #7a8699;
-      --teal-glow: #14b8a6;
-      --success: #34d399;
-      --warning: #fbbf24;
+      --ink-deep: #16120F;
+      --ink: #1E1813;
+      --ink-card: #2B2422;
+      --ink-line: #3A322C;
+      --accent: #FFC400;
+      --accent-press: #E6AC00;
+      --accent-ink: #1C1812;
+      --text-pri: #F6F1EA;
+      --text-sec: #C3B8AC;
+      --text-dim: #A2968A;
+      --teal-glow: #6E6354;
+      --success: #7BDCA0;
+      --warning: #FFD23D;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -222,7 +223,7 @@
       border: 1px solid var(--ink-line);
     }
     .schema-card pre .kw { color: var(--accent); }
-    .schema-card pre .ty { color: var(--teal-glow); }
+    .schema-card pre .ty { color: #7BDCA0; }
     .schema-card pre .cm { color: var(--text-dim); font-style: italic; }
 
     /* ─── SERVICES TRIANGLE ─── */
@@ -287,7 +288,7 @@
     /* ─── CTA BAR ─── */
     .cta-bar {
       background: var(--accent);
-      color: var(--text-pri);
+      color: var(--accent-ink);
       text-align: center;
       padding: 1.1rem 1.5rem;
       font-family: 'JetBrains Mono', monospace;
@@ -314,7 +315,7 @@
   <!-- ───────── HERO ───────── -->
   <header class="hero">
     <svg class="topo" viewBox="0 0 1920 500" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-      <g fill="none" stroke="#14b8a6" stroke-width="1">
+      <g fill="none" stroke="#6E6354" stroke-width="1">
         <path d="M0,340 Q240,240 480,280 T960,260 T1440,300 T1920,270" />
         <path d="M0,390 Q240,300 480,320 T960,310 T1440,350 T1920,330" opacity="0.7" />
         <path d="M0,440 Q240,360 480,380 T960,360 T1440,400 T1920,380" opacity="0.5" />

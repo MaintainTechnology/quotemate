@@ -9,30 +9,31 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #ffffff;
-      --bg-soft: #f5f5f5;
-      --bg-code: #f8f8f8;
-      --ink: #1a1a1a;
-      --ink-2: #2a2a2a;
-      --body: #4a4a4a;
-      --muted: #6b6b6b;
-      --line: #e0e0e0;
-      --line-strong: #cfcfcf;
-      --accent: #0066cc;
-      --accent-deep: #004999;
-      --warn-bg: #fff8e6;
-      --warn-line: #f0c75e;
-      --note-bg: #eef4fb;
-      --note-line: #b6cfe8;
-      --tip-bg: #ecf7ef;
-      --tip-line: #95cba2;
-      --skip-bg: #f4ecec;
-      --skip-line: #d6a5a5;
+      --bg: #16120F;
+      --bg-soft: #1E1813;
+      --bg-code: #2B2422;
+      --ink: #F6F1EA;
+      --ink-2: #C3B8AC;
+      --body: #C3B8AC;
+      --muted: #A2968A;
+      --line: #3A322C;
+      --line-strong: #4A4038;
+      --accent: #FFC400;
+      --accent-deep: #E6AC00;
+      --accent-ink: #1C1812;
+      --warn-bg: #2B2418;
+      --warn-line: #6E6354;
+      --note-bg: #1E2420;
+      --note-line: #3A322C;
+      --tip-bg: #1A241C;
+      --tip-line: #3A4A34;
+      --skip-bg: #2A1E1C;
+      --skip-line: #4A3A36;
 
-      --stage-02: #ea580c;
-      --stage-03: #7c3aed;
-      --stage-04: #f59e0b;
-      --stage-05: #0891b2;
+      --stage-02: #FFC400;
+      --stage-03: #FFD23D;
+      --stage-04: #E6AC00;
+      --stage-05: #6E6354;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -54,7 +55,7 @@
     /* ═══════════════ NAV ═══════════════ */
     .nav {
       border-bottom: 1px solid var(--line);
-      background: rgba(255, 255, 255, 0.95);
+      background: rgba(22, 18, 15, 0.95);
       backdrop-filter: blur(8px);
       position: sticky;
       top: 0;
@@ -79,8 +80,8 @@
     .brand-mark {
       width: 26px;
       height: 26px;
-      background: var(--ink);
-      color: var(--bg);
+      background: var(--accent);
+      color: var(--accent-ink);
       display: grid;
       place-items: center;
       font-size: 0.75rem;
@@ -385,18 +386,18 @@
     .callout p { margin-bottom: 0.7rem; }
     .callout p:last-child { margin-bottom: 0; }
     .callout.note { background: var(--note-bg); border-color: var(--note-line); }
-    .callout.note .callout-label { color: #1d4f8f; }
+    .callout.note .callout-label { color: #FFC400; }
     .callout.warn { background: var(--warn-bg); border-color: var(--warn-line); }
-    .callout.warn .callout-label { color: #8a6310; }
+    .callout.warn .callout-label { color: #FFD23D; }
     .callout.tip { background: var(--tip-bg); border-color: var(--tip-line); }
-    .callout.tip .callout-label { color: #226d3a; }
+    .callout.tip .callout-label { color: #7BDCA0; }
     .callout.skip { background: var(--skip-bg); border-color: var(--skip-line); }
-    .callout.skip .callout-label { color: #8a3a3a; }
+    .callout.skip .callout-label { color: #E89B8B; }
 
     /* ═══════════════ CODE ═══════════════ */
     pre {
-      background: var(--ink);
-      color: #e8e8e8;
+      background: #100D0B;
+      color: #E8E2D8;
       padding: 1.4rem 1.6rem;
       border-radius: 6px;
       overflow-x: auto;
@@ -404,11 +405,12 @@
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.85rem;
       line-height: 1.6;
+      border: 1px solid var(--line);
     }
-    pre .c { color: #8a8a8a; font-style: italic; }
-    pre .k { color: #ffb380; }
-    pre .s { color: #b8e6a0; }
-    pre .v { color: #a0c8ff; }
+    pre .c { color: #A2968A; font-style: italic; }
+    pre .k { color: #FFD23D; }
+    pre .s { color: #7BDCA0; }
+    pre .v { color: #FFC400; }
     code {
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.88em;
@@ -449,8 +451,8 @@
       top: -0.1rem;
       width: 2rem;
       height: 2rem;
-      background: var(--ink);
-      color: var(--bg);
+      background: var(--accent);
+      color: var(--accent-ink);
       border-radius: 50%;
       display: grid;
       place-items: center;
@@ -493,40 +495,41 @@
     /* ═══════════════ NEXT ═══════════════ */
     .next {
       padding: 6rem 0;
-      background: var(--ink);
-      color: #e8e8e8;
+      background: #1E1813;
+      color: #C3B8AC;
+      border-top: 1px solid var(--line);
     }
     .next h2 {
       font-size: 2.4rem;
       font-weight: 700;
-      color: #fff;
+      color: #F6F1EA;
       letter-spacing: -0.02em;
       margin-bottom: 1.5rem;
     }
-    .next p { color: #c0c0c0; max-width: 700px; margin-bottom: 1.2rem; }
+    .next p { color: #C3B8AC; max-width: 700px; margin-bottom: 1.2rem; }
     .next-list { list-style: none; margin: 2.5rem 0 0 0; padding: 0; }
     .next-list li {
       padding: 1.5rem 0;
-      border-top: 1px solid #333;
+      border-top: 1px solid #3A322C;
       display: grid;
       grid-template-columns: 80px 1fr;
       gap: 2rem;
       align-items: baseline;
     }
-    .next-list li:last-child { border-bottom: 1px solid #333; }
+    .next-list li:last-child { border-bottom: 1px solid #3A322C; }
     .next-num {
       font-family: 'JetBrains Mono', monospace;
-      color: #888;
+      color: #A2968A;
       font-size: 0.85rem;
     }
     .next-title {
-      color: #fff;
+      color: #F6F1EA;
       font-weight: 700;
       font-size: 1.15rem;
       display: block;
       margin-bottom: 0.3rem;
     }
-    .next-desc { color: #b0b0b0; font-size: 0.95rem; }
+    .next-desc { color: #C3B8AC; font-size: 0.95rem; }
 
     .foot {
       padding: 3rem 0;
@@ -669,8 +672,8 @@
       </header>
 
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin: 2rem 0;">
-        <div style="padding: 1.5rem; border: 1px solid #d1fae5; border-left: 4px solid #16a34a; background: #f0fdf4; border-radius: 4px;">
-          <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: #16a34a; font-weight: 700; margin-bottom: 0.75rem;">Auto-quote candidates · easy 5</div>
+        <div style="padding: 1.5rem; border: 1px solid #3A4A34; border-left: 4px solid #7BDCA0; background: #1A241C; border-radius: 4px;">
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: #7BDCA0; font-weight: 700; margin-bottom: 0.75rem;">Auto-quote candidates · easy 5</div>
           <ol style="margin-left: 1.25rem; line-height: 1.8;">
             <li>Downlights / lighting</li>
             <li>Power points (GPOs)</li>
@@ -678,19 +681,19 @@
             <li>Smoke alarms</li>
             <li>Outdoor / deck lighting</li>
           </ol>
-          <p style="font-size: 0.85rem; color: #065f46; margin-top: 1rem; line-height: 1.55;">Bounded scope · predictable materials · customer photos sufficient. Still go through tradie review in v1 — auto-send is off until the eval framework proves accuracy.</p>
+          <p style="font-size: 0.85rem; color: #9DD8AF; margin-top: 1rem; line-height: 1.55;">Bounded scope · predictable materials · customer photos sufficient. Still go through tradie review in v1 — auto-send is off until the eval framework proves accuracy.</p>
         </div>
 
-        <div style="padding: 1.5rem; border: 1px solid #fee2e2; border-left: 4px solid #dc2626; background: #fef2f2; border-radius: 4px;">
-          <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: #dc2626; font-weight: 700; margin-bottom: 0.75rem;">Inspection-only routes · hard 5</div>
+        <div style="padding: 1.5rem; border: 1px solid #4A3A36; border-left: 4px solid #E89B8B; background: #2A1E1C; border-radius: 4px;">
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: #E89B8B; font-weight: 700; margin-bottom: 0.75rem;">Inspection-only routes · hard 5</div>
           <ol style="margin-left: 1.25rem; line-height: 1.8;">
             <li>Switchboard work</li>
             <li>Fault finding</li>
             <li>EV chargers</li>
-            <li>Underground cabling <em style="font-size: 0.85em; color: #991b1b; opacity: 0.7;">(classified as <code>renovation</code> in the schema)</em></li>
+            <li>Underground cabling <em style="font-size: 0.85em; color: #E89B8B; opacity: 0.8;">(classified as <code>renovation</code> in the schema)</em></li>
             <li>Complex renovations (multi-trade / mains)</li>
           </ol>
-          <p style="font-size: 0.85rem; color: #991b1b; margin-top: 1rem; line-height: 1.55;">Hidden state can't be photographed. Surface as indicative range only and trigger the $99 paid site visit. Note: the <code>job_type</code> Zod enum has 11 values; underground cabling is folded into <code>renovation</code> at classification time, then surfaces with its own risk flag at intake.</p>
+          <p style="font-size: 0.85rem; color: #E0A99E; margin-top: 1rem; line-height: 1.55;">Hidden state can't be photographed. Surface as indicative range only and trigger the $99 paid site visit. Note: the <code>job_type</code> Zod enum has 11 values; underground cabling is folded into <code>renovation</code> at classification time, then surfaces with its own risk flag at intake.</p>
         </div>
       </div>
 
@@ -2276,15 +2279,15 @@ CONSISTENCY CHECK BEFORE EMITTING
       <header class="step-header">
         <div class="step-num">Reference · <strong>Job Flow Library</strong></div>
         <h2 class="step-title">The 9 electrical job flows.</h2>
-        <p class="step-summary">For each job type, this is what the AI Receptionist asks at intake and how the Estimator structures the Good / Better / Best options. These feed directly into the Vapi system prompt (Step 6) and the Estimator's lookup logic (Step 8). Colour bars indicate v1 routing: <span style="color:#16a34a;font-weight:600;">green = auto-quote candidate</span>, <span style="color:#f59e0b;font-weight:600;">amber = case-by-case</span>, <span style="color:#dc2626;font-weight:600;">red = inspection-only</span>.</p>
+        <p class="step-summary">For each job type, this is what the AI Receptionist asks at intake and how the Estimator structures the Good / Better / Best options. These feed directly into the Vapi system prompt (Step 6) and the Estimator's lookup logic (Step 8). Colour bars indicate v1 routing: <span style="color:#7BDCA0;font-weight:600;">green = auto-quote candidate</span>, <span style="color:#FFC400;font-weight:600;">amber = case-by-case</span>, <span style="color:#E89B8B;font-weight:600;">red = inspection-only</span>.</p>
       </header>
 
       <!-- A · Downlights -->
-      <div style="margin: 2rem 0; padding: 1.5rem; border: 1px solid var(--line); border-left: 4px solid #16a34a; border-radius: 4px;">
+      <div style="margin: 2rem 0; padding: 1.5rem; border: 1px solid var(--line); border-left: 4px solid #7BDCA0; border-radius: 4px;">
         <div style="display: flex; align-items: baseline; gap: 0.875rem; margin-bottom: 1rem; flex-wrap: wrap;">
-          <span style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 800; color: #16a34a;">A</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 800; color: #7BDCA0;">A</span>
           <h3 style="margin: 0; font-size: 1.15rem;">Downlights / Lighting</h3>
-          <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: #16a34a; font-weight: 700; padding: 0.18rem 0.5rem; border: 1px solid #16a34a; border-radius: 3px;">auto-quote candidate</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: #7BDCA0; font-weight: 700; padding: 0.18rem 0.5rem; border: 1px solid #7BDCA0; border-radius: 3px;">auto-quote candidate</span>
         </div>
         <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; margin-bottom: 0.5rem;">Ask at intake</div>
         <ul style="font-size: 0.875rem; margin-bottom: 1.25rem; margin-left: 1.25rem; line-height: 1.7;">
@@ -2299,18 +2302,18 @@ CONSISTENCY CHECK BEFORE EMITTING
         </ul>
         <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; margin-bottom: 0.5rem;">Quote logic — Good / Better / Best</div>
         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; font-size: 0.85rem;">
-          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #94a3b8;"><strong>Good</strong><br/>Standard LED downlights</div>
-          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #f59e0b;"><strong>Better</strong><br/>Tri-colour LED downlights</div>
-          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #16a34a;"><strong>Best</strong><br/>Dimmable / IP-rated / smart</div>
+          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #A2968A;"><strong>Good</strong><br/>Standard LED downlights</div>
+          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #FFC400;"><strong>Better</strong><br/>Tri-colour LED downlights</div>
+          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #7BDCA0;"><strong>Best</strong><br/>Dimmable / IP-rated / smart</div>
         </div>
       </div>
 
       <!-- B · Power Points -->
-      <div style="margin: 2rem 0; padding: 1.5rem; border: 1px solid var(--line); border-left: 4px solid #16a34a; border-radius: 4px;">
+      <div style="margin: 2rem 0; padding: 1.5rem; border: 1px solid var(--line); border-left: 4px solid #7BDCA0; border-radius: 4px;">
         <div style="display: flex; align-items: baseline; gap: 0.875rem; margin-bottom: 1rem; flex-wrap: wrap;">
-          <span style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 800; color: #16a34a;">B</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 800; color: #7BDCA0;">B</span>
           <h3 style="margin: 0; font-size: 1.15rem;">Power Points (GPOs)</h3>
-          <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: #16a34a; font-weight: 700; padding: 0.18rem 0.5rem; border: 1px solid #16a34a; border-radius: 3px;">auto-quote candidate</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: #7BDCA0; font-weight: 700; padding: 0.18rem 0.5rem; border: 1px solid #7BDCA0; border-radius: 3px;">auto-quote candidate</span>
         </div>
         <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; margin-bottom: 0.5rem;">Ask at intake</div>
         <ul style="font-size: 0.875rem; margin-bottom: 1.25rem; margin-left: 1.25rem; line-height: 1.7;">
@@ -2324,19 +2327,19 @@ CONSISTENCY CHECK BEFORE EMITTING
         </ul>
         <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; margin-bottom: 0.5rem;">Quote logic — Good / Better / Best</div>
         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; font-size: 0.85rem;">
-          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #94a3b8;"><strong>Good</strong><br/>Standard double GPO</div>
-          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #f59e0b;"><strong>Better</strong><br/>Premium / USB GPO</div>
-          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #16a34a;"><strong>Best</strong><br/>Weatherproof / smart / extra circuit</div>
+          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #A2968A;"><strong>Good</strong><br/>Standard double GPO</div>
+          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #FFC400;"><strong>Better</strong><br/>Premium / USB GPO</div>
+          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #7BDCA0;"><strong>Best</strong><br/>Weatherproof / smart / extra circuit</div>
         </div>
         <p style="margin-top: 0.75rem; font-size: 0.78rem; color: var(--muted); font-style: italic;">Note: any "extra circuit" upgrade triggers <code>inspection_required=true</code> — check the existing switchboard before quoting.</p>
       </div>
 
       <!-- C · Ceiling Fans -->
-      <div style="margin: 2rem 0; padding: 1.5rem; border: 1px solid var(--line); border-left: 4px solid #16a34a; border-radius: 4px;">
+      <div style="margin: 2rem 0; padding: 1.5rem; border: 1px solid var(--line); border-left: 4px solid #7BDCA0; border-radius: 4px;">
         <div style="display: flex; align-items: baseline; gap: 0.875rem; margin-bottom: 1rem; flex-wrap: wrap;">
-          <span style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 800; color: #16a34a;">C</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 800; color: #7BDCA0;">C</span>
           <h3 style="margin: 0; font-size: 1.15rem;">Ceiling Fans</h3>
-          <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: #16a34a; font-weight: 700; padding: 0.18rem 0.5rem; border: 1px solid #16a34a; border-radius: 3px;">auto-quote candidate</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: #7BDCA0; font-weight: 700; padding: 0.18rem 0.5rem; border: 1px solid #7BDCA0; border-radius: 3px;">auto-quote candidate</span>
         </div>
         <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; margin-bottom: 0.5rem;">Ask at intake</div>
         <ul style="font-size: 0.875rem; margin-bottom: 1.25rem; margin-left: 1.25rem; line-height: 1.7;">
@@ -2349,18 +2352,18 @@ CONSISTENCY CHECK BEFORE EMITTING
         </ul>
         <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; margin-bottom: 0.5rem;">Quote logic — Good / Better / Best</div>
         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; font-size: 0.85rem;">
-          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #94a3b8;"><strong>Good</strong><br/>Install customer-supplied fan to existing wiring</div>
-          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #f59e0b;"><strong>Better</strong><br/>Supply &amp; install quality fan with remote</div>
-          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #16a34a;"><strong>Best</strong><br/>Premium DC fan + light + wall control</div>
+          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #A2968A;"><strong>Good</strong><br/>Install customer-supplied fan to existing wiring</div>
+          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #FFC400;"><strong>Better</strong><br/>Supply &amp; install quality fan with remote</div>
+          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #7BDCA0;"><strong>Best</strong><br/>Premium DC fan + light + wall control</div>
         </div>
       </div>
 
       <!-- D · Smoke Alarms -->
-      <div style="margin: 2rem 0; padding: 1.5rem; border: 1px solid var(--line); border-left: 4px solid #16a34a; border-radius: 4px;">
+      <div style="margin: 2rem 0; padding: 1.5rem; border: 1px solid var(--line); border-left: 4px solid #7BDCA0; border-radius: 4px;">
         <div style="display: flex; align-items: baseline; gap: 0.875rem; margin-bottom: 1rem; flex-wrap: wrap;">
-          <span style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 800; color: #16a34a;">D</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 800; color: #7BDCA0;">D</span>
           <h3 style="margin: 0; font-size: 1.15rem;">Smoke Alarms</h3>
-          <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: #16a34a; font-weight: 700; padding: 0.18rem 0.5rem; border: 1px solid #16a34a; border-radius: 3px;">auto-quote candidate</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: #7BDCA0; font-weight: 700; padding: 0.18rem 0.5rem; border: 1px solid #7BDCA0; border-radius: 3px;">auto-quote candidate</span>
         </div>
         <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; margin-bottom: 0.5rem;">Ask at intake</div>
         <ul style="font-size: 0.875rem; margin-bottom: 1.25rem; margin-left: 1.25rem; line-height: 1.7;">
@@ -2373,18 +2376,18 @@ CONSISTENCY CHECK BEFORE EMITTING
         </ul>
         <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; margin-bottom: 0.5rem;">Quote logic — Good / Better / Best</div>
         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; font-size: 0.85rem;">
-          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #94a3b8;"><strong>Good</strong><br/>Replace like-for-like alarms</div>
-          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #f59e0b;"><strong>Better</strong><br/>Compliant interconnected alarms</div>
-          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #16a34a;"><strong>Best</strong><br/>Full property compliance package</div>
+          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #A2968A;"><strong>Good</strong><br/>Replace like-for-like alarms</div>
+          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #FFC400;"><strong>Better</strong><br/>Compliant interconnected alarms</div>
+          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #7BDCA0;"><strong>Best</strong><br/>Full property compliance package</div>
         </div>
       </div>
 
       <!-- E · Outdoor / Deck Lighting -->
-      <div style="margin: 2rem 0; padding: 1.5rem; border: 1px solid var(--line); border-left: 4px solid #16a34a; border-radius: 4px;">
+      <div style="margin: 2rem 0; padding: 1.5rem; border: 1px solid var(--line); border-left: 4px solid #7BDCA0; border-radius: 4px;">
         <div style="display: flex; align-items: baseline; gap: 0.875rem; margin-bottom: 1rem; flex-wrap: wrap;">
-          <span style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 800; color: #16a34a;">E</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 800; color: #7BDCA0;">E</span>
           <h3 style="margin: 0; font-size: 1.15rem;">Outdoor / Deck Lighting</h3>
-          <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: #16a34a; font-weight: 700; padding: 0.18rem 0.5rem; border: 1px solid #16a34a; border-radius: 3px;">auto-quote candidate</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: #7BDCA0; font-weight: 700; padding: 0.18rem 0.5rem; border: 1px solid #7BDCA0; border-radius: 3px;">auto-quote candidate</span>
         </div>
         <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; margin-bottom: 0.5rem;">Ask at intake</div>
         <ul style="font-size: 0.875rem; margin-bottom: 1.25rem; margin-left: 1.25rem; line-height: 1.7;">
@@ -2398,19 +2401,19 @@ CONSISTENCY CHECK BEFORE EMITTING
         </ul>
         <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; margin-bottom: 0.5rem;">Quote logic — Good / Better / Best</div>
         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; font-size: 0.85rem;">
-          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #94a3b8;"><strong>Good</strong><br/>Basic outdoor-rated lights</div>
-          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #f59e0b;"><strong>Better</strong><br/>IP-rated quality fittings</div>
-          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #16a34a;"><strong>Best</strong><br/>Premium dimmable / smart / weatherproof</div>
+          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #A2968A;"><strong>Good</strong><br/>Basic outdoor-rated lights</div>
+          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #FFC400;"><strong>Better</strong><br/>IP-rated quality fittings</div>
+          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #7BDCA0;"><strong>Best</strong><br/>Premium dimmable / smart / weatherproof</div>
         </div>
         <p style="margin-top: 0.75rem; font-size: 0.78rem; color: var(--muted); font-style: italic;">Note: if cabling is NOT already run and a new circuit is needed → triggers <code>inspection_required=true</code>.</p>
       </div>
 
       <!-- F · Switchboard Work -->
-      <div style="margin: 2rem 0; padding: 1.5rem; border: 1px solid var(--line); border-left: 4px solid #dc2626; border-radius: 4px;">
+      <div style="margin: 2rem 0; padding: 1.5rem; border: 1px solid var(--line); border-left: 4px solid #E89B8B; border-radius: 4px;">
         <div style="display: flex; align-items: baseline; gap: 0.875rem; margin-bottom: 1rem; flex-wrap: wrap;">
-          <span style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 800; color: #dc2626;">F</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 800; color: #E89B8B;">F</span>
           <h3 style="margin: 0; font-size: 1.15rem;">Switchboard Work</h3>
-          <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: #dc2626; font-weight: 700; padding: 0.18rem 0.5rem; border: 1px solid #dc2626; border-radius: 3px;">inspection-only</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: #E89B8B; font-weight: 700; padding: 0.18rem 0.5rem; border: 1px solid #E89B8B; border-radius: 3px;">inspection-only</span>
         </div>
         <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; margin-bottom: 0.5rem;">Ask at intake</div>
         <ul style="font-size: 0.875rem; margin-bottom: 1.25rem; margin-left: 1.25rem; line-height: 1.7;">
@@ -2423,19 +2426,19 @@ CONSISTENCY CHECK BEFORE EMITTING
         </ul>
         <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; margin-bottom: 0.5rem;">Quote logic — indicative only</div>
         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; font-size: 0.85rem;">
-          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #94a3b8;"><strong>Good</strong><br/>Minor breaker / RCBO addition</div>
-          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #f59e0b;"><strong>Better</strong><br/>Partial safety upgrade</div>
-          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #16a34a;"><strong>Best</strong><br/>Full switchboard upgrade</div>
+          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #A2968A;"><strong>Good</strong><br/>Minor breaker / RCBO addition</div>
+          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #FFC400;"><strong>Better</strong><br/>Partial safety upgrade</div>
+          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #7BDCA0;"><strong>Best</strong><br/>Full switchboard upgrade</div>
         </div>
-        <p style="margin-top: 0.75rem; font-size: 0.78rem; color: #b91c1c; font-weight: 500;">Always recommend inspection before fixed price. Burning smell / buzzing → mark <code>urgency=emergency</code>.</p>
+        <p style="margin-top: 0.75rem; font-size: 0.78rem; color: #E89B8B; font-weight: 500;">Always recommend inspection before fixed price. Burning smell / buzzing → mark <code>urgency=emergency</code>.</p>
       </div>
 
       <!-- G · Oven / Cooktop Install -->
-      <div style="margin: 2rem 0; padding: 1.5rem; border: 1px solid var(--line); border-left: 4px solid #f59e0b; border-radius: 4px;">
+      <div style="margin: 2rem 0; padding: 1.5rem; border: 1px solid var(--line); border-left: 4px solid #FFC400; border-radius: 4px;">
         <div style="display: flex; align-items: baseline; gap: 0.875rem; margin-bottom: 1rem; flex-wrap: wrap;">
-          <span style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 800; color: #f59e0b;">G</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 800; color: #FFC400;">G</span>
           <h3 style="margin: 0; font-size: 1.15rem;">Oven / Cooktop Install</h3>
-          <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: #f59e0b; font-weight: 700; padding: 0.18rem 0.5rem; border: 1px solid #f59e0b; border-radius: 3px;">case-by-case</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: #FFC400; font-weight: 700; padding: 0.18rem 0.5rem; border: 1px solid #FFC400; border-radius: 3px;">case-by-case</span>
         </div>
         <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; margin-bottom: 0.5rem;">Ask at intake</div>
         <ul style="font-size: 0.875rem; margin-bottom: 1.25rem; margin-left: 1.25rem; line-height: 1.7;">
@@ -2449,19 +2452,19 @@ CONSISTENCY CHECK BEFORE EMITTING
         </ul>
         <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; margin-bottom: 0.5rem;">Quote logic — Good / Better / Best</div>
         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; font-size: 0.85rem;">
-          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #94a3b8;"><strong>Good</strong><br/>Like-for-like replacement</div>
-          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #f59e0b;"><strong>Better</strong><br/>Install + circuit check</div>
-          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #16a34a;"><strong>Best</strong><br/>Dedicated circuit / switchboard upgrade</div>
+          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #A2968A;"><strong>Good</strong><br/>Like-for-like replacement</div>
+          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #FFC400;"><strong>Better</strong><br/>Install + circuit check</div>
+          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #7BDCA0;"><strong>Best</strong><br/>Dedicated circuit / switchboard upgrade</div>
         </div>
-        <p style="margin-top: 0.75rem; font-size: 0.78rem; color: #92400e; font-weight: 500;">Like-for-like with confirmed wiring → auto-quotable. Anything requiring a new circuit or switchboard work → triggers <code>inspection_required=true</code>.</p>
+        <p style="margin-top: 0.75rem; font-size: 0.78rem; color: #FFD23D; font-weight: 500;">Like-for-like with confirmed wiring → auto-quotable. Anything requiring a new circuit or switchboard work → triggers <code>inspection_required=true</code>.</p>
       </div>
 
       <!-- H · EV Charger -->
-      <div style="margin: 2rem 0; padding: 1.5rem; border: 1px solid var(--line); border-left: 4px solid #dc2626; border-radius: 4px;">
+      <div style="margin: 2rem 0; padding: 1.5rem; border: 1px solid var(--line); border-left: 4px solid #E89B8B; border-radius: 4px;">
         <div style="display: flex; align-items: baseline; gap: 0.875rem; margin-bottom: 1rem; flex-wrap: wrap;">
-          <span style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 800; color: #dc2626;">H</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 800; color: #E89B8B;">H</span>
           <h3 style="margin: 0; font-size: 1.15rem;">EV Charger</h3>
-          <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: #dc2626; font-weight: 700; padding: 0.18rem 0.5rem; border: 1px solid #dc2626; border-radius: 3px;">inspection-only</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: #E89B8B; font-weight: 700; padding: 0.18rem 0.5rem; border: 1px solid #E89B8B; border-radius: 3px;">inspection-only</span>
         </div>
         <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; margin-bottom: 0.5rem;">Ask at intake</div>
         <ul style="font-size: 0.875rem; margin-bottom: 1.25rem; margin-left: 1.25rem; line-height: 1.7;">
@@ -2475,19 +2478,19 @@ CONSISTENCY CHECK BEFORE EMITTING
         </ul>
         <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; margin-bottom: 0.5rem;">Quote logic — indicative only</div>
         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; font-size: 0.85rem;">
-          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #94a3b8;"><strong>Good</strong><br/>Basic charger install near switchboard</div>
-          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #f59e0b;"><strong>Better</strong><br/>Quality install + load assessment</div>
-          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #16a34a;"><strong>Best</strong><br/>Smart charger with solar / load management</div>
+          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #A2968A;"><strong>Good</strong><br/>Basic charger install near switchboard</div>
+          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #FFC400;"><strong>Better</strong><br/>Quality install + load assessment</div>
+          <div style="padding: 0.75rem 1rem; background: var(--bg-soft); border-left: 2px solid #7BDCA0;"><strong>Best</strong><br/>Smart charger with solar / load management</div>
         </div>
-        <p style="margin-top: 0.75rem; font-size: 0.78rem; color: #b91c1c; font-weight: 500;">Always recommend inspection. Load assessment is non-negotiable for safety + grid compliance.</p>
+        <p style="margin-top: 0.75rem; font-size: 0.78rem; color: #E89B8B; font-weight: 500;">Always recommend inspection. Load assessment is non-negotiable for safety + grid compliance.</p>
       </div>
 
       <!-- I · Fault Finding -->
-      <div style="margin: 2rem 0; padding: 1.5rem; border: 1px solid var(--line); border-left: 4px solid #dc2626; border-radius: 4px;">
+      <div style="margin: 2rem 0; padding: 1.5rem; border: 1px solid var(--line); border-left: 4px solid #E89B8B; border-radius: 4px;">
         <div style="display: flex; align-items: baseline; gap: 0.875rem; margin-bottom: 1rem; flex-wrap: wrap;">
-          <span style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 800; color: #dc2626;">I</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 800; color: #E89B8B;">I</span>
           <h3 style="margin: 0; font-size: 1.15rem;">Fault Finding</h3>
-          <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: #dc2626; font-weight: 700; padding: 0.18rem 0.5rem; border: 1px solid #dc2626; border-radius: 3px;">no fixed quote</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: #E89B8B; font-weight: 700; padding: 0.18rem 0.5rem; border: 1px solid #E89B8B; border-radius: 3px;">no fixed quote</span>
         </div>
         <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; margin-bottom: 0.5rem;">Ask at intake</div>
         <ul style="font-size: 0.875rem; margin-bottom: 1.25rem; margin-left: 1.25rem; line-height: 1.7;">
@@ -2499,7 +2502,7 @@ CONSISTENCY CHECK BEFORE EMITTING
           <li>Recent storms, renovations, or new appliances?</li>
         </ul>
         <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; margin-bottom: 0.5rem;">Quote logic — diagnostic only</div>
-        <div style="padding: 1rem 1.25rem; background: #fef2f2; border-left: 4px solid #dc2626; font-size: 0.875rem;">
+        <div style="padding: 1rem 1.25rem; background: #2A1E1C; border-left: 4px solid #E89B8B; font-size: 0.875rem;">
           <strong>Do not produce a fixed quote.</strong> Use call-out + hourly diagnostic rate ($120–$180 minimum + $90–$130/hr).<br/><br/>
           <strong>Customer wording:</strong> <em>"Faults need testing onsite. We can attend, diagnose the issue, and provide repair options before proceeding with larger work."</em>
         </div>
@@ -2529,8 +2532,8 @@ CONSISTENCY CHECK BEFORE EMITTING
         <li>
           <span class="next-num">Stage 07</span>
           <div>
-            <span class="next-title">Customer-facing quote view (Good / Better / Best)</span>
-            <span class="next-desc">A mobile-first portal page where the homeowner opens the quote, sees three tiers, and clicks "accept + deposit" — Stripe Connect Express handles the money.</span>
+            <span class="next-title">Customer-facing quote view (one clear fixed price)</span>
+            <span class="next-desc">A mobile-first portal page where the homeowner opens the quote, sees a single fixed-price quote with no haggling, and clicks "accept + deposit" — Stripe Connect Express handles the money.</span>
           </div>
         </li>
         <li>
@@ -2555,7 +2558,7 @@ CONSISTENCY CHECK BEFORE EMITTING
           </div>
         </li>
       </ul>
-      <p style="margin-top: 3rem;">Refer to <a href="wireframe.html" style="color: #fff; text-decoration: underline;">docs/wireframe.html</a> for the full system diagram. Refer to <a href="strategy.md" style="color: #fff; text-decoration: underline;">docs/strategy.md</a> for the strategic context — particularly the cost analysis around voice infrastructure.</p>
+      <p style="margin-top: 3rem;">Refer to <a href="wireframe.html" style="color: #FFC400; text-decoration: underline;">docs/wireframe.html</a> for the full system diagram. Refer to <a href="strategy.md" style="color: #FFC400; text-decoration: underline;">docs/strategy.md</a> for the strategic context — particularly the cost analysis around voice infrastructure.</p>
     </div>
   </section>
 

@@ -23,6 +23,7 @@ import {
 } from "./_components/site"
 import { PricingTiers } from "./_components/PricingTiers"
 import { DuotoneImage } from "./_components/DuotoneImage"
+import CookieConsent from "./_components/CookieConsent"
 
 /* Load-time choreography classes. Tailwind scans for literal strings,
    so these stay static; per-element stagger is an inline
@@ -66,6 +67,7 @@ export default function Home() {
       <ClosingCta />
       <Footer />
       <MarqueeBar />
+      <CookieConsent />
     </div>
   )
 }
@@ -1032,6 +1034,12 @@ const COVERED_TRADES = [
     img: "/marketing/home-solar.jpg",
     blurb: "Systems sized from the address, before you drive out.",
   },
+  {
+    href: "/trades/painting",
+    label: "Painting",
+    img: "/marketing/home-painting.jpg",
+    blurb: "Repaints inside and out, measured room by room.",
+  },
 ]
 
 function CoveredTrades() {
@@ -1048,7 +1056,7 @@ function CoveredTrades() {
             how it quotes yours.
           </p>
         </Reveal>
-        <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {COVERED_TRADES.map((t, i) => (
             <Reveal key={t.href} delay={i * 90}>
               <Link

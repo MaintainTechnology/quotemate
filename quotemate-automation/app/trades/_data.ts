@@ -21,7 +21,7 @@ export type TradeData = {
   note: string
 }
 
-export const TRADE_ORDER = ["electrical", "plumbing", "roofing", "solar"] as const
+export const TRADE_ORDER = ["electrical", "plumbing", "roofing", "solar", "painting"] as const
 
 export const TRADES: Record<string, TradeData> = {
   electrical: {
@@ -198,5 +198,51 @@ export const TRADES: Record<string, TradeData> = {
       },
     ],
     note: "Clean estimates can release automatically; flagged jobs route to a site visit first.",
+  },
+
+  painting: {
+    slug: "painting",
+    name: "Painting",
+    eyebrow: "Painting",
+    headline: { lead: "Quote the repaint before you lift a ", accent: "brush", tail: "." },
+    intro:
+      "Interior repaints, exterior weatherboard, fresh trim — a customer sends the rooms and QuoteMax measures the surfaces, counts the coats and drafts a quote against your rates before you've set up a single drop sheet.",
+    heroImage: "/trades/painting.jpg",
+    detailImage: "/trades/painting-2.jpg",
+    detailCaption: "Walls, ceilings and trim — measured room by room.",
+    scopeBody:
+      "Every painting quote lands in your dashboard for a quick check before it goes out — the surfaces, coats and prep are yours to confirm.",
+    scopeTags: [
+      "Interior repaints",
+      "Ceilings",
+      "Trim & doors",
+      "Skirting",
+      "Exterior weatherboard",
+      "Render",
+      "Prep & undercoat",
+    ],
+    steps: [
+      {
+        n: "01",
+        title: "Capture the rooms",
+        body: "The customer sends photos of the rooms or the facade. QuoteMax asks the right questions — surfaces, current condition, ceilings and trim, and how many coats.",
+      },
+      {
+        n: "02",
+        title: "Measure and apply your rates",
+        body: "Wall, ceiling and trim areas are measured surface by surface, then priced against your painting rate card — prep, undercoat and finish coats.",
+      },
+      {
+        n: "03",
+        title: "Itemised quote",
+        body: "A room-by-room breakdown with labour, paint and GST. You review every line before it leaves your dashboard.",
+      },
+      {
+        n: "04",
+        title: "Deposit and booked",
+        body: "A deposit on the quote page confirms the job and books it in.",
+      },
+    ],
+    note: "Painting quotes are review-first: nothing reaches the customer until you've checked it.",
   },
 }

@@ -64,25 +64,32 @@ export async function GET(req: Request) {
     return Response.json({ ok: false, error: trErr.message }, { status: 500 })
   }
 
-  const available = (trades ?? [])
+  // Every activatable trade (active, job-based, has pricing defaults), each
+  // tagged with whether the tenant already owns it. The Account-tab Trades
+  // section renders this as a toggle list (owned = on) and POSTs the chosen
+  // set to /api/tenant/trades/reconcile.
+  const manageable = (trades ?? [])
     .filter((t) => {
-      const name = t.name as string
-      if (owned.has(name)) return false
-      // trade_pricing_defaults comes back as an array (0 or 1 rows) from
-      // the embedded relation — a trade with no defaults can't be activated.
       const defs = t.trade_pricing_defaults as unknown[] | null
       return Array.isArray(defs) && defs.length > 0
     })
     .map((t) => ({
       name: t.name as string,
-      displayName:
-        (t.display_name as string | null) ?? (t.name as string),
+      displayName: (t.display_name as string | null) ?? (t.name as string),
+      owned: owned.has(t.name as string),
     }))
+
+  // `available` = the not-yet-owned subset, kept for the legacy per-trade
+  // Activate card / any existing consumer.
+  const available = manageable
+    .filter((t) => !t.owned)
+    .map((t) => ({ name: t.name, displayName: t.displayName }))
 
   return Response.json({
     ok: true,
     tenantId: tenant.id,
     owned: Array.from(owned),
     available,
+    manageable,
   })
 }

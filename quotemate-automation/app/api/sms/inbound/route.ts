@@ -39,6 +39,21 @@ import { buildQuoteKbText } from '@/lib/filestore/minimize'
 import { measureAndPriceRoofs } from '@/lib/roofing/measure'
 import { generateRoofAfterImage } from '@/lib/roofing/roof-after'
 import type { MultiRoofQuote } from '@/lib/roofing/types'
+import { looksLikePaintingEnquiry, toPaintingRequest } from '@/lib/sms/painting-intake'
+import {
+  advancePainting,
+  isActivePaintingFlow,
+  type PaintingConversationState,
+} from '@/lib/sms/painting-receptionist'
+import {
+  buildPaintingFormOffer,
+  buildPaintingHoldingSms,
+  buildPaintingInspectionSms,
+  composePaintingBooking,
+  composePaintingCancel,
+} from '@/lib/sms/painting-compose'
+import { runAndSavePaintingQuote } from '@/lib/painting/quote-dispatch'
+import { notifyPaintingTradie } from '@/lib/painting/release'
 import { formatActiveFollowupContext } from '@/lib/sms/followup-context'
 import { buildGpoInspectionOverride } from '@/lib/sms/gpo-guard'
 import {
@@ -136,6 +151,13 @@ const WP9_ENABLED = process.env.WP9_PRODUCT_OPTIONS === '1'
 // Requires migration 085 (sms_conversations.roofing_state +
 // roofing_measurements.public_token).
 const SMS_ROOFING_ENABLED = process.env.SMS_ROOFING_ENABLED === '1'
+
+// SMS painting receptionist — gathers residential painting inputs over SMS
+// (offering the self-serve form link first), runs the deterministic painting
+// estimate, and replies with the G/B/B quote link. Flag-gated; OFF (default)
+// ⇒ byte-identical behaviour. Requires migration 154 (sms_conversations
+// .painting_state + painting_lead_requests).
+const SMS_PAINTING_ENABLED = process.env.SMS_PAINTING_ENABLED === '1'
 
 const ROOFING_APP_BASE_URL = (
   process.env.NEXT_PUBLIC_APP_URL ?? 'https://quote-mate-rho.vercel.app'
@@ -654,6 +676,187 @@ async function handleRoofingTurn(args: {
   await sendReply("Thanks, we've got your roof details. Our team will confirm your quote shortly.")
   await persist({ slots: decision.slots, last_step: 'closed', pending_quote_token: null, pending_structure_count: null }, 'done')
   return true
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// SMS painting receptionist — deterministic per-turn handler.
+//
+// Returns true when it handled the turn (the caller then returns from
+// after() and skips the electrical/plumbing Sonnet dialog). Only engages
+// when SMS_PAINTING_ENABLED and either the conversation is already a
+// painting flow or an inbound looks like a painting enquiry. All pure
+// decision logic lives in lib/sms/painting-{intake,receptionist,compose};
+// this does the I/O (mint the form token, run the estimate, persist,
+// dispatch). Mirrors handleRoofingTurn.
+// ─────────────────────────────────────────────────────────────────────
+async function handlePaintingTurn(args: {
+  conversationId: string
+  paintingStateRaw: unknown
+  turns: ConversationTurn[]
+  toNumber: string
+  fromNumber: string
+  tenantId: string | null
+  firstName: string | null
+}): Promise<boolean> {
+  const { conversationId, turns, toNumber, fromNumber, tenantId, firstName } = args
+  const prevState = (args.paintingStateRaw ?? null) as PaintingConversationState | null
+
+  const latestInbound =
+    [...turns].reverse().find((t) => t.direction === 'inbound')?.body ?? ''
+
+  // Engage only if we're in an ACTIVE painting flow (mid-gather / awaiting a
+  // reply), or THIS message reads like a painting enquiry. A closed flow is
+  // NOT active, so an unrelated follow-up never re-quotes.
+  const activeFlow = isActivePaintingFlow(prevState)
+  if (!activeFlow && !looksLikePaintingEnquiry(latestInbound)) return false
+
+  const decision = advancePainting(prevState, latestInbound)
+
+  const replyFrom = toNumber
+  const sendReply = async (text: string, mediaUrl?: string) => {
+    const res = await dispatchQuoteMessage({ to: fromNumber, text, from: replyFrom, mediaUrl })
+    await supabase.from('sms_messages').insert({
+      conversation_id: conversationId,
+      direction: 'outbound',
+      body: text,
+    })
+    return res
+  }
+  const persist = async (state: PaintingConversationState, status: 'open' | 'done') => {
+    try {
+      await supabase
+        .from('sms_conversations')
+        .update({ painting_state: state, status, last_message_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq('id', conversationId)
+    } catch (e) {
+      console.warn('[sms/inbound:painting] painting_state persist failed (migration 154?)', e)
+    }
+  }
+  const baseUrl = ROOFING_APP_BASE_URL
+
+  // ── Warm 'quoted' thread got an unrelated message — hand back + close. ──
+  if (decision.action === 'passthrough') {
+    await persist({ slots: {}, last_step: 'closed', pending_form_token: null, pending_quote_token: null }, 'open')
+    return false
+  }
+
+  // ── Customer asked to stop / cancel. ──
+  if (decision.action === 'cancel') {
+    await sendReply(composePaintingCancel(firstName))
+    await persist({ slots: {}, last_step: 'closed', pending_form_token: null, pending_quote_token: null }, 'done')
+    return true
+  }
+
+  // ── Customer replied to "shall we book the inspection?". ──
+  if (decision.action === 'booking') {
+    await sendReply(composePaintingBooking(firstName, decision.confirmed))
+    await persist({ slots: decision.slots, last_step: 'closed', pending_form_token: null, pending_quote_token: null }, 'done')
+    return true
+  }
+
+  // ── Opener — offer the self-serve form link FIRST (unique per request). ──
+  if (decision.action === 'offer_form') {
+    const token = randomBytes(16).toString('hex')
+    try {
+      await supabase.from('painting_lead_requests').insert({
+        token,
+        tenant_id: tenantId,
+        conversation_id: conversationId,
+        customer_phone: fromNumber,
+        status: 'pending',
+      })
+    } catch (e) {
+      console.warn('[sms/inbound:painting] lead request insert failed (migration 154?)', e)
+    }
+    const formUrl = `${baseUrl}/paint-request/${token}`
+    await sendReply(buildPaintingFormOffer({ firstName, formUrl }))
+    await persist({ slots: {}, last_step: 'offer_form', pending_form_token: token, pending_quote_token: null }, 'open')
+    return true
+  }
+
+  // ── Customer chose the form — acknowledge and wait for the submission. ──
+  if (decision.action === 'await_form') {
+    await sendReply(decision.reply)
+    await persist({ slots: decision.slots, last_step: 'await_form' }, 'open')
+    return true
+  }
+
+  // ── Still gathering inputs — ask the next question (options inlined). ──
+  if (decision.action === 'ask') {
+    await persist({ slots: decision.slots, last_step: decision.step }, 'open')
+    await sendReply(decision.reply)
+    return true
+  }
+
+  // ── Gather-triggered inspection (poor / raked / 3+ storeys) — no price. ──
+  if (decision.action === 'inspection') {
+    const address = decision.slots.address ?? 'your property'
+    await sendReply(buildPaintingInspectionSms({ firstName, address, reason: decision.reason }))
+    await persist({ slots: decision.slots, last_step: 'await_booking', pending_form_token: null, pending_quote_token: null }, 'open')
+    return true
+  }
+
+  // ── Enough gathered cleanly — run the estimate, save it, send the quote. ──
+  if (decision.action === 'estimate') {
+    const request = toPaintingRequest(decision.slots)
+    if (request) {
+      const disp = await runAndSavePaintingQuote({
+        supabase,
+        tenantId,
+        customerPhone: fromNumber,
+        customerName: firstName,
+        request,
+        appUrl: baseUrl,
+      })
+      if (disp.ok) {
+        const address = request.address.address
+        if (disp.inspection) {
+          // No price to audit — keep the existing inspection/booking flow
+          // (send the on-site-measure message, park at await_booking).
+          await sendReply(buildPaintingInspectionSms({ firstName, address, reason: disp.estimate.price.routing.reason, quoteUrl: `${baseUrl}/q/paint/${disp.token}` }))
+          await persist({ slots: decision.slots, last_step: 'await_booking', pending_form_token: null, pending_quote_token: disp.token }, 'open')
+          return true
+        }
+        // Priced — DRAFT and hold: do NOT send the customer the price.
+        // Acknowledge the customer, then notify the tradie to review/edit/send.
+        const { data: t } = tenantId
+          ? await supabase
+              .from('tenants')
+              .select('owner_mobile, owner_first_name, twilio_sms_number, business_name')
+              .eq('id', tenantId)
+              .maybeSingle()
+          : { data: null }
+        const tenantRow = (t as {
+          owner_mobile?: string | null
+          owner_first_name?: string | null
+          twilio_sms_number?: string | null
+          business_name?: string | null
+        } | null) ?? null
+        await sendReply(buildPaintingHoldingSms({ firstName, businessName: tenantRow?.business_name ?? null }))
+        await notifyPaintingTradie({
+          tenant: {
+            owner_mobile: tenantRow?.owner_mobile ?? null,
+            owner_first_name: tenantRow?.owner_first_name ?? null,
+            twilio_sms_number: tenantRow?.twilio_sms_number ?? null,
+          },
+          customerName: firstName,
+          address,
+          betterIncGst: disp.estimate.price.tiers.find((tier) => tier.tier === 'better')?.inc_gst ?? null,
+          estimateToken: disp.estimateToken,
+          appUrl: baseUrl,
+          dispatch: (o) => dispatchQuoteMessage({ to: o.to, text: o.text, from: o.from }),
+        })
+        await persist({ slots: decision.slots, last_step: 'quoted', pending_form_token: null, pending_quote_token: disp.token }, 'open')
+        return true
+      }
+    }
+    // Couldn't estimate (provider down / missing fields) — fall back.
+    await sendReply("Thanks, we've got your painting details. Our team will confirm your quote shortly.")
+    await persist({ slots: decision.slots, last_step: 'closed', pending_form_token: null, pending_quote_token: null }, 'done')
+    return true
+  }
+
+  return false
 }
 
 export async function POST(req: Request) {
@@ -1407,6 +1610,33 @@ export async function POST(req: Request) {
           }
         } catch (e) {
           console.error('[sms/inbound:after] roofing receptionist threw — falling through to standard dialog', e)
+        }
+      }
+
+      // ─────── SMS painting receptionist (flag-gated) ───────
+      // When enabled, a painting enquiry (or an in-progress painting thread)
+      // is handled by the deterministic painting receptionist instead of the
+      // electrical/plumbing Sonnet dialog: offer the self-serve form link
+      // first → otherwise gather inputs question-by-question → run the
+      // painting estimate → reply with the G/B/B quote link.
+      // OFF (default) ⇒ this block is skipped entirely (byte-identical).
+      if (SMS_PAINTING_ENABLED && !inflightContinuation) {
+        try {
+          const handledPainting = await handlePaintingTurn({
+            conversationId,
+            paintingStateRaw: (conversation as Record<string, unknown>).painting_state,
+            turns,
+            toNumber,
+            fromNumber,
+            tenantId: tenant?.id ?? null,
+            firstName: customer?.first_name ?? guessFirstName(turns) ?? null,
+          })
+          if (handledPainting) {
+            console.log('[sms/inbound:after] handled by painting receptionist', { conversationId })
+            return
+          }
+        } catch (e) {
+          console.error('[sms/inbound:after] painting receptionist threw — falling through to standard dialog', e)
         }
       }
 

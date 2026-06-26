@@ -9,38 +9,39 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #ffffff;
-      --bg-soft: #fafafa;
-      --bg-section: #f5f5f5;
-      --ink: #0a0a0a;
-      --ink-2: #262626;
-      --muted: #6b7280;
-      --muted-2: #9ca3af;
-      --line: #e5e7eb;
-      --line-strong: #d4d4d8;
-      --accent: #14b8a6;
-      --accent-deep: #0f766e;
+      --bg: #16120F;
+      --bg-soft: #1E1813;
+      --bg-section: #2B2422;
+      --ink: #F6F1EA;
+      --ink-2: #C3B8AC;
+      --muted: #A2968A;
+      --muted-2: #A2968A;
+      --line: #3A322C;
+      --line-strong: #6E6354;
+      --accent: #FFC400;
+      --accent-deep: #FFC400;
+      --accent-ink: #1C1812;
 
-      --c-done: #15803d;
-      --c-done-bg: #dcfce7;
-      --c-done-tint: #f0fdf4;
-      --c-partial: #b45309;
-      --c-partial-bg: #fef3c7;
-      --c-pending: #b91c1c;
-      --c-pending-bg: #fee2e2;
-      --c-skip: #475569;
-      --c-skip-bg: #f1f5f9;
-      --c-bonus: #6d28d9;
-      --c-bonus-bg: #ede9fe;
-      --c-verified: #047857;
-      --c-verified-bg: #d1fae5;
+      --c-done: #7BDCA0;
+      --c-done-bg: #243029;
+      --c-done-tint: #1E2620;
+      --c-partial: #FFD23D;
+      --c-partial-bg: #2E2716;
+      --c-pending: #E89A8A;
+      --c-pending-bg: #2E1E1A;
+      --c-skip: #A2968A;
+      --c-skip-bg: #2B2422;
+      --c-bonus: #C9A9F0;
+      --c-bonus-bg: #2A2233;
+      --c-verified: #7BDCA0;
+      --c-verified-bg: #243029;
 
-      --c-customer: #0891b2;
-      --c-tradie: #2563eb;
-      --c-data: #059669;
-      --c-payments: #16a34a;
-      --c-comms: #ea580c;
-      --c-llm: #7c3aed;
+      --c-customer: #6E6354;
+      --c-tradie: #FFD23D;
+      --c-data: #7BDCA0;
+      --c-payments: #7BDCA0;
+      --c-comms: #FFC400;
+      --c-llm: #C9A9F0;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -71,7 +72,7 @@
       z-index: 50;
       -webkit-backdrop-filter: blur(8px);
       backdrop-filter: blur(8px);
-      background: rgba(255, 255, 255, 0.92);
+      background: rgba(22, 18, 15, 0.92);
     }
     .topbar-inner {
       display: flex;
@@ -110,13 +111,13 @@
       height: 8px;
       background: var(--accent);
       border-radius: 50%;
-      box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.7);
+      box-shadow: 0 0 0 0 rgba(255, 196, 0, 0.7);
       animation: pulse 2s infinite;
     }
     @keyframes pulse {
-      0%   { box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.7); }
-      70%  { box-shadow: 0 0 0 8px rgba(20, 184, 166, 0); }
-      100% { box-shadow: 0 0 0 0 rgba(20, 184, 166, 0); }
+      0%   { box-shadow: 0 0 0 0 rgba(255, 196, 0, 0.7); }
+      70%  { box-shadow: 0 0 0 8px rgba(255, 196, 0, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(255, 196, 0, 0); }
     }
 
     /* ═══════════════ HERO ═══════════════ */
@@ -296,38 +297,38 @@
     }
     .badge.done {
       background: var(--c-done);
-      color: #ffffff;
+      color: #1C1812;
       border-color: var(--c-done);
     }
     .badge.verified {
       background: var(--c-verified);
-      color: #ffffff;
+      color: #1C1812;
       border-color: var(--c-verified);
     }
     .badge.partial {
       background: var(--c-partial-bg);
       color: var(--c-partial);
-      border-color: rgba(180, 83, 9, 0.25);
+      border-color: rgba(255, 210, 61, 0.25);
     }
     .badge.pending {
       background: var(--c-pending-bg);
       color: var(--c-pending);
-      border-color: rgba(185, 28, 28, 0.25);
+      border-color: rgba(232, 154, 138, 0.25);
     }
     .badge.skip {
       background: var(--c-skip-bg);
       color: var(--c-skip);
-      border-color: rgba(71, 85, 105, 0.2);
+      border-color: rgba(110, 99, 84, 0.35);
     }
     .badge.bonus {
       background: var(--c-bonus-bg);
       color: var(--c-bonus);
-      border-color: rgba(109, 40, 217, 0.2);
+      border-color: rgba(201, 169, 240, 0.25);
     }
     .badge.push-pending {
-      background: #fff7ed;
-      color: #9a3412;
-      border-color: rgba(154, 52, 18, 0.25);
+      background: var(--c-partial-bg);
+      color: var(--c-partial);
+      border-color: rgba(255, 210, 61, 0.25);
     }
     .badge.push-pending::before {
       content: "↑";
@@ -378,7 +379,7 @@
       background: var(--c-bonus-bg);
       box-shadow: inset 3px 0 0 var(--c-bonus);
     }
-    tbody tr.row-bonus:hover { background: rgba(124, 58, 237, 0.08); }
+    tbody tr.row-bonus:hover { background: rgba(201, 169, 240, 0.12); }
     .col-stage { width: 13rem; }
     .col-stage strong { font-weight: 600; letter-spacing: -0.005em; }
     .col-status { width: 7.5rem; }
@@ -575,7 +576,7 @@
     a.text-link {
       color: var(--accent-deep);
       text-decoration: none;
-      border-bottom: 1px solid rgba(15, 118, 110, 0.3);
+      border-bottom: 1px solid rgba(255, 196, 0, 0.3);
       transition: border-color 0.15s ease;
     }
     a.text-link:hover { border-bottom-color: var(--accent-deep); }
@@ -882,26 +883,14 @@
 
 Your QuoteMax quote for 6 downlights (same day).
 
-3 OPTIONS (inc 10% GST - 30% deposit to confirm):
-
-GOOD: $527 (deposit $158)
-- Standard warm-white LED
-- 12 fittings
-Tap to pay: https://quote-mate-rho.vercel.app/r/cR4ij0PVKb78E0u7jvJTPQ/good
-
-BETTER: $696 (recommended) (deposit $209)
+ONE FIXED PRICE: $696 (inc 10% GST - 30% deposit $209 to confirm). No haggling.
 - Tri-colour LED
 - 12 fittings
 Tap to pay: https://quote-mate-rho.vercel.app/r/cR4ij0PVKb78E0u7jvJTPQ/better
 
-BEST: $899 (deposit $270)
-- Dimmable IP-rated premium LED
-- 12 fittings
-Tap to pay: https://quote-mate-rho.vercel.app/r/cR4ij0PVKb78E0u7jvJTPQ/best
-
 SCOPE: Replace 6 kitchen halogens with warm-white LED downlights, reuse wiring
 
-Reply or call back to confirm a tier and we will book you in.
+Reply or call back to confirm and we will book you in.
 
 - QuoteMax</pre>
       </div>

@@ -27,10 +27,24 @@ import { hasBundledEstimatorTemplate } from '@/lib/estimate/prompt'
 export const CANDIDATE_TRADES = [
   'electrical',
   'plumbing',
+  'painting',
   'roofing',
   'solar',
   'commercial_painting',
 ] as const
+
+// Trades whose money path is a DETERMINISTIC engine (per-m² rate card,
+// footprint geometry, …) rather than the strict-grounding Opus estimator.
+// For these the "estimator prompt" readiness check is satisfied by the
+// bundled deterministic pricer — there is no system prompt to find, so a
+// missing trade_prompts row must NOT gate the trade out. Residential
+// painting (lib/painting/pricing.ts) is the first such onboardable trade.
+const DETERMINISTIC_TRADES = new Set<string>(['painting'])
+
+/** True when this trade prices via a deterministic engine, not the LLM estimator. */
+export function isDeterministicTrade(trade: string): boolean {
+  return DETERMINISTIC_TRADES.has(trade)
+}
 
 export interface TradeReadinessChecks {
   pricingDefaults: boolean
@@ -82,7 +96,9 @@ export async function checkTradeReadiness(
   const pricingDefaults = hasOnboardingPricingDefaults(trade)
   const sharedAssemblies = await hasSharedAssemblies(supabase, trade)
   const estimatorPrompt =
-    hasBundledEstimatorTemplate(trade) || (await hasTradePromptRow(supabase, trade))
+    hasBundledEstimatorTemplate(trade) ||
+    isDeterministicTrade(trade) ||
+    (await hasTradePromptRow(supabase, trade))
   const intakeRules = (ONBOARDING_TRADES as readonly string[]).includes(trade)
   const licenceSchema = hasLicenceSchema(trade)
 

@@ -14,6 +14,7 @@
 import { createClient } from '@supabase/supabase-js'
 import type { PaintingEstimate, PaintScope, PaintingPriceTier } from '@/lib/painting/types'
 import { asQuoteTierMode, resolveVisibleTiers, type QuoteTierMode } from '@/lib/quote/tier-visibility'
+import { canShowPaintingPrices } from '@/lib/painting/publish-gate'
 
 export const dynamic = 'force-dynamic'
 
@@ -94,6 +95,32 @@ export default async function PaintingQuotePage(props: { params: Promise<{ token
   })
   const visibleTiers = tiers.filter((t) => visibleTierKeys.includes(t.tier))
 
+  // Per-tier Stripe deposit links (migration 156). Read in a SEPARATE,
+  // best-effort query so this LIVE page never breaks if the code deploys
+  // before the migration applies (the columns simply aren't selected then →
+  // payErr set → the placeholder shows). Each tier with a stored Checkout
+  // session gets a "Pay deposit" button via the /r/paint short-link; a paid
+  // quote shows a confirmed state instead of re-charging.
+  let stripeLinks: Record<string, string> = {}
+  let paid = false
+  let paidTier: string | null = null
+  // `released` defaults TRUE so a pre-migration deploy and every dashboard-saved
+  // quote (released at save) keep showing prices; only a HELD SMS/self-serve
+  // draft (released_at null) gates them until the tradie clicks Send.
+  let released = true
+  const { data: payRow, error: payErr } = await supabase
+    .from('painting_measurements')
+    .select('stripe_links, paid_at, paid_tier, released_at')
+    .eq('public_token', token)
+    .maybeSingle()
+  if (!payErr && payRow) {
+    stripeLinks = (payRow.stripe_links as Record<string, string> | null) ?? {}
+    paid = !!(payRow.paid_at as string | null)
+    paidTier = (payRow.paid_tier as string | null) ?? null
+    released = (payRow.released_at as string | null) != null
+  }
+  const priceGate = canShowPaintingPrices({ releasedAt: released ? 'released' : null })
+
   const date = new Date(row.created_at as string).toLocaleDateString('en-AU', {
     day: 'numeric',
     month: 'long',
@@ -152,7 +179,7 @@ export default async function PaintingQuotePage(props: { params: Promise<{ token
         </section>
       ) : null}
 
-      {/* ── Inspection note OR tiers ── */}
+      {/* ── Inspection note · held-for-review note · OR tiers ── */}
       {inspection ? (
         <section className="mt-6 border border-l-4 border-ink-line border-l-accent bg-ink-card p-6 sm:p-7">
           <div className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-accent">
@@ -162,6 +189,13 @@ export default async function PaintingQuotePage(props: { params: Promise<{ token
             {estimate.price?.routing?.reason ??
               'This job needs a quick on-site measure before we can lock a price. We’ll be in touch to book a time.'}
           </p>
+        </section>
+      ) : !priceGate.showPrices ? (
+        <section className="mt-6 border border-l-4 border-ink-line border-l-accent bg-ink-card p-6 sm:p-7">
+          <div className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-accent">
+            Quote being finalised
+          </div>
+          <p className="mt-2 text-sm leading-relaxed text-text-sec">{priceGate.reason}</p>
         </section>
       ) : (
         <section className="mt-8">
@@ -186,11 +220,25 @@ export default async function PaintingQuotePage(props: { params: Promise<{ token
                     inc GST · range {aud(tier.inc_gst_low)}–{aud(tier.inc_gst_high)}
                   </div>
                 </div>
-                {/* Deposit (R12): no paint deposit flow wired yet — clear,
-                    non-dead state per the spec's missing-link edge case. */}
-                <div className="mt-6 border border-ink-line px-4 py-3 text-center font-mono text-[0.72rem] uppercase tracking-[0.14em] text-text-dim">
-                  Contact us to book
-                </div>
+                {/* Deposit (mig 156): a "Pay deposit" link when a Stripe
+                    session exists for this tier; a confirmed state once paid;
+                    otherwise the clear non-dead placeholder. */}
+                {paid ? (
+                  <div className="mt-6 border border-accent bg-accent/10 px-4 py-3 text-center font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-accent">
+                    Deposit paid{paidTier === tier.tier ? ' ✓' : ''}
+                  </div>
+                ) : stripeLinks[tier.tier] ? (
+                  <a
+                    href={`/r/paint/${token}/${tier.tier}`}
+                    className="mt-6 block border border-accent bg-accent px-4 py-3 text-center font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press"
+                  >
+                    Pay deposit
+                  </a>
+                ) : (
+                  <div className="mt-6 border border-ink-line px-4 py-3 text-center font-mono text-[0.72rem] uppercase tracking-[0.14em] text-text-dim">
+                    Contact us to book
+                  </div>
+                )}
               </article>
             ))}
           </div>

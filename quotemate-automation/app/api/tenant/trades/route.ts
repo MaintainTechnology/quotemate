@@ -95,22 +95,37 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, error: 'no_tenant' }, { status: 404 })
   }
 
-  const current: Array<'electrical' | 'plumbing'> =
+  // The tenant's full trade portfolio — may include non-labour FEATURE
+  // trades (painting, roofing, solar, …) the tradie activated via the
+  // dashboard feature tabs / plan tier / admin. This endpoint reconciles
+  // only the LABOUR trades and must preserve feature trades verbatim, so
+  // saving electrical/plumbing never deactivates painting.
+  const current: string[] =
     Array.isArray(tenant.trades) && tenant.trades.length > 0
-      ? (tenant.trades as Array<'electrical' | 'plumbing'>)
+      ? (tenant.trades as string[])
       : tenant.trade
-        ? ([tenant.trade] as Array<'electrical' | 'plumbing'>)
+        ? [tenant.trade as string]
         : []
 
-  const toAdd = desired.filter((t) => !current.includes(t))
-  const toRemove = current.filter((t) => !desired.includes(t))
+  const LABOUR_TRADES = ['electrical', 'plumbing']
+  const isLabour = (t: string) => LABOUR_TRADES.includes(t)
+  const preservedFeatureTrades = current.filter((t) => !isLabour(t))
 
-  // ── 2. Fast path: no change ──────────────────────────────────────
+  const desiredSet = new Set<string>(desired)
+  const toAdd = desired.filter((t) => !current.includes(t))
+  // Remove only the LABOUR trades the tradie deselected — never a feature trade.
+  const toRemove = current.filter((t) => isLabour(t) && !desiredSet.has(t))
+
+  // The portfolio we'll persist: the desired labour trades plus every
+  // preserved feature trade (deduped, labour trades first for a stable scalar).
+  const nextTrades = Array.from(new Set([...desired, ...preservedFeatureTrades]))
+
+  // ── 2. Fast path: no labour-trade change ─────────────────────────
   if (toAdd.length === 0 && toRemove.length === 0) {
     return Response.json({
       ok: true,
       tenantId: tenant.id,
-      trades: desired,
+      trades: nextTrades,
       added: [],
       removed: [],
       noop: true,
@@ -288,11 +303,12 @@ export async function POST(req: Request) {
   }
 
   // ── 5. Update tenants row ────────────────────────────────────────
-  // Keep `trade` (scalar) in sync with `trades[0]` for back-compat.
+  // Persist the full portfolio (labour + preserved feature trades). Keep
+  // `trade` (scalar) in sync with the primary labour trade for back-compat.
   const { error: tenantUpdErr } = await supabase
     .from('tenants')
     .update({
-      trades: desired,
+      trades: nextTrades,
       trade: desired[0],
     })
     .eq('id', tenant.id)
@@ -314,7 +330,7 @@ export async function POST(req: Request) {
     const vapiRes = await updateVapiAssistant({
       assistantId: tenant.vapi_assistant_id,
       businessName: tenant.business_name,
-      trades: desired,
+      trades: nextTrades,
     })
     if (!vapiRes.ok) {
       vapiWarning = `AI assistant prompt refresh failed: ${vapiRes.reason}. Old prompt remains active.`
@@ -327,7 +343,7 @@ export async function POST(req: Request) {
   return Response.json({
     ok: true,
     tenantId: tenant.id,
-    trades: desired,
+    trades: nextTrades,
     added: toAdd,
     removed: toRemove,
     warning: vapiWarning,

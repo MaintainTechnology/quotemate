@@ -10,10 +10,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --ink-deep:#0E1622; --ink:#141C29; --ink-card:#1B2433; --ink-line:#2D3A4F;
-      --accent:#FF5A1F; --accent-press:#E8470F; --accent-soft:#FF7A45;
-      --text-pri:#FFFFFF; --text-sec:#B8C2D1; --text-dim:#7A8699;
-      --teal-glow:#14B8A6; --teal-deep:#0F766E;
+      --ink-deep:#16120F; --ink:#1E1813; --ink-card:#2B2422; --ink-line:#3A322C;
+      --accent:#FFC400; --accent-press:#E6AC00; --accent-soft:#FFD23D; --accent-ink:#1C1812;
+      --text-pri:#F6F1EA; --text-sec:#C3B8AC; --text-dim:#A2968A;
+      --teal-glow:#6E6354; --teal-deep:#6E6354;
     }
     *,*::before,*::after { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
@@ -146,7 +146,7 @@
     }
     .engine-tag {
       display: inline-block;
-      background: var(--accent); color: #fff;
+      background: var(--accent); color: var(--accent-ink);
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.7rem; font-weight: 700;
       letter-spacing: 0.12em; text-transform: uppercase;
@@ -194,7 +194,7 @@
 
     /* ─── CTA accent bar ────────────────────────────────────────── */
     .cta-bar {
-      background: var(--accent); color: #fff;
+      background: var(--accent); color: var(--accent-ink);
       text-align: center; padding: 1.25rem 1.5rem;
       margin-top: 4rem;
     }
@@ -266,7 +266,7 @@
         <article class="stop" role="listitem">
           <span class="stop-num">03</span>
           <h3 class="stop-title">Estimation Engine</h3>
-          <p class="stop-body">Prices the job using the tradie's real price list. Builds three tiers — Good / Better / Best — with real products.</p>
+          <p class="stop-body">Prices the job using the tradie's real price list. Builds one clear fixed-price quote — with real products.</p>
         </article>
         <article class="stop" role="listitem">
           <span class="stop-num">04</span>
@@ -287,52 +287,52 @@
           <title id="diagram-title">Pipeline data flow from customer message to finished AI preview image</title>
           <defs>
             <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
-              <path d="M0,0 L10,5 L0,10 z" fill="#FF5A1F"/>
+              <path d="M0,0 L10,5 L0,10 z" fill="#FFC400"/>
             </marker>
           </defs>
 
           <!-- Stations -->
-          <g font-family="Manrope, sans-serif" font-weight="800" fill="#FFFFFF" text-anchor="middle">
+          <g font-family="Manrope, sans-serif" font-weight="800" fill="#F6F1EA" text-anchor="middle">
             <!-- 1. Customer -->
-            <rect x="20"  y="120" width="180" height="120" fill="#1B2433" stroke="#2D3A4F" />
-            <text x="110" y="155" font-size="11" fill="#7A8699" letter-spacing="2" font-family="JetBrains Mono, monospace">01 SOURCE</text>
+            <rect x="20"  y="120" width="180" height="120" fill="#2B2422" stroke="#3A322C" />
+            <text x="110" y="155" font-size="11" fill="#A2968A" letter-spacing="2" font-family="JetBrains Mono, monospace">01 SOURCE</text>
             <text x="110" y="185" font-size="18">CUSTOMER</text>
-            <text x="110" y="210" font-size="11" fill="#B8C2D1" font-weight="400">Text · Voice · Photos</text>
+            <text x="110" y="210" font-size="11" fill="#C3B8AC" font-weight="400">Text · Voice · Photos</text>
 
             <!-- 2. Intake -->
-            <rect x="260" y="120" width="180" height="120" fill="#1B2433" stroke="#2D3A4F" />
-            <text x="350" y="155" font-size="11" fill="#FF5A1F" letter-spacing="2" font-family="JetBrains Mono, monospace">02 INTAKE</text>
+            <rect x="260" y="120" width="180" height="120" fill="#2B2422" stroke="#3A322C" />
+            <text x="350" y="155" font-size="11" fill="#FFC400" letter-spacing="2" font-family="JetBrains Mono, monospace">02 INTAKE</text>
             <text x="350" y="185" font-size="17">UNDERSTAND</text>
-            <text x="350" y="210" font-size="11" fill="#B8C2D1" font-weight="400">Claude Opus 4.7</text>
+            <text x="350" y="210" font-size="11" fill="#C3B8AC" font-weight="400">Claude Opus 4.7</text>
 
             <!-- 3. Estimator -->
-            <rect x="500" y="120" width="180" height="120" fill="#1B2433" stroke="#2D3A4F" />
-            <text x="590" y="155" font-size="11" fill="#FF5A1F" letter-spacing="2" font-family="JetBrains Mono, monospace">03 ESTIMATE</text>
+            <rect x="500" y="120" width="180" height="120" fill="#2B2422" stroke="#3A322C" />
+            <text x="590" y="155" font-size="11" fill="#FFC400" letter-spacing="2" font-family="JetBrains Mono, monospace">03 ESTIMATE</text>
             <text x="590" y="185" font-size="18">PRICE IT</text>
-            <text x="590" y="210" font-size="11" fill="#B8C2D1" font-weight="400">Claude + Price Book</text>
+            <text x="590" y="210" font-size="11" fill="#C3B8AC" font-weight="400">Claude + Price Book</text>
 
             <!-- 4. IG Engine -->
-            <rect x="740" y="120" width="180" height="120" fill="#1B2433" stroke="#FF5A1F" stroke-width="2" />
-            <text x="830" y="155" font-size="11" fill="#FF5A1F" letter-spacing="2" font-family="JetBrains Mono, monospace">04 IG ENGINE</text>
+            <rect x="740" y="120" width="180" height="120" fill="#2B2422" stroke="#FFC400" stroke-width="2" />
+            <text x="830" y="155" font-size="11" fill="#FFC400" letter-spacing="2" font-family="JetBrains Mono, monospace">04 IG ENGINE</text>
             <text x="830" y="185" font-size="18">DRAW IT</text>
-            <text x="830" y="210" font-size="11" fill="#B8C2D1" font-weight="400">Gemini · GPT-image-2</text>
+            <text x="830" y="210" font-size="11" fill="#C3B8AC" font-weight="400">Gemini · GPT-image-2</text>
 
             <!-- 5. Image -->
-            <rect x="980" y="120" width="200" height="120" fill="#1B2433" stroke="#2D3A4F" />
-            <text x="1080" y="155" font-size="11" fill="#7A8699" letter-spacing="2" font-family="JetBrains Mono, monospace">05 RESULT</text>
+            <rect x="980" y="120" width="200" height="120" fill="#2B2422" stroke="#3A322C" />
+            <text x="1080" y="155" font-size="11" fill="#A2968A" letter-spacing="2" font-family="JetBrains Mono, monospace">05 RESULT</text>
             <text x="1080" y="185" font-size="18">CUSTOMER SEES</text>
-            <text x="1080" y="210" font-size="11" fill="#B8C2D1" font-weight="400">Their room · finished</text>
+            <text x="1080" y="210" font-size="11" fill="#C3B8AC" font-weight="400">Their room · finished</text>
           </g>
 
           <!-- Arrows + data labels -->
-          <g stroke="#FF5A1F" stroke-width="2" fill="none" marker-end="url(#arrow)">
+          <g stroke="#FFC400" stroke-width="2" fill="none" marker-end="url(#arrow)">
             <line x1="200" y1="180" x2="256" y2="180" />
             <line x1="440" y1="180" x2="496" y2="180" />
             <line x1="680" y1="180" x2="736" y2="180" />
             <line x1="920" y1="180" x2="976" y2="180" />
           </g>
 
-          <g font-family="JetBrains Mono, monospace" font-size="9" fill="#14B8A6" text-anchor="middle" letter-spacing="1">
+          <g font-family="JetBrains Mono, monospace" font-size="9" fill="#6E6354" text-anchor="middle" letter-spacing="1">
             <text x="228" y="170">RAW</text>
             <text x="468" y="170">JSON INTAKE</text>
             <text x="708" y="170">QUOTE + PHOTOS</text>
@@ -340,15 +340,15 @@
           </g>
 
           <!-- Verify loop arrow -->
-          <g stroke="#14B8A6" stroke-width="1.5" fill="none" stroke-dasharray="5 3">
+          <g stroke="#6E6354" stroke-width="1.5" fill="none" stroke-dasharray="5 3">
             <path d="M 830 240 Q 830 290 830 290 L 830 305" />
           </g>
-          <rect x="730" y="305" width="200" height="35" fill="#0E1622" stroke="#14B8A6" stroke-dasharray="5 3" />
-          <text x="830" y="328" font-family="JetBrains Mono, monospace" font-size="10" fill="#14B8A6" text-anchor="middle" letter-spacing="1">JUDGE · RETRY IF WRONG</text>
+          <rect x="730" y="305" width="200" height="35" fill="#16120F" stroke="#6E6354" stroke-dasharray="5 3" />
+          <text x="830" y="328" font-family="JetBrains Mono, monospace" font-size="10" fill="#6E6354" text-anchor="middle" letter-spacing="1">JUDGE · RETRY IF WRONG</text>
 
           <!-- Top eyebrow -->
-          <text x="600" y="40" font-family="JetBrains Mono, monospace" font-size="11" fill="#7A8699" text-anchor="middle" letter-spacing="3">PIPELINE · DATA FLOWS LEFT TO RIGHT</text>
-          <line x1="20" y1="65" x2="1180" y2="65" stroke="#2D3A4F" />
+          <text x="600" y="40" font-family="JetBrains Mono, monospace" font-size="11" fill="#A2968A" text-anchor="middle" letter-spacing="3">PIPELINE · DATA FLOWS LEFT TO RIGHT</text>
+          <line x1="20" y1="65" x2="1180" y2="65" stroke="#3A322C" />
         </svg>
       </div>
       <p style="font-size: .85rem; color: var(--text-dim); margin-top: 1rem;">
@@ -405,7 +405,7 @@
         <h3 class="display-lg">THE <span class="accent">PRICER</span>.</h3>
       </div>
       <p style="max-width: 60ch; margin-bottom: 1.5rem;">
-        Takes the structured job and builds a real quote with three tiers — using the tradie's actual price list, not made-up numbers.
+        Takes the structured job and builds a real quote at one clear fixed price — using the tradie's actual price list, not made-up numbers.
       </p>
       <div class="engine">
         <div class="col">
@@ -421,14 +421,14 @@
           <ul>
             <li>You're a <em>[electrical / plumbing]</em> estimator in <em>[NSW / QLD]</em>.</li>
             <li>Use <em>only</em> prices from the tradie's price list. Never invent a number.</li>
-            <li>Build three tiers — <em>Good</em>, <em>Better</em>, <em>Best</em>. Same install, different product brand and finish.</li>
+            <li>Build one clear fixed-price quote. Pick the right product brand and finish for the job — no haggling.</li>
             <li>If something doesn't fit cleanly, fall back to a $99 site inspection rather than guess.</li>
             <li>A separate non-AI check verifies every price came from the price list. Quotes that fail get downgraded to a $99 inspection automatically.</li>
           </ul>
         </div>
         <div class="col">
           <h4>What comes out</h4>
-          <p>A three-tier quote where every line item is linked to a real product (including its photo):</p>
+          <p>A single fixed-price quote where every line item is linked to a real product (including its photo):</p>
           <p class="mono">{ good: {...}, better: {...}, best: {...} }</p>
         </div>
       </div>
@@ -518,7 +518,7 @@
           </li>
           <li>
             <strong>03 · Estimation Engine.</strong>
-            Builds three tiers from the electrician's price list. Each tier is "6 × downlights" — same install, different brand. Picks the matching product photo from the catalogue for each tier.
+            Builds one clear fixed-price quote from the electrician's price list — "6 × downlights", with the right brand for the job. Picks the matching product photo from the catalogue.
           </li>
           <li>
             <strong>04 · IG Engine.</strong>

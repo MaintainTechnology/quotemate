@@ -9,8 +9,8 @@
 // Auth: same bearer-token pattern as the rest of the painting surface.
 
 import { createClient } from '@supabase/supabase-js'
-import { randomBytes } from 'node:crypto'
 import { SavePaintingSchema } from '@/lib/painting/request-schema'
+import { buildSavedPaintingRow } from '@/lib/painting/save-row'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,26 +36,6 @@ async function userAndTenantFromBearer(
   return { userId: data.user.id, tenantId: (tenant?.id as string | undefined) ?? null }
 }
 
-/** Read a nested value off an unknown payload without `any`. */
-function readPath(obj: unknown, path: Array<string | number>): unknown {
-  let cur: unknown = obj
-  for (const k of path) {
-    if (cur && typeof cur === 'object' && String(k) in (cur as Record<string, unknown>)) {
-      cur = (cur as Record<string, unknown>)[String(k)]
-    } else {
-      return undefined
-    }
-  }
-  return cur
-}
-
-function numOrNull(v: unknown): number | null {
-  return typeof v === 'number' && Number.isFinite(v) ? v : null
-}
-function strOrNull(v: unknown): string | null {
-  return typeof v === 'string' && v.trim() !== '' ? v : null
-}
-
 export async function POST(req: Request) {
   const auth = await userAndTenantFromBearer(req)
   if (!auth) {
@@ -77,33 +57,19 @@ export async function POST(req: Request) {
     )
   }
 
-  const { address, source, inputs, estimate, customer_name, customer_phone } = parsed.data
-
-  const row = {
-    tenant_id: auth.tenantId,
-    created_by: auth.userId,
-    address: address.address,
-    postcode: address.postcode,
-    state: address.state,
-    source,
-    customer_name: customer_name ?? null,
-    customer_phone: customer_phone ?? null,
-    scopes: Array.isArray(inputs.scopes) ? inputs.scopes : [],
-    floor_area_m2: numOrNull(readPath(estimate, ['measurement', 'floor_area_m2'])),
-    total_area_m2: numOrNull(readPath(estimate, ['price', 'total_area_m2'])),
-    confidence: strOrNull(readPath(estimate, ['price', 'confidence'])),
-    // Better tier (index 1) inc-GST is the headline number for the list.
-    better_inc_gst: numOrNull(readPath(estimate, ['price', 'tiers', 1, 'inc_gst'])),
-    routing: strOrNull(readPath(estimate, ['price', 'routing', 'decision'])),
-    inputs,
-    estimate: estimate ?? null,
-    public_token: randomBytes(16).toString('hex'),
-  }
+  const row = buildSavedPaintingRow({
+    tenantId: auth.tenantId,
+    userId: auth.userId,
+    data: parsed.data,
+    // A dashboard save is tradie-authored + reviewed inline, so release it
+    // immediately — the customer quote page shows prices straight away.
+    releasedAt: new Date().toISOString(),
+  })
 
   const { data, error } = await supabase
     .from('painting_measurements')
     .insert(row)
-    .select('id, public_token')
+    .select('id, public_token, estimate_token')
     .single()
 
   if (error) {
@@ -114,7 +80,12 @@ export async function POST(req: Request) {
   }
 
   return Response.json(
-    { ok: true, id: data.id as string, public_token: data.public_token as string },
+    {
+      ok: true,
+      id: data.id as string,
+      public_token: data.public_token as string,
+      estimate_token: data.estimate_token as string,
+    },
     { status: 200 },
   )
 }

@@ -10,10 +10,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
 <style>
   :root{
-    --ink-deep:#0E1622; --ink:#141C29; --ink-card:#1B2433; --ink-line:#2D3A4F;
-    --accent:#FF5A1F; --accent-press:#E8470F; --accent-soft:#FF7A45;
-    --text-pri:#FFFFFF; --text-sec:#B8C2D1; --text-dim:#7A8699;
-    --teal:#14B8A6; --teal-deep:#0F766E;
+    color-scheme:dark;
+    --ink-deep:#16120F; --ink:#1E1813; --ink-card:#2B2422; --ink-line:#3A322C;
+    --accent:#FFC400; --accent-press:#E6AC00; --accent-soft:#FFD23D; --accent-ink:#1C1812;
+    --text-pri:#F6F1EA; --text-sec:#C3B8AC; --text-dim:#A2968A;
+    --edge:#6E6354; --success:#7BDCA0;
     --sans:'Manrope',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
     --mono:'JetBrains Mono',ui-monospace,monospace;
     --maxw:1180px;
@@ -29,13 +30,13 @@
   .topo svg{width:100%; height:100%}
   .glow{position:fixed; z-index:0; pointer-events:none; filter:blur(120px); opacity:.22}
   .glow.a{top:-120px; right:-80px; width:420px; height:420px; background:var(--accent); border-radius:50%}
-  .glow.b{bottom:-160px; left:-100px; width:480px; height:480px; background:var(--teal); border-radius:50%; opacity:.16}
+  .glow.b{bottom:-160px; left:-100px; width:480px; height:480px; background:var(--edge); border-radius:50%; opacity:.18}
   .wrap{position:relative; z-index:1; max-width:var(--maxw); margin:0 auto; padding:0 24px}
 
   .eyebrow{font-family:var(--mono); font-size:.72rem; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--text-dim)}
   .sec-title{font-weight:800; text-transform:uppercase; letter-spacing:-.03em; line-height:1.02; font-size:clamp(1.9rem,4.2vw,3.1rem)}
   .accent{color:var(--accent)}
-  .teal{color:var(--teal)}
+  .edge{color:var(--success)}
   .lead{color:var(--text-sec); font-size:1.05rem; max-width:64ch}
 
   header.hero{padding:92px 0 64px}
@@ -58,21 +59,34 @@
   .sec-head .sec-title{margin-top:12px}
   .sec-head p{margin-top:14px}
 
-  /* customer flow */
-  .flow{display:grid; grid-template-columns:repeat(7,1fr); gap:0; border:1px solid var(--ink-line); background:var(--ink-card)}
+  /* ── two-path customer flow ── */
+  .path{margin-top:30px}
+  .path:first-of-type{margin-top:0}
+  .path-label{display:flex; align-items:center; gap:14px; margin-bottom:14px; flex-wrap:wrap}
+  .path-label .tag{display:inline-flex; align-items:center; gap:8px; background:var(--accent); color:var(--accent-ink);
+    font-family:var(--mono); font-size:.72rem; font-weight:600; letter-spacing:.1em; text-transform:uppercase; padding:7px 13px}
+  .path-label.b .tag{background:transparent; color:var(--accent); border:1px solid var(--accent)}
+  .path-label .desc{font-family:var(--mono); font-size:.72rem; letter-spacing:.04em; text-transform:uppercase; color:var(--text-dim)}
+  .path-label .rule{flex:1; height:1px; background:var(--ink-line); min-width:30px}
+
+  .flow{display:grid; gap:0; border:1px solid var(--ink-line); background:var(--ink-card)}
+  .flow.a{grid-template-columns:repeat(7,1fr)}
+  .flow.b{grid-template-columns:repeat(7,1fr)}
   .step{position:relative; padding:22px 18px 26px; border-right:1px solid var(--ink-line)}
   .step:last-child{border-right:0}
   .step .num{font-family:var(--mono); font-size:.72rem; color:var(--text-dim); letter-spacing:.1em}
   .step .ic{width:34px; height:34px; color:var(--accent); margin:14px 0 12px; display:block}
   .step h4{font-size:.92rem; font-weight:800; text-transform:uppercase; letter-spacing:-.01em; line-height:1.1}
   .step p{color:var(--text-sec); font-size:.82rem; margin-top:8px; line-height:1.45}
-  .step .eg{display:block; font-family:var(--mono); font-size:.66rem; color:var(--teal); margin-top:10px; letter-spacing:.02em; line-height:1.4}
+  .step .eg{display:block; font-family:var(--mono); font-size:.66rem; color:var(--success); margin-top:10px; letter-spacing:.02em; line-height:1.4}
   .step .arrow{position:absolute; right:-9px; top:30px; width:18px; height:18px; color:var(--accent); z-index:2; background:var(--ink-deep); border-radius:50%}
   .step:last-child .arrow{display:none}
-  .step.review{background:linear-gradient(180deg,rgba(20,184,166,.12),transparent 70%)}
-  .step.review .ic{color:var(--teal)}
+  /* highlighted decision/visit steps */
+  .step.flag{background:linear-gradient(180deg,rgba(255,196,0,.12),transparent 70%)}
+  .step.visit{background:linear-gradient(180deg,rgba(255,196,0,.18),transparent 72%)}
+  .step.visit .ic{color:var(--accent-soft)}
   @media(max-width:980px){
-    .flow{grid-template-columns:1fr}
+    .flow.a,.flow.b{grid-template-columns:1fr}
     .step{border-right:0; border-bottom:1px solid var(--ink-line); padding:18px 20px}
     .step:last-child{border-bottom:0}
     .step .arrow{right:auto; left:24px; top:auto; bottom:-9px; transform:rotate(90deg)}
@@ -82,7 +96,7 @@
   .group{margin-top:48px}
   .group:first-child{margin-top:0}
   .group-label{display:flex; align-items:center; gap:14px; margin-bottom:14px}
-  .group-label .tag{display:inline-flex; align-items:center; background:var(--accent); color:#fff;
+  .group-label .tag{display:inline-flex; align-items:center; background:var(--accent); color:var(--accent-ink);
     font-family:var(--mono); font-size:.7rem; font-weight:600; letter-spacing:.12em; text-transform:uppercase; padding:6px 12px}
   .group-label .rule{flex:1; height:1px; background:var(--ink-line)}
   .group .intro{color:var(--text-sec); font-size:.95rem; margin:0 0 18px; max-width:74ch}
@@ -98,7 +112,7 @@
   .card .why{color:var(--text-dim); font-size:.82rem; margin-top:10px; line-height:1.45}
   .card .why .ar{color:var(--accent); font-weight:700; margin-right:5px}
   .card .soon{display:inline-block; font-family:var(--mono); font-size:.62rem; letter-spacing:.1em; text-transform:uppercase;
-    color:var(--teal); border:1px solid var(--teal-deep); padding:2px 7px; margin-top:11px}
+    color:var(--success); border:1px solid var(--edge); padding:2px 7px; margin-top:11px}
 
   /* money flow */
   .money{border:1px solid var(--ink-line); background:var(--ink-card); padding:28px}
@@ -112,9 +126,9 @@
   .mbox .marrow{position:absolute; right:-22px; top:50%; transform:translateY(-50%); width:18px; height:18px; color:var(--accent)}
   .mbox:last-child .marrow{display:none}
   .money-notes{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:22px}
-  .note{display:flex; gap:12px; align-items:flex-start; border-left:2px solid var(--teal); padding:8px 0 8px 14px}
+  .note{display:flex; gap:12px; align-items:flex-start; border-left:2px solid var(--success); padding:8px 0 8px 14px}
   .note.fee{border-left-color:var(--accent)}
-  .note .ic{width:22px;height:22px;color:var(--teal); flex:none; margin-top:2px}
+  .note .ic{width:22px;height:22px;color:var(--success); flex:none; margin-top:2px}
   .note.fee .ic{color:var(--accent)}
   .note b{font-weight:800; text-transform:uppercase; letter-spacing:-.01em; font-size:.92rem}
   .note span{display:block; color:var(--text-sec); font-size:.84rem; margin-top:3px}
@@ -139,11 +153,11 @@
   .side{border:1px solid var(--ink-line); background:var(--ink-card); padding:26px}
   .side h3{font-size:1.05rem; font-weight:800; text-transform:uppercase; letter-spacing:-.01em; display:flex; align-items:center; gap:10px}
   .side h3 .ic{width:22px; height:22px; color:var(--accent)}
-  .side.cust h3 .ic{color:var(--teal)}
+  .side.cust h3 .ic{color:var(--success)}
   .side ul{list-style:none; margin-top:16px; display:grid; gap:12px}
   .side li{color:var(--text-sec); font-size:.9rem; display:flex; gap:10px; line-height:1.45}
   .side li::before{content:"—"; color:var(--accent); font-weight:700}
-  .side.cust li::before{color:var(--teal)}
+  .side.cust li::before{color:var(--success)}
 
   /* why band */
   .why-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:16px}
@@ -151,7 +165,7 @@
   .why-grid .card{flex-direction:column; gap:10px}
   .why-grid .ic{width:30px; height:30px; color:var(--accent)}
 
-  .cta{background:var(--accent); color:#fff; text-align:center; padding:20px; margin-top:8px}
+  .cta{background:var(--accent); color:var(--accent-ink); text-align:center; padding:20px; margin-top:8px}
   .cta span{font-family:var(--mono); font-size:.82rem; letter-spacing:.14em; text-transform:uppercase}
   footer.foot{padding:30px 0; color:var(--text-dim); font-family:var(--mono); font-size:.72rem; letter-spacing:.06em; text-align:center}
 
@@ -159,19 +173,68 @@
     .reveal{opacity:0; transform:translateY(16px); animation:rise .6s cubic-bezier(.2,.7,.2,1) forwards; animation-delay:calc(var(--i,0)*70ms)}
     @keyframes rise{to{opacity:1; transform:none}}
   }
+
+  /* ── document actions (Download PDF · Online) ── */
+  .doc-actions{position:fixed; top:18px; right:18px; z-index:50; display:flex; gap:8px}
+  .da-btn{display:inline-flex; align-items:center; gap:7px; font-family:var(--mono); font-size:.72rem;
+    font-weight:600; letter-spacing:.08em; text-transform:uppercase; padding:9px 13px; text-decoration:none;
+    border:1px solid var(--accent); transition:background .15s,color .15s,border-color .15s}
+  .da-btn svg{width:14px; height:14px}
+  .da-pdf{background:var(--accent); color:var(--accent-ink)}
+  .da-pdf:hover{background:var(--accent-press); border-color:var(--accent-press)}
+  .da-online{background:transparent; color:var(--accent)}
+  .da-online:hover{background:var(--accent); color:var(--accent-ink)}
+  @media(max-width:560px){.doc-actions{top:10px; right:10px} .da-btn{padding:8px 10px; font-size:.66rem}}
+
+  /* ── print / PDF (keep the dark Caterpillar look) ── */
+  @media print{
+    @page{size:A4; margin:0}
+    html,body{background:var(--ink-deep) !important; -webkit-print-color-adjust:exact; print-color-adjust:exact}
+    .doc-actions{display:none !important}
+    .topo,.glow{display:none !important}
+    .reveal{opacity:1 !important; transform:none !important; animation:none !important}
+    .wrap{padding:0 22px}
+    header.hero{padding:30px 0 22px}
+    section{padding:26px 0}
+    /* keep both journeys as horizontal strips — don't fall back to the mobile stack */
+    .flow.a,.flow.b{grid-template-columns:repeat(7,1fr)}
+    .step{padding:12px 8px 16px; border-right:1px solid var(--ink-line); border-bottom:0}
+    .step:last-child{border-right:0}
+    .step .ic{width:20px; height:20px; margin:9px 0 8px}
+    .step .num{font-size:.56rem}
+    .step h4{font-size:.62rem}
+    .step p{font-size:.56rem; margin-top:5px; line-height:1.32}
+    .step .eg{font-size:.5rem; margin-top:6px; line-height:1.3}
+    .step .arrow{right:-7px; top:22px; left:auto; bottom:auto; width:14px; height:14px; transform:none}
+    /* let long sequences flow across pages; keep atomic blocks intact */
+    .path,.flow,.group{page-break-inside:auto}
+    .step,.card,.mbox,.note,.side,.stat,.why-grid>.card,.group-label,.path-label{page-break-inside:avoid}
+    .cards{gap:10px}
+  }
 </style>
 </head>
 <body>
 
+<div class="doc-actions">
+  <a class="da-btn da-pdf" href="quotemate-feature-overview.pdf" download aria-label="Download this overview as a PDF">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+    PDF
+  </a>
+  <a class="da-btn da-online" href="https://www.quotemax.com.au/docs/quotemate-feature-overview.html" aria-label="Open the online version">
+    Online
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg>
+  </a>
+</div>
+
 <div class="topo" aria-hidden="true">
   <svg viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice" fill="none">
-    <g stroke="#14B8A6" stroke-width="1" opacity="0.5">
+    <g stroke="#6E6354" stroke-width="1" opacity="0.5">
       <path d="M0 640 Q200 560 400 610 T800 590 T1200 560"/>
       <path d="M0 680 Q220 600 420 660 T820 630 T1200 610"/>
       <path d="M0 720 Q180 660 400 700 T800 680 T1200 660"/>
       <path d="M0 600 Q240 520 460 580 T860 540 T1200 520"/>
     </g>
-    <g stroke="#FF5A1F" stroke-width="1" opacity="0.25">
+    <g stroke="#FFC400" stroke-width="1" opacity="0.22">
       <path d="M0 200 Q260 120 520 190 T980 150 T1200 170"/>
       <path d="M0 150 Q300 90 560 150 T1000 110 T1200 130"/>
     </g>
@@ -188,7 +251,7 @@
       <h1 class="reveal" style="--i:1">Quotes in <span class="accent">minutes.</span> Paid jobs, <span class="accent">locked in.</span></h1>
     </div>
     <aside class="reveal" style="--i:2">
-      QuoteMax turns a customer enquiry into a detailed, priced quote in 1–2 minutes — day or
+      QuoteMax turns a customer enquiry into a detailed, single fixed-price quote in 1–2 minutes — day or
       night — then takes a deposit to lock the job. The tradie never sits down to write a quote,
       and only serious, part-paid jobs reach them.
     </aside>
@@ -198,21 +261,31 @@
     <div class="stats reveal" style="--i:3">
       <div class="stat"><div class="n">1–2 min</div><div class="l">Quote turnaround</div><div class="s">A full quote while the lead is still hot.</div></div>
       <div class="stat"><div class="n">24 / 7</div><div class="l">Always quoting</div><div class="s">Replies at 9pm, weekends, public holidays.</div></div>
-      <div class="stat"><div class="n">10% off</div><div class="l">To book now</div><div class="s">A nudge that converts quotes into jobs.</div></div>
+      <div class="stat"><div class="n">$99</div><div class="l">Site visit, credited back</div><div class="s">The only fixed price on a tricky job — credited to the work.</div></div>
       <div class="stat"><div class="n">$0</div><div class="l">Tradie admin time</div><div class="s">No nightly quoting after the tools go down.</div></div>
     </div>
   </div>
 </header>
 
-<!-- ─────────────── CUSTOMER FLOW ─────────────── -->
+<!-- ─────────────── CUSTOMER FLOW · TWO PATHS ─────────────── -->
 <section>
   <div class="wrap sec-head">
     <span class="eyebrow">The journey</span>
     <h2 class="sec-title">From <span class="accent">"got a job"</span> to <span class="accent">paid in full</span></h2>
-    <p class="lead">One simple path. The customer does the asking and the paying; QuoteMax and the AI do the quoting. A human only steps in when the price crosses a set threshold.</p>
+    <p class="lead">Two simple paths. Most jobs get an instant, single fixed-price quote. The tricky ones book a <span class="accent">$99 site visit</span> — credited straight back to the job — before a firm price. Either way, the customer does the asking and the paying; QuoteMax and the AI do the quoting.</p>
   </div>
-  <div class="wrap">
-    <div class="flow">
+
+  <!-- PATH A · STRAIGHTFORWARD -->
+  <div class="wrap path">
+    <div class="path-label a">
+      <span class="tag">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></svg>
+        Path A · Straightforward
+      </span>
+      <span class="desc">Auto-quoted → instant fixed price</span>
+      <span class="rule"></span>
+    </div>
+    <div class="flow a">
       <div class="step reveal" style="--i:0">
         <span class="num">STEP 01</span>
         <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-11.9 7.6L3 21l1.9-6.1A8.5 8.5 0 1 1 21 11.5Z"/></svg>
@@ -225,11 +298,11 @@
         <span class="num">STEP 02</span>
         <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></svg>
         <h4>AI quote</h4>
-        <p>A real, priced quote is drafted in 1–2 minutes.</p>
+        <p>A real, single fixed-price quote is drafted in 1–2 minutes.</p>
         <span class="eg">priced from a real rate book</span>
         <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
       </div>
-      <div class="step review reveal" style="--i:2">
+      <div class="step flag reveal" style="--i:2">
         <span class="num">STEP 03</span>
         <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 5 3.5 7.5 8 9 4.5-1.5 8-4 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg>
         <h4>Human check</h4>
@@ -241,8 +314,8 @@
         <span class="num">STEP 04</span>
         <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>
         <h4>Quote sent</h4>
-        <p>Detailed Good / Better / Best options, clearly priced.</p>
-        <span class="eg">3 options, photos, licence details</span>
+        <p>One clear fixed price, line-itemised — with photos and licence details.</p>
+        <span class="eg">single price · no haggling</span>
         <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
       </div>
       <div class="step reveal" style="--i:4">
@@ -259,6 +332,75 @@
         <h4>Job done</h4>
         <p>The tradie turns up and completes the work.</p>
         <span class="eg">job already part-paid</span>
+        <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </div>
+      <div class="step reveal" style="--i:6">
+        <span class="num">STEP 07</span>
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.2c0-1 1.1-1.7 2.5-1.7s2.5.7 2.5 1.7-1.1 1.7-2.5 1.7-2.5.7-2.5 1.7 1.1 1.7 2.5 1.7 2.5-.7 2.5-1.7"/></svg>
+        <h4>Paid in full</h4>
+        <p>Balance paid in full, on site, on completion.</p>
+        <span class="eg">no invoice chasing</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- PATH B · NEEDS A LOOK -->
+  <div class="wrap path">
+    <div class="path-label b">
+      <span class="tag">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        Path B · Needs a look
+      </span>
+      <span class="desc">$99 site visit → firm fixed price</span>
+      <span class="rule"></span>
+    </div>
+    <div class="flow b">
+      <div class="step reveal" style="--i:0">
+        <span class="num">STEP 01</span>
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-11.9 7.6L3 21l1.9-6.1A8.5 8.5 0 1 1 21 11.5Z"/></svg>
+        <h4>Enquiry</h4>
+        <p>Customer messages by text, voice or web — any hour.</p>
+        <span class="eg">in: "Switchboard keeps tripping"</span>
+        <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </div>
+      <div class="step flag reveal" style="--i:1">
+        <span class="num">STEP 02</span>
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.2 1.8 18a1.5 1.5 0 0 0 1.3 2.3h17.8A1.5 1.5 0 0 0 22.2 18L13.7 3.2a1.5 1.5 0 0 0-2.6 0Z"/><path d="M12 9v4M12 17h.01"/></svg>
+        <h4>AI triage</h4>
+        <p>The AI spots a job that needs eyes on site — switchboard, rewire, hidden or variable work.</p>
+        <span class="eg">flagged for a site visit</span>
+        <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </div>
+      <div class="step visit reveal" style="--i:2">
+        <span class="num">STEP 03</span>
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.2c0-1 1.1-1.7 2.5-1.7s2.5.7 2.5 1.7-1.1 1.7-2.5 1.7-2.5.7-2.5 1.7 1.1 1.7 2.5 1.7 2.5-.7 2.5-1.7"/></svg>
+        <h4>$99 site visit</h4>
+        <p>Customer pays a $99 fee to book a licensed on-site inspection.</p>
+        <span class="eg">credited straight back to the job</span>
+        <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </div>
+      <div class="step reveal" style="--i:3">
+        <span class="num">STEP 04</span>
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11.5 11 13.5 15.5 9M12 3 4 6v6c0 5 3.5 7.5 8 9 4.5-1.5 8-4 8-9V6l-8-3Z"/></svg>
+        <h4>On-site scope</h4>
+        <p>A licensed tradie inspects and confirms the real scope of work.</p>
+        <span class="eg">measured, not guessed</span>
+        <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </div>
+      <div class="step reveal" style="--i:4">
+        <span class="num">STEP 05</span>
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>
+        <h4>Firm quote</h4>
+        <p>A firm, single fixed-price quote is sent after the visit — no ballpark, no surprises.</p>
+        <span class="eg">priced from what's actually there</span>
+        <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </div>
+      <div class="step reveal" style="--i:5">
+        <span class="num">STEP 06</span>
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4l-6 6 2 2 6-6a4 4 0 0 0 5.4-5.4l-2.3 2.3-2-2 2.3-2.3Z"/></svg>
+        <h4>Book + job done</h4>
+        <p>Customer books and the tradie completes the work.</p>
+        <span class="eg">$99 credited off the price</span>
         <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
       </div>
       <div class="step reveal" style="--i:6">
@@ -304,12 +446,12 @@
     <!-- GROUP: QUOTES THAT SELL -->
     <div class="group">
       <div class="group-label"><span class="tag">Quotes that sell</span><span class="rule"></span></div>
-      <p class="intro">The quote itself does the selling: clear options the customer can pick from, a safety check before big numbers go out, and a process that only lets serious buyers through.</p>
+      <p class="intro">The quote itself does the selling: one clear price the customer can act on, a safety check before big numbers go out, and a process that only lets serious buyers through.</p>
       <div class="cards">
         <article class="card reveal" style="--i:0"><span class="num">04</span><div>
           <h3>Information-rich</h3>
-          <p>Every quote is detailed: Good / Better / Best options, each clearly priced.</p>
-          <p class="why"><span class="ar">→</span> Customers self-select up — many choose Better or Best.</p></div></article>
+          <p>Every quote is detailed: one clear fixed price, fully line-itemised.</p>
+          <p class="why"><span class="ar">→</span> A clear price with the detail behind it earns trust and books the job.</p></div></article>
         <article class="card reveal" style="--i:1"><span class="num">05</span><div>
           <h3>Human in the loop</h3>
           <p>Over a price threshold, a person reviews and validates the quote before it's sent.</p>
@@ -332,7 +474,7 @@
           <p class="why"><span class="ar">→</span> Money down means committed, not just "thinking about it."</p></div></article>
         <article class="card reveal" style="--i:1"><span class="num">09</span><div>
           <h3>Paid site visits</h3>
-          <p>If a visit is needed to scope the work, the customer pays for it.</p>
+          <p>If a visit is needed to scope the work, the customer pays a $99 fee — credited back to the job.</p>
           <p class="why"><span class="ar">→</span> Quoting visits stop being free labour.</p></div></article>
         <article class="card reveal" style="--i:2"><span class="num">08</span><div>
           <h3>Paid in full on site</h3>
@@ -368,8 +510,8 @@
       <div class="money-row">
         <div class="mbox reveal" style="--i:0">
           <div class="when">If a visit is needed</div>
-          <div class="amt pay">Site-visit fee</div>
-          <p>Customer pays for the tradie to come and scope the job.</p>
+          <div class="amt pay">$99 site visit</div>
+          <p>Customer pays for the tradie to come and scope the job — credited back to the job.</p>
           <svg class="marrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
         </div>
         <div class="mbox reveal" style="--i:1">
@@ -415,7 +557,7 @@
           <span class="sep">→</span>
           <span class="chip"><small>+ card fee</small>paid by customer</span>
         </div>
-        <p class="fine">Numbers are illustrative only — your real rate book, tier pricing and deposit rules apply.</p>
+        <p class="fine">Numbers are illustrative only — your real rate book, single fixed price and deposit rules apply.</p>
       </div>
     </div>
   </div>
@@ -432,7 +574,7 @@
       <h3><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21a8 8 0 1 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>The customer gets</h3>
       <ul>
         <li>A real, detailed quote in minutes — not days.</li>
-        <li>Clear Good / Better / Best options to choose from.</li>
+        <li>One clear, single fixed price — no haggling.</li>
         <li>10% off for booking through QuoteMax.</li>
         <li>A locked-in slot the moment they pay the deposit.</li>
         <li>To pay the balance only when the job is done.</li>
@@ -477,10 +619,11 @@
 </section>
 
 <div class="cta">
-  <span>QuoteMax · quote in minutes · deposit locks the job · paid in full on site</span>
+  <span>QuoteMax · quote in minutes · single fixed price · deposit locks the job · paid in full on site</span>
 </div>
 <footer class="foot">
-  Maintain Technology · QuoteMax — feature overview · plain-English summary
+  Maintain Technology · QuoteMax — feature overview · plain-English summary<br>
+  Online version · www.quotemax.com.au/docs/quotemate-feature-overview.html
 </footer>
 
 </body>

@@ -190,6 +190,68 @@ describe('POST /api/tenant/trades — R39 activate a new trade', () => {
     })
   })
 
+  it('preserves a feature trade (painting) when adding a labour trade', async () => {
+    // Tenant signed up for electrical + painting; now adds plumbing. Painting
+    // must survive the reconcile — this endpoint manages only labour trades.
+    state.tenant = {
+      id: 'tenant-1',
+      business_name: 'Pilot Sparky',
+      trade: 'electrical',
+      trades: ['electrical', 'painting'],
+      vapi_assistant_id: null,
+      state: 'NSW',
+    }
+    const res = await POST(postReq({ trades: ['electrical', 'plumbing'] }))
+    const json = await res.json()
+    expect(res.status).toBe(200)
+    expect(json.ok).toBe(true)
+    expect(json.added).toEqual(['plumbing'])
+    expect(json.removed).toEqual([])
+    expect(json.trades).toEqual(['electrical', 'plumbing', 'painting'])
+    expect(state.tenantUpdates).toContainEqual({
+      trades: ['electrical', 'plumbing', 'painting'],
+      trade: 'electrical',
+    })
+  })
+
+  it('does not drop painting when a labour trade is removed', async () => {
+    state.tenant = {
+      id: 'tenant-1',
+      business_name: 'Pilot Sparky',
+      trade: 'electrical',
+      trades: ['electrical', 'plumbing', 'painting'],
+      vapi_assistant_id: null,
+      state: 'NSW',
+    }
+    const res = await POST(postReq({ trades: ['electrical'] }))
+    const json = await res.json()
+    expect(res.status).toBe(200)
+    expect(json.ok).toBe(true)
+    expect(json.removed).toEqual(['plumbing'])
+    expect(json.trades).toEqual(['electrical', 'painting'])
+    expect(state.tenantUpdates).toContainEqual({
+      trades: ['electrical', 'painting'],
+      trade: 'electrical',
+    })
+  })
+
+  it('noop preserves an existing feature trade in the reported portfolio', async () => {
+    state.tenant = {
+      id: 'tenant-1',
+      business_name: 'Pilot Sparky',
+      trade: 'electrical',
+      trades: ['electrical', 'painting'],
+      vapi_assistant_id: null,
+      state: 'NSW',
+    }
+    const res = await POST(postReq({ trades: ['electrical'] }))
+    const json = await res.json()
+    expect(json.ok).toBe(true)
+    expect(json.noop).toBe(true)
+    expect(json.trades).toEqual(['electrical', 'painting'])
+    expect(state.pricingBookInserts).toHaveLength(0)
+  })
+
   it('noop when desired equals current (no seeding, no licence slot churn)', async () => {
     const res = await POST(postReq({ trades: ['electrical'] }))
     const json = await res.json()

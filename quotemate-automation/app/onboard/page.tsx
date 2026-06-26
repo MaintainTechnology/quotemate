@@ -10,6 +10,7 @@ import { Suspense, useState, useEffect, type FormEvent } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { LICENCE_BODIES } from '@/lib/onboard/schema'
+import { DEFAULT_PAINTING_RATE_CARD } from '@/lib/painting/pricing'
 import {
   defaultAvailability,
   tzForState,
@@ -19,7 +20,7 @@ import { AvailabilityEditor } from '@/app/_components/AvailabilityEditor'
 import { Field, INPUT, ErrorBanner, Arrow } from '../signup/page'
 import { BrandMark } from "@/app/_components/BrandMark"
 
-type Trade = 'electrical' | 'plumbing'
+type Trade = 'electrical' | 'plumbing' | 'painting'
 
 type FormState = {
   business_name: string
@@ -52,6 +53,15 @@ type FormState = {
   after_hours_multiplier: string
   min_labour_hours: string
   risk_buffer_pct: string
+  // Painting rate card ($/unit, ex-GST). Only meaningful when the
+  // 'painting' trade is selected; pre-filled with the AU defaults so a
+  // painter can accept or adjust. Sent to the activate route which writes
+  // them into pricing_book.overlays.painting_rate_card.
+  painting_walls_rate: string
+  painting_ceilings_rate: string
+  painting_trim_rate: string
+  painting_exterior_rate: string
+  painting_call_out_minimum: string
   gst_registered: boolean
   // Default schedule availability (migration 147). Pre-filled with the
   // Mon–Fri default; the tradie can edit or skip it. Optional in the wizard.
@@ -148,6 +158,12 @@ function OnboardWizardInner() {
     after_hours_multiplier: '',
     min_labour_hours: '',
     risk_buffer_pct: '',
+    // Pre-fill painting rates with the AU defaults so a painter lands ready.
+    painting_walls_rate: String(DEFAULT_PAINTING_RATE_CARD.rate_per_unit.walls),
+    painting_ceilings_rate: String(DEFAULT_PAINTING_RATE_CARD.rate_per_unit.ceilings),
+    painting_trim_rate: String(DEFAULT_PAINTING_RATE_CARD.rate_per_unit.trim),
+    painting_exterior_rate: String(DEFAULT_PAINTING_RATE_CARD.rate_per_unit.exterior),
+    painting_call_out_minimum: String(DEFAULT_PAINTING_RATE_CARD.call_out_minimum_ex_gst ?? 450),
     gst_registered: true,
     default_availability: defaultAvailability(),
   })
@@ -248,7 +264,11 @@ function OnboardWizardInner() {
     onboardableTrades === null || onboardableTrades.includes(t)
 
   const canContinueStep1 = !!(form.owner_mobile && form.trades.length > 0 && form.state && form.logo_url)
-  const canContinueStep2 = !!(form.hourly_rate && form.call_out_minimum && form.default_markup_pct)
+  // Labour trades need the three labour rates; a painting-only tenant prices
+  // from a (pre-filled) rate card, so the labour fields aren't required there.
+  const hasLabourTrade = form.trades.some((t) => t === 'electrical' || t === 'plumbing')
+  const canContinueStep2 =
+    !hasLabourTrade || !!(form.hourly_rate && form.call_out_minimum && form.default_markup_pct)
 
   // Helper: toggle a trade in/out of form.trades. Two-button design
   // mirrors the original single-trade pills, but selection is now
@@ -614,10 +634,10 @@ function Step1({
 
         <Field
           label="Trade"
-          hint="Pick one or both"
+          hint="Pick any that apply"
           error={fieldErrors.trades?.[0]}
         >
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {tradeAvailable('electrical') && (
               <TradePill
                 value="electrical"
@@ -631,6 +651,14 @@ function Step1({
                 value="plumbing"
                 label="Plumbing"
                 selected={form.trades.includes('plumbing')}
+                onToggle={toggleTrade}
+              />
+            )}
+            {tradeAvailable('painting') && (
+              <TradePill
+                value="painting"
+                label="Painting"
+                selected={form.trades.includes('painting')}
                 onToggle={toggleTrade}
               />
             )}
@@ -752,100 +780,141 @@ function Step2({
   showAdvanced: boolean
   setShowAdvanced: (v: boolean) => void
 }) {
-  // Hint defaults bias to plumbing rates when plumbing is the ONLY
-  // trade picked, else fall back to the electrical-shaped defaults that
-  // also work for mixed-trade tenants.
+  // Painting prices from a $/m² rate card; electrical/plumbing price by the
+  // hour. Show each pricing block only for the trades the tenant picked, so
+  // a painter never sees labour fields and a sparky never sees paint rates.
+  const hasLabour = form.trades.some((t) => t === 'electrical' || t === 'plumbing')
+  const hasPainting = form.trades.includes('painting')
+  // Hint defaults bias to plumbing rates when plumbing is the ONLY trade
+  // picked, else fall back to the electrical-shaped defaults.
   const isPlumbing = form.trades.length === 1 && form.trades[0] === 'plumbing'
   return (
     <div className="space-y-5">
-      <div className="grid gap-5 md:grid-cols-2">
-        <Field label="Hourly rate" hint="Ex-GST" error={fieldErrors.hourly_rate?.[0]}>
-          <PrefixedInput
-            prefix="$"
-            type="number"
-            step="1"
-            min="1"
-            value={form.hourly_rate}
-            onChange={(v) => update('hourly_rate', v)}
-            placeholder={isPlumbing ? '120' : '110'}
-          />
-        </Field>
+      {hasLabour && (
+        <>
+          <div className="grid gap-5 md:grid-cols-2">
+            <Field label="Hourly rate" hint="Ex-GST" error={fieldErrors.hourly_rate?.[0]}>
+              <PrefixedInput
+                prefix="$"
+                type="number"
+                step="1"
+                min="1"
+                value={form.hourly_rate}
+                onChange={(v) => update('hourly_rate', v)}
+                placeholder={isPlumbing ? '120' : '110'}
+              />
+            </Field>
 
-        <Field label="Call-out minimum" hint="Absorbed into jobs > $800" error={fieldErrors.call_out_minimum?.[0]}>
-          <PrefixedInput
-            prefix="$"
-            type="number"
-            step="1"
-            min="1"
-            value={form.call_out_minimum}
-            onChange={(v) => update('call_out_minimum', v)}
-            placeholder={isPlumbing ? '110' : '150'}
-          />
-        </Field>
+            <Field label="Call-out minimum" hint="Absorbed into jobs > $800" error={fieldErrors.call_out_minimum?.[0]}>
+              <PrefixedInput
+                prefix="$"
+                type="number"
+                step="1"
+                min="1"
+                value={form.call_out_minimum}
+                onChange={(v) => update('call_out_minimum', v)}
+                placeholder={isPlumbing ? '110' : '150'}
+              />
+            </Field>
 
-        <Field label="Materials markup" hint="20–35% typical AU" error={fieldErrors.default_markup_pct?.[0]}>
-          <SuffixedInput
-            suffix="%"
-            type="number"
-            step="1"
-            min="0"
-            max="100"
-            value={form.default_markup_pct}
-            onChange={(v) => update('default_markup_pct', v)}
-            placeholder={isPlumbing ? '20' : '28'}
-          />
-        </Field>
+            <Field label="Materials markup" hint="20–35% typical AU" error={fieldErrors.default_markup_pct?.[0]}>
+              <SuffixedInput
+                suffix="%"
+                type="number"
+                step="1"
+                min="0"
+                max="100"
+                value={form.default_markup_pct}
+                onChange={(v) => update('default_markup_pct', v)}
+                placeholder={isPlumbing ? '20' : '28'}
+              />
+            </Field>
+          </div>
 
-        <label className="flex items-center gap-3 text-sm text-text-pri cursor-pointer self-end pb-2">
-          <input
-            type="checkbox"
-            checked={form.gst_registered}
-            onChange={(e) => update('gst_registered', e.target.checked)}
-            className="h-5 w-5 rounded-none border-ink-line bg-ink-deep text-accent focus:ring-2 focus:ring-accent-soft"
-          />
-          <span>GST registered</span>
-        </label>
-      </div>
+          <button
+            type="button"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent hover:text-accent-press transition-colors"
+          >
+            {showAdvanced ? '— Hide advanced pricing' : '+ Show advanced pricing (5 optional)'}
+          </button>
 
-      <button
-        type="button"
-        onClick={() => setShowAdvanced(!showAdvanced)}
-        className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent hover:text-accent-press transition-colors"
-      >
-        {showAdvanced ? '— Hide advanced pricing' : '+ Show advanced pricing (5 optional)'}
-      </button>
+          {showAdvanced && (
+            <div className="grid gap-5 md:grid-cols-2 pt-4 border-t border-ink-line">
+              <Field label="Apprentice rate" hint="Default $65/hr">
+                <PrefixedInput prefix="$" type="number" step="1" value={form.apprentice_rate} onChange={(v) => update('apprentice_rate', v)} placeholder="65" />
+              </Field>
+              <Field label="Senior rate" hint="Default $160/hr">
+                <PrefixedInput prefix="$" type="number" step="1" value={form.senior_rate} onChange={(v) => update('senior_rate', v)} placeholder="160" />
+              </Field>
+              <Field label="After-hours multiplier" hint="Default 1.5×">
+                <input
+                  type="number" step="0.1"
+                  value={form.after_hours_multiplier}
+                  onChange={(e) => update('after_hours_multiplier', e.target.value)}
+                  placeholder="1.5"
+                  className={INPUT}
+                />
+              </Field>
+              <Field label="Minimum charge (hr)" hint={`Default ${isPlumbing ? '1.5' : '2'}hr`}>
+                <input
+                  type="number" step="0.5"
+                  value={form.min_labour_hours}
+                  onChange={(e) => update('min_labour_hours', e.target.value)}
+                  placeholder={isPlumbing ? '1.5' : '2'}
+                  className={INPUT}
+                />
+              </Field>
+              <Field label="Risk buffer %" hint="Default 15%">
+                <SuffixedInput suffix="%" type="number" step="1" value={form.risk_buffer_pct} onChange={(v) => update('risk_buffer_pct', v)} placeholder="15" />
+              </Field>
+            </div>
+          )}
+        </>
+      )}
 
-      {showAdvanced && (
-        <div className="grid gap-5 md:grid-cols-2 pt-4 border-t border-ink-line">
-          <Field label="Apprentice rate" hint="Default $65/hr">
-            <PrefixedInput prefix="$" type="number" step="1" value={form.apprentice_rate} onChange={(v) => update('apprentice_rate', v)} placeholder="65" />
-          </Field>
-          <Field label="Senior rate" hint="Default $160/hr">
-            <PrefixedInput prefix="$" type="number" step="1" value={form.senior_rate} onChange={(v) => update('senior_rate', v)} placeholder="160" />
-          </Field>
-          <Field label="After-hours multiplier" hint="Default 1.5×">
-            <input
-              type="number" step="0.1"
-              value={form.after_hours_multiplier}
-              onChange={(e) => update('after_hours_multiplier', e.target.value)}
-              placeholder="1.5"
-              className={INPUT}
-            />
-          </Field>
-          <Field label="Minimum charge (hr)" hint={`Default ${isPlumbing ? '1.5' : '2'}hr`}>
-            <input
-              type="number" step="0.5"
-              value={form.min_labour_hours}
-              onChange={(e) => update('min_labour_hours', e.target.value)}
-              placeholder={isPlumbing ? '1.5' : '2'}
-              className={INPUT}
-            />
-          </Field>
-          <Field label="Risk buffer %" hint="Default 15%">
-            <SuffixedInput suffix="%" type="number" step="1" value={form.risk_buffer_pct} onChange={(v) => update('risk_buffer_pct', v)} placeholder="15" />
-          </Field>
+      {hasPainting && (
+        <div className={hasLabour ? 'pt-6 border-t border-ink-line' : ''}>
+          <div className="mb-3">
+            <h3 className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent">
+              Painting rates (per m² / lm, ex-GST)
+            </h3>
+            <p className="mt-1.5 text-sm leading-relaxed text-text-sec">
+              Your all-in rate for a standard 2-coat repaint over a sound surface.
+              Pre-filled with typical AU rates — adjust to match your pricing. You
+              can fine-tune these anytime from your dashboard.
+            </p>
+          </div>
+          <div className="grid gap-5 md:grid-cols-2">
+            <Field label="Walls" hint="$/m²">
+              <PrefixedInput prefix="$" type="number" step="1" min="1" value={form.painting_walls_rate} onChange={(v) => update('painting_walls_rate', v)} placeholder="28" />
+            </Field>
+            <Field label="Ceilings" hint="$/m²">
+              <PrefixedInput prefix="$" type="number" step="1" min="1" value={form.painting_ceilings_rate} onChange={(v) => update('painting_ceilings_rate', v)} placeholder="20" />
+            </Field>
+            <Field label="Trim / doors" hint="$/lm">
+              <PrefixedInput prefix="$" type="number" step="1" min="1" value={form.painting_trim_rate} onChange={(v) => update('painting_trim_rate', v)} placeholder="12" />
+            </Field>
+            <Field label="Exterior" hint="$/m²">
+              <PrefixedInput prefix="$" type="number" step="1" min="1" value={form.painting_exterior_rate} onChange={(v) => update('painting_exterior_rate', v)} placeholder="45" />
+            </Field>
+            <Field label="Call-out minimum" hint="Ex-GST floor per job">
+              <PrefixedInput prefix="$" type="number" step="10" min="0" value={form.painting_call_out_minimum} onChange={(v) => update('painting_call_out_minimum', v)} placeholder="450" />
+            </Field>
+          </div>
         </div>
       )}
+
+      {/* GST registration — applies to every trade, so it's always shown. */}
+      <label className="flex items-center gap-3 text-sm text-text-pri cursor-pointer">
+        <input
+          type="checkbox"
+          checked={form.gst_registered}
+          onChange={(e) => update('gst_registered', e.target.checked)}
+          className="h-5 w-5 rounded-none border-ink-line bg-ink-deep text-accent focus:ring-2 focus:ring-accent-soft"
+        />
+        <span>GST registered</span>
+      </label>
 
       {/* Booking availability — optional. Pre-filled with the Mon–Fri default
           so the tradie is bookable immediately; fully editable here or later
@@ -870,6 +939,8 @@ function Step2({
 }
 
 function Step3({ form }: { form: FormState }) {
+  const hasLabour = form.trades.some((t) => t === 'electrical' || t === 'plumbing')
+  const hasPainting = form.trades.includes('painting')
   return (
     <div className="space-y-8">
       <ReviewBlock label="Account">
@@ -907,9 +978,21 @@ function Step3({ form }: { form: FormState }) {
       </ReviewBlock>
 
       <ReviewBlock label="Pricing">
-        <ReviewRow k="Hourly" v={form.hourly_rate ? `$${form.hourly_rate}/hr` : ''} />
-        <ReviewRow k="Callout" v={form.call_out_minimum ? `$${form.call_out_minimum}` : ''} />
-        <ReviewRow k="Markup" v={form.default_markup_pct ? `${form.default_markup_pct}%` : ''} />
+        {hasLabour && (
+          <>
+            <ReviewRow k="Hourly" v={form.hourly_rate ? `$${form.hourly_rate}/hr` : ''} />
+            <ReviewRow k="Callout" v={form.call_out_minimum ? `$${form.call_out_minimum}` : ''} />
+            <ReviewRow k="Markup" v={form.default_markup_pct ? `${form.default_markup_pct}%` : ''} />
+          </>
+        )}
+        {hasPainting && (
+          <>
+            <ReviewRow k="Walls" v={form.painting_walls_rate ? `$${form.painting_walls_rate}/m²` : ''} />
+            <ReviewRow k="Ceilings" v={form.painting_ceilings_rate ? `$${form.painting_ceilings_rate}/m²` : ''} />
+            <ReviewRow k="Trim" v={form.painting_trim_rate ? `$${form.painting_trim_rate}/lm` : ''} />
+            <ReviewRow k="Exterior" v={form.painting_exterior_rate ? `$${form.painting_exterior_rate}/m²` : ''} />
+          </>
+        )}
         <ReviewRow k="GST" v={form.gst_registered ? 'Registered' : 'Not registered'} />
       </ReviewBlock>
 

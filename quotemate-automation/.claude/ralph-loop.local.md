@@ -1,10 +1,10 @@
 ---
 active: true
 iteration: 1
-session_id: 3473e864-6f05-4549-9a2b-6b699834d582
-max_iterations: 30
+session_id: f508a8e2-9cfb-4122-a51c-20f82ca3afc9
+max_iterations: 0
 completion_promise: "All tests pass"
-started_at: "2026-06-15T06:45:28Z"
+started_at: "2026-06-26T02:30:09Z"
 ---
 
-Implement the Commercial Paint Estimator KB file-store supplementation feature per the spec at docs/superpowers/specs/2026-06-15-commercial-paint-kb-supplement.md. Work in quotemate-automation. Follow the spec contracts and use TDD, writing failing tests first. The feature must be best-effort and must always delete the temporary store. Do not weaken, skip, or delete existing tests to pass.
+Implement the Flyer Designer feature defined in specs/flyer-designer.md exactly as written. It is a template based interactive flyer editor in the quotemate-automation Next.js dashboard. Follow the spec for the data model, the 3 plus templates, the react-konva canvas editor, reuse of the existing QR builder, save and re-edit plus PNG and PDF export, migration 150 with its runner, and the full test plan. Read quotemate-automation/AGENTS.md first. After each iteration run pnpm typecheck then pnpm lint then pnpm test, and pnpm build before finishing, never regressing an existing test. Loop until all tests pass.

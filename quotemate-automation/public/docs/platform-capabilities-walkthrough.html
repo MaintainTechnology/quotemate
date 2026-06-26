@@ -304,16 +304,29 @@
   .footbar .row{max-width:88rem; margin:0 auto; display:flex; flex-wrap:wrap; gap:8px; justify-content:space-between; padding:18px 24px; font-family:var(--mono); font-size:.65rem; text-transform:uppercase; letter-spacing:.14em; color:var(--text-dim);}
   hr.div{border:0; height:1px; background:var(--ink-line); margin:0;}
   @media (prefers-reduced-motion:reduce){ html{scroll-behavior:auto;} .topo g{animation:none !important;} }
+
+  /* ─── Download / online affordance ─── */
+  .doc-actions{position:fixed;top:18px;right:18px;z-index:50;display:flex;gap:8px}
+  .da-btn{display:inline-flex;align-items:center;gap:7px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:9px 13px;text-decoration:none;border:1px solid #FFC400;transition:background .15s,color .15s}
+  .da-btn svg{width:14px;height:14px}
+  .da-pdf{background:#FFC400;color:#1C1812}.da-pdf:hover{background:#E6AC00;border-color:#E6AC00}
+  .da-online{background:transparent;color:#FFC400}.da-online:hover{background:#FFC400;color:#1C1812}
+  @media(max-width:560px){.doc-actions{top:10px;right:10px}.da-btn{padding:8px 10px;font-size:.66rem}}
+  @media print{@page{size:A4;margin:0}html,body{background:#16120F !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.doc-actions{display:none !important}.topo,.glow{display:none !important}}
 </style>
 </head>
 <body>
+<div class="doc-actions">
+  <a class="da-btn da-pdf" href="platform-capabilities-walkthrough.pdf" download aria-label="Download PDF"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>PDF</a>
+  <a class="da-btn da-online" href="https://www.quotemax.com.au/docs/platform-capabilities-walkthrough.html" aria-label="Open online">Online <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+</div>
 <div class="noise" aria-hidden="true"></div>
 
 <!-- ============ NAV ============ -->
 <nav class="bar">
   <div class="row">
     <a class="brand" href="#top" aria-label="QuoteMax home">
-      <span class="mark"><svg viewBox="0 0 64 64" width="17" height="17" aria-hidden="true"><circle cx="31" cy="28" r="17" fill="#fff"/><circle cx="31" cy="28" r="7.5" fill="var(--accent)"/><path d="M21 39 L37 39 L21 52 Z" fill="#fff"/></svg></span>
+      <span class="mark"><svg viewBox="0 0 64 64" width="17" height="17" aria-hidden="true"><circle cx="31" cy="28" r="17" fill="#1C1812"/><circle cx="31" cy="28" r="7.5" fill="var(--accent)"/><path d="M21 39 L37 39 L21 52 Z" fill="#1C1812"/></svg></span>
       <span class="nm">QuoteMax</span>
     </a>
     <div class="navlinks">
@@ -1084,7 +1097,7 @@
   <div class="footcols">
     <div>
       <a class="brand" href="#top" aria-label="QuoteMax home">
-        <span class="mark"><svg viewBox="0 0 64 64" width="17" height="17" aria-hidden="true"><circle cx="31" cy="28" r="17" fill="#fff"/><circle cx="31" cy="28" r="7.5" fill="var(--accent)"/><path d="M21 39 L37 39 L21 52 Z" fill="#fff"/></svg></span>
+        <span class="mark"><svg viewBox="0 0 64 64" width="17" height="17" aria-hidden="true"><circle cx="31" cy="28" r="17" fill="#1C1812"/><circle cx="31" cy="28" r="7.5" fill="var(--accent)"/><path d="M21 39 L37 39 L21 52 Z" fill="#1C1812"/></svg></span>
         <span class="nm">QuoteMax</span>
       </a>
       <p>The AI receptionist that drafts clear, priced quotes for Australian electricians, plumbers, roofers and more.</p>

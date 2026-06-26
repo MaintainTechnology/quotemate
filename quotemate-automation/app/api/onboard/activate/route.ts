@@ -19,6 +19,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { OnboardActivateSchema, defaultsForTrade } from '@/lib/onboard/schema'
+import { buildPaintingOverlayFromInputs } from '@/lib/painting/rate-card-overlay'
 import { defaultAvailabilityForState } from '@/lib/quote/availability'
 import { runProvisioning } from '@/lib/onboard/run-provisioning'
 import { markIntentUsed } from '@/lib/onboard/intent-tokens'
@@ -155,19 +156,19 @@ export async function POST(req: Request) {
     steps.push({ step: 'tenant', ok: true })
 
     // ─── 2. Insert pricing_book row(s) ────────────────────────
-    // One row per selected trade. The wizard collects a single shared
-    // set of rates (hourly_rate, call_out_minimum, default_markup_pct)
-    // — multi-trade tradies usually price labour the same across their
-    // trades. They can split rates later from the dashboard Pricing tab
-    // by editing each pricing_book individually.
+    // One row per selected trade. Labour trades (electrical / plumbing)
+    // use the shared hourly_rate / call_out_minimum / default_markup_pct
+    // the wizard collected. Painting prices from a per-m² rate card
+    // instead: its row carries the rates in overlays.painting_rate_card
+    // (read by /api/painting/estimate), and the labour columns fall back
+    // to harmless defaults so the row satisfies the table shape without
+    // ever driving a painting quote. Tradies can split rates later from
+    // the dashboard Pricing tab by editing each pricing_book individually.
     const pricingRows = form.trades.map((t) => {
       const d = defaultsForTrade(t)
-      return {
+      const base = {
         tenant_id: id,
         trade: t,
-        hourly_rate: form.hourly_rate,
-        call_out_minimum: form.call_out_minimum,
-        default_markup_pct: form.default_markup_pct,
         apprentice_rate: form.apprentice_rate ?? d.apprentice_rate,
         senior_rate: form.senior_rate ?? d.senior_rate,
         after_hours_multiplier: form.after_hours_multiplier ?? d.after_hours_multiplier,
@@ -178,6 +179,38 @@ export async function POST(req: Request) {
         licence_number: form.licence_number || null,
         licence_state: form.state,
         licence_expiry: form.licence_expiry || null,
+      }
+      if (t === 'painting') {
+        // The schema validated these as positive numbers (or undefined).
+        const num = (v: unknown): number | undefined =>
+          typeof v === 'number' && Number.isFinite(v) ? v : undefined
+        const built = buildPaintingOverlayFromInputs({
+          rate_per_unit: {
+            walls: num(form.painting_walls_rate),
+            ceilings: num(form.painting_ceilings_rate),
+            trim: num(form.painting_trim_rate),
+            exterior: num(form.painting_exterior_rate),
+          },
+          call_out_minimum_ex_gst: num(form.painting_call_out_minimum),
+          gst_registered: form.gst_registered ?? true,
+        })
+        // On any validation miss, persist an empty overlay so the estimator
+        // falls back to DEFAULT_PAINTING_RATE_CARD rather than bad rates.
+        const painting_rate_card = built.ok ? built.overlay : {}
+        return {
+          ...base,
+          // Labour columns are unused by painting's pricer — keep them valid.
+          hourly_rate: form.hourly_rate ?? 110,
+          call_out_minimum: form.call_out_minimum ?? 150,
+          default_markup_pct: form.default_markup_pct ?? 0,
+          overlays: { painting_rate_card },
+        }
+      }
+      return {
+        ...base,
+        hourly_rate: form.hourly_rate,
+        call_out_minimum: form.call_out_minimum,
+        default_markup_pct: form.default_markup_pct,
       }
     })
     const { error: pbErr } = await supabase.from('pricing_book').insert(pricingRows)

@@ -30,6 +30,7 @@ const TRADE_LINKS = [
   { href: "/trades/plumbing", label: "Plumbing" },
   { href: "/trades/roofing", label: "Roofing" },
   { href: "/trades/solar", label: "Solar" },
+  { href: "/trades/painting", label: "Painting" },
 ]
 
 export function MobileNav() {

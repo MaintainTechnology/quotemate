@@ -161,7 +161,7 @@ function SignUpInner() {
       step="01 / 04"
       title={
         <>
-          Create your <span className="text-accent">QuoteMax</span>
+          Create your <span className="text-accent">QuoteMate</span>
         </>
       }
       subtitle="Takes 30 seconds. The next 3 steps are your trade, pricing, and a quick review."
@@ -307,7 +307,7 @@ export function AuthShell({
           <Link href="/" className="flex items-center gap-2.5">
             <BrandMark className="h-10 w-10" />
             <span className="font-extrabold uppercase tracking-tight text-text-pri">
-              QuoteMax
+              QuoteMate
             </span>
           </Link>
           {footer && (

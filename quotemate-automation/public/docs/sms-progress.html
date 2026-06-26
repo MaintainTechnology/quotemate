@@ -9,25 +9,26 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #ffffff;
-      --bg-soft: #f5f5f5;
-      --ink: #1a1a1a;
-      --body: #4a4a4a;
-      --muted: #6b6b6b;
-      --line: #e0e0e0;
-      --accent: #0066cc;
-      --done-bg: #ecf7ef;
-      --done-line: #95cba2;
-      --done-ink: #14532d;
-      --next-bg: #fff8e6;
-      --next-line: #f0c75e;
-      --next-ink: #8a6310;
-      --block-bg: #fdecec;
-      --block-line: #e8a4a4;
-      --block-ink: #8a1a1a;
-      --future-bg: #f5f5f5;
-      --future-line: #e0e0e0;
-      --future-ink: #6b6b6b;
+      --bg: #16120F;
+      --bg-soft: #1E1813;
+      --ink: #F6F1EA;
+      --body: #C3B8AC;
+      --muted: #A2968A;
+      --line: #3A322C;
+      --accent: #FFC400;
+      --accent-ink: #1C1812;
+      --done-bg: #1E2A20;
+      --done-line: #3a5a42;
+      --done-ink: #7BDCA0;
+      --next-bg: #2A2410;
+      --next-line: #5a4f24;
+      --next-ink: #FFD23D;
+      --block-bg: #2A1818;
+      --block-line: #5a3434;
+      --block-ink: #e88a8a;
+      --future-bg: #1E1813;
+      --future-line: #3A322C;
+      --future-ink: #A2968A;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -47,7 +48,7 @@
     /* NAV */
     .nav {
       border-bottom: 1px solid var(--line);
-      background: rgba(255, 255, 255, 0.95);
+      background: rgba(22, 18, 15, 0.95);
       -webkit-backdrop-filter: blur(8px);
       backdrop-filter: blur(8px);
       position: sticky;
@@ -117,8 +118,8 @@
     }
     .pri-status.done { background: #16a34a; color: white; }
     .pri-status.partial { background: #d97706; color: white; }
-    .pri-status.next { background: #0066cc; color: white; }
-    .pri-status.future { background: #cbd5e1; color: #334155; }
+    .pri-status.next { background: #FFC400; color: #1C1812; }
+    .pri-status.future { background: #3A322C; color: #C3B8AC; }
     .pri-body h4 { font-size: 1rem; font-weight: 700; color: var(--ink); margin-bottom: 0.2rem; }
     .pri-body p { font-size: 0.93rem; color: var(--body); margin: 0; }
 
@@ -127,7 +128,7 @@
     .bar-label { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.6rem; }
     .bar-label .num { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; }
     .bar-label .pct { font-weight: 700; color: var(--ink); font-size: 1.1rem; }
-    .bar { height: 14px; background: #e8e8e8; border-radius: 7px; overflow: hidden; position: relative; }
+    .bar { height: 14px; background: #2B2422; border-radius: 7px; overflow: hidden; position: relative; }
     .bar-fill {
       height: 100%;
       width: 100%;
@@ -177,9 +178,9 @@
     }
     .stage-pill.done    { background: #16a34a; color: white; }
     .stage-pill.partial { background: #d97706; color: white; }
-    .stage-pill.next    { background: #0066cc; color: white; }
+    .stage-pill.next    { background: #FFC400; color: #1C1812; }
     .stage-pill.block   { background: #dc2626; color: white; }
-    .stage-pill.future  { background: #cbd5e1; color: #334155; }
+    .stage-pill.future  { background: #3A322C; color: #C3B8AC; }
     .stage-body strong { color: var(--ink); font-weight: 700; display: block; margin-bottom: 0.2rem; }
     .stage-body p { font-size: 0.92rem; color: var(--body); margin: 0; }
 
@@ -239,7 +240,8 @@
     .callout code {
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.85em;
-      background: rgba(0,0,0,0.04);
+      background: rgba(255,255,255,0.07);
+      color: #7BDCA0;
       padding: 0.05em 0.35em;
       border-radius: 3px;
     }
@@ -275,14 +277,14 @@
     }
 
     /* CTA */
-    .cta { padding: 4rem 0; background: var(--ink); color: var(--bg); text-align: center; }
-    .cta h2 { font-size: 1.6rem; font-weight: 700; margin-bottom: 0.6rem; color: var(--bg); letter-spacing: -0.015em; }
-    .cta p { color: #c8c8c8; max-width: 620px; margin: 0 auto 1.2rem; }
+    .cta { padding: 4rem 0; background: var(--bg-soft); color: var(--ink); text-align: center; border-top: 1px solid var(--line); }
+    .cta h2 { font-size: 1.6rem; font-weight: 700; margin-bottom: 0.6rem; color: var(--ink); letter-spacing: -0.015em; }
+    .cta p { color: var(--body); max-width: 620px; margin: 0 auto 1.2rem; }
     .cta a {
       display: inline-block;
       padding: 0.7rem 1.4rem;
-      background: var(--bg);
-      color: var(--ink);
+      background: var(--accent);
+      color: var(--accent-ink);
       text-decoration: none;
       border-radius: 6px;
       font-weight: 700;
@@ -299,9 +301,23 @@
       .hero { padding: 3rem 0 2rem; }
       .pri-list li, .stages > li, .timeline li { grid-template-columns: 1fr; gap: 0.5rem; }
     }
+
+    /* DOC ACTIONS (PDF / online) */
+    .doc-actions{position:fixed;top:18px;right:18px;z-index:200;display:flex;gap:8px}
+    .da-btn{display:inline-flex;align-items:center;gap:7px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:9px 13px;text-decoration:none;border:1px solid #FFC400;border-radius:5px;transition:background .15s,color .15s}
+    .da-btn svg{width:14px;height:14px}
+    .da-pdf{background:#FFC400;color:#1C1812}.da-pdf:hover{background:#E6AC00;border-color:#E6AC00}
+    .da-online{background:transparent;color:#FFC400}.da-online:hover{background:#FFC400;color:#1C1812}
+    @media(max-width:560px){.doc-actions{top:10px;right:10px}.da-btn{padding:8px 10px;font-size:.66rem}}
+    @media print{.doc-actions{display:none !important}}
   </style>
 </head>
 <body>
+
+  <div class="doc-actions">
+    <a class="da-btn da-pdf" href="sms-progress.pdf" download aria-label="Download PDF"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>PDF</a>
+    <a class="da-btn da-online" href="https://www.quotemax.com.au/docs/sms-progress.html" aria-label="Open online">Online <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+  </div>
 
   <nav class="nav">
     <div class="nav-inner">
@@ -315,7 +331,7 @@
       <span class="hero-eyebrow">Build status · Updated 2026-05-06</span>
       <h1>SMS Agent — <em>shipped end-to-end</em>.</h1>
       <p class="hero-lede">
-        All five phases of the SMS channel are live in production. Real customers can text our number, the AI greets + thanks them, the dialog gathers details (capped at 4 turns with declared assumptions), the SMS Agent dispatches a photo-upload link, the existing intake + estimation pipeline drafts a Good/Better/Best quote, and the customer receives the same polished quote SMS the voice path produces — with photos. The tradie gets pinged via SMS + WhatsApp on every draft. Daily abandoned-conversation cron is armed.
+        All five phases of the SMS channel are live in production. Real customers can text our number, the AI greets + thanks them, the dialog gathers details (capped at 4 turns with declared assumptions), the SMS Agent dispatches a photo-upload link, the existing intake + estimation pipeline drafts a single fixed-price quote, and the customer receives the same polished quote SMS the voice path produces — with photos. The tradie gets pinged via SMS + WhatsApp on every draft. Daily abandoned-conversation cron is armed.
       </p>
       <div class="hero-meta">
         <div class="hero-meta-item"><span class="hero-meta-label">Reporting period</span><span class="hero-meta-value">Week of 2026-05-06</span></div>
@@ -336,7 +352,7 @@
           <span class="pri-status done">DONE</span>
           <div class="pri-body">
             <h4>1. SMS trigger and dialog (similar to voice agent, fast + simple, with assumptions)</h4>
-            <p>Customer texts +61 481 613 464 → Haiku 4.5 dialog agent (capped at 4 turns, off-topic redirect, declared assumptions per job type) → handoff to the same Opus 4.7 intake + estimation pipeline as voice → customer SMS with full G/B/B quote and HTML quote page. End-to-end verified on a real phone. <a href="#sms">See SMS section ↓</a></p>
+            <p>Customer texts +61 481 613 464 → Haiku 4.5 dialog agent (capped at 4 turns, off-topic redirect, declared assumptions per job type) → handoff to the same Opus 4.7 intake + estimation pipeline as voice → customer SMS with one clear fixed-price quote and HTML quote page. End-to-end verified on a real phone. <a href="#sms">See SMS section ↓</a></p>
           </div>
         </li>
         <li>
@@ -485,7 +501,7 @@
       </ul>
 
       <h3 style="font-size: 1.15rem; font-weight: 700; color: var(--ink); margin: 2rem 0 0.5rem;">Phase 3 — Quote drafts from SMS (DONE)</h3>
-      <p style="color: var(--body); font-size: 0.94rem; margin-bottom: 0.5rem;">SMS conversations now produce the same Good/Better/Best quote the voice path produces.</p>
+      <p style="color: var(--body); font-size: 0.94rem; margin-bottom: 0.5rem;">SMS conversations now produce the same single fixed-price quote the voice path produces.</p>
       <ul class="stages">
         <li>
           <span class="stage-id">SMS08</span>
@@ -536,7 +552,7 @@
 
       <div class="callout tip">
         <div class="callout-label">✓ Verified end-to-end</div>
-        <p>Real phone tested 2026-05-06. Inbound text → dialog asks name → suburb → per-job questions → finish. Customer receives quote SMS with full Good/Better/Best breakdown and clickable HTML quote page. WABA-registered WhatsApp fallback works when SMS rejects.</p>
+        <p>Real phone tested 2026-05-06. Inbound text → dialog asks name → suburb → per-job questions → finish. Customer receives quote SMS with one clear fixed-price breakdown and clickable HTML quote page. WABA-registered WhatsApp fallback works when SMS rejects.</p>
       </div>
     </div>
   </section>
@@ -682,7 +698,7 @@
         <div class="card done">
           <span class="check">✓</span>
           <h4>Customer-facing quote page</h4>
-          <p>Each draft has its own URL at <code>/q/[token]</code> — mobile-friendly HTML page showing scope of works, Good/Better/Best line items, exclusions, assumptions, risk flags, timeframe, GST note, and licence footer. No PDF needed for v1.</p>
+          <p>Each draft has its own URL at <code>/q/[token]</code> — mobile-friendly HTML page showing scope of works, a single fixed-price line-item breakdown, exclusions, assumptions, risk flags, timeframe, GST note, and licence footer. No PDF needed for v1.</p>
         </div>
         <div class="card done">
           <span class="check">✓</span>
@@ -876,7 +892,7 @@
         <div class="card done">
           <span class="check">✓</span>
           <h4>Real phone has now received a message — RESOLVED</h4>
-          <p>2026-05-06 smoke test: customer texted +61 481 613 464 → Haiku replied → quote SMS received with full G/B/B breakdown and clickable HTML quote page. End-to-end working.</p>
+          <p>2026-05-06 smoke test: customer texted +61 481 613 464 → Haiku replied → quote SMS received with one clear fixed-price breakdown and clickable HTML quote page. End-to-end working.</p>
         </div>
         <div class="card done">
           <span class="check">✓</span>

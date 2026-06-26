@@ -55,14 +55,14 @@ export const OnboardActivateSchema = z.object({
   owner_user_id: z.string().uuid().optional().or(z.literal('')),
 
   // ── Page 2: Trade & licence ────────────────────────────────
-  // Multi-trade onboarding: tradies who hold both an electrical and a
-  // plumbing licence can pick both. min(1) so every tenant has at
-  // least one trade; max(2) so we don't accidentally accept stale
-  // strings from a buggy wizard build.
+  // Multi-trade onboarding: a tradie can pick any combination of the
+  // supported trades (e.g. electrical + plumbing + painting). min(1) so
+  // every tenant has at least one trade; max(3) so we don't accidentally
+  // accept stale / duplicated strings from a buggy wizard build.
   trades: z
-    .array(z.enum(['electrical', 'plumbing']))
+    .array(z.enum(['electrical', 'plumbing', 'painting']))
     .min(1, 'Pick at least one trade')
-    .max(2, 'Only electrical + plumbing are supported in v1'),
+    .max(3, 'Pick from electrical, plumbing and painting'),
   state: z.enum(['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'ACT', 'NT']),
   abn: z.string().trim().max(20).optional().or(z.literal('')),
   licence_type: z.string().trim().max(20).optional().or(z.literal('')),
@@ -90,10 +90,26 @@ export const OnboardActivateSchema = z.object({
   logo_url: z.string().trim().max(500).optional().or(z.literal('')),
   logo_path: z.string().trim().max(300).optional().or(z.literal('')),
 
-  // ── Page 3: Pricing (required) ─────────────────────────────
-  hourly_rate: positiveMoney,
-  call_out_minimum: positiveMoney,
-  default_markup_pct: positivePct,
+  // ── Page 3: Pricing — labour (electrical / plumbing) ───────
+  // Required only when a labour trade is selected — enforced by the
+  // superRefine below, not here, so a painting-only tenant (who prices
+  // from a $/m² rate card) can leave them blank. positive bounds still
+  // apply whenever a value IS supplied.
+  hourly_rate: optionalNumber(positiveMoney),
+  call_out_minimum: optionalNumber(positiveMoney),
+  default_markup_pct: optionalNumber(positivePct),
+
+  // ── Page 3: Pricing — painting rate card ($/unit, ex-GST) ──
+  // The per-m² (per-lm for trim) rates a painting tenant quotes from.
+  // All optional: a blank field falls back to DEFAULT_PAINTING_RATE_CARD
+  // (lib/painting/pricing.ts). The wizard pre-fills them with the AU
+  // defaults so a painter lands ready and can adjust. Persisted to
+  // pricing_book.overlays.painting_rate_card by the activate route.
+  painting_walls_rate: optionalNumber(z.coerce.number().positive().max(200)),
+  painting_ceilings_rate: optionalNumber(z.coerce.number().positive().max(200)),
+  painting_trim_rate: optionalNumber(z.coerce.number().positive().max(200)),
+  painting_exterior_rate: optionalNumber(z.coerce.number().positive().max(200)),
+  painting_call_out_minimum: optionalNumber(z.coerce.number().min(0).max(5000)),
 
   // ── Page 3: Pricing (advanced — all optional) ──────────────
   apprentice_rate: optionalNumber(z.coerce.number().nonnegative()),
@@ -140,20 +156,47 @@ export const OnboardActivateSchema = z.object({
         message: 'A business logo is required.',
       })
     }
+
+    // Labour trades (electrical / plumbing) price by the hour, so a tenant
+    // that selects either must supply the three core labour rates — they
+    // drive that trade's estimator. Painting prices from a rate card
+    // instead, so a painting-only tenant is exempt (the labour fields stay
+    // blank and the painting rates fall back to sensible defaults).
+    const hasLabourTrade = data.trades.some(
+      (t) => t === 'electrical' || t === 'plumbing',
+    )
+    if (hasLabourTrade) {
+      for (const field of ['hourly_rate', 'call_out_minimum', 'default_markup_pct'] as const) {
+        if (data[field] === undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [field],
+            message: 'Required for electrical / plumbing pricing.',
+          })
+        }
+      }
+    }
   })
 
 export type OnboardActivatePayload = z.infer<typeof OnboardActivateSchema>
 
-// Per-state licence body display labels (helpful for the form's licence_type dropdown)
-export const LICENCE_BODIES: Record<string, { electrical: string; plumbing: string }> = {
-  NSW: { electrical: 'NECA NSW',    plumbing: 'NSW Fair Trading' },
-  VIC: { electrical: 'ESV',         plumbing: 'VBA' },
-  QLD: { electrical: 'ESO QLD',     plumbing: 'QBCC' },
-  WA:  { electrical: 'EnergySafety',plumbing: 'PLC WA' },
-  SA:  { electrical: 'OTR SA',      plumbing: 'OTR SA' },
-  TAS: { electrical: 'CBOS',        plumbing: 'CBOS' },
-  ACT: { electrical: 'ACT ESA',     plumbing: 'Access Canberra' },
-  NT:  { electrical: 'NT Electrical Workers Licensing', plumbing: 'NT Plumbers and Drainers Licensing' },
+// Per-state licence body display labels (helpful for the form's licence_type dropdown).
+// Painting is largely UNLICENSED across AU — QLD (QBCC, jobs over ~$3,300) is the
+// notable exception — so the painting label is empty for most states. The key still
+// being PRESENT is what lets hasLicenceSchema('painting') pass: painting is a
+// licence-OPTIONAL trade, not a licence-missing one.
+export const LICENCE_BODIES: Record<
+  string,
+  { electrical: string; plumbing: string; painting: string }
+> = {
+  NSW: { electrical: 'NECA NSW',    plumbing: 'NSW Fair Trading',  painting: '' },
+  VIC: { electrical: 'ESV',         plumbing: 'VBA',               painting: '' },
+  QLD: { electrical: 'ESO QLD',     plumbing: 'QBCC',              painting: 'QBCC' },
+  WA:  { electrical: 'EnergySafety',plumbing: 'PLC WA',            painting: '' },
+  SA:  { electrical: 'OTR SA',      plumbing: 'OTR SA',            painting: '' },
+  TAS: { electrical: 'CBOS',        plumbing: 'CBOS',              painting: '' },
+  ACT: { electrical: 'ACT ESA',     plumbing: 'Access Canberra',   painting: '' },
+  NT:  { electrical: 'NT Electrical Workers Licensing', plumbing: 'NT Plumbers and Drainers Licensing', painting: '' },
 }
 
 // Trades the self-serve onboarding pipeline fully supports today. The
@@ -161,7 +204,7 @@ export const LICENCE_BODIES: Record<string, { electrical: string; plumbing: stri
 // separate exported constant so the trade-readiness gate
 // (lib/onboard/trade-readiness.ts) has a single source of truth for
 // "does onboarding have pricing defaults + intake support for this trade".
-export const ONBOARDING_TRADES = ['electrical', 'plumbing'] as const
+export const ONBOARDING_TRADES = ['electrical', 'plumbing', 'painting'] as const
 
 /** True when defaultsForTrade() + the onboarding schema support this trade. */
 export function hasOnboardingPricingDefaults(trade: string): boolean {
@@ -175,7 +218,7 @@ export function hasLicenceSchema(trade: string): boolean {
 
 // Service-defaults helper — gives sensible per-trade defaults that the
 // activate endpoint applies when the tradie left advanced fields blank.
-export function defaultsForTrade(trade: 'electrical' | 'plumbing') {
+export function defaultsForTrade(trade: 'electrical' | 'plumbing' | 'painting') {
   if (trade === 'plumbing') {
     return {
       apprentice_rate: 65,
@@ -183,6 +226,19 @@ export function defaultsForTrade(trade: 'electrical' | 'plumbing') {
       after_hours_multiplier: 1.5,
       min_labour_hours: 1.5,
       risk_buffer_pct: 15,
+    }
+  }
+  if (trade === 'painting') {
+    // Painting prices from a $/m² rate card, not labour hours — these
+    // labour defaults only populate the (unused) labour columns of the
+    // painting pricing_book row so it satisfies the table's shape. The
+    // real painting levers live in pricing_book.overlays.painting_rate_card.
+    return {
+      apprentice_rate: 55,
+      senior_rate: 75,
+      after_hours_multiplier: 1.5,
+      min_labour_hours: 0,
+      risk_buffer_pct: 10,
     }
   }
   // electrical defaults

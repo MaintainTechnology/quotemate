@@ -13,6 +13,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ComponentType,
   type FormEvent,
@@ -27,6 +28,7 @@ import {
   type WeeklyAvailability,
 } from '@/lib/quote/availability'
 import { AvailabilityEditor } from '@/app/_components/AvailabilityEditor'
+import { ChangePasswordCard } from './_components/ChangePasswordCard'
 import { resolveTradeFormat, tierLabelsForTrade } from '@/lib/quote/trade-format'
 import { asQuoteTierMode, type QuoteTierMode } from '@/lib/quote/tier-visibility'
 import { resolveCatalogueBadge, badgeLabel } from '@/lib/dashboard/badge-state'
@@ -67,16 +69,20 @@ import {
   FolderOpen,
   History,
   CalendarDays,
+  LayoutTemplate,
   type LucideProps,
 } from 'lucide-react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 import { hasPlanIntent } from '@/lib/billing/plan-intent'
 import { tenantHasRoofingTrade } from '@/lib/roofing/tenant'
+import { tenantHasFeature } from '@/lib/features/catalog'
 import { isFeatureTab, isTabEnabled } from '@/lib/features/catalog'
 import { RoofRatesEditor } from './_components/RoofRatesEditor'
+import { PaintRatesEditor } from './_components/PaintRatesEditor'
 import { EstimatorBetaTab } from './_components/EstimatorBetaTab'
 import { SolarTab } from './_components/SolarTab'
 import { BillingTab } from './_components/BillingTab'
+import FlyerDesignerTab from './_components/FlyerDesignerTab'
 import { FilesTab } from './_components/FilesTab'
 import { HistoricalQuotesTab } from './_components/HistoricalQuotesTab'
 import { CalendarTab } from './_components/CalendarTab'
@@ -320,12 +326,14 @@ type Tab =
   | 'files'
   /** Historical quotes — import + analyse the tradie's own past pricing. */
   | 'historical-quotes'
+  /** Flyer Designer — template-based marketing flyer editor (Marketing tool, all tenants). */
+  | 'flyer'
 
 /** Tabs reachable via /dashboard?tab=… (e.g. the estimator run page's breadcrumb). */
 const DEEP_LINK_TABS: readonly Tab[] = [
   'overview', 'account', 'payouts', 'billing', 'pricing', 'services', 'catalogue', 'estimating',
   'recipes', 'quotes', 'chats', 'followups', 'calendar', 'roofing', 'signage', 'painting',
-  'commercial-painting', 'aircon', 'estimator', 'solar', 'invites', 'files', 'historical-quotes',
+  'commercial-painting', 'aircon', 'estimator', 'solar', 'invites', 'files', 'historical-quotes', 'flyer',
 ]
 
 /** SMS conversation summary returned by /api/tenant/chats. Drives the
@@ -426,6 +434,27 @@ export default function DashboardPage() {
       cancelled = true
     }
   }, [accessToken])
+
+  // Welcome email — fire once when a freshly-activated tradie first reaches the
+  // dashboard. The endpoint (POST /api/tenant/welcome-email) is idempotent: the
+  // single send is guarded server-side by tenants.welcome_email_sent_at, so
+  // this is genuinely fire-and-forget — we never surface its result in the UI.
+  // Gated on status='active' so a tenant still finishing provisioning doesn't
+  // trigger it early. On a network error we clear the ref so the next load
+  // retries (the server still won't double-send if it actually went out).
+  const welcomeFiredRef = useRef(false)
+  useEffect(() => {
+    if (!accessToken || welcomeFiredRef.current) return
+    const status = (data?.tenant as { status?: string } | undefined)?.status
+    if (status !== 'active') return
+    welcomeFiredRef.current = true
+    void fetch('/api/tenant/welcome-email', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }).catch(() => {
+      welcomeFiredRef.current = false
+    })
+  }, [accessToken, data])
 
   async function refresh(token: string) {
     setLoadError(null)
@@ -552,9 +581,14 @@ export default function DashboardPage() {
    * server-side and reloads the dashboard. Returns the response body so
    * the caller can show e.g. "AI receptionist updated".
    */
-  async function saveTrades(trades: Array<'electrical' | 'plumbing'>) {
+  async function saveTrades(trades: string[]) {
     if (!accessToken) throw new Error('not signed in')
-    const res = await fetch('/api/tenant/trades', {
+    // Unified Save path: POST the full desired set to /reconcile, which
+    // ACTIVATES newly-selected trades (atomic activate_trade_for_tenant —
+    // seeds pricing_book + service offerings + tenants.trades[]) and
+    // DEACTIVATES deselected ones. This is what makes each trade's job type
+    // genuinely live, not just a label.
+    const res = await fetch('/api/tenant/trades/reconcile', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -564,13 +598,16 @@ export default function DashboardPage() {
     })
     const body = await res.json().catch(() => ({}))
     if (!res.ok || body?.ok === false) {
-      throw new Error(body?.error ?? `Trade update failed (HTTP ${res.status})`)
+      throw new Error(
+        body?.message ?? body?.error ?? `Trade update failed (HTTP ${res.status})`,
+      )
     }
     await refresh(accessToken)
     return body as {
       ok: true
-      added: Array<'electrical' | 'plumbing'>
-      removed: Array<'electrical' | 'plumbing'>
+      trades: string[]
+      activated: string[]
+      deactivated: string[]
       warning?: string
       noop?: boolean
     }
@@ -593,6 +630,7 @@ export default function DashboardPage() {
     return body as {
       ok: true
       available: Array<{ name: string; displayName: string }>
+      manageable: Array<{ name: string; displayName: string; owned: boolean }>
     }
   }
 
@@ -801,8 +839,28 @@ export default function DashboardPage() {
                     </span>
                   </div>
                 </Link>
+                <Link
+                  href="/dashboard/crm"
+                  className="group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
+                >
+                  <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">
+                    CRM
+                  </span>
+                  <div className="flex-1">
+                    <h3 className="font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+                      CRM &amp; Email
+                    </h3>
+                    <p className="mt-4 text-base leading-relaxed text-text-sec">
+                      Connect HubSpot or Zoho, import your contacts, and send a one-tap announcement that you&apos;re now on QuoteMax — with a QR code that turns a scan into an instant quote.
+                    </p>
+                    <span className="mt-5 inline-flex items-center gap-2 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-accent transition-colors group-hover:text-accent-press">
+                      Open CRM &amp; email <span aria-hidden="true">&rarr;</span>
+                    </span>
+                  </div>
+                </Link>
               </div>
             )}
+            {tab === 'flyer' && <FlyerDesignerTab accessToken={accessToken} />}
           </div>
         </section>
       </div>
@@ -1060,6 +1118,8 @@ function buildNav(quoteCount: number, trades: ReadonlyArray<string> = []): NavIt
   if (isTabEnabled('solar', trades)) items.push({ tab: 'solar', label: 'Solar', icon: Sun })
   // Marketing — invite codes + QR codes. Core (not a gated feature).
   items.push({ tab: 'invites', label: 'Marketing', icon: Megaphone })
+  // Flyer Designer — marketing flyer editor. Core (all tenants).
+  items.push({ tab: 'flyer', label: 'Flyer', icon: LayoutTemplate })
   // Files — per-tenant document store (archived quotes/invoices + ask-your-docs).
   items.push({ tab: 'files', label: 'Files', icon: FolderOpen })
   // Historical quotes — import + analyse the tradie's own past pricing.
@@ -1093,7 +1153,7 @@ const SIDEBAR_GROUPS: { label: string; tabs: Tab[] }[] = [
   { label: 'Daily work', tabs: ['overview', 'quotes', 'followups', 'chats', 'calendar', 'files', 'historical-quotes', 'roofing', 'signage', 'painting', 'commercial-painting', 'aircon', 'estimator', 'solar'] },
   {
     label: 'Setup',
-    tabs: ['invites', 'account', 'payouts', 'billing', 'pricing', 'services', 'catalogue', 'estimating', 'recipes'],
+    tabs: ['invites', 'flyer', 'account', 'payouts', 'billing', 'pricing', 'services', 'catalogue', 'estimating', 'recipes'],
   },
 ]
 
@@ -1291,6 +1351,10 @@ const TAB_META: Record<
   invites: {
     title: 'Marketing',
     desc: 'Invite codes gate who can onboard. QR codes turn printed flyers into AI-drafted quotes.',
+  },
+  flyer: {
+    title: 'Flyer Designer',
+    desc: 'Design a printable marketing flyer from a template — edit text, fonts, colours and images, drop in your QR code, then download a PNG or PDF.',
   },
   files: {
     title: 'Files',
@@ -2299,17 +2363,17 @@ function AccountTab({
 }: {
   data: DashboardData
   onSave: (payload: Record<string, unknown>) => Promise<void>
-  onSaveTrades: (
-    trades: Array<'electrical' | 'plumbing'>,
-  ) => Promise<{
-    added: Array<'electrical' | 'plumbing'>
-    removed: Array<'electrical' | 'plumbing'>
+  onSaveTrades: (trades: string[]) => Promise<{
+    trades: string[]
+    activated: string[]
+    deactivated: string[]
     warning?: string
     noop?: boolean
   }>
   onListAvailableTrades: () => Promise<{
     ok: true
     available: Array<{ name: string; displayName: string }>
+    manageable: Array<{ name: string; displayName: string; owned: boolean }>
   }>
   onActivateTrade: (
     trade: string,
@@ -2350,11 +2414,9 @@ function AccountTab({
 
   return (
     <div className="space-y-6">
-      <TradesCard tenant={data.tenant} onSaveTrades={onSaveTrades} />
-
-      <ActivateTradeCard
-        onListAvailableTrades={onListAvailableTrades}
-        onActivateTrade={onActivateTrade}
+      <TradesCard
+        onSaveTrades={onSaveTrades}
+        onListManageableTrades={onListAvailableTrades}
       />
 
       <SmsEstimatorCard tenant={data.tenant} onSave={onSave} />
@@ -2458,6 +2520,8 @@ function AccountTab({
         </div>
       </form>
       </Card>
+
+      <ChangePasswordCard />
     </div>
   )
 }
@@ -2824,64 +2888,81 @@ function LicencesCard({
 // ─── Trades card (sits at the top of the Account tab) ────────────
 
 function TradesCard({
-  tenant,
   onSaveTrades,
+  onListManageableTrades,
 }: {
-  tenant: Tenant
-  onSaveTrades: (
-    trades: Array<'electrical' | 'plumbing'>,
-  ) => Promise<{
-    added: Array<'electrical' | 'plumbing'>
-    removed: Array<'electrical' | 'plumbing'>
+  onSaveTrades: (trades: string[]) => Promise<{
+    trades: string[]
+    activated: string[]
+    deactivated: string[]
     warning?: string
     noop?: boolean
   }>
+  onListManageableTrades: () => Promise<{
+    manageable: Array<{ name: string; displayName: string; owned: boolean }>
+  }>
 }) {
-  // The card is its own little state machine because the user can stage
-  // changes locally (toggle pills), but we only fire the API on Save.
-  // A confirm prompt fires when the staged set REMOVES a trade — that's
-  // a destructive change worth pausing on.
-  const initialTrades: Array<'electrical' | 'plumbing'> =
-    Array.isArray(tenant.trades) && tenant.trades.length > 0
-      ? tenant.trades
-      : tenant.trade
-        ? [tenant.trade]
-        : []
-  const [staged, setStaged] = useState(initialTrades)
+  // Registry-driven: the card lists every activatable job-based trade
+  // (electrical, plumbing, painting, solar, commercial painting, …) as a
+  // toggle, pre-selected by what the tenant already owns. Save reconciles the
+  // whole set through /api/tenant/trades/reconcile — activating new trades and
+  // deactivating deselected ones. A confirm prompt fires before any removal.
+  const [manageable, setManageable] = useState<
+    Array<{ name: string; displayName: string; owned: boolean }> | null
+  >(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [owned, setOwned] = useState<string[]>([])
+  const [staged, setStaged] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [confirmRemove, setConfirmRemove] = useState<
-    null | { trades: Array<'electrical' | 'plumbing'>; removed: Array<'electrical' | 'plumbing'> }
+    null | { trades: string[]; removedLabels: string[] }
   >(null)
 
-  // Keep `staged` aligned with the latest server state when the tenant
-  // refetches (e.g. after a successful save).
+  // Fetch the activatable-trades list once on mount. onListManageableTrades is
+  // a fresh closure each render, so it is intentionally NOT a dependency.
   useEffect(() => {
-    setStaged(initialTrades)
-    setSuccess(null)
-    setError(null)
+    let cancelled = false
+    onListManageableTrades()
+      .then((r) => {
+        if (cancelled) return
+        setManageable(r.manageable)
+        const own = r.manageable.filter((t) => t.owned).map((t) => t.name)
+        setOwned(own)
+        setStaged(own)
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setLoadError(e instanceof Error ? e.message : String(e))
+      })
+    return () => {
+      cancelled = true
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tenant.trades?.join(','), tenant.trade])
+  }, [])
 
   const dirty =
-    staged.length !== initialTrades.length ||
-    staged.some((t) => !initialTrades.includes(t)) ||
-    initialTrades.some((t) => !staged.includes(t))
+    staged.length !== owned.length ||
+    staged.some((t) => !owned.includes(t)) ||
+    owned.some((t) => !staged.includes(t))
 
-  function toggle(t: 'electrical' | 'plumbing') {
+  function labelFor(name: string): string {
+    return manageable?.find((m) => m.name === name)?.displayName ?? name
+  }
+
+  function toggle(name: string) {
     setError(null)
     setSuccess(null)
     setStaged((cur) => {
-      const has = cur.includes(t)
-      const next = has ? cur.filter((x) => x !== t) : [...cur, t]
+      const has = cur.includes(name)
+      const next = has ? cur.filter((x) => x !== name) : [...cur, name]
       // Enforce min 1 — refuse the toggle rather than going to empty.
       if (next.length === 0) return cur
       return next
     })
   }
 
-  async function commit(trades: Array<'electrical' | 'plumbing'>) {
+  async function commit(trades: string[]) {
     setBusy(true)
     setError(null)
     setSuccess(null)
@@ -2889,10 +2970,13 @@ function TradesCard({
     try {
       const res = await onSaveTrades(trades)
       const parts: string[] = []
-      if (res.added.length > 0) parts.push(`Added ${res.added.join(', ')}`)
-      if (res.removed.length > 0) parts.push(`Removed ${res.removed.join(', ')}`)
+      if (res.activated.length > 0)
+        parts.push(`Activated ${res.activated.map(labelFor).join(', ')}`)
+      if (res.deactivated.length > 0)
+        parts.push(`Removed ${res.deactivated.map(labelFor).join(', ')}`)
       if (res.warning) parts.push(res.warning)
       setSuccess(parts.join(' · ') || 'Saved')
+      setOwned(trades)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       setError(msg)
@@ -2903,9 +2987,9 @@ function TradesCard({
 
   async function handleSave() {
     // Anything being removed is destructive — confirm first.
-    const removed = initialTrades.filter((t) => !staged.includes(t))
+    const removed = owned.filter((t) => !staged.includes(t))
     if (removed.length > 0) {
-      setConfirmRemove({ trades: staged, removed })
+      setConfirmRemove({ trades: staged, removedLabels: removed.map(labelFor) })
       return
     }
     await commit(staged)
@@ -2914,57 +2998,73 @@ function TradesCard({
   return (
     <Card
       title="Trades"
-      subtitle="Add a second trade to your account, or drop one. Adding seeds the easy-5 catalogue and refreshes your AI receptionist."
+      subtitle="Turn on the trades you quote — painting, solar, commercial painting, electrical and more. Activating seeds that trade's pricing book + catalogue, unlocks its dashboard tools, and refreshes your AI receptionist."
     >
-      <div className="grid grid-cols-2 gap-2 max-w-md">
-        {(['electrical', 'plumbing'] as const).map((t) => {
-          const selected = staged.includes(t)
-          return (
-            <button
-              key={t}
-              type="button"
-              onClick={() => toggle(t)}
-              disabled={busy}
-              className={`px-4 py-3.5 text-sm font-semibold uppercase tracking-wider transition-colors border ${
-                selected
-                  ? 'border-accent bg-accent text-white'
-                  : 'border-ink-line bg-ink-deep text-text-sec hover:border-accent-soft hover:text-text-pri'
-              } disabled:opacity-50 disabled:cursor-not-allowed`}
-            >
-              {tradeLabel(t)}
-            </button>
-          )
-        })}
-      </div>
+      {loadError && <ErrorBanner>{loadError}</ErrorBanner>}
 
-      {error && (
-        <div className="mt-4">
-          <ErrorBanner>{error}</ErrorBanner>
-        </div>
-      )}
-      {success && !error && (
-        <div className="mt-4 border border-accent/40 bg-accent/5 px-4 py-3 text-sm text-text-pri">
-          {success}
-        </div>
-      )}
-
-      <div className="mt-5 flex items-center justify-between">
-        <p className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
-          Current: {initialTrades.join(' + ') || '—'}
+      {!loadError && manageable === null && (
+        <p className="font-mono text-xs uppercase tracking-[0.14em] text-text-dim">
+          Loading trades…
         </p>
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={!dirty || busy}
-          className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-5 py-2.5 text-xs uppercase tracking-wider transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {busy ? 'Saving…' : 'Save trades'}
-        </button>
-      </div>
+      )}
+
+      {manageable && manageable.length === 0 && (
+        <p className="text-sm text-text-sec">No activatable trades are available yet.</p>
+      )}
+
+      {manageable && manageable.length > 0 && (
+        <>
+          <div className="grid grid-cols-2 gap-2 max-w-md">
+            {manageable.map((t) => {
+              const selected = staged.includes(t.name)
+              return (
+                <button
+                  key={t.name}
+                  type="button"
+                  onClick={() => toggle(t.name)}
+                  disabled={busy}
+                  className={`px-4 py-3.5 text-sm font-semibold uppercase tracking-wider transition-colors border ${
+                    selected
+                      ? 'border-accent bg-accent text-white'
+                      : 'border-ink-line bg-ink-deep text-text-sec hover:border-accent-soft hover:text-text-pri'
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  {t.displayName}
+                </button>
+              )
+            })}
+          </div>
+
+          {error && (
+            <div className="mt-4">
+              <ErrorBanner>{error}</ErrorBanner>
+            </div>
+          )}
+          {success && !error && (
+            <div className="mt-4 border border-accent/40 bg-accent/5 px-4 py-3 text-sm text-text-pri">
+              {success}
+            </div>
+          )}
+
+          <div className="mt-5 flex items-center justify-between">
+            <p className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+              Current: {owned.map(labelFor).join(' + ') || '—'}
+            </p>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!dirty || busy}
+              className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-5 py-2.5 text-xs uppercase tracking-wider transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {busy ? 'Saving…' : 'Save trades'}
+            </button>
+          </div>
+        </>
+      )}
 
       {confirmRemove && (
         <ConfirmRemoveTrade
-          removed={confirmRemove.removed}
+          removedLabels={confirmRemove.removedLabels}
           busy={busy}
           onCancel={() => setConfirmRemove(null)}
           onConfirm={() => commit(confirmRemove.trades)}
@@ -2975,17 +3075,17 @@ function TradesCard({
 }
 
 function ConfirmRemoveTrade({
-  removed,
+  removedLabels,
   busy,
   onCancel,
   onConfirm,
 }: {
-  removed: Array<'electrical' | 'plumbing'>
+  removedLabels: string[]
   busy: boolean
   onCancel: () => void
   onConfirm: () => void
 }) {
-  const list = removed.map((t) => tradeLabel(t)).join(' and ')
+  const list = removedLabels.join(' and ')
   return (
     <div
       role="dialog"
@@ -3227,6 +3327,15 @@ function PricingTab({
           back by /api/roofing/measure before pricing. */}
       {tenantHasRoofingTrade(data.tenant.trades as unknown as string[]) && (
         <RoofRatesEditor accessToken={accessToken} />
+      )}
+      {/* Per-tenant Paint rates editor. Only rendered when 'painting' is in
+          tenants.trades; otherwise hidden. Writes to
+          pricing_book.overlays.painting_rate_card; read back by
+          /api/painting/estimate before pricing. Mirrors RoofRatesEditor —
+          painting pricing config lives here on the Pricing tab, not on the
+          painting estimate tool tab. */}
+      {tenantHasFeature(data.tenant.trades as unknown as string[], 'painting') && (
+        <PaintRatesEditor accessToken={accessToken} />
       )}
     </div>
   )
@@ -11217,6 +11326,8 @@ function tabLabel(t: Tab): string {
       return 'Estimator'
     case 'solar':
       return 'Solar'
+    case 'flyer':
+      return 'Flyer'
   }
 }
 

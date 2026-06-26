@@ -341,10 +341,23 @@
   .foot { padding: 1.5rem 0; }
   .foot .row { display: flex; flex-wrap: wrap; gap: 0.75rem 1.5rem; justify-content: space-between; align-items: center; }
   .foot .mono { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-dim); }
+
+  /* ─── Download-PDF + Online affordance (self-contained) ──────── */
+  .doc-actions{position:fixed;top:18px;right:18px;z-index:50;display:flex;gap:8px}
+  .da-btn{display:inline-flex;align-items:center;gap:7px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:9px 13px;text-decoration:none;border:1px solid #FFC400;transition:background .15s,color .15s}
+  .da-btn svg{width:14px;height:14px}
+  .da-pdf{background:#FFC400;color:#1C1812}.da-pdf:hover{background:#E6AC00;border-color:#E6AC00}
+  .da-online{background:transparent;color:#FFC400}.da-online:hover{background:#FFC400;color:#1C1812}
+  @media(max-width:560px){.doc-actions{top:10px;right:10px}.da-btn{padding:8px 10px;font-size:.66rem}}
+  @media print{@page{size:A4;margin:0}html,body{background:#16120F !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.doc-actions{display:none !important}.topo,.glow{display:none !important}}
 </style>
 </head>
 
 <body>
+<div class="doc-actions">
+  <a class="da-btn da-pdf" href="quotemax-onepager.pdf" download aria-label="Download PDF"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>PDF</a>
+  <a class="da-btn da-online" href="https://www.quotemax.com.au/docs/quotemax-onepager.html" aria-label="Open online">Online <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+</div>
 <a class="skip" href="#main">Skip to content</a>
 <div class="noise" aria-hidden="true"></div>
 
@@ -379,12 +392,12 @@
     <div class="wrap inner">
       <span class="eyebrow"><b>01</b> / The concept · in one line</span>
       <h1>We do the <span class="accent">quoting.</span> They stay on the <span class="accent">tools.</span></h1>
-      <p class="lead">QuoteMax is the AI receptionist for Australian tradies. A customer texts their number, the AI asks the right questions, applies their pricing book, and drafts a clean Good / Better / Best quote in under a minute. The tradie just reviews, tweaks, and sends.</p>
+      <p class="lead">QuoteMax is the AI receptionist for Australian tradies. A customer texts their number, the AI asks the right questions, applies their pricing book, and drafts a single fixed-price quote in under a minute. The tradie just reviews, tweaks, and sends.</p>
 
       <div class="loop" role="list" aria-label="The QuoteMax loop">
         <div class="step" role="listitem"><span class="n">1</span><span class="t">Customer texts</span></div>
         <span class="arrow" aria-hidden="true">→</span>
-        <div class="step" role="listitem"><span class="n">2</span><span class="t">AI drafts G / B / B</span></div>
+        <div class="step" role="listitem"><span class="n">2</span><span class="t">AI drafts fixed price</span></div>
         <span class="arrow" aria-hidden="true">→</span>
         <div class="step" role="listitem"><span class="n">3</span><span class="t">Tradie reviews &amp; sends</span></div>
         <span class="arrow" aria-hidden="true">→</span>
@@ -475,7 +488,7 @@
       <div class="stats" style="margin-top:1.5rem">
         <div class="stat"><div class="v">&lt; 1 min</div><div class="l">To a drafted quote</div></div>
         <div class="stat"><div class="v">24 / 7</div><div class="l">Line always answered</div></div>
-        <div class="stat"><div class="v">3</div><div class="l">Tiers per quote</div></div>
+        <div class="stat"><div class="v">1</div><div class="l">Clear fixed price</div></div>
         <div class="stat"><div class="v">$99</div><div class="l">Site visit · refundable</div></div>
       </div>
     </div>
@@ -502,7 +515,7 @@
           <span class="num">02</span>
           <div class="txt">
             <h3>Demonstrate</h3>
-            <p>We show QuoteMax working on a live SMS thread — customer message in, Good / Better / Best quote out. This one-pager is the leave-behind that explains the whole concept at a glance.</p>
+            <p>We show QuoteMax working on a live SMS thread — customer message in, single fixed-price quote out. This one-pager is the leave-behind that explains the whole concept at a glance.</p>
             <div class="meta">Leave-behind: <b>this page</b> · live SMS demo on the home site</div>
           </div>
         </article>
@@ -580,7 +593,7 @@
         <div class="node">
           <span class="k">02 · Draft</span>
           <h3>AI builds the quote</h3>
-          <p>It asks the right questions for the job type, applies the tradie&rsquo;s pricing book, and writes Good / Better / Best line items in under a minute.</p>
+          <p>It asks the right questions for the job type, applies the tradie&rsquo;s pricing book, and writes one clear fixed-price quote in under a minute.</p>
         </div>
         <span class="arrow" aria-hidden="true">→</span>
         <div class="node">

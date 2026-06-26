@@ -9,10 +9,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
 <style>
   :root{
-    --ink-deep:#0E1622; --ink:#141C29; --ink-card:#1B2433; --ink-line:#2D3A4F;
-    --accent:#FF5A1F; --accent-press:#E8470F; --accent-soft:#FF7A45;
-    --text-pri:#FFFFFF; --text-sec:#B8C2D1; --text-dim:#7A8699;
-    --teal-glow:#14B8A6; --danger:#B91C1C; --success:#15803D;
+    --ink-deep:#16120F; --ink:#1E1813; --ink-card:#2B2422; --ink-line:#3A322C;
+    --accent:#FFC400; --accent-press:#E6AC00; --accent-soft:#FFD23D; --accent-ink:#1C1812;
+    --text-pri:#F6F1EA; --text-sec:#C3B8AC; --text-dim:#A2968A;
+    --teal-glow:#6E6354; --danger:#B91C1C; --success:#7BDCA0;
   }
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
@@ -89,18 +89,31 @@
   .step p{margin:0; font-size:.9rem; color:var(--text-sec)}
 
   /* cta bar */
-  .ctabar{background:var(--accent); color:#fff; text-align:center; padding:18px 24px;
+  .ctabar{background:var(--accent); color:var(--accent-ink); text-align:center; padding:18px 24px;
     font-family:'JetBrains Mono',monospace; font-size:.8rem; text-transform:uppercase; letter-spacing:.15em}
   hr{border:0; height:1px; background:var(--ink-line); margin:0}
   .note{font-size:.82rem; color:var(--text-dim); margin-top:14px}
+
+  .doc-actions{position:fixed;top:18px;right:18px;z-index:50;display:flex;gap:8px}
+  .da-btn{display:inline-flex;align-items:center;gap:7px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:9px 13px;text-decoration:none;border:1px solid #FFC400;transition:background .15s,color .15s}
+  .da-btn svg{width:14px;height:14px}
+  .da-pdf{background:#FFC400;color:#1C1812}.da-pdf:hover{background:#E6AC00;border-color:#E6AC00}
+  .da-online{background:transparent;color:#FFC400}.da-online:hover{background:#FFC400;color:#1C1812}
+  @media(max-width:560px){.doc-actions{top:10px;right:10px}.da-btn{padding:8px 10px;font-size:.66rem}}
+  @media print{@page{size:A4;margin:0}html,body{background:#16120F !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.doc-actions{display:none !important}.topo,.glow{display:none !important}}
 </style>
 </head>
 <body>
 
+<div class="doc-actions">
+  <a class="da-btn da-pdf" href="sms-before-after.pdf" download aria-label="Download PDF"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>PDF</a>
+  <a class="da-btn da-online" href="https://www.quotemax.com.au/docs/sms-before-after.html" aria-label="Open online">Online <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+</div>
+
 <!-- HERO -->
 <header class="hero">
   <svg class="topo" viewBox="0 0 1920 600" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-    <g fill="none" stroke="#14B8A6" stroke-width="1">
+    <g fill="none" stroke="#6E6354" stroke-width="1">
       <path d="M0,460 Q240,320 480,400 T960,360 T1440,400 T1920,340"/>
       <path d="M0,520 Q240,380 480,460 T960,420 T1440,470 T1920,410"/>
       <path d="M0,400 Q240,270 480,340 T960,300 T1440,350 T1920,290"/>
@@ -150,10 +163,10 @@
       <svg viewBox="0 0 1000 470" role="img" aria-label="Before and after quote pipeline diagram">
         <defs>
           <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
-            <path d="M0,0 L9,4.5 L0,9 z" fill="#7A8699"/>
+            <path d="M0,0 L9,4.5 L0,9 z" fill="#A2968A"/>
           </marker>
           <marker id="aro" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
-            <path d="M0,0 L9,4.5 L0,9 z" fill="#FF5A1F"/>
+            <path d="M0,0 L9,4.5 L0,9 z" fill="#FFC400"/>
           </marker>
         </defs>
 
@@ -161,13 +174,13 @@
         <text x="20" y="40" fill="#E06A6A" font-family="'JetBrains Mono',monospace" font-size="15" font-weight="600" letter-spacing="2">BEFORE</text>
         <!-- boxes -->
         <g font-family="Manrope,sans-serif" font-size="13" font-weight="700">
-          <rect x="20" y="58" width="150" height="56" rx="2" fill="#1B2433" stroke="#2D3A4F"/>
+          <rect x="20" y="58" width="150" height="56" rx="2" fill="#2B2422" stroke="#3A322C"/>
           <text x="95" y="82" fill="#fff" text-anchor="middle">Customer</text>
-          <text x="95" y="99" fill="#B8C2D1" text-anchor="middle" font-size="11" font-weight="400">texts in</text>
+          <text x="95" y="99" fill="#C3B8AC" text-anchor="middle" font-size="11" font-weight="400">texts in</text>
 
-          <rect x="205" y="58" width="160" height="56" rx="2" fill="#1B2433" stroke="#2D3A4F"/>
+          <rect x="205" y="58" width="160" height="56" rx="2" fill="#2B2422" stroke="#3A322C"/>
           <text x="285" y="82" fill="#fff" text-anchor="middle">AI dialog</text>
-          <text x="285" y="99" fill="#B8C2D1" text-anchor="middle" font-size="11" font-weight="400">asks questions</text>
+          <text x="285" y="99" fill="#C3B8AC" text-anchor="middle" font-size="11" font-weight="400">asks questions</text>
 
           <rect x="400" y="58" width="180" height="56" rx="2" fill="#2A1A1A" stroke="#B91C1C"/>
           <text x="490" y="82" fill="#fff" text-anchor="middle">AI writes prices</text>
@@ -181,7 +194,7 @@
           <text x="895" y="82" fill="#fff" text-anchor="middle">Auto-send</text>
           <text x="895" y="99" fill="#E06A6A" text-anchor="middle" font-size="11" font-weight="400">always</text>
         </g>
-        <g stroke="#7A8699" stroke-width="1.5">
+        <g stroke="#A2968A" stroke-width="1.5">
           <line x1="170" y1="86" x2="203" y2="86" marker-end="url(#ar)"/>
           <line x1="365" y1="86" x2="398" y2="86" marker-end="url(#ar)"/>
           <line x1="580" y1="86" x2="613" y2="86" marker-end="url(#ar)"/>
@@ -189,32 +202,32 @@
         </g>
         <text x="20" y="150" fill="#E06A6A" font-family="'JetBrains Mono',monospace" font-size="11">Risk: same job → different price · a wrong product could still be sent</text>
 
-        <line x1="20" y1="185" x2="980" y2="185" stroke="#2D3A4F"/>
+        <line x1="20" y1="185" x2="980" y2="185" stroke="#3A322C"/>
 
         <!-- AFTER ROW -->
-        <text x="20" y="225" fill="#FF5A1F" font-family="'JetBrains Mono',monospace" font-size="15" font-weight="600" letter-spacing="2">AFTER</text>
+        <text x="20" y="225" fill="#FFC400" font-family="'JetBrains Mono',monospace" font-size="15" font-weight="600" letter-spacing="2">AFTER</text>
         <g font-family="Manrope,sans-serif" font-size="13" font-weight="700">
-          <rect x="20" y="243" width="150" height="56" rx="2" fill="#1B2433" stroke="#2D3A4F"/>
+          <rect x="20" y="243" width="150" height="56" rx="2" fill="#2B2422" stroke="#3A322C"/>
           <text x="95" y="267" fill="#fff" text-anchor="middle">Customer</text>
-          <text x="95" y="284" fill="#B8C2D1" text-anchor="middle" font-size="11" font-weight="400">texts in</text>
+          <text x="95" y="284" fill="#C3B8AC" text-anchor="middle" font-size="11" font-weight="400">texts in</text>
 
-          <rect x="205" y="243" width="160" height="56" rx="2" fill="#1B2433" stroke="#2D3A4F"/>
+          <rect x="205" y="243" width="160" height="56" rx="2" fill="#2B2422" stroke="#3A322C"/>
           <text x="285" y="263" fill="#fff" text-anchor="middle">AI dialog</text>
-          <text x="285" y="280" fill="#B8C2D1" text-anchor="middle" font-size="11" font-weight="400">reads job + picks recipe</text>
+          <text x="285" y="280" fill="#C3B8AC" text-anchor="middle" font-size="11" font-weight="400">reads job + picks recipe</text>
 
-          <rect x="400" y="243" width="180" height="56" rx="2" fill="#13241F" stroke="#14B8A6"/>
+          <rect x="400" y="243" width="180" height="56" rx="2" fill="#211C16" stroke="#6E6354"/>
           <text x="490" y="263" fill="#fff" text-anchor="middle">Database sets price</text>
-          <text x="490" y="280" fill="#5FD0C2" text-anchor="middle" font-size="11" font-weight="400">recipe × catalogue</text>
+          <text x="490" y="280" fill="#7BDCA0" text-anchor="middle" font-size="11" font-weight="400">recipe × catalogue</text>
 
-          <rect x="615" y="243" width="160" height="56" rx="2" fill="#13241F" stroke="#14B8A6"/>
+          <rect x="615" y="243" width="160" height="56" rx="2" fill="#211C16" stroke="#6E6354"/>
           <text x="695" y="263" fill="#fff" text-anchor="middle">Checks</text>
-          <text x="695" y="280" fill="#5FD0C2" text-anchor="middle" font-size="11" font-weight="400">enforced + bounds</text>
+          <text x="695" y="280" fill="#7BDCA0" text-anchor="middle" font-size="11" font-weight="400">enforced + bounds</text>
 
-          <rect x="810" y="243" width="170" height="56" rx="2" fill="#2A1808" stroke="#FF5A1F"/>
+          <rect x="810" y="243" width="170" height="56" rx="2" fill="#2A2008" stroke="#FFC400"/>
           <text x="895" y="263" fill="#fff" text-anchor="middle">Deploy gate</text>
-          <text x="895" y="280" fill="#FF7A45" text-anchor="middle" font-size="11" font-weight="400">off by default</text>
+          <text x="895" y="280" fill="#FFD23D" text-anchor="middle" font-size="11" font-weight="400">off by default</text>
         </g>
-        <g stroke="#FF5A1F" stroke-width="1.5">
+        <g stroke="#FFC400" stroke-width="1.5">
           <line x1="170" y1="271" x2="203" y2="271" marker-end="url(#aro)"/>
           <line x1="365" y1="271" x2="398" y2="271" marker-end="url(#aro)"/>
           <line x1="580" y1="271" x2="613" y2="271" marker-end="url(#aro)"/>
@@ -223,25 +236,25 @@
 
         <!-- three outcomes from the gate -->
         <g font-family="Manrope,sans-serif" font-size="12" font-weight="700">
-          <rect x="300" y="360" width="200" height="50" rx="2" fill="#1B2433" stroke="#15803D"/>
+          <rect x="300" y="360" width="200" height="50" rx="2" fill="#2B2422" stroke="#7BDCA0"/>
           <text x="400" y="382" fill="#fff" text-anchor="middle">Auto-send</text>
-          <text x="400" y="398" fill="#7FBF93" text-anchor="middle" font-size="10.5" font-weight="400">only proven job types</text>
+          <text x="400" y="398" fill="#7BDCA0" text-anchor="middle" font-size="10.5" font-weight="400">only proven job types</text>
 
-          <rect x="520" y="360" width="180" height="50" rx="2" fill="#1B2433" stroke="#2D3A4F"/>
+          <rect x="520" y="360" width="180" height="50" rx="2" fill="#2B2422" stroke="#3A322C"/>
           <text x="610" y="382" fill="#fff" text-anchor="middle">Tradie review</text>
-          <text x="610" y="398" fill="#B8C2D1" text-anchor="middle" font-size="10.5" font-weight="400">human approves</text>
+          <text x="610" y="398" fill="#C3B8AC" text-anchor="middle" font-size="10.5" font-weight="400">human approves</text>
 
-          <rect x="720" y="360" width="180" height="50" rx="2" fill="#1B2433" stroke="#2D3A4F"/>
+          <rect x="720" y="360" width="180" height="50" rx="2" fill="#2B2422" stroke="#3A322C"/>
           <text x="810" y="382" fill="#fff" text-anchor="middle">$99 inspection</text>
-          <text x="810" y="398" fill="#B8C2D1" text-anchor="middle" font-size="10.5" font-weight="400">safe fallback</text>
+          <text x="810" y="398" fill="#C3B8AC" text-anchor="middle" font-size="10.5" font-weight="400">safe fallback</text>
         </g>
-        <g stroke="#7A8699" stroke-width="1.5" fill="none">
+        <g stroke="#A2968A" stroke-width="1.5" fill="none">
           <path d="M895,299 L895,335 L400,335 L400,358" marker-end="url(#ar)"/>
           <path d="M610,335 L610,358" marker-end="url(#ar)"/>
           <path d="M810,335 L810,358" marker-end="url(#ar)"/>
         </g>
-        <text x="20" y="392" fill="#FF7A45" font-family="'JetBrains Mono',monospace" font-size="11">Same job → same</text>
-        <text x="20" y="408" fill="#FF7A45" font-family="'JetBrains Mono',monospace" font-size="11">price, every time</text>
+        <text x="20" y="392" fill="#FFD23D" font-family="'JetBrains Mono',monospace" font-size="11">Same job → same</text>
+        <text x="20" y="408" fill="#FFD23D" font-family="'JetBrains Mono',monospace" font-size="11">price, every time</text>
       </svg>
     </div>
     <p class="note">The new flow lets the AI understand the job, but the database sets the dollar figure. Anything not proven safe goes to a person or to the paid inspection — never an unchecked auto-quote.</p>

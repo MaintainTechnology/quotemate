@@ -79,6 +79,35 @@ describe('checkTradeReadiness', () => {
     expect(r.missing.length).toBeGreaterThanOrEqual(4)
   })
 
+  it('marks painting ready with catalogue rows — no estimator prompt needed (deterministic)', async () => {
+    // Painting prices from a deterministic per-m² rate card, so it has no
+    // bundled estimator template and no trade_prompts row, yet must still be
+    // onboardable. The deterministic-trade exemption satisfies estimatorPrompt,
+    // and the LICENCE_BODIES painting key satisfies the licence-optional check.
+    const sb = mockSupabase({ assemblyCounts: { painting: 11 }, promptTrades: [] })
+    const r = await checkTradeReadiness(sb, 'painting')
+    expect(r.ready).toBe(true)
+    expect(r.missing).toEqual([])
+    expect(r.checks).toMatchObject({
+      pricingDefaults: true,
+      sharedAssemblies: true,
+      estimatorPrompt: true,
+      intakeRules: true,
+      licenceSchema: true,
+    })
+  })
+
+  it('gates painting out when it has no catalogue rows (exemptions still hold)', async () => {
+    const sb = mockSupabase({ assemblyCounts: {}, promptTrades: [] })
+    const r = await checkTradeReadiness(sb, 'painting')
+    expect(r.ready).toBe(false)
+    expect(r.checks.sharedAssemblies).toBe(false)
+    // The deterministic + licence-optional exemptions are independent of the
+    // catalogue check, so they remain satisfied even when painting is gated.
+    expect(r.checks.estimatorPrompt).toBe(true)
+    expect(r.checks.licenceSchema).toBe(true)
+  })
+
   it('still gates out a trade that has a catalogue + prompt but no pricing/licence config', async () => {
     // e.g. a hypothetical 'carpentry' with DB catalogue + a trade_prompts row
     // but no onboarding pricing defaults / licence schema → not onboardable.
@@ -102,5 +131,17 @@ describe('getOnboardableTrades', () => {
     expect(onboardable).not.toContain('roofing')
     expect(onboardable).not.toContain('solar')
     expect(onboardable).not.toContain('commercial_painting')
+    // painting has no catalogue in this mock → not yet onboardable
+    expect(onboardable).not.toContain('painting')
+  })
+
+  it('includes painting once it has a catalogue (deterministic trade)', async () => {
+    const sb = mockSupabase({
+      assemblyCounts: { electrical: 20, plumbing: 23, painting: 11 },
+    })
+    const onboardable = await getOnboardableTrades(sb)
+    expect(onboardable).toContain('painting')
+    expect(onboardable).toContain('electrical')
+    expect(onboardable).toContain('plumbing')
   })
 })

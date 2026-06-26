@@ -10,11 +10,11 @@
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --ink-deep:#0E1622; --ink:#141C29; --ink-card:#1B2433; --ink-line:#2D3A4F;
-      --accent:#FF5A1F; --accent-press:#E8470F; --accent-soft:#FF7A45;
-      --text-pri:#FFFFFF; --text-sec:#B8C2D1; --text-dim:#7A8699;
-      --teal-glow:#14B8A6; --teal-deep:#0F766E;
-      --violet:#A78BFA; --amber:#FBBF24; --green:#10B981; --rose:#F87171;
+      --ink-deep:#16120F; --ink:#1E1813; --ink-card:#2B2422; --ink-line:#3A322C;
+      --accent:#FFC400; --accent-press:#E6AC00; --accent-soft:#FFD23D; --accent-ink:#1C1812;
+      --text-pri:#F6F1EA; --text-sec:#C3B8AC; --text-dim:#A2968A;
+      --teal-glow:#6E6354; --teal-deep:#6E6354;
+      --violet:#A78BFA; --amber:#FBBF24; --green:#7BDCA0; --rose:#F87171;
     }
     *,*::before,*::after { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
@@ -186,7 +186,7 @@
     }
     .engine-tag {
       display: inline-block;
-      background: var(--accent); color: #fff;
+      background: var(--accent); color: var(--accent-ink);
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.7rem; font-weight: 700;
       letter-spacing: 0.12em; text-transform: uppercase;
@@ -299,7 +299,7 @@
 
     /* ─── CTA accent bar ────────────────────────────────────────── */
     .cta-bar {
-      background: var(--accent); color: #fff;
+      background: var(--accent); color: var(--accent-ink);
       text-align: center; padding: 1.25rem 1.5rem;
       margin-top: 4rem;
     }
@@ -343,8 +343,8 @@
       <aside>
         <p>
           A customer asks for a quote. Sixty seconds later they get
-          three options — Good, Better, Best — with real numbers and
-          a deposit link.
+          one clear fixed price — with real numbers and
+          a deposit link. No haggling.
         </p>
         <p>
           This page shows the data shapes that move between each
@@ -396,62 +396,62 @@
           <title id="diagram-title">Pipeline data flow from customer message to priced quote</title>
           <defs>
             <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
-              <path d="M0,0 L10,5 L0,10 z" fill="#FF5A1F"/>
+              <path d="M0,0 L10,5 L0,10 z" fill="#FFC400"/>
             </marker>
           </defs>
 
-          <g font-family="Manrope, sans-serif" font-weight="800" fill="#FFFFFF" text-anchor="middle">
-            <rect x="20"  y="120" width="180" height="120" fill="#1B2433" stroke="#2D3A4F" />
-            <text x="110" y="155" font-size="11" fill="#7A8699" letter-spacing="2" font-family="JetBrains Mono, monospace">01 SOURCE</text>
+          <g font-family="Manrope, sans-serif" font-weight="800" fill="#F6F1EA" text-anchor="middle">
+            <rect x="20"  y="120" width="180" height="120" fill="#2B2422" stroke="#3A322C" />
+            <text x="110" y="155" font-size="11" fill="#A2968A" letter-spacing="2" font-family="JetBrains Mono, monospace">01 SOURCE</text>
             <text x="110" y="185" font-size="18">CUSTOMER</text>
-            <text x="110" y="210" font-size="11" fill="#B8C2D1" font-weight="400">Text · Voice · Photos</text>
+            <text x="110" y="210" font-size="11" fill="#C3B8AC" font-weight="400">Text · Voice · Photos</text>
 
-            <rect x="260" y="120" width="180" height="120" fill="#1B2433" stroke="#2D3A4F" />
-            <text x="350" y="155" font-size="11" fill="#FF5A1F" letter-spacing="2" font-family="JetBrains Mono, monospace">02 INTAKE</text>
+            <rect x="260" y="120" width="180" height="120" fill="#2B2422" stroke="#3A322C" />
+            <text x="350" y="155" font-size="11" fill="#FFC400" letter-spacing="2" font-family="JetBrains Mono, monospace">02 INTAKE</text>
             <text x="350" y="185" font-size="17">UNDERSTAND</text>
-            <text x="350" y="210" font-size="11" fill="#B8C2D1" font-weight="400">Claude Opus 4.7</text>
+            <text x="350" y="210" font-size="11" fill="#C3B8AC" font-weight="400">Claude Opus 4.7</text>
 
-            <rect x="500" y="120" width="180" height="120" fill="#1B2433" stroke="#FF5A1F" stroke-width="2" />
-            <text x="590" y="155" font-size="11" fill="#FF5A1F" letter-spacing="2" font-family="JetBrains Mono, monospace">03 ESTIMATE</text>
+            <rect x="500" y="120" width="180" height="120" fill="#2B2422" stroke="#FFC400" stroke-width="2" />
+            <text x="590" y="155" font-size="11" fill="#FFC400" letter-spacing="2" font-family="JetBrains Mono, monospace">03 ESTIMATE</text>
             <text x="590" y="185" font-size="18">PRICE IT</text>
-            <text x="590" y="210" font-size="11" fill="#B8C2D1" font-weight="400">Claude + Price Book</text>
+            <text x="590" y="210" font-size="11" fill="#C3B8AC" font-weight="400">Claude + Price Book</text>
 
-            <rect x="740" y="120" width="180" height="120" fill="#1B2433" stroke="#2D3A4F" />
-            <text x="830" y="155" font-size="11" fill="#FF5A1F" letter-spacing="2" font-family="JetBrains Mono, monospace">04 GROUNDING</text>
+            <rect x="740" y="120" width="180" height="120" fill="#2B2422" stroke="#3A322C" />
+            <text x="830" y="155" font-size="11" fill="#FFC400" letter-spacing="2" font-family="JetBrains Mono, monospace">04 GROUNDING</text>
             <text x="830" y="185" font-size="18">PROVE IT</text>
-            <text x="830" y="210" font-size="11" fill="#B8C2D1" font-weight="400">Every $ traces back</text>
+            <text x="830" y="210" font-size="11" fill="#C3B8AC" font-weight="400">Every $ traces back</text>
 
-            <rect x="980" y="120" width="200" height="120" fill="#1B2433" stroke="#2D3A4F" />
-            <text x="1080" y="155" font-size="11" fill="#7A8699" letter-spacing="2" font-family="JetBrains Mono, monospace">05 RESULT</text>
+            <rect x="980" y="120" width="200" height="120" fill="#2B2422" stroke="#3A322C" />
+            <text x="1080" y="155" font-size="11" fill="#A2968A" letter-spacing="2" font-family="JetBrains Mono, monospace">05 RESULT</text>
             <text x="1080" y="185" font-size="18">CUSTOMER SEES</text>
-            <text x="1080" y="210" font-size="11" fill="#B8C2D1" font-weight="400">Good · Better · Best</text>
+            <text x="1080" y="210" font-size="11" fill="#C3B8AC" font-weight="400">One fixed price</text>
           </g>
 
-          <g stroke="#FF5A1F" stroke-width="2" fill="none" marker-end="url(#arrow)">
+          <g stroke="#FFC400" stroke-width="2" fill="none" marker-end="url(#arrow)">
             <line x1="200" y1="180" x2="256" y2="180" />
             <line x1="440" y1="180" x2="496" y2="180" />
             <line x1="680" y1="180" x2="736" y2="180" />
             <line x1="920" y1="180" x2="976" y2="180" />
           </g>
 
-          <g font-family="JetBrains Mono, monospace" font-size="9" fill="#14B8A6" text-anchor="middle" letter-spacing="1">
+          <g font-family="JetBrains Mono, monospace" font-size="9" fill="#6E6354" text-anchor="middle" letter-spacing="1">
             <text x="228" y="170">RAW WORDS</text>
             <text x="468" y="170">JSON INTAKE</text>
             <text x="708" y="170">DRAFT QUOTE</text>
             <text x="948" y="170">VALIDATED</text>
           </g>
 
-          <g stroke="#14B8A6" stroke-width="1.5" fill="none" stroke-dasharray="5 3">
+          <g stroke="#6E6354" stroke-width="1.5" fill="none" stroke-dasharray="5 3">
             <path d="M 590 240 L 590 290" />
             <path d="M 830 240 L 830 290" />
           </g>
-          <rect x="380" y="305" width="660" height="70" fill="#0E1622" stroke="#14B8A6" stroke-dasharray="5 3" />
-          <text x="710" y="328" font-family="JetBrains Mono, monospace" font-size="11" fill="#14B8A6" text-anchor="middle" letter-spacing="2">SUPABASE DATABASE</text>
-          <text x="710" y="350" font-family="JetBrains Mono, monospace" font-size="9" fill="#B8C2D1" text-anchor="middle" letter-spacing="1">pricing_book · shared_assemblies · shared_materials</text>
-          <text x="710" y="365" font-family="JetBrains Mono, monospace" font-size="9" fill="#B8C2D1" text-anchor="middle" letter-spacing="1">tenant_custom_assemblies · tenant_material_catalogue</text>
+          <rect x="380" y="305" width="660" height="70" fill="#16120F" stroke="#6E6354" stroke-dasharray="5 3" />
+          <text x="710" y="328" font-family="JetBrains Mono, monospace" font-size="11" fill="#6E6354" text-anchor="middle" letter-spacing="2">SUPABASE DATABASE</text>
+          <text x="710" y="350" font-family="JetBrains Mono, monospace" font-size="9" fill="#C3B8AC" text-anchor="middle" letter-spacing="1">pricing_book · shared_assemblies · shared_materials</text>
+          <text x="710" y="365" font-family="JetBrains Mono, monospace" font-size="9" fill="#C3B8AC" text-anchor="middle" letter-spacing="1">tenant_custom_assemblies · tenant_material_catalogue</text>
 
-          <text x="600" y="40" font-family="JetBrains Mono, monospace" font-size="11" fill="#7A8699" text-anchor="middle" letter-spacing="3">PIPELINE · DATA FLOWS LEFT TO RIGHT</text>
-          <line x1="20" y1="65" x2="1180" y2="65" stroke="#2D3A4F" />
+          <text x="600" y="40" font-family="JetBrains Mono, monospace" font-size="11" fill="#A2968A" text-anchor="middle" letter-spacing="3">PIPELINE · DATA FLOWS LEFT TO RIGHT</text>
+          <line x1="20" y1="65" x2="1180" y2="65" stroke="#3A322C" />
         </svg>
       </div>
       <p style="font-size: .85rem; color: var(--text-dim); margin-top: 1rem;">
@@ -669,46 +669,46 @@
               <path d="M0,0 L10,5 L0,10 z" fill="#A78BFA"/>
             </marker>
             <marker id="arr-teal" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-              <path d="M0,0 L10,5 L0,10 z" fill="#14B8A6"/>
+              <path d="M0,0 L10,5 L0,10 z" fill="#6E6354"/>
             </marker>
           </defs>
 
           <!-- Opus -->
-          <rect x="40" y="80" width="180" height="80" fill="#1B2433" stroke="#FF5A1F" stroke-width="2" />
-          <text x="130" y="110" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#FF5A1F" letter-spacing="2">CLAUDE OPUS</text>
-          <text x="130" y="135" text-anchor="middle" font-family="Manrope" font-size="14" font-weight="800" fill="#FFFFFF">DRAFTS QUOTE</text>
+          <rect x="40" y="80" width="180" height="80" fill="#2B2422" stroke="#FFC400" stroke-width="2" />
+          <text x="130" y="110" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#FFC400" letter-spacing="2">CLAUDE OPUS</text>
+          <text x="130" y="135" text-anchor="middle" font-family="Manrope" font-size="14" font-weight="800" fill="#F6F1EA">DRAFTS QUOTE</text>
 
           <!-- Tool -->
-          <rect x="340" y="80" width="180" height="80" fill="#1B2433" stroke="#A78BFA" stroke-width="2" />
+          <rect x="340" y="80" width="180" height="80" fill="#2B2422" stroke="#A78BFA" stroke-width="2" />
           <text x="430" y="110" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#A78BFA" letter-spacing="2">TOOL</text>
-          <text x="430" y="135" text-anchor="middle" font-family="Manrope" font-size="13" font-weight="800" fill="#FFFFFF">lookup_material</text>
+          <text x="430" y="135" text-anchor="middle" font-family="Manrope" font-size="13" font-weight="800" fill="#F6F1EA">lookup_material</text>
 
           <!-- DB -->
-          <rect x="640" y="80" width="220" height="80" fill="#0E1622" stroke="#14B8A6" stroke-width="2" stroke-dasharray="5 3" />
-          <text x="750" y="110" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#14B8A6" letter-spacing="2">SUPABASE</text>
-          <text x="750" y="135" text-anchor="middle" font-family="Manrope" font-size="12" font-weight="800" fill="#FFFFFF">tenant_material_catalogue</text>
+          <rect x="640" y="80" width="220" height="80" fill="#16120F" stroke="#6E6354" stroke-width="2" stroke-dasharray="5 3" />
+          <text x="750" y="110" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#6E6354" letter-spacing="2">SUPABASE</text>
+          <text x="750" y="135" text-anchor="middle" font-family="Manrope" font-size="12" font-weight="800" fill="#F6F1EA">tenant_material_catalogue</text>
 
           <!-- Arrows -->
           <g stroke="#A78BFA" stroke-width="2" fill="none" marker-end="url(#arr-violet)">
             <line x1="220" y1="115" x2="336" y2="115" />
             <line x1="520" y1="115" x2="636" y2="115" />
           </g>
-          <g stroke="#14B8A6" stroke-width="2" fill="none" marker-end="url(#arr-teal)" stroke-dasharray="6 3">
+          <g stroke="#6E6354" stroke-width="2" fill="none" marker-end="url(#arr-teal)" stroke-dasharray="6 3">
             <path d="M 636 145 L 520 145" />
             <path d="M 336 145 L 220 145" />
           </g>
 
           <text x="278" y="105" font-family="JetBrains Mono, monospace" font-size="9" fill="#A78BFA" text-anchor="middle" letter-spacing="1">CALL</text>
-          <text x="278" y="160" font-family="JetBrains Mono, monospace" font-size="9" fill="#14B8A6" text-anchor="middle" letter-spacing="1">RESULT</text>
+          <text x="278" y="160" font-family="JetBrains Mono, monospace" font-size="9" fill="#6E6354" text-anchor="middle" letter-spacing="1">RESULT</text>
           <text x="578" y="105" font-family="JetBrains Mono, monospace" font-size="9" fill="#A78BFA" text-anchor="middle" letter-spacing="1">SQL QUERY</text>
-          <text x="578" y="160" font-family="JetBrains Mono, monospace" font-size="9" fill="#14B8A6" text-anchor="middle" letter-spacing="1">ROWS (top 5)</text>
+          <text x="578" y="160" font-family="JetBrains Mono, monospace" font-size="9" fill="#6E6354" text-anchor="middle" letter-spacing="1">ROWS (top 5)</text>
 
-          <text x="450" y="40" font-family="JetBrains Mono, monospace" font-size="10" fill="#7A8699" text-anchor="middle" letter-spacing="2">REPEATS UP TO 10× — UNTIL OPUS HAS ALL THE PRICES IT NEEDS</text>
-          <line x1="40" y1="60" x2="860" y2="60" stroke="#2D3A4F" />
+          <text x="450" y="40" font-family="JetBrains Mono, monospace" font-size="10" fill="#A2968A" text-anchor="middle" letter-spacing="2">REPEATS UP TO 10× — UNTIL OPUS HAS ALL THE PRICES IT NEEDS</text>
+          <line x1="40" y1="60" x2="860" y2="60" stroke="#3A322C" />
 
-          <text x="130" y="200" font-family="Manrope" font-size="11" fill="#B8C2D1" text-anchor="middle">Decides which products to look up</text>
-          <text x="430" y="200" font-family="Manrope" font-size="11" fill="#B8C2D1" text-anchor="middle">Reranks results semantically</text>
-          <text x="750" y="200" font-family="Manrope" font-size="11" fill="#B8C2D1" text-anchor="middle">Tenant + trade scoped</text>
+          <text x="130" y="200" font-family="Manrope" font-size="11" fill="#C3B8AC" text-anchor="middle">Decides which products to look up</text>
+          <text x="430" y="200" font-family="Manrope" font-size="11" fill="#C3B8AC" text-anchor="middle">Reranks results semantically</text>
+          <text x="750" y="200" font-family="Manrope" font-size="11" fill="#C3B8AC" text-anchor="middle">Tenant + trade scoped</text>
         </svg>
       </div>
 
@@ -792,7 +792,7 @@
         </div>
         <div class="col">
           <h4>What comes out</h4>
-          <p><strong>Pass</strong> → quote ships as Good / Better / Best with deposit links.</p>
+          <p><strong>Pass</strong> → quote ships as a single fixed price with a deposit link.</p>
           <p><strong>Fail</strong> → whole quote becomes a $99 site-visit link.</p>
         </div>
       </div>
@@ -807,7 +807,7 @@
               <path d="M0,0 L10,5 L0,10 z" fill="#FBBF24"/>
             </marker>
             <marker id="arr-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-              <path d="M0,0 L10,5 L0,10 z" fill="#10B981"/>
+              <path d="M0,0 L10,5 L0,10 z" fill="#7BDCA0"/>
             </marker>
             <marker id="arr-rose" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
               <path d="M0,0 L10,5 L0,10 z" fill="#F87171"/>
@@ -815,46 +815,46 @@
           </defs>
 
           <!-- Start -->
-          <rect x="370" y="20" width="160" height="50" fill="#1B2433" stroke="#FBBF24" stroke-width="2" />
+          <rect x="370" y="20" width="160" height="50" fill="#2B2422" stroke="#FBBF24" stroke-width="2" />
           <text x="450" y="42" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" font-weight="700" fill="#FBBF24" letter-spacing="2">LINE ITEM IN</text>
-          <text x="450" y="58" text-anchor="middle" font-family="Manrope" font-size="12" fill="#B8C2D1">unit · price · description</text>
+          <text x="450" y="58" text-anchor="middle" font-family="Manrope" font-size="12" fill="#C3B8AC">unit · price · description</text>
 
           <!-- Q1: unit -->
           <line x1="450" y1="70" x2="450" y2="92" stroke="#FBBF24" stroke-width="2" marker-end="url(#arr-amber)"/>
-          <rect x="320" y="95" width="260" height="46" fill="#0E1622" stroke="#FBBF24" />
-          <text x="450" y="115" text-anchor="middle" font-family="Manrope" font-size="12" font-weight="700" fill="#FFFFFF">Is the unit recognised?</text>
-          <text x="450" y="131" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="#B8C2D1" letter-spacing="1">hr / each / lm / m / metre</text>
+          <rect x="320" y="95" width="260" height="46" fill="#16120F" stroke="#FBBF24" />
+          <text x="450" y="115" text-anchor="middle" font-family="Manrope" font-size="12" font-weight="700" fill="#F6F1EA">Is the unit recognised?</text>
+          <text x="450" y="131" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="#C3B8AC" letter-spacing="1">hr / each / lm / m / metre</text>
 
           <!-- Q2: branch -->
           <line x1="450" y1="141" x2="450" y2="163" stroke="#FBBF24" stroke-width="2" marker-end="url(#arr-amber)"/>
-          <rect x="320" y="166" width="260" height="46" fill="#0E1622" stroke="#FBBF24" />
-          <text x="450" y="186" text-anchor="middle" font-family="Manrope" font-size="12" font-weight="700" fill="#FFFFFF">Match price → candidate</text>
-          <text x="450" y="202" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="#B8C2D1" letter-spacing="1">within ±$0.50 of a real row</text>
+          <rect x="320" y="166" width="260" height="46" fill="#16120F" stroke="#FBBF24" />
+          <text x="450" y="186" text-anchor="middle" font-family="Manrope" font-size="12" font-weight="700" fill="#F6F1EA">Match price → candidate</text>
+          <text x="450" y="202" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="#C3B8AC" letter-spacing="1">within ±$0.50 of a real row</text>
 
           <!-- Q3: category -->
           <line x1="450" y1="212" x2="450" y2="234" stroke="#FBBF24" stroke-width="2" marker-end="url(#arr-amber)"/>
-          <rect x="320" y="237" width="260" height="46" fill="#0E1622" stroke="#FBBF24" />
-          <text x="450" y="257" text-anchor="middle" font-family="Manrope" font-size="12" font-weight="700" fill="#FFFFFF">Category overlap?</text>
-          <text x="450" y="273" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="#B8C2D1" letter-spacing="1">line tags ∩ source tags ≠ ∅</text>
+          <rect x="320" y="237" width="260" height="46" fill="#16120F" stroke="#FBBF24" />
+          <text x="450" y="257" text-anchor="middle" font-family="Manrope" font-size="12" font-weight="700" fill="#F6F1EA">Category overlap?</text>
+          <text x="450" y="273" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="#C3B8AC" letter-spacing="1">line tags ∩ source tags ≠ ∅</text>
 
           <!-- Outcomes -->
-          <line x1="380" y1="283" x2="270" y2="320" stroke="#10B981" stroke-width="2" marker-end="url(#arr-green)"/>
+          <line x1="380" y1="283" x2="270" y2="320" stroke="#7BDCA0" stroke-width="2" marker-end="url(#arr-green)"/>
           <line x1="520" y1="283" x2="630" y2="320" stroke="#F87171" stroke-width="2" marker-end="url(#arr-rose)"/>
 
-          <rect x="120" y="320" width="200" height="46" fill="#1B2433" stroke="#10B981" stroke-width="2" />
-          <text x="220" y="340" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" font-weight="700" fill="#10B981" letter-spacing="2">PASS</text>
-          <text x="220" y="358" text-anchor="middle" font-family="Manrope" font-size="11" fill="#B8C2D1">line accepted</text>
+          <rect x="120" y="320" width="200" height="46" fill="#2B2422" stroke="#7BDCA0" stroke-width="2" />
+          <text x="220" y="340" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" font-weight="700" fill="#7BDCA0" letter-spacing="2">PASS</text>
+          <text x="220" y="358" text-anchor="middle" font-family="Manrope" font-size="11" fill="#C3B8AC">line accepted</text>
 
-          <rect x="580" y="320" width="220" height="46" fill="#1B2433" stroke="#F87171" stroke-width="2" />
+          <rect x="580" y="320" width="220" height="46" fill="#2B2422" stroke="#F87171" stroke-width="2" />
           <text x="690" y="340" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" font-weight="700" fill="#F87171" letter-spacing="2">FAIL</text>
-          <text x="690" y="358" text-anchor="middle" font-family="Manrope" font-size="11" fill="#B8C2D1">whole quote → $99 inspection</text>
+          <text x="690" y="358" text-anchor="middle" font-family="Manrope" font-size="11" fill="#C3B8AC">whole quote → $99 inspection</text>
 
-          <text x="320" y="305" font-family="JetBrains Mono, monospace" font-size="9" fill="#10B981" text-anchor="middle" letter-spacing="1">ALL CHECKS YES</text>
+          <text x="320" y="305" font-family="JetBrains Mono, monospace" font-size="9" fill="#7BDCA0" text-anchor="middle" letter-spacing="1">ALL CHECKS YES</text>
           <text x="580" y="305" font-family="JetBrains Mono, monospace" font-size="9" fill="#F87171" text-anchor="middle" letter-spacing="1">ANY CHECK NO</text>
 
           <!-- Side notes -->
-          <text x="60" y="115" font-family="JetBrains Mono, monospace" font-size="9" fill="#7A8699" letter-spacing="1">labour skips → match rate</text>
-          <text x="60" y="186" font-family="JetBrains Mono, monospace" font-size="9" fill="#7A8699" letter-spacing="1">callout skips → match min</text>
+          <text x="60" y="115" font-family="JetBrains Mono, monospace" font-size="9" fill="#A2968A" letter-spacing="1">labour skips → match rate</text>
+          <text x="60" y="186" font-family="JetBrains Mono, monospace" font-size="9" fill="#A2968A" letter-spacing="1">callout skips → match min</text>
         </svg>
       </div>
 
@@ -975,7 +975,7 @@
 // created_at, sent_at, accepted_at, booking_state, applied_discount_pct.</span></pre>
 
       <p style="font-size: .9rem; color: var(--text-dim); margin-top: .8rem;">
-        The customer at <code style="font-family:JetBrains Mono,monospace;color:var(--text-pri)">/q/x9k2pl3w</code> sees the three tiers rendered <strong>inc-GST</strong> (×1.10 at display) with a Stripe deposit link under each: <strong>Good $762.87 · Better $852.63 · Best $1,211.67</strong>. The early-bird discount, if live, shows as a strikethrough on the selected tier.
+        The customer at <code style="font-family:JetBrains Mono,monospace;color:var(--text-pri)">/q/x9k2pl3w</code> sees one clear fixed price rendered <strong>inc-GST</strong> (×1.10 at display) with a Stripe deposit link: <strong>$852.63</strong>. The early-bird discount, if live, shows as a strikethrough on the headline price.
       </p>
     </div>
   </section>
@@ -1017,7 +1017,7 @@
           </li>
           <li>
             <strong>06 · Sarah sees.</strong>
-            Three tiers — Good $762.87, Better $852.63, Best $1,211.67 (all inc GST). One tap on a tier locks it in with a 30% Stripe deposit.
+            One clear fixed price — $852.63 inc GST. One tap locks it in with a 30% Stripe deposit. No haggling.
           </li>
         </ol>
       </div>

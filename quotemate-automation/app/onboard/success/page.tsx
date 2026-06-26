@@ -45,14 +45,19 @@ export default async function OnboardSuccess({ searchParams }: Props) {
 
       <div className="flex-1 flex items-center justify-center px-6 py-16">
         <div className="w-full max-w-3xl text-center">
-          <span className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-text-dim">
-            Activation complete
+          <span className="inline-block bg-accent font-mono text-[0.7rem] font-bold uppercase tracking-[0.2em] px-3 py-1.5">
+            Welcome to QuoteMax
           </span>
-          <h1 className="mt-4 font-extrabold uppercase text-[clamp(2.5rem,7vw,5.5rem)] leading-[0.95] tracking-[-0.04em]">
+          <h1 className="mt-6 font-extrabold uppercase text-[clamp(2.5rem,7vw,5.5rem)] leading-[0.95] tracking-[-0.04em]">
             G&rsquo;day {firstName}.
             <br />
             <span className="text-accent">You&rsquo;re on the line.</span>
           </h1>
+          <p className="mt-6 mx-auto max-w-xl text-base md:text-lg leading-relaxed text-text-sec">
+            You&rsquo;re all set, {firstName}. From here on, QuoteMax answers,
+            quotes, and books your jobs round the clock. You do the trade &mdash;
+            we&rsquo;ll do the quoting.
+          </p>
 
           {/* Big phone number reveal */}
           <div className="mt-14">
@@ -84,10 +89,10 @@ export default async function OnboardSuccess({ searchParams }: Props) {
             </p>
           </div>
 
-          <div className="mt-12 flex flex-wrap items-center justify-center gap-3">
+          <div className="mt-12 flex flex-col items-center gap-4">
             <Link
               href="/dashboard"
-              className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-8 py-4 text-sm uppercase tracking-wider transition-colors focus:outline-none focus:ring-2 focus:ring-accent-soft focus:ring-offset-2 focus:ring-offset-ink-deep"
+              className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-10 py-4 text-sm uppercase tracking-wider transition-colors focus:outline-none focus:ring-2 focus:ring-accent-soft focus:ring-offset-2 focus:ring-offset-ink-deep"
             >
               Open my dashboard
               <Arrow />
@@ -95,17 +100,12 @@ export default async function OnboardSuccess({ searchParams }: Props) {
             {smsHref && (
               <a
                 href={smsHref}
-                className="inline-flex items-center gap-2 bg-transparent border border-ink-line hover:bg-ink-card text-text-pri font-semibold px-6 py-4 text-sm uppercase tracking-wider transition-colors"
+                className="font-mono text-xs uppercase tracking-[0.14em] text-text-dim hover:text-text-pri transition-colors"
               >
-                Send a test text
+                Or send yourself a test text &rarr;
               </a>
             )}
           </div>
-          {smsHref && (
-            <p className="mt-4 text-xs text-text-dim">
-              Test text opens your phone&rsquo;s SMS app with the number pre-filled.
-            </p>
-          )}
         </div>
       </div>
 

@@ -9,9 +9,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --ink-deep:#0A1628; --ink:#131C2D; --ink-card:#1A2332; --ink-line:#2A3548;
-    --accent:#FF5A1F; --text-pri:#FFFFFF; --text-sec:#C2CCDA; --text-dim:#8895A8;
-    --teal:#14B8A6; --ai:#FF7A45; --violet:#A78BFA; --amber:#FBBF24;
+    --ink-deep:#16120F; --ink:#1E1813; --ink-card:#2B2422; --ink-line:#3A322C;
+    --accent:#FFC400; --accent-ink:#1C1812; --text-pri:#F6F1EA; --text-sec:#C3B8AC; --text-dim:#A2968A;
+    --teal:#7BDCA0; --ai:#FFD23D; --violet:#A78BFA; --amber:#FBBF24;
   }
   * { margin:0; padding:0; box-sizing:border-box; }
   body {
@@ -48,7 +48,7 @@
 
   /* honest-answer panel */
   .answer {
-    background:linear-gradient(135deg,rgba(255,90,31,0.10),rgba(167,139,250,0.06));
+    background:linear-gradient(135deg,rgba(255,196,0,0.10),rgba(167,139,250,0.06));
     border:1px solid var(--ink-line); border-left:3px solid var(--accent);
     padding:1.7rem 1.9rem;
   }
@@ -100,7 +100,7 @@
   .pill {
     font-family:'JetBrains Mono',monospace; font-size:0.7rem; font-weight:600;
     letter-spacing:0.03em; padding:0.22rem 0.5rem; text-transform:uppercase;
-    color:#06121f; white-space:nowrap; display:inline-block;
+    color:#1C1812; white-space:nowrap; display:inline-block;
   }
   .pill.db { background:var(--teal); }
   .pill.ai { background:var(--ai); }
@@ -134,7 +134,7 @@
   .note b { color:var(--text-pri); }
 
   .closing {
-    background:var(--accent); color:#06121f; text-align:center; padding:1.05rem 1.4rem;
+    background:var(--accent); color:#1C1812; text-align:center; padding:1.05rem 1.4rem;
     font-family:'JetBrains Mono',monospace; font-size:0.86rem; font-weight:600;
     letter-spacing:0.04em; text-transform:uppercase; margin-top:3rem;
   }
@@ -145,7 +145,7 @@
   .walk-head { display:flex; align-items:center; gap:0.7rem; margin-bottom:0.7rem; flex-wrap:wrap; }
   .walk-num {
     font-family:'JetBrains Mono',monospace; font-weight:700; font-size:1rem;
-    width:32px; height:32px; flex-shrink:0; background:var(--accent); color:#06121f;
+    width:32px; height:32px; flex-shrink:0; background:var(--accent); color:#1C1812;
     display:flex; align-items:center; justify-content:center;
   }
   .walk-head h3 {
@@ -175,21 +175,21 @@
   }
   .bubble.cust { align-self:flex-start; background:var(--ink); border:1px solid var(--ink-line); }
   .bubble.bot {
-    align-self:flex-end; background:rgba(255,90,31,0.13);
-    border:1px solid rgba(255,90,31,0.32); color:var(--text-pri);
+    align-self:flex-end; background:rgba(255,196,0,0.13);
+    border:1px solid rgba(255,196,0,0.32); color:var(--text-pri);
   }
 
   .codeblock, .ledger {
-    background:#0B1320; border:1px solid var(--ink-line); padding:1rem 1.15rem;
+    background:#16120F; border:1px solid var(--ink-line); padding:1rem 1.15rem;
     overflow-x:auto; font-family:'JetBrains Mono',monospace; font-size:0.86rem;
     line-height:1.7; color:var(--text-sec); white-space:pre; margin:0.6rem 0;
   }
-  .codeblock .k { color:#5FD0C4; }
-  .codeblock .s { color:#FF9D6B; }
+  .codeblock .k { color:#7BDCA0; }
+  .codeblock .s { color:#FFD23D; }
   .codeblock .n { color:#A78BFA; }
   .ledger .call { color:var(--ai); }
   .ledger .db { color:var(--teal); }
-  .ledger .dim { color:#67748A; }
+  .ledger .dim { color:#A2968A; }
 
   .li { width:100%; border-collapse:collapse; font-size:0.92rem; margin:0.6rem 0; }
   .li th, .li td { padding:0.55rem 0.6rem; border-bottom:1px solid var(--ink-line); text-align:left; }
@@ -215,9 +215,21 @@
   .tier .td2 { font-size:0.92rem; margin:0.32rem 0 0.5rem; }
   .tier .tp { font-size:1.3rem; font-weight:800; color:var(--text-pri); }
   .tier .tx { font-size:0.8rem; color:var(--text-dim); font-family:'JetBrains Mono',monospace; }
+
+  .doc-actions{position:fixed;top:18px;right:18px;z-index:50;display:flex;gap:8px}
+  .da-btn{display:inline-flex;align-items:center;gap:7px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:9px 13px;text-decoration:none;border:1px solid #FFC400;transition:background .15s,color .15s}
+  .da-btn svg{width:14px;height:14px}
+  .da-pdf{background:#FFC400;color:#1C1812}.da-pdf:hover{background:#E6AC00;border-color:#E6AC00}
+  .da-online{background:transparent;color:#FFC400}.da-online:hover{background:#FFC400;color:#1C1812}
+  @media(max-width:560px){.doc-actions{top:10px;right:10px}.da-btn{padding:8px 10px;font-size:.66rem}}
+  @media print{@page{size:A4;margin:0}html,body{background:#16120F !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.doc-actions{display:none !important}.topo,.glow{display:none !important}}
 </style>
 </head>
 <body>
+  <div class="doc-actions">
+    <a class="da-btn da-pdf" href="pricing-transparency.pdf" download aria-label="Download PDF"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>PDF</a>
+    <a class="da-btn da-online" href="https://www.quotemax.com.au/docs/pricing-transparency.html" aria-label="Open online">Online <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+  </div>
 <div class="wrap">
 
   <header>
@@ -253,68 +265,68 @@
       <svg viewBox="0 0 920 500" role="img" aria-label="The AI draft and the price database both feed a line-by-line check, which passes the quote or sends it to a paid site visit">
         <defs>
           <marker id="d1ai" markerWidth="10" markerHeight="10" refX="7" refY="3.4" orient="auto">
-            <path d="M0,0 L7.5,3.4 L0,6.8 Z" fill="#FF7A45"/>
+            <path d="M0,0 L7.5,3.4 L0,6.8 Z" fill="#FFD23D"/>
           </marker>
           <marker id="d1db" markerWidth="10" markerHeight="10" refX="7" refY="3.4" orient="auto">
-            <path d="M0,0 L7.5,3.4 L0,6.8 Z" fill="#14B8A6"/>
+            <path d="M0,0 L7.5,3.4 L0,6.8 Z" fill="#7BDCA0"/>
           </marker>
           <marker id="d1out" markerWidth="10" markerHeight="10" refX="7" refY="3.4" orient="auto">
-            <path d="M0,0 L7.5,3.4 L0,6.8 Z" fill="#8895A8"/>
+            <path d="M0,0 L7.5,3.4 L0,6.8 Z" fill="#A2968A"/>
           </marker>
         </defs>
 
         <!-- ── Box A · the AI draft ── -->
-        <rect x="24" y="44" width="296" height="190" rx="5" fill="#131C2D" stroke="#FF7A45" stroke-width="2"/>
-        <text x="44" y="74" font-family="'JetBrains Mono',monospace" font-size="13.5" fill="#FF7A45">STEP 1 · THE AI (CLAUDE)</text>
-        <text x="44" y="101" font-family="Manrope,sans-serif" font-size="19" font-weight="800" fill="#FFFFFF">Drafts the whole quote</text>
-        <text x="44" y="135" font-family="Manrope,sans-serif" font-size="15" fill="#C2CCDA">•  Works out the job</text>
-        <text x="44" y="162" font-family="Manrope,sans-serif" font-size="15" fill="#C2CCDA">•  Picks the items and quantities</text>
-        <text x="44" y="189" font-family="Manrope,sans-serif" font-size="15" fill="#C2CCDA">•  Estimates the labour hours</text>
-        <text x="44" y="218" font-family="Manrope,sans-serif" font-size="15" font-weight="700" fill="#FF7A45">•  Proposes a price for every line</text>
+        <rect x="24" y="44" width="296" height="190" rx="5" fill="#1E1813" stroke="#FFD23D" stroke-width="2"/>
+        <text x="44" y="74" font-family="'JetBrains Mono',monospace" font-size="13.5" fill="#FFD23D">STEP 1 · THE AI (CLAUDE)</text>
+        <text x="44" y="101" font-family="Manrope,sans-serif" font-size="19" font-weight="800" fill="#F6F1EA">Drafts the whole quote</text>
+        <text x="44" y="135" font-family="Manrope,sans-serif" font-size="15" fill="#C3B8AC">•  Works out the job</text>
+        <text x="44" y="162" font-family="Manrope,sans-serif" font-size="15" fill="#C3B8AC">•  Picks the items and quantities</text>
+        <text x="44" y="189" font-family="Manrope,sans-serif" font-size="15" fill="#C3B8AC">•  Estimates the labour hours</text>
+        <text x="44" y="218" font-family="Manrope,sans-serif" font-size="15" font-weight="700" fill="#FFD23D">•  Proposes a price for every line</text>
 
         <!-- ── Cylinder B · the price database ── -->
-        <path d="M24,282 L24,416 A148,26 0 0 0 320,416 L320,282" fill="#0F2A2E" stroke="#14B8A6" stroke-width="2"/>
-        <ellipse cx="172" cy="282" rx="148" ry="26" fill="#14342F" stroke="#14B8A6" stroke-width="2"/>
-        <text x="172" y="323" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="13.5" fill="#14B8A6">STEP 2 · THE PRICE DATABASE</text>
-        <text x="172" y="352" text-anchor="middle" font-family="Manrope,sans-serif" font-size="17" font-weight="800" fill="#FFFFFF">Pricing book + catalogue</text>
-        <text x="172" y="377" text-anchor="middle" font-family="Manrope,sans-serif" font-size="13.5" fill="#5FD0C4">the tradie's real rates, markup &amp; prices</text>
+        <path d="M24,282 L24,416 A148,26 0 0 0 320,416 L320,282" fill="#231E18" stroke="#7BDCA0" stroke-width="2"/>
+        <ellipse cx="172" cy="282" rx="148" ry="26" fill="#2B2422" stroke="#7BDCA0" stroke-width="2"/>
+        <text x="172" y="323" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="13.5" fill="#7BDCA0">STEP 2 · THE PRICE DATABASE</text>
+        <text x="172" y="352" text-anchor="middle" font-family="Manrope,sans-serif" font-size="17" font-weight="800" fill="#F6F1EA">Pricing book + catalogue</text>
+        <text x="172" y="377" text-anchor="middle" font-family="Manrope,sans-serif" font-size="13.5" fill="#7BDCA0">the tradie's real rates, markup &amp; prices</text>
 
         <!-- ── Box C · the check ── -->
-        <rect x="384" y="128" width="268" height="224" rx="5" fill="#131C2D" stroke="#A78BFA" stroke-width="2"/>
+        <rect x="384" y="128" width="268" height="224" rx="5" fill="#1E1813" stroke="#A78BFA" stroke-width="2"/>
         <text x="518" y="170" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="14" fill="#A78BFA">STEP 3 · THE CHECK</text>
-        <text x="518" y="200" text-anchor="middle" font-family="Manrope,sans-serif" font-size="20" font-weight="800" fill="#FFFFFF">Verify every line</text>
-        <text x="518" y="234" text-anchor="middle" font-family="Manrope,sans-serif" font-size="14.5" fill="#C2CCDA">For each line in the quote:</text>
-        <text x="518" y="256" text-anchor="middle" font-family="Manrope,sans-serif" font-size="14.5" fill="#C2CCDA">does the AI's price match a</text>
-        <text x="518" y="278" text-anchor="middle" font-family="Manrope,sans-serif" font-size="14.5" fill="#C2CCDA">real figure in the database?</text>
-        <rect x="426" y="300" width="184" height="36" rx="4" fill="#0B1320" stroke="#2A3548" stroke-width="1.5"/>
-        <text x="518" y="323" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="13" fill="#C2CCDA">AI price  =  database price</text>
+        <text x="518" y="200" text-anchor="middle" font-family="Manrope,sans-serif" font-size="20" font-weight="800" fill="#F6F1EA">Verify every line</text>
+        <text x="518" y="234" text-anchor="middle" font-family="Manrope,sans-serif" font-size="14.5" fill="#C3B8AC">For each line in the quote:</text>
+        <text x="518" y="256" text-anchor="middle" font-family="Manrope,sans-serif" font-size="14.5" fill="#C3B8AC">does the AI's price match a</text>
+        <text x="518" y="278" text-anchor="middle" font-family="Manrope,sans-serif" font-size="14.5" fill="#C3B8AC">real figure in the database?</text>
+        <rect x="426" y="300" width="184" height="36" rx="4" fill="#16120F" stroke="#3A322C" stroke-width="1.5"/>
+        <text x="518" y="323" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="13" fill="#C3B8AC">AI price  =  database price</text>
 
         <!-- ── Box D · pass ── -->
-        <rect x="712" y="92" width="184" height="118" rx="5" fill="#0F2A2E" stroke="#14B8A6" stroke-width="2"/>
-        <text x="732" y="128" font-family="'JetBrains Mono',monospace" font-size="15" fill="#14B8A6">PASS ✓</text>
-        <text x="732" y="156" font-family="Manrope,sans-serif" font-size="15" fill="#FFFFFF">All lines matched.</text>
-        <text x="732" y="178" font-family="Manrope,sans-serif" font-size="15" fill="#C2CCDA">Quote sent — Good,</text>
-        <text x="732" y="199" font-family="Manrope,sans-serif" font-size="15" fill="#C2CCDA">Better, Best.</text>
+        <rect x="712" y="92" width="184" height="118" rx="5" fill="#231E18" stroke="#7BDCA0" stroke-width="2"/>
+        <text x="732" y="128" font-family="'JetBrains Mono',monospace" font-size="15" fill="#7BDCA0">PASS ✓</text>
+        <text x="732" y="156" font-family="Manrope,sans-serif" font-size="15" fill="#F6F1EA">All lines matched.</text>
+        <text x="732" y="178" font-family="Manrope,sans-serif" font-size="15" fill="#C3B8AC">Quote sent — one</text>
+        <text x="732" y="199" font-family="Manrope,sans-serif" font-size="15" fill="#C3B8AC">fixed price.</text>
 
         <!-- ── Box E · fail ── -->
-        <rect x="712" y="300" width="184" height="118" rx="5" fill="#2A1810" stroke="#FF7A45" stroke-width="2"/>
-        <text x="732" y="336" font-family="'JetBrains Mono',monospace" font-size="15" fill="#FF7A45">FAIL ✗</text>
-        <text x="732" y="364" font-family="Manrope,sans-serif" font-size="15" fill="#FFFFFF">A line didn't match.</text>
-        <text x="732" y="386" font-family="Manrope,sans-serif" font-size="15" fill="#C2CCDA">Quote pulled — paid</text>
-        <text x="732" y="407" font-family="Manrope,sans-serif" font-size="15" fill="#C2CCDA">site visit offered.</text>
+        <rect x="712" y="300" width="184" height="118" rx="5" fill="#2B2422" stroke="#FFD23D" stroke-width="2"/>
+        <text x="732" y="336" font-family="'JetBrains Mono',monospace" font-size="15" fill="#FFD23D">FAIL ✗</text>
+        <text x="732" y="364" font-family="Manrope,sans-serif" font-size="15" fill="#F6F1EA">A line didn't match.</text>
+        <text x="732" y="386" font-family="Manrope,sans-serif" font-size="15" fill="#C3B8AC">Quote pulled — paid</text>
+        <text x="732" y="407" font-family="Manrope,sans-serif" font-size="15" fill="#C3B8AC">site visit offered.</text>
 
         <!-- ── arrows into the check ── -->
-        <text x="352" y="198" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="13" fill="#FF7A45">the prices</text>
-        <line x1="320" y1="216" x2="380" y2="228" stroke="#FF7A45" stroke-width="2.4" marker-end="url(#d1ai)"/>
-        <text x="352" y="288" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="13" fill="#14B8A6">real prices</text>
-        <line x1="322" y1="320" x2="380" y2="290" stroke="#14B8A6" stroke-width="2.4" marker-end="url(#d1db)"/>
+        <text x="352" y="198" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="13" fill="#FFD23D">the prices</text>
+        <line x1="320" y1="216" x2="380" y2="228" stroke="#FFD23D" stroke-width="2.4" marker-end="url(#d1ai)"/>
+        <text x="352" y="288" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="13" fill="#7BDCA0">real prices</text>
+        <line x1="322" y1="320" x2="380" y2="290" stroke="#7BDCA0" stroke-width="2.4" marker-end="url(#d1db)"/>
 
         <!-- ── arrows out of the check ── -->
-        <line x1="652" y1="200" x2="706" y2="156" stroke="#8895A8" stroke-width="2.4" marker-end="url(#d1out)"/>
-        <line x1="652" y1="300" x2="706" y2="354" stroke="#8895A8" stroke-width="2.4" marker-end="url(#d1out)"/>
+        <line x1="652" y1="200" x2="706" y2="156" stroke="#A2968A" stroke-width="2.4" marker-end="url(#d1out)"/>
+        <line x1="652" y1="300" x2="706" y2="354" stroke="#A2968A" stroke-width="2.4" marker-end="url(#d1out)"/>
 
         <!-- caption -->
-        <text x="460" y="466" text-anchor="middle" font-family="Manrope,sans-serif" font-size="15" fill="#8895A8">Every line of every quote is checked. A price that isn't in the database cannot be sent.</text>
+        <text x="460" y="466" text-anchor="middle" font-family="Manrope,sans-serif" font-size="15" fill="#A2968A">Every line of every quote is checked. A price that isn't in the database cannot be sent.</text>
       </svg>
     </div>
   </section>
@@ -335,49 +347,49 @@
       <svg viewBox="0 0 920 560" role="img" aria-label="Four stacked stages — communication, intake, estimation, grounding check — beside the price database">
         <defs>
           <marker id="ar2" markerWidth="11" markerHeight="11" refX="7.5" refY="3.6" orient="auto">
-            <path d="M0,0 L8,3.6 L0,7.2 Z" fill="#8895A8"/>
+            <path d="M0,0 L8,3.6 L0,7.2 Z" fill="#A2968A"/>
           </marker>
         </defs>
 
         <!-- STAGE 1 -->
-        <rect x="24" y="30" width="512" height="96" rx="5" fill="#131C2D" stroke="#2A3548" stroke-width="2"/>
-        <text x="48" y="63" font-family="'JetBrains Mono',monospace" font-size="14" fill="#8895A8">STAGE 1 · COMMUNICATION</text>
-        <text x="48" y="91" font-family="Manrope,sans-serif" font-size="20" font-weight="800" fill="#FFFFFF">The customer gets in touch</text>
-        <text x="48" y="115" font-family="Manrope,sans-serif" font-size="15" fill="#C2CCDA">Phone call or text. An AI agent gathers the job details.</text>
+        <rect x="24" y="30" width="512" height="96" rx="5" fill="#1E1813" stroke="#3A322C" stroke-width="2"/>
+        <text x="48" y="63" font-family="'JetBrains Mono',monospace" font-size="14" fill="#A2968A">STAGE 1 · COMMUNICATION</text>
+        <text x="48" y="91" font-family="Manrope,sans-serif" font-size="20" font-weight="800" fill="#F6F1EA">The customer gets in touch</text>
+        <text x="48" y="115" font-family="Manrope,sans-serif" font-size="15" fill="#C3B8AC">Phone call or text. An AI agent gathers the job details.</text>
 
         <!-- STAGE 2 -->
-        <rect x="24" y="166" width="512" height="96" rx="5" fill="#131C2D" stroke="#FF7A45" stroke-width="2"/>
-        <text x="48" y="199" font-family="'JetBrains Mono',monospace" font-size="14" fill="#FF7A45">STAGE 2 · INTAKE ENGINE — AI</text>
-        <text x="48" y="227" font-family="Manrope,sans-serif" font-size="20" font-weight="800" fill="#FFFFFF">The chat becomes structured data</text>
-        <text x="48" y="251" font-family="Manrope,sans-serif" font-size="15" fill="#C2CCDA">Claude writes the job into a fixed format. No prices yet.</text>
+        <rect x="24" y="166" width="512" height="96" rx="5" fill="#1E1813" stroke="#FFD23D" stroke-width="2"/>
+        <text x="48" y="199" font-family="'JetBrains Mono',monospace" font-size="14" fill="#FFD23D">STAGE 2 · INTAKE ENGINE — AI</text>
+        <text x="48" y="227" font-family="Manrope,sans-serif" font-size="20" font-weight="800" fill="#F6F1EA">The chat becomes structured data</text>
+        <text x="48" y="251" font-family="Manrope,sans-serif" font-size="15" fill="#C3B8AC">Claude writes the job into a fixed format. No prices yet.</text>
 
         <!-- STAGE 3 -->
-        <rect x="24" y="302" width="512" height="96" rx="5" fill="#131C2D" stroke="#FF7A45" stroke-width="2"/>
-        <text x="48" y="335" font-family="'JetBrains Mono',monospace" font-size="14" fill="#FF7A45">STAGE 3 · ESTIMATION ENGINE — AI</text>
-        <text x="48" y="363" font-family="Manrope,sans-serif" font-size="20" font-weight="800" fill="#FFFFFF">Claude drafts the quote</text>
-        <text x="48" y="387" font-family="Manrope,sans-serif" font-size="15" fill="#C2CCDA">Picks the items, sets quantities, looks up every price.</text>
+        <rect x="24" y="302" width="512" height="96" rx="5" fill="#1E1813" stroke="#FFD23D" stroke-width="2"/>
+        <text x="48" y="335" font-family="'JetBrains Mono',monospace" font-size="14" fill="#FFD23D">STAGE 3 · ESTIMATION ENGINE — AI</text>
+        <text x="48" y="363" font-family="Manrope,sans-serif" font-size="20" font-weight="800" fill="#F6F1EA">Claude drafts the quote</text>
+        <text x="48" y="387" font-family="Manrope,sans-serif" font-size="15" fill="#C3B8AC">Picks the items, sets quantities, looks up every price.</text>
 
         <!-- STAGE 4 -->
-        <rect x="24" y="438" width="512" height="96" rx="5" fill="#131C2D" stroke="#A78BFA" stroke-width="2"/>
+        <rect x="24" y="438" width="512" height="96" rx="5" fill="#1E1813" stroke="#A78BFA" stroke-width="2"/>
         <text x="48" y="471" font-family="'JetBrains Mono',monospace" font-size="14" fill="#A78BFA">STAGE 4 · GROUNDING CHECK — CODE</text>
-        <text x="48" y="499" font-family="Manrope,sans-serif" font-size="20" font-weight="800" fill="#FFFFFF">Every price is verified, then sent</text>
-        <text x="48" y="523" font-family="Manrope,sans-serif" font-size="15" fill="#C2CCDA">Re-checked against the database. Mismatch goes to a site visit.</text>
+        <text x="48" y="499" font-family="Manrope,sans-serif" font-size="20" font-weight="800" fill="#F6F1EA">Every price is verified, then sent</text>
+        <text x="48" y="523" font-family="Manrope,sans-serif" font-size="15" fill="#C3B8AC">Re-checked against the database. Mismatch goes to a site visit.</text>
 
         <!-- down arrows (band centre x = 280) -->
-        <line x1="280" y1="128" x2="280" y2="163" stroke="#8895A8" stroke-width="2.6" marker-end="url(#ar2)"/>
-        <line x1="280" y1="264" x2="280" y2="299" stroke="#8895A8" stroke-width="2.6" marker-end="url(#ar2)"/>
-        <line x1="280" y1="400" x2="280" y2="435" stroke="#8895A8" stroke-width="2.6" marker-end="url(#ar2)"/>
+        <line x1="280" y1="128" x2="280" y2="163" stroke="#A2968A" stroke-width="2.6" marker-end="url(#ar2)"/>
+        <line x1="280" y1="264" x2="280" y2="299" stroke="#A2968A" stroke-width="2.6" marker-end="url(#ar2)"/>
+        <line x1="280" y1="400" x2="280" y2="435" stroke="#A2968A" stroke-width="2.6" marker-end="url(#ar2)"/>
 
         <!-- DATABASE cylinder -->
-        <path d="M592,326 L592,510 A150,28 0 0 0 892,510 L892,326" fill="#0F2A2E" stroke="#14B8A6" stroke-width="2"/>
-        <ellipse cx="742" cy="326" rx="150" ry="28" fill="#14342F" stroke="#14B8A6" stroke-width="2"/>
-        <text x="742" y="392" text-anchor="middle" font-family="Manrope,sans-serif" font-size="18" font-weight="800" fill="#FFFFFF">THE PRICE DATABASE</text>
-        <text x="742" y="420" text-anchor="middle" font-family="Manrope,sans-serif" font-size="14" fill="#5FD0C4">The tradie's real rates,</text>
-        <text x="742" y="440" text-anchor="middle" font-family="Manrope,sans-serif" font-size="14" fill="#5FD0C4">markup &amp; material prices</text>
+        <path d="M592,326 L592,510 A150,28 0 0 0 892,510 L892,326" fill="#231E18" stroke="#7BDCA0" stroke-width="2"/>
+        <ellipse cx="742" cy="326" rx="150" ry="28" fill="#2B2422" stroke="#7BDCA0" stroke-width="2"/>
+        <text x="742" y="392" text-anchor="middle" font-family="Manrope,sans-serif" font-size="18" font-weight="800" fill="#F6F1EA">THE PRICE DATABASE</text>
+        <text x="742" y="420" text-anchor="middle" font-family="Manrope,sans-serif" font-size="14" fill="#7BDCA0">The tradie's real rates,</text>
+        <text x="742" y="440" text-anchor="middle" font-family="Manrope,sans-serif" font-size="14" fill="#7BDCA0">markup &amp; material prices</text>
 
         <!-- connector: estimation -> DB -->
-        <text x="563" y="338" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="13" fill="#FF7A45">look up</text>
-        <line x1="538" y1="350" x2="588" y2="350" stroke="#FF7A45" stroke-width="2.4" marker-end="url(#ar2)"/>
+        <text x="563" y="338" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="13" fill="#FFD23D">look up</text>
+        <line x1="538" y1="350" x2="588" y2="350" stroke="#FFD23D" stroke-width="2.4" marker-end="url(#ar2)"/>
 
         <!-- connector: DB -> grounding check -->
         <text x="563" y="474" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="13" fill="#A78BFA">verify</text>
@@ -401,7 +413,7 @@
       <span class="tag">Stage 3 · Estimation engine — AI</span>
       <h3>Claude drafts the quote and looks up the prices</h3>
       <p>Claude picks the items, sets quantities and labour hours, and looks up each price from
-         the database. It then writes the full Good / Better / Best draft.</p>
+         the database. It then writes the full quote draft as one clear fixed price.</p>
     </div>
     <div class="engine check">
       <span class="tag">Stage 4 · Grounding check — plain code</span>
@@ -492,7 +504,7 @@
 
 <span class="call">apply_markup($28.00, markup 28%)</span>
   <span class="dim">└─</span> <span class="db">returns</span>  $35.84   <span class="dim">(28% markup — from the tradie's pricing book)</span></div>
-        <p class="after">With real prices in hand, it drafts the <b>Good</b> tier:</p>
+        <p class="after">With real prices in hand, it drafts the <b>fixed-price</b> quote:</p>
         <table class="li">
           <thead>
             <tr><th>Line item</th><th>Qty</th><th>Unit price ex-GST</th><th>Total</th></tr>
@@ -512,10 +524,10 @@
               <td class="num">$110.00</td>
               <td class="num">$330.00</td>
             </tr>
-            <tr class="sub"><td colspan="3">Good — subtotal ex-GST</td><td class="num">$545.04</td></tr>
+            <tr class="sub"><td colspan="3">Subtotal ex-GST</td><td class="num">$545.04</td></tr>
           </tbody>
         </table>
-        <p class="after">Better and Best are built the same way with a dearer downlight.</p>
+        <p class="after">Every line on the quote is built the same way — looked up, then verified.</p>
       </div>
     </div>
 
@@ -549,25 +561,13 @@
         <span class="walk-tag">Delivered</span>
       </div>
       <div class="walk-body">
-        <p>Three options, by text — every figure already verified:</p>
+        <p>One clear fixed price, by text — every figure already verified, no haggling:</p>
         <div class="tiers">
           <div class="tier">
-            <div class="tn">Good</div>
-            <div class="td2">Basic warm-white LED</div>
+            <div class="tn">Your fixed price</div>
+            <div class="td2">Warm-white LED downlights, supplied &amp; fitted</div>
             <div class="tp">$599.54</div>
             <div class="tx">inc-GST · $545.04 ex</div>
-          </div>
-          <div class="tier">
-            <div class="tn">Better</div>
-            <div class="td2">Tri-colour LED</div>
-            <div class="tp">$734.71</div>
-            <div class="tx">inc-GST · $667.92 ex</div>
-          </div>
-          <div class="tier">
-            <div class="tn">Best</div>
-            <div class="td2">Dimmable IP-rated LED</div>
-            <div class="tp">$971.26</div>
-            <div class="tx">inc-GST · $882.96 ex</div>
           </div>
         </div>
         <p class="after">Every price came from the database. The item count and labour hours
@@ -633,7 +633,7 @@
             <td><span class="pill db">DB-verified</span><span class="cell-note">Set figures the AI cannot change.</span></td>
           </tr>
           <tr>
-            <td><b>Wording &amp; tier framing</b></td>
+            <td><b>Wording &amp; quote framing</b></td>
             <td>AI · estimation engine</td>
             <td><span class="pill ai">AI-written</span><span class="cell-note">Text, not a number.</span></td>
           </tr>
@@ -663,51 +663,51 @@
       <svg viewBox="0 0 920 460" role="img" aria-label="Four rows, each shared default replaced by the tradie's own setting">
         <defs>
           <marker id="ar3" markerWidth="10" markerHeight="10" refX="7" refY="3.2" orient="auto">
-            <path d="M0,0 L7,3.2 L0,6.4 Z" fill="#14B8A6"/>
+            <path d="M0,0 L7,3.2 L0,6.4 Z" fill="#7BDCA0"/>
           </marker>
         </defs>
 
-        <text x="260" y="46" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="15" fill="#8895A8">QUOTEMATE DEFAULT</text>
-        <text x="680" y="46" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="15" fill="#14B8A6">THE TRADIE'S OWN SETTING</text>
-        <text x="680" y="67" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="13" fill="#8895A8">used instead — every time</text>
+        <text x="260" y="46" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="15" fill="#A2968A">QUOTEMATE DEFAULT</text>
+        <text x="680" y="46" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="15" fill="#7BDCA0">THE TRADIE'S OWN SETTING</text>
+        <text x="680" y="67" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="13" fill="#A2968A">used instead — every time</text>
 
         <!-- ROW 1 · LABOUR -->
-        <text x="55" y="125" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="14" fill="#FF7A45">LABOUR</text>
-        <rect x="108" y="84" width="304" height="72" rx="5" fill="#131C2D" stroke="#2A3548" stroke-width="2"/>
-        <text x="260" y="126" text-anchor="middle" font-family="Manrope,sans-serif" font-size="16" fill="#8895A8">Generic hourly rate</text>
-        <line x1="420" y1="120" x2="462" y2="120" stroke="#14B8A6" stroke-width="2.8" marker-end="url(#ar3)"/>
-        <rect x="470" y="84" width="418" height="72" rx="5" fill="#14342F" stroke="#14B8A6" stroke-width="2"/>
-        <text x="679" y="115" text-anchor="middle" font-family="Manrope,sans-serif" font-size="16" font-weight="700" fill="#FFFFFF">Their own hourly rate</text>
-        <text x="679" y="138" text-anchor="middle" font-family="Manrope,sans-serif" font-size="14" fill="#5FD0C4">e.g. an electrician on $110/hr</text>
+        <text x="55" y="125" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="14" fill="#FFD23D">LABOUR</text>
+        <rect x="108" y="84" width="304" height="72" rx="5" fill="#1E1813" stroke="#3A322C" stroke-width="2"/>
+        <text x="260" y="126" text-anchor="middle" font-family="Manrope,sans-serif" font-size="16" fill="#A2968A">Generic hourly rate</text>
+        <line x1="420" y1="120" x2="462" y2="120" stroke="#7BDCA0" stroke-width="2.8" marker-end="url(#ar3)"/>
+        <rect x="470" y="84" width="418" height="72" rx="5" fill="#2B2422" stroke="#7BDCA0" stroke-width="2"/>
+        <text x="679" y="115" text-anchor="middle" font-family="Manrope,sans-serif" font-size="16" font-weight="700" fill="#F6F1EA">Their own hourly rate</text>
+        <text x="679" y="138" text-anchor="middle" font-family="Manrope,sans-serif" font-size="14" fill="#7BDCA0">e.g. an electrician on $110/hr</text>
 
         <!-- ROW 2 · MARKUP -->
-        <text x="55" y="211" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="14" fill="#FF7A45">MARKUP</text>
-        <rect x="108" y="170" width="304" height="72" rx="5" fill="#131C2D" stroke="#2A3548" stroke-width="2"/>
-        <text x="260" y="212" text-anchor="middle" font-family="Manrope,sans-serif" font-size="16" fill="#8895A8">Default markup %</text>
-        <line x1="420" y1="206" x2="462" y2="206" stroke="#14B8A6" stroke-width="2.8" marker-end="url(#ar3)"/>
-        <rect x="470" y="170" width="418" height="72" rx="5" fill="#14342F" stroke="#14B8A6" stroke-width="2"/>
-        <text x="679" y="201" text-anchor="middle" font-family="Manrope,sans-serif" font-size="16" font-weight="700" fill="#FFFFFF">Their own markup %</text>
-        <text x="679" y="224" text-anchor="middle" font-family="Manrope,sans-serif" font-size="14" fill="#5FD0C4">the margin they choose to add</text>
+        <text x="55" y="211" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="14" fill="#FFD23D">MARKUP</text>
+        <rect x="108" y="170" width="304" height="72" rx="5" fill="#1E1813" stroke="#3A322C" stroke-width="2"/>
+        <text x="260" y="212" text-anchor="middle" font-family="Manrope,sans-serif" font-size="16" fill="#A2968A">Default markup %</text>
+        <line x1="420" y1="206" x2="462" y2="206" stroke="#7BDCA0" stroke-width="2.8" marker-end="url(#ar3)"/>
+        <rect x="470" y="170" width="418" height="72" rx="5" fill="#2B2422" stroke="#7BDCA0" stroke-width="2"/>
+        <text x="679" y="201" text-anchor="middle" font-family="Manrope,sans-serif" font-size="16" font-weight="700" fill="#F6F1EA">Their own markup %</text>
+        <text x="679" y="224" text-anchor="middle" font-family="Manrope,sans-serif" font-size="14" fill="#7BDCA0">the margin they choose to add</text>
 
         <!-- ROW 3 · MATERIALS -->
-        <text x="55" y="297" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="14" fill="#FF7A45">MATERIALS</text>
-        <rect x="108" y="256" width="304" height="72" rx="5" fill="#131C2D" stroke="#2A3548" stroke-width="2"/>
-        <text x="260" y="298" text-anchor="middle" font-family="Manrope,sans-serif" font-size="16" fill="#8895A8">Generic parts list</text>
-        <line x1="420" y1="292" x2="462" y2="292" stroke="#14B8A6" stroke-width="2.8" marker-end="url(#ar3)"/>
-        <rect x="470" y="256" width="418" height="72" rx="5" fill="#14342F" stroke="#14B8A6" stroke-width="2"/>
-        <text x="679" y="287" text-anchor="middle" font-family="Manrope,sans-serif" font-size="16" font-weight="700" fill="#FFFFFF">Their real brands &amp; prices</text>
-        <text x="679" y="310" text-anchor="middle" font-family="Manrope,sans-serif" font-size="14" fill="#5FD0C4">the products they actually fit</text>
+        <text x="55" y="297" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="14" fill="#FFD23D">MATERIALS</text>
+        <rect x="108" y="256" width="304" height="72" rx="5" fill="#1E1813" stroke="#3A322C" stroke-width="2"/>
+        <text x="260" y="298" text-anchor="middle" font-family="Manrope,sans-serif" font-size="16" fill="#A2968A">Generic parts list</text>
+        <line x1="420" y1="292" x2="462" y2="292" stroke="#7BDCA0" stroke-width="2.8" marker-end="url(#ar3)"/>
+        <rect x="470" y="256" width="418" height="72" rx="5" fill="#2B2422" stroke="#7BDCA0" stroke-width="2"/>
+        <text x="679" y="287" text-anchor="middle" font-family="Manrope,sans-serif" font-size="16" font-weight="700" fill="#F6F1EA">Their real brands &amp; prices</text>
+        <text x="679" y="310" text-anchor="middle" font-family="Manrope,sans-serif" font-size="14" fill="#7BDCA0">the products they actually fit</text>
 
         <!-- ROW 4 · SERVICES -->
-        <text x="55" y="383" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="14" fill="#FF7A45">SERVICES</text>
-        <rect x="108" y="342" width="304" height="72" rx="5" fill="#131C2D" stroke="#2A3548" stroke-width="2"/>
-        <text x="260" y="384" text-anchor="middle" font-family="Manrope,sans-serif" font-size="16" fill="#8895A8">Standard job list</text>
-        <line x1="420" y1="378" x2="462" y2="378" stroke="#14B8A6" stroke-width="2.8" marker-end="url(#ar3)"/>
-        <rect x="470" y="342" width="418" height="72" rx="5" fill="#14342F" stroke="#14B8A6" stroke-width="2"/>
-        <text x="679" y="373" text-anchor="middle" font-family="Manrope,sans-serif" font-size="16" font-weight="700" fill="#FFFFFF">Their own custom jobs</text>
-        <text x="679" y="396" text-anchor="middle" font-family="Manrope,sans-serif" font-size="14" fill="#5FD0C4">they switch off the rest</text>
+        <text x="55" y="383" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="14" fill="#FFD23D">SERVICES</text>
+        <rect x="108" y="342" width="304" height="72" rx="5" fill="#1E1813" stroke="#3A322C" stroke-width="2"/>
+        <text x="260" y="384" text-anchor="middle" font-family="Manrope,sans-serif" font-size="16" fill="#A2968A">Standard job list</text>
+        <line x1="420" y1="378" x2="462" y2="378" stroke="#7BDCA0" stroke-width="2.8" marker-end="url(#ar3)"/>
+        <rect x="470" y="342" width="418" height="72" rx="5" fill="#2B2422" stroke="#7BDCA0" stroke-width="2"/>
+        <text x="679" y="373" text-anchor="middle" font-family="Manrope,sans-serif" font-size="16" font-weight="700" fill="#F6F1EA">Their own custom jobs</text>
+        <text x="679" y="396" text-anchor="middle" font-family="Manrope,sans-serif" font-size="14" fill="#7BDCA0">they switch off the rest</text>
 
-        <text x="460" y="442" text-anchor="middle" font-family="Manrope,sans-serif" font-size="15" fill="#C2CCDA">Defaults are only a starting point — each tradie's own numbers replace them during onboarding.</text>
+        <text x="460" y="442" text-anchor="middle" font-family="Manrope,sans-serif" font-size="15" fill="#C3B8AC">Defaults are only a starting point — each tradie's own numbers replace them during onboarding.</text>
       </svg>
     </div>
   </section>

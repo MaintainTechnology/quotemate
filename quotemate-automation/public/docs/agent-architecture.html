@@ -10,10 +10,10 @@
 
     body {
       font-family: 'JetBrains Mono', monospace;
-      background: #fafafa;
+      background: #16120F;
       min-height: 100vh;
       padding: 2.5rem;
-      color: #111;
+      color: #F6F1EA;
     }
 
     .container { max-width: 1240px; margin: 0 auto; }
@@ -23,19 +23,19 @@
 
     .pulse-dot {
       width: 10px; height: 10px;
-      background: #111;
+      background: #FFC400;
       border-radius: 50%;
       animation: pulse 2s infinite;
     }
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
-    h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; color: #111; }
-    .subtitle { color: #6b7280; font-size: 0.875rem; margin-left: 1.625rem; }
+    h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; color: #F6F1EA; }
+    .subtitle { color: #A2968A; font-size: 0.875rem; margin-left: 1.625rem; }
 
     .diagram-container {
-      background: #ffffff;
+      background: #1E1813;
       border-radius: 0.75rem;
-      border: 1px solid #e5e7eb;
+      border: 1px solid #3A322C;
       padding: 1.75rem;
       overflow-x: auto;
     }
@@ -50,20 +50,20 @@
     }
 
     .card {
-      background: #ffffff;
+      background: #2B2422;
       border-radius: 0.5rem;
-      border: 1px solid #e5e7eb;
+      border: 1px solid #3A322C;
       padding: 1.25rem;
     }
     .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
-    .card-dot { width: 8px; height: 8px; border-radius: 50%; background: #111; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; background: #FFC400; }
 
-    .card h3 { font-size: 0.875rem; font-weight: 600; color: #111; }
-    .card ul { list-style: none; color: #4b5563; font-size: 0.75rem; }
+    .card h3 { font-size: 0.875rem; font-weight: 600; color: #F6F1EA; }
+    .card ul { list-style: none; color: #C3B8AC; font-size: 0.75rem; }
     .card li { margin-bottom: 0.375rem; }
     .card li code {
-      color: #111;
-      background: #f3f4f6;
+      color: #7BDCA0;
+      background: #16120F;
       padding: 0 0.25rem;
       border-radius: 3px;
       font-size: 0.7rem;
@@ -72,12 +72,24 @@
     .footer {
       text-align: center;
       margin-top: 1.5rem;
-      color: #9ca3af;
+      color: #A2968A;
       font-size: 0.75rem;
     }
+
+    .doc-actions{position:fixed;top:18px;right:18px;z-index:50;display:flex;gap:8px}
+    .da-btn{display:inline-flex;align-items:center;gap:7px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:9px 13px;text-decoration:none;border:1px solid #FFC400;transition:background .15s,color .15s}
+    .da-btn svg{width:14px;height:14px}
+    .da-pdf{background:#FFC400;color:#1C1812}.da-pdf:hover{background:#E6AC00;border-color:#E6AC00}
+    .da-online{background:transparent;color:#FFC400}.da-online:hover{background:#FFC400;color:#1C1812}
+    @media(max-width:560px){.doc-actions{top:10px;right:10px}.da-btn{padding:8px 10px;font-size:.66rem}}
+    @media print{@page{size:A4;margin:0}html,body{background:#16120F !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.doc-actions{display:none !important}}
   </style>
 </head>
 <body>
+  <div class="doc-actions">
+    <a class="da-btn da-pdf" href="agent-architecture.pdf" download aria-label="Download PDF"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>PDF</a>
+    <a class="da-btn da-online" href="https://www.quotemax.com.au/docs/agent-architecture.html" aria-label="Open online">Online <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+  </div>
   <div class="container">
     <div class="header">
       <div class="header-row">
@@ -91,10 +103,10 @@
       <svg viewBox="0 0 1140 1320" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" fill="#111" />
+            <polygon points="0 0, 10 3.5, 0 7" fill="#A2968A" />
           </marker>
           <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#f3f4f6" stroke-width="1"/>
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#2B2422" stroke-width="1"/>
           </pattern>
         </defs>
 
@@ -103,138 +115,138 @@
 
         <!-- ─── Shared pipeline boundary (dashed gray) ─── -->
         <rect x="380" y="435" width="700" height="865" rx="10"
-              fill="none" stroke="#9ca3af" stroke-width="1" stroke-dasharray="6,4"/>
-        <text x="396" y="455" fill="#6b7280" font-size="10" font-weight="600" letter-spacing="0.05em">SHARED PIPELINE — channel-agnostic</text>
+              fill="none" stroke="#6E6354" stroke-width="1" stroke-dasharray="6,4"/>
+        <text x="396" y="455" fill="#A2968A" font-size="10" font-weight="600" letter-spacing="0.05em">SHARED PIPELINE — channel-agnostic</text>
 
         <!-- ─── ARROWS (drawn before components) ─── -->
 
         <!-- Customer fork to both lanes -->
-        <path d="M 540 100 L 540 130 L 240 130 L 240 148" fill="none" stroke="#111" stroke-width="1.5" marker-end="url(#arrow)"/>
-        <path d="M 660 100 L 660 130 L 960 130 L 960 148" fill="none" stroke="#111" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <path d="M 540 100 L 540 130 L 240 130 L 240 148" fill="none" stroke="#6E6354" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <path d="M 660 100 L 660 130 L 960 130 L 960 148" fill="none" stroke="#6E6354" stroke-width="1.5" marker-end="url(#arrow)"/>
 
         <!-- Voice lane verticals -->
-        <line x1="240" y1="210" x2="240" y2="248" stroke="#111" stroke-width="1.5" marker-end="url(#arrow)"/>
-        <line x1="240" y1="310" x2="240" y2="348" stroke="#111" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <line x1="240" y1="210" x2="240" y2="248" stroke="#6E6354" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <line x1="240" y1="310" x2="240" y2="348" stroke="#6E6354" stroke-width="1.5" marker-end="url(#arrow)"/>
 
         <!-- SMS lane verticals -->
-        <line x1="960" y1="210" x2="960" y2="248" stroke="#111" stroke-width="1.5" marker-end="url(#arrow)"/>
-        <line x1="960" y1="310" x2="960" y2="348" stroke="#111" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <line x1="960" y1="210" x2="960" y2="248" stroke="#6E6354" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <line x1="960" y1="310" x2="960" y2="348" stroke="#6E6354" stroke-width="1.5" marker-end="url(#arrow)"/>
 
         <!-- Convergence into shared intake -->
-        <path d="M 240 410 L 240 435 L 500 435 L 500 458" fill="none" stroke="#111" stroke-width="1.5" marker-end="url(#arrow)"/>
-        <text x="370" y="425" fill="#374151" font-size="10" font-weight="600" text-anchor="middle">callId</text>
+        <path d="M 240 410 L 240 435 L 500 435 L 500 458" fill="none" stroke="#6E6354" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <text x="370" y="425" fill="#A2968A" font-size="10" font-weight="600" text-anchor="middle">callId</text>
 
-        <path d="M 960 410 L 960 435 L 700 435 L 700 458" fill="none" stroke="#111" stroke-width="1.5" marker-end="url(#arrow)"/>
-        <text x="830" y="425" fill="#374151" font-size="10" font-weight="600" text-anchor="middle">conversationId</text>
+        <path d="M 960 410 L 960 435 L 700 435 L 700 458" fill="none" stroke="#6E6354" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <text x="830" y="425" fill="#A2968A" font-size="10" font-weight="600" text-anchor="middle">conversationId</text>
 
         <!-- Shared spine verticals -->
-        <line x1="600" y1="520" x2="600" y2="568" stroke="#111" stroke-width="1.5" marker-end="url(#arrow)"/>
-        <line x1="600" y1="630" x2="600" y2="678" stroke="#111" stroke-width="1.5" marker-end="url(#arrow)"/>
-        <line x1="600" y1="740" x2="600" y2="788" stroke="#111" stroke-width="1.5" marker-end="url(#arrow)"/>
-        <line x1="600" y1="850" x2="600" y2="898" stroke="#111" stroke-width="1.5" marker-end="url(#arrow)"/>
-        <line x1="600" y1="960" x2="600" y2="1008" stroke="#111" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <line x1="600" y1="520" x2="600" y2="568" stroke="#6E6354" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <line x1="600" y1="630" x2="600" y2="678" stroke="#6E6354" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <line x1="600" y1="740" x2="600" y2="788" stroke="#6E6354" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <line x1="600" y1="850" x2="600" y2="898" stroke="#6E6354" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <line x1="600" y1="960" x2="600" y2="1008" stroke="#6E6354" stroke-width="1.5" marker-end="url(#arrow)"/>
 
         <!-- Estimate → quotes (write) -->
-        <line x1="800" y1="820" x2="858" y2="820" stroke="#111" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <line x1="800" y1="820" x2="858" y2="820" stroke="#6E6354" stroke-width="1.5" marker-end="url(#arrow)"/>
 
         <!-- ─── COMPONENTS ─── -->
-        <!-- Convention: white fill = external, light gray = routes/agents, mid gray = DBs -->
+        <!-- Convention: warm-card fill = external, ink fill = routes/agents, yellow-bordered = DBs -->
 
         <!-- Customer (external) -->
-        <rect x="500" y="40" width="200" height="60" rx="4" fill="#ffffff" stroke="#111" stroke-width="1.5"/>
-        <text x="600" y="65" fill="#111" font-size="13" font-weight="600" text-anchor="middle">Customer</text>
-        <text x="600" y="83" fill="#4b5563" font-size="10" text-anchor="middle">AU mobile</text>
+        <rect x="500" y="40" width="200" height="60" rx="4" fill="#2B2422" stroke="#3A322C" stroke-width="1.5"/>
+        <text x="600" y="65" fill="#F6F1EA" font-size="13" font-weight="600" text-anchor="middle">Customer</text>
+        <text x="600" y="83" fill="#C3B8AC" font-size="10" text-anchor="middle">AU mobile</text>
 
         <!-- Vapi (external service) -->
-        <rect x="140" y="150" width="200" height="60" rx="4" fill="#ffffff" stroke="#111" stroke-width="1.5"/>
-        <text x="240" y="175" fill="#111" font-size="13" font-weight="600" text-anchor="middle">Vapi</text>
-        <text x="240" y="193" fill="#4b5563" font-size="10" text-anchor="middle">voice agent</text>
+        <rect x="140" y="150" width="200" height="60" rx="4" fill="#2B2422" stroke="#3A322C" stroke-width="1.5"/>
+        <text x="240" y="175" fill="#F6F1EA" font-size="13" font-weight="600" text-anchor="middle">Vapi</text>
+        <text x="240" y="193" fill="#C3B8AC" font-size="10" text-anchor="middle">voice agent</text>
 
         <!-- Twilio (external service) -->
-        <rect x="860" y="150" width="200" height="60" rx="4" fill="#ffffff" stroke="#111" stroke-width="1.5"/>
-        <text x="960" y="175" fill="#111" font-size="13" font-weight="600" text-anchor="middle">Twilio</text>
-        <text x="960" y="193" fill="#4b5563" font-size="10" text-anchor="middle">SMS / MMS</text>
+        <rect x="860" y="150" width="200" height="60" rx="4" fill="#2B2422" stroke="#3A322C" stroke-width="1.5"/>
+        <text x="960" y="175" fill="#F6F1EA" font-size="13" font-weight="600" text-anchor="middle">Twilio</text>
+        <text x="960" y="193" fill="#C3B8AC" font-size="10" text-anchor="middle">SMS / MMS</text>
 
         <!-- /api/vapi/webhook (route) -->
-        <rect x="140" y="250" width="200" height="60" rx="4" fill="#f3f4f6" stroke="#111" stroke-width="1.5"/>
-        <text x="240" y="275" fill="#111" font-size="12" font-weight="600" text-anchor="middle">/api/vapi/webhook</text>
-        <text x="240" y="293" fill="#4b5563" font-size="10" text-anchor="middle">end-of-call-report</text>
+        <rect x="140" y="250" width="200" height="60" rx="4" fill="#1E1813" stroke="#3A322C" stroke-width="1.5"/>
+        <text x="240" y="275" fill="#F6F1EA" font-size="12" font-weight="600" text-anchor="middle">/api/vapi/webhook</text>
+        <text x="240" y="293" fill="#C3B8AC" font-size="10" text-anchor="middle">end-of-call-report</text>
 
         <!-- /api/sms/inbound (route + Haiku Dialog Agent) -->
-        <rect x="860" y="250" width="200" height="60" rx="4" fill="#f3f4f6" stroke="#111" stroke-width="1.5"/>
-        <text x="960" y="275" fill="#111" font-size="12" font-weight="600" text-anchor="middle">/api/sms/inbound</text>
-        <text x="960" y="293" fill="#4b5563" font-size="10" text-anchor="middle">Haiku Dialog Agent</text>
+        <rect x="860" y="250" width="200" height="60" rx="4" fill="#1E1813" stroke="#3A322C" stroke-width="1.5"/>
+        <text x="960" y="275" fill="#F6F1EA" font-size="12" font-weight="600" text-anchor="middle">/api/sms/inbound</text>
+        <text x="960" y="293" fill="#C3B8AC" font-size="10" text-anchor="middle">Haiku Dialog Agent</text>
 
         <!-- calls (DB) -->
-        <rect x="140" y="350" width="200" height="60" rx="4" fill="#d1d5db" stroke="#111" stroke-width="1.5"/>
-        <text x="240" y="375" fill="#111" font-size="13" font-weight="600" text-anchor="middle">calls</text>
-        <text x="240" y="393" fill="#374151" font-size="10" text-anchor="middle">transcript · photos</text>
+        <rect x="140" y="350" width="200" height="60" rx="4" fill="#2B2422" stroke="#FFC400" stroke-width="1.5"/>
+        <text x="240" y="375" fill="#F6F1EA" font-size="13" font-weight="600" text-anchor="middle">calls</text>
+        <text x="240" y="393" fill="#A2968A" font-size="10" text-anchor="middle">transcript · photos</text>
 
         <!-- sms_conversations (DB) -->
-        <rect x="860" y="350" width="200" height="60" rx="4" fill="#d1d5db" stroke="#111" stroke-width="1.5"/>
-        <text x="960" y="375" fill="#111" font-size="13" font-weight="600" text-anchor="middle">sms_conversations</text>
-        <text x="960" y="393" fill="#374151" font-size="10" text-anchor="middle">sms_messages · MMS</text>
+        <rect x="860" y="350" width="200" height="60" rx="4" fill="#2B2422" stroke="#FFC400" stroke-width="1.5"/>
+        <text x="960" y="375" fill="#F6F1EA" font-size="13" font-weight="600" text-anchor="middle">sms_conversations</text>
+        <text x="960" y="393" fill="#A2968A" font-size="10" text-anchor="middle">sms_messages · MMS</text>
 
         <!-- /api/intake/structure (convergence) -->
-        <rect x="400" y="460" width="400" height="60" rx="4" fill="#f3f4f6" stroke="#111" stroke-width="1.5"/>
-        <text x="600" y="485" fill="#111" font-size="13" font-weight="600" text-anchor="middle">/api/intake/structure</text>
-        <text x="600" y="503" fill="#4b5563" font-size="10" text-anchor="middle">channel-agnostic handler</text>
+        <rect x="400" y="460" width="400" height="60" rx="4" fill="#1E1813" stroke="#3A322C" stroke-width="1.5"/>
+        <text x="600" y="485" fill="#F6F1EA" font-size="13" font-weight="600" text-anchor="middle">/api/intake/structure</text>
+        <text x="600" y="503" fill="#C3B8AC" font-size="10" text-anchor="middle">channel-agnostic handler</text>
 
         <!-- Opus Vision · Intake Agent -->
-        <rect x="400" y="570" width="400" height="60" rx="4" fill="#f3f4f6" stroke="#111" stroke-width="1.5"/>
-        <text x="600" y="595" fill="#111" font-size="13" font-weight="600" text-anchor="middle">Opus 4.7 Vision</text>
-        <text x="600" y="613" fill="#4b5563" font-size="10" text-anchor="middle">Intake Agent</text>
+        <rect x="400" y="570" width="400" height="60" rx="4" fill="#1E1813" stroke="#3A322C" stroke-width="1.5"/>
+        <text x="600" y="595" fill="#F6F1EA" font-size="13" font-weight="600" text-anchor="middle">Opus 4.7 Vision</text>
+        <text x="600" y="613" fill="#C3B8AC" font-size="10" text-anchor="middle">Intake Agent</text>
 
         <!-- intakes (DB) -->
-        <rect x="400" y="680" width="400" height="60" rx="4" fill="#d1d5db" stroke="#111" stroke-width="1.5"/>
-        <text x="600" y="705" fill="#111" font-size="13" font-weight="600" text-anchor="middle">intakes</text>
-        <text x="600" y="723" fill="#374151" font-size="10" text-anchor="middle">Postgres · pgvector</text>
+        <rect x="400" y="680" width="400" height="60" rx="4" fill="#2B2422" stroke="#FFC400" stroke-width="1.5"/>
+        <text x="600" y="705" fill="#F6F1EA" font-size="13" font-weight="600" text-anchor="middle">intakes</text>
+        <text x="600" y="723" fill="#A2968A" font-size="10" text-anchor="middle">Postgres · pgvector</text>
 
         <!-- Estimate Agent -->
-        <rect x="400" y="790" width="400" height="60" rx="4" fill="#f3f4f6" stroke="#111" stroke-width="1.5"/>
-        <text x="600" y="815" fill="#111" font-size="13" font-weight="600" text-anchor="middle">Opus 4.7 + RAG + Rerank</text>
-        <text x="600" y="833" fill="#4b5563" font-size="10" text-anchor="middle">Estimate Agent · Voyage Rerank-2.5</text>
+        <rect x="400" y="790" width="400" height="60" rx="4" fill="#1E1813" stroke="#3A322C" stroke-width="1.5"/>
+        <text x="600" y="815" fill="#F6F1EA" font-size="13" font-weight="600" text-anchor="middle">Opus 4.7 + RAG + Rerank</text>
+        <text x="600" y="833" fill="#C3B8AC" font-size="10" text-anchor="middle">Estimate Agent · Voyage Rerank-2.5</text>
 
         <!-- quotes (DB, sibling of Estimate) -->
-        <rect x="860" y="790" width="200" height="60" rx="4" fill="#d1d5db" stroke="#111" stroke-width="1.5"/>
-        <text x="960" y="815" fill="#111" font-size="13" font-weight="600" text-anchor="middle">quotes</text>
-        <text x="960" y="833" fill="#374151" font-size="10" text-anchor="middle">3 tiers · share token</text>
+        <rect x="860" y="790" width="200" height="60" rx="4" fill="#2B2422" stroke="#FFC400" stroke-width="1.5"/>
+        <text x="960" y="815" fill="#F6F1EA" font-size="13" font-weight="600" text-anchor="middle">quotes</text>
+        <text x="960" y="833" fill="#A2968A" font-size="10" text-anchor="middle">3 tiers · share token</text>
 
         <!-- Stripe Connect Express -->
-        <rect x="400" y="900" width="400" height="60" rx="4" fill="#ffffff" stroke="#111" stroke-width="1.5"/>
-        <text x="600" y="925" fill="#111" font-size="13" font-weight="600" text-anchor="middle">Stripe Connect Express</text>
-        <text x="600" y="943" fill="#4b5563" font-size="10" text-anchor="middle">3 deposit links</text>
+        <rect x="400" y="900" width="400" height="60" rx="4" fill="#2B2422" stroke="#3A322C" stroke-width="1.5"/>
+        <text x="600" y="925" fill="#F6F1EA" font-size="13" font-weight="600" text-anchor="middle">Stripe Connect Express</text>
+        <text x="600" y="943" fill="#C3B8AC" font-size="10" text-anchor="middle">single fixed-price deposit link</text>
 
         <!-- Tradie Notify (side branch off quotes) -->
-        <rect x="860" y="900" width="200" height="60" rx="4" fill="#ffffff" stroke="#111" stroke-width="1.5"/>
-        <text x="960" y="925" fill="#111" font-size="13" font-weight="600" text-anchor="middle">Tradie Notify</text>
-        <text x="960" y="943" fill="#4b5563" font-size="10" text-anchor="middle">SMS + WhatsApp</text>
+        <rect x="860" y="900" width="200" height="60" rx="4" fill="#2B2422" stroke="#3A322C" stroke-width="1.5"/>
+        <text x="960" y="925" fill="#F6F1EA" font-size="13" font-weight="600" text-anchor="middle">Tradie Notify</text>
+        <text x="960" y="943" fill="#C3B8AC" font-size="10" text-anchor="middle">SMS + WhatsApp</text>
 
         <!-- Arrow from quotes box → Tradie Notify -->
-        <line x1="960" y1="850" x2="960" y2="898" stroke="#111" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <line x1="960" y1="850" x2="960" y2="898" stroke="#6E6354" stroke-width="1.5" marker-end="url(#arrow)"/>
 
         <!-- Quote SMS reply -->
-        <rect x="500" y="1010" width="200" height="60" rx="4" fill="#ffffff" stroke="#111" stroke-width="1.5"/>
-        <text x="600" y="1035" fill="#111" font-size="13" font-weight="600" text-anchor="middle">Quote SMS</text>
-        <text x="600" y="1053" fill="#4b5563" font-size="10" text-anchor="middle">→ Customer</text>
+        <rect x="500" y="1010" width="200" height="60" rx="4" fill="#2B2422" stroke="#3A322C" stroke-width="1.5"/>
+        <text x="600" y="1035" fill="#F6F1EA" font-size="13" font-weight="600" text-anchor="middle">Quote SMS</text>
+        <text x="600" y="1053" fill="#C3B8AC" font-size="10" text-anchor="middle">→ Customer</text>
 
         <!-- Arrow Quote SMS → HTML quote page -->
-        <line x1="600" y1="1070" x2="600" y2="1108" stroke="#111" stroke-width="1.5" marker-end="url(#arrow)"/>
-        <text x="615" y="1093" fill="#374151" font-size="10" font-weight="600">tap link</text>
+        <line x1="600" y1="1070" x2="600" y2="1108" stroke="#6E6354" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <text x="615" y="1093" fill="#A2968A" font-size="10" font-weight="600">tap link</text>
 
         <!-- HTML quote page /q/[token] -->
-        <rect x="400" y="1110" width="400" height="60" rx="4" fill="#f3f4f6" stroke="#111" stroke-width="1.5"/>
-        <text x="600" y="1135" fill="#111" font-size="13" font-weight="600" text-anchor="middle">/q/[token] · HTML quote page</text>
-        <text x="600" y="1153" fill="#4b5563" font-size="10" text-anchor="middle">G/B/B + tier photos + customer photos</text>
+        <rect x="400" y="1110" width="400" height="60" rx="4" fill="#1E1813" stroke="#3A322C" stroke-width="1.5"/>
+        <text x="600" y="1135" fill="#F6F1EA" font-size="13" font-weight="600" text-anchor="middle">/q/[token] · HTML quote page</text>
+        <text x="600" y="1153" fill="#C3B8AC" font-size="10" text-anchor="middle">one fixed price + job photos + customer photos</text>
 
         <!-- Arrow HTML quote → booking + confirmations -->
-        <line x1="600" y1="1170" x2="600" y2="1208" stroke="#111" stroke-width="1.5" marker-end="url(#arrow)"/>
-        <text x="615" y="1193" fill="#374151" font-size="10" font-weight="600">pay + pick a time</text>
+        <line x1="600" y1="1170" x2="600" y2="1208" stroke="#6E6354" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <text x="615" y="1193" fill="#A2968A" font-size="10" font-weight="600">pay + pick a time</text>
 
         <!-- Booking + confirmations -->
-        <rect x="400" y="1210" width="400" height="60" rx="4" fill="#f3f4f6" stroke="#111" stroke-width="1.5"/>
-        <text x="600" y="1235" fill="#111" font-size="13" font-weight="600" text-anchor="middle">/q/[token]/book · Booking confirmed</text>
-        <text x="600" y="1253" fill="#4b5563" font-size="10" text-anchor="middle">customer + tradie confirmation SMS</text>
+        <rect x="400" y="1210" width="400" height="60" rx="4" fill="#1E1813" stroke="#3A322C" stroke-width="1.5"/>
+        <text x="600" y="1235" fill="#F6F1EA" font-size="13" font-weight="600" text-anchor="middle">/q/[token]/book · Booking confirmed</text>
+        <text x="600" y="1253" fill="#C3B8AC" font-size="10" text-anchor="middle">customer + tradie confirmation SMS</text>
 
       </svg>
     </div>

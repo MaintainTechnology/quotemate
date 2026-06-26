@@ -10,25 +10,26 @@
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
 <style>
   :root {
-    --ink-deep:     #0E1622;
-    --ink:          #141C29;
-    --ink-card:     #1B2433;
-    --ink-line:     #2D3A4F;
+    --ink-deep:     #16120F;
+    --ink:          #1E1813;
+    --ink-card:     #2B2422;
+    --ink-line:     #3A322C;
 
-    --accent:       #FF5A1F;
-    --accent-press: #E8470F;
-    --accent-soft:  #FF7A45;
+    --accent:       #FFC400;
+    --accent-press: #E6AC00;
+    --accent-soft:  #FFD23D;
+    --accent-ink:   #1C1812;
 
-    --text-pri:     #FFFFFF;
-    --text-sec:     #B8C2D1;
-    --text-dim:     #7A8699;
+    --text-pri:     #F6F1EA;
+    --text-sec:     #C3B8AC;
+    --text-dim:     #A2968A;
 
-    --teal-glow:    #14B8A6;
-    --teal-bright:  #2DD4BF;
-    --teal-deep:    #0F766E;
+    --teal-glow:    #6E6354;
+    --teal-bright:  #7BDCA0;
+    --teal-deep:    #6E6354;
 
-    --amber:        #F59E0B;
-    --amber-deep:   #B45309;
+    --amber:        #FFD23D;
+    --amber-deep:   #E6AC00;
 
     --sans: 'Manrope', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     --mono: 'JetBrains Mono', ui-monospace, monospace;
@@ -74,7 +75,7 @@
     max-height: 820px;
     top: -22vw;
     right: -16vw;
-    background: radial-gradient(circle, rgba(255,90,31,0.20) 0%, rgba(255,90,31,0.05) 38%, transparent 68%);
+    background: radial-gradient(circle, rgba(255,196,0,0.20) 0%, rgba(255,196,0,0.05) 38%, transparent 68%);
     filter: blur(6px);
   }
   .atmosphere .glow.teal {
@@ -82,7 +83,7 @@
     right: auto;
     bottom: -28vw;
     left: -20vw;
-    background: radial-gradient(circle, rgba(20,184,166,0.14) 0%, rgba(20,184,166,0.03) 42%, transparent 70%);
+    background: radial-gradient(circle, rgba(110,99,84,0.14) 0%, rgba(110,99,84,0.03) 42%, transparent 70%);
   }
   .grain {
     position: fixed;
@@ -104,7 +105,7 @@
   /* ── Top classification bar ───────────────────────────────────────── */
   .classbar {
     border-bottom: 1px solid var(--ink-line);
-    background: rgba(14,22,34,0.72);
+    background: rgba(22,18,15,0.72);
     backdrop-filter: blur(8px);
     position: sticky;
     top: 0;
@@ -133,7 +134,7 @@
     width: 8px; height: 8px;
     background: var(--accent);
     display: inline-block;
-    box-shadow: 0 0 10px 1px rgba(255,90,31,0.6);
+    box-shadow: 0 0 10px 1px rgba(255,196,0,0.6);
   }
   .classbar .meta {
     font-family: var(--mono);
@@ -195,7 +196,7 @@
     grid-template-columns: repeat(4, 1fr);
     border: 1px solid var(--ink-line);
     margin-top: clamp(2.5rem, 6vw, 4rem);
-    background: rgba(27,36,51,0.45);
+    background: rgba(43,36,34,0.45);
   }
   .sitrep .cell {
     padding: 1.15rem 1.35rem;
@@ -286,7 +287,7 @@
   .vector {
     border: 1px solid var(--ink-line);
     background:
-      linear-gradient(180deg, rgba(27,36,51,0.92) 0%, rgba(20,28,41,0.92) 100%);
+      linear-gradient(180deg, rgba(43,36,34,0.92) 0%, rgba(30,24,19,0.92) 100%);
     position: relative;
     overflow: hidden;
     transition: border-color 0.35s ease, transform 0.35s ease;
@@ -299,7 +300,7 @@
     background: var(--ink-line);
     transition: background 0.35s ease;
   }
-  .vector:hover { border-color: rgba(255,90,31,0.5); transform: translateY(-2px); }
+  .vector:hover { border-color: rgba(255,196,0,0.5); transform: translateY(-2px); }
   .vector:hover::before { background: var(--accent); }
 
   .vector-grid {
@@ -401,7 +402,7 @@
     gap: 1rem;
     align-items: start;
     padding: 0.85rem 0;
-    border-top: 1px solid rgba(45,58,79,0.55);
+    border-top: 1px solid rgba(58,50,44,0.55);
   }
   ul.controls > li:first-child { border-top: 0; }
   ul.controls > li .ctrl-text { color: var(--text-sec); font-size: 0.96rem; line-height: 1.5; }
@@ -409,8 +410,8 @@
 
   .honest {
     margin-top: 1.5rem;
-    border: 1px solid rgba(245,158,11,0.32);
-    background: rgba(245,158,11,0.06);
+    border: 1px solid rgba(255,210,61,0.32);
+    background: rgba(255,210,61,0.06);
     padding: 1rem 1.2rem;
     display: grid;
     grid-template-columns: auto 1fr;
@@ -430,8 +431,8 @@
 
   .proof {
     margin-top: 1.5rem;
-    border: 1px solid rgba(45,212,191,0.3);
-    background: rgba(20,184,166,0.06);
+    border: 1px solid rgba(123,220,160,0.3);
+    background: rgba(123,220,160,0.06);
     padding: 1rem 1.2rem;
     display: grid;
     grid-template-columns: auto 1fr;
@@ -453,7 +454,7 @@
   .principle {
     border: 1px solid var(--ink-line);
     background:
-      radial-gradient(120% 140% at 100% 0%, rgba(255,90,31,0.08) 0%, transparent 50%),
+      radial-gradient(120% 140% at 100% 0%, rgba(255,196,0,0.08) 0%, transparent 50%),
       var(--ink-card);
     padding: clamp(2rem, 5vw, 3.4rem);
   }
@@ -488,7 +489,7 @@
   /* ── CTA accent bar ───────────────────────────────────────────────── */
   .ctabar {
     background: var(--accent);
-    color: #fff;
+    color: var(--accent-ink);
     text-align: center;
     padding: 1.15rem 1.5rem;
   }
@@ -565,14 +566,14 @@
 
 <div class="atmosphere" aria-hidden="true">
   <svg class="topo" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" fill="none">
-    <g stroke="#14B8A6" stroke-width="1">
+    <g stroke="#6E6354" stroke-width="1">
       <path d="M-40,720 Q220,560 460,640 T940,600 T1480,660" opacity="0.55"/>
       <path d="M-40,770 Q240,620 480,700 T960,660 T1480,720" opacity="0.45"/>
       <path d="M-40,640 Q200,500 440,560 T900,520 T1480,580" opacity="0.4"/>
       <path d="M-40,560 Q260,440 500,490 T960,450 T1480,500" opacity="0.3"/>
       <path d="M-40,470 Q220,370 460,410 T920,380 T1480,420" opacity="0.22"/>
     </g>
-    <g stroke="#FF5A1F" stroke-width="1" opacity="0.18">
+    <g stroke="#FFC400" stroke-width="1" opacity="0.18">
       <path d="M-40,330 Q300,250 560,300 T1040,270 T1480,310"/>
       <path d="M-40,240 Q280,180 540,210 T1020,190 T1480,220"/>
     </g>

@@ -110,6 +110,15 @@ function SignInForm() {
         />
       </Field>
 
+      <div className="-mt-1 text-right">
+        <Link
+          href="/forgot-password"
+          className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim hover:text-accent transition-colors"
+        >
+          Forgot password?
+        </Link>
+      </div>
+
       {error && <ErrorBanner>{error}</ErrorBanner>}
 
       <button

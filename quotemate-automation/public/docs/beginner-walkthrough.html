@@ -9,25 +9,26 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #ffffff;
-      --bg-soft: #f5f5f5;
-      --bg-code: #f8f8f8;
-      --ink: #1a1a1a;
-      --ink-2: #2a2a2a;
-      --body: #4a4a4a;
-      --muted: #6b6b6b;
-      --line: #e0e0e0;
-      --line-strong: #cfcfcf;
-      --accent: #0066cc;
-      --accent-deep: #004999;
-      --warn-bg: #fff8e6;
-      --warn-line: #f0c75e;
-      --note-bg: #eef4fb;
-      --note-line: #b6cfe8;
-      --tip-bg: #ecf7ef;
-      --tip-line: #95cba2;
-      --skip-bg: #f4ecec;
-      --skip-line: #d6a5a5;
+      --bg: #16120F;
+      --bg-soft: #1E1813;
+      --bg-code: #2B2422;
+      --ink: #F6F1EA;
+      --ink-2: #C3B8AC;
+      --body: #C3B8AC;
+      --muted: #A2968A;
+      --line: #3A322C;
+      --line-strong: #4A4038;
+      --accent: #FFC400;
+      --accent-deep: #E6AC00;
+      --accent-ink: #1C1812;
+      --warn-bg: #2B2422;
+      --warn-line: #6E6354;
+      --note-bg: #1E1813;
+      --note-line: #3A322C;
+      --tip-bg: #1E1813;
+      --tip-line: #6E6354;
+      --skip-bg: #2B2422;
+      --skip-line: #6E6354;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -42,12 +43,15 @@
       -webkit-font-smoothing: antialiased;
     }
 
+    a { color: var(--accent); }
+    a:hover { color: var(--accent-deep); }
+
     .container { max-width: 880px; margin: 0 auto; padding: 0 2rem; }
 
     /* NAV */
     .nav {
       border-bottom: 1px solid var(--line);
-      background: rgba(255, 255, 255, 0.95);
+      background: rgba(22, 18, 15, 0.95);
       backdrop-filter: blur(8px);
       position: sticky;
       top: 0;
@@ -199,18 +203,19 @@
     .callout p { margin-bottom: 0.6rem; }
     .callout p:last-child { margin-bottom: 0; }
     .callout.note { background: var(--note-bg); border-color: var(--note-line); }
-    .callout.note .callout-label { color: #1d4f8f; }
+    .callout.note .callout-label { color: #FFC400; }
     .callout.warn { background: var(--warn-bg); border-color: var(--warn-line); }
-    .callout.warn .callout-label { color: #8a6310; }
+    .callout.warn .callout-label { color: #FFC400; }
     .callout.tip { background: var(--tip-bg); border-color: var(--tip-line); }
-    .callout.tip .callout-label { color: #226d3a; }
+    .callout.tip .callout-label { color: #7BDCA0; }
     .callout.skip { background: var(--skip-bg); border-color: var(--skip-line); }
-    .callout.skip .callout-label { color: #8a3a3a; }
+    .callout.skip .callout-label { color: #FFD23D; }
 
     /* CODE */
     pre {
-      background: var(--ink);
-      color: #e8e8e8;
+      background: #211B17;
+      color: #F6F1EA;
+      border: 1px solid var(--line);
       padding: 1.2rem 1.4rem;
       border-radius: 6px;
       overflow-x: auto;
@@ -219,7 +224,7 @@
       font-size: 0.83rem;
       line-height: 1.6;
     }
-    pre .c { color: #8a8a8a; font-style: italic; }
+    pre .c { color: #A2968A; font-style: italic; }
     code {
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.88em;
@@ -233,9 +238,9 @@
 
     /* DONE CHECK */
     .done {
-      background: #f0fdf4;
-      border: 1px solid #bbf7d0;
-      border-left: 3px solid #16a34a;
+      background: #1E1813;
+      border: 1px solid #3A322C;
+      border-left: 3px solid #7BDCA0;
       padding: 1rem 1.3rem;
       margin: 1.4rem 0;
       border-radius: 4px;
@@ -245,22 +250,22 @@
       font-size: 0.7rem;
       letter-spacing: 0.1em;
       text-transform: uppercase;
-      color: #16a34a;
+      color: #7BDCA0;
       font-weight: 700;
       margin-bottom: 0.4rem;
     }
-    .done p { margin: 0; font-size: 0.92rem; color: #14532d; }
+    .done p { margin: 0; font-size: 0.92rem; color: #C3B8AC; }
 
     /* TROUBLESHOOT */
     .trouble {
-      background: #fff8e6;
-      border: 1px solid #fde68a;
+      background: #2B2422;
+      border: 1px solid #6E6354;
       padding: 0.9rem 1.2rem;
       margin: 1rem 0;
       border-radius: 4px;
       font-size: 0.92rem;
     }
-    .trouble strong { color: #8a6310; }
+    .trouble strong { color: #FFC400; }
 
     /* FOOTER */
     .foot { padding: 3rem 0; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); text-align: center; }
@@ -271,9 +276,22 @@
       .phase { padding: 3rem 0 2.5rem; }
       .hero-meta { flex-direction: column; gap: 1.2rem; }
     }
+
+    .doc-actions{position:fixed;top:18px;right:18px;z-index:50;display:flex;gap:8px}
+    .da-btn{display:inline-flex;align-items:center;gap:7px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:9px 13px;text-decoration:none;border:1px solid #FFC400;transition:background .15s,color .15s}
+    .da-btn svg{width:14px;height:14px}
+    .da-pdf{background:#FFC400;color:#1C1812}.da-pdf:hover{background:#E6AC00;border-color:#E6AC00}
+    .da-online{background:transparent;color:#FFC400}.da-online:hover{background:#FFC400;color:#1C1812}
+    @media(max-width:560px){.doc-actions{top:10px;right:10px}.da-btn{padding:8px 10px;font-size:.66rem}}
+    @media print{@page{size:A4;margin:0}html,body{background:#16120F !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.doc-actions{display:none !important}.topo,.glow{display:none !important}}
   </style>
 </head>
 <body>
+
+  <div class="doc-actions">
+    <a class="da-btn da-pdf" href="beginner-walkthrough.pdf" download aria-label="Download PDF"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>PDF</a>
+    <a class="da-btn da-online" href="https://www.quotemax.com.au/docs/beginner-walkthrough.html" aria-label="Open online">Online <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+  </div>
 
   <nav class="nav">
     <div class="nav-inner">

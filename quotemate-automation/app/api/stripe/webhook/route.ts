@@ -21,6 +21,50 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+/**
+ * Record a residential painting deposit on painting_measurements (mig 156).
+ * Painting sessions carry metadata.painting_token (not quote_id), so they're
+ * handled here, separate from the quotes path. Idempotent on
+ * paid_stripe_session_id. Never throws — best-effort, like the quote path.
+ */
+async function recordPaintingDeposit(
+  token: string,
+  session: Stripe.Checkout.Session,
+  log: ReturnType<typeof pipelineLog>,
+): Promise<void> {
+  const tier = session.metadata?.tier ?? null
+  const { data: existing } = await supabase
+    .from('painting_measurements')
+    .select('public_token, paid_at, paid_stripe_session_id')
+    .eq('public_token', token)
+    .maybeSingle()
+  if (!existing) {
+    log.err('painting job not found for deposit', null, { painting_token: token })
+    return
+  }
+  if (existing.paid_stripe_session_id === session.id) {
+    log.ok('duplicate painting deposit event, skipping', { painting_token: token, session: session.id })
+    return
+  }
+  if (existing.paid_at) {
+    log.ok('painting job already paid (different session), skipping', { painting_token: token })
+    return
+  }
+  const { error } = await supabase
+    .from('painting_measurements')
+    .update({
+      paid_at: new Date().toISOString(),
+      paid_tier: tier,
+      paid_stripe_session_id: session.id,
+    })
+    .eq('public_token', token)
+  if (error) {
+    log.err('painting deposit update failed', error.message, { painting_token: token })
+    return
+  }
+  log.ok('painting deposit recorded', { painting_token: token, tier, session: session.id })
+}
+
 export async function POST(req: Request) {
   const log = pipelineLog('dispatch')
   log.step('stripe webhook received')
@@ -67,6 +111,16 @@ export async function POST(req: Request) {
   // The quote-deposit path below is mode==='payment' only.
   if (session.mode === 'subscription') {
     await onSubscriptionCheckoutCompleted(session, log)
+    return Response.json({ received: true })
+  }
+
+  // Painting deposit (SMS / self-serve form) → painting_measurements, NOT the
+  // quotes table. Keyed by metadata.painting_token (mig 156); recorded
+  // idempotently and returned BEFORE the quotes path so a painting session
+  // (which carries no quote_id) never logs a spurious "missing quote_id" error.
+  const paintingToken = session.metadata?.painting_token
+  if (paintingToken) {
+    await recordPaintingDeposit(paintingToken, session, log)
     return Response.json({ received: true })
   }
 
