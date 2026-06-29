@@ -86,7 +86,7 @@ export function ChangePasswordCard() {
           </h2>
         </div>
         <p className="text-text-sec text-sm mt-2 pl-3.5">
-          Update the password you use to sign in to QuoteMate.
+          Update the password you use to sign in to QuoteMax.
         </p>
       </div>
       <div className="px-4 sm:px-6 py-5 sm:py-6">

@@ -16,6 +16,7 @@ import {
   nextPaintingStep,
   paintingReadiness,
   parseAuState,
+  parseCeilingMetres,
   parsePostcode,
   toPaintingRequest,
   type PaintingSlots,
@@ -133,13 +134,61 @@ describe('mapCondition', () => {
   })
 })
 
+describe('parseCeilingMetres', () => {
+  it('reads metres with and without a unit', () => {
+    expect(parseCeilingMetres('3.2m')).toBe(3.2)
+    expect(parseCeilingMetres('3.2 m')).toBe(3.2)
+    expect(parseCeilingMetres('about 2.4m')).toBe(2.4)
+    expect(parseCeilingMetres('2.7 metres')).toBe(2.7)
+    expect(parseCeilingMetres('2.7')).toBe(2.7)
+  })
+  it('reads millimetres (explicit and bare 4-digit)', () => {
+    expect(parseCeilingMetres('2700mm')).toBe(2.7)
+    expect(parseCeilingMetres('2400')).toBe(2.4)
+    expect(parseCeilingMetres('3200')).toBe(3.2)
+  })
+  it('ignores non-height / out-of-band numbers', () => {
+    expect(parseCeilingMetres('9ft')).toBeNull() // imperial → handled by keyword
+    expect(parseCeilingMetres('high, 2nd floor')).toBeNull() // bare integer, not a height
+    expect(parseCeilingMetres('standard')).toBeNull()
+    expect(parseCeilingMetres('10')).toBeNull() // 10 m is not a residential ceiling
+  })
+  it('prefers the unit-bearing token over a leading unrelated number', () => {
+    expect(parseCeilingMetres('2nd floor 2.7m')).toBe(2.7)
+    expect(parseCeilingMetres('2 storeys, 2.7m ceilings')).toBe(2.7)
+    expect(parseCeilingMetres('the 1st room is 2.7m')).toBe(2.7)
+    expect(parseCeilingMetres('4000 sqft house, 2.7m ceilings')).toBe(2.7) // not 4 m
+    expect(parseCeilingMetres('3000 sq ft, ceilings 2.7m')).toBe(2.7)
+  })
+})
+
 describe('mapCeilingHeight', () => {
-  it('maps the buckets', () => {
+  it('maps the word buckets', () => {
     expect(mapCeilingHeight('standard')).toBe('standard')
     expect(mapCeilingHeight('about 2.4m')).toBe('standard')
     expect(mapCeilingHeight('high ceilings, a Queenslander')).toBe('high')
     expect(mapCeilingHeight('cathedral ceilings')).toBe('raked')
     expect(mapCeilingHeight('raked / vaulted')).toBe('raked')
+  })
+  it('bands a stated numeric height', () => {
+    expect(mapCeilingHeight('2.4m')).toBe('standard')
+    expect(mapCeilingHeight('2.7m')).toBe('high')
+    expect(mapCeilingHeight('2700')).toBe('high')
+    expect(mapCeilingHeight('2.9m')).toBe('high')
+  })
+  it('routes ceilings materially above 2.7 m to extra_high (the inspection bucket)', () => {
+    // The reported bug: "3.2m" higher than 2.7 m used to fall through to null.
+    expect(mapCeilingHeight('3.2m')).toBe('extra_high')
+    expect(mapCeilingHeight('3.2 m')).toBe('extra_high')
+    expect(mapCeilingHeight('3200mm')).toBe('extra_high')
+    expect(mapCeilingHeight('about 3 metres')).toBe('extra_high')
+  })
+  it('does not dead-end or mis-band when a non-height number leads the reply', () => {
+    // Regression: a leading "2nd"/"2 storeys"/"4000 sqft" used to anchor the
+    // parser and either loop (re-ask) or silently force inspection.
+    expect(mapCeilingHeight('2nd floor 2.7m')).toBe('high')
+    expect(mapCeilingHeight('2 storeys, 2.7m ceilings')).toBe('high')
+    expect(mapCeilingHeight('4000 sqft house, 2.7m ceilings')).toBe('high')
   })
   it('maps unsure to standard, gibberish to null', () => {
     expect(mapCeilingHeight('no idea')).toBe('standard')

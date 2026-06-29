@@ -5,8 +5,24 @@
 import { describe, expect, it } from 'vitest'
 import { MockRoofingProvider } from './providers/mock'
 import { measureAndPriceRoofs } from './measure'
-import type { RoofUserInputs } from './types'
+import type { RoofMetrics, RoofUserInputs } from './types'
 import type { RoofingMeasurementProvider } from './providers/base'
+
+/** Minimal metrics builder for the ordering tests below. */
+function metricsOf(footprint_m2: number, sloped_area_m2: number | null, buildingId: string): RoofMetrics {
+  return {
+    footprint_m2,
+    sloped_area_m2,
+    storeys: 1,
+    form: 'gable',
+    hips: 0,
+    valleys: 0,
+    ridge_lm: null,
+    polygon_geojson: null,
+    capture_date: null,
+    buildingId,
+  }
+}
 
 const ADDR = { address: '12 Example Rd', postcode: '2750', state: 'NSW' as const }
 const INPUTS: RoofUserInputs = {
@@ -131,5 +147,90 @@ describe('measureAndPriceRoofs — single-building fallback', () => {
       expect(r.code).toBe('provider_unavailable')
       expect(r.detail).toMatch(/boom/)
     }
+  })
+})
+
+describe('measureAndPriceRoofs — structures ordered largest roof first', () => {
+  // A provider that hands back its structures in the WRONG order: a small
+  // building flagged 'primary' first, a LARGE detached structure second,
+  // and a medium one third. The orchestrator must re-rank by roof size so
+  // the Main dwelling is always the biggest roof.
+  class WrongOrderProvider implements RoofingMeasurementProvider {
+    readonly name = 'mock' as const
+    async measure() {
+      return {
+        ok: true as const,
+        provider: 'mock' as const,
+        warnings: [],
+        metrics: metricsOf(70, 80, 'small'),
+      }
+    }
+    async measureAll() {
+      return {
+        ok: true as const,
+        provider: 'mock' as const,
+        warnings: [],
+        buildings: [
+          // Provider's own (wrong) ordering + role flags:
+          { buildingId: 'small', role: 'primary' as const, metrics: metricsOf(70, 80, 'small') },
+          { buildingId: 'big', role: 'secondary' as const, metrics: metricsOf(280, 300, 'big') },
+          { buildingId: 'medium', role: 'secondary' as const, metrics: metricsOf(140, 150, 'medium') },
+        ],
+      }
+    }
+  }
+
+  it('makes the largest roof the Main dwelling and sequences the rest largest→smallest', async () => {
+    const r = await measureAndPriceRoofs(ADDR, INPUTS, { provider: new WrongOrderProvider() })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    const s = r.quote.structures
+    expect(s).toHaveLength(3)
+
+    // Largest roof (sloped 300) is the Main dwelling, regardless of the
+    // provider's claim that the 80 m² building was 'primary'.
+    expect(s[0].buildingId).toBe('big')
+    expect(s[0].role).toBe('primary')
+    expect(s[0].label).toBe('Main dwelling')
+
+    // Secondaries follow in strictly descending roof size, numbered in order.
+    expect(s[1].buildingId).toBe('medium')
+    expect(s[1].role).toBe('secondary')
+    expect(s[1].label).toBe('Secondary structure 1')
+    expect(s[2].buildingId).toBe('small')
+    expect(s[2].role).toBe('secondary')
+    expect(s[2].label).toBe('Secondary structure 2')
+
+    // The sloped areas are monotonically non-increasing across the line-up.
+    const areas = s.map((x) => x.metrics.sloped_area_m2 ?? x.metrics.footprint_m2 ?? 0)
+    for (let i = 1; i < areas.length; i++) {
+      expect(areas[i - 1]).toBeGreaterThanOrEqual(areas[i])
+    }
+  })
+
+  it('falls back to footprint when sloped area is missing, still largest-first', async () => {
+    class NullSlopedProvider implements RoofingMeasurementProvider {
+      readonly name = 'mock' as const
+      async measure() {
+        return { ok: true as const, provider: 'mock' as const, warnings: [], metrics: metricsOf(120, null, 'a') }
+      }
+      async measureAll() {
+        return {
+          ok: true as const,
+          provider: 'mock' as const,
+          warnings: [],
+          buildings: [
+            { buildingId: 'a', role: 'primary' as const, metrics: metricsOf(120, null, 'a') },
+            { buildingId: 'b', role: 'secondary' as const, metrics: metricsOf(260, null, 'b') },
+          ],
+        }
+      }
+    }
+    const r = await measureAndPriceRoofs(ADDR, INPUTS, { provider: new NullSlopedProvider() })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    // 'b' has the larger footprint (260 vs 120) → becomes the Main dwelling.
+    expect(r.quote.structures[0].buildingId).toBe('b')
+    expect(r.quote.structures[0].label).toBe('Main dwelling')
   })
 })

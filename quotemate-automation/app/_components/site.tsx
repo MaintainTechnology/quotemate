@@ -22,7 +22,7 @@ export function Nav() {
         <Link href="/" className="flex items-center gap-2.5">
           <Logo />
           <span className="font-extrabold uppercase tracking-tight text-text-pri">
-            QuoteMate
+            QuoteMax
           </span>
         </Link>
         <div className="hidden gap-8 text-sm font-medium text-text-sec md:flex">
@@ -66,11 +66,11 @@ export function Footer() {
           <Link href="/" className="flex items-center gap-2.5">
             <Logo />
             <span className="font-extrabold uppercase tracking-tight text-text-pri">
-              QuoteMate
+              QuoteMax
             </span>
           </Link>
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-text-dim">
-            QuoteMate drafts clean quotes for Australian electricians and
+            QuoteMax drafts clean quotes for Australian electricians and
             plumbers.
           </p>
         </div>
@@ -112,7 +112,7 @@ export function Footer() {
       <div className="border-t border-ink-line">
         <div className="mx-auto flex max-w-[88rem] flex-col gap-2 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
           <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
-            © 2026 QuoteMate
+            © 2026 QuoteMax
           </span>
           <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
             Electrical NSW · Plumbing QLD
@@ -166,7 +166,7 @@ export function MarqueeBar() {
             className="flex shrink-0 items-center font-mono text-xl font-bold uppercase tracking-[0.16em] md:text-2xl"
           >
             {[
-              "QuoteMate",
+              "QuoteMax",
               "Built in Australia",
               "For tradies, by tradies",
               "Quote drafted in under a minute",

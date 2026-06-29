@@ -22,6 +22,14 @@ const FlyerCanvasEditor = dynamic(
   { ssr: false },
 )
 
+// Canva design experience (real Canva editor via Connect APIs). Rendered inline
+// as a sub-view of this tab (not a modal). Loaded lazily so it never weighs on
+// the built-in editor's bundle.
+const CanvaStudio = dynamic(
+  () => import('@/app/dashboard/flyer/_components/CanvaStudio'),
+  { ssr: false },
+)
+
 type FlyerListItem = {
   id: string
   name: string
@@ -55,7 +63,7 @@ function triggerDownload(dataUrl: string, filename: string) {
 }
 
 export default function FlyerDesignerTab({ accessToken }: { accessToken: string | null }) {
-  const [view, setView] = useState<'list' | 'edit'>('list')
+  const [view, setView] = useState<'list' | 'edit' | 'canva'>('list')
   const [flyers, setFlyers] = useState<FlyerListItem[]>([])
   const [loadingList, setLoadingList] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -347,6 +355,19 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
       <div className="space-y-8">
         {error && <p className="border border-warning-bright/50 bg-warning-bright/5 px-4 py-3 text-sm text-warning-bright">{error}</p>}
 
+        <section className="flex flex-wrap items-center justify-between gap-4 border border-accent/40 bg-accent/5 p-5">
+          <div className="min-w-0">
+            <h3 className="font-extrabold uppercase tracking-[-0.01em] text-lg text-text-pri">Design with Canva</h3>
+            <p className="mt-1 text-sm text-text-sec">
+              Prefer the full Canva editor? Connect your Canva account, design your flyer there, then import the
+              finished PNG &amp; PDF straight back into QuoteMax.
+            </p>
+          </div>
+          <button onClick={() => setView('canva')} className={btnAccent}>
+            Open Canva
+          </button>
+        </section>
+
         <section>
           <h3 className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-text-dim">Start a new flyer</h3>
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -391,6 +412,19 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
           )}
         </section>
       </div>
+    )
+  }
+
+  // Canva studio — inline sub-view (not a modal).
+  if (view === 'canva') {
+    return (
+      <CanvaStudio
+        accessToken={accessToken}
+        onBack={() => setView('list')}
+        onImported={() => {
+          void loadFlyers()
+        }}
+      />
     )
   }
 
@@ -489,7 +523,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
                       <textarea
                         value={selected.text}
                         onChange={(e) => patchSelected({ text: e.target.value })}
-                        className="mt-1 w-full border border-ink-line bg-ink-bg px-2 py-1 text-sm text-text-pri"
+                        className="mt-1 w-full border border-ink-line bg-ink-deep px-2 py-1 text-sm text-text-pri"
                         rows={2}
                       />
                     </label>
@@ -497,7 +531,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
                       <select
                         value={selected.fontFamily}
                         onChange={(e) => patchSelected({ fontFamily: e.target.value })}
-                        className="mt-1 w-full border border-ink-line bg-ink-bg px-2 py-1 text-sm text-text-pri"
+                        className="mt-1 w-full border border-ink-line bg-ink-deep px-2 py-1 text-sm text-text-pri"
                       >
                         {FLYER_FONTS.map((f) => <option key={f} value={f}>{f}</option>)}
                       </select>
@@ -510,7 +544,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
                           max={200}
                           value={selected.fontSize}
                           onChange={(e) => patchSelected({ fontSize: Number(e.target.value) || 12 })}
-                          className="mt-1 w-full border border-ink-line bg-ink-bg px-2 py-1 text-sm text-text-pri"
+                          className="mt-1 w-full border border-ink-line bg-ink-deep px-2 py-1 text-sm text-text-pri"
                         />
                       </label>
                       <label className="block text-xs text-text-dim">Colour
@@ -518,7 +552,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
                           type="color"
                           value={selected.fill}
                           onChange={(e) => patchSelected({ fill: e.target.value })}
-                          className="mt-1 block h-8 w-12 border border-ink-line bg-ink-bg"
+                          className="mt-1 block h-8 w-12 border border-ink-line bg-ink-deep"
                         />
                       </label>
                     </div>
@@ -526,7 +560,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
                       <select
                         value={selected.align ?? 'left'}
                         onChange={(e) => patchSelected({ align: e.target.value as 'left' | 'center' | 'right' })}
-                        className="mt-1 w-full border border-ink-line bg-ink-bg px-2 py-1 text-sm text-text-pri"
+                        className="mt-1 w-full border border-ink-line bg-ink-deep px-2 py-1 text-sm text-text-pri"
                       >
                         <option value="left">Left</option>
                         <option value="center">Center</option>
@@ -541,7 +575,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
                       type="color"
                       value={selected.fill}
                       onChange={(e) => patchSelected({ fill: e.target.value })}
-                      className="mt-1 block h-8 w-12 border border-ink-line bg-ink-bg"
+                      className="mt-1 block h-8 w-12 border border-ink-line bg-ink-deep"
                     />
                   </label>
                 )}

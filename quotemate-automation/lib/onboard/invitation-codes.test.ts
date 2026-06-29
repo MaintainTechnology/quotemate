@@ -3,6 +3,7 @@ import {
   generateInvitationCode,
   slugifyCampaign,
   isPlatformAdmin,
+  normalizeCustomCode,
   RANDOM_ALPHABET,
 } from './invitation-codes'
 
@@ -26,6 +27,33 @@ describe('generateInvitationCode', () => {
       const suffix = generateInvitationCode('QM', 'x').split('-').pop()!
       for (const ch of suffix) expect(RANDOM_ALPHABET).toContain(ch)
     }
+  })
+})
+
+describe('normalizeCustomCode', () => {
+  it('upper-cases and keeps a clean alphanumeric code', () => {
+    expect(normalizeCustomCode('mate2026')).toBe('MATE2026')
+    expect(normalizeCustomCode('  June-Special  ')).toBe('JUNE-SPECIAL')
+  })
+  it('collapses runs of non-alphanumerics to a single dash and trims edge dashes', () => {
+    expect(normalizeCustomCode('june__flyers!!')).toBe('JUNE-FLYERS')
+    expect(normalizeCustomCode('--mate--2026--')).toBe('MATE-2026')
+    expect(normalizeCustomCode('a b   c')).toBe('A-B-C')
+  })
+  it('rejects codes that are too short or empty after stripping', () => {
+    expect(normalizeCustomCode('')).toBeNull()
+    expect(normalizeCustomCode('!!')).toBeNull()
+    expect(normalizeCustomCode('ab')).toBeNull()
+  })
+  it('rejects codes longer than 40 chars', () => {
+    expect(normalizeCustomCode('A'.repeat(41))).toBeNull()
+    expect(normalizeCustomCode('A'.repeat(40))).toBe('A'.repeat(40))
+  })
+  it('produces a value that check/consume treat the same as a generated code', () => {
+    // generated codes are UPPER, alphanumerics + single dashes — a normalised
+    // custom code must satisfy the same shape so lookups behave identically.
+    const code = normalizeCustomCode('Mate 2026')!
+    expect(code).toMatch(/^[A-Z0-9]+(?:-[A-Z0-9]+)*$/)
   })
 })
 

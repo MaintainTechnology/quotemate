@@ -1,6 +1,6 @@
 'use client'
 
-// /admin/files — QuoteMate staff Files console (specs/files-tab.md R16).
+// /admin/files — QuoteMax staff Files console (specs/files-tab.md R16).
 //
 // Admin-gated (a 403 from the API renders the "not an admin" state and never
 // shows tenant data). Staff pick a tenant, see that tenant's archived
@@ -134,7 +134,7 @@ export default function AdminFilesPage() {
           </h1>
           <p className="max-w-md text-base leading-relaxed text-text-sec md:text-lg">
             Every document a tradie has generated — open one to review it with
-            them and leave comments as QuoteMate.
+            them and leave comments as QuoteMax.
           </p>
         </div>
       </header>

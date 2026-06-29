@@ -35,10 +35,12 @@ export const CANDIDATE_TRADES = [
 
 // Trades whose money path is a DETERMINISTIC engine (per-m² rate card,
 // footprint geometry, …) rather than the strict-grounding Opus estimator.
-// For these the "estimator prompt" readiness check is satisfied by the
-// bundled deterministic pricer — there is no system prompt to find, so a
-// missing trade_prompts row must NOT gate the trade out. Residential
-// painting (lib/painting/pricing.ts) is the first such onboardable trade.
+// For these BOTH the "estimator prompt" AND the "shared_assemblies catalogue"
+// readiness checks are satisfied by the bundled deterministic pricer — there is
+// no system prompt to find and no assembly catalogue to quote from (a painter
+// prices from pricing_book.overlays.painting_rate_card, not shared_assemblies),
+// so a missing trade_prompts row OR an empty catalogue must NOT gate the trade
+// out. Residential painting (lib/painting/pricing.ts) is the first such trade.
 const DETERMINISTIC_TRADES = new Set<string>(['painting'])
 
 /** True when this trade prices via a deterministic engine, not the LLM estimator. */
@@ -94,7 +96,11 @@ export async function checkTradeReadiness(
   trade: string,
 ): Promise<TradeReadiness> {
   const pricingDefaults = hasOnboardingPricingDefaults(trade)
-  const sharedAssemblies = await hasSharedAssemblies(supabase, trade)
+  // Deterministic trades (painting) quote from a rate card, not a
+  // shared_assemblies catalogue, so an empty catalogue must NOT gate them out —
+  // mirrors the estimatorPrompt exemption directly below.
+  const sharedAssemblies =
+    isDeterministicTrade(trade) || (await hasSharedAssemblies(supabase, trade))
   const estimatorPrompt =
     hasBundledEstimatorTemplate(trade) ||
     isDeterministicTrade(trade) ||

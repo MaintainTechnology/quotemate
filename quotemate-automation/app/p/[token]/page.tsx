@@ -21,6 +21,7 @@ import { createClient } from '@supabase/supabase-js'
 import type { PaintingEstimate } from '@/lib/painting/types'
 import { PaintResultView } from '@/app/dashboard/painting/_components/PaintResultView'
 import { SendToCustomerButton } from './SendToCustomerButton'
+import { EditQuotePanel, type EditableTier } from './EditQuotePanel'
 
 export const dynamic = 'force-dynamic'
 
@@ -74,6 +75,14 @@ export default async function PaintEstimateResultsPage({
   }
 
   const inspection = estimate.price?.routing?.decision === 'inspection_required'
+  // Editable tier shape for the tradie pre-send edit panel (only the
+  // customer-visible fields — label, scope, inc-GST headline).
+  const editableTiers: EditableTier[] = (estimate.price?.tiers ?? []).map((t) => ({
+    tier: t.tier,
+    label: t.label,
+    scope: t.scope,
+    inc_gst: t.inc_gst,
+  }))
   const customerPath = `/q/paint/${row.public_token}`
   const pdfPath = `/api/q/paint/${row.public_token}/pdf`
   const date = new Date(row.created_at).toLocaleDateString('en-AU', {
@@ -115,6 +124,9 @@ export default async function PaintEstimateResultsPage({
               : "Check the measurements, coats and pricing above. When it's right, send the full quote to the customer — they don't see a price until you do."}
           </p>
           <div className="mt-5 flex flex-wrap items-center gap-4">
+            {!inspection && !released && editableTiers.length > 0 && (
+              <EditQuotePanel estimateToken={row.estimate_token} tiers={editableTiers} />
+            )}
             {!inspection && (
               <SendToCustomerButton estimateToken={row.estimate_token} released={released} />
             )}

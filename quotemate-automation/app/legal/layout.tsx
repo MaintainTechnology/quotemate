@@ -6,7 +6,7 @@ import type { Metadata } from 'next'
 import { Nav, Footer, MarqueeBar } from '@/app/_components/site'
 
 export const metadata: Metadata = {
-  title: { default: 'Legal — QuoteMate', template: '%s — QuoteMate' },
+  title: { default: 'Legal — QuoteMax', template: '%s — QuoteMax' },
   robots: { index: true, follow: true },
 }
 

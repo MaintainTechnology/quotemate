@@ -628,6 +628,45 @@ function defaultStructureLabel(role: RoofStructureRole, secondaryIndex: number):
 }
 
 /**
+ * PURE — a structure's comparable "roof size" in m² for ranking. The roof
+ * surface (sloped) area is the truest measure of how big a roof is; we fall
+ * back to the ground footprint when the pitch-corrected sloped area is not
+ * available, and to 0 when neither is usable (such a structure ranks last).
+ */
+export function roofStructureSizeM2(metrics: RoofMetrics): number {
+  const sloped = metrics?.sloped_area_m2
+  if (typeof sloped === 'number' && Number.isFinite(sloped) && sloped > 0) return sloped
+  const footprint = metrics?.footprint_m2
+  if (typeof footprint === 'number' && Number.isFinite(footprint) && footprint > 0) return footprint
+  return 0
+}
+
+/**
+ * PURE — indices of `structures` ordered largest roof first. Stable on ties
+ * (equal sizes keep their original input order), and does not mutate the
+ * input. The caller treats index 0 as the primary dwelling, so this is the
+ * single source of the "Main dwelling is always the largest roof" invariant.
+ */
+export function roofSizeOrder(structures: readonly RoofStructureInput[]): number[] {
+  return structures
+    .map((s, i) => ({ size: roofStructureSizeM2(s.metrics), i }))
+    .sort((a, b) => (b.size - a.size) || (a.i - b.i))
+    .map((x) => x.i)
+}
+
+/**
+ * PURE — order structures largest roof first and re-assign roles so the
+ * biggest roof is ALWAYS the primary ("Main dwelling") and the rest are
+ * secondary in descending roof size. Stable on ties; does not mutate input.
+ */
+export function orderStructuresByRoofSize(structures: RoofStructureInput[]): RoofStructureInput[] {
+  return roofSizeOrder(structures).map((idx, rank) => ({
+    ...structures[idx],
+    role: rank === 0 ? 'primary' : 'secondary',
+  }))
+}
+
+/**
  * PURE — price N structures and aggregate into one MultiRoofQuote.
  *
  * Each structure is priced INDEPENDENTLY with its own material, area and

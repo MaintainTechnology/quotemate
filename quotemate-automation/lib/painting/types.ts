@@ -36,10 +36,11 @@ export type PaintCondition =
   | 'bare' // bare plaster / new render / bare timber — needs full prime
   | 'poor' // flaking / water damage / mould → forced inspection
 
-/** Ceiling-height bucket. `raked` (cathedral / void) forces inspection. */
+/** Ceiling-height bucket. `raked` and `extra_high` force inspection. */
 export type CeilingHeight =
   | 'standard' // ~2.4 m — modern slab homes
   | 'high' // ~2.7 m — Queenslanders / period
+  | 'extra_high' // ~3 m+ flat — beyond the auto-price band → forced inspection (access/scaffold)
   | 'raked' // cathedral / void / non-standard → forced inspection
 
 /** Property-side inputs the lead form provides. Mirrors RoofAddressInput. */
@@ -194,6 +195,22 @@ export type PaintingRateCard = {
   gst_registered: boolean
   /** Per-job floor (ex-GST) so a tiny job never computes an absurd number. */
   call_out_minimum_ex_gst?: number
+
+  // ── Hourly pricing model (optional; absent ⇒ 'sqm', backward compatible) ──
+  // Some painters quote by labour time, not $/m². In 'hourly' mode the engine
+  // converts each surface's measured area into labour hours via
+  // production_rate_per_unit, then charges hourly_rate. Everything downstream
+  // (coats/prep multipliers, loadings, tiers, GST, call-out floor) is identical
+  // to 'sqm' mode — only the per-unit base rate changes from a fixed $/unit to
+  // (hourly_rate ÷ production_rate).
+  /** How surfaces are priced. Absent or 'sqm' = fixed $/unit; 'hourly' = hours × rate. */
+  pricing_model?: 'sqm' | 'hourly'
+  /** Crew charge-out ($/hr, ex-GST). Only consulted when pricing_model === 'hourly'. */
+  hourly_rate?: number
+  /** Throughput per hour for a base (2-coat, sound) job — m²/hr for walls /
+   *  ceilings / exterior, lm/hr for trim. Converts area → hours in hourly mode.
+   *  Absent ⇒ DEFAULT_PAINTING_PRODUCTION_RATES. */
+  production_rate_per_unit?: Record<PaintScope, number>
 }
 
 /** A single price tier on the customer quote — carries a low/high band. */
@@ -238,6 +255,10 @@ export type PaintingPriceBreakdown = {
   gst_factor: number
   /** Per-job floor that raised any tier (0 = no floor). */
   call_out_minimum_ex_gst: number
+  /** Pricing model the tiers were computed under. Absent ⇒ 'sqm'. */
+  pricing_model?: 'sqm' | 'hourly'
+  /** Crew charge-out applied (only set in hourly mode). */
+  hourly_rate?: number
 }
 
 /** The full price breakdown returned to the dashboard / customer page. */
@@ -255,6 +276,10 @@ export type PaintingQuotePrice = {
   call_out_minimum_applied?: boolean
   /** How the tiers were computed — surfaced in the UI for transparency. */
   breakdown?: PaintingPriceBreakdown
+  /** True once a tradie has hand-edited the tier prices/labels/scope on the
+   *  /p review page (lib/painting/edit.ts). The UI then flags the tiers as
+   *  tradie-set and suppresses the now-stale derivation breakdown. */
+  manual_override?: boolean
 }
 
 /** The orchestrator's combined result — facts + measurement + price. */

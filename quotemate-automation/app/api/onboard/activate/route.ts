@@ -193,6 +193,10 @@ export async function POST(req: Request) {
           },
           call_out_minimum_ex_gst: num(form.painting_call_out_minimum),
           gst_registered: form.gst_registered ?? true,
+          // Hourly painters set a model + charge-out; sqm painters leave the
+          // model at its default and these are inert.
+          pricing_model: form.painting_pricing_model ?? 'sqm',
+          hourly_rate: num(form.painting_hourly_rate),
         })
         // On any validation miss, persist an empty overlay so the estimator
         // falls back to DEFAULT_PAINTING_RATE_CARD rather than bad rates.

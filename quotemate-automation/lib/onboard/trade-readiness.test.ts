@@ -97,13 +97,17 @@ describe('checkTradeReadiness', () => {
     })
   })
 
-  it('gates painting out when it has no catalogue rows (exemptions still hold)', async () => {
+  it('marks painting ready even with NO catalogue rows (deterministic — prices from a rate card)', async () => {
+    // Painting quotes from pricing_book.overlays.painting_rate_card, not a
+    // shared_assemblies catalogue, so an empty catalogue must NOT gate it out.
+    // The deterministic exemption satisfies BOTH sharedAssemblies and
+    // estimatorPrompt; pricing defaults + intake + licence-optional come from
+    // the onboarding schema. Net: painting is onboardable on a fresh DB.
     const sb = mockSupabase({ assemblyCounts: {}, promptTrades: [] })
     const r = await checkTradeReadiness(sb, 'painting')
-    expect(r.ready).toBe(false)
-    expect(r.checks.sharedAssemblies).toBe(false)
-    // The deterministic + licence-optional exemptions are independent of the
-    // catalogue check, so they remain satisfied even when painting is gated.
+    expect(r.ready).toBe(true)
+    expect(r.missing).toEqual([])
+    expect(r.checks.sharedAssemblies).toBe(true)
     expect(r.checks.estimatorPrompt).toBe(true)
     expect(r.checks.licenceSchema).toBe(true)
   })
@@ -131,13 +135,13 @@ describe('getOnboardableTrades', () => {
     expect(onboardable).not.toContain('roofing')
     expect(onboardable).not.toContain('solar')
     expect(onboardable).not.toContain('commercial_painting')
-    // painting has no catalogue in this mock → not yet onboardable
-    expect(onboardable).not.toContain('painting')
+    // painting is deterministic — onboardable without a catalogue.
+    expect(onboardable).toContain('painting')
   })
 
-  it('includes painting once it has a catalogue (deterministic trade)', async () => {
+  it('includes painting even with no catalogue (deterministic trade)', async () => {
     const sb = mockSupabase({
-      assemblyCounts: { electrical: 20, plumbing: 23, painting: 11 },
+      assemblyCounts: { electrical: 20, plumbing: 23 }, // no painting rows
     })
     const onboardable = await getOnboardableTrades(sb)
     expect(onboardable).toContain('painting')

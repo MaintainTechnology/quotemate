@@ -380,6 +380,7 @@ describe('OnboardActivateSchema — class-of-bug guard', () => {
     'painting_trim_rate',
     'painting_exterior_rate',
     'painting_call_out_minimum',
+    'painting_hourly_rate',
   ] as const
 
   for (const field of OPTIONAL_NUMERIC_FIELDS) {
@@ -496,6 +497,37 @@ describe('OnboardActivateSchema — painting trade (multi-select + rate card)', 
     expect(d.min_labour_hours).toBeLessThanOrEqual(8)
     expect(d.risk_buffer_pct).toBeGreaterThanOrEqual(0)
     expect(d.risk_buffer_pct).toBeLessThanOrEqual(100)
+  })
+
+  it('accepts an hourly painting payload (pricing_model + hourly rate)', () => {
+    const result = OnboardActivateSchema.safeParse({
+      ...paintingBase,
+      trades: ['painting'],
+      painting_pricing_model: 'hourly',
+      painting_hourly_rate: '95',
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.painting_pricing_model).toBe('hourly')
+      expect(result.data.painting_hourly_rate).toBe(95)
+    }
+  })
+
+  it('defaults the model to sqm when omitted, and coerces a numeric hourly rate', () => {
+    const result = OnboardActivateSchema.safeParse({ ...paintingBase, trades: ['painting'] })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.painting_pricing_model).toBeUndefined() // route applies 'sqm'
+    }
+  })
+
+  it('rejects an unknown painting pricing_model and a non-positive hourly rate', () => {
+    expect(
+      OnboardActivateSchema.safeParse({ ...paintingBase, trades: ['painting'], painting_pricing_model: 'weekly' }).success,
+    ).toBe(false)
+    expect(
+      OnboardActivateSchema.safeParse({ ...paintingBase, trades: ['painting'], painting_hourly_rate: 0 }).success,
+    ).toBe(false)
   })
 })
 

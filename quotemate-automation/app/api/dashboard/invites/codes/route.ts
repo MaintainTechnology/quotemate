@@ -8,7 +8,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
-import { generateInvitationCode, isPlatformAdmin } from '@/lib/onboard/invitation-codes'
+import { generateInvitationCode, isPlatformAdmin, normalizeCustomCode } from '@/lib/onboard/invitation-codes'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,6 +64,10 @@ const GenerateBody = z.object({
   campaign: z.string().trim().min(1).max(40),
   description: z.string().trim().max(200).optional().or(z.literal('')),
   expires_at: z.string().datetime().optional().or(z.literal('')),
+  // Optional admin-supplied static code (e.g. MATE2026). When present the
+  // code is used verbatim (normalised) instead of an auto-generated suffix;
+  // a clash is a hard 409 rather than a silent re-roll.
+  custom_code: z.string().trim().max(60).optional().or(z.literal('')),
 })
 
 export async function POST(req: Request) {
@@ -90,6 +94,43 @@ export async function POST(req: Request) {
   }
   const tenantId = body.scope === 'platform' ? null : tenant.id
   const prefix = body.scope === 'platform' ? 'QM' : tenant.business_name
+
+  // Static-code path: admin supplied an exact, memorable code. Use it verbatim
+  // (normalised to the canonical form) — no random suffix, no re-roll. A clash
+  // against the unique(lower(code)) index is surfaced as 409 so the admin can
+  // pick another rather than silently getting a different code than they typed.
+  if (body.custom_code) {
+    const normalized = normalizeCustomCode(body.custom_code)
+    if (!normalized) {
+      return Response.json(
+        { error: 'invalid_code_format', message: 'Custom code must be 3–40 letters or numbers.' },
+        { status: 400 },
+      )
+    }
+    const { data, error } = await supabase
+      .from('onboarding_codes')
+      .insert({
+        code: normalized,
+        tenant_id: tenantId,
+        campaign: body.campaign,
+        description: body.description || null,
+        quota_total: body.quota_total,
+        expires_at: body.expires_at || null,
+        created_by: user.id,
+      })
+      .select('id, code')
+      .single()
+    if (error) {
+      if (error.code === '23505') {
+        return Response.json(
+          { error: 'code_taken', message: 'That code is already in use. Pick another.' },
+          { status: 409 },
+        )
+      }
+      return Response.json({ error: error.message }, { status: 500 })
+    }
+    return Response.json({ ok: true, ...data, tenant_id: tenantId })
+  }
 
   // Generate with collision retry against the unique(lower(code)) index.
   let created: { id: string; code: string } | null = null

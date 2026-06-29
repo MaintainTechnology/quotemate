@@ -832,7 +832,7 @@ export default function DashboardPage() {
                       Marketing
                     </h3>
                     <p className="mt-4 text-base leading-relaxed text-text-sec">
-                      Invite codes gate who can onboard. QR codes turn printed flyers into AI-drafted quotes — generate, download, and track scans. Opens the full manager.
+                      QR codes turn printed flyers into AI-drafted quotes — generate, download, and track scans. Opens the full manager.
                     </p>
                     <span className="mt-5 inline-flex items-center gap-2 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-accent transition-colors group-hover:text-accent-press">
                       Open marketing <span aria-hidden="true">&rarr;</span>
@@ -1141,20 +1141,24 @@ function buildNav(quoteCount: number, trades: ReadonlyArray<string> = []): NavIt
 // so it stays unit-testable (vitest can't import this file directly
 // because it's a React 'use client' module).
 
-// Sidebar nav grouped into "Daily work" (what a tradie checks every
-// day) and "Setup" (config touched occasionally). Tab order matches
-// buildNav so MobileTabBar's flat scroll stays consistent.
+// Sidebar nav split into focused, scannable bands instead of two
+// overloaded buckets: the daily Workspace cockpit, the per-trade
+// Estimator tools, Marketing, Records, Account, and the Pricing-engine
+// config. The groups are ORDERED so that flattening them reproduces
+// buildNav's emission order exactly — that keeps MobileTabBar (which
+// renders the flat buildNav list) telling the same story with zero
+// change to it. Trade-tool rows are trade-gated in buildNav, so on a
+// given tenant byTab.get() returns undefined for tools they don't have
+// and the Sidebar drops the row — and collapses the whole group + its
+// header when none resolve (see visibleGroups below). No tenant-
+// specific filtering needed in this layout list.
 const SIDEBAR_GROUPS: { label: string; tabs: Tab[] }[] = [
-  // 'roofing' is listed here but the buildNav filter only emits a tab
-  // entry when the tenant has roofing in trades[], so on non-roofing
-  // tenants the byTab.get('roofing') lookup returns undefined and the
-  // sidebar quietly skips the row. No tenant-specific filtering needed
-  // in this layout list.
-  { label: 'Daily work', tabs: ['overview', 'quotes', 'followups', 'chats', 'calendar', 'files', 'historical-quotes', 'roofing', 'signage', 'painting', 'commercial-painting', 'aircon', 'estimator', 'solar'] },
-  {
-    label: 'Setup',
-    tabs: ['invites', 'flyer', 'account', 'payouts', 'billing', 'pricing', 'services', 'catalogue', 'estimating', 'recipes'],
-  },
+  { label: 'Workspace', tabs: ['overview', 'quotes', 'followups', 'chats', 'calendar'] },
+  { label: 'Estimator tools', tabs: ['roofing', 'signage', 'painting', 'commercial-painting', 'aircon', 'estimator', 'solar'] },
+  { label: 'Marketing', tabs: ['invites', 'flyer'] },
+  { label: 'Records', tabs: ['files', 'historical-quotes'] },
+  { label: 'Account', tabs: ['account', 'payouts', 'billing'] },
+  { label: 'Pricing engine', tabs: ['pricing', 'services', 'catalogue', 'estimating', 'recipes'] },
 ]
 
 function Sidebar({
@@ -1172,26 +1176,38 @@ function Sidebar({
 }) {
   const items = buildNav(quoteCount, trades)
   const byTab = new Map(items.map((i) => [i.tab, i]))
+  // Resolve each group's rows up front and drop groups that have no
+  // visible row on this tenant (e.g. a fully trade-gated "Estimator
+  // tools" group on a tenant with no trade tools). Filtering here means
+  // a collapsed group emits neither its header nor a divider, so the
+  // rail stays tight — no orphan eyebrow, no dangling hairline. Dividers
+  // are then keyed off the VISIBLE index, not the static array index.
+  const visibleGroups = SIDEBAR_GROUPS.map((g) => ({
+    label: g.label,
+    rows: g.tabs.map((t) => byTab.get(t)).filter(Boolean) as NavItem[],
+  })).filter((g) => g.rows.length > 0)
   return (
     <aside className="hidden lg:block">
       <nav
-        className="sticky top-20 bg-ink border border-ink-line"
+        // Internal-scroll so a fully-loaded multi-trade rail (all six
+        // bands + Admin can exceed the viewport) scrolls inside the
+        // panel instead of overflowing — keeps the panel edge crisp at
+        // any trade count. Scrollbar hidden in Firefox + Chromium.
+        className="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto bg-ink border border-ink-line [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         aria-label="Dashboard sections"
       >
-        {SIDEBAR_GROUPS.map((group, gi) => (
+        {visibleGroups.map((group, vi) => (
           <div
             key={group.label}
-            className={gi > 0 ? 'border-t border-ink-line' : ''}
+            className={vi > 0 ? 'border-t border-ink-line' : ''}
           >
-            <div className="px-4 pt-3.5 pb-1.5">
-              <span className="font-mono text-[0.58rem] uppercase tracking-[0.18em] text-text-dim">
+            <div className="px-4 pt-4 pb-2">
+              <span className="font-mono text-[0.56rem] uppercase tracking-[0.2em] text-text-dim/80">
                 {group.label}
               </span>
             </div>
             <ul className="pb-2">
-              {group.tabs.map((t) => {
-                const item = byTab.get(t)
-                if (!item) return null
+              {group.rows.map((item) => {
                 const active = item.tab === tab
                 const Icon = item.icon
                 return (
@@ -1202,14 +1218,14 @@ function Sidebar({
                       className={`w-full text-left flex items-center justify-between gap-3 pl-4 pr-3 py-2.5 font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold transition-colors border-l-2 cursor-pointer ${
                         active
                           ? 'border-accent text-accent bg-ink-card'
-                          : 'border-transparent text-text-dim hover:text-text-pri hover:bg-ink-card/60'
+                          : 'border-transparent text-text-sec hover:text-text-pri hover:border-ink-line hover:bg-ink-card/60'
                       }`}
                       aria-current={active ? 'page' : undefined}
                     >
                       <span className="flex items-center gap-2.5 min-w-0">
                         <Icon
                           size={16}
-                          strokeWidth={1.75}
+                          strokeWidth={active ? 2 : 1.75}
                           aria-hidden="true"
                           className="shrink-0"
                         />
@@ -1217,7 +1233,7 @@ function Sidebar({
                       </span>
                       {typeof item.count === 'number' && item.count > 0 && (
                         <span
-                          className={`font-mono text-[0.6rem] px-1.5 py-0.5 border shrink-0 ${
+                          className={`font-mono text-[0.6rem] tabular-nums min-w-[1.5rem] text-center px-1.5 py-0.5 border shrink-0 ${
                             active
                               ? 'border-accent/60 text-accent'
                               : 'border-ink-line text-text-sec'

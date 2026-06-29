@@ -78,7 +78,7 @@ export function FeatureGate({
     <GateNotice>
       <strong className="text-text-pri">{featureLabel} isn&rsquo;t enabled for your account.</strong>
       <span className="mt-2 block">
-        Ask the QuoteMate team to switch it on, or head back to your{' '}
+        Ask the QuoteMax team to switch it on, or head back to your{' '}
         <Link href="/dashboard" className="text-accent hover:underline">
           dashboard
         </Link>

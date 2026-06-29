@@ -1,6 +1,8 @@
 // ════════════════════════════════════════════════════════════════════
-// AI preview generation — Gemini 2.5 Flash Image edits the customer's
-// uploaded photos to show the proposed work installed.
+// AI preview generation — renders the proposed work for the customer.
+// Provider is engine-selected (providers/select.ts): Stability SD 3.5
+// Large (text-to-image) when STABILITY_NIM_URL is set, else Gemini
+// (which edits the customer's uploaded photo in place).
 //
 // IMPORTANT: each customer photo gets its OWN edited preview. Two
 // uploaded photos → two AI previews. Three uploaded photos → three.
@@ -39,7 +41,7 @@ import {
   verifyLoopEnabled,
   verifyMaxRetries,
 } from './judge'
-import { geminiProvider } from './providers/gemini'
+import { selectImageProvider, imageGenReadiness } from './providers/select'
 
 // Item 3 — two-pass editing for replacement jobs. Default OFF: when on,
 // a replacement job first gets a removal-only edit (strip the old
@@ -75,9 +77,12 @@ export type PreviewResult =
  * runs at a time per quote.
  */
 export async function generatePreviewImage(quoteId: string): Promise<PreviewResult> {
-  if (!process.env.GEMINI_API_KEY) {
-    console.warn('[preview] GEMINI_API_KEY not set — skipping')
-    return { status: 'skipped', reason: 'GEMINI_API_KEY missing' }
+  const readiness = imageGenReadiness()
+  if (!readiness.ready) {
+    console.warn(`[preview] image generation not configured (${readiness.provider}) — skipping`, {
+      reason: readiness.reason,
+    })
+    return { status: 'skipped', reason: readiness.reason }
   }
 
   const { data: quote } = await supabase
@@ -403,10 +408,10 @@ async function generateOnePreview(opts: {
   // null (unrecognised format) → omit imageConfig, no regression.
   const aspectRatio = aspectRatioFromImage(refBuf)
 
-  // Render via the Gemini provider — wire-format identical to the
-  // previous inline fetch (the provider adapter's payload shape is
-  // contract-tested in providers/gemini.test.ts).
-  const out = await geminiProvider.renderImage({
+  // Render via the engine-selected provider (Stability SD 3.5 Large when
+  // STABILITY_NIM_URL is configured, else Gemini). Text-to-image providers
+  // ignore sourceImage/reference; Gemini uses them as before.
+  const out = await selectImageProvider().renderImage({
     system: opts.prompt.system,
     user: opts.prompt.user,
     sourceImage: { base64: refBase64, mime: refMime },
@@ -571,7 +576,10 @@ async function runRemovalPass(
     const removal = buildRemovalPrompt(ctx)
     // Provider returns the cleaned-image bytes in the same {base64, mime}
     // shape this function returns to its caller — pass through unchanged.
-    return await geminiProvider.renderImage({
+    // (Two-pass removal is an EDIT and only meaningful on Gemini; it is
+    // off by default — PREVIEW_TWO_PASS — and a text-to-image provider
+    // simply renders from the prompt.)
+    return await selectImageProvider().renderImage({
       system: removal.system,
       user: removal.user,
       sourceImage: {

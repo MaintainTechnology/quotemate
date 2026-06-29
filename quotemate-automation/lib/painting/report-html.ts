@@ -81,8 +81,12 @@ export function buildPaintingQuoteReportHtml(input: PaintingReportInput): string
   const price = input.estimate.price
   const isInspection = price.routing.decision === 'inspection_required'
   const tiers = price.tiers
-  const surfaces = surfaceRows(input.estimate)
-  const loadings = price.loadings_applied ?? []
+  // After a tradie hand-edits the tier prices (manual_override), the surface
+  // takeoff — which sums to the ORIGINAL Better ex-GST — no longer reconciles
+  // to the headline, so suppress it rather than print a self-contradicting
+  // line-item table on the customer's quote.
+  const surfaces = price.manual_override ? '' : surfaceRows(input.estimate)
+  const loadings = price.manual_override ? [] : price.loadings_applied ?? []
 
   let body = ''
 

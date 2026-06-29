@@ -51,6 +51,58 @@ export const DEFAULT_PAINTING_RATE_CARD: PaintingRateCard = {
   // unrealistic number no painter would attend for. Well below any
   // whole-house tier, so it only binds on small jobs.
   call_out_minimum_ex_gst: 450,
+  // Default model is the per-m² rate card above. The hourly levers below are
+  // inert unless pricing_model is flipped to 'hourly' (a painter who quotes by
+  // labour time sets these at onboarding).
+  pricing_model: 'sqm',
+  hourly_rate: 85,
+  production_rate_per_unit: {
+    walls: 3, // m²/hr for a base 2-coat sound job (all-in throughput)
+    ceilings: 4, // m²/hr
+    trim: 7, // lm/hr
+    exterior: 2, // m²/hr (slower; cutting, access)
+  },
+}
+
+/** Default crew charge-out ($/hr, ex-GST) when a painter picks hourly pricing
+ *  but leaves the rate blank. Chosen so the derived per-unit rates land near
+ *  the per-m² defaults above. */
+export const DEFAULT_PAINTING_HOURLY_RATE = 85
+
+/** Default throughput (units/hour) used to convert measured area → labour
+ *  hours in hourly mode. m²/hr for walls/ceilings/exterior, lm/hr for trim. */
+export const DEFAULT_PAINTING_PRODUCTION_RATES: Record<PaintScope, number> = {
+  walls: 3,
+  ceilings: 4,
+  trim: 7,
+  exterior: 2,
+}
+
+/**
+ * PURE — the effective $/unit rate map the tiers price from.
+ *   • 'sqm' (default): the rate card's rate_per_unit verbatim.
+ *   • 'hourly': for each scope, hourly_rate ÷ production_rate (units → hours →
+ *     $). Falls back to the fixed rate_per_unit for any scope whose production
+ *     rate is missing/zero, so the engine can never divide by zero.
+ * Feeding this through the existing per-unit engine keeps coats/prep
+ * multipliers, loadings, tiers, GST and the call-out floor identical across
+ * both models — only the base rate changes.
+ */
+export function effectiveRatePerUnit(card: PaintingRateCard): Record<PaintScope, number> {
+  if (card.pricing_model !== 'hourly') return card.rate_per_unit
+  const hourly = numOrNull(card.hourly_rate) ?? DEFAULT_PAINTING_HOURLY_RATE
+  const prod = card.production_rate_per_unit ?? DEFAULT_PAINTING_PRODUCTION_RATES
+  const scopes: PaintScope[] = ['walls', 'ceilings', 'trim', 'exterior']
+  const out = {} as Record<PaintScope, number>
+  for (const scope of scopes) {
+    const p = numOrNull(prod[scope])
+    out[scope] = p && p > 0 ? hourly / p : (card.rate_per_unit[scope] ?? 0)
+  }
+  return out
+}
+
+function numOrNull(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null
 }
 
 // ── Routing / inspection triggers ───────────────────────────────────
@@ -87,6 +139,13 @@ export function requiresInspection(args: {
       decision: 'inspection_required',
       reason:
         'Raked or cathedral ceilings need a measurement on site — area and access cannot be priced from floor area alone.',
+    }
+  }
+  if (inputs.ceiling_height === 'extra_high') {
+    return {
+      decision: 'inspection_required',
+      reason:
+        'Ceilings above about 2.7 m need an on-site measure — the extra wall area and access (scaffold or tower) cannot be priced from floor area alone.',
     }
   }
   if (
@@ -180,13 +239,14 @@ function betterCostExGst(
   quantityOf: (s: PaintMeasurement['surfaces'][number]) => number,
 ): number {
   const mult = jobMultiplier(inputs, rateCard)
+  const rates = effectiveRatePerUnit(rateCard)
   const doubleStorey =
     inputs.scopes.includes('exterior') && (measurement.storeys ?? 1) >= 2
       ? 1 + rateCard.double_storey_loading_pct
       : 1.0
   let total = 0
   for (const surface of measurement.surfaces) {
-    const rate = rateCard.rate_per_unit[surface.scope] ?? 0
+    const rate = rates[surface.scope] ?? 0
     const loading = surface.scope === 'exterior' ? doubleStorey : 1.0
     total += quantityOf(surface) * rate * mult * loading
   }
@@ -270,15 +330,16 @@ export function calculatePaintingPrice(args: {
     inputs.scopes.includes('exterior') && (measurement.storeys ?? 1) >= 2
       ? 1 + rateCard.double_storey_loading_pct
       : 1.0
+  const effectiveRates = effectiveRatePerUnit(rateCard)
   const breakdownSurfaces = measurement.surfaces.map((s) => {
-    const rate = rateCard.rate_per_unit[s.scope] ?? 0
+    const rate = effectiveRates[s.scope] ?? 0
     const surfaceMult =
       coatsMult * prepMult * colourMult * (s.scope === 'exterior' ? doubleStoreyMult : 1.0)
     return {
       scope: s.scope,
       unit: s.unit,
       quantity: s.quantity,
-      rate_per_unit: rate,
+      rate_per_unit: roundTo(rate, 2),
       line_ex_gst: roundTo(s.quantity * rate * surfaceMult, 2),
     }
   })
@@ -293,6 +354,10 @@ export function calculatePaintingPrice(args: {
     premium_uplift_pct: rateCard.premium_uplift_pct,
     gst_factor: rateCard.gst_registered ? 1.1 : 1.0,
     call_out_minimum_ex_gst: rateCard.call_out_minimum_ex_gst ?? 0,
+    pricing_model: rateCard.pricing_model === 'hourly' ? ('hourly' as const) : ('sqm' as const),
+    ...(rateCard.pricing_model === 'hourly'
+      ? { hourly_rate: numOrNull(rateCard.hourly_rate) ?? DEFAULT_PAINTING_HOURLY_RATE }
+      : {}),
   }
 
   const tierFractions: Record<'good' | 'better' | 'best', number> = {

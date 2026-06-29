@@ -133,7 +133,26 @@ export async function PATCH(req: Request) {
     book.overlays && typeof book.overlays === 'object' && !Array.isArray(book.overlays)
       ? (book.overlays as Record<string, unknown>)
       : {}
-  const nextOverlays = { ...existingOverlays, painting_rate_card: built.overlay }
+
+  // Preserve the hourly-pricing model across a plain sqm-rate edit. This editor
+  // doesn't surface pricing_model / hourly_rate yet (they're set at onboarding),
+  // so a PATCH that omits them must NOT silently revert an hourly painter back
+  // to per-m². Carry the prior values forward whenever the new body leaves them out.
+  const prevParsed = parsePaintingRateOverlay(existingOverlays.painting_rate_card)
+  const prevCard = prevParsed.ok ? prevParsed.overlay : {}
+  const mergedCard = {
+    ...built.overlay,
+    ...(built.overlay.pricing_model === undefined && prevCard.pricing_model != null
+      ? { pricing_model: prevCard.pricing_model }
+      : {}),
+    ...(built.overlay.hourly_rate === undefined && prevCard.hourly_rate != null
+      ? { hourly_rate: prevCard.hourly_rate }
+      : {}),
+    ...(built.overlay.production_rate_per_unit === undefined && prevCard.production_rate_per_unit != null
+      ? { production_rate_per_unit: prevCard.production_rate_per_unit }
+      : {}),
+  }
+  const nextOverlays = { ...existingOverlays, painting_rate_card: mergedCard }
   const { error: upErr } = await supabase
     .from('pricing_book')
     .update({ overlays: nextOverlays })
@@ -142,6 +161,6 @@ export async function PATCH(req: Request) {
     return Response.json({ ok: false, error: 'update_failed', detail: upErr.message }, { status: 500 })
   }
 
-  const effective = effectivePaintingRateCardFromOverlay(built.overlay)
+  const effective = effectivePaintingRateCardFromOverlay(mergedCard)
   return Response.json({ ok: true, effective })
 }

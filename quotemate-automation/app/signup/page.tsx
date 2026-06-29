@@ -8,6 +8,7 @@ import Link from 'next/link'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 import { normaliseAuMobile } from '@/lib/onboard/schema'
 import { BrandMark } from "@/app/_components/BrandMark"
+import { FunnelShell } from '@/app/_components/funnel-shell'
 
 // Next.js 16 disallows prerendering pages whose default export reads
 // useSearchParams() without a Suspense boundary. The signup page reads
@@ -157,131 +158,124 @@ function SignUpInner() {
   }
 
   return (
-    <AuthShell
-      step="01 / 04"
-      title={
-        <>
-          Create your <span className="text-accent">QuoteMate</span>
-        </>
-      }
-      subtitle="Takes 30 seconds. The next 3 steps are your trade, pricing, and a quick review."
-      footer={
-        <>
-          Already onboard?{' '}
-          <Link href="/signin" className="text-accent hover:text-accent-press font-semibold">
-            Sign in
-          </Link>
-        </>
-      }
+    <FunnelShell
+      currentNum="01"
+      heading="Create your account"
+      subtitle="Takes about 30 seconds. Next you'll add your trade, pricing, and a quick review."
     >
-      <form onSubmit={handleSubmit} className="space-y-5">
-        {/* SMS-prefill banner — only renders when the URL has ?intent=...
-            and the token resolved to a mobile. Confirms to the tradie
-            that we skip the OTP step because they already proved
-            mobile possession by texting us. */}
-        {intentMobile && (
-          <div className="border border-accent/40 bg-accent/5 px-4 py-3 -mx-2">
-            <div className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-accent font-bold">
-              Verified via SMS
+      <div className="mt-up border border-ink-line bg-ink-card p-7 md:p-10">
+        <form onSubmit={handleSubmit} className="space-y-7">
+          {/* SMS-prefill banner — only renders when the URL has ?intent=...
+              and the token resolved to a mobile. Confirms to the tradie
+              that we skip the OTP step because they already proved
+              mobile possession by texting us. */}
+          {intentMobile && (
+            <div className="border border-accent/40 bg-accent/5 px-4 py-3">
+              <div className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-accent font-bold">
+                Verified via SMS
+              </div>
+              <div className="mt-1 text-sm text-text-pri">
+                Mobile <span className="font-mono">{intentMobile}</span> · no code needed.
+              </div>
             </div>
-            <div className="mt-1 text-sm text-text-pri">
-              Mobile <span className="font-mono">{intentMobile}</span> — no
-              code needed.
-            </div>
-          </div>
-        )}
-        {intentError && (
-          <ErrorBanner>{intentError}</ErrorBanner>
-        )}
+          )}
+          {intentError && <ErrorBanner>{intentError}</ErrorBanner>}
 
-        <Field label="Business name" hint="Shows on every quote you send.">
-          <input
-            type="text"
-            value={businessName}
-            onChange={(e) => setBusinessName(e.target.value)}
-            placeholder="Jon's Sparky Co."
-            className={INPUT}
+          <RequiredLegend />
+
+          <Field label="Business name" hint="Shows on every quote you send." required>
+            <input
+              type="text"
+              value={businessName}
+              onChange={(e) => setBusinessName(e.target.value)}
+              className={INPUT}
+              required
+              maxLength={80}
+              autoComplete="organization"
+            />
+          </Field>
+
+          <Field label="Your first name" required>
+            <input
+              type="text"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              className={INPUT}
+              required
+              maxLength={40}
+              autoComplete="given-name"
+            />
+          </Field>
+
+          <Field label="Email" required>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={INPUT}
+              required
+              autoComplete="email"
+            />
+          </Field>
+
+          <Field
+            label="Mobile"
+            hint={mobileLocked ? 'Verified via SMS' : 'Customers see this on quotes'}
             required
-            maxLength={80}
-            autoComplete="organization"
-          />
-        </Field>
+          >
+            <input
+              type="tel"
+              value={mobile}
+              onChange={(e) => setMobile(e.target.value)}
+              className={
+                mobileLocked
+                  ? `${INPUT} bg-ink-card/60 cursor-not-allowed text-text-sec`
+                  : INPUT
+              }
+              required
+              readOnly={mobileLocked}
+              inputMode="tel"
+              autoComplete="tel"
+              maxLength={20}
+            />
+          </Field>
 
-        <Field label="Your first name">
-          <input
-            type="text"
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-            placeholder="Jon"
-            className={INPUT}
-            required
-            maxLength={40}
-            autoComplete="given-name"
-          />
-        </Field>
+          <Field label="Password" hint="Minimum 8 characters." required>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className={INPUT}
+              required
+              minLength={8}
+              autoComplete="new-password"
+            />
+          </Field>
 
-        <Field label="Email">
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@business.com.au"
-            className={INPUT}
-            required
-            autoComplete="email"
-          />
-        </Field>
+          {error && <ErrorBanner>{error}</ErrorBanner>}
 
-        <Field
-          label="Mobile"
-          hint={mobileLocked ? 'Verified via SMS' : 'Customers see this on quotes'}
-        >
-          <input
-            type="tel"
-            value={mobile}
-            onChange={(e) => setMobile(e.target.value)}
-            placeholder="04xx xxx xxx"
-            className={
-              mobileLocked
-                ? `${INPUT} bg-ink-card/60 cursor-not-allowed text-text-sec`
-                : INPUT
-            }
-            required
-            readOnly={mobileLocked}
-            inputMode="tel"
-            autoComplete="tel"
-            maxLength={20}
-          />
-        </Field>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full inline-flex items-center justify-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-4 text-sm uppercase tracking-wider transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-accent-soft focus:ring-offset-2 focus:ring-offset-ink-deep"
+          >
+            {submitting ? 'Creating your account…' : 'Continue'}
+            {!submitting && <Arrow />}
+          </button>
 
-        <Field label="Password" hint="Minimum 8 characters.">
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className={INPUT}
-            required
-            minLength={8}
-            autoComplete="new-password"
-          />
-        </Field>
+          <p className="text-center text-[0.7rem] font-mono uppercase tracking-[0.14em] text-text-dim">
+            No card · We never auto-send quotes without your review
+          </p>
+        </form>
+      </div>
 
-        {error && <ErrorBanner>{error}</ErrorBanner>}
-
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full inline-flex items-center justify-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-4 text-sm uppercase tracking-wider transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-accent-soft focus:ring-offset-2 focus:ring-offset-ink-deep"
-        >
-          {submitting ? 'Creating your account…' : 'Continue'}
-          {!submitting && <Arrow />}
-        </button>
-
-        <p className="text-center text-[0.7rem] font-mono uppercase tracking-[0.14em] text-text-dim">
-          No card · We never auto-send quotes without your review
-        </p>
-      </form>
-    </AuthShell>
+      <p className="mt-6 text-center text-sm text-text-sec">
+        Already onboard?{' '}
+        <Link href="/signin" className="text-accent hover:text-accent-press font-semibold">
+          Sign in
+        </Link>
+      </p>
+    </FunnelShell>
   )
 }
 
@@ -307,7 +301,7 @@ export function AuthShell({
           <Link href="/" className="flex items-center gap-2.5">
             <BrandMark className="h-10 w-10" />
             <span className="font-extrabold uppercase tracking-tight text-text-pri">
-              QuoteMate
+              QuoteMax
             </span>
           </Link>
           {footer && (
@@ -346,17 +340,27 @@ export function Field({
   hint,
   children,
   error,
+  required,
 }: {
   label: string
   hint?: string
   children: React.ReactNode
   error?: string
+  /** Renders an accent `*` after the label to mark the field as mandatory.
+   *  Purely a visual indicator — the underlying input still carries its own
+   *  `required` attribute for screen readers and native validation. */
+  required?: boolean
 }) {
   return (
     <label className="block">
       <div className="mb-2 flex items-baseline justify-between gap-3">
         <span className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-pri font-semibold">
           {label}
+          {required && (
+            <span className="ml-1 text-rose-500" aria-hidden="true">
+              *
+            </span>
+          )}
         </span>
         {hint && (
           <span className="font-mono text-[0.65rem] uppercase tracking-[0.1em] text-text-dim">
@@ -369,6 +373,20 @@ export function Field({
         <div className="mt-2 text-xs text-rose-400 font-mono">{error}</div>
       )}
     </label>
+  )
+}
+
+// One-line legend that explains the `*` indicator. Sits at the top of each
+// onboarding data-entry form (funnel stages 01–03) so the asterisk has an
+// obvious meaning the first time a tradie sees it.
+export function RequiredLegend() {
+  return (
+    <p className="font-mono text-[0.65rem] uppercase tracking-[0.12em] text-text-dim">
+      <span className="text-rose-500" aria-hidden="true">
+        *
+      </span>{' '}
+      Required
+    </p>
   )
 }
 

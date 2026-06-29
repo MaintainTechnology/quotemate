@@ -29,7 +29,7 @@ import { createClient } from '@supabase/supabase-js'
 import { buildSamplePrompts, pickAnchorImagePath, type PromptIntake, type SystemUserPrompt } from './prompts'
 import { loadPromptContext } from './generate'
 import { resolveProductImage, type ProductImage } from './product-image'
-import { geminiProvider } from './providers/gemini'
+import { selectImageProvider, imageGenReadiness } from './providers/select'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -50,9 +50,12 @@ export type SamplesResult =
   | { status: 'skipped'; reason: string }
 
 export async function generateSampleImages(quoteId: string): Promise<SamplesResult> {
-  if (!process.env.GEMINI_API_KEY) {
-    console.warn('[samples] GEMINI_API_KEY not set — skipping')
-    return { status: 'skipped', reason: 'GEMINI_API_KEY missing' }
+  const readiness = imageGenReadiness()
+  if (!readiness.ready) {
+    console.warn(`[samples] image generation not configured (${readiness.provider}) — skipping`, {
+      reason: readiness.reason,
+    })
+    return { status: 'skipped', reason: readiness.reason }
   }
   if (process.env.DISABLE_AI_SAMPLES) {
     return { status: 'skipped', reason: 'DISABLE_AI_SAMPLES env set' }
@@ -218,9 +221,10 @@ async function generateOneSample(opts: {
   referencePhoto: { base64: string; mime: string } | null
   productRef?: ProductImage | null
 }): Promise<{ path: string; imageBytes: Buffer; mimeType: string }> {
-  // Render via the Gemini provider — wire format identical to the
-  // previous inline fetch (contract-tested in providers/gemini.test.ts).
-  const out = await geminiProvider.renderImage({
+  // Render via the engine-selected provider (Stability SD 3.5 Large when
+  // STABILITY_NIM_URL is configured, else Gemini). Text-to-image providers
+  // ignore the referencePhoto / productRef; Gemini uses them as before.
+  const out = await selectImageProvider().renderImage({
     system: opts.prompt.system,
     user: opts.prompt.user,
     sourceImage: opts.referencePhoto ?? undefined,

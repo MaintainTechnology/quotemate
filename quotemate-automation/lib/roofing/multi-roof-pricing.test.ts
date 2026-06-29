@@ -9,7 +9,10 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_ROOFING_RATE_CARD,
   calculateRoofingPrice,
+  orderStructuresByRoofSize,
   priceMultiRoof,
+  roofSizeOrder,
+  roofStructureSizeM2,
   type RoofStructureInput,
 } from './pricing'
 import type { RoofMetrics, RoofUserInputs } from './types'
@@ -171,6 +174,65 @@ describe('priceMultiRoof — per-structure pricing + aggregation', () => {
     const card = { ...DEFAULT_ROOFING_RATE_CARD, reroof_rate_per_m2: { ...DEFAULT_ROOFING_RATE_CARD.reroof_rate_per_m2, colorbond_trimdek: 100 } }
     const q = priceMultiRoof({ structures: [shed], rateCard: card })
     expect(q.structures[0].price.tiers[1].ex_gst).toBe(50 * 100) // 5,000
+  })
+})
+
+describe('roof-size ordering — Main dwelling is always the largest roof', () => {
+  const mk = (footprint: number, sloped: number | null, buildingId: string): RoofStructureInput => ({
+    buildingId,
+    role: 'secondary',
+    metrics: metrics({ footprint_m2: footprint, sloped_area_m2: sloped, buildingId }),
+    inputs: inputs(),
+  })
+
+  describe('roofStructureSizeM2', () => {
+    it('uses sloped area when present and positive', () => {
+      expect(roofStructureSizeM2(metrics({ footprint_m2: 100, sloped_area_m2: 130 }))).toBe(130)
+    })
+    it('falls back to footprint when sloped area is null or non-positive', () => {
+      expect(roofStructureSizeM2(metrics({ footprint_m2: 100, sloped_area_m2: null }))).toBe(100)
+      expect(roofStructureSizeM2(metrics({ footprint_m2: 100, sloped_area_m2: 0 }))).toBe(100)
+    })
+    it('is 0 when neither measure is usable', () => {
+      expect(roofStructureSizeM2(metrics({ footprint_m2: 0, sloped_area_m2: null }))).toBe(0)
+    })
+  })
+
+  describe('roofSizeOrder', () => {
+    it('returns indices largest roof first', () => {
+      const s = [mk(70, 80, 'a'), mk(280, 300, 'b'), mk(140, 150, 'c')]
+      expect(roofSizeOrder(s)).toEqual([1, 2, 0])
+    })
+    it('is stable on ties (equal sizes keep input order)', () => {
+      const s = [mk(50, 50, 'a'), mk(200, 200, 'b'), mk(50, 50, 'c')]
+      expect(roofSizeOrder(s)).toEqual([1, 0, 2])
+    })
+    it('does not mutate its input', () => {
+      const s = [mk(70, 80, 'a'), mk(280, 300, 'b')]
+      const before = s.map((x) => x.buildingId)
+      roofSizeOrder(s)
+      expect(s.map((x) => x.buildingId)).toEqual(before)
+    })
+  })
+
+  describe('orderStructuresByRoofSize', () => {
+    it('makes the biggest roof primary and the rest secondary, largest→smallest', () => {
+      const ordered = orderStructuresByRoofSize([mk(70, 80, 'a'), mk(280, 300, 'b'), mk(140, 150, 'c')])
+      expect(ordered.map((s) => s.buildingId)).toEqual(['b', 'c', 'a'])
+      expect(ordered.map((s) => s.role)).toEqual(['primary', 'secondary', 'secondary'])
+    })
+
+    it('feeds priceMultiRoof so labels follow size: Main dwelling, Secondary 1, 2', () => {
+      const q = priceMultiRoof({
+        structures: orderStructuresByRoofSize([mk(70, 80, 'a'), mk(280, 300, 'b'), mk(140, 150, 'c')]),
+      })
+      expect(q.structures.map((s) => s.label)).toEqual([
+        'Main dwelling',
+        'Secondary structure 1',
+        'Secondary structure 2',
+      ])
+      expect(q.structures.map((s) => s.buildingId)).toEqual(['b', 'c', 'a'])
+    })
   })
 })
 

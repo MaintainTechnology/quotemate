@@ -5,7 +5,7 @@ import { COMPANY } from '../_components/company'
 export const metadata: Metadata = {
   title: 'Cookie policy',
   description:
-    'How QuoteMate uses cookies and local storage — essential session, payment and preference data only.',
+    'How QuoteMax uses cookies and local storage — essential session, payment and preference data only.',
 }
 
 const TOC: TocItem[] = [

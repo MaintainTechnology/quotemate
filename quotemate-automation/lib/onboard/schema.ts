@@ -110,6 +110,11 @@ export const OnboardActivateSchema = z.object({
   painting_trim_rate: optionalNumber(z.coerce.number().positive().max(200)),
   painting_exterior_rate: optionalNumber(z.coerce.number().positive().max(200)),
   painting_call_out_minimum: optionalNumber(z.coerce.number().min(0).max(5000)),
+  // Painting pricing model. 'sqm' (default) prices from the per-m² rate card
+  // above; 'hourly' charges painting_hourly_rate × labour hours (derived from
+  // area). Both persist to pricing_book.overlays.painting_rate_card.
+  painting_pricing_model: z.enum(['sqm', 'hourly']).optional(),
+  painting_hourly_rate: optionalNumber(z.coerce.number().positive().max(2000)),
 
   // ── Page 3: Pricing (advanced — all optional) ──────────────
   apprentice_rate: optionalNumber(z.coerce.number().nonnegative()),

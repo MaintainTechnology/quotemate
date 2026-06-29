@@ -37,6 +37,7 @@ import type {
 const CEILING_HEIGHT_M: Record<CeilingHeight, number> = {
   standard: 2.4,
   high: 2.7,
+  extra_high: 3.2, // routes to inspection; height used only for the indicative number
   raked: 2.7, // routes to inspection; height used only for the indicative number
 }
 
@@ -48,6 +49,7 @@ const CEILING_HEIGHT_M: Record<CeilingHeight, number> = {
 const WALL_MULTIPLIER: Record<CeilingHeight, number> = {
   standard: 2.8,
   high: 3.2,
+  extra_high: 3.6, // indicative only — extra_high routes to inspection before a price commits
   raked: 3.5,
 }
 

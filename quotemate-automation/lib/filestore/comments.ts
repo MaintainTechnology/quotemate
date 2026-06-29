@@ -1,5 +1,5 @@
 // Shared data + presentation helpers for the Files-tab comment thread
-// (specs/files-tab.md R6–R14). One flat, two-party (tenant ↔ QuoteMate staff)
+// (specs/files-tab.md R6–R14). One flat, two-party (tenant ↔ QuoteMax staff)
 // thread per archived document, plus a per-document resolved state.
 //
 // All DB access uses the service-role client (RLS bypass); tenancy and author
@@ -121,13 +121,13 @@ const COMMENT_COLS =
   'id, file_document_id, tenant_id, author_role, author_user_id, body, created_at, updated_at, deleted_at'
 
 // ─── Presentation (R11) ─────────────────────────────────────────────
-// Own comment → "You"; otherwise an admin comment → "QuoteMate" and a tenant
+// Own comment → "You"; otherwise an admin comment → "QuoteMax" and a tenant
 // comment → the tradie's business name (the only cross-author case a viewer
 // sees is staff looking at a tenant comment, or a tradie looking at a staff
 // comment — isolation prevents tenant↔tenant visibility).
 export function commentLabel(c: CommentRow, viewer: Viewer): string {
   if (c.author_role === viewer.role && c.author_user_id === viewer.userId) return 'You'
-  if (c.author_role === 'admin') return 'QuoteMate'
+  if (c.author_role === 'admin') return 'QuoteMax'
   return viewer.businessName || 'Tradie'
 }
 

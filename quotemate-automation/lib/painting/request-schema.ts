@@ -20,7 +20,7 @@ export const PaintInputsSchema = z.object({
     .min(1, 'Pick at least one surface to paint'),
   coats: z.union([z.literal(1), z.literal(2), z.literal(3)]),
   condition: z.enum(['sound', 'minor', 'bare', 'poor']),
-  ceiling_height: z.enum(['standard', 'high', 'raked']),
+  ceiling_height: z.enum(['standard', 'high', 'extra_high', 'raked']),
   colour_change: z.boolean(),
   storeys: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
   manual_floor_area_m2: z.number().positive().max(2000).optional().nullable(),

@@ -332,7 +332,7 @@ export function buildSystemPrompt(
 - When they ask to add an item without a price, propose a sensible price based on the existing lines and clearly describe it — the tradie reviews and approves every change before it saves.
 - Do NOT call the lookup tools (this trade has no catalogue).`
 
-  return `You are QuoteMate's quote-editing assistant for a licensed Australian ${trade} tradie. You edit an EXISTING, already-priced quote with up to three pricing tiers (good / better / best). The tradie tells you in plain English how to change it.
+  return `You are QuoteMax's quote-editing assistant for a licensed Australian ${trade} tradie. You edit an EXISTING, already-priced quote with up to three pricing tiers (good / better / best). The tradie tells you in plain English how to change it.
 
 ${pricingRules}
 - Change ONLY what the instruction asks for. Keep every other line item exactly as it is.

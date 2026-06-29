@@ -6,10 +6,10 @@
 // consistent (same entity name, ABN, contact email everywhere).
 
 export const COMPANY = {
-  /** Registered legal entity that operates QuoteMate. */
+  /** Registered legal entity that operates QuoteMax. */
   legalName: '[LEGAL ENTITY NAME] Pty Ltd',
   /** Customer-facing product/brand name. */
-  product: 'QuoteMate',
+  product: 'QuoteMax',
   /** Australian Business Number. */
   abn: '[ABN — e.g. 00 000 000 000]',
   /** Registered business address. */

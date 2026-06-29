@@ -80,6 +80,13 @@ export function PaintResultView({
         ))}
       </div>
 
+      {price.manual_override && (
+        <div className="mt-5 border border-ink-line border-l-4 border-l-accent bg-ink-card px-5 py-3 text-sm text-text-sec">
+          <span className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-accent">✎ Adjusted by you</span>{' '}
+          — these prices were hand-edited, so they override the automatic derivation below.
+        </div>
+      )}
+
       {(price.loadings_applied.length > 0 || price.call_out_minimum_applied) && (
         <div className="mt-5 space-y-1.5 text-sm text-text-sec">
           {price.call_out_minimum_applied && <p>Call-out minimum applied — small job floored to the minimum charge.</p>}

@@ -121,6 +121,15 @@ const SECONDARY_TILES: Tile[] = [
     cta: 'Open tenant health',
     href: '/admin/tenants',
   },
+  {
+    num: '10',
+    eyebrow: 'Access & recruitment',
+    title: 'Invites & onboarding',
+    blurb:
+      'Quota-bound invitation codes that gate who can onboard as a tradie, plus the recruitment “Onboard as a tradie” signup QR. Generate, copy, pause, resume, revoke or archive — every scan and sign-up is tracked.',
+    cta: 'Open invites',
+    href: '/admin/invites',
+  },
 ]
 
 export default function AdminHomePage() {

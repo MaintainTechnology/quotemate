@@ -59,6 +59,24 @@ export function generateInvitationCode(prefix: string, campaign: string): string
   return `${p}-${c}-${randomSuffix()}`
 }
 
+/**
+ * Normalise an admin-supplied custom (static) invitation code to the same
+ * canonical UPPER-case form as a generated one: alphanumerics with runs of
+ * any other character collapsed to a single dash, no leading/trailing dash.
+ * Returns null when the result can't be a usable code (fewer than 3 or more
+ * than 40 usable chars). Used when a tradie wants a memorable code like
+ * MATE2026 or JUNE-SPECIAL instead of an auto-generated random suffix.
+ */
+export function normalizeCustomCode(raw: string): string | null {
+  const c = raw
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  if (c.length < 3 || c.length > 40) return null
+  return c
+}
+
 /** Membership test against a comma-separated env allowlist. */
 export function isPlatformAdmin(userId: string, allowlist = process.env.PLATFORM_ADMIN_USER_IDS): boolean {
   if (!allowlist) return false

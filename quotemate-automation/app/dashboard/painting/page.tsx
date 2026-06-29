@@ -54,6 +54,7 @@ const CONDITIONS = [
 const CEILINGS = [
   ['standard', 'Standard (~2.4 m)'],
   ['high', 'High (~2.7 m, Queenslander / period)'],
+  ['extra_high', 'Very high (~3 m+, forces inspection)'],
   ['raked', 'Raked / cathedral (forces inspection)'],
 ] as const
 

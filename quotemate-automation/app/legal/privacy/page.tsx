@@ -5,7 +5,7 @@ import { COMPANY } from '../_components/company'
 export const metadata: Metadata = {
   title: 'Privacy policy',
   description:
-    'How QuoteMate collects, uses, stores and discloses personal information under the Australian Privacy Principles and the Privacy Act 1988 (Cth).',
+    'How QuoteMax collects, uses, stores and discloses personal information under the Australian Privacy Principles and the Privacy Act 1988 (Cth).',
 }
 
 const TOC: TocItem[] = [

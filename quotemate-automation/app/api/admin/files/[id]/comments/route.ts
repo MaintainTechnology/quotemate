@@ -1,4 +1,4 @@
-// GET/POST /api/admin/files/[id]/comments — QuoteMate staff side of the two-
+// GET/POST /api/admin/files/[id]/comments — QuoteMax staff side of the two-
 // party comment thread (specs/files-tab.md R10). Admin-gated; staff can reach
 // ANY tenant's document. Staff always author as role 'admin'.
 

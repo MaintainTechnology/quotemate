@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_PAINTING_RATE_CARD,
+  DEFAULT_PAINTING_HOURLY_RATE,
   applicableLoadings,
   calculatePaintingPrice,
+  effectiveRatePerUnit,
   jobMultiplier,
   requiresInspection,
 } from './pricing'
 import { measurePaintableArea } from './area'
-import type { PaintMeasurement, PaintUserInputs, PropertyFacts } from './types'
+import type { PaintMeasurement, PaintUserInputs, PaintingRateCard, PropertyFacts } from './types'
 
 function baseFacts(overrides: Partial<PropertyFacts> = {}): PropertyFacts {
   return {
@@ -168,6 +170,86 @@ describe('calculatePaintingPrice', () => {
     })
     expect(price.call_out_minimum_applied).toBe(true)
     expect(price.tiers[0].ex_gst).toBeGreaterThanOrEqual(450)
+  })
+})
+
+describe('effectiveRatePerUnit', () => {
+  it('returns the rate card verbatim in the default (sqm) model', () => {
+    expect(effectiveRatePerUnit(DEFAULT_PAINTING_RATE_CARD)).toEqual(
+      DEFAULT_PAINTING_RATE_CARD.rate_per_unit,
+    )
+  })
+
+  it('derives $/unit from hourly_rate ÷ production_rate in hourly mode', () => {
+    const card: PaintingRateCard = { ...DEFAULT_PAINTING_RATE_CARD, pricing_model: 'hourly', hourly_rate: 90 }
+    const rates = effectiveRatePerUnit(card)
+    // production defaults: walls 3, ceilings 4, trim 7, exterior 2 (units/hr).
+    expect(rates.walls).toBeCloseTo(90 / 3, 6)
+    expect(rates.ceilings).toBeCloseTo(90 / 4, 6)
+    expect(rates.trim).toBeCloseTo(90 / 7, 6)
+    expect(rates.exterior).toBeCloseTo(90 / 2, 6)
+  })
+
+  it('falls back to the fixed rate for a scope whose production rate is missing/zero (no div-by-zero)', () => {
+    const card: PaintingRateCard = {
+      ...DEFAULT_PAINTING_RATE_CARD,
+      pricing_model: 'hourly',
+      hourly_rate: 90,
+      production_rate_per_unit: { walls: 0, ceilings: 4, trim: 7, exterior: 2 },
+    }
+    const rates = effectiveRatePerUnit(card)
+    expect(rates.walls).toBe(DEFAULT_PAINTING_RATE_CARD.rate_per_unit.walls)
+    expect(Number.isFinite(rates.walls)).toBe(true)
+  })
+
+  it('defaults the hourly_rate when omitted', () => {
+    const card: PaintingRateCard = { ...DEFAULT_PAINTING_RATE_CARD, pricing_model: 'hourly', hourly_rate: undefined }
+    const rates = effectiveRatePerUnit(card)
+    expect(rates.walls).toBeCloseTo(DEFAULT_PAINTING_HOURLY_RATE / 3, 6)
+  })
+})
+
+describe('calculatePaintingPrice — hourly model', () => {
+  function hourly(rate: number): PaintingRateCard {
+    return { ...DEFAULT_PAINTING_RATE_CARD, pricing_model: 'hourly', hourly_rate: rate }
+  }
+
+  it('prices the Better tier as area ÷ production × hourly_rate', () => {
+    // 420 m² of walls at $85/hr, 3 m²/hr → 420 × (85/3) = $11,900 ex GST.
+    const price = calculatePaintingPrice({
+      facts: baseFacts(),
+      inputs: baseInputs(),
+      measurement: measure(),
+      rateCard: hourly(85),
+    })
+    expect(price.tiers[1].ex_gst).toBe(11900)
+    expect(price.tiers[1].inc_gst).toBe(13090) // × 1.10
+  })
+
+  it('scales linearly with the hourly rate', () => {
+    const at85 = calculatePaintingPrice({ facts: baseFacts(), inputs: baseInputs(), measurement: measure(), rateCard: hourly(85) })
+    const at170 = calculatePaintingPrice({ facts: baseFacts(), inputs: baseInputs(), measurement: measure(), rateCard: hourly(170) })
+    expect(at170.tiers[1].ex_gst).toBeCloseTo(at85.tiers[1].ex_gst * 2, 4)
+  })
+
+  it('keeps ordered Good/Better/Best tiers and routing in hourly mode', () => {
+    const price = calculatePaintingPrice({ facts: baseFacts(), inputs: baseInputs(), measurement: measure(), rateCard: hourly(85) })
+    expect(price.tiers[0].ex_gst).toBeLessThan(price.tiers[1].ex_gst)
+    expect(price.tiers[2].ex_gst).toBeGreaterThan(price.tiers[1].ex_gst)
+    expect(price.routing.decision).toBe('tradie_review')
+    expect(price.breakdown?.pricing_model).toBe('hourly')
+    expect(price.breakdown?.hourly_rate).toBe(85)
+  })
+
+  it('still applies coats/condition multipliers (hours scale with the job)', () => {
+    const base = calculatePaintingPrice({ facts: baseFacts(), inputs: baseInputs(), measurement: measure(), rateCard: hourly(85) })
+    const heavier = calculatePaintingPrice({
+      facts: baseFacts(),
+      inputs: baseInputs({ coats: 3, condition: 'bare' }),
+      measurement: measure({}, { coats: 3, condition: 'bare' }),
+      rateCard: hourly(85),
+    })
+    expect(heavier.tiers[1].ex_gst).toBeGreaterThan(base.tiers[1].ex_gst)
   })
 })
 

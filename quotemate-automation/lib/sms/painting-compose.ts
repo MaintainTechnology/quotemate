@@ -93,7 +93,10 @@ export function buildPaintingQuoteSms(ctx: PaintingReplyContext): string {
   const lines = tiers
     .filter((t) => visibleTierKeys.includes(t.tier))
     .map((t) => {
-      const base = `• ${PAINT_TIER_LABEL_BY_KEY[t.tier]}: ${fmtAud(t.inc_gst)}`
+      // Honour a tradie's edited tier label (lib/painting/edit.ts) so the SMS
+      // matches the customer page + PDF; fall back to the canonical name.
+      const label = t.label?.trim() || PAINT_TIER_LABEL_BY_KEY[t.tier]
+      const base = `• ${label}: ${fmtAud(t.inc_gst)}`
       // Per-tier deposit short-link, only when a Stripe session exists for it.
       if (ctx.token && ctx.appUrl && ctx.stripeLinks?.[t.tier]) {
         return `${base} · deposit ${ctx.appUrl}/r/paint/${ctx.token}/${t.tier}`

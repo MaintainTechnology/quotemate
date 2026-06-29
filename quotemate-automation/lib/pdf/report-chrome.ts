@@ -11,7 +11,7 @@
 // Caterpillar yellow #FFC400 is used only as FILLS with dark ink on it,
 // never as text colour on the cream page (yellow text fails WCAG).
 //
-// White-label: NO "QuoteMate" / "QuoteMax" string or mark appears here.
+// White-label: NO "QuoteMax" string or mark appears here.
 // Pure & deterministic (pass `generatedAt`); unit-tested.
 // ════════════════════════════════════════════════════════════════════
 
@@ -59,7 +59,7 @@ export function brandingFromName(businessName: string): TenantBranding {
 
 /** The trade-agnostic document content the chrome wraps around. */
 export type ReportDocument = {
-  /** <title> — white-label, no QuoteMate. */
+  /** <title> — white-label, no QuoteMax. */
   docTitle: string
   /** Mono eyebrow above the heading, e.g. "Roofing quote · Good / Better / Best". */
   eyebrow?: string | null

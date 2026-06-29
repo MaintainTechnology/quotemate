@@ -158,7 +158,7 @@ VAPI_SERVER_URL=https://your-app.vercel.app/api/vapi/webhook \
   node --env-file=.env.local scripts/update-vapi-server-url.mjs
 ```
 
-Or do it in the Vapi dashboard: Assistants → QuoteMate Receptionist → Messaging → Server URL.
+Or do it in the Vapi dashboard: Assistants → QuoteMax Receptionist → Messaging → Server URL.
 
 ---
 

@@ -66,7 +66,7 @@ export type ProviderCapabilities = {
   vision: boolean
 }
 
-export type ProviderName = 'gemini' | 'openai'
+export type ProviderName = 'gemini' | 'openai' | 'stability'
 
 export interface ImageProvider {
   readonly name: ProviderName

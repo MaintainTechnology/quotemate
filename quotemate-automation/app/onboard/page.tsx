@@ -8,7 +8,6 @@
 
 import { Suspense, useState, useEffect, type FormEvent } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
 import { LICENCE_BODIES } from '@/lib/onboard/schema'
 import { DEFAULT_PAINTING_RATE_CARD } from '@/lib/painting/pricing'
 import {
@@ -17,8 +16,9 @@ import {
   type WeeklyAvailability,
 } from '@/lib/quote/availability'
 import { AvailabilityEditor } from '@/app/_components/AvailabilityEditor'
-import { Field, INPUT, ErrorBanner, Arrow } from '../signup/page'
-import { BrandMark } from "@/app/_components/BrandMark"
+import { AddressAutocomplete } from '@/app/_components/AddressAutocomplete'
+import { Field, INPUT, ErrorBanner, Arrow, RequiredLegend } from '../signup/page'
+import { FunnelShell } from '@/app/_components/funnel-shell'
 
 type Trade = 'electrical' | 'plumbing' | 'painting'
 
@@ -62,6 +62,11 @@ type FormState = {
   painting_trim_rate: string
   painting_exterior_rate: string
   painting_call_out_minimum: string
+  // Painting pricing model: 'sqm' = the per-m² rate card above; 'hourly' =
+  // charge by labour time at painting_hourly_rate. Drives which fields Step 2
+  // shows and what the activate route writes into the rate-card overlay.
+  painting_pricing_model: 'sqm' | 'hourly'
+  painting_hourly_rate: string
   gst_registered: boolean
   // Default schedule availability (migration 147). Pre-filled with the
   // Mon–Fri default; the tradie can edit or skip it. Optional in the wizard.
@@ -75,6 +80,7 @@ const STEP_META = [
   { num: '03', label: 'Your pricing',    subtitle: 'Three required fields. Advanced settings have defaults.' },
   { num: '04', label: 'Review & activate', subtitle: 'One last look, then we provision your AI line.' },
 ] as const
+
 
 // Next.js 16 disallows prerendering pages whose default export reads
 // useSearchParams() without a Suspense boundary. The wizard reads
@@ -164,6 +170,8 @@ function OnboardWizardInner() {
     painting_trim_rate: String(DEFAULT_PAINTING_RATE_CARD.rate_per_unit.trim),
     painting_exterior_rate: String(DEFAULT_PAINTING_RATE_CARD.rate_per_unit.exterior),
     painting_call_out_minimum: String(DEFAULT_PAINTING_RATE_CARD.call_out_minimum_ex_gst ?? 450),
+    painting_pricing_model: 'sqm',
+    painting_hourly_rate: String(DEFAULT_PAINTING_RATE_CARD.hourly_rate ?? 85),
     gst_registered: true,
     default_availability: defaultAvailability(),
   })
@@ -390,75 +398,43 @@ function OnboardWizardInner() {
   const meta = STEP_META[step - 1]
 
   return (
-    <main className="min-h-screen flex flex-col">
-      {/* nav */}
-      <nav className="border-b border-ink-line">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
-          <Link href="/" className="flex items-center gap-2.5">
-            <BrandMark className="h-10 w-10" />
-            <span className="font-extrabold uppercase tracking-tight text-text-pri">
-              QuoteMax
-            </span>
-          </Link>
-          <span className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
-            Step {meta.num} of 04
-          </span>
-        </div>
-      </nav>
-
-      <div className="flex-1 flex items-start justify-center px-6 py-12 md:py-16">
-        <div className="w-full max-w-2xl">
-          <ProgressDots current={step} />
-
-          {/* Signature numbered step card */}
-          <div className="mt-10">
-            <div className="flex items-start gap-6 md:gap-8">
-              <span className="font-mono text-5xl md:text-7xl font-bold text-accent leading-none shrink-0">
-                {meta.num}
-              </span>
-              <div className="pt-1.5">
-                <h1 className="font-extrabold uppercase text-[clamp(1.75rem,4vw,2.75rem)] leading-[1.05] tracking-[-0.03em]">
-                  {meta.label}
-                </h1>
-                <p className="mt-3 text-text-sec leading-relaxed">{meta.subtitle}</p>
-              </div>
-            </div>
+    <FunnelShell
+      currentNum={meta.num}
+      heading={codeAccepted ? meta.label : 'One code to start'}
+      subtitle={
+        codeAccepted
+          ? meta.subtitle
+          : 'Enter the invitation code whoever invited you sent. It unlocks tradie sign-up.'
+      }
+    >
+      {!codeAccepted ? (
+        <div className="mt-up border border-ink-line bg-ink-card p-7 md:p-10">
+          <Field
+            label="Invitation code"
+            hint={codeLocked ? 'From your text · locked' : 'The code whoever invited you gave you'}
+            error={codeError ?? undefined}
+          >
+            <input
+              type="text"
+              value={invitationCode}
+              onChange={(e) => setInvitationCode(e.target.value.toUpperCase())}
+              placeholder="e.g. JON-JUNE-FLYERS-7K2P"
+              className={`${INPUT} ${codeLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
+              readOnly={codeLocked}
+              autoCapitalize="characters"
+            />
+          </Field>
+          {codeNote && <p className="mt-3 text-sm font-medium text-amber-500">{codeNote}</p>}
+          <div className="mt-7 flex justify-end">
+            <PrimaryButton disabled={codeChecking} onClick={checkCode}>
+              {codeChecking ? 'Checking…' : 'Continue'}
+            </PrimaryButton>
           </div>
-
-          {/* Step 0 — invitation-code gate. Web tradies type it here;
-              SMS tradies arrive pre-validated and skip straight through. */}
-          {!codeAccepted && (
-            <div className="mt-10 bg-ink-card border border-ink-line p-6 md:p-8">
-              <Field
-                label="Invitation code"
-                hint={codeLocked ? 'From your text — locked' : 'The code whoever invited you gave you'}
-                error={codeError ?? undefined}
-              >
-                <input
-                  type="text"
-                  value={invitationCode}
-                  onChange={(e) => setInvitationCode(e.target.value.toUpperCase())}
-                  placeholder="e.g. JON-JUNE-FLYERS-7K2P"
-                  className={`${INPUT} ${codeLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
-                  readOnly={codeLocked}
-                  autoCapitalize="characters"
-                />
-              </Field>
-              {codeNote && (
-                <p className="mt-3 text-sm text-amber-400 font-medium">{codeNote}</p>
-              )}
-              <div className="mt-6 flex justify-end">
-                <PrimaryButton disabled={codeChecking} onClick={checkCode}>
-                  {codeChecking ? 'Checking…' : 'Continue'}
-                </PrimaryButton>
-              </div>
-            </div>
-          )}
-
-          {codeAccepted && (
-          <>
+        </div>
+      ) : (
+        <>
           {/* Step content */}
-          <div className="mt-10 bg-ink-card border border-ink-line p-6 md:p-8">
+          <div key={step} className="mt-up border border-ink-line bg-ink-card p-7 md:p-10 lg:p-12">
             {step === 1 && (
               <Step1
                 form={form}
@@ -480,9 +456,7 @@ function OnboardWizardInner() {
                 setShowAdvanced={setShowAdvanced}
               />
             )}
-            {step === 3 && (
-              <Step3 form={form} />
-            )}
+            {step === 3 && <Step3 form={form} />}
           </div>
 
           {/* Inline error */}
@@ -500,18 +474,12 @@ function OnboardWizardInner() {
               <span />
             )}
             {step === 1 && (
-              <PrimaryButton
-                disabled={!canContinueStep1}
-                onClick={() => setStep(2)}
-              >
+              <PrimaryButton disabled={!canContinueStep1} onClick={() => setStep(2)}>
                 Continue
               </PrimaryButton>
             )}
             {step === 2 && (
-              <PrimaryButton
-                disabled={!canContinueStep2}
-                onClick={() => setStep(3)}
-              >
+              <PrimaryButton disabled={!canContinueStep2} onClick={() => setStep(3)}>
                 Continue
               </PrimaryButton>
             )}
@@ -528,11 +496,9 @@ function OnboardWizardInner() {
               </form>
             )}
           </div>
-          </>
-          )}
-        </div>
-      </div>
-    </main>
+        </>
+      )}
+    </FunnelShell>
   )
 }
 
@@ -564,8 +530,13 @@ function Step1({
   const primaryTrade: Trade | '' = form.trades[0] ?? ''
   return (
     <>
+      <div className="mb-7">
+        <RequiredLegend />
+      </div>
+
       {/* ─── Your brand — shown on every customer quote ───────────── */}
-      <div className="space-y-5">
+      <SectionHeading hint="Shows on the quotes your customers receive.">Your brand</SectionHeading>
+      <div className="space-y-7">
         <LogoUpload
           ownerUserId={form.owner_user_id}
           logoUrl={form.logo_url}
@@ -574,13 +545,12 @@ function Step1({
             update('logo_path', path)
           }}
         />
-        <div className="grid gap-5 md:grid-cols-2">
-          <Field label="Contact name" hint="Optional — who customers ask for">
+        <div className="grid gap-x-8 gap-y-7 md:grid-cols-2">
+          <Field label="Contact name" hint="Optional · who customers ask for">
             <input
               type="text"
               value={form.contact_name}
               onChange={(e) => update('contact_name', e.target.value)}
-              placeholder={form.owner_first_name || 'e.g. Matthew'}
               className={INPUT}
               maxLength={80}
               autoComplete="name"
@@ -591,102 +561,102 @@ function Step1({
               type="text"
               value={form.website_url}
               onChange={(e) => update('website_url', e.target.value)}
-              placeholder="rooroofing.com.au"
               className={INPUT}
               maxLength={200}
               inputMode="url"
             />
           </Field>
         </div>
-        <Field label="Business address" hint="Optional — shows on your quotes">
-          <input
-            type="text"
+        <Field label="Business address" hint="Optional · start typing to search">
+          <AddressAutocomplete
             value={form.business_address}
-            onChange={(e) => update('business_address', e.target.value)}
-            placeholder="123 Trade St, Brisbane QLD 4000"
+            onChange={(v) => update('business_address', v)}
             className={INPUT}
             maxLength={200}
-            autoComplete="street-address"
+            aria-label="Business address"
           />
         </Field>
       </div>
 
-      <div className="mt-6 pt-6 border-t border-ink-line" />
-
-      {/* Required + commonly-asked fields */}
-      <div className="grid gap-5 md:grid-cols-2">
-        <Field
-          label="Mobile"
-          hint={mobileLocked ? 'Verified via your SMS — locked' : 'For your welcome text'}
-          error={fieldErrors.owner_mobile?.[0]}
-        >
-          <input
-            type="tel"
-            value={form.owner_mobile}
-            onChange={(e) => update('owner_mobile', e.target.value)}
-            placeholder="04xx xxx xxx"
-            className={`${INPUT} ${mobileLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
-            autoComplete="tel"
-            required
-            readOnly={mobileLocked}
-          />
-        </Field>
-
-        <Field
-          label="Trade"
-          hint="Pick any that apply"
-          error={fieldErrors.trades?.[0]}
-        >
-          <div className="grid grid-cols-3 gap-2">
-            {tradeAvailable('electrical') && (
-              <TradePill
-                value="electrical"
-                label="Electrical"
-                selected={form.trades.includes('electrical')}
-                onToggle={toggleTrade}
-              />
-            )}
-            {tradeAvailable('plumbing') && (
-              <TradePill
-                value="plumbing"
-                label="Plumbing"
-                selected={form.trades.includes('plumbing')}
-                onToggle={toggleTrade}
-              />
-            )}
-            {tradeAvailable('painting') && (
-              <TradePill
-                value="painting"
-                label="Painting"
-                selected={form.trades.includes('painting')}
-                onToggle={toggleTrade}
-              />
-            )}
-          </div>
-        </Field>
-
-        <Field label="State">
-          <select
-            value={form.state}
-            onChange={(e) => update('state', e.target.value as FormState['state'])}
-            className={INPUT}
+      {/* ─── Your trade — required core fields ─────────────────────── */}
+      <div className="mt-12 border-t border-ink-line pt-12">
+        <SectionHeading hint="What you do and where. Pick every trade you're licensed for.">
+          Your trade
+        </SectionHeading>
+        <div className="grid gap-x-8 gap-y-7 md:grid-cols-2">
+          <Field
+            label="Mobile"
+            hint={mobileLocked ? 'Verified via SMS · locked' : 'For your welcome text'}
+            error={fieldErrors.owner_mobile?.[0]}
             required
           >
-            <option value="" className="bg-ink-deep">Choose state</option>
-            {STATES.map((s) => <option key={s} value={s} className="bg-ink-deep">{s}</option>)}
-          </select>
-        </Field>
+            <input
+              type="tel"
+              value={form.owner_mobile}
+              onChange={(e) => update('owner_mobile', e.target.value)}
+              className={`${INPUT} ${mobileLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
+              autoComplete="tel"
+              required
+              readOnly={mobileLocked}
+            />
+          </Field>
 
-        <Field label="ABN" hint="Optional — add later">
-          <input
-            type="text"
-            value={form.abn}
-            onChange={(e) => update('abn', e.target.value)}
-            placeholder="11 222 333 444"
-            className={INPUT}
-            maxLength={20}
-          />
-        </Field>
+          <Field
+            label="Trade"
+            hint="Pick any that apply"
+            error={fieldErrors.trades?.[0]}
+            required
+          >
+            <div className="grid grid-cols-3 gap-2">
+              {tradeAvailable('electrical') && (
+                <TradePill
+                  value="electrical"
+                  label="Electrical"
+                  selected={form.trades.includes('electrical')}
+                  onToggle={toggleTrade}
+                />
+              )}
+              {tradeAvailable('plumbing') && (
+                <TradePill
+                  value="plumbing"
+                  label="Plumbing"
+                  selected={form.trades.includes('plumbing')}
+                  onToggle={toggleTrade}
+                />
+              )}
+              {tradeAvailable('painting') && (
+                <TradePill
+                  value="painting"
+                  label="Painting"
+                  selected={form.trades.includes('painting')}
+                  onToggle={toggleTrade}
+                />
+              )}
+            </div>
+          </Field>
+
+          <Field label="State" required>
+            <select
+              value={form.state}
+              onChange={(e) => update('state', e.target.value as FormState['state'])}
+              className={INPUT}
+              required
+            >
+              <option value="" className="bg-ink-deep">Choose state</option>
+              {STATES.map((s) => <option key={s} value={s} className="bg-ink-deep">{s}</option>)}
+            </select>
+          </Field>
+
+          <Field label="ABN" hint="Optional · add later">
+            <input
+              type="text"
+              value={form.abn}
+              onChange={(e) => update('abn', e.target.value)}
+              className={INPUT}
+              maxLength={20}
+            />
+          </Field>
+        </div>
       </div>
 
       {/* ─── Licence details — collapsed by default ───────────────── */}
@@ -694,7 +664,7 @@ function Step1({
           Law for the test phase. Most tradies have one but typing it
           mid-onboarding is friction — let them skip cleanly and add it
           later from the dashboard's Account tab. */}
-      <div className="mt-6 pt-6 border-t border-ink-line">
+      <div className="mt-12 pt-12 border-t border-ink-line">
         {!showLicence ? (
           <button
             type="button"
@@ -722,13 +692,13 @@ function Step1({
                 Skip
               </button>
             </div>
-            <div className="mt-4 grid gap-5 md:grid-cols-2">
+            <div className="mt-5 grid gap-x-8 gap-y-7 md:grid-cols-2">
               {form.state && primaryTrade && (
                 <Field
                   label="Licence body"
                   hint={
                     form.trades.length > 1
-                      ? `Optional — defaults to ${primaryTrade} regulator`
+                      ? `Optional · defaults to ${primaryTrade} regulator`
                       : 'Optional'
                   }
                 >
@@ -737,7 +707,6 @@ function Step1({
                     value={form.licence_type || LICENCE_BODIES[form.state]?.[primaryTrade] || ''}
                     onChange={(e) => update('licence_type', e.target.value)}
                     className={INPUT}
-                    placeholder={LICENCE_BODIES[form.state]?.[primaryTrade]}
                   />
                 </Field>
               )}
@@ -789,11 +758,19 @@ function Step2({
   // picked, else fall back to the electrical-shaped defaults.
   const isPlumbing = form.trades.length === 1 && form.trades[0] === 'plumbing'
   return (
-    <div className="space-y-5">
+    <div className="space-y-10">
       {hasLabour && (
         <>
-          <div className="grid gap-5 md:grid-cols-2">
-            <Field label="Hourly rate" hint="Ex-GST" error={fieldErrors.hourly_rate?.[0]}>
+          <div>
+            <div className="mb-3">
+              <RequiredLegend />
+            </div>
+            <SectionHeading hint="Your standard charge-out. The advanced settings below all have sensible defaults.">
+              Labour rates
+            </SectionHeading>
+          </div>
+          <div className="grid gap-x-8 gap-y-7 md:grid-cols-2">
+            <Field label="Hourly rate" hint="Ex-GST" error={fieldErrors.hourly_rate?.[0]} required>
               <PrefixedInput
                 prefix="$"
                 type="number"
@@ -801,11 +778,10 @@ function Step2({
                 min="1"
                 value={form.hourly_rate}
                 onChange={(v) => update('hourly_rate', v)}
-                placeholder={isPlumbing ? '120' : '110'}
               />
             </Field>
 
-            <Field label="Call-out minimum" hint="Absorbed into jobs > $800" error={fieldErrors.call_out_minimum?.[0]}>
+            <Field label="Call-out minimum" hint="Absorbed into jobs > $800" error={fieldErrors.call_out_minimum?.[0]} required>
               <PrefixedInput
                 prefix="$"
                 type="number"
@@ -813,11 +789,10 @@ function Step2({
                 min="1"
                 value={form.call_out_minimum}
                 onChange={(v) => update('call_out_minimum', v)}
-                placeholder={isPlumbing ? '110' : '150'}
               />
             </Field>
 
-            <Field label="Materials markup" hint="20–35% typical AU" error={fieldErrors.default_markup_pct?.[0]}>
+            <Field label="Materials markup" hint="20-35% typical AU" error={fieldErrors.default_markup_pct?.[0]} required>
               <SuffixedInput
                 suffix="%"
                 type="number"
@@ -826,7 +801,6 @@ function Step2({
                 max="100"
                 value={form.default_markup_pct}
                 onChange={(v) => update('default_markup_pct', v)}
-                placeholder={isPlumbing ? '20' : '28'}
               />
             </Field>
           </div>
@@ -836,23 +810,22 @@ function Step2({
             onClick={() => setShowAdvanced(!showAdvanced)}
             className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent hover:text-accent-press transition-colors"
           >
-            {showAdvanced ? '— Hide advanced pricing' : '+ Show advanced pricing (5 optional)'}
+            {showAdvanced ? 'Hide advanced pricing' : '+ Show advanced pricing (5 optional)'}
           </button>
 
           {showAdvanced && (
-            <div className="grid gap-5 md:grid-cols-2 pt-4 border-t border-ink-line">
+            <div className="grid gap-x-8 gap-y-7 md:grid-cols-2 pt-6 border-t border-ink-line">
               <Field label="Apprentice rate" hint="Default $65/hr">
-                <PrefixedInput prefix="$" type="number" step="1" value={form.apprentice_rate} onChange={(v) => update('apprentice_rate', v)} placeholder="65" />
+                <PrefixedInput prefix="$" type="number" step="1" value={form.apprentice_rate} onChange={(v) => update('apprentice_rate', v)} />
               </Field>
               <Field label="Senior rate" hint="Default $160/hr">
-                <PrefixedInput prefix="$" type="number" step="1" value={form.senior_rate} onChange={(v) => update('senior_rate', v)} placeholder="160" />
+                <PrefixedInput prefix="$" type="number" step="1" value={form.senior_rate} onChange={(v) => update('senior_rate', v)} />
               </Field>
               <Field label="After-hours multiplier" hint="Default 1.5×">
                 <input
                   type="number" step="0.1"
                   value={form.after_hours_multiplier}
                   onChange={(e) => update('after_hours_multiplier', e.target.value)}
-                  placeholder="1.5"
                   className={INPUT}
                 />
               </Field>
@@ -861,12 +834,11 @@ function Step2({
                   type="number" step="0.5"
                   value={form.min_labour_hours}
                   onChange={(e) => update('min_labour_hours', e.target.value)}
-                  placeholder={isPlumbing ? '1.5' : '2'}
                   className={INPUT}
                 />
               </Field>
               <Field label="Risk buffer %" hint="Default 15%">
-                <SuffixedInput suffix="%" type="number" step="1" value={form.risk_buffer_pct} onChange={(v) => update('risk_buffer_pct', v)} placeholder="15" />
+                <SuffixedInput suffix="%" type="number" step="1" value={form.risk_buffer_pct} onChange={(v) => update('risk_buffer_pct', v)} />
               </Field>
             </div>
           )}
@@ -874,34 +846,71 @@ function Step2({
       )}
 
       {hasPainting && (
-        <div className={hasLabour ? 'pt-6 border-t border-ink-line' : ''}>
-          <div className="mb-3">
-            <h3 className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent">
-              Painting rates (per m² / lm, ex-GST)
+        <div className={hasLabour ? 'pt-10 border-t border-ink-line' : ''}>
+          <div className="mb-5">
+            <h3 className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-accent">
+              Painting pricing
             </h3>
             <p className="mt-1.5 text-sm leading-relaxed text-text-sec">
-              Your all-in rate for a standard 2-coat repaint over a sound surface.
-              Pre-filled with typical AU rates — adjust to match your pricing. You
-              can fine-tune these anytime from your dashboard.
+              Choose how you price painting jobs. <strong className="text-text-pri">Per m²</strong> uses
+              an all-in rate card; <strong className="text-text-pri">Hourly</strong> charges by labour
+              time. You can fine-tune this anytime from your dashboard.
             </p>
           </div>
-          <div className="grid gap-5 md:grid-cols-2">
-            <Field label="Walls" hint="$/m²">
-              <PrefixedInput prefix="$" type="number" step="1" min="1" value={form.painting_walls_rate} onChange={(v) => update('painting_walls_rate', v)} placeholder="28" />
-            </Field>
-            <Field label="Ceilings" hint="$/m²">
-              <PrefixedInput prefix="$" type="number" step="1" min="1" value={form.painting_ceilings_rate} onChange={(v) => update('painting_ceilings_rate', v)} placeholder="20" />
-            </Field>
-            <Field label="Trim / doors" hint="$/lm">
-              <PrefixedInput prefix="$" type="number" step="1" min="1" value={form.painting_trim_rate} onChange={(v) => update('painting_trim_rate', v)} placeholder="12" />
-            </Field>
-            <Field label="Exterior" hint="$/m²">
-              <PrefixedInput prefix="$" type="number" step="1" min="1" value={form.painting_exterior_rate} onChange={(v) => update('painting_exterior_rate', v)} placeholder="45" />
-            </Field>
-            <Field label="Call-out minimum" hint="Ex-GST floor per job">
-              <PrefixedInput prefix="$" type="number" step="10" min="0" value={form.painting_call_out_minimum} onChange={(v) => update('painting_call_out_minimum', v)} placeholder="450" />
-            </Field>
+
+          {/* Pricing-model toggle */}
+          <div className="mb-5">
+            <span className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
+              Pricing model
+            </span>
+            <div className="mt-1.5 grid max-w-sm grid-cols-2 gap-2">
+              <PricingModelButton
+                label="Per m²"
+                sublabel="Rate card"
+                active={form.painting_pricing_model === 'sqm'}
+                onClick={() => update('painting_pricing_model', 'sqm')}
+              />
+              <PricingModelButton
+                label="Hourly"
+                sublabel="By labour time"
+                active={form.painting_pricing_model === 'hourly'}
+                onClick={() => update('painting_pricing_model', 'hourly')}
+              />
+            </div>
           </div>
+
+          {form.painting_pricing_model === 'sqm' ? (
+            <div className="grid gap-x-8 gap-y-7 md:grid-cols-2">
+              <Field label="Walls" hint="$/m²">
+                <PrefixedInput prefix="$" type="number" step="1" min="1" value={form.painting_walls_rate} onChange={(v) => update('painting_walls_rate', v)} />
+              </Field>
+              <Field label="Ceilings" hint="$/m²">
+                <PrefixedInput prefix="$" type="number" step="1" min="1" value={form.painting_ceilings_rate} onChange={(v) => update('painting_ceilings_rate', v)} />
+              </Field>
+              <Field label="Trim / doors" hint="$/lm">
+                <PrefixedInput prefix="$" type="number" step="1" min="1" value={form.painting_trim_rate} onChange={(v) => update('painting_trim_rate', v)} />
+              </Field>
+              <Field label="Exterior" hint="$/m²">
+                <PrefixedInput prefix="$" type="number" step="1" min="1" value={form.painting_exterior_rate} onChange={(v) => update('painting_exterior_rate', v)} />
+              </Field>
+              <Field label="Call-out minimum" hint="Ex-GST floor per job">
+                <PrefixedInput prefix="$" type="number" step="10" min="0" value={form.painting_call_out_minimum} onChange={(v) => update('painting_call_out_minimum', v)} />
+              </Field>
+            </div>
+          ) : (
+            <div className="grid gap-x-8 gap-y-7 md:grid-cols-2">
+              <Field label="Hourly rate" hint="$/hr ex-GST">
+                <PrefixedInput prefix="$" type="number" step="1" min="1" value={form.painting_hourly_rate} onChange={(v) => update('painting_hourly_rate', v)} />
+              </Field>
+              <Field label="Call-out minimum" hint="Ex-GST floor per job">
+                <PrefixedInput prefix="$" type="number" step="10" min="0" value={form.painting_call_out_minimum} onChange={(v) => update('painting_call_out_minimum', v)} />
+              </Field>
+              <p className="text-xs leading-relaxed text-text-dim md:col-span-2">
+                We estimate labour hours from the measured job area and charge your hourly
+                rate. Coats, prep and access still scale the quote, same as the rate-card model.
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -919,9 +928,9 @@ function Step2({
       {/* Booking availability — optional. Pre-filled with the Mon–Fri default
           so the tradie is bookable immediately; fully editable here or later
           from the dashboard Account tab. */}
-      <div className="pt-6 border-t border-ink-line">
-        <div className="mb-3">
-          <h3 className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent">
+      <div className="pt-10 border-t border-ink-line">
+        <div className="mb-5">
+          <h3 className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-accent">
             Booking availability (optional)
           </h3>
           <p className="mt-1.5 text-sm leading-relaxed text-text-sec">
@@ -985,7 +994,10 @@ function Step3({ form }: { form: FormState }) {
             <ReviewRow k="Markup" v={form.default_markup_pct ? `${form.default_markup_pct}%` : ''} />
           </>
         )}
-        {hasPainting && (
+        {hasPainting && form.painting_pricing_model === 'hourly' && (
+          <ReviewRow k="Painting" v={form.painting_hourly_rate ? `$${form.painting_hourly_rate}/hr (hourly)` : 'Hourly'} />
+        )}
+        {hasPainting && form.painting_pricing_model !== 'hourly' && (
           <>
             <ReviewRow k="Walls" v={form.painting_walls_rate ? `$${form.painting_walls_rate}/m²` : ''} />
             <ReviewRow k="Ceilings" v={form.painting_ceilings_rate ? `$${form.painting_ceilings_rate}/m²` : ''} />
@@ -1013,22 +1025,13 @@ function Step3({ form }: { form: FormState }) {
 
 /* ─── Primitives ────────────────────────────────────────────── */
 
-function ProgressDots({ current }: { current: 1 | 2 | 3 }) {
+// Subtle group heading used inside steps to break a long form into calm,
+// labelled sections instead of one undifferentiated block.
+function SectionHeading({ children, hint }: { children: React.ReactNode; hint?: string }) {
   return (
-    <div className="flex items-center gap-3">
-      {[1, 2, 3].map((s) => {
-        const active = s === current
-        const done = s < current
-        return (
-          <div
-            key={s}
-            className={`h-1 flex-1 transition-colors ${
-              done || active ? 'bg-accent' : 'bg-ink-line'
-            }`}
-            aria-current={active ? 'step' : undefined}
-          />
-        )
-      })}
+    <div className="mb-6">
+      <h3 className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-accent">{children}</h3>
+      {hint && <p className="mt-2 text-sm leading-relaxed text-text-sec">{hint}</p>}
     </div>
   )
 }
@@ -1048,13 +1051,43 @@ function TradePill({
     <button
       type="button"
       onClick={() => onToggle(value)}
-      className={`px-4 py-3.5 text-sm font-semibold uppercase tracking-wider transition-colors border ${
+      className={`px-4 py-3.5 text-sm font-semibold uppercase tracking-wider transition-colors border focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft ${
         selected
           ? 'border-accent bg-accent text-white'
           : 'border-ink-line bg-ink-deep text-text-sec hover:border-accent-soft hover:text-text-pri'
       }`}
     >
       {label}
+    </button>
+  )
+}
+
+function PricingModelButton({
+  label,
+  sublabel,
+  active,
+  onClick,
+}: {
+  label: string
+  sublabel: string
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`flex flex-col items-start gap-0.5 border px-4 py-3 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft ${
+        active
+          ? 'border-accent bg-accent text-white'
+          : 'border-ink-line bg-ink-deep text-text-sec hover:border-accent-soft hover:text-text-pri'
+      }`}
+    >
+      <span className="text-sm font-semibold uppercase tracking-wider">{label}</span>
+      <span className={`font-mono text-[0.6rem] uppercase tracking-[0.12em] ${active ? 'text-white/80' : 'text-text-dim'}`}>
+        {sublabel}
+      </span>
     </button>
   )
 }
@@ -1220,7 +1253,7 @@ function LogoUpload({
   }
 
   return (
-    <Field label="Business logo" hint="Required — shows on every quote" error={err ?? undefined}>
+    <Field label="Business logo" hint="Shows on every quote" error={err ?? undefined} required>
       <div className="flex items-center gap-4">
         <div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden border border-ink-line bg-ink-deep">
           {logoUrl ? (

@@ -226,22 +226,81 @@ export function mapCondition(text: string): PaintCondition | null {
   return null
 }
 
-/** PURE — map words to a ceiling-height bucket (or null = re-ask). `raked`
- *  (cathedral / sloped / void) forces inspection. Unsure → standard. */
+/**
+ * PURE — pull a stated ceiling height in METRES from a freeform reply, or
+ * null when there's no usable number. Handles metres ("3.2m", "3.2 m",
+ * "2.7 metres", or a bare decimal "3.2"), millimetres ("2700mm" or a bare
+ * 4-digit "2700"), and centimetres ("270 cm"). A bare 1–2 digit integer
+ * with NO unit (e.g. "high, 2nd floor", "9ft") is deliberately ignored —
+ * it's too ambiguous to be a height — and falls through to the keyword path.
+ * Only a plausible residential band (1.9–6 m) is returned.
+ */
+export function parseCeilingMetres(text: string): number | null {
+  const t = (text ?? '').toLowerCase()
+  // Scan EVERY numeric token (global flag) rather than anchoring on the first —
+  // a customer may volunteer an unrelated leading number ("2nd floor 2.7m",
+  // "4000 sqft place, ceilings 2.7m"), and the genuine height is the token
+  // carrying a unit, not the first digit run. We collect two tiers of
+  // candidates and prefer the explicit-unit one.
+  const re = /(\d+(?:[.,]\d+)?)\s*(mm|millimet\w*|cm|centimet\w*|m\b|met\w*)?/g
+  const plausible = (v: number) => Number.isFinite(v) && v >= 1.9 && v <= 6
+  const withUnit: number[] = []
+  const noUnit: number[] = []
+
+  for (const m of t.matchAll(re)) {
+    const raw = m[1]
+    const unit = m[2] ?? ''
+    const hasDecimal = /[.,]/.test(raw)
+    const n = Number(raw.replace(',', '.'))
+    if (!Number.isFinite(n) || n <= 0) continue
+
+    if (unit.startsWith('mm') || unit.startsWith('millim')) {
+      if (plausible(n / 1000)) withUnit.push(n / 1000)
+    } else if (unit.startsWith('cm') || unit.startsWith('centim')) {
+      if (plausible(n / 100)) withUnit.push(n / 100)
+    } else if (unit.startsWith('m')) {
+      // "m" / "metre(s)" / "meter(s)"
+      if (plausible(n)) withUnit.push(n)
+    } else if (hasDecimal) {
+      // No unit but a decimal like "3.2" → a weaker (unit-less) metres candidate.
+      if (plausible(n)) noUnit.push(n)
+    } else if (n >= 1000 && n <= 6000) {
+      // No unit, a bare 4-digit like "2700" → millimetres (weaker candidate).
+      if (plausible(n / 1000)) noUnit.push(n / 1000)
+    }
+    // A bare 1–3 digit integer with no unit (e.g. "2nd", "9ft" → "9") is too
+    // ambiguous to be a height and is skipped.
+  }
+
+  // An explicit-unit height wins over a unit-less number anywhere in the reply.
+  if (withUnit.length > 0) return withUnit[0]
+  if (noUnit.length > 0) return noUnit[0]
+  return null
+}
+
+/** PURE — map words OR a stated number to a ceiling-height bucket (or null
+ *  = re-ask). `raked` (cathedral / sloped / void) and `extra_high` (~3 m+
+ *  flat) both force inspection. A stated number is authoritative and is
+ *  banded: <2.55 m standard, 2.55–2.95 m high, ≥2.95 m extra_high. Unsure →
+ *  standard. */
 export function mapCeilingHeight(text: string): CeilingHeight | null {
   const t = (text ?? '').toLowerCase()
   if (!t.trim()) return null
+  // Raked / cathedral SHAPE always wins — a sloped 4 m ceiling is still raked.
   if (/\b(raked|cathedral|vaulted|sloped|sloping|void|double[- ]?height|skillion ceiling)\b/.test(t)) {
     return 'raked'
   }
-  // Word tokens use \b boundaries; the metric tokens are matched without a
-  // trailing boundary so "2.4m" / "2.7m" (digit run straight into "m") hit.
-  if (/\b(high|tall|queenslander|period|9 ?ft|10 ?ft)\b/.test(t) || /2\.7|2700|2,700|3 ?metre|\b3 ?m\b/.test(t)) {
-    return 'high'
+  // A stated number is authoritative: band it. This is what fixes "3.2m"
+  // (and any value above the 2.7 m "high" bucket) instead of re-asking.
+  const metres = parseCeilingMetres(t)
+  if (metres != null) {
+    if (metres < 2.55) return 'standard'
+    if (metres < 2.95) return 'high'
+    return 'extra_high'
   }
-  if (/\b(standard|normal|regular|average|usual|typical|low|8 ?ft)\b/.test(t) || /2\.4|2400|2,400/.test(t)) {
-    return 'standard'
-  }
+  // Word-only answers.
+  if (/\b(high|tall|queenslander|period|9 ?ft|10 ?ft)\b/.test(t)) return 'high'
+  if (/\b(standard|normal|regular|average|usual|typical|low|8 ?ft)\b/.test(t)) return 'standard'
   if (UNSURE.test(t)) return 'standard'
   return null
 }
@@ -379,6 +438,7 @@ export function paintingReadiness(slots: PaintingSlots): 'ready' | 'need_more' |
   if (slots.colour_change == null) return 'need_more'
   if (slots.condition === 'poor') return 'inspection'
   if (slots.ceiling_height === 'raked') return 'inspection'
+  if (slots.ceiling_height === 'extra_high') return 'inspection'
   if (slots.storeys === 3) return 'inspection'
   return 'ready'
 }
@@ -398,7 +458,7 @@ const QUESTIONS: Record<
   condition:
     'What condition are the surfaces in? Reply: sound (already painted), minor (small patching), bare (new or unpainted), or poor (flaking or damage).',
   ceiling_height:
-    'How high are the ceilings? Reply: standard (about 2.4 m), high (about 2.7 m, Queenslander or period), or raked (cathedral or sloped).',
+    'How high are the ceilings? Reply: standard (about 2.4 m), high (about 2.7 m, Queenslander or period), or raked (cathedral or sloped) — or just tell me the height, e.g. 3.2 m.',
   storeys: 'How many storeys is the property? Reply: single, double, or 3 or more.',
   colour_change: 'Last one — are you changing the colour, for example light to dark? Reply yes or no.',
 }
@@ -433,6 +493,9 @@ export function nextPaintingStep(slots: PaintingSlots): {
   if (slots.ceiling_height == null) return { step: 'ceiling_height', question: QUESTIONS.ceiling_height }
   if (slots.ceiling_height === 'raked') {
     return { step: 'inspection', reason: 'raked or cathedral ceilings need an on-site measure' }
+  }
+  if (slots.ceiling_height === 'extra_high') {
+    return { step: 'inspection', reason: 'ceilings above about 2.7 m need an on-site measure for the extra wall area and access' }
   }
 
   if (slots.storeys == null) return { step: 'storeys', question: QUESTIONS.storeys }

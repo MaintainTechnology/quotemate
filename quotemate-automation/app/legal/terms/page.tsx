@@ -5,7 +5,7 @@ import { COMPANY } from '../_components/company'
 export const metadata: Metadata = {
   title: 'Terms & conditions',
   description:
-    'The terms governing use of QuoteMate by Australian tradespeople and their customers.',
+    'The terms governing use of QuoteMax by Australian tradespeople and their customers.',
 }
 
 const TOC: TocItem[] = [

@@ -29,6 +29,7 @@ import { MockRoofingProvider } from './providers/mock'
 import {
   calculateRoofingPrice,
   priceMultiRoof,
+  roofSizeOrder,
   slopedAreaFromFootprint,
   type RoofStructureInput,
 } from './pricing'
@@ -230,27 +231,47 @@ export async function measureAndPriceRoofs(
   const warnings = [...multi.warnings]
   const solarOn = solarEnabled(opts.solar)
   const solarOpts = resolveSolarOpts(opts.solar)
-  const structures: RoofStructureInput[] = []
+
+  // Build each structure's priced input, carrying any solar-enrichment
+  // warnings so they can be re-labelled once the final order is known.
+  const built: { input: RoofStructureInput; enrichWarnings: string[] }[] = []
   for (const b of multi.buildings) {
     const override = (b.buildingId ? opts.perBuilding?.[b.buildingId] : undefined) ?? {}
     const merged: RoofUserInputs = { ...inputs, ...override }
     if (solarOn) {
       const enriched = await enrichMetricsWithSolar(b.metrics, merged, solarOpts)
-      structures.push({
-        buildingId: b.buildingId,
-        role: b.role,
-        metrics: enriched.metrics,
-        inputs: enriched.inputs,
+      built.push({
+        input: { buildingId: b.buildingId, role: b.role, metrics: enriched.metrics, inputs: enriched.inputs },
+        enrichWarnings: enriched.warnings,
       })
-      const tag = b.role === 'primary' ? 'Main dwelling' : `Structure ${b.buildingId ?? ''}`.trim()
-      for (const w of enriched.warnings) warnings.push(`${tag}: ${w}`)
     } else {
       const metrics = reapplyPitchToMetrics(b.metrics, merged)
-      structures.push({ buildingId: b.buildingId, role: b.role, metrics, inputs: merged })
+      built.push({
+        input: { buildingId: b.buildingId, role: b.role, metrics, inputs: merged },
+        enrichWarnings: [],
+      })
     }
   }
 
-  const quote = priceMultiRoof({ structures, rateCard: opts.rateCard })
+  // The Main dwelling is ALWAYS the largest roof: rank structures largest
+  // first and re-assign roles so secondary structures are sequenced
+  // largest→smallest. Done BEFORE pricing so the quote — and every
+  // downstream view (report, per-structure aerials, SMS) — is consistent.
+  const order = roofSizeOrder(built.map((b) => b.input))
+  const orderedStructures: RoofStructureInput[] = order.map((idx, rank) => ({
+    ...built[idx].input,
+    role: rank === 0 ? 'primary' : 'secondary',
+  }))
+
+  const quote = priceMultiRoof({ structures: orderedStructures, rateCard: opts.rateCard })
+
+  // Tag each structure's solar-enrichment warnings with its FINAL label so
+  // the warning text matches the structure as it appears on the quote.
+  order.forEach((idx, rank) => {
+    for (const w of built[idx].enrichWarnings) {
+      warnings.push(`${quote.structures[rank].label}: ${w}`)
+    }
+  })
 
   return { ok: true, quote, provider: multi.provider, warnings }
 }

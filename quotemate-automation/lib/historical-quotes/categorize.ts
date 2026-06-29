@@ -27,7 +27,7 @@ export type CategorizeResult = {
 
 const CATEGORIZE_SYSTEM =
   "You categorise a tradie's historical quote into exactly one canonical job_type " +
-  'from the QuoteMate taxonomy (electrical + plumbing trades). Read the quote ' +
+  'from the QuoteMax taxonomy (electrical + plumbing trades). Read the quote ' +
   'description and pick the single best-matching job_type. If nothing fits, use ' +
   '"other". Set confidence "high" only when the description clearly names the work, ' +
   '"low" when it is vague or ambiguous. You only classify — never invent prices or facts.'
