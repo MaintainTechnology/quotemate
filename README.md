@@ -1,8 +1,8 @@
-# QuoteMate
+# QuoteMax
 
 > AI-powered quoting for trade businesses. Turn a phone call or a photo into a professional quote in minutes — not on Sunday night.
 
-QuoteMate is a mobile-first quoting tool built for residential trade owner-operators (plumbers, electricians, carpenters, painters, landscapers) in the AU/NZ market. It combines an AI receptionist that captures jobs over the phone, an AI engine that drafts professional quotes from the intake, and a customer-facing portal that takes deposits the moment the quote is accepted.
+QuoteMax is a mobile-first quoting tool built for residential trade owner-operators (plumbers, electricians, carpenters, painters, landscapers) in the AU/NZ market. It combines an AI receptionist that captures jobs over the phone, an AI engine that drafts professional quotes from the intake, and a customer-facing portal that takes deposits the moment the quote is accepted.
 
 The goal is simple: **reclaim the evenings tradies currently lose to admin, and stop wasting trips on jobs that were never going to convert.**
 
@@ -18,11 +18,11 @@ Tradies don't lose money on jobs — they lose it *between* jobs:
 - Driving to free site visits for jobs that were never a real fit
 - Customers shopping the quote against two others and never replying
 
-Existing job-management tools (ServiceM8, Tradify, AroFlo) handle scheduling and invoicing well, but the **intake → quote** moment is still mostly manual. QuoteMate is built around that moment.
+Existing job-management tools (ServiceM8, Tradify, AroFlo) handle scheduling and invoicing well, but the **intake → quote** moment is still mostly manual. QuoteMax is built around that moment.
 
 ---
 
-## What QuoteMate does
+## What QuoteMax does
 
 1. **Captures the job for you** — a dedicated AI receptionist answers the call and asks the right job-specific questions. The moment the call ends, the customer gets an SMS with a one-tap link to add photos — optional, races the quote draft, lifts confidence when it arrives.
 2. **Drafts the quote** — an AI engine generates a structured quote (scope, line items, labour, materials, exclusions, risks) using the tradie's own pricing book and prior quote history.
@@ -36,21 +36,21 @@ Existing job-management tools (ServiceM8, Tradify, AroFlo) handle scheduling and
 
 ### Two flows, one engine
 
-QuoteMate routes every job into one of two paths based on whether the tradie can quote it remotely.
+QuoteMax routes every job into one of two paths based on whether the tradie can quote it remotely.
 
 **Standard flow** — the AI drafts the quote and sends it to the customer the moment it's ready; the tradie is notified and can edit before acceptance. The customer accepts and pays a deposit through the portal. The flow ends with the job confirmed and on the calendar.
 
-**Inspection flow** — when remote scoping isn't enough, the tradie creates a paid site-visit request. The customer pays a $99 inspection fee (refundable on accepted quote), the tradie attends in person, then completes the full quote in QuoteMate before rejoining the standard send/accept/deposit path.
+**Inspection flow** — when remote scoping isn't enough, the tradie creates a paid site-visit request. The customer pays a $99 inspection fee (refundable on accepted quote), the tradie attends in person, then completes the full quote in QuoteMax before rejoining the standard send/accept/deposit path.
 
 The full flow is mapped here:
 
-![QuoteMate flow with inspection branch](assets/quotemate_flow_with_inspection.svg)
+![QuoteMax flow with inspection branch](assets/quotemate_flow_with_inspection.svg)
 
 ### The "wow moment" experience
 
 The customer-facing experience is designed around one outcome — the call ends with the customer feeling they're already in good hands, and the tradie wakes up the next morning to a draft they only need to tweak.
 
-![QuoteMate experience map](assets/quotemate_experience_map.jpeg)
+![QuoteMax experience map](assets/quotemate_experience_map.jpeg)
 
 ### High-level architecture
 
@@ -114,7 +114,7 @@ Planned but not yet wired: Stripe Connect Express (marketplace fund-split), Post
 
 **Built and running** (as of 2026-05-18). The application lives in [`quotemate-automation/`](quotemate-automation/); the repo root holds planning docs and design assets.
 
-- **Voice and SMS intake are both live end-to-end** — a customer calls or texts a tradie's QuoteMate number, the AI captures the job, Opus drafts a Good/Better/Best quote grounded strictly in that trade's pricing book, and the customer gets a mobile quote page with a Stripe deposit (or a $99 inspection for complex jobs).
+- **Voice and SMS intake are both live end-to-end** — a customer calls or texts a tradie's QuoteMax number, the AI captures the job, Opus drafts a Good/Better/Best quote grounded strictly in that trade's pricing book, and the customer gets a mobile quote page with a Stripe deposit (or a $99 inspection for complex jobs).
 - **Multi-trade is live**: electrical (NSW) and plumbing (QLD) run on the same platform, with 4 pilot tenants active.
 - Current work: self-serve tradie onboarding (auto-provisioned number, pricing book, and AI brand voice per tradie).
 - Production: `quote-mate-rho.vercel.app`. Payments run in Stripe test mode.

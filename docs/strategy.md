@@ -1,4 +1,4 @@
-# QuoteMate — Strategy & Re-evaluation
+# QuoteMax — Strategy & Re-evaluation
 
 > **Current iteration: v13 (2026-06-25).** v1 trade pivoted from **painting** to **electrical** in v3; v5 expanded to **multi-trade** (electrical + plumbing); v10 added roofing; v11 adds **commercial painting** as a document-driven estimator extension; v12 extended **solar** to Path B auto-send; v13 refines **roofing multi-structure selection** (roof-only read-time default + clearer Measurement Results UI). The prose in §1–§12 below is the v2 painting analysis, kept as audit-log record. See [Iteration history](#iteration-history) at the bottom for the full v3–v13 rationale.
 
@@ -29,8 +29,8 @@ This document supersedes the initial chat-based analysis. It is written to be ho
 
 Your two reference assets describe two different products:
 
-- **`quotemate_flow_with_inspection.svg`**: customer enters via existing platform (hipages, Airtasker) → tradie opens QuoteMate → tradie *types* the job details → AI drafts quote. This is **portal-first**.
-- **High-level design (in your prompt)**: customer dials the tradie's QuoteMate-provisioned number → AI receptionist captures everything → tradie wakes up to a draft. This is **voice-first**.
+- **`quotemate_flow_with_inspection.svg`**: customer enters via existing platform (hipages, Airtasker) → tradie opens QuoteMax → tradie *types* the job details → AI drafts quote. This is **portal-first**.
+- **High-level design (in your prompt)**: customer dials the tradie's QuoteMax-provisioned number → AI receptionist captures everything → tradie wakes up to a draft. This is **voice-first**.
 
 These are not the same product. They differ on:
 
@@ -282,7 +282,7 @@ This is brutal but necessary. Every one of these 20 becomes a referenceable case
 ### Customers 81–250 (months 7–12) — paid + partnerships
 
 - Google Ads on "quoting software for painters" (low competition keyword)
-- hipages partnership conversation: "QuoteMate widget on every painter enquiry"
+- hipages partnership conversation: "QuoteMax widget on every painter enquiry"
 - Trade supplier partnerships: Inspirations Paint, Bristol Paint
 - Paid: aim for $200 CAC, $4,800 LTV → 24x ratio
 
@@ -705,7 +705,7 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
   **The split — what ships now (Phase A) vs later (Phase B):**
 
   - **Phase A — early-booking discount (this iteration).** A deterministic, per-tenant % discount with a deadline. The tradie configures `{ enabled, discount_pct, window_hours }`; every drafted quote is stamped with an offer (`quotes.early_bird_discount_pct` + `early_bird_expires_at`). The quote page advertises a countdown ("book by <time> → save X%"); the discount is *realised* server-side at the booking choke-point (`POST /api/q/[token]/book`) when the customer commits a time before expiry, and a fresh discounted Stripe Checkout Session is re-issued for the deposit.
-  - **Phase B — availability-derived dynamic pricing (deferred).** The true Uber-surge model ("if I'm free in these areas") needs two things QuoteMate does not have: a real two-way calendar integration (today `tradies.available_slots` is a flat ISO-timestamp array; `GOOGLE_BOOKING_URL` is an off-platform link with no callback) and geographic zones. Deferred until calendar sync exists. A crude per-day proxy (discount days with many open slots) is possible earlier but is explicitly **not** in Phase A.
+  - **Phase B — availability-derived dynamic pricing (deferred).** The true Uber-surge model ("if I'm free in these areas") needs two things QuoteMax does not have: a real two-way calendar integration (today `tradies.available_slots` is a flat ISO-timestamp array; `GOOGLE_BOOKING_URL` is an off-platform link with no callback) and geographic zones. Deferred until calendar sync exists. A crude per-day proxy (discount days with many open slots) is possible earlier but is explicitly **not** in Phase A.
 
   **Decisions locked with the operator (Anant), 2026-05-21:**
 
@@ -740,7 +740,7 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
 
   **Why this entry exists:**
 
-  Every iteration v5→v8 repeated the same line: "electrical + plumbing are the boundary — a third trade requires a new entry." v5's own trigger list spelled out the exit condition: *"Third trade gets pitched → stop bolting trades on per-pilot and refactor to a trade-registry pattern."* That trigger has now fired. The operator wants QuoteMate to expand into carpentry, garden cleaning, swimming-pool cleaning and more — **added in bulk, by a non-developer, through an admin dashboard, not hand-wired in code per trade.**
+  Every iteration v5→v8 repeated the same line: "electrical + plumbing are the boundary — a third trade requires a new entry." v5's own trigger list spelled out the exit condition: *"Third trade gets pitched → stop bolting trades on per-pilot and refactor to a trade-registry pattern."* That trigger has now fired. The operator wants QuoteMax to expand into carpentry, garden cleaning, swimming-pool cleaning and more — **added in bulk, by a non-developer, through an admin dashboard, not hand-wired in code per trade.**
 
   This entry **is** the authorization to cross the electrical+plumbing boundary. It supersedes that boundary line in v5/v6/v7/v8, and it supersedes v7's deferral of "Phase 5 — bulk CSV import" (v7 "out of scope" list): bulk loading is now the *mechanism* for growth, not a nice-to-have.
 
@@ -809,7 +809,7 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
 
   **What's settled:**
 
-  Roofing is QuoteMate's third trade, joining electrical (NSW/NECA) and plumbing (QLD/QBCC). Phase 1 ships with the existing hand-wired pattern (a new migration seeding `shared_assemblies` + `shared_materials` rows scoped to `trade='roofing'`, no admin loader involved). The measurement engine starts on **Geoscape Buildings + customer-declared pitch** (precomputed footprints, ~10–15% accuracy on sloped area) with a clean swap-point for a real LiDAR pipeline (PDAL + Open3D over ELVIS data) once Phase 2 volume justifies the 4–6 week Python-worker investment.
+  Roofing is QuoteMax's third trade, joining electrical (NSW/NECA) and plumbing (QLD/QBCC). Phase 1 ships with the existing hand-wired pattern (a new migration seeding `shared_assemblies` + `shared_materials` rows scoped to `trade='roofing'`, no admin loader involved). The measurement engine starts on **Geoscape Buildings + customer-declared pitch** (precomputed footprints, ~10–15% accuracy on sloped area) with a clean swap-point for a real LiDAR pipeline (PDAL + Open3D over ELVIS data) once Phase 2 volume justifies the 4–6 week Python-worker investment.
 
   **Why this departs from v9 (intentionally):**
 

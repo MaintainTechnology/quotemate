@@ -17,7 +17,7 @@ These were settled after substantive re-evaluation (see iteration history at the
 | **Four agents, not ten** | Quote Drafter, Quote Reviewer, Inspection Coordinator, Conversion Engine. Reception agent is reserved for v3. |
 | **Build the pricing book WITH the tradie** | Most owner-operators don't have a structured price list. Ship a base assembly library per trade (built by paid domain experts) and capture the tradie's overlay through guided onboarding. |
 | **Eval framework before prompt iteration** | 100 hold-out (intake → quote) pairs, scored by 5-dimension rubric. No prompt change ships without delta measurement. |
-| **Stripe Connect Express** for marketplace flow | Each tradie owns their funds; QuoteMate takes a platform fee. Required for Australian payment compliance. |
+| **Stripe Connect Express** for marketplace flow | Each tradie owns their funds; QuoteMax takes a platform fee. Required for Australian payment compliance. |
 | **No auto-send in v1** | Tradie human-in-loop is the liability shield. Australian Consumer Law treats accepted quotes as binding contracts. |
 
 ## Repository layout
@@ -114,7 +114,7 @@ See [`.Codex/PLUGINS.md`](.Codex/PLUGINS.md) for the full list and rationale.
 ## What's deliberately not yet set up
 
 - `.Codex/settings.json` — add permissions when you discover repeated prompts (the `fewer-permission-prompts` skill is the right tool for this)
-- Custom **project-specific** skills (workflows unique to QuoteMate, e.g. `/add-trade`, `/eval-quote`) — premature for a greenfield repo; add when a workflow repeats
+- Custom **project-specific** skills (workflows unique to QuoteMax, e.g. `/add-trade`, `/eval-quote`) — premature for a greenfield repo; add when a workflow repeats
 - CI/CD pipelines — add when there's code to test
 - Database migrations — Phase 1
 
