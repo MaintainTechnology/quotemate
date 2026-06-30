@@ -56,7 +56,9 @@ export class ZohoProvider implements CrmProvider {
     return `${accountsDomain()}/oauth/v2/auth?${params.toString()}`
   }
 
-  async exchangeCode(code: string): Promise<TokenSet> {
+  // Zoho doesn't require PKCE; the codeVerifier param is accepted (to satisfy
+  // the shared interface) but unused.
+  async exchangeCode(code: string, _codeVerifier?: string): Promise<TokenSet> {
     const cfg = readOAuthConfig('ZOHO')
     const body = new URLSearchParams({
       grant_type: 'authorization_code',

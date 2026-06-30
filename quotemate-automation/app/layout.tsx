@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Manrope, JetBrains_Mono } from "next/font/google";
 import Script from "next/script";
+import { ClerkProvider } from "@clerk/nextjs";
+import { clerkAppearance } from "./_components/clerk-appearance";
 import "./globals.css";
 
 const manrope = Manrope({
@@ -56,7 +58,12 @@ export default function RootLayout({
         <Script id="qm-theme" strategy="beforeInteractive">
           {`(function(){try{var t=localStorage.getItem('qm-theme');var e=document.documentElement;var m=(t==='light'||t==='dark')?t:'light';e.setAttribute('data-theme',m);e.style.colorScheme=m;}catch(e){var el=document.documentElement;el.setAttribute('data-theme','light');el.style.colorScheme='light';}})();`}
         </Script>
-        {children}
+        {/* ClerkProvider lives INSIDE <body> (not wrapping <html>) per Clerk's
+            Next 16 guidance. It only supplies auth context — it does not force
+            sign-in, so the existing Supabase-auth pages keep working. */}
+        <ClerkProvider appearance={clerkAppearance} afterSignOutUrl="/sign-in">
+          {children}
+        </ClerkProvider>
       </body>
     </html>
   );

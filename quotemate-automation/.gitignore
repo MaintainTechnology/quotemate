@@ -52,3 +52,6 @@ tmp/
 
 # DB CSV exports (contain real customer PII — never commit)
 /db-export/
+
+# clerk configuration (can include secrets)
+/.clerk/

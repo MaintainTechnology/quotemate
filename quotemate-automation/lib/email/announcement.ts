@@ -97,9 +97,7 @@ export function renderAnnouncementEmail(p: AnnouncementParams): RenderedEmail {
           <a href="${esc(intakeUrl)}" style="text-decoration:none;">
             <img src="${esc(qrDataUrl)}" width="200" height="200" alt="Scan to start your quote with ${esc(businessName)}" style="display:block;border:0;border-radius:8px;" />
           </a>
-          <p style="margin:8px 0 0 0;font-size:13px;color:#71717a;">
-            <a href="${esc(intakeUrl)}" style="color:#ff5a1f;text-decoration:none;">Scan or tap to start your quote</a>
-          </p>
+          <a href="${esc(intakeUrl)}" style="display:inline-block;margin-top:14px;background:#FFC400;color:#1C1812;font-weight:700;font-size:14px;text-decoration:none;padding:12px 26px;border-radius:4px;">Start your quote &rarr;</a>
         </td></tr>
         <tr><td style="padding:24px 32px 8px 32px;border-top:1px solid #f4f4f5;">
           <p style="margin:0;font-size:15px;line-height:1.6;color:#3f3f46;">

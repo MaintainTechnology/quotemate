@@ -8,6 +8,7 @@
 import { after } from 'next/server'
 import { getServiceClient } from '@/lib/supabase/admin'
 import { parseOAuthState } from '@/lib/crm/oauth-state'
+import { deriveCodeVerifier } from '@/lib/crm/pkce'
 import { isSupportedProvider } from '@/lib/crm/provider'
 import { getProvider } from '@/lib/crm/registry'
 import { encryptSecret } from '@/lib/crypto/encrypt'
@@ -21,22 +22,27 @@ function backTo(req: Request, params: Record<string, string>): Response {
 }
 
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url)
-  const code = searchParams.get('code')
-  const stateParam = searchParams.get('state')
-  const oauthError = searchParams.get('error')
-
-  if (oauthError) return backTo(req, { crm: 'error', reason: oauthError })
-  if (!code || !stateParam) return backTo(req, { crm: 'error', reason: 'missing_code_or_state' })
-
-  const state = parseOAuthState(stateParam)
-  if (!state || !isSupportedProvider(state.provider)) {
-    return backTo(req, { crm: 'error', reason: 'invalid_state' })
-  }
-
+  // The entire handler is wrapped so a tradie NEVER sees a raw 500 — a missing
+  // signing secret, an unconfigured provider, or a provider/network error all
+  // degrade to a "couldn't connect" redirect back to the dashboard.
   try {
+    const { searchParams } = new URL(req.url)
+    const code = searchParams.get('code')
+    const stateParam = searchParams.get('state')
+    const oauthError = searchParams.get('error')
+
+    if (oauthError) return backTo(req, { crm: 'error', reason: oauthError })
+    if (!code || !stateParam) return backTo(req, { crm: 'error', reason: 'missing_code_or_state' })
+
+    const state = parseOAuthState(stateParam)
+    if (!state || !isSupportedProvider(state.provider)) {
+      return backTo(req, { crm: 'error', reason: 'invalid_state' })
+    }
+
     const provider = getProvider(state.provider)
-    const tokens = await provider.exchangeCode(code)
+    // Re-derive the PKCE verifier from the same signed state used to build the
+    // authorize URL. HubSpot uses it; providers that don't require PKCE ignore it.
+    const tokens = await provider.exchangeCode(code, deriveCodeVerifier(stateParam))
 
     const supabase = getServiceClient()
     const { error } = await supabase.from('crm_connections').upsert(
@@ -69,6 +75,6 @@ export async function GET(req: Request) {
 
     return backTo(req, { crm: 'connected', provider: state.provider })
   } catch {
-    return backTo(req, { crm: 'error', reason: 'exchange_failed' })
+    return backTo(req, { crm: 'error', reason: 'server_error' })
   }
 }

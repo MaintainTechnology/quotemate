@@ -37,8 +37,12 @@ export interface CrmProvider {
   isConfigured(): boolean
   /** The provider authorize URL the tradie is redirected to. */
   authorizeUrl(state: string): string
-  /** Exchange an authorization code for tokens. */
-  exchangeCode(code: string): Promise<TokenSet>
+  /**
+   * Exchange an authorization code for tokens. `codeVerifier` carries the PKCE
+   * verifier for providers that require it (HubSpot); providers that don't use
+   * PKCE ignore it.
+   */
+  exchangeCode(code: string, codeVerifier?: string): Promise<TokenSet>
   /** Refresh an access token. */
   refresh(refreshToken: string): Promise<TokenSet>
   /** Fetch all contacts (email + name), paginating as needed. */

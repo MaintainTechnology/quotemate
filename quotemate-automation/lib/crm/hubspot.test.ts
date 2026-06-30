@@ -12,31 +12,40 @@ describe('HubspotProvider', () => {
     process.env.HUBSPOT_CLIENT_ID = 'cid'
     process.env.HUBSPOT_CLIENT_SECRET = 'secret'
     process.env.HUBSPOT_REDIRECT_URI = 'https://app/cb'
+    process.env.OAUTH_STATE_SECRET = 'pkce-secret'
   })
   afterEach(() => {
     delete process.env.HUBSPOT_CLIENT_ID
     delete process.env.HUBSPOT_CLIENT_SECRET
     delete process.env.HUBSPOT_REDIRECT_URI
+    delete process.env.OAUTH_STATE_SECRET
     vi.unstubAllGlobals()
   })
 
-  it('builds an authorize URL with client_id, redirect_uri, scope, state', () => {
+  it('builds an authorize URL with client_id, redirect_uri, scope, state + PKCE', () => {
     const url = new URL(p.authorizeUrl('state-123'))
     expect(url.origin + url.pathname).toBe('https://app.hubspot.com/oauth/authorize')
     expect(url.searchParams.get('client_id')).toBe('cid')
     expect(url.searchParams.get('redirect_uri')).toBe('https://app/cb')
     expect(url.searchParams.get('scope')).toContain('crm.objects.contacts.read')
     expect(url.searchParams.get('state')).toBe('state-123')
+    // PKCE (required by HubSpot): a code_challenge + S256 method must be present.
+    expect(url.searchParams.get('code_challenge')).toMatch(/^[A-Za-z0-9\-_]{43}$/)
+    expect(url.searchParams.get('code_challenge_method')).toBe('S256')
   })
 
-  it('exchanges an auth code for a token set', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () =>
+  it('exchanges an auth code for a token set, sending the PKCE code_verifier', async () => {
+    const fetchMock = vi.fn(async (_url: string | URL, _init?: RequestInit) =>
       jsonResponse({ access_token: 'at', refresh_token: 'rt', expires_in: 1800 }),
-    ))
-    const t = await p.exchangeCode('code-1')
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const t = await p.exchangeCode('code-1', 'verifier-xyz')
     expect(t.accessToken).toBe('at')
     expect(t.refreshToken).toBe('rt')
     expect(t.expiresAt).toBeGreaterThan(Date.now())
+    // posts to the v3 token endpoint with the verifier in the form body
+    expect(String(fetchMock.mock.calls[0][0])).toBe('https://api.hubapi.com/oauth/v3/token')
+    expect(String((fetchMock.mock.calls[0][1] as RequestInit).body)).toContain('code_verifier=verifier-xyz')
   })
 
   it('keeps the existing refresh token when refresh response omits one', async () => {

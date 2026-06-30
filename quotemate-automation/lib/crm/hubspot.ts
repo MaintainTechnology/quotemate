@@ -9,9 +9,13 @@ import {
   type CrmProvider,
   type TokenSet,
 } from '@/lib/crm/provider'
+import { codeChallengeS256, deriveCodeVerifier } from '@/lib/crm/pkce'
 
 const AUTHORIZE_URL = 'https://app.hubspot.com/oauth/authorize'
-const TOKEN_URL = 'https://api.hubapi.com/oauth/v1/token'
+// v3 token endpoint (OAuth 2.1) — HubSpot recommends v3 for all new public apps
+// built on the 2026 developer platform; v1 is deprecated-but-operational. Params
+// go in the form body (which we already do). Verified 2026-06-30.
+const TOKEN_URL = 'https://api.hubapi.com/oauth/v3/token'
 const CONTACTS_URL = 'https://api.hubapi.com/crm/v3/objects/contacts'
 const SCOPE = 'crm.objects.contacts.read'
 
@@ -36,16 +40,22 @@ export class HubspotProvider implements CrmProvider {
 
   authorizeUrl(state: string): string {
     const cfg = readOAuthConfig('HUBSPOT')
+    // PKCE (required by HubSpot's new-platform apps): send the S256 challenge of
+    // the per-flow verifier derived from this state. The callback re-derives the
+    // verifier from the same state for the token exchange.
+    const challenge = codeChallengeS256(deriveCodeVerifier(state))
     const params = new URLSearchParams({
       client_id: cfg.clientId,
       redirect_uri: cfg.redirectUri,
       scope: SCOPE,
       state,
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
     })
     return `${AUTHORIZE_URL}?${params.toString()}`
   }
 
-  async exchangeCode(code: string): Promise<TokenSet> {
+  async exchangeCode(code: string, codeVerifier?: string): Promise<TokenSet> {
     const cfg = readOAuthConfig('HUBSPOT')
     const body = new URLSearchParams({
       grant_type: 'authorization_code',
@@ -54,6 +64,8 @@ export class HubspotProvider implements CrmProvider {
       redirect_uri: cfg.redirectUri,
       code,
     })
+    // PKCE: prove this is the same client that started the flow.
+    if (codeVerifier) body.set('code_verifier', codeVerifier)
     const res = await fetch(TOKEN_URL, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
