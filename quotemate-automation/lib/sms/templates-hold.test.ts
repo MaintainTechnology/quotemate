@@ -29,7 +29,7 @@ const baseQuote = {
   estimated_timeframe: 'Half day',
   needs_inspection: false,
   inspection_reason: null,
-  quote_view_url: 'https://quote-mate-rho.vercel.app/q/abc123',
+  quote_view_url: 'https://www.quotemax.com.au/q/abc123',
   pay_links: { good: 'g', better: 'b', best: 'x' },
   deposit_pct: 30,
 }

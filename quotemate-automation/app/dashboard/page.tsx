@@ -19,6 +19,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { CATEGORIES } from '@/lib/estimate/categories'
@@ -6607,7 +6608,13 @@ function Transcript({
 // the unit-tested lib/quote/followup.ts selector).
 
 type FollowupItem = {
-  quote_id: string
+  // 'quote' = a drafted quote to chase; 'lead' = a customer who texted in
+  // but never got a quote (sourced from sms_conversations). Leads have no
+  // quote_id — Call/Text/Messages work off the conversation instead, and
+  // the quote-only actions (Open quote / Log touch / History) are hidden.
+  kind: 'quote' | 'lead'
+  quote_id: string | null
+  conversation_id: string | null
   share_token: string | null
   status: string | null
   followup_reason: string
@@ -6627,6 +6634,14 @@ type FollowupItem = {
     suburb: string | null
     email: string | null
   }
+}
+
+/** Stable per-row key that works for both quotes and no-quote leads —
+ *  used for React keys and all the row-level open/busy state maps. */
+function followupRowId(f: FollowupItem): string {
+  return f.kind === 'lead'
+    ? `lead:${f.conversation_id ?? ''}`
+    : (f.quote_id ?? '')
 }
 
 function fmtAgeHours(h: number | null): string {
@@ -7171,6 +7186,10 @@ function BrowseSupplierPanel({
   const [tradeFilter, setTradeFilter] = useState<string>('all')
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [brandFilter, setBrandFilter] = useState<string>('all')
+  // Free-text keyword search, ANDed with the trade/category/brand chips.
+  // Matches across name / brand / range / category / supplier / description
+  // so a tradie can type "clipsal downlight" and narrow the list fast.
+  const [search, setSearch] = useState('')
   // Per-row expand/collapse — present = expanded. We use a Set instead of
   // a Map<bool> so a row is either present (expanded) or absent (collapsed);
   // no stale `false` entries to garbage-collect.
@@ -7288,10 +7307,29 @@ function BrowseSupplierPanel({
       .filter((r) => categoryFilter === 'all' || r.category === categoryFilter)
     return Array.from(new Set(visible.map((r) => r.brand))).sort()
   })()
+  // Lower-cased search terms — split on whitespace so a multi-word query
+  // ("hunter fan") matches when every term appears somewhere in the row.
+  const searchTerms = search.trim().toLowerCase().split(/\s+/).filter(Boolean)
   const filtered = rows
     .filter((r) => tradeFilter === 'all' || r.trade === tradeFilter)
     .filter((r) => categoryFilter === 'all' || r.category === categoryFilter)
     .filter((r) => brandFilter === 'all' || r.brand === brandFilter)
+    .filter((r) => {
+      if (searchTerms.length === 0) return true
+      const haystack = [
+        r.name,
+        r.brand,
+        r.range_series,
+        r.category,
+        r.supplier_label,
+        r.description,
+        r.trade,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+      return searchTerms.every((t) => haystack.includes(t))
+    })
 
   if (loading) {
     return (
@@ -7401,11 +7439,48 @@ function BrowseSupplierPanel({
         )}
       </div>
 
-      {/* Action bar — sticky at the top of the list when items are selected. */}
+      {/* Action bar — match count, keyword search, and the add-selected
+         button. The search box narrows `filtered` live and ANDs with the
+         trade/category/brand chips above. */}
       <div className="flex flex-wrap items-center justify-between gap-3 border border-ink-line bg-ink-deep px-4 py-3">
         <div className="text-xs text-text-sec">
           {filtered.length} matching · <span className="text-text-pri font-semibold">{selected.size} selected</span>
         </div>
+
+        {/* Keyword search. */}
+        <div className="relative order-last w-full sm:order-none sm:w-auto sm:flex-1 sm:max-w-xs">
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-dim"
+          >
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" strokeLinecap="round" />
+          </svg>
+          <input
+            type="text"
+            inputMode="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search materials…"
+            aria-label="Search supplier catalogue"
+            className="w-full bg-ink-card border border-ink-line pl-8 pr-8 py-1.5 text-sm text-text-pri placeholder:text-text-dim/70 focus:border-accent/60 focus:outline-none transition-colors"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-text-dim hover:text-accent transition-colors cursor-pointer text-sm leading-none"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
         <div className="flex items-center gap-3">
           {addMsg && (
             <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-accent">
@@ -7422,6 +7497,36 @@ function BrowseSupplierPanel({
           </button>
         </div>
       </div>
+
+      {/* Empty state — search / filters matched nothing. */}
+      {filtered.length === 0 && (
+        <div className="border border-dashed border-ink-line bg-ink-card/40 px-4 py-6 text-sm text-text-sec">
+          No materials match{' '}
+          {searchTerms.length > 0 ? (
+            <>&ldquo;<span className="text-text-pri">{search.trim()}</span>&rdquo;</>
+          ) : (
+            'these filters'
+          )}
+          .{' '}
+          {(searchTerms.length > 0 ||
+            tradeFilter !== 'all' ||
+            categoryFilter !== 'all' ||
+            brandFilter !== 'all') && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearch('')
+                setTradeFilter('all')
+                setCategoryFilter('all')
+                setBrandFilter('all')
+              }}
+              className="text-accent hover:underline cursor-pointer"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Rows. */}
       <div className="space-y-1">
@@ -9789,10 +9894,14 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
     setLoading(true)
     setError(null)
     try {
-      // includeActioned=1 → contacted leads come back too (CRM style),
-      // so "Mark contacted" moves a row to the Contacted section
-      // instead of vanishing it. Split by followed_up_at below.
-      const res = await fetch('/api/tenant/followups?includeActioned=1', {
+      // minAgeHours=0 → surface recent quotes too, not just 24h+ stale
+      // ones, so the tab is "up to date". includeActioned=1 → contacted
+      // leads come back too (CRM style), so "Mark contacted" moves a row
+      // to the Contacted section instead of vanishing it. Split by
+      // followed_up_at below.
+      const res = await fetch(
+        '/api/tenant/followups?includeActioned=1&minAgeHours=0',
+        {
         headers: { Authorization: `Bearer ${accessToken}` },
         cache: 'no-store',
       })
@@ -9897,8 +10006,9 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
       )
     )
       return
-    setCallBusy(item.quote_id)
-    clearRowMsg(item.quote_id)
+    const rowId = followupRowId(item)
+    setCallBusy(rowId)
+    clearRowMsg(rowId)
     try {
       const res = await fetch('/api/tenant/followups/call', {
         method: 'POST',
@@ -9906,7 +10016,11 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ quoteId: item.quote_id }),
+        body: JSON.stringify(
+          item.kind === 'lead'
+            ? { conversationId: item.conversation_id }
+            : { quoteId: item.quote_id },
+        ),
       })
       const json = (await res.json().catch(() => ({}))) as {
         ok?: boolean
@@ -9915,7 +10029,7 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
       }
       if (!res.ok || !json.ok) {
         setRowMsg(
-          item.quote_id,
+          rowId,
           'err',
           json.message ||
             json.error ||
@@ -9924,14 +10038,14 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
         return
       }
       setRowMsg(
-        item.quote_id,
+        rowId,
         'ok',
         'Calling — your phone will ring, then we connect the customer.',
       )
-      bumpHistory(item.quote_id)
+      if (item.kind === 'quote') bumpHistory(rowId)
     } catch (e) {
       setRowMsg(
-        item.quote_id,
+        rowId,
         'err',
         e instanceof Error ? e.message : 'Network error starting the call.',
       )
@@ -9971,21 +10085,22 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
   const done = list.filter((f) => !!f.followed_up_at)
   const ordered = [...toChase, ...done]
   const thresholdNote =
-    minAgeHours !== null
+    minAgeHours && minAgeHours > 0
       ? `Quotes sent over ${
           minAgeHours >= 48
             ? `${Math.round(minAgeHours / 24)} days`
             : `${minAgeHours}h`
-        } ago with no payment.`
-      : 'Quotes sent but not accepted.'
+        } ago with no payment, plus SMS leads with no quote.`
+      : 'Quotes not yet paid, plus SMS leads with no quote.'
 
   if (list.length === 0) {
     return (
       <Card subtitle={`${thresholdNote} Nothing to chase right now.`}>
         <p className="text-sm text-text-dim">
-          No follow-ups. Every quote is either too recent, already paid, or
-          accepted — or you have contacted them all. Newly sent quotes will
-          appear here once they go stale without converting.
+          No follow-ups. Every quote is already paid or accepted — or you
+          have contacted everyone. New quotes and SMS leads (people who
+          texted in but never got a quote) appear here as soon as they
+          come in.
         </p>
       </Card>
     )
@@ -10006,12 +10121,14 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
       )}
       <div className="space-y-3">
         {ordered.map((f, _idx) => {
+          const rowId = followupRowId(f)
+          const isLead = f.kind === 'lead'
           const name = f.customer.full_name || 'Unknown customer'
           const hasPhone =
             !!f.customer.phone &&
             f.customer.phone.replace(/\D/g, '').length >= 6
-          const act = actionState[f.quote_id]
-          const calling = callBusy === f.quote_id
+          const act = actionState[rowId]
+          const calling = callBusy === rowId
           const isDone = !!f.followed_up_at
           const opened = f.followup_reason.startsWith('Opened')
           const showChaseHeader = !isDone && _idx === 0
@@ -10020,7 +10137,7 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
           return [
             showChaseHeader ? (
               <p
-                key={`${f.quote_id}-h`}
+                key={`${rowId}-h`}
                 className="font-mono text-[0.62rem] uppercase tracking-[0.18em] text-text-dim"
               >
                 To chase ({toChase.length})
@@ -10028,7 +10145,7 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
             ) : null,
             showContactedHeader ? (
               <p
-                key={`${f.quote_id}-h`}
+                key={`${rowId}-h`}
                 className="mt-6 border-t border-ink-line pt-4 font-mono text-[0.62rem] uppercase tracking-[0.18em] text-text-dim"
               >
                 Contacted ({done.length}) · still no payment
@@ -10036,7 +10153,7 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
             ) : null,
             (
             <div
-              key={f.quote_id}
+              key={rowId}
               className={`border border-ink-line bg-ink p-4 ${
                 isDone ? 'opacity-70' : ''
               }`}
@@ -10058,6 +10175,11 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
                     >
                       {f.followup_reason}
                     </span>
+                    {isLead && (
+                      <span className="font-mono text-[0.6rem] uppercase tracking-[0.16em] font-bold px-2 py-0.5 border border-ink-line text-text-dim">
+                        SMS lead
+                      </span>
+                    )}
                     {f.needs_inspection && (
                       <span className="font-mono text-[0.6rem] uppercase tracking-[0.16em] font-bold px-2 py-0.5 border border-ink-line text-text-dim">
                         Inspection
@@ -10066,9 +10188,16 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
                   </div>
                   <p className="mt-1 text-sm text-text-sec">
                     {fmtJobType(f.job_type)}
-                    {f.customer.suburb ? ` · ${f.customer.suburb}` : ''} ·{' '}
-                    {fmtAUD(f.total_inc_gst)} inc GST
-                    {f.selected_tier ? ` · ${f.selected_tier} tier` : ''}
+                    {f.customer.suburb ? ` · ${f.customer.suburb}` : ''}
+                    {f.kind === 'quote' ? (
+                      <>
+                        {' · '}
+                        {fmtAUD(f.total_inc_gst)} inc GST
+                        {f.selected_tier ? ` · ${f.selected_tier} tier` : ''}
+                      </>
+                    ) : (
+                      ' · SMS enquiry, no quote yet'
+                    )}
                   </p>
                   <p className="mt-1 font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
                     Last activity {fmtAgeHours(f.age_hours)}
@@ -10088,7 +10217,7 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
                       type="button"
                       disabled={!hasPhone}
                       onClick={() => {
-                        clearRowMsg(f.quote_id)
+                        clearRowMsg(rowId)
                         setComposeFor(f)
                       }}
                       className="inline-flex items-center justify-center gap-1.5 border border-accent/60 text-accent hover:bg-accent/10 font-mono text-[0.62rem] uppercase tracking-[0.14em] font-bold px-3 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
@@ -10134,62 +10263,66 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
                   onClick={() =>
                     setThreadOpen((s) => ({
                       ...s,
-                      [f.quote_id]: !s[f.quote_id],
+                      [rowId]: !s[rowId],
                     }))
                   }
                   className="inline-flex items-center gap-1.5 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer"
                 >
-                  {threadOpen[f.quote_id] ? 'Hide messages ▾' : 'Messages ▸'}
+                  {threadOpen[rowId] ? 'Hide messages ▾' : 'Messages ▸'}
                 </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setHistoryOpen((s) => ({
-                      ...s,
-                      [f.quote_id]: !s[f.quote_id],
-                    }))
-                  }
-                  className="inline-flex items-center gap-1.5 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer"
-                >
-                  {historyOpen[f.quote_id] ? 'Hide history ▾' : 'History ▸'}
-                </button>
-                {isDone && (
+                {!isLead && (
                   <button
                     type="button"
-                    disabled={busyId === f.quote_id}
-                    onClick={() => void reopen(f.quote_id)}
-                    className="inline-flex items-center gap-2 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-50"
+                    onClick={() =>
+                      setHistoryOpen((s) => ({
+                        ...s,
+                        [rowId]: !s[rowId],
+                      }))
+                    }
+                    className="inline-flex items-center gap-1.5 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer"
                   >
-                    {busyId === f.quote_id ? 'Saving…' : 'Reopen ↩'}
+                    {historyOpen[rowId] ? 'Hide history ▾' : 'History ▸'}
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() =>
-                    setLogFor((s) => ({
-                      ...s,
-                      [f.quote_id]: !s[f.quote_id],
-                    }))
-                  }
-                  className={`ml-auto inline-flex items-center gap-2 font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer ${
-                    logFor[f.quote_id]
-                      ? 'border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri'
-                      : 'border border-accent/60 bg-accent/10 text-accent hover:bg-accent/20'
-                  }`}
-                >
-                  {logFor[f.quote_id]
-                    ? '× Cancel'
-                    : isDone
-                      ? '+ Log another'
-                      : '+ Log touch'}
-                </button>
+                {isDone && f.quote_id && (
+                  <button
+                    type="button"
+                    disabled={busyId === rowId}
+                    onClick={() => void reopen(f.quote_id as string)}
+                    className="inline-flex items-center gap-2 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {busyId === rowId ? 'Saving…' : 'Reopen ↩'}
+                  </button>
+                )}
+                {!isLead && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setLogFor((s) => ({
+                        ...s,
+                        [rowId]: !s[rowId],
+                      }))
+                    }
+                    className={`ml-auto inline-flex items-center gap-2 font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer ${
+                      logFor[rowId]
+                        ? 'border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri'
+                        : 'border border-accent/60 bg-accent/10 text-accent hover:bg-accent/20'
+                    }`}
+                  >
+                    {logFor[rowId]
+                      ? '× Cancel'
+                      : isDone
+                        ? '+ Log another'
+                        : '+ Log touch'}
+                  </button>
+                )}
               </div>
-              {logFor[f.quote_id] && (
+              {!isLead && logFor[rowId] && f.quote_id && (
                 <FollowupLogForm
                   quoteId={f.quote_id}
                   accessToken={accessToken}
                   onCancel={() =>
-                    setLogFor((s) => ({ ...s, [f.quote_id]: false }))
+                    setLogFor((s) => ({ ...s, [rowId]: false }))
                   }
                   onLogged={(evt) => {
                     const nowIso = new Date().toISOString()
@@ -10211,28 +10344,31 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
                           )
                         : prev,
                     )
-                    setLogFor((s) => ({ ...s, [f.quote_id]: false }))
-                    setHistoryOpen((s) => ({ ...s, [f.quote_id]: true }))
+                    setLogFor((s) => ({ ...s, [rowId]: false }))
+                    setHistoryOpen((s) => ({ ...s, [rowId]: true }))
                     setHistoryRefresh((s) => ({
                       ...s,
-                      [f.quote_id]: (s[f.quote_id] ?? 0) + 1,
+                      [rowId]: (s[rowId] ?? 0) + 1,
                     }))
                   }}
                 />
               )}
-              {historyOpen[f.quote_id] && (
+              {!isLead && historyOpen[rowId] && f.quote_id && (
                 <div className="mt-3 border-t border-ink-line pt-3">
                   <FollowupHistory
                     quoteId={f.quote_id}
                     accessToken={accessToken}
-                    refreshKey={historyRefresh[f.quote_id] ?? 0}
+                    refreshKey={historyRefresh[rowId] ?? 0}
                   />
                 </div>
               )}
-              {threadOpen[f.quote_id] && (
+              {threadOpen[rowId] && (
                 <div className="mt-3 border-t border-ink-line pt-3">
                   <FollowupThread
-                    quoteId={f.quote_id}
+                    quoteId={f.kind === 'quote' ? f.quote_id : null}
+                    conversationId={
+                      f.kind === 'lead' ? f.conversation_id : null
+                    }
                     accessToken={accessToken}
                   />
                 </div>
@@ -10248,14 +10384,15 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
           item={composeFor}
           accessToken={accessToken}
           onClose={() => setComposeFor(null)}
-          onSent={(quoteId, channel) => {
+          onSent={(sentItem, channel) => {
+            const id = followupRowId(sentItem)
             setComposeFor(null)
             setRowMsg(
-              quoteId,
+              id,
               'ok',
               channel === 'whatsapp' ? 'Sent via WhatsApp ✓' : 'Text sent ✓',
             )
-            bumpHistory(quoteId)
+            if (sentItem.kind === 'quote') bumpHistory(id)
           }}
         />
       )}
@@ -10550,7 +10687,7 @@ function FollowupTextModal({
   item: FollowupItem
   accessToken: string | null
   onClose: () => void
-  onSent: (quoteId: string, channel: 'sms' | 'whatsapp') => void
+  onSent: (item: FollowupItem, channel: 'sms' | 'whatsapp') => void
 }) {
   const firstName = item.customer.first_name || ''
   const jobLabel = fmtJobType(item.job_type)
@@ -10578,7 +10715,11 @@ function FollowupTextModal({
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ quoteId: item.quote_id, text: trimmed }),
+        body: JSON.stringify(
+          item.kind === 'lead'
+            ? { conversationId: item.conversation_id, text: trimmed }
+            : { quoteId: item.quote_id, text: trimmed },
+        ),
       })
       const json = (await res.json().catch(() => ({}))) as {
         ok?: boolean
@@ -10592,7 +10733,7 @@ function FollowupTextModal({
         )
         return
       }
-      onSent(item.quote_id, json.channel ?? 'sms')
+      onSent(item, json.channel ?? 'sms')
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Network error sending the text.')
     } finally {
@@ -10600,16 +10741,31 @@ function FollowupTextModal({
     }
   }
 
-  return (
+  // Rendered into <body> via a portal (below) so the overlay is a direct
+  // child of <body> and truly viewport-fixed + centred. This is what
+  // escapes the dashboard tab wrapper's persistent `transform` (the
+  // fade-up `both` fill-mode leaves translateY(0) on it), which would
+  // otherwise make `position: fixed` anchor to that tall wrapper — the
+  // modal would land mid-list and the backdrop cover only the scroll
+  // area. The modal only ever mounts on a click, so document exists.
+  if (typeof document === 'undefined') return null
+
+  // Layout is a capped flex column: the header and the composer stay
+  // pinned while the conversation history is the only scrolling region,
+  // so the FULL text thread is reachable and the modal never overflows.
+  const overlay = (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 p-0 sm:p-4"
+      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/70 p-0 sm:p-4"
       onClick={onClose}
     >
       <div
-        className="w-full sm:max-w-md bg-ink border border-ink-line p-5 sm:p-6"
+        role="dialog"
+        aria-modal="true"
+        className="flex max-h-[92dvh] w-full flex-col bg-ink border border-ink-line sm:max-w-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-3">
+        {/* Header — pinned */}
+        <div className="flex shrink-0 items-start justify-between gap-3 p-5 pb-3 sm:p-6 sm:pb-3">
           <div>
             <h3 className="font-extrabold uppercase tracking-tight text-text-pri">
               Text {item.customer.full_name || 'customer'}
@@ -10628,58 +10784,71 @@ function FollowupTextModal({
           </button>
         </div>
 
-        {err && (
-          <div className="mt-4 border border-amber-500/50 bg-amber-500/10 text-amber-200 text-sm px-3 py-2">
-            {err}
+        {/* Conversation history — the ONLY scrolling region. Grows with
+            the thread and only scrolls once the modal hits its cap, so a
+            short thread stays compact and a long one is fully browsable. */}
+        <div className="min-h-0 overflow-y-auto px-5 sm:px-6">
+          {err && (
+            <div className="mb-3 border border-amber-500/50 bg-amber-500/10 text-amber-200 text-sm px-3 py-2">
+              {err}
+            </div>
+          )}
+          <div className="border border-ink-line bg-ink-deep p-3">
+            <p className="mb-2 font-mono text-[0.58rem] uppercase tracking-[0.14em] text-text-dim">
+              Conversation
+            </p>
+            <FollowupThread
+              quoteId={item.kind === 'quote' ? item.quote_id : null}
+              conversationId={
+                item.kind === 'lead' ? item.conversation_id : null
+              }
+              accessToken={accessToken}
+              fill
+            />
           </div>
-        )}
-
-        <div className="mt-4 border border-ink-line bg-ink-deep p-3">
-          <p className="mb-2 font-mono text-[0.58rem] uppercase tracking-[0.14em] text-text-dim">
-            Conversation
-          </p>
-          <FollowupThread
-            quoteId={item.quote_id}
-            accessToken={accessToken}
-            compact
-          />
         </div>
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          rows={5}
-          maxLength={640}
-          disabled={sending}
-          aria-label="Follow-up message to the customer"
-          placeholder="Type your follow-up message…"
-          className="mt-3 w-full bg-ink-deep border border-ink-line text-text-pri text-sm p-3 outline-none focus:border-accent/60 disabled:opacity-60"
-        />
-        <p className="mt-1.5 font-mono text-[0.58rem] uppercase tracking-[0.14em] text-text-dim">
-          {trimmed.length}/640 chars · ~{segments} SMS{' '}
-          {segments === 1 ? 'segment' : 'segments'}
-        </p>
 
-        <div className="mt-5 flex gap-2 justify-end">
-          <button
-            type="button"
-            onClick={onClose}
+        {/* Composer — pinned */}
+        <div className="shrink-0 border-t border-ink-line p-5 pt-3 sm:p-6 sm:pt-4">
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={4}
+            maxLength={640}
             disabled={sending}
-            className="border border-ink-line bg-ink-card hover:bg-ink-deep text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2.5 min-h-[44px] transition-colors cursor-pointer disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => void send()}
-            disabled={sending || trimmed.length === 0}
-            className="bg-accent hover:bg-accent-press text-white font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-5 py-2.5 min-h-[44px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {sending ? 'Sending…' : 'Send text'}
-          </button>
+            aria-label="Follow-up message to the customer"
+            placeholder="Type your follow-up message…"
+            className="w-full bg-ink-deep border border-ink-line text-text-pri text-sm p-3 outline-none focus:border-accent/60 disabled:opacity-60"
+          />
+          <p className="mt-1.5 font-mono text-[0.58rem] uppercase tracking-[0.14em] text-text-dim">
+            {trimmed.length}/640 chars · ~{segments} SMS{' '}
+            {segments === 1 ? 'segment' : 'segments'}
+          </p>
+
+          <div className="mt-4 flex gap-2 justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={sending}
+              className="border border-ink-line bg-ink-card hover:bg-ink-deep text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2.5 min-h-[44px] transition-colors cursor-pointer disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void send()}
+              disabled={sending || trimmed.length === 0}
+              className="bg-accent hover:bg-accent-press text-white font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-5 py-2.5 min-h-[44px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {sending ? 'Sending…' : 'Send text'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
   )
+
+  return createPortal(overlay, document.body)
 }
 
 // ─── Follow-up SMS thread ─────────────────────────────────────────
@@ -10706,13 +10875,23 @@ type ThreadMsg = {
 }
 
 function FollowupThread({
-  quoteId,
+  quoteId = null,
+  conversationId = null,
   accessToken,
   compact = false,
+  fill = false,
 }: {
-  quoteId: string
+  // A quote follow-up passes quoteId; a no-quote SMS lead passes
+  // conversationId. Exactly one is set; the messages endpoint resolves
+  // the phone server-side from whichever it receives.
+  quoteId?: string | null
+  conversationId?: string | null
   accessToken: string | null
   compact?: boolean
+  /** Grow to fit the full thread and let an ancestor own the scroll
+   *  (used inside the compose modal, whose body is the scroll region).
+   *  When false, the thread caps its own height and scrolls internally. */
+  fill?: boolean
 }) {
   const [state, setState] = useState<
     | { phase: 'loading' }
@@ -10733,8 +10912,11 @@ function FollowupThread({
         return
       }
       try {
+        const qs = conversationId
+          ? `conversationId=${encodeURIComponent(conversationId)}`
+          : `quoteId=${encodeURIComponent(quoteId ?? '')}`
         const res = await fetch(
-          `/api/tenant/followups/messages?quoteId=${encodeURIComponent(quoteId)}`,
+          `/api/tenant/followups/messages?${qs}`,
           {
             headers: { Authorization: `Bearer ${accessToken}` },
             cache: 'no-store',
@@ -10770,7 +10952,7 @@ function FollowupThread({
     return () => {
       cancelled = true
     }
-  }, [quoteId, accessToken])
+  }, [quoteId, conversationId, accessToken])
 
   if (state.phase === 'loading') {
     return <p className="text-xs text-text-dim">Loading messages…</p>
@@ -10800,8 +10982,8 @@ function FollowupThread({
         </p>
       )}
       <div
-        className={`space-y-2 overflow-y-auto pr-1 ${
-          compact ? 'max-h-44' : 'max-h-72'
+        className={`space-y-2 pr-1 ${
+          fill ? '' : `overflow-y-auto ${compact ? 'max-h-44' : 'max-h-72'}`
         }`}
       >
         {state.messages.map((m, i) => {

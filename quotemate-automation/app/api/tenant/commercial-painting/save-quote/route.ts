@@ -89,7 +89,7 @@ export async function POST(req: Request) {
     )
   }
 
-  const appUrl = process.env.APP_URL ?? 'https://quote-mate-rho.vercel.app'
+  const appUrl = process.env.APP_URL ?? 'https://www.quotemax.com.au'
 
   // ── Idempotency: one quote per pricing pass. Re-saving the same
   // priced_at returns the existing quote instead of minting duplicate

@@ -35,7 +35,7 @@ describe('buildPaintCustomerSms', () => {
   const base = {
     businessName: 'Coastline Painting',
     totalIncGst: 18450.4,
-    quoteUrl: 'https://quote-mate-rho.vercel.app/q/abc123',
+    quoteUrl: 'https://www.quotemax.com.au/q/abc123',
   }
 
   it('builds the full body with name, job, total, links and PDF', () => {
@@ -43,19 +43,19 @@ describe('buildPaintCustomerSms', () => {
       ...base,
       customerName: 'Jordan',
       jobName: 'Swan Street warehouse',
-      pdfUrl: 'https://quote-mate-rho.vercel.app/api/q/abc123/pdf',
+      pdfUrl: 'https://www.quotemax.com.au/api/q/abc123/pdf',
     })
     expect(body).toBe(
       'Hi Jordan, your painting quote from Coastline Painting for Swan Street warehouse is ready: ' +
-        '$18,450 inc GST. View the full quote: https://quote-mate-rho.vercel.app/q/abc123 · ' +
-        'PDF copy: https://quote-mate-rho.vercel.app/api/q/abc123/pdf — reply to confirm.',
+        '$18,450 inc GST. View the full quote: https://www.quotemax.com.au/q/abc123 · ' +
+        'PDF copy: https://www.quotemax.com.au/api/q/abc123/pdf — reply to confirm.',
     )
   })
 
   it('omits the PDF clause when no PDF was produced', () => {
     const body = buildPaintCustomerSms({ ...base, customerName: 'Jordan' })
     expect(body).not.toContain('PDF copy')
-    expect(body).toContain('View the full quote: https://quote-mate-rho.vercel.app/q/abc123 — reply to confirm.')
+    expect(body).toContain('View the full quote: https://www.quotemax.com.au/q/abc123 — reply to confirm.')
   })
 
   it('falls back to a generic greeting and no job clause', () => {

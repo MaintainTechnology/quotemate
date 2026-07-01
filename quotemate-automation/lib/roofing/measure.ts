@@ -39,6 +39,11 @@ import {
   solarEnabled,
   type SolarEnrichmentOpts,
 } from './solar-api'
+import {
+  fetchPropertyContext,
+  propertyContextWarnings,
+  type PropRadarOpts,
+} from './propradar'
 
 export type MeasureRoofOpts = {
   /** Explicit provider override — tests and the dashboard demo path use this. */
@@ -52,6 +57,13 @@ export type MeasureRoofOpts = {
    * and NO Solar call is made. Tests pass an explicit override here.
    */
   solar?: SolarEnrichmentOpts
+  /**
+   * PropRadar property-context enrichment (best-effort, additive). Defaults
+   * from env (PROPRADAR_ENRICHMENT + PROPRADAR_API_KEY); off unless both set.
+   * Attaches dwelling type / year built / areas to the quote and seeds the
+   * asbestos gate when a year is found. Tests pass an explicit override.
+   */
+  propradar?: PropRadarOpts
 }
 
 export type MeasureRoofResult =
@@ -189,6 +201,10 @@ export async function measureAndPriceRoofs(
   opts: MeasureRoofsOpts = {},
 ): Promise<MeasureRoofsResult> {
   const provider = pickProvider(opts)
+  // Kick off the PropRadar property-context lookup concurrently with the
+  // measurement (both key off the same address). Resolves to null unless
+  // enrichment is enabled and the address is covered; never throws.
+  const propertyContextPromise = fetchPropertyContext(address, opts.propradar)
 
   let multi: RoofingMultiMeasurementResult
   try {
@@ -231,6 +247,9 @@ export async function measureAndPriceRoofs(
   const warnings = [...multi.warnings]
   const solarOn = solarEnabled(opts.solar)
   const solarOpts = resolveSolarOpts(opts.solar)
+  // Resolve the property context now so a PropRadar year_built can seed the
+  // asbestos gate for structures the caller didn't supply a year for.
+  const propertyContext = await propertyContextPromise
 
   // Build each structure's priced input, carrying any solar-enrichment
   // warnings so they can be re-labelled once the final order is known.
@@ -238,6 +257,9 @@ export async function measureAndPriceRoofs(
   for (const b of multi.buildings) {
     const override = (b.buildingId ? opts.perBuilding?.[b.buildingId] : undefined) ?? {}
     const merged: RoofUserInputs = { ...inputs, ...override }
+    if (merged.building_year_built == null && propertyContext?.year_built != null) {
+      merged.building_year_built = propertyContext.year_built
+    }
     if (solarOn) {
       const enriched = await enrichMetricsWithSolar(b.metrics, merged, solarOpts)
       built.push({
@@ -272,6 +294,11 @@ export async function measureAndPriceRoofs(
       warnings.push(`${quote.structures[rank].label}: ${w}`)
     }
   })
+
+  if (propertyContext) {
+    quote.property_context = propertyContext
+    warnings.push(...propertyContextWarnings(propertyContext, quote))
+  }
 
   return { ok: true, quote, provider: multi.provider, warnings }
 }

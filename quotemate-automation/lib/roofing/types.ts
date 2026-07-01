@@ -74,6 +74,32 @@ export type RoofUserInputs = {
 }
 
 /**
+ * Premium building attributes from the paid Geoscape Buildings API
+ * (Roof / Height / Solar insight packs), fetched per building alongside
+ * the footprint. Every field is nullable — null when Geoscape has no
+ * value for that building or the sub-resource isn't licensed / reachable.
+ */
+export type GeoscapeBuildingAttributes = {
+  /** Roof material verbatim from Geoscape, e.g. "Metal" / "Tile". */
+  roof_material: string | null
+  /** Roof complexity band, e.g. "Moderate pitch or complexity". */
+  roof_complexity: string | null
+  /** Highest roof point above ground in metres (from maximumRoofHeight). */
+  max_roof_height_m: number | null
+  /** Average eave height above ground in metres (from averageEaveHeight). */
+  eave_height_m: number | null
+  /** Ground elevation above the AHD datum in metres. */
+  ground_elevation_m: number | null
+  /** Derived roof rise = max roof height − eave height, metres. Null when
+   *  either height is missing. */
+  roof_rise_m: number | null
+  /** Whether Geoscape detected existing solar panels on the roof. */
+  solar_panel: boolean | null
+  /** Whether a tree overhangs the roof (access / debris signal). */
+  overhanging_tree: boolean | null
+}
+
+/**
  * The structured measurement output. Provider-agnostic: Geoscape, LiDAR
  * and a hand-entered fallback all return this shape. Nullable fields
  * mean the provider couldn't determine that metric — the orchestrator
@@ -123,6 +149,11 @@ export type RoofMetrics = {
   imagery_quality?: 'HIGH' | 'MEDIUM' | 'LOW' | null
   /** ISO date (YYYY-MM-DD) the Solar imagery was captured. */
   imagery_date?: string | null
+  // ── Geoscape premium building attributes (optional, additive) ────────
+  // Populated by lib/roofing/providers/geoscape.ts from the paid Buildings
+  // API roof / height / solar sub-resources. Absent on mock / manual /
+  // legacy measurements; individual fields are null when unavailable.
+  building_attributes?: GeoscapeBuildingAttributes | null
 }
 
 /** Which structure on the parcel a measurement represents. */
@@ -325,6 +356,27 @@ export type RoofStructurePrice = {
   price: RoofingQuotePrice
 }
 
+/**
+ * Property context from PropRadar (best-effort, additive). Present only when
+ * PropRadar covers the address (on-market / recently-sold) and enrichment is
+ * enabled. Supplements — never measures — the roof: dwelling type, age, and
+ * areas that contextualise or sanity-check the Geoscape measurement.
+ */
+export type RoofPropertyContext = {
+  source: 'propradar'
+  property_id: string
+  /** Dwelling type, e.g. "House" / "Unit" / "Townhouse". */
+  property_type: string | null
+  /** Year the dwelling was built — feeds the pre-1990 asbestos gate. Hobby+
+   *  plan only; null on the free plan even when the property is covered. */
+  year_built: number | null
+  floor_area_sqm: number | null
+  land_size_sqm: number | null
+  bedrooms: number | null
+  bathrooms: number | null
+  parking: number | null
+}
+
 /** The aggregated multi-structure quote returned to the dashboard. */
 export type MultiRoofQuote = {
   structures: RoofStructurePrice[]
@@ -351,4 +403,11 @@ export type MultiRoofQuote = {
    * the estimator grounding validator.
    */
   solar?: SolarQuoteAddon
+  /**
+   * Best-effort PropRadar property context (dwelling type, year built, areas),
+   * attached at measurement time when enrichment is enabled and the address is
+   * covered. Additive + optional — off-market addresses and disabled
+   * enrichment simply omit it. See lib/roofing/propradar.ts.
+   */
+  property_context?: RoofPropertyContext | null
 }

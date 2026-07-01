@@ -130,7 +130,7 @@ export async function sendCustomerSolarQuote(
       .maybeSingle()
     const businessName = (tenant?.business_name as string | null) ?? 'Your installer'
 
-    const appUrl = (process.env.APP_URL ?? 'https://quote-mate-rho.vercel.app').replace(/\/$/, '')
+    const appUrl = (process.env.APP_URL ?? 'https://www.quotemax.com.au').replace(/\/$/, '')
     const pdfPath = await ensureSolarQuotePdf(row.publicToken)
     const body = buildSolarCustomerSms({
       businessName,

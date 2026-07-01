@@ -29,10 +29,6 @@ export const PaintInputsSchema = z.object({
 export const EstimateRequestSchema = z.object({
   address: PaintAddressSchema,
   inputs: PaintInputsSchema,
-  /** Which dashboard tab issued the request. */
-  source: z.enum(['rea', 'auto']).optional(),
-  /** Demo toggle — flips the orchestrator to the deterministic mock. */
-  use_mock_provider: z.boolean().optional(),
 })
 
 export type EstimateRequest = z.infer<typeof EstimateRequestSchema>

@@ -32,6 +32,9 @@ type Props = {
   appliedDiscountPct: number
   isPaid: boolean
   paidTier: string | null
+  /** Price hold lapsed → suppress the Pay Deposit CTA (customer must reply
+   *  for a refreshed quote). Defaults false. */
+  priceExpired?: boolean
   /** Section heading. Defaults to a roofing-appropriate heading. */
   heading?: string
   /** Per-tier labels. Defaults to roofing framing. */
@@ -79,6 +82,7 @@ export function TradeTiers({
   appliedDiscountPct,
   isPaid,
   paidTier,
+  priceExpired = false,
   heading,
   labels = ROOF_TIER_LABEL,
   blurbs = ROOF_TIER_BLURB,
@@ -98,7 +102,7 @@ export function TradeTiers({
           const exGst = asNumber(tier.subtotal_ex_gst) * (1 - appliedDiscountPct / 100)
           const priceInc = incGst(exGst)
           const dep = deposit(priceInc, depositPct)
-          const href = stripeLinks[key] ? `/r/${token}/${key}` : null
+          const href = !priceExpired && stripeLinks[key] ? `/r/${token}/${key}` : null
           const recommended = selectedTier === key
           const paid = isPaid && paidTier === key
           const dimmed = isPaid && paidTier !== key
@@ -138,6 +142,10 @@ export function TradeTiers({
                 {paid ? (
                   <div className="border border-success/40 bg-success/10 px-4 py-3 text-center font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-success">
                     Deposit paid
+                  </div>
+                ) : priceExpired ? (
+                  <div className="border border-warning/40 px-4 py-3 text-center font-mono text-[0.72rem] uppercase tracking-[0.14em] text-warning">
+                    Price expired — reply for a refreshed quote
                   </div>
                 ) : href ? (
                   <Link

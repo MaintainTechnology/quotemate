@@ -215,6 +215,24 @@ export function composeCancelMessage(firstName?: string | null): string {
   return `No problem${nameSuffix(firstName)}. I've stopped there. Just text me anytime if you'd like a roofing quote.`
 }
 
+/**
+ * PURE — fallback when the automatic measurement is unavailable (Geoscape
+ * transient / down) but the customer has given us a complete roofing brief.
+ * Instead of dead-ending the thread, we offer the on-site inspection so the
+ * lead is never lost. The route parks the conversation at await_booking, so
+ * a "yes" books it through the existing booking flow — the same safe path a
+ * measured inspection-routed job takes.
+ */
+export function composeMeasureUnavailableMessage(
+  firstName: string | null | undefined,
+  address: string,
+): string {
+  return [
+    `Thanks${nameSuffix(firstName)}. I couldn't pull an automatic measurement for ${address} just now, so we'll arrange a quick on-site inspection to quote it accurately.`,
+    `Reply YES and we'll book a time that suits you.`,
+  ].join('\n')
+}
+
 /** PURE — reply after the inspection "shall we book?" prompt. */
 export function composeBookingMessage(firstName: string | null | undefined, confirmed: boolean): string {
   return confirmed

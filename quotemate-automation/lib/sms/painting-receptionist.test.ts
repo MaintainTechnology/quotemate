@@ -90,7 +90,6 @@ describe('advancePainting — full Q&A path to an estimate', () => {
       const req = toPaintingRequest(last.slots)
       expect(req).not.toBeNull()
       expect(req!.inputs.scopes).toEqual(['walls', 'ceilings'])
-      expect(req!.source).toBe('auto')
     }
     expect(finalState.last_step).toBe('quoted')
   })

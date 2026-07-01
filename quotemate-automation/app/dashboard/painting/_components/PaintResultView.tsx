@@ -36,7 +36,11 @@ export function PaintResultView({
           hint={`${measurement.floor_area_low_m2.toFixed(0)}–${measurement.floor_area_high_m2.toFixed(0)} m² · ${sourceWords(measurement.floor_area_source)}`}
         />
         <Stat label="Storeys · ceiling" value={`${measurement.storeys} · ${measurement.ceiling_height_m} m`} hint={facts.property_type ?? ''} />
-        <Stat label="Beds · baths" value={`${facts.bedrooms ?? '?'} · ${facts.bathrooms ?? '?'}`} hint={facts.year_built ? `Built ${facts.year_built}` : ''} />
+        <Stat
+          label="Beds · baths"
+          value={`${facts.bedrooms ?? '?'} · ${facts.bathrooms ?? '?'}`}
+          hint={[facts.year_built ? `Built ${facts.year_built}` : '', facts.car_spaces != null ? `${facts.car_spaces} car` : ''].filter(Boolean).join(' · ')}
+        />
       </div>
 
       {/* Property details — everything the data source told us */}
@@ -46,6 +50,9 @@ export function PaintResultView({
           <Stat label="Building footprint" value={facts.footprint_m2 != null ? `${Math.round(facts.footprint_m2)} m²` : '—'} hint={facts.footprint_m2 != null ? 'roof outprint' : 'not provided'} />
           <Stat label="Land size" value={facts.land_size_m2 != null ? `${Math.round(facts.land_size_m2)} m²` : '—'} />
           <Stat label="Type · built" value={`${facts.property_type ?? '—'}${facts.year_built ? ` · ${facts.year_built}` : ''}`} hint={facts.has_floor_plan ? 'floor plan available' : ''} />
+          {facts.eave_height_m != null && (
+            <Stat label="Eave height" value={`${facts.eave_height_m.toFixed(1)} m`} hint="ground to eave" />
+          )}
         </div>
         {facts.capture_note && <p className="mt-3 text-xs text-text-dim">{facts.capture_note}</p>}
       </div>

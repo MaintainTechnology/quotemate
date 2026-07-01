@@ -61,7 +61,7 @@ export async function GET(req: Request) {
     return Response.json({ ok: false, error: 'no_tenant' }, { status: 404 })
   }
 
-  const appUrl = process.env.APP_URL ?? 'https://quote-mate-rho.vercel.app'
+  const appUrl = process.env.APP_URL ?? 'https://www.quotemax.com.au'
 
   // Pull the most recent N estimates for this tenant (newest first).
   // pylon_opportunity rides along as a JSON-path projection so the lead's

@@ -823,14 +823,63 @@ describe('GeoscapeProvider.measure — error envelope (with stub fetch)', () => 
     ).rejects.toThrow(/address is required/)
   })
 
-  it('returns rate_limited on 429 from the address lookup', async () => {
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(null, { status: 429 }))
+  it('returns rate_limited when the address lookup 429s persistently', async () => {
+    // Persistent 429 (every attempt) — the critical-path retry is exhausted
+    // and we still surface the rate-limit failure.
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(null, { status: 429 }))
     const p = new GeoscapeProvider({ apiKey: 'fake', fetchImpl })
     const r = await p.measure({ address: '1 Test St', postcode: '2000', state: 'NSW' })
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.code).toBe('provider_rate_limited')
+  })
+
+  it('recovers from a transient 429 on the address lookup (retries then succeeds)', async () => {
+    // A single 429 on the FIRST (address) call used to fail the whole
+    // measurement immediately — which dead-ended the SMS roofing flow. The
+    // critical-path calls now retry a transient 429, so the measurement
+    // proceeds instead of black-holing the customer.
+    const fetchImpl = vi
+      .fn()
+      // 1. Addresses search — transient 429 …
+      .mockResolvedValueOnce(new Response(null, { status: 429 }))
+      // … then the retry succeeds.
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: [{ addressId: 'a1' }] }), { status: 200 }),
+      )
+      // 2. Buildings list
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                buildingId: 'b1',
+                relatedAddressIds: ['a1'],
+                links: {
+                  footprint2d: '/v1/buildings/b1/footprint2d',
+                  roofShape: '/v1/buildings/b1/roofShape',
+                  estimatedLevels: '/v1/buildings/b1/estimatedLevels',
+                  area: '/v1/buildings/b1/area',
+                },
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      )
+      // 3. Sub-resources (routed by URL suffix).
+      .mockImplementation((url: RequestInfo | URL) => {
+        const s = String(url)
+        if (s.endsWith('/footprint2d')) return Promise.resolve(new Response(JSON.stringify({ data: SQUARE_10M }), { status: 200 }))
+        if (s.endsWith('/roofShape')) return Promise.resolve(new Response(JSON.stringify({ roofShape: 'hip' }), { status: 200 }))
+        if (s.endsWith('/estimatedLevels')) return Promise.resolve(new Response(JSON.stringify({ estimatedLevels: 1 }), { status: 200 }))
+        if (s.endsWith('/area')) return Promise.resolve(new Response(JSON.stringify({ area: 200 }), { status: 200 }))
+        return Promise.resolve(new Response('not found', { status: 404 }))
+      })
+
+    const p = new GeoscapeProvider({ apiKey: 'fake', fetchImpl })
+    const r = await p.measure({ address: '1 Oxford St', postcode: '2021', state: 'NSW' })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.metrics.footprint_m2).toBe(200)
   })
 
   it('returns address_not_resolved on empty address result', async () => {

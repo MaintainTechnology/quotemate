@@ -10,7 +10,10 @@
 // abused to dial arbitrary numbers.
 
 import { createClient } from '@supabase/supabase-js'
-import { resolveFollowupTarget } from '@/lib/quote/followup-contact'
+import {
+  resolveFollowupTarget,
+  resolveLeadTarget,
+} from '@/lib/quote/followup-contact'
 import { normaliseAuMobile } from '@/lib/phone/au'
 import { friendlyCallError } from '@/lib/sms/twilio-error'
 import { placeBridgeCall, signBridge } from '@/lib/twilio/voice'
@@ -52,15 +55,20 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
 
-  let body: { quoteId?: unknown }
+  let body: { quoteId?: unknown; conversationId?: unknown }
   try {
     body = await req.json()
   } catch {
     return Response.json({ ok: false, error: 'invalid_json' }, { status: 400 })
   }
   const quoteId = typeof body.quoteId === 'string' ? body.quoteId : null
-  if (!quoteId) {
-    return Response.json({ ok: false, error: 'quoteId is required' }, { status: 400 })
+  const conversationId =
+    typeof body.conversationId === 'string' ? body.conversationId : null
+  if (!quoteId && !conversationId) {
+    return Response.json(
+      { ok: false, error: 'quoteId or conversationId is required' },
+      { status: 400 },
+    )
   }
 
   // Caller-ID = tenant's provisioned Twilio number (must be E.164).
@@ -80,7 +88,9 @@ export async function POST(req: Request) {
     )
   }
 
-  const target = await resolveFollowupTarget(supabase, quoteId, tenant.id)
+  const target = conversationId
+    ? await resolveLeadTarget(supabase, conversationId, tenant.id)
+    : await resolveFollowupTarget(supabase, quoteId as string, tenant.id)
   if (!target.ok) {
     return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
   }
@@ -135,16 +145,20 @@ export async function POST(req: Request) {
   // History panel shows the dial attempt. Twilio status callbacks (busy
   // / answered / etc.) aren't wired yet — when they are, the row's
   // outcome can be updated. Never fail the call response on log error.
-  try {
-    await supabase.from('quote_followup_events').insert({
-      tenant_id: tenant.id,
-      quote_id: quoteId,
-      kind: 'call',
-      outcome: 'call_dialed',
-      summary: 'Outbound call placed',
-    })
-  } catch (e) {
-    console.error('[followups/call] event log failed (call still placed)', e)
+  // Quote follow-ups only — quote_followup_events.quote_id is NOT NULL,
+  // so a no-quote lead has no quote to attach the event to.
+  if (quoteId) {
+    try {
+      await supabase.from('quote_followup_events').insert({
+        tenant_id: tenant.id,
+        quote_id: quoteId,
+        kind: 'call',
+        outcome: 'call_dialed',
+        summary: 'Outbound call placed',
+      })
+    } catch (e) {
+      console.error('[followups/call] event log failed (call still placed)', e)
+    }
   }
 
   // The tradie's phone is now ringing; when they answer it bridges to the

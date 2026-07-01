@@ -12,7 +12,10 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
-import { resolveFollowupTarget } from '@/lib/quote/followup-contact'
+import {
+  resolveFollowupTarget,
+  resolveLeadTarget,
+} from '@/lib/quote/followup-contact'
 import { normaliseAuMobile } from '@/lib/phone/au'
 import { friendlyTwilioError } from '@/lib/sms/twilio-error'
 import { humanizeJobType, FOLLOWUP_PIN_TTL_DAYS } from '@/lib/sms/followup-context'
@@ -47,17 +50,22 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
 
-  let body: { quoteId?: unknown; text?: unknown }
+  let body: { quoteId?: unknown; conversationId?: unknown; text?: unknown }
   try {
     body = await req.json()
   } catch {
     return Response.json({ ok: false, error: 'invalid_json' }, { status: 400 })
   }
   const quoteId = typeof body.quoteId === 'string' ? body.quoteId : null
+  const conversationId =
+    typeof body.conversationId === 'string' ? body.conversationId : null
   const text =
     typeof body.text === 'string' ? body.text.trim().slice(0, MAX_LEN) : ''
-  if (!quoteId) {
-    return Response.json({ ok: false, error: 'quoteId is required' }, { status: 400 })
+  if (!quoteId && !conversationId) {
+    return Response.json(
+      { ok: false, error: 'quoteId or conversationId is required' },
+      { status: 400 },
+    )
   }
   if (!text) {
     return Response.json(
@@ -78,7 +86,9 @@ export async function POST(req: Request) {
     )
   }
 
-  const target = await resolveFollowupTarget(supabase, quoteId, tenant.id)
+  const target = conversationId
+    ? await resolveLeadTarget(supabase, conversationId, tenant.id)
+    : await resolveFollowupTarget(supabase, quoteId as string, tenant.id)
   if (!target.ok) {
     return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
   }
@@ -126,75 +136,86 @@ export async function POST(req: Request) {
   try {
     const nowIso = new Date().toISOString()
 
-    // Pin WHICH quote this follow-up is about so a reply ("resend the
-    // quote", "how much again") is answered about THIS quote — not
-    // whatever the live thread had drifted to. Resolved server-side from
-    // the quote (ownership-scoped); never trusted from the request.
-    const { data: quoteRow } = await supabase
-      .from('quotes')
-      .select('share_token, selected_tier, total_inc_gst, intake_id')
-      .eq('id', quoteId)
-      .eq('tenant_id', tenant.id)
-      .maybeSingle()
-    let jobType: string | null = null
-    if (quoteRow?.intake_id) {
-      const { data: intakeRow } = await supabase
-        .from('intakes')
-        .select('job_type')
-        .eq('id', quoteRow.intake_id)
+    // Quote follow-up only: pin WHICH quote this text is about so a reply
+    // ("resend the quote", "how much again") is answered about THIS quote
+    // — not whatever the live thread had drifted to. Resolved server-side
+    // (ownership-scoped); never trusted from the request. A no-quote lead
+    // has nothing to pin.
+    let followupQuote: Record<string, unknown> | null = null
+    if (quoteId) {
+      const { data: quoteRow } = await supabase
+        .from('quotes')
+        .select('share_token, selected_tier, total_inc_gst, intake_id')
+        .eq('id', quoteId)
+        .eq('tenant_id', tenant.id)
         .maybeSingle()
-      jobType = (intakeRow?.job_type as string | null) ?? null
-    }
-    const appUrl = process.env.APP_URL?.replace(/\/$/, '') ?? null
-    const totalRaw = quoteRow?.total_inc_gst
-    const followupQuote = {
-      quote_id: quoteId,
-      share_token: (quoteRow?.share_token as string | null) ?? null,
-      job_label: humanizeJobType(jobType),
-      total_inc_gst:
-        typeof totalRaw === 'number'
-          ? totalRaw
-          : totalRaw != null && Number.isFinite(Number(totalRaw))
-            ? Number(totalRaw)
+      let jobType: string | null = null
+      if (quoteRow?.intake_id) {
+        const { data: intakeRow } = await supabase
+          .from('intakes')
+          .select('job_type')
+          .eq('id', quoteRow.intake_id)
+          .maybeSingle()
+        jobType = (intakeRow?.job_type as string | null) ?? null
+      }
+      const appUrl = process.env.APP_URL?.replace(/\/$/, '') ?? null
+      const totalRaw = quoteRow?.total_inc_gst
+      followupQuote = {
+        quote_id: quoteId,
+        share_token: (quoteRow?.share_token as string | null) ?? null,
+        job_label: humanizeJobType(jobType),
+        total_inc_gst:
+          typeof totalRaw === 'number'
+            ? totalRaw
+            : totalRaw != null && Number.isFinite(Number(totalRaw))
+              ? Number(totalRaw)
+              : null,
+        tier: (quoteRow?.selected_tier as string | null) ?? null,
+        quote_url:
+          appUrl && quoteRow?.share_token
+            ? `${appUrl}/q/${quoteRow.share_token}`
             : null,
-      tier: (quoteRow?.selected_tier as string | null) ?? null,
-      quote_url:
-        appUrl && quoteRow?.share_token
-          ? `${appUrl}/q/${quoteRow.share_token}`
-          : null,
-      sent_at: nowIso,
-      // After this the pin is stale and ignored (lib/sms/followup-context
-      // isFollowupContextActive) so an old follow-up can't hijack an
-      // unrelated later conversation.
-      expires_at: new Date(
-        Date.now() + FOLLOWUP_PIN_TTL_DAYS * 24 * 60 * 60 * 1000,
-      ).toISOString(),
+        sent_at: nowIso,
+        // After this the pin is stale and ignored (lib/sms/followup-context
+        // isFollowupContextActive) so an old follow-up can't hijack an
+        // unrelated later conversation.
+        expires_at: new Date(
+          Date.now() + FOLLOWUP_PIN_TTL_DAYS * 24 * 60 * 60 * 1000,
+        ).toISOString(),
+      }
     }
 
-    const { data: prior } = await supabase
-      .from('sms_conversations')
-      .select('id')
-      .eq('from_number', toE164)
-      .eq('tenant_id', tenant.id)
-      .order('last_message_at', { ascending: false, nullsFirst: false })
-      .limit(1)
-      .maybeSingle()
+    // A lead already resolves to a concrete conversation; a quote
+    // follow-up finds the customer's latest thread by number (or opens
+    // one). Either way we thread the outbound message into it.
+    let threadConvoId = conversationId ?? undefined
+    if (!threadConvoId) {
+      const { data: prior } = await supabase
+        .from('sms_conversations')
+        .select('id')
+        .eq('from_number', toE164)
+        .eq('tenant_id', tenant.id)
+        .order('last_message_at', { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle()
+      threadConvoId = prior?.id as string | undefined
+    }
 
-    let conversationId = prior?.id as string | undefined
-    if (conversationId) {
+    if (threadConvoId) {
       // Pin goes in the DEDICATED followup_quote column — NOT
       // conversation_state — so /api/sms/inbound's slot-merge writes
       // (which replace conversation_state wholesale) can never clobber
       // it. Survives the whole conversation, bounded by expires_at.
+      const update: Record<string, unknown> = {
+        status: 'open',
+        last_message_at: nowIso,
+        updated_at: nowIso,
+      }
+      if (followupQuote) update.followup_quote = followupQuote
       await supabase
         .from('sms_conversations')
-        .update({
-          status: 'open',
-          last_message_at: nowIso,
-          updated_at: nowIso,
-          followup_quote: followupQuote,
-        })
-        .eq('id', conversationId)
+        .update(update)
+        .eq('id', threadConvoId)
     } else {
       const { data: created } = await supabase
         .from('sms_conversations')
@@ -205,15 +226,15 @@ export async function POST(req: Request) {
           conversation_type: 'customer_quote',
           status: 'open',
           last_message_at: nowIso,
-          followup_quote: followupQuote,
+          ...(followupQuote ? { followup_quote: followupQuote } : {}),
         })
         .select('id')
         .single()
-      conversationId = created?.id as string | undefined
+      threadConvoId = created?.id as string | undefined
     }
-    if (conversationId) {
+    if (threadConvoId) {
       await supabase.from('sms_messages').insert({
-        conversation_id: conversationId,
+        conversation_id: threadConvoId,
         direction: 'outbound',
         body: text,
         twilio_message_sid: result.sid,
@@ -223,20 +244,22 @@ export async function POST(req: Request) {
     console.error('[followups/text] thread-logging failed (send still OK)', e)
   }
 
-  // CRM touch log — same best-effort posture as the conversation thread
-  // logging above. Summary = first 120 chars of the sent body so a VA
-  // scanning history sees what the customer was told without opening
-  // the conversation.
-  try {
-    await supabase.from('quote_followup_events').insert({
-      tenant_id: tenant.id,
-      quote_id: quoteId,
-      kind: 'sms',
-      outcome: 'text_sent',
-      summary: `SMS: ${text.slice(0, 120)}${text.length > 120 ? '…' : ''}`,
-    })
-  } catch (e) {
-    console.error('[followups/text] event log failed (text still sent)', e)
+  // CRM touch log — quote follow-ups only: quote_followup_events.quote_id
+  // is NOT NULL, so a no-quote lead has nothing to attach the event to
+  // (its record IS the SMS thread, logged above). Same best-effort
+  // posture. Summary = first 120 chars of the sent body.
+  if (quoteId) {
+    try {
+      await supabase.from('quote_followup_events').insert({
+        tenant_id: tenant.id,
+        quote_id: quoteId,
+        kind: 'sms',
+        outcome: 'text_sent',
+        summary: `SMS: ${text.slice(0, 120)}${text.length > 120 ? '…' : ''}`,
+      })
+    } catch (e) {
+      console.error('[followups/text] event log failed (text still sent)', e)
+    }
   }
 
   return Response.json({ ok: true, channel: result.channel, sid: result.sid })

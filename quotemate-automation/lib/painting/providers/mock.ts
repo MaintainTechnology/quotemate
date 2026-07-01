@@ -3,7 +3,6 @@
 //
 // Used for:
 //   • local development without any property-data API key set
-//   • the dashboard "demo" toggle so a tradie can dry-run both tabs
 //   • unit tests of the orchestrator + area + pricing pipeline
 //
 // Returns deterministic, address-derived facts so the same address
@@ -15,20 +14,11 @@
 import type { PropertyDataProvider } from './base'
 import type {
   PaintAddressInput,
-  PropertyDataSource,
   PropertyLookupResult,
 } from '../types'
 
 export class MockPropertyProvider implements PropertyDataProvider {
   readonly name = 'mock' as const
-
-  /** Lets the mock stamp a different `source` so each tab's demo data is
-   *  labelled with the provider it stands in for (e.g. 'rea'). */
-  private readonly stampSource: PropertyDataSource
-
-  constructor(opts: { stampSource?: PropertyDataSource } = {}) {
-    this.stampSource = opts.stampSource ?? 'mock'
-  }
 
   async lookup(input: PaintAddressInput): Promise<PropertyLookupResult> {
     if (!input.address?.trim()) {
@@ -45,13 +35,8 @@ export class MockPropertyProvider implements PropertyDataProvider {
 
     return {
       ok: true,
-      provider: this.stampSource,
-      warnings:
-        this.stampSource === 'rea'
-          ? [
-              'Demo data — the realestate.com.au tab is not wired to a live source yet. Choose a managed scraper or paste the listing to get real building-size numbers.',
-            ]
-          : ['Demo data from the deterministic mock provider.'],
+      provider: 'mock',
+      warnings: ['Demo data from the deterministic mock provider.'],
       facts: {
         floor_area_m2: floorArea,
         floor_area_source: 'listing',
@@ -63,7 +48,7 @@ export class MockPropertyProvider implements PropertyDataProvider {
         property_type: 'House',
         land_size_m2: 300 + (h % 500),
         has_floor_plan: h % 2 === 0,
-        source: this.stampSource,
+        source: 'mock',
         capture_note: 'Synthetic demo record — not a real property.',
       },
     }

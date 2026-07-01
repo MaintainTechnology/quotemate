@@ -243,7 +243,7 @@ export async function POST(
     estimate.routing?.decision !== 'inspection_required'
 
   // ── Notify the tradie after the response. ────────────────────────
-  const appUrl = process.env.APP_URL ?? 'https://quote-mate-rho.vercel.app'
+  const appUrl = process.env.APP_URL ?? 'https://www.quotemax.com.au'
   // The SMS must quote the SAME numbers the share page headlines. The
   // page hero shows the LARGEST tier (resolveSolarQuoteView's
   // headlineTier — last in good→best order); quoting the 'better' tier

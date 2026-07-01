@@ -13,6 +13,7 @@ import {
   composeConfirmMessage,
   composeEstimateMessage,
   composeInspectionMessage,
+  composeMeasureUnavailableMessage,
   fmtAud,
   narrowQuoteToStructure,
   narrowQuoteToStructures,
@@ -36,7 +37,7 @@ const shed: RoofStructureInput = {
   inputs: inputs({ material: 'colorbond_trimdek' }),
 }
 
-const CTX = { address: '670 London Rd, Chandler QLD 4155', quoteUrl: 'https://quote-mate-rho.vercel.app/q/roof/abc123', firstName: 'James' }
+const CTX = { address: '670 London Rd, Chandler QLD 4155', quoteUrl: 'https://www.quotemax.com.au/q/roof/abc123', firstName: 'James' }
 
 describe('fmtAud', () => {
   it('formats whole-dollar AUD with no cents', () => {
@@ -185,7 +186,7 @@ describe('composeConfirmMessage', () => {
 })
 
 describe('buildRoofPhotoMedia (best-effort MMS attachments)', () => {
-  const B = 'https://quote-mate-rho.vercel.app'
+  const B = 'https://www.quotemax.com.au'
 
   it('single building → one image, no ?b=, generic caption', () => {
     const quote = priceMultiRoof({ structures: [house] })
@@ -219,6 +220,21 @@ describe('buildRoofPhotoMedia (best-effort MMS attachments)', () => {
   })
 })
 
+describe('composeMeasureUnavailableMessage (measurement-failed fallback)', () => {
+  it('offers an on-site inspection and asks for YES, naming the address', () => {
+    const m = composeMeasureUnavailableMessage('James', '670 London Rd, Chandler QLD 4155')
+    expect(m).toMatch(/inspection/i)
+    expect(m).toContain('670 London Rd, Chandler QLD 4155')
+    expect(m).toMatch(/\bYES\b/)
+    // Must NOT reuse the old dead-end copy that black-holed the customer.
+    expect(m.toLowerCase()).not.toContain('confirm your quote shortly')
+  })
+  it('handles a missing first name gracefully', () => {
+    const m = composeMeasureUnavailableMessage(null, '1 Test St')
+    expect(m.startsWith('Thanks.')).toBe(true)
+  })
+})
+
 describe('no em dashes in any customer-facing message', () => {
   const quote = priceMultiRoof({ structures: [house, shed] })
   const inspectionQuote = priceMultiRoof({ structures: [{ ...house, inputs: inputs({ material: 'cement_sheet' }) }, shed] })
@@ -231,6 +247,8 @@ describe('no em dashes in any customer-facing message', () => {
     composeCancelMessage(null),
     composeBookingMessage('James', true),
     composeBookingMessage(null, false),
+    composeMeasureUnavailableMessage('James', CTX.address),
+    composeMeasureUnavailableMessage(null, CTX.address),
     buildRoofingReplyMessage({ ...CTX, quote }),
   ]
   it('contains no em dash (—) or en dash (–)', () => {

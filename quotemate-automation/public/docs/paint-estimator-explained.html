@@ -1,0 +1,763 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>How the Paint Estimator prices a job</title>
+<meta name="description" content="A plain-English walkthrough of how QuoteMate's paint estimator turns surfaces into a Good / Better / Best price, with a worked example and a live calculator." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  /* ============================================================
+     Maintain Technology brand, Caterpillar palette.
+     Tokens copied verbatim from app/globals.css (the running site).
+     Warm charcoal canvas + Caterpillar yellow accent.
+     Rule: yellow always takes dark ink, never white.
+     Borders, not drop shadows. All-caps display. Square corners.
+     ============================================================ */
+  :root{
+    --ink-deep:#16120F;        /* page canvas */
+    --ink:#1E1813;             /* secondary surface / inputs */
+    --ink-card:#2B2422;        /* card / panel */
+    --ink-line:#3A322C;        /* border on dark */
+    --ink-line-2:#4A4136;      /* stronger border */
+    --accent:#FFC400;          /* Caterpillar yellow */
+    --accent-press:#E6AC00;
+    --accent-soft:#FFD23D;
+    --accent-ink:#1C1812;      /* text/icons ON yellow */
+    --text-pri:#F6F1EA;
+    --text-sec:#C3B8AC;
+    --text-dim:#A2968A;
+    --warm-glow:#6E6354;
+    --warm-deep:#4A4136;
+    --lift:inset 0 1px 0 0 rgba(255,255,255,.05);
+    --r:3px;                   /* near-square */
+    --r-sm:2px;
+    --maxw:1140px;
+  }
+
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1150px 560px at 50% -6%, rgba(255,196,0,.06), transparent 62%),
+      var(--ink-deep);
+    color:var(--text-sec);
+    font-family:"Manrope", "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    font-size:17px;
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+  }
+  .topo{position:fixed;inset:0;width:100%;height:100%;z-index:0;opacity:.5;pointer-events:none}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px;position:relative;z-index:1}
+
+  h1,h2,h3{font-family:"Manrope",sans-serif;font-weight:800;text-transform:uppercase;color:var(--text-pri);margin:0;line-height:1.03}
+  h1{font-size:clamp(2.6rem,6vw,4.6rem);letter-spacing:-.035em;line-height:.98}
+  h2{font-size:clamp(1.7rem,3.4vw,2.5rem);letter-spacing:-.03em}
+  h3{font-size:1.06rem;letter-spacing:-.01em;line-height:1.18}
+  .hl{color:var(--accent)}
+  p{margin:0 0 1rem}
+  .mono{font-family:"JetBrains Mono", ui-monospace, monospace;font-variant-ligatures:none}
+  strong{font-weight:600;color:var(--text-pri)}
+  a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(255,196,0,.32)}
+  a:hover{color:var(--accent-press);border-bottom-color:var(--accent-press)}
+
+  .eyebrow{
+    font-family:"JetBrains Mono",monospace;font-size:.72rem;font-weight:600;
+    letter-spacing:.18em;text-transform:uppercase;color:var(--accent);
+    margin:0 0 1.1rem;
+  }
+  .lede{font-size:clamp(1.05rem,2vw,1.28rem);color:var(--text-sec);max-width:62ch}
+
+  /* ---- Top bar ---- */
+  .topbar{
+    position:sticky;top:0;z-index:50;
+    background:rgba(22,18,15,.82);backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--ink-line);
+  }
+  .topbar .row{display:flex;align-items:center;justify-content:space-between;height:60px}
+  .brand{display:flex;align-items:center;gap:.6rem;font-family:"Manrope",sans-serif;font-weight:800;text-transform:uppercase;letter-spacing:.02em;font-size:1.02rem;color:var(--text-pri)}
+  .brand .dot{width:11px;height:11px;background:var(--accent);display:inline-block}
+  .topbar .tag{font-family:"JetBrains Mono",monospace;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim)}
+
+  section{padding:clamp(4rem,8vw,6.5rem) 0;position:relative;z-index:1}
+  .section-line{border:0;height:1px;background:var(--ink-line);margin:0}
+
+  /* ---- Hero ---- */
+  .hero{padding-top:clamp(3.2rem,6vw,5rem)}
+  .hero .oneliner{
+    margin-top:2rem;display:inline-flex;gap:.85rem;align-items:baseline;flex-wrap:wrap;
+    background:var(--ink-card);border:1px solid var(--ink-line);border-left:3px solid var(--accent);
+    padding:1rem 1.3rem;max-width:66ch;box-shadow:var(--lift);
+  }
+  .hero .oneliner .k{font-family:"JetBrains Mono",monospace;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+  .hero .oneliner .v{font-size:1.05rem;color:var(--text-pri)}
+
+  /* ---- Reusable ---- */
+  .grid{display:grid;gap:22px}
+  .callout{
+    background:var(--ink-card);border:1px solid var(--ink-line);border-left:3px solid var(--accent);
+    padding:1.5rem 1.6rem;box-shadow:var(--lift);
+  }
+  .callout h3{color:var(--accent);margin-bottom:.5rem}
+  .note{color:var(--text-sec);font-size:.95rem}
+
+  .chip{
+    display:inline-block;font-family:"JetBrains Mono",monospace;font-size:.78rem;font-weight:500;
+    background:var(--ink);border:1px solid var(--ink-line);border-radius:var(--r-sm);
+    padding:.16rem .5rem;color:var(--text-pri);white-space:nowrap;text-transform:uppercase;letter-spacing:.04em;
+  }
+  .chip.accent{background:var(--accent);border-color:transparent;color:var(--accent-ink)}
+
+  /* ---- Pipeline diagram ---- */
+  .pipe{display:flex;flex-wrap:wrap;align-items:stretch;gap:10px}
+  .pipe .node{
+    flex:1 1 130px;min-width:120px;background:var(--ink-card);border:1px solid var(--ink-line);
+    border-radius:var(--r);padding:.9rem .95rem;position:relative;box-shadow:var(--lift);
+  }
+  .pipe .node .n{font-family:"JetBrains Mono",monospace;font-size:1.05rem;font-weight:700;color:var(--accent);letter-spacing:.02em;line-height:1}
+  .pipe .node .t{font-family:"Manrope",sans-serif;font-weight:800;text-transform:uppercase;font-size:.9rem;letter-spacing:-.01em;color:var(--text-pri);margin-top:.3rem}
+  .pipe .arrow{align-self:center;color:var(--text-dim);font-family:"JetBrains Mono",monospace;font-weight:700}
+  @media (max-width:720px){ .pipe{flex-direction:column} .pipe .arrow{transform:rotate(90deg);align-self:flex-start;margin-left:1.4rem} }
+
+  /* ---- Step ledger (signature numbered cards) ---- */
+  .steps{counter-reset:step;display:grid;gap:14px;margin-top:2.2rem}
+  .step{
+    display:grid;grid-template-columns:auto 1fr;gap:1.3rem;align-items:start;
+    background:var(--ink-card);border:1px solid var(--ink-line);border-radius:var(--r);
+    padding:1.4rem 1.5rem;box-shadow:var(--lift);
+  }
+  .step .badge{
+    counter-increment:step;
+    font-family:"JetBrains Mono",monospace;font-weight:700;color:var(--accent);
+    font-size:clamp(1.9rem,4vw,2.7rem);line-height:.9;min-width:1.6ch;
+  }
+  .step .badge::before{content:counter(step,decimal-leading-zero)}
+  .step h3{margin-bottom:.35rem}
+  .step .formula{margin-top:.7rem;font-family:"JetBrains Mono",monospace;font-size:.84rem;color:var(--text-sec);background:var(--ink);border:1px dashed var(--ink-line-2);border-radius:var(--r-sm);padding:.6rem .75rem;overflow-x:auto;white-space:pre-wrap}
+
+  /* ---- Two-column ---- */
+  .cols-2{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  @media (max-width:760px){ .cols-2{grid-template-columns:1fr} }
+
+  .card{background:var(--ink-card);border:1px solid var(--ink-line);border-radius:var(--r);padding:1.5rem 1.6rem;box-shadow:var(--lift)}
+  .card h3{margin-bottom:.6rem}
+
+  /* convergence bars */
+  .bar-row{display:grid;grid-template-columns:130px 1fr auto;align-items:center;gap:.8rem;margin:.6rem 0}
+  .bar-row .lab{font-size:.9rem;color:var(--text-sec)}
+  .bar-track{height:16px;background:var(--ink);border:1px solid var(--ink-line);border-radius:var(--r-sm);overflow:hidden}
+  .bar-fill{height:100%;background:var(--accent)}
+  .bar-fill.alt{background:var(--text-sec)}
+  .bar-row .val{font-family:"JetBrains Mono",monospace;font-size:.9rem;font-weight:600;color:var(--text-pri)}
+
+  /* ---- Worked example ledger ---- */
+  .ledger{font-family:"JetBrains Mono",monospace;font-size:.9rem;color:var(--text-sec)}
+  .ledger .lr{display:flex;justify-content:space-between;gap:1rem;padding:.55rem 0;border-bottom:1px solid var(--ink-line)}
+  .ledger .lr:last-child{border-bottom:0}
+  .ledger .lr .rt{font-weight:600;color:var(--text-pri)}
+  .ledger .lr.total{color:var(--accent)}
+  .ledger .lr.total .rt{color:var(--accent)}
+  .tier-out{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:1.5rem}
+  @media (max-width:640px){ .tier-out{grid-template-columns:1fr} }
+  .tier{border:1px solid var(--ink-line);border-radius:var(--r);padding:1.2rem 1.3rem;background:var(--ink-card);box-shadow:var(--lift)}
+  .tier .swatch{width:100%;height:6px;margin-bottom:.9rem}
+  .tier .name{font-family:"JetBrains Mono",monospace;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim)}
+  .tier .amt{font-family:"JetBrains Mono",sans-serif;font-weight:700;font-size:1.9rem;letter-spacing:-.01em;margin-top:.2rem;color:var(--text-pri)}
+  .tier .sub{font-size:.82rem;color:var(--text-sec);margin-top:.25rem}
+  .tier.is-better{border:2px solid var(--accent)}
+  .tier.is-better .name{color:var(--accent)}
+  .tier .flag{display:inline-block;margin-top:.75rem;font-family:"JetBrains Mono",monospace;font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;color:var(--accent-ink);background:var(--accent);padding:.16rem .55rem}
+
+  /* ---- Simulator ---- */
+  .sim{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:22px;align-items:start}
+  @media (max-width:900px){ .sim{grid-template-columns:1fr} }
+  .panel{background:var(--ink-card);border:1px solid var(--ink-line);border-radius:var(--r);box-shadow:var(--lift);overflow:hidden}
+  .panel .head{padding:1rem 1.3rem;border-bottom:1px solid var(--ink-line);display:flex;align-items:center;justify-content:space-between;gap:1rem}
+  .panel .head h3{font-size:.95rem}
+  .panel .body{padding:1.3rem}
+
+  .field-group{margin-bottom:1.5rem}
+  .field-group > .gl{font-family:"JetBrains Mono",monospace;font-size:.7rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim);margin-bottom:.75rem}
+  .field{display:grid;gap:.35rem;margin-bottom:.9rem}
+  .field label{font-size:.85rem;color:var(--text-sec);font-weight:500}
+  .field .row2{display:grid;grid-template-columns:1fr auto;gap:.5rem;align-items:center}
+  input[type=number], select{
+    font-family:"JetBrains Mono",monospace;font-size:.95rem;color:var(--text-pri);
+    background:var(--ink);border:1px solid var(--ink-line-2);border-radius:var(--r-sm);
+    padding:.55rem .65rem;width:100%;
+  }
+  input[type=number]:focus, select:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+  select option{background:var(--ink)}
+  .unit{font-family:"JetBrains Mono",monospace;font-size:.82rem;color:var(--text-dim);min-width:34px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:.9rem}
+
+  /* segmented toggle (square, brand-correct) */
+  .seg{display:inline-flex;background:var(--ink);border:1px solid var(--ink-line);border-radius:var(--r-sm);padding:3px}
+  .seg button{
+    font-family:"JetBrains Mono",monospace;font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;
+    border:0;background:transparent;color:var(--text-sec);
+    padding:.42rem .9rem;border-radius:var(--r-sm);cursor:pointer;transition:background .18s, color .18s;
+  }
+  .seg button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink)}
+
+  .checkline{display:flex;align-items:center;gap:.6rem;margin-top:.2rem}
+  .checkline input{width:18px;height:18px;accent-color:var(--accent)}
+  .checkline label{font-size:.9rem;color:var(--text-pri);font-weight:500}
+
+  .out-tiers{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  @media (max-width:520px){ .out-tiers{grid-template-columns:1fr} }
+  .out-tiers .tier .amt{font-size:1.5rem}
+
+  .breakdown{margin-top:1.3rem;font-family:"JetBrains Mono",monospace;font-size:.82rem;color:var(--text-dim)}
+  .breakdown .b-line{display:flex;justify-content:space-between;gap:.8rem;padding:.34rem 0;border-bottom:1px dotted var(--ink-line)}
+  .breakdown .b-line span:last-child{color:var(--text-pri);font-weight:500;white-space:nowrap}
+  .breakdown .b-sub{margin-top:.7rem;padding-top:.65rem;border-top:1px solid var(--ink-line-2);color:var(--text-pri);font-weight:600}
+  .hint{font-size:.8rem;color:var(--text-dim);margin-top:.95rem;line-height:1.45}
+  .rate-echo{font-family:"JetBrains Mono",monospace;font-size:.78rem;color:var(--accent-soft);background:rgba(255,196,0,.08);border:1px solid rgba(255,196,0,.25);border-radius:var(--r-sm);padding:.55rem .7rem;margin-bottom:1rem;display:none}
+  .rate-echo.show{display:block}
+
+  /* ---- Answer grid ---- */
+  .reveal{opacity:0;transform:translateY(16px);transition:opacity .6s cubic-bezier(.16,1,.3,1), transform .6s cubic-bezier(.16,1,.3,1)}
+  .reveal.in{opacity:1;transform:none}
+
+  /* ---- CTA accent bar (brand full-stop) ---- */
+  .cta-bar{
+    background:var(--accent);color:var(--accent-ink);text-align:center;
+    padding:1.15rem 1.5rem;position:relative;z-index:1;
+    font-family:"JetBrains Mono",monospace;font-size:.82rem;font-weight:600;
+    text-transform:uppercase;letter-spacing:.16em;
+  }
+
+  footer{border-top:1px solid var(--ink-line);padding:2.6rem 0 3.5rem;color:var(--text-dim);font-size:.86rem;position:relative;z-index:1}
+  footer .files{font-family:"JetBrains Mono",monospace;font-size:.8rem;margin-top:.7rem;line-height:1.95;color:var(--text-dim)}
+  footer .files b{color:var(--accent);font-weight:600}
+
+  @media (prefers-reduced-motion:reduce){
+    html{scroll-behavior:auto}
+    .reveal{opacity:1;transform:none;transition:none}
+    .seg button{transition:none}
+  }
+</style>
+</head>
+<body>
+
+<!-- Topographic overlay (Maintain signature texture) -->
+<svg class="topo" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+  <g fill="none" stroke="var(--warm-glow)" stroke-width="1">
+    <path d="M0,760 Q240,600 480,690 T960,650 T1440,700 T1920,610"/>
+    <path d="M0,820 Q240,670 480,750 T960,710 T1440,760 T1920,675"/>
+    <path d="M0,880 Q240,740 480,810 T960,775 T1440,825 T1920,740"/>
+    <path d="M0,700 Q240,540 480,630 T960,590 T1440,640 T1920,545" stroke="var(--warm-deep)"/>
+    <path d="M0,940 Q240,810 480,875 T960,840 T1440,890 T1920,805" stroke="var(--warm-deep)"/>
+  </g>
+</svg>
+
+<div class="topbar">
+  <div class="wrap row">
+    <div class="brand"><span class="dot"></span> QuoteMate</div>
+    <div class="tag">Paint pricing engine</div>
+  </div>
+</div>
+
+<!-- HERO -->
+<header class="hero wrap">
+  <p class="eyebrow">Paint estimator</p>
+  <h1>How a <span class="hl">paint</span> quote<br>gets its <span class="hl">price</span>.</h1>
+  <p class="lede" style="margin-top:1.5rem">A plain-English walk through the exact maths behind every Good, Better and Best number, plus a live calculator you can poke at.</p>
+
+  <div class="oneliner">
+    <span class="k">In one sentence</span>
+    <span class="v">Measure each surface, multiply it by a rate, adjust for the job, add it up, then split the total into three price tiers.</span>
+  </div>
+</header>
+
+<hr class="section-line" />
+
+<!-- THE ONE BIG IDEA -->
+<section class="wrap reveal">
+  <p class="eyebrow">The one big idea</p>
+  <h2>Every price is <span class="hl">surface</span> times a <span class="hl">rate</span>.</h2>
+  <p class="lede" style="margin:1.2rem 0 2rem">The estimator does not guess a lump sum. It works the way you would buy carpet or tiles: it figures out <strong>how much surface</strong> there is, then multiplies by a <strong>price per square metre</strong> (or per metre of length for trim). Everything else is a small adjustment on top of that.</p>
+
+  <div class="cols-2">
+    <div class="card">
+      <h3>The units it counts</h3>
+      <p class="note" style="margin-bottom:1rem">Four kinds of surface, two kinds of unit:</p>
+      <p style="margin:.2rem 0"><span class="chip">Walls</span> <span class="chip">Ceilings</span> <span class="chip">Exterior</span> counted in <strong>m&sup2;</strong> (square metres of area).</p>
+      <p style="margin:.6rem 0 0"><span class="chip">Trim</span> (skirting, architraves) counted in <strong>lm</strong> (linear metres, just length).</p>
+    </div>
+    <div class="callout">
+      <h3>So do we pick "square metre" or "hourly"?</h3>
+      <p class="note" style="margin-bottom:0">You already have <strong>one calculator that does both</strong>. The default is priced by the square metre. There is an optional "hourly" mode, but it does not add up hours worked. It just turns an hourly rate into an equivalent per square metre rate, then runs the exact same maths. More on this two sections down.</p>
+    </div>
+  </div>
+</section>
+
+<hr class="section-line" />
+
+<!-- PIPELINE DIAGRAM -->
+<section class="wrap reveal">
+  <p class="eyebrow">The pipeline</p>
+  <h2>Six steps, <span class="hl">start to finish</span>.</h2>
+  <p class="lede" style="margin:1.2rem 0 2rem">Here is the whole journey from an address to three dollar figures. Each box below is one job the engine does in order.</p>
+
+  <div class="pipe">
+    <div class="node"><div class="n">01</div><div class="t">Measure</div></div>
+    <div class="arrow">&rarr;</div>
+    <div class="node"><div class="n">02</div><div class="t">Set the rate</div></div>
+    <div class="arrow">&rarr;</div>
+    <div class="node"><div class="n">03</div><div class="t">Adjust</div></div>
+    <div class="arrow">&rarr;</div>
+    <div class="node"><div class="n">04</div><div class="t">Add up</div></div>
+    <div class="arrow">&rarr;</div>
+    <div class="node"><div class="n">05</div><div class="t">Split into tiers</div></div>
+    <div class="arrow">&rarr;</div>
+    <div class="node"><div class="n">06</div><div class="t">Floor + GST</div></div>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="badge"></div>
+      <div>
+        <h3>Measure the surfaces</h3>
+        <p class="note">From the address (or a manual entry) it works out one floor-area number, then fans that out into wall m&sup2;, ceiling m&sup2;, trim length and exterior m&sup2;. Each comes with a low and high band, because a guessed area is never exact.</p>
+        <div class="formula">walls m&sup2; = floor area &times; wall_multiplier    |    ceiling m&sup2; = floor area</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="badge"></div>
+      <div>
+        <h3>Set the rate per unit</h3>
+        <p class="note">Each surface has a price per unit from the rate card you tune in the dashboard. Default: walls $28/m&sup2;, ceilings $20/m&sup2;, trim $12/lm, exterior $45/m&sup2;. (In hourly mode this rate is instead worked out as hourly rate divided by how many units you paint per hour.)</p>
+        <div class="formula">rate = rate_card[surface]    |    hourly mode: rate = hourly_rate &divide; units_per_hour</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="badge"></div>
+      <div>
+        <h3>Adjust for the job</h3>
+        <p class="note">The rate is a starting point for a standard job. It then gets nudged up or down for how many coats, how rough the surface is, and whether the colour is changing.</p>
+        <div class="formula">adjust = coats &times; condition &times; colour_change
+coats: 1&rarr;0.70  2&rarr;1.00  3&rarr;1.35   condition: sound 1.00  minor +15%  bare +40%   colour change +10%</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="badge"></div>
+      <div>
+        <h3>Add it all up (this is "Better")</h3>
+        <p class="note">For every surface: quantity times rate times the adjustment. Exterior gets an extra loading (+50%) if it is a two-storey job, because access is harder. Add every surface together and you have the middle "Better" price.</p>
+        <div class="formula">Better = &Sigma; ( quantity &times; rate &times; adjust &times; storey_loading )</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="badge"></div>
+      <div>
+        <h3>Split into three tiers</h3>
+        <p class="note">Good and Best are simply the Better price scaled. Good is a lighter refresh, Best is premium prep and paint. No separate calculation, just a multiplier.</p>
+        <div class="formula">Good = Better &times; 0.72    |    Better &times; 1.00    |    Best = Better &times; 1.28</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="badge"></div>
+      <div>
+        <h3>Apply the floor, then GST</h3>
+        <p class="note">Tiny jobs are lifted to a minimum call-out ($450). Then the 10% GST is added to show the price the customer actually pays. Every tier is also worked out at its low and high band, which is where the price range comes from.</p>
+        <div class="formula">final = max( tier, $450 ) &times; 1.10</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="section-line" />
+
+<!-- SQM vs HOURLY -->
+<section class="wrap reveal">
+  <p class="eyebrow">Two ways to set the rate</p>
+  <h2>"Hourly" is just another way to write <span class="hl">"per square metre"</span>.</h2>
+  <p class="lede" style="margin:1.2rem 0 2rem">This is the heart of your question. The engine never adds up hours to build a total. If a painter prefers to think in dollars per hour, the engine converts that into a per square metre rate and then runs the identical maths. The two roads meet.</p>
+
+  <div class="cols-2">
+    <div class="card">
+      <h3>By the square metre <span class="chip accent">default</span></h3>
+      <p class="note" style="margin-bottom:0">You type a rate straight in. Walls are $28 for every square metre. Simple, and it is what most painters quote in.</p>
+    </div>
+    <div class="card">
+      <h3>By the hour <span class="chip">optional</span></h3>
+      <p class="note" style="margin-bottom:0">You give an hourly rate ($85/hr) and how fast the crew paints (3 m&sup2; per hour on walls). The engine divides: <span class="chip">$85 &divide; 3 = $28.33/m&sup2;</span>. Same shape, different starting number.</p>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:22px">
+    <h3 style="margin-bottom:1.1rem">Both land in almost the same place (by design)</h3>
+    <div class="bar-row">
+      <span class="lab">Per square metre</span>
+      <span class="bar-track"><span class="bar-fill" style="width:70.0%"></span></span>
+      <span class="val">$28.00 / m&sup2;</span>
+    </div>
+    <div class="bar-row">
+      <span class="lab">Hourly, converted</span>
+      <span class="bar-track"><span class="bar-fill alt" style="width:70.8%"></span></span>
+      <span class="val">$28.33 / m&sup2;</span>
+    </div>
+    <p class="note" style="margin:1rem 0 0">The defaults were chosen so $85/hr at 3 m&sup2;/hr comes out to roughly the $28/m&sup2; wall rate. Picking "hourly" does not change how tiers, loadings, the floor or GST behave. Only the base rate is written a different way.</p>
+  </div>
+</section>
+
+<hr class="section-line" />
+
+<!-- WORKED EXAMPLE -->
+<section class="wrap reveal">
+  <p class="eyebrow">Worked example</p>
+  <h2>One real job, <span class="hl">line by line</span>.</h2>
+  <p class="lede" style="margin:1.2rem 0 2rem">A single-storey interior repaint: <strong>100 m&sup2; of walls</strong> and <strong>40 m&sup2; of ceilings</strong>, 2 coats, sound (good) surface, no colour change. Using the default rates. Watch it build.</p>
+
+  <div class="card">
+    <div class="ledger">
+      <div class="lr"><span>Walls&nbsp; 100 m&sup2; &times; $28.00 &times; 1.00 (2 coats, sound)</span><span class="rt">$2,800.00</span></div>
+      <div class="lr"><span>Ceilings&nbsp; 40 m&sup2; &times; $20.00 &times; 1.00</span><span class="rt">$800.00</span></div>
+      <div class="lr total"><span>Better price, before GST (add the two)</span><span class="rt">$3,600.00</span></div>
+      <div class="lr"><span>Good&nbsp; = $3,600 &times; 0.72</span><span class="rt">$2,592.00</span></div>
+      <div class="lr"><span>Best&nbsp; = $3,600 &times; 1.28</span><span class="rt">$4,608.00</span></div>
+      <div class="lr"><span>Call-out floor ($450)</span><span class="rt">not triggered</span></div>
+    </div>
+
+    <div class="tier-out">
+      <div class="tier">
+        <div class="swatch" style="background:var(--warm-glow)"></div>
+        <div class="name">Good</div>
+        <div class="amt">$2,851</div>
+        <div class="sub">inc GST &nbsp;($2,592 &times; 1.10)</div>
+      </div>
+      <div class="tier is-better">
+        <div class="swatch" style="background:var(--accent)"></div>
+        <div class="name">Better</div>
+        <div class="amt">$3,960</div>
+        <div class="sub">inc GST &nbsp;($3,600 &times; 1.10)</div>
+        <span class="flag">the anchor</span>
+      </div>
+      <div class="tier">
+        <div class="swatch" style="background:var(--text-pri)"></div>
+        <div class="name">Best</div>
+        <div class="amt">$5,069</div>
+        <div class="sub">inc GST &nbsp;($4,608 &times; 1.10)</div>
+      </div>
+    </div>
+  </div>
+  <p class="note" style="margin-top:1rem">If the same painter quoted hourly instead ($85/hr), Better would land at about <strong>$4,052</strong> inc GST. Within a couple of percent, because the rate underneath is nearly the same.</p>
+</section>
+
+<hr class="section-line" />
+
+<!-- SIMULATOR -->
+<section class="wrap reveal">
+  <p class="eyebrow">Live calculator</p>
+  <h2>Try it <span class="hl">yourself</span>.</h2>
+  <p class="lede" style="margin:1.2rem 0 2rem">Change any number and the three tiers update instantly. Flip the rate mode to watch "square metre" and "hourly" produce nearly the same result. This runs the real engine maths.</p>
+
+  <div class="sim">
+    <!-- INPUTS -->
+    <div class="panel">
+      <div class="head">
+        <h3>The job &amp; the rate card</h3>
+        <div class="seg" role="group" aria-label="Rate mode">
+          <button id="mode-sqm" aria-pressed="true">Per m&sup2;</button>
+          <button id="mode-hourly" aria-pressed="false">Hourly</button>
+        </div>
+      </div>
+      <div class="body">
+
+        <div id="hourlyEcho" class="rate-echo mono"></div>
+
+        <div class="field-group">
+          <div class="gl">How much surface</div>
+          <div class="two">
+            <div class="field"><label for="q-walls">Walls</label><div class="row2"><input type="number" id="q-walls" value="100" min="0" step="1"><span class="unit">m&sup2;</span></div></div>
+            <div class="field"><label for="q-ceil">Ceilings</label><div class="row2"><input type="number" id="q-ceil" value="40" min="0" step="1"><span class="unit">m&sup2;</span></div></div>
+            <div class="field"><label for="q-trim">Trim</label><div class="row2"><input type="number" id="q-trim" value="0" min="0" step="1"><span class="unit">lm</span></div></div>
+            <div class="field"><label for="q-ext">Exterior</label><div class="row2"><input type="number" id="q-ext" value="0" min="0" step="1"><span class="unit">m&sup2;</span></div></div>
+          </div>
+        </div>
+
+        <div class="field-group" id="rateCardGroup">
+          <div class="gl">Rate per unit &nbsp;<span style="text-transform:none;letter-spacing:0;color:var(--text-dim)">(your screenshot bumped walls to $36, try it)</span></div>
+          <div class="two">
+            <div class="field"><label for="r-walls">Walls $/m&sup2;</label><input type="number" id="r-walls" value="28" min="0" step="1"></div>
+            <div class="field"><label for="r-ceil">Ceilings $/m&sup2;</label><input type="number" id="r-ceil" value="20" min="0" step="1"></div>
+            <div class="field"><label for="r-trim">Trim $/lm</label><input type="number" id="r-trim" value="12" min="0" step="1"></div>
+            <div class="field"><label for="r-ext">Exterior $/m&sup2;</label><input type="number" id="r-ext" value="45" min="0" step="1"></div>
+          </div>
+        </div>
+
+        <div class="field-group" id="hourlyGroup" style="display:none">
+          <div class="gl">Hourly settings</div>
+          <div class="two">
+            <div class="field"><label for="h-rate">Hourly rate $/hr</label><input type="number" id="h-rate" value="85" min="0" step="1"></div>
+            <div class="field"><label for="p-walls">Walls per hour (m&sup2;)</label><input type="number" id="p-walls" value="3" min="0.1" step="0.1"></div>
+            <div class="field"><label for="p-ceil">Ceilings per hour (m&sup2;)</label><input type="number" id="p-ceil" value="4" min="0.1" step="0.1"></div>
+            <div class="field"><label for="p-trim">Trim per hour (lm)</label><input type="number" id="p-trim" value="7" min="0.1" step="0.1"></div>
+            <div class="field"><label for="p-ext">Exterior per hour (m&sup2;)</label><input type="number" id="p-ext" value="2" min="0.1" step="0.1"></div>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <div class="gl">Job details</div>
+          <div class="two">
+            <div class="field"><label for="j-coats">Coats</label>
+              <select id="j-coats"><option value="1">1 coat (0.70&times;)</option><option value="2" selected>2 coats (1.00&times;)</option><option value="3">3 coats (1.35&times;)</option></select>
+            </div>
+            <div class="field"><label for="j-cond">Surface condition</label>
+              <select id="j-cond"><option value="sound" selected>Sound (1.00&times;)</option><option value="minor">Minor prep (1.15&times;)</option><option value="bare">Bare / heavy (1.40&times;)</option></select>
+            </div>
+            <div class="field"><label for="j-storeys">Storeys</label>
+              <select id="j-storeys"><option value="1" selected>Single storey</option><option value="2">Two storeys (+50% exterior)</option></select>
+            </div>
+            <div class="field" style="justify-content:end">
+              <label style="visibility:hidden">x</label>
+              <div class="checkline"><input type="checkbox" id="j-colour"><label for="j-colour">Colour change (+10%)</label></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- OUTPUT -->
+    <div class="panel">
+      <div class="head"><h3>What the customer sees</h3><span class="mono" style="font-size:.7rem;letter-spacing:.12em;color:var(--text-dim)">INC GST</span></div>
+      <div class="body">
+        <div class="out-tiers">
+          <div class="tier">
+            <div class="swatch" style="background:var(--warm-glow)"></div>
+            <div class="name">Good</div>
+            <div class="amt" id="out-good">$0</div>
+            <div class="sub" id="sub-good">lighter refresh</div>
+          </div>
+          <div class="tier is-better">
+            <div class="swatch" style="background:var(--accent)"></div>
+            <div class="name">Better</div>
+            <div class="amt" id="out-better">$0</div>
+            <div class="sub">the anchor</div>
+          </div>
+          <div class="tier">
+            <div class="swatch" style="background:var(--text-pri)"></div>
+            <div class="name">Best</div>
+            <div class="amt" id="out-best">$0</div>
+            <div class="sub" id="sub-best">premium</div>
+          </div>
+        </div>
+
+        <div class="breakdown" id="breakdown"></div>
+        <p class="hint" id="floorHint"></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="section-line" />
+
+<!-- THE ANSWER -->
+<section class="wrap reveal">
+  <p class="eyebrow">Back to your question</p>
+  <h2>Do we need a <span class="hl">"sqm or hourly"</span> selector?</h2>
+  <div class="grid" style="margin-top:1.7rem">
+    <div class="callout">
+      <h3>You already have the calculator that handles both.</h3>
+      <p class="note" style="margin-bottom:0">It is one engine with a per-painter switch. Everything after the base rate (coats, prep, loadings, tiers, floor, GST) is shared. So there is nothing to build from scratch. The only gaps are that the dashboard screen does not yet show the hourly switch, and that "hourly" today is a way to write the rate, not a true add-up-the-hours quote.</p>
+    </div>
+    <div class="cols-2">
+      <div class="card">
+        <h3>Recommendation</h3>
+        <p class="note" style="margin-bottom:0">Keep "per square metre" as the default. Do not force painters to choose. Offer "hourly" as an optional advanced toggle for those who think in dollars per hour. A required either-or adds friction for a choice that lands in the same place.</p>
+      </div>
+      <div class="card">
+        <h3>The one catch to remember</h3>
+        <p class="note" style="margin-bottom:0">Hourly still needs the measured area. It divides area by a paint-per-hour speed to get hours. So switching to hourly does not remove the need to measure the surfaces. Measurement is load-bearing either way.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="cta-bar">One engine &middot; two rate modes &middot; three tiers</div>
+
+<footer>
+  <div class="wrap">
+    <div>QuoteMate paint estimator, explained in plain English. The calculator on this page runs the same formula as the live engine.</div>
+    <div class="files">
+      <b>engine</b>&nbsp; lib/painting/pricing.ts<br>
+      <b>measurement</b>&nbsp; lib/painting/area.ts<br>
+      <b>rate card</b>&nbsp; lib/painting/rate-card-overlay.ts<br>
+      <b>dashboard editor</b>&nbsp; app/dashboard/_components/PaintRatesEditor.tsx
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---- Constants, mirrored from lib/painting/pricing.ts ----
+  var COATS = {1:0.70, 2:1.00, 3:1.35};
+  var CONDITION = {sound:1.00, minor:1.15, bare:1.40};
+  var COLOUR_EXTRA = 0.10;
+  var GOOD_FRACTION = 0.72;
+  var PREMIUM_UPLIFT = 0.28;         // Best = Better x 1.28
+  var DOUBLE_STOREY = 0.50;          // +50% exterior on 2+ storeys
+  var CALLOUT_FLOOR = 450;           // ex GST
+  var GST = 1.10;
+
+  var fmt0 = new Intl.NumberFormat('en-AU', {style:'currency', currency:'AUD', maximumFractionDigits:0});
+  var fmt2 = new Intl.NumberFormat('en-AU', {minimumFractionDigits:2, maximumFractionDigits:2});
+
+  var $ = function(id){ return document.getElementById(id); };
+  var mode = 'sqm';
+
+  var SURFACES = [
+    {key:'walls',    label:'Walls',    q:'q-walls', r:'r-walls', p:'p-walls', unit:'m²'},
+    {key:'ceilings', label:'Ceilings', q:'q-ceil',  r:'r-ceil',  p:'p-ceil',  unit:'m²'},
+    {key:'trim',     label:'Trim',     q:'q-trim',  r:'r-trim',  p:'p-trim',  unit:'lm'},
+    {key:'exterior', label:'Exterior', q:'q-ext',   r:'r-ext',   p:'p-ext',   unit:'m²'}
+  ];
+
+  function num(id){ var v = parseFloat($(id).value); return isFinite(v) ? v : 0; }
+
+  // effective rate per unit for a surface (mirrors effectiveRatePerUnit)
+  function rateFor(s){
+    if(mode === 'sqm'){ return num(s.r); }
+    var hourly = num('h-rate');
+    var perHour = num(s.p);
+    return perHour > 0 ? hourly / perHour : num(s.r);
+  }
+
+  function compute(){
+    var coats = COATS[$('j-coats').value] || 1;
+    var cond = CONDITION[$('j-cond').value] || 1;
+    var colour = $('j-colour').checked ? (1 + COLOUR_EXTRA) : 1;
+    var adjust = coats * cond * colour;
+    var storeyLoad = ($('j-storeys').value === '2') ? (1 + DOUBLE_STOREY) : 1;
+
+    var better = 0;
+    var lines = [];
+    SURFACES.forEach(function(s){
+      var qty = num(s.q);
+      if(qty <= 0) return;
+      var rate = rateFor(s);
+      var loading = (s.key === 'exterior') ? storeyLoad : 1;
+      var line = qty * rate * adjust * loading;
+      better += line;
+      lines.push({
+        label: s.label,
+        text: qty + ' ' + s.unit + ' × $' + fmt2.format(rate) + ' × ' + fmt2.format(adjust) + (loading !== 1 ? ' × ' + fmt2.format(loading) : ''),
+        amt: line
+      });
+    });
+
+    function tier(fraction){
+      var ex = better * fraction;
+      var floored = ex > 0 ? Math.max(ex, CALLOUT_FLOOR) : ex;
+      return { ex: floored, inc: floored * GST, floorHit: floored > ex + 0.001 };
+    }
+
+    var good = tier(GOOD_FRACTION);
+    var mid  = tier(1.0);
+    var best = tier(1 + PREMIUM_UPLIFT);
+
+    return {adjust:adjust, better:better, lines:lines, good:good, mid:mid, best:best};
+  }
+
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function setAmount(el, value){
+    if(reduce){ el.textContent = fmt0.format(value); return; }
+    var start = el._val || 0, end = value, t0 = null;
+    el._val = end;
+    function tick(ts){
+      if(t0 === null) t0 = ts;
+      var k = Math.min((ts - t0)/280, 1);
+      var eased = 1 - Math.pow(1-k, 3);
+      el.textContent = fmt0.format(start + (end-start)*eased);
+      if(k < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function render(){
+    var r = compute();
+    setAmount($('out-good'), r.good.inc);
+    setAmount($('out-better'), r.mid.inc);
+    setAmount($('out-best'), r.best.inc);
+
+    // breakdown
+    var html = '';
+    if(r.lines.length === 0){
+      html = '<div class="b-line"><span>No surfaces entered</span><span>$0.00</span></div>';
+    } else {
+      r.lines.forEach(function(l){
+        html += '<div class="b-line"><span>' + l.label + ':&nbsp; ' + l.text + '</span><span>$' + fmt2.format(l.amt) + '</span></div>';
+      });
+      html += '<div class="b-line b-sub"><span>Better, before GST</span><span>$' + fmt2.format(r.better) + '</span></div>';
+      html += '<div class="b-line"><span>Good&nbsp; = Better × 0.72</span><span>$' + fmt2.format(r.good.ex) + '</span></div>';
+      html += '<div class="b-line"><span>Best&nbsp; = Better × 1.28</span><span>$' + fmt2.format(r.best.ex) + '</span></div>';
+    }
+    $('breakdown').innerHTML = html;
+
+    // floor / hint
+    var hint = '';
+    if(r.mid.floorHit || r.good.floorHit){
+      hint = 'This job is small enough that the $450 minimum call-out lifted at least one tier.';
+    } else {
+      hint = 'The call-out floor ($450) was not triggered. GST of 10% is added to every tier to reach the price shown.';
+    }
+    $('floorHint').textContent = hint;
+
+    // hourly echo
+    var echo = $('hourlyEcho');
+    if(mode === 'hourly'){
+      var hr = num('h-rate');
+      var w = num('p-walls');
+      echo.classList.add('show');
+      echo.innerHTML = 'Converted rate: $' + hr + ' ÷ ' + w + ' m²/hr = $' + fmt2.format(w>0?hr/w:0) + '/m² on walls. Same maths, rate written as hours.';
+    } else {
+      echo.classList.remove('show');
+    }
+  }
+
+  function setMode(next){
+    mode = next;
+    $('mode-sqm').setAttribute('aria-pressed', String(next === 'sqm'));
+    $('mode-hourly').setAttribute('aria-pressed', String(next === 'hourly'));
+    $('rateCardGroup').style.display = (next === 'sqm') ? '' : 'none';
+    $('hourlyGroup').style.display = (next === 'hourly') ? '' : 'none';
+    render();
+  }
+
+  $('mode-sqm').addEventListener('click', function(){ setMode('sqm'); });
+  $('mode-hourly').addEventListener('click', function(){ setMode('hourly'); });
+
+  document.querySelectorAll('.panel input, .panel select').forEach(function(el){
+    el.addEventListener('input', render);
+    el.addEventListener('change', render);
+  });
+
+  render();
+
+  // ---- scroll reveal ----
+  if(!reduce && 'IntersectionObserver' in window){
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+    }, {threshold:0.12});
+    document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
+  } else {
+    document.querySelectorAll('.reveal').forEach(function(el){ el.classList.add('in'); });
+  }
+})();
+</script>
+</body>
+</html>

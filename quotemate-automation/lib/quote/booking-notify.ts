@@ -31,7 +31,7 @@ export async function notifyBookingConfirmed(
 ): Promise<void> {
   const sms = pipelineLog('dispatch', args.quoteId)
   try {
-    const appUrl = process.env.APP_URL ?? 'https://quote-mate-rho.vercel.app'
+    const appUrl = process.env.APP_URL ?? 'https://www.quotemax.com.au'
 
     // Resolve customer name + phone via intake → calls. caller.phone is
     // set on SMS-sourced quotes; calls.caller_number on voice-sourced.

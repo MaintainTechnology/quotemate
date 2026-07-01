@@ -19,7 +19,7 @@
 //   • lib/painting/pricing.ts   ($/m² × area × coats/prep → tiers)
 //   • lib/painting/measure.ts   (orchestrator)
 //   • app/api/painting/estimate/route.ts (HTTP boundary)
-//   • app/dashboard/painting/*  (UI — the two-tab tool)
+//   • app/dashboard/painting/*  (UI — the estimate tool)
 // ════════════════════════════════════════════════════════════════════
 
 /** The paintable surface scopes a tradie can toggle on a job. */
@@ -77,7 +77,7 @@ export type PaintUserInputs = {
 
 /** Where the floor-area number came from — drives the confidence band. */
 export type FloorAreaSource =
-  | 'listing' // a real listing's building size (REA scrape / Domain) → high
+  | 'listing' // a real listing's building size (Domain / paste) → high
   | 'footprint' // footprint × storeys (Google Solar / Geoscape) → medium
   | 'beds_estimate' // inferred from bedroom count only → low
   | 'manual' // customer/tradie-entered → high
@@ -85,7 +85,7 @@ export type FloorAreaSource =
 
 /** Which data source produced the facts (for tracing + the UI badge). */
 export type PropertyDataSource =
-  | 'rea' // realestate.com.au — needs a managed scraper (no official API)
+  | 'rea' // legacy — the realestate.com.au tab was removed; retained so historical saved jobs still type-check
   | 'domain' // Domain API — beds/baths/land, NOT floor area
   | 'solar' // Google Solar API — footprint only
   | 'geoscape' // Geoscape National Buildings — licensed total_floor_area
@@ -115,13 +115,20 @@ export type PropertyFacts = {
   source: PropertyDataSource
   /** Free-text provenance note surfaced to the tradie (e.g. "stale listing"). */
   capture_note: string | null
+  /**
+   * Ground-to-eave wall height in metres (Geoscape `averageEaveHeight`).
+   * When present it drives the exterior façade area (perimeter × eave height);
+   * absent ⇒ the per-storey wall-band default is used. Enrichment-only, optional.
+   */
+  eave_height_m?: number | null
+  /** Off-street parking spaces (PropRadar). Enrichment-only, optional. */
+  car_spaces?: number | null
 }
 
 /** Operator-actionable failure codes from a property-data lookup. */
 export type PropertyLookupFailureCode =
   | 'address_not_resolved'
   | 'no_data_for_address'
-  | 'rea_not_configured' // the REA tab with no scraper/paste configured
   | 'provider_unavailable'
   | 'provider_rate_limited'
   | 'provider_invalid_response'

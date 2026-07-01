@@ -383,10 +383,6 @@ describe('toPaintingRequest', () => {
       storeys: 1,
       manual_floor_area_m2: null,
     })
-    // Defaults to the "Other tools" (footprint / Geoscape / floor plan)
-    // path — never the demo provider.
-    expect(req!.source).toBe('auto')
-    expect(req!.use_mock_provider).toBe(false)
   })
   it('returns null when not enough is gathered', () => {
     expect(toPaintingRequest({ address: '1 A St' })).toBeNull()

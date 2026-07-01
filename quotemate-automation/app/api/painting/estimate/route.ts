@@ -1,14 +1,11 @@
 // POST /api/painting/estimate — runs an address + job inputs through the
-// painting orchestrator and returns { ok, estimate } for the dashboard's
-// two-tab painting tool.
+// painting orchestrator and returns { ok, estimate } for the dashboard
+// painting tool.
 //
 // Auth: same bearer-token pattern as /api/roofing/measure — the
 // dashboard passes the Supabase access token. No tenant-data write
-// happens here (Phase 1: read-only estimate). `source` selects the tab:
-//   'rea'  → realestate.com.au provider (inert until a scraper/paste
-//            backend is wired; demo toggle returns sample data)
-//   'auto' → the "other tools" provider stack (Solar/Geoscape/Domain —
-//            mock until their adapters + keys land)
+// happens here (Phase 1: read-only estimate). The orchestrator uses the
+// Google Solar footprint lookup (mock fallback when no key is set).
 
 import { createClient } from '@supabase/supabase-js'
 import { EstimateRequestSchema } from '@/lib/painting/request-schema'
@@ -17,6 +14,10 @@ import { effectivePaintingRateCardFromOverlay } from '@/lib/painting/rate-card-o
 import type { PaintingRateCard } from '@/lib/painting/types'
 
 export const dynamic = 'force-dynamic'
+// Solar footprint + Geoscape (address→buildings→sub-resources) + PropRadar
+// (search→detail) enrichment run per estimate — raise the ceiling above the
+// Vercel Hobby 10s default (needs Pro / Railway). Enrichers no-op without keys.
+export const maxDuration = 30
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -102,7 +103,7 @@ export async function POST(req: Request) {
     )
   }
 
-  const { address, inputs, source, use_mock_provider } = parsed.data
+  const { address, inputs } = parsed.data
 
   let rateCard: PaintingRateCard | undefined
   if (auth.tenantId) {
@@ -111,8 +112,6 @@ export async function POST(req: Request) {
   }
 
   const result = await estimatePainting(address, inputs, {
-    source: source ?? 'auto',
-    useMock: use_mock_provider,
     rateCard,
   })
 

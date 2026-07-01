@@ -71,6 +71,39 @@ export function priceHoldStatus(
 }
 
 /**
+ * Resolve the effective "price held until" ISO for a quote: prefer the
+ * persisted `quotes.price_hold_until` (migration 026); otherwise derive it
+ * from `created_at` (+ N days) so a hold exists even before the column is
+ * populated. This is the ONE place "effective hold" is defined, so the quote
+ * page, the pay redirector, the booking page, and the booking API all agree
+ * on when a price has lapsed. Returns null when neither input yields a
+ * parseable date (→ 'no hold', never treated as expired).
+ */
+export function resolvePriceHoldUntil(
+  priceHoldUntilIso: string | null | undefined,
+  createdAtIso: string | null | undefined,
+  days: number = DEFAULT_HOLD_DAYS,
+): string | null {
+  return priceHoldUntilIso ?? computePriceHoldUntil(createdAtIso, days)
+}
+
+/**
+ * True once a quote's held price has lapsed. Convenience over
+ * resolvePriceHoldUntil + priceHoldStatus for the booking/pay surfaces that
+ * only need the boolean gate. A quote with no derivable hold is NOT expired.
+ */
+export function isPriceHoldExpired(
+  priceHoldUntilIso: string | null | undefined,
+  createdAtIso: string | null | undefined,
+  nowMs: number = Date.now(),
+): boolean {
+  return (
+    priceHoldStatus(resolvePriceHoldUntil(priceHoldUntilIso, createdAtIso), nowMs)
+      .state === 'expired'
+  )
+}
+
+/**
  * Short AU date label, ASCII-only so it is GSM-7 safe for SMS, e.g.
  * "Thu 22 May". Returns '' for missing/unparseable input.
  */

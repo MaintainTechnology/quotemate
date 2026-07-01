@@ -41,13 +41,15 @@
 // specific match for the queried address.
 //
 // CREDIT COST: a complete measurement = 1 address + 1 buildings list +
-// 4 sub-resource calls = 6 credits. Premium tier (30k+ credits/mo)
-// comfortably covers ~5000 measurements/month.
+// 11 sub-resource calls (footprint2d, roofShape, estimatedLevels, area +
+// the 7 roof/height/solar attributes) = 13 credits. Premium tier (30k+
+// credits/mo) comfortably covers ~2300 measurements/month.
 // ════════════════════════════════════════════════════════════════════
 
 import type { RoofingMeasurementProvider } from './base'
 import type {
   GeoJSONPolygon,
+  GeoscapeBuildingAttributes,
   PitchBucket,
   RoofAddressInput,
   RoofForm,
@@ -61,13 +63,18 @@ import { slopedAreaFromFootprint } from '../pricing'
 import { fillEdgesFromGeometry } from '../geometry-edges'
 
 /** Max buildings fetched per address — bounds Geoscape credit cost
- *  (each building = a 4-call sub-resource fan-out). */
+ *  (each building = an 11-call sub-resource fan-out). */
 export const MAX_BUILDINGS = 6
 
 /** Smallest footprint sub-polygon (m²) treated as a measurable
  *  secondary structure. Below this it's a carport sliver / projection
  *  artefact, not a roof worth quoting. */
 export const SECONDARY_MIN_AREA_M2 = 10
+
+/** Concurrency cap for a building's sub-resource fan-out. Geoscape 429s
+ *  large concurrent bursts; 3-at-a-time + a 429 retry keeps every
+ *  licensed attribute populated instead of silently dropping to null. */
+const SUB_RESOURCE_CONCURRENCY = 3
 
 const DEFAULT_BASE_URL =
   process.env.GEOSCAPE_API_BASE_URL ?? 'https://api.psma.com.au/v1'
@@ -179,6 +186,21 @@ export class GeoscapeProvider implements RoofingMeasurementProvider {
     }
   }
 
+  /** tryGet with a bounded 429 retry. Guards BOTH the critical-path calls
+   *  (address resolve + buildings list — an un-retried 429 there fails the
+   *  whole measurement) and the concurrent sub-resource fan-out (a dropped
+   *  429 would null out a licensed attribute). Linear backoff + jitter;
+   *  non-429 errors return at once. */
+  private async tryGetRetrying(url: string, attempts = 4) {
+    let res = await this.tryGet(url)
+    for (let i = 1; i < attempts; i++) {
+      if (res.ok || res.kind !== 'http_error' || res.status !== 429) return res
+      await sleep(250 * i + Math.floor(Math.random() * 150))
+      res = await this.tryGet(url)
+    }
+    return res
+  }
+
   /** PURE — turn a relative `/v1/…` link into an absolute URL on the
    *  host of `this.baseUrl`. */
   private absoluteLink(relative: string): string {
@@ -201,7 +223,10 @@ export class GeoscapeProvider implements RoofingMeasurementProvider {
     const url =
       `${this.baseUrl}/addresses?addressString=${encodeURIComponent(input.address)}` +
       `&state=${encodeURIComponent(input.state)}&perPage=1`
-    const res = await this.tryGet(url)
+    // Retry a transient 429 here: this is the FIRST call on the critical
+    // path, and a single un-retried rate-limit used to fail the whole
+    // measurement — which dead-ended the SMS roofing flow.
+    const res = await this.tryGetRetrying(url)
     if (!res.ok) {
       if (res.kind === 'fetch_failed') {
         return failure('provider_unavailable', friendlyFetchError(res.cause, this.baseUrl))
@@ -233,7 +258,9 @@ export class GeoscapeProvider implements RoofingMeasurementProvider {
     | (RoofingMeasurementResult & { ok: false })
   > {
     const listUrl = `${this.baseUrl}/buildings?addressId=${encodeURIComponent(addressId)}`
-    const listRes = await this.tryGet(listUrl)
+    // Retry a transient 429 on the buildings-list call too — the other
+    // single point of failure on the critical measurement path.
+    const listRes = await this.tryGetRetrying(listUrl)
     if (!listRes.ok) {
       if (listRes.kind === 'fetch_failed') {
         return failure('provider_unavailable', friendlyFetchError(listRes.cause, this.baseUrl))
@@ -301,13 +328,46 @@ export class GeoscapeProvider implements RoofingMeasurementProvider {
     const areaLink =
       links.area ??
       `/v1/buildings/${encodeURIComponent(summary.buildingId)}/area`
+    // Premium roof / height / solar sub-resources (paid Buildings plan).
+    // A missing link falls back to the canonical path from buildingId; a
+    // sub-resource the key can't reach just 404s and its attribute stays null.
+    const sub = (key: string) =>
+      this.absoluteLink(
+        links[key] ?? `/v1/buildings/${encodeURIComponent(summary.buildingId)}/${key}`,
+      )
 
-    const [footRes, roofRes, levelsRes, areaRes] = await Promise.all([
-      this.tryGet(this.absoluteLink(footprintLink)),
-      this.tryGet(this.absoluteLink(roofShapeLink)),
-      this.tryGet(this.absoluteLink(levelsLink)),
-      this.tryGet(this.absoluteLink(areaLink)),
-    ])
+    // Bounded-concurrency + 429-retry fan-out — 11 parallel calls trip
+    // Geoscape's burst limit and drop attributes; this loads every one.
+    const urls = [
+      this.absoluteLink(footprintLink),
+      this.absoluteLink(roofShapeLink),
+      this.absoluteLink(levelsLink),
+      this.absoluteLink(areaLink),
+      sub('roofMaterial'),
+      sub('roofComplexity'),
+      sub('maximumRoofHeight'),
+      sub('averageEaveHeight'),
+      sub('elevation'),
+      sub('solarPanel'),
+      sub('overhangingTree'),
+    ]
+    const [
+      footRes, roofRes, levelsRes, areaRes,
+      matRes, cplxRes, maxHRes, eaveRes, elevRes, solarRes, treeRes,
+    ] = await runPooled(
+      urls.map((u) => () => this.tryGetRetrying(u)),
+      SUB_RESOURCE_CONCURRENCY,
+    )
+
+    const attributes = buildGeoscapeAttributes({
+      roofMaterial: matRes.ok ? matRes.body : null,
+      roofComplexity: cplxRes.ok ? cplxRes.body : null,
+      maxRoofHeight: maxHRes.ok ? maxHRes.body : null,
+      eaveHeight: eaveRes.ok ? eaveRes.body : null,
+      elevation: elevRes.ok ? elevRes.body : null,
+      solarPanel: solarRes.ok ? solarRes.body : null,
+      overhangingTree: treeRes.ok ? treeRes.body : null,
+    })
 
     const footprint = footRes.ok ? pickPolygon(footRes.body) : null
     // Retain EVERY footprint sub-polygon (not just the largest) so the
@@ -339,6 +399,7 @@ export class GeoscapeProvider implements RoofingMeasurementProvider {
         storeys,
         planarArea,
         allFootprints,
+        attributes,
       },
     }
   }
@@ -424,6 +485,7 @@ export class GeoscapeProvider implements RoofingMeasurementProvider {
               roofShape: d.roofShape,
               storeys: d.storeys,
               planarArea: null,
+              attributes: d.attributes ?? null,
             },
             this.defaultPitch,
           )
@@ -471,6 +533,10 @@ export type BuildingDetails = {
    *  multi-structure path; the single-building path ignores it and uses
    *  `footprint` (the largest). */
   allFootprints?: GeoJSONPolygon[]
+  /** Premium roof / height / solar attributes from the paid Buildings API
+   *  sub-resources. Null when the products aren't licensed / reachable;
+   *  absent on legacy inline-polygon shapes. */
+  attributes?: GeoscapeBuildingAttributes | null
 }
 
 /** Summary returned by /buildings?addressId=. */
@@ -819,6 +885,83 @@ export function extractArea(body: unknown): number | null {
   return null
 }
 
+// ── Premium building attributes (paid Buildings plan) ────────────────
+// Grounded in the live sub-resource shapes probed 2026-07-01:
+//   /roofMaterial       { roofMaterial: "Metal" }
+//   /roofComplexity     { roofComplexity: "Moderate pitch or complexity" }
+//   /maximumRoofHeight  { maximumRoofHeight: 6.91 }
+//   /averageEaveHeight  { averageEaveHeight: 5.55 }
+//   /elevation          { elevation: 19.61 }
+//   /solarPanel         { solarPanel: true }
+//   /overhangingTree    { overhangingTree: { overhangingTree: false } }
+
+/** PURE — roof material string from /roofMaterial. */
+export function extractRoofMaterial(body: unknown): string | null {
+  return pickNestedString(body, ['roofMaterial', 'roof_material', 'material'])
+}
+/** PURE — roof complexity band from /roofComplexity. */
+export function extractRoofComplexity(body: unknown): string | null {
+  return pickNestedString(body, ['roofComplexity', 'roof_complexity', 'complexity'])
+}
+/** PURE — maximum (ridge) roof height in metres from /maximumRoofHeight. */
+export function extractMaxRoofHeight(body: unknown): number | null {
+  return pickNestedNumber(body, ['maximumRoofHeight', 'maximum_roof_height', 'maxRoofHeight'])
+}
+/** PURE — average eave height in metres from /averageEaveHeight. */
+export function extractEaveHeight(body: unknown): number | null {
+  return pickNestedNumber(body, ['averageEaveHeight', 'average_eave_height', 'eaveHeight'])
+}
+/** PURE — ground elevation (m, AHD) from /elevation. */
+export function extractElevation(body: unknown): number | null {
+  return pickNestedNumber(body, ['elevation', 'groundElevation', 'ground_elevation'])
+}
+/** PURE — existing-solar flag from /solarPanel. */
+export function extractSolarPanel(body: unknown): boolean | null {
+  return pickNestedBoolean(body, ['solarPanel', 'solar_panel'])
+}
+/** PURE — tree-overhang flag from /overhangingTree. The live shape nests
+ *  the flag one level: { overhangingTree: { overhangingTree: bool } }. */
+export function extractOverhangingTree(body: unknown): boolean | null {
+  if (body && typeof body === 'object' && !Array.isArray(body)) {
+    const inner = (body as Record<string, unknown>).overhangingTree
+    if (inner && typeof inner === 'object') {
+      return pickNestedBoolean(inner, ['overhangingTree', 'overhanging_tree'])
+    }
+  }
+  return pickNestedBoolean(body, ['overhangingTree', 'overhanging_tree'])
+}
+
+/** PURE — assemble the premium attribute block from the raw sub-resource
+ *  bodies and derive roof rise from the two heights. Returns null when
+ *  EVERY field is null (nothing licensed / all sub-resources missing) so
+ *  the metric stays absent rather than a block of nulls. */
+export function buildGeoscapeAttributes(parts: {
+  roofMaterial: unknown
+  roofComplexity: unknown
+  maxRoofHeight: unknown
+  eaveHeight: unknown
+  elevation: unknown
+  solarPanel: unknown
+  overhangingTree: unknown
+}): GeoscapeBuildingAttributes | null {
+  const max_roof_height_m = extractMaxRoofHeight(parts.maxRoofHeight)
+  const eave_height_m = extractEaveHeight(parts.eaveHeight)
+  const attrs: GeoscapeBuildingAttributes = {
+    roof_material: extractRoofMaterial(parts.roofMaterial),
+    roof_complexity: extractRoofComplexity(parts.roofComplexity),
+    max_roof_height_m,
+    eave_height_m,
+    ground_elevation_m: extractElevation(parts.elevation),
+    roof_rise_m:
+      max_roof_height_m != null && eave_height_m != null && max_roof_height_m >= eave_height_m
+        ? Math.round((max_roof_height_m - eave_height_m) * 100) / 100
+        : null,
+    solar_panel: extractSolarPanel(parts.solarPanel),
+    overhanging_tree: extractOverhangingTree(parts.overhangingTree),
+  }
+  return Object.values(attrs).some((v) => v !== null) ? attrs : null
+}
+
 /** PURE — map Geoscape's roof shape string onto our RoofForm enum. */
 export function normaliseGeoscapeRoofForm(raw: string | null | undefined): RoofForm {
   if (!raw) return 'unknown'
@@ -879,6 +1022,7 @@ export function buildingDetailsToMetrics(
     polygon_geojson: polygon,
     capture_date: d.captureDate ?? null,
     buildingId: d.buildingId,
+    building_attributes: d.attributes ?? null,
   })
 }
 
@@ -914,6 +1058,58 @@ function pickString(b: Record<string, unknown>, keys: string[]): string | null {
   return null
 }
 
+/** PURE — first finite number under any `keys`, descending into `.data`. */
+function pickNestedNumber(body: unknown, keys: string[]): number | null {
+  if (body == null) return null
+  if (typeof body === 'number') return Number.isFinite(body) ? body : null
+  if (typeof body !== 'object') return null
+  const b = body as Record<string, unknown>
+  for (const k of keys) {
+    const v = b[k]
+    if (typeof v === 'number' && Number.isFinite(v)) return v
+    if (typeof v === 'string') {
+      const n = parseFloat(v)
+      if (Number.isFinite(n)) return n
+    }
+  }
+  if (b.data && typeof b.data === 'object') return pickNestedNumber(b.data, keys)
+  return null
+}
+
+/** PURE — first non-empty string under any `keys`, descending into `.data`. */
+function pickNestedString(body: unknown, keys: string[]): string | null {
+  if (body == null) return null
+  if (typeof body === 'string') return body.trim() || null
+  if (typeof body !== 'object') return null
+  const b = body as Record<string, unknown>
+  for (const k of keys) {
+    const v = b[k]
+    if (typeof v === 'string' && v.trim() !== '') return v.trim()
+  }
+  if (b.data && typeof b.data === 'object') return pickNestedString(b.data, keys)
+  return null
+}
+
+/** PURE — first boolean under any `keys`, descending into `.data`. Also
+ *  accepts "true"/"false"/"yes"/"no" strings. */
+function pickNestedBoolean(body: unknown, keys: string[]): boolean | null {
+  if (body == null) return null
+  if (typeof body === 'boolean') return body
+  if (typeof body !== 'object') return null
+  const b = body as Record<string, unknown>
+  for (const k of keys) {
+    const v = b[k]
+    if (typeof v === 'boolean') return v
+    if (typeof v === 'string') {
+      const s = v.trim().toLowerCase()
+      if (s === 'true' || s === 'yes') return true
+      if (s === 'false' || s === 'no') return false
+    }
+  }
+  if (b.data && typeof b.data === 'object') return pickNestedBoolean(b.data, keys)
+  return null
+}
+
 function failure(
   code: RoofingMeasurementFailureCode,
   detail: string,
@@ -924,6 +1120,26 @@ function failure(
 function errorMessage(e: unknown): string {
   if (e instanceof Error) return e.message
   return String(e)
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** PURE(ish) — run thunks with at most `limit` in flight, preserving input
+ *  order in the results. Used to fan out a building's sub-resource fetches
+ *  without tripping Geoscape's concurrent-burst rate limit. */
+async function runPooled<T>(thunks: Array<() => Promise<T>>, limit: number): Promise<T[]> {
+  const out = new Array<T>(thunks.length)
+  let next = 0
+  async function worker(): Promise<void> {
+    while (next < thunks.length) {
+      const i = next++
+      out[i] = await thunks[i]()
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, thunks.length) }, () => worker()))
+  return out
 }
 
 /** PURE — turn an undici "fetch failed" into an actionable message. */

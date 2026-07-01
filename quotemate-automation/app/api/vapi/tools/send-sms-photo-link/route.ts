@@ -143,7 +143,7 @@ export async function POST(req: Request) {
   // Build + send the SMS using the same template the post-call path uses.
   // First name is unknown mid-call (we haven't structured the intake yet),
   // so the template falls back to "Hi there".
-  const appUrl = process.env.APP_URL ?? 'https://quote-mate-rho.vercel.app'
+  const appUrl = process.env.APP_URL ?? 'https://www.quotemax.com.au'
   const uploadUrl = `${appUrl}/upload/${photoRequestToken}`
   const text = buildPhotoRequestSms({ uploadUrl })
 

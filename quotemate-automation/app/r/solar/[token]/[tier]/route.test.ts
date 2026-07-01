@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildSolarRedirectUrl, VALID_SOLAR_TIERS } from './route'
 
-const APP = 'https://quote-mate-rho.vercel.app'
+const APP = 'https://www.quotemax.com.au'
 
 describe('VALID_SOLAR_TIERS', () => {
   it('accepts good/better/best/inspection only', () => {

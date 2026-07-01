@@ -148,7 +148,7 @@ export async function POST(
   }
 
   // ─── Build + dispatch the customer SMS ──
-  const appUrl = process.env.APP_URL ?? 'https://quote-mate-rho.vercel.app'
+  const appUrl = process.env.APP_URL ?? 'https://www.quotemax.com.au'
   const displayMode = resolveQuoteDisplayMode({
     perQuoteOverride: quote.display_mode as string | null,
     tenantPreference:

@@ -1,17 +1,11 @@
 'use client'
 
-// /dashboard/painting — painting estimate tool, two tabs.
+// /dashboard/painting — painting estimate tool.
 //
-//   • "realestate.com.au" tab → asks the REA provider. There is no
-//     official REA lookup API, so this is inert until a managed scraper
-//     or a paste flow is wired — the demo toggle returns sample data so
-//     the flow runs end-to-end. The tab carries an honest provenance note.
-//   • "Other tools" tab → the Solar / Geoscape / Domain provider stack
-//     (mock until those adapters + keys land).
-//
-// Both tabs feed the SAME deterministic area → G/B/B pricing engine. The
-// estimate is always a RANGE with a confidence band; low confidence
-// routes to a site measure. Maintain Technology design.
+// Address → Google Solar footprint → floor area (× storeys) → the
+// deterministic area → G/B/B pricing engine. The estimate is always a
+// RANGE with a confidence band; low confidence routes to a site measure.
+// Maintain Technology design.
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -32,8 +26,6 @@ type EstimateResponse =
   | { ok: true; estimate: PaintingEstimate }
   | { ok: false; code: string; detail: string }
   | { ok: false; error: string }
-
-type Tab = 'rea' | 'auto'
 
 const STATES = ['NSW', 'VIC', 'QLD', 'SA', 'WA', 'TAS', 'ACT', 'NT'] as const
 
@@ -71,8 +63,6 @@ function PaintingEstimatePageInner() {
   const [token, setToken] = useState<string | null>(null)
   const [authState, setAuthState] = useState<'loading' | 'signed-out' | 'ready'>('loading')
 
-  const [tab, setTab] = useState<Tab>('rea')
-
   const [address, setAddress] = useState('')
   const [postcode, setPostcode] = useState('')
   const [stateCode, setStateCode] = useState<(typeof STATES)[number]>('QLD')
@@ -83,7 +73,6 @@ function PaintingEstimatePageInner() {
   const [storeys, setStoreys] = useState<1 | 2 | 3>(1)
   const [colourChange, setColourChange] = useState(false)
   const [manualArea, setManualArea] = useState('')
-  const [useMock, setUseMock] = useState(true)
 
   const [busy, setBusy] = useState(false)
   const [resp, setResp] = useState<EstimateResponse | null>(null)
@@ -153,8 +142,6 @@ function PaintingEstimatePageInner() {
             colour_change: colourChange,
             manual_floor_area_m2: manualArea ? Number(manualArea) : null,
           },
-          source: tab,
-          use_mock_provider: useMock,
         }),
       })
       const json = (await res.json()) as EstimateResponse
@@ -168,7 +155,7 @@ function PaintingEstimatePageInner() {
     } finally {
       setBusy(false)
     }
-  }, [token, address, postcode, stateCode, scopes, coats, condition, ceiling, storeys, colourChange, manualArea, tab, useMock])
+  }, [token, address, postcode, stateCode, scopes, coats, condition, ceiling, storeys, colourChange, manualArea])
 
   const runEstimate = useCallback(
     (e: React.FormEvent) => {
@@ -257,28 +244,14 @@ function PaintingEstimatePageInner() {
         <AuthBadge state={authState} />
       </section>
 
-      {/* ── Tabs ──────────────────────────────────────────────────── */}
+      {/* ── Data source note ──────────────────────────────────────── */}
       <section className="relative z-10 mx-auto max-w-6xl px-6 sm:px-10">
-        <div className="flex flex-wrap gap-px border border-ink-line bg-ink-line">
-          <TabButton active={tab === 'rea'} onClick={() => setTab('rea')} label="realestate.com.au" sub="Listing building size" />
-          <TabButton active={tab === 'auto'} onClick={() => setTab('auto')} label="Other tools" sub="Footprint · Geoscape · floor plan" />
-        </div>
-
-        {tab === 'rea' ? (
-          <ProvenanceNote tone="warn" label="realestate.com.au — no official lookup API">
-            REA has no API that returns a property&rsquo;s floor area, and scraping the
-            listing page is against their terms. This tab is inert until a managed
-            scraper or a paste flow is wired. Leave <strong>demo data</strong> on
-            below to run the flow end-to-end with sample numbers.
-          </ProvenanceNote>
-        ) : (
-          <ProvenanceNote tone="accent" label="Other tools — Google Solar is live">
-            Turn <strong>demo data off</strong> to run a real Google Solar lookup:
-            address → building footprint → floor area (× storeys). Works for most
-            AU addresses even with no listing. Set the storey count and confirm the
-            area for a tight number. Geoscape + floor-plan upload come next.
-          </ProvenanceNote>
-        )}
+        <ProvenanceNote tone="accent" label="Google Solar footprint lookup">
+          Enter an address and we run a Google Solar lookup: address → building
+          footprint → floor area (× storeys). Works for most AU addresses even
+          with no listing. Set the storey count and confirm the area for a tight
+          number. Geoscape + floor-plan upload come next.
+        </ProvenanceNote>
       </section>
 
       {/* ── Form ──────────────────────────────────────────────────── */}
@@ -373,10 +346,6 @@ function PaintingEstimatePageInner() {
               <label className="inline-flex cursor-pointer items-center gap-3 text-text-sec">
                 <input type="checkbox" checked={colourChange} onChange={(e) => setColourChange(e.target.checked)} className="h-4 w-4 accent-accent" />
                 <span className="font-mono text-sm font-semibold uppercase tracking-[0.12em]">Colour change</span>
-              </label>
-              <label className="inline-flex cursor-pointer items-center gap-3 text-text-sec">
-                <input type="checkbox" checked={useMock} onChange={(e) => setUseMock(e.target.checked)} className="h-4 w-4 accent-accent" />
-                <span className="font-mono text-sm font-semibold uppercase tracking-[0.12em]">Demo data</span>
               </label>
             </div>
             <button type="submit" disabled={busy || authState !== 'ready'} className="inline-flex items-center gap-2 bg-accent px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50">
@@ -475,7 +444,7 @@ function PaintingEstimatePageInner() {
           estimate here with the ↻ button on the result panel. */}
 
       <div className="relative z-10 mt-16 bg-accent px-6 py-5 text-center text-white">
-        <span className="font-mono text-sm font-semibold uppercase tracking-[0.16em]">QuoteMax · Paint estimate · two-tab</span>
+        <span className="font-mono text-sm font-semibold uppercase tracking-[0.16em]">QuoteMax · Paint estimate</span>
       </div>
     </main>
   )
@@ -802,15 +771,6 @@ function PaintPreviewSection({
 }
 
 // ─── Small UI bits ──────────────────────────────────────────────────
-
-function TabButton({ active, onClick, label, sub }: { active: boolean; onClick: () => void; label: string; sub: string }) {
-  return (
-    <button type="button" onClick={onClick} className={`flex-1 px-6 py-4 text-left transition-colors ${active ? 'bg-ink-card' : 'bg-ink-deep hover:bg-ink-card/60'}`}>
-      <div className={`font-mono text-sm font-semibold uppercase tracking-[0.14em] ${active ? 'text-accent' : 'text-text-sec'}`}>{label}</div>
-      <div className="mt-1 text-xs text-text-dim">{sub}</div>
-    </button>
-  )
-}
 
 function ProvenanceNote({ tone, label, children }: { tone: 'warn' | 'accent'; label: string; children: React.ReactNode }) {
   const border = tone === 'warn' ? 'border-l-warning' : 'border-l-accent'

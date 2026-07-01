@@ -11,6 +11,8 @@ import {
   BOOKING_STATE,
   computePriceHoldUntil,
   priceHoldStatus,
+  resolvePriceHoldUntil,
+  isPriceHoldExpired,
   fmtHoldUntilAU,
   bookingStateAfterDepositPaid,
   bookingStateAfterSlotPicked,
@@ -68,6 +70,48 @@ describe('priceHoldStatus', () => {
   it("treats the exact expiry instant as 'expired' (boundary)", () => {
     const now = Date.parse(CREATED)
     expect(priceHoldStatus(new Date(now).toISOString(), now).state).toBe('expired')
+  })
+})
+
+describe('resolvePriceHoldUntil', () => {
+  it('prefers the persisted price_hold_until over the derived date', () => {
+    const persisted = '2026-06-01T00:00:00.000Z'
+    expect(resolvePriceHoldUntil(persisted, CREATED)).toBe(persisted)
+  })
+  it('derives from created_at (+ default days) when not persisted', () => {
+    expect(resolvePriceHoldUntil(null, CREATED)).toBe(
+      new Date(Date.parse(CREATED) + DEFAULT_HOLD_DAYS * DAY).toISOString(),
+    )
+    expect(resolvePriceHoldUntil(undefined, CREATED)).toBe(
+      new Date(Date.parse(CREATED) + DEFAULT_HOLD_DAYS * DAY).toISOString(),
+    )
+  })
+  it('returns null when neither input yields a date', () => {
+    expect(resolvePriceHoldUntil(null, null)).toBeNull()
+    expect(resolvePriceHoldUntil(undefined, undefined)).toBeNull()
+  })
+})
+
+describe('isPriceHoldExpired', () => {
+  const now = Date.parse(CREATED)
+  it('false while the persisted hold is still in the future', () => {
+    const until = new Date(now + 2 * DAY).toISOString()
+    expect(isPriceHoldExpired(until, null, now)).toBe(false)
+  })
+  it('true once the persisted hold has lapsed', () => {
+    const until = new Date(now - 1000).toISOString()
+    expect(isPriceHoldExpired(until, null, now)).toBe(true)
+  })
+  it('derives from created_at when no persisted hold — not expired within the window', () => {
+    // created_at + 7 days; check 3 days in
+    expect(isPriceHoldExpired(null, CREATED, now + 3 * DAY)).toBe(false)
+  })
+  it('derives from created_at when no persisted hold — expired past the window', () => {
+    // 8 days after created_at is beyond the default 7-day hold
+    expect(isPriceHoldExpired(null, CREATED, now + 8 * DAY)).toBe(true)
+  })
+  it('a quote with no derivable hold is NOT expired', () => {
+    expect(isPriceHoldExpired(null, null, now)).toBe(false)
   })
 })
 

@@ -24,6 +24,7 @@ import type {
 } from '@/lib/roofing/types'
 import { combinedTotalsForIndices } from '@/lib/roofing/selection'
 import { edgeStat } from '@/lib/roofing/geometry-edges'
+import { buildingAttributeChips, propertyContextChips } from '@/lib/roofing/attributes-display'
 import { narrowQuoteToStructures } from '@/lib/sms/roofing-compose'
 import { RoofMap, type RoofMapBuilding } from '../_components/RoofMap'
 import { AddressAutocomplete } from '../_components/AddressAutocomplete'
@@ -105,11 +106,10 @@ function RoofingMeasurePageInner() {
   const [address, setAddress] = useState('')
   const [postcode, setPostcode] = useState('')
   const [state, setState] = useState<(typeof STATES)[number]>('NSW')
-  const [material, setMaterial] = useState<(typeof MATERIALS)[number][0]>('colorbond_trimdek')
+  const [material, setMaterial] = useState<(typeof MATERIALS)[number][0]>('colorbond_corrugated')
   const [pitch, setPitch] = useState<(typeof PITCHES)[number][0]>('standard')
   const [intent, setIntent] = useState<(typeof INTENTS)[number][0]>('full_reroof')
   const [yearBuilt, setYearBuilt] = useState<string>('')
-  const [useMock, setUseMock] = useState(false)
 
   const [busy, setBusy] = useState(false)
   const [resp, setResp] = useState<MultiResponse | null>(null)
@@ -170,7 +170,6 @@ function RoofingMeasurePageInner() {
             address: { address: a, postcode: pc, state: st },
             inputs: { material, pitch, intent, building_year_built: yearBuilt ? Number(yearBuilt) : null },
             perBuilding: overrides?.perBuilding,
-            use_mock_provider: useMock,
           }),
         })
         const json = (await res.json()) as MultiResponse
@@ -207,7 +206,7 @@ function RoofingMeasurePageInner() {
         setBusy(false)
       }
     },
-    [token, address, postcode, state, material, pitch, intent, yearBuilt, useMock],
+    [token, address, postcode, state, material, pitch, intent, yearBuilt],
   )
 
   const onMeasure = useCallback(
@@ -509,13 +508,7 @@ function RoofingMeasurePageInner() {
             <input type="number" min={1850} max={2100} value={yearBuilt} onChange={(e) => setYearBuilt(e.target.value)} placeholder="1985" className={INPUT} />
           </div>
 
-          <div className="md:col-span-2 flex flex-wrap items-center justify-between gap-5 pt-2">
-            <label className="inline-flex cursor-pointer items-center gap-3 text-text-sec">
-              <input type="checkbox" checked={useMock} onChange={(e) => setUseMock(e.target.checked)} className="h-4 w-4 accent-accent" />
-              <span className="font-mono text-sm font-semibold uppercase tracking-[0.14em]">
-                Use mock provider (demo · returns a house + shed)
-              </span>
-            </label>
+          <div className="md:col-span-2 flex flex-wrap items-center justify-end gap-5 pt-2">
             <button
               type="submit"
               disabled={busy || authState !== 'ready'}
@@ -715,6 +708,8 @@ function MultiResultBlock({
       {/* Job-level routing strip */}
       <RoutingStrip routing={quote.routing} />
 
+      <PropertyContextStrip quote={quote} />
+
       {/* Per-structure cards */}
       <div className="mt-8 grid gap-6">
         {quote.structures.map((s, i) => {
@@ -909,6 +904,8 @@ function StructureCard({
 
       <PitchProvenance metrics={m} declaredPitch={structure.inputs.pitch} />
 
+      <GeoscapeAttributes metrics={m} />
+
       {/* Per-structure material override */}
       <div className="mt-5" onClick={(e) => e.stopPropagation()}>
         <div className="mb-2 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
@@ -948,6 +945,28 @@ function StructureCard({
         </div>
       )}
     </article>
+  )
+}
+
+/** PropRadar property context (job-level) — dwelling type, year built, areas.
+ *  Renders nothing when enrichment is off or the address isn't covered. */
+function PropertyContextStrip({ quote }: { quote: MultiRoofQuote }) {
+  const chips = quote.property_context ? propertyContextChips(quote.property_context) : []
+  if (chips.length === 0) return null
+  return (
+    <div className="mt-8 border border-ink-line border-l-4 border-l-accent bg-ink-card px-6 py-5 sm:px-8">
+      <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
+        Property context · PropRadar
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {chips.map(([label, value]) => (
+          <span key={label} className="inline-flex items-baseline gap-1.5 border border-ink-line bg-ink-deep px-3 py-1.5 font-mono text-[0.72rem]">
+            <span className="uppercase tracking-[0.12em] text-text-dim">{label}</span>
+            <span className="font-semibold text-text-pri">{value}</span>
+          </span>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -1026,6 +1045,28 @@ function PitchProvenance({ metrics, declaredPitch }: { metrics: RoofMetrics; dec
   return (
     <div className="mt-4 inline-flex items-center gap-2 border border-ink-line bg-ink-deep px-3 py-2 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-text-dim">
       <span>◳ Pitch declared · {declaredPitch}</span>
+    </div>
+  )
+}
+
+/** Premium Geoscape building attributes — material, heights, solar, tree.
+ *  Renders nothing when the paid attributes aren't present (mock / free tier). */
+function GeoscapeAttributes({ metrics }: { metrics: RoofMetrics }) {
+  const chips = buildingAttributeChips(metrics)
+  if (chips.length === 0) return null
+  return (
+    <div className="mt-5">
+      <div className="mb-2 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+        Geoscape building data
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {chips.map(([label, value]) => (
+          <span key={label} className="inline-flex items-baseline gap-1.5 border border-ink-line bg-ink-deep px-3 py-1.5 font-mono text-[0.72rem]">
+            <span className="uppercase tracking-[0.12em] text-text-dim">{label}</span>
+            <span className="font-semibold text-text-pri">{value}</span>
+          </span>
+        ))}
+      </div>
     </div>
   )
 }

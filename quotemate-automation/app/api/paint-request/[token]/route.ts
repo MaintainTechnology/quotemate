@@ -28,7 +28,7 @@ const supabase = createClient(
 )
 
 const APP_BASE_URL = (
-  process.env.NEXT_PUBLIC_APP_URL ?? 'https://quote-mate-rho.vercel.app'
+  process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.quotemax.com.au'
 ).replace(/\/$/, '')
 
 export async function GET(_req: Request, ctx: { params: Promise<{ token: string }> }) {
@@ -85,13 +85,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   const tenantId = (lead.tenant_id as string | null) ?? null
   const customerPhone = (lead.customer_phone as string | null) ?? null
 
-  // Default to the "Other tools" path (footprint / Geoscape / floor plan),
-  // never the demo provider — the same default the SMS Q&A path uses.
+  // The estimate runs the Google Solar footprint lookup — the same path
+  // the SMS Q&A flow uses.
   const disp = await runAndSavePaintingQuote({
     supabase,
     tenantId,
     customerPhone,
-    request: { address: parsed.data.address, inputs: parsed.data.inputs, source: 'auto', use_mock_provider: false },
+    request: { address: parsed.data.address, inputs: parsed.data.inputs },
     appUrl: APP_BASE_URL,
   })
 

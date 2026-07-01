@@ -26,7 +26,7 @@ const supabase = createClient(
 )
 
 const APP_BASE_URL = (
-  process.env.NEXT_PUBLIC_APP_URL ?? 'https://quote-mate-rho.vercel.app'
+  process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.quotemax.com.au'
 ).replace(/\/$/, '')
 
 export async function POST(_req: Request, ctx: { params: Promise<{ token: string }> }) {

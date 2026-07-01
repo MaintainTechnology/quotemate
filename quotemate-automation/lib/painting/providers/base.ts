@@ -1,12 +1,11 @@
 // ════════════════════════════════════════════════════════════════════
 // Painting — property-data provider interface.
 //
-// Every adapter (mock today; realestate.com.au scraper, Google Solar,
-// Geoscape, Domain tomorrow) implements this contract so the
-// orchestrator can swap the data backend without touching the API route
-// or the UI. This is the abstraction the two dashboard tabs sit on:
-//   • "realestate.com.au" tab → a ReaListingProvider
-//   • "Other tools" tab       → Solar / Geoscape / Domain providers
+// Every adapter (mock + Google Solar today; Geoscape, Domain tomorrow)
+// implements this contract so the orchestrator can swap the data backend
+// without touching the API route or the UI. The estimate tool resolves an
+// address via Google Solar (footprint → floor area), falling back to the
+// deterministic mock when no key is set.
 //
 // PURE types — no I/O. Adapter implementations do their own fetch (fully
 // unit-testable via dependency injection).
@@ -17,7 +16,6 @@ import type { PaintAddressInput, PropertyLookupResult } from '../types'
 export interface PropertyDataProvider {
   /** Stable provider name — surfaces in tracing + the result envelope. */
   readonly name:
-    | 'rea'
     | 'domain'
     | 'solar'
     | 'geoscape'

@@ -24,7 +24,7 @@
 import { after } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { pipelineLog } from '@/lib/log/pipeline'
-import { BOOKING_STATE } from '@/lib/quote/hold'
+import { BOOKING_STATE, isPriceHoldExpired } from '@/lib/quote/hold'
 import { earlyBirdStatus } from '@/lib/quote/early-bird'
 import { resolveBookingOptions, buildBookedKeys } from '@/lib/quote/slots'
 import { tzForState } from '@/lib/quote/availability'
@@ -73,7 +73,7 @@ export async function POST(
 
   const { data: quote, error: quoteErr } = await supabase
     .from('quotes')
-    .select('id, paid_at, scheduled_at, selected_tier, share_token, intake_id, tenant_id, good, better, best, stripe_links')
+    .select('id, paid_at, scheduled_at, selected_tier, share_token, intake_id, tenant_id, good, better, best, stripe_links, created_at, price_hold_until')
     .eq('share_token', token)
     .maybeSingle()
 
@@ -88,6 +88,27 @@ export async function POST(
   if (quote.paid_at && quote.scheduled_at) {
     return Response.json(
       { ok: false, error: 'This quote is already booked' },
+      { status: 409 },
+    )
+  }
+
+  // Price-hold gate (defense in depth for the UI block): a lapsed price must
+  // not be booked against a stale figure. Already-paid quotes (legacy
+  // paid-then-pick recovery) have transacted and may still pick a time.
+  if (
+    !quote.paid_at &&
+    isPriceHoldExpired(
+      (quote as { price_hold_until?: string | null }).price_hold_until ?? null,
+      (quote as { created_at?: string | null }).created_at ?? null,
+    )
+  ) {
+    log.step('booking blocked — price hold expired', { quote_id: quote.id })
+    return Response.json(
+      {
+        ok: false,
+        error:
+          "This quote's price has expired. Reply to your tradie's SMS for a refreshed quote.",
+      },
       { status: 409 },
     )
   }

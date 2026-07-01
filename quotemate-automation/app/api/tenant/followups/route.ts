@@ -23,6 +23,11 @@ import {
   selectFollowups,
   type FollowupQuote,
 } from '@/lib/quote/followup'
+import {
+  selectLeadFollowups,
+  type LeadConversation,
+} from '@/lib/quote/followup-leads'
+import { normaliseAuMobile } from '@/lib/phone/au'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,13 +74,19 @@ export async function GET(req: Request) {
   const includeActioned = url.searchParams.get('includeActioned') === '1'
 
   // Coarse DB filter (cheap, index-backed): tenant + delivered-but-not-
-  // converted. The precise staleness / actioned rules are applied by the
-  // pure selectFollowups() so they stay unit-tested and single-sourced.
+  // converted. "Delivered" = status advanced to sent/viewed OR a sent_at
+  // timestamp exists — the latter catches quotes that reached the
+  // customer over SMS but whose status column never advanced (the
+  // lifecycle write is best-effort/swallowed), which the strict
+  // status-only filter used to silently drop. The precise staleness /
+  // actioned rules are applied by the pure selectFollowups() so they stay
+  // unit-tested and single-sourced (reachedCustomer() already treats
+  // sent_at as "reached").
   const { data: rows, error } = await supabase
     .from('quotes')
     .select(QUOTE_COLS)
     .eq('tenant_id', tenant.id)
-    .in('status', ['sent', 'viewed'])
+    .or('status.in.(sent,viewed),sent_at.not.is.null')
     .is('paid_at', null)
     .is('accepted_at', null)
     .order('last_status_at', { ascending: true, nullsFirst: false })
@@ -161,7 +172,9 @@ export async function GET(req: Request) {
       intake?.caller?.phone?.trim() || customer?.phone_number || null
     const lastIso = lastActivityIso(q)
     return {
+      kind: 'quote' as const,
       quote_id: q.id as string,
+      conversation_id: null as string | null,
       share_token: (q.share_token as string | null) ?? null,
       status: (q.status as string | null) ?? null,
       followup_reason: followupReason(q),
@@ -188,10 +201,87 @@ export async function GET(req: Request) {
     }
   })
 
+  // ── No-quote SMS leads ────────────────────────────────────────────
+  // People who texted in but never got a quote (dialog stalled, dropped
+  // off, or escalated without a draft) live only in sms_conversations.
+  // Surface them too so the queue lists EVERYTHING worth chasing. Deduped
+  // against the quote queue: leads whose intake already produced a quote,
+  // or whose number is already a quote-followup, are dropped inside
+  // selectLeadFollowups().
+  const quotedIntakeIds = new Set<string>()
+  {
+    const { data: quotedRows } = await supabase
+      .from('quotes')
+      .select('intake_id')
+      .eq('tenant_id', tenant.id)
+      .not('intake_id', 'is', null)
+      .limit(5000)
+    for (const r of quotedRows ?? []) {
+      const id = r.intake_id as string | null
+      if (id) quotedIntakeIds.add(id)
+    }
+  }
+
+  const excludePhones = new Set<string>()
+  for (const f of followups) {
+    const e164 = normaliseAuMobile(f.customer.phone)
+    if (e164) excludePhones.add(e164)
+  }
+
+  const { data: convoRows } = await supabase
+    .from('sms_conversations')
+    .select(
+      'id, from_number, conversation_type, intake_id, status, ' +
+        'created_at, last_message_at, conversation_state',
+    )
+    .eq('tenant_id', tenant.id)
+    .order('last_message_at', { ascending: false, nullsFirst: false })
+    .limit(300)
+
+  const leads = selectLeadFollowups(
+    (convoRows ?? []) as unknown as LeadConversation[],
+    { now, minAgeHours, quotedIntakeIds, excludePhones },
+  ).map((lead) => ({
+    kind: 'lead' as const,
+    quote_id: null as string | null,
+    conversation_id: lead.conversation_id,
+    share_token: null as string | null,
+    status: null as string | null,
+    followup_reason: 'SMS lead — no quote yet',
+    last_activity: lead.last_activity,
+    age_hours: lead.age_hours,
+    total_inc_gst: null as number | null,
+    selected_tier: null as string | null,
+    job_type: lead.job_type,
+    needs_inspection: false,
+    scope_of_works: null as string | null,
+    followed_up_at: null as string | null,
+    followup_note: null as string | null,
+    customer: {
+      first_name: lead.first_name,
+      full_name: lead.first_name,
+      phone: lead.phone,
+      suburb: lead.suburb,
+      email: null as string | null,
+    },
+  }))
+
+  // Merge quote follow-ups + leads into one oldest-activity-first list so
+  // the VA works the most overdue item next regardless of type.
+  const merged = [...followups, ...leads].sort((a, b) => {
+    const ta = Date.parse(a.last_activity ?? '')
+    const tb = Date.parse(b.last_activity ?? '')
+    const va = Number.isFinite(ta) ? ta : Number.POSITIVE_INFINITY
+    const vb = Number.isFinite(tb) ? tb : Number.POSITIVE_INFINITY
+    return va - vb
+  })
+
   return Response.json({
-    followups,
+    followups: merged,
     meta: {
-      count: followups.length,
+      count: merged.length,
+      quote_count: followups.length,
+      lead_count: leads.length,
       min_age_hours: minAgeHours,
       include_actioned: includeActioned,
       generated_at: new Date(now).toISOString(),

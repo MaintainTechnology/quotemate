@@ -1,20 +1,23 @@
 // ════════════════════════════════════════════════════════════════════
 // Painting — estimate orchestrator.
 //
-// Picks a property-data provider (per the dashboard tab + env), looks up
-// the property facts, runs the deterministic area engine, prices the
-// G/B/B tiers + routing, and returns the structured PaintingEstimate the
-// API route hands to the dashboard.
+// Picks a property-data provider (per env), looks up the property facts,
+// runs the deterministic area engine, prices the G/B/B tiers + routing,
+// and returns the structured PaintingEstimate the API route hands to the
+// dashboard.
 //
 // Provider selection (in order):
 //   1. opts.provider — explicit override (tests pass MockPropertyProvider)
-//   2. opts.source   — which tab: 'rea' → ReaListingProvider,
-//                      'auto'/others → the best configured "other tools"
-//                      provider (Solar/Geoscape/Domain — stubs for now)
-//   3. opts.useMock  — force the deterministic mock (the demo toggle)
+//   2. Google Solar footprint lookup when GOOGLE_MAPS_API_KEY is set
+//   3. the deterministic mock (local dev / no key) so the flow still runs
 //
-// PURE-ish: the orchestrator is I/O-free; the provider does the network.
-// Unit tests pass MockPropertyProvider.
+// After the base lookup, the facts are ENRICHED with per-address building
+// data from Geoscape (storeys, eave height, use) and PropRadar (beds/baths/
+// car/type/land/floor-area). Each enricher no-ops without its key, so the
+// estimate always succeeds on the base provider alone. See lib/painting/enrich.ts.
+//
+// PURE-ish: the orchestrator is I/O-free apart from the provider + enrichers.
+// Unit tests pass MockPropertyProvider (enrichers no-op without keys).
 // ════════════════════════════════════════════════════════════════════
 
 import type {
@@ -26,23 +29,19 @@ import type {
 } from './types'
 import type { PropertyDataProvider } from './providers/base'
 import { MockPropertyProvider } from './providers/mock'
-import { ReaListingProvider } from './providers/rea'
 import { SolarPropertyProvider } from './providers/solar'
 import { measurePaintableArea } from './area'
 import { calculatePaintingPrice, requiresInspection } from './pricing'
-
-/** Which tab / data path the request came from. */
-export type EstimateSource = 'rea' | 'auto'
+import { enrichPaintingFacts, type EnrichPaintingOpts } from './enrich'
 
 export type EstimateOpts = {
-  /** Explicit provider override — tests + the demo path use this. */
+  /** Explicit provider override — tests use this. */
   provider?: PropertyDataProvider
-  /** Which dashboard tab issued the request. Default 'auto'. */
-  source?: EstimateSource
-  /** Force the deterministic mock provider (the dashboard demo toggle). */
-  useMock?: boolean
   /** Per-tenant rate card. When omitted, pricing.ts default applies. */
   rateCard?: PaintingRateCard
+  /** Enrichment provider overrides (apiKey/fetchImpl) — tests inject here;
+   *  production reads GEOSCAPE_API_KEY / PROPRADAR_API from the env. */
+  enrich?: EnrichPaintingOpts
 }
 
 export type EstimateResult =
@@ -50,36 +49,18 @@ export type EstimateResult =
   | { ok: false; code: string; detail: string }
 
 /**
- * Pick a property-data provider based on opts → source → env.
+ * Pick a property-data provider based on opts → env.
  *
- * The "other tools" `auto` tab uses the real Google Solar provider when
- * GOOGLE_MAPS_API_KEY is set (footprint → floor-area estimate); without a
- * key it falls back to the mock. Geoscape/Domain adapters are still to
- * come. The REA tab uses ReaListingProvider, which is inert (returns
- * rea_not_configured) until a scraper/paste backend is injected — unless
- * the demo toggle forces the mock.
+ * Uses the real Google Solar provider when GOOGLE_MAPS_API_KEY is set
+ * (footprint → floor-area estimate); without a key it falls back to the
+ * deterministic mock so local dev + tests still run. Geoscape/Domain
+ * adapters are still to come.
  */
 export function pickProvider(opts: EstimateOpts = {}): PropertyDataProvider {
   if (opts.provider) return opts.provider
 
-  const source = opts.source ?? 'auto'
-
-  if (opts.useMock) {
-    // Demo data, labelled with the tab it stands in for.
-    return new MockPropertyProvider({
-      stampSource: source === 'rea' ? 'rea' : 'mock',
-    })
-  }
-
-  if (source === 'rea') {
-    // No scraper/paste backend is injected here yet — the provider returns
-    // a clean rea_not_configured failure. (Inject `fetchListing` once a
-    // managed scraper or paste flow is chosen.)
-    return new ReaListingProvider()
-  }
-
-  // 'auto' tab — real Google Solar footprint lookup when the key is set;
-  // otherwise the deterministic mock so the tab still works.
+  // Real Google Solar footprint lookup when the key is set; otherwise the
+  // deterministic mock so the tool still works.
   if (process.env.GOOGLE_MAPS_API_KEY) {
     return new SolarPropertyProvider()
   }
@@ -113,12 +94,16 @@ export async function estimatePainting(
     return { ok: false, code: lookup.code, detail: lookup.detail }
   }
 
-  // The user's declared storeys override the provider's value (Google
-  // Solar can't infer storeys, and floor area scales with it).
+  // Enrich the base (Solar) facts with Geoscape + PropRadar building data.
+  // No-ops per provider without its API key, so this never breaks the estimate.
+  const { facts: enriched } = await enrichPaintingFacts(address, lookup.facts, opts.enrich)
+
+  // The user's declared storeys always wins over any provider/enricher value
+  // (floor area + exterior area scale with it).
   const facts =
     inputs.storeys && inputs.storeys > 0
-      ? { ...lookup.facts, storeys: inputs.storeys }
-      : lookup.facts
+      ? { ...enriched, storeys: inputs.storeys }
+      : enriched
   const measurement = measurePaintableArea(facts, inputs)
 
   // No floor area at all → there's nothing to price. Surface the

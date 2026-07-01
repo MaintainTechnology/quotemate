@@ -87,8 +87,6 @@ export function PaintRequestForm({ token }: { token: string }) {
               colour_change: colourChange,
               manual_floor_area_m2: manualArea ? Number(manualArea) : null,
             },
-            source: 'auto',
-            use_mock_provider: false,
           }),
         })
         const j = await res.json()

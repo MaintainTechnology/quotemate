@@ -455,6 +455,10 @@ export default async function PublicQuotePage(props: {
     computePriceHoldUntil(quote.created_at as string | null)
   const hold = priceHoldStatus(effectiveHoldUntil)
   const showHoldBanner = !isPaid && !isInspection && hold.state !== 'none'
+  // Price hold lapsed → suppress the "Lock in" CTA so a customer can't book /
+  // pay against a stale price. The banner above already tells them to reply
+  // for a refreshed quote. N/A to inspection ($99 fee, no hold) or once paid.
+  const priceExpired = !isPaid && !isInspection && hold.state === 'expired'
 
   // v8 — early-booking discount. `ebApplied` once the customer booked
   // in time → tier prices render discounted. Otherwise, while the offer
@@ -674,6 +678,7 @@ export default async function PublicQuotePage(props: {
               appliedDiscountPct={ebApplied ? ebAppliedPct : 0}
               isPaid={isPaid}
               paidTier={(quote.paid_tier as string | null) ?? null}
+              priceExpired={priceExpired}
               // Roofing keeps its roofing-specific copy (component default), but
               // an on-site (indicative) roofing quote gets an indicative footnote.
               // Any other non-generic trade gets neutral labels so it still
@@ -715,7 +720,7 @@ export default async function PublicQuotePage(props: {
                     seq={String(seqIndex).padStart(2, '0')}
                     tier={tier}
                     recommended={showRecommendedBadge && quote.selected_tier === key}
-                    link={stripeLinks[key] ? `/r/${token}/${key}` : null}
+                    link={!priceExpired && stripeLinks[key] ? `/r/${token}/${key}` : null}
                     depositPct={depositPct}
                     appliedDiscountPct={ebApplied ? ebAppliedPct : 0}
                     paid={isPaid && quote.paid_tier === key}

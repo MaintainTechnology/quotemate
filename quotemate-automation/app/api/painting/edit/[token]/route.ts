@@ -31,7 +31,7 @@ export const runtime = 'nodejs'
 export const maxDuration = 60 // a priced edit re-mints per-tier Stripe sessions
 
 const APP_BASE_URL = (
-  process.env.NEXT_PUBLIC_APP_URL ?? 'https://quote-mate-rho.vercel.app'
+  process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.quotemax.com.au'
 ).replace(/\/$/, '')
 
 const supabase = createClient(

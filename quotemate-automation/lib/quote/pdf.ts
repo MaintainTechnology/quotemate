@@ -36,7 +36,7 @@ import { loadTenantBranding } from '@/lib/pdf/branding'
 import { prepareImage } from '@/lib/pdf/image'
 
 const BUCKET = 'quote-pdfs'
-const APP_URL = (process.env.APP_URL ?? 'https://quote-mate-rho.vercel.app').replace(/\/$/, '')
+const APP_URL = (process.env.APP_URL ?? 'https://www.quotemax.com.au').replace(/\/$/, '')
 
 let _client: SupabaseClient | null = null
 function supabase(): SupabaseClient {

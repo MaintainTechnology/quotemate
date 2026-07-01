@@ -21,6 +21,7 @@ import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { resolveGoogleBookingUrl } from '@/lib/quote/booking'
+import { isPriceHoldExpired } from '@/lib/quote/hold'
 import { resolveBookingOptions, buildBookedKeys, type BookingOption } from '@/lib/quote/slots'
 import { tzForState } from '@/lib/quote/availability'
 import { BrandMark } from '@/app/_components/BrandMark'
@@ -130,7 +131,7 @@ export default async function BookingPage(props: {
 
   const { data: quote } = await supabase
     .from('quotes')
-    .select('id, paid_at, paid_tier, selected_tier, scheduled_at, scheduled_window, share_token, intake_id, tenant_id')
+    .select('id, paid_at, paid_tier, selected_tier, scheduled_at, scheduled_window, share_token, intake_id, tenant_id, created_at, price_hold_until')
     .eq('share_token', token)
     .maybeSingle()
 
@@ -189,6 +190,16 @@ export default async function BookingPage(props: {
   const isPaid = !!quote.paid_at
   const isScheduled = !!quote.scheduled_at
 
+  // Price hold lapsed → block booking/payment (the customer must reply for a
+  // refreshed quote). An already-paid quote has transacted and is exempt so
+  // the legacy "paid, now pick a time" recovery path still works.
+  const priceExpired =
+    !isPaid &&
+    isPriceHoldExpired(
+      (quote as { price_hold_until?: string | null }).price_hold_until ?? null,
+      (quote as { created_at?: string | null }).created_at ?? null,
+    )
+
   // Tier to charge at the deposit step: query param (carried from the
   // quote page tier button) → the quote's selected_tier → 'better'.
   const tier =
@@ -206,7 +217,10 @@ export default async function BookingPage(props: {
   const tradieName = tenantRow?.business_name ?? null
 
   let content: ReactNode
-  if (isPaid && isScheduled) {
+  if (priceExpired) {
+    // Lapsed price — block the picker; send them back to refresh the quote.
+    content = <ExpiredState tradieName={tradieName} token={token} />
+  } else if (isPaid && isScheduled) {
     content = (
       <AlreadyScheduledState
         scheduledAt={quote.scheduled_at!}
@@ -415,6 +429,41 @@ function GoogleBookingOption({
         Book on {who}&apos;s calendar ↗
       </a>
     </div>
+  )
+}
+
+// Price hold lapsed — booking/payment is blocked. Mirrors the quote page's
+// "PRICE EXPIRED" banner: pricing may have changed, so the customer replies
+// to their tradie for a refreshed quote rather than booking against a stale
+// price. No slot picker, no pay link.
+function ExpiredState({
+  tradieName,
+  token,
+}: {
+  tradieName: string | null
+  token: string
+}) {
+  return (
+    <section className="motion-safe:animate-[fade-in_240ms_ease-out_both]">
+      <StepStrip active={1} />
+      <span className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-warning">
+        Price expired
+      </span>
+      <h1 className="mt-6 text-[clamp(2rem,5vw,3.25rem)] font-extrabold uppercase leading-[1.02] tracking-[-0.03em]">
+        This quote&apos;s price has <span className="text-accent">lapsed</span>
+      </h1>
+      <p className="mt-5 max-w-[60ch] text-base leading-relaxed text-text-sec">
+        The held price on this quote has expired, so it can&apos;t be booked as-is
+        — pricing may have changed. Reply to {tradieName ?? 'your tradie'}&apos;s
+        SMS for a refreshed quote and you can lock in a time then.
+      </p>
+      <Link
+        href={`/q/${token}`}
+        className="mt-8 inline-flex items-center gap-2 border border-ink-line px-6 py-3.5 text-sm font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+      >
+        ← Back to quote
+      </Link>
+    </section>
   )
 }
 

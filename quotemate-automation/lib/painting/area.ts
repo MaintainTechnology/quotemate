@@ -25,7 +25,6 @@ import type {
   FloorAreaSource,
   PaintConfidence,
   PaintMeasurement,
-  PaintScope,
   PaintSurfaceArea,
   PaintUserInputs,
   PropertyFacts,
@@ -210,18 +209,27 @@ export function measurePaintableArea(
   }
 
   if (scopes.has('exterior')) {
-    // Façade ≈ external perimeter × wall band × storeys × gable factor.
+    // Façade ≈ external perimeter × wall height × gable factor.
     // Recover the per-storey footprint to get the external perimeter.
     const footprint =
       facts.footprint_m2 && facts.footprint_m2 > 0
         ? facts.footprint_m2
         : floor / storeys
     const extPerimeter = K_SHAPE_EXTERIOR * 4 * Math.sqrt(footprint)
-    const facade =
-      extPerimeter * EXTERIOR_WALL_BAND_M * storeys * GABLE_FACTOR
+    // Prefer a real ground-to-eave wall height (Geoscape averageEaveHeight):
+    // it already spans every storey, so we do NOT multiply by the storey
+    // count again. Fall back to the per-storey band × storeys when unknown.
+    const eave =
+      typeof facts.eave_height_m === 'number' && facts.eave_height_m > 0
+        ? clamp(facts.eave_height_m, 2.1, 15)
+        : null
+    const wallHeight = eave ?? EXTERIOR_WALL_BAND_M * storeys
+    const facade = extPerimeter * wallHeight * GABLE_FACTOR
     surfaces.push({ scope: 'exterior', unit: 'm2', ...withBand(facade) })
     notes.push(
-      `Exterior façade ≈ external perimeter × ${EXTERIOR_WALL_BAND_M} m × ${storeys} storey${storeys === 1 ? '' : 's'} × ${GABLE_FACTOR} gable factor.`,
+      eave != null
+        ? `Exterior façade ≈ external perimeter × ${eave.toFixed(1)} m eave height (Geoscape) × ${GABLE_FACTOR} gable factor.`
+        : `Exterior façade ≈ external perimeter × ${EXTERIOR_WALL_BAND_M} m × ${storeys} storey${storeys === 1 ? '' : 's'} × ${GABLE_FACTOR} gable factor.`,
     )
   }
 
@@ -243,6 +251,11 @@ export function roundTo(n: number, dp: number): number {
   if (!Number.isFinite(n)) return 0
   const f = Math.pow(10, dp)
   return Math.round(n * f) / f
+}
+
+/** PURE — clamp n into [min, max]. */
+export function clamp(n: number, min: number, max: number): number {
+  return Math.min(Math.max(n, min), max)
 }
 
 export const __test_only__ = {

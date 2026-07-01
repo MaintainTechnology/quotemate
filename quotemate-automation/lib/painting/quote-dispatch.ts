@@ -91,8 +91,6 @@ export async function runAndSavePaintingQuote(args: {
     : undefined
 
   const est = await estimatePainting(args.request.address, args.request.inputs, {
-    source: args.request.source ?? 'auto',
-    useMock: args.request.use_mock_provider ?? false,
     rateCard,
   })
   if (!est.ok) return { ok: false, reason: est.detail }

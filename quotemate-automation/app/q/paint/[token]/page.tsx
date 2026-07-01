@@ -179,6 +179,9 @@ export default async function PaintingQuotePage(props: { params: Promise<{ token
         </section>
       ) : null}
 
+      {/* ── About your home (Geoscape / PropRadar enrichment) ── */}
+      <AboutHome facts={estimate.facts} />
+
       {/* ── Inspection note · held-for-review note · OR tiers ── */}
       {inspection ? (
         <section className="mt-6 border border-l-4 border-ink-line border-l-accent bg-ink-card p-6 sm:p-7">
@@ -258,6 +261,32 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-text-dim">{label}</div>
       <div className="mt-1 font-mono text-lg font-bold tabular-nums text-text-pri">{value}</div>
     </div>
+  )
+}
+
+// Human-meaningful building facts from the property-data enrichment
+// (PropRadar attributes / Geoscape use). Renders only fields that are
+// present — off-market homes with no enrichment show nothing.
+function AboutHome({ facts }: { facts?: PaintingEstimate['facts'] }) {
+  if (!facts) return null
+  const items: Array<{ label: string; value: string }> = []
+  if (facts.property_type) items.push({ label: 'Type', value: facts.property_type })
+  if (facts.bedrooms != null) items.push({ label: 'Bedrooms', value: String(facts.bedrooms) })
+  if (facts.bathrooms != null) items.push({ label: 'Bathrooms', value: String(facts.bathrooms) })
+  if (facts.car_spaces != null) items.push({ label: 'Car spaces', value: String(facts.car_spaces) })
+  if (facts.land_size_m2 != null) items.push({ label: 'Land size', value: `${Math.round(facts.land_size_m2)} m²` })
+  if (items.length === 0) return null
+  return (
+    <section className="mt-6 border border-ink-line bg-ink-card p-6 sm:p-7">
+      <div className="mb-4 font-mono text-[0.7rem] uppercase tracking-[0.16em] text-text-dim">
+        About your home
+      </div>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {items.map((it) => (
+          <Stat key={it.label} label={it.label} value={it.value} />
+        ))}
+      </div>
+    </section>
   )
 }
 

@@ -511,9 +511,8 @@ export function nextPaintingStep(slots: PaintingSlots): {
 /**
  * PURE — convert the gathered slots into the EstimateRequest the painting
  * estimate endpoint expects. Returns null when not ready (missing required
- * fields). The request defaults to the "Other tools" path (`source:'auto'`,
- * `use_mock_provider:false`) — Google Solar footprint → Geoscape / floor
- * plan — never the demo provider.
+ * fields). The estimate runs the Google Solar footprint lookup (→ Geoscape
+ * / floor plan as those land).
  */
 export function toPaintingRequest(slots: PaintingSlots): EstimateRequest | null {
   if (!slots.address || !slots.postcode || !slots.state) return null
@@ -542,7 +541,5 @@ export function toPaintingRequest(slots: PaintingSlots): EstimateRequest | null 
       storeys: slots.storeys,
       manual_floor_area_m2: slots.manual_floor_area_m2 ?? null,
     },
-    source: 'auto',
-    use_mock_provider: false,
   }
 }

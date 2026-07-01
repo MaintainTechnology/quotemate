@@ -474,7 +474,7 @@ export async function POST(
   const appUrl =
     process.env.APP_URL ??
     process.env.NEXT_PUBLIC_APP_URL ??
-    'https://quote-mate-rho.vercel.app'
+    'https://www.quotemax.com.au'
 
   // C-1 (2026-05-25) — preserve any early-booking discount the customer
   // already locked in. `applied_discount_pct` is stamped at booking time

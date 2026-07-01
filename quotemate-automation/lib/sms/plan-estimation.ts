@@ -22,7 +22,7 @@ import { sendSms } from './twilio'
 import { wantsPlanEstimation, buildPlanUploadSms } from '@/lib/estimation/plan-request'
 import type { TenantRow } from '@/lib/tenant/lookup'
 
-const APP_URL = (process.env.APP_URL ?? 'https://quote-mate-rho.vercel.app').replace(/\/$/, '')
+const APP_URL = (process.env.APP_URL ?? 'https://www.quotemax.com.au').replace(/\/$/, '')
 
 export function planUploadUrl(token: string): string {
   return `${APP_URL}/upload/plan/${token}`

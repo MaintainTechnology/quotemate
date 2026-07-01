@@ -68,8 +68,8 @@ describe('solarGuardrailCount', () => {
 describe('buildSolarShareUrl', () => {
   it('builds the /solar/<tenant-id> entry link', () => {
     expect(
-      buildSolarShareUrl('https://quote-mate-rho.vercel.app', 'tenant-123'),
-    ).toBe('https://quote-mate-rho.vercel.app/solar/tenant-123')
+      buildSolarShareUrl('https://www.quotemax.com.au', 'tenant-123'),
+    ).toBe('https://www.quotemax.com.au/solar/tenant-123')
   })
 
   it('trims a trailing slash on the base url', () => {

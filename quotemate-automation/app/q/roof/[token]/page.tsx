@@ -32,6 +32,7 @@ import type {
 import { partitionRoofQuote, resolveEffectiveIndices } from '@/lib/roofing/selection'
 import { structureStaticMapPath } from '@/lib/roofing/structure-images'
 import { edgeStat } from '@/lib/roofing/geometry-edges'
+import { buildingAttributeChips, propertyContextChips } from '@/lib/roofing/attributes-display'
 import { indicativeCombinedTiers } from '@/lib/sms/roofing-compose'
 import { RoofMap, type RoofMapBuilding } from '@/app/dashboard/roofing/_components/RoofMap'
 
@@ -69,6 +70,45 @@ const MATERIAL_LABEL: Record<RoofMaterial, string> = {
   terracotta_tile: 'Terracotta tile',
   cement_sheet: 'Cement sheet',
   unknown: 'To confirm on site',
+}
+
+/** Geoscape premium building attributes on the customer quote — material,
+ *  heights, solar, tree. Renders nothing when the attributes are absent. */
+function RoofBuildingData({ metrics }: { metrics: RoofMetrics }) {
+  const chips = buildingAttributeChips(metrics)
+  if (chips.length === 0) return null
+  return (
+    <div className="mt-4 flex flex-wrap gap-2">
+      {chips.map(([label, value]) => (
+        <span key={label} className="inline-flex items-baseline gap-1.5 border border-ink-line bg-ink-deep px-3 py-1.5 font-mono text-[0.72rem]">
+          <span className="uppercase tracking-[0.12em] text-text-dim">{label}</span>
+          <span className="font-semibold text-text-pri">{value}</span>
+        </span>
+      ))}
+    </div>
+  )
+}
+
+/** PropRadar property context on the customer quote — dwelling type, age,
+ *  areas. Renders nothing when PropRadar didn't cover the address. */
+function RoofPropertyContextBlock({ quote }: { quote: MultiRoofQuote | null }) {
+  const chips = quote?.property_context ? propertyContextChips(quote.property_context) : []
+  if (chips.length === 0) return null
+  return (
+    <div className="mt-8 border border-ink-line bg-ink-card px-6 py-5">
+      <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
+        Property details
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {chips.map(([label, value]) => (
+          <span key={label} className="inline-flex items-baseline gap-1.5 border border-ink-line bg-ink-deep px-3 py-1.5 font-mono text-[0.72rem]">
+            <span className="uppercase tracking-[0.12em] text-text-dim">{label}</span>
+            <span className="font-semibold text-text-pri">{value}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 function formLabel(form: RoofMetrics['form']): string {
@@ -272,6 +312,8 @@ export default async function RoofingQuotePage({
           ))}
         </div>
 
+        <RoofPropertyContextBlock quote={fullQuote} />
+
         {isInspection && (
           <div className="mt-8 border border-ink-line border-l-4 border-l-warning bg-ink-card px-6 py-5">
             <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-warning">
@@ -427,6 +469,8 @@ function StructureBreakdown({
           ? <MiniStat label="Rate" value={p.effective_rate_per_m2 ? `$${money(p.effective_rate_per_m2)}/m²` : '-'} hint={p.area_m2 ? `over ${Math.round(p.area_m2)} m²` : ''} />
           : <MiniStat label="Area" value={p.area_m2 ? `${Math.round(p.area_m2)} m²` : '-'} hint="sloped" />}
       </div>
+
+      <RoofBuildingData metrics={m} />
 
       {excluded ? (
         <div className="mt-5 border border-ink-line border-l-4 border-l-text-dim bg-ink-deep px-4 py-3 text-sm text-text-sec">

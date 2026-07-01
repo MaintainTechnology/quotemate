@@ -30,6 +30,7 @@ import {
   composeBookingMessage,
   composeCancelMessage,
   composeConfirmMessage,
+  composeMeasureUnavailableMessage,
   narrowQuoteToStructures,
 } from '@/lib/sms/roofing-compose'
 import { asQuoteTierMode, type QuoteTierMode } from '@/lib/quote/tier-visibility'
@@ -160,7 +161,7 @@ const SMS_ROOFING_ENABLED = process.env.SMS_ROOFING_ENABLED === '1'
 const SMS_PAINTING_ENABLED = process.env.SMS_PAINTING_ENABLED === '1'
 
 const ROOFING_APP_BASE_URL = (
-  process.env.NEXT_PUBLIC_APP_URL ?? 'https://quote-mate-rho.vercel.app'
+  process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.quotemax.com.au'
 ).replace(/\/$/, '')
 
 // Twilio webhook ack. We send the real customer reply via the REST API
@@ -672,9 +673,18 @@ async function handleRoofingTurn(args: {
     }
   }
 
-  // Fallback — we couldn't measure (provider down or missing fields).
-  await sendReply("Thanks, we've got your roof details. Our team will confirm your quote shortly.")
-  await persist({ slots: decision.slots, last_step: 'closed', pending_quote_token: null, pending_structure_count: null }, 'done')
+  // Fallback — the automatic measurement was unavailable (provider down /
+  // transient error) despite a complete brief. DON'T dead-end the customer:
+  // route to the on-site inspection so the lead is never lost. Park at
+  // await_booking (status 'open') so a "yes" books it via the existing
+  // booking flow — the same safe path a measured inspection-routed job
+  // takes. Previously this closed the thread with a "we'll confirm your
+  // quote shortly" message that created no measurement, no booking, and no
+  // tradie alert — a black hole the customer never heard back from.
+  const fallbackAddress =
+    reqInput?.address.address ?? decision.slots.address ?? 'your property'
+  await sendReply(composeMeasureUnavailableMessage(firstName, fallbackAddress))
+  await persist({ slots: decision.slots, last_step: 'await_booking', pending_quote_token: null, pending_structure_count: null }, 'open')
   return true
 }
 
@@ -2578,7 +2588,7 @@ export async function POST(req: Request) {
 
       const dispatchPhotoRequestSms = async () => {
         try {
-          const appUrl = process.env.APP_URL ?? 'https://quote-mate-rho.vercel.app'
+          const appUrl = process.env.APP_URL ?? 'https://www.quotemax.com.au'
           const uploadUrl = `${appUrl}/upload/${photoRequestToken}`
           // Priority order (authoritative → best-effort):
           //   1. conversation_state.slots.first_name (this turn's extracted + merged name)
@@ -2726,7 +2736,7 @@ export async function POST(req: Request) {
               // Just offered → hold the quote until the customer picks.
               wp9HoldingForChoice = true
               wp9HoldingOptionCount = options.length
-              const appUrl = process.env.APP_URL ?? 'https://quote-mate-rho.vercel.app'
+              const appUrl = process.env.APP_URL ?? 'https://www.quotemax.com.au'
               const chooseUrl = `${appUrl}/q/choose/${token}`
               let optionsBody = buildProductOptionsSms(options, chooseUrl, category)
               // External / weather-exposed install with no weatherproof
