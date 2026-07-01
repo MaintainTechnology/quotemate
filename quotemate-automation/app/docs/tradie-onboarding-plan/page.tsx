@@ -33,7 +33,7 @@ export const metadata: Metadata = {
 type Step = { num: string; label: string; desc: string }
 
 const FLOW: Step[] = [
-  { num: '01', label: 'Website',  desc: 'Tradie visits quotemate.com.au and clicks Get Started' },
+  { num: '01', label: 'Website',  desc: 'Tradie visits quotemax.com.au and clicks Get Started' },
   { num: '02', label: 'Form',     desc: '4 short pages on mobile, ~3 minutes to fill' },
   { num: '03', label: 'Database', desc: 'Tenant row, pricing book, service offerings written' },
   { num: '04', label: 'Twilio',   desc: 'New AU phone number bought, SMS + voice webhooks wired' },

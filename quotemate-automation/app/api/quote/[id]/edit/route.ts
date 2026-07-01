@@ -530,6 +530,20 @@ export async function POST(
     best: nextTiers.best,
     total_inc_gst: newTotalIncGst,
     stripe_links: stripeLinks,
+    // Mig 146 — INVALIDATE the cached customer PDF on every edit. The
+    // pdf_signature (lib/quote/pdf-signature.ts) captures only template version
+    // + tier mode + visible tiers — NOT line-item content — so an edited price,
+    // label, quantity, or added/removed line would otherwise keep serving the
+    // STALE cached quotes.pdf_path on the next /api/q/[token]/pdf hit
+    // (quotePdfIsStale sees an unchanged signature). The notify path below
+    // eagerly regenerates with { regenerate: true }; but a quote held for review
+    // (status 'awaiting_tradie_approval') or a silent save (notify_customer:
+    // false) takes the NO-notify branch and never regenerates — that was the
+    // "edit didn't reach the PDF" bug. Nulling pdf_path forces quotePdfIsStale →
+    // true, so the next preview/download/send regenerates from these saved
+    // tiers regardless of whether the customer is SMS'd now.
+    pdf_path: null,
+    pdf_signature: null,
     // M-3 (2026-05-25) — only bump status when an actual price changed.
     // A label-only or description-only edit shouldn't transition the
     // quote from 'draft' to 'sent' (that signals tradie price-ownership
