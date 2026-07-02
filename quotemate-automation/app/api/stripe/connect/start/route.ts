@@ -95,7 +95,11 @@ export async function POST(req: Request) {
         )
       }
       if (isStaleConnectAccountError(status.code, status.reason)) {
-        const { error: healErr } = await supabase
+        // Compare-and-swap on the account id so a concurrent request (the
+        // payouts-tab auto-sync in /api/stripe/connect/refresh, or a second
+        // click) that already replaced this stale id can't be clobbered back
+        // to null — that would orphan a live Stripe account.
+        const { data: healed, error: healErr } = await supabase
           .from('tenants')
           .update({
             stripe_connect_account_id: null,
@@ -104,13 +108,27 @@ export async function POST(req: Request) {
             stripe_connect_details_submitted: false,
           })
           .eq('id', tenant.id)
+          .eq('stripe_connect_account_id', accountId)
+          .select('id')
         if (healErr) {
           return Response.json(
             { ok: false, error: 'stale_account_heal_failed', detail: healErr.message },
             { status: 500 },
           )
         }
-        accountId = null
+        if (!healed || healed.length === 0) {
+          // A concurrent request changed the id underneath us. Reuse whatever
+          // is now stored (a freshly-provisioned account) rather than
+          // provisioning a duplicate; null falls through to provisioning.
+          const { data: fresh } = await supabase
+            .from('tenants')
+            .select('stripe_connect_account_id')
+            .eq('id', tenant.id)
+            .maybeSingle()
+          accountId = (fresh?.stripe_connect_account_id as string | null) ?? null
+        } else {
+          accountId = null
+        }
       } else {
         // Transient/unclassified Stripe failure — don't create a duplicate
         // account on top of one that may still exist; surface and retry.

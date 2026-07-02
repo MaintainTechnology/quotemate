@@ -6,7 +6,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const h = vi.hoisted(() => {
-  const sessionsCreate = vi.fn(async () => ({
+  const sessionsCreate = vi.fn(async (_params: Record<string, any>) => ({
     id: 'cs_test_1',
     url: 'https://checkout.stripe.com/c/pay/cs_test_1',
   }))

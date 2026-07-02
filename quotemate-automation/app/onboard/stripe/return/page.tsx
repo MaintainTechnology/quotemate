@@ -52,7 +52,7 @@ export default function StripeConnectReturn() {
             automatically as soon as verification clears.
           </p>
           <Link
-            href="/dashboard"
+            href="/dashboard?tab=payouts"
             className="mt-10 inline-block bg-accent px-8 py-4 font-extrabold uppercase tracking-tight text-white"
           >
             Back to dashboard

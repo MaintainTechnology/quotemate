@@ -31,6 +31,11 @@ import {
 import { AvailabilityEditor } from '@/app/_components/AvailabilityEditor'
 import { ChangePasswordCard } from './_components/ChangePasswordCard'
 import { resolveTradeFormat, tierLabelsForTrade } from '@/lib/quote/trade-format'
+import {
+  ALL_CATEGORY,
+  filterFollowups,
+  followupCategoryOptions,
+} from '@/lib/quote/followup-filter'
 import { asQuoteTierMode, type QuoteTierMode } from '@/lib/quote/tier-visibility'
 import { resolveCatalogueBadge, badgeLabel } from '@/lib/dashboard/badge-state'
 import {
@@ -757,7 +762,13 @@ export default function DashboardPage() {
               />
             )}
             {tab === 'payouts' && (
-              <PayoutsTab data={data} accessToken={accessToken} />
+              <PayoutsTab
+                data={data}
+                accessToken={accessToken}
+                onSynced={() => {
+                  if (accessToken) void refresh(accessToken)
+                }}
+              />
             )}
             {tab === 'pricing' && (
               <PricingTab data={data} onSave={patch} accessToken={accessToken} />
@@ -2574,17 +2585,66 @@ function AccountTab({
 function PayoutsTab({
   data,
   accessToken,
+  onSynced,
 }: {
   data: DashboardData
   accessToken: string | null
+  /** Re-pull /api/tenant/me so the status line re-derives after a sync. */
+  onSynced?: () => void
 }) {
   const t = data.tenant
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [syncing, setSyncing] = useState(false)
 
   const hasAccount = !!t.stripe_connect_account_id
   const payoutsReady = !!t.stripe_connect_payouts_enabled
   const detailsSubmitted = !!t.stripe_connect_details_submitted
+
+  // Pull the live account status from Stripe and mirror it onto the tenant
+  // row, then re-pull the dashboard so the status line updates. This is the
+  // fix for the onboarding loop: returning from Stripe's hosted form, the
+  // `account.updated` webhook may never land (localhost / lag), leaving the
+  // flags stale-false. `soft` (the on-return auto-sync) swallows errors so a
+  // transient hiccup doesn't flash a scary banner; the manual button surfaces
+  // them. Returns whether the tenant data was refreshed.
+  const syncStatus = useCallback(
+    async (soft: boolean): Promise<void> => {
+      if (!accessToken) return
+      setSyncing(true)
+      if (!soft) setErr(null)
+      try {
+        const res = await fetch('/api/stripe/connect/refresh', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+        const json = await res.json().catch(() => null)
+        if (json?.ok) {
+          if (json.synced) onSynced?.()
+        } else if (!soft) {
+          setErr(
+            json?.detail || json?.error || `Couldn’t refresh payout status (HTTP ${res.status}).`,
+          )
+        }
+      } catch (e) {
+        if (!soft) setErr(e instanceof Error ? e.message : String(e))
+      } finally {
+        setSyncing(false)
+      }
+    },
+    [accessToken, onSynced],
+  )
+
+  // On return from Stripe the flags are usually stale — reconcile once when
+  // an account exists but payouts aren't yet marked ready. Fires a single
+  // time per mount (the ref guard); once payoutsReady flips true the guard is
+  // moot because the condition no longer holds.
+  const autoSyncedRef = useRef(false)
+  useEffect(() => {
+    if (!accessToken || !hasAccount || payoutsReady || autoSyncedRef.current) return
+    autoSyncedRef.current = true
+    void syncStatus(true)
+  }, [accessToken, hasAccount, payoutsReady, syncStatus])
 
   // One headline status, derived from the synced flags:
   //   not_started — no connected account yet
@@ -2689,30 +2749,44 @@ function PayoutsTab({
 
           {err && <ErrorBanner>{err}</ErrorBanner>}
 
-          {status === 'ready' ? (
-            <button
-              type="button"
-              onClick={startOnboarding}
-              disabled={busy}
-              className="inline-flex items-center gap-2 border border-ink-line text-text-sec hover:text-text-pri font-semibold px-5 py-2.5 text-xs uppercase tracking-wider transition-colors disabled:opacity-50"
-            >
-              {busy ? 'Opening Stripe…' : 'Update payout details'}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={startOnboarding}
-              disabled={busy}
-              className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-50"
-            >
-              <Banknote size={16} strokeWidth={2} aria-hidden="true" />
-              {busy
-                ? 'Opening Stripe…'
-                : status === 'not_started'
-                  ? 'Set up payouts'
-                  : 'Continue setup'}
-            </button>
-          )}
+          <div className="flex flex-wrap items-center gap-3">
+            {status === 'ready' ? (
+              <button
+                type="button"
+                onClick={startOnboarding}
+                disabled={busy}
+                className="inline-flex items-center gap-2 border border-ink-line text-text-sec hover:text-text-pri font-semibold px-5 py-2.5 text-xs uppercase tracking-wider transition-colors disabled:opacity-50"
+              >
+                {busy ? 'Opening Stripe…' : 'Update payout details'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={startOnboarding}
+                disabled={busy}
+                className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-50"
+              >
+                <Banknote size={16} strokeWidth={2} aria-hidden="true" />
+                {busy
+                  ? 'Opening Stripe…'
+                  : status === 'not_started'
+                    ? 'Set up payouts'
+                    : 'Continue setup'}
+              </button>
+            )}
+            {/* Finished the Stripe form but the tab still says incomplete?
+                Re-pull the live status (covers a missed/late webhook). */}
+            {hasAccount && !payoutsReady && (
+              <button
+                type="button"
+                onClick={() => void syncStatus(false)}
+                disabled={syncing}
+                className="inline-flex items-center gap-2 border border-ink-line text-text-sec hover:text-text-pri font-semibold px-5 py-2.5 text-xs uppercase tracking-wider transition-colors disabled:opacity-50"
+              >
+                {syncing ? 'Checking…' : 'Refresh status'}
+              </button>
+            )}
+          </div>
         </div>
       </Card>
 
@@ -6039,12 +6113,16 @@ function quoteMatchesFilter(q: Quote, f: QuoteFilter): boolean {
 // source of truth so the collapsed left-rail, the summary pill, and the
 // expanded badge set can never drift apart.
 type QuoteBadgeTone = 'paid' | 'inspect' | 'draft' | 'sent' | 'accepted'
+// Restrained, cohesive vocabulary: neutral greyscale for the resting states
+// (draft / sent / inspection), with the single orange accent reserved for the
+// money event a tradie actually wants to spot — a paid/accepted quote. No
+// teal/amber here; the multi-hue treatment read as noise (see redesign brief).
 const QUOTE_BADGE_TONE: Record<QuoteBadgeTone, Tone> = {
-  paid: 'good',
-  accepted: 'good',
-  inspect: 'accent',
-  sent: 'default',
-  draft: 'warn',
+  paid: 'accent',
+  accepted: 'accent',
+  inspect: 'default',
+  sent: 'dim',
+  draft: 'dim',
 }
 
 // The "Saved jobs" strip (roofing/solar/painting/commercial jobs living
@@ -6078,6 +6156,89 @@ function compareQuotes(a: Quote, b: Quote, sort: QuoteSort): number {
   return (b.created_at ?? '').localeCompare(a.created_at ?? '')
 }
 
+// Sub-tab bar for the Quotes tab. "Quotes" (the drafted-quote pipeline) and
+// "Saved jobs" (measure-tool estimates outside that pipeline) are distinct
+// entities that used to stack on one screen; this switches between them so
+// each is seen on its own. Tab-bar look (single accent underline on the active
+// tab) rather than pills — reads as tabs and keeps the surface calm.
+type QuoteSection = 'quotes' | 'jobs'
+
+function QuoteSectionTabs({
+  section,
+  onChange,
+  quotesCount,
+  jobsCount,
+}: {
+  section: QuoteSection
+  onChange: (s: QuoteSection) => void
+  quotesCount: number
+  jobsCount: number | null
+}) {
+  const tabs: { key: QuoteSection; label: string; count: number | null }[] = [
+    { key: 'quotes', label: 'Quotes', count: quotesCount },
+    { key: 'jobs', label: 'Saved jobs', count: jobsCount },
+  ]
+  // Full WAI-ARIA tabs pattern: role=tab/tabpanel wiring (aria-controls + the
+  // panels' aria-labelledby, below), roving tabindex (only the active tab is
+  // in the Tab order), and arrow/Home/End key movement between tabs.
+  const btnRefs = useRef<Record<QuoteSection, HTMLButtonElement | null>>({
+    quotes: null,
+    jobs: null,
+  })
+  function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    const order: QuoteSection[] = tabs.map((t) => t.key)
+    const i = order.indexOf(section)
+    let next: QuoteSection | null = null
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = order[(i + 1) % order.length]
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp')
+      next = order[(i - 1 + order.length) % order.length]
+    else if (e.key === 'Home') next = order[0]
+    else if (e.key === 'End') next = order[order.length - 1]
+    if (next && next !== section) {
+      e.preventDefault()
+      onChange(next)
+      btnRefs.current[next]?.focus()
+    }
+  }
+  return (
+    <div
+      role="tablist"
+      aria-label="Quotes and saved jobs"
+      onKeyDown={onKeyDown}
+      className="flex items-center gap-6 border-b border-ink-line"
+    >
+      {tabs.map((t) => {
+        const active = section === t.key
+        return (
+          <button
+            key={t.key}
+            ref={(el) => {
+              btnRefs.current[t.key] = el
+            }}
+            type="button"
+            role="tab"
+            id={`quote-tab-${t.key}`}
+            aria-selected={active}
+            aria-controls={`quote-panel-${t.key}`}
+            tabIndex={active ? 0 : -1}
+            onClick={() => onChange(t.key)}
+            className={`-mb-px inline-flex items-center gap-2 border-b-2 px-1 pb-3 pt-1 font-mono text-[0.72rem] font-bold uppercase tracking-[0.16em] transition-colors cursor-pointer ${
+              active
+                ? 'border-accent text-text-pri'
+                : 'border-transparent text-text-dim hover:text-text-pri'
+            }`}
+          >
+            {t.label}
+            {t.count != null && (
+              <span className={active ? 'text-accent' : 'text-text-dim'}>{t.count}</span>
+            )}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 function QuotesTab({
   data,
   accessToken,
@@ -6090,24 +6251,12 @@ function QuotesTab({
   const isMultiTrade =
     Array.isArray(data.tenant.trades) && data.tenant.trades.length > 1
 
+  const [section, setSection] = useState<QuoteSection>('quotes')
+  const [savedCount, setSavedCount] = useState<number | null>(null)
   const [filter, setFilter] = useState<QuoteFilter>('all')
   const [visible, setVisible] = useState(LIST_PAGE_SIZE)
   const [sort, setSort] = useState<QuoteSort>('newest')
   const all = data.quotes
-
-  if (all.length === 0) {
-    return (
-      <div className="space-y-5">
-        <SavedJobsSection accessToken={accessToken} />
-        <Card>
-          <p className="text-sm text-text-dim">
-            No quotes drafted yet. Customers texting your QuoteMax number will
-            appear here once their first quote is drafted.
-          </p>
-        </Card>
-      </div>
-    )
-  }
 
   const FILTERS: { key: QuoteFilter; label: string }[] = [
     { key: 'all', label: 'All' },
@@ -6137,35 +6286,68 @@ function QuotesTab({
 
   return (
     <div className="space-y-5">
-      <SavedJobsSection accessToken={accessToken} />
-      <StatGrid
-        cols={4}
-        stats={[
-          {
-            label: 'Quoted',
-            value: `$${formatMoney(quotedValue)}`,
-            hint: `${all.length} quote${all.length === 1 ? '' : 's'} · avg $${formatMoney(avgQuote)}`,
-            hero: true,
-          },
-          {
-            label: 'Converted',
-            value: `$${formatMoney(convertedValue)}`,
-            hint: `${acceptedQuotes.length} accepted`,
-            tone: acceptedQuotes.length > 0 ? 'good' : 'default',
-          },
-          {
-            label: 'Conversion',
-            value: `${conversion}%`,
-            tone: conversion > 0 ? 'good' : 'default',
-          },
-          {
-            label: 'Needs review',
-            value: String(needsReview),
-            tone: needsReview > 0 ? 'warn' : 'default',
-            hint: needsReview > 0 ? 'awaiting you' : 'all actioned',
-          },
-        ]}
+      <QuoteSectionTabs
+        section={section}
+        onChange={setSection}
+        quotesCount={all.length}
+        jobsCount={savedCount}
       />
+
+      {/* Saved jobs — its own sub-tab panel. Kept mounted (hidden via the
+          `hidden` attribute when the Quotes sub-tab is active) so its count
+          feeds the tab badge and switching is instant, without re-fetching
+          /api/tenant/trade-jobs each toggle. */}
+      <div
+        role="tabpanel"
+        id="quote-panel-jobs"
+        aria-labelledby="quote-tab-jobs"
+        hidden={section !== 'jobs'}
+      >
+        <SavedJobsSection accessToken={accessToken} renderWhenEmpty onCount={setSavedCount} />
+      </div>
+
+      {section === 'quotes' && (
+        <div
+          role="tabpanel"
+          id="quote-panel-quotes"
+          aria-labelledby="quote-tab-quotes"
+          className="space-y-5"
+        >
+          {all.length === 0 ? (
+            <Card>
+              <p className="text-sm text-text-dim">
+                No quotes drafted yet. Customers texting your QuoteMax number will
+                appear here once their first quote is drafted.
+              </p>
+            </Card>
+          ) : (
+            <>
+              <StatGrid
+            cols={4}
+            stats={[
+              {
+                label: 'Quoted',
+                value: `$${formatMoney(quotedValue)}`,
+                hint: `${all.length} quote${all.length === 1 ? '' : 's'} · avg $${formatMoney(avgQuote)}`,
+                hero: true,
+              },
+              {
+                label: 'Converted',
+                value: `$${formatMoney(convertedValue)}`,
+                hint: `${acceptedQuotes.length} accepted`,
+              },
+              {
+                label: 'Conversion',
+                value: `${conversion}%`,
+              },
+              {
+                label: 'Needs review',
+                value: String(needsReview),
+                tone: needsReview > 0 ? 'accent' : 'default',
+                hint: needsReview > 0 ? 'awaiting you' : 'all actioned',
+              },
+            ]}
+          />
 
       {/* Status filter rail — lets a tradie with a long history jump
           straight to what needs action (in-review) or what converted.
@@ -6251,6 +6433,10 @@ function QuotesTab({
           </>
         )}
       </Card>
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -6458,14 +6644,14 @@ function QuoteCard({
             {/* Trade label only when actually relevant (multi-trade) +
                 large enough to fit. */}
             {isMultiTrade && trade && (
-              <span className="hidden sm:inline font-mono text-[0.6rem] uppercase tracking-[0.14em] text-accent font-bold">
+              <span className="hidden sm:inline font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim font-bold">
                 · {tradeLabel(trade)}
               </span>
             )}
-            {/* Wave 3b — always-show ROOF pill on roofing quotes so it
-                stands out from electrical/plumbing in a mixed list. */}
+            {/* Wave 3b — a ROOF pill flags roofing quotes in a mixed list.
+                Neutral chip (was an orange fill) so the row stays calm. */}
             {isRoofingTrade && (
-              <span className="inline-flex items-center bg-accent/15 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-[0.16em] font-bold text-accent">
+              <span className="inline-flex items-center border border-ink-line px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-[0.16em] font-bold text-text-dim">
                 Roof
               </span>
             )}
@@ -6836,21 +7022,17 @@ function QuoteDisplayModeToggle({
   )
 }
 
-/** Small pill rendered in card headers to make the channel of origin
- *  unambiguous: an SMS thread vs. a voice-call transcript look similar
- *  in the expanded view, so the badge prevents the tradie from
- *  misreading one for the other. Two-tone palette — emerald for SMS
- *  (matches the inbound-bubble accent), violet for voice (visually
- *  distinct so it doesn't blend with the SMS green). */
+/** Small neutral pill rendered in card headers to make the channel of origin
+ *  unambiguous: an SMS thread vs. a voice-call transcript look similar in the
+ *  expanded view, so the badge prevents the tradie from misreading one for the
+ *  other. The label alone carries the signal — no colour (the old emerald/
+ *  violet fills sat outside the Maintain palette). */
 function ChannelBadge({ channel }: { channel: 'sms' | 'voice' }) {
-  const tone =
-    channel === 'voice'
-      ? 'border-violet-500/60 bg-violet-500/10 text-violet-300'
-      : 'border-emerald-500/60 bg-emerald-500/10 text-emerald-300'
+  // Neutral mono chip — the label carries the meaning. The old emerald/violet
+  // fills sat outside the Maintain palette and were the loudest source of the
+  // "colourful filler" look.
   return (
-    <span
-      className={`inline-flex items-center font-mono text-[0.55rem] uppercase tracking-[0.16em] font-bold px-1.5 py-0.5 border ${tone}`}
-    >
+    <span className="inline-flex items-center border border-ink-line px-1.5 py-0.5 font-mono text-[0.55rem] font-bold uppercase tracking-[0.16em] text-text-dim">
       {channel === 'voice' ? 'Voice' : 'SMS'}
     </span>
   )
@@ -10192,6 +10374,9 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
   const [logFor, setLogFor] = useState<Record<string, boolean>>({})
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({})
   const [historyRefresh, setHistoryRefresh] = useState<Record<string, number>>({})
+  // Category filter + free-text search to tame a long follow-up stack.
+  const [category, setCategory] = useState<string>(ALL_CATEGORY)
+  const [query, setQuery] = useState('')
 
   const load = useCallback(async () => {
     if (!accessToken) {
@@ -10362,6 +10547,22 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
     }
   }
 
+  // Filter state is derived with hooks, so it MUST be computed before the
+  // loading/error early returns below — every render has to run the same
+  // hooks in the same order (Rules of Hooks).
+  const list = rows ?? []
+  // Category options come from the full queue; the selected category
+  // self-heals to "All" if a reload drops it, so the <select> and the
+  // filter can never disagree.
+  const categoryOptions = useMemo(() => followupCategoryOptions(list), [list])
+  const effectiveCategory = categoryOptions.some((o) => o.value === category)
+    ? category
+    : ALL_CATEGORY
+  const filtered = useMemo(
+    () => filterFollowups(list, { category: effectiveCategory, query }),
+    [list, effectiveCategory, query],
+  )
+
   if (loading) {
     return (
       <Card>
@@ -10384,13 +10585,18 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
     )
   }
 
-  const list = rows ?? []
+  const filtersActive = effectiveCategory !== ALL_CATEGORY || query.trim() !== ''
+  const clearFilters = () => {
+    setCategory(ALL_CATEGORY)
+    setQuery('')
+  }
   // CRM split: active queue first, contacted-but-still-unpaid after.
   // Server already returns both (includeActioned=1); we group by
   // followed_up_at and render one ordered list with a divider so a
-  // contacted lead is parked, not lost.
-  const toChase = list.filter((f) => !f.followed_up_at)
-  const done = list.filter((f) => !!f.followed_up_at)
+  // contacted lead is parked, not lost. Grouping runs on the FILTERED set
+  // so the counts + section headers track what's actually shown.
+  const toChase = filtered.filter((f) => !f.followed_up_at)
+  const done = filtered.filter((f) => !!f.followed_up_at)
   const ordered = [...toChase, ...done]
   const thresholdNote =
     minAgeHours && minAgeHours > 0
@@ -10421,13 +10627,78 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
         done.length ? ` · ${done.length} contacted` : ''
       } · ${thresholdNote} Oldest first.`}
     >
+      {/* Filter + search — keep the long queue navigable */}
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative flex-1">
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            aria-hidden="true"
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-dim"
+          >
+            <circle cx="11" cy="11" r="7" />
+            <path d="M21 21l-4.3-4.3" />
+          </svg>
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search name, suburb, phone or follow-up code…"
+            aria-label="Search follow-ups"
+            className="w-full bg-ink-deep border border-ink-line pl-10 pr-3 py-2 text-sm text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft transition-colors"
+          />
+        </div>
+        <select
+          value={effectiveCategory}
+          onChange={(e) => setCategory(e.target.value)}
+          aria-label="Filter by job category"
+          className="bg-ink-deep border border-ink-line px-3.5 py-2.5 text-sm text-text-pri focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft transition-colors sm:w-56"
+        >
+          {categoryOptions.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label} ({o.count})
+            </option>
+          ))}
+        </select>
+      </div>
+      {filtersActive && (
+        <p className="mb-3 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
+          Showing {ordered.length} of {list.length}
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="ml-2 text-accent hover:text-accent-press cursor-pointer"
+          >
+            Clear
+          </button>
+        </p>
+      )}
+      {ordered.length === 0 ? (
+        <p className="text-sm text-text-dim">
+          No follow-ups match{' '}
+          {query.trim() ? `“${query.trim()}”` : 'this filter'}.{' '}
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="font-semibold text-accent hover:text-accent-press cursor-pointer"
+          >
+            Clear filters
+          </button>
+        </p>
+      ) : (
+        <>
       {toChase.length === 0 && done.length > 0 && (
         <p className="mb-3 text-sm text-text-dim">
           Nothing left to chase — everyone&apos;s been contacted. Reopen
           any below if they still need a nudge.
         </p>
       )}
-      <div className="space-y-3">
+      <div className="max-h-[70vh] space-y-3 overflow-y-auto pr-1">
         {ordered.map((f, _idx) => {
           const rowId = followupRowId(f)
           const isLead = f.kind === 'lead'
@@ -10686,6 +10957,8 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
           ]
         })}
       </div>
+        </>
+      )}
     </Card>
       {composeFor && (
         <FollowupTextModal

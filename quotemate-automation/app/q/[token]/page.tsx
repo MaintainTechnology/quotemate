@@ -13,14 +13,24 @@
 import { createClient } from '@supabase/supabase-js'
 import { after } from 'next/server'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { getTierPhoto } from '@/lib/quote/tier-photos'
 import { asQuoteTierMode, resolveVisibleTiers } from '@/lib/quote/tier-visibility'
 import { refreshSignedUrl } from '@/lib/storage/upload'
 import { CustomerPhotosBlock } from './CustomerPhotosBlock'
 import { RoofHeroStrip } from './RoofHeroStrip'
+import { CommercialPaintDetails } from './CommercialPaintDetails'
 import { TradeTiers } from './TradeTiers'
 import { resolveTradeFormat, tierLabelsForTrade } from '@/lib/quote/trade-format'
+import {
+  roofScopeStats,
+  commercialPaintScope,
+  tenderLineItems,
+} from '@/lib/quote/trade-scope'
+import {
+  resolveSolarPagePath,
+  resolveCommercialPaintTenderPath,
+} from '@/lib/quote/dedicated-page'
 import { generatePreviewImage } from '@/lib/ig-engine/generate'
 import { generateSampleImages } from '@/lib/ig-engine/samples'
 import { PreviewSection } from './PreviewSection'
@@ -174,24 +184,35 @@ export default async function PublicQuotePage(props: {
   // the generic card AND log a warning here on the customer surface.
   const tradeFormat = resolveTradeFormat(intakeTrade)
   const isRoofing = tradeFormat.key === 'roofing'
+
+  // ── Solar → dedicated page redirect ──────────────────────────────
+  // The solar pipeline token-twins its rows (quotes.share_token ==
+  // solar_estimates.public_token) and leaves the quotes row TIER-LESS —
+  // rendering it here produced an empty "Your solar options" page. The
+  // dedicated /q/solar/[token] page owns the measurement detail (kW,
+  // panels, sun/shade map) AND the deposit CTAs, so every /q/<token>
+  // link — including ones already sent by SMS — hands over to it.
+  if (tradeFormat.key === 'solar') {
+    const solarPath = await resolveSolarPagePath(supabase, token)
+    if (solarPath) redirect(solarPath)
+  }
+
   // Pull the roof-hero stats off the intake scope when this IS a roofing
-  // job. The roofing save-as-quote route stamps these into intake.scope
-  // verbatim (see app/api/roofing/save-as-quote/route.ts).
-  const roofScope =
-    isRoofing && intake?.scope && typeof intake.scope === 'object'
-      ? (intake.scope as Record<string, unknown>)
-      : null
-  const roofStats = roofScope
-    ? {
-        area_m2:
-          typeof roofScope.sloped_area_m2 === 'number'
-            ? roofScope.sloped_area_m2
-            : null,
-        form: typeof roofScope.form === 'string' ? roofScope.form : null,
-        hips: typeof roofScope.hips === 'number' ? roofScope.hips : null,
-        valleys: typeof roofScope.valleys === 'number' ? roofScope.valleys : null,
-        storeys: typeof roofScope.storeys === 'number' ? roofScope.storeys : null,
-      }
+  // job. The roofing save-as-quote route stamps its full measurement
+  // snapshot ({...inputs, ...metrics}) into intake.scope verbatim (see
+  // app/api/roofing/save-as-quote/route.ts) — surface all of it.
+  const roofStats = isRoofing ? roofScopeStats(intake?.scope) : null
+
+  // Commercial painting: the tender's measured takeoff (intake.scope
+  // summary + the per-surface line items wrapped into the tender tier),
+  // plus a link to the rich /q/commercial-paint page when the saved_quote
+  // backlink resolves one. This quotes row keeps the deposit checkout, so
+  // it enriches in place instead of redirecting like solar.
+  const isCommercialPaint = tradeFormat.key === 'commercial-painting'
+  const commPaintScope = isCommercialPaint ? commercialPaintScope(intake?.scope) : null
+  const commPaintLines = isCommercialPaint ? tenderLineItems(quote.better) : []
+  const commPaintTenderUrl = isCommercialPaint
+    ? await resolveCommercialPaintTenderPath(supabase, quote.id as string)
     : null
   // WP1 — the licence number + GST status shown to the customer must be
   // THIS quote's tradie, never "whichever pricing_book row Postgres returns
@@ -383,8 +404,15 @@ export default async function PublicQuotePage(props: {
   // Inspection-required quotes still get preview + samples — the customer
   // uploaded photos of the site, so visualising the proposed work is just
   // as useful before the on-site visit as it is for an auto-priced quote.
-  const needsPreview = previewStatus === 'idle' && photoPaths.length > 0
-  const needsSamples = samplesStatus === 'idle'
+  //
+  // Install-visualisation (photo upload prompt + "AI preview · your room" +
+  // room sample images) is electrical/plumbing framing. Bespoke trades
+  // (roofing / commercial painting / …) are measured deterministically from
+  // satellite or plan documents — the room-install visuals are wrong there,
+  // so both the sections AND the Gemini generation triggers are gated off.
+  const showInstallVisuals = tradeFormat.usesGenericCard
+  const needsPreview = showInstallVisuals && previewStatus === 'idle' && photoPaths.length > 0
+  const needsSamples = showInstallVisuals && samplesStatus === 'idle'
   if (needsPreview || needsSamples) {
     after(async () => {
       try {
@@ -411,7 +439,12 @@ export default async function PublicQuotePage(props: {
   })
 
   const firstName = (intake?.caller?.name ?? '').toString().split(' ')[0] || 'there'
-  const jobLabel = JOB_TYPE_LABEL[intake?.job_type ?? ''] ?? 'job'
+  // JOB_TYPE_LABEL covers electrical/plumbing job types; bespoke trades fall
+  // back to their trade label ("your roofing quote", "your commercial
+  // painting quote") instead of the anonymous "your job quote".
+  const jobLabel =
+    JOB_TYPE_LABEL[intake?.job_type ?? ''] ??
+    (tradeFormat.usesGenericCard ? 'job' : tradeFormat.label.toLowerCase())
   const itemCount: number | undefined = intake?.scope?.item_count
   const jobSummary = itemCount && itemCount > 0 ? `${itemCount} ${jobLabel}` : jobLabel
 
@@ -613,21 +646,29 @@ export default async function PublicQuotePage(props: {
           </NumberedSection>
         ) : null}
 
-        {/* ─── Step 02 · Customer photos (always rendered, three states) ─── */}
-        <CustomerPhotosBlock urls={customerPhotoUrls} uploadToken={uploadToken} />
+        {/* ─── Step 02 · Customer photos ───────────────────
+            Electrical/plumbing quotes always render it (three states incl.
+            the upload prompt). Bespoke trades are measured from satellite /
+            plan documents, so the block only appears when photos genuinely
+            exist — never as an upload prompt that has no pipeline behind it. */}
+        {showInstallVisuals || customerPhotoUrls.length > 0 ? (
+          <CustomerPhotosBlock urls={customerPhotoUrls} uploadToken={uploadToken} />
+        ) : null}
 
         {/* ─── AI preview + sample gallery ─────────────────
-            Renders for BOTH auto-priced and inspection-required quotes.
-            For inspection-only flows, the visuals still help the customer
-            picture the proposed install before the on-site visit. The
-            $99 booking CTA still dominates below — see InspectionBlock. */}
-        <PreviewSection
-          shareToken={token}
-          initialPreviewStatus={previewStatus}
-          initialPreviewImageUrls={previewImageUrls}
-          initialSamplesStatus={samplesStatus}
-          initialSampleImageUrls={sampleImageUrls}
-        />
+            Electrical/plumbing only ("AI preview · your room" is install
+            visualisation). Renders for BOTH auto-priced and inspection-
+            required quotes there. Bespoke trades show their own measurement
+            evidence instead (RoofHeroStrip / CommercialPaintDetails below). */}
+        {showInstallVisuals ? (
+          <PreviewSection
+            shareToken={token}
+            initialPreviewStatus={previewStatus}
+            initialPreviewImageUrls={previewImageUrls}
+            initialSamplesStatus={samplesStatus}
+            initialSampleImageUrls={sampleImageUrls}
+          />
+        ) : null}
 
         {/* ─── Roof hero (only for roofing quotes) ──────── */}
         {isRoofing && roofStats && intake && (
@@ -638,6 +679,15 @@ export default async function PublicQuotePage(props: {
             stats={roofStats}
           />
         )}
+
+        {/* ─── Measured takeoff (only for commercial painting) ── */}
+        {isCommercialPaint ? (
+          <CommercialPaintDetails
+            scope={commPaintScope}
+            lineItems={commPaintLines}
+            tenderUrl={commPaintTenderUrl}
+          />
+        ) : null}
 
         {/* ─── Inspection-only block OR tier cards ──────── */}
         {/* Roofing quotes render the roofing-framed options (patch/repair ·
@@ -690,13 +740,28 @@ export default async function PublicQuotePage(props: {
                         'Indicative estimate from your satellite measurement. Your final price is confirmed at a quick on-site visit ($99, refundable and credited to your job).',
                     }
                   : {}
-                : {
-                    heading: `Your ${tradeFormat.label.toLowerCase()} options`,
-                    labels: tierLabelsForTrade(intakeTrade),
-                    blurbs: { good: '', better: '', best: '' },
-                    footnote:
-                      'Final price is confirmed after our on-site visit. This estimate is based on the information provided so far.',
-                  })}
+                : isCommercialPaint
+                  ? {
+                      // One tender price wrapped into the tier slots — frame it
+                      // as the tender, never as a Good/Better/Best ladder.
+                      heading: 'Your tender',
+                      labels: tierLabelsForTrade(intakeTrade),
+                      blurbs: {
+                        good: 'Fixed price for the full measured scope — every surface itemised above.',
+                        better:
+                          'Fixed price for the full measured scope — every surface itemised above.',
+                        best: 'Fixed price for the full measured scope — every surface itemised above.',
+                      },
+                      footnote:
+                        'Priced from the measured takeoff above. Your tradie confirms the final scope before any work commences.',
+                    }
+                  : {
+                      heading: `Your ${tradeFormat.label.toLowerCase()} options`,
+                      labels: tierLabelsForTrade(intakeTrade),
+                      blurbs: { good: '', better: '', best: '' },
+                      footnote:
+                        'Final price is confirmed after our on-site visit. This estimate is based on the information provided so far.',
+                    })}
             />
           </>
         ) : (

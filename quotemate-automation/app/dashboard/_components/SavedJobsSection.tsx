@@ -62,9 +62,11 @@ const STATUS_RANK: Record<TradeJobSummary['status'], number> = {
   confirmed: 2,
 }
 
+// Neutral status pills — the label carries the state. Muted to match the
+// de-coloured Quotes sub-tab so the two sibling tabs read as one surface.
 const STATUS_PILL: Record<TradeJobSummary['status'], string> = {
-  confirmed: 'border-success/50 text-success',
-  inspection: 'border-accent/50 text-accent',
+  confirmed: 'border-ink-line text-text-sec',
+  inspection: 'border-ink-line text-text-dim',
   draft: 'border-ink-line text-text-dim',
 }
 
@@ -102,7 +104,18 @@ function compareJobs(a: TradeJobSummary, b: TradeJobSummary, sort: JobSort): num
   return (b.createdAt ?? '').localeCompare(a.createdAt ?? '')
 }
 
-export function SavedJobsSection({ accessToken }: { accessToken: string | null }) {
+export function SavedJobsSection({
+  accessToken,
+  renderWhenEmpty = false,
+  onCount,
+}: {
+  accessToken: string | null
+  /** When true (the section is its own active sub-tab), render an empty state
+   *  instead of collapsing to null once the fetch resolves with zero jobs. */
+  renderWhenEmpty?: boolean
+  /** Reports the current job count up so a parent tab can show a badge. */
+  onCount?: (count: number) => void
+}) {
   const [jobs, setJobs] = useState<TradeJobSummary[] | null>(null)
   const [filter, setFilter] = useState<'all' | TradeKey>('all')
   const [sort, setSort] = useState<JobSort>('newest')
@@ -122,7 +135,11 @@ export function SavedJobsSection({ accessToken }: { accessToken: string | null }
         })
         if (!res.ok) return
         const json = (await res.json()) as { jobs?: TradeJobSummary[] }
-        if (!cancelled) setJobs(Array.isArray(json.jobs) ? json.jobs : [])
+        const arr = Array.isArray(json.jobs) ? json.jobs : []
+        if (!cancelled) {
+          setJobs(arr)
+          onCount?.(arr.length)
+        }
       } catch {
         /* network error — leave hidden */
       }
@@ -130,7 +147,7 @@ export function SavedJobsSection({ accessToken }: { accessToken: string | null }
     return () => {
       cancelled = true
     }
-  }, [accessToken])
+  }, [accessToken, onCount])
 
   async function deleteJob(job: TradeJobSummary) {
     if (!accessToken) return
@@ -161,6 +178,7 @@ export function SavedJobsSection({ accessToken }: { accessToken: string | null }
         (j) => !(j.trade === job.trade && j.id === job.id),
       )
       setJobs(next)
+      onCount?.(next.length)
       // Don't strand the tradie on an empty category: if the deleted row was
       // the filtered trade's last job, fall back to 'All'.
       if (filter !== 'all' && !next.some((j) => j.trade === filter)) {
@@ -176,7 +194,23 @@ export function SavedJobsSection({ accessToken }: { accessToken: string | null }
     }
   }
 
-  if (!jobs || jobs.length === 0) return null
+  // Not fetched yet → stay invisible (no flash). Fetched-but-empty → a proper
+  // empty state when this section is its own active sub-tab, else collapse.
+  if (!jobs) return null
+  if (jobs.length === 0) {
+    if (!renderWhenEmpty) return null
+    return (
+      <section className="border border-ink-line bg-ink-card px-5 py-10 text-center">
+        <div className="font-mono text-[0.7rem] font-bold uppercase tracking-[0.16em] text-text-pri">
+          No saved jobs yet
+        </div>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-text-sec">
+          Roofing, solar and painting estimates you save from the measure tools
+          land here — kept separate from your quote pipeline.
+        </p>
+      </section>
+    )
+  }
 
   const visibleTrades = TRADE_ORDER.filter((t) => jobs.some((j) => j.trade === t))
   const activeTrades = filter === 'all' ? visibleTrades : visibleTrades.filter((t) => t === filter)
@@ -290,7 +324,7 @@ export function SavedJobsSection({ accessToken }: { accessToken: string | null }
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="inline-flex shrink-0 items-center bg-accent/15 px-1.5 py-0.5 font-mono text-[0.55rem] font-bold uppercase tracking-[0.16em] text-accent">
+                        <span className="inline-flex shrink-0 items-center border border-ink-line px-1.5 py-0.5 font-mono text-[0.55rem] font-bold uppercase tracking-[0.16em] text-text-dim">
                           {TRADE_BADGE[job.trade]}
                         </span>
                         <span className="truncate text-sm font-semibold text-text-pri">

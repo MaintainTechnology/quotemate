@@ -124,7 +124,7 @@ describe('POST /api/stripe/connect/start', () => {
     authedUser()
     h.results.push(
       { data: tenantRow('acct_stale'), error: null }, // tenant lookup
-      { data: null, error: null }, // heal update
+      { data: [{ id: 'tenant-1' }], error: null }, // heal update (CAS matched the stale id)
       { data: null, error: null }, // persist new acct id
     )
     statusMock.mockResolvedValue({
@@ -156,9 +156,9 @@ describe('POST /api/stripe/connect/start', () => {
   it('also treats the literal account-link error message as stale', async () => {
     authedUser()
     h.results.push(
-      { data: tenantRow('acct_foreign'), error: null },
-      { data: null, error: null },
-      { data: null, error: null },
+      { data: tenantRow('acct_foreign'), error: null }, // tenant lookup
+      { data: [{ id: 'tenant-1' }], error: null }, // heal update (CAS matched)
+      { data: null, error: null }, // persist new acct id
     )
     statusMock.mockResolvedValue({
       ok: false,

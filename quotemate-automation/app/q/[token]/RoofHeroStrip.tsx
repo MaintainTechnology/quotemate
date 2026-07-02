@@ -19,9 +19,13 @@ import { useEffect, useState } from 'react'
 
 type Stats = {
   area_m2: number | null
+  footprint_m2: number | null
   form: string | null
+  material: string | null
+  pitch: string | null
   hips: number | null
   valleys: number | null
+  ridge_lm: number | null
   storeys: number | null
 }
 
@@ -123,14 +127,35 @@ export function RoofHeroStrip({ address, suburb, shareToken, stats }: Props) {
               label="Sloped area"
               value={stats.area_m2 !== null ? `${stats.area_m2.toFixed(0)} m²` : '—'}
             />
-            <StatCell label="Roof form" value={titleCase(stats.form ?? 'unknown')} />
+            <StatCell
+              label="Material"
+              value={stats.material !== null ? titleCase(stats.material) : '—'}
+            />
+            <StatCell
+              label="Roof form"
+              value={stats.form !== null ? titleCase(stats.form) : '—'}
+            />
+            <StatCell
+              label="Pitch"
+              value={stats.pitch !== null ? titleCase(stats.pitch) : '—'}
+            />
             <StatCell
               label="Hips · valleys"
-              value={`${stats.hips ?? '?'} · ${stats.valleys ?? '?'}`}
+              value={`${stats.hips ?? '—'} · ${stats.valleys ?? '—'}`}
+            />
+            <StatCell
+              label="Ridge"
+              value={stats.ridge_lm !== null ? `${stats.ridge_lm.toFixed(0)} lm` : '—'}
             />
             <StatCell
               label="Storeys"
               value={stats.storeys !== null ? String(stats.storeys) : '—'}
+            />
+            <StatCell
+              label="Footprint"
+              value={
+                stats.footprint_m2 !== null ? `${stats.footprint_m2.toFixed(0)} m²` : '—'
+              }
             />
           </ul>
 

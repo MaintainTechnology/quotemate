@@ -211,6 +211,15 @@ const TIER_LABELS_BY_TRADE: Partial<Record<TradeKey, TierLabels>> = {
   // Roofing uses the same framing as the customer-facing /q/roof + RoofingTiers
   // so the tradie and customer see one shared vocabulary.
   roofing: { good: 'Patch / repair', better: 'Re-roof', best: 'Upgrade' },
+  // Commercial painting wraps ONE tender price into all three tier slots
+  // (lib/commercial-painting/save-quote-helpers.ts buildTenderTier), so
+  // whichever slot the tier-mode surfaces must read as the tender — never
+  // as a Good/Better/Best ladder that implies cheaper options exist.
+  'commercial-painting': {
+    good: 'Tender price',
+    better: 'Tender price',
+    best: 'Tender price',
+  },
 }
 
 /**

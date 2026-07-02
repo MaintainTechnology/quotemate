@@ -89,6 +89,16 @@ describe('tierLabelsForTrade', () => {
     })
   })
 
+  it('labels every commercial-painting tier slot as the tender price', () => {
+    // buildTenderTier wraps ONE tender into good/better/best identically, so
+    // whichever slot the tier mode surfaces must read as the tender.
+    expect(tierLabelsForTrade('commercial_painting')).toEqual({
+      good: 'Tender price',
+      better: 'Tender price',
+      best: 'Tender price',
+    })
+  })
+
   it('keeps Good/Better/Best for electrical, plumbing, and unknown trades', () => {
     const generic = { good: 'Good', better: 'Better', best: 'Best' }
     expect(tierLabelsForTrade('electrical')).toEqual(generic)
