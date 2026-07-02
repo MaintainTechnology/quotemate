@@ -37,6 +37,24 @@ describe('resolvePayRedirect', () => {
     expect(d.kind).toBe('stripe')
   })
 
+  it('PAID inspection → thank-you page, never a fresh $99 Session (double-charge guard)', () => {
+    // /r mints a fresh payable Session per click; if a paid inspection ever
+    // reached the stripe branch again, every re-click of the old SMS link
+    // would charge another $99.
+    const d = resolvePayRedirect({
+      tier: 'inspection',
+      paid: true,
+      scheduledAt: null,
+      expired: false,
+      token,
+      appUrl: APP,
+    })
+    expect(d).toEqual({
+      kind: 'paid',
+      url: `${APP}/q/${token}/paid?tier=inspection&already=1`,
+    })
+  })
+
   it('expired does NOT block an already-paid quote', () => {
     const d = resolvePayRedirect({
       tier: 'good',

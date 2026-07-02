@@ -26,7 +26,7 @@ import { getStripe } from './client'
 export type StripeProvisionResult =
   | { ok: true; stubbed: false; accountId: string }
   | { ok: true; stubbed: true; accountId: null }
-  | { ok: false; reason: string }
+  | { ok: false; reason: string; code?: string | null }
 
 /**
  * Create a Stripe Connect connected account for a tenant.
@@ -87,7 +87,7 @@ export async function provisionStripeConnectAccount(opts: {
     return { ok: true, stubbed: false, accountId: account.id }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
-    return { ok: false, reason: msg }
+    return { ok: false, reason: msg, code: (e as { code?: string })?.code ?? null }
   }
 }
 
@@ -102,7 +102,7 @@ export async function provisionStripeConnectAccount(opts: {
 export async function createConnectOnboardingLink(opts: {
   accountId: string
   appUrl: string
-}): Promise<{ ok: true; url: string } | { ok: false; reason: string }> {
+}): Promise<{ ok: true; url: string } | { ok: false; reason: string; code?: string | null }> {
   if (process.env.STRIPE_PROVISIONING_ENABLED !== 'true') {
     return {
       ok: false,
@@ -120,7 +120,7 @@ export async function createConnectOnboardingLink(opts: {
     return { ok: true, url: link.url }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
-    return { ok: false, reason: msg }
+    return { ok: false, reason: msg, code: (e as { code?: string })?.code ?? null }
   }
 }
 
@@ -135,6 +135,8 @@ export async function getConnectAccountStatus(accountId: string): Promise<{
   payoutsEnabled: boolean
   detailsSubmitted: boolean
   reason?: string
+  /** Stripe error code (e.g. 'resource_missing') for failure classification. */
+  code?: string | null
 }> {
   try {
     const stripe = getStripe()
@@ -147,6 +149,32 @@ export async function getConnectAccountStatus(accountId: string): Promise<{
     }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
-    return { ok: false, chargesEnabled: false, payoutsEnabled: false, detailsSubmitted: false, reason: msg }
+    const code = (e as { code?: string })?.code ?? null
+    return { ok: false, chargesEnabled: false, payoutsEnabled: false, detailsSubmitted: false, reason: msg, code }
   }
+}
+
+/**
+ * A stored acct_… id that this platform can no longer operate on — it was
+ * created under a DIFFERENT Stripe account/sandbox (key rotation) or deleted.
+ * Reusing it is what produces "The requested account link is for an account
+ * that is not connected to your platform or does not exist" — the fix is to
+ * discard the id and provision a fresh account.
+ */
+export function isStaleConnectAccountError(code: string | null | undefined, message: string | null | undefined): boolean {
+  if (code === 'resource_missing' || code === 'account_invalid') return true
+  const m = message ?? ''
+  return /not connected to your platform|does not exist|does not have access to account/i.test(m)
+}
+
+/**
+ * The PLATFORM itself can't use Connect yet — "sign up for Connect" is a
+ * one-time Stripe Dashboard action (https://dashboard.stripe.com/connect;
+ * docs/markdown/stripe-connect-setup.md Stage 1). No account create/retrieve
+ * works until it's done, so surface it as an actionable operator error
+ * instead of retry-looping.
+ */
+export function isConnectNotEnabledError(code: string | null | undefined, message: string | null | undefined): boolean {
+  if (code === 'platform_account_required') return true
+  return /signed up for Connect|sign up for Connect/i.test(message ?? '')
 }

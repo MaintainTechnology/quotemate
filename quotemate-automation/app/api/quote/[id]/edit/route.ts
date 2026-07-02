@@ -30,6 +30,8 @@ import {
   expireCheckoutSession,
   createCheckoutSessionForTier,
 } from '@/lib/stripe/checkout'
+import { connectDestinationForTenant } from '@/lib/stripe/connect'
+import { computePriceHoldUntil } from '@/lib/quote/hold'
 import { dispatchQuoteWithPdf } from '@/lib/sms/send-quote-pdf'
 import { ensureQuotePdf, quotePdfUrl, signQuotePdfUrl } from '@/lib/quote/pdf'
 import { archiveAndIngestQuote } from '@/lib/filestore/ingest-quote'
@@ -188,7 +190,9 @@ export async function POST(
 
   const { data: tenant } = await supabase
     .from('tenants')
-    .select('id, owner_user_id')
+    .select(
+      'id, owner_user_id, stripe_connect_account_id, stripe_connect_charges_enabled, stripe_connect_payouts_enabled',
+    )
     .eq('id', quote.tenant_id)
     .maybeSingle()
   if (!tenant || tenant.owner_user_id !== userId) {
@@ -486,6 +490,10 @@ export async function POST(
   // for any quote that wasn't booked yet).
   const appliedDiscountPct = ((quote.applied_discount_pct as number | null | undefined) ?? 0)
 
+  // Connect routing (2% platform fee) — same decision the original Session
+  // used, re-read off the tenant row loaded for the ownership check above.
+  const connect = connectDestinationForTenant(tenant)
+
   for (const key of changedTiers) {
     const oldUrl = stripeLinks[key]
     if (oldUrl) {
@@ -519,6 +527,7 @@ export async function POST(
       shareToken: quote.share_token as string,
       appUrl,
       discountPct: appliedDiscountPct,
+      connect,
     })
     if (newUrl) stripeLinks[key] = newUrl
   }
@@ -554,6 +563,14 @@ export async function POST(
       quote.status === 'draft' && changedTiers.length > 0
         ? 'sent'
         : quote.status,
+    // 2026-07-02 — restart the 7-day price hold whenever a price actually
+    // changed. The /q expired banner tells the customer to "reply for a
+    // refreshed quote" and THIS is that refresh: without the restamp, an
+    // edited quote older than 7 days stayed permanently blocked by the
+    // /r + booking expiry gates. Label/typo-only edits keep the old hold.
+    ...(changedTiers.length > 0
+      ? { price_hold_until: computePriceHoldUntil(new Date().toISOString()) }
+      : {}),
   }
 
   // Audit risk_flags. Two append-only sources, merged + deduped onto the
@@ -751,8 +768,14 @@ export async function POST(
             estimated_timeframe: (quote.estimated_timeframe as string | null) ?? null,
             needs_inspection: !!quote.needs_inspection,
             inspection_reason: (quote.inspection_reason as string | null) ?? null,
+            // Gated /r short-links, not the raw Stripe URLs: raw links die
+            // after Stripe's 24h expiry (unchanged tiers still carried
+            // draft-time Sessions here) and skip /r's book-first funnel +
+            // price-hold gate + fresh-Session mint.
             pay_links: Object.fromEntries(
-              Object.entries(stripeLinks).filter(([, v]) => !!v),
+              Object.entries(stripeLinks)
+                .filter(([, v]) => !!v)
+                .map(([k]) => [k, `${appUrl}/r/${quote.share_token as string}/${k}`]),
             ) as Partial<Record<'good' | 'better' | 'best' | 'inspection', string>>,
             deposit_pct: 30,
             quote_view_url: `${appUrl}/q/${quote.share_token as string}`,

@@ -131,7 +131,7 @@ export default async function BookingPage(props: {
 
   const { data: quote } = await supabase
     .from('quotes')
-    .select('id, paid_at, paid_tier, selected_tier, scheduled_at, scheduled_window, share_token, intake_id, tenant_id, created_at, price_hold_until')
+    .select('id, paid_at, paid_tier, selected_tier, scheduled_at, scheduled_window, share_token, intake_id, tenant_id, created_at, price_hold_until, needs_inspection')
     .eq('share_token', token)
     .maybeSingle()
 
@@ -192,9 +192,12 @@ export default async function BookingPage(props: {
 
   // Price hold lapsed → block booking/payment (the customer must reply for a
   // refreshed quote). An already-paid quote has transacted and is exempt so
-  // the legacy "paid, now pick a time" recovery path still works.
+  // the legacy "paid, now pick a time" recovery path still works. Inspection-
+  // required quotes are exempt too — their prices are indicative (final price
+  // confirmed on-site), matching /q, /r, and the book API.
   const priceExpired =
     !isPaid &&
+    !(quote as { needs_inspection?: boolean | null }).needs_inspection &&
     isPriceHoldExpired(
       (quote as { price_hold_until?: string | null }).price_hold_until ?? null,
       (quote as { created_at?: string | null }).created_at ?? null,

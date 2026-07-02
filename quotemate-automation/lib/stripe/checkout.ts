@@ -2,9 +2,11 @@
 // Each Session charges the deposit (default 30% of inc-GST tier total).
 // Returns a { good, better, best } map of Session URLs ready to embed in SMS.
 //
-// Platform-direct charging (NOT Stripe Connect) — money lands in QuoteMax's
-// Stripe account. When tradie #2 onboards, switch to Connect by adding
-// `stripeAccount` and `application_fee_amount` to the call.
+// Charging is per-tenant: when the caller passes a `connect` destination
+// (the tenant's fully-onboarded connected account — see
+// lib/stripe/connect.ts) the Session is a DESTINATION charge with QuoteMax's
+// 2% application fee and `on_behalf_of` the tradie. Without it, the legacy
+// platform-direct charge is kept — money lands in QuoteMax's Stripe account.
 //
 // ── AU-only checkout (spec post-payment-scheduling-checkout, Task 2) ──
 // QuoteMax serves Australian tradies + their customers only, so every Session
@@ -25,6 +27,11 @@
 import { getStripe } from './client'
 import { randomBytes } from 'node:crypto'
 import { clampDiscountPct } from '@/lib/quote/early-bird'
+import {
+  connectPaymentIntentExtras,
+  connectSessionMetadata,
+  type ConnectDestination,
+} from './connect'
 
 type Tier = { label: string; subtotal_ex_gst: number | string } | null
 
@@ -95,6 +102,9 @@ export async function createCheckoutSessionsForQuote(opts: {
   intake: IntakeForCheckout
   shareToken: string
   appUrl: string  // base URL for success/cancel, e.g. https://quote-mate-rho.vercel.app
+  /** Tenant's live connected account — routes the charge via Connect with
+   *  the 2% platform fee. Omitted/null → platform-direct (legacy). */
+  connect?: ConnectDestination | null
 }): Promise<StripeLinks> {
   const stripe = getStripe()
   const depositPct = typeof opts.quote.deposit_pct === 'string'
@@ -140,12 +150,14 @@ export async function createCheckoutSessionsForQuote(opts: {
         tier: key,
         deposit_pct: String(depositPct),
         full_total_inc_gst_cents: String(incCents),
+        ...(opts.connect ? connectSessionMetadata(deposit, opts.connect) : {}),
       },
       payment_intent_data: {
         metadata: {
           quote_id: opts.quote.id,
           tier: key,
         },
+        ...(opts.connect ? connectPaymentIntentExtras(deposit, opts.connect) : {}),
       },
       // 24h default Session expiry is fine for a quote workflow.
     })
@@ -210,6 +222,9 @@ export async function createCheckoutSessionForTier(opts: {
    *  created. Clamped to the 15% platform cap. Omitted / 0 → no
    *  discount, behaviour identical to before. */
   discountPct?: number | null
+  /** Tenant's live connected account — routes the charge via Connect with
+   *  the 2% platform fee. Omitted/null → platform-direct (legacy). */
+  connect?: ConnectDestination | null
 }): Promise<string | null> {
   const stripe = getStripe()
   const tier = opts.quote[opts.tierKey]
@@ -255,12 +270,14 @@ export async function createCheckoutSessionForTier(opts: {
       full_total_inc_gst_cents: String(fullIncCents),
       discounted_total_inc_gst_cents: String(incCents),
       early_bird_discount_pct: String(discountPct),
+      ...(opts.connect ? connectSessionMetadata(deposit, opts.connect) : {}),
     },
     payment_intent_data: {
       metadata: {
         quote_id: opts.quote.id,
         tier: opts.tierKey,
       },
+      ...(opts.connect ? connectPaymentIntentExtras(deposit, opts.connect) : {}),
     },
   })
   return session.url ?? null
@@ -276,6 +293,9 @@ export async function createInspectionCheckoutSession(opts: {
   intake: IntakeForCheckout
   shareToken: string
   appUrl: string
+  /** Tenant's live connected account — routes the charge via Connect with
+   *  the 2% platform fee. Omitted/null → platform-direct (legacy). */
+  connect?: ConnectDestination | null
 }): Promise<string | null> {
   const stripe = getStripe()
   const job = opts.intake.job_type.replace(/_/g, ' ')
@@ -302,12 +322,14 @@ export async function createInspectionCheckoutSession(opts: {
       quote_id: opts.quoteId,
       tier: 'inspection',
       fee_aud_cents: String(INSPECTION_FEE_AUD_CENTS),
+      ...(opts.connect ? connectSessionMetadata(INSPECTION_FEE_AUD_CENTS, opts.connect) : {}),
     },
     payment_intent_data: {
       metadata: {
         quote_id: opts.quoteId,
         tier: 'inspection',
       },
+      ...(opts.connect ? connectPaymentIntentExtras(INSPECTION_FEE_AUD_CENTS, opts.connect) : {}),
     },
   })
 

@@ -173,7 +173,7 @@ export async function GET(req: Request) {
       supabase
         .from('quotes')
         .select(
-          'id, created_at, status, selected_tier, total_inc_gst, scope_of_works, share_token, intake_id, needs_inspection, routing_decision, good, better, best, estimated_timeframe, display_mode',
+          'id, created_at, status, selected_tier, total_inc_gst, scope_of_works, share_token, intake_id, needs_inspection, routing_decision, good, better, best, estimated_timeframe, display_mode, paid_at',
         )
         .eq('tenant_id', tenant.id)
         .order('created_at', { ascending: false })
@@ -412,11 +412,13 @@ export async function GET(req: Request) {
     }
   }
 
-  // Payments are tracked on quotes.status / quotes.accepted_at today;
-  // the standalone payments table was dropped in migration 058 because
-  // Stripe Connect Express isn't wired yet (0 rows in prod). Keep the
-  // empty set so the deposit_paid flag below stays false-by-default
-  // until the Connect flow lands and we re-introduce a payments source.
+  // Payments are tracked on quotes.paid_at (set by the Stripe webhook on
+  // checkout.session.completed); the standalone payments table was dropped
+  // in migration 058 because Stripe Connect Express isn't wired yet. The
+  // set stays for a future Connect payments source, but deposit_paid below
+  // now also reads quotes.paid_at directly — previously it was hardcoded
+  // false for every quote, which made the dashboard's "Deposit paid" badge
+  // (and the delete-button gate) dead code.
   const paidQuoteIds = new Set<string>()
 
   const quotes = (quotesRes.data ?? []).map((q) => {
@@ -442,7 +444,7 @@ export async function GET(req: Request) {
       job_type: intake?.job_type ?? null,
       trade: intake?.trade ?? null,
       inspection_required: intake?.inspection_required ?? null,
-      deposit_paid: paidQuoteIds.has(q.id as string),
+      deposit_paid: !!q.paid_at || paidQuoteIds.has(q.id as string),
       // Channel + transcript: SMS thread for sms-sourced quotes, parsed
       // Vapi transcript for voice-sourced. Both shapes match
       // ConvoMessage[] so the dashboard renders them identically.

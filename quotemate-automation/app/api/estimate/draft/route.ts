@@ -17,6 +17,7 @@ import {
 import { shouldHoldForReview } from '@/lib/quote/review-policy'
 import { pipelineLog } from '@/lib/log/pipeline'
 import { createCheckoutSessionsForQuote, createInspectionCheckoutSession, generateShareToken } from '@/lib/stripe/checkout'
+import { connectDestinationForTenantId } from '@/lib/stripe/connect'
 import { withRetry } from '@/lib/util/retry'
 import { decideRouting } from '@/lib/routing/decide'
 import { advanceQuoteStatus } from '@/lib/quote/lifecycle'
@@ -570,6 +571,11 @@ export async function POST(req: Request) {
     const appUrl =
       process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin
 
+    // Charge via the tenant's connected account (2% platform fee, funds held
+    // for release on job completion) once Connect onboarding is live;
+    // platform-direct otherwise. Never throws.
+    const connect = await connectDestinationForTenantId(supabase, intakeTenantId)
+
     if (!draft.needs_inspection) {
       log.step('creating Stripe Checkout Sessions (one per tier, deposit only)')
       try {
@@ -578,6 +584,7 @@ export async function POST(req: Request) {
           intake,
           shareToken,
           appUrl,
+          connect,
         })
 
         await supabase.from('quotes').update({ stripe_links: stripeLinks }).eq('id', quote!.id)
@@ -605,6 +612,7 @@ export async function POST(req: Request) {
           intake,
           shareToken,
           appUrl,
+          connect,
         })
 
         if (inspectionUrl) {

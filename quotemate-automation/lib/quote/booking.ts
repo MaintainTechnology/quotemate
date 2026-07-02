@@ -33,14 +33,21 @@ export type PayRedirectInput = {
 /**
  * Where should /r/<token>/<tier> send the customer?
  *
+ *  already paid          → 'paid'   (NEVER re-charge — including the $99
+ *                          inspection fee; see ordering note below)
  *  inspection            → 'stripe' (pay-first preserved; out of scope)
- *  already paid          → 'paid'
  *  not paid, no slot      → 'book'   (the flip: choose a time first)
  *  not paid, slot chosen  → 'stripe' (deposit is now the last step)
+ *
+ * ORDERING MATTERS: paid is checked BEFORE inspection. While /r redirected
+ * to the stored draft-time Session this was masked — a completed Session
+ * refuses re-payment — but /r now mints a FRESH payable Session per click
+ * (2026-07-01), so routing a paid inspection to 'stripe' would mint a new
+ * $99 charge on every re-click of the old SMS link.
  */
 export function payRedirectTarget(input: PayRedirectInput): PayRedirectKind {
-  if (input.tier === 'inspection') return 'stripe'
   if (input.paid) return 'paid'
+  if (input.tier === 'inspection') return 'stripe'
   if (!input.scheduledAt) return 'book'
   return 'stripe'
 }

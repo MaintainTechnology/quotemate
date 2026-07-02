@@ -19,6 +19,9 @@ import { createClient } from '@supabase/supabase-js'
 import {
   provisionStripeConnectAccount,
   createConnectOnboardingLink,
+  getConnectAccountStatus,
+  isStaleConnectAccountError,
+  isConnectNotEnabledError,
 } from '@/lib/stripe/provision'
 
 export const dynamic = 'force-dynamic'
@@ -69,6 +72,56 @@ export async function POST(req: Request) {
   // ─── 1. Ensure a connected account exists ───────────────────────
   let accountId = tenant.stripe_connect_account_id as string | null
 
+  // Validate a stored acct_… id before reusing it. A stale id — created
+  // under a different Stripe account/sandbox (key rotation) or since
+  // deleted — makes accountLinks.create fail with "The requested account
+  // link is for an account that is not connected to your platform or does
+  // not exist". Self-heal: discard the stale id (+ its readiness flags) and
+  // fall through to provisioning a fresh account.
+  if (accountId && process.env.STRIPE_PROVISIONING_ENABLED === 'true') {
+    const status = await getConnectAccountStatus(accountId)
+    if (!status.ok) {
+      if (isConnectNotEnabledError(status.code, status.reason)) {
+        return Response.json(
+          {
+            ok: false,
+            error: 'connect_not_enabled',
+            detail:
+              'Stripe Connect is not enabled on the platform account behind STRIPE_SECRET_KEY. ' +
+              'Enable it once at https://dashboard.stripe.com/connect ' +
+              '(docs/markdown/stripe-connect-setup.md, Stages 1–2), then retry.',
+          },
+          { status: 503 },
+        )
+      }
+      if (isStaleConnectAccountError(status.code, status.reason)) {
+        const { error: healErr } = await supabase
+          .from('tenants')
+          .update({
+            stripe_connect_account_id: null,
+            stripe_connect_charges_enabled: false,
+            stripe_connect_payouts_enabled: false,
+            stripe_connect_details_submitted: false,
+          })
+          .eq('id', tenant.id)
+        if (healErr) {
+          return Response.json(
+            { ok: false, error: 'stale_account_heal_failed', detail: healErr.message },
+            { status: 500 },
+          )
+        }
+        accountId = null
+      } else {
+        // Transient/unclassified Stripe failure — don't create a duplicate
+        // account on top of one that may still exist; surface and retry.
+        return Response.json(
+          { ok: false, error: 'account_validate_failed', detail: status.reason },
+          { status: 502 },
+        )
+      }
+    }
+  }
+
   if (!accountId) {
     const created = await provisionStripeConnectAccount({
       tenantId: tenant.id,
@@ -76,6 +129,19 @@ export async function POST(req: Request) {
       businessName: tenant.business_name,
     })
     if (!created.ok) {
+      if (isConnectNotEnabledError(created.code, created.reason)) {
+        return Response.json(
+          {
+            ok: false,
+            error: 'connect_not_enabled',
+            detail:
+              'Stripe Connect is not enabled on the platform account behind STRIPE_SECRET_KEY. ' +
+              'Enable it once at https://dashboard.stripe.com/connect ' +
+              '(docs/markdown/stripe-connect-setup.md, Stages 1–2), then retry.',
+          },
+          { status: 503 },
+        )
+      }
       return Response.json(
         { ok: false, error: 'account_create_failed', detail: created.reason },
         { status: 502 },

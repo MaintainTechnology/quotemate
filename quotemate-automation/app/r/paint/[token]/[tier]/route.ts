@@ -1,10 +1,14 @@
 // ════════════════════════════════════════════════════════════════════
 // GET /r/paint/[token]/[tier] — residential painting deposit short-link.
 //
-// Token = painting_measurements.public_token. Reads the stored per-tier
-// Stripe Checkout URL (stripe_links[tier], migration 156) and redirects;
-// once the deposit is paid it sends the customer back to the quote page
-// instead of re-charging. Mirrors app/r/[token]/[tier] + app/r/solar/….
+// Token = painting_measurements.public_token. Once the deposit is paid the
+// customer is sent back to the quote page instead of re-charged; while
+// unpaid + released, a FRESH Stripe Checkout Session is minted per click
+// (mirrors app/r/[token]/[tier], 2026-07-02): Sessions die after Stripe's
+// 24h max, so the URL stored at save time (migration 156) is usually dead
+// by the time the tradie has released the quote and the customer taps the
+// SMS link — redirecting to it showed Stripe's "checkout session has timed
+// out" page. The stored URL remains only as a mint-failure fallback.
 //
 // Next 16: params is a Promise (await it).
 // ════════════════════════════════════════════════════════════════════
@@ -12,8 +16,15 @@
 import { createClient } from '@supabase/supabase-js'
 import { buildPaintRedirectUrl, VALID_PAINT_TIERS } from '@/lib/painting/pay-redirect'
 import { paintingDepositLocked } from '@/lib/painting/publish-gate'
+import { createPaintingCheckoutSessionForTier } from '@/lib/stripe/painting-checkout'
+import { expireCheckoutSession } from '@/lib/stripe/checkout'
+import { pipelineLog } from '@/lib/log/pipeline'
+import type { PaintingEstimate } from '@/lib/painting/types'
 
 export const dynamic = 'force-dynamic'
+// One Stripe Session create runs on the unpaid path — headroom over the
+// fast-redirect default so a cold start can't time out mid-mint.
+export const maxDuration = 30
 
 function getSupabase() {
   return createClient(
@@ -30,7 +41,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string;
 
   const { data: row } = await getSupabase()
     .from('painting_measurements')
-    .select('paid_at, stripe_links, released_at')
+    .select('paid_at, stripe_links, released_at, estimate')
     .eq('public_token', token)
     .maybeSingle()
   if (!row) return new Response('Not found', { status: 404 })
@@ -43,7 +54,45 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string;
     return Response.redirect(`${appUrl}/q/paint/${token}`, 302)
   }
 
-  const stripeUrl = (row.stripe_links as Record<string, string> | null)?.[tier] ?? null
+  const stored = (row.stripe_links as Record<string, string> | null)?.[tier] ?? null
+  let stripeUrl = stored
+
+  // Unpaid → mint a live Session for this click; best-effort with the
+  // stored (likely dead) URL as the fallback so the flow never hard-breaks.
+  if (!row.paid_at) {
+    try {
+      const estimate = (row.estimate as PaintingEstimate | null) ?? null
+      const fresh = estimate
+        ? await createPaintingCheckoutSessionForTier({
+            estimate,
+            tierKey: tier as 'good' | 'better' | 'best',
+            token,
+            appUrl,
+          })
+        : null
+      if (fresh) {
+        const links = { ...((row.stripe_links as Record<string, string> | null) ?? {}) }
+        const replaced = links[tier]
+        links[tier] = fresh
+        await getSupabase()
+          .from('painting_measurements')
+          .update({ stripe_links: links })
+          .eq('public_token', token)
+        // At most ONE payable Session per tier: expire the one replaced
+        // (best-effort, tolerant of already-expired/paid) so a second tab
+        // can't complete an orphaned older Session.
+        if (replaced && replaced !== fresh) await expireCheckoutSession(replaced)
+        stripeUrl = fresh
+      }
+    } catch (e: unknown) {
+      pipelineLog('dispatch').err(
+        'paint fresh Session mint failed — falling back to stored link',
+        e instanceof Error ? e.message : String(e),
+        { token: token.slice(0, 8) + '…', tier },
+      )
+    }
+  }
+
   const dest = buildPaintRedirectUrl({
     paid: !!(row.paid_at as string | null),
     token,

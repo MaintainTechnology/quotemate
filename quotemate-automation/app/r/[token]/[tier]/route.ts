@@ -32,10 +32,13 @@ import { createClient } from '@supabase/supabase-js'
 import { NextRequest } from 'next/server'
 import { payRedirectTarget } from '@/lib/quote/booking'
 import { isPriceHoldExpired } from '@/lib/quote/hold'
+import { pipelineLog } from '@/lib/log/pipeline'
 import {
   createCheckoutSessionForTier,
   createInspectionCheckoutSession,
+  expireCheckoutSession,
 } from '@/lib/stripe/checkout'
+import { connectDestinationForTenantId } from '@/lib/stripe/connect'
 
 // A single Stripe Session create runs on the stripe path — give it headroom
 // over the fast-redirect default so a cold start can't time out mid-mint.
@@ -113,6 +116,7 @@ async function mintFreshDepositUrl(
   quote: {
     id: string
     intake_id: string | null
+    tenant_id: string | null
     good: unknown
     better: unknown
     best: unknown
@@ -123,6 +127,10 @@ async function mintFreshDepositUrl(
 ): Promise<string | null> {
   const appUrl = process.env.APP_URL!
   try {
+    // Connect routing (2% platform fee, destination = the tenant's live
+    // connected account) — same decision the draft-time Session used.
+    const connect = await connectDestinationForTenantId(db(), quote.tenant_id)
+
     const { data: intakeRow } = await db()
       .from('intakes')
       .select('job_type, scope, caller')
@@ -141,6 +149,7 @@ async function mintFreshDepositUrl(
         intake,
         shareToken: token,
         appUrl,
+        connect,
       })
     } else {
       // Re-apply the realised early-booking discount (if the customer earned
@@ -174,16 +183,29 @@ async function mintFreshDepositUrl(
         shareToken: token,
         appUrl,
         discountPct,
+        connect,
       })
     }
 
     if (url) {
       const links = { ...(quote.stripe_links ?? {}) }
+      const replaced = links[tier]
       links[tier] = url
       await db().from('quotes').update({ stripe_links: links }).eq('id', quote.id)
+      // Expire the Session this one replaces (best-effort, tolerant of
+      // already-expired/paid) so at most ONE payable Session exists per
+      // quote+tier. Without this a customer with two tabs / a double-click
+      // could complete an ORPHANED older Session — the webhook's paid_at
+      // guard silently drops the duplicate record, but Stripe still charges.
+      if (replaced && replaced !== url) await expireCheckoutSession(replaced)
     }
     return url
-  } catch {
+  } catch (e: unknown) {
+    pipelineLog('dispatch').err(
+      'fresh deposit Session mint failed — caller falls back to stored link',
+      e instanceof Error ? e.message : String(e),
+      { quote_id: quote.id, tier },
+    )
     return null
   }
 }
@@ -197,17 +219,23 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
   const { data: quote } = await db()
     .from('quotes')
     .select(
-      'id, stripe_links, paid_at, scheduled_at, created_at, price_hold_until, intake_id, good, better, best',
+      'id, stripe_links, paid_at, scheduled_at, created_at, price_hold_until, needs_inspection, intake_id, tenant_id, good, better, best',
     )
     .eq('share_token', token)
     .single()
 
   if (!quote) return new Response('Not found', { status: 404 })
 
-  const expired = isPriceHoldExpired(
-    quote.price_hold_until as string | null,
-    quote.created_at as string | null,
-  )
+  // Inspection-required quotes are EXEMPT from the price-hold gate — their
+  // tier prices are indicative (final price confirmed on-site) and the /q
+  // page already exempts them (priceExpired requires !isInspection), so
+  // gating here would silently bounce their CTAs back to a banner-less page.
+  const expired =
+    !quote.needs_inspection &&
+    isPriceHoldExpired(
+      quote.price_hold_until as string | null,
+      quote.created_at as string | null,
+    )
 
   const decision = resolvePayRedirect({
     tier,
@@ -228,6 +256,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
     {
       id: quote.id as string,
       intake_id: (quote.intake_id as string | null) ?? null,
+      tenant_id: (quote.tenant_id as string | null) ?? null,
       good: quote.good,
       better: quote.better,
       best: quote.best,
@@ -239,8 +268,14 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
   if (fresh) return Response.redirect(fresh, 302)
 
   // Mint failed — fall back to the stored link so the flow isn't hard-broken
-  // (no worse than the pre-fix behaviour).
+  // (no worse than the pre-fix behaviour). Logged: this link is usually past
+  // Stripe's 24h expiry, so the customer likely sees the timed-out page.
   const stored = (quote.stripe_links as Record<string, string> | null)?.[tier]
+  pipelineLog('dispatch').err(
+    'mint failed — falling back to stored (likely dead) Session link',
+    null,
+    { quote_id: quote.id, tier, has_stored: !!stored },
+  )
   if (stored) return Response.redirect(stored, 302)
   return new Response('No payment link for this tier', { status: 404 })
 }

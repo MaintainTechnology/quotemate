@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuoteMax &middot; Recipes &amp; Estimating &mdash; Beginner&rsquo;s Guide</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      /* Warm-paper light theme — mirrors app/globals.css */
+      --bg:        #FAF8F4;
+      --card:      #FFFFFF;
+      --line:      #E9E3DC;
+      --text-pri:  #241E1B;
+      --text-sec:  #5E544E;
+      --text-dim:  #837870;
+      --accent:       #FFC400;
+      --accent-press: #E6AC00;
+      --accent-ink:   #2B2422;
+      --warn:      #B45309;
+      --ok:        #1D7A53;
+      --chip-bg:   #F5F1EB;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg:        #16120F;
+        --card:      #2B2422;
+        --line:      #3A322C;
+        --text-pri:  #F6F1EA;
+        --text-sec:  #C3B8AC;
+        --text-dim:  #A2968A;
+        --accent-ink: #1C1812;
+        --warn:      #F59E0B;
+        --ok:        #7BDCA0;
+        --chip-bg:   #1E1813;
+      }
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text-sec);
+      font-size: 16px;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+      font-feature-settings: "kern" 1;
+      text-rendering: optimizeLegibility;
+    }
+    .container { max-width: 880px; margin: 0 auto; padding: 0 2rem; }
+
+    .nav {
+      border-bottom: 1px solid var(--line);
+      position: sticky; top: 0; z-index: 100;
+      padding: 0.9rem 0;
+      background: var(--bg);
+    }
+    .nav-inner { display: flex; align-items: center; justify-content: space-between; max-width: 880px; margin: 0 auto; padding: 0 2rem; }
+    .brand {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem; font-weight: 600;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--text-dim); text-decoration: none;
+    }
+    .brand strong { color: var(--text-pri); font-weight: 600; }
+
+    .hero { padding: 4rem 0 2.5rem; }
+    .eyebrow {
+      display: inline-block;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem; font-weight: 500;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--text-dim); margin-bottom: 1rem;
+      padding: 0.35rem 0.75rem; border: 1px solid var(--line); border-radius: 4px;
+    }
+    h1 {
+      font-size: clamp(1.9rem, 5vw, 2.7rem); font-weight: 800;
+      line-height: 1.12; letter-spacing: -0.02em;
+      color: var(--text-pri); margin-bottom: 1rem;
+      hyphens: none;
+    }
+    h1 em { font-style: normal; color: var(--accent-press); }
+    .lede { font-size: 1.1rem; max-width: 42rem; }
+
+    .section { padding: 2.75rem 0 0.5rem; }
+    .section-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem; font-weight: 600;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--text-pri);
+      border-left: 3px solid var(--accent);
+      padding-left: 0.7rem;
+      margin-bottom: 1.4rem;
+    }
+    h2 { font-size: 1.45rem; font-weight: 700; color: var(--text-pri); margin: 0 0 0.75rem; hyphens: none; }
+    h3 { font-size: 1.05rem; font-weight: 600; color: var(--text-pri); margin: 1.6rem 0 0.5rem; hyphens: none; }
+    p { max-width: 42rem; margin-bottom: 0.9rem; }
+    ul, ol { max-width: 42rem; margin: 0 0 1rem 1.25rem; }
+    li { margin-bottom: 0.45rem; }
+    strong { color: var(--text-pri); font-weight: 600; }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 1.4rem 1.5rem;
+      margin: 0 0 1rem;
+    }
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1rem; margin: 1.25rem 0; }
+    .card h3 { margin-top: 0; }
+    .card p { margin-bottom: 0; font-size: 0.95rem; }
+    .card .mini-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem; font-weight: 600;
+      letter-spacing: 0.11em; text-transform: uppercase;
+      color: var(--text-dim); display: block; margin-bottom: 0.5rem;
+    }
+
+    /* Badge chips — mirror the dashboard's pill badges */
+    .chip {
+      display: inline-block;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.62rem; font-weight: 500;
+      letter-spacing: 0.09em; text-transform: uppercase;
+      padding: 0.18rem 0.5rem;
+      border: 1px solid var(--line);
+      border-radius: 3px;
+      background: var(--chip-bg);
+      color: var(--text-dim);
+      white-space: nowrap;
+      vertical-align: 1px;
+    }
+    .chip-yours { color: var(--ok); border-color: currentColor; background: transparent; }
+    .chip-warn  { color: var(--warn); border-color: currentColor; background: transparent; }
+
+    /* Flow steps */
+    .flow { counter-reset: step; margin: 1.5rem 0; display: grid; gap: 0.65rem; }
+    .flow-step {
+      display: flex; gap: 1rem; align-items: flex-start;
+      background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+      padding: 1rem 1.2rem;
+    }
+    .flow-num {
+      counter-increment: step;
+      flex: 0 0 auto;
+      width: 1.9rem; height: 1.9rem;
+      display: grid; place-items: center;
+      background: var(--accent); color: var(--accent-ink);
+      font-weight: 700; font-size: 0.85rem;
+      border-radius: 5px;
+    }
+    .flow-num::before { content: counter(step); }
+    .flow-body { font-size: 0.95rem; }
+    .flow-body strong { display: block; margin-bottom: 0.1rem; }
+
+    /* Mock dashboard row — looks like the real Estimating card */
+    .mock {
+      background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+      padding: 1.2rem 1.4rem; margin: 1.4rem 0;
+      font-size: 0.9rem;
+    }
+    .mock-head { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; align-items: baseline; margin-bottom: 0.8rem; }
+    .mock-title { font-weight: 600; color: var(--text-pri); font-size: 1rem; }
+    .mock-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.62rem; letter-spacing: 0.11em; text-transform: uppercase;
+      color: var(--text-dim); display: block; margin: 0.7rem 0 0.35rem;
+    }
+    .mock-row { display: flex; flex-wrap: wrap; gap: 0.5rem 1.6rem; align-items: baseline; margin-top: 0.9rem; padding-top: 0.9rem; border-top: 1px solid var(--line); }
+    .mock-metric strong { font-size: 1rem; }
+    .mock ul { list-style: none; margin: 0; }
+    .mock li { margin-bottom: 0.3rem; }
+    .note {
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--accent);
+      border-radius: 0;
+      background: var(--card);
+      padding: 0.9rem 1.2rem;
+      max-width: 42rem;
+      margin: 1.2rem 0;
+      font-size: 0.95rem;
+    }
+    .note-warn { border-left-color: var(--warn); }
+    .note-ok   { border-left-color: var(--ok); }
+
+    table { border-collapse: collapse; width: 100%; margin: 1.2rem 0 1.6rem; font-size: 0.92rem; }
+    th {
+      text-align: left; font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--text-dim);
+      border-bottom: 1px solid var(--line);
+      padding: 0.5rem 1rem 0.5rem 0;
+    }
+    td { padding: 0.6rem 1rem 0.6rem 0; vertical-align: top; border-bottom: 1px solid var(--line); }
+    td:first-child { white-space: nowrap; }
+
+    .verdict { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin: 1.4rem 0; }
+    .verdict .card { margin: 0; }
+    .meter {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--accent-press); margin-top: 0.75rem; display: block;
+    }
+
+    .checklist { list-style: none; margin-left: 0; }
+    .checklist li {
+      background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+      padding: 0.9rem 1.2rem; margin-bottom: 0.6rem;
+      display: flex; gap: 0.85rem; align-items: flex-start;
+      font-size: 0.95rem;
+    }
+    .tick { flex: 0 0 auto; color: var(--ok); font-weight: 700; }
+
+    details {
+      border: 1px solid var(--line); border-radius: 8px;
+      background: var(--card);
+      padding: 0.9rem 1.2rem; margin-bottom: 0.6rem;
+      max-width: 42rem;
+    }
+    summary { cursor: pointer; font-weight: 600; color: var(--text-pri); font-size: 0.98rem; }
+    details p { margin: 0.7rem 0 0; font-size: 0.95rem; }
+
+    .footer { padding: 3rem 0 3.5rem; color: var(--text-dim); font-size: 0.85rem; border-top: 1px solid var(--line); margin-top: 3rem; }
+    @media (max-width: 560px) { .container, .nav-inner { padding: 0 1rem; } }
+  </style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="#"><strong>QuoteMax</strong> &middot; Dashboard guide</a>
+  </div>
+</nav>
+
+<header class="hero container">
+  <span class="eyebrow">Recipes &amp; Estimating</span>
+  <h1>The two tabs that decide <em>how your AI prices a job</em></h1>
+  <p class="lede">When a customer texts your number, the AI receptionist works out what the job is &mdash; then prices it using the settings on these two tabs. This guide explains what each one does, what you need to set up (mostly nothing), and what happens when you change things.</p>
+</header>
+
+<main class="container">
+
+  <section class="section">
+    <div class="section-label">The 30-second version</div>
+    <div class="card-grid">
+      <div class="card">
+        <span class="mini-label">Recipes tab</span>
+        <h3>Your parts list per job</h3>
+        <p>What a job always needs. &ldquo;Replace LED downlight&rdquo; = 6&nbsp;&times;&nbsp;downlight + sundries. Set once, quoted the same way every time.</p>
+      </div>
+      <div class="card">
+        <span class="mini-label">Estimating tab</span>
+        <h3>A practice run of the maths</h3>
+        <p>Shows exactly how each job will price &mdash; parts, labour hours and markup &mdash; <em>before</em> a real customer ever texts you.</p>
+      </div>
+      <div class="card">
+        <span class="mini-label">Do they matter?</span>
+        <h3>Yes &mdash; directly</h3>
+        <p>The SMS AI uses these exact settings on every quote it sends. Change a recipe or an override, and the next quote changes with it.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-label">How a quote is built</div>
+    <h2>The assembly line behind every SMS quote</h2>
+    <p>Every quote follows the same five steps, in the same order. The bold parts are what these two tabs control.</p>
+    <div class="flow">
+      <div class="flow-step"><span class="flow-num" aria-hidden="true"></span><div class="flow-body"><strong>Customer texts your number</strong>The AI receptionist chats with them and works out which job they need &mdash; say, &ldquo;replace a couple of downlights&rdquo;.</div></div>
+      <div class="flow-step"><span class="flow-num" aria-hidden="true"></span><div class="flow-body"><strong>The recipe supplies the parts list</strong>Your recipe if you&rsquo;ve made one, otherwise the standard one. This is why the same job always gets the same parts.</div></div>
+      <div class="flow-step"><span class="flow-num" aria-hidden="true"></span><div class="flow-body"><strong>Your catalogue supplies the prices</strong>Each part is matched to a product in your Catalogue by its category. No match? It falls back to a generic price.</div></div>
+      <div class="flow-step"><span class="flow-num" aria-hidden="true"></span><div class="flow-body"><strong>Labour and markup are added</strong>The job&rsquo;s labour hours &times; your hourly rate, plus your markup. Defaults come from your Pricing tab; the Estimating tab can override them per job.</div></div>
+      <div class="flow-step"><span class="flow-num" aria-hidden="true"></span><div class="flow-body"><strong>The quote is sent by SMS</strong>The customer gets a link to a mobile quote page. Every price on it traces back to steps 2&ndash;4.</div></div>
+    </div>
+    <div class="note note-ok"><strong>Safety net:</strong> the AI is never allowed to invent a price. If it can&rsquo;t ground every line in your pricing data, the job is routed to a paid inspection instead of a guessed quote.</div>
+  </section>
+
+  <section class="section">
+    <div class="section-label">Tab 1 &middot; Recipes</div>
+    <h2>Recipes &mdash; the parts list a job always needs</h2>
+    <p>A recipe is the ingredient list for one job. It answers a single question: <strong>&ldquo;when I do this job, what parts do I always use, and how many?&rdquo;</strong></p>
+    <p>Every job starts with a sensible <strong>standard recipe</strong> written by us. You only touch this tab when <em>your way</em> of doing a job differs &mdash; you always fit 8 downlights instead of 6, or you always add a smoke-alarm check.</p>
+
+    <h3>What a recipe looks like</h3>
+    <div class="mock">
+      <div class="mock-head">
+        <span class="mock-title">Install security camera (single) &mdash; recipe</span>
+        <span><span class="chip">Electrical</span></span>
+      </div>
+      <span class="mock-label">Parts in this recipe</span>
+      <ul>
+        <li>1 &times; security camera &mdash; Eufy wireless battery-operated <span class="chip chip-warn">&#9888; No catalogue product &mdash; generic price</span></li>
+      </ul>
+      <div class="mock-row">
+        <span class="mock-metric" style="font-size: 0.85rem; color: var(--text-dim);">Each part has a quantity, an optional description, and a &ldquo;required&rdquo; tick &mdash; required parts are always quoted.</span>
+      </div>
+    </div>
+
+    <h3>The one rule that matters</h3>
+    <p>Each part in a recipe has a <strong>material category</strong> (like &ldquo;downlight&rdquo; or &ldquo;security_camera&rdquo;). The AI uses that category to look up <em>your</em> product in the Catalogue tab. So:</p>
+    <ul>
+      <li><strong>Category matches a Catalogue product</strong> &rarr; the quote uses your real product name, brand and price. <span class="chip chip-yours">&#10003; Your catalogue</span></li>
+      <li><strong>No matching product</strong> &rarr; the quote falls back to a generic industry price. <span class="chip chip-warn">&#9888; Generic price</span></li>
+    </ul>
+    <p>If you see the amber &ldquo;generic price&rdquo; badge, the fix is not on this tab &mdash; add the product to your <strong>Catalogue</strong> using the same category, and the recipe picks it up automatically.</p>
+
+    <h3>What happens when you edit a recipe</h3>
+    <ul>
+      <li>Your version <strong>replaces the standard one for you only</strong> &mdash; from the next quote onward. Other tradies are never affected, and quotes already sent don&rsquo;t change.</li>
+      <li>Start from our baseline and adjust it &mdash; you rarely need to build from scratch.</li>
+      <li>Get a quantity wrong and every future quote for that job inherits the mistake &mdash; that&rsquo;s the power and the risk. The Estimating tab (below) is where you sanity-check it.</li>
+    </ul>
+  </section>
+
+  <section class="section">
+    <div class="section-label">Tab 2 &middot; Estimating</div>
+    <h2>Estimating &mdash; see how a job prices before a customer does</h2>
+    <p>This tab is a <strong>read-out, not a form</strong>. For every job you offer, it shows the exact parts, labour hours and markup the AI will use &mdash; and where each value comes from. Think of it as running a job through the AI as a drill.</p>
+
+    <h3>How to read a job card</h3>
+    <div class="mock">
+      <div class="mock-head">
+        <span class="mock-title">Replace LED downlight</span>
+        <span><span class="chip">Standard recipe</span> <span class="chip">Electrical</span></span>
+      </div>
+      <span class="mock-label">Bill of materials</span>
+      <ul>
+        <li>6 &times; downlight <span class="chip chip-yours">&#10003; Your catalogue</span></li>
+        <li>1 &times; sundries <span class="chip chip-warn">&#9888; Generic price</span></li>
+      </ul>
+      <div class="mock-row">
+        <span class="mock-metric">Labour: <strong>0.4 hr</strong> <span class="chip">Global default</span> <span style="color: var(--text-dim);">@ $110/hr</span></span>
+        <span class="mock-metric">Markup: <strong>14%</strong> <span class="chip">Global default</span></span>
+      </div>
+    </div>
+
+    <h3>The badges, decoded</h3>
+    <table>
+      <thead>
+        <tr><th scope="col">Badge</th><th scope="col">What it means</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="chip">Standard recipe</span></td><td>This job uses our baseline parts list. Fine for most jobs &mdash; edit it on the Recipes tab only if your way differs.</td></tr>
+        <tr><td><span class="chip chip-yours">&#10003; Your catalogue</span></td><td>This part is priced from a real product you added in Catalogue &mdash; your brand, your price. This is the goal state.</td></tr>
+        <tr><td><span class="chip chip-warn">&#9888; Generic price</span></td><td>No matching Catalogue product, so a generic industry price is used. Works, but it&rsquo;s not <em>your</em> number &mdash; add the product to Catalogue to fix it.</td></tr>
+        <tr><td><span class="chip">Global default</span></td><td>Labour hours or markup come from your overall settings on the Pricing tab. One number, all jobs.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>The two buttons</h3>
+    <ul>
+      <li><strong>Edit overrides</strong> &mdash; set your own labour hours or markup <em>for that one job only</em>. Example: the default says 0.4&nbsp;hr to replace a downlight, but your crew takes 0.75&nbsp;hr &mdash; override it, and every future quote for that job uses your number.</li>
+      <li><strong>Reset to default</strong> &mdash; clears your override and the job goes back to the global setting. Nothing is ever lost permanently.</li>
+    </ul>
+  </section>
+
+  <section class="section">
+    <div class="section-label">Straight answer</div>
+    <h2>Are these tabs essential?</h2>
+    <div class="verdict">
+      <div class="card">
+        <span class="mini-label">Recipes</span>
+        <h3>The engine&rsquo;s backbone</h3>
+        <p>Recipes are why the same job gets the same quote every time. You can leave them on the standard baseline forever &mdash; but the standard can&rsquo;t know that <em>you</em> fit 8 downlights, not 6. Editing them is how the AI learns your way of working.</p>
+        <span class="meter">Impact on quotes: high &middot; Setup required: none</span>
+      </div>
+      <div class="card">
+        <span class="mini-label">Estimating</span>
+        <h3>Your trust check</h3>
+        <p>Estimating changes nothing by itself &mdash; it <em>shows</em> you the maths and lets you fine-tune labour and markup per job. Skipping it won&rsquo;t break anything, but reviewing your top jobs here is the single best way to trust what the AI sends customers.</p>
+        <span class="meter">Impact on quotes: medium &middot; Setup required: none</span>
+      </div>
+    </div>
+    <div class="note"><strong>Bottom line:</strong> the engine works on day one with zero setup &mdash; safe defaults cover everything. These tabs exist so the quotes stop being <em>generic</em> and start being <em>yours</em>. Ten minutes here is the difference.</div>
+  </section>
+
+  <section class="section">
+    <div class="section-label">Do this once</div>
+    <h2>The 10-minute setup</h2>
+    <ol class="checklist">
+      <li><span class="tick">1.</span><span>Open <strong>Estimating</strong> and skim your five most common jobs. Do the parts, hours and markup look like how you&rsquo;d actually quote them?</span></li>
+      <li><span class="tick">2.</span><span>Hunt the amber <strong>generic price</strong> badges. For each one, add your real product in <strong>Catalogue</strong> under the same category &mdash; the badge flips to &ldquo;your catalogue&rdquo; on its own.</span></li>
+      <li><span class="tick">3.</span><span>Where the labour hours are wrong for your crew, hit <strong>Edit overrides</strong> and set your own. Don&rsquo;t touch the ones that look right.</span></li>
+      <li><span class="tick">4.</span><span>Only if a parts list is truly different from how you work, adjust the recipe on the <strong>Recipes</strong> tab. Most tradies never need to.</span></li>
+    </ol>
+  </section>
+
+  <section class="section">
+    <div class="section-label">Common questions</div>
+    <h2>Quick answers</h2>
+    <details>
+      <summary>What if I never touch these tabs?</summary>
+      <p>Quotes still go out, priced from the standard recipes, generic prices and your global rates. They&rsquo;ll be sensible &mdash; just not tailored to your products and your pace of work.</p>
+    </details>
+    <details>
+      <summary>Can my changes affect other tradies?</summary>
+      <p>No. Recipes, overrides and catalogue products are yours alone. Editing them changes your quotes only.</p>
+    </details>
+    <details>
+      <summary>Why does a part say &ldquo;generic price&rdquo;?</summary>
+      <p>The recipe asks for a category (say, &ldquo;security_camera&rdquo;) that has no matching product in your Catalogue. Add one under that exact category and your real price takes over.</p>
+    </details>
+    <details>
+      <summary>I changed something and regret it &mdash; how do I undo?</summary>
+      <p>Labour or markup overrides: hit <strong>Reset to default</strong> on the job&rsquo;s card in Estimating. Recipe edits: adjust or remove the lines you added on the Recipes tab. Already-sent quotes never change retroactively.</p>
+    </details>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="container">QuoteMax &middot; Recipes &amp; Estimating guide &middot; The AI never invents a price &mdash; every number traces back to your pricing data.</div>
+</footer>
+
+</body>
+</html>

@@ -59,11 +59,16 @@ function buildQueryStub(table: string) {
   }
 
   if (table === 'trades') {
-    // loadManageableTrades: select(...).eq('active',true).eq('is_job_based',true)
+    // listManageableTrades: select(...).eq('active',true).eq('is_job_based',true)
+    // trade_pricing_defaults is a ONE-TO-ONE embed (trade_id is unique), so
+    // PostgREST returns `object | null` — mirror the real shape, not an
+    // array: the array-shaped mock is exactly what hid the prod bug where
+    // every trade was filtered out of the activatable list.
     const result = Promise.resolve({
       data: state.registry.map((t) => ({
         name: t.name,
-        trade_pricing_defaults: t.hasDefaults ? [{ trade_id: `${t.name}-def` }] : [],
+        display_name: t.name,
+        trade_pricing_defaults: t.hasDefaults ? { trade_id: `${t.name}-def` } : null,
       })),
       error: null,
     })

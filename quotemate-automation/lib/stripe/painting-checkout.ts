@@ -33,6 +33,62 @@ export function paintingDepositCents(incGst: number, depositPct: number): number
 }
 
 /**
+ * Create a Stripe Checkout Session for ONE painting tier. Used by the
+ * all-tiers draft mint below AND by /r/paint's fresh-mint-per-click path:
+ * Checkout Sessions die after Stripe's 24h max, so the URL minted at save
+ * time is usually dead by the time the tradie has released the quote and
+ * the customer taps the SMS link. Returns null for a missing/unpriced tier.
+ */
+export async function createPaintingCheckoutSessionForTier(opts: {
+  estimate: PaintingEstimate
+  tierKey: 'good' | 'better' | 'best'
+  /** painting_measurements.public_token — drives success/cancel URLs. */
+  token: string
+  /** Base URL for success/cancel, e.g. https://quote-mate-rho.vercel.app */
+  appUrl: string
+  depositPct?: number
+}): Promise<string | null> {
+  const stripe = getStripe()
+  const depositPct = opts.depositPct ?? DEFAULT_PAINTING_DEPOSIT_PCT
+  const tier = opts.estimate.price.tiers.find((t) => t.tier === opts.tierKey)
+  if (!tier) return null
+  const deposit = paintingDepositCents(tier.inc_gst, depositPct)
+  if (deposit <= 0) return null
+
+  const session = await stripe.checkout.sessions.create({
+    mode: 'payment',
+    line_items: [
+      {
+        price_data: {
+          currency: 'aud',
+          product_data: {
+            name: `QuoteMax — painting · ${tier.label}`,
+            description: `${depositPct}% deposit · balance due on completion`,
+          },
+          unit_amount: deposit,
+        },
+        quantity: 1,
+      },
+    ],
+    success_url: `${opts.appUrl}/q/paint/${opts.token}?paid=1&tier=${tier.tier}&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${opts.appUrl}/q/paint/${opts.token}`,
+    // painting_token (NOT quote_id) so the webhook records the deposit on
+    // painting_measurements, not the quotes table.
+    metadata: {
+      painting_token: opts.token,
+      tier: tier.tier,
+      deposit_pct: String(depositPct),
+      full_total_inc_gst_cents: String(Math.round(tier.inc_gst * 100)),
+    },
+    payment_intent_data: {
+      metadata: { painting_token: opts.token, tier: tier.tier },
+    },
+  })
+
+  return session.url ?? null
+}
+
+/**
  * Create one Stripe Checkout Session per priced painting tier (good/better/
  * best) and return a { good, better, best } map of Session URLs. Best-effort
  * at the call site: the I/O can throw (no STRIPE_SECRET_KEY, Stripe down) and
@@ -48,46 +104,16 @@ export async function createPaintingCheckoutSessions(opts: {
   appUrl: string
   depositPct?: number
 }): Promise<StripeLinks> {
-  const stripe = getStripe()
-  const depositPct = opts.depositPct ?? DEFAULT_PAINTING_DEPOSIT_PCT
   const links: StripeLinks = {}
-
   for (const tier of opts.estimate.price.tiers) {
-    const deposit = paintingDepositCents(tier.inc_gst, depositPct)
-    if (deposit <= 0) continue
-
-    const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      line_items: [
-        {
-          price_data: {
-            currency: 'aud',
-            product_data: {
-              name: `QuoteMax — painting · ${tier.label}`,
-              description: `${depositPct}% deposit · balance due on completion`,
-            },
-            unit_amount: deposit,
-          },
-          quantity: 1,
-        },
-      ],
-      success_url: `${opts.appUrl}/q/paint/${opts.token}?paid=1&tier=${tier.tier}&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${opts.appUrl}/q/paint/${opts.token}`,
-      // painting_token (NOT quote_id) so the webhook records the deposit on
-      // painting_measurements, not the quotes table.
-      metadata: {
-        painting_token: opts.token,
-        tier: tier.tier,
-        deposit_pct: String(depositPct),
-        full_total_inc_gst_cents: String(Math.round(tier.inc_gst * 100)),
-      },
-      payment_intent_data: {
-        metadata: { painting_token: opts.token, tier: tier.tier },
-      },
+    const url = await createPaintingCheckoutSessionForTier({
+      estimate: opts.estimate,
+      tierKey: tier.tier,
+      token: opts.token,
+      appUrl: opts.appUrl,
+      depositPct: opts.depositPct,
     })
-
-    if (session.url) links[tier.tier] = session.url
+    if (url) links[tier.tier] = url
   }
-
   return links
 }

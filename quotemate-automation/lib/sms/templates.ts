@@ -528,6 +528,37 @@ export function buildFollowup2hSms(opts: {
     .replace(/[^\x20-\x7E\n]/g, '')
 }
 
+// ════════════════════════════════════════════════════════════════════
+// Migration 159 — 2-hour MID-CONVERSATION check-in (no quote yet).
+//
+// Fired by /api/cron/followup-2h on customer threads where the SMS
+// receptionist asked a question 2h+ ago and the customer never replied.
+// Trade-agnostic: the sweep unit is the sms_conversations thread, so
+// electrical/plumbing dialog and the roofing/painting/solar receptionist
+// flows are all covered. One SMS per conversation, ever (idempotency on
+// sms_conversations.followup_2h_sent_at).
+//
+// Wording differs from buildFollowup2hSms deliberately — there is no
+// quote to reference yet, so the body invites the customer to resume the
+// intake, not to reread a quote. Same GSM-7 single-segment target and
+// firstName/businessName fallbacks as the quote-level template.
+// ════════════════════════════════════════════════════════════════════
+export function buildConversationFollowup2hSms(opts: {
+  firstName?: string | null
+  businessName?: string | null
+}): string {
+  const first = (opts.firstName ?? '').trim().split(' ')[0] || 'there'
+  const business = (opts.businessName ?? '').trim() || 'your tradie'
+  const body = `Hi ${first}, just checking in - still keen to get that job sorted? Reply here and we'll pick up where we left off. - ${business}`
+  return body
+    .replace(/[‐-―−]/g, '-')
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/…/g, '...')
+    .replace(/·/g, '-')
+    .replace(/[^\x20-\x7E\n]/g, '')
+}
+
 // Format an ISO timestamp as a short AU Eastern label, e.g. "Thu 7 May, 9:00am".
 // ASCII output for GSM-7 SMS.
 function fmtSlotShort(iso: string): string {

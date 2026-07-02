@@ -1,7 +1,10 @@
 // Stripe webhook — authoritative source for "quote was paid".
-// Subscribes to `checkout.session.completed`. Idempotent via Stripe's
-// event.id (already-processed events are no-ops) and via paid_stripe_session_id
-// on the quote row (re-delivery of same session is a no-op).
+// Subscribes to `checkout.session.completed`. Idempotency is quote-row
+// based (there is NO event.id ledger): re-delivery of the same session is
+// skipped via paid_stripe_session_id, and the paid_at write is a
+// conditional claim (`... WHERE paid_at IS NULL`) so two completed events
+// for DIFFERENT sessions — possible now that /r mints a fresh Session per
+// pay click — can never both finalise the quote.
 
 import { after } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -152,7 +155,12 @@ export async function POST(req: Request) {
     return Response.json({ received: true })
   }
 
-  const { error } = await supabase
+  // Conditional CLAIM, not a blind write: `.is('paid_at', null)` makes the
+  // read-then-write race safe. With /r minting a fresh Session per click,
+  // two live Sessions can complete near-simultaneously; both events pass
+  // the select-guard above, but only ONE can claim the row here — the
+  // loser matches zero rows and takes the duplicate branch below.
+  const { data: claimed, error } = await supabase
     .from('quotes')
     .update({
       paid_at: new Date().toISOString(),
@@ -160,10 +168,42 @@ export async function POST(req: Request) {
       paid_stripe_session_id: session.id,
     })
     .eq('id', quoteId)
+    .is('paid_at', null)
+    .select('id')
 
   if (error) {
     log.err('quote update failed', error.message, { quote_id: quoteId })
     return new Response('DB update failed', { status: 500 })
+  }
+  if (!claimed || claimed.length === 0) {
+    log.ok('payment already claimed by a concurrent event, skipping', {
+      quote_id: quoteId,
+      this_session: session.id,
+    })
+    return Response.json({ received: true })
+  }
+
+  // Connect fund-flow stamp (mig 160) — the amount collected, QuoteMax's 2%
+  // fee, and the connected account the funds settled to (null for legacy
+  // platform-direct charges). The completion route reads these to compute
+  // and release the tradie's payout. Written SEPARATELY from the claim above
+  // so a not-yet-migrated DB degrades this stamp, never the payment record.
+  {
+    const feeCentsRaw = session.metadata?.application_fee_cents
+    const feeCents = feeCentsRaw ? Number.parseInt(feeCentsRaw, 10) : null
+    const { error: stampErr } = await supabase
+      .from('quotes')
+      .update({
+        paid_amount_cents: session.amount_total ?? null,
+        platform_fee_cents: Number.isFinite(feeCents as number) ? feeCents : null,
+        stripe_connect_destination: session.metadata?.connect_destination ?? null,
+      })
+      .eq('id', quoteId)
+    if (stampErr) {
+      log.err('fund-flow stamp skipped (non-fatal — apply migration 160)', stampErr.message, {
+        quote_id: quoteId,
+      })
+    }
   }
 
   // WP6 reorder — the deposit is the LAST step, so paying CONFIRMS the

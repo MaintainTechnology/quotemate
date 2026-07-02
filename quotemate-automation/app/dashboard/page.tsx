@@ -71,6 +71,8 @@ import {
   History,
   CalendarDays,
   LayoutTemplate,
+  Trash2,
+  Loader2,
   type LucideProps,
 } from 'lucide-react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
@@ -88,6 +90,7 @@ import { FilesTab } from './_components/FilesTab'
 import { HistoricalQuotesTab } from './_components/HistoricalQuotesTab'
 import { CalendarTab } from './_components/CalendarTab'
 import { HistoricalHint } from './_components/HistoricalHint'
+import { SavedJobsSection } from './_components/SavedJobsSection'
 import CommercialPaintingTab from './_components/commercial-painting/CommercialPaintingTab'
 import { StatusPill, StatGrid, TONE_LEFT_RAIL, type Tone } from './_components/quote-ui'
 import { BrandMark } from '@/app/_components/BrandMark'
@@ -774,7 +777,23 @@ export default function DashboardPage() {
             {tab === 'catalogue' && <CatalogueTab accessToken={accessToken} />}
             {tab === 'estimating' && <EstimatingTab accessToken={accessToken} />}
             {tab === 'recipes' && <RecipesTab accessToken={accessToken} />}
-            {tab === 'quotes' && <QuotesTab data={data} accessToken={accessToken} />}
+            {tab === 'quotes' && (
+              <QuotesTab
+                data={data}
+                accessToken={accessToken}
+                // Deletion must land in the parent-owned DashboardData —
+                // QuotesTab unmounts on tab switch, and Overview's KPIs +
+                // recent-quotes preview read the same data.quotes. A local
+                // set in the tab would resurrect deleted rows on remount.
+                onQuoteDeleted={(id) =>
+                  setData((prev) =>
+                    prev
+                      ? { ...prev, quotes: prev.quotes.filter((q) => q.id !== id) }
+                      : prev,
+                  )
+                }
+              />
+            )}
             {tab === 'calendar' && <CalendarTab accessToken={accessToken} />}
             {tab === 'followups' && (
               <FollowupsTab accessToken={accessToken} />
@@ -2697,6 +2716,8 @@ function PayoutsTab({
         </div>
       </Card>
 
+      {hasAccount && <PayoutJobsSection accessToken={accessToken} />}
+
       <Card title="How you get paid">
         <ul className="space-y-3.5 text-sm leading-relaxed text-text-sec">
           <li className="flex gap-3">
@@ -2720,6 +2741,208 @@ function PayoutsTab({
         </ul>
       </Card>
     </div>
+  )
+}
+
+// ─── Payouts tab — held money + release on job completion ────────
+//
+// Lists the tenant's Connect-routed paid jobs (GET /api/tenant/payouts):
+// the deposit collected, QuoteMax's 2% fee, and the net held in their
+// Stripe balance. "Mark complete" POSTs /api/quote/[id]/complete, which
+// stamps completed_at and releases the payout to their bank.
+
+type PayoutJob = {
+  quote_id: string
+  job_type: string | null
+  paid_tier: string | null
+  paid_at: string
+  paid_amount_cents: number | null
+  platform_fee_cents: number | null
+  net_cents: number
+  completed_at: string | null
+  release_state: 'released' | 'in_flight' | 'awaiting'
+  payout: { id: string; amount_cents: number | null; created_at: string | null } | null
+}
+
+const PAYOUT_BLOCK_COPY: Record<string, string> = {
+  payouts_not_ready:
+    'Stripe hasn’t finished verifying your payout account yet — the release will work once verification clears.',
+  release_in_progress:
+    'A release for this job is already in progress — give it a moment and refresh.',
+  account_mismatch:
+    'This job was paid into a previous payout account. Contact QuoteMax support to release it.',
+  not_connect_routed:
+    'This job was paid before your payout account was live, so there’s no held money to release.',
+  nothing_to_release: 'There’s nothing left to release for this job.',
+}
+
+function fmtAudCents(cents: number | null | undefined): string {
+  return ((cents ?? 0) / 100).toLocaleString('en-AU', {
+    style: 'currency',
+    currency: 'AUD',
+  })
+}
+
+function payoutJobLabel(j: PayoutJob): string {
+  const job = (j.job_type ?? 'job').replace(/_/g, ' ')
+  return j.paid_tier && j.paid_tier !== 'inspection'
+    ? `${job} · ${j.paid_tier}`
+    : j.paid_tier === 'inspection'
+      ? `${job} · site visit`
+      : job
+}
+
+function PayoutJobsSection({ accessToken }: { accessToken: string | null }) {
+  const [jobs, setJobs] = useState<PayoutJob[] | null>(null)
+  const [loadErr, setLoadErr] = useState<string | null>(null)
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [actionMsg, setActionMsg] = useState<string | null>(null)
+
+  const refresh = useCallback(async () => {
+    if (!accessToken) return
+    try {
+      const res = await fetch('/api/tenant/payouts', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: 'no-store',
+      })
+      const json = await res.json().catch(() => null)
+      if (res.ok && json?.ok) {
+        setJobs(json.jobs as PayoutJob[])
+        setLoadErr(null)
+      } else {
+        setLoadErr(json?.error ?? `Couldn’t load payouts (HTTP ${res.status}).`)
+      }
+    } catch (e) {
+      setLoadErr(e instanceof Error ? e.message : String(e))
+    }
+  }, [accessToken])
+
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
+
+  async function releaseJob(quoteId: string) {
+    if (!accessToken) return
+    setActionMsg(null)
+    setBusyId(quoteId)
+    try {
+      const res = await fetch(`/api/quote/${quoteId}/complete`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      const json = await res.json().catch(() => null)
+      if (json?.ok && json.released) {
+        setActionMsg(
+          `Payout of ${fmtAudCents(json.payout?.amount_cents)} is on its way to your bank.`,
+        )
+      } else if (json?.ok && json.block) {
+        setActionMsg(
+          PAYOUT_BLOCK_COPY[json.block as string] ??
+            'Job marked complete, but the payout couldn’t be released yet.',
+        )
+      } else if (json?.error === 'payout_failed' && json.code === 'balance_insufficient') {
+        setActionMsg(
+          'Job marked complete. Stripe is still settling this payment (usually 1–2 business days) — release it again once it clears.',
+        )
+      } else {
+        setActionMsg(
+          json?.detail || json?.error || `Couldn’t release the payout (HTTP ${res.status}).`,
+        )
+      }
+      await refresh()
+    } catch (e) {
+      setActionMsg(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const awaiting = (jobs ?? []).filter((j) => j.release_state !== 'released')
+  const released = (jobs ?? []).filter((j) => j.release_state === 'released')
+
+  return (
+    <>
+      <Card title="Money held for you">
+        {loadErr && <ErrorBanner>{loadErr}</ErrorBanner>}
+        {actionMsg && (
+          <p className="mb-4 text-sm leading-relaxed text-text-sec">{actionMsg}</p>
+        )}
+        {jobs === null && !loadErr ? (
+          <p className="text-sm text-text-dim">Loading…</p>
+        ) : awaiting.length === 0 ? (
+          <p className="text-sm leading-relaxed text-text-sec">
+            No payments waiting on you. When a customer pays a deposit, it
+            shows up here until you mark the job complete.
+          </p>
+        ) : (
+          <ul className="divide-y divide-ink-line">
+            {awaiting.map((j) => (
+              <li
+                key={j.quote_id}
+                className="flex flex-wrap items-center justify-between gap-3 py-3.5"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold capitalize text-text-pri">
+                    {payoutJobLabel(j)}
+                  </p>
+                  <p className="mt-0.5 text-xs text-text-dim">
+                    Paid {new Date(j.paid_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                    {' · '}
+                    {fmtAudCents(j.paid_amount_cents)} collected − {fmtAudCents(j.platform_fee_cents)} fee ={' '}
+                    <span className="text-text-sec">{fmtAudCents(j.net_cents)} yours</span>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => releaseJob(j.quote_id)}
+                  disabled={busyId !== null || j.release_state === 'in_flight'}
+                  className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-4 py-2 text-xs uppercase tracking-wider transition-colors disabled:opacity-50"
+                >
+                  {busyId === j.quote_id
+                    ? 'Releasing…'
+                    : j.release_state === 'in_flight'
+                      ? 'Release in progress'
+                      : j.completed_at
+                        ? 'Release payout'
+                        : 'Mark complete & release'}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      {released.length > 0 && (
+        <Card title="Paid out">
+          <ul className="divide-y divide-ink-line">
+            {released.map((j) => (
+              <li
+                key={j.quote_id}
+                className="flex flex-wrap items-center justify-between gap-3 py-3.5"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold capitalize text-text-pri">
+                    {payoutJobLabel(j)}
+                  </p>
+                  <p className="mt-0.5 text-xs text-text-dim">
+                    Released{' '}
+                    {j.payout?.created_at
+                      ? new Date(j.payout.created_at).toLocaleDateString('en-AU', {
+                          day: 'numeric',
+                          month: 'short',
+                        })
+                      : '—'}
+                  </p>
+                </div>
+                <span className="font-mono text-sm font-bold text-emerald-400">
+                  {fmtAudCents(j.payout?.amount_cents ?? j.net_cents)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+    </>
   )
 }
 
@@ -5824,117 +6047,58 @@ const QUOTE_BADGE_TONE: Record<QuoteBadgeTone, Tone> = {
   draft: 'warn',
 }
 
-// Lightweight summary of a saved trade-specific job (roofing/solar/painting)
-// returned by /api/tenant/trade-jobs. Mirrors the route's TradeJobSummary.
-type TradeJobSummary = {
-  id: string
-  trade: 'roofing' | 'solar' | 'painting' | 'commercial-painting'
-  address: string | null
-  headline: string | null
-  status: 'confirmed' | 'inspection' | 'draft'
-  href: string | null
-  createdAt: string | null
+// The "Saved jobs" strip (roofing/solar/painting/commercial jobs living
+// outside the quotes table) was extracted + redesigned into
+// ./_components/SavedJobsSection — grouped by trade, sortable, deletable.
+
+// Sort options for the main quotes list. 'newest' matches the API's
+// created_at-descending order, so it's the default.
+type QuoteSort = 'newest' | 'oldest' | 'value_desc' | 'value_asc'
+
+const QUOTE_SORTS: { key: QuoteSort; label: string }[] = [
+  { key: 'newest', label: 'Newest first' },
+  { key: 'oldest', label: 'Oldest first' },
+  { key: 'value_desc', label: 'Highest value' },
+  { key: 'value_asc', label: 'Lowest value' },
+]
+
+function compareQuotes(a: Quote, b: Quote, sort: QuoteSort): number {
+  if (sort === 'oldest') return (a.created_at ?? '').localeCompare(b.created_at ?? '')
+  if (sort === 'value_desc' || sort === 'value_asc') {
+    const av = toNum(a.total_inc_gst)
+    const bv = toNum(b.total_inc_gst)
+    // Unpriced quotes (inspection-routed) sink to the bottom for both
+    // value sorts rather than sorting as $0.
+    if (av === null && bv === null) return 0
+    if (av === null) return 1
+    if (bv === null) return -1
+    return sort === 'value_desc' ? bv - av : av - bv
+  }
+  // newest
+  return (b.created_at ?? '').localeCompare(a.created_at ?? '')
 }
 
-const TRADE_JOB_LABEL: Record<TradeJobSummary['trade'], string> = {
-  roofing: 'Roof',
-  solar: 'Solar',
-  painting: 'Paint',
-  'commercial-painting': 'Commercial',
-}
-
-/**
- * Quotes-tab "saved jobs" strip (spec R4/R8/R19, link-out variant). Roofing,
- * solar and painting jobs live in their own tables — not the quotes table — so
- * they never appeared in this list. This fetches their summaries and renders a
- * trade-styled card that links to the rich customer page (/q/roof, /q/solar,
- * /q/paint) the customer sees, instead of the electrical card. Renders nothing
- * until the fetch resolves with at least one job.
- */
-function TradeJobsSection({ accessToken }: { accessToken: string | null }) {
-  const [jobs, setJobs] = useState<TradeJobSummary[] | null>(null)
-  useEffect(() => {
-    if (!accessToken) return
-    let cancelled = false
-    void (async () => {
-      try {
-        const res = await fetch('/api/tenant/trade-jobs', {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        })
-        if (!res.ok) return
-        const json = (await res.json()) as { jobs?: TradeJobSummary[] }
-        if (!cancelled) setJobs(Array.isArray(json.jobs) ? json.jobs : [])
-      } catch {
-        /* network error — leave hidden */
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [accessToken])
-
-  if (!jobs || jobs.length === 0) return null
-
-  return (
-    <section className="border border-ink-line bg-ink-card p-5">
-      <div className="mb-3 font-mono text-[0.7rem] uppercase tracking-[0.16em] text-text-dim">
-        Saved jobs · roofing · solar · painting
-      </div>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {jobs.map((j) => (
-          <TradeJobCard key={`${j.trade}-${j.id}`} job={j} />
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function TradeJobCard({ job }: { job: TradeJobSummary }) {
-  const inner = (
-    <div className="flex items-center justify-between gap-3 border border-ink-line bg-ink-deep/30 px-4 py-3 transition-colors group-hover:border-accent">
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center bg-accent/15 px-1.5 py-0.5 font-mono text-[0.55rem] font-bold uppercase tracking-[0.16em] text-accent">
-            {TRADE_JOB_LABEL[job.trade]}
-          </span>
-          <span className="truncate font-semibold text-text-pri">{job.address ?? '—'}</span>
-        </div>
-        <div className="mt-1 font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
-          {[job.headline, job.status].filter(Boolean).join(' · ')}
-        </div>
-      </div>
-      {job.href ? (
-        <span className="shrink-0 font-mono text-[0.62rem] font-bold uppercase tracking-[0.14em] text-accent">
-          View →
-        </span>
-      ) : (
-        <span className="shrink-0 font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
-          No link yet
-        </span>
-      )}
-    </div>
-  )
-  return job.href ? (
-    <Link href={job.href} target="_blank" className="group block">
-      {inner}
-    </Link>
-  ) : (
-    <div className="group">{inner}</div>
-  )
-}
-
-function QuotesTab({ data, accessToken }: { data: DashboardData; accessToken: string | null }) {
+function QuotesTab({
+  data,
+  accessToken,
+  onQuoteDeleted,
+}: {
+  data: DashboardData
+  accessToken: string | null
+  onQuoteDeleted: (id: string) => void
+}) {
   const isMultiTrade =
     Array.isArray(data.tenant.trades) && data.tenant.trades.length > 1
 
   const [filter, setFilter] = useState<QuoteFilter>('all')
   const [visible, setVisible] = useState(LIST_PAGE_SIZE)
+  const [sort, setSort] = useState<QuoteSort>('newest')
   const all = data.quotes
 
   if (all.length === 0) {
     return (
       <div className="space-y-5">
-        <TradeJobsSection accessToken={accessToken} />
+        <SavedJobsSection accessToken={accessToken} />
         <Card>
           <p className="text-sm text-text-dim">
             No quotes drafted yet. Customers texting your QuoteMax number will
@@ -5952,7 +6116,9 @@ function QuotesTab({ data, accessToken }: { data: DashboardData; accessToken: st
     { key: 'paid', label: 'Deposit paid' },
     { key: 'inspect', label: 'Inspection' },
   ]
-  const filtered = all.filter((q) => quoteMatchesFilter(q, filter))
+  const filtered = all
+    .filter((q) => quoteMatchesFilter(q, filter))
+    .sort((a, b) => compareQuotes(a, b, sort))
   const total = filtered.length
   const visibleQuotes = filtered.slice(0, visible)
   const remaining = Math.max(0, total - visible)
@@ -5971,7 +6137,7 @@ function QuotesTab({ data, accessToken }: { data: DashboardData; accessToken: st
 
   return (
     <div className="space-y-5">
-      <TradeJobsSection accessToken={accessToken} />
+      <SavedJobsSection accessToken={accessToken} />
       <StatGrid
         cols={4}
         stats={[
@@ -6002,8 +6168,9 @@ function QuotesTab({ data, accessToken }: { data: DashboardData; accessToken: st
       />
 
       {/* Status filter rail — lets a tradie with a long history jump
-          straight to what needs action (in-review) or what converted. */}
-      <div className="flex flex-wrap gap-2">
+          straight to what needs action (in-review) or what converted.
+          The sort select on the right re-orders the filtered list. */}
+      <div className="flex flex-wrap items-center gap-2">
         {FILTERS.map((f) => {
           const count = all.filter((q) => quoteMatchesFilter(q, f.key)).length
           const active = filter === f.key
@@ -6029,6 +6196,23 @@ function QuotesTab({ data, accessToken }: { data: DashboardData; accessToken: st
             </button>
           )
         })}
+        <label className="ml-auto flex items-center gap-2 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+          Sort
+          <select
+            value={sort}
+            onChange={(e) => {
+              setSort(e.target.value as QuoteSort)
+              setVisible(LIST_PAGE_SIZE)
+            }}
+            className="cursor-pointer border border-ink-line bg-ink-card px-2.5 py-2 font-mono text-[0.65rem] font-bold uppercase tracking-[0.14em] text-text-pri focus:border-accent focus:outline-none"
+          >
+            {QUOTE_SORTS.map((s) => (
+              <option key={s.key} value={s.key}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <Card
@@ -6044,7 +6228,13 @@ function QuotesTab({ data, accessToken }: { data: DashboardData; accessToken: st
           <>
             <div className="space-y-2">
               {visibleQuotes.map((q) => (
-                <QuoteCard key={q.id} q={q} isMultiTrade={isMultiTrade} accessToken={accessToken} />
+                <QuoteCard
+                  key={q.id}
+                  q={q}
+                  isMultiTrade={isMultiTrade}
+                  accessToken={accessToken}
+                  onDeleted={onQuoteDeleted}
+                />
               ))}
             </div>
             {remaining > 0 && (
@@ -6065,7 +6255,112 @@ function QuotesTab({ data, accessToken }: { data: DashboardData; accessToken: st
   )
 }
 
-function QuoteCard({ q, isMultiTrade, accessToken }: { q: Quote; isMultiTrade: boolean; accessToken: string | null }) {
+/**
+ * Two-step delete for a drafted quote. First click arms the confirm state;
+ * confirming calls DELETE /api/quote/[id] (owner-checked, refuses paid
+ * quotes server-side) and reports success upward so QuotesTab drops the
+ * card without re-fetching the dashboard payload.
+ */
+function DeleteQuoteButton({
+  quoteId,
+  accessToken,
+  onDeleted,
+}: {
+  quoteId: string
+  accessToken: string | null
+  onDeleted: (id: string) => void
+}) {
+  const [confirming, setConfirming] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function doDelete() {
+    if (!accessToken) return
+    setBusy(true)
+    setErr(null)
+    try {
+      const res = await fetch(`/api/quote/${quoteId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      // 404 = the row is already gone (deleted in another tab) — treat as
+      // success so the card can't become an undeletable phantom.
+      if (res.ok || res.status === 404) {
+        onDeleted(quoteId)
+        return
+      }
+      const json = (await res.json().catch(() => ({}))) as { error?: string }
+      setErr(
+        res.status === 409 || json.error === 'quote_already_paid'
+          ? "Deposit paid — this quote can't be deleted."
+          : 'Could not delete — try again shortly.',
+      )
+      setBusy(false)
+      setConfirming(false)
+    } catch {
+      setErr('Could not delete — try again shortly.')
+      setBusy(false)
+      setConfirming(false)
+    }
+  }
+
+  if (confirming) {
+    return (
+      <span className="flex w-full items-stretch gap-2 sm:w-auto">
+        <button
+          type="button"
+          onClick={() => void doDelete()}
+          disabled={busy}
+          className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 border border-danger/60 bg-danger/10 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-danger transition-colors hover:bg-danger/20 disabled:opacity-50 sm:flex-none"
+        >
+          {busy ? <Loader2 size={13} className="animate-spin" /> : null}
+          {busy ? 'Deleting…' : 'Yes, delete'}
+        </button>
+        <button
+          type="button"
+          onClick={() => setConfirming(false)}
+          disabled={busy}
+          className="inline-flex min-h-[44px] flex-1 items-center justify-center border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent disabled:opacity-50 sm:flex-none"
+        >
+          Cancel
+        </button>
+      </span>
+    )
+  }
+  return (
+    <span className="flex w-full items-stretch gap-2 sm:w-auto sm:items-center">
+      {err && (
+        <span
+          role="alert"
+          className="self-center font-mono text-[0.62rem] uppercase tracking-[0.12em] text-danger"
+        >
+          {err}
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={() => setConfirming(true)}
+        aria-label="Delete quote"
+        className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-dim transition-colors hover:border-danger hover:text-danger sm:flex-none"
+      >
+        <Trash2 size={13} />
+        Delete
+      </button>
+    </span>
+  )
+}
+
+function QuoteCard({
+  q,
+  isMultiTrade,
+  accessToken,
+  onDeleted,
+}: {
+  q: Quote
+  isMultiTrade: boolean
+  accessToken: string | null
+  onDeleted: (id: string) => void
+}) {
   const [expanded, setExpanded] = useState(false)
   const url = q.share_token ? `/q/${q.share_token}` : null
 
@@ -6282,39 +6577,39 @@ function QuoteCard({ q, isMultiTrade, accessToken }: { q: Quote; isMultiTrade: b
                   <StatusPill key={i} label={b.label} tone={QUOTE_BADGE_TONE[b.tone]} />
                 ))}
               </div>
-              {url && (
-                <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:items-center">
-                  {/* Share the customer's deposit link (spec R7). This copies
-                      the /r/{token}/{tier} short-link — it never charges from
-                      the dashboard; the real Pay Deposit button lives on the
-                      customer page. Hidden for inspection-routed quotes. */}
-                  {!isInspection && q.share_token && (
-                    <CopyDepositLink token={q.share_token} tier={q.selected_tier} />
-                  )}
-                  {/* Open the in-dashboard PDF viewer where the tradie can edit
-                      the quote manually or with AI, then re-download. Hidden for
-                      inspection quotes (no priced PDF / nothing to edit). */}
-                  {!isInspection && q.share_token && (
-                    <Link
-                      href={`/dashboard/quote/${q.share_token}`}
-                      className="inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
-                    >
-                      View PDF · Edit
-                    </Link>
-                  )}
-                  {/* Download the full quote as a PDF. Hidden for inspection-
-                      routed quotes — the /api/q/[token]/pdf route 404s those
-                      (no committable price belongs in a final-looking doc). */}
-                  {!isInspection && (
-                    <a
-                      href={`/api/q/${q.share_token}/pdf`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
-                    >
-                      Download PDF ↓
-                    </a>
-                  )}
+              <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:items-center">
+                {/* Share the customer's deposit link (spec R7). This copies
+                    the /r/{token}/{tier} short-link — it never charges from
+                    the dashboard; the real Pay Deposit button lives on the
+                    customer page. Hidden for inspection-routed quotes. */}
+                {url && !isInspection && q.share_token && (
+                  <CopyDepositLink token={q.share_token} tier={q.selected_tier} />
+                )}
+                {/* Open the in-dashboard PDF viewer where the tradie can edit
+                    the quote manually or with AI, then re-download. Hidden for
+                    inspection quotes (no priced PDF / nothing to edit). */}
+                {url && !isInspection && q.share_token && (
+                  <Link
+                    href={`/dashboard/quote/${q.share_token}`}
+                    className="inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+                  >
+                    View PDF · Edit
+                  </Link>
+                )}
+                {/* Download the full quote as a PDF. Hidden for inspection-
+                    routed quotes — the /api/q/[token]/pdf route 404s those
+                    (no committable price belongs in a final-looking doc). */}
+                {url && !isInspection && (
+                  <a
+                    href={`/api/q/${q.share_token}/pdf`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+                  >
+                    Download PDF ↓
+                  </a>
+                )}
+                {url && (
                   <Link
                     href={url}
                     target="_blank"
@@ -6322,8 +6617,21 @@ function QuoteCard({ q, isMultiTrade, accessToken }: { q: Quote; isMultiTrade: b
                   >
                     View customer page →
                   </Link>
-                </div>
-              )}
+                )}
+                {/* Delete — hidden once a deposit lands or the quote is
+                    accepted. deposit_paid now reflects quotes.paid_at (set by
+                    the Stripe webhook) via /api/tenant/me; the status check
+                    covers webhook-advanced quotes in older payloads. The API
+                    independently refuses paid quotes with a 409. */}
+                {!q.deposit_paid &&
+                  !['accepted', 'paid'].includes((q.status ?? '').toLowerCase()) && (
+                    <DeleteQuoteButton
+                      quoteId={q.id}
+                      accessToken={accessToken}
+                      onDeleted={onDeleted}
+                    />
+                  )}
+              </div>
             </div>
 
             {/* Phase B — per-quote display-mode override. Lets the tradie

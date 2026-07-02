@@ -38,6 +38,7 @@ import {
   resolveQuoteDisplayMode,
 } from '@/lib/quote/display'
 import { asQuoteTierMode } from '@/lib/quote/tier-visibility'
+import { computePriceHoldUntil } from '@/lib/quote/hold'
 
 export const dynamic = 'force-dynamic'
 
@@ -159,10 +160,20 @@ export async function POST(
   // tier jsonb already lives on the quote row; we just need to attach
   // the share-link + deposit pct + pay links so the body renders the
   // pay-now CTAs.
-  const payLinks =
+  //
+  // Pay links are the GATED /r short-links, never the raw stored Stripe
+  // URLs (mirrors the draft route). Raw Session URLs die after Stripe's
+  // 24h expiry — usually before a review-held quote is even approved —
+  // and bypass /r's book-first funnel + price-hold gate + fresh-Session
+  // mint entirely.
+  const storedLinks =
     quote.stripe_links && typeof quote.stripe_links === 'object'
       ? (quote.stripe_links as Record<string, string>)
       : {}
+  const payLinks: Record<string, string> = {}
+  for (const k of Object.keys(storedLinks)) {
+    payLinks[k] = `${appUrl}/r/${quote.share_token as string}/${k}`
+  }
   const depositPct =
     typeof quote.deposit_pct === 'number'
       ? quote.deposit_pct
@@ -180,8 +191,22 @@ export async function POST(
     ? null
     : await ensureQuotePdf(quote.id as string, { regenerate: true })
 
+  // Restart the 7-day price hold from the moment the customer actually
+  // receives the quote. A review-held quote approved days after drafting
+  // would otherwise arrive with its hold partly (or fully) burnt and be
+  // blocked as 'expired' by the /r + booking gates before the customer
+  // ever had a window to act. Stamped before the SMS body is built so any
+  // "price held until" copy shows the refreshed date; harmless if the
+  // dispatch below fails (a retry simply restamps).
+  const refreshedHoldUntil = computePriceHoldUntil(new Date().toISOString())
+  await supabase
+    .from('quotes')
+    .update({ price_hold_until: refreshedHoldUntil })
+    .eq('id', quote.id)
+
   const quoteForSms = {
     ...quote,
+    price_hold_until: refreshedHoldUntil,
     pay_links: payLinks,
     deposit_pct: depositPct,
     needs_inspection: !!quote.needs_inspection,

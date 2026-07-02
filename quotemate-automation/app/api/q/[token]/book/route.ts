@@ -29,10 +29,7 @@ import { earlyBirdStatus } from '@/lib/quote/early-bird'
 import { resolveBookingOptions, buildBookedKeys } from '@/lib/quote/slots'
 import { tzForState } from '@/lib/quote/availability'
 import { notifyBookingConfirmed } from '@/lib/quote/booking-notify'
-import {
-  createCheckoutSessionForTier,
-  expireCheckoutSession,
-} from '@/lib/stripe/checkout'
+import { expireCheckoutSession } from '@/lib/stripe/checkout'
 
 export const maxDuration = 300
 
@@ -73,7 +70,7 @@ export async function POST(
 
   const { data: quote, error: quoteErr } = await supabase
     .from('quotes')
-    .select('id, paid_at, scheduled_at, selected_tier, share_token, intake_id, tenant_id, good, better, best, stripe_links, created_at, price_hold_until')
+    .select('id, paid_at, scheduled_at, selected_tier, share_token, intake_id, tenant_id, good, better, best, stripe_links, created_at, price_hold_until, needs_inspection')
     .eq('share_token', token)
     .maybeSingle()
 
@@ -95,8 +92,11 @@ export async function POST(
   // Price-hold gate (defense in depth for the UI block): a lapsed price must
   // not be booked against a stale figure. Already-paid quotes (legacy
   // paid-then-pick recovery) have transacted and may still pick a time.
+  // Inspection-required quotes are exempt — their prices are indicative
+  // (final price confirmed on-site), matching /q and /r.
   if (
     !quote.paid_at &&
+    !quote.needs_inspection &&
     isPriceHoldExpired(
       (quote as { price_hold_until?: string | null }).price_hold_until ?? null,
       (quote as { created_at?: string | null }).created_at ?? null,
@@ -295,64 +295,25 @@ export async function POST(
             })
             appliedDiscountPct = 0
           } else {
-            // 2. Re-issue the deposit Stripe Session at the discounted
-            //    price. The pre-baked Session in stripe_links froze the
-            //    full price at draft time, so it must be replaced.
+            // 2. Kill the stale full-price Session so a cached old link
+            //    can't be paid at the undiscounted amount. NO replacement
+            //    is minted here: /r/<token>/<tier> mints a FRESH Session
+            //    on every pay click and reads applied_discount_pct
+            //    (stamped above), so the discounted deposit is issued
+            //    there. Minting here too left an orphaned duplicate
+            //    Session per booking and added ~1-2s to this POST.
             try {
-              const { data: intakeRow } = await supabase
-                .from('intakes')
-                .select('job_type, scope, caller')
-                .eq('id', quote.intake_id)
-                .maybeSingle()
-
-              const appUrl = process.env.APP_URL!
-              type CheckoutOpts = Parameters<typeof createCheckoutSessionForTier>[0]
-              const newUrl = await createCheckoutSessionForTier({
-                quote: {
-                  id: quote.id as string,
-                  good: quote.good ?? null,
-                  better: quote.better ?? null,
-                  best: quote.best ?? null,
-                  // Matches the hardcoded 30% used at draft time
-                  // (createCheckoutSessionsForQuote in the estimate route).
-                  deposit_pct: 30,
-                } as unknown as CheckoutOpts['quote'],
-                tierKey: tier as 'good' | 'better' | 'best',
-                intake: {
-                  job_type: (intakeRow?.job_type as string) ?? 'other',
-                  scope: intakeRow?.scope ?? null,
-                  caller: intakeRow?.caller ?? null,
-                } as unknown as CheckoutOpts['intake'],
-                shareToken: token,
-                appUrl,
-                discountPct: appliedDiscountPct,
+              const oldUrl = ((quote.stripe_links as Record<string, string> | null) ?? {})[
+                tier
+              ]
+              if (oldUrl) await expireCheckoutSession(oldUrl)
+              log.ok('early-bird discount applied — /r mints the discounted Session on click', {
+                quote_id: quote.id,
+                tier,
+                discount_pct: appliedDiscountPct,
               })
-
-              if (newUrl) {
-                const links = {
-                  ...((quote.stripe_links as Record<string, string> | null) ?? {}),
-                }
-                const oldUrl = links[tier]
-                links[tier] = newUrl
-                await supabase
-                  .from('quotes')
-                  .update({ stripe_links: links })
-                  .eq('id', quote.id)
-                // Expire the stale full-price Session so a cached old
-                // link can't be paid at the undiscounted amount.
-                if (oldUrl) await expireCheckoutSession(oldUrl)
-                log.ok('early-bird discount applied — discounted Session issued', {
-                  quote_id: quote.id,
-                  tier,
-                  discount_pct: appliedDiscountPct,
-                })
-              } else {
-                log.err('discounted Session returned no URL — customer keeps full-price link', null, {
-                  quote_id: quote.id,
-                })
-              }
             } catch (e: unknown) {
-              log.err('discounted Session re-issue threw (non-fatal — full-price link still works)',
+              log.err('stale full-price Session expire threw (non-fatal — /r replaces it on click)',
                 e instanceof Error ? e.message : String(e), { quote_id: quote.id })
             }
           }

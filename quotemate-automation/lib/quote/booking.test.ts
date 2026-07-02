@@ -45,7 +45,7 @@ describe('payRedirectTarget — the flip', () => {
     ).toBe('paid')
   })
 
-  it('inspection $99 stays pay-first regardless of slot/paid state', () => {
+  it('inspection $99 stays pay-first regardless of slot state (while unpaid)', () => {
     expect(
       payRedirectTarget({ paid: false, scheduledAt: null, tier: 'inspection' }),
     ).toBe('stripe')
@@ -56,6 +56,22 @@ describe('payRedirectTarget — the flip', () => {
         tier: 'inspection',
       }),
     ).toBe('stripe')
+  })
+
+  it('PAID inspection → thank-you, never a fresh $99 charge (double-charge guard)', () => {
+    // /r mints a fresh payable Session per click since 2026-07-01; if a paid
+    // inspection ever routed to 'stripe' again, every re-click of the old SMS
+    // link would charge another $99.
+    expect(
+      payRedirectTarget({ paid: true, scheduledAt: null, tier: 'inspection' }),
+    ).toBe('paid')
+    expect(
+      payRedirectTarget({
+        paid: true,
+        scheduledAt: '2026-05-20T03:00:00.000Z',
+        tier: 'inspection',
+      }),
+    ).toBe('paid')
   })
 })
 

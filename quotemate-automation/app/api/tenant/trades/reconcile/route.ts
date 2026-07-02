@@ -28,6 +28,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { updateVapiAssistant } from '@/lib/vapi/update-assistant'
+import { listManageableTrades } from '@/lib/trades/manageable'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,24 +59,6 @@ async function userFromBearer(req: Request) {
   const { data, error } = await supabase.auth.getUser(token)
   if (error || !data.user) return null
   return data.user
-}
-
-/** The set of trades a tenant may manage from the dashboard: registered,
- *  active, job-based, and carrying a trade_pricing_defaults row (without
- *  which activate_trade_for_tenant cannot seed the pricing_book). */
-async function loadManageableTrades(): Promise<Set<string>> {
-  const { data, error } = await supabase
-    .from('trades')
-    .select('name, trade_pricing_defaults(trade_id)')
-    .eq('active', true)
-    .eq('is_job_based', true)
-  if (error) throw new Error(error.message)
-  const set = new Set<string>()
-  for (const t of data ?? []) {
-    const defs = (t as { trade_pricing_defaults?: unknown[] }).trade_pricing_defaults
-    if (Array.isArray(defs) && defs.length > 0) set.add((t as { name: string }).name)
-  }
-  return set
 }
 
 /** Disable offerings + drop pricing/licence config for a deactivated trade.
@@ -136,9 +119,11 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, error: 'no_tenant' }, { status: 404 })
   }
 
+  // The set of trades a tenant may manage from the dashboard — same
+  // registry read the /available route renders (lib/trades/manageable).
   let manageable: Set<string>
   try {
-    manageable = await loadManageableTrades()
+    manageable = new Set((await listManageableTrades(supabase)).map((t) => t.name))
   } catch (e) {
     return Response.json(
       { ok: false, error: e instanceof Error ? e.message : 'registry_unavailable' },

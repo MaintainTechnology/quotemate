@@ -11,6 +11,7 @@
 // which POSTs to /api/tenant/trades/activate.
 
 import { createClient } from '@supabase/supabase-js'
+import { listManageableTrades } from '@/lib/trades/manageable'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,33 +52,21 @@ export async function GET(req: Request) {
   if (tenant.trade) owned.add(tenant.trade as string)
   for (const t of (tenant.trades as string[] | null) ?? []) owned.add(t)
 
-  // Active, job-based trades + their pricing-defaults presence. An inner
-  // join would also work, but selecting the relation keeps the "has
-  // defaults" decision explicit and easy to read.
-  const { data: trades, error: trErr } = await supabase
-    .from('trades')
-    .select('name, display_name, is_job_based, active, trade_pricing_defaults(trade_id)')
-    .eq('active', true)
-    .eq('is_job_based', true)
-    .order('display_name')
-  if (trErr) {
-    return Response.json({ ok: false, error: trErr.message }, { status: 500 })
-  }
-
   // Every activatable trade (active, job-based, has pricing defaults), each
   // tagged with whether the tenant already owns it. The Account-tab Trades
   // section renders this as a toggle list (owned = on) and POSTs the chosen
-  // set to /api/tenant/trades/reconcile.
-  const manageable = (trades ?? [])
-    .filter((t) => {
-      const defs = t.trade_pricing_defaults as unknown[] | null
-      return Array.isArray(defs) && defs.length > 0
-    })
-    .map((t) => ({
-      name: t.name as string,
-      displayName: (t.display_name as string | null) ?? (t.name as string),
-      owned: owned.has(t.name as string),
-    }))
+  // set to /api/tenant/trades/reconcile. The registry read + defaults check
+  // is shared with /reconcile via lib/trades/manageable.
+  let registry
+  try {
+    registry = await listManageableTrades(supabase)
+  } catch (e) {
+    return Response.json(
+      { ok: false, error: e instanceof Error ? e.message : 'registry_unavailable' },
+      { status: 500 },
+    )
+  }
+  const manageable = registry.map((t) => ({ ...t, owned: owned.has(t.name) }))
 
   // `available` = the not-yet-owned subset, kept for the legacy per-trade
   // Activate card / any existing consumer.
