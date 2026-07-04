@@ -1,0 +1,38 @@
+<!-- @dsCard group="Colors" viewport="700x190" name="Accent — Caterpillar yellow" subtitle="The only accent. Text on a yellow fill is ALWAYS dark ink." -->
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { margin: 0; padding: 22px 24px; background: var(--ink-deep); }
+  .row { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; }
+  .sw { flex: 1 1 0; min-width: 110px; }
+  .chip { height: 78px; border: 1px solid var(--ink-line); display: grid; place-items: center; }
+  .chip span { font-family: var(--font-mono); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; }
+  .name { font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--text-pri); margin-top: 10px; }
+  .hex { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.12em; margin-top: 3px; }
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="sw">
+      <div class="chip" style="background: var(--accent)"><span style="color: var(--accent-ink)">Aa text</span></div>
+      <div class="name">--accent</div><div class="hex">#FFC400</div>
+    </div>
+    <div class="sw">
+      <div class="chip" style="background: var(--accent-press)"><span style="color: var(--accent-ink)">press</span></div>
+      <div class="name">--accent-press</div><div class="hex">#E6AC00</div>
+    </div>
+    <div class="sw">
+      <div class="chip" style="background: var(--accent-soft)"><span style="color: var(--accent-ink)">soft</span></div>
+      <div class="name">--accent-soft</div><div class="hex">#FFD23D</div>
+    </div>
+    <div class="sw">
+      <div class="chip" style="background: var(--accent-ink)"><span style="color: var(--accent)">on yellow</span></div>
+      <div class="name">--accent-ink</div><div class="hex">#1C1812</div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,41 @@
+<!-- @dsCard group="Marketing" viewport="1280x880" name="Marketing / pricing site" subtitle="Command-centre landing — animated SMS demo, trades, pricing, theme toggle" -->
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QuoteMax — Marketing site</title>
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  body { margin: 0; }
+  /* Partner logos: monochrome on dark (white), revealing colour on hover. */
+  .qm-partner { filter: brightness(0) invert(1); opacity: 0.55; transition: filter .2s ease, opacity .2s ease; }
+  .qm-partner:hover { filter: none; opacity: 1; }
+  [data-theme="light"] .qm-partner { filter: brightness(0); opacity: 0.5; }
+  [data-theme="light"] .qm-partner:hover { filter: none; opacity: 1; }
+  /* Responsive */
+  @media (max-width: 1024px) {
+    .qm-hero-grid { grid-template-columns: 1fr !important; gap: 40px !important; }
+    .qm-how-grid { grid-template-columns: 1fr !important; }
+    .qm-how-photo { display: none; }
+  }
+  @media (max-width: 880px) {
+    .qm-nav-links { display: none !important; }
+    .qm-trades-grid, .qm-plans, .qm-faq { grid-template-columns: 1fr !important; }
+    .qm-numbers { grid-template-columns: repeat(2,1fr) !important; }
+    .qm-footer-grid { grid-template-columns: 1fr 1fr !important; }
+    .qm-shift-head, .qm-shift-row { grid-template-columns: 1fr !important; }
+    .qm-shift-head span:nth-child(2), .qm-shift-row span:nth-child(2) { display: none; }
+  }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" data-presets="react" src="../_shared/kit.jsx"></script>
+  <script type="text/babel" data-presets="react" src="marketing.jsx"></script>
+</body>
+</html>

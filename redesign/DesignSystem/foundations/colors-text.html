@@ -1,0 +1,24 @@
+<!-- @dsCard group="Colors" viewport="700x180" name="Text on dark" subtitle="Three weights of warm off-white — all clear AA on the charcoal canvas" -->
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { margin: 0; padding: 24px; background: var(--ink-card); }
+  .stack { display: grid; gap: 16px; }
+  .line { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--ink-line); padding-bottom: 14px; }
+  .line:last-child { border-bottom: 0; padding-bottom: 0; }
+  .sample { font-family: var(--font-sans); font-weight: 700; font-size: 22px; letter-spacing: -0.01em; }
+  .tok { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.12em; white-space: nowrap; }
+</style>
+</head>
+<body>
+  <div class="stack">
+    <div class="line"><span class="sample" style="color: var(--text-pri)">Primary — headlines & key copy</span><span class="tok">--text-pri · #F6F1EA</span></div>
+    <div class="line"><span class="sample" style="color: var(--text-sec)">Secondary — body & supporting copy</span><span class="tok">--text-sec · #C3B8AC</span></div>
+    <div class="line"><span class="sample" style="color: var(--text-dim)">Dim — mono labels & captions</span><span class="tok">--text-dim · #A2968A</span></div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,133 @@
+/* ════════════════════════════════════════════════════════════════════
+   QuoteMax — COLOUR TOKENS
+   Warm Caterpillar-charcoal canvas, one accent: Caterpillar yellow.
+   Source of truth: quotemate-automation/app/globals.css (the live app).
+
+   DARK is the primary brand ("command-centre"). The LIGHT theme
+   ("warm paper") is shipped for device preference and manual opt-in.
+
+   THEME RESOLUTION
+   ----------------
+   :root                                 → DARK (primary brand, default)
+   [data-theme="dark"]  / .qm-dark        → DARK (explicit pin)
+   [data-theme="light"] / .qm-light       → LIGHT (explicit pin)
+
+   Device-preference flip is JS-driven (matching the live app): a one-line
+   bootstrap sets data-theme on <html> from localStorage, else from
+   matchMedia('(prefers-color-scheme: light)'). See readme.md → Theming.
+   Keeping it in JS lets a pinned theme always win and keeps every token
+   under a single, registrable scope.
+
+   Text on a yellow FILL is ALWAYS dark charcoal (--accent-ink), never
+   white — white-on-yellow fails WCAG (~1.4:1). Yellow is a fill colour,
+   not a body-text colour.
+   ════════════════════════════════════════════════════════════════════ */
+
+:root {
+  color-scheme: dark;
+
+  /* ─── INK / SURFACE — warm near-black charcoal scale ─────────────
+     Cards lift to the #2B2422 palette charcoal; borders stay warm so the
+     canvas reads premium, not flat. */
+  --ink-deep: #16120F;   /* page background — primary canvas            */
+  --ink:      #1E1813;   /* secondary surface (insets, sunken panels)   */
+  --ink-card: #2B2422;   /* card / panel — palette charcoal             */
+  --ink-line: #3A322C;   /* hairline border on dark                     */
+
+  /* ─── ACCENT — Caterpillar yellow (the only accent) ─────────────── */
+  --accent:       #FFC400;   /* buttons, big numbers, highlighted words */
+  --accent-press: #E6AC00;   /* hover / active fill                     */
+  --accent-soft:  #FFD23D;   /* focus rings, soft accent, ticks         */
+  --accent-ink:   #1C1812;   /* text/icons ON a yellow fill (never white) */
+
+  /* ─── TEXT ON DARK ──────────────────────────────────────────────── */
+  --text-pri: #F6F1EA;   /* headlines + primary copy                    */
+  --text-sec: #C3B8AC;   /* body + secondary copy                       */
+  --text-dim: #A2968A;   /* mono labels, captions — ≥4.5:1 on ink-card  */
+
+  /* ─── WARM EDGE GLOW — topographic ridge lines / lit field ──────── */
+  --edge-glow: #6E6354;
+  --edge-deep: #4A4136;
+
+  /* ─── STATE COLOURS ─────────────────────────────────────────────── */
+  --success:        #15803D;   /* fill — behind white text              */
+  --success-bright: #34D27B;   /* text/border on the dark canvas        */
+  --warning:        #B45309;   /* fill — behind white text              */
+  --warning-bright: #F59E0B;   /* text/border on the dark canvas        */
+  --danger:         #B91C1C;   /* fill — behind white text              */
+  --danger-bright:  #F0816B;   /* text/border on the dark canvas        */
+
+  /* ─── SEMANTIC ALIASES — author against these, not the raw scale ── */
+  --surface-canvas:  var(--ink-deep);
+  --surface-sunken:  var(--ink);
+  --surface-card:    var(--ink-card);
+  --surface-accent:  var(--accent);
+  --border-hairline: var(--ink-line);
+  --border-strong:   var(--text-dim);
+  --border-accent:   var(--accent);
+
+  --text-heading:    var(--text-pri);
+  --text-body:       var(--text-sec);
+  --text-muted:      var(--text-dim);
+  --text-on-accent:  var(--accent-ink);
+  --text-link:       var(--accent);
+
+  /* ─── EFFECT TOKENS (flip with theme) ───────────────────────────── */
+  --glow-cool:     rgba(43, 36, 34, 0.85);   /* command-centre canvas glow  */
+  --glow-warm:     rgba(255, 196, 0, 0.07);  /* warm ember in the canvas    */
+  --canvas-radial: #2B2422;                  /* app-canvas top-of-page lift */
+
+  /* ─── DUOTONE PHOTO TREATMENT — consumed by .qm-duotone (base.css) ─
+     Warms stock trade photos toward the palette. Flips per theme. */
+  --duo-shadow:    rgba(22, 18, 15, 0.55);   /* multiply scrim — warms shadows */
+  --duo-highlight: rgba(255, 196, 0, 0.16);  /* soft-light — lifts to accent   */
+  --duo-edge:      rgba(22, 18, 15, 0.62);   /* lower-edge vignette            */
+}
+
+/* Explicit dark pin (identical to the default :root). */
+[data-theme="dark"],
+.qm-dark {
+  color-scheme: dark;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   LIGHT THEME — "warm paper". Cream canvas on white cards. The accent
+   stays Caterpillar yellow for FILLS; on-surface accent TEXT resolves to
+   charcoal in typography.css so it never goes unreadable on cream.
+   ════════════════════════════════════════════════════════════════════ */
+:root[data-theme="light"],
+.qm-light {
+  color-scheme: light;
+
+  --ink-deep: #FAF8F4;
+  --ink:      #F3EEE7;
+  --ink-card: #FFFFFF;
+  --ink-line: #E9E3DC;
+
+  --accent:       #FFC400;
+  --accent-press: #E6AC00;
+  --accent-soft:  #FFD23D;
+  --accent-ink:   #2B2422;
+
+  --text-pri: #241E1B;
+  --text-sec: #5E544E;
+  --text-dim: #837870;
+
+  --edge-glow: #C9BEAD;
+  --edge-deep: #B7AB98;
+
+  --success:        #15803D;
+  --success-bright: #15803D;
+  --warning:        #B45309;
+  --warning-bright: #B45309;
+  --danger:         #B91C1C;
+  --danger-bright:  #B91C1C;
+
+  --glow-cool:     rgba(255, 253, 250, 0.9);
+  --glow-warm:     rgba(255, 196, 0, 0.05);
+  --canvas-radial: rgba(255, 248, 235, 0.85);
+
+  --duo-shadow:    rgba(43, 36, 34, 0.42);
+  --duo-highlight: rgba(255, 196, 0, 0.20);
+  --duo-edge:      rgba(43, 36, 34, 0.30);
+}

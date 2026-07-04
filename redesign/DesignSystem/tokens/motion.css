@@ -1,0 +1,73 @@
+/* ════════════════════════════════════════════════════════════════════
+   QuoteMax — MOTION
+   Motivated motion only: load choreography, scroll reveals, a typing
+   indicator, the marquee ticker, the breathing topography. CSS-only.
+   The long expo-out ease is what makes sections feel engineered rather
+   than animated. Reduced-motion users get instant content.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* Primary content settles up. */
+@keyframes qm-fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Subordinate panels just fade. */
+@keyframes qm-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Hero choreography — bigger travel so first paint feels staged. */
+@keyframes qm-rise {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* SMS demo bubbles arriving — slight scale + lift so each "just landed". */
+@keyframes qm-pop-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Live status indicator — an "active" account reads as a live signal. */
+@keyframes qm-pulse-soft {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+
+/* Typing indicator dots — the receptionist is "thinking" before the quote. */
+@keyframes qm-typing-bounce {
+  0%, 70%, 100% { opacity: 0.25; transform: translateY(0); }
+  35%           { opacity: 1;    transform: translateY(-3px); }
+}
+
+/* The signature yellow CTA bar ticker. Track holds content twice; -50% loops. */
+@keyframes qm-marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+/* The hero topography breathes sideways, very slowly; alternates. */
+@keyframes qm-topo-drift {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-48px); }
+}
+
+/* Skeleton shimmer for loading states. */
+@keyframes qm-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.5; }
+}
+
+/* ─── Reduced motion — collapse everything to instant ─────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

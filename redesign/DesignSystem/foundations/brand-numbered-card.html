@@ -1,0 +1,26 @@
+<!-- @dsCard group="Brand" viewport="700x210" name="Numbered card" subtitle="Big mono accent number beside the title — the signature card motif" -->
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { margin: 0; padding: 26px 28px; background: var(--ink-deep); }
+  .card { position: relative; border: 1px solid var(--ink-line); background: var(--ink-card); box-shadow: var(--lift); padding: 26px; display: flex; gap: 28px; align-items: flex-start; }
+  .card::before { content:''; position:absolute; top:-1px; left:-1px; right:-1px; height:2px; background: linear-gradient(90deg, var(--accent), var(--accent-soft)); }
+  .num { font-family: var(--font-mono); font-weight: 700; font-size: 64px; line-height: 0.8; color: var(--accent); }
+  h3 { margin: 0; font-family: var(--font-sans); font-weight: 800; text-transform: uppercase; letter-spacing: -0.02em; font-size: 22px; color: var(--text-pri); }
+  p { margin: 10px 0 0; font-size: 14px; line-height: 1.55; color: var(--text-sec); max-width: 46ch; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <span class="num">02</span>
+    <div>
+      <h3>QuoteMax drafts the quote</h3>
+      <p>QuoteMax asks the right questions for the job type, applies your pricing book, and writes the line items in under a minute.</p>
+    </div>
+  </div>
+</body>
+</html>

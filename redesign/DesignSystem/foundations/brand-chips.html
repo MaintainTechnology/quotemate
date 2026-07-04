@@ -1,0 +1,34 @@
+<!-- @dsCard group="Brand" viewport="700x180" name="Eyebrows & chips" subtitle="Mono uppercase chips, trust chips with the AU flag, status pills" -->
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { margin: 0; padding: 24px 28px; background: var(--ink-deep); display: grid; gap: 16px; align-content: start; }
+  .eyebrow { font-family: var(--font-mono); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.18em; color: var(--text-dim); }
+  .chips { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--ink-line); padding: 7px 12px; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); }
+  .chip img { height: 12px; width: auto; border: 1px solid rgba(255,255,255,0.12); display: block; }
+  .pill { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; font-family: var(--font-mono); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; }
+  .pill .dot { width: 7px; height: 7px; border-radius: 9999px; }
+  .p-live { border: 1px solid color-mix(in srgb, var(--success-bright) 45%, transparent); color: var(--success-bright); }
+  .p-live .dot { background: var(--success-bright); animation: qm-pulse-soft 2.4s ease-in-out infinite; }
+  .p-review { border: 1px solid color-mix(in srgb, var(--warning-bright) 45%, transparent); color: var(--warning-bright); }
+  .p-review .dot { background: var(--warning-bright); }
+</style>
+</head>
+<body>
+  <div class="eyebrow">How it works</div>
+  <div class="chips">
+    <span class="chip"><img src="../assets/icons/au-flag.svg" alt="Australia"> Built for Australian tradies</span>
+    <span class="chip">Electrical pilot · NSW</span>
+    <span class="chip">Runs on Twilio</span>
+  </div>
+  <div class="chips">
+    <span class="pill p-live"><span class="dot"></span> Account active</span>
+    <span class="pill p-review"><span class="dot"></span> Awaiting review</span>
+  </div>
+</body>
+</html>

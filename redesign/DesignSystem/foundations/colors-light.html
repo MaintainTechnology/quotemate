@@ -1,0 +1,37 @@
+<!-- @dsCard group="Colors" viewport="700x200" name="Light theme — warm paper" subtitle="Device-preference flip: cream canvas, white cards, yellow stays for fills" -->
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { margin: 0; padding: 22px 24px; background: var(--ink-deep); }
+  .row { display: flex; gap: 14px; flex-wrap: wrap; align-items: stretch; }
+  .sw { flex: 1 1 0; min-width: 100px; }
+  .chip { height: 60px; border: 1px solid var(--ink-line); box-shadow: var(--lift); }
+  .name { font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--text-pri); margin-top: 9px; }
+  .hex { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; margin-top: 3px; }
+  .demo { margin-top: 16px; display: flex; align-items: center; gap: 14px; border: 1px solid var(--ink-line); background: var(--ink-card); box-shadow: var(--lift); padding: 14px 16px; }
+  .demo h3 { margin: 0; font-family: var(--font-sans); font-weight: 800; text-transform: uppercase; letter-spacing: -0.02em; font-size: 16px; color: var(--text-pri); }
+  .demo p { margin: 2px 0 0; font-size: 13px; color: var(--text-sec); }
+  .btn { margin-left: auto; background: var(--accent); color: var(--accent-ink); font-family: var(--font-mono); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; padding: 9px 14px; white-space: nowrap; }
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="sw"><div class="chip" style="background: var(--ink-deep)"></div><div class="name">--ink-deep</div><div class="hex">#FAF8F4</div></div>
+    <div class="sw"><div class="chip" style="background: var(--ink-card)"></div><div class="name">--ink-card</div><div class="hex">#FFFFFF</div></div>
+    <div class="sw"><div class="chip" style="background: var(--ink-line)"></div><div class="name">--ink-line</div><div class="hex">#E9E3DC</div></div>
+    <div class="sw"><div class="chip" style="background: var(--accent)"></div><div class="name">--accent</div><div class="hex">#FFC400</div></div>
+    <div class="sw"><div class="chip" style="background: var(--text-pri)"></div><div class="name">--text-pri</div><div class="hex">#241E1B</div></div>
+  </div>
+  <div class="demo">
+    <div>
+      <h3>Quote drafted</h3>
+      <p>Same components, warm-paper surface.</p>
+    </div>
+    <span class="btn">Review</span>
+  </div>
+</body>
+</html>

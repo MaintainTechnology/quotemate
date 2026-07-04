@@ -1,0 +1,23 @@
+<!-- @dsCard group="Spacing" viewport="700x230" name="Radii & borders" subtitle="Square corners. Borders, not shadows. Depth from the lit edge." -->
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { margin: 0; padding: 24px 28px; background: var(--ink-deep); display: flex; gap: 18px; align-items: stretch; flex-wrap: wrap; }
+  .demo { flex: 1 1 0; min-width: 150px; display: flex; flex-direction: column; }
+  .box { flex: 1; min-height: 84px; display: grid; place-items: center; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-sec); }
+  .b-hair { background: var(--ink-card); border: 1px solid var(--ink-line); }
+  .b-lit { background: var(--ink-card); border: 1px solid var(--ink-line); box-shadow: var(--lift); }
+  .b-accent { background: var(--ink-card); border: 1px solid var(--ink-line); border-top: 2px solid var(--accent); }
+  .cap { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; margin-top: 10px; }
+</style>
+</head>
+<body>
+  <div class="demo"><div class="box b-hair">radius 0</div><div class="cap">1px hairline · --ink-line</div></div>
+  <div class="demo"><div class="box b-lit">lit edge</div><div class="cap">.qm-edge-lit · inner highlight</div></div>
+  <div class="demo"><div class="box b-accent">accent rule</div><div class="cap">2px top · --accent</div></div>
+</body>
+</html>

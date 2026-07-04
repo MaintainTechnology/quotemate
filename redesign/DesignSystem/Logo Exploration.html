@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="design_doc_mode" content="canvas">
+<title>QuoteMax — Logo Exploration</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* tweakable */
+    --wordWeight: 900;
+    --tracking: -0.045em;
+    --mtnA: #FFC400;      /* base accent fill        */
+    --mtnLit: #FFD23D;    /* lit face (facet on)     */
+    --mtnShade: #E6AC00;  /* shade face (facet on)   */
+    /* palette */
+    --ink-deep:#16120F; --ink-card:#2B2422; --ink-line:#3A322C;
+    --text-pri:#F6F1EA; --text-dim:#A2968A;
+    --accent-ink:#1C1812;
+    --paper:#FAF8F4; --paper-card:#FFFFFF; --paper-line:#E9E3DC;
+    --paper-text:#241E1B; --paper-dim:#837870;
+    --word-dark:#F6F1EA; --word-light:#1C1812;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{
+    font-family:'Manrope',system-ui,sans-serif;
+    position:relative;
+    width:1300px; height:2060px;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;}
+
+  /* ─── LEGEND ─────────────────────────────────────────── */
+  .legend{
+    position:absolute; left:40px; top:40px; width:1200px;
+    background:var(--ink-card); border:1px solid var(--ink-line);
+    color:var(--text-pri); padding:26px 30px;
+  }
+  .legend .eyebrow{
+    font-family:'JetBrains Mono',monospace; font-weight:700; font-size:12px;
+    letter-spacing:.22em; text-transform:uppercase; color:var(--mtnA); margin:0 0 12px;
+  }
+  .legend h1{
+    font-weight:900; font-size:30px; letter-spacing:-0.03em; margin:0 0 10px;
+    text-transform:uppercase;
+  }
+  .legend p{
+    color:var(--text-dim); font-size:14.5px; line-height:1.55; margin:0 0 4px; max-width:940px;
+  }
+  .legend .concept{color:var(--text-pri);}
+  .legend .concept b{color:var(--mtnA); font-weight:800;}
+  .jump{display:flex; gap:8px; margin-top:18px; flex-wrap:wrap;}
+  .jump a{
+    font-family:'JetBrains Mono',monospace; font-weight:700; font-size:12px;
+    letter-spacing:.08em; text-decoration:none;
+    border:1px solid var(--ink-line); color:var(--text-dim);
+    padding:7px 11px 6px; text-transform:uppercase;
+  }
+  .jump a:hover{color:var(--accent-ink); background:var(--mtnA); border-color:var(--mtnA);}
+
+  /* ─── OPTION WRAPPER ─────────────────────────────────── */
+  .opt{position:absolute; left:40px; width:1200px;}
+  .opt-head{display:flex; align-items:baseline; gap:14px; margin-bottom:14px;}
+  .badge{
+    font-family:'JetBrains Mono',monospace; font-weight:700; font-size:13px;
+    letter-spacing:.05em; background:var(--mtnA); color:var(--accent-ink);
+    padding:4px 9px 3px; line-height:1;
+  }
+  .opt-head .ttl{
+    font-weight:800; font-size:17px; letter-spacing:-0.01em; color:#efe8df;
+    text-transform:uppercase; letter-spacing:.02em;
+  }
+  .opt-head .desc{
+    font-family:'JetBrains Mono',monospace; font-size:12.5px; color:#9a8f83;
+    letter-spacing:.02em; margin-left:2px;
+  }
+  .panels{display:flex; gap:20px;}
+  .panel{
+    flex:1; min-height:250px; display:flex; align-items:center; justify-content:center;
+    position:relative; overflow:hidden;
+  }
+  .panel.dark{background:var(--ink-deep); border:1px solid var(--ink-line);}
+  .panel.light{background:var(--paper); border:1px solid var(--paper-line);}
+  .panel .tag{
+    position:absolute; top:12px; left:14px;
+    font-family:'JetBrains Mono',monospace; font-weight:700; font-size:10.5px;
+    letter-spacing:.18em; text-transform:uppercase;
+  }
+  .panel.dark .tag{color:#6f6558;}
+  .panel.light .tag{color:#b3a99d;}
+
+  /* ─── MARK / WORD ────────────────────────────────────── */
+  .word{
+    font-weight:var(--wordWeight); text-transform:uppercase;
+    letter-spacing:var(--tracking); line-height:.86; display:block;
+  }
+  .panel.dark .word{color:var(--word-dark);}
+  .panel.light .word{color:var(--word-light);}
+
+  /* mountain fill + facets */
+  .mtn .base, .mtn-inline .base{fill:var(--mtnA);}
+  .fc{display:none;}
+  body.facet .fc{display:block;}
+  .fc.lit{fill:var(--mtnLit);}
+  .fc.sh{fill:var(--mtnShade);}
+
+  /* 1a — stacked */
+  .lk-stack{display:flex; flex-direction:column; align-items:center;}
+  .lk-stack .word{font-size:82px;}
+  .lk-stack .mtn{width:216px; height:86px; margin-top:-8px; display:block;}
+
+  /* 1b — overlap (Caterpillar integration) */
+  .lk-ov{position:relative; display:inline-flex; flex-direction:column; align-items:center; padding-bottom:30px;}
+  .lk-ov .word{font-size:82px; position:relative; z-index:2;}
+  .lk-ov .mtn{position:absolute; z-index:1; left:50%; transform:translateX(-50%); bottom:-2px; width:244px; height:112px; display:block;}
+
+  /* 1c — inline wordmark */
+  .lk-inline{display:inline-flex; align-items:flex-end; font-size:64px;}
+  .lk-inline .word{font-size:1em; line-height:.9;}
+  .lk-inline .mtn-inline{height:.80em; width:.64em; margin:0 .01em -0.03em; display:block; align-self:flex-end;}
+
+  /* 1d — badges */
+  .badge-row{display:flex; gap:20px; align-items:stretch;}
+  .badge-panel{
+    flex:1; min-height:280px; display:flex; align-items:center; justify-content:center; gap:38px;
+    position:relative; overflow:hidden; flex-wrap:wrap;
+  }
+  .app-badge{width:132px; height:132px; display:flex; align-items:center; justify-content:center;}
+  .app-badge svg{width:78px; height:53px; display:block;}
+  .app-badge.on-yellow{background:var(--mtnA);}
+  .app-badge.on-yellow .base{fill:var(--accent-ink);}
+  .app-badge.on-charcoal{background:var(--ink-card); border:1px solid var(--ink-line);}
+  .app-badge.on-charcoal .base{fill:var(--mtnA);}
+  .sizes{display:flex; align-items:flex-end; gap:22px;}
+  .size-chip{display:flex; flex-direction:column; align-items:center; gap:9px;}
+  .size-chip .ic{display:flex; align-items:center; justify-content:center; background:var(--mtnA);}
+  .size-chip .ic .base{fill:var(--accent-ink);}
+  .size-chip .ic svg{display:block;}
+  .size-chip .cap{
+    font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.12em;
+    text-transform:uppercase; color:#9a8f83;
+  }
+  .s64{width:56px;height:56px;} .s64 svg{width:34px;height:23px;}
+  .s32{width:32px;height:32px;} .s32 svg{width:20px;height:14px;}
+  .s16{width:18px;height:18px;} .s16 svg{width:12px;height:8px;}
+
+  /* topbar context */
+  .topbar{
+    display:flex; align-items:center; gap:11px;
+    background:var(--ink-deep); border:1px solid var(--ink-line);
+    padding:11px 16px; min-width:300px;
+  }
+  .topbar .tb-mark{display:flex; align-items:baseline; font-size:19px;}
+  .topbar .tb-mark .word{font-size:1em;}
+  .topbar .tb-mark .mtn-inline{height:.72em; width:.6em; margin:0 .01em -0.01em;}
+  .topbar .tb-nav{margin-left:auto; display:flex; gap:16px;}
+  .topbar .tb-nav span{font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.1em; color:#8a8073; text-transform:uppercase;}
+
+  /* ─── TWEAKS PANEL ───────────────────────────────────── */
+  #tweaks{
+    position:fixed; right:20px; bottom:20px; width:250px; z-index:9999;
+    background:var(--ink-card); border:1px solid var(--ink-line);
+    color:var(--text-pri); font-family:'Manrope',sans-serif;
+    box-shadow:0 18px 50px rgba(0,0,0,.5); display:none;
+  }
+  body.tweaks-on #tweaks{display:block;}
+  #tweaks .tw-head{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 14px; border-bottom:1px solid var(--ink-line);
+  }
+  #tweaks .tw-head b{
+    font-family:'JetBrains Mono',monospace; font-weight:700; font-size:12px;
+    letter-spacing:.2em; text-transform:uppercase; color:var(--mtnA);
+  }
+  #tweaks .tw-x{cursor:pointer; color:var(--text-dim); border:none; background:none; font-size:16px; line-height:1;}
+  #tweaks .tw-body{padding:14px; display:flex; flex-direction:column; gap:16px;}
+  .tw-field label{
+    display:block; font-family:'JetBrains Mono',monospace; font-size:10.5px;
+    letter-spacing:.14em; text-transform:uppercase; color:var(--text-dim); margin-bottom:8px;
+  }
+  .tw-seg{display:flex; border:1px solid var(--ink-line);}
+  .tw-seg button{
+    flex:1; background:transparent; border:none; color:var(--text-dim);
+    font-family:'JetBrains Mono',monospace; font-weight:700; font-size:12px;
+    padding:7px 0; cursor:pointer; letter-spacing:.04em;
+  }
+  .tw-seg button+button{border-left:1px solid var(--ink-line);}
+  .tw-seg button.on{background:var(--mtnA); color:var(--accent-ink);}
+  .tw-swatches{display:flex; gap:8px;}
+  .tw-swatches button{
+    width:34px; height:34px; border:2px solid transparent; cursor:pointer; padding:0;
+  }
+  .tw-swatches button.on{border-color:var(--text-pri);}
+  input[type=range]{width:100%; accent-color:var(--mtnA);}
+  .tw-val{font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-pri); float:right;}
+  .tw-toggle{display:flex; align-items:center; justify-content:space-between; cursor:pointer;}
+  .tw-toggle .sw{width:40px; height:22px; background:var(--ink-line); border-radius:0; position:relative; transition:background .15s;}
+  .tw-toggle .sw::after{content:""; position:absolute; top:2px; left:2px; width:18px; height:18px; background:var(--text-dim); transition:.15s;}
+  .tw-toggle.on .sw{background:var(--mtnA);}
+  .tw-toggle.on .sw::after{left:20px; background:var(--accent-ink);}
+</style>
+</head>
+<body>
+
+  <!-- ══ LEGEND ══ -->
+  <section class="legend">
+    <p class="eyebrow">QuoteMax · Identity · Round 1</p>
+    <h1>Mountain-M Wordmark</h1>
+    <p class="concept">Built on the <b>Caterpillar</b> lockup: heavy all-caps word, one yellow geometric mark grounded to the baseline. The triangle becomes a <b>mountain-M</b> — and the M <b>is</b> the &ldquo;Max&rdquo;: max = peak = summit.</p>
+    <p>Black letters on warm paper, near-white on the command-centre charcoal. Yellow stays constant (#FFC400). Four executions below — pick a direction and I&rsquo;ll cut clean SVGs, favicons and app icons, then roll it through the kits. Flip <b style="color:var(--mtnA)">Tweaks</b> on to test weight, tracking, fill and a faceted &ldquo;lit-ridge&rdquo; treatment live.</p>
+    <nav class="jump">
+      <a href="#1a">1a · Stacked</a>
+      <a href="#1b">1b · Caterpillar wedge</a>
+      <a href="#1c">1c · Inline wordmark</a>
+      <a href="#1d">1d · App mark</a>
+    </nav>
+  </section>
+
+  <!-- ══ 1a — STACKED ══ -->
+  <section class="opt" id="1a" style="top:360px;">
+    <div class="opt-head">
+      <span class="badge">1a</span>
+      <span class="ttl">Stacked</span>
+      <span class="desc">— sketch-faithful · range under the word, peaks kissing the baseline</span>
+    </div>
+    <div class="panels">
+      <div class="panel dark">  <span class="tag">Command-centre · dark</span>  <div class="mark" data-variant="stack"></div></div>
+      <div class="panel light"> <span class="tag">Warm paper · light</span>     <div class="mark" data-variant="stack"></div></div>
+    </div>
+  </section>
+
+  <!-- ══ 1b — OVERLAP / CATERPILLAR WEDGE ══ -->
+  <section class="opt" id="1b" style="top:700px;">
+    <div class="opt-head">
+      <span class="badge">1b</span>
+      <span class="ttl">Caterpillar wedge</span>
+      <span class="desc">— mark rises behind the letters &amp; breaks the baseline, like the CAT triangle</span>
+    </div>
+    <div class="panels">
+      <div class="panel dark">  <span class="tag">Command-centre · dark</span>  <div class="mark" data-variant="ov"></div></div>
+      <div class="panel light"> <span class="tag">Warm paper · light</span>     <div class="mark" data-variant="ov"></div></div>
+    </div>
+  </section>
+
+  <!-- ══ 1c — INLINE WORDMARK ══ -->
+  <section class="opt" id="1c" style="top:1040px;">
+    <div class="opt-head">
+      <span class="badge">1c</span>
+      <span class="ttl">Inline wordmark</span>
+      <span class="desc">— full name, the M drawn as the mountain glyph: QUOTE▲AX</span>
+    </div>
+    <div class="panels">
+      <div class="panel dark">  <span class="tag">Command-centre · dark</span>  <div class="mark" data-variant="inline"></div></div>
+      <div class="panel light"> <span class="tag">Warm paper · light</span>     <div class="mark" data-variant="inline"></div></div>
+    </div>
+  </section>
+
+  <!-- ══ 1d — APP MARK ══ -->
+  <section class="opt" id="1d" style="top:1380px;">
+    <div class="opt-head">
+      <span class="badge">1d</span>
+      <span class="ttl">App mark</span>
+      <span class="desc">— square icon for favicon / app / avatar, shown at true sizes + faceted ridge</span>
+    </div>
+    <div class="badge-row">
+      <div class="badge-panel panel dark">
+        <span class="tag">Icon lockups</span>
+        <div class="app-badge on-yellow"></div>
+        <div class="app-badge on-charcoal"></div>
+      </div>
+      <div class="badge-panel panel light">
+        <span class="tag">In context · real sizes</span>
+        <div class="sizes">
+          <div class="size-chip"><div class="ic s64"></div><span class="cap">64</span></div>
+          <div class="size-chip"><div class="ic s32"></div><span class="cap">32</span></div>
+          <div class="size-chip"><div class="ic s16"></div><span class="cap">16</span></div>
+        </div>
+        <div class="topbar">
+          <span class="tb-mark"></span>
+          <span class="tb-nav"><span>Quotes</span><span>Jobs</span><span>Pricing</span></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ TWEAKS ══ -->
+  <aside id="tweaks">
+    <div class="tw-head"><b>Tweaks</b><button class="tw-x" id="twClose">✕</button></div>
+    <div class="tw-body">
+      <div class="tw-field">
+        <label>Word weight</label>
+        <div class="tw-seg" id="twWeight">
+          <button data-v="700">700</button><button data-v="800">800</button><button data-v="900" class="on">900</button>
+        </div>
+      </div>
+      <div class="tw-field">
+        <label>Tracking <span class="tw-val" id="twTrackVal">-0.045em</span></label>
+        <input type="range" id="twTrack" min="-70" max="0" step="5" value="-45">
+      </div>
+      <div class="tw-field">
+        <label>Mountain fill</label>
+        <div class="tw-swatches" id="twFill">
+          <button data-v="#FFC400" style="background:#FFC400" class="on" title="Accent"></button>
+          <button data-v="#FFD23D" style="background:#FFD23D" title="Soft"></button>
+          <button data-v="#E6AC00" style="background:#E6AC00" title="Press"></button>
+        </div>
+      </div>
+      <div class="tw-field">
+        <div class="tw-toggle" id="twFacet">
+          <label style="margin:0;">Faceted ridge</label>
+          <span class="sw"></span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+<script>
+(function(){
+  // ── mountain geometry (defined once) ────────────────────────────
+  var RANGE = 'M2 66 L26 6 L50 46 L74 6 L98 66 Z';
+  var rangeFacets =
+    '<path class="fc lit" d="M2 66 L26 6 L26 66 Z"/>' +
+    '<path class="fc lit" d="M50 46 L74 6 L74 66 L50 66 Z"/>' +
+    '<path class="fc sh" d="M26 6 L50 46 L50 66 L26 66 Z"/>' +
+    '<path class="fc sh" d="M74 6 L98 66 L74 66 Z"/>';
+  function rangeSVG(cls){
+    return '<svg class="'+cls+'" viewBox="0 0 100 68" aria-hidden="true">' +
+           '<path class="base" d="'+RANGE+'"/>' + rangeFacets + '</svg>';
+  }
+  var MM = 'M2 98 L16 8 L39 60 L62 8 L76 98 Z';
+  var mmFacets =
+    '<path class="fc lit" d="M2 98 L16 8 L16 98 Z"/>' +
+    '<path class="fc lit" d="M39 60 L62 8 L62 98 L39 98 Z"/>' +
+    '<path class="fc sh" d="M16 8 L39 60 L39 98 L16 98 Z"/>' +
+    '<path class="fc sh" d="M62 8 L76 98 L62 98 Z"/>';
+  function mmSVG(){
+    return '<svg class="mtn-inline" viewBox="0 0 78 100" aria-hidden="true">' +
+           '<path class="base" d="'+MM+'"/>' + mmFacets + '</svg>';
+  }
+
+  // ── build the marks ─────────────────────────────────────────────
+  var builders = {
+    stack:  function(){ return '<div class="lk-stack"><span class="word">QUOTE</span>'+rangeSVG('mtn')+'</div>'; },
+    ov:     function(){ return '<div class="lk-ov">'+rangeSVG('mtn')+'<span class="word">QUOTE</span></div>'; },
+    inline: function(){ return '<div class="lk-inline"><span class="word">QUOTE</span>'+mmSVG()+'<span class="word">AX</span></div>'; }
+  };
+  document.querySelectorAll('.mark').forEach(function(el){
+    var b = builders[el.getAttribute('data-variant')];
+    if(b) el.innerHTML = b();
+  });
+  // app badges + size chips + topbar
+  document.querySelectorAll('.app-badge').forEach(function(el){ el.innerHTML = rangeSVG('mtn'); });
+  document.querySelectorAll('.ic').forEach(function(el){ el.innerHTML = rangeSVG('mtn'); });
+  document.querySelectorAll('.tb-mark').forEach(function(el){
+    el.innerHTML = '<span class="word" style="color:var(--text-pri)">QUOTE</span>'+mmSVG()+'<span class="word" style="color:var(--text-pri)">AX</span>';
+  });
+
+  // ── tweaks: persistence + apply ─────────────────────────────────
+  var KEY='quotemax-logo-tweaks';
+  var state={weight:'900', track:-45, fill:'#FFC400', facet:false};
+  try{ var saved=JSON.parse(localStorage.getItem(KEY)); if(saved) Object.assign(state,saved); }catch(e){}
+  var root=document.documentElement, body=document.body;
+  function apply(){
+    root.style.setProperty('--wordWeight', state.weight);
+    root.style.setProperty('--tracking', (state.track/1000)+'em');
+    root.style.setProperty('--mtnA', state.fill);
+    body.classList.toggle('facet', !!state.facet);
+    // reflect controls
+    document.querySelectorAll('#twWeight button').forEach(function(b){ b.classList.toggle('on', b.dataset.v===state.weight); });
+    document.getElementById('twTrack').value=state.track;
+    document.getElementById('twTrackVal').textContent=(state.track/1000)+'em';
+    document.querySelectorAll('#twFill button').forEach(function(b){ b.classList.toggle('on', b.dataset.v===state.fill); });
+    document.getElementById('twFacet').classList.toggle('on', !!state.facet);
+  }
+  function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){}
+    try{ window.parent.postMessage({type:'__edit_mode_set_keys', edits:state}, '*'); }catch(e){} }
+  function set(patch){ Object.assign(state,patch); apply(); save(); }
+
+  document.getElementById('twWeight').addEventListener('click', function(e){ if(e.target.dataset.v) set({weight:e.target.dataset.v}); });
+  document.getElementById('twTrack').addEventListener('input', function(e){ set({track:parseInt(e.target.value,10)}); });
+  document.getElementById('twFill').addEventListener('click', function(e){ if(e.target.dataset.v) set({fill:e.target.dataset.v}); });
+  document.getElementById('twFacet').addEventListener('click', function(){ set({facet:!state.facet}); });
+  apply();
+
+  // ── host tweaks protocol ────────────────────────────────────────
+  window.addEventListener('message', function(e){
+    var t=e&&e.data&&e.data.type;
+    if(t==='__activate_edit_mode') body.classList.add('tweaks-on');
+    else if(t==='__deactivate_edit_mode') body.classList.remove('tweaks-on');
+  });
+  document.getElementById('twClose').addEventListener('click', function(){
+    body.classList.remove('tweaks-on');
+    try{ window.parent.postMessage({type:'__edit_mode_dismissed'}, '*'); }catch(e){}
+  });
+  try{ window.parent.postMessage({type:'__edit_mode_available'}, '*'); }catch(e){}
+})();
+</script>
+</body>
+</html>

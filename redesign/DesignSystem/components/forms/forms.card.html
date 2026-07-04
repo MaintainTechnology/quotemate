@@ -1,0 +1,55 @@
+<!-- @dsCard group="Components" viewport="700x440" name="Forms — fields & toggle" subtitle="TextField (input / select / textarea), SegmentedToggle" -->
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  body { margin: 0; padding: 26px 28px; background: var(--ink-deep); }
+  .glabel { font-family: var(--font-mono); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-dim); margin: 0 0 12px; border-bottom: 1px solid var(--ink-line); padding-bottom: 7px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .mb { margin-bottom: 22px; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" data-presets="react">
+    const { TextField, SegmentedToggle } = window.QuoteMaxDesignSystem_638aa1;
+    function Demo() {
+      const [period, setPeriod] = React.useState('annual');
+      const [mode, setMode] = React.useState('gbb');
+      return (
+        <div>
+          <div className="mb">
+            <div className="glabel">TextField</div>
+            <div className="grid2">
+              <TextField label="Business name" placeholder="Sparky Co" required />
+              <TextField label="Trade" as="select" options={["Electrical", "Plumbing", "Solar"]} />
+              <TextField label="ABN" defaultValue="12 345" error="Enter a valid 11-digit ABN" />
+              <TextField label="Hourly rate (ex-GST)" defaultValue="$120" hint="Used to draft labour lines" />
+            </div>
+            <div style={{ marginTop: 16 }}>
+              <TextField label="Scope notes" as="textarea" rows={2} placeholder="Anything QuoteMax should know about this job…" />
+            </div>
+          </div>
+          <div>
+            <div className="glabel">SegmentedToggle</div>
+            <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+              <SegmentedToggle ariaLabel="Billing period" value={period} onChange={setPeriod}
+                options={[{label:'Monthly',value:'monthly'},{label:'Annual',value:'annual'}]} />
+              <SegmentedToggle ariaLabel="Tier mode" value={mode} onChange={setMode}
+                options={[{label:'Single',value:'single'},{label:'Good·Better·Best',value:'gbb'}]} />
+            </div>
+          </div>
+        </div>
+      );
+    }
+    ReactDOM.createRoot(document.getElementById('root')).render(<Demo />);
+  </script>
+</body>
+</html>

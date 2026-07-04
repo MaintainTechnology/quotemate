@@ -1,0 +1,9 @@
+/* ════════════════════════════════════════════════════════════════════
+   QuoteMax — WEBFONTS
+   Manrope (display + body) and JetBrains Mono (labels/eyebrows/metadata).
+   Both are loaded from Google Fonts — the exact families the live app
+   loads via next/font/google, so there is NO substitution here.
+   If you self-host, replace this @import with local @font-face rules and
+   keep the family names identical.
+   ════════════════════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');

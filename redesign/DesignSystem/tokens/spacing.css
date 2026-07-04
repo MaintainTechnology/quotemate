@@ -1,0 +1,38 @@
+/* ════════════════════════════════════════════════════════════════════
+   QuoteMax — SPACING & LAYOUT TOKENS
+   4px base grid. Generous, structural spacing — the command-centre reads
+   as engineered, not cramped.
+   ════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ─── SPACE SCALE (4px base) ────────────────────────────────────── */
+  --space-0:  0;
+  --space-1:  0.25rem;   /*  4px */
+  --space-2:  0.5rem;    /*  8px */
+  --space-3:  0.75rem;   /* 12px */
+  --space-4:  1rem;      /* 16px */
+  --space-5:  1.25rem;   /* 20px */
+  --space-6:  1.5rem;    /* 24px — default card padding (mobile)        */
+  --space-8:  2rem;      /* 32px — card padding (desktop)               */
+  --space-10: 2.5rem;    /* 40px */
+  --space-12: 3rem;      /* 48px */
+  --space-16: 4rem;      /* 64px */
+  --space-20: 5rem;      /* 80px */
+  --space-24: 6rem;      /* 96px — section padding (mobile)             */
+  --space-32: 8rem;      /* 128px — section padding (desktop)          */
+
+  /* ─── CONTAINERS ────────────────────────────────────────────────── */
+  --container-prose: 65ch;       /* readable measure for body copy      */
+  --container-narrow: 48rem;     /* focused single-column (quote, auth) */
+  --container-content: 80rem;    /* dashboard / app content             */
+  --container-marketing: 88rem;  /* marketing max width (live site)     */
+
+  --gutter: var(--space-6);      /* page side padding (mobile)          */
+  --gutter-lg: var(--space-8);   /* page side padding (desktop)         */
+
+  /* ─── HIT TARGETS ───────────────────────────────────────────────── */
+  --tap-min: 44px;               /* minimum interactive target          */
+  --control-h-sm: 36px;
+  --control-h-md: 44px;
+  --control-h-lg: 56px;          /* primary CTA on the marketing site   */
+}

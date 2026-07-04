@@ -1,0 +1,60 @@
+/* ════════════════════════════════════════════════════════════════════
+   QuoteMax — EFFECT TOKENS
+   "Command-centre, not SaaS." Depth comes from BORDERS, lit panel edges,
+   film grain and a topographic overlay — never from drop shadows. Corners
+   are square (minimal radius). Keep these defaults; reach for a radius or
+   a shadow only when the brand explicitly calls for it.
+   ════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ─── RADII — square by default ─────────────────────────────────── */
+  --radius-none: 0;        /* cards, panels, inputs, buttons (default)  */
+  --radius-xs: 2px;        /* the rare softened corner                  */
+  --radius-sm: 4px;        /* chips inside dense UI, if ever            */
+  --radius-pill: 9999px;   /* status dots + avatar discs ONLY           */
+  --radius-card: var(--radius-none);
+  --radius-control: var(--radius-none);
+
+  /* ─── BORDERS ───────────────────────────────────────────────────── */
+  --border-width: 1px;     /* hairline — the structural unit            */
+  --border-width-strong: 2px;
+  --border: var(--border-width) solid var(--ink-line);
+  --border-accent-rule: var(--border-width-strong) solid var(--accent);
+
+  /* ─── LIT PANEL EDGE — an inset top highlight, NOT a drop shadow ───
+     A bordered panel reads as a lifted plate catching light from above.
+     Flips per theme: a 1px inner highlight on dark; a whisper-soft cast
+     on the cream light theme where an inner highlight would not read. */
+  --lift: inset 0 1px 0 0 rgba(255, 255, 255, 0.06); /* @kind shadow */
+
+  /* ─── SHADOWS — used sparingly; the brand prefers borders ─────────
+     Provided for overlays (dialogs, menus, toasts) that must separate
+     from the canvas. Warm-charcoal tinted, never neutral grey/black. */
+  --shadow-none: none;
+  --shadow-overlay: 0 24px 60px -12px rgba(11, 9, 7, 0.7);
+  --shadow-menu: 0 16px 40px -12px rgba(11, 9, 7, 0.55);
+
+  /* ─── FILM GRAIN ────────────────────────────────────────────────── */
+  --grain-opacity: 0.045;   /* @kind other */
+
+  /* ─── FOCUS RING ────────────────────────────────────────────────── */
+  --focus-ring: 2px solid var(--accent-soft);
+  --focus-offset: 2px;
+
+  /* ─── MOTION EASING ─────────────────────────────────────────────── */
+  --ease-out-expo: cubic-bezier(0.22, 1, 0.36, 1);   /* @kind other */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);     /* @kind other */
+  --dur-fast: 200ms;    /* @kind other */
+  --dur-base: 320ms;    /* @kind other */
+  --dur-slow: 480ms;    /* @kind other */
+  --dur-reveal: 700ms;  /* @kind other */
+}
+
+/* Light theme: an inner highlight does not read on cream, so the lit edge
+   becomes a whisper-soft warm cast (the only place the brand uses a cast),
+   and grain is dialled back. */
+:root[data-theme="light"],
+.qm-light {
+  --lift: 0 1px 2px rgba(43, 36, 34, 0.06), 0 1px 1px rgba(43, 36, 34, 0.04);
+  --grain-opacity: 0.03;   /* @kind other */
+}

@@ -1,0 +1,26 @@
+<!-- @dsCard group="Spacing" viewport="700x280" name="Space scale" subtitle="4px base grid — the structural rhythm" -->
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { margin: 0; padding: 22px 28px; background: var(--ink-deep); }
+  .r { display: flex; align-items: center; gap: 16px; padding: 5px 0; }
+  .bar { height: 16px; background: var(--accent); }
+  .tok { font-family: var(--font-mono); font-size: 11px; color: var(--text-pri); width: 92px; }
+  .px { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); letter-spacing: 0.08em; }
+</style>
+</head>
+<body>
+  <div class="r"><span class="tok">--space-1</span><div class="bar" style="width:4px"></div><span class="px">4px</span></div>
+  <div class="r"><span class="tok">--space-2</span><div class="bar" style="width:8px"></div><span class="px">8px</span></div>
+  <div class="r"><span class="tok">--space-4</span><div class="bar" style="width:16px"></div><span class="px">16px</span></div>
+  <div class="r"><span class="tok">--space-6</span><div class="bar" style="width:24px"></div><span class="px">24px · card pad (mobile)</span></div>
+  <div class="r"><span class="tok">--space-8</span><div class="bar" style="width:32px"></div><span class="px">32px · card pad (desktop)</span></div>
+  <div class="r"><span class="tok">--space-12</span><div class="bar" style="width:48px"></div><span class="px">48px</span></div>
+  <div class="r"><span class="tok">--space-24</span><div class="bar" style="width:96px"></div><span class="px">96px · section (mobile)</span></div>
+  <div class="r"><span class="tok">--space-32</span><div class="bar" style="width:128px"></div><span class="px">128px · section (desktop)</span></div>
+</body>
+</html>

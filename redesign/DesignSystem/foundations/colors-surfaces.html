@@ -1,0 +1,39 @@
+<!-- @dsCard group="Colors" viewport="700x180" name="Canvas & surfaces" subtitle="Warm near-black charcoal scale — borders, not shadows" -->
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { margin: 0; padding: 22px 24px; background: var(--ink-deep); }
+  .row { display: flex; gap: 14px; flex-wrap: wrap; }
+  .sw { flex: 1 1 0; min-width: 120px; }
+  .chip { height: 78px; border: 1px solid var(--ink-line); box-shadow: var(--lift); }
+  .meta { margin-top: 10px; }
+  .name { font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--text-pri); letter-spacing: 0.02em; }
+  .hex { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.12em; margin-top: 3px; }
+  .use { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="sw">
+      <div class="chip" style="background: var(--ink-deep)"></div>
+      <div class="meta"><div class="name">--ink-deep</div><div class="hex">#16120F</div><div class="use">page canvas</div></div>
+    </div>
+    <div class="sw">
+      <div class="chip" style="background: var(--ink)"></div>
+      <div class="meta"><div class="name">--ink</div><div class="hex">#1E1813</div><div class="use">sunken surface</div></div>
+    </div>
+    <div class="sw">
+      <div class="chip" style="background: var(--ink-card)"></div>
+      <div class="meta"><div class="name">--ink-card</div><div class="hex">#2B2422</div><div class="use">cards / panels</div></div>
+    </div>
+    <div class="sw">
+      <div class="chip" style="background: var(--ink-line)"></div>
+      <div class="meta"><div class="name">--ink-line</div><div class="hex">#3A322C</div><div class="use">hairline border</div></div>
+    </div>
+  </div>
+</body>
+</html>

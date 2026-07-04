@@ -1,0 +1,270 @@
+{
+  "schemaVersion": 2,
+  "appName": "QuoteMax",
+  "themeId": "quotemax",
+  "connectedCanvas": true,
+  "locales": [
+    "en"
+  ],
+  "locale": "en",
+  "device": "iphone",
+  "orientation": "portrait",
+  "appIcon": "/app-icon.png",
+  "slidesByDevice": {
+    "iphone": [
+      {
+        "id": "ip_1",
+        "layout": "hero",
+        "label": {
+          "en": "MEET QUOTEMAX"
+        },
+        "headline": {
+          "en": "Quotes drafted\nbefore they\nhang up."
+        },
+        "screenshot": "/screenshots/quotemax/landing.png",
+        "transforms": {
+          "device": {
+            "x": 130.89001473104685,
+            "y": 1237.9254441276023,
+            "width": 1013.64,
+            "height": 2064.96,
+            "rotation": 0,
+            "zIndex": 3
+          },
+          "caption": {
+            "x": 105.60000000000001,
+            "y": 258.12,
+            "width": 1108.8,
+            "height": 803.0400000000001,
+            "rotation": 0,
+            "zIndex": 4
+          }
+        }
+      },
+      {
+        "id": "ip_2",
+        "layout": "device-bottom",
+        "label": {
+          "en": "TEXT IN, QUOTE OUT"
+        },
+        "headline": {
+          "en": "They text.\nAI does\nthe quoting."
+        },
+        "screenshot": "/screenshots/quotemax/paint.png",
+        "transforms": {
+          "device": {
+            "x": 153.1822478386166,
+            "y": 745.6799999999998,
+            "width": 1013.6355043227666,
+            "height": 2064.96,
+            "rotation": 0,
+            "zIndex": 2
+          },
+          "caption": {
+            "x": 105.60000000000001,
+            "y": 229.44,
+            "width": 1108.8,
+            "height": 803.0400000000001,
+            "rotation": 0,
+            "zIndex": 1
+          }
+        }
+      },
+      {
+        "id": "ip_3",
+        "layout": "device-top",
+        "label": {
+          "en": "GOOD · BETTER · BEST"
+        },
+        "headline": {
+          "en": "Three prices.\nOne tap to book."
+        },
+        "screenshot": "/screenshots/quotemax/solar.png",
+        "inverted": true
+      },
+      {
+        "id": "ip_4",
+        "layout": "device-bottom",
+        "label": {
+          "en": "MEASURED FROM ABOVE"
+        },
+        "headline": {
+          "en": "Price a roof\nfrom the sky."
+        },
+        "screenshot": "/screenshots/quotemax/roofing.png",
+        "transforms": {
+          "device": {
+            "x": 171.0402802171975,
+            "y": 706.3923287671232,
+            "width": 1013.6355043227666,
+            "height": 2064.96,
+            "rotation": 0,
+            "zIndex": 3
+          }
+        }
+      },
+      {
+        "id": "ip_5",
+        "layout": "device-top",
+        "label": {
+          "en": "LIVE IN MINUTES"
+        },
+        "headline": {
+          "en": "Your number.\nYour brand.\nToday."
+        },
+        "screenshot": "/screenshots/quotemax/onboard.png",
+        "inverted": true
+      },
+      {
+        "id": "ip_6",
+        "layout": "no-device",
+        "label": {
+          "en": "BUILT FOR TRADIES"
+        },
+        "headline": {
+          "en": "Sparkies. Plumbers.\nPainters. Roofers.\nAll trades."
+        },
+        "screenshot": ""
+      }
+    ],
+    "android": [
+      {
+        "id": "an_1",
+        "layout": "hero",
+        "label": {
+          "en": "MEET QUOTEMAX"
+        },
+        "headline": {
+          "en": "Quotes drafted\nbefore they\nhang up."
+        },
+        "screenshot": "/screenshots/quotemax/landing.png"
+      },
+      {
+        "id": "an_2",
+        "layout": "device-bottom",
+        "label": {
+          "en": "TEXT IN, QUOTE OUT"
+        },
+        "headline": {
+          "en": "They text.\nAI does\nthe quoting."
+        },
+        "screenshot": "/screenshots/quotemax/paint.png"
+      },
+      {
+        "id": "an_3",
+        "layout": "device-top",
+        "label": {
+          "en": "GOOD · BETTER · BEST"
+        },
+        "headline": {
+          "en": "Three prices.\nOne tap to book."
+        },
+        "screenshot": "/screenshots/quotemax/solar.png",
+        "inverted": true
+      },
+      {
+        "id": "an_4",
+        "layout": "device-bottom",
+        "label": {
+          "en": "MEASURED FROM ABOVE"
+        },
+        "headline": {
+          "en": "Price a roof\nfrom the sky."
+        },
+        "screenshot": "/screenshots/quotemax/roofing.png"
+      },
+      {
+        "id": "an_5",
+        "layout": "device-top",
+        "label": {
+          "en": "LIVE IN MINUTES"
+        },
+        "headline": {
+          "en": "Your number.\nYour brand.\nToday."
+        },
+        "screenshot": "/screenshots/quotemax/onboard.png",
+        "inverted": true
+      },
+      {
+        "id": "an_6",
+        "layout": "no-device",
+        "label": {
+          "en": "BUILT FOR TRADIES"
+        },
+        "headline": {
+          "en": "Sparkies. Plumbers.\nPainters. Roofers.\nAll trades."
+        },
+        "screenshot": ""
+      }
+    ],
+    "ipad": [
+      {
+        "id": "pad_1",
+        "layout": "hero",
+        "label": {
+          "en": "MEET QUOTEMAX"
+        },
+        "headline": {
+          "en": "Quotes drafted\nbefore they hang up."
+        },
+        "screenshot": "/screenshots/quotemax/landing.png"
+      },
+      {
+        "id": "pad_2",
+        "layout": "device-bottom",
+        "label": {
+          "en": "GOOD · BETTER · BEST"
+        },
+        "headline": {
+          "en": "Three prices.\nOne tap to book."
+        },
+        "screenshot": "/screenshots/quotemax/solar.png"
+      }
+    ],
+    "android-7": [
+      {
+        "id": "a7_1",
+        "layout": "hero",
+        "label": {
+          "en": "MEET QUOTEMAX"
+        },
+        "headline": {
+          "en": "Quotes drafted\nbefore they hang up."
+        },
+        "screenshot": "/screenshots/quotemax/landing.png"
+      }
+    ],
+    "android-10": [
+      {
+        "id": "a10_1",
+        "layout": "hero",
+        "label": {
+          "en": "MEET QUOTEMAX"
+        },
+        "headline": {
+          "en": "Quotes drafted\nbefore they hang up."
+        },
+        "screenshot": "/screenshots/quotemax/landing.png"
+      }
+    ],
+    "feature-graphic": [
+      {
+        "id": "fg_1",
+        "layout": "feature-graphic",
+        "label": {},
+        "headline": {
+          "en": "Quotes drafted before they hang up."
+        },
+        "screenshot": ""
+      }
+    ]
+  },
+  "crossScreenMockupsByDevice": {
+    "iphone": [],
+    "ipad": [],
+    "android": [],
+    "android-7": [],
+    "android-10": [],
+    "feature-graphic": []
+  }
+}

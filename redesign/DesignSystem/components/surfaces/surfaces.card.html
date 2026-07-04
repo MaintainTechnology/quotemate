@@ -1,0 +1,51 @@
+<!-- @dsCard group="Components" viewport="700x560" name="Surfaces — cards & marquee" subtitle="Card, NumberedCard, Marquee" -->
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  body { margin: 0; padding: 26px 28px; background: var(--ink-deep); }
+  .glabel { font-family: var(--font-mono); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-dim); margin: 0 0 12px; border-bottom: 1px solid var(--ink-line); padding-bottom: 7px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  h4 { margin: 0 0 8px; font-family: var(--font-sans); font-weight: 800; text-transform: uppercase; letter-spacing: -0.02em; font-size: 15px; color: var(--text-pri); }
+  p.b { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-sec); }
+  .mb { margin-bottom: 26px; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" data-presets="react">
+    const { Card, NumberedCard, Marquee } = window.QuoteMaxDesignSystem_638aa1;
+    function Demo() {
+      return (
+        <div>
+          <div className="mb">
+            <div className="glabel">Card — plain · interactive + sweep · featured</div>
+            <div className="grid3">
+              <Card padding={20}><h4>Plain</h4><p className="b">Hairline + lit edge.</p></Card>
+              <Card padding={20} interactive sweep><h4>Interactive</h4><p className="b">Hover warms the border.</p></Card>
+              <Card padding={20} accentTop><h4>Featured</h4><p className="b">2px accent top rule.</p></Card>
+            </div>
+          </div>
+          <div className="mb">
+            <div className="glabel">NumberedCard</div>
+            <NumberedCard num="02" title="QuoteMax drafts the quote"
+              body="Asks the right questions for the job type, applies your pricing book, and writes the line items in under a minute." />
+          </div>
+          <div>
+            <div className="glabel">Marquee</div>
+            <Marquee items={["QuoteMax", "Built in Australia", "For tradies, by tradies", "Quote drafted in under a minute"]} />
+          </div>
+        </div>
+      );
+    }
+    ReactDOM.createRoot(document.getElementById('root')).render(<Demo />);
+  </script>
+</body>
+</html>
