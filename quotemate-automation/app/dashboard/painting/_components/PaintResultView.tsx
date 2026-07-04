@@ -44,7 +44,7 @@ export function PaintResultView({
       </div>
 
       {/* Property details — everything the data source told us */}
-      <div className="mt-6 border border-ink-line bg-ink-card p-6 sm:p-7">
+      <div className="rounded-card mt-6 border border-ink-line bg-ink-card p-6 sm:p-7">
         <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">Property details</div>
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <Stat label="Building footprint" value={facts.footprint_m2 != null ? `${Math.round(facts.footprint_m2)} m²` : '—'} hint={facts.footprint_m2 != null ? 'roof outprint' : 'not provided'} />
@@ -58,11 +58,11 @@ export function PaintResultView({
       </div>
 
       {/* Paintable surfaces */}
-      <div className="mt-6 border border-ink-line bg-ink-card p-6 sm:p-7">
+      <div className="rounded-card mt-6 border border-ink-line bg-ink-card p-6 sm:p-7">
         <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">Paintable quantities</div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {measurement.surfaces.map((s) => (
-            <div key={s.scope} className="flex items-baseline justify-between border border-ink-line bg-ink-deep px-4 py-3">
+            <div key={s.scope} className="rounded-card flex items-baseline justify-between border border-ink-line bg-ink-deep px-4 py-3">
               <span className="font-mono text-sm font-semibold uppercase tracking-[0.1em] text-text-sec">{s.scope}</span>
               <span className="font-mono text-base tabular-nums text-text-pri">
                 {s.quantity.toFixed(0)} {s.unit === 'lm' ? 'lm' : 'm²'}
@@ -76,7 +76,7 @@ export function PaintResultView({
       {/* G/B/B tiers */}
       <div className="mt-6 grid gap-6 md:grid-cols-3">
         {price.tiers.map((t) => (
-          <div key={t.tier} className="border border-ink-line bg-ink-card p-6">
+          <div key={t.tier} className="rounded-card border border-ink-line bg-ink-card p-6">
             <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">{t.tier} · {t.label}</div>
             <div className="mt-3 font-mono text-3xl font-bold tabular-nums text-accent">${money(t.inc_gst)}</div>
             <div className="mt-1 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim">
@@ -88,7 +88,7 @@ export function PaintResultView({
       </div>
 
       {price.manual_override && (
-        <div className="mt-5 border border-ink-line border-l-4 border-l-accent bg-ink-card px-5 py-3 text-sm text-text-sec">
+        <div className="rounded-card mt-5 border border-ink-line border-l-4 border-l-accent bg-ink-card px-5 py-3 text-sm text-text-sec">
           <span className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-accent">✎ Adjusted by you</span>{' '}
           — these prices were hand-edited, so they override the automatic derivation below.
         </div>
@@ -103,7 +103,7 @@ export function PaintResultView({
 
       {/* How the price was built — every contributor to the tiers */}
       {price.breakdown && (
-        <div className="mt-6 border border-ink-line border-l-4 border-l-accent bg-ink-card p-6 sm:p-7">
+        <div className="rounded-card mt-6 border border-ink-line border-l-4 border-l-accent bg-ink-card p-6 sm:p-7">
           <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">How the price was built</div>
           <p className="mt-2 text-xs text-text-dim">Better = each surface × your rate × multipliers. Good and Best are derived from Better.</p>
           <div className="mt-4 space-y-2 font-mono text-sm">
@@ -153,7 +153,7 @@ export function PaintResultView({
       )}
 
       {/* Derivation notes + warnings */}
-      <div className="mt-6 border border-ink-line border-l-4 border-l-accent bg-ink-card p-6 sm:p-7">
+      <div className="rounded-card mt-6 border border-ink-line border-l-4 border-l-accent bg-ink-card p-6 sm:p-7">
         <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">How this was derived</div>
         <ul className="mt-3 space-y-2 text-sm text-text-sec">
           {measurement.notes.map((n, i) => (
@@ -173,7 +173,7 @@ export function PaintResultView({
 function RoutingStrip({ routing }: { routing: PaintingRoutingDecision }) {
   const warn = routing.decision === 'inspection_required'
   return (
-    <div className={`mt-6 border border-ink-line border-l-4 ${warn ? 'border-l-warning' : 'border-l-accent'} bg-ink-card px-6 py-5`}>
+    <div className={`rounded-card mt-6 border border-ink-line border-l-4 ${warn ? 'border-l-warning' : 'border-l-accent'} bg-ink-card px-6 py-5`}>
       <div className={`font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] ${warn ? 'text-warning' : 'text-accent'}`}>
         Routing · {routing.decision.replace(/_/g, ' ')}
       </div>
@@ -191,7 +191,7 @@ function ConfidenceBadge({ confidence }: { confidence: 'high' | 'medium' | 'low'
 
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="border border-ink-line bg-ink-card p-5">
+    <div className="rounded-card border border-ink-line bg-ink-card p-5">
       <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">{label}</div>
       <div className="mt-2 font-mono text-2xl font-bold tabular-nums text-text-pri">{value}</div>
       {hint && <div className="mt-1 text-xs text-text-dim">{hint}</div>}

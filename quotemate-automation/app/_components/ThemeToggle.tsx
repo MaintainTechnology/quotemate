@@ -54,7 +54,7 @@ export default function ThemeToggle() {
       onClick={toggle}
       aria-label={`Switch to ${target} mode`}
       title={`Switch to ${target} mode`}
-      className="inline-flex h-11 w-11 items-center justify-center border border-ink-line text-text-sec transition-colors hover:border-text-dim hover:text-text-pri focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep md:h-9 md:w-9"
+      className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-ink-line text-text-sec transition-colors hover:border-text-dim hover:text-text-pri focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep md:h-9 md:w-9"
     >
       {theme === "dark" ? <SunIcon /> : <MoonIcon />}
     </button>

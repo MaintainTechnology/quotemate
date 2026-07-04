@@ -99,7 +99,7 @@ function GateNotice({ children }: { children: React.ReactNode }) {
           <span className="text-ink-line">/</span>
           <span className="text-text-pri">Feature</span>
         </div>
-        <div className="mt-8 border border-ink-line border-l-4 border-l-accent bg-ink-card px-6 py-8 text-base leading-relaxed text-text-sec">
+        <div className="rounded-card mt-8 border border-ink-line border-l-4 border-l-accent bg-ink-card px-6 py-8 text-base leading-relaxed text-text-sec">
           {children}
         </div>
       </div>

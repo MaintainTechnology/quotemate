@@ -77,7 +77,7 @@ export function ChangePasswordCard() {
   }
 
   return (
-    <div className="bg-ink-card border border-ink-line">
+    <div className="rounded-card bg-ink-card border border-ink-line">
       <div className="border-b border-ink-line bg-ink-deep/35 px-4 sm:px-6 py-4 sm:py-5">
         <div className="flex items-center gap-2.5">
           <span aria-hidden="true" className="h-4 w-1 shrink-0 bg-accent" />
@@ -130,7 +130,7 @@ export function ChangePasswordCard() {
 
           <div className="flex items-center justify-between pt-2">
             {done ? (
-              <span className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-emerald-400">
+              <span className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-success-bright">
                 ✓ Password updated
               </span>
             ) : (
@@ -139,7 +139,7 @@ export function ChangePasswordCard() {
             <button
               type="submit"
               disabled={submitting}
-              className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-accent-soft focus:ring-offset-2 focus:ring-offset-ink-deep"
+              className="rounded-ctl inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-accent-soft focus:ring-offset-2 focus:ring-offset-ink-deep"
             >
               {submitting ? 'Updating…' : 'Update password'}
             </button>

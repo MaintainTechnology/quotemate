@@ -180,7 +180,7 @@ export function RoofRatesEditor({ accessToken }: Props) {
 
   if (!hasPricingBook) {
     return (
-      <div className="border border-ink-line bg-ink-card p-6">
+      <div className="rounded-card border border-ink-line bg-ink-card p-6">
         <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-warning">
           Roof rates · pricing book missing
         </div>
@@ -195,7 +195,7 @@ export function RoofRatesEditor({ accessToken }: Props) {
   return (
     <form
       onSubmit={save}
-      className="border border-ink-line bg-ink-card p-7 sm:p-8"
+      className="rounded-card border border-ink-line bg-ink-card p-7 sm:p-8"
       aria-busy={loading || saving}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-3">
@@ -220,7 +220,7 @@ export function RoofRatesEditor({ accessToken }: Props) {
       </div>
 
       {errMsg && (
-        <div className="mt-5 border border-ink-line border-l-4 border-l-warning bg-ink-deep px-4 py-3">
+        <div className="rounded-card mt-5 border border-ink-line border-l-4 border-l-warning bg-ink-deep px-4 py-3">
           <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-warning">
             Could not save
           </div>
@@ -299,7 +299,7 @@ export function RoofRatesEditor({ accessToken }: Props) {
             value={upgradeMat}
             onChange={(e) => setUpgradeMat(e.target.value as MaterialKey | '')}
             disabled={loading || saving}
-            className="w-full border border-ink-line bg-ink-deep px-4 py-3 font-mono text-base text-text-pri focus:border-accent focus:outline-none"
+            className="rounded-ctl w-full border border-ink-line bg-ink-deep px-4 py-3 font-mono text-base text-text-pri focus:border-accent focus:outline-none"
           >
             <option value="">
               {defaults ? `Default — ${displayMaterial(defaults.upgrade_material)}` : '—'}
@@ -319,7 +319,7 @@ export function RoofRatesEditor({ accessToken }: Props) {
             value={gstMode}
             onChange={(e) => setGstMode(e.target.value as '' | 'true' | 'false')}
             disabled={loading || saving}
-            className="w-full border border-ink-line bg-ink-deep px-4 py-3 font-mono text-base text-text-pri focus:border-accent focus:outline-none"
+            className="rounded-ctl w-full border border-ink-line bg-ink-deep px-4 py-3 font-mono text-base text-text-pri focus:border-accent focus:outline-none"
           >
             <option value="">{defaults ? `Default — ${defaults.gst_registered ? 'Yes' : 'No'}` : '—'}</option>
             <option value="true">Yes — add 10% GST to inc-GST tier</option>
@@ -334,7 +334,7 @@ export function RoofRatesEditor({ accessToken }: Props) {
         <button
           type="submit"
           disabled={loading || saving || !accessToken}
-          className="inline-flex items-center gap-2 bg-accent px-6 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-ctl inline-flex items-center gap-2 bg-accent px-6 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
         >
           {saving ? (
             <>
@@ -442,7 +442,7 @@ function CurrencyInput({
         placeholder={placeholder}
         disabled={disabled}
         aria-label={ariaLabel}
-        className={`w-full border bg-ink-deep px-8 py-3 font-mono text-base text-text-pri placeholder:text-text-dim focus:outline-none ${
+        className={`rounded-ctl w-full border bg-ink-deep px-8 py-3 font-mono text-base text-text-pri placeholder:text-text-dim focus:outline-none ${
           hasError ? 'border-warning' : 'border-ink-line focus:border-accent'
         }`}
       />
@@ -485,7 +485,7 @@ function PctInput({
           placeholder={defaultValue !== null ? String(Math.round(defaultValue)) : ''}
           disabled={disabled}
           aria-label={label}
-          className={`w-full border bg-ink-deep px-4 py-3 pr-10 font-mono text-base text-text-pri placeholder:text-text-dim focus:outline-none ${
+          className={`rounded-ctl w-full border bg-ink-deep px-4 py-3 pr-10 font-mono text-base text-text-pri placeholder:text-text-dim focus:outline-none ${
             error ? 'border-warning' : 'border-ink-line focus:border-accent'
           }`}
         />

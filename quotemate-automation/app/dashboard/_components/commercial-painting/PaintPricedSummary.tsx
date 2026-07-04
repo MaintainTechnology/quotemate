@@ -102,7 +102,7 @@ function LineRow({
             onClick={toggle}
             aria-expanded={open}
             aria-controls={traceId}
-            className={`inline-flex cursor-pointer items-center gap-1 border px-1.5 py-0.5 font-mono text-[0.62rem] font-semibold uppercase tracking-widest transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
+            className={`rounded-ctl inline-flex cursor-pointer items-center gap-1 border px-1.5 py-0.5 font-mono text-[0.62rem] font-semibold uppercase tracking-widest transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
               open
                 ? 'border-accent/70 bg-accent/10 text-accent'
                 : 'border-ink-line text-text-dim hover:border-accent hover:text-accent'
@@ -191,7 +191,7 @@ export function PaintPricedSummary({ bom }: { bom: PricedPaintBom }) {
 
       {/* Unmatched — never guessed */}
       {bom.unmatched.length > 0 && (
-        <div className="border border-ink-line border-l-4 border-l-warning-bright bg-ink-deep px-4 py-3.5">
+        <div className="rounded-card border border-ink-line border-l-4 border-l-warning-bright bg-ink-deep px-4 py-3.5">
           <p className="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-warning-bright">
             {bom.unmatched.length} line{bom.unmatched.length === 1 ? '' : 's'} returned unpriced
           </p>
@@ -239,7 +239,7 @@ export function PaintPricedSummary({ bom }: { bom: PricedPaintBom }) {
       {bom.equipment.length > 0 && (
         <div>
           <SectionLabel>Equipment &amp; access</SectionLabel>
-          <ul className="mt-4 divide-y divide-ink-line border border-ink-line bg-ink-card">
+          <ul className="rounded-card mt-4 divide-y divide-ink-line border border-ink-line bg-ink-card">
             {bom.equipment.map((e, i) => (
               <li key={i} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-3 transition-colors hover:bg-ink-deep/50">
                 <span className="text-sm text-text-pri">{e.label}</span>
@@ -267,7 +267,7 @@ export function PaintPricedSummary({ bom }: { bom: PricedPaintBom }) {
 
       {/* Assumptions + exclusions — differentiated so exclusions read as a guard */}
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="border border-ink-line bg-ink-deep p-5">
+        <div className="rounded-card border border-ink-line bg-ink-deep p-5">
           <h4 className="font-mono text-[0.66rem] font-bold uppercase tracking-[0.14em] text-text-dim">Assumptions</h4>
           <ul className="mt-3 space-y-1.5 text-sm text-text-sec">
             {bom.assumptions.map((a, i) => (
@@ -278,7 +278,7 @@ export function PaintPricedSummary({ bom }: { bom: PricedPaintBom }) {
             ))}
           </ul>
         </div>
-        <div className="border border-ink-line border-l-4 border-l-warning-bright/60 bg-ink-deep p-5">
+        <div className="rounded-card border border-ink-line border-l-4 border-l-warning-bright/60 bg-ink-deep p-5">
           <h4 className="font-mono text-[0.66rem] font-bold uppercase tracking-[0.14em] text-warning-bright">Exclusions</h4>
           <ul className="mt-3 space-y-1.5 text-sm text-text-sec">
             {bom.exclusions.map((e, i) => (

@@ -11,6 +11,21 @@ import { CATEGORY_ENUM_TUPLE } from '@/lib/estimate/categories'
 import { AvailabilitySchema } from '@/lib/quote/availability'
 
 export const TRADE_ENUM = z.enum(['electrical', 'plumbing'])
+// Every trade that can own a pricing_book row via the dashboard's trade
+// hubs (dashboard TRADE_HUB_SLUGS) — a superset of the labour TRADE_ENUM.
+// pricing_by_trade accepts these so a hub-scoped pricing wizard run
+// (?trade=roofing) can save that trade's rate card; the route scopes the
+// UPDATE by (tenant_id, trade), so a slug with no book row matches 0 rows.
+export const HUB_TRADE_ENUM = z.enum([
+  'electrical',
+  'plumbing',
+  'roofing',
+  'signage',
+  'painting',
+  'commercial_painting',
+  'aircon',
+  'solar',
+])
 export const STATE_ENUM = z.enum(['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'ACT', 'NT'])
 
 // Migration 142 — customer-quote tier presentation mode (single source of
@@ -81,7 +96,11 @@ export const UpdateSchema = z.object({
   pricing: PricingFields.optional(),
   // Per-trade pricing — keys are trade names. Allow partial (only the
   // trades the tradie actually has) — see the partialRecord note above.
-  pricing_by_trade: PartialTradeRecord(PricingFields).optional(),
+  // Keyed by HUB_TRADE_ENUM (not the labour-only TRADE_ENUM) so the
+  // trade hubs + trade-scoped pricing wizard can save feature-trade
+  // rate cards (roofing, painting, solar, …), mirroring how
+  // quote_tier_mode_by_trade already accepts feature trades.
+  pricing_by_trade: z.partialRecord(HUB_TRADE_ENUM, PricingFields).optional(),
   // Per-trade licence storage (migration 018). Same constraint as
   // pricing_by_trade — only present trades come through.
   licences_by_trade: PartialTradeRecord(LicenceFields).optional(),

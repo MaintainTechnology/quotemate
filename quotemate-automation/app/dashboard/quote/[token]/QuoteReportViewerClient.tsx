@@ -85,7 +85,7 @@ export default function QuoteReportViewerClient(props: {
               onClick={() => api?.openEditor()}
               disabled={!canEdit}
               title={!canEdit ? disabledReason ?? undefined : undefined}
-              className="inline-flex min-h-[40px] items-center gap-2 border border-ink-line px-4 py-2 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-ink-line disabled:hover:text-text-pri"
+              className="rounded-ctl inline-flex min-h-[40px] items-center gap-2 border border-ink-line px-4 py-2 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-ink-line disabled:hover:text-text-pri"
             >
               ✎ Edit Report
             </button>
@@ -93,7 +93,7 @@ export default function QuoteReportViewerClient(props: {
               href={pdfUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex min-h-[40px] items-center gap-2 border border-ink-line px-4 py-2 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+              className="rounded-ctl inline-flex min-h-[40px] items-center gap-2 border border-ink-line px-4 py-2 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
             >
               ↓ Download PDF
             </a>
@@ -102,7 +102,7 @@ export default function QuoteReportViewerClient(props: {
               onClick={() => api?.openEditor({ chat: true })}
               disabled={!canAi}
               title={!canAi ? disabledReason ?? undefined : undefined}
-              className="inline-flex min-h-[40px] items-center gap-2 bg-accent px-4 py-2 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent"
+              className="rounded-ctl inline-flex min-h-[40px] items-center gap-2 bg-accent px-4 py-2 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent"
             >
               ⚡ Edit with AI
               <span className="rounded-sm bg-white/20 px-1.5 py-0.5 font-mono text-[0.55rem] leading-none">
@@ -142,7 +142,7 @@ export default function QuoteReportViewerClient(props: {
               href={pdfUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex min-h-[44px] items-center gap-2 bg-accent px-5 py-3 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-accent-press"
+              className="rounded-ctl inline-flex min-h-[44px] items-center gap-2 bg-accent px-5 py-3 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-accent-press"
             >
               ↓ Download PDF
             </a>

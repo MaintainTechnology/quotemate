@@ -161,7 +161,7 @@ export function AddressAutocomplete({
         placeholder={placeholder}
         autoComplete="off"
         spellCheck={false}
-        className="w-full border border-ink-line bg-ink-deep px-4 py-3 font-mono text-base text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none"
+        className="rounded-ctl w-full border border-ink-line bg-ink-deep px-4 py-3 font-mono text-base text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none"
       />
       {busy && (
         <span className="absolute right-4 top-1/2 -translate-y-1/2 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
@@ -169,7 +169,7 @@ export function AddressAutocomplete({
         </span>
       )}
       {open && items.length > 0 && (
-        <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-80 overflow-y-auto border border-ink-line bg-ink-card shadow-lg">
+        <ul className="rounded-card absolute left-0 right-0 top-full z-20 mt-1 max-h-80 overflow-y-auto border border-ink-line bg-ink-card shadow-lg">
           {items.map((s, i) => (
             <li
               key={s.id}

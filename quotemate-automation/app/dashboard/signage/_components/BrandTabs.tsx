@@ -21,7 +21,7 @@ export function BrandTabs({
 }) {
   if (!brands || brands.length === 0) return null
   return (
-    <div role="group" aria-label="Brand" className="inline-flex flex-wrap gap-1 border border-ink-line bg-ink-card p-1">
+    <div role="group" aria-label="Brand" className="rounded-card inline-flex flex-wrap gap-1 border border-ink-line bg-ink-card p-1">
       {brands.map((b) => {
         const active = b.slug === selected
         return (

@@ -3,10 +3,11 @@
 // and the Electrical Estimator bill-of-materials.
 //
 // Maintain Technology system: deep-ink canvas, disciplined orange accent,
-// JetBrains-Mono numerals, hairline `gap-px` stat grids, borders not
-// shadows, square corners, staggered fade-up. Presentational only — these
-// carry NO data/business logic, so a redesign never risks a number or an
-// action. Importable from both server and client components.
+// JetBrains-Mono numerals, hairline `gap-px` stat grids, borders over
+// shadows, soft rounded corners (the dashboard surface uses the reference
+// 14px `rounded-card` treatment), staggered fade-up. Presentational only —
+// these carry NO data/business logic, so a redesign never risks a number
+// or an action. Importable from both server and client components.
 
 import type { CSSProperties, ReactNode } from 'react'
 
@@ -67,7 +68,7 @@ export function StatusPill({
 }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 border font-mono font-semibold uppercase tracking-[0.12em] ${
+      className={`rounded-ctl inline-flex items-center gap-1.5 border font-mono font-semibold uppercase tracking-[0.12em] ${
         compact ? 'px-2 py-0.5 text-[0.58rem]' : 'px-2.5 py-1 text-[0.64rem]'
       } ${TONE_CHIP[tone]}`}
     >
@@ -110,7 +111,7 @@ export type StatCell = {
 export function StatGrid({ stats, cols = 4 }: { stats: StatCell[]; cols?: 2 | 3 | 4 }) {
   const colCls = cols === 2 ? 'sm:grid-cols-2' : cols === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-4'
   return (
-    <dl className={`grid grid-cols-2 gap-px border border-ink-line bg-ink-line ${colCls}`}>
+    <dl className={`grid grid-cols-2 gap-px overflow-hidden rounded-card border border-ink-line bg-ink-line ${colCls}`}>
       {stats.map((s, i) => (
         <div key={i} className={`px-5 py-4 ${s.hero ? 'bg-ink' : 'bg-ink-card'}`}>
           <dt className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
@@ -151,7 +152,7 @@ export function HeroTotal({
 }) {
   return (
     <div
-      className={`border border-ink-line border-t-2 border-t-accent bg-ink p-6 sm:p-7 ${REVEAL}`}
+      className={`rounded-card border border-ink-line border-t-2 border-t-accent bg-ink p-6 sm:p-7 ${REVEAL}`}
       style={style}
     >
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
@@ -208,7 +209,7 @@ export function DataPanel({
   scroll?: boolean
 }) {
   return (
-    <div className="overflow-hidden border border-ink-line bg-ink-card">
+    <div className="overflow-hidden rounded-card border border-ink-line bg-ink-card">
       <div className={scroll ? 'overflow-x-auto' : ''}>{children}</div>
     </div>
   )

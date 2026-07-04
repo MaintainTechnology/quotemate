@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Upload, Loader2, TrendingUp, Check, X, SlidersHorizontal } from 'lucide-react'
+import { PaginationControls, usePagination } from './Pagination'
 
 // Canonical job types — kept local so this client component doesn't import the
 // server intake schema (mirrors the dashboard's own local job-type lists).
@@ -246,6 +247,18 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
   const [selectedJobTypes, setSelectedJobTypes] = useState<Set<string>>(new Set())
   const [calibrating, setCalibrating] = useState(false)
   const [calibrationMsg, setCalibrationMsg] = useState<string | null>(null)
+  const {
+    page: quotePage,
+    setPage: setQuotePage,
+    totalPages: quoteTotalPages,
+    pageItems: quoteRows,
+    startIndex: quoteStart,
+    endIndex: quoteEnd,
+    total: quoteTotal,
+  } = usePagination(quotes ?? [], {
+    urlKey: 'hq_page',
+    resetKey: `${filterJobType} ${search}`,
+  })
 
   async function previewCalibration() {
     if (!accessToken) return
@@ -309,7 +322,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
           <button
             type="submit"
             disabled={uploading}
-            className="inline-flex items-center gap-2 bg-accent px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press disabled:opacity-50"
+            className="rounded-ctl inline-flex items-center gap-2 bg-accent px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press disabled:opacity-50"
           >
             {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
             {uploading ? 'Uploading…' : 'Import'}
@@ -322,7 +335,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
           </div>
         )}
         {importing && (
-          <div className="mt-4 flex items-center gap-2 border border-ink-line bg-ink-card px-4 py-3 text-sm text-text-sec">
+          <div className="rounded-card mt-4 flex items-center gap-2 border border-ink-line bg-ink-card px-4 py-3 text-sm text-text-sec">
             <Loader2 size={14} className="animate-spin text-accent" />
             Parsing and categorising “{batch?.filename}”…
           </div>
@@ -348,7 +361,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
                 type="button"
                 onClick={saveReview}
                 disabled={savingReview}
-                className="inline-flex items-center gap-2 bg-accent px-4 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-white hover:bg-accent-press disabled:opacity-50"
+                className="rounded-ctl inline-flex items-center gap-2 bg-accent px-4 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-white hover:bg-accent-press disabled:opacity-50"
               >
                 {savingReview ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
                 Save review
@@ -359,7 +372,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
             We matched each imported quote to a job type. Correct any that are off, then confirm — only
             confirmed quotes feed your analytics and pricing.
           </p>
-          <ul className="mt-4 divide-y divide-ink-line border border-ink-line bg-ink-card">
+          <ul className="rounded-card mt-4 divide-y divide-ink-line border border-ink-line bg-ink-card">
             {batchRows.map((r) => (
               <li key={r.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                 <div className="min-w-0 flex-1">
@@ -377,7 +390,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
                 <select
                   value={r.job_type ?? 'other'}
                   onChange={(e) => setRowJobType(r.id, e.target.value)}
-                  className="border border-ink-line bg-ink-deep px-2 py-1 text-xs text-text-pri"
+                  className="rounded-card border border-ink-line bg-ink-deep px-2 py-1 text-xs text-text-pri"
                 >
                   {JOB_TYPE_OPTIONS.map((jt) => (
                     <option key={jt} value={jt}>
@@ -424,7 +437,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
           Averages across your confirmed history — what you’ve typically charged per job type.
         </p>
         {!analytics || analytics.length === 0 ? (
-          <div className="mt-6 border border-ink-line bg-ink-card p-6 text-center text-sm text-text-sec">
+          <div className="rounded-card mt-6 border border-ink-line bg-ink-card p-6 text-center text-sm text-text-sec">
             No confirmed history yet. Import and review some quotes to see your averages.
           </div>
         ) : (
@@ -471,7 +484,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
             type="button"
             onClick={previewCalibration}
             disabled={calibrating}
-            className="inline-flex items-center gap-2 border border-ink-line px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri hover:border-accent hover:text-accent disabled:opacity-50"
+            className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri hover:border-accent hover:text-accent disabled:opacity-50"
           >
             {calibrating ? <Loader2 size={12} className="animate-spin" /> : <SlidersHorizontal size={12} />}
             Preview
@@ -488,11 +501,11 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
         )}
         {proposals && (
           proposals.length === 0 ? (
-            <div className="mt-4 border border-ink-line bg-ink-card p-5 text-sm text-text-sec">
+            <div className="rounded-card mt-4 border border-ink-line bg-ink-card p-5 text-sm text-text-sec">
               Not enough confirmed history yet (need at least 3 quotes for a job type).
             </div>
           ) : (
-            <div className="mt-4 border border-ink-line bg-ink-card">
+            <div className="rounded-card mt-4 border border-ink-line bg-ink-card">
               <ul className="divide-y divide-ink-line">
                 {proposals.map((p) => (
                   <li key={p.job_type} className="flex flex-wrap items-center gap-3 px-4 py-3">
@@ -526,7 +539,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
                   type="button"
                   onClick={applyCalibration}
                   disabled={calibrating || selectedJobTypes.size === 0}
-                  className="inline-flex items-center gap-2 bg-accent px-4 py-2 text-xs font-semibold uppercase tracking-wider text-white hover:bg-accent-press disabled:opacity-50"
+                  className="rounded-ctl inline-flex items-center gap-2 bg-accent px-4 py-2 text-xs font-semibold uppercase tracking-wider text-white hover:bg-accent-press disabled:opacity-50"
                 >
                   {calibrating ? <Loader2 size={13} className="animate-spin" /> : <TrendingUp size={13} />}
                   Apply to pricing book
@@ -558,16 +571,17 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search descriptions…"
-            className="flex-1 min-w-[12rem] border border-ink-line bg-ink-card px-3 py-2 text-sm text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none"
+            className="rounded-ctl flex-1 min-w-[12rem] border border-ink-line bg-ink-card px-3 py-2 text-sm text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none"
           />
         </div>
         {!quotes || quotes.length === 0 ? (
-          <div className="mt-6 border border-ink-line bg-ink-card p-6 text-center text-sm text-text-sec">
+          <div className="rounded-card mt-6 border border-ink-line bg-ink-card p-6 text-center text-sm text-text-sec">
             No confirmed historical quotes{filterJobType || search ? ' match your filters' : ' yet'}.
           </div>
         ) : (
-          <ul className="mt-6 divide-y divide-ink-line border border-ink-line bg-ink-card">
-            {quotes.map((q) => (
+          <>
+          <ul className="rounded-card mt-6 divide-y divide-ink-line border border-ink-line bg-ink-card">
+            {quoteRows.map((q) => (
               <li key={q.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
                   <div className="truncate text-sm text-text-pri">{q.raw_description ?? '(no description)'}</div>
@@ -582,6 +596,16 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
               </li>
             ))}
           </ul>
+          <PaginationControls
+            page={quotePage}
+            totalPages={quoteTotalPages}
+            onPageChange={setQuotePage}
+            startIndex={quoteStart}
+            endIndex={quoteEnd}
+            total={quoteTotal}
+            unit="quotes"
+          />
+          </>
         )}
       </section>
     </div>

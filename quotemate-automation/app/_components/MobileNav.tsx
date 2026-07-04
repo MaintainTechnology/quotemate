@@ -59,7 +59,7 @@ export function MobileNav() {
         aria-expanded={open}
         aria-controls="mobile-menu"
         onClick={() => setOpen((o) => !o)}
-        className="relative z-50 inline-flex h-11 w-11 touch-manipulation items-center justify-center border border-ink-line text-text-pri transition-colors hover:border-text-dim hover:bg-ink-card focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+        className="relative z-50 inline-flex h-11 w-11 touch-manipulation items-center justify-center rounded-lg border border-ink-line text-text-pri transition-colors hover:border-text-dim hover:bg-ink-card focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
       >
         <span
           className="pointer-events-none relative block h-3.5 w-5"
@@ -126,7 +126,7 @@ export function MobileNav() {
                   <Link
                     href={t.href}
                     onClick={close}
-                    className="block border border-ink-line px-3 py-2 text-sm font-semibold uppercase tracking-tight text-text-pri transition-colors hover:border-text-dim hover:bg-ink-card hover:text-accent"
+                    className="block rounded-md border border-ink-line px-3 py-2 text-sm font-semibold uppercase tracking-tight text-text-pri transition-colors hover:border-text-dim hover:bg-ink-card hover:text-accent"
                   >
                     {t.label}
                   </Link>

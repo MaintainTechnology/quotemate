@@ -103,7 +103,7 @@ export function PlanOverlay({ file, items, selectedIdx, onSelect, requirePins = 
 
   if (requirePins && pinnedPages.length === 0) {
     return (
-      <p className="mt-4 border border-ink-line bg-ink-deep px-4 py-3 text-sm text-text-dim">
+      <p className="rounded-card mt-4 border border-ink-line bg-ink-deep px-4 py-3 text-sm text-text-dim">
         No pin locations in this take-off — run the analysis again (newer runs include per-symbol pins) or use
         “Refine dense items”.
       </p>
@@ -118,7 +118,7 @@ export function PlanOverlay({ file, items, selectedIdx, onSelect, requirePins = 
       : Array.from({ length: Math.max(pageCount, 1) }, (_, i) => i + 1)
 
   return (
-    <div className="mt-5 border border-ink-line bg-ink-deep">
+    <div className="rounded-card mt-5 border border-ink-line bg-ink-deep">
       <div className="flex flex-wrap items-center gap-3 border-b border-ink-line px-4 py-2.5">
         <span className="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-accent">
           Plan viewer
@@ -129,7 +129,7 @@ export function PlanOverlay({ file, items, selectedIdx, onSelect, requirePins = 
             value={effectivePage ?? ''}
             onChange={(e) => setPage(Number(e.target.value))}
             aria-label="PDF page"
-            className="border border-ink-line bg-ink-card px-2 py-1 font-mono text-xs text-text-pri focus:border-accent focus:outline-none"
+            className="rounded-ctl border border-ink-line bg-ink-card px-2 py-1 font-mono text-xs text-text-pri focus:border-accent focus:outline-none"
           >
             {pageOptions.map((p) => (
               <option key={p} value={p}>

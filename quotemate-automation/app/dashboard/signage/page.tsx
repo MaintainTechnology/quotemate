@@ -259,7 +259,7 @@ function SignageHubPageInner() {
               title="Request photos from your studios"
               hint={`Pick the shots, optionally narrow by region, and every targeted ${brand?.location_noun ?? 'location'} gets its own upload link.`}
             />
-            <form onSubmit={createSweep} className="mt-7 grid gap-7 border border-ink-line bg-ink-card p-7 sm:p-9 md:grid-cols-2">
+            <form onSubmit={createSweep} className="rounded-card mt-7 grid gap-7 border border-ink-line bg-ink-card p-7 sm:p-9 md:grid-cols-2">
               <div>
                 <Label htmlFor="sweep-name">Sweep name</Label>
                 <input
@@ -288,7 +288,7 @@ function SignageHubPageInner() {
                     return (
                       <label
                         key={s.slot}
-                        className={`inline-flex cursor-pointer items-center gap-2 border px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] transition-colors has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-accent ${
+                        className={`rounded-ctl inline-flex cursor-pointer items-center gap-2 border px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] transition-colors has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-accent ${
                           on
                             ? 'border-accent bg-accent/10 text-accent'
                             : 'border-ink-line text-text-sec hover:border-accent/50 hover:text-text-pri'
@@ -383,7 +383,7 @@ function SweepCard({ sweep, token, brandSlug, onDeleted }: { sweep: Sweep; token
     }
   }
   return (
-    <article className={`border border-ink-line bg-ink-card p-6 sm:p-7 ${REVEAL}`}>
+    <article className={`rounded-card border border-ink-line bg-ink-card p-6 sm:p-7 ${REVEAL}`}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
@@ -413,7 +413,7 @@ function SweepCard({ sweep, token, brandSlug, onDeleted }: { sweep: Sweep; token
 
       <div className="mt-5 grid gap-2.5">
         {sweep.requests.map((r) => (
-          <div key={r.id} className="flex flex-wrap items-center justify-between gap-3 border border-ink-line bg-ink-deep px-4 py-3">
+          <div key={r.id} className="rounded-card flex flex-wrap items-center justify-between gap-3 border border-ink-line bg-ink-deep px-4 py-3">
             <div className="flex items-center gap-3">
               <RequestChip state={r.state} overall={r.overall} />
               <span className="font-mono text-sm text-text-pri">{r.studio_name}</span>
@@ -425,7 +425,7 @@ function SweepCard({ sweep, token, brandSlug, onDeleted }: { sweep: Sweep; token
               {r.assessment_id && (
                 <Link
                   href={withBrand(`/dashboard/signage/queue?a=${r.assessment_id}`, brandSlug)}
-                  className="inline-flex items-center justify-center bg-accent px-3 py-1.5 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-white transition-colors hover:bg-accent-press"
+                  className="rounded-ctl inline-flex items-center justify-center bg-accent px-3 py-1.5 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-white transition-colors hover:bg-accent-press"
                 >
                   Review
                 </Link>
@@ -466,7 +466,7 @@ function AuthBadge({ state }: { state: 'loading' | 'signed-out' | 'ready' | 'no-
     state === 'error' ? 'bg-warning-bright' :
     state === 'signed-out' || state === 'no-org' ? 'bg-accent' : 'bg-text-dim'
   return (
-    <div className="inline-flex items-center gap-3 border border-ink-line bg-ink-card px-5 py-3">
+    <div className="rounded-ctl inline-flex items-center gap-3 border border-ink-line bg-ink-card px-5 py-3">
       <span className={`h-2.5 w-2.5 ${dot}`} aria-hidden="true" />
       <span className="font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-sec">{label}</span>
     </div>

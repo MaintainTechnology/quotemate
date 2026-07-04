@@ -200,7 +200,7 @@ export function SavedJobsSection({
   if (jobs.length === 0) {
     if (!renderWhenEmpty) return null
     return (
-      <section className="border border-ink-line bg-ink-card px-5 py-10 text-center">
+      <section className="rounded-card border border-ink-line bg-ink-card px-5 py-10 text-center">
         <div className="font-mono text-[0.7rem] font-bold uppercase tracking-[0.16em] text-text-pri">
           No saved jobs yet
         </div>
@@ -222,7 +222,7 @@ export function SavedJobsSection({
   ]
 
   return (
-    <section className="border border-ink-line bg-ink-card">
+    <section className="rounded-card border border-ink-line bg-ink-card">
       {/* ── Header: title + count + sort ─────────────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-line px-5 py-4">
         <div>
@@ -240,7 +240,7 @@ export function SavedJobsSection({
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as JobSort)}
-            className="cursor-pointer border border-ink-line bg-ink-card px-2.5 py-2 font-mono text-[0.65rem] font-bold uppercase tracking-[0.14em] text-text-pri focus:border-accent focus:outline-none"
+            className="rounded-ctl cursor-pointer border border-ink-line bg-ink-card px-2.5 py-2 font-mono text-[0.65rem] font-bold uppercase tracking-[0.14em] text-text-pri focus:border-accent focus:outline-none"
           >
             {SORTS.map((s) => (
               <option key={s.key} value={s.key}>
@@ -261,7 +261,7 @@ export function SavedJobsSection({
               type="button"
               onClick={() => setFilter(p.key)}
               aria-pressed={active}
-              className={`inline-flex items-center gap-2 border px-3.5 py-2 font-mono text-[0.65rem] font-bold uppercase tracking-[0.14em] transition-colors cursor-pointer ${
+              className={`rounded-ctl inline-flex items-center gap-2 border px-3.5 py-2 font-mono text-[0.65rem] font-bold uppercase tracking-[0.14em] transition-colors cursor-pointer ${
                 active
                   ? 'border-accent bg-accent/10 text-accent'
                   : 'border-ink-line bg-ink-card text-text-dim hover:border-text-dim hover:text-text-pri'
@@ -324,7 +324,7 @@ export function SavedJobsSection({
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="inline-flex shrink-0 items-center border border-ink-line px-1.5 py-0.5 font-mono text-[0.55rem] font-bold uppercase tracking-[0.16em] text-text-dim">
+                        <span className="rounded-ctl inline-flex shrink-0 items-center border border-ink-line px-1.5 py-0.5 font-mono text-[0.55rem] font-bold uppercase tracking-[0.16em] text-text-dim">
                           {TRADE_BADGE[job.trade]}
                         </span>
                         <span className="truncate text-sm font-semibold text-text-pri">
@@ -364,7 +364,7 @@ export function SavedJobsSection({
                             type="button"
                             onClick={() => void deleteJob(job)}
                             disabled={busyKey !== null}
-                            className="inline-flex min-h-[44px] items-center gap-1.5 border border-danger/60 bg-danger/10 px-3.5 py-2 text-[0.65rem] font-semibold uppercase tracking-wider text-danger transition-colors hover:bg-danger/20 disabled:opacity-50"
+                            className="rounded-ctl inline-flex min-h-[44px] items-center gap-1.5 border border-danger/60 bg-danger/10 px-3.5 py-2 text-[0.65rem] font-semibold uppercase tracking-wider text-danger transition-colors hover:bg-danger/20 disabled:opacity-50"
                           >
                             {busy ? <Loader2 size={13} className="animate-spin" /> : null}
                             {busy ? 'Deleting…' : 'Delete'}
@@ -373,7 +373,7 @@ export function SavedJobsSection({
                             type="button"
                             onClick={() => setConfirmKey(null)}
                             disabled={busy}
-                            className="inline-flex min-h-[44px] items-center border border-ink-line px-3.5 py-2 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+                            className="rounded-ctl inline-flex min-h-[44px] items-center border border-ink-line px-3.5 py-2 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
                           >
                             Cancel
                           </button>
@@ -384,7 +384,7 @@ export function SavedJobsSection({
                             <Link
                               href={job.href}
                               target="_blank"
-                              className="inline-flex min-h-[44px] items-center gap-1.5 border border-ink-line px-3.5 py-2 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+                              className="rounded-ctl inline-flex min-h-[44px] items-center gap-1.5 border border-ink-line px-3.5 py-2 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
                             >
                               View →
                             </Link>

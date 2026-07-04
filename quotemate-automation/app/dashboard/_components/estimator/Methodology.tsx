@@ -43,7 +43,7 @@ export function Methodology({ model, runtimeSeconds, sheets, bom }: Props) {
       <h3 className="mt-1.5 font-extrabold uppercase tracking-tight text-xl text-text-pri sm:text-2xl">
         How this estimate was built
       </h3>
-      <div className="mt-5 grid gap-px border border-ink-line bg-ink-line lg:grid-cols-2">
+      <div className="rounded-card mt-5 grid gap-px border border-ink-line bg-ink-line lg:grid-cols-2">
         {steps.map((s, i) => (
           <article key={s.title} className="flex items-start gap-5 bg-ink-card p-6">
             <span aria-hidden="true" className="font-mono text-4xl font-bold leading-none text-accent sm:text-5xl">

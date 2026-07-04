@@ -17,7 +17,7 @@ const TONE: Record<NonNullable<Stat['tone']>, string> = {
 
 export function StatStrip({ stats }: { stats: Stat[] }) {
   return (
-    <dl className="grid grid-cols-2 gap-px border border-ink-line bg-ink-line sm:grid-cols-4">
+    <dl className="rounded-card grid grid-cols-2 gap-px border border-ink-line bg-ink-line sm:grid-cols-4">
       {stats.map((s) => (
         <div key={s.label} className="bg-ink-card px-5 py-4">
           <dt className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-text-dim">

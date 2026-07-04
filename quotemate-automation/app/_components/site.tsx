@@ -209,7 +209,7 @@ export function PrimaryCTA({
   return (
     <Link
       href={href}
-      className="group inline-flex items-center gap-2 bg-accent px-7 py-3.5 text-sm font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
+      className="group inline-flex items-center gap-2 rounded-lg bg-accent px-7 py-3.5 text-sm font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
     >
       {children}
       <span className="transition-transform duration-300 group-hover:translate-x-0.5">
@@ -229,7 +229,7 @@ export function SecondaryCTA({
   return (
     <Link
       href={href}
-      className="inline-flex items-center gap-2 border border-ink-line bg-transparent px-7 py-3.5 text-sm font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-text-dim hover:bg-ink-card focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
+      className="inline-flex items-center gap-2 rounded-lg border border-ink-line bg-transparent px-7 py-3.5 text-sm font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-text-dim hover:bg-ink-card focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
     >
       {children}
     </Link>

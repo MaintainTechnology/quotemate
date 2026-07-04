@@ -147,7 +147,7 @@ export function PhotoVerify({ accessToken, address, onMaterialDetected }: Props)
   )
 
   return (
-    <div className="border border-ink-line bg-ink-card p-7 sm:p-8">
+    <div className="rounded-card border border-ink-line bg-ink-card p-7 sm:p-8">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
           <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
@@ -180,7 +180,7 @@ export function PhotoVerify({ accessToken, address, onMaterialDetected }: Props)
           onDragOver={(e) => e.preventDefault()}
           onDrop={onDrop}
           onClick={() => fileRef.current?.click()}
-          className="mt-6 cursor-pointer border border-dashed border-ink-line bg-ink-deep p-8 text-center transition-colors hover:border-accent"
+          className="rounded-card mt-6 cursor-pointer border border-dashed border-ink-line bg-ink-deep p-8 text-center transition-colors hover:border-accent"
         >
           <input
             ref={fileRef}
@@ -199,7 +199,7 @@ export function PhotoVerify({ accessToken, address, onMaterialDetected }: Props)
       ) : (
         <div className="mt-6 grid gap-6 md:grid-cols-[1fr_1fr]">
           {/* Preview */}
-          <div className="border border-ink-line bg-ink-deep">
+          <div className="rounded-card border border-ink-line bg-ink-deep">
             {photoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img

@@ -181,7 +181,7 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
       {loading ? (
         <div className="mt-8 text-sm text-text-dim">Loading…</div>
       ) : hasActive && status ? (
-        <div className="mt-8 border border-ink-line bg-ink-card p-6">
+        <div className="rounded-card mt-8 border border-ink-line bg-ink-card p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-3">
@@ -206,7 +206,7 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
               type="button"
               onClick={openPortal}
               disabled={busy === 'portal'}
-              className="inline-flex items-center gap-2 bg-accent px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press disabled:opacity-50"
+              className="rounded-ctl inline-flex items-center gap-2 bg-accent px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press disabled:opacity-50"
             >
               {busy === 'portal' ? 'Opening…' : 'Manage billing'}
             </button>
@@ -217,7 +217,7 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
           </p>
         </div>
       ) : (
-        <div className="mt-8 border border-ink-line bg-ink-card p-6">
+        <div className="rounded-card mt-8 border border-ink-line bg-ink-card p-6">
           <p className="text-sm text-text-sec">
             You don&rsquo;t have an active subscription yet. Choose a plan below
             to get started — Starter Monthly includes a 14-day free trial.
@@ -227,7 +227,7 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
               type="button"
               onClick={openPortal}
               disabled={busy === 'portal'}
-              className="mt-4 inline-flex items-center gap-2 border border-ink-line px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-text-dim disabled:opacity-50"
+              className="rounded-ctl mt-4 inline-flex items-center gap-2 border border-ink-line px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-text-dim disabled:opacity-50"
             >
               {busy === 'portal' ? 'Opening…' : 'View billing history'}
             </button>
@@ -258,7 +258,7 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
       {/* Plan chooser */}
       <div className="mt-10 flex flex-wrap items-center gap-4">
         <div
-          className="inline-flex border border-ink-line bg-ink-card p-1"
+          className="rounded-card inline-flex border border-ink-line bg-ink-card p-1"
           role="group"
           aria-label="Billing period"
         >
@@ -282,7 +282,7 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
           return (
             <div
               key={plan.id}
-              className={`flex h-full flex-col border bg-ink-card p-6 ${
+              className={`rounded-card flex h-full flex-col border bg-ink-card p-6 ${
                 plan.featured ? 'border-accent/50' : 'border-ink-line'
               }`}
             >
@@ -318,7 +318,7 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
                 type="button"
                 onClick={() => startCheckout(plan)}
                 disabled={busy === plan.id || isCurrent}
-                className={`mt-5 inline-flex items-center justify-center px-5 py-2.5 text-xs font-semibold uppercase tracking-wider transition-colors disabled:opacity-50 ${
+                className={`rounded-ctl mt-5 inline-flex items-center justify-center px-5 py-2.5 text-xs font-semibold uppercase tracking-wider transition-colors disabled:opacity-50 ${
                   plan.featured
                     ? 'bg-accent text-white hover:bg-accent-press'
                     : 'border border-ink-line text-text-pri hover:border-text-dim'
@@ -380,7 +380,7 @@ function UsageBar({
   const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0
   const over = limit > 0 && used >= limit
   return (
-    <div className="border border-ink-line bg-ink-card p-4">
+    <div className="rounded-card border border-ink-line bg-ink-card p-4">
       <div className="flex items-baseline justify-between gap-3">
         <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-text-dim">
           {label}

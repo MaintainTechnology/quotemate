@@ -66,7 +66,7 @@ function BillingToggle({
   return (
     <div className="flex flex-wrap items-center gap-4">
       <div
-        className="inline-flex border border-ink-line bg-ink-card p-1"
+        className="inline-flex rounded-xl border border-ink-line bg-ink-card p-1"
         role="group"
         aria-label="Billing period"
       >
@@ -98,7 +98,7 @@ function ToggleButton({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`px-5 py-2 text-xs font-semibold uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep ${
+      className={`rounded-lg px-5 py-2 text-xs font-semibold uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep ${
         active
           ? "bg-accent text-white"
           : "bg-transparent text-text-sec hover:text-text-pri"
@@ -167,7 +167,7 @@ function CheckoutButton({
       type="button"
       onClick={start}
       disabled={loading}
-      className={`mt-7 inline-flex items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep disabled:opacity-60 ${
+      className={`mt-7 inline-flex items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-semibold uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep disabled:opacity-60 ${
         featured
           ? "bg-accent text-white hover:bg-accent-press"
           : "border border-ink-line bg-transparent text-text-pri hover:border-text-dim hover:bg-ink"
@@ -188,7 +188,7 @@ function PlanCard({ plan, annual }: { plan: Plan; annual: boolean }) {
 
   return (
     <div
-      className={`edge-lit card-sweep relative flex h-full flex-col border bg-ink-card p-6 transition-colors duration-300 md:p-8 ${
+      className={`edge-lit card-sweep relative flex h-full flex-col overflow-hidden rounded-2xl border bg-ink-card p-6 transition-colors duration-300 md:p-8 ${
         featured
           ? "border-accent/50 hover:border-accent/70"
           : "border-ink-line hover:border-text-dim"
@@ -200,7 +200,7 @@ function PlanCard({ plan, annual }: { plan: Plan; annual: boolean }) {
             className="absolute inset-x-0 top-0 h-0.5 bg-accent"
             aria-hidden="true"
           />
-          <span className="absolute right-5 top-5 bg-accent px-2.5 py-1 font-mono text-[0.6rem] font-bold uppercase tracking-[0.12em] text-white">
+          <span className="absolute right-5 top-5 rounded-md bg-accent px-2.5 py-1 font-mono text-[0.6rem] font-bold uppercase tracking-[0.12em] text-white">
             Most popular
           </span>
         </>

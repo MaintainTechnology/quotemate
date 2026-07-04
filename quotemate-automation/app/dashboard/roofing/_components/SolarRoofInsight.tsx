@@ -60,7 +60,7 @@ export function SolarRoofInsight({ accessToken, metrics }: { accessToken: string
   if (state === 'idle') return null
 
   return (
-    <div className="mt-6 border border-ink-line bg-ink-card p-6 sm:p-7">
+    <div className="rounded-card mt-6 border border-ink-line bg-ink-card p-6 sm:p-7">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
           Google Solar · aerial roof insight
@@ -93,7 +93,7 @@ export function SolarRoofInsight({ accessToken, metrics }: { accessToken: string
             </div>
             <div className="grid gap-1.5">
               {insight.segments.slice(0, 12).map((s, i) => (
-                <div key={i} className="flex items-center justify-between border border-ink-line bg-ink-deep px-3 py-2 font-mono text-xs">
+                <div key={i} className="rounded-card flex items-center justify-between border border-ink-line bg-ink-deep px-3 py-2 font-mono text-xs">
                   <span className="text-text-sec">Plane {String(i + 1).padStart(2, '0')}</span>
                   <span className="flex gap-4 text-text-pri">
                     <span>{s.area} m²</span>
@@ -118,7 +118,7 @@ export function SolarRoofInsight({ accessToken, metrics }: { accessToken: string
 
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="border border-ink-line bg-ink-deep p-4">
+    <div className="rounded-card border border-ink-line bg-ink-deep p-4">
       <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">{label}</div>
       <div className="mt-2 font-mono text-2xl font-bold tabular-nums text-accent">{value}</div>
       {hint && <div className="mt-1 text-xs text-text-dim">{hint}</div>}

@@ -33,6 +33,7 @@ import { PaintTakeoffEditor } from './PaintTakeoffEditor'
 import { PaintPricedSummary } from './PaintPricedSummary'
 import EstimatorChatbot from '../EstimatorChatbot'
 import { PaintPreviewPanel } from './PaintPreviewPanel'
+import { PaginationControls, usePagination } from '../Pagination'
 
 const API = '/api/tenant/commercial-painting'
 
@@ -113,6 +114,15 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
   const [siteAddress, setSiteAddress] = useState('')
   const [uploads, setUploads] = useState<UploadRow[]>([])
   const [recentRuns, setRecentRuns] = useState<RunRow[]>([])
+  const {
+    page: runPage,
+    setPage: setRunPage,
+    totalPages: runTotalPages,
+    pageItems: cpaintRows,
+    startIndex: runStart,
+    endIndex: runEnd,
+    total: runTotal,
+  } = usePagination(recentRuns, { urlKey: 'cpaint_page' })
 
   const [extraction, setExtraction] = useState<ExtractionState | null>(null)
   const [bom, setBom] = useState<PricedPaintBom | null>(null)
@@ -554,14 +564,14 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
   return (
     <div className="space-y-8">
       {errMsg && (
-        <p role="alert" className="border border-ink-line border-l-4 border-l-warning bg-ink-card px-4 py-3 text-sm text-text-sec">
+        <p role="alert" className="rounded-card border border-ink-line border-l-4 border-l-warning bg-ink-card px-4 py-3 text-sm text-text-sec">
           {errMsg}
         </p>
       )}
 
       {/* Run-status banners — a resumed run must explain itself. */}
       {runStatus === 'failed' && !extracting && (
-        <div role="alert" className="border border-ink-line border-l-4 border-l-warning bg-ink-card px-4 py-3">
+        <div role="alert" className="rounded-card border border-ink-line border-l-4 border-l-warning bg-ink-card px-4 py-3">
           <p className="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-warning">
             Last takeoff failed
           </p>
@@ -571,7 +581,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
         </div>
       )}
       {runStatus === 'extracting' && !extracting && (
-        <div className="flex flex-wrap items-center gap-3 border border-ink-line border-l-4 border-l-accent bg-ink-card px-4 py-3">
+        <div className="rounded-card flex flex-wrap items-center gap-3 border border-ink-line border-l-4 border-l-accent bg-ink-card px-4 py-3">
           <Loader2 className="h-4 w-4 animate-spin text-accent" aria-hidden />
           <p className="flex-1 text-sm text-text-sec">
             A takeoff is running on the server for this run — it takes a few minutes.
@@ -587,7 +597,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
       )}
 
       {/* ── 01 · Documents ──────────────────────────────────────────── */}
-      <section className="border border-ink-line bg-ink-card p-6 sm:p-7">
+      <section className="rounded-card border border-ink-line bg-ink-card p-6 sm:p-7">
         <div className="flex items-start gap-5">
           <span className="font-mono text-4xl font-bold leading-none text-accent sm:text-5xl">01</span>
           <div className="min-w-0 flex-1">
@@ -613,7 +623,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
               onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
               onDragLeave={() => setDragOver(false)}
               onDrop={(e) => { e.preventDefault(); setDragOver(false); void uploadFiles(e.dataTransfer.files) }}
-              className={`mt-4 flex cursor-pointer flex-col items-center justify-center gap-2 border border-dashed px-6 py-9 text-center transition-colors ${
+              className={`rounded-card mt-4 flex cursor-pointer flex-col items-center justify-center gap-2 border border-dashed px-6 py-9 text-center transition-colors ${
                 dragOver ? 'border-accent bg-ink' : 'border-ink-line bg-ink-deep hover:border-accent'
               }`}
             >
@@ -646,7 +656,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
                       value={u.doc_type}
                       onChange={(e) => void setDocType(u.id, e.target.value as PaintDocType)}
                       aria-label={`Document type for ${u.filename}`}
-                      className="cursor-pointer border border-ink-line bg-ink-card px-2 py-1.5 font-mono text-[0.68rem] uppercase tracking-[0.1em] text-text-sec outline-none focus:border-accent"
+                      className="rounded-ctl cursor-pointer border border-ink-line bg-ink-card px-2 py-1.5 font-mono text-[0.68rem] uppercase tracking-[0.1em] text-text-sec outline-none focus:border-accent"
                     >
                       {DOC_TYPES.map((t) => (
                         <option key={t} value={t}>{DOC_TYPE_LABELS[t]}</option>
@@ -682,7 +692,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
                 PDFs (full-page browsing), plain image for site photos. */}
             {viewer && (
               <div className="mt-4">
-                <div className="flex items-center gap-3 border border-b-0 border-ink-line bg-ink-deep px-4 py-2.5">
+                <div className="rounded-card flex items-center gap-3 border border-b-0 border-ink-line bg-ink-deep px-4 py-2.5">
                   <span className="min-w-0 flex-1 truncate font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-accent">
                     Viewing · {viewer.filename}
                   </span>
@@ -700,7 +710,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
                     <PlanOverlay file={viewer.file} items={[]} selectedIdx={null} requirePins={false} />
                   </div>
                 ) : (
-                  <div className="border border-ink-line bg-ink-deep p-3">
+                  <div className="rounded-card border border-ink-line bg-ink-deep p-3">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={viewer.objectUrl} alt={viewer.filename} className="max-h-[34rem] w-auto" />
                   </div>
@@ -713,7 +723,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
                 type="button"
                 onClick={() => void runTakeoff()}
                 disabled={!hasPlanSet || uploading || extracting}
-                className="inline-flex cursor-pointer items-center gap-2.5 bg-accent px-5 py-3 font-mono text-sm font-bold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-ctl inline-flex cursor-pointer items-center gap-2.5 bg-accent px-5 py-3 font-mono text-sm font-bold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {extracting ? (
                   <>
@@ -747,7 +757,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
 
       {/* ── 02 · Confirm the takeoff ────────────────────────────────── */}
       {extraction && (
-        <section className="border border-ink-line bg-ink-card p-6 sm:p-7">
+        <section className="rounded-card border border-ink-line bg-ink-card p-6 sm:p-7">
           <div className="flex items-start gap-5">
             <span className="font-mono text-4xl font-bold leading-none text-accent sm:text-5xl">02</span>
             <div className="min-w-0 flex-1">
@@ -774,7 +784,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
               </p>
 
               {extraction.measurementParseFailed && (
-                <p role="alert" className="mt-4 border border-ink-line border-l-4 border-l-warning bg-ink-deep px-4 py-3 text-sm text-text-sec">
+                <p role="alert" className="rounded-card mt-4 border border-ink-line border-l-4 border-l-warning bg-ink-deep px-4 py-3 text-sm text-text-sec">
                   The measurements document could not be transcribed, so this takeoff is
                   plan-only — no reconciliation flags were produced. Check quantities
                   against the painter’s takeoff by hand, or re-run after fixing the document.
@@ -782,7 +792,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
               )}
 
               {lowShare > 0.5 && (
-                <p role="alert" className="mt-4 border border-ink-line border-l-4 border-l-warning bg-ink-deep px-4 py-3 text-sm text-text-sec">
+                <p role="alert" className="rounded-card mt-4 border border-ink-line border-l-4 border-l-warning bg-ink-deep px-4 py-3 text-sm text-text-sec">
                   More than half this takeoff’s area is low-confidence. Recommend a site
                   measure before this quote goes anywhere near a tender.
                 </p>
@@ -805,7 +815,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
 
       {/* ── 03 · Tender price ───────────────────────────────────────── */}
       {bom && extraction && runId && (
-        <section className="border border-ink-line bg-ink-card p-6 sm:p-7">
+        <section className="rounded-card border border-ink-line bg-ink-card p-6 sm:p-7">
           <div className="flex items-start gap-5">
             <span className="font-mono text-4xl font-bold leading-none text-accent sm:text-5xl">03</span>
             <div className="min-w-0 flex-1">
@@ -846,7 +856,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
                   type="button"
                   disabled={saving}
                   onClick={() => void saveAsQuote()}
-                  className="inline-flex cursor-pointer items-center gap-2.5 bg-accent px-5 py-3 font-mono text-sm font-bold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-ctl inline-flex cursor-pointer items-center gap-2.5 bg-accent px-5 py-3 font-mono text-sm font-bold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {saving ? (
                     <>
@@ -904,7 +914,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
 
       {/* ── History rail ────────────────────────────────────────────── */}
       {recentRuns.length > 0 && (
-        <section className="border border-ink-line bg-ink-card">
+        <section className="rounded-card border border-ink-line bg-ink-card">
           <header className="flex items-center gap-3 border-b border-ink-line px-5 py-3.5">
             <History className="h-4 w-4 shrink-0 text-accent" aria-hidden />
             <h3 className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-pri">
@@ -918,7 +928,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
             </span>
           </header>
           <ul className="divide-y divide-ink-line">
-            {recentRuns.map((r) => {
+            {cpaintRows.map((r) => {
               const meta = runStatusMeta(r.status)
               const isActive = r.id === runId
               const title = r.job_name?.trim() || r.site_address?.trim() || 'Untitled run'
@@ -988,6 +998,15 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
               )
             })}
           </ul>
+          <PaginationControls
+            page={runPage}
+            totalPages={runTotalPages}
+            onPageChange={setRunPage}
+            startIndex={runStart}
+            endIndex={runEnd}
+            total={runTotal}
+            unit="runs"
+          />
         </section>
       )}
     </div>

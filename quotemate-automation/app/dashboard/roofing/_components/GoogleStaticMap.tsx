@@ -94,9 +94,9 @@ export function GoogleStaticMap({
   }, [src])
 
   return (
-    <div className={`relative w-full ${heightClass} border border-ink-line bg-ink-card overflow-hidden`}>
+    <div className={`rounded-card relative w-full ${heightClass} border border-ink-line bg-ink-card overflow-hidden`}>
       {/* Top-left eyebrow */}
-      <div className="pointer-events-none absolute left-3 top-3 z-10 border border-ink-line bg-ink-deep/95 px-3 py-1.5 backdrop-blur">
+      <div className="rounded-card pointer-events-none absolute left-3 top-3 z-10 border border-ink-line bg-ink-deep/95 px-3 py-1.5 backdrop-blur">
         <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
           Google satellite
         </span>

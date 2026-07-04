@@ -288,7 +288,7 @@ export function RunWorkspace({ runId }: { runId: string }) {
   if (load.phase === 'loading') {
     return (
       <WorkspaceShell>
-        <output aria-live="polite" className="block border border-ink-line bg-ink-card px-6 py-16 text-center">
+        <output aria-live="polite" className="rounded-card block border border-ink-line bg-ink-card px-6 py-16 text-center">
           <span className="inline-block h-5 w-5 animate-spin border-2 border-accent/40 border-t-accent align-middle" aria-hidden="true" />
           <span className="ml-3 align-middle font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim">
             Loading run…
@@ -301,14 +301,14 @@ export function RunWorkspace({ runId }: { runId: string }) {
   if (load.phase === 'not_found') {
     return (
       <WorkspaceShell>
-        <div className="border border-ink-line bg-ink-card p-10">
+        <div className="rounded-card border border-ink-line bg-ink-card p-10">
           <h1 className="font-extrabold uppercase tracking-tight text-2xl text-text-pri">Run not found</h1>
           <p className="mt-3 max-w-xl text-sm leading-relaxed text-text-sec">
             This analysis doesn’t exist or belongs to another account. It may have been deleted.
           </p>
           <Link
             href="/dashboard?tab=estimator"
-            className="mt-6 inline-flex items-center gap-2 bg-accent px-6 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press focus-visible:outline-2 focus-visible:outline-accent"
+            className="rounded-ctl mt-6 inline-flex items-center gap-2 bg-accent px-6 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press focus-visible:outline-2 focus-visible:outline-accent"
           >
             ← Back to the Estimator
           </Link>
@@ -320,7 +320,7 @@ export function RunWorkspace({ runId }: { runId: string }) {
   if (load.phase === 'error' || !run) {
     return (
       <WorkspaceShell>
-        <div className="border border-ink-line border-l-4 border-l-warning bg-ink-card px-6 py-5">
+        <div className="rounded-card border border-ink-line border-l-4 border-l-warning bg-ink-card px-6 py-5">
           <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-warning">
             Something went wrong
           </div>
@@ -385,7 +385,7 @@ export function RunWorkspace({ runId }: { runId: string }) {
       </div>
 
       {errMsg && (
-        <div role="alert" className="border border-ink-line border-l-4 border-l-warning bg-ink-card px-4 py-3">
+        <div role="alert" className="rounded-card border border-ink-line border-l-4 border-l-warning bg-ink-card px-4 py-3">
           <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-warning">
             Something went wrong
           </div>
@@ -401,7 +401,7 @@ export function RunWorkspace({ runId }: { runId: string }) {
       {/* ── Take-off ledger ───────────────────────────────────── */}
       <section
         aria-label="Quantity take-off"
-        className="border border-ink-line bg-ink-card p-6 sm:p-8 motion-safe:animate-[fade-up_220ms_ease-out_120ms_both]"
+        className="rounded-card border border-ink-line bg-ink-card p-6 sm:p-8 motion-safe:animate-[fade-up_220ms_ease-out_120ms_both]"
       >
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <div>
@@ -453,7 +453,7 @@ export function RunWorkspace({ runId }: { runId: string }) {
             />
           </>
         ) : (
-          <div className="mt-5 border border-dashed border-ink-line bg-ink-deep px-5 py-4">
+          <div className="rounded-card mt-5 border border-dashed border-ink-line bg-ink-deep px-5 py-4">
             <p className="text-sm text-text-sec">
               The plan viewer and dense-item recount need the original PDF — it’s never stored on our servers.
             </p>
@@ -475,7 +475,7 @@ export function RunWorkspace({ runId }: { runId: string }) {
 
       {/* ── Priced BOM ────────────────────────────────────────── */}
       {priced && (
-        <section className="border border-ink-line bg-ink-card p-6 sm:p-8">
+        <section className="rounded-card border border-ink-line bg-ink-card p-6 sm:p-8">
           <PricedSummary bom={priced} info={priceInfo} pricedAt={pricedAt} onAddToCatalogue={addToCatalogue} />
         </section>
       )}
@@ -524,7 +524,7 @@ export function RunWorkspace({ runId }: { runId: string }) {
                     ? 'Re-attach the plan PDF to enable recounts'
                     : `Tiled high-DPI recount of the low-confidence items on page ${dominantPage}`
               }
-              className="inline-flex items-center gap-2 border border-ink-line px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-sec transition-colors hover:border-accent hover:text-accent focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-sec transition-colors hover:border-accent hover:text-accent focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
             >
               {refining ? (
                 <>
@@ -538,7 +538,7 @@ export function RunWorkspace({ runId }: { runId: string }) {
               type="button"
               onClick={() => accessToken && void price(accessToken)}
               disabled={pricing || saving || rows.length === 0}
-              className="inline-flex items-center gap-2 border border-accent px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-accent transition-colors hover:bg-accent hover:text-white focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-ctl inline-flex items-center gap-2 border border-accent px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-accent transition-colors hover:bg-accent hover:text-white focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
             >
               {pricing ? (
                 <>
@@ -554,7 +554,7 @@ export function RunWorkspace({ runId }: { runId: string }) {
               type="button"
               onClick={save}
               disabled={saving || refining}
-              className="inline-flex items-center gap-2 bg-accent px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press focus-visible:outline-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-ctl inline-flex items-center gap-2 bg-accent px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press focus-visible:outline-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               {saving ? (
                 <>

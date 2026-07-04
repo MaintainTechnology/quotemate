@@ -77,14 +77,14 @@ export function TradesMenu() {
           open ? "visible opacity-100" : "invisible opacity-0"
         }`}
       >
-        <div className="min-w-[230px] border border-ink-line bg-ink-deep/95 p-2 backdrop-blur-md">
+        <div className="min-w-[230px] rounded-xl border border-ink-line bg-ink-deep/95 p-2 backdrop-blur-md">
           {TRADE_LINKS.map((t) => (
             <Link
               key={t.href}
               href={t.href}
               role="menuitem"
               onClick={() => setOpen(false)}
-              className="flex items-center justify-between gap-6 px-3 py-2.5 text-sm text-text-sec transition-colors hover:bg-ink-card hover:text-text-pri focus:bg-ink-card focus:text-text-pri focus:outline-none"
+              className="flex items-center justify-between gap-6 rounded-lg px-3 py-2.5 text-sm text-text-sec transition-colors hover:bg-ink-card hover:text-text-pri focus:bg-ink-card focus:text-text-pri focus:outline-none"
             >
               <span className="font-medium">{t.label}</span>
               {t.region && (

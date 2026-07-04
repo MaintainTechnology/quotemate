@@ -12,6 +12,7 @@ import { runDeviceCount, runItemCount, runStatus } from '@/lib/estimation/run-st
 import { RunStatusChip } from './estimator/badges'
 import { stashPlanFile } from './estimator/plan-file-store'
 import { money, type ExtractResponse, type HistoryUpload } from './estimator/types'
+import { PaginationControls, usePagination } from './Pagination'
 
 type Props = { accessToken: string | null }
 
@@ -25,6 +26,15 @@ export function EstimatorBetaTab({ accessToken }: Props) {
   const [dragOver, setDragOver] = useState(false)
 
   const [history, setHistory] = useState<HistoryUpload[] | null>(null)
+  const {
+    page: histPage,
+    setPage: setHistPage,
+    totalPages: histTotalPages,
+    pageItems: histRows,
+    startIndex: histStart,
+    endIndex: histEnd,
+    total: histTotal,
+  } = usePagination(history ?? [], { urlKey: 'estb_page' })
 
   useEffect(() => {
     if (!accessToken) return
@@ -94,7 +104,7 @@ export function EstimatorBetaTab({ accessToken }: Props) {
       <form
         onSubmit={analyse}
         aria-busy={analysing ? 'true' : 'false'}
-        className="border border-ink-line bg-ink-card p-7 motion-safe:animate-[fade-up_220ms_ease-out_both] sm:p-9"
+        className="rounded-card border border-ink-line bg-ink-card p-7 motion-safe:animate-[fade-up_220ms_ease-out_both] sm:p-9"
       >
         <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
           Plan take-off
@@ -119,7 +129,7 @@ export function EstimatorBetaTab({ accessToken }: Props) {
             setDragOver(false)
             acceptFile(e.dataTransfer.files?.[0])
           }}
-          className={`mt-6 flex cursor-pointer flex-col items-center justify-center gap-2 border border-dashed px-6 py-10 text-center transition-colors has-focus-visible:outline-2 has-focus-visible:outline-accent ${
+          className={`rounded-card mt-6 flex cursor-pointer flex-col items-center justify-center gap-2 border border-dashed px-6 py-10 text-center transition-colors has-focus-visible:outline-2 has-focus-visible:outline-accent ${
             dragOver
               ? 'border-accent bg-accent/5'
               : file
@@ -167,7 +177,7 @@ export function EstimatorBetaTab({ accessToken }: Props) {
               placeholder="ELECTRICAL / POWER & DATA"
               disabled={analysing}
               aria-label="Sheet hint"
-              className="mt-2 w-full border border-ink-line bg-ink-deep px-4 py-3 font-mono text-base text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none"
+              className="rounded-ctl mt-2 w-full border border-ink-line bg-ink-deep px-4 py-3 font-mono text-base text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none"
             />
             <p className="mt-1.5 text-xs text-text-dim">
               Which sheet matters — the title-block name, e.g. “LIGHTING” or “POWER &amp; DATA”.
@@ -177,7 +187,7 @@ export function EstimatorBetaTab({ accessToken }: Props) {
             <button
               type="submit"
               disabled={analysing || !file || !accessToken}
-              className="inline-flex w-full items-center justify-center gap-2 bg-accent px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press focus-visible:outline-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-ctl inline-flex w-full items-center justify-center gap-2 bg-accent px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press focus-visible:outline-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               {analysing ? (
                 <>
@@ -201,7 +211,7 @@ export function EstimatorBetaTab({ accessToken }: Props) {
         )}
 
         {errMsg && (
-          <div role="alert" className="mt-5 border border-ink-line border-l-4 border-l-warning bg-ink-deep px-4 py-3">
+          <div role="alert" className="rounded-card mt-5 border border-ink-line border-l-4 border-l-warning bg-ink-deep px-4 py-3">
             <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-warning">
               Something went wrong
             </div>
@@ -222,7 +232,7 @@ export function EstimatorBetaTab({ accessToken }: Props) {
       {/* ── Run history ────────────────────────────────────────── */}
       <section
         aria-label="Run history"
-        className="border border-ink-line bg-ink-card p-7 motion-safe:animate-[fade-up_220ms_ease-out_80ms_both] sm:p-9"
+        className="rounded-card border border-ink-line bg-ink-card p-7 motion-safe:animate-[fade-up_220ms_ease-out_80ms_both] sm:p-9"
       >
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <div>
@@ -248,7 +258,7 @@ export function EstimatorBetaTab({ accessToken }: Props) {
             </span>
           </output>
         ) : history.length === 0 ? (
-          <div className="mt-5 border border-dashed border-ink-line bg-ink-deep px-6 py-10 text-center">
+          <div className="rounded-card mt-5 border border-dashed border-ink-line bg-ink-deep px-6 py-10 text-center">
             <p className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim">
               No saved runs yet
             </p>
@@ -258,8 +268,9 @@ export function EstimatorBetaTab({ accessToken }: Props) {
             </p>
           </div>
         ) : (
+          <>
           <ul className="mt-5 divide-y divide-ink-line border-t border-ink-line">
-            {history.map((u) => {
+            {histRows.map((u) => {
               const ex = u.plan_extractions?.[0]
               const status = ex ? runStatus(ex) : 'draft'
               const items = ex ? runItemCount(ex) : 0
@@ -311,6 +322,16 @@ export function EstimatorBetaTab({ accessToken }: Props) {
               )
             })}
           </ul>
+          <PaginationControls
+            page={histPage}
+            totalPages={histTotalPages}
+            onPageChange={setHistPage}
+            startIndex={histStart}
+            endIndex={histEnd}
+            total={histTotal}
+            unit="runs"
+          />
+          </>
         )}
       </section>
     </div>

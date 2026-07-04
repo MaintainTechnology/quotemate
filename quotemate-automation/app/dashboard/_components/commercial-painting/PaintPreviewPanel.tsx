@@ -91,7 +91,7 @@ export function PaintPreviewPanel({
             type="button"
             disabled={busy}
             onClick={() => void call({ colour })}
-            className="inline-flex cursor-pointer items-center gap-2 bg-accent px-4 py-2.5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-ctl inline-flex cursor-pointer items-center gap-2 bg-accent px-4 py-2.5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy && !after ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Sparkles className="h-4 w-4" aria-hidden />}
             {after ? 'Re-render' : 'Generate preview'}
@@ -100,7 +100,7 @@ export function PaintPreviewPanel({
       )}
 
       {err && (
-        <p role="alert" className="mt-3 border border-ink-line border-l-4 border-l-warning bg-ink-deep px-4 py-2.5 text-sm text-text-sec">
+        <p role="alert" className="rounded-card mt-3 border border-ink-line border-l-4 border-l-warning bg-ink-deep px-4 py-2.5 text-sm text-text-sec">
           {err}
         </p>
       )}
@@ -108,7 +108,7 @@ export function PaintPreviewPanel({
       {(before || after) && (
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           {before && (
-            <figure className="border border-ink-line bg-ink-deep">
+            <figure className="rounded-card border border-ink-line bg-ink-deep">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={before} alt="Site photo before repaint" className="w-full" />
               <figcaption className="px-3 py-2 font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
@@ -117,7 +117,7 @@ export function PaintPreviewPanel({
             </figure>
           )}
           {after && (
-            <figure className="border border-ink-line bg-ink-deep">
+            <figure className="rounded-card border border-ink-line bg-ink-deep">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={after} alt="AI-generated repaint concept" className="w-full" />
               <figcaption className="px-3 py-2 font-mono text-[0.62rem] uppercase tracking-[0.14em] text-accent">
@@ -141,7 +141,7 @@ export function PaintPreviewPanel({
             type="button"
             disabled={busy || !instruction.trim()}
             onClick={() => void call({ refine: { image: after, instruction } })}
-            className="inline-flex cursor-pointer items-center gap-2 border border-ink-line bg-ink-deep px-4 py-2.5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-text-sec transition-colors hover:border-accent hover:text-text-pri disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-ctl inline-flex cursor-pointer items-center gap-2 border border-ink-line bg-ink-deep px-4 py-2.5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-text-sec transition-colors hover:border-accent hover:text-text-pri disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
             Refine

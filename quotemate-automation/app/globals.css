@@ -32,9 +32,11 @@
 
   /* ─── STATE COLOURS ─────────────────────────────────────── */
   --success:      #15803D;
+  --success-bright: #34D27B; /* text/border shade — readable on the dark canvas */
   --warning:      #B45309;   /* fill shade — behind white text only */
   --warning-bright: #F59E0B; /* text/border shade — readable on the dark canvas */
   --danger:       #B91C1C;
+  --danger-bright: #F0816B;  /* text/border shade — readable on the dark canvas */
 
   /* ─── THEME-AWARE EFFECT TOKENS (these flip in light mode) ── */
   color-scheme: dark;
@@ -58,7 +60,10 @@
     --ink-deep: #FAF8F4;
     --ink: #FFFFFF;
     --ink-card: #FFFFFF;
-    --ink-line: #E9E3DC;
+    /* Warm taupe border. Darkened from #E9E3DC — that was only ~1.25:1 on
+       the white/cream surfaces, so card edges, dividers and the sidebar
+       nearly vanished and the whole light theme read as washed-out. */
+    --ink-line: #CFC2B0;
     --accent: #FFC400;
     --accent-press: #E6AC00;
     --accent-soft: #FFD23D;
@@ -68,7 +73,9 @@
     --text-dim: #837870;
     --teal-glow: #8A7D6A;
     --teal-deep: #6E6354;
+    --success-bright: #15803D;
     --warning-bright: #B45309;
+    --danger-bright: #B91C1C;
     --glow-cool: rgba(255, 253, 250, 0.9);
     --glow-warm: rgba(255, 196, 0, 0.05);
     --lift: 0 1px 2px rgba(43, 36, 34, 0.06), 0 1px 1px rgba(43, 36, 34, 0.04);
@@ -81,7 +88,9 @@
   --ink-deep: #FAF8F4;
   --ink: #FFFFFF;
   --ink-card: #FFFFFF;
-  --ink-line: #E9E3DC;
+  /* Warm taupe border — see the media-query block above for why #E9E3DC
+     was darkened to #CFC2B0 (kept identical so auto + pinned light match). */
+  --ink-line: #CFC2B0;
   --accent: #FFC400;
   --accent-press: #E6AC00;
   --accent-soft: #FFD23D;
@@ -91,7 +100,9 @@
   --text-dim: #837870;
   --teal-glow: #8A7D6A;
   --teal-deep: #6E6354;
+  --success-bright: #15803D;
   --warning-bright: #B45309;
+  --danger-bright: #B91C1C;
   --glow-cool: rgba(255, 253, 250, 0.9);
   --glow-warm: rgba(255, 196, 0, 0.05);
   --lift: 0 1px 2px rgba(43, 36, 34, 0.06), 0 1px 1px rgba(43, 36, 34, 0.04);
@@ -113,12 +124,23 @@
   --color-text-dim:     var(--text-dim);
   --color-teal-glow:    var(--teal-glow);
   --color-success:      var(--success);
+  --color-success-bright: var(--success-bright);
   --color-warning:      var(--warning);
   --color-warning-bright: var(--warning-bright);
   --color-danger:       var(--danger);
+  --color-danger-bright: var(--danger-bright);
 
   --font-sans: var(--font-manrope);
   --font-mono: var(--font-jetbrains-mono);
+
+  /* ─── DASHBOARD CORNER RADII ─────────────────────────────────────
+     The tradie dashboard surface adopts the soft rounded corners of the
+     QuoteMax dashboard reference (the broader brand system is square-
+     cornered; the product cockpit is deliberately friendlier). Cards
+     round to 14px + lit edge; controls/nav/inputs to 9px. Exposed as
+     `rounded-card` / `rounded-ctl` Tailwind utilities. */
+  --radius-card: 14px;
+  --radius-ctl: 9px;
 }
 
 body {

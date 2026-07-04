@@ -39,6 +39,15 @@ type Tile = {
 const PRIMARY_TILES: Tile[] = [
   {
     num: '01',
+    eyebrow: 'Company health',
+    title: 'Metrics dashboard',
+    blurb:
+      'Everything happening across QuoteMax in one view — quotes processed, requests, unique consumers, active tradies, weekly trends, channel/trade splits, and a per-tradie usage table. The founder scorecard against the 90-day targets.',
+    cta: 'Open metrics',
+    href: '/admin/metrics',
+  },
+  {
+    num: '02',
     eyebrow: 'Catalogue intake',
     title: 'Bulk loader',
     blurb:
@@ -47,7 +56,7 @@ const PRIMARY_TILES: Tile[] = [
     href: '/admin/loader',
   },
   {
-    num: '02',
+    num: '03',
     eyebrow: 'Quality agents',
     title: 'Agents overview',
     blurb:
@@ -59,7 +68,7 @@ const PRIMARY_TILES: Tile[] = [
 
 const SECONDARY_TILES: Tile[] = [
   {
-    num: '03',
+    num: '04',
     eyebrow: 'Scoreboard',
     title: 'Eval runs',
     blurb:
@@ -68,7 +77,7 @@ const SECONDARY_TILES: Tile[] = [
     href: '/admin/agents/eval',
   },
   {
-    num: '04',
+    num: '05',
     eyebrow: 'Catalogue QA',
     title: 'Pending findings',
     blurb:
@@ -77,7 +86,7 @@ const SECONDARY_TILES: Tile[] = [
     href: '/admin/agents/catalogue',
   },
   {
-    num: '05',
+    num: '06',
     eyebrow: 'Tradie-Learn',
     title: 'Edit patterns',
     blurb:
@@ -86,7 +95,7 @@ const SECONDARY_TILES: Tile[] = [
     href: '/admin/agents/tradie-edits',
   },
   {
-    num: '06',
+    num: '07',
     eyebrow: 'Operator view',
     title: 'Tradie dashboard',
     blurb:
@@ -95,7 +104,7 @@ const SECONDARY_TILES: Tile[] = [
     href: '/dashboard',
   },
   {
-    num: '07',
+    num: '08',
     eyebrow: 'Customer management',
     title: 'Customers',
     blurb:
@@ -104,7 +113,7 @@ const SECONDARY_TILES: Tile[] = [
     href: '/admin/customers',
   },
   {
-    num: '08',
+    num: '09',
     eyebrow: 'Reference',
     title: 'Documentation',
     blurb:
@@ -113,7 +122,7 @@ const SECONDARY_TILES: Tile[] = [
     href: '/admin/docs',
   },
   {
-    num: '09',
+    num: '10',
     eyebrow: 'Onboarding QA',
     title: 'Tenant health',
     blurb:
@@ -122,7 +131,7 @@ const SECONDARY_TILES: Tile[] = [
     href: '/admin/tenants',
   },
   {
-    num: '10',
+    num: '11',
     eyebrow: 'Access & recruitment',
     title: 'Invites & onboarding',
     blurb:
@@ -167,13 +176,9 @@ export default function AdminHomePage() {
 
       {/* ── Hero ─────────────────────────────────────────────────── */}
       <section className="relative z-10 mx-auto max-w-7xl px-6 pt-16 pb-12 sm:px-10 md:pt-24 md:pb-16">
-        <div className="flex items-center gap-3 font-mono text-[0.75rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
-          <span>QuoteMax</span>
-          <span className="text-ink-line">/</span>
-          <span className="text-text-pri">Admin</span>
-        </div>
-
-        <div className="mt-8 grid gap-10 md:grid-cols-[1.6fr_1fr] md:items-end md:gap-16">
+        {/* No breadcrumb here — the persistent nav in app/admin/layout.tsx
+            already carries the "QuoteMax / Admin" identity above this hero. */}
+        <div className="grid gap-10 md:grid-cols-[1.6fr_1fr] md:items-end md:gap-16">
           <h1 className="font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2.75rem,6vw,5.25rem)]">
             The <span className="text-accent">command</span> centre <br className="hidden md:block" />
             for the quote engine.

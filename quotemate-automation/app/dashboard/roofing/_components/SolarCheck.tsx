@@ -74,7 +74,7 @@ export function SolarCheck({ accessToken, address, intent, betterIncGst, bestInc
   const bestWithSolar = applies ? bestIncGst + (allowance?.inc_gst ?? 0) : bestIncGst
 
   return (
-    <div className="border border-ink-line bg-ink-card p-7 sm:p-8">
+    <div className="rounded-card border border-ink-line bg-ink-card p-7 sm:p-8">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
           <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
@@ -88,7 +88,7 @@ export function SolarCheck({ accessToken, address, intent, betterIncGst, bestInc
           type="button"
           onClick={scan}
           disabled={stage === 'scanning' || !accessToken}
-          className="inline-flex items-center gap-2 bg-accent px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-ctl inline-flex items-center gap-2 bg-accent px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
         >
           {stage === 'scanning' ? (<><Spinner /> Scanning…</>) : stage === 'done' ? 'Re-scan' : 'Scan for solar'}
         </button>
@@ -121,7 +121,7 @@ export function SolarCheck({ accessToken, address, intent, betterIncGst, bestInc
               </div>
 
               {allowance && (
-                <div className={`border border-ink-line border-l-4 ${applies ? 'border-l-accent' : 'border-l-warning'} bg-ink-deep p-5`}>
+                <div className={`rounded-card border border-ink-line border-l-4 ${applies ? 'border-l-accent' : 'border-l-warning'} bg-ink-deep p-5`}>
                   <div className={`font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] ${applies ? 'text-accent' : 'text-warning'}`}>
                     {applies ? 'Solar detach & reinstate' : 'Solar flagged — confirm on site'}
                   </div>
@@ -152,7 +152,7 @@ export function SolarCheck({ accessToken, address, intent, betterIncGst, bestInc
           {/* Skylights — SURFACED ONLY. Never auto-priced; the tradie adds a
               re-flash line manually if needed. */}
           {detection.has_skylight && (
-            <div className="border border-ink-line border-l-4 border-l-warning bg-ink-deep p-5">
+            <div className="rounded-card border border-ink-line border-l-4 border-l-warning bg-ink-deep p-5">
               <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-warning">
                 {detection.skylight_count} skylight{detection.skylight_count === 1 ? '' : 's'} flagged
               </div>
@@ -173,7 +173,7 @@ export function SolarCheck({ accessToken, address, intent, betterIncGst, bestInc
 
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="border border-ink-line bg-ink-deep p-4">
+    <div className="rounded-card border border-ink-line bg-ink-deep p-4">
       <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">{label}</div>
       <div className="mt-2 font-mono text-xl font-bold tabular-nums text-text-pri">{value}</div>
       {hint && <div className="mt-1 text-xs text-text-dim">{hint}</div>}
@@ -183,7 +183,7 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 
 function TotalCard({ label, value, sub }: { label: string; value: number; sub: string }) {
   return (
-    <div className="border border-ink-line bg-ink-deep p-5">
+    <div className="rounded-card border border-ink-line bg-ink-deep p-5">
       <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">{label}</div>
       <div className="mt-2 font-mono text-2xl font-bold tabular-nums text-accent">${formatMoney(value)}</div>
       <div className="mt-1 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">{sub} inc GST</div>

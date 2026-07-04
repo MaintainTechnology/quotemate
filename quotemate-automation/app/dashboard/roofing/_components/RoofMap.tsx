@@ -212,11 +212,11 @@ export function RoofMap({
       <div
         ref={containerRef}
         role="presentation"
-        className="h-112 w-full border border-ink-line bg-ink-card sm:h-128"
+        className="rounded-card h-112 w-full border border-ink-line bg-ink-card sm:h-128"
       />
 
       {stats && (
-        <div className="pointer-events-none absolute right-4 top-4 max-w-[18rem] border border-ink-line bg-ink-deep/95 p-4 backdrop-blur">
+        <div className="rounded-card pointer-events-none absolute right-4 top-4 max-w-[18rem] border border-ink-line bg-ink-deep/95 p-4 backdrop-blur">
           <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
             {multi ? 'Selected structure' : 'Geoscape measurement'}
           </div>
@@ -233,7 +233,7 @@ export function RoofMap({
       )}
 
       {multi ? (
-        <div className="pointer-events-none absolute bottom-4 left-4 border border-ink-line bg-ink-deep/95 p-3 backdrop-blur">
+        <div className="rounded-card pointer-events-none absolute bottom-4 left-4 border border-ink-line bg-ink-deep/95 p-3 backdrop-blur">
           <div className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
             Structure legend
           </div>
@@ -246,7 +246,7 @@ export function RoofMap({
         </div>
       ) : (
         polygon && (
-          <div className="pointer-events-none absolute bottom-4 left-4 border border-ink-line bg-ink-deep/95 p-3 backdrop-blur">
+          <div className="rounded-card pointer-events-none absolute bottom-4 left-4 border border-ink-line bg-ink-deep/95 p-3 backdrop-blur">
             <div className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
               Edge legend
             </div>
@@ -261,7 +261,7 @@ export function RoofMap({
       )}
 
       {onRecenter && (
-        <div className="pointer-events-none absolute bottom-4 right-4 border border-ink-line bg-ink-deep/95 px-3 py-2 backdrop-blur">
+        <div className="rounded-card pointer-events-none absolute bottom-4 right-4 border border-ink-line bg-ink-deep/95 px-3 py-2 backdrop-blur">
           <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
             {multi ? 'Click the map to add / re-measure a building' : 'Click any building to re-measure'}
           </span>

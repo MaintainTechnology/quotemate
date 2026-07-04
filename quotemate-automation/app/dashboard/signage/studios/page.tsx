@@ -299,7 +299,7 @@ export default function SignageStudiosPage() {
       {authState === 'ready' && (
         <section className="relative z-10 mx-auto mt-10 max-w-6xl px-6 pb-24 sm:px-10">
           {/* 01 · Find on Google */}
-          <div className={`border border-ink-line bg-ink-card p-7 sm:p-8 ${REVEAL}`} style={delay(240)}>
+          <div className={`rounded-card border border-ink-line bg-ink-card p-7 sm:p-8 ${REVEAL}`} style={delay(240)}>
             <NumberedEyebrow n="01">Find on Google</NumberedEyebrow>
             <div className="mt-4">
               <Label htmlFor="place-query">Search a studio by name or area</Label>
@@ -321,7 +321,7 @@ export default function SignageStudiosPage() {
                   </span>
                 )}
                 {places.length > 0 && (
-                  <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-80 overflow-y-auto border border-ink-line bg-ink-card">
+                  <ul className="rounded-card absolute left-0 right-0 top-full z-20 mt-1 max-h-80 overflow-y-auto border border-ink-line bg-ink-card">
                     {places.map((p) => (
                       <li key={p.place_id}>
                         <button
@@ -345,7 +345,7 @@ export default function SignageStudiosPage() {
           </div>
 
           {/* 02 · Add a studio */}
-          <form onSubmit={addStudio} className={`mt-5 border border-ink-line bg-ink-card p-7 sm:p-8 ${REVEAL}`} style={delay(300)}>
+          <form onSubmit={addStudio} className={`rounded-card mt-5 border border-ink-line bg-ink-card p-7 sm:p-8 ${REVEAL}`} style={delay(300)}>
             <NumberedEyebrow n="02">Add a studio</NumberedEyebrow>
             <div className="mt-4 grid gap-5 md:grid-cols-2">
               <div className="md:col-span-2">
@@ -395,7 +395,7 @@ export default function SignageStudiosPage() {
           </form>
 
           {/* 03 · CSV import */}
-          <div className={`mt-5 border border-ink-line bg-ink-card p-7 sm:p-8 ${REVEAL}`} style={delay(360)}>
+          <div className={`rounded-card mt-5 border border-ink-line bg-ink-card p-7 sm:p-8 ${REVEAL}`} style={delay(360)}>
             <NumberedEyebrow n="03">Bulk import</NumberedEyebrow>
             <p className="mt-4 text-sm leading-relaxed text-text-sec">
               Upload a roster CSV. Columns: name (required), address, region, state, postcode, contact_phone, contact_email.
@@ -421,7 +421,7 @@ export default function SignageStudiosPage() {
           ) : (
             <div className="mt-4 grid gap-3">
               {studios.map((s) => (
-                <div key={s.id} className="flex flex-wrap items-center gap-4 border border-ink-line bg-ink-card p-4 transition-colors hover:border-accent/40">
+                <div key={s.id} className="rounded-card flex flex-wrap items-center gap-4 border border-ink-line bg-ink-card p-4 transition-colors hover:border-accent/40">
                   <StreetThumb token={token} studio={s} onView={setLightbox} />
                   <StaticMapThumb token={token} studio={s} onView={setLightbox} />
                   <div className="min-w-[12rem] flex-1">
@@ -482,7 +482,7 @@ function Preview({ token, label, url, emptyHint, onView }: { token: string | nul
         type="button"
         disabled={!src}
         onClick={() => src && onView(src)}
-        className="block h-32 w-full overflow-hidden border border-ink-line bg-ink-deep transition-colors enabled:hover:border-accent disabled:cursor-default"
+        className="rounded-card block h-32 w-full overflow-hidden border border-ink-line bg-ink-deep transition-colors enabled:hover:border-accent disabled:cursor-default"
       >
         {src ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -517,7 +517,7 @@ function Thumb({ src, alt, empty, onView }: { src: string | null; alt: string; e
       type="button"
       disabled={!src}
       onClick={() => src && onView(src)}
-      className="h-14 w-20 shrink-0 overflow-hidden border border-ink-line bg-ink-deep transition-colors enabled:hover:border-accent disabled:cursor-default"
+      className="rounded-card h-14 w-20 shrink-0 overflow-hidden border border-ink-line bg-ink-deep transition-colors enabled:hover:border-accent disabled:cursor-default"
     >
       {src ? (
         // eslint-disable-next-line @next/next/no-img-element

@@ -32,6 +32,7 @@ import type {
 import { OVERLAY_MAP_ZOOM, OVERLAY_MAP_WIDTH, OVERLAY_MAP_HEIGHT } from '@/lib/solar/layout-overlay'
 import { BuildingPicker } from '@/app/q/solar/[token]/BuildingPicker'
 import { PylonHardwareCard } from './PylonHardwareCard'
+import { PaginationControls, usePagination } from './Pagination'
 
 type Props = {
   accessToken: string | null
@@ -47,15 +48,15 @@ const STATUS_META: Record<
 > = {
   awaiting_confirmation: {
     label: 'Awaiting review',
-    cls: 'border-amber-400/40 text-amber-300',
+    cls: 'border-warning-bright/50 text-warning-bright',
   },
   confirmed: {
     label: 'Released',
-    cls: 'border-emerald-400/40 text-emerald-300',
+    cls: 'border-success-bright/50 text-success-bright',
   },
   paid: {
     label: 'Deposit paid',
-    cls: 'border-emerald-400/60 text-emerald-200',
+    cls: 'border-success-bright/50 text-success-bright',
   },
   flagged: {
     label: 'Needs review',
@@ -91,9 +92,9 @@ const FELT_CHIP: Record<
   { label: string; cls: string }
 > = {
   ready: { label: 'Map ready', cls: 'border-teal-glow/40 text-teal-glow' },
-  partial: { label: 'Map building…', cls: 'border-amber-400/40 text-amber-300' },
-  provisioning: { label: 'Map building…', cls: 'border-amber-400/40 text-amber-300' },
-  pending: { label: 'Map building…', cls: 'border-amber-400/40 text-amber-300' },
+  partial: { label: 'Map building…', cls: 'border-warning-bright/50 text-warning-bright' },
+  provisioning: { label: 'Map building…', cls: 'border-warning-bright/50 text-warning-bright' },
+  pending: { label: 'Map building…', cls: 'border-warning-bright/50 text-warning-bright' },
   failed: { label: 'Map unavailable', cls: 'border-warning/50 text-warning' },
 }
 
@@ -229,6 +230,15 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
   const visibleEstimates = (estimates ?? []).filter((e) =>
     sub === 'felt' ? e.quoteVariant === 'felt' : e.quoteVariant !== 'felt',
   )
+  const {
+    page: solarPage,
+    setPage: setSolarPage,
+    totalPages: solarTotalPages,
+    pageItems: solarRows,
+    startIndex: solarStart,
+    endIndex: solarEnd,
+    total: solarTotal,
+  } = usePagination(visibleEstimates, { urlKey: 'solar_page', resetKey: sub })
 
   const confirmEstimate = useCallback(
     async (token: string) => {
@@ -386,7 +396,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
       </div>
 
       {/* ── Sub-tabs: Instant estimate | Felt (spec 2026-06-13) ──── */}
-      <div className="flex flex-wrap gap-px border border-ink-line bg-ink-line">
+      <div className="rounded-card flex flex-wrap gap-px border border-ink-line bg-ink-line">
         <TabButton
           active={sub === 'instant'}
           onClick={() => setSub('instant')}
@@ -403,7 +413,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
 
       {/* Felt setup notice — the sub-tab stays browsable when disabled. */}
       {sub === 'felt' && feltEnabled === false && (
-        <div className="border border-ink-line border-l-4 border-l-warning bg-ink-card px-6 py-5">
+        <div className="rounded-card border border-ink-line border-l-4 border-l-warning bg-ink-card px-6 py-5">
           <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-warning">
             Felt not configured
           </div>
@@ -418,7 +428,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
 
       <>
           {/* Shareable customer entry link + copy button */}
-      <div className="border border-ink-line bg-ink-card p-7 sm:p-9">
+      <div className="rounded-card border border-ink-line bg-ink-card p-7 sm:p-9">
         <div className="flex items-center gap-3 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
           {sub === 'felt' ? (
             <MapIcon className="h-4 w-4" aria-hidden="true" />
@@ -433,13 +443,13 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
             : 'Send this to a customer so they can request a solar estimate.'}
         </p>
         <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
-          <code className="flex-1 break-all border border-ink-line bg-ink-deep px-4 py-3 font-mono text-sm text-text-pri">
+          <code className="rounded-card flex-1 break-all border border-ink-line bg-ink-deep px-4 py-3 font-mono text-sm text-text-pri">
             {resolvedShareUrl}
           </code>
           <button
             type="button"
             onClick={() => void copyLink()}
-            className="inline-flex shrink-0 items-center justify-center gap-2 bg-accent px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press"
+            className="rounded-ctl inline-flex shrink-0 items-center justify-center gap-2 bg-accent px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press"
           >
             {copied ? (
               <>
@@ -459,7 +469,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
       {sub === 'instant' && <PylonHardwareCard accessToken={accessToken} />}
 
       {/* Estimate list */}
-      <div className="border border-ink-line bg-ink-card p-7 sm:p-9">
+      <div className="rounded-card border border-ink-line bg-ink-card p-7 sm:p-9">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
             {sub === 'felt' ? 'Felt estimates' : 'Solar estimates'}
@@ -491,15 +501,16 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
         )}
 
         {!loading && !error && estimates && visibleEstimates.length > 0 && (
+          <>
           <ul className="mt-5 space-y-4">
-            {visibleEstimates.map((e) => {
+            {solarRows.map((e) => {
               const meta = STATUS_META[e.status]
               const busy = !!confirming[e.token]
               const cErr = confirmError[e.token]
               return (
                 <li
                   key={e.token}
-                  className="border border-ink-line bg-ink-deep p-5 sm:p-6"
+                  className="rounded-card border border-ink-line bg-ink-deep p-5 sm:p-6"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -563,7 +574,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                   </div>
 
                   {/* Headline stats */}
-                  <div className="mt-4 grid grid-cols-2 gap-px border border-ink-line bg-ink-line/60 sm:grid-cols-4">
+                  <div className="rounded-card mt-4 grid grid-cols-2 gap-px border border-ink-line bg-ink-line/60 sm:grid-cols-4">
                     <Stat label="System" value={fmtKw(e.systemKw)} />
                     <Stat label="Net (inc GST)" value={fmtMoney(e.netIncGst)} accent />
                     <Stat
@@ -670,7 +681,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                     </p>
                   )}
                   {redraftDone[e.token] && (
-                    <p className="mt-3 text-sm text-emerald-300">
+                    <p className="mt-3 text-sm text-success-bright">
                       {redraftDone[e.token]}
                     </p>
                   )}
@@ -681,7 +692,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                       href={e.quoteUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 border border-ink-line px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent"
+                      className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent"
                     >
                       <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
                       View
@@ -694,7 +705,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                         href={`/api/q/solar/${e.token}/pdf`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 border border-ink-line px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent"
+                        className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent"
                       >
                         <Download className="h-3.5 w-3.5" aria-hidden="true" />
                         PDF
@@ -707,7 +718,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                         href={e.feltMapUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 border border-ink-line px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-teal-glow hover:text-teal-glow"
+                        className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-teal-glow hover:text-teal-glow"
                       >
                         <MapIcon className="h-3.5 w-3.5" aria-hidden="true" />
                         Open in Felt
@@ -718,7 +729,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                         type="button"
                         onClick={() => void confirmEstimate(e.token)}
                         disabled={busy}
-                        className="inline-flex items-center gap-2 bg-accent px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:opacity-60"
+                        className="rounded-ctl inline-flex items-center gap-2 bg-accent px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:opacity-60"
                       >
                         {busy ? 'Releasing…' : 'Confirm & release'}
                       </button>
@@ -772,7 +783,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                               [e.token]: { ...draftFor(e), desiredKw: ev.target.value },
                             }))
                           }
-                          className="w-24 border border-ink-line bg-ink-deep px-3 py-2.5 font-mono text-xs tabular-nums text-text-pri"
+                          className="rounded-card w-24 border border-ink-line bg-ink-deep px-3 py-2.5 font-mono text-xs tabular-nums text-text-pri"
                         />
                         <button
                           type="button"
@@ -785,7 +796,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                             })
                           }}
                           disabled={!!redrafting[e.token]}
-                          className={`inline-flex items-center gap-2 px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] transition-colors disabled:opacity-60 ${
+                          className={`rounded-ctl inline-flex items-center gap-2 px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] transition-colors disabled:opacity-60 ${
                             e.status === 'flagged'
                               ? 'bg-accent text-white hover:bg-accent-press'
                               : 'border border-ink-line text-text-pri hover:border-accent hover:text-accent'
@@ -804,6 +815,16 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
               )
             })}
           </ul>
+          <PaginationControls
+            page={solarPage}
+            totalPages={solarTotalPages}
+            onPageChange={setSolarPage}
+            startIndex={solarStart}
+            endIndex={solarEnd}
+            total={solarTotal}
+            unit="estimates"
+          />
+          </>
         )}
           </div>
       </>

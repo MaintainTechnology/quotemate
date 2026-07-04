@@ -204,14 +204,14 @@ function IngestCard({ token, brandName, brandSlug }: { token: string | null; bra
   )
 
   return (
-    <div className="border border-ink-line bg-ink-card p-6 sm:p-7">
+    <div className="rounded-card border border-ink-line bg-ink-card p-6 sm:p-7">
       <NumberedEyebrow n="01">Upload standards PDF</NumberedEyebrow>
       <h2 className="mt-3 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri">Decipher the rules</h2>
       <p className="mt-2 text-sm leading-relaxed text-text-sec">
         Drop a brand standards PDF — the AI reads it and proposes the photo shots + a tagged rule set.
       </p>
 
-      <label className="mt-5 block cursor-pointer border border-dashed border-ink-line bg-ink-deep px-5 py-6 text-center transition-colors hover:border-accent/60 has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-accent">
+      <label className="rounded-card mt-5 block cursor-pointer border border-dashed border-ink-line bg-ink-deep px-5 py-6 text-center transition-colors hover:border-accent/60 has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-accent">
         <input
           type="file"
           accept="application/pdf"
@@ -238,7 +238,7 @@ function IngestCard({ token, brandName, brandSlug }: { token: string | null; bra
       {err && <p role="alert" className="mt-3 text-sm text-warning-bright">{err}</p>}
 
       {result && (
-        <div className={`mt-5 border border-ink-line bg-ink-deep p-5 ${REVEAL}`}>
+        <div className={`rounded-card mt-5 border border-ink-line bg-ink-deep p-5 ${REVEAL}`}>
           <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-accent">
             {result.applied ? '✓ Saved' : 'AI found'} · {result.rules.length} rule{result.rules.length === 1 ? '' : 's'} ·{' '}
             {result.scored} AI-scorable · {result.shots.length} shot{result.shots.length === 1 ? '' : 's'}
@@ -250,7 +250,7 @@ function IngestCard({ token, brandName, brandSlug }: { token: string | null; bra
               </span>
             ))}
           </div>
-          <div tabIndex={0} role="region" aria-label="Extracted rules" className="mt-3 max-h-56 overflow-auto focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/40">
+          <div tabIndex={0} role="region" aria-label="Extracted rules" className="rounded-ctl mt-3 max-h-56 overflow-auto focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/40">
             {result.rules.slice(0, 30).map((r) => (
               <div key={r.rule_key} className="border-b border-ink-line/60 py-1.5 text-xs leading-relaxed text-text-sec">
                 <span className="font-mono text-[0.62rem] uppercase tracking-[0.1em] text-text-dim">{r.verdict_mode}</span> {r.rule_text}
@@ -330,7 +330,7 @@ function AuditCard({ token, brand, brandSlug }: { token: string | null; brand: B
   }, [token, report, brand])
 
   return (
-    <div className="border border-ink-line bg-ink-card p-6 sm:p-7">
+    <div className="rounded-card border border-ink-line bg-ink-card p-6 sm:p-7">
       <NumberedEyebrow n="02">Upload photos</NumberedEyebrow>
       <h2 className="mt-3 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri">Assess compliance</h2>
       <p className="mt-2 text-sm leading-relaxed text-text-sec">Add a photo per shot; the AI scores them against the rules instantly.</p>
@@ -339,7 +339,7 @@ function AuditCard({ token, brand, brandSlug }: { token: string | null; brand: B
         {(brand?.shots ?? []).map((s) => {
           const picked = files[s.slot]?.length ?? 0
           return (
-            <div key={s.slot} className={`border border-ink-line bg-ink-deep px-4 py-3 ${picked > 0 ? 'border-l-2 border-l-teal-glow/60' : ''}`}>
+            <div key={s.slot} className={`rounded-card border border-ink-line bg-ink-deep px-4 py-3 ${picked > 0 ? 'border-l-2 border-l-teal-glow/60' : ''}`}>
               <div className="flex items-center justify-between gap-2">
                 <span className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-accent">{s.label}</span>
                 {picked > 0 && (
@@ -380,7 +380,7 @@ function AuditCard({ token, brand, brandSlug }: { token: string | null; brand: B
               type="button"
               onClick={() => void downloadPdf()}
               disabled={pdfBusy}
-              className="inline-flex items-center gap-2 border border-ink-line px-4 py-2 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-4 py-2 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
             >
               {pdfBusy ? 'Preparing…' : 'Download PDF ↓'}
             </button>
@@ -396,7 +396,7 @@ function AuditCard({ token, brand, brandSlug }: { token: string | null; brand: B
                 <div className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">{g.group}</div>
                 <div className="mt-1.5 grid gap-1.5">
                   {g.items.map((it) => (
-                    <div key={it.rule_key} className={`flex items-start gap-2.5 border border-ink-line bg-ink-deep px-3 py-2.5 ${railFor(it.state)}`}>
+                    <div key={it.rule_key} className={`rounded-card flex items-start gap-2.5 border border-ink-line bg-ink-deep px-3 py-2.5 ${railFor(it.state)}`}>
                       <StateGlyph state={it.state} />
                       <p className="text-xs leading-relaxed text-text-pri">{it.detail}</p>
                     </div>

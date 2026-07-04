@@ -163,7 +163,7 @@ export default function SignageShotsPage() {
               {shots.map((s, i) => (
                 <div
                   key={i}
-                  className={`grid gap-4 border border-ink-line bg-ink-card p-5 md:grid-cols-[auto_1fr_1fr_2fr_auto] md:items-end ${REVEAL}`}
+                  className={`rounded-card grid gap-4 border border-ink-line bg-ink-card p-5 md:grid-cols-[auto_1fr_1fr_2fr_auto] md:items-end ${REVEAL}`}
                   style={delay(Math.min(i, 8) * 40)}
                 >
                   <span className="hidden font-mono text-3xl font-bold leading-none text-accent md:block md:self-center" aria-hidden="true">

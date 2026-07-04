@@ -155,7 +155,7 @@ const TONE_CHIP: Record<Tone, string> = {
 
 export function Chip({ label, tone, compact }: { label: string; tone: Tone; compact?: boolean }) {
   return (
-    <span className={`inline-flex items-center border px-2.5 py-1 font-mono ${compact ? 'text-[0.62rem]' : 'text-[0.68rem]'} font-semibold uppercase tracking-[0.12em] ${TONE_CHIP[tone]}`}>
+    <span className={`rounded-ctl inline-flex items-center border px-2.5 py-1 font-mono ${compact ? 'text-[0.62rem]' : 'text-[0.68rem]'} font-semibold uppercase tracking-[0.12em] ${TONE_CHIP[tone]}`}>
       {label}
     </span>
   )
@@ -191,7 +191,7 @@ export function railFor(state: 'compliant' | 'fix' | 'review'): string {
 
 export function Stat({ label, value, tone, style }: { label: string; value: number; tone?: Tone; style?: React.CSSProperties }) {
   return (
-    <div className={`border border-ink-line bg-ink-card p-5 ${REVEAL}`} style={style}>
+    <div className={`rounded-card border border-ink-line bg-ink-card p-5 ${REVEAL}`} style={style}>
       <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">{label}</div>
       <div className={`mt-2 font-mono text-3xl font-bold tabular-nums ${tone ? TONE_TEXT[tone] : 'text-text-pri'}`}>{value}</div>
     </div>
@@ -200,7 +200,7 @@ export function Stat({ label, value, tone, style }: { label: string; value: numb
 
 export function Tally({ label, value, tone }: { label: string; value: number; tone: Tone }) {
   return (
-    <div className="border border-ink-line bg-ink-card p-4 text-center">
+    <div className="rounded-card border border-ink-line bg-ink-card p-4 text-center">
       <div className={`font-mono text-3xl font-bold tabular-nums ${TONE_TEXT[tone]}`}>{value}</div>
       <div className="mt-1 font-mono text-[0.64rem] font-semibold uppercase tracking-[0.12em] text-text-dim">{label}</div>
     </div>
@@ -275,7 +275,7 @@ export function FleetSnapshot({
         <Stat label="Needs review" value={rollup.needs_review} tone="accent" style={delay(200)} />
         <Stat label="Awaiting" value={rollup.awaiting} style={delay(250)} />
       </div>
-      <div className={`mt-5 border border-ink-line bg-ink-card p-5 ${REVEAL}`} style={delay(300)}>
+      <div className={`rounded-card mt-5 border border-ink-line bg-ink-card p-5 ${REVEAL}`} style={delay(300)}>
         <div className="mb-3 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">Fleet health</div>
         <ComplianceBar pass={rollup.pass} fix={rollup.fix_needed} review={rollup.needs_review} awaiting={rollup.awaiting} />
       </div>
@@ -297,7 +297,7 @@ export function NumberedEyebrow({ n, children }: { n: string; children: React.Re
 
 export function EmptyState({ title, body, children }: { title: string; body: string; children?: React.ReactNode }) {
   return (
-    <div className="border border-dashed border-ink-line bg-ink-card/50 px-7 py-10 text-center">
+    <div className="rounded-card border border-dashed border-ink-line bg-ink-card/50 px-7 py-10 text-center">
       <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-text-dim">{title}</div>
       <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-text-sec">{body}</p>
       {children && <div className="mt-5 flex justify-center">{children}</div>}
@@ -308,7 +308,7 @@ export function EmptyState({ title, body, children }: { title: string; body: str
 export function Notice({ tone, children }: { tone: Tone; children: React.ReactNode }) {
   const rail = tone === 'good' ? 'border-l-teal-glow' : tone === 'warn' ? 'border-l-warning-bright' : tone === 'accent' ? 'border-l-accent' : 'border-l-ink-line'
   return (
-    <div className={`border border-ink-line border-l-4 ${rail} bg-ink-card p-6`}>
+    <div className={`rounded-card border border-ink-line border-l-4 ${rail} bg-ink-card p-6`}>
       <div className="text-sm leading-relaxed text-text-sec">{children}</div>
     </div>
   )
@@ -349,7 +349,7 @@ export function Lightbox({ src, alt, onClose }: { src: string; alt?: string; onC
         ref={closeRef}
         type="button"
         onClick={onClose}
-        className="absolute right-6 top-6 border border-ink-line bg-ink-card px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent"
+        className="rounded-card absolute right-6 top-6 border border-ink-line bg-ink-card px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent"
       >
         Close ✕
       </button>

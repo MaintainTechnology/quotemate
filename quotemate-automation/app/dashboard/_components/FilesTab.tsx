@@ -22,6 +22,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { FileText, ReceiptText, Download, Eye, Search, Loader2, X, MessageSquare } from 'lucide-react'
 import { CommentsThread } from '../../_components/CommentsThread'
+import { PaginationControls, usePagination } from './Pagination'
 
 type FileDoc = {
   id: string
@@ -110,6 +111,15 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
 
   // Comments drawer state
   const [commentsDoc, setCommentsDoc] = useState<FileDoc | null>(null)
+  const {
+    page: docPage,
+    setPage: setDocPage,
+    totalPages: docTotalPages,
+    pageItems: docRows,
+    startIndex: docStart,
+    endIndex: docEnd,
+    total: docTotal,
+  } = usePagination(docs ?? [], { urlKey: 'files_page' })
 
   useEffect(() => {
     if (!accessToken) return
@@ -328,13 +338,13 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="e.g. What did I charge for a hot water system?"
-              className="w-full border border-ink-line bg-ink-card py-2.5 pl-9 pr-3 text-sm text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none"
+              className="rounded-ctl w-full border border-ink-line bg-ink-card py-2.5 pl-9 pr-3 text-sm text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none"
             />
           </div>
           <button
             type="submit"
             disabled={asking || !query.trim()}
-            className="inline-flex items-center gap-2 bg-accent px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press disabled:opacity-50"
+            className="rounded-ctl inline-flex items-center gap-2 bg-accent px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press disabled:opacity-50"
           >
             {asking ? <Loader2 size={14} className="animate-spin" /> : null}
             {asking ? 'Searching…' : 'Ask'}
@@ -348,7 +358,7 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
         )}
 
         {answer && (
-          <div className="mt-5 border border-ink-line bg-ink-card p-5">
+          <div className="rounded-card mt-5 border border-ink-line bg-ink-card p-5">
             <p className="whitespace-pre-wrap text-sm leading-relaxed text-text-pri">
               {answer.answer}
             </p>
@@ -413,7 +423,7 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
         {loading ? (
           <div className="mt-8 text-sm text-text-dim">Loading…</div>
         ) : !docs || docs.length === 0 ? (
-          <div className="mt-8 border border-ink-line bg-ink-card p-8 text-center">
+          <div className="rounded-card mt-8 border border-ink-line bg-ink-card p-8 text-center">
             <FileText size={24} className="mx-auto text-text-dim" aria-hidden="true" />
             <p className="mt-3 text-sm text-text-sec">
               No documents yet. Quotes are archived automatically as your AI
@@ -421,8 +431,9 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
             </p>
           </div>
         ) : (
-          <ul className="mt-6 divide-y divide-ink-line border border-ink-line bg-ink-card">
-            {docs.map((doc) => {
+          <>
+          <ul className="rounded-card mt-6 divide-y divide-ink-line border border-ink-line bg-ink-card">
+            {docRows.map((doc) => {
               const Icon = doc.source_kind === 'invoice' ? ReceiptText : FileText
               const size = fmtBytes(doc.bytes)
               return (
@@ -464,7 +475,7 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
                     <button
                       type="button"
                       onClick={() => view(doc)}
-                      className="inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+                      className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
                     >
                       <Eye size={13} />
                       View
@@ -473,7 +484,7 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
                       type="button"
                       onClick={() => download(doc)}
                       disabled={downloading === doc.id}
-                      className="inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+                      className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
                     >
                       {downloading === doc.id ? (
                         <Loader2 size={13} className="animate-spin" />
@@ -485,7 +496,7 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
                     <button
                       type="button"
                       onClick={() => setCommentsDoc(doc)}
-                      className="inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+                      className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
                     >
                       <MessageSquare size={13} />
                       Comments{doc.comment_count ? ` (${doc.comment_count})` : ''}
@@ -501,6 +512,16 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
               )
             })}
           </ul>
+          <PaginationControls
+            page={docPage}
+            totalPages={docTotalPages}
+            onPageChange={setDocPage}
+            startIndex={docStart}
+            endIndex={docEnd}
+            total={docTotal}
+            unit="documents"
+          />
+          </>
         )}
       </section>
     </div>
@@ -516,7 +537,7 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="mx-auto flex h-full w-full max-w-5xl flex-col border border-ink-line bg-ink-card shadow-2xl"
+            className="rounded-card mx-auto flex h-full w-full max-w-5xl flex-col border border-ink-line bg-ink-card shadow-2xl"
           >
             {/* Header: title + download + close */}
             <div className="flex items-center justify-between gap-3 border-b border-ink-line px-4 py-3">
@@ -535,7 +556,7 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
                   type="button"
                   onClick={() => download(viewerDoc)}
                   disabled={downloading === viewerDoc.id}
-                  className="inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+                  className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
                 >
                   {downloading === viewerDoc.id ? (
                     <Loader2 size={13} className="animate-spin" />
@@ -580,7 +601,7 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
                     <button
                       type="button"
                       onClick={() => download(viewerDoc)}
-                      className="inline-flex items-center gap-1.5 bg-accent px-4 py-2 text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press"
+                      className="rounded-ctl inline-flex items-center gap-1.5 bg-accent px-4 py-2 text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press"
                     >
                       <Download size={13} /> Download instead
                     </button>
@@ -617,7 +638,7 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
                       <button
                         type="button"
                         onClick={() => download(viewerDoc)}
-                        className="inline-flex items-center gap-1.5 bg-accent px-4 py-2 text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press"
+                        className="rounded-ctl inline-flex items-center gap-1.5 bg-accent px-4 py-2 text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press"
                       >
                         <Download size={13} /> Download instead
                       </button>

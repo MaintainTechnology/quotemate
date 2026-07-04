@@ -167,7 +167,7 @@ export default function MarketingPage() {
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <span className="font-mono text-sm text-text-dim">{origin}/t/</span>
               <input value={slugInput} onChange={(e) => setSlugInput(e.target.value)} placeholder="atomic-electrical"
-                className="bg-ink-deep border border-ink-line px-3 py-2 font-mono text-sm text-text-pri focus:border-accent focus:outline-none" />
+                className="rounded-ctl bg-ink-deep border border-ink-line px-3 py-2 font-mono text-sm text-text-pri focus:border-accent focus:outline-none" />
               <button type="button" onClick={saveSlug} disabled={slugSaving} className={GHOST}>
                 {slugSaving ? 'Saving…' : 'Save'}
               </button>

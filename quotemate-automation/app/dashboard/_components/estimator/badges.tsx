@@ -10,7 +10,7 @@ export function ConfidenceBadge({ confidence }: { confidence: Confidence }) {
   }
   return (
     <span
-      className={`inline-flex border px-1.5 py-0.5 font-mono text-[0.6rem] font-semibold uppercase tracking-[0.12em] ${styles[confidence]}`}
+      className={`rounded-ctl inline-flex border px-1.5 py-0.5 font-mono text-[0.6rem] font-semibold uppercase tracking-[0.12em] ${styles[confidence]}`}
     >
       {confidence}
     </span>
@@ -28,7 +28,7 @@ export function RunStatusChip({ status }: { status: RunStatus }) {
   const s = STATUS_STYLES[status]
   return (
     <span
-      className={`inline-flex border px-2 py-0.5 font-mono text-[0.62rem] font-semibold uppercase tracking-[0.12em] ${s.cls}`}
+      className={`rounded-ctl inline-flex border px-2 py-0.5 font-mono text-[0.62rem] font-semibold uppercase tracking-[0.12em] ${s.cls}`}
     >
       {s.label}
     </span>

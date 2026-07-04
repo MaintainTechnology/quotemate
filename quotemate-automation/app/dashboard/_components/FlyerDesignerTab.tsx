@@ -376,7 +376,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
                 key={t.id}
                 disabled={busy}
                 onClick={() => createFromTemplate(t.id)}
-                className="group flex flex-col items-start gap-3 border border-ink-line bg-ink-card p-5 text-left transition-colors hover:border-accent disabled:opacity-50"
+                className="rounded-card group flex flex-col items-start gap-3 border border-ink-line bg-ink-card p-5 text-left transition-colors hover:border-accent disabled:opacity-50"
               >
                 <span className="font-extrabold uppercase tracking-[-0.01em] text-lg text-text-pri">{t.name}</span>
                 <span className="text-sm leading-relaxed text-text-sec">{t.description}</span>
@@ -438,7 +438,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="min-w-0 flex-1 border border-ink-line bg-ink-card px-3 py-2 text-text-pri"
+          className="rounded-card min-w-0 flex-1 border border-ink-line bg-ink-card px-3 py-2 text-text-pri"
           placeholder="Flyer name"
         />
         <button onClick={saveFlyer} disabled={saving} className={btnAccent}>{saving ? 'Saving…' : 'Save'}</button>
@@ -447,7 +447,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
 
       <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
         {/* Canvas */}
-        <div className="border border-ink-line bg-ink-card p-4">
+        <div className="rounded-card border border-ink-line bg-ink-card p-4">
           {doc && (
             <FlyerCanvasEditor
               document={doc}
@@ -461,7 +461,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
 
         {/* Properties + tools */}
         <div className="space-y-5">
-          <div className="space-y-2 border border-ink-line bg-ink-card p-4">
+          <div className="rounded-card space-y-2 border border-ink-line bg-ink-card p-4">
             <p className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-text-dim">Add</p>
             <div className="flex flex-wrap gap-2">
               <button onClick={addText} className={btnPlain}>+ Text</button>
@@ -482,7 +482,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
           </div>
 
           {/* QR helper */}
-          <div className="space-y-3 border border-ink-line bg-ink-card p-4">
+          <div className="rounded-card space-y-3 border border-ink-line bg-ink-card p-4">
             <p className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-text-dim">QR code</p>
             {qrAction === 'generate' ? (
               <>
@@ -511,7 +511,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
           </div>
 
           {/* Selected element properties */}
-          <div className="space-y-3 border border-ink-line bg-ink-card p-4">
+          <div className="rounded-card space-y-3 border border-ink-line bg-ink-card p-4">
             <p className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-text-dim">Selected element</p>
             {!selected ? (
               <p className="text-sm text-text-dim">Click an element on the canvas to edit it.</p>
@@ -523,7 +523,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
                       <textarea
                         value={selected.text}
                         onChange={(e) => patchSelected({ text: e.target.value })}
-                        className="mt-1 w-full border border-ink-line bg-ink-deep px-2 py-1 text-sm text-text-pri"
+                        className="rounded-ctl mt-1 w-full border border-ink-line bg-ink-deep px-2 py-1 text-sm text-text-pri"
                         rows={2}
                       />
                     </label>
@@ -531,7 +531,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
                       <select
                         value={selected.fontFamily}
                         onChange={(e) => patchSelected({ fontFamily: e.target.value })}
-                        className="mt-1 w-full border border-ink-line bg-ink-deep px-2 py-1 text-sm text-text-pri"
+                        className="rounded-ctl mt-1 w-full border border-ink-line bg-ink-deep px-2 py-1 text-sm text-text-pri"
                       >
                         {FLYER_FONTS.map((f) => <option key={f} value={f}>{f}</option>)}
                       </select>
@@ -544,7 +544,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
                           max={200}
                           value={selected.fontSize}
                           onChange={(e) => patchSelected({ fontSize: Number(e.target.value) || 12 })}
-                          className="mt-1 w-full border border-ink-line bg-ink-deep px-2 py-1 text-sm text-text-pri"
+                          className="rounded-ctl mt-1 w-full border border-ink-line bg-ink-deep px-2 py-1 text-sm text-text-pri"
                         />
                       </label>
                       <label className="block text-xs text-text-dim">Colour
@@ -552,7 +552,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
                           type="color"
                           value={selected.fill}
                           onChange={(e) => patchSelected({ fill: e.target.value })}
-                          className="mt-1 block h-8 w-12 border border-ink-line bg-ink-deep"
+                          className="rounded-card mt-1 block h-8 w-12 border border-ink-line bg-ink-deep"
                         />
                       </label>
                     </div>
@@ -560,7 +560,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
                       <select
                         value={selected.align ?? 'left'}
                         onChange={(e) => patchSelected({ align: e.target.value as 'left' | 'center' | 'right' })}
-                        className="mt-1 w-full border border-ink-line bg-ink-deep px-2 py-1 text-sm text-text-pri"
+                        className="rounded-ctl mt-1 w-full border border-ink-line bg-ink-deep px-2 py-1 text-sm text-text-pri"
                       >
                         <option value="left">Left</option>
                         <option value="center">Center</option>
@@ -575,7 +575,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
                       type="color"
                       value={selected.fill}
                       onChange={(e) => patchSelected({ fill: e.target.value })}
-                      className="mt-1 block h-8 w-12 border border-ink-line bg-ink-deep"
+                      className="rounded-card mt-1 block h-8 w-12 border border-ink-line bg-ink-deep"
                     />
                   </label>
                 )}

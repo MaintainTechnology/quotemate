@@ -70,6 +70,11 @@ export default function PricingWizardPage() {
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [info, setInfo] = useState<string | null>(null)
+  // ?trade=<slug> (from a trade hub's wizard link) scopes the whole wizard
+  // to one trade: its rate-card row, its services, its brand categories.
+  // Null = the legacy tenant-wide wizard. Validated against the tenant's
+  // actual trades once the profile loads; an unknown slug is ignored.
+  const [tradeScope, setTradeScope] = useState<string | null>(null)
 
   // Step-1 state — rate card
   const [hourly, setHourly] = useState('')
@@ -117,17 +122,42 @@ export default function PricingWizardPage() {
           trade: data.tenant?.trade ?? null,
           trades: data.tenant?.trades ?? null,
         }
-        const pricingRows = (data.pricing_by_trade ?? data.pricing ?? []) as Array<{
+        // ?trade=<slug> — honoured only when the slug is one of the
+        // tenant's trades; otherwise fall back to the tenant-wide wizard.
+        const wantTrade =
+          new URLSearchParams(window.location.search).get('trade')?.toLowerCase() ?? null
+        const tenantTradeSlugs = (
+          tenant.trades && tenant.trades.length > 0
+            ? tenant.trades
+            : tenant.trade
+              ? [tenant.trade]
+              : []
+        ).map((t) => t.toLowerCase())
+        const scope = wantTrade && tenantTradeSlugs.includes(wantTrade) ? wantTrade : null
+        setTradeScope(scope)
+
+        // GET /api/tenant/me returns `pricing_books` (one row per trade)
+        // plus a legacy `pricing` single object (= pricing_books[0]).
+        // Read the array so a ?trade= run can pick ITS OWN trade's row.
+        const pricingRows = (Array.isArray(data.pricing_books)
+          ? data.pricing_books
+          : data.pricing
+            ? [data.pricing]
+            : []) as Array<{
+          trade?: string | null
           hourly_rate?: number | string | null
           call_out_minimum?: number | string | null
           default_markup_pct?: number | string | null
           after_hours_multiplier?: number | string | null
         }>
-        // Use the first pricing row (legacy /api/tenant/me may return a
-        // single object; for cross-trade tenants we show one shared rate
-        // card — the dashboard's per-trade editing remains the place to
-        // diverge them later).
-        const first = Array.isArray(pricingRows) ? pricingRows[0] : pricingRows
+        // Scoped run: prefill ONLY from the scoped trade's row — never
+        // fall back to another trade's book, or the tradie would accept
+        // e.g. electrical rates as their plumbing rates and overwrite the
+        // plumbing book on finish. No row = empty rate card.
+        // Unscoped run: first row (legacy tenant-wide behaviour).
+        const first = scope
+          ? pricingRows.find((r) => (r.trade ?? '').toLowerCase() === scope)
+          : pricingRows[0]
         const pricing = {
           hourly_rate: numOrNull(first?.hourly_rate),
           call_out_minimum: numOrNull(first?.call_out_minimum),
@@ -192,14 +222,21 @@ export default function PricingWizardPage() {
     }
   }, [token])
 
-  const tradeList = (loaded?.tenant.trades && loaded.tenant.trades.length > 0
-    ? loaded.tenant.trades
-    : loaded?.tenant.trade
-      ? [loaded.tenant.trade]
-      : []) as string[]
+  const tradeList = (tradeScope
+    ? [tradeScope]
+    : loaded?.tenant.trades && loaded.tenant.trades.length > 0
+      ? loaded.tenant.trades
+      : loaded?.tenant.trade
+        ? [loaded.tenant.trade]
+        : []) as string[]
 
   const categories: WizardCategory[] = categoriesForTrades(tradeList)
   const quickFillBrands: string[] = commonBrandsForTrades(tradeList)
+
+  // Step-2 list — scoped to one trade when ?trade= is set.
+  const visibleAssemblies = (loaded?.assemblies ?? []).filter(
+    (a) => !tradeScope || a.trade.toLowerCase() === tradeScope,
+  )
 
   /** Stamp `brand` onto every visible category. Overwrites whatever the
    *  tradie has typed — that's the literal "fill all" semantics. They
@@ -264,6 +301,40 @@ export default function PricingWizardPage() {
         setError('Nothing to save — fill in at least the rate card.')
         return
       }
+      if (tradeScope) {
+        // Trade-scoped run — never touch the other trades' books, services
+        // or brands. The rate card goes to this trade's pricing_book row
+        // only (pricing_by_trade), and the toggle/brand maps are filtered
+        // to this trade's assemblies/categories.
+        if (body.pricing) {
+          body.pricing_by_trade = { [tradeScope]: body.pricing }
+          delete body.pricing
+        }
+        if (body.services) {
+          const allowed = new Set(visibleAssemblies.map((a) => a.id))
+          const scoped = Object.fromEntries(
+            Object.entries(body.services as Record<string, boolean>).filter(([id]) =>
+              allowed.has(id),
+            ),
+          )
+          if (Object.keys(scoped).length > 0) body.services = scoped
+          else delete body.services
+        }
+        if (body.material_preferences) {
+          const allowedCats = new Set(categoriesForTrades([tradeScope]).map((c) => c.slug))
+          const scoped = Object.fromEntries(
+            Object.entries(body.material_preferences as Record<string, string | null>).filter(
+              ([cat]) => allowedCats.has(cat),
+            ),
+          )
+          if (Object.keys(scoped).length > 0) body.material_preferences = scoped
+          else delete body.material_preferences
+        }
+        if (Object.keys(body).length === 0) {
+          setError('Nothing to save for this trade — fill in at least the rate card.')
+          return
+        }
+      }
       const res = await fetch('/api/tenant/me', {
         method: 'PATCH',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${t}` },
@@ -275,9 +346,12 @@ export default function PricingWizardPage() {
         return
       }
       setInfo('Saved. Redirecting to your dashboard…')
-      // Brief pause so the success message is visible.
+      // Brief pause so the success message is visible. A trade-scoped run
+      // lands back on that trade's hub tab.
       setTimeout(() => {
-        window.location.href = '/dashboard?welcome=1'
+        window.location.href = tradeScope
+          ? `/dashboard?welcome=1&tab=hub-${tradeScope}`
+          : '/dashboard?welcome=1'
       }, 800)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -318,6 +392,11 @@ export default function PricingWizardPage() {
           rate card, the jobs you do, and your preferred brands — and the
           AI will use them straight away when customers text you.
         </p>
+        {tradeScope && (
+          <p className="mt-3 font-mono text-[0.65rem] font-bold uppercase tracking-[0.16em] text-accent">
+            Scoped to your {tradeScope.replace(/_/g, ' ')} trade only
+          </p>
+        )}
       </header>
 
       <StepRail current={step} />
@@ -383,16 +462,16 @@ export default function PricingWizardPage() {
             — they won&apos;t end up on a quote you can&apos;t deliver.
           </p>
 
-          {loaded.assemblies.length === 0 ? (
+          {visibleAssemblies.length === 0 ? (
             <p className="mt-5 text-sm text-text-dim">
               No services in your trade catalogue yet — talk to QuoteMax support.
             </p>
           ) : (
             <div className="mt-5 grid gap-2 sm:grid-cols-2">
-              {loaded.assemblies.map((a) => (
+              {visibleAssemblies.map((a) => (
                 <label
                   key={a.id}
-                  className="flex cursor-pointer items-start gap-3 border border-ink-line bg-ink-deep px-4 py-3 hover:border-text-dim"
+                  className="rounded-card flex cursor-pointer items-start gap-3 border border-ink-line bg-ink-deep px-4 py-3 hover:border-text-dim"
                 >
                   <input
                     type="checkbox"
@@ -438,13 +517,14 @@ export default function PricingWizardPage() {
 
           {categories.length === 0 ? (
             <p className="mt-5 text-sm text-text-dim">
-              Your trade isn&apos;t set yet — finish without brand prefs
-              and update on the dashboard later.
+              {tradeScope
+                ? `No brand preferences to set for your ${tradeScope.replace(/_/g, ' ')} trade yet — just save and finish.`
+                : 'Your trade isn’t set yet — finish without brand prefs and update on the dashboard later.'}
             </p>
           ) : (
             <>
               {quickFillBrands.length > 0 && (
-                <div className="mt-5 flex flex-wrap items-center gap-2 border border-ink-line bg-ink-deep px-4 py-3">
+                <div className="rounded-card mt-5 flex flex-wrap items-center gap-2 border border-ink-line bg-ink-deep px-4 py-3">
                   <span className="mr-2 font-mono text-[0.65rem] uppercase tracking-[0.12em] text-text-dim">
                     Fill all with
                   </span>
@@ -453,7 +533,7 @@ export default function PricingWizardPage() {
                       key={brand}
                       type="button"
                       onClick={() => fillAllBrands(brand)}
-                      className="border border-ink-line bg-ink-card px-3 py-1.5 text-xs font-semibold text-text-pri transition-colors hover:border-accent hover:text-accent"
+                      className="rounded-card border border-ink-line bg-ink-card px-3 py-1.5 text-xs font-semibold text-text-pri transition-colors hover:border-accent hover:text-accent"
                     >
                       {brand}
                     </button>
@@ -478,7 +558,7 @@ export default function PricingWizardPage() {
                         setBrands((b) => ({ ...b, [c.slug]: e.target.value }))
                       }
                       placeholder="e.g. Clipsal"
-                      className="mt-1 block w-full border border-ink-line bg-ink-card px-3 py-2 text-sm text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none"
+                      className="rounded-ctl mt-1 block w-full border border-ink-line bg-ink-card px-3 py-2 text-sm text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none"
                     />
                   </label>
                 ))}
@@ -530,7 +610,7 @@ function Layout({ children }: { children: React.ReactNode }) {
 
 function StepRail({ current }: { current: StepIndex }) {
   return (
-    <ol className="mt-10 grid grid-cols-3 gap-px border border-ink-line bg-ink-line">
+    <ol className="rounded-card mt-10 grid grid-cols-3 gap-px border border-ink-line bg-ink-line">
       {STEP_LABELS.map((label, i) => {
         const state = i < current ? 'done' : i === current ? 'current' : 'upcoming'
         return (
@@ -576,7 +656,7 @@ function StepCard({
   children: React.ReactNode
 }) {
   return (
-    <section className="mt-8 border border-ink-line bg-ink-card">
+    <section className="rounded-card mt-8 border border-ink-line bg-ink-card">
       <header className="flex items-center gap-5 border-b border-ink-line px-6 py-5 md:px-8">
         <span className="font-mono text-4xl font-bold leading-none text-accent md:text-5xl">
           {n}
@@ -624,7 +704,7 @@ function NumberInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="mt-1 block w-full border border-ink-line bg-ink-card px-3 py-2 text-sm text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none"
+        className="rounded-ctl mt-1 block w-full border border-ink-line bg-ink-card px-3 py-2 text-sm text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none"
       />
       {hint && (
         <span className="mt-1 block font-mono text-[0.65rem] text-text-dim">

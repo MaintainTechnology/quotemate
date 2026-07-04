@@ -150,7 +150,7 @@ export function PaintRatesEditor({ accessToken }: Props) {
 
   if (!hasPricingBook) {
     return (
-      <div className="border border-ink-line bg-ink-card p-6">
+      <div className="rounded-card border border-ink-line bg-ink-card p-6">
         <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-warning">
           Paint rates · pricing book missing
         </div>
@@ -163,7 +163,7 @@ export function PaintRatesEditor({ accessToken }: Props) {
   }
 
   return (
-    <form onSubmit={save} className="border border-ink-line bg-ink-card p-7 sm:p-8" aria-busy={loading || saving}>
+    <form onSubmit={save} className="rounded-card border border-ink-line bg-ink-card p-7 sm:p-8" aria-busy={loading || saving}>
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
           <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">Paint rates</div>
@@ -177,7 +177,7 @@ export function PaintRatesEditor({ accessToken }: Props) {
       </div>
 
       {errMsg && (
-        <div className="mt-5 border border-ink-line border-l-4 border-l-warning bg-ink-deep px-4 py-3">
+        <div className="rounded-card mt-5 border border-ink-line border-l-4 border-l-warning bg-ink-deep px-4 py-3">
           <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-warning">Could not save</div>
           <p className="mt-1 text-sm text-text-sec">{errMsg}</p>
         </div>
@@ -219,7 +219,7 @@ export function PaintRatesEditor({ accessToken }: Props) {
         </label>
         <label className="block">
           <FieldLabel>GST registered</FieldLabel>
-          <select aria-label="GST registered" value={gstMode} onChange={(e) => setGstMode(e.target.value as '' | 'true' | 'false')} disabled={loading || saving} className="mt-2 w-full border border-ink-line bg-ink-deep px-4 py-3 font-mono text-base text-text-pri focus:border-accent focus:outline-none">
+          <select aria-label="GST registered" value={gstMode} onChange={(e) => setGstMode(e.target.value as '' | 'true' | 'false')} disabled={loading || saving} className="rounded-ctl mt-2 w-full border border-ink-line bg-ink-deep px-4 py-3 font-mono text-base text-text-pri focus:border-accent focus:outline-none">
             <option value="">{defaults ? `Default — ${defaults.gst_registered ? 'Yes' : 'No'}` : '—'}</option>
             <option value="true">Yes — add 10% GST</option>
             <option value="false">No — inc-GST equals ex-GST</option>
@@ -229,7 +229,7 @@ export function PaintRatesEditor({ accessToken }: Props) {
       </div>
 
       <div className="mt-7 flex flex-wrap items-center gap-4 pt-2">
-        <button type="submit" disabled={loading || saving || !accessToken} className="inline-flex items-center gap-2 bg-accent px-6 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50">
+        <button type="submit" disabled={loading || saving || !accessToken} className="rounded-ctl inline-flex items-center gap-2 bg-accent px-6 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50">
           {saving ? (<><span className="inline-block h-3.5 w-3.5 animate-spin border-2 border-white/40 border-t-white" aria-hidden="true" /> Saving…</>) : (<>Save rates <span aria-hidden="true">&rarr;</span></>)}
         </button>
         <button type="button" onClick={() => { setRates({ walls: '', ceilings: '', trim: '', exterior: '' }); setDoubleStorey(''); setPremium(''); setGoodFrac(''); setColourExtra(''); setCallOut(''); setGstMode('') }} disabled={loading || saving} className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim hover:text-accent disabled:opacity-50">
@@ -268,7 +268,7 @@ function UnitInput({ value, onChange, placeholder, unit, disabled, hasError, ari
   return (
     <div className="relative mt-2">
       <span aria-hidden="true" className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 font-mono text-base text-text-dim">$</span>
-      <input type="number" inputMode="decimal" min={0} step={1} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} disabled={disabled} aria-label={ariaLabel} className={`w-full border bg-ink-deep px-8 py-3 font-mono text-base text-text-pri placeholder:text-text-dim focus:outline-none ${hasError ? 'border-warning' : 'border-ink-line focus:border-accent'}`} />
+      <input type="number" inputMode="decimal" min={0} step={1} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} disabled={disabled} aria-label={ariaLabel} className={`rounded-ctl w-full border bg-ink-deep px-8 py-3 font-mono text-base text-text-pri placeholder:text-text-dim focus:outline-none ${hasError ? 'border-warning' : 'border-ink-line focus:border-accent'}`} />
       <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-xs text-text-dim">/{unit}</span>
     </div>
   )
@@ -279,7 +279,7 @@ function PctInput({ label, value, onChange, defaultValue, error, disabled, hint 
     <label className="block">
       <FieldLabel>{label}</FieldLabel>
       <div className="relative mt-2">
-        <input type="number" inputMode="decimal" min={0} step={1} value={value} onChange={(e) => onChange(e.target.value)} placeholder={defaultValue !== null ? String(Math.round(defaultValue)) : ''} disabled={disabled} aria-label={label} className={`w-full border bg-ink-deep px-4 py-3 pr-10 font-mono text-base text-text-pri placeholder:text-text-dim focus:outline-none ${error ? 'border-warning' : 'border-ink-line focus:border-accent'}`} />
+        <input type="number" inputMode="decimal" min={0} step={1} value={value} onChange={(e) => onChange(e.target.value)} placeholder={defaultValue !== null ? String(Math.round(defaultValue)) : ''} disabled={disabled} aria-label={label} className={`rounded-ctl w-full border bg-ink-deep px-4 py-3 pr-10 font-mono text-base text-text-pri placeholder:text-text-dim focus:outline-none ${error ? 'border-warning' : 'border-ink-line focus:border-accent'}`} />
         <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-sm text-text-dim">%</span>
       </div>
       <Caption error={error} defaultHint={defaultValue !== null ? `Default ${Math.round(defaultValue)}% · ${hint}` : hint} />

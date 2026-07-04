@@ -13,8 +13,6 @@
 'use client'
 
 import { useEffect, useState, useCallback, Fragment } from 'react'
-import Link from 'next/link'
-import { BrandMark } from '@/app/_components/BrandMark'
 import {
   INPUT, EYEBROW, PRIMARY, GHOST, TH,
   authHeader, Stat, Section, Panel, Field, TableShell, StatusPill, ActionBtn,
@@ -187,21 +185,9 @@ export default function AdminInvitesPage() {
              style={{ backgroundImage: 'linear-gradient(#2D3A4F 1px, transparent 1px), linear-gradient(90deg, #2D3A4F 1px, transparent 1px)', backgroundSize: '64px 64px' }} />
       </div>
 
-      {/* nav */}
-      <nav className="relative z-10 border-b border-ink-line">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-5">
-          <div className="flex items-center gap-2.5 font-mono text-[0.75rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
-            <BrandMark className="h-10 w-10" />
-            <span>QuoteMax</span>
-            <span className="text-ink-line">/</span>
-            <span className="text-text-pri">Admin</span>
-          </div>
-          <Link href="/admin" className="flex items-center gap-2 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-text-pri">
-            <span aria-hidden>←</span> Admin
-          </Link>
-        </div>
-      </nav>
-
+      {/* The persistent admin nav (brand + Admin breadcrumb + Back to
+          dashboard) now lives in app/admin/layout.tsx, which wraps every
+          /admin/* route — so no per-page nav here. */}
       <div className="relative z-10 mx-auto max-w-5xl px-6 pb-24 pt-14 md:pt-20">
         {/* hero header */}
         <header className="mt-up" style={{ animationDelay: '0ms' }}>

@@ -80,7 +80,7 @@ export default function AuthNav({ variant = 'nav' }: { variant?: Variant }) {
     // Sign-in lives in the nav. Square, focus-ringed, with an arrow that
     // nudges forward on hover.
     const heroPrimary =
-      'group inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-7 py-4 text-sm uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep'
+      'group inline-flex items-center gap-2 rounded-lg bg-accent hover:bg-accent-press text-white font-semibold px-7 py-4 text-sm uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep'
     return authed ? (
       <Link href="/dashboard" className={heroPrimary}>
         Open my dashboard
@@ -103,7 +103,7 @@ export default function AuthNav({ variant = 'nav' }: { variant?: Variant }) {
     <>
       <Link
         href="/dashboard"
-        className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold min-h-11 md:min-h-0 px-4 py-2.5 text-xs uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
+        className="inline-flex items-center gap-2 rounded-lg bg-accent hover:bg-accent-press text-white font-semibold min-h-11 md:min-h-0 px-4 py-2.5 text-xs uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
       >
         Dashboard
         <Arrow />
@@ -127,7 +127,7 @@ export default function AuthNav({ variant = 'nav' }: { variant?: Variant }) {
       </Link>
       <Link
         href="/signup"
-        className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold min-h-11 md:min-h-0 px-4 py-2.5 text-xs uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
+        className="inline-flex items-center gap-2 rounded-lg bg-accent hover:bg-accent-press text-white font-semibold min-h-11 md:min-h-0 px-4 py-2.5 text-xs uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
       >
         Get started
         <Arrow />

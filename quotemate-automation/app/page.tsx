@@ -10,6 +10,7 @@
 // PricingTiers client island.
 
 import Link from "next/link"
+import Image from "next/image"
 import AuthNav from "./AuthNav"
 import { Reveal } from "./_components/Reveal"
 import {
@@ -65,6 +66,7 @@ export default function Home() {
       <BuiltForAustralia />
       <Faq />
       <ClosingCta />
+      <AppDownload />
       <Footer />
       <MarqueeBar />
       <CookieConsent />
@@ -86,12 +88,12 @@ function Hero() {
       <div className="relative z-10 mx-auto grid max-w-[88rem] items-center gap-12 px-6 py-20 md:py-28 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16">
         <div>
           <div className={`mb-5 ${RISE}`}>
-            <span className="inline-flex items-center gap-2 border border-ink-line bg-ink/40 px-3 py-1.5 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-text-sec">
+            <span className="inline-flex items-center gap-2 rounded-md border border-ink-line bg-ink/40 px-3 py-1.5 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-text-sec">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/brand/au-flag.svg"
                 alt="Australia"
-                className="h-3.5 w-auto border border-ink-line/60"
+                className="h-3.5 w-auto rounded-sm border border-ink-line/60"
               />
               Built for Australian tradies
             </span>
@@ -122,7 +124,7 @@ function Hero() {
             <AuthNav variant="hero" />
             <a
               href="#how"
-              className="inline-flex items-center gap-2 border border-ink-line bg-transparent px-7 py-4 text-sm font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-text-dim hover:bg-ink-card focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
+              className="inline-flex items-center gap-2 rounded-lg border border-ink-line bg-transparent px-7 py-4 text-sm font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-text-dim hover:bg-ink-card focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
             >
               See how it works
             </a>
@@ -150,12 +152,13 @@ function Hero() {
               src="/marketing/trade-solar.jpg"
               alt="Two installers fitting solar panels on a rooftop array"
               caption="Solar"
+              position="center 15%"
             />
           </div>
         </div>
 
         <div
-          className={`self-center ${RISE}`}
+          className={`self-start ${RISE}`}
           style={{ animationDelay: "300ms" }}
         >
           <SmsDemo />
@@ -172,14 +175,17 @@ function HeroTile({
   alt,
   caption,
   priority = false,
+  position,
 }: {
   src: string
   alt: string
   caption: string
   priority?: boolean
+  /** object-position override so a face isn't clipped by the tall crop. */
+  position?: string
 }) {
   return (
-    <figure className="edge-lit relative border border-ink-line">
+    <figure className="edge-lit relative overflow-hidden rounded-xl border border-ink-line">
       <DuotoneImage
         src={src}
         alt={alt}
@@ -187,6 +193,7 @@ function HeroTile({
         sizes="(max-width: 1024px) 30vw, 16vw"
         priority={priority}
         tone="hero"
+        position={position}
       />
       <figcaption className="photo-caption absolute inset-x-0 bottom-0 px-2.5 pb-2 pt-6 font-mono text-[0.6rem] font-semibold uppercase tracking-[0.16em] text-white">
         {caption}
@@ -283,7 +290,7 @@ function TrustChip({
   children: React.ReactNode
 }) {
   return (
-    <li className="inline-flex items-center gap-2 border border-ink-line px-3 py-1.5 font-mono text-[0.7rem] uppercase tracking-[0.1em] text-text-dim">
+    <li className="inline-flex items-center gap-2 rounded-md border border-ink-line px-3 py-1.5 font-mono text-[0.7rem] uppercase tracking-[0.1em] text-text-dim">
       {icon ? (
         <span className="text-accent-soft" aria-hidden="true">
           {icon}
@@ -308,7 +315,7 @@ function HowItWorks() {
           </h2>
         </Reveal>
 
-        <div className="mt-14 grid items-start gap-10 lg:grid-cols-[1.4fr_1fr] lg:gap-14">
+        <div className="mt-14 grid items-stretch gap-10 lg:grid-cols-[1.4fr_1fr] lg:gap-14">
           {/* The spine sits behind the number column and connects the steps. */}
           <div className="relative grid gap-4">
             <div
@@ -341,12 +348,12 @@ function HowItWorks() {
           {/* A real tradesperson at the bench — the quoting runs itself so the
               work stays where it belongs. Hidden on small screens to keep the
               timeline the focus. */}
-          <Reveal delay={120} className="hidden lg:block">
-            <figure className="edge-lit relative border border-ink-line">
+          <Reveal delay={120} className="hidden h-full lg:block">
+            <figure className="edge-lit relative h-full overflow-hidden rounded-2xl border border-ink-line">
               <DuotoneImage
                 src="/marketing/trade-carpentry.jpg"
                 alt="Tradesperson working with hand tools at a tidy workshop bench"
-                aspect="aspect-[3/4]"
+                aspect="aspect-[3/4] lg:aspect-auto lg:h-full"
                 sizes="(max-width: 1024px) 0px, 32vw"
                 position="center 30%"
               />
@@ -410,7 +417,7 @@ function Trades() {
               image={{
                 src: "/marketing/trade-plumbing.jpg",
                 alt: "Plumber fixing a leaky faucet under a kitchen sink",
-                position: "center 30%",
+                position: "center 20%",
               }}
               auto={[
                 "Blocked drains",
@@ -443,7 +450,7 @@ function Trades() {
                 src="/marketing/trade-solar.jpg"
                 alt="Installers mounting solar panels at a rooftop power station"
                 label="Solar"
-                position="center 40%"
+                position="center 62%"
               />
               <UpcomingTrade
                 src="/marketing/trade-painting.jpg"
@@ -458,13 +465,13 @@ function Trades() {
         {/* Generic "request your trade" prompt. The workshop photo adds warmth
             without claiming a trade we don't yet support. */}
         <Reveal delay={180}>
-          <div className="edge-lit mt-6 grid items-stretch gap-0 overflow-hidden border border-ink-line bg-ink-card md:grid-cols-[1fr_1.3fr]">
+          <div className="edge-lit mt-6 grid items-stretch gap-0 overflow-hidden rounded-2xl border border-ink-line bg-ink-card md:grid-cols-[1fr_1.3fr]">
             <DuotoneImage
               src="/marketing/workshop.jpg"
               alt="Tradesperson inspecting their work at a well-kept workshop bench"
               aspect="aspect-[4/3] md:aspect-auto md:h-full"
               sizes="(max-width: 768px) 100vw, 38vw"
-              position="center 35%"
+              position="center 18%"
               className="md:border-r md:border-ink-line"
             />
             <div className="flex flex-col items-start justify-center gap-5 p-6 md:p-8">
@@ -509,7 +516,7 @@ function Shift() {
           </h2>
         </Reveal>
 
-        <div className="mt-14 grid gap-px border border-ink-line bg-ink-line">
+        <div className="mt-14 grid gap-px overflow-hidden rounded-2xl border border-ink-line bg-ink-line">
           <div className="hidden grid-cols-[1fr_auto_1fr] items-center gap-6 bg-ink-deep px-6 py-4 md:grid">
             <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
               The usual
@@ -682,6 +689,133 @@ function ClosingCta() {
   )
 }
 
+/* ─── App download (iOS + Android · coming soon) ──────────────── */
+// The final content band before the footer. Mirrors the OnTheTools
+// composition (device left, copy right). The apps aren't shipped yet, so
+// the store badges are deliberately NON-interactive and clearly marked
+// "coming soon" — no dead links, no fake store pages (see /ux ethical
+// design). The one real action is the "get notified" link into signup,
+// so a keen tradie isn't left at a dead end.
+function AppDownload() {
+  return (
+    <section id="app" className="border-b border-ink-line scroll-mt-20">
+      <div className="mx-auto grid max-w-[88rem] items-center gap-14 px-6 py-24 md:grid-cols-[0.85fr_1.15fr] md:gap-16 md:py-32">
+        <Reveal className="flex justify-center md:justify-start">
+          <AppPhone />
+        </Reveal>
+        <Reveal delay={120}>
+          <span className="inline-flex items-center gap-2 rounded-md border border-accent/40 bg-accent/10 px-3 py-1.5 font-mono text-[0.66rem] font-semibold uppercase tracking-[0.16em] text-accent-soft">
+            <span
+              className="h-1.5 w-1.5 rounded-full bg-accent motion-safe:animate-[pulse-soft_2.4s_ease-in-out_infinite]"
+              aria-hidden="true"
+            />
+            Coming soon
+          </span>
+          <h2 className="mt-6 font-extrabold uppercase leading-[1.02] tracking-[-0.03em] text-[clamp(1.9rem,3.6vw,3rem)]">
+            Your quoting line,{" "}
+            <span className="text-accent">in your pocket.</span>
+          </h2>
+          <p className="mt-6 max-w-md text-lg leading-relaxed text-text-sec">
+            Approve drafts, check your pipeline, and get paid &mdash; from the
+            ute, the roof, or the couch. The iOS and Android apps are still on
+            the workbench; we&rsquo;re building them now.
+          </p>
+
+          <div className="mt-9 flex flex-wrap gap-3">
+            <StoreBadge platform="apple" />
+            <StoreBadge platform="google" />
+          </div>
+
+          <p className="mt-5 text-sm text-text-dim">
+            Want first dibs?{" "}
+            <Link
+              href="/signup"
+              className="link-underline font-semibold text-text-pri hover:text-accent"
+            >
+              Get notified at launch &rarr;
+            </Link>
+          </p>
+        </Reveal>
+      </div>
+    </section>
+  )
+}
+
+// A store badge in the shape users recognise (glyph + two-line label),
+// re-cut in the Maintain style: square corners, bordered ink-card, mono
+// eyebrow. It is not a link — the app isn't live — so it renders as a
+// labelled image with an explicit "Soon" tag (never colour alone).
+function StoreBadge({ platform }: { platform: "apple" | "google" }) {
+  const isApple = platform === "apple"
+  const label = isApple ? "App Store" : "Google Play"
+  const top = isApple ? "Download on the" : "Get it on"
+  return (
+    <div
+      role="img"
+      aria-label={`${label} — coming soon`}
+      className="inline-flex cursor-default select-none items-center gap-3 rounded-lg border border-ink-line bg-ink-card px-4 py-3"
+    >
+      <span className="text-text-pri" aria-hidden="true">
+        {isApple ? <AppleGlyph /> : <PlayGlyph />}
+      </span>
+      <span className="flex flex-col leading-none">
+        <span className="font-mono text-[0.55rem] uppercase tracking-[0.14em] text-text-dim">
+          {top}
+        </span>
+        <span className="mt-1 text-[0.95rem] font-semibold tracking-tight text-text-pri">
+          {label}
+        </span>
+      </span>
+      <span className="ml-1.5 self-start rounded border border-accent/40 bg-accent/10 px-1.5 py-0.5 font-mono text-[0.5rem] font-semibold uppercase tracking-[0.12em] text-accent-soft">
+        Soon
+      </span>
+    </div>
+  )
+}
+
+// A real device shot — the live QuoteMax mobile homepage composited into
+// an iPhone frame (public/marketing/app-iphone-quotemax.png; the PNG is
+// transparent outside the body, so it sits on either theme). No border,
+// no drop shadow — the frame is the device, depth comes from the single
+// accent glow behind it.
+function AppPhone() {
+  return (
+    <div className="relative">
+      <div
+        className="pointer-events-none absolute -inset-8 bg-accent/15 blur-[64px]"
+        aria-hidden="true"
+      />
+      <Image
+        src="/marketing/app-iphone-quotemax.png"
+        alt="The QuoteMax mobile site on an iPhone — drafts your quote before they hang up"
+        width={1022}
+        height={2082}
+        sizes="(max-width: 768px) 264px, 300px"
+        className="relative z-10 h-auto w-[264px] md:w-[300px]"
+      />
+    </div>
+  )
+}
+
+function AppleGlyph() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M16.365 1.43c0 1.14-.42 2.2-1.1 2.98-.75.86-1.98 1.53-3.02 1.45-.13-1.1.42-2.26 1.06-2.98.72-.82 2.02-1.44 3.06-1.45zm4.575 15.59c-.55 1.27-.82 1.84-1.53 2.97-.99 1.57-2.39 3.52-4.12 3.53-1.54.02-1.94-.99-4.03-.98-2.09.01-2.52.99-4.06.97-1.73-.01-3.06-1.79-4.05-3.36-2.77-4.4-3.06-9.56-1.35-12.31 1.21-1.95 3.12-3.09 4.92-3.09 1.83 0 2.98 1.01 4.49 1.01 1.47 0 2.36-1.01 4.48-1.01 1.6 0 3.3.87 4.51 2.38-3.96 2.17-3.31 7.82.31 9.9z" />
+    </svg>
+  )
+}
+
+function PlayGlyph() {
+  return (
+    <svg width="20" height="22" viewBox="0 0 20 22" fill="currentColor" aria-hidden="true">
+      <path d="M1.02 1.31C.76 1.45.6 1.72.6 2.06v17.88c0 .34.16.61.42.75l.06.03L11 11.06v-.12L1.08 1.28l-.06.03z" />
+      <path d="M14.3 14.36l-3.3-3.3v-.12l3.3-3.3.08.05 3.91 2.22c1.12.63 1.12 1.67 0 2.31l-3.91 2.22-.08.02z" opacity="0.85" />
+      <path d="M14.38 14.31L11 10.94 1.02 20.69c.37.39.98.44 1.67.05l11.69-6.43" opacity="0.7" />
+      <path d="M14.38 7.59L2.69 1.16C2 .77 1.39.82 1.02 1.21L11 10.94l3.38-3.35z" opacity="0.9" />
+    </svg>
+  )
+}
+
 /* ─── SMS demo card ───────────────────────────────────────────── */
 
 // A live-example conversation rendered as plain content bubbles on the
@@ -690,7 +824,7 @@ function ClosingCta() {
 // a timeline), ends on a typing indicator, then the drafted quote lands.
 function SmsDemo() {
   return (
-    <div className="edge-lit border border-ink-line bg-ink-card">
+    <div className="edge-lit overflow-hidden rounded-2xl border border-ink-line bg-ink-card">
       <div className="flex items-center justify-between border-b border-ink-line px-4 py-3">
         <span className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
           Live example · SMS intake
@@ -727,7 +861,7 @@ function SmsDemo() {
             Sample
           </span>
         </div>
-        <div className="mt-3 border border-ink-line bg-ink-card">
+        <div className="mt-3 overflow-hidden rounded-xl border border-ink-line bg-ink-card">
           <div
             className={`relative px-3 py-4 text-center ${POP}`}
             style={{ animationDelay: "4150ms" }}
@@ -766,10 +900,10 @@ function Bubble({
       style={{ animationDelay: `${at}ms` }}
     >
       <div
-        className={`max-w-[86%] border px-3.5 py-2.5 text-sm leading-snug ${
+        className={`max-w-[86%] rounded-xl border px-3.5 py-2.5 text-sm leading-snug ${
           inbound
-            ? "border-ink-line bg-ink-deep text-text-sec"
-            : "border-accent/35 bg-accent/10 text-text-pri"
+            ? "rounded-bl-sm border-ink-line bg-ink-deep text-text-sec"
+            : "rounded-br-sm border-accent/35 bg-accent/10 text-text-pri"
         }`}
       >
         {!inbound && (
@@ -792,7 +926,7 @@ function TypingBubble({ at }: { at: number }) {
       style={{ animationDelay: `${at}ms` }}
     >
       <div
-        className="flex items-center gap-1.5 border border-accent/35 bg-accent/10 px-3.5 py-3"
+        className="flex items-center gap-1.5 rounded-xl rounded-br-sm border border-accent/35 bg-accent/10 px-3.5 py-3"
         role="status"
         aria-label="QuoteMax is drafting the quote"
       >
@@ -821,7 +955,7 @@ function NumberedCard({
   body: string
 }) {
   return (
-    <article className="group card-sweep edge-lit relative border border-ink-line bg-ink-card p-6 transition-colors duration-300 hover:border-accent/40 hover:bg-ink md:p-10">
+    <article className="group card-sweep edge-lit relative overflow-hidden rounded-2xl border border-ink-line bg-ink-card p-6 transition-colors duration-300 hover:border-accent/40 hover:bg-ink md:p-10">
       <div className="flex items-start gap-6 md:gap-10">
         <span className="shrink-0 font-mono text-5xl font-bold leading-none text-accent/80 transition-[color,transform] duration-300 group-hover:translate-x-1 group-hover:text-accent md:text-7xl">
           {num}
@@ -853,13 +987,13 @@ function TradePanel({
   inspection: string[]
 }) {
   return (
-    <div className="card-sweep edge-lit group h-full overflow-hidden border border-ink-line bg-ink-card transition-colors duration-300 hover:border-accent/30">
+    <div className="card-sweep edge-lit group h-full overflow-hidden rounded-2xl border border-ink-line bg-ink-card transition-colors duration-300 hover:border-accent/30">
       {image ? (
         <div className="relative">
           <DuotoneImage
             src={image.src}
             alt={image.alt}
-            aspect="aspect-[16/9]"
+            aspect="aspect-[2/1]"
             sizes="(max-width: 768px) 100vw, 44vw"
             position={image.position}
             className="border-b border-ink-line"
@@ -941,7 +1075,7 @@ function UpcomingTrade({
   position?: string
 }) {
   return (
-    <figure className="edge-lit relative overflow-hidden border border-ink-line">
+    <figure className="edge-lit relative overflow-hidden rounded-2xl border border-ink-line">
       <DuotoneImage
         src={src}
         alt={alt}
@@ -987,7 +1121,7 @@ function OnTheTools() {
             aspect="aspect-[4/3]"
             sizes="(max-width: 768px) 100vw, 50vw"
             position="center 40%"
-            className="edge-lit border border-ink-line"
+            className="edge-lit rounded-2xl border border-ink-line"
           />
         </Reveal>
         <Reveal delay={120}>
@@ -1056,12 +1190,12 @@ function CoveredTrades() {
             how it quotes yours.
           </p>
         </Reveal>
-        <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <div className="mt-14 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {COVERED_TRADES.map((t, i) => (
-            <Reveal key={t.href} delay={i * 90}>
+            <Reveal key={t.href} delay={i * 90} className="h-full">
               <Link
                 href={t.href}
-                className="edge-lit group block border border-ink-line bg-ink-card transition-colors hover:border-text-dim focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
+                className="edge-lit group flex h-full flex-col overflow-hidden rounded-2xl border border-ink-line bg-ink-card transition-colors hover:border-text-dim focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
               >
                 <DuotoneImage
                   src={t.img}
@@ -1122,7 +1256,7 @@ function BuiltForAustralia() {
             aspect="aspect-[4/3]"
             sizes="(max-width: 768px) 100vw, 50vw"
             position="center 30%"
-            className="edge-lit border border-ink-line"
+            className="edge-lit rounded-2xl border border-ink-line"
           />
         </Reveal>
       </div>

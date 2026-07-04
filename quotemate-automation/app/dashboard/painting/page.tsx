@@ -256,7 +256,7 @@ function PaintingEstimatePageInner() {
 
       {/* ── Form ──────────────────────────────────────────────────── */}
       <section className="relative z-10 mx-auto max-w-6xl px-6 sm:px-10">
-        <form onSubmit={runEstimate} className="mt-5 grid gap-7 border border-ink-line bg-ink-card p-7 sm:p-9 md:grid-cols-2">
+        <form onSubmit={runEstimate} className="rounded-card mt-5 grid gap-7 border border-ink-line bg-ink-card p-7 sm:p-9 md:grid-cols-2">
           <div className="md:col-span-2">
             <Label>Property address</Label>
             <AddressAutocomplete
@@ -296,7 +296,7 @@ function PaintingEstimatePageInner() {
             <Label>Surfaces to paint</Label>
             <div className="flex flex-wrap gap-3">
               {SCOPES.map(([v, label]) => (
-                <label key={v} className={`inline-flex cursor-pointer items-center gap-2.5 border px-4 py-2.5 transition-colors ${scopes.includes(v) ? 'border-accent text-text-pri' : 'border-ink-line text-text-sec hover:border-accent/50'}`}>
+                <label key={v} className={`rounded-ctl inline-flex cursor-pointer items-center gap-2.5 border px-4 py-2.5 transition-colors ${scopes.includes(v) ? 'border-accent text-text-pri' : 'border-ink-line text-text-sec hover:border-accent/50'}`}>
                   <input type="checkbox" checked={scopes.includes(v)} onChange={() => toggleScope(v)} className="h-4 w-4 accent-accent" />
                   <span className="font-mono text-sm font-semibold uppercase tracking-[0.1em]">{label}</span>
                 </label>
@@ -348,7 +348,7 @@ function PaintingEstimatePageInner() {
                 <span className="font-mono text-sm font-semibold uppercase tracking-[0.12em]">Colour change</span>
               </label>
             </div>
-            <button type="submit" disabled={busy || authState !== 'ready'} className="inline-flex items-center gap-2 bg-accent px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50">
+            <button type="submit" disabled={busy || authState !== 'ready'} className="rounded-ctl inline-flex items-center gap-2 bg-accent px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50">
               {busy ? (<><Spinner /> Estimating…</>) : (<>Estimate paintable area <span aria-hidden="true">&rarr;</span></>)}
             </button>
           </div>
@@ -358,6 +358,13 @@ function PaintingEstimatePageInner() {
           <ProvenanceNote tone="warn" label="Estimate could not complete">{errMsg}</ProvenanceNote>
         )}
       </section>
+
+      {/* ── Front of the house (Street View) ──────────────────────── */}
+      {/* Original intent: the moment a valid address is entered, show the
+          Google Street View photo of the front of the house so the tradie
+          confirms the right property BEFORE running the estimate. Not gated
+          on the estimate (which redirects away to /p/[token] on success). */}
+      <FrontOfHouse token={token} address={address} postcode={postcode} state={stateCode} />
 
       {/* ── Result ────────────────────────────────────────────────── */}
       {/* On a clean estimate this is fleeting — the auto-save effect routes
@@ -372,7 +379,7 @@ function PaintingEstimatePageInner() {
               onClick={() => void runEstimateCore()}
               disabled={busy}
               title="Re-run this estimate with your current saved rates"
-              className="inline-flex items-center gap-2 border border-ink-line px-4 py-2 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-4 py-2 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
             >
               {busy ? (<><Spinner /> Recalculating…</>) : (<><span aria-hidden="true">↻</span> Recalculate</>)}
             </button>
@@ -394,12 +401,12 @@ function PaintingEstimatePageInner() {
       {/* ── Save job ──────────────────────────────────────────────── */}
       {estimate && (
         <section className="relative z-10 mx-auto mt-6 max-w-6xl px-6 sm:px-10">
-          <div className="flex flex-wrap items-center gap-4 border border-ink-line border-l-4 border-l-accent bg-ink-card px-6 py-5">
+          <div className="rounded-card flex flex-wrap items-center gap-4 border border-ink-line border-l-4 border-l-accent bg-ink-card px-6 py-5">
             <button
               type="button"
               onClick={onSave}
               disabled={saveState === 'saving'}
-              className="inline-flex items-center gap-2 bg-accent px-6 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-ctl inline-flex items-center gap-2 bg-accent px-6 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
             >
               {saveState === 'saving' ? (<><Spinner /> Saving…</>) : (<>Save job</>)}
             </button>
@@ -413,7 +420,7 @@ function PaintingEstimatePageInner() {
                 href={`/api/q/paint/${savedToken}/pdf`}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-2 border border-ink-line px-4 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent"
+                className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-4 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent"
               >
                 Download PDF <span aria-hidden="true">↓</span>
               </a>
@@ -447,6 +454,105 @@ function PaintingEstimatePageInner() {
         <span className="font-mono text-sm font-semibold uppercase tracking-[0.16em]">QuoteMax · Paint estimate</span>
       </div>
     </main>
+  )
+}
+
+// ─── Front of the house (Street View, shown on address entry) ───────
+
+function FrontOfHouse({
+  token,
+  address,
+  postcode,
+  state,
+}: {
+  token: string | null
+  address: string
+  postcode: string
+  state: string
+}) {
+  const [src, setSrc] = useState<string | null>(null)
+  const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'none'>('idle')
+
+  useEffect(() => {
+    // Only look the property up once the address is plausibly complete —
+    // enough characters AND a 4-digit postcode (filled by picking an
+    // autocomplete suggestion or typed into the postcode field). This keeps
+    // us from hammering the Street View API on every keystroke. A short
+    // debounce coalesces the address/postcode/state updates a suggestion
+    // fires together into a single lookup.
+    const ready = !!token && address.trim().length >= 5 && /^\d{4}$/.test(postcode)
+    if (!ready) {
+      setStatus('idle')
+      setSrc(null)
+      return
+    }
+    let cancelled = false
+    let objUrl: string | null = null
+    const handle = setTimeout(() => {
+      setStatus('loading')
+      setSrc(null)
+      const params = new URLSearchParams({ address, postcode, state })
+      fetch(`/api/painting/street-view?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then(async (res) => {
+          if (cancelled) return
+          if (!res.ok || !(res.headers.get('content-type') ?? '').startsWith('image')) {
+            setStatus('none')
+            return
+          }
+          const blob = await res.blob()
+          objUrl = URL.createObjectURL(blob)
+          setSrc(objUrl)
+          setStatus('ready')
+        })
+        .catch(() => {
+          if (!cancelled) setStatus('none')
+        })
+    }, 600)
+    return () => {
+      cancelled = true
+      clearTimeout(handle)
+      if (objUrl) URL.revokeObjectURL(objUrl)
+    }
+  }, [token, address, postcode, state])
+
+  // Nothing to show until there's a complete-enough address.
+  if (status === 'idle') return null
+
+  return (
+    <section className="relative z-10 mx-auto mt-5 max-w-6xl px-6 sm:px-10">
+      <div className="rounded-card border border-ink-line bg-ink-card p-6 sm:p-7">
+        <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
+          Front of the house · Google Street View
+        </div>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-sec">
+          The street-level photo Google returns for this address — confirm it&rsquo;s
+          the right property before you estimate.
+        </p>
+        <div className="mt-4">
+          {status === 'loading' && (
+            <div className="rounded-card flex h-56 items-center justify-center border border-ink-line bg-ink-deep text-text-dim">
+              <Spinner />
+              <span className="ml-2 font-mono text-xs uppercase tracking-[0.14em]">Locating the property…</span>
+            </div>
+          )}
+          {status === 'ready' && src && (
+            <ZoomableImage
+              src={src}
+              alt="Google Street View of the front of the house"
+              caption="Front of the house · Street View"
+              className="w-full max-w-2xl border border-ink-line"
+            />
+          )}
+          {status === 'none' && (
+            <p className="text-sm text-warning">
+              No Street View imagery for this address yet — the estimate still works from the aerial footprint.
+            </p>
+          )}
+        </div>
+      </div>
+    </section>
   )
 }
 
@@ -597,7 +703,7 @@ function PaintPreviewSection({
 
   return (
     <section className="relative z-10 mx-auto mt-8 max-w-6xl px-6 pb-4 sm:px-10">
-      <div className="border border-ink-line bg-ink-card p-6 sm:p-8">
+      <div className="rounded-card border border-ink-line bg-ink-card p-6 sm:p-8">
         <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
           Visual preview · exterior repaint
         </div>
@@ -623,7 +729,7 @@ function PaintPreviewSection({
               title="Custom colour"
               value={/^#[0-9a-fA-F]{6}$/.test(colour) ? colour : '#777777'}
               onChange={(e) => setColour(e.target.value)}
-              className="h-12 w-14 shrink-0 cursor-pointer border border-ink-line bg-ink-deep p-1"
+              className="rounded-card h-12 w-14 shrink-0 cursor-pointer border border-ink-line bg-ink-deep p-1"
             />
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -644,7 +750,7 @@ function PaintPreviewSection({
           type="button"
           onClick={generate}
           disabled={busy || !token || beforeState === 'none'}
-          className="mt-5 inline-flex items-center gap-2 bg-accent px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-ctl mt-5 inline-flex items-center gap-2 bg-accent px-6 py-3.5 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
         >
           {busy ? (<><Spinner /> Painting… (10–20s)</>) : (<>Generate painted preview <span aria-hidden="true">&rarr;</span></>)}
         </button>
@@ -664,7 +770,7 @@ function PaintPreviewSection({
               {beforeSrc ? (
                 <ZoomableImage src={beforeSrc} alt="Street View of the house" caption="Before · Street View" className="w-full border border-ink-line" />
               ) : (
-                <div className="flex h-48 items-center justify-center border border-ink-line bg-ink-deep text-text-dim">{beforeState === 'loading' ? 'Loading…' : '—'}</div>
+                <div className="rounded-card flex h-48 items-center justify-center border border-ink-line bg-ink-deep text-text-dim">{beforeState === 'loading' ? 'Loading…' : '—'}</div>
               )}
             </figure>
             <figure>
@@ -672,14 +778,14 @@ function PaintPreviewSection({
               {after ? (
                 <ZoomableImage src={after} alt="AI preview of the house repainted" caption="After · AI repaint" className="w-full border border-accent" />
               ) : (
-                <div className="flex h-48 items-center justify-center border border-ink-line bg-ink-deep text-text-dim">{busy ? 'Generating…' : 'Pick a colour and generate'}</div>
+                <div className="rounded-card flex h-48 items-center justify-center border border-ink-line bg-ink-deep text-text-dim">{busy ? 'Generating…' : 'Pick a colour and generate'}</div>
               )}
             </figure>
           </div>
         )}
         {/* Conversational refinement — ask for more changes */}
         {after && (
-          <div className="mt-6 border border-ink-line border-l-4 border-l-accent bg-ink-deep p-5">
+          <div className="rounded-card mt-6 border border-ink-line border-l-4 border-l-accent bg-ink-deep p-5">
             <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">Refine the preview</div>
             <p className="mt-1 text-sm text-text-sec">
               Ask for changes in plain English — e.g. &ldquo;paint the fence grey too&rdquo;, &ldquo;make the front door black&rdquo;, &ldquo;add a darker trim&rdquo;.
@@ -712,7 +818,7 @@ function PaintPreviewSection({
                 type="button"
                 onClick={() => void refine()}
                 disabled={refining || refineInput.trim().length < 2}
-                className="inline-flex items-center gap-2 bg-accent px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-ctl inline-flex items-center gap-2 bg-accent px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {refining ? (<><Spinner /> Applying…</>) : (<>Apply change</>)}
               </button>
@@ -753,7 +859,7 @@ function PaintPreviewSection({
               type="button"
               onClick={() => setShow3D((v) => !v)}
               disabled={address.trim().length < 3}
-              className="inline-flex items-center gap-2 border border-ink-line px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
             >
               {show3D ? 'Hide 3D' : (<>Fly around in 3D <span aria-hidden="true">&rarr;</span></>)}
             </button>
@@ -776,7 +882,7 @@ function ProvenanceNote({ tone, label, children }: { tone: 'warn' | 'accent'; la
   const border = tone === 'warn' ? 'border-l-warning' : 'border-l-accent'
   const labelColour = tone === 'warn' ? 'text-warning' : 'text-accent'
   return (
-    <div className={`mt-4 border border-ink-line ${border} border-l-4 bg-ink-card px-5 py-4`}>
+    <div className={`rounded-card mt-4 border border-ink-line ${border} border-l-4 bg-ink-card px-5 py-4`}>
       <div className={`font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] ${labelColour}`}>{label}</div>
       <p className="mt-1 text-sm leading-relaxed text-text-sec">{children}</p>
     </div>
@@ -797,7 +903,7 @@ function AuthBadge({ state }: { state: 'loading' | 'signed-out' | 'ready' }) {
   const label = state === 'loading' ? 'Checking session…' : state === 'signed-out' ? 'Not signed in — sign in to estimate' : 'Signed in — ready to estimate'
   const dot = state === 'ready' ? 'bg-teal-glow' : state === 'signed-out' ? 'bg-accent' : 'bg-text-dim'
   return (
-    <div className="mt-10 inline-flex items-center gap-3 border border-ink-line bg-ink-card px-5 py-3">
+    <div className="rounded-ctl mt-10 inline-flex items-center gap-3 border border-ink-line bg-ink-card px-5 py-3">
       <span className={`h-2.5 w-2.5 ${dot}`} aria-hidden="true" />
       <span className="font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-sec">{label}</span>
     </div>

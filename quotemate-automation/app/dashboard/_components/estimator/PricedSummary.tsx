@@ -139,7 +139,7 @@ export function PricedSummary({ bom, info, pricedAt, onAddToCatalogue }: Props) 
                               onClick={() => setOpenTrace((s) => (s === i ? null : i))}
                               aria-expanded={openTrace === i}
                               aria-controls={`${traceId}-trace-${i}`}
-                              className={`ml-2 inline-flex cursor-pointer items-center gap-1 border px-1.5 py-0.5 font-semibold uppercase tracking-widest transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
+                              className={`rounded-ctl ml-2 inline-flex cursor-pointer items-center gap-1 border px-1.5 py-0.5 font-semibold uppercase tracking-widest transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
                                 openTrace === i
                                   ? 'border-accent/70 bg-accent/10 text-accent'
                                   : 'border-ink-line text-text-dim hover:border-accent hover:text-accent'
@@ -187,7 +187,7 @@ export function PricedSummary({ bom, info, pricedAt, onAddToCatalogue }: Props) 
       )}
 
       {bom.unmatched.length > 0 && (
-        <div className="mt-6 border border-ink-line border-l-4 border-l-warning-bright bg-ink-deep px-4 py-3.5">
+        <div className="rounded-card mt-6 border border-ink-line border-l-4 border-l-warning-bright bg-ink-deep px-4 py-3.5">
           <div className="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-warning-bright">
             Not priced — not in your catalogue ({bom.unmatched.length})
           </div>
@@ -309,7 +309,7 @@ function UnmatchedItem({
               <span className="block font-mono text-[0.58rem] font-semibold uppercase tracking-[0.12em] text-text-dim">
                 Unit price ex GST
               </span>
-              <div className="mt-1 flex items-center border border-ink-line bg-ink-deep focus-within:border-accent">
+              <div className="rounded-card mt-1 flex items-center border border-ink-line bg-ink-deep focus-within:border-accent">
                 <span className="pl-2 font-mono text-xs text-text-dim">$</span>
                 <input
                   type="number"
@@ -321,7 +321,7 @@ function UnmatchedItem({
                   onChange={(e) => setPrice(e.target.value)}
                   placeholder="0.00"
                   aria-label={`Unit price ex GST for ${item.type}`}
-                  className="w-full bg-transparent px-2 py-1.5 font-mono text-sm tabular-nums text-text-pri outline-none"
+                  className="rounded-ctl w-full bg-transparent px-2 py-1.5 font-mono text-sm tabular-nums text-text-pri outline-none"
                 />
               </div>
             </label>
@@ -338,7 +338,7 @@ function UnmatchedItem({
                 onChange={(e) => setLabour(e.target.value)}
                 placeholder="0"
                 aria-label={`Labour hours per unit for ${item.type}`}
-                className="mt-1 w-full border border-ink-line bg-ink-deep px-2 py-1.5 font-mono text-sm tabular-nums text-text-pri outline-none focus:border-accent"
+                className="rounded-ctl mt-1 w-full border border-ink-line bg-ink-deep px-2 py-1.5 font-mono text-sm tabular-nums text-text-pri outline-none focus:border-accent"
               />
             </label>
             <label className="block">
@@ -349,7 +349,7 @@ function UnmatchedItem({
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 aria-label={`Catalogue category for ${item.type}`}
-                className="mt-1 w-full border border-ink-line bg-ink-deep px-2 py-1.5 font-mono text-sm text-text-pri outline-none focus:border-accent"
+                className="rounded-ctl mt-1 w-full border border-ink-line bg-ink-deep px-2 py-1.5 font-mono text-sm text-text-pri outline-none focus:border-accent"
               >
                 <option value="">Auto (from name)</option>
                 {CATEGORY_OPTIONS.map((c) => (
@@ -371,7 +371,7 @@ function UnmatchedItem({
             <button
               type="submit"
               disabled={!canSubmit}
-              className="inline-flex items-center gap-2 bg-accent px-4 py-2 font-mono text-[0.64rem] font-semibold uppercase tracking-[0.12em] text-white transition-colors hover:bg-accent-press focus-visible:outline-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-ctl inline-flex items-center gap-2 bg-accent px-4 py-2 font-mono text-[0.64rem] font-semibold uppercase tracking-[0.12em] text-white transition-colors hover:bg-accent-press focus-visible:outline-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               {busy ? 'Saving…' : 'Save to catalogue & re-price'}
             </button>

@@ -171,7 +171,7 @@ export function TakeoffTable({ rows, onRowsChange, selectedIdx, onSelect, disabl
         type="button"
         onClick={add}
         disabled={disabled}
-        className="mt-3 inline-flex items-center gap-2 border border-dashed border-ink-line px-4 py-2 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-sec transition-colors hover:border-accent hover:text-accent focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40"
+        className="rounded-ctl mt-3 inline-flex items-center gap-2 border border-dashed border-ink-line px-4 py-2 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-sec transition-colors hover:border-accent hover:text-accent focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40"
       >
         + Add missed item
       </button>

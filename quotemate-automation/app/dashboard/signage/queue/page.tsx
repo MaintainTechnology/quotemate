@@ -269,7 +269,7 @@ export default function SignageQueuePage() {
                       type="button"
                       onClick={() => token && openDetail(q.id, token)}
                       aria-pressed={selected === q.id ? 'true' : 'false'}
-                      className={`w-full border bg-ink-card p-4 text-left transition-colors ${REVEAL} ${
+                      className={`rounded-card w-full border bg-ink-card p-4 text-left transition-colors ${REVEAL} ${
                         selected === q.id ? 'border-accent' : 'border-ink-line hover:border-accent/50'
                       }`}
                       style={delay(Math.min(i, 8) * 40)}
@@ -303,7 +303,7 @@ export default function SignageQueuePage() {
                     disabled={!f.assessment_id}
                     onClick={() => f.assessment_id && token && openDetail(f.assessment_id, token)}
                     aria-pressed={selected !== null && selected === f.assessment_id ? 'true' : 'false'}
-                    className={`flex items-center justify-between gap-3 border px-4 py-2.5 text-left transition-colors disabled:opacity-60 enabled:hover:border-accent/50 ${
+                    className={`rounded-card flex items-center justify-between gap-3 border px-4 py-2.5 text-left transition-colors disabled:opacity-60 enabled:hover:border-accent/50 ${
                       selected !== null && selected === f.assessment_id
                         ? 'border-accent bg-ink-card'
                         : 'border-ink-line bg-ink-deep'
@@ -320,7 +320,7 @@ export default function SignageQueuePage() {
             </div>
 
             {/* Right: detail */}
-            <div ref={detailRef} className="scroll-mt-6 border border-ink-line bg-ink-card p-6 sm:p-7 lg:sticky lg:top-6">
+            <div ref={detailRef} className="rounded-card scroll-mt-6 border border-ink-line bg-ink-card p-6 sm:p-7 lg:sticky lg:top-6">
               {!detail && !detailBusy && (
                 <EmptyState
                   title="No studio selected"
@@ -370,13 +370,13 @@ function DetailPanel({
       </div>
 
       {assessment.hq_decision && (
-        <div className="mt-3 inline-block border border-ink-line border-l-4 border-l-teal-glow bg-ink-deep px-3 py-1.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-teal-glow">
+        <div className="rounded-card mt-3 inline-block border border-ink-line border-l-4 border-l-teal-glow bg-ink-deep px-3 py-1.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-teal-glow">
           HQ: {assessment.hq_decision.replace('_', ' ')}
         </div>
       )}
 
       {assessment.kb_degraded && (
-        <div className="mt-3 border border-ink-line border-l-4 border-l-warning-bright bg-ink-deep px-3 py-2 font-mono text-[0.7rem] uppercase tracking-[0.12em] text-warning-bright">
+        <div className="rounded-card mt-3 border border-ink-line border-l-4 border-l-warning-bright bg-ink-deep px-3 py-2 font-mono text-[0.7rem] uppercase tracking-[0.12em] text-warning-bright">
           ⚠ The second-stage brand-standards check did not complete for this assessment — verdicts are Step-1 (database) only.
         </div>
       )}
@@ -420,7 +420,7 @@ function DetailPanel({
                 .filter((v) => v.rule_group === g)
                 .sort((a, b) => rank(a.status) - rank(b.status))
                 .map((v) => (
-                  <div key={v.rule_key} className={`border border-ink-line bg-ink-deep px-4 py-3 ${railFor(glyphState(v.status))}`}>
+                  <div key={v.rule_key} className={`rounded-card border border-ink-line bg-ink-deep px-4 py-3 ${railFor(glyphState(v.status))}`}>
                     <div className="flex items-start gap-3">
                       <StateGlyph state={glyphState(v.status)} />
                       <div className="min-w-0">
@@ -454,7 +454,7 @@ function DetailPanel({
           <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">Other observations</div>
           <div className="mt-2 grid gap-2">
             {advisory.map((a, i) => (
-              <div key={i} className="border border-ink-line border-l-2 border-l-accent/50 bg-ink-deep px-4 py-3">
+              <div key={i} className="rounded-card border border-ink-line border-l-2 border-l-accent/50 bg-ink-deep px-4 py-3">
                 <div className="flex items-start gap-3">
                   <span className="text-accent" aria-hidden="true">◇</span>
                   <div className="min-w-0">
@@ -493,7 +493,7 @@ function DetailPanel({
           type="button"
           disabled={busy}
           onClick={() => onDecide('escalated')}
-          className="inline-flex items-center justify-center border border-ink-line px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-ctl inline-flex items-center justify-center border border-ink-line px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
         >
           Escalate
         </button>

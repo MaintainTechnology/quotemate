@@ -1,7 +1,16 @@
 // GET /api/tenant/calendar — the tradie's bookings for the dashboard
-// Calendar tab. A booking is any quote for this tenant with a scheduled_at
-// set (self-serve request, reserved, confirmed, or paid+booked). Read-only
-// and tenant-scoped. See specs/dashboard-calendar-tab.md.
+// Calendar tab. Returns two lists:
+//   • events      — quotes with a scheduled_at (self-serve request, reserved,
+//                   confirmed, or paid+booked) in the past/future window.
+//   • toSchedule  — PAID quotes with NO scheduled_at yet. The $99 site
+//                   inspection is deliberately pay-first with no slot
+//                   (lib/quote/booking.ts), and a deposit paid against an old
+//                   SMS link can also land with no time chosen. These carry a
+//                   real, money-in-hand commitment the tradie still has to
+//                   arrange, so they must be visible even though the agenda
+//                   query (which keys off scheduled_at) can't place them on a
+//                   day.
+// Read-only and tenant-scoped. See specs/dashboard-calendar-tab.md.
 //
 // Auth: Authorization: Bearer <supabase access token> → tenant resolved by
 // owner_user_id (shared tenantFromBearer helper). Service role is used for
@@ -15,15 +24,21 @@ export const dynamic = 'force-dynamic'
 const MAX_EVENTS = 500
 const DEFAULT_PAST_DAYS = 30
 const DEFAULT_FUTURE_DAYS = 120
+// Paid-but-unscheduled items have no scheduled_at to age out on, so bound
+// them by how recently they were paid — generous enough that an inspection
+// left unscheduled for weeks keeps nagging, but not unbounded.
+const TO_SCHEDULE_LOOKBACK_DAYS = 180
 
 type CalendarEvent = {
   quoteId: string
   shareToken: string | null
-  scheduledAt: string
+  scheduledAt: string | null
   bookingState: string | null
   status: string | null
   paid: boolean
   paidTier: string | null
+  paidAt: string | null
+  needsInspection: boolean
   customerName: string | null
   customerPhone: string | null
   jobType: string | null
@@ -32,12 +47,55 @@ type CalendarEvent = {
   source: string | null
 }
 
+type QuoteRow = {
+  id: string
+  share_token: string | null
+  scheduled_at: string | null
+  booking_state: string | null
+  status: string | null
+  paid_at: string | null
+  paid_tier: string | null
+  needs_inspection: boolean | null
+  intake_id: string | null
+}
+
+type IntakeRow = {
+  caller: { name?: string; phone?: string } | null
+  job_type: string | null
+  address: string | null
+  suburb: string | null
+  scope: { source?: string } | null
+}
+
+const QUOTE_COLS =
+  'id, share_token, scheduled_at, booking_state, status, paid_at, paid_tier, needs_inspection, intake_id'
+
 function clampIso(value: string | null, fallbackMs: number): string {
   if (value) {
     const t = Date.parse(value)
     if (Number.isFinite(t)) return new Date(t).toISOString()
   }
   return new Date(fallbackMs).toISOString()
+}
+
+function toEvent(q: QuoteRow, intake: IntakeRow | null): CalendarEvent {
+  return {
+    quoteId: q.id,
+    shareToken: q.share_token ?? null,
+    scheduledAt: q.scheduled_at ?? null,
+    bookingState: q.booking_state ?? null,
+    status: q.status ?? null,
+    paid: !!q.paid_at,
+    paidTier: q.paid_tier ?? null,
+    paidAt: q.paid_at ?? null,
+    needsInspection: !!q.needs_inspection,
+    customerName: intake?.caller?.name?.trim() || null,
+    customerPhone: intake?.caller?.phone?.trim() || null,
+    jobType: intake?.job_type ?? null,
+    address: intake?.address ?? null,
+    suburb: intake?.suburb ?? null,
+    source: intake?.scope?.source ?? null,
+  }
 }
 
 export async function GET(req: Request) {
@@ -56,9 +114,10 @@ export async function GET(req: Request) {
 
   const sb = billingAdmin()
 
-  const { data: quotes, error } = await sb
+  // Scheduled bookings — a chosen time in the [from, to] window.
+  const { data: scheduled, error } = await sb
     .from('quotes')
-    .select('id, share_token, scheduled_at, booking_state, status, paid_at, paid_tier, intake_id')
+    .select(QUOTE_COLS)
     .eq('tenant_id', auth.tenant.id)
     .not('scheduled_at', 'is', null)
     .gte('scheduled_at', from)
@@ -70,23 +129,35 @@ export async function GET(req: Request) {
     return Response.json({ error: error.message }, { status: 500 })
   }
 
+  // Paid-but-unscheduled — a paid $99 inspection (pay-first, no slot) or a
+  // deposit paid with no time chosen. Bounded by paid_at recency.
+  const paidSince = new Date(now - TO_SCHEDULE_LOOKBACK_DAYS * 86_400_000).toISOString()
+  const { data: unscheduled, error: unschedErr } = await sb
+    .from('quotes')
+    .select(QUOTE_COLS)
+    .eq('tenant_id', auth.tenant.id)
+    .is('scheduled_at', null)
+    .not('paid_at', 'is', null)
+    .gte('paid_at', paidSince)
+    .order('paid_at', { ascending: false })
+    .limit(MAX_EVENTS)
+
+  if (unschedErr) {
+    return Response.json({ error: unschedErr.message }, { status: 500 })
+  }
+
   // Join intakes for the customer-facing details (caller name/phone live in
   // the caller jsonb; job_type/address/suburb are columns; scope.source marks
-  // self-serve web bookings).
+  // self-serve web bookings). One lookup covers both lists.
+  const scheduledRows = (scheduled ?? []) as QuoteRow[]
+  const unscheduledRows = (unscheduled ?? []) as QuoteRow[]
   const intakeIds = Array.from(
     new Set(
-      (quotes ?? [])
-        .map((q) => q.intake_id as string | null)
+      [...scheduledRows, ...unscheduledRows]
+        .map((q) => q.intake_id)
         .filter((id): id is string => !!id),
     ),
   )
-  type IntakeRow = {
-    caller: { name?: string; phone?: string } | null
-    job_type: string | null
-    address: string | null
-    suburb: string | null
-    scope: { source?: string } | null
-  }
   const intakeMap: Record<string, IntakeRow> = {}
   if (intakeIds.length > 0) {
     const { data: intakes } = await sb
@@ -104,26 +175,13 @@ export async function GET(req: Request) {
     }
   }
 
-  const events: CalendarEvent[] = (quotes ?? [])
+  const events: CalendarEvent[] = scheduledRows
     .filter((q) => typeof q.scheduled_at === 'string')
-    .map((q) => {
-      const intake = q.intake_id ? intakeMap[q.intake_id as string] : null
-      return {
-        quoteId: q.id as string,
-        shareToken: (q.share_token as string | null) ?? null,
-        scheduledAt: q.scheduled_at as string,
-        bookingState: (q.booking_state as string | null) ?? null,
-        status: (q.status as string | null) ?? null,
-        paid: !!q.paid_at,
-        paidTier: (q.paid_tier as string | null) ?? null,
-        customerName: intake?.caller?.name?.trim() || null,
-        customerPhone: intake?.caller?.phone?.trim() || null,
-        jobType: intake?.job_type ?? null,
-        address: intake?.address ?? null,
-        suburb: intake?.suburb ?? null,
-        source: intake?.scope?.source ?? null,
-      }
-    })
+    .map((q) => toEvent(q, q.intake_id ? intakeMap[q.intake_id] ?? null : null))
 
-  return Response.json({ events })
+  const toSchedule: CalendarEvent[] = unscheduledRows.map((q) =>
+    toEvent(q, q.intake_id ? intakeMap[q.intake_id] ?? null : null),
+  )
+
+  return Response.json({ events, toSchedule })
 }

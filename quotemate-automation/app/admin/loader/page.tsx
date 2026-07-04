@@ -9,7 +9,6 @@
 // accent, numbered 3-step flow (.claude/skills/maintain-design-system).
 
 import { useCallback, useState, type ReactNode } from 'react'
-import { BrandMark } from "@/app/_components/BrandMark"
 import { getBrowserSupabase } from '@/lib/supabase/client'
 
 type StagedRow = {
@@ -854,28 +853,9 @@ export default function AdminLoaderPage() {
         <path d="M0,830 Q280,750 560,790 T1120,780 T1440,800" fill="none" stroke="var(--teal-glow)" strokeWidth="1" />
       </svg>
 
-      {/* ── Slim admin nav — keeps the page from feeling orphaned ── */}
-      <nav className="relative z-10 border-b border-ink-line bg-ink-deep/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-4">
-          <a href="/dashboard" className="flex min-w-0 items-center gap-2.5">
-            <BrandMark className="h-10 w-10" />
-            <span className="font-extrabold uppercase tracking-tight">
-              QuoteMax
-            </span>
-            <span className="text-text-dim">/</span>
-            <span className="font-mono text-xs uppercase tracking-[0.14em] text-text-sec">
-              Admin
-            </span>
-          </a>
-          <a
-            href="/dashboard"
-            className="shrink-0 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-sec transition-colors hover:text-text-pri"
-          >
-            ← Dashboard
-          </a>
-        </div>
-      </nav>
-
+      {/* The persistent admin nav (brand + Admin breadcrumb + Back to
+          dashboard) now lives in app/admin/layout.tsx, which wraps every
+          /admin/* route — so no per-page nav here. */}
       <div className="relative z-10 mx-auto max-w-5xl px-6 py-14 md:py-16">
         {/* ── Header ──────────────────────────────────────────────── */}
         <header>

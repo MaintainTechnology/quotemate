@@ -2,12 +2,15 @@
 
 // Dashboard → Calendar tab (specs/dashboard-calendar-tab.md).
 //
-// Reads the tenant's bookings from GET /api/tenant/calendar (every quote with
-// a scheduled_at) and renders an agenda grouped by day, upcoming first, with a
-// "Past" group at the end. Booking state is shown with a tone-coded StatusPill;
-// a 'requested' self-serve booking can be confirmed inline (POST
-// /api/tenant/calendar/<quoteId>/confirm). Tenant-scoped via the bearer token,
-// same contract as the other dashboard tabs.
+// Reads the tenant's bookings from GET /api/tenant/calendar, which returns two
+// lists: `events` (quotes with a scheduled_at) render as a day-grouped agenda,
+// upcoming first, with a "Past" group at the end; `toSchedule` (PAID quotes
+// with no time chosen yet — chiefly the pay-first $99 site inspection) render
+// in a "Paid · needs a time" block above the agenda so a money-in-hand job the
+// tradie still has to arrange is never hidden. Booking state is shown with a
+// tone-coded StatusPill; a 'requested' self-serve booking can be confirmed
+// inline (POST /api/tenant/calendar/<quoteId>/confirm). Tenant-scoped via the
+// bearer token, same contract as the other dashboard tabs.
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CalendarDays, Loader2, Check, ExternalLink } from 'lucide-react'
@@ -16,11 +19,13 @@ import { StatusPill, StatGrid, type Tone } from './quote-ui'
 type CalendarEvent = {
   quoteId: string
   shareToken: string | null
-  scheduledAt: string
+  scheduledAt: string | null
   bookingState: string | null
   status: string | null
   paid: boolean
   paidTier: string | null
+  paidAt: string | null
+  needsInspection: boolean
   customerName: string | null
   customerPhone: string | null
   jobType: string | null
@@ -28,6 +33,10 @@ type CalendarEvent = {
   suburb: string | null
   source: string | null
 }
+
+// A scheduled event is a CalendarEvent that definitely has a time — used for
+// the day-grouped agenda so the grouping helpers never see a null scheduledAt.
+type ScheduledEvent = CalendarEvent & { scheduledAt: string }
 
 const TZ = 'Australia/Sydney'
 
@@ -54,6 +63,10 @@ function timeLabel(iso: string): string {
     timeZone: TZ,
   })
 }
+function shortDate(iso: string): string {
+  const d = new Date(iso)
+  return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: TZ })
+}
 
 function jobLabel(jt: string | null): string {
   if (!jt) return 'Job'
@@ -68,10 +81,11 @@ function statePill(ev: CalendarEvent): { label: string; tone: Tone } {
   return { label: 'Scheduled', tone: 'dim' }
 }
 
-type DayGroup = { key: string; label: string; events: CalendarEvent[] }
+type DayGroup = { key: string; label: string; events: ScheduledEvent[] }
 
 export function CalendarTab({ accessToken }: { accessToken: string | null }) {
   const [events, setEvents] = useState<CalendarEvent[] | null>(null)
+  const [toSchedule, setToSchedule] = useState<CalendarEvent[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [confirming, setConfirming] = useState<string | null>(null)
@@ -91,8 +105,12 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
         setError('Couldn’t load your calendar. Please try again.')
         return
       }
-      const json = (await res.json()) as { events: CalendarEvent[] }
+      const json = (await res.json()) as {
+        events: CalendarEvent[]
+        toSchedule?: CalendarEvent[]
+      }
       setEvents(json.events ?? [])
+      setToSchedule(json.toSchedule ?? [])
     } catch {
       setError('Couldn’t reach the server. Please try again shortly.')
     } finally {
@@ -124,17 +142,21 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
     }
   }
 
-  // Split into upcoming vs past, then group each by Sydney day.
+  // Split into upcoming vs past, then group each by Sydney day. Only events
+  // that actually carry a time land here; the paid-but-unscheduled set is
+  // rendered separately (it has no day to group on).
   const { upcoming, past, pendingCount, upcomingCount } = useMemo(() => {
     const now = Date.now()
-    const all = events ?? []
-    const up: CalendarEvent[] = []
-    const pa: CalendarEvent[] = []
+    const all: ScheduledEvent[] = (events ?? []).filter(
+      (e): e is ScheduledEvent => typeof e.scheduledAt === 'string',
+    )
+    const up: ScheduledEvent[] = []
+    const pa: ScheduledEvent[] = []
     for (const e of all) {
       if (Date.parse(e.scheduledAt) >= now) up.push(e)
       else pa.push(e)
     }
-    const groupBy = (list: CalendarEvent[], pastFirst = false): DayGroup[] => {
+    const groupBy = (list: ScheduledEvent[], pastFirst = false): DayGroup[] => {
       const map = new Map<string, DayGroup>()
       for (const e of list) {
         const k = dayKey(e.scheduledAt)
@@ -156,7 +178,7 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
 
   if (loading && !events) {
     return (
-      <div className="border border-ink-line bg-ink-card px-5 py-6 font-mono text-xs uppercase tracking-[0.16em] text-text-dim">
+      <div className="rounded-card border border-ink-line bg-ink-card px-5 py-6 font-mono text-xs uppercase tracking-[0.16em] text-text-dim">
         <Loader2 size={14} className="mr-2 inline animate-spin text-accent" />
         Loading calendar…
       </div>
@@ -171,20 +193,23 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
     )
   }
 
-  const isEmpty = (events?.length ?? 0) === 0
+  const isEmpty = (events?.length ?? 0) === 0 && toSchedule.length === 0
 
   return (
     <div className="max-w-4xl space-y-8">
       <StatGrid
-        cols={2}
+        cols={3}
         stats={[
           { label: 'Upcoming jobs', value: upcomingCount, hero: true },
+          { label: 'To schedule', value: toSchedule.length, tone: toSchedule.length > 0 ? 'warn' : 'dim' },
           { label: 'Pending requests', value: pendingCount, tone: pendingCount > 0 ? 'warn' : 'dim' },
         ]}
       />
 
+      {toSchedule.length > 0 && <ToScheduleBlock events={toSchedule} />}
+
       {isEmpty ? (
-        <div className="border border-ink-line bg-ink-card p-8 text-center">
+        <div className="rounded-card border border-ink-line bg-ink-card p-8 text-center">
           <CalendarDays size={22} className="mx-auto text-text-dim" />
           <p className="mt-3 text-sm text-text-sec">No bookings scheduled yet.</p>
         </div>
@@ -244,7 +269,7 @@ function DayBlock({
         </span>
         <span className="h-px flex-1 bg-ink-line" aria-hidden="true" />
       </div>
-      <ul className="mt-3 divide-y divide-ink-line border border-ink-line bg-ink-card">
+      <ul className="rounded-card mt-3 divide-y divide-ink-line border border-ink-line bg-ink-card">
         {group.events.map((ev) => {
           const pill = statePill(ev)
           const canConfirm = ev.bookingState === 'requested'
@@ -270,7 +295,7 @@ function DayBlock({
                   type="button"
                   onClick={() => onConfirm(ev.quoteId)}
                   disabled={confirming === ev.quoteId}
-                  className="inline-flex items-center gap-1.5 border border-ink-line px-2.5 py-1 text-[0.6rem] font-semibold uppercase tracking-wider text-text-pri hover:border-accent hover:text-accent disabled:opacity-50"
+                  className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-2.5 py-1 text-[0.6rem] font-semibold uppercase tracking-wider text-text-pri hover:border-accent hover:text-accent disabled:opacity-50"
                 >
                   {confirming === ev.quoteId ? (
                     <Loader2 size={11} className="animate-spin" />
@@ -296,5 +321,65 @@ function DayBlock({
         })}
       </ul>
     </div>
+  )
+}
+
+// Paid, but no time chosen yet — the $99 site inspection (pay-first, no slot)
+// or a deposit paid against an old link. Money-in-hand jobs the tradie still
+// has to arrange, so they get a prominent block above the dated agenda with
+// the customer's number to call. No day/time row — they have none.
+function ToScheduleBlock({ events }: { events: CalendarEvent[] }) {
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center gap-3">
+        <span className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-warning-bright">
+          Paid · needs a time
+        </span>
+        <span className="h-px flex-1 bg-ink-line" aria-hidden="true" />
+      </div>
+      <ul className="rounded-card divide-y divide-ink-line border border-ink-line bg-ink-card">
+        {events.map((ev) => {
+          const isInspection = ev.needsInspection || ev.paidTier === 'inspection'
+          return (
+            <li
+              key={ev.quoteId}
+              className="flex flex-wrap items-center gap-3 border-l-2 border-l-warning-bright px-4 py-3"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm text-text-pri">
+                  {ev.customerName ?? 'Customer'}
+                  {ev.jobType ? <span className="text-text-sec"> · {jobLabel(ev.jobType)}</span> : null}
+                </div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">
+                  {ev.suburb ? <span>{ev.suburb}</span> : null}
+                  {ev.customerPhone ? <span>· {ev.customerPhone}</span> : null}
+                  {ev.paidAt ? <span>· paid {shortDate(ev.paidAt)}</span> : null}
+                </div>
+              </div>
+              <StatusPill
+                label={isInspection ? 'Inspection · paid' : 'Deposit paid'}
+                tone="warn"
+                compact
+                dot
+              />
+              {ev.shareToken && (
+                <a
+                  href={`/q/${ev.shareToken}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="Open quote"
+                  className="inline-flex h-7 w-7 items-center justify-center border border-ink-line text-text-dim hover:border-accent hover:text-accent"
+                >
+                  <ExternalLink size={12} />
+                </a>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+      <p className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">
+        Call the customer to lock in a visit time.
+      </p>
+    </section>
   )
 }

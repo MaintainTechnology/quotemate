@@ -242,7 +242,7 @@ export default function CrmPage() {
           <div className="flex flex-wrap items-center gap-3">
             <span className={EYEBROW}>CRM &amp; Email</span>
             {isConnected && (
-              <span className="inline-flex items-center gap-1.5 border border-success/40 px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-success">
+              <span className="rounded-ctl inline-flex items-center gap-1.5 border border-success/40 px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-success">
                 <span className="h-1.5 w-1.5 rounded-full bg-success" /> Connected
               </span>
             )}
@@ -266,13 +266,13 @@ export default function CrmPage() {
         )}
 
         {loading ? (
-          <div className="mt-12 border border-ink-line bg-ink-card p-6">
+          <div className="rounded-card mt-12 border border-ink-line bg-ink-card p-6">
             <p className="font-mono text-xs uppercase tracking-[0.14em] text-text-dim">Loading…</p>
           </div>
         ) : isConnected ? (
           <>
             {/* ── KPI strip ── */}
-            <div className="mt-10 grid grid-cols-2 gap-px border border-ink-line bg-ink-line md:grid-cols-4">
+            <div className="rounded-card mt-10 grid grid-cols-2 gap-px border border-ink-line bg-ink-line md:grid-cols-4">
               <Kpi n={status?.contact_count ?? 0} label="Contacts" />
               <Kpi n={campaign?.sent_count ?? 0} label="Emails sent" accent />
               <Kpi n={campaign?.failed_count ?? 0} label="Failed" />
@@ -283,7 +283,7 @@ export default function CrmPage() {
             <Section num="01" title="Connections" blurb="Your linked CRM accounts. Sync to pull in new contacts.">
               <div className="space-y-3">
                 {liveConnections.map((c) => (
-                  <div key={c.provider} className="border border-ink-line bg-ink-card p-5">
+                  <div key={c.provider} className="rounded-card border border-ink-line bg-ink-card p-5">
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div className="flex items-center gap-4">
                         <span className="flex h-11 w-11 shrink-0 items-center justify-center bg-accent font-mono text-lg font-bold text-white">
@@ -335,7 +335,7 @@ export default function CrmPage() {
               title="Announcement"
               blurb="Send (or re-send) the “I'm now on QuoteMax” email to your imported contacts."
             >
-              <div className="border border-ink-line bg-ink-card p-6">
+              <div className="rounded-card border border-ink-line bg-ink-card p-6">
                 {!status?.ready_to_send && (
                   <div className="mb-5 border-l-2 border-warning bg-warning/10 px-4 py-3 text-sm">
                     Add your {(status?.missing_for_send ?? []).join(', ').replace(/_/g, ' ')} in your profile before
@@ -353,7 +353,7 @@ export default function CrmPage() {
                         setMode(e.target.value as 'unsent' | 'all')
                         setPreview(null)
                       }}
-                      className="mt-1.5 block w-72 max-w-full border border-ink-line bg-ink-deep px-3 py-2.5 text-sm text-text-pri focus:border-accent focus:outline-none"
+                      className="rounded-ctl mt-1.5 block w-72 max-w-full border border-ink-line bg-ink-deep px-3 py-2.5 text-sm text-text-pri focus:border-accent focus:outline-none"
                     >
                       <option value="unsent" className="bg-ink-deep">Contacts not yet emailed</option>
                       <option value="all" className="bg-ink-deep">Everyone (re-send)</option>
@@ -426,7 +426,7 @@ export default function CrmPage() {
           /* ── Not connected: connect-first ── */
           <Section num="01" title="Connect your CRM" blurb="HubSpot or Zoho. We only read your contacts.">
             {(status?.providers_available?.length ?? 0) === 0 ? (
-              <div className="border border-ink-line bg-ink-card p-6">
+              <div className="rounded-card border border-ink-line bg-ink-card p-6">
                 <p className="text-sm text-text-dim">
                   No CRM providers are configured on the server yet. Ask your admin to set the HubSpot / Zoho OAuth
                   credentials.
@@ -435,7 +435,7 @@ export default function CrmPage() {
             ) : (
               <div className="grid gap-4 sm:grid-cols-2">
                 {status!.providers_available.map((p, i) => (
-                  <div key={p} className="flex flex-col border border-ink-line bg-ink-card p-7">
+                  <div key={p} className="rounded-card flex flex-col border border-ink-line bg-ink-card p-7">
                     <div className="flex items-center gap-4">
                       <span className="flex h-12 w-12 items-center justify-center bg-accent font-mono text-xl font-bold text-white">
                         {PROVIDER_LABEL[p][0]}
@@ -515,7 +515,7 @@ function StatusPill({ status }: { status: string }) {
         ? 'text-danger border-danger/40'
         : 'text-text-dim border-ink-line'
   return (
-    <span className={`inline-flex border px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-[0.12em] ${tone}`}>
+    <span className={`rounded-ctl inline-flex border px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-[0.12em] ${tone}`}>
       {status}
     </span>
   )

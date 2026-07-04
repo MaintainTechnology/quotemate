@@ -227,12 +227,12 @@ export default function CanvaStudio({
           <div className="h-6 w-40 animate-pulse bg-ink-card" />
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {[0, 1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="aspect-[100/141] animate-pulse border border-ink-line bg-ink-card" />
+              <div key={i} className="rounded-card aspect-[100/141] animate-pulse border border-ink-line bg-ink-card" />
             ))}
           </div>
         </div>
       ) : !configured ? (
-        <p className="border border-ink-line bg-ink-card px-4 py-4 text-sm text-text-sec">
+        <p className="rounded-card border border-ink-line bg-ink-card px-4 py-4 text-sm text-text-sec">
           The Canva integration isn’t configured on the server yet (missing{' '}
           <code className="font-mono text-text-dim">CANVA_CLIENT_ID</code> /{' '}
           <code className="font-mono text-text-dim">CANVA_CLIENT_SECRET</code>).
@@ -243,7 +243,7 @@ export default function CanvaStudio({
           <section className="space-y-4">
             <StepLabel n="01" label="Connect" />
             {connected ? (
-              <div className="flex flex-wrap items-center gap-3 border border-ink-line bg-ink-card px-4 py-3">
+              <div className="rounded-card flex flex-wrap items-center gap-3 border border-ink-line bg-ink-card px-4 py-3">
                 <span className="inline-flex items-center gap-2 text-sm text-text-sec">
                   <span className="h-2 w-2 bg-accent" aria-hidden="true" />
                   Canva account connected
@@ -253,7 +253,7 @@ export default function CanvaStudio({
                 </button>
               </div>
             ) : (
-              <div className="space-y-3 border border-ink-line bg-ink-card p-5">
+              <div className="rounded-card space-y-3 border border-ink-line bg-ink-card p-5">
                 <p className="text-sm text-text-sec">
                   Connect your Canva account to design without leaving QuoteMax. A Canva window opens for you to
                   approve access.
@@ -279,7 +279,7 @@ export default function CanvaStudio({
                     href={t.canvaUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="group flex h-full flex-col border border-ink-line bg-ink-card transition-colors hover:border-accent focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
+                    className="rounded-card group flex h-full flex-col border border-ink-line bg-ink-card transition-colors hover:border-accent focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
                   >
                     <div className="aspect-[100/141] overflow-hidden border-b border-ink-line bg-ink-deep p-3">
                       <FlyerTemplatePreview layout={t.layout} accent={t.accent} />
@@ -302,13 +302,13 @@ export default function CanvaStudio({
           <section className="space-y-4">
             <StepLabel n="03" label="Create & import back" />
             {!connected ? (
-              <p className="border border-ink-line bg-ink-card px-4 py-3 text-sm text-text-dim">
+              <p className="rounded-card border border-ink-line bg-ink-card px-4 py-3 text-sm text-text-dim">
                 Connect your Canva account (step 01) to create a tracked flyer you can import straight back into
                 QuoteMax.
               </p>
             ) : (
               <>
-                <div className="flex flex-wrap items-center gap-3 border border-ink-line bg-ink-card px-4 py-3">
+                <div className="rounded-card flex flex-wrap items-center gap-3 border border-ink-line bg-ink-card px-4 py-3">
                   <p className="min-w-0 flex-1 text-sm text-text-sec">
                     Start a blank Canva flyer linked to QuoteMax, design it, then import the PNG &amp; PDF back here.
                   </p>

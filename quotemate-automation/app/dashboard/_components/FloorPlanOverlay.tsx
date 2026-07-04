@@ -138,7 +138,7 @@ export function FloorPlanOverlay({ file, rooms, loads, design, ceilingHeightM }:
   const warnings = layout.warnings
 
   return (
-    <div className="mt-5 border border-ink-line bg-ink-deep">
+    <div className="rounded-card mt-5 border border-ink-line bg-ink-deep">
       <div className="flex flex-wrap items-center gap-3 border-b border-ink-line px-4 py-2.5">
         <span className="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-accent">
           Indicative design overlay
@@ -306,7 +306,7 @@ export function FloorPlanOverlay({ file, rooms, loads, design, ceilingHeightM }:
           </p>
         )}
         {warnings.map((w) => (
-          <p key={w} className="text-xs leading-relaxed text-amber-500">
+          <p key={w} className="text-xs leading-relaxed text-warning-bright">
             {w}
           </p>
         ))}

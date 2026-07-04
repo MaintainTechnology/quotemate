@@ -30,6 +30,7 @@ import {
 } from '@/lib/quote/availability'
 import { AvailabilityEditor } from '@/app/_components/AvailabilityEditor'
 import { ChangePasswordCard } from './_components/ChangePasswordCard'
+import { OverviewAnalytics } from './_components/OverviewAnalytics'
 import { resolveTradeFormat, tierLabelsForTrade } from '@/lib/quote/trade-format'
 import {
   ALL_CATEGORY,
@@ -48,6 +49,14 @@ import {
 import { mapForkGaps, type ForkGapDisplay } from '@/lib/dashboard/fork-gaps'
 import { licenceFieldsetsForTrades } from '@/lib/dashboard/licence-fieldsets'
 import { collisionView } from '@/lib/dashboard/name-collision'
+import {
+  parseSearchTerms,
+  quoteMatchesSearch,
+  quoteInDateRange,
+  quoteMatchesTrade,
+  tradeOptionsFromQuotes,
+  quoteTradeLabel,
+} from '@/lib/dashboard/quote-filters'
 import {
   LayoutDashboard,
   FileText,
@@ -76,8 +85,17 @@ import {
   History,
   CalendarDays,
   LayoutTemplate,
+  Sparkles,
   Trash2,
   Loader2,
+  Zap,
+  Droplets,
+  Search,
+  Bell,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
+  ChevronDown,
   type LucideProps,
 } from 'lucide-react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
@@ -97,8 +115,10 @@ import { CalendarTab } from './_components/CalendarTab'
 import { HistoricalHint } from './_components/HistoricalHint'
 import { SavedJobsSection } from './_components/SavedJobsSection'
 import CommercialPaintingTab from './_components/commercial-painting/CommercialPaintingTab'
+import { PaginationControls, usePagination } from './_components/Pagination'
 import { StatusPill, StatGrid, TONE_LEFT_RAIL, type Tone } from './_components/quote-ui'
 import { BrandMark } from '@/app/_components/BrandMark'
+import ThemeToggle from '@/app/_components/ThemeToggle'
 import { ErrorBanner, Field, INPUT } from '../signup/page'
 
 type NavIcon = ComponentType<LucideProps>
@@ -337,12 +357,64 @@ type Tab =
   | 'historical-quotes'
   /** Flyer Designer — template-based marketing flyer editor (Marketing tool, all tenants). */
   | 'flyer'
+  /** Trade hubs — one tab per enabled trade consolidating that trade's
+   *  pricing, services, brands, catalogue, recipes, estimating, quotes,
+   *  tools, and pricing-wizard entry. Gated by tenants.trades[]. */
+  | HubTab
+
+/** Every trade that can own a hub tab. Slugs match tenants.trades[] entries
+ *  (lib/admin/trades.ts KNOWN_TRADES — note commercial_painting's underscore). */
+const TRADE_HUB_SLUGS = [
+  'electrical',
+  'plumbing',
+  'roofing',
+  'signage',
+  'painting',
+  'commercial_painting',
+  'aircon',
+  'solar',
+] as const
+type TradeHubSlug = (typeof TRADE_HUB_SLUGS)[number]
+type HubTab = `hub-${TradeHubSlug}`
+
+const HUB_TABS: readonly HubTab[] = TRADE_HUB_SLUGS.map((s) => `hub-${s}` as HubTab)
+
+/** Hub trades that never receive an hourly-rate pricing_book row — they're
+ *  priced through their tool panels instead (roof/paint rate cards, signage
+ *  compliance, AC recommender). Used to suppress the hub pricing empty-state. */
+const NO_BOOK_HUB_TRADES: readonly TradeHubSlug[] = ['roofing', 'painting', 'signage', 'aircon']
+
+function isHubTab(tab: string): tab is HubTab {
+  return (HUB_TABS as readonly string[]).includes(tab)
+}
+
+/** hub-electrical → electrical */
+function hubTrade(tab: HubTab): TradeHubSlug {
+  return tab.slice(4) as TradeHubSlug
+}
+
+/** A hub is enabled when the trade slug appears in tenants.trades[]
+ *  (case-insensitive; legacy single-trade tenants fall back to tenant.trade). */
+function hubEnabled(slug: TradeHubSlug, trades: string[]): boolean {
+  return trades.some((t) => typeof t === 'string' && t.toLowerCase() === slug)
+}
+
+/** Resolve the tenant's trade portfolio with the legacy single-trade fallback
+ *  (pre-migration-017 tenants have trades=[] but a scalar trade). */
+function tenantTradeList(tenant: { trades?: unknown; trade?: unknown } | null | undefined): string[] {
+  const arr = Array.isArray(tenant?.trades)
+    ? (tenant.trades as unknown[]).filter((t): t is string => typeof t === 'string')
+    : []
+  if (arr.length > 0) return arr
+  return typeof tenant?.trade === 'string' && tenant.trade ? [tenant.trade] : []
+}
 
 /** Tabs reachable via /dashboard?tab=… (e.g. the estimator run page's breadcrumb). */
 const DEEP_LINK_TABS: readonly Tab[] = [
   'overview', 'account', 'payouts', 'billing', 'pricing', 'services', 'catalogue', 'estimating',
   'recipes', 'quotes', 'chats', 'followups', 'calendar', 'roofing', 'signage', 'painting',
   'commercial-painting', 'aircon', 'estimator', 'solar', 'invites', 'files', 'historical-quotes', 'flyer',
+  ...HUB_TABS,
 ]
 
 /** SMS conversation summary returned by /api/tenant/chats. Drives the
@@ -374,6 +446,29 @@ export default function DashboardPage() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('overview')
+  // Desktop rail fold (reference design) — persisted so the tradie's
+  // choice survives reloads. Read after mount to keep SSR/CSR in sync.
+  const [railCollapsed, setRailCollapsed] = useState(false)
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('qm-dash-rail') === 'collapsed') {
+        setRailCollapsed(true)
+      }
+    } catch {
+      /* private mode / blocked storage — ignore */
+    }
+  }, [])
+  const toggleRail = useCallback(() => {
+    setRailCollapsed((v) => {
+      const next = !v
+      try {
+        localStorage.setItem('qm-dash-rail', next ? 'collapsed' : 'open')
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  }, [])
   // is_admin gates the "Admin loader" sidebar entry. Probe lazily off the
   // access token — non-admin users never see the link. Server still
   // enforces admin on every /admin/* route (the link is just UX).
@@ -417,8 +512,9 @@ export default function DashboardPage() {
   // direct-URL path so a disabled feature never renders its tool.
   useEffect(() => {
     if (!data) return
-    const trades = (data.tenant.trades as unknown as string[]) ?? []
+    const trades = tenantTradeList(data.tenant)
     if (isFeatureTab(tab) && !isTabEnabled(tab, trades)) setTab('overview')
+    if (isHubTab(tab) && !hubEnabled(hubTrade(tab), trades)) setTab('overview')
   }, [data, tab])
 
   // Lazily probe is_admin once the access token lands. Fails CLOSED — any
@@ -682,7 +778,7 @@ export default function DashboardPage() {
           <ErrorBanner>{loadError}</ErrorBanner>
           <button
             onClick={() => accessToken && refresh(accessToken)}
-            className="mt-4 inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-5 py-2.5 text-xs uppercase tracking-wider"
+            className="rounded-ctl mt-4 inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-5 py-2.5 text-xs uppercase tracking-wider"
           >
             Try again
           </button>
@@ -716,38 +812,48 @@ export default function DashboardPage() {
       ownerFirstName={data.tenant.owner_first_name ?? 'Tradie'}
       tenantStatus={data.tenant.status}
       tenantSubtitle={profileSubtitle || null}
+      topbar={{
+        navItems: buildNav(data.quotes.length, tenantTradeList(data.tenant)),
+        setTab,
+        quotes: data.quotes,
+      }}
     >
-      {/* Mobile tab strip (< lg). Hidden on desktop — sidebar takes over. */}
-      <MobileTabBar
-        tab={tab}
-        setTab={setTab}
-        quoteCount={data.quotes.length}
-        trades={data.tenant.trades as unknown as string[]}
-      />
-
-      {/* Desktop two-column grid: sidebar | content. On mobile this
-          collapses to single-column with MobileTabBar handling section
-          switching above. The grid starts immediately under the top
-          nav — no big greeting block above so the sidebar aligns flush
-          with the KPI row. */}
-      <div className="mt-4 lg:mt-6 lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-8">
+      {/* App shell — flush-left full-height sidebar (its right border is the
+          only divider) + a scrollable content column, matching the QuoteMax
+          dashboard reference. The sidebar is hidden below lg, where the
+          MobileTabBar takes over. The grid column width animates on collapse. */}
+      <div
+        className={`lg:grid lg:items-stretch motion-safe:transition-[grid-template-columns] motion-safe:duration-300 motion-safe:[transition-timing-function:cubic-bezier(0.22,1,0.36,1)] ${
+          railCollapsed
+            ? 'lg:grid-cols-[3.75rem_minmax(0,1fr)]'
+            : 'lg:grid-cols-[15rem_minmax(0,1fr)]'
+        }`}
+      >
         <Sidebar
           tab={tab}
           setTab={setTab}
           quoteCount={data.quotes.length}
           isAdmin={isAdmin}
-          trades={data.tenant.trades as unknown as string[]}
+          trades={tenantTradeList(data.tenant)}
+          collapsed={railCollapsed}
+          onToggleCollapse={toggleRail}
         />
-        <section className="mt-6 lg:mt-0 pb-20 min-w-0">
-          {/* `key={tab}` forces a tear-down + remount when the user
-              switches tabs, so the inner fade-in keyframe re-fires.
-              OverviewTab's chat fetch lives behind an effect so the
-              brief loading state on first paint is acceptable. */}
-          <div
-            key={tab}
-            className="motion-safe:animate-[fade-up_300ms_cubic-bezier(0.22,1,0.36,1)_both]"
-          >
-            {tab !== 'overview' && <TabHeader tab={tab} />}
+        <div className="min-w-0">
+          <div className="mx-auto w-full max-w-[96rem] px-4 sm:px-6 lg:px-8 py-5 sm:py-6 pb-20">
+            {/* Mobile tab strip (< lg). Hidden on desktop — sidebar takes over. */}
+            <MobileTabBar
+              tab={tab}
+              setTab={setTab}
+              quoteCount={data.quotes.length}
+              trades={tenantTradeList(data.tenant)}
+            />
+            {/* `key={tab}` forces a tear-down + remount when the user
+                switches tabs, so the inner fade-in keyframe re-fires. */}
+            <div
+              key={tab}
+              className="mt-4 lg:mt-0 motion-safe:animate-[fade-up_300ms_cubic-bezier(0.22,1,0.36,1)_both]"
+            >
+            {tab !== 'overview' && !isHubTab(tab) && <TabHeader tab={tab} />}
             {tab === 'overview' && (
               <OverviewTab data={data} accessToken={accessToken} setTab={setTab} />
             )}
@@ -771,7 +877,7 @@ export default function DashboardPage() {
               />
             )}
             {tab === 'pricing' && (
-              <PricingTab data={data} onSave={patch} accessToken={accessToken} />
+              <PricingTab data={data} onSave={patch} accessToken={accessToken} sharedOnly />
             )}
             {tab === 'services' && (
               <ServicesTab
@@ -821,7 +927,7 @@ export default function DashboardPage() {
               <div className="space-y-7">
                 <Link
                   href="/dashboard/aircon"
-                  className="group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
+                  className="rounded-card group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
                 >
                   <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">
                     AC
@@ -853,7 +959,7 @@ export default function DashboardPage() {
               <div className="space-y-7">
                 <Link
                   href="/dashboard/invites"
-                  className="group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
+                  className="rounded-card group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
                 >
                   <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">
                     QR
@@ -872,7 +978,7 @@ export default function DashboardPage() {
                 </Link>
                 <Link
                   href="/dashboard/crm"
-                  className="group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
+                  className="rounded-card group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
                 >
                   <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">
                     CRM
@@ -892,8 +998,27 @@ export default function DashboardPage() {
               </div>
             )}
             {tab === 'flyer' && <FlyerDesignerTab accessToken={accessToken} />}
+            {isHubTab(tab) && (
+              <TradeHub
+                trade={hubTrade(tab)}
+                data={data}
+                accessToken={accessToken}
+                onSave={patch}
+                onCreateCustom={createCustomService}
+                onUpdateCustom={updateCustomService}
+                onDeleteCustom={deleteCustomService}
+                onQuoteDeleted={(id) =>
+                  setData((prev) =>
+                    prev
+                      ? { ...prev, quotes: prev.quotes.filter((q) => q.id !== id) }
+                      : prev,
+                  )
+                }
+              />
+            )}
+            </div>
           </div>
-        </section>
+        </div>
       </div>
     </Shell>
   )
@@ -908,32 +1033,51 @@ export default function DashboardPage() {
 function DashboardSkeleton() {
   return (
     <div
-      className="mt-4 lg:mt-6 lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-8"
+      className="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-stretch"
       role="status"
       aria-label="Loading your portal"
     >
-      <div className="hidden lg:block">
-        <div className="h-96 border border-ink-line bg-ink motion-safe:animate-pulse" />
-      </div>
-      <div className="space-y-6">
-        <div className="space-y-2.5">
-          <div className="h-3 w-40 bg-ink-card motion-safe:animate-pulse" />
-          <div className="h-8 w-72 max-w-full bg-ink-card motion-safe:animate-pulse" />
-        </div>
-        <div className="h-36 border border-ink-line bg-ink-card motion-safe:animate-pulse" />
-        <div className="grid grid-cols-2 gap-px border border-ink-line bg-ink-line lg:grid-cols-4">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-28 bg-ink-card motion-safe:animate-pulse" />
+      {/* Flush-left sidebar skeleton */}
+      <div className="hidden lg:block self-stretch border-r border-ink-line bg-ink-deep">
+        <div className="sticky top-[61px] space-y-2 p-3">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <div
+              key={i}
+              className="h-9 rounded-lg bg-ink-card motion-safe:animate-pulse"
+            />
           ))}
         </div>
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="h-64 border border-ink-line bg-ink-card motion-safe:animate-pulse lg:col-span-2" />
-          <div className="h-64 border border-ink-line bg-ink-card motion-safe:animate-pulse" />
+      </div>
+      {/* Content skeleton — mirrors the 6-cell KPI strip + 2-column grid */}
+      <div className="min-w-0">
+        <div className="mx-auto w-full max-w-[96rem] space-y-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
+          <div className="space-y-2.5">
+            <div className="h-3 w-40 bg-ink-card motion-safe:animate-pulse" />
+            <div className="h-9 w-72 max-w-full bg-ink-card motion-safe:animate-pulse" />
+          </div>
+          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-card border border-ink-line bg-ink-line sm:grid-cols-3 lg:grid-cols-6">
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="h-24 bg-ink-card motion-safe:animate-pulse" />
+            ))}
+          </div>
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.75fr)_minmax(300px,430px)]">
+            <div className="rounded-card h-80 border border-ink-line bg-ink-card motion-safe:animate-pulse" />
+            <div className="rounded-card h-80 border border-ink-line bg-ink-card motion-safe:animate-pulse" />
+          </div>
+          <span className="sr-only">Loading your portal…</span>
         </div>
-        <span className="sr-only">Loading your portal…</span>
       </div>
     </div>
   )
+}
+
+/** Live context the authenticated topbar needs for the reference-design
+ *  chrome — the ⌘K command palette and the notifications bell. Loading and
+ *  error Shells omit it, so those states render the plain brand bar. */
+type TopbarContext = {
+  navItems: NavItem[]
+  setTab: (t: Tab) => void
+  quotes: Quote[]
 }
 
 function Shell({
@@ -944,6 +1088,7 @@ function Shell({
   ownerFirstName,
   tenantStatus,
   tenantSubtitle,
+  topbar,
 }: {
   businessName: string | null
   onSignOut: () => void
@@ -961,150 +1106,656 @@ function Shell({
   /** Small one-line context under the name in the profile chip — e.g.
    *  "Electrical · NSW". */
   tenantSubtitle?: string | null
+  /** Authenticated chrome — search palette + notifications. Optional so
+   *  the loading/error Shells keep working unchanged. */
+  topbar?: TopbarContext
 }) {
   const showProfile = !!ownerFirstName
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const hasTopbar = !!topbar
+
+  // ⌘K / Ctrl+K toggles the command palette (reference-design shortcut).
+  useEffect(() => {
+    if (!hasTopbar) return
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen((v) => !v)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [hasTopbar])
+
   return (
     <main className="min-h-screen app-canvas text-text-pri flex flex-col">
-      <nav className="border-b border-ink-line bg-ink-deep/90 backdrop-blur-md sticky top-0 z-20">
+      {/* Film grain — kills the banding that makes flat dark UIs read as
+          cheap. Fixed + non-interactive, same treatment as the reference
+          dashboard and the marketing canvas. */}
+      <div aria-hidden="true" className="noise-overlay" />
+      <nav className="border-b border-ink-line bg-ink-deep/90 backdrop-blur-md sticky top-0 z-30">
         <div
-          className={`mx-auto flex items-center justify-between gap-2 sm:gap-4 px-4 sm:px-6 py-4 ${
-            wide ? 'max-w-[96rem]' : 'max-w-7xl'
+          className={`flex items-center justify-between gap-2 sm:gap-4 px-4 sm:px-5 h-[60px] ${
+            wide ? 'w-full' : 'mx-auto max-w-7xl'
           }`}
         >
           <Link href="/dashboard" className="flex items-center gap-2 sm:gap-3 min-w-0">
             <BrandMark className="h-10 w-10" />
-            {/* Brand wordmark hidden on the smallest screens — the
-                Q-logo carries the brand and we need the row for the
-                business name + profile chip + sign-out. */}
+            {/* Reference lockup — mark + wordmark only. The tradie's
+                business name lives in the profile chip (top-right), not
+                here, matching the QuoteMax dashboard reference. */}
             <span className="hidden sm:inline font-extrabold uppercase tracking-tight text-text-pri shrink-0">
               QuoteMax
             </span>
-            {businessName && (
-              <>
-                <span className="hidden sm:inline text-text-dim shrink-0">/</span>
-                <span className="font-mono text-xs uppercase tracking-[0.14em] text-text-sec truncate max-w-[10rem] sm:max-w-none">
-                  {businessName}
-                </span>
-              </>
-            )}
           </Link>
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            {showProfile && (
-              <ProfileChip
-                firstName={ownerFirstName!}
-                subtitle={tenantSubtitle ?? null}
-                status={tenantStatus ?? null}
-              />
-            )}
-            {/* Pricing Wizard — guided onboarding for tradies without a
-                trade-book PDF to upload. Sits in the nav so it's reachable
-                from every dashboard view, not just first-time signup. */}
-            <Link
-              href="/dashboard/pricing-wizard"
-              aria-label="Pricing wizard"
-              className="inline-flex items-center gap-2 self-stretch border border-accent/55 bg-accent/10 px-3.5 py-2.5 text-xs font-semibold uppercase tracking-wider text-accent transition-colors hover:border-accent hover:bg-accent/20"
-            >
-              <span className="font-mono text-[0.7rem] tracking-[0.14em]">
-                ★
-              </span>
-              <span className="hidden sm:inline">Pricing wizard</span>
-            </Link>
+
+          {/* Search trigger — the reference topbar's centre element. A
+              field-styled button (not a real input) that opens the ⌘K
+              palette. Hidden below lg where the row is already tight. */}
+          {topbar && (
             <button
               type="button"
-              onClick={onSignOut}
-              aria-label="Sign out"
-              className="inline-flex items-center gap-2 self-stretch border border-ink-line px-3.5 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-sec transition-colors cursor-pointer hover:border-text-dim hover:bg-ink-card hover:text-text-pri"
+              onClick={() => setPaletteOpen(true)}
+              className="hidden lg:flex w-full max-w-[420px] min-w-0 items-center gap-2.5 h-9 px-3 rounded-lg bg-ink border border-ink-line text-left transition-colors cursor-pointer hover:border-text-dim"
+              aria-label="Search quotes, customers, jobs"
+              aria-haspopup="dialog"
             >
-              <LogOut
-                size={16}
-                strokeWidth={1.75}
-                aria-hidden="true"
-                className="shrink-0"
-              />
-              <span className="hidden sm:inline">Sign out</span>
+              <Search size={15} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-text-dim" />
+              <span className="flex-1 truncate text-[0.8rem] text-text-dim">
+                Search quotes, customers, jobs
+              </span>
+              <kbd className="shrink-0 border border-ink-line rounded-[5px] px-1.5 py-0.5 font-mono text-[0.6rem] font-semibold text-text-dim">
+                ⌘K
+              </kbd>
             </button>
+          )}
+
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            {/* Compact search trigger below lg — same palette, icon-only. */}
+            {topbar && (
+              <button
+                type="button"
+                onClick={() => setPaletteOpen(true)}
+                aria-label="Search quotes, customers, jobs"
+                aria-haspopup="dialog"
+                className="lg:hidden inline-flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-ctl border border-ink-line text-text-sec transition-colors cursor-pointer hover:border-text-dim hover:text-text-pri"
+              >
+                <Search size={16} strokeWidth={1.75} aria-hidden="true" />
+              </button>
+            )}
+            {/* New quote — the reference topbar's primary action. Quotes are
+                drafted from customer SMS/voice, so (like the reference's own
+                goQuotes) this opens the Quotes queue rather than a manual
+                composer. Yellow fill, dark ink — never white on yellow. */}
+            {topbar && (
+              <button
+                type="button"
+                onClick={() => topbar.setTab('quotes')}
+                aria-label="New quote"
+                className="inline-flex h-11 md:h-9 items-center gap-2 rounded-ctl bg-accent px-3 sm:px-4 text-[13px] font-bold text-accent-ink transition-colors cursor-pointer hover:bg-accent-press"
+              >
+                <Plus size={16} strokeWidth={2.25} aria-hidden="true" className="shrink-0" />
+                <span className="hidden sm:inline">New quote</span>
+              </button>
+            )}
+            {topbar && (
+              <NotificationsBell
+                quotes={topbar.quotes}
+                onOpenQuotes={() => topbar.setTab('quotes')}
+              />
+            )}
+            <ThemeToggle />
+            {showProfile ? (
+              <>
+                <span
+                  aria-hidden="true"
+                  className="hidden sm:block h-7 w-px bg-ink-line"
+                />
+                <ProfileChip
+                  firstName={ownerFirstName!}
+                  businessName={businessName}
+                  subtitle={tenantSubtitle ?? null}
+                  status={tenantStatus ?? null}
+                  onSignOut={onSignOut}
+                  onAccount={topbar ? () => topbar.setTab('account') : undefined}
+                />
+              </>
+            ) : (
+              /* Loading / error shells have no profile chip — keep a plain
+                 Sign out control so the tradie is never stranded. */
+              <button
+                type="button"
+                onClick={onSignOut}
+                aria-label="Sign out"
+                className="inline-flex items-center gap-2 self-stretch rounded-ctl border border-ink-line px-3.5 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-sec transition-colors cursor-pointer hover:border-text-dim hover:bg-ink-card hover:text-text-pri"
+              >
+                <LogOut
+                  size={16}
+                  strokeWidth={1.75}
+                  aria-hidden="true"
+                  className="shrink-0"
+                />
+                <span className="hidden sm:inline">Sign out</span>
+              </button>
+            )}
           </div>
         </div>
       </nav>
-      <div
-        className={`flex-1 mx-auto w-full px-4 sm:px-6 py-5 sm:py-6 ${
-          wide ? 'max-w-[96rem]' : 'max-w-5xl py-10'
-        }`}
-      >
-        {children}
-      </div>
+      {topbar && (
+        <CommandPalette
+          open={paletteOpen}
+          onClose={() => setPaletteOpen(false)}
+          navItems={topbar.navItems}
+          setTab={topbar.setTab}
+          quotes={topbar.quotes}
+        />
+      )}
+      {wide ? (
+        /* Dashboard app body — full-width, no centering. The children provide
+           the flush-left sidebar + content column themselves. */
+        <div className="flex-1 w-full min-w-0">{children}</div>
+      ) : (
+        /* Loading / error shells — a centred, narrow column. */
+        <div className="flex-1 mx-auto w-full max-w-5xl px-4 sm:px-6 py-10">
+          {children}
+        </div>
+      )}
     </main>
   )
 }
 
-/** Identity unit in the top-nav right cluster — a single flush block:
- *  a solid accent avatar square (echoes the nav Q-mark), the owner's
- *  name + trade/state, and an ops-console account-status readout.
- *  Status is shown as a labelled key/value with a vertical accent tick
- *  — deliberately NOT a free-floating coloured status dot.
- *  Responsive: avatar-only on phones, + identity from `sm`, + status
- *  readout from `md`, so the chip never crowds a narrow nav. */
+/** Identity chip + account menu in the top-nav right cluster. A single
+ *  chip — accent avatar square, owner name, business name, chevron — that
+ *  opens a dropdown carrying the account-status readout, an Account jump,
+ *  and Sign out. Mirrors the QuoteMax dashboard reference; Sign out lives
+ *  in the menu, not as a bare nav button. Click-away + ESC close it and
+ *  return focus to the trigger. */
 function ProfileChip({
   firstName,
+  businessName,
   subtitle,
   status,
+  onSignOut,
+  onAccount,
 }: {
   firstName: string
+  businessName: string | null
   subtitle: string | null
   status: 'onboarding' | 'active' | null
+  onSignOut: () => void
+  onAccount?: () => void
 }) {
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef<HTMLDivElement | null>(null)
+  const btnRef = useRef<HTMLButtonElement | null>(null)
   const initial = (firstName.trim()[0] ?? '?').toUpperCase()
   const active = status === 'active'
+  const subline = businessName || subtitle
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: PointerEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpen(false)
+        btnRef.current?.focus()
+      }
+    }
+    document.addEventListener('pointerdown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
   return (
-    <div className="flex items-stretch border border-ink-line bg-ink-card/70">
-      {/* Avatar — solid accent square, the same mark language as the
-          QuoteMax logo so the identity reads as part of the system. */}
-      <span
-        aria-hidden="true"
-        className="grid h-9 w-9 shrink-0 place-items-center bg-accent font-mono text-[0.95rem] font-extrabold text-white"
+    <div ref={wrapRef} className="relative">
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="true"
+        aria-label="Account menu"
+        className="flex h-11 md:h-9 items-center gap-2.5 overflow-hidden rounded-ctl border border-ink-line bg-ink-card/70 pr-2.5 transition-colors cursor-pointer hover:border-text-dim"
       >
-        {initial}
-      </span>
-
-      {/* Name + trade/state — collapses on the smallest screens. */}
-      <div className="hidden sm:flex min-w-0 flex-col justify-center px-3 leading-tight">
-        <span className="truncate text-[0.8rem] font-extrabold uppercase tracking-[0.04em] text-text-pri">
-          {firstName}
+        {/* Avatar — solid accent square, the same mark language as the
+            QuoteMax logo so the identity reads as part of the system. */}
+        <span
+          aria-hidden="true"
+          className="grid h-full w-11 md:w-9 shrink-0 place-items-center bg-accent font-mono text-[0.95rem] font-extrabold text-accent-ink"
+        >
+          {initial}
         </span>
-        {subtitle && (
-          <span className="mt-0.5 truncate font-mono text-[0.55rem] uppercase tracking-[0.13em] text-text-dim">
-            {subtitle}
+        <span className="hidden sm:flex min-w-0 flex-col justify-center text-left leading-tight">
+          <span className="truncate text-[0.85rem] font-bold text-text-pri">
+            {firstName}
           </span>
-        )}
-      </div>
-
-      {/* Account status — a labelled readout, not a status pill. The
-          vertical tick mirrors the accent marker on every card header. */}
-      {status && (
-        <div className="hidden md:flex items-center gap-2 border-l border-ink-line pl-3 pr-3.5">
-          <span
-            aria-hidden="true"
-            className={`h-7 w-[3px] shrink-0 ${
-              active
-                ? 'bg-emerald-400 shadow-[0_0_8px_1px_rgba(52,211,153,0.55)] motion-safe:animate-[pulse-soft_2.6s_ease-in-out_infinite]'
-                : 'bg-amber-400'
-            }`}
-          />
-          <div className="flex flex-col leading-tight">
-            <span className="font-mono text-[0.5rem] uppercase tracking-[0.18em] text-text-dim">
-              Account
+          {subline && (
+            <span className="mt-0.5 truncate font-mono text-[0.55rem] uppercase tracking-[0.13em] text-text-dim">
+              {subline}
             </span>
-            <span
-              className={`font-mono text-[0.62rem] font-bold uppercase tracking-[0.13em] ${
-                active ? 'text-emerald-300' : 'text-amber-300'
-              }`}
-            >
-              {active ? 'Active' : 'Onboarding'}
-            </span>
+          )}
+        </span>
+        <ChevronDown
+          size={15}
+          strokeWidth={2}
+          aria-hidden="true"
+          className={`hidden sm:block shrink-0 text-text-dim transition-transform ${
+            open ? 'rotate-180' : ''
+          }`}
+        />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-[calc(100%+10px)] z-40 w-[min(260px,88vw)] overflow-hidden rounded-card edge-lit border border-ink-line bg-ink-card shadow-[0_16px_40px_-12px_rgba(11,9,7,0.55)]">
+          <div className="border-b border-ink-line px-4 py-3">
+            <div className="truncate text-[0.85rem] font-extrabold uppercase tracking-[0.02em] text-text-pri">
+              {firstName}
+            </div>
+            {businessName && (
+              <div className="mt-0.5 truncate font-mono text-[0.58rem] uppercase tracking-[0.12em] text-text-dim">
+                {businessName}
+              </div>
+            )}
+            {(subtitle || status) && (
+              <div className="mt-2 flex items-center gap-2">
+                {status && (
+                  <span
+                    aria-hidden="true"
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      active ? 'bg-success-bright' : 'bg-warning-bright'
+                    }`}
+                  />
+                )}
+                <span className="font-mono text-[0.58rem] uppercase tracking-[0.12em] text-text-sec">
+                  {[subtitle, status ? (active ? 'Active' : 'Onboarding') : null]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+              </div>
+            )}
           </div>
+          {onAccount && (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false)
+                onAccount()
+              }}
+              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-[0.8rem] font-semibold text-text-sec transition-colors cursor-pointer hover:bg-ink-deep/50 hover:text-text-pri"
+            >
+              <User size={15} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
+              Account settings
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false)
+              onSignOut()
+            }}
+            className="flex w-full items-center gap-2.5 border-t border-ink-line px-4 py-2.5 text-left text-[0.8rem] font-semibold text-text-sec transition-colors cursor-pointer hover:bg-ink-deep/50 hover:text-text-pri"
+          >
+            <LogOut size={15} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
+            Sign out
+          </button>
         </div>
       )}
     </div>
+  )
+}
+
+/** Notifications bell + dropdown panel — the reference topbar's activity
+ *  feed. Sourced entirely from the quotes already loaded by /api/tenant/me:
+ *  every quote still sitting in the review queue is a notification. A row
+ *  (or the footer) jumps to the Quotes tab. No extra network round-trips. */
+function NotificationsBell({
+  quotes,
+  onOpenQuotes,
+}: {
+  quotes: Quote[]
+  onOpenQuotes: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef<HTMLDivElement | null>(null)
+  const btnRef = useRef<HTMLButtonElement | null>(null)
+
+  const pending = useMemo(
+    () =>
+      quotes
+        .filter((q) => quoteMatchesFilter(q, 'review'))
+        .slice()
+        .sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        )
+        .slice(0, 5),
+    [quotes],
+  )
+
+  // Click-away via a document-level listener instead of a fixed overlay:
+  // the sticky nav's backdrop-blur creates a containing block for fixed
+  // descendants, which would mis-anchor an inset-0 scrim rendered here.
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: PointerEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    const onKey = (e: KeyboardEvent) => {
+      // ESC closes and returns focus to the bell trigger (WCAG 2.4.3) so a
+      // keyboard user who tabbed into the panel isn't dropped on <body>.
+      if (e.key === 'Escape') {
+        setOpen(false)
+        btnRef.current?.focus()
+      }
+    }
+    document.addEventListener('pointerdown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label={
+          pending.length > 0
+            ? `Notifications, ${pending.length} quotes to review`
+            : 'Notifications'
+        }
+        aria-expanded={open}
+        aria-haspopup="true"
+        className="relative inline-flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-lg border border-ink-line text-text-sec transition-colors cursor-pointer hover:border-text-dim hover:text-text-pri"
+      >
+        <Bell size={16} strokeWidth={1.75} aria-hidden="true" />
+        {pending.length > 0 && (
+          <span
+            aria-hidden="true"
+            className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-accent ring-2 ring-ink-deep"
+          />
+        )}
+      </button>
+      {open && (
+        <div className="absolute right-0 top-[calc(100%+10px)] z-40 w-[min(350px,88vw)] overflow-hidden rounded-[14px] border border-ink-line bg-ink-card edge-lit shadow-[0_16px_40px_-12px_rgba(11,9,7,0.55)]">
+          <div className="flex items-center justify-between border-b border-ink-line px-4 py-3">
+            <span className="font-mono text-[0.62rem] font-bold uppercase tracking-[0.16em] text-text-pri">
+              Notifications
+            </span>
+            <span className="font-mono text-[0.56rem] uppercase tracking-[0.1em] text-text-dim">
+              {pending.length > 0 ? `${pending.length} to review` : 'All clear'}
+            </span>
+          </div>
+          {pending.length === 0 ? (
+            <p className="px-4 py-5 text-sm text-text-sec">
+              All caught up. Nothing needs review.
+            </p>
+          ) : (
+            pending.map((q) => (
+              <button
+                key={q.id}
+                type="button"
+                onClick={() => {
+                  setOpen(false)
+                  onOpenQuotes()
+                }}
+                className="block w-full border-b border-ink-line px-4 py-3 text-left transition-colors cursor-pointer hover:bg-ink-deep/50"
+              >
+                <span className="flex items-center justify-between gap-3">
+                  <span className="truncate text-[0.82rem] font-semibold text-text-pri">
+                    {q.customer_full_name || q.customer_first_name || 'Customer'}
+                    {' · '}
+                    {fmtJobType(q.job_type)}
+                  </span>
+                  {q.total_inc_gst != null && (
+                    <span className="shrink-0 font-mono text-[0.7rem] font-bold tabular-nums text-text-sec">
+                      {fmtAUD(toNum(q.total_inc_gst))}
+                    </span>
+                  )}
+                </span>
+                <span className="mt-0.5 block font-mono text-[0.58rem] uppercase tracking-[0.1em] text-text-dim">
+                  Quote drafted · {fmtRelative(q.created_at)}
+                </span>
+              </button>
+            ))
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false)
+              onOpenQuotes()
+            }}
+            className="block w-full px-4 py-2.5 text-left font-mono text-[0.62rem] font-bold uppercase tracking-[0.14em] text-accent transition-colors cursor-pointer hover:bg-ink-deep/50"
+          >
+            View all quotes →
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** ⌘K command palette — the reference topbar's search, client-side only.
+ *  Searches the already-loaded nav sections and quote queue; selecting a
+ *  result switches tabs. Rendered through a portal because the sticky
+ *  nav's backdrop-blur would otherwise clip the fixed overlay. */
+function CommandPalette({
+  open,
+  onClose,
+  navItems,
+  setTab,
+  quotes,
+}: {
+  open: boolean
+  onClose: () => void
+  navItems: NavItem[]
+  setTab: (t: Tab) => void
+  quotes: Quote[]
+}) {
+  const [query, setQuery] = useState('')
+
+  // Fresh query each time the palette opens. Kept separate from the ESC
+  // listener below so a parent re-render (new onClose identity) can't
+  // wipe what the tradie is typing.
+  useEffect(() => {
+    if (open) setQuery('')
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
+  // Dialog focus contract (WCAG 2.4.3): remember what was focused when the
+  // palette opened (the search trigger) and return focus there on close, so
+  // keyboard users don't get dumped at the top of the document.
+  useEffect(() => {
+    if (!open) return
+    const prev = document.activeElement as HTMLElement | null
+    return () => prev?.focus?.()
+  }, [open])
+
+  if (!open || typeof document === 'undefined') return null
+
+  const q = query.trim().toLowerCase()
+  const navHits = navItems.filter(
+    (i) => !q || i.label.toLowerCase().includes(q),
+  )
+  const showWizard = !q || 'pricing wizard'.includes(q)
+  const quoteHits = quotes
+    .filter((qt) => {
+      if (!q) return true
+      return [
+        qt.customer_full_name,
+        qt.customer_first_name,
+        qt.job_type,
+        qt.suburb,
+        qt.status,
+      ].some((v) => v && String(v).toLowerCase().replace(/_/g, ' ').includes(q))
+    })
+    .slice(0, 6)
+  const empty = navHits.length === 0 && !showWizard && quoteHits.length === 0
+
+  const go = (t: Tab) => {
+    setTab(t)
+    onClose()
+  }
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center bg-ink-deep/60 px-4 pt-[11vh]"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Search quotes, customers, jobs"
+    >
+      <div
+        className="flex w-[min(620px,92vw)] max-h-[64vh] flex-col overflow-hidden rounded-[14px] border border-ink-line bg-ink-card edge-lit shadow-[0_24px_60px_-12px_rgba(11,9,7,0.7)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <label className="flex cursor-text items-center gap-3 border-b border-ink-line px-4 py-3.5 sm:px-5">
+          <Search
+            size={16}
+            strokeWidth={1.75}
+            aria-hidden="true"
+            className="shrink-0 text-text-dim"
+          />
+          <input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search quotes, customers, jobs"
+            className="rounded-ctl min-w-0 flex-1 bg-transparent text-[0.95rem] text-text-pri outline-none placeholder:text-text-dim"
+            aria-label="Search quotes, customers, jobs"
+          />
+          <kbd className="shrink-0 rounded-[5px] border border-ink-line px-1.5 py-0.5 font-mono text-[0.6rem] font-semibold text-text-dim">
+            ESC
+          </kbd>
+        </label>
+        {/* Result count for screen readers (WCAG 4.1.3) — the visible list
+            updates silently as the tradie types; this announces how many
+            matches the current query has. */}
+        <p className="sr-only" role="status" aria-live="polite">
+          {empty
+            ? `No matches for ${query}`
+            : `${navHits.length + (showWizard ? 1 : 0) + quoteHits.length} results`}
+        </p>
+        <div className="overflow-y-auto">
+          {(navHits.length > 0 || showWizard) && (
+            <div>
+              <div className="px-4 sm:px-5 pt-3 pb-1.5 font-mono text-[0.56rem] font-bold uppercase tracking-[0.16em] text-text-dim">
+                Go to
+              </div>
+              {navHits.map((item) => {
+                const Icon = item.icon
+                return (
+                  <button
+                    key={item.tab}
+                    type="button"
+                    onClick={() => go(item.tab)}
+                    className="flex w-full items-center gap-3 px-4 sm:px-5 py-2.5 text-left transition-colors cursor-pointer hover:bg-ink-deep/50"
+                  >
+                    <Icon
+                      size={15}
+                      strokeWidth={1.75}
+                      aria-hidden="true"
+                      className="shrink-0 text-text-dim"
+                    />
+                    <span className="flex-1 truncate text-[0.84rem] font-semibold text-text-pri">
+                      {item.label}
+                    </span>
+                    {typeof item.count === 'number' && item.count > 0 && (
+                      <span className="shrink-0 font-mono text-[0.7rem] font-bold tabular-nums text-text-sec">
+                        {item.count}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+              {showWizard && (
+                <Link
+                  href="/dashboard/pricing-wizard"
+                  onClick={onClose}
+                  className="flex w-full items-center gap-3 px-4 sm:px-5 py-2.5 text-left transition-colors hover:bg-ink-deep/50"
+                >
+                  <Sparkles
+                    size={15}
+                    strokeWidth={1.75}
+                    aria-hidden="true"
+                    className="shrink-0 text-accent"
+                  />
+                  <span className="flex-1 truncate text-[0.84rem] font-semibold text-accent">
+                    Pricing wizard
+                  </span>
+                </Link>
+              )}
+            </div>
+          )}
+          {quoteHits.length > 0 && (
+            <div
+              className={
+                navHits.length > 0 || showWizard
+                  ? 'border-t border-ink-line'
+                  : ''
+              }
+            >
+              <div className="px-4 sm:px-5 pt-3 pb-1.5 font-mono text-[0.56rem] font-bold uppercase tracking-[0.16em] text-text-dim">
+                Quotes
+              </div>
+              {quoteHits.map((qt) => (
+                <button
+                  key={qt.id}
+                  type="button"
+                  onClick={() => go('quotes')}
+                  className="flex w-full items-center justify-between gap-3 px-4 sm:px-5 py-2.5 text-left transition-colors cursor-pointer hover:bg-ink-deep/50"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-[0.84rem] font-semibold text-text-pri">
+                      {qt.customer_full_name ||
+                        qt.customer_first_name ||
+                        'Customer'}
+                    </span>
+                    <span className="mt-0.5 block truncate font-mono text-[0.58rem] uppercase tracking-[0.1em] text-text-dim">
+                      {[
+                        fmtJobType(qt.job_type),
+                        qt.suburb,
+                        (qt.status || 'draft').replace(/_/g, ' '),
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </span>
+                  </span>
+                  {qt.total_inc_gst != null && (
+                    <span className="shrink-0 font-mono text-[0.7rem] font-bold tabular-nums text-text-sec">
+                      {fmtAUD(toNum(qt.total_inc_gst))}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+          {empty && (
+            <p className="px-5 py-6 text-sm text-text-sec">
+              No matches for “{query}”. Try a customer name, job or page.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -1126,27 +1777,59 @@ type NavItem = {
   count?: number | null
 }
 
+/** Nav config for the per-trade hub tabs — label + icon per trade slug.
+ *  Order here fixes the sidebar/mobile order of the Trades band. */
+const HUB_NAV: { slug: TradeHubSlug; label: string; icon: NavIcon }[] = [
+  { slug: 'electrical', label: 'Electrical', icon: Zap },
+  { slug: 'plumbing', label: 'Plumbing', icon: Droplets },
+  { slug: 'roofing', label: 'Roofing', icon: Home },
+  { slug: 'signage', label: 'Signage', icon: Megaphone },
+  { slug: 'painting', label: 'Painting', icon: Paintbrush },
+  { slug: 'commercial_painting', label: 'Comm. paint', icon: Building2 },
+  { slug: 'aircon', label: 'Aircon', icon: AirVent },
+  { slug: 'solar', label: 'Solar', icon: Sun },
+]
+
 function buildNav(quoteCount: number, trades: ReadonlyArray<string> = []): NavItem[] {
   const items: NavItem[] = [
     { tab: 'overview', label: 'Overview', icon: LayoutDashboard },
     { tab: 'quotes', label: 'Quotes', icon: FileText, count: quoteCount },
-    { tab: 'followups', label: 'Follow-ups', icon: PhoneCall },
     { tab: 'chats', label: 'Chats', icon: MessageSquare },
+    { tab: 'followups', label: 'Follow-ups', icon: PhoneCall },
     // Calendar — core tab (every tenant). Shows all bookings + self-serve requests.
     { tab: 'calendar', label: 'Calendar', icon: CalendarDays },
   ]
-  // Feature tabs — each shown only when its gating slug is in tenants.trades[]
-  // (see lib/features/catalog FEATURE_TAB_SLUGS). New tenants are provisioned
-  // with their trade(s) only; admins grant more via /admin/customers/[id], and
-  // the subscription plan map can grant tools. isTabEnabled returns true for
-  // core tabs, so here it only filters these feature entries.
-  if (isTabEnabled('roofing', trades)) items.push({ tab: 'roofing', label: 'Roof', icon: Home })
-  if (isTabEnabled('signage', trades)) items.push({ tab: 'signage', label: 'Signage', icon: Megaphone })
-  if (isTabEnabled('painting', trades)) items.push({ tab: 'painting', label: 'Paint', icon: Paintbrush })
-  if (isTabEnabled('commercial-painting', trades)) items.push({ tab: 'commercial-painting', label: 'Comm. paint', icon: Building2 })
-  if (isTabEnabled('aircon', trades)) items.push({ tab: 'aircon', label: 'AC', icon: AirVent })
-  if (isTabEnabled('estimator', trades)) items.push({ tab: 'estimator', label: 'Estimator', icon: ScanLine })
-  if (isTabEnabled('solar', trades)) items.push({ tab: 'solar', label: 'Solar', icon: Sun })
+  // Trade hubs — one entry per enabled trade (tenants.trades[]). Each hub
+  // consolidates that trade's tools, pricing, tier options, services,
+  // brands, catalogue, recipes, estimating, and quotes in one tab. The old
+  // per-trade tool tabs (roofing, signage, painting, commercial-painting,
+  // aircon, estimator, solar) and the cross-trade pricing-engine tabs
+  // (services, catalogue, estimating, recipes) now live INSIDE the hubs;
+  // their Tab ids stay renderable for deep links but are no longer
+  // emitted here, so they disappear from the sidebar and mobile bar.
+  for (const h of HUB_NAV) {
+    if (hubEnabled(h.slug, trades as string[])) {
+      items.push({ tab: `hub-${h.slug}`, label: h.label, icon: h.icon })
+    }
+  }
+  // Escape hatch for registry/loader trades without a hub (strategy-v9
+  // trades like an admin-loaded 'carpentry'): keep the legacy cross-trade
+  // pricing-engine tabs in the nav so those trades' services, catalogue,
+  // estimating and recipes stay reachable. Tenants whose trades all have
+  // hubs never see these — the hubs cover them.
+  const hasOrphanTrade = trades.some(
+    (t) =>
+      typeof t === 'string' &&
+      !(TRADE_HUB_SLUGS as readonly string[]).includes(t.toLowerCase()),
+  )
+  if (hasOrphanTrade) {
+    items.push(
+      { tab: 'services', label: 'Services', icon: Wrench },
+      { tab: 'catalogue', label: 'Catalogue', icon: Package },
+      { tab: 'estimating', label: 'Estimating', icon: Calculator },
+      { tab: 'recipes', label: 'Recipes', icon: ClipboardList },
+    )
+  }
   // Marketing — invite codes + QR codes. Core (not a gated feature).
   items.push({ tab: 'invites', label: 'Marketing', icon: Megaphone })
   // Flyer Designer — marketing flyer editor. Core (all tenants).
@@ -1159,11 +1842,10 @@ function buildNav(quoteCount: number, trades: ReadonlyArray<string> = []): NavIt
     { tab: 'account', label: 'Account', icon: User },
     { tab: 'payouts', label: 'Payouts', icon: Banknote },
     { tab: 'billing', label: 'Billing', icon: CreditCard },
-    { tab: 'pricing', label: 'Pricing', icon: DollarSign },
-    { tab: 'services', label: 'Services', icon: Wrench },
-    { tab: 'catalogue', label: 'Catalogue', icon: Package },
-    { tab: 'estimating', label: 'Estimating', icon: Calculator },
-    { tab: 'recipes', label: 'Recipes', icon: ClipboardList },
+    // General pricing — tenant-wide settings only (early-booking discount,
+    // quote display, review policy, follow-up, calibration). Per-trade
+    // rates/tiers moved into the trade hubs.
+    { tab: 'pricing', label: 'General pricing', icon: DollarSign },
   )
   return items
 }
@@ -1172,24 +1854,31 @@ function buildNav(quoteCount: number, trades: ReadonlyArray<string> = []): NavIt
 // so it stays unit-testable (vitest can't import this file directly
 // because it's a React 'use client' module).
 
-// Sidebar nav split into focused, scannable bands instead of two
-// overloaded buckets: the daily Workspace cockpit, the per-trade
-// Estimator tools, Marketing, Records, Account, and the Pricing-engine
-// config. The groups are ORDERED so that flattening them reproduces
-// buildNav's emission order exactly — that keeps MobileTabBar (which
-// renders the flat buildNav list) telling the same story with zero
-// change to it. Trade-tool rows are trade-gated in buildNav, so on a
-// given tenant byTab.get() returns undefined for tools they don't have
-// and the Sidebar drops the row — and collapses the whole group + its
-// header when none resolve (see visibleGroups below). No tenant-
-// specific filtering needed in this layout list.
+// Sidebar nav split into focused, scannable bands: the daily Workspace
+// cockpit, one hub per enabled Trade (all of that trade's setup + tools
+// + quotes in one tab), Marketing, Records, Account, and the tenant-wide
+// General settings. The groups are ORDERED so that flattening them
+// reproduces buildNav's emission order exactly — that keeps MobileTabBar
+// (which renders the flat buildNav list) telling the same story with
+// zero change to it. Hub rows are trade-gated in buildNav, so on a given
+// tenant byTab.get() returns undefined for trades they don't have and
+// the Sidebar drops the row — and collapses the whole group + its header
+// when none resolve (see visibleGroups below). No tenant-specific
+// filtering needed in this layout list.
+// Sidebar bands mirror the QuoteMax dashboard reference: Daily, Trades,
+// Price book, Business. All of a tenant's actual (gated) tabs still appear —
+// only the grouping/labels match the reference. `pricing` and the pricing-
+// engine tabs (services/catalogue/estimating/recipes, buildNav-gated to
+// orphan-trade tenants) share the Price book band; Marketing, Records and
+// Account items fold into Business. visibleGroups drops any band with no row.
 const SIDEBAR_GROUPS: { label: string; tabs: Tab[] }[] = [
-  { label: 'Workspace', tabs: ['overview', 'quotes', 'followups', 'chats', 'calendar'] },
-  { label: 'Estimator tools', tabs: ['roofing', 'signage', 'painting', 'commercial-painting', 'aircon', 'estimator', 'solar'] },
-  { label: 'Marketing', tabs: ['invites', 'flyer'] },
-  { label: 'Records', tabs: ['files', 'historical-quotes'] },
-  { label: 'Account', tabs: ['account', 'payouts', 'billing'] },
-  { label: 'Pricing engine', tabs: ['pricing', 'services', 'catalogue', 'estimating', 'recipes'] },
+  { label: 'Daily', tabs: ['overview', 'quotes', 'chats', 'followups', 'calendar'] },
+  { label: 'Trades', tabs: [...HUB_TABS] },
+  { label: 'Price book', tabs: ['pricing', 'services', 'catalogue', 'estimating', 'recipes'] },
+  {
+    label: 'Business',
+    tabs: ['invites', 'flyer', 'files', 'historical-quotes', 'account', 'payouts', 'billing'],
+  },
 ]
 
 function Sidebar({
@@ -1198,12 +1887,18 @@ function Sidebar({
   quoteCount,
   isAdmin,
   trades = [],
+  collapsed = false,
+  onToggleCollapse,
 }: {
   tab: Tab
   setTab: (t: Tab) => void
   quoteCount: number
   isAdmin: boolean
   trades?: ReadonlyArray<string>
+  /** Icon-only rail (reference design). The state lives in DashboardPage
+   *  so the sidebar/content grid can animate its columns in step. */
+  collapsed?: boolean
+  onToggleCollapse?: () => void
 }) {
   const items = buildNav(quoteCount, trades)
   const byTab = new Map(items.map((i) => [i.tab, i]))
@@ -1218,26 +1913,54 @@ function Sidebar({
     rows: g.tabs.map((t) => byTab.get(t)).filter(Boolean) as NavItem[],
   })).filter((g) => g.rows.length > 0)
   return (
-    <aside className="hidden lg:block">
+    <aside className="hidden lg:block self-stretch border-r border-ink-line bg-ink-deep">
       <nav
-        // Internal-scroll so a fully-loaded multi-trade rail (all six
-        // bands + Admin can exceed the viewport) scrolls inside the
-        // panel instead of overflowing — keeps the panel edge crisp at
-        // any trade count. Scrollbar hidden in Firefox + Chromium.
-        className="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto bg-ink border border-ink-line [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        // Flush-left full-height rail (its right border is the divider). The
+        // inner nav sticks just below the 60px topbar and scrolls internally
+        // so a fully-loaded multi-trade rail never overflows the viewport.
+        // Scrollbar hidden in Firefox + Chromium.
+        className="sticky top-[61px] max-h-[calc(100vh-61px)] overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         aria-label="Dashboard sections"
       >
-        {visibleGroups.map((group, vi) => (
+        {/* Workspace title + collapse toggle — mirrors the reference sidebar
+            header (mono label left, panel button right). The rail folds to
+            icon-only; the button warms its border + glyph to accent on hover. */}
+        {onToggleCollapse && (
           <div
-            key={group.label}
-            className={vi > 0 ? 'border-t border-ink-line' : ''}
+            className={`flex items-center gap-2 px-3 pt-3 pb-1 ${
+              collapsed ? 'justify-center' : 'justify-between'
+            }`}
           >
-            <div className="px-4 pt-4 pb-2">
-              <span className="font-mono text-[0.56rem] uppercase tracking-[0.2em] text-text-dim/80">
-                {group.label}
+            {!collapsed && (
+              <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-text-dim">
+                Workspace
               </span>
-            </div>
-            <ul className="pb-2">
+            )}
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              className="grid h-8 w-8 place-items-center rounded-lg border border-ink-line text-text-sec transition-colors cursor-pointer hover:border-accent/50 hover:bg-ink-card hover:text-accent"
+            >
+              {collapsed ? (
+                <PanelLeftOpen size={15} strokeWidth={1.75} aria-hidden="true" />
+              ) : (
+                <PanelLeftClose size={15} strokeWidth={1.75} aria-hidden="true" />
+              )}
+            </button>
+          </div>
+        )}
+        {visibleGroups.map((group, vi) => (
+          <div key={group.label} className={vi > 0 ? 'mt-3' : 'mt-1'}>
+            {!collapsed && (
+              <div className="px-3 pb-1.5 pt-1">
+                <span className="font-mono text-[9.5px] font-bold uppercase tracking-[0.16em] text-text-dim">
+                  {group.label}
+                </span>
+              </div>
+            )}
+            <ul className={`flex flex-col gap-0.5 px-2 ${collapsed ? 'py-1' : 'pb-1'}`}>
               {group.rows.map((item) => {
                 const active = item.tab === tab
                 const Icon = item.icon
@@ -1246,37 +1969,88 @@ function Sidebar({
                     <button
                       type="button"
                       onClick={() => setTab(item.tab)}
-                      className={`w-full text-left flex items-center justify-between gap-3 pl-4 pr-3 py-2.5 font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold transition-colors border-l-2 cursor-pointer ${
-                        active
-                          ? 'border-accent text-accent bg-ink-card'
-                          : 'border-transparent text-text-sec hover:text-text-pri hover:border-ink-line hover:bg-ink-card/60'
-                      }`}
+                      title={item.label}
+                      aria-label={collapsed ? item.label : undefined}
                       aria-current={active ? 'page' : undefined}
+                      style={
+                        active
+                          ? {
+                              borderColor:
+                                'color-mix(in srgb, var(--accent) 32%, var(--ink-line))',
+                            }
+                          : undefined
+                      }
+                      className={`relative w-full text-left flex items-center rounded-lg border text-[13.5px] transition-colors cursor-pointer ${
+                        collapsed
+                          ? 'justify-center px-0 py-2.5'
+                          : 'justify-between gap-3 px-[11px] py-[9px]'
+                      } ${
+                        active
+                          ? 'bg-ink-card font-bold text-text-pri'
+                          : 'border-transparent font-medium text-text-sec hover:bg-ink-card/60 hover:text-text-pri'
+                      }`}
                     >
-                      <span className="flex items-center gap-2.5 min-w-0">
+                      {/* Left accent tick — the reference's active marker. */}
+                      <span
+                        aria-hidden="true"
+                        className="absolute left-0 top-[7px] bottom-[7px] w-[2px]"
+                        style={{ background: active ? 'var(--accent)' : 'transparent' }}
+                      />
+                      <span
+                        className={
+                          collapsed
+                            ? 'flex items-center'
+                            : 'flex items-center gap-2.5 min-w-0'
+                        }
+                      >
                         <Icon
-                          size={16}
-                          strokeWidth={active ? 2 : 1.75}
+                          size={17}
+                          strokeWidth={1.75}
                           aria-hidden="true"
-                          className="shrink-0"
+                          className={`shrink-0 ${active ? 'text-accent' : 'text-text-dim'}`}
                         />
-                        <span className="truncate">{item.label}</span>
+                        {!collapsed && <span className="truncate">{item.label}</span>}
                       </span>
-                      {typeof item.count === 'number' && item.count > 0 && (
-                        <span
-                          className={`font-mono text-[0.6rem] tabular-nums min-w-[1.5rem] text-center px-1.5 py-0.5 border shrink-0 ${
-                            active
-                              ? 'border-accent/60 text-accent'
-                              : 'border-ink-line text-text-sec'
-                          }`}
-                        >
-                          {item.count}
-                        </span>
-                      )}
+                      {/* Count chip — solid accent fill with dark ink, the
+                          reference badge treatment (never white-on-yellow). */}
+                      {!collapsed &&
+                        typeof item.count === 'number' &&
+                        item.count > 0 && (
+                          <span className="rounded-[5px] bg-accent px-1.5 py-0.5 font-mono text-[10px] font-bold tabular-nums text-accent-ink shrink-0">
+                            {item.count}
+                          </span>
+                        )}
                     </button>
                   </li>
                 )
               })}
+              {/* Pricing Wizard — guided pricing setup, moved out of the
+                  global top nav into this Pricing-engine band so it sits
+                  with the other pricing tools instead of floating in the
+                  nav. Route link (navigates away), not an in-page tab, so
+                  it renders as an accent CTA rather than a setTab button. */}
+              {group.rows.some((r) => r.tab === 'pricing') && (
+                <li>
+                  <Link
+                    href="/dashboard/pricing-wizard"
+                    title="Pricing wizard"
+                    aria-label={collapsed ? 'Pricing wizard' : undefined}
+                    className={`relative w-full text-left flex items-center rounded-lg border border-transparent text-[13.5px] font-medium text-accent transition-colors hover:bg-ink-card/60 ${
+                      collapsed
+                        ? 'justify-center px-0 py-2.5'
+                        : 'gap-2.5 px-[11px] py-[9px]'
+                    }`}
+                  >
+                    <Sparkles
+                      size={17}
+                      strokeWidth={1.75}
+                      aria-hidden="true"
+                      className="shrink-0 text-accent"
+                    />
+                    {!collapsed && <span className="truncate">Pricing wizard</span>}
+                  </Link>
+                </li>
+              )}
             </ul>
           </div>
         ))}
@@ -1287,26 +2061,42 @@ function Sidebar({
             Quality Agents, etc.) via the tile grid. Single nav entry
             instead of one anchor per admin page. */}
         {isAdmin && (
-          <div className="border-t border-ink-line">
-            <div className="px-4 pt-3.5 pb-1.5">
-              <span className="font-mono text-[0.58rem] uppercase tracking-[0.18em] text-accent">
-                Admin
-              </span>
-            </div>
-            <ul className="pb-2">
+          <div className="mt-3">
+            {!collapsed && (
+              <div className="px-3 pb-1.5 pt-1">
+                <span className="font-mono text-[9.5px] font-bold uppercase tracking-[0.16em] text-accent">
+                  Admin
+                </span>
+              </div>
+            )}
+            <ul className={`flex flex-col gap-0.5 px-2 ${collapsed ? 'py-1' : 'pb-1'}`}>
               <li>
                 <a
                   href="/admin"
-                  className="w-full text-left flex items-center justify-between gap-3 pl-4 pr-3 py-2.5 font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold transition-colors border-l-2 border-transparent text-text-dim hover:text-accent hover:bg-ink-card/60"
+                  title="Admin command centre"
+                  aria-label={collapsed ? 'Admin command centre' : undefined}
+                  className={`relative w-full text-left flex items-center rounded-lg border border-transparent text-[13.5px] font-medium text-text-sec transition-colors hover:bg-ink-card/60 hover:text-text-pri ${
+                    collapsed
+                      ? 'justify-center px-0 py-2.5'
+                      : 'justify-between gap-3 px-[11px] py-[9px]'
+                  }`}
                 >
-                  <span className="flex items-center gap-2.5 min-w-0">
+                  <span
+                    className={
+                      collapsed
+                        ? 'flex items-center'
+                        : 'flex items-center gap-2.5 min-w-0'
+                    }
+                  >
                     <Shield
-                      size={16}
+                      size={17}
                       strokeWidth={1.75}
                       aria-hidden="true"
-                      className="shrink-0"
+                      className="shrink-0 text-text-dim"
                     />
-                    <span className="truncate">Admin command centre</span>
+                    {!collapsed && (
+                      <span className="truncate">Admin command centre</span>
+                    )}
                   </span>
                 </a>
               </li>
@@ -1364,6 +2154,16 @@ function MobileTabBar({
           </button>
         )
       })}
+      {/* Pricing Wizard — moved here from the top nav. Sits at the end of
+          the mobile strip, right after the pricing-engine tabs. Route
+          link (navigates to the wizard page), not a setTab tab. */}
+      <Link
+        href="/dashboard/pricing-wizard"
+        className="shrink-0 inline-flex items-center gap-2 px-4 py-3 font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold text-accent transition-colors hover:text-accent-press"
+      >
+        <Sparkles size={14} strokeWidth={1.75} aria-hidden="true" />
+        <span>Pricing wizard</span>
+      </Link>
     </nav>
   )
 }
@@ -1375,8 +2175,10 @@ function MobileTabBar({
 // description per tab; rendered centrally from DashboardPage so all
 // nine tabs stay consistent. Overview keeps its own greeting header.
 
+// Hub tabs render their own header (trade label + section nav) inside
+// TradeHub, so they're excluded here alongside overview.
 const TAB_META: Record<
-  Exclude<Tab, 'overview'>,
+  Exclude<Tab, 'overview' | HubTab>,
   { title: string; desc: string }
 > = {
   aircon: {
@@ -1436,8 +2238,8 @@ const TAB_META: Record<
     desc: 'Set up the secure account QuoteMax pays your completed-job money into.',
   },
   pricing: {
-    title: 'Pricing book',
-    desc: 'The hourly rates, markups, and early-bird discount that drive every quote the AI drafts.',
+    title: 'General pricing',
+    desc: 'Settings shared across all your trades — early-booking discount, quote layout, review policy, follow-ups, and invoice calibration. Per-trade rates live in each trade’s tab.',
   },
   services: {
     title: 'Services',
@@ -1473,7 +2275,7 @@ const TAB_META: Record<
   },
 }
 
-function TabHeader({ tab }: { tab: Exclude<Tab, 'overview'> }) {
+function TabHeader({ tab }: { tab: Exclude<Tab, 'overview' | HubTab> }) {
   const meta = TAB_META[tab]
   return (
     <header className="mb-6">
@@ -1491,6 +2293,23 @@ function TabHeader({ tab }: { tab: Exclude<Tab, 'overview'> }) {
 }
 
 // ─── Overview tab ─────────────────────────────────────────────────
+
+/** Status pill vocabulary for the Overview "Recent quotes" table — mirrors
+ *  the reference's dot + hairline-border chip. Colours are raw tokens so the
+ *  pill reads identically on both themes; the review state pulses. */
+function overviewQuotePill(q: Quote): {
+  label: string
+  color: string
+  pulse: boolean
+} {
+  if (q.deposit_paid || (q.status ?? '').toLowerCase() === 'accepted')
+    return { label: 'Accepted', color: 'var(--success-bright)', pulse: false }
+  const s = (q.status ?? 'draft').toLowerCase()
+  if (s === 'sent') return { label: 'Sent', color: 'var(--text-sec)', pulse: false }
+  if (q.needs_inspection || q.inspection_required)
+    return { label: 'Site visit', color: 'var(--text-dim)', pulse: false }
+  return { label: 'Awaiting you', color: 'var(--warning-bright)', pulse: true }
+}
 
 function OverviewTab({
   data,
@@ -1528,7 +2347,6 @@ function OverviewTab({
       ? Math.round((acceptedQuotes.length / activeQuotes) * 100)
       : 0
   const avgQuoteValue = activeQuotes > 0 ? quotedValue / activeQuotes : 0
-  const depositsPaidCount = data.quotes.filter((q) => q.deposit_paid).length
 
   const tenant = data.tenant
   const smsNumber = tenant.twilio_sms_number
@@ -1587,156 +2405,128 @@ function OverviewTab({
       ? 'Stub'
       : 'Live'
 
+  // 6-cell KPI strip — matches the QuoteMax dashboard reference exactly.
+  // Colour: accent for money/coverage, warning for the review backlog, dim
+  // for the still-zero conversion figures. Raw var(--accent) keeps the hero
+  // numbers yellow in BOTH themes (the .text-accent token flips to charcoal
+  // on the cream light theme, which the reference deliberately does not).
+  const metrics: { k: string; v: string; sub: string; color: string }[] = [
+    {
+      k: 'Quoted',
+      v: `$${formatMoney(Math.round(quotedValue))}`,
+      sub: `${activeQuotes} draft${activeQuotes === 1 ? '' : 's'}`,
+      color: 'var(--accent)',
+    },
+    {
+      k: 'Converted',
+      v: `$${formatMoney(Math.round(acceptedValue))}`,
+      sub: acceptedQuotes.length > 0 ? `${acceptedQuotes.length} won` : 'None yet',
+      color: 'var(--text-dim)',
+    },
+    {
+      k: 'Conversion',
+      v: `${conversionPct}%`,
+      sub: `${acceptedQuotes.length} of ${activeQuotes}`,
+      color: 'var(--text-dim)',
+    },
+    {
+      k: 'Avg quote',
+      v: `$${formatMoney(Math.round(avgQuoteValue))}`,
+      sub: 'Per draft',
+      color: 'var(--accent)',
+    },
+    {
+      k: 'In review',
+      v: `${draftQuotes}`,
+      sub: 'Awaiting send',
+      color: 'var(--warning-bright)',
+    },
+    {
+      k: 'Services',
+      v: `${enabledServices}/${totalServices}`,
+      sub: 'Auto-quote',
+      color: 'var(--accent)',
+    },
+  ]
+
+  // The single most-urgent quote for the "Needs your attention" rail card
+  // (first still-in-review quote; data.quotes is already newest-first).
+  const attnQuote = data.quotes.find((q) =>
+    ['drafted', 'awaiting_review', 'review', 'draft'].includes(
+      (q.status ?? '').toLowerCase(),
+    ),
+  )
+
+  // Channel-readiness chips for the number card — colour carries the same
+  // live/stub/pending signal the old status pill did.
+  const channelChips: { label: string; live: boolean }[] = [
+    { label: 'SMS', live: !!smsNumber && !isStubTwilio },
+    {
+      label: 'Voice',
+      live: !!(tenant.twilio_voice_number || assistantId) && !isStubVapi,
+    },
+    { label: 'AI', live: !!assistantId && !isStubVapi },
+  ]
+
   return (
-    <div className="space-y-6 motion-safe:animate-[fade-in_180ms_ease-out_both]">
-      {/* PAGE HEADER — orients the tradie: who they are, what day it is. */}
-      <OverviewHeader firstName={tenant.owner_first_name ?? 'Tradie'} />
+    <div className="space-y-5 motion-safe:animate-[fade-in_180ms_ease-out_both]">
+      {/* PAGE HEADER — greeting + the one-line state of the queue, plus the
+          reference's period label and New quote action. */}
+      <OverviewHeader
+        firstName={tenant.owner_first_name ?? 'Tradie'}
+        subtitle={
+          draftQuotes === 0
+            ? "You're all caught up. No quotes waiting on you."
+            : draftQuotes === 1
+              ? 'One quote needs your review. The rest are drafted and waiting.'
+              : `${draftQuotes} quotes need your review. The rest are drafted and waiting.`
+        }
+        onNewQuote={() => setTab('quotes')}
+      />
 
-      {/* HERO — your QuoteMax number, the tradie's lifeline. Copy
-          action + voice line make it the one card to hand a customer. */}
-      <div className="bg-ink-card border border-ink-line p-4 sm:p-5 md:p-6 motion-safe:animate-[fade-up_380ms_cubic-bezier(0.22,1,0.36,1)_both]">
-        <div className="flex flex-wrap items-start justify-between gap-3 sm:gap-4">
-          <div className="min-w-0">
-            <div className="font-mono text-[0.6rem] sm:text-[0.65rem] uppercase tracking-[0.18em] text-text-dim">
-              Your QuoteMax number
+      {/* KPI STRIP — one seamed 6-cell instrument cluster (the reference's
+          command-centre metrics row). Cells share 1px ink-line seams inside
+          a single rounded, lit-edge container. */}
+      <section className="grid grid-cols-2 gap-px overflow-hidden rounded-card edge-lit border border-ink-line bg-ink-line motion-safe:animate-[fade-up_380ms_cubic-bezier(0.22,1,0.36,1)_both] sm:grid-cols-3 lg:grid-cols-6">
+        {metrics.map((m) => (
+          <div key={m.k} className="bg-ink-card px-5 py-4 sm:px-[22px] sm:py-[18px]">
+            <div className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.13em] text-text-dim">
+              {m.k}
             </div>
-            {smsNumber ? (
-              <>
-                <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center gap-3">
-                  <span className="font-mono text-[clamp(1.25rem,5vw,2rem)] font-bold text-text-pri tracking-tight leading-none break-all">
-                    {formatAuMobile(smsNumber)}
-                  </span>
-                  <CopyNumberButton value={smsNumber} />
-                </div>
-                {tenant.twilio_voice_number &&
-                  tenant.twilio_voice_number !== smsNumber && (
-                    <div className="mt-2 font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
-                      Voice · {formatAuMobile(tenant.twilio_voice_number)}
-                    </div>
-                  )}
-                <p className="mt-2 text-xs text-text-dim max-w-sm">
-                  Hand this to customers — every SMS or call lands as a
-                  drafted quote in your dashboard.
-                </p>
-              </>
-            ) : (
-              <div className="mt-2 text-amber-300 text-sm">
-                Provisioning didn&rsquo;t finish on activate. Hit retry —
-                your account + pricing book are saved.
-              </div>
-            )}
-            {needsProvisioning && <RetryProvisionButton />}
+            <div
+              className="mt-2 font-mono font-extrabold leading-none tabular-nums text-[clamp(1.4rem,1.85vw,2.35rem)]"
+              style={{ color: m.color }}
+            >
+              {m.v}
+            </div>
+            <div className="mt-[7px] font-mono text-[8.5px] font-semibold uppercase tracking-[0.1em] text-text-sec">
+              {m.sub}
+            </div>
           </div>
-          <div className="flex flex-col items-end gap-1.5 shrink-0">
-            <Pill
-              tone={needsProvisioning ? 'warn' : isStubTwilio ? 'warn' : 'ok'}
-              label={
-                needsProvisioning
-                  ? 'Pending'
-                  : isStubTwilio
-                    ? 'Stub mode'
-                    : 'Live'
-              }
-            />
-            {tenant.activated_at && (
-              <span className="hidden sm:inline font-mono text-[0.55rem] uppercase tracking-[0.16em] text-text-dim">
-                Activated {formatDate(tenant.activated_at)}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* PIPELINE — money view. Lifted to the top (right under the
-          QuoteMax number hero) because revenue + conversion are what
-          the tradie actually opens the dashboard to check first. */}
-      <section
-        className="bg-ink-card border border-ink-line motion-safe:animate-[fade-up_380ms_cubic-bezier(0.22,1,0.36,1)_both]"
-        style={{ animationDelay: '90ms' }}
-      >
-        <header className="flex items-center justify-between px-5 py-3 border-b border-ink-line">
-          <h2 className="font-mono text-[0.7rem] uppercase tracking-[0.16em] font-bold text-text-pri">
-            Pipeline
-          </h2>
-          <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
-            All time
-          </span>
-        </header>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-ink-line border-t border-ink-line">
-          <PipelineStat
-            label="Quoted"
-            value={`$${formatMoney(Math.round(quotedValue))}`}
-            hint={`${activeQuotes} ${activeQuotes === 1 ? 'quote' : 'quotes'} drafted`}
-          />
-          <PipelineStat
-            label="Converted"
-            value={`$${formatMoney(Math.round(acceptedValue))}`}
-            hint={`${acceptedQuotes.length} accepted`}
-            tone={acceptedQuotes.length > 0 ? 'ok' : 'default'}
-          />
-          <PipelineStat
-            label="Conversion"
-            value={`${conversionPct}%`}
-            hint={`${acceptedQuotes.length} of ${activeQuotes}`}
-          />
-          <PipelineStat
-            label="Avg quote"
-            value={`$${formatMoney(Math.round(avgQuoteValue))}`}
-            hint={`${depositsPaidCount} ${depositsPaidCount === 1 ? 'deposit' : 'deposits'} paid`}
-          />
-        </div>
+        ))}
       </section>
 
-      {/* KPI ROW — operational state below the money. Numbered-card
-          pattern (big orange mono value, uppercase label). Each tile
-          carries its own fade-up so the row reveals smoothly on first
-          mount. */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-ink-line border border-ink-line">
-        <KpiTile
-          label="Quotes total"
-          value={activeQuotes}
-          hint={activeQuotes === 0 ? 'No quotes yet' : 'All time'}
-          delay={150}
-        />
-        <KpiTile
-          label="In review"
-          value={draftQuotes}
-          hint="Awaiting your send"
-          tone={draftQuotes > 0 ? 'warn' : 'default'}
-          delay={210}
-        />
-        <KpiTile
-          label="Services on"
-          value={`${enabledServices}/${totalServices}`}
-          hint="Auto-quote enabled"
-          delay={270}
-        />
-        <KpiTile
-          label="AI receptionist"
-          value={aiValue}
-          hint={tenant.status === 'active' ? 'Account active' : 'Onboarding'}
-          tone={aiTone}
-          delay={330}
-        />
-      </div>
-
-      {/* TWO-COLUMN GRID — latest quotes hero + latest chats sidebar */}
+      {/* TWO-COLUMN GRID — recent quotes table (left) + the attention /
+          number / chats rail (right), exactly as the reference lays it out. */}
       <div
-        className="grid gap-6 lg:grid-cols-3 motion-safe:animate-[fade-up_380ms_cubic-bezier(0.22,1,0.36,1)_both]"
-        style={{ animationDelay: '280ms' }}
+        className="grid items-start gap-5 motion-safe:animate-[fade-up_380ms_cubic-bezier(0.22,1,0.36,1)_both] lg:grid-cols-[minmax(0,1.75fr)_minmax(300px,430px)]"
+        style={{ animationDelay: '120ms' }}
       >
-        {/* Latest quotes — primary scan target, takes 2/3 of the row */}
-        <section className="lg:col-span-2 bg-ink-card border border-ink-line">
-          <header className="flex items-center justify-between px-5 py-3 border-b border-ink-line">
-            <h2 className="font-mono text-[0.7rem] uppercase tracking-[0.16em] font-bold text-text-pri">
-              Latest quotes
-            </h2>
+        {/* Recent quotes — numbered header + 5-column table */}
+        <section className="min-w-0 rounded-card edge-lit overflow-hidden bg-ink-card border border-ink-line">
+          <header className="flex items-center justify-between border-b border-ink-line px-5 py-3.5">
+            <div className="flex items-baseline gap-2.5">
+              <span className="font-mono text-[13px] font-bold text-accent">01</span>
+              <h2 className="font-mono text-[11.5px] font-bold uppercase tracking-[0.16em] text-text-pri">
+                Recent quotes
+              </h2>
+            </div>
             <button
               type="button"
               onClick={() => setTab('quotes')}
-              className="font-mono text-[0.65rem] uppercase tracking-[0.14em] font-bold text-accent hover:text-accent-press cursor-pointer"
+              className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-accent transition-colors cursor-pointer hover:text-accent-press"
             >
-              See all →
+              View all {activeQuotes} →
             </button>
           </header>
           {latestQuotes.length === 0 ? (
@@ -1745,44 +2535,224 @@ function OverviewTab({
             </div>
           ) : (
             <div>
-              {latestQuotes.map((q) => (
-                <LatestQuoteRow key={q.id} q={q} onOpen={() => setTab('quotes')} />
-              ))}
+              <div className="hidden grid-cols-[minmax(94px,1.4fr)_minmax(108px,1.7fr)_46px_76px_116px] gap-3 border-b border-ink-line px-5 py-2.5 sm:grid">
+                <span className="font-mono text-[9px] font-bold uppercase tracking-[0.13em] text-text-dim">
+                  Customer
+                </span>
+                <span className="font-mono text-[9px] font-bold uppercase tracking-[0.13em] text-text-dim">
+                  Job
+                </span>
+                <span className="font-mono text-[9px] font-bold uppercase tracking-[0.13em] text-text-dim">
+                  Ch
+                </span>
+                <span className="text-right font-mono text-[9px] font-bold uppercase tracking-[0.13em] text-text-dim">
+                  Value
+                </span>
+                <span className="text-right font-mono text-[9px] font-bold uppercase tracking-[0.13em] text-text-dim">
+                  Status
+                </span>
+              </div>
+              {latestQuotes.map((q) => {
+                const pill = overviewQuotePill(q)
+                const name =
+                  q.customer_full_name || q.customer_first_name || 'Customer'
+                const val =
+                  q.total_inc_gst != null ? fmtAUD(toNum(q.total_inc_gst)) : '—'
+                return (
+                  <button
+                    key={q.id}
+                    type="button"
+                    onClick={() => setTab('quotes')}
+                    className="grid w-full grid-cols-[1fr_auto] items-center gap-3 border-b border-ink-line px-5 py-3 text-left transition-colors cursor-pointer last:border-b-0 hover:bg-ink-deep/40 sm:grid-cols-[minmax(94px,1.4fr)_minmax(108px,1.7fr)_46px_76px_116px]"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-[13.5px] font-bold text-text-pri">
+                        {name}
+                      </div>
+                      {q.suburb && (
+                        <div className="mt-0.5 truncate font-mono text-[9px] uppercase tracking-[0.1em] text-text-dim">
+                          {q.suburb}
+                        </div>
+                      )}
+                    </div>
+                    <span className="hidden min-w-0 truncate text-[12.5px] text-text-sec sm:block">
+                      {fmtJobType(q.job_type)}
+                    </span>
+                    <span className="hidden font-mono text-[9px] font-bold uppercase tracking-[0.08em] text-text-dim sm:block">
+                      {q.channel === 'voice' ? 'Voice' : 'SMS'}
+                    </span>
+                    <span
+                      className="hidden text-right font-mono text-[13.5px] font-bold tabular-nums sm:block"
+                      style={{ color: val === '—' ? 'var(--text-dim)' : 'var(--text-pri)' }}
+                    >
+                      {val}
+                    </span>
+                    <span
+                      className="inline-flex items-center gap-1.5 justify-self-end px-2 py-[3px] font-mono text-[9px] font-bold uppercase tracking-[0.1em]"
+                      style={{
+                        border: `1px solid color-mix(in srgb, ${pill.color} 45%, transparent)`,
+                        color: pill.color,
+                      }}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`h-[5px] w-[5px] rounded-full ${
+                          pill.pulse
+                            ? 'motion-safe:animate-[pulse-soft_2.4s_ease-in-out_infinite]'
+                            : ''
+                        }`}
+                        style={{ background: pill.color }}
+                      />
+                      {pill.label}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
           )}
         </section>
 
-        {/* Latest chats — secondary scan target */}
-        <section className="bg-ink-card border border-ink-line">
-          <header className="flex items-center justify-between px-5 py-3 border-b border-ink-line">
-            <h2 className="font-mono text-[0.7rem] uppercase tracking-[0.16em] font-bold text-text-pri">
-              Latest chats
-            </h2>
-            <button
-              type="button"
-              onClick={() => setTab('chats')}
-              className="font-mono text-[0.65rem] uppercase tracking-[0.14em] font-bold text-accent hover:text-accent-press cursor-pointer"
-            >
-              See all →
-            </button>
-          </header>
-          {chatsLoading ? (
-            <div className="px-5 py-8 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
-              Loading…
-            </div>
-          ) : latestChats.length === 0 ? (
-            <div className="px-5 py-8 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
-              No conversations yet.
-            </div>
+        {/* Right rail — attention · number · chats */}
+        <div className="flex min-w-0 flex-col gap-[18px]">
+          {/* Needs your attention — the top review quote (or an all-clear). */}
+          {attnQuote ? (
+            <section className="card-sweep relative rounded-card edge-lit overflow-hidden border border-ink-line border-l-2 border-l-warning-bright bg-ink-card p-[18px]">
+              <div className="flex items-center gap-2 font-mono text-[9.5px] font-bold uppercase tracking-[0.14em] text-warning-bright">
+                <span
+                  aria-hidden="true"
+                  className="h-1.5 w-1.5 rounded-full bg-warning-bright motion-safe:animate-[pulse-soft_2.4s_ease-in-out_infinite]"
+                />
+                Needs your attention
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-2.5">
+                <span className="truncate text-[15px] font-bold text-text-pri">
+                  {attnQuote.customer_full_name ||
+                    attnQuote.customer_first_name ||
+                    'Customer'}
+                  {attnQuote.suburb ? ` · ${attnQuote.suburb}` : ''}
+                </span>
+                <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.1em] text-text-dim">
+                  {attnQuote.channel === 'voice' ? 'Voice' : 'SMS'} ·{' '}
+                  {fmtRelative(attnQuote.created_at)}
+                </span>
+              </div>
+              <p className="mt-1.5 text-[12.5px] leading-normal text-text-dim">
+                QuoteMax drafted this one. It needs a couple of details before
+                you can send.
+              </p>
+              <button
+                type="button"
+                onClick={() => setTab('quotes')}
+                className="mt-3.5 inline-flex w-full items-center justify-center gap-2 rounded-ctl bg-accent px-3 py-2.5 text-[12px] font-bold uppercase tracking-wide text-accent-ink transition-colors cursor-pointer hover:bg-accent-press"
+              >
+                Review quote →
+              </button>
+            </section>
           ) : (
-            <div>
-              {latestChats.map((c) => (
-                <LatestChatRow key={c.id} chat={c} onOpen={() => setTab('chats')} />
-              ))}
-            </div>
+            <section className="rounded-card edge-lit overflow-hidden border border-ink-line bg-ink-card p-[18px]">
+              <div className="flex items-center gap-2 font-mono text-[9.5px] font-bold uppercase tracking-[0.14em] text-success-bright">
+                <span
+                  aria-hidden="true"
+                  className="h-1.5 w-1.5 rounded-full bg-success-bright"
+                />
+                All clear
+              </div>
+              <p className="mt-2 text-[12.5px] leading-normal text-text-dim">
+                No quotes need your review right now. New ones land here the
+                moment they are drafted.
+              </p>
+            </section>
           )}
-        </section>
+
+          {/* Your QuoteMax number — number + copy + SMS / Voice / AI chips. */}
+          <section className="rounded-card edge-lit overflow-hidden border border-ink-line bg-ink-card p-[18px]">
+            <div className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.16em] text-text-dim">
+              Your QuoteMax number
+            </div>
+            {smsNumber ? (
+              <>
+                <div className="mt-2.5 flex items-center justify-between gap-2.5">
+                  <span className="break-all font-mono text-[18px] font-bold tracking-[-0.01em] text-text-pri">
+                    {formatAuMobile(smsNumber)}
+                  </span>
+                  <CopyNumberButton value={smsNumber} />
+                </div>
+                <div className="mt-3.5 flex gap-2">
+                  {channelChips.map((c) => (
+                    <span
+                      key={c.label}
+                      className="inline-flex flex-1 items-center justify-center gap-1.5 py-1.5 font-mono text-[8.5px] font-bold uppercase tracking-[0.1em]"
+                      style={{
+                        border: `1px solid color-mix(in srgb, ${
+                          c.live ? 'var(--success-bright)' : 'var(--warning-bright)'
+                        } 40%, transparent)`,
+                        color: c.live
+                          ? 'var(--success-bright)'
+                          : 'var(--warning-bright)',
+                      }}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="h-[5px] w-[5px] rounded-full"
+                        style={{
+                          background: c.live
+                            ? 'var(--success-bright)'
+                            : 'var(--warning-bright)',
+                        }}
+                      />
+                      {c.label}
+                    </span>
+                  ))}
+                </div>
+                {needsProvisioning && <RetryProvisionButton />}
+              </>
+            ) : (
+              <>
+                <p className="mt-2 text-[12.5px] leading-normal text-warning-bright">
+                  Provisioning didn&rsquo;t finish on activate. Hit retry — your
+                  account and pricing book are saved.
+                </p>
+                <RetryProvisionButton />
+              </>
+            )}
+          </section>
+
+          {/* Recent chats */}
+          <section className="rounded-card edge-lit overflow-hidden border border-ink-line bg-ink-card">
+            <header className="flex items-center justify-between border-b border-ink-line px-4 py-3">
+              <h2 className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-text-pri">
+                Recent chats
+              </h2>
+              <button
+                type="button"
+                onClick={() => setTab('chats')}
+                className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-accent transition-colors cursor-pointer hover:text-accent-press"
+              >
+                Open →
+              </button>
+            </header>
+            {chatsLoading ? (
+              <div className="px-4 py-8 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+                Loading…
+              </div>
+            ) : latestChats.length === 0 ? (
+              <div className="px-4 py-8 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+                No conversations yet.
+              </div>
+            ) : (
+              <div>
+                {latestChats.slice(0, 3).map((c) => (
+                  <LatestChatRow key={c.id} chat={c} onOpen={() => setTab('chats')} />
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
       </div>
+
+      {/* YOUR ACTIVITY — communication + conversion analytics not shown by the
+          money-first Pipeline/KPI rows above. Lazy-fetches its own aggregate. */}
+      <OverviewAnalytics accessToken={accessToken} setTab={setTab} />
 
     </div>
   )
@@ -1791,29 +2761,51 @@ function OverviewTab({
 /** Slim Overview page header — time-of-day greeting + today's date.
  *  Sits inside the content column so the sidebar still aligns flush
  *  with the QuoteMax-number hero below it. */
-function OverviewHeader({ firstName }: { firstName: string }) {
-  const now = new Date()
-  const hour = now.getHours()
+function OverviewHeader({
+  firstName,
+  subtitle,
+  onNewQuote,
+}: {
+  firstName: string
+  subtitle: string
+  onNewQuote: () => void
+}) {
+  const hour = new Date().getHours()
   const greeting =
     hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
-  const dateStr = now.toLocaleDateString('en-AU', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  })
   return (
-    <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
+    <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
       <div className="min-w-0">
         <div className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-text-dim">
-          QuoteMax · Dashboard
+          QuoteMax · Overview
         </div>
-        <h1 className="mt-1.5 font-extrabold uppercase tracking-tight text-text-pri text-[clamp(1.5rem,3vw,2rem)]">
+        <h1 className="mt-2 font-extrabold uppercase tracking-tight text-text-pri text-[clamp(1.8rem,2.6vw,2.7rem)] leading-none">
           {greeting}, <span className="text-accent">{firstName}</span>
         </h1>
+        <p className="mt-2.5 max-w-xl text-sm text-text-sec">{subtitle}</p>
       </div>
-      <span className="font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
-        {dateStr}
-      </span>
+      <div className="flex items-center gap-2.5 shrink-0">
+        {/* Period indicator — the reference's "This month" slot. Static
+            (the KPIs below are all-time), so it reads as a label rather
+            than a dead dropdown. */}
+        <span className="inline-flex items-center gap-2 rounded-ctl border border-ink-line px-3.5 py-2 font-mono text-[0.62rem] font-bold uppercase tracking-[0.13em] text-text-sec">
+          <CalendarDays
+            size={14}
+            strokeWidth={1.75}
+            aria-hidden="true"
+            className="text-text-dim"
+          />
+          All time
+        </span>
+        <button
+          type="button"
+          onClick={onNewQuote}
+          className="inline-flex items-center gap-2 rounded-ctl bg-accent px-4 py-2.5 font-mono text-[0.62rem] font-bold uppercase tracking-[0.1em] text-accent-ink transition-colors cursor-pointer hover:bg-accent-press"
+        >
+          <Plus size={15} strokeWidth={2.25} aria-hidden="true" />
+          New quote
+        </button>
+      </div>
     </header>
   )
 }
@@ -1835,7 +2827,7 @@ function CopyNumberButton({ value }: { value: string }) {
     <button
       type="button"
       onClick={copy}
-      className="inline-flex items-center gap-1.5 border border-ink-line px-2.5 py-1.5 font-mono text-[0.58rem] font-bold uppercase tracking-[0.14em] text-text-sec transition-colors hover:border-accent/50 hover:text-text-pri cursor-pointer"
+      className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-2.5 py-1.5 font-mono text-[0.58rem] font-bold uppercase tracking-[0.14em] text-text-sec transition-colors hover:border-accent/50 hover:text-text-pri cursor-pointer"
       aria-label={copied ? 'Number copied' : 'Copy number'}
     >
       {copied ? (
@@ -1869,7 +2861,7 @@ function PipelineStat({
   hint?: string
   tone?: 'default' | 'ok'
 }) {
-  const valueTone = tone === 'ok' ? 'text-emerald-300' : 'text-accent'
+  const valueTone = tone === 'ok' ? 'text-success-bright' : 'text-accent'
   return (
     <div className="bg-ink-card p-5">
       <div className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-text-dim">
@@ -1923,12 +2915,12 @@ function RetryProvisionButton() {
         type="button"
         onClick={handleClick}
         disabled={busy}
-        className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-5 py-2.5 text-xs uppercase tracking-wider transition-colors disabled:opacity-50"
+        className="rounded-ctl inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-5 py-2.5 text-xs uppercase tracking-wider transition-colors disabled:opacity-50"
       >
         {busy ? 'Retrying…' : 'Retry provisioning'}
       </button>
       {err && (
-        <p className="mt-2 text-xs text-amber-300 max-w-md">{err}</p>
+        <p className="mt-2 text-xs text-warning-bright max-w-md">{err}</p>
       )}
     </div>
   )
@@ -1937,20 +2929,20 @@ function RetryProvisionButton() {
 function Pill({ tone, label }: { tone: 'ok' | 'warn' | 'dim'; label: string }) {
   const cls =
     tone === 'ok'
-      ? 'text-emerald-300 border-emerald-700/60 bg-emerald-950/30'
+      ? 'text-success-bright border-success-bright/50 bg-success/15'
       : tone === 'warn'
-        ? 'text-amber-300 border-amber-700/60 bg-amber-950/30'
+        ? 'text-warning-bright border-warning-bright/50 bg-warning/15'
         : 'text-text-dim border-ink-line bg-ink-card'
   return (
     <span
-      className={`inline-flex items-center gap-2 font-mono text-[0.65rem] uppercase tracking-[0.16em] font-bold px-3 py-1.5 border ${cls}`}
+      className={`rounded-ctl inline-flex items-center gap-2 font-mono text-[0.65rem] uppercase tracking-[0.16em] font-bold px-3 py-1.5 border ${cls}`}
     >
       <span
         className={`h-1.5 w-1.5 rounded-full ${
           tone === 'ok'
-            ? 'bg-emerald-300'
+            ? 'bg-success-bright'
             : tone === 'warn'
-              ? 'bg-amber-300'
+              ? 'bg-warning-bright'
               : 'bg-text-dim'
         }`}
       />
@@ -1978,7 +2970,7 @@ function Kpi({
   mono?: boolean
 }) {
   return (
-    <div className="bg-ink-card border border-ink-line p-5">
+    <div className="rounded-card bg-ink-card border border-ink-line p-5">
       <div className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-text-dim">
         {label}
       </div>
@@ -2049,13 +3041,13 @@ function KpiTile({
   const display = isNumber ? animated : value
   const valueTone =
     tone === 'warn'
-      ? 'text-amber-300'
+      ? 'text-warning-bright'
       : tone === 'ok'
-        ? 'text-emerald-300'
+        ? 'text-success-bright'
         : 'text-accent'
   return (
     <div
-      className="bg-ink-card border border-ink-line p-5 md:p-6 motion-safe:animate-[fade-up_380ms_cubic-bezier(0.22,1,0.36,1)_both]"
+      className="rounded-card bg-ink-card border border-ink-line p-5 md:p-6 motion-safe:animate-[fade-up_380ms_cubic-bezier(0.22,1,0.36,1)_both]"
       style={delay > 0 ? { animationDelay: `${delay}ms` } : undefined}
     >
       <div className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-text-dim">
@@ -2091,9 +3083,9 @@ function LatestQuoteRow({
   const isPaid = !!q.deposit_paid
   const isInspect = !!(q.needs_inspection || q.inspection_required)
   const tone = isPaid
-    ? 'border-emerald-500/60 text-emerald-300'
+    ? 'border-success-bright/50 text-success-bright'
     : isInspect
-      ? 'border-amber-500/60 text-amber-300'
+      ? 'border-warning-bright/50 text-warning-bright'
       : status === 'accepted'
         ? 'border-accent/60 text-accent'
         : 'border-ink-line text-text-sec'
@@ -2125,7 +3117,7 @@ function LatestQuoteRow({
           {total !== null ? `$${formatMoney(total)}` : '—'}
         </div>
         <span
-          className={`mt-1 inline-flex items-center font-mono text-[0.55rem] uppercase tracking-[0.14em] font-bold px-1.5 py-0.5 border ${tone}`}
+          className={`rounded-ctl mt-1 inline-flex items-center font-mono text-[0.55rem] uppercase tracking-[0.14em] font-bold px-1.5 py-0.5 border ${tone}`}
         >
           {badge}
         </span>
@@ -2231,7 +3223,7 @@ function SmsEstimatorCard({
           aria-checked={enabled ? 'true' : 'false'}
           onClick={toggle}
           disabled={busy}
-          className={`inline-flex items-center gap-2 border px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] transition-colors focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50 ${
+          className={`rounded-ctl inline-flex items-center gap-2 border px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] transition-colors focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50 ${
             enabled
               ? 'border-teal-glow/60 bg-teal-glow/10 text-teal-glow'
               : 'border-ink-line text-text-dim hover:border-accent hover:text-accent'
@@ -2309,7 +3301,7 @@ function LogoCard({
           )}
         </div>
         <div className="flex-1">
-          <label className="inline-flex cursor-pointer items-center gap-2 border border-ink-line bg-ink-deep px-4 py-2.5 text-sm font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent-soft">
+          <label className="rounded-ctl inline-flex cursor-pointer items-center gap-2 border border-ink-line bg-ink-deep px-4 py-2.5 text-sm font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent-soft">
             <input
               type="file"
               accept={LOGO_ACCEPT}
@@ -2389,7 +3381,7 @@ function DefaultScheduleCard({
           type="button"
           onClick={save}
           disabled={busy || !valid}
-          className="inline-flex items-center gap-2 border border-ink-line bg-ink-deep px-5 py-2.5 text-sm font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent-soft disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-ctl inline-flex items-center gap-2 border border-ink-line bg-ink-deep px-5 py-2.5 text-sm font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent-soft disabled:cursor-not-allowed disabled:opacity-50"
         >
           {busy ? 'Saving…' : 'Save availability'}
         </button>
@@ -2560,7 +3552,7 @@ function AccountTab({
           <button
             type="submit"
             disabled={submitting}
-            className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-50"
+            className="rounded-ctl inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-50"
           >
             {submitting ? 'Saving…' : 'Save account'}
           </button>
@@ -2697,9 +3689,9 @@ function PayoutsTab({
   }
 
   const statusUi = {
-    ready: { dot: 'bg-emerald-400', label: 'Payouts active', tone: 'text-emerald-400' },
-    verifying: { dot: 'bg-amber-400', label: 'Verifying with Stripe', tone: 'text-amber-400' },
-    incomplete: { dot: 'bg-amber-400', label: 'Setup incomplete', tone: 'text-amber-400' },
+    ready: { dot: 'bg-success-bright', label: 'Payouts active', tone: 'text-success-bright' },
+    verifying: { dot: 'bg-warning-bright', label: 'Verifying with Stripe', tone: 'text-warning-bright' },
+    incomplete: { dot: 'bg-warning-bright', label: 'Setup incomplete', tone: 'text-warning-bright' },
     not_started: { dot: 'bg-text-dim', label: 'Not set up', tone: 'text-text-dim' },
   }[status]
 
@@ -2755,7 +3747,7 @@ function PayoutsTab({
                 type="button"
                 onClick={startOnboarding}
                 disabled={busy}
-                className="inline-flex items-center gap-2 border border-ink-line text-text-sec hover:text-text-pri font-semibold px-5 py-2.5 text-xs uppercase tracking-wider transition-colors disabled:opacity-50"
+                className="rounded-ctl inline-flex items-center gap-2 border border-ink-line text-text-sec hover:text-text-pri font-semibold px-5 py-2.5 text-xs uppercase tracking-wider transition-colors disabled:opacity-50"
               >
                 {busy ? 'Opening Stripe…' : 'Update payout details'}
               </button>
@@ -2764,7 +3756,7 @@ function PayoutsTab({
                 type="button"
                 onClick={startOnboarding}
                 disabled={busy}
-                className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-50"
+                className="rounded-ctl inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-50"
               >
                 <Banknote size={16} strokeWidth={2} aria-hidden="true" />
                 {busy
@@ -2781,7 +3773,7 @@ function PayoutsTab({
                 type="button"
                 onClick={() => void syncStatus(false)}
                 disabled={syncing}
-                className="inline-flex items-center gap-2 border border-ink-line text-text-sec hover:text-text-pri font-semibold px-5 py-2.5 text-xs uppercase tracking-wider transition-colors disabled:opacity-50"
+                className="rounded-ctl inline-flex items-center gap-2 border border-ink-line text-text-sec hover:text-text-pri font-semibold px-5 py-2.5 text-xs uppercase tracking-wider transition-colors disabled:opacity-50"
               >
                 {syncing ? 'Checking…' : 'Refresh status'}
               </button>
@@ -2970,7 +3962,7 @@ function PayoutJobsSection({ accessToken }: { accessToken: string | null }) {
                   type="button"
                   onClick={() => releaseJob(j.quote_id)}
                   disabled={busyId !== null || j.release_state === 'in_flight'}
-                  className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-4 py-2 text-xs uppercase tracking-wider transition-colors disabled:opacity-50"
+                  className="rounded-ctl inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-4 py-2 text-xs uppercase tracking-wider transition-colors disabled:opacity-50"
                 >
                   {busyId === j.quote_id
                     ? 'Releasing…'
@@ -3008,7 +4000,7 @@ function PayoutJobsSection({ accessToken }: { accessToken: string | null }) {
                       : '—'}
                   </p>
                 </div>
-                <span className="font-mono text-sm font-bold text-emerald-400">
+                <span className="font-mono text-sm font-bold text-success-bright">
                   {fmtAudCents(j.payout?.amount_cents ?? j.net_cents)}
                 </span>
               </li>
@@ -3189,7 +4181,7 @@ function LicencesCard({
           <button
             type="submit"
             disabled={submitting}
-            className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-50"
+            className="rounded-ctl inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-50"
           >
             {submitting ? 'Saving…' : isMulti ? 'Save licences' : 'Save licence'}
           </button>
@@ -3337,7 +4329,7 @@ function TradesCard({
                   type="button"
                   onClick={() => toggle(t.name)}
                   disabled={busy}
-                  className={`px-4 py-3.5 text-sm font-semibold uppercase tracking-wider transition-colors border ${
+                  className={`rounded-card px-4 py-3.5 text-sm font-semibold uppercase tracking-wider transition-colors border ${
                     selected
                       ? 'border-accent bg-accent text-white'
                       : 'border-ink-line bg-ink-deep text-text-sec hover:border-accent-soft hover:text-text-pri'
@@ -3368,7 +4360,7 @@ function TradesCard({
               type="button"
               onClick={handleSave}
               disabled={!dirty || busy}
-              className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-5 py-2.5 text-xs uppercase tracking-wider transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="rounded-ctl inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-5 py-2.5 text-xs uppercase tracking-wider transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {busy ? 'Saving…' : 'Save trades'}
             </button>
@@ -3406,7 +4398,7 @@ function ConfirmRemoveTrade({
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink-deep/80 backdrop-blur-sm px-4"
     >
-      <div className="w-full max-w-md bg-ink-card border border-ink-line p-6 space-y-4">
+      <div className="rounded-card w-full max-w-md bg-ink-card border border-ink-line p-6 space-y-4">
         <h3 className="font-extrabold uppercase text-lg tracking-[-0.02em]">
           Remove {list}?
         </h3>
@@ -3433,7 +4425,7 @@ function ConfirmRemoveTrade({
             type="button"
             onClick={onConfirm}
             disabled={busy}
-            className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-5 py-2.5 text-xs uppercase tracking-wider transition-colors disabled:opacity-50"
+            className="rounded-ctl inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-5 py-2.5 text-xs uppercase tracking-wider transition-colors disabled:opacity-50"
           >
             {busy ? 'Removing…' : `Remove ${list}`}
           </button>
@@ -3541,7 +4533,7 @@ function ActivateTradeCard({
           {available.map((t) => (
             <div
               key={t.name}
-              className="flex items-center justify-between gap-4 border border-ink-line bg-ink-deep px-4 py-3"
+              className="rounded-card flex items-center justify-between gap-4 border border-ink-line bg-ink-deep px-4 py-3"
             >
               <span className="text-sm font-semibold uppercase tracking-wider text-text-pri">
                 {t.displayName}
@@ -3550,7 +4542,7 @@ function ActivateTradeCard({
                 type="button"
                 onClick={() => activate(t)}
                 disabled={busyTrade !== null}
-                className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-5 py-2.5 text-xs uppercase tracking-wider transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="rounded-ctl inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-5 py-2.5 text-xs uppercase tracking-wider transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {busyTrade === t.name ? 'Activating…' : 'Activate'}
               </button>
@@ -3579,10 +4571,21 @@ function PricingTab({
   data,
   onSave,
   accessToken,
+  tradeFilter,
+  sharedOnly,
 }: {
   data: DashboardData
   onSave: (payload: Record<string, unknown>) => Promise<void>
   accessToken: string | null
+  /** Render only this trade's rate card + tier options (trade-hub mode).
+   *  Tenant-wide cards (early-bird, display, review, follow-up,
+   *  calibration) are hidden — they live on the General pricing tab. */
+  tradeFilter?: TradeHubSlug
+  /** Render only the tenant-wide cards (General pricing tab mode).
+   *  Per-trade rate cards are hidden — they live in the trade hubs —
+   *  except books whose trade has no hub, which stay here so no rate
+   *  card ever becomes unreachable. */
+  sharedOnly?: boolean
 }) {
   // Multi-trade tenants get one PricingBookCard per trade. Single-trade
   // tenants get exactly one card — same component, no special UI.
@@ -3591,6 +4594,36 @@ function PricingTab({
     : data.pricing
       ? [data.pricing as PricingBook]
       : []
+
+  const tenantTrades = tenantTradeList(data.tenant)
+
+  // A trade-less legacy book (the data.pricing fallback carries no trade
+  // column) belongs to the tenant's only trade when there is exactly one,
+  // so its hub still shows a rate card.
+  const bookTrade = (book: PricingBook): string | null => {
+    if (typeof book.trade === 'string' && book.trade) return book.trade.toLowerCase()
+    if (tenantTrades.length === 1) return tenantTrades[0]?.toLowerCase() ?? null
+    return null
+  }
+  // "Claimed" means a hub tab actually exists for this tenant — the slug
+  // must be one THIS tenant has enabled, not merely a known hub slug.
+  // A book whose trade lost its slug (e.g. a deactivation that removed the
+  // trade but a transient failure left the book behind) falls back to the
+  // General pricing tab instead of becoming unreachable.
+  const claimedByHub = (book: PricingBook): boolean => {
+    const t = bookTrade(book)
+    return (
+      t !== null &&
+      (TRADE_HUB_SLUGS as readonly string[]).includes(t) &&
+      hubEnabled(t as TradeHubSlug, tenantTrades)
+    )
+  }
+
+  const visibleBooks = tradeFilter
+    ? books.filter((b) => bookTrade(b) === tradeFilter)
+    : sharedOnly
+      ? books.filter((b) => !claimedByHub(b))
+      : books
 
   if (books.length === 0) {
     return (
@@ -3604,7 +4637,7 @@ function PricingTab({
 
   return (
     <div className="space-y-6">
-      {books.map((book) => (
+      {visibleBooks.map((book) => (
         <PricingBookCard
           key={book.trade ?? 'default'}
           book={book}
@@ -3612,44 +4645,59 @@ function PricingTab({
           onSave={onSave}
         />
       ))}
-      {/* v8 — early-booking discount. One card per tenant (the offer is
-          trade-agnostic, written to every pricing_book row). */}
-      <EarlyBirdCard books={books} onSave={onSave} />
-      {/* Mig 142 — per-feature quote tier presentation mode (single price vs
-          Good/Better/Best vs a forced tier). PER-FEATURE: each trade keeps its
-          own mode. Sits above the layout card — "how many options" then "how
-          much detail per option". */}
-      <QuoteTierModeCard books={books} onSave={onSave} />
-      {/* Phase A — customer-quote display preference (itemised vs summary).
-          Trade-agnostic, written to every pricing_book row by /api/tenant/me. */}
-      <QuoteDisplayCard books={books} onSave={onSave} />
-      {/* Mig 078 — tradie review-before-send policy. Sits next to the
-          display card because they're the two "how quotes leave the
-          system" controls; tradies tend to set them together. */}
-      <ReviewPolicyCard books={books} onSave={onSave} />
-      {/* Mig 079 — customer 2-hour follow-up check-in. Toggle sits on the
-          Pricing tab alongside the other "how quotes leave the system"
-          controls (review_policy, quote_display) — same scope, same UX. */}
-      <Followup2hCard books={books} onSave={onSave} />
-      {/* A5 — invoice-history calibration. Upload past invoices, see how
-          our recipe lines up with what you actually charged, accept a
-          suggested hourly-rate adjustment. */}
-      <CalibrationCard accessToken={accessToken} />
-      {/* v10 / Phase 1.5 — per-tenant Roof rates editor. Only rendered when
-          'roofing' is in tenants.trades; otherwise the whole card is
-          hidden. Writes to pricing_book.overlays.roofing_rate_card; read
-          back by /api/roofing/measure before pricing. */}
-      {tenantHasRoofingTrade(data.tenant.trades as unknown as string[]) && (
-        <RoofRatesEditor accessToken={accessToken} />
+      {tradeFilter && visibleBooks.length === 0 && !NO_BOOK_HUB_TRADES.includes(tradeFilter) && (
+        <Card>
+          <p className="text-sm text-text-sec">
+            No hourly-rate pricing book for this trade yet. Tenant-wide
+            settings live under General pricing.
+          </p>
+        </Card>
       )}
-      {/* Per-tenant Paint rates editor. Only rendered when 'painting' is in
-          tenants.trades; otherwise hidden. Writes to
-          pricing_book.overlays.painting_rate_card; read back by
-          /api/painting/estimate before pricing. Mirrors RoofRatesEditor —
-          painting pricing config lives here on the Pricing tab, not on the
-          painting estimate tool tab. */}
-      {tenantHasFeature(data.tenant.trades as unknown as string[], 'painting') && (
-        <PaintRatesEditor accessToken={accessToken} />
+      {!sharedOnly && (
+        /* Mig 142 — per-feature quote tier presentation mode (single price vs
+           Good/Better/Best vs a forced tier). PER-FEATURE: each trade keeps its
+           own mode, so in hub mode the card sees only this trade's book (the
+           card returns null for non-tier-capable trades like aircon/signage). */
+        <QuoteTierModeCard books={visibleBooks} onSave={onSave} />
+      )}
+      {(!tradeFilter || tradeFilter === 'roofing') && !sharedOnly && (
+        /* v10 / Phase 1.5 — per-tenant Roof rates editor. Only rendered when
+           'roofing' is in tenants.trades; otherwise the whole card is
+           hidden. Writes to pricing_book.overlays.roofing_rate_card; read
+           back by /api/roofing/measure before pricing. */
+        tenantHasRoofingTrade(tenantTrades) && (
+          <RoofRatesEditor accessToken={accessToken} />
+        )
+      )}
+      {(!tradeFilter || tradeFilter === 'painting') && !sharedOnly && (
+        /* Per-tenant Paint rates editor. Only rendered when 'painting' is in
+           tenants.trades; otherwise hidden. Writes to
+           pricing_book.overlays.painting_rate_card; read back by
+           /api/painting/estimate before pricing. */
+        tenantHasFeature(tenantTrades, 'painting') && (
+          <PaintRatesEditor accessToken={accessToken} />
+        )
+      )}
+      {!tradeFilter && (
+        <>
+          {/* v8 — early-booking discount. One card per tenant (the offer is
+              trade-agnostic, written to every pricing_book row). */}
+          <EarlyBirdCard books={books} onSave={onSave} />
+          {/* Phase A — customer-quote display preference (itemised vs summary).
+              Trade-agnostic, written to every pricing_book row by /api/tenant/me. */}
+          <QuoteDisplayCard books={books} onSave={onSave} />
+          {/* Mig 078 — tradie review-before-send policy. Sits next to the
+              display card because they're the two "how quotes leave the
+              system" controls; tradies tend to set them together. */}
+          <ReviewPolicyCard books={books} onSave={onSave} />
+          {/* Mig 079 — customer 2-hour follow-up check-in. Same scope as the
+              other "how quotes leave the system" controls, same UX. */}
+          <Followup2hCard books={books} onSave={onSave} />
+          {/* A5 — invoice-history calibration. Upload past invoices, see how
+              our recipe lines up with what you actually charged, accept a
+              suggested hourly-rate adjustment. */}
+          <CalibrationCard accessToken={accessToken} />
+        </>
       )}
     </div>
   )
@@ -4386,7 +5434,7 @@ function CalibrationCard({ accessToken }: { accessToken: string | null }) {
         automatically — you always click Accept.
       </p>
 
-      <div className="mb-4 border border-dashed border-ink-line bg-ink-card p-4">
+      <div className="rounded-card mb-4 border border-dashed border-ink-line bg-ink-card p-4">
         <label className="block">
           <span className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-text-dim block mb-2">
             Upload invoice image (JPG / PNG / WEBP / HEIC)
@@ -4434,7 +5482,7 @@ function CalibrationCard({ accessToken }: { accessToken: string | null }) {
             const tradeLabel = trade.charAt(0).toUpperCase() + trade.slice(1)
             const s = r.suggestions[0]
             return (
-              <div key={trade} className="border border-ink-line bg-ink-card">
+              <div key={trade} className="rounded-card border border-ink-line bg-ink-card">
                 <div className="px-4 py-3 border-b border-ink-line flex items-baseline justify-between flex-wrap gap-2">
                   <h4 className="font-semibold text-text-pri">{tradeLabel}</h4>
                   <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
@@ -4484,7 +5532,7 @@ function CalibrationCard({ accessToken }: { accessToken: string | null }) {
             )
           })}
           {report.uploads.length > 0 && (
-            <details className="border border-ink-line bg-ink-card">
+            <details className="rounded-card border border-ink-line bg-ink-card">
               <summary className="px-4 py-3 cursor-pointer font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim hover:text-text-pri">
                 ▸ Uploaded invoices ({report.uploads.length})
               </summary>
@@ -4640,7 +5688,7 @@ function EarlyBirdCard({
           <button
             type="submit"
             disabled={submitting}
-            className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-50"
+            className="rounded-ctl inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-50"
           >
             {submitting ? 'Saving…' : 'Save discount'}
           </button>
@@ -4852,7 +5900,7 @@ function PricingBookCard({
           <button
             type="submit"
             disabled={submitting}
-            className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-50"
+            className="rounded-ctl inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-50"
           >
             {submitting ? 'Saving…' : 'Save pricing'}
           </button>
@@ -4870,12 +5918,17 @@ function ServicesTab({
   onCreateCustom,
   onUpdateCustom,
   onDeleteCustom,
+  tradeFilter,
 }: {
   data: DashboardData
   onSave: (payload: Record<string, unknown>) => Promise<void>
   onCreateCustom: (payload: Record<string, unknown>) => Promise<unknown>
   onUpdateCustom: (id: string, payload: Record<string, unknown>) => Promise<unknown>
   onDeleteCustom: (id: string) => Promise<void>
+  /** Trade-hub mode: scope the service list, counts, brand preferences,
+   *  and the custom-service form to one trade. Unset = all trades
+   *  (legacy cross-trade view, kept for deep links). */
+  tradeFilter?: TradeHubSlug
 }) {
   // R36 — optimistic per-row override map (assembly_id → flipped value). Keyed
   // per row so two overlapping toggles never share state. See lib/dashboard/
@@ -4997,17 +6050,25 @@ function ServicesTab({
     }
   }
 
-  const enabledCount = data.services.filter((s) => {
+  // Trade-hub mode: scope the list (and every count) to one trade before
+  // search + pagination so page counts and "N of M on" stay truthful.
+  const visibleServices = tradeFilter
+    ? data.services.filter((s) => (s.trade ?? '').toLowerCase() === tradeFilter)
+    : data.services
+
+  const enabledCount = visibleServices.filter((s) => {
     const live = pending[s.assembly_id] !== undefined ? pending[s.assembly_id] : s.enabled
     return live
   }).length
-  const totalCount = data.services.length
+  const totalCount = visibleServices.length
 
   // Multi-trade tenants see services grouped by trade so the dashboard
   // makes it obvious which catalogue half each row belongs to. Single-
-  // trade tenants get the original flat list (no group header).
-  const tenantTrades =
-    Array.isArray(data.tenant.trades) && data.tenant.trades.length > 0
+  // trade tenants — and trade-hub mode — get the original flat list
+  // (no group header; the hub's own header already names the trade).
+  const tenantTrades = tradeFilter
+    ? [tradeFilter]
+    : Array.isArray(data.tenant.trades) && data.tenant.trades.length > 0
       ? data.tenant.trades
       : data.tenant.trade
         ? [data.tenant.trade]
@@ -5015,12 +6076,12 @@ function ServicesTab({
   const showGrouped = tenantTrades.length > 1
   const q = query.trim().toLowerCase()
   const searchedServices = q
-    ? data.services.filter(
+    ? visibleServices.filter(
         (s) =>
           s.name.toLowerCase().includes(q) ||
           (s.description ?? '').toLowerCase().includes(q),
       )
-    : data.services
+    : visibleServices
   // Paginate at 10 — the grouping below runs on the page slice so a
   // long catalogue never grows the page past one screen of rows.
   const SVC_PAGE_SIZE = 10
@@ -5043,8 +6104,10 @@ function ServicesTab({
   return (
     <div className="space-y-6">
       {/* v7 Phase 1 banner — Jon's "everything is pre-populated, toggle on/off"
-         framing made explicit. Always shown (informational, not dismissible);
-         the enabledCount in the Card subtitle already encodes the state. */}
+         framing made explicit. Informational, not dismissible; hidden when
+         the (possibly trade-scoped) list is empty so it can't claim a
+         catalogue is loaded when nothing is. */}
+      {visibleServices.length > 0 && (
       <div className="border-l-2 border-l-accent/60 bg-ink-card/60 px-4 py-3">
         <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-accent mb-1">
           Catalogue · pre-populated
@@ -5055,6 +6118,7 @@ function ServicesTab({
           customers can still book it as a $99 inspection, your AI just won&rsquo;t auto-draft a price.
         </div>
       </div>
+      )}
 
       <Card
         title="Auto-quote services"
@@ -5065,9 +6129,9 @@ function ServicesTab({
             to create-mode (no existing row pre-filled). */}
         <div className="mb-4 flex items-center justify-between gap-3 flex-wrap">
           <div className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-text-dim">
-            {data.services.filter((s) => s.is_custom).length} custom service
-            {data.services.filter((s) => s.is_custom).length === 1 ? '' : 's'} ·{' '}
-            {data.services.filter((s) => !s.is_custom).length} catalogue
+            {visibleServices.filter((s) => s.is_custom).length} custom service
+            {visibleServices.filter((s) => s.is_custom).length === 1 ? '' : 's'} ·{' '}
+            {visibleServices.filter((s) => !s.is_custom).length} catalogue
           </div>
           <button
             type="button"
@@ -5078,7 +6142,7 @@ function ServicesTab({
                   : { mode: 'create', trade: tenantTrades[0] ?? 'electrical' },
               )
             }
-            className="inline-flex items-center gap-2 border border-accent/60 text-accent hover:bg-accent/10 font-mono font-bold uppercase tracking-[0.14em] text-[0.7rem] px-3.5 py-2 transition-colors"
+            className="rounded-ctl inline-flex items-center gap-2 border border-accent/60 text-accent hover:bg-accent/10 font-mono font-bold uppercase tracking-[0.14em] text-[0.7rem] px-3.5 py-2 transition-colors"
           >
             {formState ? '× Cancel' : '+ Add custom service'}
           </button>
@@ -5105,7 +6169,7 @@ function ServicesTab({
 
         {/* Search — filters across every trade group so a long
             catalogue is one keystroke from the row you want. */}
-        {data.services.length > 0 && (
+        {visibleServices.length > 0 && (
           <div className="relative mb-4">
             <svg
               width="15"
@@ -5127,19 +6191,23 @@ function ServicesTab({
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search services by name…"
               aria-label="Search services"
-              className="w-full bg-ink-deep border border-ink-line pl-10 pr-3 py-2.5 text-sm text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft transition-colors"
+              className="rounded-ctl w-full bg-ink-deep border border-ink-line pl-10 pr-3 py-2.5 text-sm text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft transition-colors"
             />
           </div>
         )}
 
         <div className="space-y-2">
-          {data.services.length === 0 ? (
-            <div className="bg-amber-950/30 border border-amber-700/50 px-4 py-3">
-              <p className="text-sm text-amber-200">
+          {visibleServices.length === 0 ? (
+            <div className="bg-warning/15 border border-warning-bright/50 px-4 py-3">
+              <p className="text-sm text-warning-bright">
                 No services found in the catalogue for{' '}
                 <span className="font-mono">{tenantTrades.join(', ') || '—'}</span>.
-                This usually means the seed data hasn&rsquo;t loaded — check the
-                Supabase <span className="font-mono">shared_assemblies</span> table.
+                {tradeFilter ? (
+                  <> This trade has no shared catalogue yet — its pricing lives in the trade&rsquo;s tool settings.</>
+                ) : (
+                  <> This usually means the seed data hasn&rsquo;t loaded — check the
+                  Supabase <span className="font-mono">shared_assemblies</span> table.</>
+                )}
               </p>
             </div>
           ) : searchedServices.length === 0 ? (
@@ -5188,7 +6256,7 @@ function ServicesTab({
               return (
                 <div
                   key={svc.assembly_id}
-                  className={`border transition-colors ${
+                  className={`rounded-card border transition-colors ${
                     live
                       ? 'border-accent/70 bg-accent/5'
                       : 'border-ink-line bg-ink-card'
@@ -5305,7 +6373,7 @@ function ServicesTab({
                       className="shrink-0 inline-flex items-center gap-2.5 cursor-pointer group select-none"
                     >
                       <span
-                        className={`relative inline-block h-5 w-10 border transition-colors ${
+                        className={`rounded-card relative inline-block h-5 w-10 border transition-colors ${
                           live
                             ? 'border-accent bg-accent/20'
                             : 'border-ink-line bg-ink-base group-hover:border-text-dim'
@@ -5478,7 +6546,7 @@ function ServicesTab({
                                 category: svc.category ?? '',
                               })
                             }
-                            className="inline-flex items-center gap-1.5 border border-ink-line text-text-sec hover:border-accent/60 hover:text-accent font-mono font-bold uppercase tracking-[0.14em] text-[0.65rem] px-3 py-1.5 transition-colors"
+                            className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line text-text-sec hover:border-accent/60 hover:text-accent font-mono font-bold uppercase tracking-[0.14em] text-[0.65rem] px-3 py-1.5 transition-colors"
                           >
                             ✎ Edit
                           </button>
@@ -5498,7 +6566,7 @@ function ServicesTab({
                                 setError(err?.message ?? 'Delete failed')
                               }
                             }}
-                            className="inline-flex items-center gap-1.5 border border-ink-line text-text-dim hover:border-warning/60 hover:text-warning font-mono font-bold uppercase tracking-[0.14em] text-[0.65rem] px-3 py-1.5 transition-colors"
+                            className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line text-text-dim hover:border-warning/60 hover:text-warning font-mono font-bold uppercase tracking-[0.14em] text-[0.65rem] px-3 py-1.5 transition-colors"
                           >
                             ⌫ Delete
                           </button>
@@ -5532,7 +6600,7 @@ function ServicesTab({
             type="button"
             onClick={saveAll}
             disabled={busy || !dirty}
-            className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="rounded-ctl inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {busy
               ? 'Saving…'
@@ -5548,30 +6616,35 @@ function ServicesTab({
           supplier of choice. Soft hint only: if the customer needs a
           tier the preferred brand can't fulfil, the AI picks the best
           alternative regardless. */}
-      <PreferredBrandsCard data={data} onSave={onSave} />
+      <PreferredBrandsCard data={data} onSave={onSave} tradeFilter={tradeFilter} />
 
-      {/* Inspection-only educational footer */}
-      <Card title="Always require a site visit" subtitle="These jobs route to a $99 paid inspection regardless of toggles above. Your AI tells the customer up front.">
-        <ul className="grid sm:grid-cols-2 gap-2 text-sm">
-          {(data.tenant.trade === 'plumbing'
-            ? PLUMBING_INSPECTION_ONLY
-            : ELECTRICAL_INSPECTION_ONLY
-          ).map((item) => (
-            <li
-              key={item}
-              className="flex items-baseline gap-3 text-text-sec border border-ink-line bg-ink-card px-3.5 py-2.5"
-            >
-              <span className="font-mono text-xs text-accent">!</span>
-              {item}
-            </li>
-          ))}
-        </ul>
-        <p className="mt-4 text-xs text-text-dim">
-          These are out-of-scope for SMS auto-quote in v1. Need to handle one yourself?
-          The customer&rsquo;s details are still captured in the dialog — you take it from
-          there after the site visit fee is paid.
-        </p>
-      </Card>
+      {/* Inspection-only educational footer. The lists exist for the two
+          labour trades only, so in hub mode it renders solely on the
+          electrical/plumbing hubs, keyed by the hub's trade rather than
+          the tenant's primary trade. */}
+      {(!tradeFilter || tradeFilter === 'electrical' || tradeFilter === 'plumbing') && (
+        <Card title="Always require a site visit" subtitle="These jobs route to a $99 paid inspection regardless of toggles above. Your AI tells the customer up front.">
+          <ul className="grid sm:grid-cols-2 gap-2 text-sm">
+            {((tradeFilter ?? data.tenant.trade) === 'plumbing'
+              ? PLUMBING_INSPECTION_ONLY
+              : ELECTRICAL_INSPECTION_ONLY
+            ).map((item) => (
+              <li
+                key={item}
+                className="rounded-card flex items-baseline gap-3 text-text-sec border border-ink-line bg-ink-card px-3.5 py-2.5"
+              >
+                <span className="font-mono text-xs text-accent">!</span>
+                {item}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-4 text-xs text-text-dim">
+            These are out-of-scope for SMS auto-quote in v1. Need to handle one yourself?
+            The customer&rsquo;s details are still captured in the dialog — you take it from
+            there after the site visit fee is paid.
+          </p>
+        </Card>
+      )}
     </div>
   )
 }
@@ -5610,9 +6683,13 @@ function categoryLabel(category: string): string {
 function PreferredBrandsCard({
   data,
   onSave,
+  tradeFilter,
 }: {
   data: DashboardData
   onSave: (payload: Record<string, unknown>) => Promise<void>
+  /** Trade-hub mode: show only this trade's brand categories (no trade
+   *  group headers — the hub header already names the trade). */
+  tradeFilter?: TradeHubSlug
 }) {
   const initial = data.material_preferences ?? {}
   const [pending, setPending] = useState<Record<string, string>>({})
@@ -5621,8 +6698,9 @@ function PreferredBrandsCard({
   const [savedAt, setSavedAt] = useState<number | null>(null)
 
   // Group by trade so multi-trade tenants see two sections.
-  const tenantTrades =
-    Array.isArray(data.tenant.trades) && data.tenant.trades.length > 0
+  const tenantTrades = tradeFilter
+    ? [tradeFilter]
+    : Array.isArray(data.tenant.trades) && data.tenant.trades.length > 0
       ? (data.tenant.trades as string[])
       : data.tenant.trade
         ? [data.tenant.trade]
@@ -5635,7 +6713,7 @@ function PreferredBrandsCard({
       rows: (data.material_categories ?? []).filter((c) => c.trade === t),
     }))
 
-  const totalCategories = (data.material_categories ?? []).length
+  const totalCategories = grouped.reduce((sum, g) => sum + g.rows.length, 0)
   if (totalCategories === 0) {
     // Migration 022 hasn't run yet (or no branded SKUs in catalogue).
     // Render nothing — silently degrades for legacy environments.
@@ -5681,7 +6759,13 @@ function PreferredBrandsCard({
   }
 
   const dirty = Object.keys(pending).length > 0
-  const setCount = Object.values({ ...initial, ...pending }).filter((v) => !!v).length
+  // Count only categories that are actually visible (in hub mode `grouped`
+  // holds one trade), otherwise another trade's preferences inflate the
+  // "N of M set" subtitle — N could even exceed M.
+  const visibleCategoryKeys = new Set(grouped.flatMap((g) => g.rows.map((r) => r.category)))
+  const setCount = Object.entries({ ...initial, ...pending }).filter(
+    ([cat, v]) => visibleCategoryKeys.has(cat) && !!v,
+  ).length
 
   return (
     <Card
@@ -5705,7 +6789,7 @@ function PreferredBrandsCard({
                   return (
                     <label
                       key={`${row.trade}::${row.category}`}
-                      className={`flex flex-col gap-2 px-4 py-3 border transition-colors ${
+                      className={`rounded-card flex flex-col gap-2 px-4 py-3 border transition-colors ${
                         isSet
                           ? 'border-accent/40 bg-accent/[0.04]'
                           : 'border-ink-line bg-ink-card'
@@ -5717,7 +6801,7 @@ function PreferredBrandsCard({
                       <select
                         value={value}
                         onChange={(e) => change(row.category, e.target.value)}
-                        className="bg-ink-base border border-ink-line text-text-pri text-sm px-3 py-2 focus:outline-none focus:border-accent"
+                        className="rounded-ctl bg-ink-base border border-ink-line text-text-pri text-sm px-3 py-2 focus:outline-none focus:border-accent"
                       >
                         <option value="" className="bg-white text-black">
                           Any (use catalogue default)
@@ -5749,7 +6833,7 @@ function PreferredBrandsCard({
           type="button"
           onClick={saveAll}
           disabled={busy || !dirty}
-          className="inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="rounded-ctl inline-flex items-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-6 py-3 text-sm uppercase tracking-wider transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {busy
             ? 'Saving…'
@@ -5897,7 +6981,7 @@ function CustomServiceForm({
             value={trade}
             onChange={(e) => setTrade(e.target.value)}
             aria-label="Trade for this service"
-            className="bg-ink-base border border-ink-line text-text-pri text-xs font-mono uppercase tracking-[0.14em] px-2.5 py-1.5 focus:outline-none focus:border-accent"
+            className="rounded-ctl bg-ink-base border border-ink-line text-text-pri text-xs font-mono uppercase tracking-[0.14em] px-2.5 py-1.5 focus:outline-none focus:border-accent"
           >
             {tenantTrades.map((t) => (
               <option key={t} value={t}>
@@ -5920,7 +7004,7 @@ function CustomServiceForm({
           required
           maxLength={120}
           placeholder="e.g. Install pool light"
-          className="w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent"
+          className="rounded-ctl w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent"
         />
       </FormField>
 
@@ -5931,7 +7015,7 @@ function CustomServiceForm({
           maxLength={500}
           rows={2}
           placeholder="Mount, terminate, test on existing circuit"
-          className="w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent resize-y"
+          className="rounded-ctl w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent resize-y"
         />
       </FormField>
 
@@ -5943,7 +7027,7 @@ function CustomServiceForm({
           value={category}
           onChange={(e) => setCategory(e.target.value)}
           aria-label="Grounding category for this service"
-          className="w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent"
+          className="rounded-ctl w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent"
         >
           <option value="">Auto-detect from name (recommended)</option>
           {CATEGORIES.map((c) => (
@@ -5962,7 +7046,7 @@ function CustomServiceForm({
             onChange={(e) => setDefaultUnit(e.target.value)}
             maxLength={30}
             placeholder="each"
-            className="w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent"
+            className="rounded-ctl w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent"
           />
         </FormField>
         <FormField label="Sundries / equipment price (ex-GST)" required>
@@ -5975,7 +7059,7 @@ function CustomServiceForm({
             step="0.01"
             required
             placeholder="80.00"
-            className="w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent"
+            className="rounded-ctl w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent"
           />
         </FormField>
         <FormField label="Default labour hours">
@@ -5987,7 +7071,7 @@ function CustomServiceForm({
             max={80}
             step="0.25"
             placeholder="2.0"
-            className="w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent"
+            className="rounded-ctl w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent"
           />
         </FormField>
       </div>
@@ -5999,7 +7083,7 @@ function CustomServiceForm({
           maxLength={500}
           rows={2}
           placeholder="Excludes new wiring runs and ceiling repair"
-          className="w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent resize-y"
+          className="rounded-ctl w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent resize-y"
         />
       </FormField>
 
@@ -6092,11 +7176,6 @@ function toNum(v: number | string | null | undefined): number | null {
 }
 
 // ─── Quotes tab ───────────────────────────────────────────────────
-
-// Page size for the Quotes + Chats lists. Tradies typically scan the
-// last few days at a time; 10 lets the page sit at one screen with
-// collapsed rows. Increase if real-volume usage shows it's too small.
-const LIST_PAGE_SIZE = 10
 
 type QuoteFilter = 'all' | 'review' | 'sent' | 'paid' | 'inspect'
 
@@ -6243,20 +7322,34 @@ function QuotesTab({
   data,
   accessToken,
   onQuoteDeleted,
+  tradeFilter,
 }: {
   data: DashboardData
   accessToken: string | null
   onQuoteDeleted: (id: string) => void
+  /** Trade-hub mode: show only this trade's quotes (quote.trade is joined
+   *  from the intake). The money band, filters, and counts all scope with
+   *  it. Unset = every quote (the Workspace → Quotes pipeline view). */
+  tradeFilter?: TradeHubSlug
 }) {
   const isMultiTrade =
+    !tradeFilter &&
     Array.isArray(data.tenant.trades) && data.tenant.trades.length > 1
 
   const [section, setSection] = useState<QuoteSection>('quotes')
   const [savedCount, setSavedCount] = useState<number | null>(null)
   const [filter, setFilter] = useState<QuoteFilter>('all')
-  const [visible, setVisible] = useState(LIST_PAGE_SIZE)
   const [sort, setSort] = useState<QuoteSort>('newest')
-  const all = data.quotes
+  // Extra filters (workspace + hub). Trade chips isolate one trade's quotes;
+  // date range picks by when the quote was drafted; search is free-text
+  // across customer / suburb / job / trade / scope / share code / status.
+  const [tradeSel, setTradeSel] = useState<string>('all')
+  const [search, setSearch] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const all = tradeFilter
+    ? data.quotes.filter((q) => (q.trade ?? '').toLowerCase() === tradeFilter)
+    : data.quotes
 
   const FILTERS: { key: QuoteFilter; label: string }[] = [
     { key: 'all', label: 'All' },
@@ -6265,12 +7358,45 @@ function QuotesTab({
     { key: 'paid', label: 'Deposit paid' },
     { key: 'inspect', label: 'Inspection' },
   ]
+  // Trade chips only make sense on the cross-trade Workspace view — a hub is
+  // already one trade. Derived from the quotes present so empty trades don't
+  // show a dead chip.
+  const tradeOptions = tradeOptionsFromQuotes(all)
+  const showTradeChips = !tradeFilter && tradeOptions.length > 1
+  const searchTerms = parseSearchTerms(search)
+  const filtersActive =
+    filter !== 'all' ||
+    tradeSel !== 'all' ||
+    !!dateFrom ||
+    !!dateTo ||
+    searchTerms.length > 0
+
+  function clearFilters() {
+    setFilter('all')
+    setTradeSel('all')
+    setSearch('')
+    setDateFrom('')
+    setDateTo('')
+  }
+
   const filtered = all
     .filter((q) => quoteMatchesFilter(q, filter))
+    .filter((q) => quoteMatchesTrade(q, tradeSel))
+    .filter((q) => quoteInDateRange(q, dateFrom, dateTo))
+    .filter((q) => quoteMatchesSearch(q, searchTerms))
     .sort((a, b) => compareQuotes(a, b, sort))
   const total = filtered.length
-  const visibleQuotes = filtered.slice(0, visible)
-  const remaining = Math.max(0, total - visible)
+  const {
+    page,
+    setPage,
+    totalPages,
+    pageItems: visibleQuotes,
+    startIndex,
+    endIndex,
+  } = usePagination(filtered, {
+    urlKey: tradeFilter ? `${tradeFilter}_q_page` : 'q_page',
+    resetKey: `${filter} ${sort} ${tradeSel} ${dateFrom} ${dateTo} ${search}`,
+  })
 
   // ── Money summary band. The Quotes tab is where a tradie manages
   //    revenue, so it leads with the totals (mirrors the Overview KPI
@@ -6286,31 +7412,45 @@ function QuotesTab({
 
   return (
     <div className="space-y-5">
-      <QuoteSectionTabs
-        section={section}
-        onChange={setSection}
-        quotesCount={all.length}
-        jobsCount={savedCount}
-      />
+      {/* Saved jobs are cross-trade, so the sub-tab strip only renders on
+          the Workspace Quotes tab — a trade hub shows just that trade's
+          quote list (section stays on its 'quotes' default). */}
+      {!tradeFilter && (
+        <QuoteSectionTabs
+          section={section}
+          onChange={setSection}
+          quotesCount={all.length}
+          jobsCount={savedCount}
+        />
+      )}
 
       {/* Saved jobs — its own sub-tab panel. Kept mounted (hidden via the
           `hidden` attribute when the Quotes sub-tab is active) so its count
           feeds the tab badge and switching is instant, without re-fetching
           /api/tenant/trade-jobs each toggle. */}
-      <div
-        role="tabpanel"
-        id="quote-panel-jobs"
-        aria-labelledby="quote-tab-jobs"
-        hidden={section !== 'jobs'}
-      >
-        <SavedJobsSection accessToken={accessToken} renderWhenEmpty onCount={setSavedCount} />
-      </div>
+      {!tradeFilter && (
+        <div
+          role="tabpanel"
+          id="quote-panel-jobs"
+          aria-labelledby="quote-tab-jobs"
+          hidden={section !== 'jobs'}
+        >
+          <SavedJobsSection accessToken={accessToken} renderWhenEmpty onCount={setSavedCount} />
+        </div>
+      )}
 
       {section === 'quotes' && (
         <div
-          role="tabpanel"
-          id="quote-panel-quotes"
-          aria-labelledby="quote-tab-quotes"
+          // Tab-panel semantics only when the sub-tab strip that owns
+          // quote-tab-quotes is actually rendered (legacy mode); in hub
+          // mode the strip is hidden and the ids would dangle.
+          {...(!tradeFilter
+            ? {
+                role: 'tabpanel',
+                id: 'quote-panel-quotes',
+                'aria-labelledby': 'quote-tab-quotes',
+              }
+            : {})}
           className="space-y-5"
         >
           {all.length === 0 ? (
@@ -6360,11 +7500,8 @@ function QuotesTab({
             <button
               key={f.key}
               type="button"
-              onClick={() => {
-                setFilter(f.key)
-                setVisible(LIST_PAGE_SIZE)
-              }}
-              className={`inline-flex items-center gap-2 border px-3.5 py-2 font-mono text-[0.65rem] font-bold uppercase tracking-[0.14em] transition-colors cursor-pointer ${
+              onClick={() => setFilter(f.key)}
+              className={`rounded-ctl inline-flex items-center gap-2 border px-3.5 py-2 font-mono text-[0.65rem] font-bold uppercase tracking-[0.14em] transition-colors cursor-pointer ${
                 active
                   ? 'border-accent bg-accent/10 text-accent'
                   : 'border-ink-line bg-ink-card text-text-dim hover:border-text-dim hover:text-text-pri'
@@ -6382,11 +7519,8 @@ function QuotesTab({
           Sort
           <select
             value={sort}
-            onChange={(e) => {
-              setSort(e.target.value as QuoteSort)
-              setVisible(LIST_PAGE_SIZE)
-            }}
-            className="cursor-pointer border border-ink-line bg-ink-card px-2.5 py-2 font-mono text-[0.65rem] font-bold uppercase tracking-[0.14em] text-text-pri focus:border-accent focus:outline-none"
+            onChange={(e) => setSort(e.target.value as QuoteSort)}
+            className="rounded-ctl cursor-pointer border border-ink-line bg-ink-card px-2.5 py-2 font-mono text-[0.65rem] font-bold uppercase tracking-[0.14em] text-text-pri focus:border-accent focus:outline-none"
           >
             {QUOTE_SORTS.map((s) => (
               <option key={s.key} value={s.key}>
@@ -6397,15 +7531,103 @@ function QuotesTab({
         </label>
       </div>
 
+      {/* Trade rail — isolate one trade's quotes. Only on the cross-trade
+          Workspace view (a hub is already scoped to its trade) and only
+          when the tenant actually has quotes in more than one trade. */}
+      {showTradeChips && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="mr-1 font-mono text-[0.6rem] uppercase tracking-[0.16em] text-text-dim">
+            Trade
+          </span>
+          {['all', ...tradeOptions].map((t) => {
+            const active = tradeSel === t
+            const count =
+              t === 'all'
+                ? all.length
+                : all.filter((q) => (q.trade ?? '').toLowerCase() === t).length
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTradeSel(t)}
+                className={`rounded-ctl inline-flex items-center gap-2 border px-3.5 py-2 font-mono text-[0.65rem] font-bold uppercase tracking-[0.14em] transition-colors cursor-pointer ${
+                  active
+                    ? 'border-accent bg-accent/10 text-accent'
+                    : 'border-ink-line bg-ink-card text-text-dim hover:border-text-dim hover:text-text-pri'
+                }`}
+                aria-pressed={active}
+              >
+                {t === 'all' ? 'All trades' : quoteTradeLabel(t)}
+                <span className={active ? 'text-accent' : 'text-text-sec'}>{count}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Search + date-range toolbar. Search matches customer / suburb / job
+          / trade / scope / share code / status; the date range picks quotes
+          by when they were drafted (inclusive, calendar date). */}
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="relative min-w-[13rem] flex-1">
+          <span className="sr-only">Search quotes</span>
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search name, suburb, job, code…"
+            className="rounded-ctl w-full border border-ink-line bg-ink-card px-3 py-2 font-mono text-[0.72rem] text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none"
+          />
+        </label>
+        <label className="flex items-center gap-2 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
+          From
+          <input
+            type="date"
+            value={dateFrom}
+            max={dateTo || undefined}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="rounded-ctl border border-ink-line bg-ink-card px-2.5 py-2 font-mono text-[0.72rem] text-text-pri focus:border-accent focus:outline-none"
+          />
+        </label>
+        <label className="flex items-center gap-2 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
+          To
+          <input
+            type="date"
+            value={dateTo}
+            min={dateFrom || undefined}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="rounded-ctl border border-ink-line bg-ink-card px-2.5 py-2 font-mono text-[0.72rem] text-text-pri focus:border-accent focus:outline-none"
+          />
+        </label>
+        {filtersActive && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="rounded-ctl inline-flex items-center gap-2 border border-ink-line bg-ink-card px-3 py-2 font-mono text-[0.62rem] font-bold uppercase tracking-[0.14em] text-text-dim transition-colors cursor-pointer hover:border-accent hover:text-accent"
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+
       <Card
-        subtitle={`${Math.min(visible, total)} of ${total} shown${
-          filter !== 'all' ? ' · filtered' : ''
+        subtitle={`${total} quote${total === 1 ? '' : 's'}${
+          filtersActive ? ' · filtered' : ''
         } · click a row to see the scope, tier breakdown, and customer page.`}
       >
         {total === 0 ? (
-          <p className="text-sm text-text-dim">
-            No quotes match this filter.
-          </p>
+          <div className="space-y-3">
+            <p className="text-sm text-text-dim">No quotes match these filters.</p>
+            {filtersActive && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="rounded-ctl inline-flex items-center gap-2 border border-ink-line bg-ink-card px-3 py-2 font-mono text-[0.62rem] font-bold uppercase tracking-[0.14em] text-text-dim transition-colors cursor-pointer hover:border-accent hover:text-accent"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
         ) : (
           <>
             <div className="space-y-2">
@@ -6419,17 +7641,15 @@ function QuotesTab({
                 />
               ))}
             </div>
-            {remaining > 0 && (
-              <div className="mt-6 flex justify-center">
-                <button
-                  type="button"
-                  onClick={() => setVisible((v) => v + LIST_PAGE_SIZE)}
-                  className="inline-flex items-center gap-2 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-pri font-mono text-[0.7rem] uppercase tracking-[0.16em] font-bold px-5 py-3 min-h-[44px] transition-colors cursor-pointer w-full sm:w-auto justify-center"
-                >
-                  Load {Math.min(LIST_PAGE_SIZE, remaining)} more · {remaining} left
-                </button>
-              </div>
-            )}
+            <PaginationControls
+              page={page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              startIndex={startIndex}
+              endIndex={endIndex}
+              total={total}
+              unit="quotes"
+            />
           </>
         )}
       </Card>
@@ -6497,7 +7717,7 @@ function DeleteQuoteButton({
           type="button"
           onClick={() => void doDelete()}
           disabled={busy}
-          className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 border border-danger/60 bg-danger/10 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-danger transition-colors hover:bg-danger/20 disabled:opacity-50 sm:flex-none"
+          className="rounded-ctl inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 border border-danger/60 bg-danger/10 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-danger transition-colors hover:bg-danger/20 disabled:opacity-50 sm:flex-none"
         >
           {busy ? <Loader2 size={13} className="animate-spin" /> : null}
           {busy ? 'Deleting…' : 'Yes, delete'}
@@ -6506,7 +7726,7 @@ function DeleteQuoteButton({
           type="button"
           onClick={() => setConfirming(false)}
           disabled={busy}
-          className="inline-flex min-h-[44px] flex-1 items-center justify-center border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent disabled:opacity-50 sm:flex-none"
+          className="rounded-ctl inline-flex min-h-[44px] flex-1 items-center justify-center border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent disabled:opacity-50 sm:flex-none"
         >
           Cancel
         </button>
@@ -6527,7 +7747,7 @@ function DeleteQuoteButton({
         type="button"
         onClick={() => setConfirming(true)}
         aria-label="Delete quote"
-        className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-dim transition-colors hover:border-danger hover:text-danger sm:flex-none"
+        className="rounded-ctl inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-dim transition-colors hover:border-danger hover:text-danger sm:flex-none"
       >
         <Trash2 size={13} />
         Delete
@@ -6617,7 +7837,7 @@ function QuoteCard({
   const railTone: Tone = primaryBadge ? QUOTE_BADGE_TONE[primaryBadge.tone] : 'default'
 
   return (
-    <div className={`border border-ink-line border-l-2 ${TONE_LEFT_RAIL[railTone]} bg-ink-card motion-safe:animate-[fade-up_240ms_ease-out_both]`}>
+    <div className={`rounded-card border border-ink-line border-l-2 ${TONE_LEFT_RAIL[railTone]} bg-ink-card motion-safe:animate-[fade-up_240ms_ease-out_both]`}>
       {/* ── Collapsed summary row (always visible — also the trigger) ─ */}
       <button
         type="button"
@@ -6651,7 +7871,7 @@ function QuoteCard({
             {/* Wave 3b — a ROOF pill flags roofing quotes in a mixed list.
                 Neutral chip (was an orange fill) so the row stays calm. */}
             {isRoofingTrade && (
-              <span className="inline-flex items-center border border-ink-line px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-[0.16em] font-bold text-text-dim">
+              <span className="rounded-ctl inline-flex items-center border border-ink-line px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-[0.16em] font-bold text-text-dim">
                 Roof
               </span>
             )}
@@ -6711,7 +7931,7 @@ function QuoteCard({
         <div className="overflow-hidden">
           <div className="border-t border-ink-line">
             {/* Metadata grid */}
-            <div className="mx-5 mt-4 grid grid-cols-2 md:grid-cols-4 gap-px bg-ink-line border border-ink-line">
+            <div className="rounded-card mx-5 mt-4 grid grid-cols-2 md:grid-cols-4 gap-px bg-ink-line border border-ink-line">
               <MetaCell label="Work" value={formatJobType(q.job_type)} />
               <MetaCell
                 label="Service"
@@ -6777,7 +7997,7 @@ function QuoteCard({
                 {url && !isInspection && q.share_token && (
                   <Link
                     href={`/dashboard/quote/${q.share_token}`}
-                    className="inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+                    className="rounded-ctl inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
                   >
                     View PDF · Edit
                   </Link>
@@ -6790,7 +8010,7 @@ function QuoteCard({
                     href={`/api/q/${q.share_token}/pdf`}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+                    className="rounded-ctl inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
                   >
                     Download PDF ↓
                   </a>
@@ -6799,7 +8019,7 @@ function QuoteCard({
                   <Link
                     href={url}
                     target="_blank"
-                    className="inline-flex min-h-[44px] items-center justify-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-4 py-3 text-xs uppercase tracking-wider transition-colors"
+                    className="rounded-ctl inline-flex min-h-[44px] items-center justify-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-4 py-3 text-xs uppercase tracking-wider transition-colors"
                   >
                     View customer page →
                   </Link>
@@ -6889,7 +8109,7 @@ function CopyDepositLink({ token, tier }: { token: string; tier: string | null }
     <button
       type="button"
       onClick={onCopy}
-      className="inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+      className="rounded-ctl inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
     >
       {copied ? 'Copied ✓' : 'Copy deposit link'}
     </button>
@@ -7032,7 +8252,7 @@ function ChannelBadge({ channel }: { channel: 'sms' | 'voice' }) {
   // fills sat outside the Maintain palette and were the loudest source of the
   // "colourful filler" look.
   return (
-    <span className="inline-flex items-center border border-ink-line px-1.5 py-0.5 font-mono text-[0.55rem] font-bold uppercase tracking-[0.16em] text-text-dim">
+    <span className="rounded-ctl inline-flex items-center border border-ink-line px-1.5 py-0.5 font-mono text-[0.55rem] font-bold uppercase tracking-[0.16em] text-text-dim">
       {channel === 'voice' ? 'Voice' : 'SMS'}
     </span>
   )
@@ -7301,7 +8521,7 @@ function SupplierCsvUpload({
     (report.summary.toInsert > 0 || (alsoStock && report.summary.validRows > 0))
 
   return (
-    <div className="border border-ink-line bg-ink-deep">
+    <div className="rounded-card border border-ink-line bg-ink-deep">
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
         <button
           type="button"
@@ -7332,7 +8552,7 @@ function SupplierCsvUpload({
           </p>
 
           <div>
-            <label className="inline-flex items-center gap-2 font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-3 py-2 border border-accent/60 text-accent hover:bg-accent/10 transition-colors cursor-pointer">
+            <label className="rounded-ctl inline-flex items-center gap-2 font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold px-3 py-2 border border-accent/60 text-accent hover:bg-accent/10 transition-colors cursor-pointer">
               {busy && !report ? 'Reading…' : 'Choose CSV file'}
               <input
                 type="file"
@@ -7380,7 +8600,7 @@ function SupplierCsvUpload({
 
               {/* Row errors — bounded scroll list. */}
               {report.errors.length > 0 && (
-                <div className="bg-ink-card border border-ink-line max-h-44 overflow-y-auto">
+                <div className="rounded-card bg-ink-card border border-ink-line max-h-44 overflow-y-auto">
                   {report.errors.map((e, i) => (
                     <div
                       key={`${e.line}-${e.column}-${i}`}
@@ -7467,9 +8687,12 @@ type CoverageReportClient = {
 function CoveragePanel({
   accessToken,
   onJumpToBrowse,
+  lockTrade,
 }: {
   accessToken: string | null
   onJumpToBrowse: () => void
+  /** Trade-hub mode: report coverage for this trade only. */
+  lockTrade?: string
 }) {
   const [report, setReport] = useState<CoverageReportClient | null>(null)
   const [loading, setLoading] = useState(true)
@@ -7521,7 +8744,7 @@ function CoveragePanel({
 
   if (loading) {
     return (
-      <div className="mb-6 border border-ink-line bg-ink-card p-4 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
+      <div className="rounded-card mb-6 border border-ink-line bg-ink-card p-4 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
         Loading coverage…
       </div>
     )
@@ -7536,10 +8759,13 @@ function CoveragePanel({
       </div>
     )
   }
-  if (!report || report.by_trade.length === 0) return null
+  const visibleTradeReports = (report?.by_trade ?? []).filter(
+    (t) => !lockTrade || t.trade === lockTrade,
+  )
+  if (!report || visibleTradeReports.length === 0) return null
 
   return (
-    <div className="mb-6 border border-ink-line bg-ink-card">
+    <div className="rounded-card mb-6 border border-ink-line bg-ink-card">
       <div className="px-4 py-3 border-b border-ink-line flex items-baseline justify-between gap-3 flex-wrap">
         <h3 className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent font-extrabold">
           Coverage
@@ -7549,7 +8775,7 @@ function CoveragePanel({
         </p>
       </div>
       <div className="divide-y divide-ink-line">
-        {report.by_trade.map((t) => {
+        {visibleTradeReports.map((t) => {
           const isOpen = openTrades.has(t.trade)
           const tradeLabel = t.trade.charAt(0).toUpperCase() + t.trade.slice(1)
           // Categories sorted: uncovered first (most actionable), then covered with missing rows, then fully stocked
@@ -7662,9 +8888,13 @@ function CoveragePanel({
 function BrowseSupplierPanel({
   accessToken,
   onAdded,
+  lockTrade,
 }: {
   accessToken: string | null
   onAdded: () => void
+  /** Trade-hub mode: only this trade's supplier SKUs are browsable, so a
+   *  bulk-add can never land rows in a trade the hub doesn't show. */
+  lockTrade?: string
 }) {
   const [supplierRows, setSupplierRows] = useState<SupplierCatalogueRow[] | null>(null)
   const [alreadyStocked, setAlreadyStocked] = useState<Set<string>>(new Set())
@@ -7782,7 +9012,9 @@ function BrowseSupplierPanel({
     }
   }
 
-  const rows = supplierRows ?? []
+  // lockTrade (hub mode) narrows BEFORE anything else — the trade chips
+  // then collapse to the single locked trade automatically.
+  const rows = (supplierRows ?? []).filter((r) => !lockTrade || r.trade === lockTrade)
   // Filter chips' option lists. We compute these off the UNFILTERED
   // rows so the chip labels stay stable as the user narrows the view.
   const trades = Array.from(new Set(rows.map((r) => r.trade))).sort()
@@ -7842,7 +9074,7 @@ function BrowseSupplierPanel({
     return (
       <div className="mt-4 space-y-4">
         <SupplierCsvUpload accessToken={accessToken} onImported={() => void load()} />
-        <div className="bg-ink-card/40 border border-dashed border-ink-line p-6">
+        <div className="rounded-card bg-ink-card/40 border border-dashed border-ink-line p-6">
           <p className="text-sm text-text-sec">
             The supplier catalogue is empty for your trade(s). Upload a CSV above to
             populate it, or ask QuoteMax to add a brand.
@@ -7932,7 +9164,7 @@ function BrowseSupplierPanel({
       {/* Action bar — match count, keyword search, and the add-selected
          button. The search box narrows `filtered` live and ANDs with the
          trade/category/brand chips above. */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border border-ink-line bg-ink-deep px-4 py-3">
+      <div className="rounded-card flex flex-wrap items-center justify-between gap-3 border border-ink-line bg-ink-deep px-4 py-3">
         <div className="text-xs text-text-sec">
           {filtered.length} matching · <span className="text-text-pri font-semibold">{selected.size} selected</span>
         </div>
@@ -7957,7 +9189,7 @@ function BrowseSupplierPanel({
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search materials…"
             aria-label="Search supplier catalogue"
-            className="w-full bg-ink-card border border-ink-line pl-8 pr-8 py-1.5 text-sm text-text-pri placeholder:text-text-dim/70 focus:border-accent/60 focus:outline-none transition-colors"
+            className="rounded-ctl w-full bg-ink-card border border-ink-line pl-8 pr-8 py-1.5 text-sm text-text-pri placeholder:text-text-dim/70 focus:border-accent/60 focus:outline-none transition-colors"
           />
           {search && (
             <button
@@ -7990,7 +9222,7 @@ function BrowseSupplierPanel({
 
       {/* Empty state — search / filters matched nothing. */}
       {filtered.length === 0 && (
-        <div className="border border-dashed border-ink-line bg-ink-card/40 px-4 py-6 text-sm text-text-sec">
+        <div className="rounded-card border border-dashed border-ink-line bg-ink-card/40 px-4 py-6 text-sm text-text-sec">
           No materials match{' '}
           {searchTerms.length > 0 ? (
             <>&ldquo;<span className="text-text-pri">{search.trim()}</span>&rdquo;</>
@@ -8027,7 +9259,7 @@ function BrowseSupplierPanel({
           return (
             <div
               key={r.id}
-              className={`border transition-colors ${
+              className={`rounded-card border transition-colors ${
                 isSelected
                   ? 'border-accent bg-accent/5'
                   : stocked
@@ -8092,7 +9324,7 @@ function BrowseSupplierPanel({
                   <div className="grid gap-4 sm:grid-cols-[auto_1fr] mt-3">
                     {/* Product image — left column. Falls back to a typed
                         placeholder when supplier hasn't supplied a URL. */}
-                    <div className="w-28 h-28 sm:w-32 sm:h-32 border border-ink-line bg-ink-card/40 flex items-center justify-center overflow-hidden">
+                    <div className="rounded-card w-28 h-28 sm:w-32 sm:h-32 border border-ink-line bg-ink-card/40 flex items-center justify-center overflow-hidden">
                       {r.image_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -8205,7 +9437,14 @@ type LadderCatalogueRow = {
   tier_hint: 'good' | 'better' | 'best' | null
 }
 
-function TierLadderPanel({ accessToken }: { accessToken: string | null }) {
+function TierLadderPanel({
+  accessToken,
+  lockTrade,
+}: {
+  accessToken: string | null
+  /** Trade-hub mode: only categories stocked with this trade's products. */
+  lockTrade?: string
+}) {
   const [ladder, setLadder] = useState<LadderRow[] | null>(null)
   const [catalogueByCategory, setCatalogueByCategory] = useState<
     Record<string, LadderCatalogueRow[]>
@@ -8306,10 +9545,17 @@ function TierLadderPanel({ accessToken }: { accessToken: string | null }) {
   // Categories with at least one catalogue product. If the tenant has
   // no stocked products, nothing to pick from — point them at Stock-the-
   // essentials / Browse instead of showing empty dropdowns.
-  const categoriesWithProducts = Object.keys(catalogueByCategory).sort()
+  // LadderRow has no trade column; a category belongs to the locked trade
+  // when its catalogue products do (electrical/plumbing category sets are
+  // disjoint, so any-match is unambiguous).
+  const categoriesWithProducts = Object.keys(catalogueByCategory)
+    .filter(
+      (c) => !lockTrade || (catalogueByCategory[c] ?? []).some((r) => r.trade === lockTrade),
+    )
+    .sort()
   if (categoriesWithProducts.length === 0) {
     return (
-      <div className="mt-4 bg-ink-card/40 border border-dashed border-ink-line p-6">
+      <div className="rounded-card mt-4 bg-ink-card/40 border border-dashed border-ink-line p-6">
         <p className="text-sm text-text-sec">
           Stock some products first — the G/B/B ladder picks from your own catalogue.
           Use <span className="font-mono">Stock the essentials</span> or{' '}
@@ -8382,7 +9628,15 @@ function TierLadderPanel({ accessToken }: { accessToken: string | null }) {
   )
 }
 
-function CatalogueTab({ accessToken }: { accessToken: string | null }) {
+function CatalogueTab({
+  accessToken,
+  tradeFilter,
+}: {
+  accessToken: string | null
+  /** Trade-hub mode: show only this trade's catalogue rows. Unset = all
+   *  trades (legacy cross-trade view, kept for deep links). */
+  tradeFilter?: TradeHubSlug
+}) {
   const [rows, setRows] = useState<CatalogueRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -8720,7 +9974,11 @@ function CatalogueTab({ accessToken }: { accessToken: string | null }) {
     )
   }
 
-  const list = rows ?? []
+  // Trade-hub mode: scope everything (rows, chips, counts, grouping) to
+  // one trade before any category filtering runs.
+  const list = tradeFilter
+    ? (rows ?? []).filter((r) => (r.trade ?? '').toLowerCase() === tradeFilter)
+    : (rows ?? [])
 
   // Per-category counts off the unfiltered list so the chip labels stay
   // stable as the user clicks between filters (otherwise "All (12)" would
@@ -8781,11 +10039,30 @@ function CatalogueTab({ accessToken }: { accessToken: string | null }) {
       return (CATEGORY_ORDER.get(a.category) ?? 999) - (CATEGORY_ORDER.get(b.category) ?? 999)
     })
 
+  // Hub mode for a trade the tenant-catalogue API doesn't support
+  // (MaterialCatalogueSchema's TRADE_ENUM is electrical|plumbing): the
+  // full catalogue UI would be a dead end — a permanently empty scoped
+  // list, an add form that can only misfile or 400, and supplier
+  // browse/ladder panels spanning other trades. Point at the tool
+  // settings instead.
+  if (tradeFilter && tradeFilter !== 'electrical' && tradeFilter !== 'plumbing') {
+    return (
+      <Card title="Product catalogue">
+        <p className="text-sm text-text-sec">
+          No product catalogue for this trade yet — the supplier catalogue
+          covers electrical and plumbing. This trade&rsquo;s materials are
+          priced through its tool settings and rate cards.
+        </p>
+      </Card>
+    )
+  }
+
   return (
     <>
       <CoveragePanel
         accessToken={accessToken}
         onJumpToBrowse={() => setViewMode('browse')}
+        lockTrade={tradeFilter}
       />
     <Card title="Product catalogue">
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -8801,7 +10078,9 @@ function CatalogueTab({ accessToken }: { accessToken: string | null }) {
               if (showForm) {
                 closeForm()
               } else {
-                setForm({ ...blankForm, trade: form.trade })
+                // Hub mode: a new product always belongs to the hub's
+                // trade, otherwise it would vanish from the scoped list.
+                setForm({ ...blankForm, trade: tradeFilter ?? form.trade })
                 setEditingId(null)
                 setShowForm(true)
                 setFormErr(null)
@@ -8856,6 +10135,7 @@ function CatalogueTab({ accessToken }: { accessToken: string | null }) {
       {viewMode === 'browse' && (
         <BrowseSupplierPanel
           accessToken={accessToken}
+          lockTrade={tradeFilter}
           onAdded={() => {
             // After a successful bulk-add, refresh the tenant's own catalogue
             // so the "+ N" count + the My catalogue view reflect the new rows.
@@ -8864,7 +10144,9 @@ function CatalogueTab({ accessToken }: { accessToken: string | null }) {
         />
       )}
 
-      {viewMode === 'ladder' && <TierLadderPanel accessToken={accessToken} />}
+      {viewMode === 'ladder' && (
+        <TierLadderPanel accessToken={accessToken} lockTrade={tradeFilter} />
+      )}
 
       {viewMode === 'mine' && (
         <>
@@ -8913,7 +10195,7 @@ function CatalogueTab({ accessToken }: { accessToken: string | null }) {
             e.preventDefault()
             void (editingId ? update() : create())
           }}
-          className="mt-5 border border-ink-line bg-ink-deep p-4 grid gap-3 sm:grid-cols-2"
+          className="rounded-card mt-5 border border-ink-line bg-ink-deep p-4 grid gap-3 sm:grid-cols-2"
         >
           {editingId && (
             <div className="sm:col-span-2 font-mono text-[0.65rem] uppercase tracking-[0.15em] text-accent">
@@ -8925,10 +10207,19 @@ function CatalogueTab({ accessToken }: { accessToken: string | null }) {
             <select
               value={form.trade}
               onChange={(e) => set('trade', e.target.value)}
-              className="bg-ink-card border border-ink-line px-3 py-2 text-sm text-text-pri"
+              // Hub mode: the trade is fixed by the hub — a different
+              // pick would file the product where this view can't show it.
+              disabled={!!tradeFilter}
+              className="bg-ink-card border border-ink-line px-3 py-2 text-sm text-text-pri disabled:opacity-60"
             >
-              <option value="electrical">electrical</option>
-              <option value="plumbing">plumbing</option>
+              {tradeFilter ? (
+                <option value={tradeFilter}>{tradeFilter}</option>
+              ) : (
+                <>
+                  <option value="electrical">electrical</option>
+                  <option value="plumbing">plumbing</option>
+                </>
+              )}
             </select>
           </label>
           <label className="flex flex-col gap-1">
@@ -9066,7 +10357,7 @@ function CatalogueTab({ accessToken }: { accessToken: string | null }) {
                 <img
                   src={form.image_path}
                   alt="Product photo preview"
-                  className="h-16 w-16 object-cover border border-ink-line bg-ink-deep shrink-0"
+                  className="rounded-card h-16 w-16 object-cover border border-ink-line bg-ink-deep shrink-0"
                 />
               )}
               <div className="flex-1 min-w-[12rem] flex flex-col gap-2">
@@ -9162,7 +10453,7 @@ function CatalogueTab({ accessToken }: { accessToken: string | null }) {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by product, brand, range or supplier…"
             aria-label="Search catalogue"
-            className="w-full bg-ink-deep border border-ink-line pl-10 pr-3 py-2.5 text-sm text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft transition-colors"
+            className="rounded-ctl w-full bg-ink-deep border border-ink-line pl-10 pr-3 py-2.5 text-sm text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft transition-colors"
           />
         </div>
       )}
@@ -9250,7 +10541,7 @@ function CatalogueTab({ accessToken }: { accessToken: string | null }) {
                 {g.items.map((r) => (
                   <div
                     key={r.id}
-                    className={`border px-4 py-3 flex items-start justify-between gap-4 ${
+                    className={`rounded-card border px-4 py-3 flex items-start justify-between gap-4 ${
                       r.active ? 'border-accent/60 bg-accent/5' : 'border-ink-line bg-ink-card'
                     }`}
                   >
@@ -9320,7 +10611,7 @@ function CatalogueTab({ accessToken }: { accessToken: string | null }) {
                         className="inline-flex items-center cursor-pointer group select-none"
                       >
                         <span
-                          className={`relative inline-block h-5 w-10 border transition-colors ${
+                          className={`rounded-card relative inline-block h-5 w-10 border transition-colors ${
                             r.active
                               ? 'border-accent bg-accent/20'
                               : 'border-ink-line bg-ink-base group-hover:border-text-dim'
@@ -9400,7 +10691,15 @@ type BaselineLine = {
 }
 type AsmOpt = { id: string; name: string; trade: string }
 
-function RecipesTab({ accessToken }: { accessToken: string | null }) {
+function RecipesTab({
+  accessToken,
+  tradeFilter,
+}: {
+  accessToken: string | null
+  /** Trade-hub mode: only this trade's job recipes appear in the picker.
+   *  Unset = all trades (legacy cross-trade view, kept for deep links). */
+  tradeFilter?: TradeHubSlug
+}) {
   const [assemblies, setAssemblies] = useState<AsmOpt[]>([])
   const [lines, setLines] = useState<BomLineRow[] | null>(null)
   const [baselines, setBaselines] = useState<Record<string, BaselineLine[]>>({})
@@ -9455,7 +10754,16 @@ function RecipesTab({ accessToken }: { accessToken: string | null }) {
       setLines(json.lines)
       setBaselines(json.baselines ?? {})
       setCatalogueCats(json.catalogue_categories ?? [])
-      setSelectedId((cur) => cur || (json.assemblies[0]?.id ?? ''))
+      setSelectedId((cur) => {
+        // Trade-hub mode: default (and heal) the selection within this
+        // trade's recipes only, so an electrical hub never lands on a
+        // plumbing job.
+        const pool = tradeFilter
+          ? json.assemblies.filter((a) => (a.trade ?? '').toLowerCase() === tradeFilter)
+          : json.assemblies
+        if (cur && pool.some((a) => a.id === cur)) return cur
+        return pool[0]?.id ?? ''
+      })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -9474,11 +10782,15 @@ function RecipesTab({ accessToken }: { accessToken: string | null }) {
   }, [selectedId])
 
   const selectedAsm = assemblies.find((a) => a.id === selectedId) ?? null
+  // Trade-hub mode: scope the picker to one trade before the name search.
+  const tradeAssemblies = tradeFilter
+    ? assemblies.filter((a) => (a.trade ?? '').toLowerCase() === tradeFilter)
+    : assemblies
   const jobPickerList = jobQuery.trim()
-    ? assemblies.filter((a) =>
+    ? tradeAssemblies.filter((a) =>
         a.name.toLowerCase().includes(jobQuery.trim().toLowerCase()),
       )
-    : assemblies
+    : tradeAssemblies
   const jobLines = (lines ?? [])
     .filter((l) => l.assembly_id === selectedId)
     .sort((a, b) => a.sort - b.sort)
@@ -9652,28 +10964,28 @@ function RecipesTab({ accessToken }: { accessToken: string | null }) {
             onChange={(e) => setJobQuery(e.target.value)}
             placeholder="Search jobs…"
             aria-label="Search jobs"
-            className="w-full bg-ink-deep border border-ink-line pl-10 pr-3 py-2 text-sm text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft transition-colors"
+            className="rounded-ctl w-full bg-ink-deep border border-ink-line pl-10 pr-3 py-2 text-sm text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft transition-colors"
           />
         </div>
         <select
           value={selectedId}
           onChange={(e) => setSelectedId(e.target.value)}
           aria-label="Select a job to edit its recipe"
-          className="bg-ink-deep border border-ink-line px-3.5 py-2.5 text-sm text-text-pri focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft transition-colors"
+          className="rounded-ctl bg-ink-deep border border-ink-line px-3.5 py-2.5 text-sm text-text-pri focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft transition-colors"
         >
-          {assemblies.length === 0 && <option value="">No jobs available</option>}
-          {jobPickerList.length === 0 && (
+          {tradeAssemblies.length === 0 && <option value="">No jobs available</option>}
+          {tradeAssemblies.length > 0 && jobPickerList.length === 0 && (
             <option value="">No jobs match “{jobQuery.trim()}”</option>
           )}
           {jobPickerList.map((a) => (
             <option key={a.id} value={a.id}>
-              {a.name} ({a.trade})
+              {tradeFilter ? a.name : `${a.name} (${a.trade})`}
             </option>
           ))}
         </select>
-        {jobQuery.trim() && assemblies.length > 0 && (
+        {jobQuery.trim() && tradeAssemblies.length > 0 && (
           <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
-            {jobPickerList.length} of {assemblies.length} jobs
+            {jobPickerList.length} of {tradeAssemblies.length} jobs
           </span>
         )}
       </div>
@@ -9720,7 +11032,7 @@ function RecipesTab({ accessToken }: { accessToken: string | null }) {
                   {jobBaseline.map((b, i) => (
                     <div
                       key={`${b.material_category}|${b.description ?? ''}|${i}`}
-                      className="border border-ink-line bg-ink-deep px-4 py-3 flex items-center justify-between gap-4 flex-wrap opacity-90"
+                      className="rounded-card border border-ink-line bg-ink-deep px-4 py-3 flex items-center justify-between gap-4 flex-wrap opacity-90"
                     >
                       <div className="min-w-0">
                         <div className="text-sm text-text-pri font-medium">
@@ -9792,7 +11104,7 @@ function RecipesTab({ accessToken }: { accessToken: string | null }) {
                 return (
                   <div
                     key={l.id}
-                    className="border border-ink-line bg-ink-deep px-4 py-3 flex items-center justify-between gap-4 flex-wrap"
+                    className="rounded-card border border-ink-line bg-ink-deep px-4 py-3 flex items-center justify-between gap-4 flex-wrap"
                   >
                     <div className="min-w-0">
                       <div className="text-sm text-text-pri font-medium">{l.material_category}</div>
@@ -9874,7 +11186,7 @@ function RecipesTab({ accessToken }: { accessToken: string | null }) {
               e.preventDefault()
               void addLine()
             }}
-            className="mt-4 border border-ink-line bg-ink-deep p-4 grid gap-3 sm:grid-cols-2"
+            className="rounded-card mt-4 border border-ink-line bg-ink-deep p-4 grid gap-3 sm:grid-cols-2"
           >
             <label className="flex flex-col gap-1">
               <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">Material category</span>
@@ -9984,7 +11296,15 @@ function SourceBadge({ source }: { source: 'local' | 'global' }) {
   )
 }
 
-function EstimatingTab({ accessToken }: { accessToken: string | null }) {
+function EstimatingTab({
+  accessToken,
+  tradeFilter,
+}: {
+  accessToken: string | null
+  /** Trade-hub mode: show only this trade's estimation jobs. Unset = all
+   *  trades (legacy cross-trade view, kept for deep links). */
+  tradeFilter?: TradeHubSlug
+}) {
   const [jobs, setJobs] = useState<EstimationJob[] | null>(null)
   const [catalogueCats, setCatalogueCats] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -10118,6 +11438,23 @@ function EstimatingTab({ accessToken }: { accessToken: string | null }) {
     }
   }
 
+  // Trade-hub mode: scope the job list to one trade. Derived above the
+  // loading/error returns so the pagination hook runs on every render.
+  const list = tradeFilter
+    ? (jobs ?? []).filter((j) => (j.trade ?? '').toLowerCase() === tradeFilter)
+    : (jobs ?? [])
+  const {
+    page: estPage,
+    setPage: setEstPage,
+    totalPages: estTotalPages,
+    pageItems: estRows,
+    startIndex: estStart,
+    endIndex: estEnd,
+    total: estTotal,
+  } = usePagination(list, {
+    urlKey: tradeFilter ? `${tradeFilter}_est_page` : 'est_page',
+  })
+
   if (loading) {
     return (
       <Card>
@@ -10137,8 +11474,6 @@ function EstimatingTab({ accessToken }: { accessToken: string | null }) {
       </Card>
     )
   }
-
-  const list = jobs ?? []
 
   return (
     <Card title="How each job is estimated">
@@ -10161,9 +11496,10 @@ function EstimatingTab({ accessToken }: { accessToken: string | null }) {
           loaded, every standard job will show its fixed parts and pricing here.
         </p>
       ) : (
+        <>
         <div className="mt-6 space-y-3">
-          {list.map((j) => (
-            <div key={j.assembly_id} className="border border-ink-line bg-ink-deep p-4">
+          {estRows.map((j) => (
+            <div key={j.assembly_id} className="rounded-card border border-ink-line bg-ink-deep p-4">
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="font-semibold text-sm text-text-pri">{j.name}</div>
                 <div className="flex items-center gap-2">
@@ -10350,6 +11686,16 @@ function EstimatingTab({ accessToken }: { accessToken: string | null }) {
             </div>
           ))}
         </div>
+        <PaginationControls
+          page={estPage}
+          totalPages={estTotalPages}
+          onPageChange={setEstPage}
+          startIndex={estStart}
+          endIndex={estEnd}
+          total={estTotal}
+          unit="jobs"
+        />
+        </>
       )}
     </Card>
   )
@@ -10562,6 +11908,24 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
     () => filterFollowups(list, { category: effectiveCategory, query }),
     [list, effectiveCategory, query],
   )
+  // CRM split (active queue first, contacted-but-still-unpaid after) is
+  // derived up here — above the loading/error early returns — because the
+  // pagination hook below is a hook and must run on every render.
+  const toChase = filtered.filter((f) => !f.followed_up_at)
+  const done = filtered.filter((f) => !!f.followed_up_at)
+  const ordered = [...toChase, ...done]
+  const {
+    page,
+    setPage,
+    totalPages,
+    pageItems: pageRows,
+    startIndex,
+    endIndex,
+    total,
+  } = usePagination(ordered, {
+    urlKey: 'fu_page',
+    resetKey: `${effectiveCategory}::${query}`,
+  })
 
   if (loading) {
     return (
@@ -10573,11 +11937,11 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
   if (error) {
     return (
       <Card>
-        <p className="text-sm text-amber-300">{error}</p>
+        <p className="text-sm text-warning-bright">{error}</p>
         <button
           type="button"
           onClick={() => void load()}
-          className="mt-4 inline-flex items-center gap-2 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-pri font-mono text-[0.7rem] uppercase tracking-[0.16em] font-bold px-5 py-3 min-h-[44px] transition-colors cursor-pointer"
+          className="rounded-ctl mt-4 inline-flex items-center gap-2 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-pri font-mono text-[0.7rem] uppercase tracking-[0.16em] font-bold px-5 py-3 min-h-[44px] transition-colors cursor-pointer"
         >
           Retry
         </button>
@@ -10590,14 +11954,11 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
     setCategory(ALL_CATEGORY)
     setQuery('')
   }
-  // CRM split: active queue first, contacted-but-still-unpaid after.
-  // Server already returns both (includeActioned=1); we group by
-  // followed_up_at and render one ordered list with a divider so a
-  // contacted lead is parked, not lost. Grouping runs on the FILTERED set
-  // so the counts + section headers track what's actually shown.
-  const toChase = filtered.filter((f) => !f.followed_up_at)
-  const done = filtered.filter((f) => !!f.followed_up_at)
-  const ordered = [...toChase, ...done]
+  // toChase / done / ordered are derived above (before the early returns).
+  // Server returns both active + contacted (includeActioned=1); we group by
+  // followed_up_at and render one ordered, paginated list with a section
+  // divider so a contacted lead is parked, not lost. Grouping runs on the
+  // FILTERED set so the counts + section headers track what's actually shown.
   const thresholdNote =
     minAgeHours && minAgeHours > 0
       ? `Quotes sent over ${
@@ -10650,14 +12011,14 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search name, suburb, phone or follow-up code…"
             aria-label="Search follow-ups"
-            className="w-full bg-ink-deep border border-ink-line pl-10 pr-3 py-2 text-sm text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft transition-colors"
+            className="rounded-ctl w-full bg-ink-deep border border-ink-line pl-10 pr-3 py-2 text-sm text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft transition-colors"
           />
         </div>
         <select
           value={effectiveCategory}
           onChange={(e) => setCategory(e.target.value)}
           aria-label="Filter by job category"
-          className="bg-ink-deep border border-ink-line px-3.5 py-2.5 text-sm text-text-pri focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft transition-colors sm:w-56"
+          className="rounded-ctl bg-ink-deep border border-ink-line px-3.5 py-2.5 text-sm text-text-pri focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft transition-colors sm:w-56"
         >
           {categoryOptions.map((o) => (
             <option key={o.value} value={o.value}>
@@ -10698,8 +12059,8 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
           any below if they still need a nudge.
         </p>
       )}
-      <div className="max-h-[70vh] space-y-3 overflow-y-auto pr-1">
-        {ordered.map((f, _idx) => {
+      <div className="space-y-3">
+        {pageRows.map((f, _idx) => {
           const rowId = followupRowId(f)
           const isLead = f.kind === 'lead'
           const name = f.customer.full_name || 'Unknown customer'
@@ -10712,7 +12073,7 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
           const opened = f.followup_reason.startsWith('Opened')
           const showChaseHeader = !isDone && _idx === 0
           const showContactedHeader =
-            isDone && (_idx === 0 || !ordered[_idx - 1].followed_up_at)
+            isDone && (_idx === 0 || !pageRows[_idx - 1].followed_up_at)
           return [
             showChaseHeader ? (
               <p
@@ -10733,7 +12094,7 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
             (
             <div
               key={rowId}
-              className={`border border-ink-line bg-ink p-4 ${
+              className={`rounded-card border border-ink-line bg-ink p-4 ${
                 isDone ? 'opacity-70' : ''
               }`}
             >
@@ -10746,9 +12107,9 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
                     <span
                       className={`font-mono text-[0.6rem] uppercase tracking-[0.16em] font-bold px-2 py-0.5 border ${
                         isDone
-                          ? 'border-emerald-500/50 text-emerald-300'
+                          ? 'border-success-bright/50 text-success-bright'
                           : opened
-                            ? 'border-amber-500/60 text-amber-300'
+                            ? 'border-warning-bright/50 text-warning-bright'
                             : 'border-accent/60 text-accent'
                       }`}
                     >
@@ -10788,7 +12149,7 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
                       type="button"
                       disabled={!hasPhone || calling}
                       onClick={() => void startCall(f)}
-                      className="inline-flex items-center justify-center gap-1.5 bg-accent hover:bg-accent-press text-white font-mono text-[0.62rem] uppercase tracking-[0.14em] font-bold px-3 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="rounded-ctl inline-flex items-center justify-center gap-1.5 bg-accent hover:bg-accent-press text-white font-mono text-[0.62rem] uppercase tracking-[0.14em] font-bold px-3 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {calling ? 'Ringing…' : 'Call'}
                     </button>
@@ -10799,13 +12160,13 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
                         clearRowMsg(rowId)
                         setComposeFor(f)
                       }}
-                      className="inline-flex items-center justify-center gap-1.5 border border-accent/60 text-accent hover:bg-accent/10 font-mono text-[0.62rem] uppercase tracking-[0.14em] font-bold px-3 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="rounded-ctl inline-flex items-center justify-center gap-1.5 border border-accent/60 text-accent hover:bg-accent/10 font-mono text-[0.62rem] uppercase tracking-[0.14em] font-bold px-3 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Text
                     </button>
                   </div>
                   {!hasPhone && (
-                    <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-amber-300">
+                    <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-warning-bright">
                       No phone on file
                     </span>
                   )}
@@ -10818,8 +12179,8 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
                     <span
                       className={`text-center font-mono text-[0.6rem] uppercase tracking-[0.12em] leading-relaxed ${
                         act.kind === 'ok'
-                          ? 'text-emerald-300'
-                          : 'text-amber-300'
+                          ? 'text-success-bright'
+                          : 'text-warning-bright'
                       }`}
                     >
                       {act.text}
@@ -10845,7 +12206,7 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
                       [rowId]: !s[rowId],
                     }))
                   }
-                  className="inline-flex items-center gap-1.5 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer"
+                  className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer"
                 >
                   {threadOpen[rowId] ? 'Hide messages ▾' : 'Messages ▸'}
                 </button>
@@ -10858,7 +12219,7 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
                         [rowId]: !s[rowId],
                       }))
                     }
-                    className="inline-flex items-center gap-1.5 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer"
+                    className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer"
                   >
                     {historyOpen[rowId] ? 'Hide history ▾' : 'History ▸'}
                   </button>
@@ -10868,7 +12229,7 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
                     type="button"
                     disabled={busyId === rowId}
                     onClick={() => void reopen(f.quote_id as string)}
-                    className="inline-flex items-center gap-2 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-50"
+                    className="rounded-ctl inline-flex items-center gap-2 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-50"
                   >
                     {busyId === rowId ? 'Saving…' : 'Reopen ↩'}
                   </button>
@@ -10882,7 +12243,7 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
                         [rowId]: !s[rowId],
                       }))
                     }
-                    className={`ml-auto inline-flex items-center gap-2 font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer ${
+                    className={`rounded-ctl ml-auto inline-flex items-center gap-2 font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer ${
                       logFor[rowId]
                         ? 'border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri'
                         : 'border border-accent/60 bg-accent/10 text-accent hover:bg-accent/20'
@@ -10957,6 +12318,15 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
           ]
         })}
       </div>
+      <PaginationControls
+        page={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        startIndex={startIndex}
+        endIndex={endIndex}
+        total={total}
+        unit="follow-ups"
+      />
         </>
       )}
     </Card>
@@ -11108,7 +12478,7 @@ function FollowupLogForm({
           className="bg-ink-card border border-ink-line px-3 py-2 text-sm text-text-pri resize-none"
         />
       </label>
-      {err && <p className="mt-2 text-xs text-amber-300">{err}</p>}
+      {err && <p className="mt-2 text-xs text-warning-bright">{err}</p>}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button
           type="button"
@@ -11122,7 +12492,7 @@ function FollowupLogForm({
           type="button"
           onClick={onCancel}
           disabled={saving}
-          className="border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.14em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-60"
+          className="rounded-card border border-ink-line bg-ink-card hover:bg-ink-deep text-text-sec hover:text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.14em] font-bold px-4 py-2 min-h-[40px] transition-colors cursor-pointer disabled:opacity-60"
         >
           Cancel
         </button>
@@ -11191,7 +12561,7 @@ function FollowupHistory({
     )
   }
   if (err) {
-    return <p className="text-xs text-amber-300">{err}</p>
+    return <p className="text-xs text-warning-bright">{err}</p>
   }
   if (!events || events.length === 0) {
     return (
@@ -11342,7 +12712,7 @@ function FollowupTextModal({
       <div
         role="dialog"
         aria-modal="true"
-        className="flex max-h-[92dvh] w-full flex-col bg-ink border border-ink-line sm:max-w-xl"
+        className="rounded-card flex max-h-[92dvh] w-full flex-col bg-ink border border-ink-line sm:max-w-xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header — pinned */}
@@ -11370,11 +12740,11 @@ function FollowupTextModal({
             short thread stays compact and a long one is fully browsable. */}
         <div className="min-h-0 overflow-y-auto px-5 sm:px-6">
           {err && (
-            <div className="mb-3 border border-amber-500/50 bg-amber-500/10 text-amber-200 text-sm px-3 py-2">
+            <div className="mb-3 border border-warning-bright/50 bg-warning/15 text-warning-bright text-sm px-3 py-2">
               {err}
             </div>
           )}
-          <div className="border border-ink-line bg-ink-deep p-3">
+          <div className="rounded-card border border-ink-line bg-ink-deep p-3">
             <p className="mb-2 font-mono text-[0.58rem] uppercase tracking-[0.14em] text-text-dim">
               Conversation
             </p>
@@ -11399,7 +12769,7 @@ function FollowupTextModal({
             disabled={sending}
             aria-label="Follow-up message to the customer"
             placeholder="Type your follow-up message…"
-            className="w-full bg-ink-deep border border-ink-line text-text-pri text-sm p-3 outline-none focus:border-accent/60 disabled:opacity-60"
+            className="rounded-ctl w-full bg-ink-deep border border-ink-line text-text-pri text-sm p-3 outline-none focus:border-accent/60 disabled:opacity-60"
           />
           <p className="mt-1.5 font-mono text-[0.58rem] uppercase tracking-[0.14em] text-text-dim">
             {trimmed.length}/640 chars · ~{segments} SMS{' '}
@@ -11411,7 +12781,7 @@ function FollowupTextModal({
               type="button"
               onClick={onClose}
               disabled={sending}
-              className="border border-ink-line bg-ink-card hover:bg-ink-deep text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2.5 min-h-[44px] transition-colors cursor-pointer disabled:opacity-50"
+              className="rounded-card border border-ink-line bg-ink-card hover:bg-ink-deep text-text-pri font-mono text-[0.62rem] uppercase tracking-[0.16em] font-bold px-4 py-2.5 min-h-[44px] transition-colors cursor-pointer disabled:opacity-50"
             >
               Cancel
             </button>
@@ -11539,7 +12909,7 @@ function FollowupThread({
     return <p className="text-xs text-text-dim">Loading messages…</p>
   }
   if (state.phase === 'error') {
-    return <p className="text-xs text-amber-300">{state.msg}</p>
+    return <p className="text-xs text-warning-bright">{state.msg}</p>
   }
   if (state.messages.length === 0) {
     return (
@@ -11558,7 +12928,7 @@ function FollowupThread({
   return (
     <div>
       {customerRepliedLast && (
-        <p className="mb-2 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-emerald-300">
+        <p className="mb-2 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-success-bright">
           Customer replied — awaiting your response
         </p>
       )}
@@ -11690,31 +13060,34 @@ function ChatsList({
   chats: ChatRow[]
   isMultiTrade: boolean
 }) {
-  const [visible, setVisible] = useState(LIST_PAGE_SIZE)
   const total = chats.length
-  const visibleChats = chats.slice(0, visible)
-  const remaining = Math.max(0, total - visible)
+  const {
+    page,
+    setPage,
+    totalPages,
+    pageItems: visibleChats,
+    startIndex,
+    endIndex,
+  } = usePagination(chats, { urlKey: 'chat_page' })
 
   return (
     <Card
-      subtitle={`${Math.min(visible, total)} of ${total} shown · click a row to expand the full thread.`}
+      subtitle={`${total} conversation${total === 1 ? '' : 's'} · click a row to expand the full thread.`}
     >
       <div className="space-y-2">
         {visibleChats.map((c) => (
           <ChatCard key={c.id} chat={c} isMultiTrade={isMultiTrade} />
         ))}
       </div>
-      {remaining > 0 && (
-        <div className="mt-6 flex justify-center">
-          <button
-            type="button"
-            onClick={() => setVisible((v) => v + LIST_PAGE_SIZE)}
-            className="inline-flex items-center gap-2 border border-ink-line bg-ink-card hover:bg-ink-deep text-text-pri font-mono text-[0.7rem] uppercase tracking-[0.16em] font-bold px-5 py-3 min-h-[44px] transition-colors cursor-pointer w-full sm:w-auto justify-center"
-          >
-            Load {Math.min(LIST_PAGE_SIZE, remaining)} more · {remaining} left
-          </button>
-        </div>
-      )}
+      <PaginationControls
+        page={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        startIndex={startIndex}
+        endIndex={endIndex}
+        total={total}
+        unit="conversations"
+      />
     </Card>
   )
 }
@@ -11733,13 +13106,13 @@ function ChatCard({ chat, isMultiTrade }: { chat: ChatRow; isMultiTrade: boolean
   //   anything else  → grey (default)
   const statusTone =
     chat.status === 'done'
-      ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/60'
+      ? 'bg-success/15 text-success-bright border-success-bright/50'
       : chat.status === 'structuring'
-        ? 'bg-amber-500/10 text-amber-300 border-amber-500/60'
+        ? 'bg-warning/15 text-warning-bright border-warning-bright/50'
         : 'bg-ink-deep text-text-dim border-ink-line'
 
   return (
-    <div className="border border-ink-line bg-ink-card motion-safe:animate-[fade-up_240ms_ease-out_both]">
+    <div className="rounded-card border border-ink-line bg-ink-card motion-safe:animate-[fade-up_240ms_ease-out_both]">
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
@@ -11778,17 +13151,17 @@ function ChatCard({ chat, isMultiTrade }: { chat: ChatRow; isMultiTrade: boolean
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
             <span
-              className={`inline-flex items-center font-mono text-[0.6rem] uppercase tracking-[0.14em] font-bold px-2 py-0.5 border ${statusTone}`}
+              className={`rounded-ctl inline-flex items-center font-mono text-[0.6rem] uppercase tracking-[0.14em] font-bold px-2 py-0.5 border ${statusTone}`}
             >
               {chat.status ?? 'unknown'}
             </span>
             {chat.intake_id && (
-              <span className="inline-flex items-center font-mono text-[0.6rem] uppercase tracking-[0.14em] font-bold px-2 py-0.5 border border-accent/60 bg-accent/10 text-accent">
+              <span className="rounded-ctl inline-flex items-center font-mono text-[0.6rem] uppercase tracking-[0.14em] font-bold px-2 py-0.5 border border-accent/60 bg-accent/10 text-accent">
                 Quote drafted
               </span>
             )}
             {chat.conversation_type === 'tradie_registration' && (
-              <span className="inline-flex items-center font-mono text-[0.6rem] uppercase tracking-[0.14em] font-bold px-2 py-0.5 border border-text-sec/40 bg-text-sec/5 text-text-sec">
+              <span className="rounded-ctl inline-flex items-center font-mono text-[0.6rem] uppercase tracking-[0.14em] font-bold px-2 py-0.5 border border-text-sec/40 bg-text-sec/5 text-text-sec">
                 Tradie signup
               </span>
             )}
@@ -11902,7 +13275,7 @@ function TierCell({
 }) {
   return (
     <div
-      className={`px-3 py-2 border ${
+      className={`rounded-card px-3 py-2 border ${
         selected
           ? 'border-accent bg-accent/10 text-text-pri'
           : 'border-ink-line bg-ink-card text-text-sec'
@@ -11979,7 +13352,7 @@ function Card({
 }) {
   const hasHeader = !!title || !!subtitle
   return (
-    <div className="bg-ink-card border border-ink-line">
+    <div className="rounded-card bg-ink-card border border-ink-line">
       {hasHeader && (
         <div className="border-b border-ink-line bg-ink-deep/35 px-4 sm:px-6 py-4 sm:py-5">
           {title && (
@@ -12029,7 +13402,7 @@ function SaveHint({ savedAt }: { savedAt: number | null }) {
   }, [savedAt])
   if (!show) return <span />
   return (
-    <span className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-emerald-400">
+    <span className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-success-bright">
       ✓ Saved
     </span>
   )
@@ -12058,6 +13431,9 @@ function tenantTradesLabel(tenant: Tenant): string {
 }
 
 function tabLabel(t: Tab): string {
+  if (isHubTab(t)) {
+    return HUB_NAV.find((h) => h.slug === hubTrade(t))?.label ?? hubTrade(t)
+  }
   switch (t) {
     case 'aircon':
       return 'AC'
@@ -12260,7 +13636,7 @@ function SignageHubTab({ accessToken }: { accessToken: string | null }) {
       <div className="grid gap-4 lg:grid-cols-2">
         <Link
           href="/dashboard/signage"
-          className="group flex flex-col gap-5 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-7"
+          className="rounded-card group flex flex-col gap-5 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-7"
         >
           <span className="font-mono text-4xl font-bold leading-none text-accent sm:text-5xl">01</span>
           <div className="flex-1">
@@ -12282,7 +13658,7 @@ function SignageHubTab({ accessToken }: { accessToken: string | null }) {
 
         <Link
           href="/dashboard/signage/queue"
-          className="group flex flex-col gap-5 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-7"
+          className="rounded-card group flex flex-col gap-5 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-7"
         >
           <span className="font-mono text-4xl font-bold leading-none text-accent sm:text-5xl">02</span>
           <div className="flex-1">
@@ -12306,7 +13682,7 @@ function SignageHubTab({ accessToken }: { accessToken: string | null }) {
       {/* Recent requests — the signage analogue of "Saved roofing jobs".
           Every sweep + request auto-persists, so this history is always
           live; click through to review an assessed studio. */}
-      <div className="border border-ink-line bg-ink-card p-7 sm:p-9">
+      <div className="rounded-card border border-ink-line bg-ink-card p-7 sm:p-9">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
             Recent requests{recent.length ? ` · ${recent.length}` : ''}
@@ -12334,7 +13710,7 @@ function SignageHubTab({ accessToken }: { accessToken: string | null }) {
             {recentTop.map((r) => (
               <div
                 key={r.id}
-                className="flex flex-wrap items-center justify-between gap-3 border border-ink-line bg-ink-deep px-4 py-3"
+                className="rounded-card flex flex-wrap items-center justify-between gap-3 border border-ink-line bg-ink-deep px-4 py-3"
               >
                 <div className="flex items-center gap-3">
                   <SgChip state={r.state} overall={r.overall} />
@@ -12350,7 +13726,7 @@ function SignageHubTab({ accessToken }: { accessToken: string | null }) {
                     href={r.link}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-sec transition-colors hover:border-accent hover:text-accent"
+                    className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-3 py-1.5 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-sec transition-colors hover:border-accent hover:text-accent"
                   >
                     Open <span aria-hidden="true">&#8599;</span>
                   </a>
@@ -12376,7 +13752,7 @@ function SgStat({ label, value, tone }: { label: string; value: number; tone?: '
   const colour =
     tone === 'good' ? 'text-teal-glow' : tone === 'warn' ? 'text-warning' : tone === 'accent' ? 'text-accent' : 'text-text-pri'
   return (
-    <div className="border border-ink-line bg-ink-card p-4">
+    <div className="rounded-card border border-ink-line bg-ink-card p-4">
       <div className="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-text-dim">{label}</div>
       <div className={`mt-1.5 font-mono text-2xl font-bold tabular-nums ${colour}`}>{value}</div>
     </div>
@@ -12429,6 +13805,15 @@ function PaintingHubTab({ accessToken }: { accessToken: string | null }) {
   const [jobs, setJobs] = useState<SavedPaintJob[] | null>(null)
   const [loadingJobs, setLoadingJobs] = useState(true)
   const [jobsError, setJobsError] = useState<string | null>(null)
+  const {
+    page: jobPage,
+    setPage: setJobPage,
+    totalPages: jobTotalPages,
+    pageItems: jobRows,
+    startIndex: jobStart,
+    endIndex: jobEnd,
+    total: jobTotal,
+  } = usePagination(jobs ?? [], { urlKey: 'paint_page' })
 
   const loadJobs = useCallback(async () => {
     if (!accessToken) {
@@ -12483,7 +13868,7 @@ function PaintingHubTab({ accessToken }: { accessToken: string | null }) {
 
       <Link
         href="/dashboard/painting"
-        className="group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
+        className="rounded-card group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
       >
         <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">
           01
@@ -12507,7 +13892,7 @@ function PaintingHubTab({ accessToken }: { accessToken: string | null }) {
       </Link>
 
       {/* Saved paint jobs — history of every "Save job", scoped to this tenant. */}
-      <div className="border border-ink-line bg-ink-card p-7 sm:p-9">
+      <div className="rounded-card border border-ink-line bg-ink-card p-7 sm:p-9">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
             Saved paint jobs{jobs ? ` · ${jobs.length}` : ''}
@@ -12532,12 +13917,13 @@ function PaintingHubTab({ accessToken }: { accessToken: string | null }) {
           </p>
         )}
         {!loadingJobs && !jobsError && jobs && jobs.length > 0 && (
+          <>
           <ul className="mt-5 space-y-3">
-            {jobs.map((j) => {
+            {jobRows.map((j) => {
               const inspection = j.routing === 'inspection_required'
               const scopes = Array.isArray(j.scopes) ? j.scopes : []
               return (
-                <li key={j.id} className="border border-ink-line bg-ink-deep p-4">
+                <li key={j.id} className="rounded-card border border-ink-line bg-ink-deep p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="truncate font-semibold text-text-pri">
@@ -12569,6 +13955,16 @@ function PaintingHubTab({ accessToken }: { accessToken: string | null }) {
               )
             })}
           </ul>
+          <PaginationControls
+            page={jobPage}
+            totalPages={jobTotalPages}
+            onPageChange={setJobPage}
+            startIndex={jobStart}
+            endIndex={jobEnd}
+            total={jobTotal}
+            unit="jobs"
+          />
+          </>
         )}
       </div>
     </div>
@@ -12602,6 +13998,15 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
   const [jobs, setJobs] = useState<SavedRoofJob[] | null>(null)
   const [loadingJobs, setLoadingJobs] = useState(true)
   const [jobsError, setJobsError] = useState<string | null>(null)
+  const {
+    page: jobPage,
+    setPage: setJobPage,
+    totalPages: jobTotalPages,
+    pageItems: jobRows,
+    startIndex: jobStart,
+    endIndex: jobEnd,
+    total: jobTotal,
+  } = usePagination(jobs ?? [], { urlKey: 'roof_page' })
 
   const loadJobs = useCallback(async () => {
     if (!accessToken) {
@@ -12656,7 +14061,7 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
 
       <Link
         href="/dashboard/roofing/measure"
-        className="group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
+        className="rounded-card group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
       >
         <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">
           01
@@ -12683,7 +14088,7 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
       {/* Saved roofing jobs — history of every "Save job" from the
           measure tool, scoped to this tenant. Click View to open the
           customer quote page (/q/roof/[token]). */}
-      <div className="border border-ink-line bg-ink-card p-7 sm:p-9">
+      <div className="rounded-card border border-ink-line bg-ink-card p-7 sm:p-9">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
             Saved roofing jobs{jobs ? ` · ${jobs.length}` : ''}
@@ -12710,12 +14115,13 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
           </p>
         )}
         {!loadingJobs && !jobsError && jobs && jobs.length > 0 && (
+          <>
           <ul className="mt-5 space-y-3">
-            {jobs.map((j) => {
+            {jobRows.map((j) => {
               const inspection = j.routing === 'inspection_required'
               const structures = j.structure_count ?? 1
               return (
-                <li key={j.id} className="border border-ink-line bg-ink-deep p-4">
+                <li key={j.id} className="rounded-card border border-ink-line bg-ink-deep p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="truncate font-semibold text-text-pri">
@@ -12734,7 +14140,7 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
                   {/* Two cards per job — the customer-facing saved quote (+PDF)
                       and the tradie-facing measurement review page (/m/[token]). */}
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <div className="border border-ink-line bg-ink-card p-4">
+                    <div className="rounded-card border border-ink-line bg-ink-card p-4">
                       <div className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-accent">
                         Saved roofing job
                       </div>
@@ -12765,7 +14171,7 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
                       </div>
                     </div>
 
-                    <div className="border border-ink-line bg-ink-card p-4">
+                    <div className="rounded-card border border-ink-line bg-ink-card p-4">
                       <div className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-teal-glow">
                         Measurement results
                       </div>
@@ -12794,10 +14200,20 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
               )
             })}
           </ul>
+          <PaginationControls
+            page={jobPage}
+            totalPages={jobTotalPages}
+            onPageChange={setJobPage}
+            startIndex={jobStart}
+            endIndex={jobEnd}
+            total={jobTotal}
+            unit="jobs"
+          />
+          </>
         )}
       </div>
 
-      <div className="border border-ink-line bg-ink-card p-7 sm:p-9">
+      <div className="rounded-card border border-ink-line bg-ink-card p-7 sm:p-9">
         <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
           What's live in Phase 1
         </div>
@@ -12824,6 +14240,249 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
           Geoscape behind the same interface for true 3D area + accurate
           hip / valley counts. See <code className="font-mono">docs/strategy.md</code> v10.
         </p>
+      </div>
+    </div>
+  )
+}
+
+// ─── Trade hub ────────────────────────────────────────────────────
+//
+// One tab per enabled trade, consolidating everything that used to be
+// spread across the cross-trade Pricing / Services / Catalogue /
+// Estimating / Recipes tabs plus the per-trade tool tabs (roofing,
+// signage, painting, commercial-painting, aircon, estimator, solar).
+// Every section reuses the existing tab component with tradeFilter set,
+// so behaviour and save paths are identical — only the scope changes.
+// Section state is local: switching hubs remounts via the parent's
+// key={tab}, so each hub opens on its default section.
+
+type HubSection =
+  | 'tools'
+  | 'pricing'
+  | 'services'
+  | 'catalogue'
+  | 'recipes'
+  | 'estimating'
+  | 'quotes'
+
+const HUB_SECTION_LABELS: Record<HubSection, string> = {
+  tools: 'Tools',
+  pricing: 'Pricing',
+  services: 'Services & brands',
+  catalogue: 'Catalogue',
+  recipes: 'Recipes',
+  estimating: 'Estimating',
+  quotes: 'Quotes',
+}
+
+/** Trades that ship an interactive tool panel (the old tool tabs).
+ *  Plumbing has no standalone tool yet, so its hub starts on Pricing. */
+const HUB_TOOL_TRADES: readonly TradeHubSlug[] = [
+  'electrical',
+  'roofing',
+  'signage',
+  'painting',
+  'commercial_painting',
+  'aircon',
+  'solar',
+]
+
+function TradeHub({
+  trade,
+  data,
+  accessToken,
+  onSave,
+  onCreateCustom,
+  onUpdateCustom,
+  onDeleteCustom,
+  onQuoteDeleted,
+}: {
+  trade: TradeHubSlug
+  data: DashboardData
+  accessToken: string | null
+  onSave: (payload: Record<string, unknown>) => Promise<void>
+  onCreateCustom: (payload: Record<string, unknown>) => Promise<unknown>
+  onUpdateCustom: (id: string, payload: Record<string, unknown>) => Promise<unknown>
+  onDeleteCustom: (id: string) => Promise<void>
+  onQuoteDeleted: (id: string) => void
+}) {
+  const label = HUB_NAV.find((h) => h.slug === trade)?.label ?? trade
+  const hasTools = HUB_TOOL_TRADES.includes(trade)
+  const sections: HubSection[] = [
+    ...(hasTools ? (['tools'] as HubSection[]) : []),
+    'pricing',
+    'services',
+    'catalogue',
+    'recipes',
+    'estimating',
+    'quotes',
+  ]
+  const [section, setSection] = useState<HubSection>(hasTools ? 'tools' : 'pricing')
+  const quoteCount = data.quotes.filter(
+    (q) => (q.trade ?? '').toLowerCase() === trade,
+  ).length
+
+  return (
+    <div>
+      <header className="mb-6">
+        <div className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-text-dim">
+          QuoteMax · Dashboard · Trades
+        </div>
+        <h1 className="mt-1.5 font-extrabold uppercase tracking-tight text-text-pri text-[clamp(1.5rem,3vw,2rem)]">
+          {label}
+        </h1>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-sec">
+          Everything for your {label.toLowerCase()} work in one place —{' '}
+          {hasTools ? 'tools, ' : ''}pricing, services, brands, catalogue,
+          recipes, estimating and quotes.
+        </p>
+      </header>
+
+      {/* Section chips — plain toggle buttons (aria-pressed), matching the
+          QuoteFilter rail pattern, rather than a role=tablist that would
+          promise roving-tabindex/arrow-key behaviour we don't implement. */}
+      <div className="mb-6 flex flex-wrap gap-2" aria-label={`${label} sections`}>
+        {sections.map((s) => {
+          const active = s === section
+          return (
+            <button
+              key={s}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setSection(s)}
+              className={`rounded-ctl inline-flex items-center gap-2 border px-3.5 py-2 font-mono text-[0.65rem] font-bold uppercase tracking-[0.14em] transition-colors cursor-pointer ${
+                active
+                  ? 'border-accent bg-accent/10 text-accent'
+                  : 'border-ink-line bg-ink-card text-text-dim hover:border-text-dim hover:text-text-pri'
+              }`}
+            >
+              {HUB_SECTION_LABELS[s]}
+              {s === 'quotes' && quoteCount > 0 && (
+                <span
+                  className={`font-mono text-[0.6rem] tabular-nums px-1.5 py-0.5 border ${
+                    active ? 'border-accent/60 text-accent' : 'border-ink-line text-text-sec'
+                  }`}
+                >
+                  {quoteCount}
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* `key={section}` re-fires the fade-in on section switch, matching
+          the top-level tab behaviour. */}
+      <div
+        key={section}
+        className="motion-safe:animate-[fade-up_300ms_cubic-bezier(0.22,1,0.36,1)_both]"
+      >
+        {section === 'tools' && trade === 'electrical' && (
+          <EstimatorBetaTab accessToken={accessToken} />
+        )}
+        {section === 'tools' && trade === 'roofing' && (
+          <RoofingHubTab accessToken={accessToken} />
+        )}
+        {section === 'tools' && trade === 'signage' && (
+          <SignageHubTab accessToken={accessToken} />
+        )}
+        {section === 'tools' && trade === 'painting' && (
+          <PaintingHubTab accessToken={accessToken} />
+        )}
+        {section === 'tools' && trade === 'commercial_painting' && (
+          <CommercialPaintingTab accessToken={accessToken} />
+        )}
+        {section === 'tools' && trade === 'solar' && (
+          <SolarTab
+            accessToken={accessToken}
+            tenantId={data.tenant.id}
+            appUrl={process.env.NEXT_PUBLIC_APP_URL ?? null}
+          />
+        )}
+        {section === 'tools' && trade === 'aircon' && (
+          <div className="space-y-7">
+            <Link
+              href="/dashboard/aircon"
+              className="rounded-card group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
+            >
+              <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">
+                AC
+              </span>
+              <div className="flex-1">
+                <h3 className="font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+                  Air-conditioning recommender
+                </h3>
+                <p className="mt-4 text-base leading-relaxed text-text-sec">
+                  Size a home and get an indicative ducted-vs-split recommendation with a price range. Opens the full tool.
+                </p>
+                <span className="mt-5 inline-flex items-center gap-2 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-accent transition-colors group-hover:text-accent-press">
+                  Open AC recommender <span aria-hidden="true">&rarr;</span>
+                </span>
+              </div>
+            </Link>
+          </div>
+        )}
+
+        {section === 'pricing' && (
+          <div className="space-y-6">
+            <PricingTab
+              data={data}
+              onSave={onSave}
+              accessToken={accessToken}
+              tradeFilter={trade}
+            />
+            {/* Guided setup entry — the wizard opens scoped to this trade
+                (?trade=) so its rate card, services and brand steps only
+                touch this hub's trade. */}
+            <Link
+              href={`/dashboard/pricing-wizard?trade=${trade}`}
+              className="rounded-card group flex items-center gap-3 border border-ink-line bg-ink-card px-5 py-4 transition-colors hover:border-accent"
+            >
+              <Sparkles size={18} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-accent" />
+              <span className="flex-1 text-sm text-text-sec">
+                <span className="font-mono text-[0.7rem] font-bold uppercase tracking-[0.14em] text-accent">
+                  Pricing wizard
+                </span>
+                <span className="block mt-0.5">
+                  Guided setup for your {label.toLowerCase()} rates, services and preferred brands.
+                </span>
+              </span>
+              <span aria-hidden="true" className="text-accent">&rarr;</span>
+            </Link>
+          </div>
+        )}
+
+        {section === 'services' && (
+          <ServicesTab
+            data={data}
+            onSave={onSave}
+            onCreateCustom={onCreateCustom}
+            onUpdateCustom={onUpdateCustom}
+            onDeleteCustom={onDeleteCustom}
+            tradeFilter={trade}
+          />
+        )}
+
+        {section === 'catalogue' && (
+          <CatalogueTab accessToken={accessToken} tradeFilter={trade} />
+        )}
+
+        {section === 'recipes' && (
+          <RecipesTab accessToken={accessToken} tradeFilter={trade} />
+        )}
+
+        {section === 'estimating' && (
+          <EstimatingTab accessToken={accessToken} tradeFilter={trade} />
+        )}
+
+        {section === 'quotes' && (
+          <QuotesTab
+            data={data}
+            accessToken={accessToken}
+            onQuoteDeleted={onQuoteDeleted}
+            tradeFilter={trade}
+          />
+        )}
       </div>
     </div>
   )

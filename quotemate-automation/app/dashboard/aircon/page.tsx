@@ -240,7 +240,7 @@ function AirconRecommendPageInner() {
         </header>
 
         {/* ── Form ── */}
-        <form onSubmit={run} className="border border-ink-line bg-ink-card p-6 sm:p-9">
+        <form onSubmit={run} className="rounded-card border border-ink-line bg-ink-card p-6 sm:p-9">
           <FormSectionHeading num="01" title="Property" sub="Address drives climate zone + satellite evidence" />
           <div className="mb-8 grid grid-cols-1 gap-5 sm:grid-cols-4">
             <label className="flex flex-col gap-2 sm:col-span-2">
@@ -330,7 +330,7 @@ function AirconRecommendPageInner() {
               sub="Real rooms beat estimates — PDF or photo of any plan"
             />
             <div className="flex flex-wrap items-center gap-4">
-              <label className="inline-flex cursor-pointer items-center gap-3 border border-ink-line bg-ink-deep px-4 py-3 text-sm text-text-sec hover:border-accent">
+              <label className="rounded-ctl inline-flex cursor-pointer items-center gap-3 border border-ink-line bg-ink-deep px-4 py-3 text-sm text-text-sec hover:border-accent">
                 <span className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-accent">
                   {planFile ? 'Change plan' : 'Upload plan'}
                 </span>
@@ -364,14 +364,14 @@ function AirconRecommendPageInner() {
           <button
             type="submit"
             disabled={busy}
-            className="mt-9 inline-flex w-full items-center justify-center gap-3 bg-accent px-8 py-4 text-sm font-semibold uppercase tracking-[0.08em] text-white transition-colors hover:bg-accent-press disabled:opacity-50 sm:w-auto"
+            className="rounded-ctl mt-9 inline-flex w-full items-center justify-center gap-3 bg-accent px-8 py-4 text-sm font-semibold uppercase tracking-[0.08em] text-white transition-colors hover:bg-accent-press disabled:opacity-50 sm:w-auto"
           >
             {busy ? (planFile ? 'Reading plan…' : 'Calculating…') : 'Get recommendation'}
             {!busy && <span aria-hidden>→</span>}
           </button>
         </form>
 
-        {errMsg && <p className="mt-5 text-sm text-red-400">{errMsg}</p>}
+        {errMsg && <p className="mt-5 text-sm text-danger-bright">{errMsg}</p>}
 
         {resp && resp.ok && (
           <Result
@@ -382,7 +382,7 @@ function AirconRecommendPageInner() {
           />
         )}
         {resp && !resp.ok && (
-          <p className="mt-5 text-sm text-red-400">
+          <p className="mt-5 text-sm text-danger-bright">
             Could not size this job ({resp.error}).{resp.detail ? ` ${resp.detail}` : ''}
           </p>
         )}
@@ -474,7 +474,7 @@ function Result({
 
       <div>
         <SectionHeader num="04" title="Next step" />
-        <div className="border border-ink-line border-l-4 border-l-accent bg-ink-card p-6 sm:p-8">
+        <div className="rounded-card border border-ink-line border-l-4 border-l-accent bg-ink-card p-6 sm:p-8">
           <p className="text-lg font-extrabold uppercase tracking-[0.02em]">
             Book a <span className="text-accent">site assessment</span>
           </p>
@@ -545,7 +545,7 @@ function AirconPdfButton({
         type="button"
         onClick={() => void download()}
         disabled={busy}
-        className="inline-flex items-center gap-2 border border-ink-line px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+        className="rounded-ctl inline-flex items-center gap-2 border border-ink-line px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
       >
         {busy ? 'Preparing PDF…' : 'Download PDF ↓'}
       </button>
@@ -559,7 +559,7 @@ function AirconPdfButton({
 function LocationPanel({ location, token }: { location: AcLocationEvidence; token: string | null }) {
   const { geocode, weather, building } = location
   return (
-    <div className="grid gap-0 border border-ink-line bg-ink-card sm:grid-cols-[380px_1fr]">
+    <div className="rounded-card grid gap-0 border border-ink-line bg-ink-card sm:grid-cols-[380px_1fr]">
       <AcStaticMap token={token} geocode={geocode} />
       <div className="flex flex-col gap-3 p-6 text-sm sm:p-8">
         {geocode.ok ? (
@@ -640,7 +640,7 @@ function AcStaticMap({
 
   return (
     <div className="relative h-56 w-full overflow-hidden border-b border-ink-line bg-ink-deep sm:h-full sm:border-b-0 sm:border-r">
-      <div className="pointer-events-none absolute left-3 top-3 z-10 border border-ink-line bg-ink-deep/95 px-3 py-1.5">
+      <div className="rounded-card pointer-events-none absolute left-3 top-3 z-10 border border-ink-line bg-ink-deep/95 px-3 py-1.5">
         <span className="font-mono text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
           Google satellite
         </span>
@@ -665,7 +665,7 @@ function AcStaticMap({
 
 function PlanRoomsPanel({ plan }: { plan: PlanReadout }) {
   return (
-    <div className="mt-5 border border-ink-line bg-ink-card p-6 sm:p-8">
+    <div className="rounded-card mt-5 border border-ink-line bg-ink-card p-6 sm:p-8">
       <div className="flex flex-wrap items-center gap-3">
         <span className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-accent">
           Plan read · {plan.filename}
@@ -708,7 +708,7 @@ function PlanRoomsPanel({ plan }: { plan: PlanReadout }) {
         </ul>
       )}
       {plan.warnings.length > 0 && (
-        <ul className="mt-3 flex list-disc flex-col gap-1 pl-5 text-xs leading-relaxed text-amber-500">
+        <ul className="mt-3 flex list-disc flex-col gap-1 pl-5 text-xs leading-relaxed text-warning-bright">
           {plan.warnings.map((w) => <li key={w}>{w}</li>)}
         </ul>
       )}
@@ -739,7 +739,7 @@ function Stat({
   text?: boolean
 }) {
   return (
-    <div className="flex min-w-0 flex-col justify-between gap-2 border border-ink-line bg-ink-deep px-4 py-4 sm:px-5">
+    <div className="rounded-card flex min-w-0 flex-col justify-between gap-2 border border-ink-line bg-ink-deep px-4 py-4 sm:px-5">
       <p
         className={`wrap-break-word font-mono font-bold leading-tight text-text-pri ${
           text ? 'text-base uppercase tracking-wide sm:text-lg' : 'text-2xl leading-none sm:text-3xl'
@@ -764,7 +764,7 @@ function SizingPanel({
 }) {
   const labels = roomLabels(sizing.rooms)
   return (
-    <div className="border border-ink-line bg-ink-card p-6 sm:p-8">
+    <div className="rounded-card border border-ink-line bg-ink-card p-6 sm:p-8">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <Stat value={sizing.connected_kw} unit="kW" label="Connected load" />
         <Stat value={sizing.total_volume_m3} unit="m³" label="Conditioned air" />
@@ -819,7 +819,7 @@ function SizingPanel({
           {sizing.notes.map((n) => <li key={n}>{n}</li>)}
         </ul>
         {sizing.warnings.length > 0 && (
-          <ul className="mt-3 flex list-disc flex-col gap-1 pl-5 text-xs leading-relaxed text-amber-500">
+          <ul className="mt-3 flex list-disc flex-col gap-1 pl-5 text-xs leading-relaxed text-warning-bright">
             {sizing.warnings.map((w) => <li key={w}>{w}</li>)}
           </ul>
         )}
@@ -833,7 +833,7 @@ function SizingPanel({
 function OptionCard({ option: o, rooms }: { option: AcOption; rooms: RoomLoad[] }) {
   const p = o.pricing
   return (
-    <div className={`flex flex-col border bg-ink-card p-6 sm:p-8 ${o.best_fit ? 'border-accent' : 'border-ink-line'}`}>
+    <div className={`rounded-card flex flex-col border bg-ink-card p-6 sm:p-8 ${o.best_fit ? 'border-accent' : 'border-ink-line'}`}>
       <div className="mb-1 flex items-start justify-between gap-3">
         <div>
           <p className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">

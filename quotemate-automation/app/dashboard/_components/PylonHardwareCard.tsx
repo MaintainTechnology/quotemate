@@ -88,7 +88,7 @@ export function PylonHardwareCard({ accessToken }: { accessToken: string | null 
   if (!enabled) return null
 
   return (
-    <div className="border border-ink-line bg-ink-card p-7 sm:p-9">
+    <div className="rounded-card border border-ink-line bg-ink-card p-7 sm:p-9">
       <div className="flex items-center gap-3 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
         <Cpu className="h-4 w-4" aria-hidden="true" />
         Your standard hardware
@@ -112,10 +112,10 @@ export function PylonHardwareCard({ accessToken }: { accessToken: string | null 
                 setValues((v) => ({ ...v, [f.key]: e.target.value || null }))
               }
               placeholder={f.hint}
-              className="mt-1.5 w-full border border-ink-line bg-ink-deep px-3 py-2.5 font-mono text-sm text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none"
+              className="rounded-ctl mt-1.5 w-full border border-ink-line bg-ink-deep px-3 py-2.5 font-mono text-sm text-text-pri placeholder:text-text-dim focus:border-accent focus:outline-none"
             />
             {resolved[f.key] && (
-              <span className="mt-1 block text-xs text-emerald-300">✓ {resolved[f.key]}</span>
+              <span className="mt-1 block text-xs text-success-bright">✓ {resolved[f.key]}</span>
             )}
           </label>
         ))}
@@ -126,13 +126,13 @@ export function PylonHardwareCard({ accessToken }: { accessToken: string | null 
           type="button"
           onClick={() => void save()}
           disabled={saving}
-          className="inline-flex items-center gap-2 bg-accent px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:opacity-60"
+          className="rounded-ctl inline-flex items-center gap-2 bg-accent px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:opacity-60"
         >
           {saving ? 'Checking with Pylon\u2026' : 'Save hardware'}
         </button>
         {saved && (
-          <span className="font-mono text-xs uppercase tracking-[0.12em] text-emerald-300">
-            Saved &mdash; SKUs verified
+          <span className="font-mono text-xs uppercase tracking-[0.12em] text-success-bright">
+            Saved · SKUs verified
           </span>
         )}
       </div>

@@ -58,7 +58,7 @@ function SourceChip({ row }: { row: Row }) {
   return (
     <span
       title={row.note}
-      className={`inline-flex border px-1.5 py-0.5 font-mono text-[0.6rem] font-semibold uppercase tracking-[0.08em] ${
+      className={`rounded-ctl inline-flex border px-1.5 py-0.5 font-mono text-[0.6rem] font-semibold uppercase tracking-[0.08em] ${
         flaggedDelta ? 'border-warning text-warning' : styles[row.source]
       }`}
     >
@@ -176,7 +176,7 @@ export function PaintTakeoffEditor({
     <div className="mt-5">
       {/* Reconciliation flags */}
       {flags.length > 0 && (
-        <div className="border border-ink-line bg-ink-deep">
+        <div className="rounded-card border border-ink-line bg-ink-deep">
           <button
             type="button"
             onClick={() => setShowFlags((v) => !v)}
@@ -206,7 +206,7 @@ export function PaintTakeoffEditor({
 
       {/* Finishes schedule reference */}
       {finishesSchedule.length > 0 && (
-        <details className="mt-3 border border-ink-line bg-ink-deep">
+        <details className="rounded-card mt-3 border border-ink-line bg-ink-deep">
           <summary className="cursor-pointer list-none px-4 py-2.5 font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-text-sec [&::-webkit-details-marker]:hidden">
             Finishes schedule from the plans · {finishesSchedule.length} entries
           </summary>
@@ -228,7 +228,7 @@ export function PaintTakeoffEditor({
       )}
 
       {/* Bulk edit — set the coats on every line at once. */}
-      <div className="mt-4 flex flex-wrap items-center gap-3 border border-ink-line bg-ink-deep px-4 py-3">
+      <div className="rounded-card mt-4 flex flex-wrap items-center gap-3 border border-ink-line bg-ink-deep px-4 py-3">
         <span className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
           Bulk edit
         </span>
@@ -244,14 +244,14 @@ export function PaintTakeoffEditor({
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyBulkCoats() } }}
             placeholder="3"
             aria-label="Set all coats to"
-            className="w-16 border border-ink-line bg-ink-deep px-2 py-1.5 text-right font-mono text-sm tabular-nums text-text-pri outline-none transition-colors focus:border-accent"
+            className="rounded-ctl w-16 border border-ink-line bg-ink-deep px-2 py-1.5 text-right font-mono text-sm tabular-nums text-text-pri outline-none transition-colors focus:border-accent"
           />
         </label>
         <button
           type="button"
           onClick={applyBulkCoats}
           disabled={bulkCoats.trim() === ''}
-          className="inline-flex cursor-pointer items-center gap-1.5 border border-ink-line bg-ink-card px-3 py-1.5 font-mono text-[0.64rem] font-semibold uppercase tracking-[0.12em] text-text-sec transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-ctl inline-flex cursor-pointer items-center gap-1.5 border border-ink-line bg-ink-card px-3 py-1.5 font-mono text-[0.64rem] font-semibold uppercase tracking-[0.12em] text-text-sec transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
         >
           Apply to all lines
         </button>
@@ -305,7 +305,7 @@ export function PaintTakeoffEditor({
                           placeholder="Surface"
                           aria-label="Surface"
                           title={r.note}
-                          className="w-full min-w-44 border border-transparent bg-transparent px-1.5 py-1 text-text-pri outline-none transition-colors focus:border-accent"
+                          className="rounded-ctl w-full min-w-44 border border-transparent bg-transparent px-1.5 py-1 text-text-pri outline-none transition-colors focus:border-accent"
                         />
                       </td>
                       <td className="py-1.5 pr-3">
@@ -313,7 +313,7 @@ export function PaintTakeoffEditor({
                           value={r.system}
                           onChange={(e) => patch(r.uid, { system: e.target.value as PaintSystem })}
                           aria-label="Paint system"
-                          className="cursor-pointer border border-ink-line bg-ink-deep px-2 py-1.5 text-xs text-text-sec outline-none focus:border-accent"
+                          className="rounded-ctl cursor-pointer border border-ink-line bg-ink-deep px-2 py-1.5 text-xs text-text-sec outline-none focus:border-accent"
                         >
                           {PAINT_SYSTEMS.map((s) => (
                             <option key={s} value={s}>{SYSTEM_LABELS[s]}</option>
@@ -336,7 +336,7 @@ export function PaintTakeoffEditor({
                           value={r.unit}
                           onChange={(e) => patch(r.uid, { unit: e.target.value as 'm2' | 'item' })}
                           aria-label="Unit"
-                          className="cursor-pointer border border-ink-line bg-ink-deep px-2 py-1.5 font-mono text-xs text-text-sec outline-none focus:border-accent"
+                          className="rounded-ctl cursor-pointer border border-ink-line bg-ink-deep px-2 py-1.5 font-mono text-xs text-text-sec outline-none focus:border-accent"
                         >
                           <option value="m2">m²</option>
                           <option value="item">item</option>
@@ -351,7 +351,7 @@ export function PaintTakeoffEditor({
                           value={r.coats}
                           onChange={(e) => patch(r.uid, { coats: Number(e.target.value) })}
                           aria-label="Coats"
-                          className="w-14 border border-ink-line bg-ink-deep px-2 py-1.5 text-right font-mono text-sm tabular-nums text-text-pri outline-none transition-colors focus:border-accent"
+                          className="rounded-ctl w-14 border border-ink-line bg-ink-deep px-2 py-1.5 text-right font-mono text-sm tabular-nums text-text-pri outline-none transition-colors focus:border-accent"
                         />
                       </td>
                       <td className="py-1.5 pr-3 text-right">
@@ -417,7 +417,7 @@ export function PaintTakeoffEditor({
             placeholder={defaultLabourRate != null ? String(defaultLabourRate) : '75'}
             aria-label="Labour rate in dollars per hour"
             title="Per-quote override. Leave blank to use your saved rate."
-            className={`w-20 border bg-ink-deep px-2 py-1.5 text-right font-mono text-sm tabular-nums normal-case tracking-normal text-text-pri outline-none transition-colors focus:border-accent ${
+            className={`rounded-ctl w-20 border bg-ink-deep px-2 py-1.5 text-right font-mono text-sm tabular-nums normal-case tracking-normal text-text-pri outline-none transition-colors focus:border-accent ${
               labourRateError ? 'border-warning' : 'border-ink-line'
             }`}
           />
@@ -426,7 +426,7 @@ export function PaintTakeoffEditor({
           type="button"
           disabled={pricing}
           onClick={handleConfirm}
-          className="inline-flex cursor-pointer items-center gap-2.5 bg-accent px-5 py-3 font-mono text-sm font-bold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-ctl inline-flex cursor-pointer items-center gap-2.5 bg-accent px-5 py-3 font-mono text-sm font-bold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
         >
           {pricing ? (
             <>
