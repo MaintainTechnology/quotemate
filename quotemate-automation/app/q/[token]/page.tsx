@@ -12,9 +12,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { after } from 'next/server'
-import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { getTierPhoto } from '@/lib/quote/tier-photos'
 import { asQuoteTierMode, resolveVisibleTiers } from '@/lib/quote/tier-visibility'
 import { refreshSignedUrl } from '@/lib/storage/upload'
 import { CustomerPhotosBlock } from './CustomerPhotosBlock'
@@ -22,6 +20,13 @@ import { RoofHeroStrip } from './RoofHeroStrip'
 import { CommercialPaintDetails } from './CommercialPaintDetails'
 import { TradeTiers } from './TradeTiers'
 import { resolveTradeFormat, tierLabelsForTrade } from '@/lib/quote/trade-format'
+import { QuoteChrome, type StickyBar } from '../_chrome/QuoteChrome'
+import { tradeIcon } from '../_chrome/icons'
+import {
+  QuoteSheet, Letterhead, HeroPhoto, QuoteHero, StatGrid, Scope,
+  SheetSection, TierCards, GoodToKnow, CredentialFooter,
+  type QuoteTier, type Stat, type FooterRow,
+} from '../_chrome/parts'
 import {
   roofScopeStats,
   commercialPaintScope,
@@ -45,8 +50,6 @@ import {
 } from '@/lib/quote/early-bird'
 import {
   resolveQuoteDisplayMode,
-  sumLabourHours,
-  countMaterialItems,
   type QuoteDisplayMode,
 } from '@/lib/quote/display'
 
@@ -446,7 +449,6 @@ export default async function PublicQuotePage(props: {
     JOB_TYPE_LABEL[intake?.job_type ?? ''] ??
     (tradeFormat.usesGenericCard ? 'job' : tradeFormat.label.toLowerCase())
   const itemCount: number | undefined = intake?.scope?.item_count
-  const jobSummary = itemCount && itemCount > 0 ? `${itemCount} ${jobLabel}` : jobLabel
 
   const stripeLinks: StripeLinks = (quote.stripe_links as StripeLinks) ?? {}
   const isInspection = !!quote.needs_inspection
@@ -518,8 +520,262 @@ export default async function PublicQuotePage(props: {
   // When only one option is shown it IS the offer — no "recommended" badge.
   const showRecommendedBadge = visibleTierKeys.length > 1
 
+  // ─── Presentation-only helpers for the reskinned sheet ──────────────
+  // Everything below reuses the pricing computations already established
+  // above (incGst / applyEarlyBirdDiscount / deposit / the /r/<token>/<key>
+  // link, visibleTierSet, priceExpired, isPaid/paid_tier). No new pricing.
+  const ebApp = ebApplied ? ebAppliedPct : 0
+  const tierIncGst = (t: Tier): number => {
+    const full = incGst((t as { subtotal_ex_gst?: number | string })?.subtotal_ex_gst ?? 0)
+    return ebApp > 0 ? applyEarlyBirdDiscount(full, ebApp) : full
+  }
+  const cleanTierLabel = (label: string | undefined): string =>
+    (label ?? '').replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim()
+
+  // Featured tier for the sticky bar — the tradie-selected tier if it's
+  // visible, else the middle ('better') if visible, else the first visible.
+  const featuredKey: 'good' | 'better' | 'best' | null =
+    (visibleTierSet.has((quote.selected_tier as 'good' | 'better' | 'best') ?? 'better')
+      ? ((quote.selected_tier as 'good' | 'better' | 'best' | null) ?? null)
+      : null) ??
+    (visibleTierSet.has('better') ? 'better' : (visibleTierKeys[0] ?? null))
+
+  // Build the sticky deposit bar. Mirrors the tier-card CTA gating exactly:
+  //   paid            → "Deposit paid"
+  //   inspection      → $99 site-visit CTA (unless roofing-indicative, which
+  //                     keeps real tiers + its own $99 banner in-sheet)
+  //   otherwise       → featured visible tier's inc-GST price + deposit CTA
+  //                     (href suppressed when the price hold has lapsed or no
+  //                     Stripe link exists).
+  let stickyBar: StickyBar | null = null
+  if (isPaid) {
+    stickyBar = {
+      paid: true,
+      paidSub: quote.paid_tier
+        ? `${cleanTierLabel(String(quote.paid_tier)) || String(quote.paid_tier).toUpperCase()} option — your tradie will be in touch`
+        : 'Your tradie will be in touch',
+    }
+  } else if (isInspection && !roofingIndicative) {
+    stickyBar = {
+      tierLabel: '$99 site visit · refundable',
+      priceText: '$99',
+      ctaLabel: 'Pay $99',
+      ctaHref: stripeLinks.inspection ? `/r/${token}/inspection` : null,
+    }
+  } else if (featuredKey) {
+    const fTier = quote[featuredKey] as Tier
+    if (fTier) {
+      const fInc = tierIncGst(fTier)
+      const fDep = deposit(fInc, depositPct)
+      const hasLink = !priceExpired && !!stripeLinks[featuredKey]
+      stickyBar = {
+        tierLabel: `${cleanTierLabel(fTier.label) || featuredKey.toUpperCase()} option${
+          depositPct ? ` · ${depositPct}% deposit` : ''
+        }`,
+        priceText: `$${fmt(fInc)}`,
+        ctaLabel: fDep ? `Pay $${fmt(fDep)}` : 'Lock it in',
+        ctaHref: hasLink ? `/r/${token}/${featuredKey}` : null,
+      }
+    }
+  }
+
+  // Map the visible generic (electrical/plumbing) tiers → kit TierCards.
+  const genericTiers: QuoteTier[] = tradeFormat.usesGenericCard
+    ? (['good', 'better', 'best'] as const)
+        .filter((k) => visibleTierSet.has(k) && !!quote[k])
+        .map((k) => {
+          const t = quote[k] as NonNullable<Tier>
+          const full = incGst((t as { subtotal_ex_gst?: number | string }).subtotal_ex_gst ?? 0)
+          const discounted = ebApp > 0
+          const priceInc = discounted ? applyEarlyBirdDiscount(full, ebApp) : full
+          const dep = deposit(priceInc, depositPct)
+          const recommended = showRecommendedBadge && quote.selected_tier === k
+          const paidThis = isPaid && quote.paid_tier === k
+          const disabledOther = isPaid && quote.paid_tier !== k
+          const hasLink = !priceExpired && !!stripeLinks[k]
+          const lineItems = Array.isArray(t?.line_items) ? t!.line_items! : []
+          // Compact bullets: up to 4 line-item descriptions.
+          const bullets: string[] = lineItems.slice(0, 4).map((li) => {
+            const you = (li as unknown as { supplied_by?: string }).supplied_by === 'customer'
+            return you ? `${li.description} (you supply · install only)` : li.description
+          })
+          // Full breakdown preserved in a collapsible <details> so no data is
+          // lost when the tenant is in itemised mode and there are >4 lines.
+          const showBreakdown =
+            quoteDisplayMode === 'itemised' && lineItems.length > 0
+          const items: React.ReactNode[] = [...bullets]
+          if (showBreakdown) {
+            items.push(
+              <details key="__breakdown" style={{ marginTop: 2 }}>
+                <summary
+                  style={{
+                    cursor: 'pointer',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 10,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.14em',
+                    color: 'var(--text-dim)',
+                  }}
+                >
+                  Full breakdown
+                </summary>
+                <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+                  {lineItems.map((li, i) => {
+                    const you = (li as unknown as { supplied_by?: string }).supplied_by === 'customer'
+                    return (
+                      <div
+                        key={i}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 12,
+                          fontSize: 12,
+                          lineHeight: 1.4,
+                          color: 'var(--text-sec)',
+                        }}
+                      >
+                        <span style={{ minWidth: 0 }}>
+                          {li.description}
+                          <span
+                            style={{
+                              display: 'block',
+                              fontFamily: 'var(--font-mono)',
+                              fontSize: 10.5,
+                              color: 'var(--text-dim)',
+                            }}
+                          >
+                            {li.quantity} × {li.unit} @ ${fmt(asNumber(li.unit_price_ex_gst))} ex GST
+                            {you ? ' · install only' : ''}
+                          </span>
+                        </span>
+                        <span
+                          style={{
+                            fontFamily: 'var(--font-mono)',
+                            flexShrink: 0,
+                            color: 'var(--text-sec)',
+                          }}
+                        >
+                          ${fmt(asNumber(li.total_ex_gst))}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </details>,
+            )
+          }
+          // CTA mirrors the old TierCard gating precisely.
+          let ctaLabel: string
+          let ctaHref: string | null
+          if (paidThis) {
+            ctaLabel = 'Deposit received'
+            ctaHref = null
+          } else if (disabledOther) {
+            ctaLabel = 'Another option confirmed'
+            ctaHref = null
+          } else if (hasLink) {
+            ctaLabel = dep ? `Pay $${fmt(dep)} deposit` : 'Lock in this option'
+            ctaHref = `/r/${token}/${k}`
+          } else {
+            ctaLabel = 'Reply to SMS to confirm'
+            ctaHref = null
+          }
+          return {
+            name: cleanTierLabel(t.label) || k.toUpperCase(),
+            badge: recommended ? 'Most popular' : null,
+            recommended,
+            priceText: `$${fmt(priceInc)}`,
+            priceNote: discounted ? `inc GST · ${ebApp}% off` : 'inc GST',
+            items,
+            ctaLabel,
+            ctaHref,
+          }
+        })
+    : []
+
+  // Stat grid — up to 4 truthful cells from data that actually exists.
+  const statItems: Stat[] = []
+  if (itemCount && itemCount > 0) {
+    statItems.push({ k: 'The job', v: String(itemCount), sub: jobLabel })
+  }
+  if (quote.estimated_timeframe) {
+    statItems.push({ k: 'Timeframe', v: quote.estimated_timeframe as string })
+  }
+  if (!isInspection && depositPct) {
+    statItems.push({ k: 'Deposit', v: `${depositPct}%`, sub: 'to book' })
+  }
+  if (pricingBook?.gst_registered) {
+    statItems.push({ k: 'GST', v: 'Incl.', sub: 'all prices' })
+  } else if (isInspection) {
+    statItems.push({ k: 'Site visit', v: '$99', sub: 'refundable' })
+  }
+
+  // Credential footer rows — only render rows whose data genuinely exists.
+  const footerRows: FooterRow[] = []
+  if (tenantIdentity?.business_name) {
+    footerRows.push({ k: 'Contractor', v: tenantIdentity.business_name })
+  }
+  if (pricingBook?.licence_type && pricingBook?.licence_state) {
+    footerRows.push({
+      k: 'Licence',
+      v: `${pricingBook.licence_type} (${pricingBook.licence_state})${
+        pricingBook.licence_number ? ` · ${pricingBook.licence_number}` : ''
+      }`,
+    })
+  }
+  if (pricingBook?.gst_registered) {
+    footerRows.push({ k: 'GST', v: 'Registered · all prices include 10% GST' })
+  }
+  footerRows.push({ k: 'Quote ref', v: quoteRef })
+  footerRows.push({
+    k: 'Terms',
+    v: 'Draft prepared via QuoteMax. Final scope confirmed by your tradie before work commences. Australian Consumer Law applies.',
+  })
+
+  // Letterhead credential line (licence) + phone href.
+  const letterheadCredential =
+    pricingBook?.licence_type && pricingBook?.licence_state
+      ? `${pricingBook.licence_type} ${pricingBook.licence_state}${
+          pricingBook.licence_number ? ` · ${pricingBook.licence_number}` : ''
+        }`
+      : null
+  const ownerPhone = (tenantIdentity?.owner_mobile ?? '').trim()
+  const letterheadPhoneHref = ownerPhone ? `tel:${ownerPhone.replace(/\s+/g, '')}` : null
+  // Reference-quote letterhead contact strip: Contact / Phone / Email. Contact
+  // name = contact_name, else owner full name, else owner first name.
+  const letterheadContactName =
+    (tenantIdentity?.contact_name?.trim() || '') ||
+    [tenantIdentity?.owner_first_name, tenantIdentity?.owner_last_name]
+      .filter(Boolean).join(' ').trim() ||
+    (tenantIdentity?.owner_first_name ?? '') ||
+    null
+  const letterheadEmail = (tenantIdentity?.owner_email ?? '').trim() || null
+
+  // Hero photo — first customer photo, else first AI preview, else none.
+  const heroPhotoSrc = customerPhotoUrls[0] ?? previewImageUrls[0] ?? null
+
+  // Hero headline (component uppercases them): the warm "G'day {name}," /
+  // "your {job} quote" style from the reference quote surface. jobLabel is the
+  // trade-specific label ("downlights", "commercial painting", …); firstName
+  // falls back to "there" when the caller name is unknown.
+  const heroLine1 = `G'day ${firstName},`
+  const heroLine2 = `your ${jobLabel} quote`
+  const heroStatus: { label: string; tone: 'await' | 'booked' } = isPaid
+    ? { label: 'Deposit paid', tone: 'booked' }
+    : isInspection
+      ? { label: 'Site visit', tone: 'await' }
+      : { label: 'Awaiting you', tone: 'await' }
+  const heroGreeting = isInspection
+    ? `This job needs a quick on-site visit before a real price can be locked in. The visit is $99 — refundable, credited toward your final quote.`
+    : tierCount === 1
+      ? `One option below — price includes 10% GST. Tap to lock it in with a ${depositPct ?? 30}% deposit.`
+      : `${tierCount === 2 ? 'Two' : 'Three'} options below — all prices include 10% GST. Tap any tier to lock it in with a ${depositPct ?? 30}% deposit.`
+
   return (
-    <main className="min-h-screen bg-ink-deep text-text-pri relative">
+    <QuoteChrome
+      trade={{ label: tradeFormat.label, icon: tradeIcon(intakeTrade) }}
+      sticky={stickyBar}
+    >
       {/* ─── Tradie-owner edit overlay (renders nothing for customers) ─── */}
       <TradieEditor
         quoteId={quote.id as string}
@@ -563,96 +819,74 @@ export default async function PublicQuotePage(props: {
           } | null) ?? null,
         }}
       />
-      {/* ─── Topographic SVG overlay (signature brand pattern) ─── */}
-      <TopographicBackground />
 
-      {/* ─── Header ──────────────────────────────────────── */}
-      <header className="relative z-10 border-b border-ink-line bg-ink-deep/80 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4 sm:px-6">
-          <Link href="/" className="inline-flex items-center group" aria-label="Maintain Technology">
-            <MaintainLogo className="h-8 sm:h-9 w-auto transition-transform group-hover:-translate-y-0.5" />
-          </Link>
-          <div className="text-right">
-            <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-text-dim">Quote ref</div>
-            <div className="font-mono text-sm font-semibold text-text-pri mt-0.5">{quoteRef}</div>
-          </div>
-        </div>
-      </header>
-
-      <div className="relative z-10 mx-auto max-w-5xl px-4 py-10 sm:px-6 sm:py-16">
+      <QuoteSheet label={`Quote ${quoteRef}`}>
         {/* ─── Tradie letterhead (the quote's owning tradie) ─── */}
-        <TradieLetterhead identity={tenantIdentity} />
+        {tenantIdentity?.business_name ? (
+          <Letterhead
+            name={tenantIdentity.business_name}
+            credential={letterheadCredential}
+            phoneHref={letterheadPhoneHref}
+            logoUrl={tenantIdentity.logo_url}
+            contactName={letterheadContactName}
+            phone={ownerPhone || null}
+            email={letterheadEmail}
+          />
+        ) : null}
+
+        {/* ─── Hero photo (customer photo or AI preview, when present) ─── */}
+        {heroPhotoSrc ? <HeroPhoto src={heroPhotoSrc} alt={`${jobLabel} — job photo`} /> : null}
 
         {/* ─── Hero ─────────────────────────────────────── */}
-        <section>
-          <StatusChip
-            kind={isPaid ? 'paid' : isInspection ? 'inspection' : 'draft'}
-            paidTier={quote.paid_tier as string | null}
-          />
+        <QuoteHero
+          quoteId={`Quote ${quoteRef}`}
+          status={heroStatus}
+          line1={heroLine1}
+          line2={heroLine2}
+          greeting={heroGreeting}
+          issued={issuedDate ? `Issued ${issuedDate}` : null}
+        />
 
-          <h1 className="mt-6 font-extrabold uppercase tracking-[-0.03em] text-[clamp(2rem,5vw,3.5rem)] leading-none">
-            G&apos;day <span className="text-accent">{firstName}</span>,
-            <br />
-            your <span className="text-accent">{jobLabel}</span> quote
-            {itemCount && itemCount > 0 ? (
-              <span className="text-text-sec font-mono text-2xl sm:text-3xl ml-2 align-middle">
-                / {itemCount}
-              </span>
-            ) : null}
-          </h1>
-
-          <p className="mt-5 max-w-2xl text-base leading-relaxed text-text-sec sm:text-lg">
-            {isInspection ? (
-              <>This job needs a quick on-site visit before a real price can be locked in. The visit is <span className="font-semibold text-accent">$99</span> — refundable, credited toward your final quote.</>
-            ) : tierCount === 1 ? (
-              <>One option below — price includes 10% GST. Tap to lock it in with a {depositPct ?? 30}% deposit.</>
-            ) : (
-              <>{tierCount === 2 ? 'Two' : 'Three'} options below — all prices include 10% GST. Tap any tier to lock it in with a <span className="font-semibold text-accent">{depositPct ?? 30}%</span> deposit.</>
-            )}
-          </p>
-
-          {issuedDate ? (
-            <p className="mt-4 font-mono text-[0.7rem] uppercase tracking-[0.15em] text-text-dim">
-              Issued {issuedDate}
-            </p>
-          ) : null}
-        </section>
+        {/* ─── Summary stat grid ─────────────────────────── */}
+        {statItems.length > 0 ? <StatGrid items={statItems} /> : null}
 
         {/* ─── WP6 · Price-hold / urgency banner ─────────── */}
-        {showHoldBanner ? <PriceHoldBanner hold={hold} depositPct={depositPct ?? 30} /> : null}
+        {showHoldBanner ? (
+          <SheetSection pad="20px 24px">
+            <PriceHoldBanner hold={hold} depositPct={depositPct ?? 30} />
+          </SheetSection>
+        ) : null}
 
         {/* ─── v8 · Early-booking discount banner ────────── */}
         {showEarlyBirdOffer ? (
-          <EarlyBirdBanner
-            discountPct={ebStatus.discountPct}
-            remaining={fmtEarlyBirdRemaining(ebStatus)}
-            deadline={fmtEarlyBirdDeadlineAU(ebStatus.expiresAt)}
-          />
+          <SheetSection pad="20px 24px">
+            <EarlyBirdBanner
+              discountPct={ebStatus.discountPct}
+              remaining={fmtEarlyBirdRemaining(ebStatus)}
+              deadline={fmtEarlyBirdDeadlineAU(ebStatus.expiresAt)}
+            />
+          </SheetSection>
         ) : null}
         {ebApplied && !isInspection ? (
-          <EarlyBirdAppliedBanner discountPct={ebAppliedPct} />
+          <SheetSection pad="20px 24px">
+            <EarlyBirdAppliedBanner discountPct={ebAppliedPct} />
+          </SheetSection>
         ) : null}
 
         {/* ─── Scope of works ────────────────────────────── */}
         {quote.scope_of_works ? (
-          <NumberedSection
-            number="01"
-            title="Scope of works"
-            className="mt-12"
-          >
-            <p className="whitespace-pre-line text-sm leading-relaxed text-text-sec sm:text-base">
-              {quote.scope_of_works}
-            </p>
-          </NumberedSection>
+          <Scope items={[{ title: 'Scope of works', body: quote.scope_of_works as string }]} />
         ) : null}
 
-        {/* ─── Step 02 · Customer photos ───────────────────
+        {/* ─── Customer photos ─────────────────────────────
             Electrical/plumbing quotes always render it (three states incl.
             the upload prompt). Bespoke trades are measured from satellite /
             plan documents, so the block only appears when photos genuinely
             exist — never as an upload prompt that has no pipeline behind it. */}
         {showInstallVisuals || customerPhotoUrls.length > 0 ? (
-          <CustomerPhotosBlock urls={customerPhotoUrls} uploadToken={uploadToken} />
+          <SheetSection pad="20px 20px" background="var(--ink-deep)">
+            <CustomerPhotosBlock urls={customerPhotoUrls} uploadToken={uploadToken} />
+          </SheetSection>
         ) : null}
 
         {/* ─── AI preview + sample gallery ─────────────────
@@ -661,48 +895,56 @@ export default async function PublicQuotePage(props: {
             required quotes there. Bespoke trades show their own measurement
             evidence instead (RoofHeroStrip / CommercialPaintDetails below). */}
         {showInstallVisuals ? (
-          <PreviewSection
-            shareToken={token}
-            initialPreviewStatus={previewStatus}
-            initialPreviewImageUrls={previewImageUrls}
-            initialSamplesStatus={samplesStatus}
-            initialSampleImageUrls={sampleImageUrls}
-          />
+          <SheetSection pad="20px 20px" background="var(--ink-deep)">
+            <PreviewSection
+              shareToken={token}
+              initialPreviewStatus={previewStatus}
+              initialPreviewImageUrls={previewImageUrls}
+              initialSamplesStatus={samplesStatus}
+              initialSampleImageUrls={sampleImageUrls}
+            />
+          </SheetSection>
         ) : null}
 
         {/* ─── Roof hero (only for roofing quotes) ──────── */}
         {isRoofing && roofStats && intake && (
-          <RoofHeroStrip
-            address={String(intake.address ?? '')}
-            suburb={(intake.suburb as string | null | undefined) ?? null}
-            shareToken={token}
-            stats={roofStats}
-          />
+          <SheetSection pad="20px 20px" background="var(--ink-deep)">
+            <RoofHeroStrip
+              address={String(intake.address ?? '')}
+              suburb={(intake.suburb as string | null | undefined) ?? null}
+              shareToken={token}
+              stats={roofStats}
+            />
+          </SheetSection>
         )}
 
         {/* ─── Measured takeoff (only for commercial painting) ── */}
         {isCommercialPaint ? (
-          <CommercialPaintDetails
-            scope={commPaintScope}
-            lineItems={commPaintLines}
-            tenderUrl={commPaintTenderUrl}
-          />
+          <SheetSection pad="20px 20px" background="var(--ink-deep)">
+            <CommercialPaintDetails
+              scope={commPaintScope}
+              lineItems={commPaintLines}
+              tenderUrl={commPaintTenderUrl}
+            />
+          </SheetSection>
         ) : null}
 
         {/* ─── Inspection-only block OR tier cards ──────── */}
         {/* Roofing quotes render the roofing-framed options (patch/repair ·
-            re-roof · upgrade) instead of the generic electrical TierCard grid
-            so a roofing customer never sees the electrical line-item card
+            re-roof · upgrade) instead of the generic electrical card so a
+            roofing customer never sees the electrical line-item card
             (spec R2/R9/R18). */}
         {isInspection && !roofingIndicative ? (
-          <InspectionBlock
-            reason={quote.inspection_reason}
-            link={stripeLinks.inspection}
-            shareToken={token}
-            paid={isPaid}
-          />
+          <SheetSection pad="20px 24px">
+            <InspectionBlock
+              reason={quote.inspection_reason}
+              link={stripeLinks.inspection}
+              shareToken={token}
+              paid={isPaid}
+            />
+          </SheetSection>
         ) : !tradeFormat.usesGenericCard ? (
-          <>
+          <SheetSection pad="20px 24px">
             {/* Roofing on-site quote: the deterministic engine DID price the
                 roof from the satellite measurement; show those tiers as an
                 indicative estimate plus the $99 booking CTA, rather than the
@@ -763,364 +1005,54 @@ export default async function PublicQuotePage(props: {
                         'Final price is confirmed after our on-site visit. This estimate is based on the information provided so far.',
                     })}
             />
-          </>
+          </SheetSection>
         ) : (
-          <section className="mt-12">
-            <h2 className="font-mono text-xs uppercase tracking-[0.15em] text-text-dim mb-6">
-              {tierCount === 1 ? 'Your option' : tierCount === 2 ? 'Your two options' : 'Your three options'}
-            </h2>
-            <div className="grid gap-5 sm:gap-6">
-              {(['good','better','best'] as const).map((key, idx) => {
-                const tier = quote[key] as Tier
-                // Mig 142 — hide tiers the resolved mode doesn't surface.
-                if (!tier || !visibleTierSet.has(key)) return null
-                // Compute sequential 01/02/03 against the VISIBLE tiers.
-                const seqIndex = (['good','better','best'] as const)
-                  .slice(0, idx)
-                  .filter(k => visibleTierSet.has(k)).length + 1
-                return (
-                  <TierCard
-                    key={key}
-                    keyName={key}
-                    seq={String(seqIndex).padStart(2, '0')}
-                    tier={tier}
-                    recommended={showRecommendedBadge && quote.selected_tier === key}
-                    link={!priceExpired && stripeLinks[key] ? `/r/${token}/${key}` : null}
-                    depositPct={depositPct}
-                    appliedDiscountPct={ebApplied ? ebAppliedPct : 0}
-                    paid={isPaid && quote.paid_tier === key}
-                    disabled={isPaid && quote.paid_tier !== key}
-                    jobType={intake?.job_type ?? null}
-                    displayMode={quoteDisplayMode}
-                    scopeOfWorks={(quote.scope_of_works as string | null) ?? null}
-                  />
-                )
-              })}
-            </div>
-          </section>
+          <TierCards
+            heading={tierCount === 1 ? 'Your option' : 'Good · Better · Best'}
+            intro={
+              !isInspection && depositPct
+                ? `All prices include GST. The ${depositPct}% deposit locks your booking and comes off the final invoice.`
+                : 'All prices include GST.'
+            }
+            tiers={genericTiers}
+          />
         )}
 
-        {/* ─── Assumptions + Risks ──────────────────────── */}
-        <div className="mt-12 grid gap-5 sm:grid-cols-2 sm:gap-6">
-          {Array.isArray(quote.assumptions) && quote.assumptions.length > 0 ? (
-            <section className="bg-ink-card border border-ink-line p-6 sm:p-7">
-              <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-text-dim mb-3">
-                What&apos;s assumed
-              </div>
-              <ul className="space-y-2 text-sm leading-relaxed text-text-sec">
-                {(quote.assumptions as string[]).map((a, i) => (
-                  <li key={i} className="flex gap-3">
-                    <span className="text-accent shrink-0">›</span>
-                    <span>{a}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
-
-          {Array.isArray(quote.risk_flags) && quote.risk_flags.length > 0 ? (
-            <section className="bg-ink-card border-l-2 border-l-warning border-y border-r border-ink-line p-6 sm:p-7">
-              <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-warning mb-3">
-                Things to be aware of
-              </div>
-              <ul className="space-y-2 text-sm leading-relaxed text-text-sec">
-                {(quote.risk_flags as Array<string | { description?: string }>).map((r, i) => (
-                  <li key={i} className="flex gap-3">
-                    <span className="text-warning shrink-0">!</span>
-                    <span>{typeof r === 'string' ? r : (r?.description ?? JSON.stringify(r))}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
-        </div>
-
-        {/* ─── Timeframe + GST note ─────────────────────── */}
-        {(quote.estimated_timeframe || quote.gst_note) ? (
-          <section className="mt-12 bg-ink-card border border-ink-line p-6 sm:p-7">
-            <div className="grid gap-3 text-sm">
-              {quote.estimated_timeframe ? (
-                <div className="flex items-baseline justify-between gap-4">
-                  <span className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-text-dim">
-                    Estimated timeframe
-                  </span>
-                  <span className="text-right font-medium text-text-pri">{quote.estimated_timeframe}</span>
+        {/* ─── Things to be aware of (risk flags) ───────── */}
+        {Array.isArray(quote.risk_flags) && quote.risk_flags.length > 0 ? (
+          <SheetSection eyebrow="Things to be aware of" eyebrowAccent>
+            <div style={{ marginTop: 14, display: 'grid', gap: 11 }}>
+              {(quote.risk_flags as Array<string | { description?: string }>).map((r, i) => (
+                <div
+                  key={i}
+                  style={{ display: 'flex', gap: 11, fontSize: 13.5, lineHeight: 1.45, color: 'var(--text-sec)' }}
+                >
+                  <span aria-hidden="true" style={{ color: 'var(--warning-bright)', flexShrink: 0, fontFamily: 'var(--font-mono)' }}>!</span>
+                  <span>{typeof r === 'string' ? r : (r?.description ?? JSON.stringify(r))}</span>
                 </div>
-              ) : null}
-              {quote.gst_note ? (
-                <div className="flex items-baseline justify-between gap-4 border-t border-ink-line pt-3">
-                  <span className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-text-dim">
-                    GST
-                  </span>
-                  <span className="text-right text-xs text-text-sec">{quote.gst_note}</span>
-                </div>
-              ) : null}
+              ))}
             </div>
-          </section>
+          </SheetSection>
         ) : null}
 
-        {/* ─── Tradie / licence footer ──────────────────── */}
-        <section className="mt-12 bg-ink-card border border-ink-line p-6 sm:p-7">
-          <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-text-dim mb-4">
-            Licensed &amp; compliant
-          </div>
-          <dl className="grid gap-3 sm:grid-cols-3 text-xs">
-            {pricingBook?.licence_type && pricingBook?.licence_state ? (
-              <div>
-                <dt className="text-text-dim">Licence</dt>
-                <dd className="font-mono text-text-pri mt-1">
-                  {pricingBook.licence_type} ({pricingBook.licence_state})
-                  {pricingBook.licence_number ? ` · ${pricingBook.licence_number}` : ''}
-                </dd>
-              </div>
-            ) : null}
-            {pricingBook?.gst_registered ? (
-              <div>
-                <dt className="text-text-dim">GST</dt>
-                <dd className="font-mono text-text-pri mt-1">Registered</dd>
-              </div>
-            ) : null}
-            <div>
-              <dt className="text-text-dim">Quote ref</dt>
-              <dd className="font-mono text-text-pri mt-1">{quoteRef}</dd>
-            </div>
-          </dl>
-          <p className="mt-5 text-xs leading-relaxed text-text-dim">
-            This quote is a draft prepared via QuoteMax. Final scope is confirmed by your tradie before any work commences.
-            Australian Consumer Law applies.
-          </p>
-        </section>
+        {/* ─── Good to know (assumptions) + GST note ────── */}
+        {(Array.isArray(quote.assumptions) && quote.assumptions.length > 0) || quote.gst_note ? (
+          <GoodToKnow
+            items={Array.isArray(quote.assumptions) ? (quote.assumptions as string[]) : []}
+            note={quote.gst_note ? (quote.gst_note as string) : undefined}
+          />
+        ) : null}
 
-        <p className="mt-12 text-center font-mono text-[0.65rem] uppercase tracking-[0.2em] text-text-dim">
-          Powered by <Link href="/" className="text-text-sec hover:text-accent transition-colors">QuoteMax</Link> · Built in Australia
-        </p>
-      </div>
-
-      {/* ─── Closing accent bar (Maintain signature) ─── */}
-      <div className="relative z-10 bg-accent text-white text-center py-4 px-6 mt-8">
-        <span className="font-mono text-xs sm:text-sm uppercase tracking-[0.18em]">
-          {isPaid
-            ? 'Deposit received — your tradie will be in touch'
-            : isInspection
-            ? '$99 site visit · refundable, credited to your final quote'
-            : `Lock in your option · ${depositPct ?? 30}% deposit`}
-        </span>
-      </div>
-    </main>
+        {/* ─── Credential footer + tagline strip ────────── */}
+        <CredentialFooter rows={footerRows} />
+      </QuoteSheet>
+    </QuoteChrome>
   )
 }
 
 /* ═══════════════════════════════════════════════════════════════
    Components
    ═══════════════════════════════════════════════════════════════ */
-
-function MaintainLogo({ className }: { className?: string }) {
-  // Maintain Technology brand logo — horizontal lockup.
-  // Orange M-mark + "MAINTAIN TECHNOLOGY" wordmark in white. Inlined as
-  // SVG so it stays crisp at any size and renders without an HTTP fetch.
-  // Source: provided by Maintain Technology design team.
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 184 39"
-      fill="none"
-      className={className}
-      role="img"
-      aria-label="Maintain Technology"
-    >
-      <g clipPath="url(#mt-logo-clip)">
-        <path d="M76.1019 29.7139H73.5806V36.6808H72.1687V29.7139H69.6475V28.417H76.1023V29.7139H76.1019Z" fill="white" />
-        <path d="M82.3761 29.7139V31.9007H86.171V33.1976H82.3761V35.384H86.4355V36.6808H80.9766V28.417H86.4355V29.7139H82.3761Z" fill="white" />
-        <path d="M95.4282 29.7263C93.8018 29.7263 92.7052 30.9212 92.7052 32.5489C92.7052 34.1765 93.8022 35.3714 95.4282 35.3714C96.399 35.3714 97.1804 34.8377 97.6091 34.2402L98.7437 35.1172C98.0378 36.147 96.878 36.7827 95.4282 36.7827C92.9952 36.7827 91.3057 35.0028 91.3057 32.5489C91.3057 30.0949 92.9952 28.3154 95.4282 28.3154C96.878 28.3154 98.0378 28.9512 98.7437 29.9809L97.6091 30.8201C97.1804 30.2098 96.399 29.7267 95.4282 29.7267V29.7263Z" fill="white" />
-        <path d="M110.276 28.417V36.6808H108.877V33.2354H105.069V36.6808H103.67V28.417H105.069V31.8624H108.877V28.417H110.276Z" fill="white" />
-        <path d="M122.284 28.417V36.6808H120.923L117.153 30.8705V36.6808H115.754V28.417H117.115L120.885 34.2273V28.417H122.284Z" fill="white" />
-        <path d="M127.468 32.5489C127.468 30.0954 129.157 28.3154 131.59 28.3154C134.023 28.3154 135.688 30.0954 135.688 32.5489C135.688 35.0024 134.023 36.7827 131.59 36.7827C129.157 36.7827 127.468 35.0028 127.468 32.5489ZM134.276 32.5489C134.276 30.9216 133.217 29.7263 131.59 29.7263C129.964 29.7263 128.867 30.9212 128.867 32.5489C128.867 34.1765 129.964 35.3714 131.59 35.3714C133.217 35.3714 134.276 34.1765 134.276 32.5489Z" fill="white" />
-        <path d="M146.268 35.384V36.6808H140.834V28.417H142.233V35.384H146.268Z" fill="white" />
-        <path d="M150.666 32.5489C150.666 30.0954 152.356 28.3154 154.789 28.3154C157.222 28.3154 158.886 30.0954 158.886 32.5489C158.886 35.0024 157.222 36.7827 154.789 36.7827C152.356 36.7827 150.666 35.0028 150.666 32.5489ZM157.474 32.5489C157.474 30.9216 156.415 29.7263 154.789 29.7263C153.162 29.7263 152.066 30.9212 152.066 32.5489C152.066 34.1765 153.163 35.3714 154.789 35.3714C156.415 35.3714 157.474 34.1765 157.474 32.5489Z" fill="white" />
-        <path d="M167.854 36.7827C165.421 36.7827 163.731 35.0028 163.731 32.5489C163.731 30.0949 165.421 28.3154 167.854 28.3154C169.304 28.3154 170.464 28.9512 171.17 29.968L170.023 30.8072C169.506 30.0824 168.699 29.7267 167.854 29.7267C166.228 29.7267 165.131 30.9216 165.131 32.5493C165.131 34.177 166.228 35.3719 167.854 35.3719C169.014 35.3719 169.997 34.66 170.186 33.4139H167.766V32.117H171.788V32.7403C171.699 35.0923 170.224 36.7832 167.854 36.7832V36.7827Z" fill="white" />
-        <path d="M180.088 33.121V36.6808H178.688V33.1593L175.764 28.417H177.377L179.382 31.659L181.387 28.417H183L180.088 33.121Z" fill="white" />
-        <path d="M91.3279 22.9581H87.6423L86.1248 10.9332L81.3549 22.9581H79.6205L74.8506 10.9332L73.3331 22.9581H69.6475L72.2493 4.59277H75.718L80.4879 16.3989L85.2578 4.59277H88.7266L91.3284 22.9581H91.3279Z" fill="white" />
-        <path d="M108.014 9.4017V22.9569H104.546V21.5087C103.462 22.7659 102.052 23.3942 100.426 23.3942C96.7136 23.3942 93.7051 20.1693 93.7051 16.179C93.7051 12.1888 96.7131 8.96387 100.426 8.96387C102.052 8.96387 103.462 9.59224 104.546 10.8494V9.40123H108.014V9.4017ZM104.546 16.1795C104.546 14.1297 102.893 12.4628 100.86 12.4628C98.8273 12.4628 97.1743 14.1297 97.1743 16.1795C97.1743 18.2293 98.8273 19.8962 100.86 19.8962C102.893 19.8962 104.546 18.2293 104.546 16.1795Z" fill="white" />
-        <path d="M111.993 9.40234H115.462V22.9575H111.993V9.40234Z" fill="white" />
-        <path d="M111.993 4.5918H115.462V7.65291H111.993V4.5918Z" fill="white" />
-        <path d="M163.008 4.5918H166.477V7.65291H163.008V4.5918Z" fill="white" />
-        <path d="M131.985 15.0871V22.9578H128.516V15.5244C128.516 13.4202 127.703 12.4633 125.914 12.4633C124.342 12.4633 122.879 13.5018 122.879 15.9613V22.9578H119.41V9.40221H122.879V10.7139C123.8 9.6209 124.912 8.96484 126.944 8.96484C130.034 8.96484 131.985 10.9874 131.985 15.0866V15.0871Z" fill="white" />
-        <path d="M136.303 12.463H134.568V9.40192H136.303V4.5918H139.772V9.40192H142.373V12.463H139.772V18.1474C139.772 20.2245 140.666 20.3066 142.373 19.8964V22.9575C141.696 23.2307 140.964 23.3949 139.826 23.3949C137.36 23.3949 136.303 21.6187 136.303 19.1043V12.463Z" fill="white" />
-        <path d="M159.029 9.4017V22.9569H155.56V21.5087C154.476 22.7659 153.067 23.3942 151.441 23.3942C147.728 23.3942 144.72 20.1693 144.72 16.179C144.72 12.1888 147.728 8.96387 151.441 8.96387C153.067 8.96387 154.476 9.59224 155.56 10.8494V9.40123H159.029V9.4017ZM155.56 16.1795C155.56 14.1297 153.907 12.4628 151.875 12.4628C149.842 12.4628 148.189 14.1297 148.189 16.1795C148.189 18.2293 149.842 19.8962 151.875 19.8962C153.907 19.8962 155.56 18.2293 155.56 16.1795Z" fill="white" />
-        <path d="M163.008 9.40234H166.477V22.9575H163.008V9.40234Z" fill="white" />
-        <path d="M183.001 15.0871V22.9578H179.532V15.5244C179.532 13.4202 178.719 12.4633 176.93 12.4633C175.358 12.4633 173.895 13.5018 173.895 15.9613V22.9578H170.426V9.40221H173.895V10.7139C174.816 9.6209 175.927 8.96484 177.96 8.96484C181.049 8.96484 183.001 10.9874 183.001 15.0866V15.0871Z" fill="white" />
-        <path d="M60.5416 21.3594V38.5104C60.5416 38.7812 60.3238 39.0003 60.0557 39.0003H44.2212C43.7884 39.0003 43.5716 38.4725 43.8776 38.1639L60.5416 21.3594Z" fill="#FF5F00" />
-        <path d="M60.5416 0.490945V21.3591H57.1749C56.5307 21.3591 55.9126 21.6175 55.457 22.0765L38.8177 38.8561C38.7266 38.9479 38.6031 38.9996 38.4741 38.9996H22.355C21.9222 38.9996 21.7054 38.4718 22.0114 38.1632L59.7117 0.144465C60.0178 -0.164184 60.5412 0.0544997 60.5412 0.490945H60.5416Z" fill="#FF5F00" />
-        <path d="M38.6739 0.490945V21.3591H35.3072C34.663 21.3591 34.0449 21.6175 33.5892 22.0765L16.95 38.8561C16.8589 38.9479 16.7354 38.9996 16.6064 38.9996H0.486839C0.0540439 38.9996 -0.162811 38.4718 0.143256 38.1632L37.8445 0.144465C38.1505 -0.164184 38.6739 0.0544997 38.6739 0.490945Z" fill="#FF5F00" />
-      </g>
-      <defs>
-        <clipPath id="mt-logo-clip">
-          <rect width="184" height="39" fill="white" />
-        </clipPath>
-      </defs>
-    </svg>
-  )
-}
-
-// Normalise a tradie-entered website to a working link + clean display label.
-// Tradies often type "rooroofing.com.au" with no scheme; without https:// the
-// browser would treat it as a relative path and 404.
-function normalizeWebsiteUrl(raw: string): { href: string; label: string } {
-  const trimmed = raw.trim().replace(/\/+$/, '')
-  const href = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
-  const label = trimmed.replace(/^https?:\/\//i, '')
-  return { href, label }
-}
-
-// The quote's owning tradie, rendered as a letterhead at the top of the quote
-// (modelled on a real tradie quote like Roo Roofing's). Logo sits on a white
-// tile so transparent/dark logos stay visible on the navy canvas. Optional
-// fields are omitted cleanly when absent; a legacy quote with no tenant (or a
-// tenant with no business name) renders nothing.
-function TradieLetterhead({ identity }: { identity: TenantIdentity | null }) {
-  if (!identity || !identity.business_name) return null
-  const contact =
-    (identity.contact_name ?? '').trim() ||
-    [identity.owner_first_name, identity.owner_last_name].filter(Boolean).join(' ').trim()
-  const phone = (identity.owner_mobile ?? '').trim()
-  const email = (identity.owner_email ?? '').trim()
-  const website = (identity.website_url ?? '').trim()
-  const address = (identity.business_address ?? '').trim()
-  const web = website ? normalizeWebsiteUrl(website) : null
-  return (
-    <section className="mb-8 flex flex-col gap-5 border border-ink-line bg-ink-card p-6 sm:mb-10 sm:flex-row sm:items-center sm:gap-6 sm:p-7">
-      {identity.logo_url ? (
-        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden bg-white sm:h-20 sm:w-20">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={identity.logo_url}
-            alt={`${identity.business_name} logo`}
-            className="h-full w-full object-contain"
-          />
-        </div>
-      ) : null}
-      <div className="min-w-0 flex-1">
-        <div className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">
-          Your tradie
-        </div>
-        <h2 className="mt-1 font-extrabold uppercase tracking-tight text-text-pri text-lg sm:text-xl">
-          {identity.business_name}
-        </h2>
-        <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
-          {contact ? (
-            <div>
-              <dt className="inline text-text-dim">Contact </dt>
-              <dd className="inline font-medium text-text-pri">{contact}</dd>
-            </div>
-          ) : null}
-          {phone ? (
-            <div>
-              <dt className="inline text-text-dim">Phone </dt>
-              <dd className="inline">
-                <a href={`tel:${phone.replace(/\s+/g, '')}`} className="font-medium text-text-pri hover:text-accent">
-                  {phone}
-                </a>
-              </dd>
-            </div>
-          ) : null}
-          {email ? (
-            <div>
-              <dt className="inline text-text-dim">Email </dt>
-              <dd className="inline">
-                <a href={`mailto:${email}`} className="font-medium text-text-pri hover:text-accent">
-                  {email}
-                </a>
-              </dd>
-            </div>
-          ) : null}
-          {web ? (
-            <div>
-              <dt className="inline text-text-dim">Web </dt>
-              <dd className="inline">
-                <a
-                  href={web.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-medium text-text-pri hover:text-accent"
-                >
-                  {web.label}
-                </a>
-              </dd>
-            </div>
-          ) : null}
-          {address ? (
-            <div>
-              <dt className="inline text-text-dim">Address </dt>
-              <dd className="inline font-medium text-text-pri">{address}</dd>
-            </div>
-          ) : null}
-        </dl>
-      </div>
-    </section>
-  )
-}
-
-function TopographicBackground() {
-  // Faint topographic line overlay — Maintain brand signature.
-  // Pure SVG, no JS, fixed background that scrolls with content.
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
-      <svg
-        className="absolute inset-0 w-full h-full opacity-[0.07]"
-        viewBox="0 0 1920 2400"
-        preserveAspectRatio="xMidYMid slice"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <defs>
-          <linearGradient id="topo-fade" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--teal-glow)" stopOpacity="0.6" />
-            <stop offset="100%" stopColor="var(--teal-glow)" stopOpacity="0.1" />
-          </linearGradient>
-        </defs>
-        {/* Stylised mountain-ridge contour lines */}
-        <g stroke="url(#topo-fade)" strokeWidth="1" fill="none">
-          <path d="M0,800 Q200,600 400,700 T800,650 T1200,700 T1600,600 T1920,650" />
-          <path d="M0,860 Q200,680 400,760 T800,720 T1200,770 T1600,680 T1920,720" />
-          <path d="M0,920 Q200,760 400,820 T800,790 T1200,830 T1600,760 T1920,790" />
-          <path d="M0,1000 Q220,860 420,900 T820,880 T1220,910 T1620,860 T1920,880" />
-          <path d="M0,1100 Q240,980 440,1000 T840,990 T1240,1010 T1640,980 T1920,990" />
-          <path d="M0,1300 Q260,1160 460,1200 T860,1190 T1260,1210 T1660,1180 T1920,1190" />
-          <path d="M0,1500 Q280,1380 480,1400 T880,1390 T1280,1410 T1680,1380 T1920,1390" />
-          <path d="M0,1700 Q300,1580 500,1600 T900,1590 T1300,1610 T1700,1580 T1920,1590" />
-          <path d="M0,1900 Q320,1780 520,1800 T920,1790 T1320,1810 T1720,1780 T1920,1790" />
-          <path d="M0,2100 Q340,1980 540,2000 T940,1990 T1340,2010 T1740,1980 T1920,1990" />
-        </g>
-      </svg>
-    </div>
-  )
-}
-
-function StatusChip({
-  kind,
-  paidTier,
-}: {
-  kind: 'paid' | 'inspection' | 'draft'
-  paidTier: string | null
-}) {
-  const styles =
-    kind === 'paid'
-      ? 'bg-success/15 text-[#34d399] border-success/40'
-      : kind === 'inspection'
-      ? 'bg-warning/15 text-[#fbbf24] border-warning/40'
-      : 'bg-accent/15 text-accent border-accent/40'
-  const label =
-    kind === 'paid'
-      ? `Deposit received${paidTier ? ` · ${String(paidTier).toUpperCase()} option` : ''}`
-      : kind === 'inspection'
-      ? 'Site visit required'
-      : 'Draft quote · awaiting your choice'
-  return (
-    <span className={`inline-flex items-center font-mono text-[0.7rem] uppercase tracking-[0.12em] px-3 py-1.5 border ${styles}`}>
-      <span className="w-1.5 h-1.5 rounded-full bg-current mr-2 animate-pulse" />
-      {label}
-    </span>
-  )
-}
 
 function PriceHoldBanner({
   hold,
@@ -1229,294 +1161,6 @@ function EarlyBirdAppliedBanner({ discountPct }: { discountPct: number }) {
   )
 }
 
-function NumberedSection({
-  number,
-  title,
-  subtitle,
-  className,
-  children,
-}: {
-  number: string
-  title: string
-  subtitle?: string
-  className?: string
-  children: React.ReactNode
-}) {
-  return (
-    <section className={`bg-ink-card border border-ink-line p-6 sm:p-8 ${className ?? ''}`}>
-      <div className="flex items-start gap-5 sm:gap-6">
-        <span className="font-mono text-3xl sm:text-4xl font-bold text-accent leading-none shrink-0">
-          {number}
-        </span>
-        <div className="flex-1 min-w-0">
-          <h2 className="text-text-pri font-extrabold uppercase tracking-tight text-base sm:text-lg">
-            {title}
-          </h2>
-          {subtitle ? (
-            <p className="mt-1 text-xs text-text-dim">{subtitle}</p>
-          ) : null}
-          <div className="mt-4">{children}</div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-// Photos rendering moved into CustomerPhotosBlock.tsx — the new
-// client component handles all three states (empty / fulfilled /
-// uploading) so Step 02 is always visible on the page.
-
-function TierCard({
-  keyName,
-  seq,
-  tier,
-  recommended,
-  link,
-  depositPct,
-  appliedDiscountPct,
-  paid,
-  disabled,
-  jobType,
-  displayMode,
-  scopeOfWorks,
-}: {
-  keyName: 'good' | 'better' | 'best'
-  seq: string
-  tier: Tier
-  recommended: boolean
-  link: string | null
-  depositPct: number | null
-  /** v8 — realised early-booking discount %. 0 = no discount. When > 0
-   *  the card shows the original price struck through next to the
-   *  discounted total, and the deposit CTA charges the discounted amount. */
-  appliedDiscountPct: number
-  paid: boolean
-  disabled: boolean
-  jobType: string | null
-  /** Phase A — tenant-level itemised/summary preference resolved at the
-   *  page level (pricing_book.quote_display + Phase B per-quote override
-   *  via lib/quote/display.resolveQuoteDisplayMode). 'itemised' renders the
-   *  full line-items table (today's behaviour); 'summary' rolls the lines
-   *  up into a scope paragraph + hours/items hint. */
-  displayMode: QuoteDisplayMode
-  /** quotes.scope_of_works — used as the body text of the summary view so
-   *  the customer sees WHAT the lump sum covers without the line-by-line
-   *  breakdown. Null falls through to a generic "Full scope as discussed". */
-  scopeOfWorks: string | null
-}) {
-  if (!tier) return null
-  const fullIncGst = incGst(tier.subtotal_ex_gst)
-  const discounted = appliedDiscountPct > 0
-  const totalIncGst = discounted
-    ? applyEarlyBirdDiscount(fullIncGst, appliedDiscountPct)
-    : fullIncGst
-  const dep = deposit(totalIncGst, depositPct)
-  const cleanLabel = (tier.label ?? '').replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim()
-  const photo = getTierPhoto(jobType, keyName)
-
-  return (
-    <article
-      className={`relative overflow-hidden border bg-ink-card transition-colors ${
-        recommended
-          ? 'border-accent shadow-[0_0_0_1px_rgba(255,90,31,0.5)_inset]'
-          : 'border-ink-line hover:border-accent/40'
-      }`}
-    >
-      {/* Tier-photo banner (indicative — see lib/quote/tier-photos.ts) */}
-      <div className="relative aspect-video w-full overflow-hidden border-b border-ink-line bg-ink-deep">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={photo.url}
-          alt={photo.alt}
-          loading="lazy"
-          className="h-full w-full object-cover opacity-90"
-        />
-        <div className="absolute inset-0 bg-linear-to-t from-ink-card via-ink-deep/40 to-transparent" />
-        <div className="absolute bottom-3 left-4 right-4 flex items-center justify-between gap-3">
-          <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-pri/80 bg-ink-deep/70 backdrop-blur-sm px-2 py-1">
-            Indicative · {photo.caption}
-          </span>
-          {recommended ? (
-            <span className="font-mono text-[0.6rem] uppercase tracking-[0.15em] bg-accent text-white px-2.5 py-1 font-bold">
-              Recommended
-            </span>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="p-6 sm:p-8">
-        {/* Header — sequential number + tier name + price */}
-        <div className="flex items-start justify-between gap-4 sm:gap-6">
-          <div className="flex items-start gap-4 sm:gap-5 min-w-0 flex-1">
-            <span className="font-mono text-3xl sm:text-4xl font-bold text-accent leading-none shrink-0">
-              {seq}
-            </span>
-            <div className="min-w-0 flex-1">
-              <span className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-text-dim">
-                {keyName}
-              </span>
-              {cleanLabel ? (
-                <h3 className="mt-1 text-text-pri font-extrabold uppercase tracking-tight text-lg sm:text-xl">
-                  {cleanLabel}
-                </h3>
-              ) : null}
-            </div>
-          </div>
-          <div className="text-right shrink-0">
-            {discounted ? (
-              <div className="font-mono text-sm text-text-dim line-through">
-                ${fmt(fullIncGst)}
-              </div>
-            ) : null}
-            <div className="text-text-pri font-extrabold tracking-tight text-2xl sm:text-3xl">
-              ${fmt(totalIncGst)}
-            </div>
-            <div className="font-mono text-[0.65rem] uppercase tracking-[0.12em] text-text-dim mt-0.5">
-              {discounted ? `inc GST · ${appliedDiscountPct}% off` : 'inc GST'}
-            </div>
-          </div>
-        </div>
-
-        {/* Body — Phase A: itemised line-items table OR rolled-up summary.
-            Both views share the same tier total above + CTA below; only the
-            middle block changes. Both branches still expose enough scope info
-            that the customer can tell what they're paying for. */}
-        {displayMode === 'summary' ? (
-          <TierSummary tier={tier} scopeOfWorks={scopeOfWorks} />
-        ) : (
-          Array.isArray(tier.line_items) && tier.line_items.length > 0 ? (
-            <ul className="mt-6 divide-y divide-ink-line border-t border-ink-line text-sm">
-              {tier.line_items.map((li, i) => {
-                // WP5 — customer-supply badge + safety note. Fields are
-                // optional in the JSONB; cast extracts them without
-                // narrowing the page's existing types.
-                const wp5 = li as unknown as {
-                  supplied_by?: 'tradie' | 'customer' | null
-                  safety_note?: string | null
-                }
-                const youSupply = wp5.supplied_by === 'customer'
-                const safetyNote = (wp5.safety_note ?? '').trim()
-                return (
-                  <li key={i} className="flex items-start justify-between gap-4 py-3.5">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-text-pri flex flex-wrap items-center gap-2">
-                        <span>{li.description}</span>
-                        {youSupply && (
-                          <span
-                            className="font-mono text-[0.6rem] uppercase tracking-[0.15em] font-bold px-1.5 py-0.5 border border-accent/60 text-accent shrink-0"
-                            title="You're supplying this item yourself — we install only."
-                          >
-                            You supply
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-0.5 font-mono text-[0.7rem] text-text-dim">
-                        {li.quantity} × {li.unit} @ ${fmt(asNumber(li.unit_price_ex_gst))} ex GST
-                        {youSupply ? ' · install only' : ''}
-                      </div>
-                      {youSupply && safetyNote && (
-                        <p className="mt-1 text-[0.75rem] leading-snug text-text-dim normal-case">
-                          {safetyNote}
-                        </p>
-                      )}
-                    </div>
-                    <div className="font-mono text-sm text-text-sec shrink-0">
-                      ${fmt(asNumber(li.total_ex_gst))}
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
-          ) : null
-        )}
-
-        {/* CTA */}
-        <div className="mt-6 border-t border-ink-line pt-5">
-          {paid ? (
-            <div className="bg-success/10 border border-success/30 px-5 py-4 text-center">
-              <span className="font-mono text-xs uppercase tracking-[0.12em] font-semibold text-[#4ade80]">
-                Deposit received — tradie will be in touch
-              </span>
-            </div>
-          ) : disabled ? (
-            <div className="bg-ink-deep border border-ink-line px-5 py-4 text-center">
-              <span className="font-mono text-xs uppercase tracking-[0.12em] text-text-dim">
-                Different option already confirmed
-              </span>
-            </div>
-          ) : link ? (
-            <a
-              href={link}
-              className="block bg-accent hover:bg-accent-press text-white px-5 py-4 text-center transition-colors font-mono text-xs sm:text-sm uppercase tracking-[0.15em] font-bold"
-            >
-              {dep ? <>Lock in · ${fmt(dep)} deposit →</> : <>Lock in this option →</>}
-            </a>
-          ) : (
-            <div className="bg-ink-deep border border-ink-line px-5 py-4 text-center">
-              <span className="font-mono text-xs uppercase tracking-[0.12em] text-text-dim">
-                Reply to your tradie&apos;s SMS to confirm
-              </span>
-            </div>
-          )}
-        </div>
-      </div>
-    </article>
-  )
-}
-
-/**
- * Phase A — rolled-up summary view. Replaces the itemised line-items table
- * when pricing_book.quote_display = 'summary'. Pulls the labour hours +
- * material-item count from the line items so the customer still sees a
- * rough scope hint, but never the per-line prices that invite line-by-line
- * negotiation. The scope_of_works paragraph is the canonical "what the
- * customer is paying for"; it's already grounded + reviewed by the tradie
- * before the quote goes out.
- */
-function TierSummary({
-  tier,
-  scopeOfWorks,
-}: {
-  tier: Tier
-  scopeOfWorks: string | null
-}) {
-  // Tier is `{...} | null` in this file. Narrow here so the rest of the
-  // body can deref `tier.line_items` etc. without `!` everywhere.
-  if (!tier) return null
-  const labourHours = sumLabourHours(tier.line_items as unknown as { source?: string | null; quantity?: number | string | null }[])
-  const itemCount = countMaterialItems(tier.line_items as unknown as { source?: string | null }[])
-  const scope = (scopeOfWorks ?? '').trim()
-  return (
-    <div className="mt-6 border-t border-ink-line pt-5">
-      <div className="font-mono text-[0.62rem] uppercase tracking-[0.16em] text-text-dim mb-3">
-        Scope summary
-      </div>
-      <p className="text-sm leading-relaxed text-text-sec">
-        {scope || 'Supply, install, and commission as discussed during your enquiry.'}
-      </p>
-      {(itemCount > 0 || labourHours > 0) && (
-        <div className="mt-4 flex flex-wrap items-center gap-3 font-mono text-[0.65rem] uppercase tracking-[0.15em] text-text-dim">
-          {itemCount > 0 && (
-            <span className="border border-ink-line px-2 py-1">
-              {itemCount} {itemCount === 1 ? 'item' : 'items'}
-            </span>
-          )}
-          {labourHours > 0 && (
-            <span className="border border-ink-line px-2 py-1">
-              {labourHours} hr labour
-            </span>
-          )}
-        </div>
-      )}
-      {/* Phase C "See breakdown" opt-in was removed 2026-05-28 per
-          tradie preference — summary mode is now a pure lump-sum read.
-          Customers who want the per-line detail can ask the tradie
-          directly; tenants who want detail visible by default should
-          switch their quote_display setting to 'itemised'. */}
-    </div>
-  )
-}
-
 // Roofing on-site (indicative) banner. The indicative tier prices render below
 // this (TradeTiers); here we frame them as an estimate and carry the $99
 // on-site booking CTA — so an on-site-flagged roofing quote shows a real number
@@ -1533,7 +1177,7 @@ function RoofingIndicativeBanner({
   paid: boolean
 }) {
   return (
-    <section className="mt-12 bg-ink-card border-2 border-warning/50 p-6 sm:p-8 relative overflow-hidden">
+    <section className="bg-ink-card border-2 border-warning/50 p-6 sm:p-8 relative overflow-hidden">
       <div className="absolute top-0 left-0 w-1.5 h-full bg-warning" aria-hidden />
       <div className="relative">
         <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-warning mb-3">
@@ -1595,7 +1239,7 @@ function InspectionBlock({
   paid: boolean
 }) {
   return (
-    <section className="mt-12 bg-ink-card border-2 border-warning/50 p-6 sm:p-8 relative overflow-hidden">
+    <section className="bg-ink-card border-2 border-warning/50 p-6 sm:p-8 relative overflow-hidden">
       {/* Subtle warning gradient corner accent */}
       <div className="absolute top-0 left-0 w-1.5 h-full bg-warning" aria-hidden />
 

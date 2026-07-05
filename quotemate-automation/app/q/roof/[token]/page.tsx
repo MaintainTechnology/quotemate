@@ -19,8 +19,11 @@
 // breakdown (metrics, every tier with its scope, effective rate +
 // loadings) plus the combined total. Read-only — no editing.
 //
-// Maintain Technology brand: dark navy, vibrant orange, all-caps display.
+// Reskin: the QuoteMax "command-center" quote surface (app/q/_chrome/*) —
+// dark, square, 520px sheet. All data + gate logic is unchanged; only the
+// presentation of already-computed values moved into the kit components.
 
+import type { CSSProperties } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { notFound } from 'next/navigation'
 import type {
@@ -34,9 +37,31 @@ import { structureStaticMapPath } from '@/lib/roofing/structure-images'
 import { edgeStat } from '@/lib/roofing/geometry-edges'
 import { buildingAttributeChips, propertyContextChips } from '@/lib/roofing/attributes-display'
 import { indicativeCombinedTiers } from '@/lib/sms/roofing-compose'
+import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
 import { RoofMap, type RoofMapBuilding } from '@/app/dashboard/roofing/_components/RoofMap'
+import { QuoteChrome, type StickyBar } from '../../_chrome/QuoteChrome'
+import { tradeIcon } from '../../_chrome/icons'
+import {
+  QuoteSheet,
+  Letterhead,
+  QuoteHero,
+  StatGrid,
+  SheetSection,
+  Scope,
+  MetricGrid,
+  TierCards,
+  GoodToKnow,
+  CredentialFooter,
+  type Stat,
+  type QuoteTier,
+  type ScopeItem,
+  type Metric,
+  type FooterRow,
+} from '../../_chrome/parts'
 
 export const dynamic = 'force-dynamic'
+
+const MONO: CSSProperties = { fontFamily: 'var(--font-mono)' }
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -44,6 +69,7 @@ const supabase = createClient(
 )
 
 type Row = {
+  tenant_id: string | null
   address: string | null
   state: string | null
   provider: string | null
@@ -70,45 +96,6 @@ const MATERIAL_LABEL: Record<RoofMaterial, string> = {
   terracotta_tile: 'Terracotta tile',
   cement_sheet: 'Cement sheet',
   unknown: 'To confirm on site',
-}
-
-/** Geoscape premium building attributes on the customer quote — material,
- *  heights, solar, tree. Renders nothing when the attributes are absent. */
-function RoofBuildingData({ metrics }: { metrics: RoofMetrics }) {
-  const chips = buildingAttributeChips(metrics)
-  if (chips.length === 0) return null
-  return (
-    <div className="mt-4 flex flex-wrap gap-2">
-      {chips.map(([label, value]) => (
-        <span key={label} className="inline-flex items-baseline gap-1.5 border border-ink-line bg-ink-deep px-3 py-1.5 font-mono text-[0.72rem]">
-          <span className="uppercase tracking-[0.12em] text-text-dim">{label}</span>
-          <span className="font-semibold text-text-pri">{value}</span>
-        </span>
-      ))}
-    </div>
-  )
-}
-
-/** PropRadar property context on the customer quote — dwelling type, age,
- *  areas. Renders nothing when PropRadar didn't cover the address. */
-function RoofPropertyContextBlock({ quote }: { quote: MultiRoofQuote | null }) {
-  const chips = quote?.property_context ? propertyContextChips(quote.property_context) : []
-  if (chips.length === 0) return null
-  return (
-    <div className="mt-8 border border-ink-line bg-ink-card px-6 py-5">
-      <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
-        Property details
-      </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        {chips.map(([label, value]) => (
-          <span key={label} className="inline-flex items-baseline gap-1.5 border border-ink-line bg-ink-deep px-3 py-1.5 font-mono text-[0.72rem]">
-            <span className="uppercase tracking-[0.12em] text-text-dim">{label}</span>
-            <span className="font-semibold text-text-pri">{value}</span>
-          </span>
-        ))}
-      </div>
-    </div>
-  )
 }
 
 function formLabel(form: RoofMetrics['form']): string {
@@ -152,12 +139,19 @@ export default async function RoofingQuotePage({
 
   const { data, error } = await supabase
     .from('roofing_measurements')
-    .select('address, state, provider, routing, combined_area_m2, quote, public_token, confirmed_at, confirmed_structure, included_indices')
+    .select('tenant_id, address, state, provider, routing, combined_area_m2, quote, public_token, confirmed_at, confirmed_structure, included_indices')
     .eq('public_token', token)
     .maybeSingle()
 
   if (error || !data) notFound()
   const row = data as Row
+
+  // Tradie identity for the letterhead (logo + Contact / Phone / Email),
+  // matching the reference quote surface. Best-effort: degrades to null when
+  // tenant_id is absent or the identity columns aren't present, so the page
+  // still renders (logo/contact simply hidden).
+  const identity = await loadTenantIdentity(supabase, row.tenant_id ?? null)
+
   const fullQuote = row.quote
   const allStructures: RoofStructurePrice[] = Array.isArray(fullQuote?.structures) ? fullQuote!.structures : []
 
@@ -261,168 +255,431 @@ export default async function RoofingQuotePage({
   const showElectricianNote =
     showPrices && solar?.detection?.has_solar === true && !!solar?.allowance
 
+  // ── Presentational mapping (reuses only the computed values above) ────
+
+  // Letterhead identity — we now load the owning tradie's identity (loaded
+  // above) so the letterhead carries their logo + Contact / Phone / Email; the
+  // roofing quote falls back to a generic name when no tenant is joined.
+  const placeLabel = [row.address, row.state].filter(Boolean).join(', ') || null
+
+  // Hero headline: the "FULL REROOF, / DONE RIGHT." style from the confirmed
+  // state, or the measurement framing before confirmation.
+  const headline = confirmed
+    ? { line1: 'Your roof,', line2: 'quoted.' }
+    : { line1: 'Your roof,', line2: 'measured.' }
+  const heroStatus = confirmed
+    ? ({ label: 'Ready to book', tone: 'booked' } as const)
+    : ({ label: 'Awaiting you', tone: 'await' } as const)
+  const greeting = confirmed
+    ? "Here are your options measured from the satellite. Pick what suits and reply to lock it in — a licensed roofer confirms the final price on site."
+    : structures.length > 1
+      ? "We found more than one building at this address. Reply to our text with YES for all of them, the building number for just one, or NO, and we'll send your full priced quote."
+      : "Reply YES to our text and we'll send your full priced quote for this roof."
+
+  // Summary stat grid — ROOF AREA / MATERIAL / PITCH / WARRANTY, from the
+  // primary structure's measured metrics.
+  const areaM2 = combinedForDisplay?.area_m2 ?? row.combined_area_m2 ?? primary?.metrics.sloped_area_m2
+  const summaryStats: Stat[] = [
+    {
+      k: 'Roof area',
+      v: areaM2 != null ? `${Math.round(areaM2)}` : '—',
+      sub: areaM2 != null ? 'm² measured aerial' : 'measured aerial',
+    },
+    {
+      k: 'Material',
+      v: primaryMaterialLabel ? primaryMaterialLabel.split(' ')[0] : 'To confirm',
+      sub: primaryMaterialLabel ?? 'confirmed on site',
+    },
+    {
+      k: 'Roof form',
+      v: primary ? formLabel(primary.metrics.form) : 'To confirm',
+      sub: primary?.metrics.storeys != null ? `${primary.metrics.storeys}-storey` : 'from aerial',
+    },
+    {
+      k: 'Structures',
+      v: `${structures.length}`,
+      sub: structures.length === 1 ? 'measured building' : 'measured buildings',
+    },
+  ]
+
+  // Scope of works — the job, what's always included, timing & access.
+  const scopeItems: ScopeItem[] = [
+    {
+      title: 'The job',
+      body: confirmed
+        ? 'Re-sheet or repair the roof to the option you choose — new sarking, battens, ridge capping and flashings as your tier includes.'
+        : 'We measured this roof from satellite imagery. Confirm which building is yours and we send the full priced options.',
+    },
+    {
+      title: 'Included on every option',
+      list: [
+        'Measured area, hips and valleys from aerial imagery',
+        'Make good and flashings to suit the roof form',
+        'Site cleaned and magnet-swept for nails',
+        'A licensed roofer reviews every quote before booking',
+      ],
+    },
+    {
+      title: 'Timing & access',
+      body: 'Final measure is confirmed on site before any work starts. Scaffold and skip arrive the day before; we keep it watertight each night.',
+    },
+  ]
+
+  // Aerial measurement metrics overlay (mockup "Selected structure" panel).
+  const measureMetrics: Metric[] = primaryStats
+    ? [
+        { k: 'Sloped area', v: primaryStats.sloped_area_m2 != null ? `${Math.round(primaryStats.sloped_area_m2)} m²` : '—' },
+        { k: 'Hips', v: primaryStats.hips != null ? String(primaryStats.hips) : '?' },
+        { k: 'Valleys', v: primaryStats.valleys != null ? String(primaryStats.valleys) : '?' },
+        { k: 'Storeys', v: primaryStats.storeys != null ? String(primaryStats.storeys) : '?' },
+      ]
+    : []
+
+  // Tier cards from the combined headline total. On the priced view each tier
+  // links to the SMS reply flow (there is no per-tier Stripe checkout on this
+  // roofing surface — booking is confirmed over text), so CTAs are label-only.
+  // When the gate hides prices we still render the three tier names, price-free,
+  // with a "reply to unlock" label — never a price the gate intends to hide.
+  const displayTiers = combinedForDisplay?.tiers ?? []
+  const propertyChips = fullQuote?.property_context ? propertyContextChips(fullQuote.property_context) : []
+
+  let quoteTiers: QuoteTier[]
+  if (showPrices && displayTiers.length) {
+    quoteTiers = displayTiers
+      // In indicative mode hide any $0 tier (e.g. asbestos has only an upgrade
+      // price) so the customer never sees a "$0" option. Firm quotes show all.
+      .filter((t) => !indicative || t.inc_gst > 0)
+      .map((t, i) => ({
+        name: TIER_NAME[t.tier],
+        badge: t.tier === 'better' ? 'Most popular' : null,
+        recommended: t.tier === 'better',
+        blurb:
+          t.tier === 'good'
+            ? 'Fix what needs it. The lightest-touch option.'
+            : t.tier === 'better'
+              ? 'A full re-roof — what most homes get.'
+              : 'Top spec: upgraded sheeting and the longest cover.',
+        priceText: `$${money(t.inc_gst + solarIncGst)}`,
+        priceNote: `inc GST · $${money(t.ex_gst + solarExGst)} ex`,
+        ctaLabel: indicative ? 'Reply to confirm' : 'Reply to book',
+        ctaHref: null,
+        // Full per-tier line detail preserved below in the breakdown section.
+        items: [
+          `${TIER_NAME[t.tier]} across ${combinedForDisplay?.area_m2 ? `${Math.round(combinedForDisplay.area_m2)} m²` : 'the measured roof'}`,
+          solarIncGst > 0 ? 'Includes solar detach & reinstate' : 'Licensed & insured roofer',
+        ].filter(Boolean) as QuoteTier['items'],
+      }))
+  } else {
+    // Gate closed — price-free tier names only.
+    quoteTiers = (['good', 'better', 'best'] as const).map((tier) => ({
+      name: TIER_NAME[tier],
+      badge: tier === 'better' ? 'Most popular' : null,
+      recommended: tier === 'better',
+      blurb:
+        tier === 'good'
+          ? 'Fix what needs it. The lightest-touch option.'
+          : tier === 'better'
+            ? 'A full re-roof — what most homes get.'
+            : 'Top spec: upgraded sheeting and the longest cover.',
+      priceText: '—',
+      priceNote: 'reply to unlock',
+      ctaLabel: 'Reply YES to see prices',
+      ctaHref: null,
+    }))
+  }
+
+  // Good to know — assumptions + the electrician disclaimer + solar note.
+  const goodToKnow: string[] = [
+    'Measurements are indicative from satellite imagery; the final measure is confirmed on site.',
+    'A licensed roofer reviews every quote before any work is booked.',
+    'No major structural repairs to the roof frame are assumed.',
+    'Asbestos, if present, is confirmed and quoted before we start.',
+  ]
+  if (solarApplies) {
+    goodToKnow.push(
+      `Existing solar panels are detached and reinstated as part of a re-roof${
+        solar?.detection?.array_count ? ` (${solar.detection.array_count} array${solar.detection.array_count === 1 ? '' : 's'})` : ''
+      }.`,
+    )
+  }
+  const goodToKnowNote = showElectricianNote ? solar?.allowance?.electrician_note : undefined
+
+  // Footer credential rows — only data that exists.
+  const footerRows: FooterRow[] = []
+  if (placeLabel) footerRows.push({ k: 'Property', v: placeLabel })
+  if (areaM2 != null) footerRows.push({ k: 'Measured', v: `${Math.round(areaM2)} m² sloped roof area from aerial imagery` })
+  footerRows.push({
+    k: 'Terms',
+    v: showPrices
+      ? 'Prices include GST and are indicative from a satellite measurement. A licensed roofer reviews every quote before any work is booked.'
+      : 'Measurements are indicative from satellite imagery. Confirm your building over text and a licensed roofer reviews every quote before any work is booked.',
+  })
+
+  // Sticky deposit bar — the featured (recommended → better, else middle,
+  // else first) VISIBLE priced tier. Absent while the gate hides prices; there
+  // is no deposit checkout on this surface, so booking is a reply (no ctaHref).
+  let sticky: StickyBar | null = null
+  if (showPrices && quoteTiers.length) {
+    const featured =
+      quoteTiers.find((t) => t.recommended) ?? quoteTiers[Math.floor(quoteTiers.length / 2)] ?? quoteTiers[0]
+    sticky = {
+      tierLabel: `${featured.name}${indicative ? ' · indicative' : ''}`,
+      priceText: featured.priceText,
+      ctaLabel: indicative ? 'Reply to confirm' : 'Reply to book',
+      ctaHref: null,
+    }
+  }
+
   return (
-    <main className="min-h-screen bg-ink-deep text-text-pri">
-      <section className="mx-auto max-w-4xl px-6 pt-14 pb-10 sm:px-10">
-        <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
-          QuoteMax · Roofing
-        </div>
-        <h1 className="mt-3 font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2rem,5vw,3.5rem)]">
-          Your roof <span className="text-accent">{confirmed ? 'quote' : 'measurement'}</span>
-        </h1>
-        {row.address && <p className="mt-4 text-lg text-text-sec">{row.address}</p>}
+    <QuoteChrome trade={{ label: 'Roof', icon: tradeIcon('roof') }} sticky={sticky}>
+      <QuoteSheet label={`Quote ${row.public_token.slice(0, 8).toUpperCase()}`}>
+        <Letterhead
+          name={identity?.business_name ?? 'Your roofer'}
+          credential={placeLabel ? `Measured roof · ${placeLabel}` : 'Measured from satellite imagery'}
+          logoUrl={identity?.logo_url ?? null}
+          contactName={contactDisplayName(identity)}
+          phone={(identity?.owner_mobile ?? '').trim() || null}
+          email={(identity?.owner_email ?? '').trim() || null}
+        />
+
+        <QuoteHero
+          quoteId={`Roof · ${row.public_token.slice(0, 8).toUpperCase()}`}
+          status={heroStatus}
+          line1={headline.line1}
+          line2={headline.line2}
+          greeting={greeting}
+          issued={placeLabel ?? undefined}
+        />
+
+        <StatGrid items={summaryStats} />
 
         {/* Pre-confirmation notice — explain why there's no price yet. */}
         {!confirmed && (
-          <div className="mt-8 border border-ink-line border-l-4 border-l-accent bg-ink-card px-6 py-5">
-            <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
-              {structures.length > 1 ? 'Which building is yours?' : 'Is this your roof?'}
-            </div>
-            <p className="mt-2 text-base text-text-sec">
+          <SheetSection eyebrow={structures.length > 1 ? 'Which building is yours?' : 'Is this your roof?'} eyebrowAccent>
+            <p style={{ margin: '10px 0 0', fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
               {structures.length > 1
                 ? "We found more than one building at this address. Reply to our text with YES for all of them, the building number for just one, or NO, and we'll send your full priced quote."
                 : "Reply YES to our text and we'll send your full priced quote for this roof."}
             </p>
-          </div>
+          </SheetSection>
         )}
 
-        {/* Satellite views — Geoscape roof outline (Esri) + one Google
-            satellite photo per shown structure, each centred on its building
-            via static-map ?b=. */}
-        <div className="mt-8 grid gap-5 lg:grid-cols-2">
-          <RoofMap
-            polygon={null}
-            form={primary?.metrics.form ?? 'unknown'}
-            stats={primaryStats}
-            buildings={mapBuildings}
-            selectedId={mapBuildings[0]?.id ?? null}
-          />
+        <Scope items={scopeItems} />
+
+        {/* Roof measurement — the Geoscape outline (RoofMap) with its metrics
+            overlay, the measurement metric grid, and one Google satellite photo
+            per shown structure. */}
+        <SheetSection
+          eyebrow="Roof measurement"
+          aside={areaM2 != null ? `${Math.round(areaM2)} m² from aerial` : 'from aerial'}
+        >
+          <div
+            className="qm-duotone"
+            style={{ marginTop: 14, position: 'relative', border: '1px solid var(--ink-line)', overflow: 'hidden' }}
+          >
+            <RoofMap
+              polygon={null}
+              form={primary?.metrics.form ?? 'unknown'}
+              stats={primaryStats}
+              buildings={mapBuildings}
+              selectedId={mapBuildings[0]?.id ?? null}
+            />
+          </div>
+
+          {measureMetrics.length ? <MetricGrid items={measureMetrics} /> : null}
+
           {satelliteImages.map((img) => (
-            <div key={img.index1Based} className="overflow-hidden border border-ink-line bg-ink-card">
+            <figure
+              key={img.index1Based}
+              className="qm-duotone"
+              style={{ margin: '10px 0 0', position: 'relative', border: '1px solid var(--ink-line)', overflow: 'hidden' }}
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={structureStaticMapPath(row.public_token, img.index1Based)}
                 alt={`Satellite view of ${img.label} at ${row.address ?? 'the property'}`}
-                className="h-112 w-full object-cover sm:h-128"
+                style={{ display: 'block', width: '100%', height: 214, objectFit: 'cover' }}
               />
-              <div className="px-5 py-3 font-mono text-xs uppercase tracking-[0.16em] text-text-dim">
+              <figcaption
+                style={{
+                  ...MONO,
+                  padding: '9px 12px',
+                  fontSize: 8.5,
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.1em',
+                  color: 'var(--text-dim)',
+                  borderTop: '1px solid var(--ink-line)',
+                }}
+              >
                 {satelliteImages.length > 1 ? `${img.label} · satellite view` : 'Google satellite view'}
-              </div>
-            </div>
+              </figcaption>
+            </figure>
           ))}
-        </div>
 
-        <RoofPropertyContextBlock quote={fullQuote} />
+          <p style={{ margin: '12px 0 0', fontSize: 12, lineHeight: 1.5, color: 'var(--text-dim)' }}>
+            Measured from aerial imagery. The final measure is confirmed on site before we start.
+          </p>
+        </SheetSection>
 
-        {isInspection && (
-          <div className="mt-8 border border-ink-line border-l-4 border-l-warning bg-ink-card px-6 py-5">
-            <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-warning">
-              On-site inspection needed
-            </div>
-            <p className="mt-2 text-base text-text-sec">
-              {quote?.routing?.reason ??
-                'This roof needs a quick inspection on site before we can give an accurate price.'}
-            </p>
-          </div>
-        )}
-
-        {/* Combined total — the quotable headline on a firm quote, or the
-            indicative all-structure sum on a whole-job on-site quote. */}
-        {showPrices && combinedForDisplay?.tiers && (
-          <div className="mt-8 border border-ink-line border-l-4 border-l-accent bg-ink-card p-6 sm:p-8">
-            <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
-              {indicative ? 'Indicative estimate' : 'Combined estimate'}
-              {quote?.structures?.length
-                ? ` · ${quote.structures.length} structure${quote.structures.length === 1 ? '' : 's'}`
-                : ''}
-              {combinedForDisplay.area_m2 ? ` · ${Math.round(combinedForDisplay.area_m2)} m²` : ''}
-            </div>
-            {indicative && (
-              <p className="mt-2 text-sm leading-relaxed text-text-sec">
-                Subject to on-site confirmation. These prices are estimated from your satellite measurement;
-                your roofer confirms the final price at a quick on-site visit. Reply to our text and we&apos;ll book a time.
-              </p>
-            )}
-            <div className="mt-5 grid gap-5 sm:grid-cols-3">
-              {/* In indicative mode, hide any $0 tier (e.g. an asbestos roof has
-                  no patch/re-roof price, only an upgrade price) so the customer
-                  never sees a "$0" option. Firm quotes show all tiers. */}
-              {combinedForDisplay.tiers
-                .filter((t) => !indicative || t.inc_gst > 0)
-                .map((t, i) => (
-                <div key={i} className="border border-ink-line bg-ink-deep p-5">
-                  <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
-                    {TIER_NAME[t.tier]}
-                  </div>
-                  <div className="mt-2 font-mono text-3xl font-bold tabular-nums text-accent sm:text-4xl">
-                    ${money(t.inc_gst + solarIncGst)}
-                  </div>
-                  <div className="mt-1 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
-                    inc GST · ${money(t.ex_gst + solarExGst)} ex GST
-                  </div>
-                </div>
+        {/* PropRadar property context — dwelling type, age, areas. */}
+        {propertyChips.length ? (
+          <SheetSection eyebrow="Property details" eyebrowAccent>
+            <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {propertyChips.map(([label, value]) => (
+                <span
+                  key={label}
+                  style={{
+                    ...MONO,
+                    display: 'inline-flex',
+                    alignItems: 'baseline',
+                    gap: 6,
+                    border: '1px solid var(--ink-line)',
+                    background: 'var(--ink-deep)',
+                    padding: '6px 10px',
+                    fontSize: 11.5,
+                  }}
+                >
+                  <span style={{ textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-dim)' }}>{label}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--text-pri)' }}>{value}</span>
+                </span>
               ))}
             </div>
-            {solarApplies && (
-              <div className="mt-5 flex flex-wrap items-baseline justify-between gap-3 border-t border-ink-line pt-4">
-                <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
-                  Incl. solar panel detach and reinstate
-                  {solar?.detection?.array_count
-                    ? ` · ${solar.detection.array_count} array${solar.detection.array_count === 1 ? '' : 's'}`
-                    : ''}
-                </div>
-                <div className="font-mono text-lg font-bold tabular-nums text-accent">
-                  + ${money(solarIncGst)} inc GST
-                </div>
+          </SheetSection>
+        ) : null}
+
+        {/* On-site inspection notice. */}
+        {isInspection && (
+          <SheetSection>
+            <div
+              style={{
+                borderLeft: '3px solid var(--warning-bright)',
+                background: 'var(--ink-deep)',
+                border: '1px solid var(--ink-line)',
+                borderLeftWidth: 3,
+                borderLeftColor: 'var(--warning-bright)',
+                padding: '14px 16px',
+              }}
+            >
+              <div style={{ ...MONO, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'var(--warning-bright)' }}>
+                On-site inspection needed
               </div>
-            )}
-            {showElectricianNote && (
-              <p className="mt-3 text-sm text-text-sec">{solar?.allowance?.electrician_note}</p>
-            )}
-          </div>
+              <p style={{ margin: '8px 0 0', fontSize: 13, lineHeight: 1.5, color: 'var(--text-sec)' }}>
+                {quote?.routing?.reason ??
+                  'This roof needs a quick inspection on site before we can give an accurate price.'}
+              </p>
+            </div>
+          </SheetSection>
         )}
 
-        {/* Per-structure breakdown — metrics always; prices only when confirmed. */}
-        <div className="mt-10 space-y-6">
-          <div className="font-mono text-[0.8rem] font-semibold uppercase tracking-[0.18em] text-accent">
-            {showPrices ? 'Detailed breakdown' : 'Measured buildings'} · {structures.length} structure{structures.length === 1 ? '' : 's'}
+        {/* Indicative-estimate reassurance banner. */}
+        {showPrices && indicative && (
+          <SheetSection>
+            <div
+              style={{
+                border: '1px solid var(--ink-line)',
+                borderLeftWidth: 3,
+                borderLeftColor: 'var(--warning-bright)',
+                background: 'var(--ink-deep)',
+                padding: '14px 16px',
+              }}
+            >
+              <div style={{ ...MONO, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'var(--warning-bright)' }}>
+                Indicative estimate
+              </div>
+              <p style={{ margin: '8px 0 0', fontSize: 13, lineHeight: 1.5, color: 'var(--text-sec)' }}>
+                Subject to on-site confirmation. These prices are estimated from your satellite measurement; your roofer confirms the
+                final price at a quick on-site visit. Reply to our text and we&apos;ll book a time.
+              </p>
+            </div>
+          </SheetSection>
+        )}
+
+        {/* Choose your option — combined tier headline (or price-free gate). */}
+        <TierCards
+          tiers={quoteTiers}
+          heading={showPrices ? 'Patch · Re-roof · Upgrade' : 'Your three options'}
+          intro={
+            showPrices
+              ? indicative
+                ? 'Indicative from your satellite measurement — your roofer confirms the final price on a quick on-site visit.'
+                : `All prices include GST${solarIncGst > 0 ? ' and the solar detach & reinstate allowance' : ''}. Reply to lock in your option.`
+              : 'Reply YES to our text and we send your full priced options for this roof.'
+          }
+        />
+
+        {/* Combined solar add-on note under the tiers. */}
+        {solarApplies && (
+          <SheetSection>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+              <div style={{ ...MONO, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'var(--accent)' }}>
+                Incl. solar panel detach and reinstate
+                {solar?.detection?.array_count
+                  ? ` · ${solar.detection.array_count} array${solar.detection.array_count === 1 ? '' : 's'}`
+                  : ''}
+              </div>
+              <div style={{ ...MONO, fontSize: 16, fontWeight: 800, color: 'var(--accent)', fontVariantNumeric: 'tabular-nums' }}>
+                + ${money(solarIncGst)} inc GST
+              </div>
+            </div>
+          </SheetSection>
+        )}
+
+        {/* Per-structure breakdown — metrics always; prices only when confirmed.
+            Full itemised detail lives here so no data is lost from the compact
+            tier cards. */}
+        <SheetSection
+          eyebrow={showPrices ? 'Detailed breakdown' : 'Measured buildings'}
+          aside={`${structures.length} structure${structures.length === 1 ? '' : 's'}`}
+        >
+          <div style={{ marginTop: 14, display: 'grid', gap: 12 }}>
+            {structureCards.map(({ structure: s, excluded }, i) => (
+              <StructureBreakdown
+                key={s.buildingId ?? i}
+                structure={s}
+                index={i}
+                flagged={flagged.has(s.label)}
+                showPrices={showPrices}
+                indicative={indicative}
+                excluded={excluded}
+              />
+            ))}
           </div>
-          {structureCards.map(({ structure: s, excluded }, i) => (
-            <StructureBreakdown key={s.buildingId ?? i} structure={s} index={i} flagged={flagged.has(s.label)} showPrices={showPrices} indicative={indicative} excluded={excluded} />
-          ))}
-        </div>
+        </SheetSection>
 
         {/* AI "after re-roof" preview — generated FROM the satellite aerial.
-            Shown LAST (after the price breakdown) so a slow first-load render
-            can never hide the quote. Pre-warmed at confirm time, so it's
-            usually cached by the time the customer opens this page. */}
+            Shown after the breakdown so a slow render can never hide the quote. */}
         {showPrices && (
-          <div className="mt-10 overflow-hidden border border-ink-line bg-ink-card">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={`/api/roofing/q/${row.public_token}/after-image`}
-              alt={`AI preview of the property with a new ${primaryMaterialLabel ?? ''} roof`}
-              className="h-112 w-full object-cover sm:h-144"
-            />
-            <div className="px-5 py-3 font-mono text-xs uppercase tracking-[0.16em] text-text-dim">
-              Preview · your roof in {primaryMaterialLabel ?? 'a new roof'} (AI generated from the satellite image)
-            </div>
-          </div>
+          <section style={{ borderTop: '1px solid var(--ink-line)' }}>
+            <figure style={{ margin: 0, position: 'relative', overflow: 'hidden', borderBottom: '1px solid var(--ink-line)' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`/api/roofing/q/${row.public_token}/after-image`}
+                alt={`AI preview of the property with a new ${primaryMaterialLabel ?? ''} roof`}
+                style={{ display: 'block', width: '100%', height: 300, objectFit: 'cover' }}
+              />
+              <span
+                aria-hidden="true"
+                style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '52%', background: 'linear-gradient(180deg,transparent,color-mix(in srgb, var(--ink-deep) 90%, transparent))' }}
+              />
+              <figcaption style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 18px', textAlign: 'center' }}>
+                <span style={{ ...MONO, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--accent)' }}>Preview</span>
+                <span style={{ ...MONO, fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-pri)' }}>
+                  {' '}· your roof in {primaryMaterialLabel ?? 'a new roof'}
+                </span>
+                <div style={{ marginTop: 5, ...MONO, fontSize: 8.5, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-dim)' }}>
+                  AI generated from the satellite image
+                </div>
+              </figcaption>
+            </figure>
+          </section>
         )}
 
-        <p className="mt-8 text-sm text-text-dim">
-          {showPrices
-            ? 'Prices include GST and are indicative from a satellite measurement. A licensed roofer reviews every quote before any work is booked.'
-            : 'Measurements are indicative from satellite imagery. Confirm your building over text and a licensed roofer reviews every quote before any work is booked.'}
-        </p>
-      </section>
+        <GoodToKnow items={goodToKnow} note={goodToKnowNote} />
 
-      <div className="bg-accent px-6 py-5 text-center text-white">
-        <span className="font-mono text-sm font-semibold uppercase tracking-[0.16em]">
-          QuoteMax · Roofing
-        </span>
-      </div>
-    </main>
+        <CredentialFooter rows={footerRows} />
+      </QuoteSheet>
+    </QuoteChrome>
   )
 }
 
@@ -447,78 +704,107 @@ function StructureBreakdown({
   const p = structure.price
   const edges = edgeStat(m, structure.inputs.pitch)
   const inspection = p.routing?.decision === 'inspection_required' || flagged
+  const buildingChips = buildingAttributeChips(m)
+
+  const metrics: Metric[] = [
+    { k: 'Sloped area', v: m.sloped_area_m2 != null ? `${Math.round(m.sloped_area_m2)} m²` : '—', sub: m.footprint_m2 ? `Footprint ${Math.round(m.footprint_m2)} m²` : undefined },
+    { k: 'Roof form', v: formLabel(m.form), sub: m.storeys != null ? `${m.storeys}-storey` : undefined },
+    { k: 'Hips · valleys', v: `${edges.hips ?? '?'} · ${edges.valleys ?? '?'}`, sub: `≈ ${Math.round(edges.hips_lm ?? 0)} · ${Math.round(edges.valleys_lm ?? 0)} m` },
+    showPrices
+      ? { k: 'Rate', v: p.effective_rate_per_m2 ? `$${money(p.effective_rate_per_m2)}/m²` : '—', sub: p.area_m2 ? `over ${Math.round(p.area_m2)} m²` : undefined }
+      : { k: 'Area', v: p.area_m2 ? `${Math.round(p.area_m2)} m²` : '—', sub: 'sloped' },
+  ]
+
   return (
-    <article className={`border border-ink-line bg-ink-card p-6 sm:p-7 ${excluded ? 'opacity-60' : ''}`}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
+    <article
+      style={{
+        border: '1px solid var(--ink-line)',
+        background: 'var(--ink-card)',
+        padding: '16px 18px',
+        opacity: excluded ? 0.6 : 1,
+      }}
+    >
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ ...MONO, fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--accent)' }}>
             {structure.role === 'primary' ? 'Main dwelling' : 'Secondary structure'} · {String(index + 1).padStart(2, '0')}
             {excluded ? ' · Not included' : ''}
           </div>
-          <h3 className="mt-1.5 font-extrabold uppercase tracking-[-0.02em] text-xl text-text-pri">{structure.label}</h3>
+          <h3 style={{ margin: '5px 0 0', fontFamily: 'var(--font-sans)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '-0.01em', fontSize: 16, color: 'var(--text-pri)' }}>
+            {structure.label}
+          </h3>
         </div>
-        <span className="font-mono text-xs text-text-dim">{MATERIAL_LABEL[structure.inputs.material]}</span>
+        <span style={{ ...MONO, fontSize: 10, color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>{MATERIAL_LABEL[structure.inputs.material]}</span>
       </div>
 
-      {/* Geoscape metrics */}
-      <div className="mt-5 grid gap-4 sm:grid-cols-4">
-        <MiniStat label="Sloped area" value={m.sloped_area_m2 != null ? `${Math.round(m.sloped_area_m2)} m²` : '-'} hint={m.footprint_m2 ? `Footprint ${Math.round(m.footprint_m2)} m²` : ''} />
-        <MiniStat label="Roof form" value={formLabel(m.form)} hint={m.storeys != null ? `${m.storeys}-storey` : ''} />
-        <MiniStat label="Hips · valleys" value={`${edges.hips ?? '?'} · ${edges.valleys ?? '?'}`} hint={`≈ ${Math.round(edges.hips_lm ?? 0)} · ${Math.round(edges.valleys_lm ?? 0)} m`} />
-        {showPrices
-          ? <MiniStat label="Rate" value={p.effective_rate_per_m2 ? `$${money(p.effective_rate_per_m2)}/m²` : '-'} hint={p.area_m2 ? `over ${Math.round(p.area_m2)} m²` : ''} />
-          : <MiniStat label="Area" value={p.area_m2 ? `${Math.round(p.area_m2)} m²` : '-'} hint="sloped" />}
-      </div>
+      <MetricGrid items={metrics} valueSize={14} valueColor="var(--text-pri)" />
 
-      <RoofBuildingData metrics={m} />
+      {buildingChips.length ? (
+        <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {buildingChips.map(([label, value]) => (
+            <span
+              key={label}
+              style={{
+                ...MONO,
+                display: 'inline-flex',
+                alignItems: 'baseline',
+                gap: 6,
+                border: '1px solid var(--ink-line)',
+                background: 'var(--ink-deep)',
+                padding: '6px 10px',
+                fontSize: 11.5,
+              }}
+            >
+              <span style={{ textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-dim)' }}>{label}</span>
+              <span style={{ fontWeight: 700, color: 'var(--text-pri)' }}>{value}</span>
+            </span>
+          ))}
+        </div>
+      ) : null}
 
       {excluded ? (
-        <div className="mt-5 border border-ink-line border-l-4 border-l-text-dim bg-ink-deep px-4 py-3 text-sm text-text-sec">
-          Not included in this quote — leave it out, or ask us to add it.
-        </div>
+        <NoteBox tone="var(--text-dim)">Not included in this quote — leave it out, or ask us to add it.</NoteBox>
       ) : !showPrices ? (
         inspection ? (
-          <div className="mt-5 border border-ink-line border-l-4 border-l-warning bg-ink-deep px-4 py-3 text-sm text-text-sec">
-            This structure needs a quick look on site before we can price it.
-          </div>
+          <NoteBox tone="var(--warning-bright)">This structure needs a quick look on site before we can price it.</NoteBox>
         ) : null
       ) : inspection && !indicative ? (
-        <div className="mt-5 border border-ink-line border-l-4 border-l-warning bg-ink-deep px-4 py-3 text-sm text-text-sec">
+        <NoteBox tone="var(--warning-bright)">
           Priced on site — {p.routing?.reason ?? 'this structure needs a quick look before we can price it.'}
-        </div>
+        </NoteBox>
       ) : (
         <>
           {indicative && (
-            <div className="mt-5 border border-ink-line border-l-4 border-l-warning bg-ink-deep px-4 py-3 text-sm text-text-sec">
-              Indicative estimate — subject to on-site confirmation.
-            </div>
+            <NoteBox tone="var(--warning-bright)">Indicative estimate — subject to on-site confirmation.</NoteBox>
           )}
           {/* Each tier with its scope of works. In indicative mode hide $0
               tiers (asbestos has only an upgrade price) so no "$0" is shown. */}
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
+          <div style={{ marginTop: 14, display: 'grid', gap: 10 }}>
             {p.tiers
               .filter((t) => !indicative || t.inc_gst > 0)
               .map((t) => (
-              <div key={t.tier} className="flex flex-col border border-ink-line bg-ink-deep p-5">
-                <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
-                  {TIER_NAME[t.tier]}
+                <div key={t.tier} style={{ border: '1px solid var(--ink-line)', background: 'var(--ink-deep)', padding: '14px 16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
+                    <span style={{ ...MONO, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'var(--accent)' }}>
+                      {TIER_NAME[t.tier]}
+                    </span>
+                    <span style={{ textAlign: 'right' }}>
+                      <span style={{ ...MONO, fontSize: 18, fontWeight: 800, color: 'var(--text-pri)', fontVariantNumeric: 'tabular-nums' }}>${money(t.inc_gst)}</span>
+                      <span style={{ ...MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-dim)' }}> inc · ${money(t.ex_gst)} ex</span>
+                    </span>
+                  </div>
+                  <p style={{ margin: '9px 0 0', fontSize: 13, lineHeight: 1.5, color: 'var(--text-sec)' }}>{t.scope}</p>
                 </div>
-                <div className="mt-2 font-mono text-2xl font-bold tabular-nums text-accent">${money(t.inc_gst)}</div>
-                <div className="mt-1 font-mono text-[0.68rem] uppercase tracking-[0.14em] text-text-dim">
-                  inc GST · ${money(t.ex_gst)} ex
-                </div>
-                <p className="mt-3 text-sm leading-relaxed text-text-sec">{t.scope}</p>
-              </div>
-            ))}
+              ))}
           </div>
 
           {/* Loadings + call-out floor */}
           {(p.loadings_applied.length > 0 || p.call_out_minimum_applied) && (
-            <div className="mt-5 space-y-1.5 text-sm text-text-sec">
+            <div style={{ marginTop: 12, display: 'grid', gap: 6, fontSize: 12.5, color: 'var(--text-sec)' }}>
               {p.loadings_applied.map((l) => (
-                <p key={l.code}>+ {l.detail}</p>
+                <p key={l.code} style={{ margin: 0 }}>+ {l.detail}</p>
               ))}
-              {p.call_out_minimum_applied && <p>Minimum job charge applied (small structure).</p>}
+              {p.call_out_minimum_applied && <p style={{ margin: 0 }}>Minimum job charge applied (small structure).</p>}
             </div>
           )}
         </>
@@ -527,12 +813,22 @@ function StructureBreakdown({
   )
 }
 
-function MiniStat({ label, value, hint }: { label: string; value: string; hint?: string }) {
+function NoteBox({ tone, children }: { tone: string; children: React.ReactNode }) {
   return (
-    <div className="border border-ink-line bg-ink-deep p-4">
-      <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">{label}</div>
-      <div className="mt-2 font-mono text-lg font-bold tabular-nums text-text-pri">{value}</div>
-      {hint && <div className="mt-1 text-xs text-text-dim">{hint}</div>}
+    <div
+      style={{
+        marginTop: 14,
+        border: '1px solid var(--ink-line)',
+        borderLeftWidth: 3,
+        borderLeftColor: tone,
+        background: 'var(--ink-deep)',
+        padding: '12px 14px',
+        fontSize: 13,
+        lineHeight: 1.5,
+        color: 'var(--text-sec)',
+      }}
+    >
+      {children}
     </div>
   )
 }

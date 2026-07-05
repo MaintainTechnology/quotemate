@@ -11,6 +11,13 @@
 
 import { createClient } from '@supabase/supabase-js'
 import type { PricedPaintBom } from '@/lib/commercial-painting/types'
+import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
+import { QuoteChrome } from '../../_chrome/QuoteChrome'
+import { tradeIcon } from '../../_chrome/icons'
+import {
+  QuoteSheet, Letterhead, QuoteHero, StatGrid, SheetSection,
+  TierCards, GoodToKnow, CredentialFooter,
+} from '../../_chrome/parts'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,6 +29,8 @@ const supabase = createClient(
 const aud = (n: number) =>
   '$' + Math.round(n).toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 
+const MONO = { fontFamily: 'var(--font-mono)' } as const
+
 export default async function CommercialPaintQuotePage(props: {
   params: Promise<{ token: string }>
 }) {
@@ -29,11 +38,19 @@ export default async function CommercialPaintQuotePage(props: {
 
   const { data: run, error } = await supabase
     .from('paint_runs')
-    .select('id, job_name, site_address, status, created_at, public_token, tenants:tenant_id(business_name)')
+    .select('id, job_name, site_address, status, created_at, public_token, tenant_id, tenants:tenant_id(business_name)')
     .eq('public_token', token)
     .maybeSingle()
 
   if (error || !run) return <NotFound />
+
+  // Tradie identity for the letterhead (logo + Contact / Phone / Email),
+  // matching the reference quote surface. Best-effort: degrades to the joined
+  // business_name when identity columns are absent or tenant_id is null.
+  const identity = await loadTenantIdentity(
+    supabase,
+    (run as { tenant_id?: string | null }).tenant_id ?? null,
+  )
 
   // Latest priced extraction for this run holds the tender BOM.
   const { data: ext } = await supabase
@@ -47,156 +64,198 @@ export default async function CommercialPaintQuotePage(props: {
 
   const bom = (ext?.priced_bom as PricedPaintBom | null) ?? null
   const business =
-    (run.tenants as { business_name?: string } | null)?.business_name ?? 'Your painter'
+    identity?.business_name ??
+    (run.tenants as { business_name?: string } | null)?.business_name ??
+    'Your painter'
+  const jobName = String(run.job_name ?? 'Painting tender')
+  const address = run.site_address ? String(run.site_address) : null
   const date = new Date(run.created_at as string).toLocaleDateString('en-AU', {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
   })
 
+  // Measured-takeoff summary figures (presentation only — no math change to bom).
+  const areaM2 = bom
+    ? bom.lines.filter((l) => l.unit === 'm2').reduce((s, l) => s + l.quantity, 0)
+    : 0
+  const notes: string[] = bom
+    ? [...(bom.assumptions ?? []), ...(bom.exclusions ?? [])]
+    : []
+
   return (
-    <Shell>
-      {/* ── Hero ── */}
-      <section className="border border-ink-line bg-ink-card p-7 sm:p-9">
-        <div className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent">
-          Commercial painting tender · {business}
-        </div>
-        <h1 className="mt-3 text-3xl font-extrabold uppercase tracking-tight text-text-pri sm:text-4xl">
-          {String(run.job_name ?? 'Painting tender')}
-        </h1>
-        <div className="mt-2 font-mono text-sm text-text-dim">
-          {[run.site_address, date].filter(Boolean).join(' · ')}
-        </div>
-      </section>
+    <QuoteChrome
+      trade={{ label: 'Commercial paint', icon: tradeIcon('commercial-paint') }}
+      sticky={
+        bom
+          ? { tierLabel: 'Tender · inc GST', priceText: aud(bom.totalIncGst), ctaLabel: 'Contact us to accept' }
+          : { tierLabel: 'Tender', priceText: 'Pricing in progress', ctaLabel: 'Awaiting takeoff' }
+      }
+    >
+      <QuoteSheet label="Painting tender">
+        <Letterhead
+          name={business}
+          credential="Commercial painting tender"
+          logoUrl={identity?.logo_url ?? null}
+          contactName={contactDisplayName(identity)}
+          phone={(identity?.owner_mobile ?? '').trim() || null}
+          email={(identity?.owner_email ?? '').trim() || null}
+        />
 
-      {!bom ? (
-        <section className="mt-6 border border-l-4 border-ink-line border-l-accent bg-ink-card p-6 sm:p-7">
-          <div className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-accent">
-            Pricing in progress
-          </div>
-          <p className="mt-2 text-sm leading-relaxed text-text-sec">
-            We&apos;re finalising the takeoff for this job. Your detailed tender will appear here
-            shortly.
-          </p>
-        </section>
-      ) : (
-        <>
-          {/* ── Takeoff line items ── */}
-          <section className="mt-6 border border-ink-line bg-ink-card p-6 sm:p-7">
-            <div className="mb-4 font-mono text-[0.7rem] uppercase tracking-[0.16em] text-text-dim">
-              Scope &amp; takeoff
-            </div>
-            <ul className="divide-y divide-ink-line">
-              {bom.lines.map((l, i) => (
-                <li key={i} className="flex items-baseline justify-between gap-3 py-2.5">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm text-text-pri">
-                      {l.surface}
-                      {l.room ? <span className="text-text-dim"> · {l.room}</span> : null}
-                    </div>
-                    <div className="font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
-                      {Math.round(l.quantity)} {l.unit === 'item' ? 'items' : 'm²'} ·{' '}
-                      {String(l.system).replace(/_/g, ' ')} · {l.coats} coats
-                    </div>
-                  </div>
-                  <div className="shrink-0 font-mono text-sm tabular-nums text-text-pri">
-                    {aud(l.lineExGst)}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </section>
+        <QuoteHero
+          quoteId={`Tender · ${business}`}
+          line1={jobName}
+          greeting={[address, date].filter(Boolean).join(' · ') || undefined}
+          issued={`Prepared ${date}`}
+        />
 
-          {/* ── Cost breakdown ── */}
-          <section className="mt-6 grid gap-px border border-ink-line bg-ink-line sm:grid-cols-3">
-            <Cell label="Labour" value={aud(bom.labour.costExGst)} sub={`${Math.round(bom.labour.hours)} hrs`} />
-            <Cell label="Materials" value={aud(bom.materialsExGst)} />
-            <Cell label="Equipment" value={aud(bom.equipmentExGst)} />
-          </section>
+        {!bom ? (
+          <SheetSection eyebrow="Pricing in progress" eyebrowAccent>
+            <p style={{ margin: '12px 0 0', fontSize: 14, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+              We&apos;re finalising the takeoff for this job. Your detailed tender will appear here shortly.
+            </p>
+          </SheetSection>
+        ) : (
+          <>
+            <StatGrid
+              items={[
+                { k: 'Surfaces', v: String(bom.lines.length), sub: 'line items' },
+                { k: 'Area', v: `${Math.round(areaM2)} m²`, sub: 'measured takeoff' },
+                { k: 'Labour', v: `${Math.round(bom.labour.hours)} hrs`, sub: `${bom.labour.crewSize} crew` },
+                { k: 'Duration', v: `${Math.max(1, Math.round(bom.labour.estimatedDays))} days`, sub: 'on site' },
+              ]}
+            />
 
-          {/* ── Total + deposit ── */}
-          <section className="mt-6 border border-accent bg-ink-card p-6 sm:p-7">
-            <div className="flex items-baseline justify-between gap-4">
-              <span className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-text-dim">
-                Total inc GST
-              </span>
-              <span className="font-mono text-3xl font-bold tabular-nums text-text-pri">
-                {aud(bom.totalIncGst)}
-              </span>
-            </div>
-            <div className="mt-1 text-right font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
-              {aud(bom.subtotalExGst)} ex GST + {aud(bom.gst)} GST
-            </div>
-            <div className="mt-5 border border-ink-line px-4 py-3 text-center font-mono text-[0.72rem] uppercase tracking-[0.14em] text-text-dim">
-              Contact us to accept this tender
-            </div>
-          </section>
+            {/* ── Measured takeoff — per-surface line-item table ── */}
+            <SheetSection eyebrow="Measured takeoff" aside={`${bom.lines.length} lines`}>
+              <div style={{ marginTop: 14, overflowX: 'auto' }}>
+                <table style={{ width: '100%', minWidth: 440, borderCollapse: 'collapse', ...MONO, fontVariantNumeric: 'tabular-nums' }}>
+                  <thead>
+                    <tr>
+                      {['Surface', 'Qty', 'System', 'Coats', 'Price'].map((h, i) => (
+                        <th
+                          key={h}
+                          style={{
+                            textAlign: i === 0 ? 'left' : i === 4 ? 'right' : 'left',
+                            padding: '0 0 9px',
+                            borderBottom: '1px solid var(--ink-line)',
+                            fontSize: 8.5,
+                            fontWeight: 700,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.13em',
+                            color: 'var(--text-dim)',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bom.lines.map((l, i) => (
+                      <tr key={i}>
+                        <td style={{ padding: '11px 12px 11px 0', borderBottom: '1px solid var(--ink-line)', verticalAlign: 'top' }}>
+                          <div style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--text-pri)', lineHeight: 1.3 }}>
+                            {l.surface}
+                          </div>
+                          {l.room ? (
+                            <div style={{ marginTop: 3, fontSize: 8.5, textTransform: 'uppercase', letterSpacing: '0.11em', color: 'var(--text-dim)' }}>
+                              {l.room}
+                            </div>
+                          ) : null}
+                        </td>
+                        <td style={{ padding: '11px 12px 11px 0', borderBottom: '1px solid var(--ink-line)', fontSize: 12, color: 'var(--text-sec)', whiteSpace: 'nowrap', verticalAlign: 'top' }}>
+                          {Math.round(l.quantity)} {l.unit === 'item' ? 'items' : 'm²'}
+                        </td>
+                        <td style={{ padding: '11px 12px 11px 0', borderBottom: '1px solid var(--ink-line)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-sec)', whiteSpace: 'nowrap', verticalAlign: 'top' }}>
+                          {String(l.system).replace(/_/g, ' ')}
+                        </td>
+                        <td style={{ padding: '11px 12px 11px 0', borderBottom: '1px solid var(--ink-line)', fontSize: 12, color: 'var(--text-sec)', whiteSpace: 'nowrap', verticalAlign: 'top' }}>
+                          {l.coats}
+                        </td>
+                        <td style={{ padding: '11px 0', borderBottom: '1px solid var(--ink-line)', textAlign: 'right', fontSize: 13, color: 'var(--text-pri)', whiteSpace: 'nowrap', verticalAlign: 'top' }}>
+                          {aud(l.lineExGst)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
-          {/* ── Exclusions / assumptions ── */}
-          {(bom.exclusions?.length || bom.assumptions?.length) ? (
-            <section className="mt-6 grid gap-5 sm:grid-cols-2">
-              {bom.assumptions?.length ? (
-                <Notes title="Assumptions" items={bom.assumptions} />
-              ) : null}
-              {bom.exclusions?.length ? (
-                <Notes title="Exclusions" items={bom.exclusions} />
-              ) : null}
-            </section>
-          ) : null}
-        </>
-      )}
-    </Shell>
+              {/* Cost breakdown — labour / materials / equipment */}
+              <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 1, background: 'var(--ink-line)', border: '1px solid var(--ink-line)' }}>
+                <BreakCell label="Labour" value={aud(bom.labour.costExGst)} sub={`${Math.round(bom.labour.hours)} hrs`} />
+                <BreakCell label="Materials" value={aud(bom.materialsExGst)} />
+                <BreakCell label="Equipment" value={aud(bom.equipmentExGst)} />
+              </div>
+            </SheetSection>
+
+            {/* ── Tender price ── */}
+            <TierCards
+              eyebrow="Your tender"
+              heading="Tender price"
+              intro={`${aud(bom.subtotalExGst)} ex GST + ${aud(bom.gst)} GST. No online deposit — contact us to accept.`}
+              tiers={[
+                {
+                  name: 'Tender',
+                  badge: 'Fixed price',
+                  recommended: true,
+                  blurb: 'The complete measured takeoff above, delivered as a single fixed-price tender.',
+                  priceText: aud(bom.totalIncGst),
+                  priceNote: 'inc GST',
+                  items: [
+                    `${bom.lines.length} surfaces measured and priced`,
+                    `${Math.round(bom.labour.hours)} labour hours · ${bom.labour.crewSize} crew`,
+                    'Labour, materials and equipment included',
+                  ],
+                  ctaLabel: 'Contact us to accept this tender',
+                },
+              ]}
+            />
+
+            {notes.length ? (
+              <GoodToKnow eyebrow="Assumptions & exclusions" items={notes} />
+            ) : null}
+          </>
+        )}
+
+        <CredentialFooter
+          rows={[
+            { k: 'Prepared by', v: business },
+            ...(address ? [{ k: 'Site', v: address }] : []),
+            { k: 'Terms', v: 'Prices include GST · fixed-price tender · contact to accept' },
+          ]}
+          tagline="Measured takeoff · Fixed-price tender · Contact us to book"
+        />
+      </QuoteSheet>
+    </QuoteChrome>
   )
 }
 
-function Cell({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function BreakCell({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="bg-ink-card p-5">
-      <div className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-text-dim">{label}</div>
-      <div className="mt-1 font-mono text-lg font-bold tabular-nums text-text-pri">{value}</div>
-      {sub ? <div className="mt-0.5 font-mono text-[0.6rem] text-text-dim">{sub}</div> : null}
-    </div>
-  )
-}
-
-function Notes({ title, items }: { title: string; items: string[] }) {
-  return (
-    <div className="border border-ink-line bg-ink-card p-5">
-      <div className="mb-2 font-mono text-[0.62rem] uppercase tracking-[0.16em] text-text-dim">{title}</div>
-      <ul className="space-y-1.5 text-sm text-text-sec">
-        {items.map((s, i) => (
-          <li key={i} className="flex gap-2">
-            <span className="text-accent">›</span>
-            <span>{s}</span>
-          </li>
-        ))}
-      </ul>
+    <div style={{ background: 'var(--ink-card)', padding: '14px 14px 15px' }}>
+      <div style={{ ...MONO, fontSize: 8.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.13em', color: 'var(--text-dim)' }}>{label}</div>
+      <div style={{ marginTop: 7, ...MONO, fontWeight: 800, fontSize: 17, color: 'var(--text-pri)', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+      {sub ? <div style={{ marginTop: 4, ...MONO, fontSize: 8, textTransform: 'uppercase', letterSpacing: '0.09em', color: 'var(--text-sec)' }}>{sub}</div> : null}
     </div>
   )
 }
 
 function NotFound() {
   return (
-    <Shell>
-      <section className="border-2 border-warning/50 bg-ink-card p-8 sm:p-10">
-        <div className="mb-4 font-mono text-[0.7rem] uppercase tracking-[0.15em] text-warning">
-          Invalid link
-        </div>
-        <h1 className="text-3xl font-extrabold uppercase tracking-tight text-text-pri sm:text-4xl">
-          Tender not found
-        </h1>
-        <p className="mt-4 text-base leading-relaxed text-text-sec sm:text-lg">
-          This tender link is invalid or has expired. Get in touch if you need it re-sent.
-        </p>
-      </section>
-    </Shell>
-  )
-}
-
-function Shell({ children }: { children: React.ReactNode }) {
-  return (
-    <main className="min-h-screen bg-ink-deep px-4 py-10 sm:px-6 sm:py-14">
-      <div className="mx-auto w-full max-w-3xl">{children}</div>
-    </main>
+    <QuoteChrome trade={{ label: 'Commercial paint', icon: tradeIcon('commercial-paint') }} sticky={null}>
+      <QuoteSheet label="Tender not found">
+        <SheetSection eyebrow="Invalid link" eyebrowAccent first>
+          <h1 style={{ margin: '14px 0 0', fontFamily: 'var(--font-sans)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '-0.02em', fontSize: 30, lineHeight: 1, color: 'var(--text-pri)' }}>
+            Tender not found
+          </h1>
+          <p style={{ margin: '16px 0 0', fontSize: 15, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+            This tender link is invalid or has expired. Get in touch if you need it re-sent.
+          </p>
+        </SheetSection>
+      </QuoteSheet>
+    </QuoteChrome>
   )
 }

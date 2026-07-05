@@ -85,7 +85,7 @@ export function RoofHeroStrip({ address, suburb, shareToken, stats }: Props) {
   }, [imgSrc])
 
   return (
-    <section className="mt-12 border border-ink-line bg-ink-card overflow-hidden">
+    <section className="border border-ink-line bg-ink-card overflow-hidden">
       <div className="grid gap-6 md:grid-cols-[1.4fr_1fr]">
         {/* Satellite image */}
         <div className="relative h-72 w-full bg-ink-deep md:h-96">

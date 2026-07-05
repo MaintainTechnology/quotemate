@@ -67,6 +67,11 @@ export default async function DashboardQuoteViewerPage({
       paid={!!quote.paid_at}
       bodyMode={adapter.bodyMode}
       pdfUrl={adapter.pdfPath(token)}
+      // Live, edit-reactive HTML render of the same report the PDF is built
+      // from — the viewer prefers this over the frozen PDF iframe. Every
+      // dashboard-viewer quote (electrical / plumbing / commercial paint) stores
+      // good/better/best, which /api/q/[token]/html renders via buildQuoteReportHtml.
+      htmlUrl={`/api/q/${token}/html`}
       capabilities={adapter.capabilities}
       tiers={{
         good: (quote.good as ViewerTier) ?? null,

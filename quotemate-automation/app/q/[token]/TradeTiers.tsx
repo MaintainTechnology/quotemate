@@ -92,7 +92,7 @@ export function TradeTiers({
   const resolvedHeading =
     heading ?? (keys.length === 1 ? 'Your roofing option' : 'Your roofing options')
   return (
-    <section className="mt-12">
+    <section>
       <h2 className="mb-6 font-mono text-xs uppercase tracking-[0.15em] text-text-dim">
         {resolvedHeading}
       </h2>

@@ -57,7 +57,7 @@ export function CommercialPaintDetails({ scope, lineItems, tenderUrl }: Props) {
   }
 
   return (
-    <section className="mt-12 border border-ink-line bg-ink-card">
+    <section className="border border-ink-line bg-ink-card">
       <div className="p-6 sm:p-7">
         <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
           Measured takeoff

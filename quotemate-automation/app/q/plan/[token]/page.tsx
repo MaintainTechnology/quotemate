@@ -9,9 +9,16 @@
 // shown to the customer, framed as indicative and subject to confirmation.
 
 import { createClient } from '@supabase/supabase-js'
-import Link from 'next/link'
+import type { CSSProperties } from 'react'
 import type { ExtractionItem } from '@/lib/estimation/extract'
 import type { PricedBom } from '@/lib/estimation/price'
+import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
+import { QuoteChrome } from '../../_chrome/QuoteChrome'
+import { tradeIcon } from '../../_chrome/icons'
+import {
+  QuoteSheet, Letterhead, QuoteHero, StatGrid, SheetSection,
+  GoodToKnow, CredentialFooter,
+} from '../../_chrome/parts'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,6 +29,8 @@ const supabase = createClient(
 
 const aud = (n: number) =>
   '$' + n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+const MONO: CSSProperties = { fontFamily: 'var(--font-mono)' }
 
 export default async function PlanResultsPage(props: { params: Promise<{ token: string }> }) {
   const { token } = await props.params
@@ -36,24 +45,31 @@ export default async function PlanResultsPage(props: { params: Promise<{ token: 
 
   if (!extraction) {
     return (
-      <Shell>
-        <section className="bg-ink-card border-2 border-warning/50 p-8 sm:p-10">
-          <div className="font-mono text-[0.7rem] uppercase tracking-[0.15em] text-[#fbbf24] mb-4">
-            Invalid link
-          </div>
-          <h1 className="text-text-pri font-extrabold uppercase tracking-tight text-3xl sm:text-4xl">
-            RESULTS NOT FOUND
-          </h1>
-          <p className="mt-4 text-base leading-relaxed text-text-sec sm:text-lg">
-            This results link is invalid or has expired. Text us if you need it re-sent.
-          </p>
-        </section>
-      </Shell>
+      <QuoteChrome trade={{ label: 'Plan', icon: tradeIcon('plan') }} sticky={null}>
+        <QuoteSheet label="Invalid link">
+          <QuoteHero
+            quoteId="Take-off results"
+            line1="Results not"
+            line2="found."
+            greeting="This results link is invalid or has expired. Text us if you need it re-sent."
+          />
+        </QuoteSheet>
+      </QuoteChrome>
     )
   }
 
+  // Tradie identity for the letterhead (logo + Contact / Phone / Email),
+  // matching the reference quote surface. Best-effort: degrades to the joined
+  // business_name when identity columns are absent or tenant_id is null.
+  const identity = await loadTenantIdentity(
+    supabase,
+    (extraction as { tenant_id?: string | null }).tenant_id ?? null,
+  )
+
   const business =
-    (extraction.tenants as { business_name?: string } | null)?.business_name ?? 'Your tradie'
+    identity?.business_name ??
+    (extraction.tenants as { business_name?: string } | null)?.business_name ??
+    'Your tradie'
   const filename = (extraction.plan_uploads as { filename?: string } | null)?.filename ?? 'plan.pdf'
   const corrected = extraction.corrected_items as ExtractionItem[] | null
   const items: ExtractionItem[] =
@@ -69,69 +85,97 @@ export default async function PlanResultsPage(props: { params: Promise<{ token: 
     year: 'numeric',
   })
 
+  const stats: { k: string; v: React.ReactNode; sub?: React.ReactNode }[] = [
+    { k: 'Item types', v: String(items.length) },
+    { k: 'Devices counted', v: String(deviceCount) },
+  ]
+  if (bom) {
+    stats.push({
+      k: `Indicative total${bom.gstRegistered ? ' inc GST' : ''}`,
+      v: aud(bom.totalIncGst),
+    })
+  }
+
+  const pdfHref = extraction.report_pdf_path ? `/api/q/plan/${token}/pdf` : null
+
+  // Sticky: when priced, surface the indicative total; otherwise a neutral
+  // summary. The CTA links to the PDF report when one exists.
+  const sticky = bom
+    ? {
+        tierLabel: `Indicative estimate${bom.gstRegistered ? ' · inc GST' : ''}`,
+        priceText: aud(bom.totalIncGst),
+        ctaLabel: pdfHref ? 'Download PDF ↓' : 'Awaiting confirmation',
+        ctaHref: pdfHref,
+      }
+    : pdfHref
+      ? { tierLabel: 'Plan take-off', priceText: `${deviceCount} counted`, ctaLabel: 'Download PDF ↓', ctaHref: pdfHref }
+      : null
+
   return (
-    <Shell>
-      <section>
-        <span className="font-mono text-[0.7rem] uppercase tracking-[0.15em] text-text-dim">
-          Plan take-off · {business} · {date}
-        </span>
-        <h1 className="mt-4 font-extrabold uppercase tracking-[-0.03em] text-[clamp(1.75rem,5vw,3rem)] leading-none">
-          Your plan, <span className="text-accent">counted</span>
-        </h1>
-        <p className="mt-5 max-w-xl text-base leading-relaxed text-text-sec sm:text-lg">
-          Every electrical item read off <span className="font-semibold text-text-pri">{filename}</span>
-          {sheets.length > 0 ? <> (sheets: {sheets.join(', ')})</> : null}. {business} reviews and
-          confirms before anything is final.
-        </p>
-      </section>
+    <QuoteChrome trade={{ label: 'Plan', icon: tradeIcon('plan') }} sticky={sticky}>
+      <QuoteSheet label="Take-off results">
+        <Letterhead
+          name={identity?.business_name ?? business}
+          credential={`Plan take-off · ${date}`}
+          logoUrl={identity?.logo_url ?? null}
+          contactName={contactDisplayName(identity)}
+          phone={(identity?.owner_mobile ?? '').trim() || null}
+          email={(identity?.owner_email ?? '').trim() || null}
+        />
+        <QuoteHero
+          quoteId="Take-off results"
+          line1="Your plan,"
+          line2="counted."
+          greeting={
+            <>
+              Every electrical item read off <strong style={{ color: 'var(--text-pri)' }}>{filename}</strong>
+              {sheets.length > 0 ? <> (sheets: {sheets.join(', ')})</> : null}. {business} reviews and confirms before anything is final.
+            </>
+          }
+          issued={`Read ${date}`}
+        />
 
-      {/* ── Stat strip ── */}
-      <section className="mt-8 grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <Stat value={String(items.length)} label="Item types" />
-        <Stat value={String(deviceCount)} label="Devices counted" />
-        {bom ? <Stat value={aud(bom.totalIncGst)} label={`Indicative total${bom.gstRegistered ? ' inc GST' : ''}`} accent /> : null}
-      </section>
+        <StatGrid items={stats} />
 
-      {/* ── PDF download ── */}
-      {extraction.report_pdf_path ? (
-        <a
-          href={`/api/q/plan/${token}/pdf`}
-          className="mt-6 block w-full bg-accent hover:bg-accent-press text-white text-center px-5 py-4 font-mono text-xs sm:text-sm uppercase tracking-[0.15em] font-bold transition-colors"
-        >
-          Download PDF report ↓
-        </a>
-      ) : null}
-
-      {/* ── Counted items ── */}
-      <section className="mt-8 bg-ink-card border border-ink-line p-6 sm:p-8">
-        <div className="flex items-start gap-5 sm:gap-6">
-          <span className="font-mono text-3xl sm:text-4xl font-bold text-accent leading-none shrink-0">01</span>
-          <div className="flex-1 min-w-0 overflow-x-auto">
-            <h2 className="text-text-pri font-extrabold uppercase tracking-tight text-base sm:text-lg">
-              Counted items
-            </h2>
-            <table className="mt-4 w-full text-sm">
+        {/* ── Counted items ── */}
+        <SheetSection eyebrow="Counted items" eyebrowAccent aside={`${items.length} types`}>
+          <div style={{ marginTop: 14, overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
-                <tr className="text-left font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim border-b border-ink-line">
-                  <th className="py-2 pr-3">Item</th>
-                  <th className="py-2 pr-3 text-right">Count</th>
-                  <th className="py-2">Confidence</th>
+                <tr style={{ ...MONO, textAlign: 'left', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.13em', color: 'var(--text-dim)' }}>
+                  <th style={{ padding: '8px 12px 8px 0', borderBottom: '1px solid var(--ink-line)' }}>Item</th>
+                  <th style={{ padding: '8px 12px 8px 0', borderBottom: '1px solid var(--ink-line)', textAlign: 'right' }}>Count</th>
+                  <th style={{ padding: '8px 0', borderBottom: '1px solid var(--ink-line)' }}>Confidence</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((it, i) => (
-                  <tr key={i} className="border-b border-ink-line/50">
-                    <td className="py-2.5 pr-3 text-text-pri">{it.type}</td>
-                    <td className="py-2.5 pr-3 text-right font-mono font-bold text-text-pri">{it.count}</td>
-                    <td className="py-2.5">
+                  <tr key={i}>
+                    <td style={{ padding: '10px 12px 10px 0', borderBottom: '1px solid color-mix(in srgb, var(--ink-line) 55%, transparent)', color: 'var(--text-pri)' }}>{it.type}</td>
+                    <td style={{ padding: '10px 12px 10px 0', borderBottom: '1px solid color-mix(in srgb, var(--ink-line) 55%, transparent)', textAlign: 'right', ...MONO, fontWeight: 800, color: 'var(--text-pri)', fontVariantNumeric: 'tabular-nums' }}>{it.count}</td>
+                    <td style={{ padding: '10px 0', borderBottom: '1px solid color-mix(in srgb, var(--ink-line) 55%, transparent)' }}>
                       <span
-                        className={`font-mono text-[0.6rem] uppercase tracking-widest border px-1.5 py-0.5 ${
-                          it.confidence === 'high'
-                            ? 'text-[#34d399] border-success/40'
-                            : it.confidence === 'low'
-                              ? 'text-[#fca5a5] border-danger/40'
-                              : 'text-[#fbbf24] border-warning/40'
-                        }`}
+                        style={{
+                          ...MONO,
+                          fontSize: 8.5,
+                          fontWeight: 700,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.12em',
+                          padding: '3px 7px',
+                          border: `1px solid ${
+                            it.confidence === 'high'
+                              ? 'color-mix(in srgb, var(--success-bright) 45%, transparent)'
+                              : it.confidence === 'low'
+                                ? 'color-mix(in srgb, var(--danger-bright) 45%, transparent)'
+                                : 'color-mix(in srgb, var(--warning-bright) 45%, transparent)'
+                          }`,
+                          color:
+                            it.confidence === 'high'
+                              ? 'var(--success-bright)'
+                              : it.confidence === 'low'
+                                ? 'var(--danger-bright)'
+                                : 'var(--warning-bright)',
+                        }}
                       >
                         {it.confidence}
                       </span>
@@ -140,94 +184,86 @@ export default async function PlanResultsPage(props: { params: Promise<{ token: 
                 ))}
               </tbody>
             </table>
-            {extraction.overall_note ? (
-              <p className="mt-4 text-xs leading-relaxed text-text-dim">
-                Reader&apos;s note: {String(extraction.overall_note)}
+          </div>
+          {extraction.overall_note ? (
+            <p style={{ margin: '16px 0 0', fontSize: 12.5, lineHeight: 1.5, color: 'var(--text-dim)' }}>
+              Reader&apos;s note: {String(extraction.overall_note)}
+            </p>
+          ) : null}
+        </SheetSection>
+
+        {/* ── Indicative estimate ── */}
+        {bom ? (
+          <SheetSection eyebrow="Indicative estimate" eyebrowAccent>
+            <p style={{ margin: '10px 0 0', fontSize: 12.5, lineHeight: 1.5, color: 'var(--text-dim)' }}>
+              Generated from {business}&apos;s standard rates — {business} confirms the final price
+              before any work is booked.
+            </p>
+            <div style={{ marginTop: 16, display: 'grid', gap: 8 }}>
+              <Row label="Materials (ex GST)" value={aud(bom.materialExGst)} />
+              <Row label="Labour (ex GST)" value={aud(bom.labourExGst)} />
+              {bom.labourFloorAddedExGst > 0 ? (
+                <Row label="Minimum-labour adjustment" value={aud(bom.labourFloorAddedExGst)} />
+              ) : null}
+              <Row label="Subtotal (ex GST)" value={aud(bom.subtotalExGst)} />
+              {bom.gstRegistered ? <Row label="GST" value={aud(bom.gstExGst)} /> : null}
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, borderTop: '2px solid var(--ink-line)', paddingTop: 12, marginTop: 6 }}>
+                <span style={{ fontFamily: 'var(--font-sans)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '-0.01em', fontSize: 14, color: 'var(--text-pri)' }}>
+                  Indicative total{bom.gstRegistered ? ' (inc GST)' : ''}
+                </span>
+                <span style={{ ...MONO, fontWeight: 800, fontSize: 22, color: 'var(--accent)', fontVariantNumeric: 'tabular-nums' }}>{aud(bom.totalIncGst)}</span>
+              </div>
+            </div>
+            {bom.unmatched.length > 0 ? (
+              <p style={{ margin: '16px 0 0', fontSize: 12.5, lineHeight: 1.5, color: 'var(--text-dim)' }}>
+                Not yet priced (needs {business}&apos;s manual look):{' '}
+                {bom.unmatched.map((u) => `${u.type} × ${u.count}`).join(' · ')}
               </p>
             ) : null}
-          </div>
-        </div>
-      </section>
+          </SheetSection>
+        ) : null}
 
-      {/* ── Indicative estimate ── */}
-      {bom ? (
-        <section className="mt-6 bg-ink-card border border-ink-line p-6 sm:p-8">
-          <div className="flex items-start gap-5 sm:gap-6">
-            <span className="font-mono text-3xl sm:text-4xl font-bold text-accent leading-none shrink-0">02</span>
-            <div className="flex-1 min-w-0">
-              <h2 className="text-text-pri font-extrabold uppercase tracking-tight text-base sm:text-lg">
-                Indicative estimate
-              </h2>
-              <p className="mt-1 text-xs text-text-dim">
-                Generated from {business}&apos;s standard rates — {business} confirms the final
-                price before any work is booked.
-              </p>
-              <div className="mt-4 space-y-1.5 text-sm">
-                <Row label="Materials (ex GST)" value={aud(bom.materialExGst)} />
-                <Row label="Labour (ex GST)" value={aud(bom.labourExGst)} />
-                {bom.labourFloorAddedExGst > 0 ? (
-                  <Row label="Minimum-labour adjustment" value={aud(bom.labourFloorAddedExGst)} />
-                ) : null}
-                <Row label="Subtotal (ex GST)" value={aud(bom.subtotalExGst)} />
-                {bom.gstRegistered ? <Row label="GST" value={aud(bom.gstExGst)} /> : null}
-                <div className="flex items-baseline justify-between border-t-2 border-ink-line pt-2.5 mt-2.5">
-                  <span className="font-extrabold uppercase tracking-tight text-text-pri">
-                    Indicative total{bom.gstRegistered ? ' (inc GST)' : ''}
-                  </span>
-                  <span className="font-mono font-bold text-xl text-accent">{aud(bom.totalIncGst)}</span>
-                </div>
-              </div>
-              {bom.unmatched.length > 0 ? (
-                <p className="mt-4 text-xs leading-relaxed text-text-dim">
-                  Not yet priced (needs {business}&apos;s manual look):{' '}
-                  {bom.unmatched.map((u) => `${u.type} × ${u.count}`).join(' · ')}
-                </p>
-              ) : null}
-            </div>
-          </div>
-        </section>
-      ) : null}
-    </Shell>
-  )
-}
+        {/* ── PDF download ── */}
+        {pdfHref ? (
+          <SheetSection eyebrow="Report">
+            <a
+              href={pdfHref}
+              className="qm-cta"
+              style={{ display: 'block', marginTop: 14, textAlign: 'center', border: '1px solid transparent', background: 'var(--accent)', color: 'var(--accent-ink)', padding: '14px 16px', fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.05em', textDecoration: 'none' }}
+            >
+              Download PDF report ↓
+            </a>
+          </SheetSection>
+        ) : null}
 
-function Stat({ value, label, accent }: { value: string; label: string; accent?: boolean }) {
-  return (
-    <div className="bg-ink-card border border-ink-line p-4">
-      <div className={`text-xl sm:text-2xl font-extrabold ${accent ? 'text-accent' : 'text-text-pri'}`}>{value}</div>
-      <div className="mt-1 font-mono text-[0.6rem] uppercase tracking-[0.15em] text-text-dim">{label}</div>
-    </div>
+        <GoodToKnow
+          items={[
+            'Counts are read straight off the plan and reviewed before pricing.',
+            `${business} confirms the final scope and price before any work is booked.`,
+            'Anything the reader flagged as low-confidence gets a manual look.',
+          ]}
+          note="This take-off is indicative only. Text us if any count looks off and we'll re-check the plan."
+        />
+
+        <CredentialFooter
+          rows={[
+            { k: 'Prepared by', v: business },
+            { k: 'Source plan', v: filename },
+            ...(sheets.length > 0 ? [{ k: 'Sheets', v: sheets.join(', ') }] : []),
+            { k: 'Read on', v: date },
+          ]}
+          tagline="Reviewed counts · Indicative estimate · Confirmed before booking"
+        />
+      </QuoteSheet>
+    </QuoteChrome>
   )
 }
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between">
-      <span className="text-text-sec">{label}</span>
-      <span className="font-mono text-text-pri">{value}</span>
+    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, fontSize: 13.5 }}>
+      <span style={{ color: 'var(--text-sec)' }}>{label}</span>
+      <span style={{ ...MONO, color: 'var(--text-pri)', fontVariantNumeric: 'tabular-nums' }}>{value}</span>
     </div>
-  )
-}
-
-function Shell({ children }: { children: React.ReactNode }) {
-  return (
-    <main className="min-h-screen bg-ink-deep text-text-pri relative">
-      <header className="relative z-10 border-b border-ink-line bg-ink-deep/80 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4 sm:px-6">
-          <Link href="/" className="font-extrabold uppercase tracking-tight text-lg" aria-label="QuoteMax">
-            Quote<span className="text-accent">Max</span>
-          </Link>
-          <div className="text-right">
-            <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-text-dim">Take-off results</div>
-          </div>
-        </div>
-      </header>
-      <div className="relative z-10 mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-16">
-        {children}
-        <p className="mt-12 text-center font-mono text-[0.65rem] uppercase tracking-[0.2em] text-text-dim">
-          Powered by <Link href="/" className="text-text-sec hover:text-accent transition-colors">QuoteMax</Link> · Built in Australia
-        </p>
-      </div>
-    </main>
   )
 }

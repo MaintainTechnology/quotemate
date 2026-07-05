@@ -84,7 +84,7 @@ export function CustomerPhotosBlock({
   }
 
   return (
-    <section className="mt-6 border border-ink-line bg-ink-card p-6 sm:p-8">
+    <section className="border border-ink-line bg-ink-card p-6 sm:p-8">
       {/* Header — numbered card chrome, always visible */}
       <div className="flex items-start gap-5 sm:gap-6">
         <span className="font-mono text-3xl sm:text-4xl font-bold text-accent leading-none shrink-0">

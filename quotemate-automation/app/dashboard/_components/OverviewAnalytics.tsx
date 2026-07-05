@@ -1,13 +1,16 @@
 'use client'
 
-// "Your activity" — the tradie's own analytics block on the dashboard Overview.
-// Communication volume (who's texting/calling), a lead funnel, speed-to-quote,
-// weekly trends and channel/job-type splits — the things NOT already shown by
-// the money-first Pipeline + KPI rows above it.
+// "Your activity" — the tradie's own analytics block, now the second top-level
+// tab of the dashboard Overview page (Overview | Your activity). Communication
+// volume (who's texting/calling), a lead funnel, speed-to-quote, weekly trends
+// and channel/job-type splits — the things NOT already shown by the money-first
+// Pipeline + KPI rows on the Overview tab.
 //
-// Design: Maintain system (dark navy, orange accent, mono all-caps), matched to
-// the surrounding Overview. Insights lead with the ACTIONABLE ("3 quotes to
-// review →") so the section drives a next step, not just a number to admire.
+// Design: matched to the Overview tab so the two views read as one product.
+// Every surface uses the dashboard card language — rounded-card corners + the
+// `edge-lit` top highlight — over the Maintain tokens (warm charcoal, Cat-
+// yellow accent, mono all-caps). Insights lead with the ACTIONABLE ("3 quotes
+// to review →") so the section drives a next step, not just a number to admire.
 
 import { useEffect, useState } from 'react'
 import type { TradieAnalytics } from '@/lib/dashboard/tradie-analytics'
@@ -15,6 +18,10 @@ import { SplitBars, TrendBars } from '@/app/_components/MetricCharts'
 
 type NavTab = 'quotes' | 'chats'
 type LoadState = 'loading' | 'ready' | 'error'
+
+// Shared surface treatment so every card here matches the Overview tab's
+// rounded, lit-edge plates.
+const CARD = 'rounded-card edge-lit'
 
 export function OverviewAnalytics({
   accessToken,
@@ -62,21 +69,15 @@ export function OverviewAnalytics({
   return (
     <section
       aria-labelledby="activity-heading"
-      className="space-y-4 motion-safe:animate-[fade-up_380ms_cubic-bezier(0.22,1,0.36,1)_both]"
-      style={{ animationDelay: '360ms' }}
+      className="space-y-5 motion-safe:animate-[fade-in_180ms_ease-out_both]"
     >
       <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
-        <div>
-          <div className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-accent">
-            Your activity
-          </div>
-          <h2
-            id="activity-heading"
-            className="mt-1.5 font-mono text-[0.7rem] uppercase tracking-[0.16em] font-bold text-text-pri"
-          >
-            Who&rsquo;s reaching out &amp; what&rsquo;s been processed
-          </h2>
-        </div>
+        <h2
+          id="activity-heading"
+          className="font-mono text-[0.7rem] uppercase tracking-[0.16em] font-bold text-text-pri"
+        >
+          Who&rsquo;s reaching out &amp; what&rsquo;s been processed
+        </h2>
         <span className="font-mono text-[0.58rem] uppercase tracking-[0.14em] text-text-dim">
           Last 8 weeks
         </span>
@@ -84,7 +85,9 @@ export function OverviewAnalytics({
 
       {state === 'loading' && <AnalyticsSkeleton />}
       {state === 'error' && (
-        <div className="border border-amber-700/60 bg-amber-950/30 px-5 py-4 font-mono text-sm text-amber-200">
+        <div
+          className={`${CARD} border border-amber-700/60 bg-amber-950/30 px-5 py-4 font-mono text-sm text-amber-200`}
+        >
           Couldn&rsquo;t load your activity: {err}
         </div>
       )}
@@ -111,7 +114,7 @@ function AnalyticsBody({
 
   if (isEmpty) {
     return (
-      <div className="rounded-card bg-ink-card border border-ink-line px-5 py-8 text-center">
+      <div className={`${CARD} bg-ink-card border border-ink-line px-5 py-8 text-center`}>
         <div className="font-mono text-sm font-bold text-text-pri">
           No activity yet
         </div>
@@ -124,11 +127,11 @@ function AnalyticsBody({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <NeedsAttention data={data} setTab={setTab} />
 
       {/* Communication + throughput counters — the headline volumes. */}
-      <div className="rounded-card grid grid-cols-2 md:grid-cols-4 gap-px bg-ink-line border border-ink-line">
+      <div className={`${CARD} overflow-hidden grid grid-cols-2 md:grid-cols-4 gap-px bg-ink-line border border-ink-line`}>
         <Counter label="People texting" value={h.peopleTexting} hint="Unique numbers" />
         <Counter label="People calling" value={h.peopleCalling} hint="Unique callers" />
         <Counter label="Chats" value={h.totalChats} hint="SMS conversations" />
@@ -140,35 +143,43 @@ function AnalyticsBody({
       </div>
 
       {/* Speed + lead funnel. */}
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-5 lg:grid-cols-3">
         <SpeedCard minutes={data.speedToQuoteMinutes} />
         <div className="lg:col-span-2">
-          <SplitBars title="Lead funnel" slices={data.funnel} tone="accent" />
+          <SplitBars title="Lead funnel" slices={data.funnel} tone="accent" className={CARD} />
         </div>
       </div>
 
       {/* Weekly trends. */}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-5 md:grid-cols-2">
         <TrendBars
           title="Requests / week"
           points={data.weeklyTrend.map((w) => ({ label: w.label, value: w.intakes }))}
           tone="teal"
+          className={CARD}
         />
         <TrendBars
           title="Quotes / week"
           points={data.weeklyTrend.map((w) => ({ label: w.label, value: w.quotes }))}
           tone="accent"
+          className={CARD}
         />
       </div>
 
       {/* Where work comes from + what it is. */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <SplitBars title="Where customers come from" slices={data.channelSplit} tone="teal" />
+      <div className="grid gap-5 md:grid-cols-2">
+        <SplitBars
+          title="Where customers come from"
+          slices={data.channelSplit}
+          tone="teal"
+          className={CARD}
+        />
         <SplitBars
           title="Top job types"
           slices={data.topJobTypes}
           tone="accent"
           emptyLabel="No job types yet"
+          className={CARD}
         />
       </div>
     </div>
@@ -213,7 +224,7 @@ function NeedsAttention({
 
   if (actions.length === 0) {
     return (
-      <div className="flex items-center gap-3 border border-emerald-800/50 bg-emerald-950/20 px-5 py-4">
+      <div className={`${CARD} flex items-center gap-3 border border-emerald-800/50 bg-emerald-950/20 px-5 py-4`}>
         <span className="h-2 w-2 rounded-full bg-emerald-300" aria-hidden="true" />
         <span className="font-mono text-[0.7rem] uppercase tracking-[0.14em] font-bold text-emerald-200">
           You&rsquo;re all caught up
@@ -226,13 +237,13 @@ function NeedsAttention({
   }
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {actions.map((a) => (
         <button
           key={a.label}
           type="button"
           onClick={a.onClick}
-          className="group flex items-center justify-between gap-3 border border-amber-700/50 bg-amber-950/20 px-4 py-3.5 text-left transition-colors hover:border-amber-500/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+          className={`${CARD} group flex items-center justify-between gap-3 border border-amber-700/50 bg-amber-950/20 px-4 py-3.5 text-left transition-colors hover:border-amber-500/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent`}
         >
           <span className="flex items-baseline gap-2">
             <span className="font-mono text-2xl font-extrabold leading-none tabular-nums text-amber-300">
@@ -281,7 +292,7 @@ function Counter({
 
 function SpeedCard({ minutes }: { minutes: number | null }) {
   return (
-    <div className="rounded-card bg-ink-card border border-ink-line p-5">
+    <div className={`${CARD} bg-ink-card border border-ink-line p-5`}>
       <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-text-dim">
         Typical time to quote
       </div>
@@ -297,16 +308,16 @@ function SpeedCard({ minutes }: { minutes: number | null }) {
 
 function AnalyticsSkeleton() {
   return (
-    <div className="space-y-4" aria-hidden="true">
-      <div className="rounded-card h-16 bg-ink-card border border-ink-line motion-safe:animate-pulse" />
-      <div className="rounded-card grid grid-cols-2 md:grid-cols-4 gap-px bg-ink-line border border-ink-line">
+    <div className="space-y-5" aria-hidden="true">
+      <div className={`${CARD} h-16 bg-ink-card border border-ink-line motion-safe:animate-pulse`} />
+      <div className={`${CARD} overflow-hidden grid grid-cols-2 md:grid-cols-4 gap-px bg-ink-line border border-ink-line`}>
         {Array.from({ length: 8 }).map((_, i) => (
           <div key={i} className="h-24 bg-ink-card motion-safe:animate-pulse" />
         ))}
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-card h-44 bg-ink-card border border-ink-line motion-safe:animate-pulse" />
-        <div className="rounded-card h-44 bg-ink-card border border-ink-line motion-safe:animate-pulse" />
+      <div className="grid gap-5 md:grid-cols-2">
+        <div className={`${CARD} h-44 bg-ink-card border border-ink-line motion-safe:animate-pulse`} />
+        <div className={`${CARD} h-44 bg-ink-card border border-ink-line motion-safe:animate-pulse`} />
       </div>
     </div>
   )

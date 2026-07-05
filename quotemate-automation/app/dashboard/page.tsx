@@ -2311,6 +2311,73 @@ function overviewQuotePill(q: Quote): {
   return { label: 'Awaiting you', color: 'var(--warning-bright)', pulse: true }
 }
 
+// The Overview page is split into two top-level views: the money-first
+// Overview (KPI strip + recent quotes + rail) and the Your-activity analytics.
+type OverviewSection = 'overview' | 'activity'
+
+const OVERVIEW_SECTIONS: { id: OverviewSection; label: string }[] = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'activity', label: 'Your activity' },
+]
+
+/** Page-level segmented switch between the Overview and Your-activity views.
+ *  A rounded, lit-edge plate in the dashboard's card language; the active
+ *  segment takes the brand yellow fill (charcoal ink on top — theme-safe in
+ *  both the dark and cream themes, since .bg-accent forces --accent-ink).
+ *  WAI-ARIA tabs pattern: roving tabindex + arrow-key nav, panels wired via
+ *  aria-controls / aria-labelledby. */
+function SectionTabs({
+  active,
+  onChange,
+}: {
+  active: OverviewSection
+  onChange: (s: OverviewSection) => void
+}) {
+  const idx = OVERVIEW_SECTIONS.findIndex((s) => s.id === active)
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
+    e.preventDefault()
+    const dir = e.key === 'ArrowRight' ? 1 : -1
+    const next = (idx + dir + OVERVIEW_SECTIONS.length) % OVERVIEW_SECTIONS.length
+    onChange(OVERVIEW_SECTIONS[next].id)
+    document.getElementById(`section-tab-${OVERVIEW_SECTIONS[next].id}`)?.focus()
+  }
+
+  return (
+    <div
+      role="tablist"
+      aria-label="Dashboard section"
+      onKeyDown={onKeyDown}
+      className="inline-flex gap-1 rounded-ctl edge-lit border border-ink-line bg-ink-card p-1 motion-safe:animate-[fade-up_380ms_cubic-bezier(0.22,1,0.36,1)_both]"
+    >
+      {OVERVIEW_SECTIONS.map((s) => {
+        const on = s.id === active
+        return (
+          <button
+            key={s.id}
+            type="button"
+            role="tab"
+            id={`section-tab-${s.id}`}
+            aria-selected={on}
+            aria-controls={`section-panel-${s.id}`}
+            tabIndex={on ? 0 : -1}
+            onClick={() => onChange(s.id)}
+            className={[
+              'rounded-[6px] px-4 py-2 font-mono text-[11px] font-bold uppercase tracking-[0.14em] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
+              on
+                ? 'bg-accent text-accent-ink'
+                : 'text-text-dim hover:text-text-sec',
+            ].join(' ')}
+          >
+            {s.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 function OverviewTab({
   data,
   accessToken,
@@ -2370,6 +2437,9 @@ function OverviewTab({
   // clicking a row jumps to the Chats tab where the full list lives.
   const [latestChats, setLatestChats] = useState<ChatRow[]>([])
   const [chatsLoading, setChatsLoading] = useState(true)
+
+  // Which of the two top-level views is showing: Overview | Your activity.
+  const [section, setSection] = useState<OverviewSection>('overview')
   useEffect(() => {
     if (!accessToken) return
     let cancelled = false
@@ -2484,6 +2554,16 @@ function OverviewTab({
         onNewQuote={() => setTab('quotes')}
       />
 
+      {/* TOP-LEVEL VIEW SWITCH — Overview | Your activity. */}
+      <SectionTabs active={section} onChange={setSection} />
+
+      {section === 'overview' ? (
+        <div
+          role="tabpanel"
+          id="section-panel-overview"
+          aria-labelledby="section-tab-overview"
+          className="space-y-5"
+        >
       {/* KPI STRIP — one seamed 6-cell instrument cluster (the reference's
           command-centre metrics row). Cells share 1px ink-line seams inside
           a single rounded, lit-edge container. */}
@@ -2749,10 +2829,19 @@ function OverviewTab({
           </section>
         </div>
       </div>
-
-      {/* YOUR ACTIVITY — communication + conversion analytics not shown by the
-          money-first Pipeline/KPI rows above. Lazy-fetches its own aggregate. */}
-      <OverviewAnalytics accessToken={accessToken} setTab={setTab} />
+        </div>
+      ) : (
+        <div
+          role="tabpanel"
+          id="section-panel-activity"
+          aria-labelledby="section-tab-activity"
+        >
+          {/* YOUR ACTIVITY — communication + conversion analytics not shown by
+              the money-first Pipeline/KPI rows above. Lazy-fetches its own
+              aggregate on first view. */}
+          <OverviewAnalytics accessToken={accessToken} setTab={setTab} />
+        </div>
+      )}
 
     </div>
   )

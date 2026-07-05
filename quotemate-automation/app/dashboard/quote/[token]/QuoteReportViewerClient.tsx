@@ -38,6 +38,11 @@ export default function QuoteReportViewerClient(props: {
   paid: boolean
   bodyMode: 'pdf-inline' | 'download-only'
   pdfUrl: string
+  /** Live HTML render of the report (same document the PDF is built from).
+   *  When present the viewer embeds this instead of the frozen PDF, so manual
+   *  and AI edits (which flow through the structured editor + save) show up on
+   *  reload. Download PDF still uses pdfUrl. */
+  htmlUrl?: string
   capabilities: { manualEdit: boolean; aiEdit: boolean }
   tiers: { good: Tier; better: Tier; best: Tier }
 }) {
@@ -50,6 +55,7 @@ export default function QuoteReportViewerClient(props: {
     paid,
     bodyMode,
     pdfUrl,
+    htmlUrl,
     capabilities,
     tiers,
   } = props
@@ -70,6 +76,10 @@ export default function QuoteReportViewerClient(props: {
   }, [capabilities.manualEdit, paid, needsInspection, owner, trade])
 
   const inlineSrc = `${pdfUrl}${pdfUrl.includes('?') ? '&' : '?'}disposition=inline&v=${reloadKey}`
+  // Prefer the live HTML render. `?v=reloadKey` busts the iframe after a save so
+  // the preview reflects the just-edited tiers (the HTML route reads the live
+  // quotes row, so no PDF regeneration is needed for the preview to update).
+  const htmlSrc = htmlUrl ? `${htmlUrl}${htmlUrl.includes('?') ? '&' : '?'}v=${reloadKey}` : null
 
   return (
     <main className="min-h-screen bg-ink-deep text-text-pri">
@@ -122,7 +132,20 @@ export default function QuoteReportViewerClient(props: {
 
       {/* ─── Report body ─── */}
       <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
-        {bodyMode === 'pdf-inline' ? (
+        {htmlSrc ? (
+          <>
+            <div className="mb-2 flex items-center gap-2 font-mono text-[0.6rem] uppercase tracking-[0.12em] text-text-dim">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />
+              Live preview · edits appear here after you save · Download PDF exports it
+            </div>
+            <iframe
+              key={`html-${reloadKey}`}
+              src={htmlSrc}
+              title="Quote report"
+              className="h-[80vh] w-full rounded border border-ink-line bg-white"
+            />
+          </>
+        ) : bodyMode === 'pdf-inline' ? (
           <iframe
             key={reloadKey}
             src={inlineSrc}

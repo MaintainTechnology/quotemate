@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/quotemax-design-system-638aa1f7-d131-4260-9f6b-5bba3e058741/tokens/fonts.css">
+  <link rel="stylesheet" href="_ds/quotemax-design-system-638aa1f7-d131-4260-9f6b-5bba3e058741/tokens/colors.css">
+  <link rel="stylesheet" href="_ds/quotemax-design-system-638aa1f7-d131-4260-9f6b-5bba3e058741/tokens/typography.css">
+  <link rel="stylesheet" href="_ds/quotemax-design-system-638aa1f7-d131-4260-9f6b-5bba3e058741/tokens/spacing.css">
+  <link rel="stylesheet" href="_ds/quotemax-design-system-638aa1f7-d131-4260-9f6b-5bba3e058741/tokens/effects.css">
+  <link rel="stylesheet" href="_ds/quotemax-design-system-638aa1f7-d131-4260-9f6b-5bba3e058741/tokens/motion.css">
+  <link rel="stylesheet" href="_ds/quotemax-design-system-638aa1f7-d131-4260-9f6b-5bba3e058741/base.css">
+  <script src="_ds/quotemax-design-system-638aa1f7-d131-4260-9f6b-5bba3e058741/_ds_bundle.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    html, body { height: 100%; }
+    body { margin: 0; background: var(--ink-deep); color: var(--text-pri); font-family: var(--font-sans); }
+    *, *::before, *::after { box-sizing: border-box; }
+    .qm-scroll::-webkit-scrollbar { width: 10px; }
+    .qm-scroll::-webkit-scrollbar-thumb { background: var(--ink-line); border: 2px solid var(--ink-deep); }
+    .qm-scroll::-webkit-scrollbar-track { background: transparent; }
+    .qm-accentword { color: var(--accent); }
+    :root.qm-light .qm-accentword { color: #171310; }
+    .qm-tier:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--ink-line)) !important; }
+    .qm-cta:hover { background: var(--accent-press) !important; }
+    .qm-ghost:hover { border-color: color-mix(in srgb, var(--accent) 50%, var(--ink-line)) !important; color: var(--accent) !important; }
+    .qm-seg:hover { color: var(--text-pri) !important; }
+    @keyframes qm-pop { from { opacity: 0; transform: translateY(6px) scale(0.99); } to { opacity: 1; transform: none; } }
+    .qm-heroimg { height: 210px; background-size: cover; background-position: center; }
+    .qm-heroimg--solar { background-image: url('assets/photos/trade-solar.jpg'); }
+    .qm-heroimg--roof { background-image: url('assets/photos/trade-roofing.jpg'); }
+    .qm-heroimg--electrical { background-image: url('assets/photos/trade-electrical.jpg'); }
+    .qm-gal { background-size: cover; background-position: center; }
+    .qm-gal--solar { background-image: url('assets/photos/trade-solar.jpg'); }
+    .qm-gal--roof { background-image: url('assets/photos/trade-roofing.jpg'); }
+    .qm-gal--elec { background-image: url('assets/photos/trade-electrical.jpg'); }
+    .qm-gal--tools { background-image: url('assets/photos/home-on-the-tools.jpg'); }
+    .qm-gal--workshop { background-image: url('assets/photos/workshop.jpg'); }
+    .qm-aerial { background-size: cover; background-position: center; }
+    .qm-aerial--measure { background-image: url('assets/photos/prop-measure.jpg'); }
+    .qm-aerial--solar { background-image: url('assets/photos/prop-solar.jpg'); }
+    .qm-aerial--sat { background-image: url('assets/photos/prop-aerial.jpg'); }
+    .qm-roofpreview { background-image: url('assets/photos/roof-preview.jpg'); background-size: cover; background-position: 66% 48%; }
+    .qm-sunshade { background-image: url('assets/photos/sun-shade.jpg'); background-size: cover; background-position: 60% 46%; }
+  </style>
+  <template id="__bundler_thumbnail">
+    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-label="QuoteMax quote">
+      <rect width="100" height="100" fill="#16120F"></rect>
+      <rect x="30" y="33" width="40" height="28" rx="7" fill="#FFC400"></rect>
+      <path d="M39 59 L39 70 L49 60 Z" fill="#FFC400"></path>
+      <path d="M41 46 L47 52 L59 40" fill="none" stroke="#16120F" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path>
+    </svg>
+  </template>
+</helmet>
+<div class="qm-quote-canvas {{ themeClass }}" style="position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden;background:var(--ink-deep);color:var(--text-pri)">
+  <div class="qm-noise" aria-hidden="true"></div>
+
+  <header style="position:relative;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:16px;height:56px;padding:0 20px;border-bottom:1px solid var(--ink-line);background:var(--ink-deep)">
+    <div style="display:flex;align-items:center;gap:10px;min-width:0">
+      <svg width="24" height="24" viewBox="0 0 64 64" role="img" aria-label="QuoteMax" style="display:block;flex-shrink:0"><rect width="64" height="64" fill="#FFC400"></rect><rect x="13" y="14" width="38" height="26" rx="7" fill="#1C1812"></rect><path d="M20 39 L20 50 L31 40 Z" fill="#1C1812"></path><path d="M23 27 L29.5 33.5 L41 21" fill="none" stroke="#FFC400" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      <span style="font-family:var(--font-mono);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-dim);white-space:nowrap">Customer quote</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:2px;border:1px solid var(--ink-line);background:var(--ink);padding:3px;border-radius:10px">
+      <sc-for list="{{ tradePills }}" as="t" hint-placeholder-count="3">
+        <button type="button" class="qm-seg" onClick="{{ t.onSelect }}" style="{{ t.btnStyle }}">{{ t.iconEl }}<span>{{ t.label }}</span></button>
+      </sc-for>
+    </div>
+    <div style="display:flex;align-items:center;gap:9px">
+      <button type="button" class="qm-ghost" aria-label="Toggle theme" onClick="{{ toggleTheme }}" style="display:grid;place-items:center;width:36px;height:36px;border:1px solid var(--ink-line);border-radius:9px;background:transparent;color:var(--text-sec);cursor:pointer;transition:border-color .15s ease,color .15s ease">{{ themeIcon }}</button>
+      <button type="button" class="qm-ghost" onClick="{{ printDoc }}" style="display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border:1px solid var(--ink-line);border-radius:9px;background:transparent;color:var(--text-sec);font-family:var(--font-mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;white-space:nowrap;cursor:pointer;transition:border-color .15s ease,color .15s ease">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V2h12v7"></path><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>Print</button>
+    </div>
+  </header>
+
+  <main class="qm-scroll" style="position:relative;z-index:10;flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 16px">
+    <article data-screen-label="Quote {{ quote.id }}" class="qm-edge-lit" style="max-width:520px;width:100%;margin:26px auto;border:1px solid var(--ink-line);background:var(--ink-deep);animation:qm-pop .4s cubic-bezier(0.22,1,0.36,1) both">
+
+      <header style="border-bottom:1px solid var(--ink-line);padding:20px 24px;background:var(--ink-card)">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+          <div style="display:flex;align-items:center;gap:13px;min-width:0">
+            <span style="display:inline-grid;place-items:center;width:44px;height:44px;flex-shrink:0;background:var(--accent);color:var(--accent-ink)">{{ biz.iconEl }}</span>
+            <div style="min-width:0">
+              <div style="font-family:var(--font-sans);font-weight:800;text-transform:uppercase;letter-spacing:-0.01em;font-size:18px;line-height:1.12;color:var(--text-pri)">{{ biz.name }}</div>
+              <div style="margin-top:7px;font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.13em;color:var(--text-dim)">{{ biz.cred }}</div>
+            </div>
+          </div>
+          <a href="{{ biz.phoneHref }}" aria-label="Call" style="display:inline-grid;place-items:center;width:40px;height:40px;flex-shrink:0;border:1px solid var(--ink-line);color:var(--text-sec);text-decoration:none">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384"></path></svg>
+          </a>
+        </div>
+      </header>
+
+      <figure class="qm-duotone" style="margin:0;position:relative;border-bottom:1px solid var(--ink-line)">
+        <div class="qm-duotone__img qm-heroimg {{ heroPhoto.cls }}" role="img" aria-label="{{ heroPhoto.alt }}"></div>
+        <div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg, color-mix(in srgb, var(--ink-deep) 20%, transparent) 0%, transparent 34%, color-mix(in srgb, var(--ink-deep) 78%, transparent) 100%)"></div>
+      </figure>
+
+      <section style="position:relative;overflow:hidden;border-bottom:1px solid var(--ink-line);background:var(--ink-deep)">
+        <div aria-hidden="true" style="position:absolute;inset:0;background:radial-gradient(130% 90% at 50% 0%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 62%)"></div>
+        <div style="position:relative;z-index:1;padding:28px 24px 30px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <span style="font-family:var(--font-mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--accent)">Quote {{ quote.id }}</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;padding:5px 10px;border:1px solid color-mix(in srgb, var(--warning-bright) 45%, transparent);font-family:var(--font-mono);font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.13em;color:var(--warning-bright)">
+              <span aria-hidden="true" style="width:6px;height:6px;border-radius:9999px;background:var(--warning-bright);animation:qm-pulse-soft 2.4s ease-in-out infinite"></span>Awaiting you</span>
+          </div>
+          <h1 style="margin:16px 0 0;font-family:var(--font-sans);font-weight:800;text-transform:uppercase;letter-spacing:-0.03em;font-size:34px;line-height:0.98;color:var(--text-pri)">{{ hero.line1 }}<br><span class="qm-accentword">{{ hero.line2 }}</span></h1>
+          <p style="margin:18px 0 0;font-size:15.5px;line-height:1.55;color:var(--text-sec)">{{ hero.greeting }}</p>
+          <div style="margin-top:18px;display:flex;flex-wrap:wrap;gap:8px">
+            <span style="font-family:var(--font-mono);font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-dim);border:1px solid var(--ink-line);padding:5px 10px">Issued {{ hero.issued }}</span>
+            <span style="font-family:var(--font-mono);font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-dim);border:1px solid var(--ink-line);padding:5px 10px">Valid to {{ hero.valid }}</span>
+          </div>
+        </div>
+      </section>
+
+      <section style="border-bottom:1px solid var(--ink-line);background:var(--ink-card);display:grid;grid-template-columns:1fr 1fr">
+        <sc-for list="{{ summary }}" as="s" hint-placeholder-count="4">
+          <div style="{{ s.cellStyle }}">
+            <div style="font-family:var(--font-mono);font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.13em;color:var(--text-dim)">{{ s.k }}</div>
+            <div style="margin-top:7px;font-family:var(--font-mono);font-weight:800;line-height:1;font-size:22px;color:var(--accent);font-variant-numeric:tabular-nums">{{ s.v }}</div>
+            <div style="margin-top:6px;font-size:11.5px;color:var(--text-sec)">{{ s.sub }}</div>
+          </div>
+        </sc-for>
+      </section>
+
+      <section style="padding:22px 24px 8px">
+        <div style="font-family:var(--font-mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-dim)">Scope of works</div>
+        <sc-for list="{{ scope }}" as="s" hint-placeholder-count="3">
+          <div style="display:flex;gap:16px;padding:20px 0;border-top:1px solid var(--ink-line);margin-top:14px">
+            <span aria-hidden="true" style="flex-shrink:0;font-family:var(--font-mono);font-weight:700;font-size:26px;line-height:0.85;color:var(--accent)">{{ s.n }}</span>
+            <div style="min-width:0">
+              <h3 style="margin:0;font-family:var(--font-sans);font-weight:800;text-transform:uppercase;letter-spacing:-0.01em;font-size:15px;color:var(--text-pri)">{{ s.title }}</h3>
+              <sc-if value="{{ s.hasBody }}" hint-placeholder-val="{{ true }}">
+                <p style="margin:9px 0 0;font-size:13.5px;line-height:1.55;color:var(--text-sec)">{{ s.body }}</p>
+              </sc-if>
+              <sc-if value="{{ s.hasList }}" hint-placeholder-val="{{ false }}">
+                <div style="margin-top:11px;display:grid;gap:9px">
+                  <sc-for list="{{ s.list }}" as="li" hint-placeholder-count="4">
+                    <div style="display:flex;gap:11px;font-size:13.5px;line-height:1.45;color:var(--text-sec)">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0;margin-top:2px"><path d="M20 6 9 17l-5-5"></path></svg>{{ li }}
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </div>
+        </sc-for>
+      </section>
+
+      <sc-if value="{{ isAerial }}" hint-placeholder-val="{{ false }}">
+      <section style="padding:22px 24px;border-top:1px solid var(--ink-line)">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div style="font-family:var(--font-mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-dim)">{{ aerial.label }}</div>
+          <span style="font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-dim)">{{ aerial.sub }}</span>
+        </div>
+        <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <figure class="qm-duotone" style="margin:0;position:relative;height:214px;border:1px solid var(--ink-line);overflow:hidden">
+            <div class="qm-aerial {{ aerial.measureCls }}" role="img" aria-label="{{ aerial.measureAlt }}" style="position:absolute;inset:0;background-position:78% 42%"></div>
+            <div style="position:absolute;top:9px;left:9px;background:color-mix(in srgb, var(--ink-deep) 90%, transparent);border:1px solid var(--ink-line);padding:9px 11px">
+              <div style="font-family:var(--font-mono);font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.13em;color:var(--accent)">{{ aerial.panelTitle }}</div>
+              <div style="margin-top:8px;display:grid;gap:6px">
+                <sc-for list="{{ aerial.metrics }}" as="m" hint-placeholder-count="4">
+                  <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px">
+                    <span style="font-family:var(--font-mono);font-size:8px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim)">{{ m.k }}</span>
+                    <span style="font-family:var(--font-mono);font-size:11.5px;font-weight:700;color:var(--text-pri);font-variant-numeric:tabular-nums">{{ m.v }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="position:absolute;right:9px;bottom:9px;display:flex;align-items:center;gap:7px;background:color-mix(in srgb, var(--ink-deep) 82%, transparent);border:1px solid var(--ink-line);padding:5px 8px">
+              <span aria-hidden="true" style="width:13px;border-top:2px solid var(--accent)"></span>
+              <span style="font-family:var(--font-mono);font-size:7.5px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-sec)">{{ aerial.legend }}</span>
+            </div>
+          </figure>
+          <figure class="qm-duotone" style="margin:0;position:relative;height:214px;border:1px solid var(--ink-line);overflow:hidden">
+            <div class="qm-aerial qm-aerial--sat" role="img" aria-label="Satellite view of the property" style="position:absolute;inset:0;background-position:58% 42%"></div>
+            <span aria-hidden="true" style="position:absolute;left:0;right:0;bottom:0;height:44%;background:linear-gradient(180deg,transparent,color-mix(in srgb, var(--ink-deep) 82%, transparent))"></span>
+            <div style="position:absolute;left:9px;bottom:9px;font-family:var(--font-mono);font-size:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-pri)">Satellite · {{ aerial.place }}</div>
+          </figure>
+        </div>
+        <p style="margin:12px 0 0;font-size:12px;line-height:1.5;color:var(--text-dim)">{{ aerial.note }}</p>
+      </section>
+      </sc-if>
+
+      <sc-if value="{{ isGallery }}" hint-placeholder-val="{{ true }}">
+      <section style="padding:22px 24px;border-top:1px solid var(--ink-line)">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div style="font-family:var(--font-mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-dim)">{{ galleryLabel }}</div>
+          <span style="font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-dim)">{{ galleryCount }} photos</span>
+        </div>
+        <div style="margin-top:14px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+          <sc-for list="{{ gallery }}" as="g" hint-placeholder-count="3">
+            <figure class="qm-duotone" style="margin:0;position:relative;height:104px;border:1px solid var(--ink-line);overflow:hidden">
+              <div class="qm-duotone__img qm-gal {{ g.cls }}" role="img" aria-label="{{ g.caption }}" style="position:absolute;inset:0"></div>
+              <span aria-hidden="true" style="position:absolute;left:0;right:0;bottom:0;height:60%;background:linear-gradient(180deg,transparent,color-mix(in srgb, var(--ink-deep) 82%, transparent))"></span>
+              <figcaption style="position:absolute;left:0;right:0;bottom:0;padding:7px 9px;font-family:var(--font-mono);font-size:8.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-pri)">{{ g.caption }}</figcaption>
+            </figure>
+          </sc-for>
+        </div>
+        <p style="margin:12px 0 0;font-size:12px;line-height:1.5;color:var(--text-dim)">Filler shots so you can see the layout. On the real quote these are this job's site photos.</p>
+      </section>
+      </sc-if>
+
+      <sc-if value="{{ isSolarReport }}" hint-placeholder-val="{{ false }}">
+      <section style="padding:22px 24px;border-top:1px solid var(--ink-line)">
+        <div style="font-family:var(--font-mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-dim)">Sun &amp; shade analysis</div>
+        <figure style="margin:14px 0 0;position:relative;height:232px;border:1px solid var(--ink-line);overflow:hidden">
+          <div class="qm-sunshade" role="img" aria-label="Sun and shade heatmap of your roof" style="position:absolute;inset:0"></div>
+          <div style="position:absolute;left:9px;bottom:9px;display:flex;align-items:center;gap:9px;background:color-mix(in srgb, var(--ink-deep) 84%, transparent);border:1px solid var(--ink-line);padding:6px 10px">
+            <span style="font-family:var(--font-mono);font-size:7.5px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-sec)">Shade</span>
+            <span aria-hidden="true" style="width:76px;height:7px;background:linear-gradient(90deg,#2fa39a,#ffd400,#e5471c)"></span>
+            <span style="font-family:var(--font-mono);font-size:7.5px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-sec)">Full sun</span>
+          </div>
+        </figure>
+        <div style="margin-top:12px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--ink-line);border:1px solid var(--ink-line)">
+          <sc-for list="{{ solar.sunMetrics }}" as="m" hint-placeholder-count="4">
+            <div style="background:var(--ink-card);padding:12px 12px">
+              <div style="font-family:var(--font-mono);font-size:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.11em;color:var(--text-dim)">{{ m.k }}</div>
+              <div style="margin-top:6px;font-family:var(--font-mono);font-weight:800;font-size:16px;color:var(--accent);font-variant-numeric:tabular-nums">{{ m.v }}</div>
+              <div style="margin-top:4px;font-family:var(--font-mono);font-size:7.5px;text-transform:uppercase;letter-spacing:0.09em;color:var(--text-sec)">{{ m.sub }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <p style="margin:12px 0 0;font-size:12px;line-height:1.5;color:var(--text-dim)">Modelled from aerial imagery and local sun paths. Your north and west faces get the best run of sun, with minimal shading from the tree line.</p>
+      </section>
+
+      <section style="padding:22px 24px;border-top:1px solid var(--ink-line);background:var(--ink-deep)">
+        <div style="font-family:var(--font-mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-dim)">The numbers, explained</div>
+        <div style="margin-top:14px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--ink-line);border:1px solid var(--ink-line)">
+          <sc-for list="{{ solar.numbers }}" as="m" hint-placeholder-count="4">
+            <div style="background:var(--ink-card);padding:14px 12px">
+              <div style="font-family:var(--font-mono);font-size:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.11em;color:var(--text-dim)">{{ m.k }}</div>
+              <div style="margin-top:7px;font-family:var(--font-mono);font-weight:800;font-size:18px;color:var(--accent);font-variant-numeric:tabular-nums">{{ m.v }}</div>
+              <div style="margin-top:5px;font-family:var(--font-mono);font-size:7.5px;text-transform:uppercase;letter-spacing:0.09em;color:var(--text-sec)">{{ m.sub }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <section style="padding:22px 24px;border-top:1px solid var(--ink-line)">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div style="font-family:var(--font-mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-dim)">System details · monthly output</div>
+          <span style="font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-dim)">kWh</span>
+        </div>
+        <div style="margin-top:16px;display:flex;align-items:flex-end;gap:5px;height:118px">
+          <sc-for list="{{ solar.bars }}" as="b" hint-placeholder-count="12">
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end">
+              <div style="{{ b.barStyle }}"></div>
+              <span style="font-family:var(--font-mono);font-size:8px;color:var(--text-dim)">{{ b.label }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:16px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--ink-line);border:1px solid var(--ink-line)">
+          <sc-for list="{{ solar.specs }}" as="m" hint-placeholder-count="4">
+            <div style="background:var(--ink-card);padding:12px 12px">
+              <div style="font-family:var(--font-mono);font-size:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.11em;color:var(--text-dim)">{{ m.k }}</div>
+              <div style="margin-top:6px;font-family:var(--font-mono);font-weight:700;font-size:13px;color:var(--text-pri);font-variant-numeric:tabular-nums">{{ m.v }}</div>
+              <div style="margin-top:4px;font-family:var(--font-mono);font-size:7.5px;text-transform:uppercase;letter-spacing:0.09em;color:var(--text-sec)">{{ m.sub }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <section style="padding:22px 24px;border-top:1px solid var(--ink-line);background:var(--ink-deep)">
+        <div style="font-family:var(--font-mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--accent)">25-year financial summary</div>
+        <div style="margin-top:14px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--ink-line);border:1px solid var(--ink-line)">
+          <sc-for list="{{ solar.finance }}" as="m" hint-placeholder-count="4">
+            <div style="background:var(--ink-card);padding:14px 12px">
+              <div style="font-family:var(--font-mono);font-size:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.11em;color:var(--text-dim)">{{ m.k }}</div>
+              <div style="margin-top:7px;font-family:var(--font-mono);font-weight:800;font-size:18px;color:var(--accent);font-variant-numeric:tabular-nums">{{ m.v }}</div>
+              <div style="margin-top:5px;font-family:var(--font-mono);font-size:7.5px;text-transform:uppercase;letter-spacing:0.09em;color:var(--text-sec)">{{ m.sub }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:16px;border:1px solid var(--ink-line);background:var(--ink-card);padding:15px 16px 12px">
+          <div style="font-family:var(--font-mono);font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-dim)">Cumulative savings</div>
+          <svg viewBox="0 0 470 150" preserveAspectRatio="none" style="width:100%;height:150px;display:block;margin-top:10px">
+            <path d="{{ solar.chartArea }}" fill="color-mix(in srgb, var(--accent) 15%, transparent)"></path>
+            <path d="{{ solar.chartLine }}" fill="none" stroke="var(--accent)" stroke-width="2.5" vector-effect="non-scaling-stroke"></path>
+            <line x1="0" y1="{{ solar.chartZeroY }}" x2="470" y2="{{ solar.chartZeroY }}" stroke="var(--ink-line)" stroke-width="1" stroke-dasharray="5 5" vector-effect="non-scaling-stroke"></line>
+          </svg>
+          <div style="margin-top:8px;display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:8px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim)"><span>Year 0</span><span>Break-even ~4.2 yrs</span><span>Year 25</span></div>
+        </div>
+      </section>
+
+      <section style="padding:22px 24px;border-top:1px solid var(--ink-line)">
+        <div style="font-family:var(--font-mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-dim)">Environmental impact</div>
+        <div style="margin-top:14px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--ink-line);border:1px solid var(--ink-line)">
+          <sc-for list="{{ solar.enviro }}" as="m" hint-placeholder-count="4">
+            <div style="background:var(--ink-card);padding:14px 12px">
+              <div style="font-family:var(--font-mono);font-size:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.11em;color:var(--text-dim)">{{ m.k }}</div>
+              <div style="margin-top:7px;font-family:var(--font-mono);font-weight:800;font-size:17px;color:var(--success-bright);font-variant-numeric:tabular-nums">{{ m.v }}</div>
+              <div style="margin-top:5px;font-family:var(--font-mono);font-size:7.5px;text-transform:uppercase;letter-spacing:0.09em;color:var(--text-sec)">{{ m.sub }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+      </sc-if>
+
+      <section style="padding:26px 24px;border-top:1px solid var(--ink-line);background:var(--ink-deep)">
+        <div style="font-family:var(--font-mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--accent)">Choose your option</div>
+        <h2 style="margin:10px 0 0;font-family:var(--font-sans);font-weight:800;text-transform:uppercase;letter-spacing:-0.02em;font-size:22px;color:var(--text-pri)">Good · Better · Best</h2>
+        <p style="margin:10px 0 0;font-size:13px;line-height:1.5;color:var(--text-dim)">All prices include GST. The 30% deposit locks your booking and comes off the final invoice.</p>
+        <div style="margin-top:20px;display:grid;gap:14px">
+          <sc-for list="{{ tiers }}" as="t" hint-placeholder-count="3">
+            <div class="qm-tier" onClick="{{ t.onSelect }}" style="{{ t.cardStyle }}">
+              <span aria-hidden="true" style="{{ t.sweepStyle }}"></span>
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+                <div>
+                  <div style="display:flex;align-items:center;gap:9px">
+                    <span style="font-family:var(--font-mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.14em;color:var(--accent)">{{ t.tier }}</span>
+                    <sc-if value="{{ t.recommended }}" hint-placeholder-val="{{ false }}">
+                      <span style="background:var(--accent);color:var(--accent-ink);font-family:var(--font-mono);font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.13em;padding:2px 7px">Most popular</span>
+                    </sc-if>
+                  </div>
+                  <p style="margin:9px 0 0;font-size:13px;line-height:1.45;color:var(--text-sec);max-width:34ch">{{ t.blurb }}</p>
+                </div>
+                <div style="text-align:right;flex-shrink:0">
+                  <div style="font-family:var(--font-mono);font-weight:800;font-size:24px;line-height:1;color:var(--text-pri);font-variant-numeric:tabular-nums">{{ t.priceText }}</div>
+                  <div style="margin-top:5px;font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim)">inc GST</div>
+                </div>
+              </div>
+              <div style="margin-top:14px;display:grid;gap:9px">
+                <sc-for list="{{ t.items }}" as="it" hint-placeholder-count="3">
+                  <div style="display:flex;gap:10px;font-size:13px;line-height:1.4;color:var(--text-sec)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0;margin-top:2px"><path d="M20 6 9 17l-5-5"></path></svg>{{ it }}
+                  </div>
+                </sc-for>
+              </div>
+              <button type="button" onClick="{{ t.onPay }}" class="{{ t.ctaClass }}" style="{{ t.ctaStyle }}">{{ t.ctaLabel }}</button>
+            </div>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ booked }}" hint-placeholder-val="{{ false }}">
+          <div role="status" style="margin-top:18px;display:flex;gap:12px;align-items:flex-start;border:1px solid color-mix(in srgb, var(--success-bright) 45%, transparent);background:color-mix(in srgb, var(--success-bright) 12%, transparent);padding:16px 18px;animation:qm-pop .35s ease both">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--success-bright)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0;margin-top:1px"><path d="M18 6 7 17l-5-5"></path><path d="m22 10-7.5 7.5L13 16"></path></svg>
+            <div>
+              <div style="font-family:var(--font-mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.13em;color:var(--success-bright)">{{ bookedTier }} option booked</div>
+              <p style="margin:6px 0 0;font-size:13.5px;line-height:1.5;color:var(--text-sec)">{{ bookedMsg }}</p>
+            </div>
+          </div>
+        </sc-if>
+      </section>
+
+      <section style="padding:24px;border-top:1px solid var(--ink-line)">
+        <div style="font-family:var(--font-mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-dim)">Good to know</div>
+        <div style="margin-top:14px;display:grid;gap:11px">
+          <sc-for list="{{ assumptions }}" as="a" hint-placeholder-count="4">
+            <div style="display:flex;gap:11px;font-size:13.5px;line-height:1.45;color:var(--text-sec)">
+              <span aria-hidden="true" style="font-family:var(--font-mono);color:var(--text-dim);flex-shrink:0">○</span>{{ a }}
+            </div>
+          </sc-for>
+        </div>
+        <p style="margin:16px 0 0;font-size:12.5px;line-height:1.5;color:var(--text-dim)">Anything unexpected turns up, we stop and talk it through before doing more. Never a surprise on the invoice.</p>
+      </section>
+
+      <sc-if value="{{ hasPreview }}" hint-placeholder-val="{{ false }}">
+      <section style="border-top:1px solid var(--ink-line)">
+        <figure style="margin:0;position:relative;height:300px;overflow:hidden;border-bottom:1px solid var(--ink-line)">
+          <div class="qm-roofpreview" role="img" aria-label="Preview of your roof rendered in Colorbond Corrugated" style="position:absolute;inset:0"></div>
+          <span aria-hidden="true" style="position:absolute;left:0;right:0;bottom:0;height:52%;background:linear-gradient(180deg,transparent,color-mix(in srgb, var(--ink-deep) 90%, transparent))"></span>
+          <figcaption style="position:absolute;left:0;right:0;bottom:0;padding:14px 18px;text-align:center">
+            <span style="font-family:var(--font-mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.14em;color:var(--accent)">Preview</span><span style="font-family:var(--font-mono);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-pri)"> · your roof in Colorbond Corrugated</span>
+            <div style="margin-top:5px;font-family:var(--font-mono);font-size:8.5px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim)">AI generated from the satellite image</div>
+          </figcaption>
+        </figure>
+        <p style="margin:0;padding:16px 24px;font-size:12.5px;line-height:1.55;color:var(--text-dim);border-bottom:1px solid var(--ink-line)">{{ preview.note }}</p>
+      </section>
+      </sc-if>
+
+      <footer style="padding:24px;border-top:1px solid var(--ink-line);background:var(--ink-card)">
+        <div style="display:grid;gap:1px;border:1px solid var(--ink-line);background:var(--ink-line)">
+          <sc-for list="{{ footerRows }}" as="r" hint-placeholder-count="4">
+            <div style="display:grid;grid-template-columns:118px 1fr;gap:12px;padding:11px 14px;background:var(--ink-card)">
+              <span style="font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-dim)">{{ r.k }}</span>
+              <span style="font-size:12.5px;color:var(--text-sec);line-height:1.4">{{ r.v }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:18px;display:flex;align-items:center;justify-content:center;gap:8px">
+          <span style="font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-dim)">Quote prepared with</span>
+          <span style="display:inline-flex;align-items:center;gap:7px">
+            <svg width="18" height="18" viewBox="0 0 64 64" aria-hidden="true" style="display:block"><rect width="64" height="64" fill="#FFC400"></rect><rect x="13" y="14" width="38" height="26" rx="7" fill="#1C1812"></rect><path d="M20 39 L20 50 L31 40 Z" fill="#1C1812"></path><path d="M23 27 L29.5 33.5 L41 21" fill="none" stroke="#FFC400" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <span style="font-family:var(--font-sans);font-weight:800;font-size:13px;text-transform:uppercase;letter-spacing:-0.01em;color:var(--text-sec)">QuoteMax</span>
+          </span>
+        </div>
+      </footer>
+
+      <div style="background:var(--accent);color:var(--accent-ink);padding:12px 16px;text-align:center;font-family:var(--font-mono);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.14em">Pick a tier · Pay the deposit · We book it in · Licensed &amp; insured</div>
+    </article>
+  </main>
+
+  <footer style="position:relative;z-index:20;border-top:1px solid var(--ink-line);background:var(--ink-card);padding:12px 20px">
+    <div style="max-width:520px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px">
+      <sc-if value="{{ bar.paid }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;align-items:center;gap:10px;min-width:0">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--success-bright)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0"><path d="M18 6 7 17l-5-5"></path><path d="m22 10-7.5 7.5L13 16"></path></svg>
+          <div style="min-width:0">
+            <div style="font-family:var(--font-mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--success-bright)">Deposit paid</div>
+            <div style="font-size:12.5px;color:var(--text-sec);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ bar.sub }}</div>
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ bar.unpaid }}" hint-placeholder-val="{{ true }}">
+        <div style="min-width:0">
+          <div style="font-family:var(--font-mono);font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-dim)">{{ bar.tierLabel }}</div>
+          <div style="margin-top:3px;font-family:var(--font-mono);font-weight:800;font-size:17px;color:var(--text-pri);font-variant-numeric:tabular-nums">{{ bar.priceText }} <span style="font-size:10px;font-weight:600;color:var(--text-dim)">inc GST</span></div>
+        </div>
+        <button type="button" onClick="{{ bar.onPay }}" class="qm-cta" style="display:inline-flex;align-items:center;gap:9px;border:1px solid transparent;background:var(--accent);color:var(--accent-ink);padding:13px 20px;font-family:var(--font-sans);font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:0.05em;white-space:nowrap;cursor:pointer;transition:background-color .15s ease">
+          {{ bar.ctaLabel }}
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
+        </button>
+      </sc-if>
+    </div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1200,&quot;height&quot;:880},&quot;trade&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;solar&quot;,&quot;roof&quot;,&quot;electrical&quot;],&quot;default&quot;:&quot;solar&quot;,&quot;tsType&quot;:&quot;'solar' | 'roof' | 'electrical'&quot;,&quot;section&quot;:&quot;Quote&quot;},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;'dark' | 'light'&quot;,&quot;section&quot;:&quot;Appearance&quot;}}">
+class Component extends DCLogic {
+  state = { trade: this._initTrade(), sel: null, paid: null, theme: null };
+
+  _initTrade() { const t = this.props && this.props.trade; return ['solar', 'roof', 'electrical'].includes(t) ? t : 'solar'; }
+
+  componentDidMount() {
+    if (!(window.lucide && window.lucide.icons)) {
+      this._t = setInterval(() => { if (window.lucide && window.lucide.icons) { clearInterval(this._t); this._t = null; this.forceUpdate(); } }, 60);
+      setTimeout(() => { if (this._t) { clearInterval(this._t); this._t = null; } }, 5000);
+    }
+    let saved = null;
+    try { saved = localStorage.getItem('qm-theme-quote'); } catch (e) {}
+    if (saved === 'light' || saved === 'dark') this.setState({ theme: saved });
+    this._applyTheme(saved || this.resolvedTheme());
+  }
+  componentWillUnmount() { if (this._t) clearInterval(this._t); }
+
+  pascal(n) { return String(n).split(/[-_]/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(''); }
+  camel(k) { return k.indexOf('-') === -1 ? k : k.replace(/-([a-z])/g, (_, c) => c.toUpperCase()); }
+  icon(name, opts) {
+    opts = opts || {};
+    const size = opts.size || 18, color = opts.color || 'currentColor', sw = opts.sw || 1.9;
+    const lib = (window.lucide && window.lucide.icons) || {};
+    const node = lib[this.pascal(name)] || lib[name];
+    const base = { display: 'inline-flex', flexShrink: 0, verticalAlign: 'middle' };
+    if (!node) return React.createElement('span', { 'aria-hidden': true, style: Object.assign({ width: size, height: size }, base) });
+    const kids = node.map((c, i) => { const a = c[1] || {}; const o = { key: i }; for (const k in a) o[this.camel(k)] = a[k]; return React.createElement(c[0], o); });
+    return React.createElement('svg', { xmlns: 'http://www.w3.org/2000/svg', width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: color, strokeWidth: sw, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true, style: base }, kids);
+  }
+  money(n) { return '$' + Number(n).toLocaleString('en-AU', { maximumFractionDigits: 0 }); }
+
+  resolvedTheme() { return this.state.theme || (this.props.theme === 'light' ? 'light' : 'dark'); }
+  _applyTheme(t) { try { const r = document.documentElement; r.setAttribute('data-theme', t); r.classList.toggle('qm-light', t === 'light'); r.classList.toggle('qm-dark', t === 'dark'); } catch (e) {} }
+  toggleTheme() { const t = this.resolvedTheme() === 'light' ? 'dark' : 'light'; this._applyTheme(t); try { localStorage.setItem('qm-theme-quote', t); } catch (e) {} this.setState({ theme: t }); }
+
+  setTrade(id) { this.setState({ trade: id, sel: null, paid: null }); }
+  selectTier(name) { if (!this.state.paid) this.setState({ sel: name }); }
+  pay(name, e) { if (e) e.stopPropagation(); this.setState({ paid: name, sel: name }); }
+  printDoc() { try { window.print(); } catch (e) {} }
+
+  TRADES = {
+    solar: {
+      icon: 'sun', label: 'Solar',
+      biz: { name: 'Hartley Electrical & Solar', cred: 'CEC Accredited · A1284420', owner: 'Dave', phone: '0480102030', abn: '54 219 887 663', insure: 'Public liability to $20m' },
+      quote: { id: 'QM-1054', customer: 'Sarah', suburb: 'Ashfield', issued: '28 Jun 2026', valid: '12 Jul 2026' },
+      hero: { line1: '6.6kW solar,', line2: 'sorted.', greeting: "G'day Sarah, here are three ways we can do your solar. Pick what suits and pay the deposit to lock it in. No deposit, no obligation." },
+      summary: [['System', '6.6 kW', '16 panels, north & west'], ['Est. output', '9,200', 'kWh per year'], ['Bill offset', '~92%', 'of your usage'], ['Payback', '4.2 yrs', 'then it pays you']],
+      scope: [
+        ['01', 'The system', "Supply and install a 6.6kW system: 16 panels across the north and west roof faces, wired to a 5kW inverter in the garage.", null],
+        ['02', 'Included on every option', null, ['Full design and CEC-accredited install', 'Grid connection and paperwork with your retailer', 'Monitoring app set up on your phone', 'Old gear and packaging taken away']],
+        ['03', 'Timing & access', "One day on site, weather permitting. We need roof access and the power off for about an hour. We book it once the deposit is in.", null],
+      ],
+      tiers: [
+        { tier: 'Good', price: 6900, blurb: 'A solid entry system. Quality panels, reliable output.', items: ['16× 415W tier-1 panels', '5kW string inverter', '10-year product warranty'] },
+        { tier: 'Better', price: 9600, recommended: true, blurb: 'What most homes go for. Better inverter and per-panel monitoring.', items: ['16× 440W premium panels', '5kW hybrid inverter, battery-ready', '12-year product · 25-year performance'] },
+        { tier: 'Best', price: 18400, blurb: 'Maximum output and storage, ready for time-of-use.', items: ['24× 440W premium panels', '10kWh battery + hybrid inverter', 'Panel-level optimisation · 25-year cover'] },
+      ],
+      assumptions: ['Roof is sound and can take the load', 'Switchboard has room for a solar breaker', 'No major shading from trees or neighbours', 'Single-phase supply, 3-phase quoted separately'],
+      galleryLabel: 'Recent solar work',
+      gallery: [['qm-gal--solar', '6.6kW · Ashfield'], ['qm-gal--tools', 'Install day'], ['qm-gal--workshop', 'Inverter fit-off']],
+      aerial: { label: 'Panel layout', sub: 'Sized from aerial', measureCls: 'qm-aerial--solar', measureAlt: 'Proposed solar array on the roof', panelTitle: 'Proposed array', metrics: [['Array', '6.6 kW'], ['Panels', '16'], ['Facing', 'N + W'], ['Roof pitch', '22°']], legend: 'Panel array', place: 'Ashfield NSW', note: 'Panel layout is indicative, sized from aerial imagery. Final placement is confirmed on the day.' },
+    },
+    roof: {
+      icon: 'home', label: 'Roof',
+      biz: { name: 'Ridgeline Roofing', cred: 'Licensed roofer · NSW 302145C', owner: 'Mick', phone: '0468771220', abn: '88 442 190 774', insure: 'Public liability to $20m' },
+      quote: { id: 'QM-1061', customer: 'the Nguyens', suburb: 'Chandler', issued: '26 Jun 2026', valid: '10 Jul 2026' },
+      hero: { line1: 'Full reroof,', line2: 'done right.', greeting: "G'day, here are three ways we can do the reroof. Pick what suits and pay the deposit to lock it in. No deposit, no obligation." },
+      summary: [['Roof area', '586 m²', 'measured aerial'], ['Material', 'Colorbond', 'Ultra grade'], ['Pitch', '22°', 'tile to metal'], ['Warranty', '25 yrs', 'material cover']],
+      scope: [
+        ['01', 'The job', "Strip the existing tile roof and re-sheet in Colorbond, including new sarking, battens, ridge capping and flashings.", null],
+        ['02', 'Included on every option', null, ['Full removal and disposal of the old roof', 'New sarking, battens and flashings', 'Colorbond sheeting in your chosen colour', 'Site cleaned and magnet-swept for nails']],
+        ['03', 'Timing & access', "Three to four days on site depending on weather. Scaffold and skip arrive the day before. We keep it watertight each night.", null],
+      ],
+      tiers: [
+        { tier: 'Good', price: 14800, blurb: 'A clean reroof: strip, sark and re-sheet.', items: ['Remove and dispose existing roof', 'New sarking and battens', 'Colorbond Classic · 10-year workmanship'] },
+        { tier: 'Better', price: 19600, recommended: true, blurb: 'The full job most homes get. Premium sheeting and new gutters.', items: ['Colorbond Ultra sheeting', 'New gutters and downpipes', '25-year material · 10-year workmanship'] },
+        { tier: 'Best', price: 27400, blurb: 'Top spec with insulation and leaf protection.', items: ['Colorbond Ultra + Anticon blanket', 'Ceiling insulation upgrade', 'Leaf guard to all gutters · 15-year workmanship'] },
+      ],
+      assumptions: ['No major structural repairs to the roof frame', 'Asbestos-free, confirmed before we start', 'Clear site access for scaffold and skip', 'Solar removal and refit quoted separately'],
+      galleryLabel: 'Recent roofing work',
+      gallery: [['qm-gal--roof', 'Colorbond · Chandler'], ['qm-gal--tools', 'Strip & re-sheet'], ['qm-gal--workshop', 'Ridge & flashing']],
+      aerial: { label: 'Roof measurement', sub: '586 m² from aerial', measureCls: 'qm-aerial--measure', measureAlt: 'Roof measured from aerial imagery', panelTitle: 'Selected structure', metrics: [['Sloped area', '586 m²'], ['Hips', '11'], ['Valleys', '7'], ['Storeys', '2']], legend: 'Measured roof', place: 'Chandler QLD', note: 'Measured from aerial imagery. Final measure is confirmed on site before we start.' },
+    },
+    electrical: {
+      icon: 'zap', label: 'Electrical',
+      biz: { name: 'Hartley Electrical', cred: 'Licensed electrician · NSW EC 89421', owner: 'Dave', phone: '0480102030', abn: '54 219 887 663', insure: 'Public liability to $20m' },
+      quote: { id: 'QM-1043', customer: 'Sarah', suburb: 'Ashfield', issued: '28 Jun 2026', valid: '12 Jul 2026' },
+      hero: { line1: '6 downlights,', line2: 'lounge.', greeting: "G'day Sarah, here are three ways we can do it. Pick what suits and pay the deposit to lock it in. No deposit, no obligation." },
+      summary: [['The job', '6 points', 'LED downlights'], ['Circuit', 'Existing', 'reuse wiring'], ['On site', '~4 hrs', 'half a day'], ['Warranty', '5 yrs', 'workmanship']],
+      scope: [
+        ['01', 'The job', "Supply and install 6 LED downlights in the lounge ceiling, evenly set out and run off your existing wall switch.", null],
+        ['02', 'Included on every option', null, ['Set-out and marking to suit the room', 'Make good around each cut-in', 'Test and a Certificate of Compliance', 'All offcuts and packaging taken away']],
+        ['03', 'Timing & access', "About half a day on site. We need roof-space access and the lighting circuit off for roughly an hour.", null],
+      ],
+      tiers: [
+        { tier: 'Good', price: 890, blurb: 'A tidy like-for-like. Does the job, nothing fancy.', items: ['6× dimmable LED downlights, warm white', 'Reuse existing wiring and switch', '12-month workmanship warranty'] },
+        { tier: 'Better', price: 1180, recommended: true, blurb: 'What most lounges get. Set the white to suit the room.', items: ['6× CCT-selectable downlights', 'New LED-rated dimmer fitted', '5-year warranty · neat cut-ins'] },
+        { tier: 'Best', price: 1540, blurb: 'Smart control, scenes and the longest cover.', items: ['6× smart app-controlled downlights', 'Individual dimming and scenes', '7-year warranty · priority callback'] },
+      ],
+      assumptions: ['Existing ceiling wiring is sound and to standard', 'Clear roof-space access, no full insulation removal', 'No asbestos present in the ceiling', 'Ceiling patching or painting is not included'],
+      galleryLabel: 'Recent electrical work',
+      gallery: [['qm-gal--elec', 'Downlights · Ashfield'], ['qm-gal--workshop', 'Board tidy-up'], ['qm-gal--tools', 'On the tools']],
+    },
+  };
+
+  solarReport() {
+    const st = (k, v, s) => ({ k: k, v: v, sub: s });
+    const monthly = [1020, 900, 820, 650, 540, 470, 510, 600, 720, 860, 950, 1030];
+    const mmax = Math.max.apply(null, monthly);
+    const months = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+    const bars = monthly.map((v, i) => ({ label: months[i], val: v, barStyle: { width: '100%', height: Math.round(v / mmax * 100) + '%', background: 'linear-gradient(180deg, var(--accent), var(--accent-press))', minHeight: '3px' } }));
+    const W = 470, H = 150, years = 25, cum = [];
+    for (let y = 0; y <= years; y++) cum.push(-9600 + 2100 * y + 8 * y * y);
+    const minV = Math.min.apply(null, cum), maxV = Math.max.apply(null, cum);
+    const X = (y) => (y / years) * W, Y = (v) => H - ((v - minV) / (maxV - minV)) * H;
+    let line = 'M' + X(0).toFixed(1) + ',' + Y(cum[0]).toFixed(1);
+    for (let y = 1; y <= years; y++) line += ' L' + X(y).toFixed(1) + ',' + Y(cum[y]).toFixed(1);
+    const area = line + ' L' + W + ',' + H + ' L0,' + H + ' Z';
+    return {
+      sunMetrics: [st('Irradiance', '1,840', 'kWh/m² yr'), st('Peak sun', '4.7 h', 'avg / day'), st('Shading loss', '3.2%', 'minimal'), st('Optimal tilt', '22°', 'matches roof')],
+      numbers: [st('System size', '6.6 kW', '16 panels'), st('Annual output', '9,060', 'kWh · year one'), st('Self-use', '62%', 'of output'), st('Bill offset', '~92%', 'of your usage')],
+      specs: [st('Panels', '16 × 440W', 'tier-1 mono'), st('Inverter', '5 kW', 'hybrid, battery-ready'), st('Roof used', '22.8 m²', 'north + west'), st('Warranty', '25 yrs', 'performance')],
+      bars: bars,
+      finance: [st('25-yr benefit', '$47,700', 'net of costs'), st('Payback', '4.2 yrs', 'then it pays you'), st('Year-one saving', '$2,290', 'off your bills'), st('Feed-in', '8c', 'per kWh export')],
+      enviro: [st('CO₂ offset', '7.1 t', 'per year'), st('Lifetime CO₂', '178 t', 'over 25 yrs'), st('Equivalent', '107', 'trees / year'), st('Car travel', '28,466', 'km offset / yr')],
+      chartArea: area, chartLine: line, chartZeroY: Y(0).toFixed(1),
+    };
+  }
+
+  renderVals() {
+    const t = this.TRADES[this.state.trade];
+    const paid = this.state.paid;
+    const sel = this.state.sel || (t.tiers.find((x) => x.recommended) || t.tiers[0]).tier;
+
+    const tradePills = Object.keys(this.TRADES).map((id) => {
+      const active = this.state.trade === id;
+      return {
+        label: this.TRADES[id].label, onSelect: () => this.setTrade(id),
+        iconEl: this.icon(this.TRADES[id].icon, { size: 13, color: active ? 'var(--accent-ink)' : 'var(--text-sec)', sw: 2 }),
+        btnStyle: { display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 13px', border: 'none', borderRadius: '7px', cursor: 'pointer', fontFamily: 'var(--font-sans)', fontWeight: active ? 700 : 600, fontSize: '12px', background: active ? 'var(--accent)' : 'transparent', color: active ? 'var(--accent-ink)' : 'var(--text-sec)', transition: 'background-color .15s ease, color .15s ease' },
+      };
+    });
+
+    const tiers = t.tiers.map((x) => {
+      const isSel = sel === x.tier && !paid;
+      const isPaid = paid === x.tier;
+      const disabled = paid && paid !== x.tier;
+      const hot = isSel || isPaid || (x.recommended && !paid);
+      let ctaLabel, ctaBg, ctaColor, ctaBorder, ctaClass;
+      if (isPaid) { ctaLabel = 'Deposit paid'; ctaBg = 'color-mix(in srgb, var(--success-bright) 14%, transparent)'; ctaColor = 'var(--success-bright)'; ctaBorder = 'color-mix(in srgb, var(--success-bright) 45%, transparent)'; ctaClass = ''; }
+      else if (disabled) { ctaLabel = 'Pay ' + this.money(Math.round(x.price * 0.3)) + ' deposit'; ctaBg = 'transparent'; ctaColor = 'var(--text-dim)'; ctaBorder = 'var(--ink-line)'; ctaClass = ''; }
+      else { ctaLabel = 'Pay ' + this.money(Math.round(x.price * 0.3)) + ' deposit'; ctaBg = 'var(--accent)'; ctaColor = 'var(--accent-ink)'; ctaBorder = 'transparent'; ctaClass = 'qm-cta'; }
+      return {
+        tier: x.tier, blurb: x.blurb, items: x.items, recommended: !!x.recommended,
+        priceText: this.money(x.price),
+        cardStyle: { position: 'relative', border: '1px solid ' + (hot ? 'color-mix(in srgb, var(--accent) 55%, var(--ink-line))' : 'var(--ink-line)'), background: isSel ? 'var(--ink)' : 'var(--ink-card)', padding: '18px', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.55 : 1, transition: 'border-color .15s ease, background-color .15s ease' },
+        sweepStyle: { position: 'absolute', left: 0, right: 0, top: 0, height: '2px', background: hot ? 'var(--accent)' : 'transparent' },
+        ctaClass, ctaLabel,
+        ctaStyle: { marginTop: '16px', width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '1px solid ' + ctaBorder, background: ctaBg, color: ctaColor, padding: '12px', fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: '12.5px', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: disabled || isPaid ? 'default' : 'pointer', transition: 'background-color .15s ease' },
+        onSelect: () => this.selectTier(x.tier),
+        onPay: (e) => { if (disabled || isPaid) { if (e) e.stopPropagation(); return; } this.pay(x.tier, e); },
+      };
+    });
+
+    const selObj = t.tiers.find((x) => x.tier === sel) || t.tiers[0];
+    const paidObj = paid ? t.tiers.find((x) => x.tier === paid) : null;
+
+    const ALT = { solar: 'Solar panels on an Australian home', roof: 'A freshly re-sheeted Colorbond roof', electrical: 'An electrician fitting downlights' };
+    const heroPhoto = { alt: ALT[this.state.trade], cls: 'qm-heroimg--' + this.state.trade };
+
+    return {
+      themeClass: this.resolvedTheme() === 'light' ? 'qm-light' : '',
+      themeIcon: this.icon(this.resolvedTheme() === 'light' ? 'moon' : 'sun', { size: 16, color: 'currentColor' }),
+      toggleTheme: () => this.toggleTheme(),
+      printDoc: () => this.printDoc(),
+      tradePills,
+      biz: { name: t.biz.name, cred: t.biz.cred, phoneHref: 'tel:' + t.biz.phone, iconEl: this.icon(t.icon, { size: 22, color: 'var(--accent-ink)', sw: 2 }) },
+      quote: { id: t.quote.id },
+      hero: Object.assign({}, t.hero, { issued: t.quote.issued, valid: t.quote.valid }),
+      heroPhoto,
+      isAerial: !!t.aerial,
+      isGallery: !t.aerial,
+      aerial: t.aerial ? Object.assign({}, t.aerial, { metrics: t.aerial.metrics.map((m) => ({ k: m[0], v: m[1] })) }) : { metrics: [] },
+      galleryLabel: t.galleryLabel,
+      galleryCount: t.gallery.length,
+      gallery: t.gallery.map((g) => ({ cls: g[0], caption: g[1] })),
+      summary: t.summary.map((s, i) => ({ k: s[0], v: s[1], sub: s[2], cellStyle: { padding: '16px 18px', borderRight: i % 2 === 0 ? '1px solid var(--ink-line)' : 'none', borderTop: i >= 2 ? '1px solid var(--ink-line)' : 'none' } })),
+      scope: t.scope.map((s) => ({ n: s[0], title: s[1], body: s[2], hasBody: !!s[2], list: s[3] || [], hasList: !!s[3] })),
+      tiers,
+      booked: !!paid,
+      bookedTier: paid || '',
+      bookedMsg: paidObj ? ('Nice one. ' + t.biz.owner + ' will text to lock in a time that suits. Your receipt is on the way.') : '',
+      assumptions: t.assumptions,
+      isSolarReport: this.state.trade === 'solar',
+      solar: this.solarReport(),
+      hasPreview: this.state.trade === 'roof',
+      preview: { note: 'Prices include GST and are indicative from a satellite measurement. A licensed roofer reviews every quote before any work is booked.' },
+      footerRows: [
+        { k: 'Contractor', v: t.biz.name + ' · ' + t.biz.cred.replace(/^[^·]*· /, '') },
+        { k: 'ABN', v: t.biz.abn },
+        { k: 'Insurance', v: t.biz.insure },
+        { k: 'Terms', v: 'GST included · deposit refundable to 48 hrs before booking' },
+      ],
+      bar: {
+        paid: !!paid, unpaid: !paid,
+        tierLabel: sel + ' option · 30% deposit',
+        priceText: this.money(selObj.price),
+        ctaLabel: 'Pay ' + this.money(Math.round(selObj.price * 0.3)),
+        sub: paidObj ? (paid + ' · ' + t.biz.owner + ' will be in touch') : '',
+        onPay: () => this.pay(sel),
+      },
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -18,6 +18,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { getBrowserSupabase } from '@/lib/supabase/client'
@@ -156,6 +157,14 @@ export default function TradieEditor({
   // the in-modal chat panel expanded.
   const [chatAutoOpen, setChatAutoOpen] = useState(false)
 
+  // The banner + modals render through a portal into document.body (see the
+  // returns). Without it they sit inside the customer page's <main>, which
+  // QuoteChrome gives `position:relative; z-index:10` — a stacking context that
+  // paints these fixed/full-screen elements BEHIND the sticky header (z-20),
+  // footer (z-25) and noise overlay (z-30). That's the "Edit pricing is
+  // missing" bug (banner hidden) and would let the chrome poke through the
+  // edit modal. Portalling to body lifts them into the root stacking context.
+
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -223,10 +232,11 @@ export default function TradieEditor({
   // preserves the edit intent across the round-trip; /signin will
   // honour it after the sign-in flow lands (see /signin redirect note).
   if (wantsEdit && check && !check.owner) {
+    if (typeof document === 'undefined') return null // portal target is client-only
     const returnTo =
       (pathname ?? `/q/${quoteId}`) + (wantsEdit ? '?edit=1' : '')
-    return (
-      <div className="fixed top-3 right-3 z-40 max-w-[95vw]">
+    return createPortal(
+      <div className="fixed top-16 right-3 z-[70] max-w-[95vw]">
         <div className="flex flex-wrap items-center gap-3 bg-accent text-white px-4 py-2.5 shadow-lg">
           <span className="font-mono text-[0.6rem] uppercase tracking-[0.18em] font-bold">
             Sign in to edit
@@ -238,7 +248,8 @@ export default function TradieEditor({
             Sign in →
           </Link>
         </div>
-      </div>
+      </div>,
+      document.body,
     )
   }
 
@@ -437,11 +448,12 @@ export default function TradieEditor({
     })
   }
 
-  return (
+  if (typeof document === 'undefined') return null // portal target is client-only
+  return createPortal(
     <>
       {/* ─── Floating tradie-mode banner (suppressed in embedded viewer) ─── */}
       {!hideBanner && (
-      <div className="fixed top-3 right-3 z-40 max-w-[90vw]">
+      <div className="fixed top-16 right-3 z-40 max-w-[90vw]">
         <div className="flex items-center gap-3 bg-accent text-white px-4 py-2.5 shadow-lg">
           <span className="font-mono text-[0.6rem] uppercase tracking-[0.18em] font-bold">
             Tradie · {check.tenantBusinessName ?? 'You'}
@@ -782,7 +794,8 @@ export default function TradieEditor({
           </div>
         </div>
       )}
-    </>
+    </>,
+    document.body,
   )
 }
 

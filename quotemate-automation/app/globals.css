@@ -504,3 +504,193 @@ html {
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) .text-accent { color: var(--accent-ink); }
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   QUOTEMAX QUOTE SURFACE  ·  squared editorial "command-center" theme
+   ────────────────────────────────────────────────────────────────────
+   Scoped to the customer-facing /q/* full-quote pages. This is the
+   square-cornered branch of the brand (the dashboard cockpit rounds;
+   the customer quote is deliberately sharp/editorial). It is SELF-
+   CONTAINED: the palette is re-declared on `.qm-quote` so these pages
+   default to the DARK look that matches the design references even
+   though the site is light-first (html[data-theme]). The in-page toggle
+   flips `data-qm-theme` locally (persisted as `qm-quote-theme`) without
+   touching the global site theme.
+
+   Fonts: `--font-sans` / `--font-mono` are re-declared here because the
+   app exposes them only through `@theme inline` (Tailwind inlines those
+   into utilities and does NOT emit them as :root custom properties), so
+   the mockup's `font-family: var(--font-sans)` inline styles need a real
+   variable in this scope to resolve.
+
+   Source of truth: redesign/fullQuote (quotemax-design-system mockup).
+   ════════════════════════════════════════════════════════════════════ */
+
+/* DARK (default) — pinned on the scope so the light site theme can't leak
+   into the quote subtree. */
+.qm-quote,
+.qm-quote[data-qm-theme="dark"] {
+  color-scheme: dark;
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --ink-deep:  #16120F;
+  --ink:       #1E1813;
+  --ink-card:  #2B2422;
+  --ink-line:  #3A322C;
+
+  --accent:       #FFC400;
+  --accent-press: #E6AC00;
+  --accent-soft:  #FFD23D;
+  --accent-ink:   #1C1812;
+
+  --text-pri: #F6F1EA;
+  --text-sec: #C3B8AC;
+  --text-dim: #A2968A;
+
+  --success-bright: #34D27B;
+  --warning-bright: #F59E0B;
+  --danger-bright:  #F0816B;
+
+  --lift: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  --noise-opacity: 0.045;
+
+  /* duotone photo endpoints + the desaturate/warm filter (dark tuning) */
+  --duo-shadow:    rgba(22, 18, 15, 0.55);
+  --duo-highlight: rgba(255, 196, 0, 0.16);
+  --qm-duo-filter: grayscale(0.6) sepia(0.18) saturate(0.95) contrast(1.05) brightness(0.92);
+}
+
+/* LIGHT — the polished toggle target (matches the app's tuned warm-paper). */
+.qm-quote[data-qm-theme="light"] {
+  color-scheme: light;
+  --ink-deep:  #FAF8F4;
+  --ink:       #FFFFFF;
+  --ink-card:  #FFFFFF;
+  --ink-line:  #CFC2B0;
+
+  --accent:       #FFC400;
+  --accent-press: #E6AC00;
+  --accent-soft:  #FFD23D;
+  --accent-ink:   #2B2422;
+
+  --text-pri: #241E1B;
+  --text-sec: #5E544E;
+  --text-dim: #837870;
+
+  --success-bright: #15803D;
+  --warning-bright: #B45309;
+  --danger-bright:  #B91C1C;
+
+  --lift: 0 1px 2px rgba(43, 36, 34, 0.06), 0 1px 1px rgba(43, 36, 34, 0.04);
+  --noise-opacity: 0.03;
+
+  --duo-shadow:    rgba(43, 36, 34, 0.42);
+  --duo-highlight: rgba(255, 196, 0, 0.20);
+  --qm-duo-filter: grayscale(0.5) sepia(0.2) saturate(1.05) contrast(1.03) brightness(1.02);
+}
+
+.qm-quote {
+  background: var(--ink-deep);
+  color: var(--text-pri);
+  font-family: var(--font-sans);
+  /* Corner radii for the quote surface. Single set of levers: set these to 0
+     for the square, reference-exact look; the values below give the rounded
+     "friendly" treatment. `card` = the sheet + tier/nested cards, `ctl` =
+     buttons/pills/chips, `sm` = small tiles/figures/badges. */
+  --qm-r-card: 16px;
+  --qm-r-ctl: 10px;
+  --qm-r-sm: 10px;
+  /* Width of the centred quote sheet. Caps on desktop; the scroll column's
+     side padding lets it shrink to full-width on phones. Widened from the
+     mockup's 520px phone width to a full desktop document width so it no
+     longer reads as a marooned mobile column. */
+  --qm-sheet-w: 1040px;
+}
+
+/* Accent word inside the big hero headline. */
+.qm-quote .qm-accentword { color: var(--accent); }
+.qm-quote[data-qm-theme="light"] .qm-accentword { color: #171310; }
+
+/* The floating "quote sheet" article — entrance pop + lit top edge.
+   overflow:hidden clips every full-bleed inner band (letterhead, hero photo,
+   tagline strip) to the rounded outer corners. */
+.qm-sheet {
+  box-shadow: var(--lift);
+  border-radius: var(--qm-r-card);
+  overflow: hidden;
+  animation: qm-pop 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .qm-sheet { animation: none; }
+}
+
+/* Duotone photo treatment — warms stock / site photos toward the palette.
+   `.qm-duotone__img` is a background-image element; the filter tints it.
+   A multiply scrim deepens the shadows; a soft-light pass lifts the top
+   toward the accent so photos belong to the dark canvas. */
+.qm-duotone { position: relative; overflow: hidden; border-radius: var(--qm-r-sm); }
+/* Full-bleed photos (the hero band) stay flush with the sheet edges — the
+   sheet's own rounding clips them, so they must not round independently. */
+.qm-duotone.qm-bleed { border-radius: 0; }
+.qm-duotone__img {
+  background-size: cover;
+  background-position: center;
+  filter: var(--qm-duo-filter);
+}
+.qm-duotone::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--duo-shadow);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+.qm-duotone::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(160deg, var(--duo-highlight) 0%, transparent 55%);
+  mix-blend-mode: soft-light;
+  pointer-events: none;
+}
+
+/* Interaction states (mirrors the mockup's hover rules). */
+.qm-tier { transition: border-color 0.15s ease, background-color 0.2s ease; border-radius: var(--qm-r-card); overflow: hidden; }
+.qm-tier:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--ink-line)); }
+.qm-cta { transition: background-color 0.15s ease; border-radius: var(--qm-r-ctl); }
+.qm-cta:hover { background: var(--accent-press); }
+.qm-ghost { transition: border-color 0.15s ease, color 0.15s ease; }
+.qm-ghost:hover { border-color: color-mix(in srgb, var(--accent) 50%, var(--ink-line)); color: var(--accent); }
+.qm-seg { transition: color 0.15s ease, background-color 0.15s ease; }
+.qm-seg:hover { color: var(--text-pri); }
+
+/* Scroll region — thin brand scrollbar. */
+.qm-scroll::-webkit-scrollbar { width: 10px; }
+.qm-scroll::-webkit-scrollbar-thumb { background: var(--ink-line); border: 2px solid var(--ink-deep); }
+.qm-scroll::-webkit-scrollbar-track { background: transparent; }
+
+@keyframes qm-pop {
+  from { opacity: 0; transform: translateY(6px) scale(0.99); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes qm-pulse-soft {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+
+/* Print / PDF (Gotenberg URL render uses print media) — drop the fixed chrome
+   and let the sheet flow the full page as a clean document. */
+@media print {
+  .qm-quote .qm-print-hide { display: none !important; }
+  .qm-quote { min-height: 0 !important; }
+  .qm-quote main { padding: 0 !important; }
+  .qm-quote .qm-sheet {
+    max-width: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    animation: none !important;
+  }
+}

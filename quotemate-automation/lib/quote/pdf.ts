@@ -14,7 +14,12 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { renderPdfFromHtml, gotenbergConfigured } from '@/lib/pdf/gotenberg'
-import { buildQuoteReportHtml, REPORT_TEMPLATE_VERSION, type QuoteReportTier } from './report-html'
+import {
+  buildQuoteReportHtml,
+  REPORT_TEMPLATE_VERSION,
+  type QuoteReportTier,
+  type QuoteReportInput,
+} from './report-html'
 import { asQuoteTierMode, resolveVisibleTiers, type QuoteTierMode } from './tier-visibility'
 import { quotePdfIsStale, quotePdfSignature } from './pdf-signature'
 import { buildRoofQuoteReportHtml } from '@/lib/roofing/report-html'
@@ -183,6 +188,106 @@ async function renderQuotePdfCapped(html: string, label: string): Promise<Buffer
   return fallback.length < pdf.length ? fallback : pdf
 }
 
+/** Resolved basis for a quote's report — the quotes row, its intake, and which
+ *  tier(s) the tenant's mode surfaces. Shared by the PDF (ensureQuotePdf) and
+ *  the inline HTML report (renderQuoteReportHtml) so the two can never drift. */
+type QuoteReportContext = {
+  quote: QuotePdfRow
+  intake: IntakePdfRow | null
+  intakeTrade: string
+  tierMode: QuoteTierMode
+  visibleTierKeys: Array<'good' | 'better' | 'best'>
+  visibleTierSet: Set<'good' | 'better' | 'best'>
+  recommendedTier: 'good' | 'better' | 'best' | null
+}
+
+/**
+ * Load a quotes row + its intake and resolve the tenant's visible tiers.
+ * Returns null when the quote is missing OR inspection-routed (an inspection
+ * quote carries no committable prices — the same guard ensureQuotePdf has always
+ * applied). Pure read, never throws to the caller's expectations beyond supabase.
+ */
+async function loadQuoteReportContext(quoteId: string): Promise<QuoteReportContext | null> {
+  const { data: quote } = await supabase()
+    .from('quotes')
+    .select(
+      'id, tenant_id, intake_id, share_token, good, better, best, selected_tier, scope_of_works, assumptions, estimated_timeframe, needs_inspection, pdf_path, pdf_signature',
+    )
+    .eq('id', quoteId)
+    .maybeSingle<QuotePdfRow>()
+  if (!quote) return null
+  if (quote.needs_inspection) return null
+
+  const intakeRes = quote.intake_id
+    ? await supabase()
+        .from('intakes')
+        .select('job_type, caller, trade')
+        .eq('id', quote.intake_id)
+        .maybeSingle<IntakePdfRow>()
+    : { data: null as IntakePdfRow | null }
+  const intake = intakeRes.data
+
+  // Mig 142 — render only the tier(s) this feature's mode surfaces. The full
+  // good/better/best stays persisted; the report mirrors the customer page.
+  const intakeTrade = (intake?.trade as string | null) ?? 'electrical'
+  let tierMode: QuoteTierMode = 'single'
+  if (quote.tenant_id) {
+    const { data: pb } = await supabase()
+      .from('pricing_book')
+      .select('quote_tier_mode')
+      .eq('tenant_id', quote.tenant_id)
+      .eq('trade', intakeTrade)
+      .maybeSingle<{ quote_tier_mode: string | null }>()
+    tierMode = asQuoteTierMode(pb?.quote_tier_mode ?? null)
+  }
+  const visibleTierKeys = resolveVisibleTiers({
+    mode: tierMode,
+    present: { good: !!quote.good, better: !!quote.better, best: !!quote.best },
+    selectedTier: quote.selected_tier,
+  })
+  const visibleTierSet = new Set(visibleTierKeys)
+  const recommendedTier = visibleTierKeys.length > 1 ? quote.selected_tier : null
+
+  return { quote, intake, intakeTrade, tierMode, visibleTierKeys, visibleTierSet, recommendedTier }
+}
+
+/** Shape the QuoteReportInput both the PDF and the inline HTML render from —
+ *  identical output guarantees the on-screen HTML matches the downloaded PDF. */
+function buildQuoteReportInput(
+  ctx: QuoteReportContext,
+  branding: Awaited<ReturnType<typeof loadTenantBranding>>,
+): QuoteReportInput {
+  const { quote, intake, visibleTierSet, recommendedTier } = ctx
+  return {
+    businessName: branding.businessName,
+    branding,
+    customerName: intake?.caller?.name ?? null,
+    jobType: intake?.job_type ?? 'job',
+    scopeOfWorks: quote.scope_of_works,
+    assumptions: quote.assumptions,
+    estimatedTimeframe: quote.estimated_timeframe,
+    good: visibleTierSet.has('good') ? quote.good : null,
+    better: visibleTierSet.has('better') ? quote.better : null,
+    best: visibleTierSet.has('best') ? quote.best : null,
+    selectedTier: recommendedTier,
+    quoteViewUrl: `${APP_URL}/q/${quote.share_token}`,
+  }
+}
+
+/**
+ * The report as self-contained HTML (the exact document Gotenberg renders to
+ * PDF), for the dashboard quote viewer's inline, editable preview. Returns null
+ * for a missing or inspection-routed quote (mirrors ensureQuotePdf). Reads the
+ * live quotes row every call, so it reflects a structured edit the instant it
+ * saves — no PDF regeneration needed for the preview to update.
+ */
+export async function renderQuoteReportHtml(quoteId: string): Promise<string | null> {
+  const ctx = await loadQuoteReportContext(quoteId)
+  if (!ctx) return null
+  const branding = await loadTenantBranding(supabase(), ctx.quote.tenant_id, ctx.intakeTrade)
+  return buildQuoteReportHtml(buildQuoteReportInput(ctx, branding))
+}
+
 /**
  * Generate (or reuse) the PDF for an electrical/plumbing quote.
  * Returns the storage path, or null when generation isn't possible
@@ -195,48 +300,12 @@ export async function ensureQuotePdf(
 ): Promise<string | null> {
   try {
     if (!gotenbergConfigured()) return null
-    const { data: quote } = await supabase()
-      .from('quotes')
-      .select(
-        'id, tenant_id, intake_id, share_token, good, better, best, selected_tier, scope_of_works, assumptions, estimated_timeframe, needs_inspection, pdf_path, pdf_signature',
-      )
-      .eq('id', quoteId)
-      .maybeSingle<QuotePdfRow>()
-    if (!quote) return null
     // Inspection-routed quotes carry no committable prices — a "quote PDF"
-    // would put indicative numbers in a document that reads as final.
-    if (quote.needs_inspection) return null
-
-    const intakeRes = quote.intake_id
-      ? await supabase()
-          .from('intakes')
-          .select('job_type, caller, trade')
-          .eq('id', quote.intake_id)
-          .maybeSingle<IntakePdfRow>()
-      : { data: null as IntakePdfRow | null }
-    const intake = intakeRes.data
-
-    // Mig 142 — render only the tier(s) this feature's mode surfaces. The full
-    // good/better/best stays persisted; the PDF mirrors the customer page.
-    const intakeTrade = (intake?.trade as string | null) ?? 'electrical'
-    let tierMode: QuoteTierMode = 'single'
-    if (quote.tenant_id) {
-      const { data: pb } = await supabase()
-        .from('pricing_book')
-        .select('quote_tier_mode')
-        .eq('tenant_id', quote.tenant_id)
-        .eq('trade', intakeTrade)
-        .maybeSingle<{ quote_tier_mode: string | null }>()
-      tierMode = asQuoteTierMode(pb?.quote_tier_mode ?? null)
-    }
-    const visibleTierKeys = resolveVisibleTiers({
-      mode: tierMode,
-      present: { good: !!quote.good, better: !!quote.better, best: !!quote.best },
-      selectedTier: quote.selected_tier,
-    })
-    const visibleTierSet = new Set(visibleTierKeys)
-    const showRecommended = visibleTierKeys.length > 1
-    const recommendedTier = showRecommended ? quote.selected_tier : null
+    // would put indicative numbers in a document that reads as final —
+    // loadQuoteReportContext returns null for them (and for a missing quote).
+    const ctx = await loadQuoteReportContext(quoteId)
+    if (!ctx) return null
+    const { quote, intakeTrade, tierMode, visibleTierKeys, recommendedTier } = ctx
 
     // Mig 146 — self-heal: serve the cached PDF only when it was rendered from
     // the SAME template version + tier mode + visible tiers + recommended tier.
@@ -261,20 +330,7 @@ export async function ensureQuotePdf(
     }
 
     const branding = await loadTenantBranding(supabase(), quote.tenant_id, intakeTrade)
-    const html = buildQuoteReportHtml({
-      businessName: branding.businessName,
-      branding,
-      customerName: intake?.caller?.name ?? null,
-      jobType: intake?.job_type ?? 'job',
-      scopeOfWorks: quote.scope_of_works,
-      assumptions: quote.assumptions,
-      estimatedTimeframe: quote.estimated_timeframe,
-      good: visibleTierSet.has('good') ? quote.good : null,
-      better: visibleTierSet.has('better') ? quote.better : null,
-      best: visibleTierSet.has('best') ? quote.best : null,
-      selectedTier: recommendedTier,
-      quoteViewUrl: `${APP_URL}/q/${quote.share_token}`,
-    })
+    const html = buildQuoteReportHtml(buildQuoteReportInput(ctx, branding))
     const pdf = await renderQuotePdfCapped(html, `quote:${quoteId}`)
     const path = await storePdf(`quotes/${quoteId}.pdf`, pdf)
     await supabase()

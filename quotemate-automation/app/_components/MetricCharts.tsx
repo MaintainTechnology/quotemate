@@ -22,11 +22,15 @@ export function TrendBars({
   points,
   tone = 'accent',
   caption,
+  className = '',
 }: {
   title: string
   points: BarPoint[]
   tone?: Tone
   caption?: string
+  /** Extra surface classes (e.g. `rounded-card edge-lit` on the dashboard).
+   *  Defaults to none so /admin/metrics keeps its square plates. */
+  className?: string
 }) {
   const values = points.map((p) => p.value)
   const max = Math.max(1, ...values)
@@ -34,7 +38,7 @@ export function TrendBars({
   const total = values.reduce((a, b) => a + b, 0)
 
   return (
-    <div className="bg-ink-card border border-ink-line p-5">
+    <div className={`bg-ink-card border border-ink-line p-5 ${className}`}>
       <div className="flex items-baseline justify-between">
         <div className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-text-dim">
           {title}
@@ -83,17 +87,21 @@ export function SplitBars({
   slices,
   tone = 'accent',
   emptyLabel = 'No data yet',
+  className = '',
 }: {
   title: string
   slices: SplitDatum[]
   tone?: Tone
   emptyLabel?: string
+  /** Extra surface classes (e.g. `rounded-card edge-lit` on the dashboard).
+   *  Defaults to none so /admin/metrics keeps its square plates. */
+  className?: string
 }) {
   const max = Math.max(1, ...slices.map((s) => s.count))
   const total = slices.reduce((a, s) => a + s.count, 0)
 
   return (
-    <div className="bg-ink-card border border-ink-line p-5">
+    <div className={`bg-ink-card border border-ink-line p-5 ${className}`}>
       <div className="flex items-baseline justify-between">
         <div className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-text-dim">
           {title}

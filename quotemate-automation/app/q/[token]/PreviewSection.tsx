@@ -102,7 +102,7 @@ export function PreviewSection({
           AI PREVIEW — one image per uploaded customer photo
           ═══════════════════════════════════════════════════════════════ */}
       {showPreviewSection ? (
-        <section className="mt-6 bg-ink-card border border-ink-line p-6 sm:p-8">
+        <section className="bg-ink-card border border-ink-line p-6 sm:p-8">
           <div className="flex items-start gap-5 sm:gap-6">
             <span className="font-mono text-3xl sm:text-4xl font-bold text-accent leading-none shrink-0">
               03

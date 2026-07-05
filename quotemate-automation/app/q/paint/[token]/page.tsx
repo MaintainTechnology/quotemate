@@ -2,19 +2,27 @@
 // Token = painting_measurements.public_token — unguessable, same trust model
 // as /q/[token]. Service-role read because this is a public sharing surface.
 //
-// Renders the deterministic PaintingEstimate (lib/painting/types.ts) in a
-// painting-appropriate format — scopes, derived paintable area, and the three
-// price tiers as inc-GST RANGES (the estimate is a band, not a point) — instead
-// of the electrical Good/Better/Best line-item card.
+// Renders the deterministic PaintingEstimate (lib/painting/types.ts) on the
+// shared QuoteMax quote chrome (app/q/_chrome/*) — scopes, derived paintable
+// area, and the three price tiers as inc-GST RANGES (the estimate is a band,
+// not a point).
 //
-// Deposit (R12): painting has no Stripe deposit flow wired yet (no stripe_links
-// column / no /r/paint route). The Pay Deposit CTA therefore renders in the
-// spec's "no deposit link → clear disabled state" mode until that flow exists.
+// Deposit (R12): per-tier Stripe deposit links (migration 156) drive the tier
+// CTAs via the /r/paint short-link; tiers without a stored Checkout session
+// show a "Contact us to book" state. A paid quote shows a confirmed state.
 
 import { createClient } from '@supabase/supabase-js'
 import type { PaintingEstimate, PaintScope, PaintingPriceTier } from '@/lib/painting/types'
 import { asQuoteTierMode, resolveVisibleTiers, type QuoteTierMode } from '@/lib/quote/tier-visibility'
 import { canShowPaintingPrices } from '@/lib/painting/publish-gate'
+import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
+import { QuoteChrome, type StickyBar } from '../../_chrome/QuoteChrome'
+import { tradeIcon } from '../../_chrome/icons'
+import {
+  QuoteSheet, Letterhead, QuoteHero, StatGrid, Scope,
+  SheetSection, TierCards, CredentialFooter,
+  type QuoteTier, type Stat, type FooterRow,
+} from '../../_chrome/parts'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,6 +41,10 @@ const SCOPE_LABEL: Record<PaintScope, string> = {
   exterior: 'Exterior',
 }
 
+function titleCase(s: string): string {
+  return s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
 export default async function PaintingQuotePage(props: { params: Promise<{ token: string }> }) {
   const { token } = await props.params
 
@@ -46,24 +58,43 @@ export default async function PaintingQuotePage(props: { params: Promise<{ token
 
   if (!row || !row.estimate) {
     return (
-      <Shell>
-        <section className="border-2 border-warning/50 bg-ink-card p-8 sm:p-10">
-          <div className="mb-4 font-mono text-[0.7rem] uppercase tracking-[0.15em] text-warning">
-            Invalid link
-          </div>
-          <h1 className="text-3xl font-extrabold uppercase tracking-tight text-text-pri sm:text-4xl">
-            Quote not found
-          </h1>
-          <p className="mt-4 text-base leading-relaxed text-text-sec sm:text-lg">
-            This quote link is invalid or has expired. Text us if you need it re-sent.
-          </p>
-        </section>
-      </Shell>
+      <QuoteChrome trade={{ label: 'Paint', icon: tradeIcon('paint') }} sticky={null}>
+        <QuoteSheet>
+          <SheetSection eyebrow="Invalid link" eyebrowAccent first>
+            <h1
+              style={{
+                margin: '14px 0 0',
+                fontFamily: 'var(--font-sans)',
+                fontWeight: 800,
+                textTransform: 'uppercase',
+                letterSpacing: '-0.02em',
+                fontSize: 28,
+                lineHeight: 1,
+                color: 'var(--text-pri)',
+              }}
+            >
+              Quote not found
+            </h1>
+            <p style={{ margin: '14px 0 0', fontSize: 14, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+              This quote link is invalid or has expired. Text us if you need it re-sent.
+            </p>
+          </SheetSection>
+        </QuoteSheet>
+      </QuoteChrome>
     )
   }
 
   const business =
     (row.tenants as { business_name?: string } | null)?.business_name ?? 'Your painter'
+
+  // Tradie identity for the letterhead (logo + Contact / Phone / Email),
+  // matching the reference quote surface. Best-effort: degrades to the joined
+  // business_name when identity columns are absent or tenant_id is null.
+  const identity = await loadTenantIdentity(
+    supabase,
+    (row as { tenant_id?: string | null }).tenant_id ?? null,
+  )
+
   const estimate = row.estimate as PaintingEstimate
   const tiers: PaintingPriceTier[] = estimate.price?.tiers ?? []
   const measurement = estimate.measurement
@@ -127,177 +158,196 @@ export default async function PaintingQuotePage(props: { params: Promise<{ token
     year: 'numeric',
   })
 
+  const showTiers = !inspection && priceGate.showPrices
+  const source = estimate.facts?.source ?? 'property data'
+
+  // ─── Stat grid — up to 4 truthful cells from data that exists ─────────
+  const statItems: Stat[] = []
+  if (measurement) {
+    statItems.push({ k: 'Floor area', v: `${Math.round(measurement.floor_area_m2)} m²` })
+    statItems.push({ k: 'Paintable area', v: `${Math.round(estimate.price?.total_area_m2 ?? 0)} m²` })
+    if (measurement.storeys != null) {
+      statItems.push({ k: 'Storeys', v: String(measurement.storeys) })
+    }
+    statItems.push({
+      k: 'Confidence',
+      v: titleCase(String(row.confidence ?? measurement.confidence ?? '—')),
+    })
+  }
+
+  // ─── Scope of works — surfaces measured + About-your-home facts ───────
+  const scopeItems: import('../../_chrome/parts').ScopeItem[] = []
+  const surfaces = Array.isArray(measurement?.surfaces) ? measurement.surfaces : []
+  if (scopes.length > 0 || surfaces.length > 0) {
+    scopeItems.push({
+      title: 'Surfaces to paint',
+      body:
+        scopes.length > 0
+          ? scopes.map((s) => SCOPE_LABEL[s] ?? s).join(' · ')
+          : undefined,
+      list:
+        surfaces.length > 0
+          ? surfaces.map((s) => (
+              <span key={s.scope}>
+                {SCOPE_LABEL[s.scope] ?? s.scope} —{' '}
+                <span style={{ fontFamily: 'var(--font-mono)' }}>
+                  {Math.round(s.quantity)} {s.unit === 'lm' ? 'lm' : 'm²'}
+                </span>
+              </span>
+            ))
+          : undefined,
+    })
+  }
+  const facts = estimate.facts
+  const homeList: string[] = []
+  if (facts?.property_type) homeList.push(`Type — ${facts.property_type}`)
+  if (facts?.bedrooms != null) homeList.push(`Bedrooms — ${facts.bedrooms}`)
+  if (facts?.bathrooms != null) homeList.push(`Bathrooms — ${facts.bathrooms}`)
+  if (facts?.car_spaces != null) homeList.push(`Car spaces — ${facts.car_spaces}`)
+  if (facts?.land_size_m2 != null) homeList.push(`Land size — ${Math.round(facts.land_size_m2)} m²`)
+  if (homeList.length > 0) {
+    scopeItems.push({ title: 'About your home', list: homeList })
+  }
+
+  // ─── Tier cards — mirror the original per-tier CTA gating exactly ─────
+  const quoteTiers: QuoteTier[] = visibleTiers.map((tier) => {
+    const paidThis = paid && paidTier === tier.tier
+    let ctaLabel: string
+    let ctaHref: string | null
+    if (paid) {
+      ctaLabel = paidThis ? 'Deposit paid ✓' : 'Deposit paid'
+      ctaHref = null
+    } else if (stripeLinks[tier.tier]) {
+      ctaLabel = 'Pay deposit'
+      ctaHref = `/r/paint/${token}/${tier.tier}`
+    } else {
+      ctaLabel = 'Contact us to book'
+      ctaHref = null
+    }
+    return {
+      name: tier.label,
+      blurb: tier.scope,
+      priceText: aud(tier.inc_gst),
+      priceNote: `inc GST · ${aud(tier.inc_gst_low)}–${aud(tier.inc_gst_high)}`,
+      ctaLabel,
+      ctaHref,
+    }
+  })
+
+  // ─── Sticky bar — the featured (Better if visible, else first) tier ───
+  const featured =
+    visibleTiers.find((t) => t.tier === 'better') ?? visibleTiers[0] ?? null
+  let stickyBar: StickyBar | null = null
+  if (paid) {
+    stickyBar = {
+      paid: true,
+      paidSub: paidTier
+        ? `${titleCase(paidTier)} option — your painter will be in touch`
+        : 'Your painter will be in touch',
+    }
+  } else if (showTiers && featured) {
+    stickyBar = {
+      tierLabel: `${featured.label} option`,
+      priceText: aud(featured.inc_gst),
+      ctaLabel: stripeLinks[featured.tier] ? 'Pay deposit' : 'Contact us to book',
+      ctaHref: stripeLinks[featured.tier] ? `/r/paint/${token}/${featured.tier}` : null,
+    }
+  }
+
+  // ─── Credential footer — only rows whose data genuinely exists ────────
+  const footerRows: FooterRow[] = []
+  footerRows.push({ k: 'Painter', v: business })
+  if (row.address) {
+    footerRows.push({
+      k: 'Property',
+      v: [String(row.address), [row.postcode, row.state].filter(Boolean).join(' ')]
+        .filter(Boolean)
+        .join(', '),
+    })
+  }
+  footerRows.push({ k: 'Prepared', v: date })
+  footerRows.push({
+    k: 'Terms',
+    v: `Prices are inc-GST estimates derived from ${source} and your declared scope. The final price is confirmed after a quick on-site check.`,
+  })
+
+  // Clean street / suburb headline: drop a trailing "<STATE> <POSTCODE>" so the
+  // accent line isn't a redundant "4151 QLD" echo of the address in line 1.
+  const rawAddr = String(row.address ?? 'Your property')
+  const cleanAddr =
+    rawAddr.replace(/,?\s*(QLD|NSW|VIC|SA|WA|TAS|NT|ACT)\b\s*\d{4}\s*$/i, '').trim() || rawAddr
+  const addrSegs = cleanAddr.split(',').map((s) => s.trim()).filter(Boolean)
+  const heroLine1 = addrSegs.length >= 2 ? `${addrSegs.slice(0, -1).join(', ')},` : cleanAddr
+  const heroLine2 = addrSegs.length >= 2 ? addrSegs[addrSegs.length - 1] : undefined
+
+  const heroStatus: { label: string; tone: 'await' | 'booked' } = paid
+    ? { label: 'Deposit paid', tone: 'booked' }
+    : inspection
+      ? { label: 'On-site measure', tone: 'await' }
+      : { label: 'Awaiting you', tone: 'await' }
+  const heroGreeting = inspection
+    ? (estimate.price?.routing?.reason ??
+        "This job needs a quick on-site measure before we can lock a price. We'll be in touch to book a time.")
+    : !priceGate.showPrices
+      ? priceGate.reason
+      : visibleTiers.length === 1
+        ? 'One painting option below — all prices include 10% GST as an estimated range.'
+        : 'Your painting options below — all prices include 10% GST as an estimated range.'
+
   return (
-    <Shell>
-      {/* ── Hero ── */}
-      <section className="border border-ink-line bg-ink-card p-7 sm:p-9">
-        <div className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent">
-          Painting quote · {business}
-        </div>
-        <h1 className="mt-3 text-3xl font-extrabold uppercase tracking-tight text-text-pri sm:text-4xl">
-          {String(row.address ?? 'Your property')}
-        </h1>
-        <div className="mt-2 font-mono text-sm text-text-dim">
-          {[row.postcode, row.state].filter(Boolean).join(' ')} · {date}
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {scopes.map((s) => (
-            <span
-              key={s}
-              className="inline-flex items-center bg-accent/15 px-2.5 py-1 font-mono text-[0.62rem] font-bold uppercase tracking-[0.14em] text-accent"
-            >
-              {SCOPE_LABEL[s] ?? s}
-            </span>
-          ))}
-        </div>
-      </section>
+    <QuoteChrome trade={{ label: 'Paint', icon: tradeIcon('paint') }} sticky={stickyBar}>
+      <QuoteSheet label={`Painting quote · ${business}`}>
+        <Letterhead
+          name={identity?.business_name ?? business}
+          credential={`Painting quote · ${date}`}
+          logoUrl={identity?.logo_url ?? null}
+          contactName={contactDisplayName(identity)}
+          phone={(identity?.owner_mobile ?? '').trim() || null}
+          email={(identity?.owner_email ?? '').trim() || null}
+        />
 
-      {/* ── Measurement summary ── */}
-      {measurement ? (
-        <section className="mt-6 border border-ink-line bg-ink-card p-6 sm:p-7">
-          <div className="mb-4 font-mono text-[0.7rem] uppercase tracking-[0.16em] text-text-dim">
-            Measured from {estimate.facts?.source ?? 'property data'}
-          </div>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <Stat label="Floor area" value={`${Math.round(measurement.floor_area_m2)} m²`} />
-            <Stat label="Paintable area" value={`${Math.round(estimate.price?.total_area_m2 ?? 0)} m²`} />
-            <Stat label="Storeys" value={String(measurement.storeys ?? '—')} />
-            <Stat label="Confidence" value={titleCase(String(row.confidence ?? measurement.confidence ?? '—'))} />
-          </div>
-          {Array.isArray(measurement.surfaces) && measurement.surfaces.length > 0 ? (
-            <ul className="mt-5 grid gap-2 border-t border-ink-line pt-5 sm:grid-cols-2">
-              {measurement.surfaces.map((s) => (
-                <li key={s.scope} className="flex items-baseline justify-between gap-3 text-sm">
-                  <span className="text-text-sec">{SCOPE_LABEL[s.scope] ?? s.scope}</span>
-                  <span className="font-mono tabular-nums text-text-pri">
-                    {Math.round(s.quantity)} {s.unit === 'lm' ? 'lm' : 'm²'}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </section>
-      ) : null}
+        <QuoteHero
+          quoteId={`Painting quote · ${business}`}
+          status={heroStatus}
+          line1={heroLine1}
+          line2={heroLine2}
+          greeting={heroGreeting}
+          issued={`Issued ${date}`}
+        />
 
-      {/* ── About your home (Geoscape / PropRadar enrichment) ── */}
-      <AboutHome facts={estimate.facts} />
+        {statItems.length > 0 ? <StatGrid items={statItems} /> : null}
 
-      {/* ── Inspection note · held-for-review note · OR tiers ── */}
-      {inspection ? (
-        <section className="mt-6 border border-l-4 border-ink-line border-l-accent bg-ink-card p-6 sm:p-7">
-          <div className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-accent">
-            On-site measure needed
-          </div>
-          <p className="mt-2 text-sm leading-relaxed text-text-sec">
-            {estimate.price?.routing?.reason ??
-              'This job needs a quick on-site measure before we can lock a price. We’ll be in touch to book a time.'}
-          </p>
-        </section>
-      ) : !priceGate.showPrices ? (
-        <section className="mt-6 border border-l-4 border-ink-line border-l-accent bg-ink-card p-6 sm:p-7">
-          <div className="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-accent">
-            Quote being finalised
-          </div>
-          <p className="mt-2 text-sm leading-relaxed text-text-sec">{priceGate.reason}</p>
-        </section>
-      ) : (
-        <section className="mt-8">
-          <h2 className="mb-6 font-mono text-xs uppercase tracking-[0.15em] text-text-dim">
-            {visibleTiers.length === 1 ? 'Your painting option' : 'Your painting options'}
-          </h2>
-          <div className="grid gap-5 sm:gap-6 lg:grid-cols-3">
-            {visibleTiers.map((tier) => (
-              <article
-                key={tier.tier}
-                className="relative flex flex-col border border-ink-line bg-ink-card p-6 sm:p-7"
-              >
-                <div className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-accent">
-                  {tier.label}
-                </div>
-                <p className="mt-2 text-sm leading-relaxed text-text-sec">{tier.scope}</p>
-                <div className="mt-5 border-t border-ink-line pt-5">
-                  <div className="font-mono text-3xl font-bold tabular-nums text-text-pri">
-                    {aud(tier.inc_gst)}
-                  </div>
-                  <div className="mt-1 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
-                    inc GST · range {aud(tier.inc_gst_low)}–{aud(tier.inc_gst_high)}
-                  </div>
-                </div>
-                {/* Deposit (mig 156): a "Pay deposit" link when a Stripe
-                    session exists for this tier; a confirmed state once paid;
-                    otherwise the clear non-dead placeholder. */}
-                {paid ? (
-                  <div className="mt-6 border border-accent bg-accent/10 px-4 py-3 text-center font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-accent">
-                    Deposit paid{paidTier === tier.tier ? ' ✓' : ''}
-                  </div>
-                ) : stripeLinks[tier.tier] ? (
-                  <a
-                    href={`/r/paint/${token}/${tier.tier}`}
-                    className="mt-6 block border border-accent bg-accent px-4 py-3 text-center font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press"
-                  >
-                    Pay deposit
-                  </a>
-                ) : (
-                  <div className="mt-6 border border-ink-line px-4 py-3 text-center font-mono text-[0.72rem] uppercase tracking-[0.14em] text-text-dim">
-                    Contact us to book
-                  </div>
-                )}
-              </article>
-            ))}
-          </div>
-          <p className="mt-5 text-sm leading-relaxed text-text-dim">
-            Prices are inc-GST estimates derived from {estimate.facts?.source ?? 'property data'} and
-            your declared scope. The final price is confirmed after a quick on-site check.
-          </p>
-        </section>
-      )}
-    </Shell>
-  )
-}
+        {scopeItems.length > 0 ? (
+          <Scope
+            items={scopeItems}
+            eyebrow={measurement ? `Scope of works · measured from ${source}` : 'Scope of works'}
+          />
+        ) : null}
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-text-dim">{label}</div>
-      <div className="mt-1 font-mono text-lg font-bold tabular-nums text-text-pri">{value}</div>
-    </div>
-  )
-}
+        {/* ── Inspection note · held-for-review note · OR tiers ── */}
+        {inspection ? (
+          <SheetSection eyebrow="On-site measure needed" eyebrowAccent>
+            <p style={{ margin: '12px 0 0', fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+              {estimate.price?.routing?.reason ??
+                "This job needs a quick on-site measure before we can lock a price. We'll be in touch to book a time."}
+            </p>
+          </SheetSection>
+        ) : !priceGate.showPrices ? (
+          <SheetSection eyebrow="Quote being finalised" eyebrowAccent>
+            <p style={{ margin: '12px 0 0', fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+              {priceGate.reason}
+            </p>
+          </SheetSection>
+        ) : quoteTiers.length > 0 ? (
+          <TierCards
+            heading={visibleTiers.length === 1 ? 'Your painting option' : 'Your painting options'}
+            intro={`Prices are inc-GST estimates derived from ${source} and your declared scope. The final price is confirmed after a quick on-site check.`}
+            tiers={quoteTiers}
+          />
+        ) : null}
 
-// Human-meaningful building facts from the property-data enrichment
-// (PropRadar attributes / Geoscape use). Renders only fields that are
-// present — off-market homes with no enrichment show nothing.
-function AboutHome({ facts }: { facts?: PaintingEstimate['facts'] }) {
-  if (!facts) return null
-  const items: Array<{ label: string; value: string }> = []
-  if (facts.property_type) items.push({ label: 'Type', value: facts.property_type })
-  if (facts.bedrooms != null) items.push({ label: 'Bedrooms', value: String(facts.bedrooms) })
-  if (facts.bathrooms != null) items.push({ label: 'Bathrooms', value: String(facts.bathrooms) })
-  if (facts.car_spaces != null) items.push({ label: 'Car spaces', value: String(facts.car_spaces) })
-  if (facts.land_size_m2 != null) items.push({ label: 'Land size', value: `${Math.round(facts.land_size_m2)} m²` })
-  if (items.length === 0) return null
-  return (
-    <section className="mt-6 border border-ink-line bg-ink-card p-6 sm:p-7">
-      <div className="mb-4 font-mono text-[0.7rem] uppercase tracking-[0.16em] text-text-dim">
-        About your home
-      </div>
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {items.map((it) => (
-          <Stat key={it.label} label={it.label} value={it.value} />
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function titleCase(s: string): string {
-  return s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
-}
-
-function Shell({ children }: { children: React.ReactNode }) {
-  return (
-    <main className="min-h-screen bg-ink-deep px-4 py-10 sm:px-6 sm:py-14">
-      <div className="mx-auto w-full max-w-3xl">{children}</div>
-    </main>
+        <CredentialFooter rows={footerRows} />
+      </QuoteSheet>
+    </QuoteChrome>
   )
 }
