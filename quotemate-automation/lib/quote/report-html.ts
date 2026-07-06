@@ -133,24 +133,14 @@ const QUOTE_PLEASE_NOTE = [
 ]
 
 export function buildQuoteReportHtml(input: QuoteReportInput): string {
-  const date = (input.generatedAt ?? new Date()).toLocaleDateString('en-AU', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })
-  const branding = input.branding ?? brandingFromName(input.businessName)
-  const job = prettyJobType(input.jobType)
+  return buildQuoteReportHtmlFromBody(input, buildDefaultQuoteBody(input))
+}
+
+/** The default report body — scope of works + Good/Better/Best + assumptions,
+ *  exactly as before the report-doc split. Used when a quote has no report_doc. */
+function buildDefaultQuoteBody(input: QuoteReportInput): string {
+  const multiTier = (['good', 'better', 'best'] as const).filter((k) => input[k]).length >= 2
   const tiers = renderQuoteTiersHtml(input)
-
-  // Mig 146 — eyebrow / intro / heading wording follows how many tiers are
-  // actually visible. The caller (lib/quote/pdf.ts) has already filtered
-  // good/better/best to the tenant's tier mode, so a single-tier quote reads
-  // as one quote — not "Good / Better / Best"; two or more keeps the tiered
-  // framing. Count-driven so it is correct for every mode (single, forced-one,
-  // and a good_better_best quote that only ended up with one priced tier).
-  const visibleTierCount = (['good', 'better', 'best'] as const).filter((k) => input[k]).length
-  const multiTier = visibleTierCount >= 2
-
   const assumptions = (input.assumptions ?? []).filter((a) => a && a.trim()) as string[]
 
   let body = ''
@@ -163,6 +153,29 @@ export function buildQuoteReportHtml(input: QuoteReportInput): string {
       .map((a) => `<li>${esc(a)}</li>`)
       .join('')}</ul>`
   }
+  return body
+}
+
+/**
+ * Wrap an arbitrary report body in the shared white-label chrome (branding,
+ * eyebrow, intro, please-note, closing). The document serializer
+ * (report-doc/serialize.ts) renders report_doc through this so a document quote
+ * uses the EXACT same chrome the PDF uses — the on-screen HTML == the PDF.
+ *
+ * Mig 146 — eyebrow / intro / heading wording follows how many tiers are
+ * actually visible. The caller (lib/quote/pdf.ts) has already filtered
+ * good/better/best to the tenant's tier mode, so a single-tier quote reads as
+ * one quote — not "Good / Better / Best"; two or more keeps the tiered framing.
+ */
+export function buildQuoteReportHtmlFromBody(input: QuoteReportInput, bodyHtml: string): string {
+  const date = (input.generatedAt ?? new Date()).toLocaleDateString('en-AU', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
+  const branding = input.branding ?? brandingFromName(input.businessName)
+  const job = prettyJobType(input.jobType)
+  const multiTier = (['good', 'better', 'best'] as const).filter((k) => input[k]).length >= 2
 
   const closingLine = input.quoteViewUrl
     ? `Pay links and the live version of this quote: ${input.quoteViewUrl}`
@@ -179,7 +192,7 @@ export function buildQuoteReportHtml(input: QuoteReportInput): string {
     )}</strong>. ${
       multiTier ? 'Your Good / Better / Best options are' : 'Your quote is'
     } set out below.`,
-    bodyHtml: body,
+    bodyHtml,
     pleaseNote: QUOTE_PLEASE_NOTE,
     closingLine,
   })

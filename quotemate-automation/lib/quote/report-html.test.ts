@@ -2,7 +2,12 @@
 // rendering, inc-GST rounding parity with the SMS template, escaping.
 
 import { describe, it, expect } from 'vitest'
-import { buildQuoteReportHtml, incGst, type QuoteReportTier } from './report-html'
+import {
+  buildQuoteReportHtml,
+  buildQuoteReportHtmlFromBody,
+  incGst,
+  type QuoteReportTier,
+} from './report-html'
 import { resolveVisibleTiers, type QuoteTierMode } from './tier-visibility'
 
 const tier = (label: string, exGst: number): QuoteReportTier => ({
@@ -180,4 +185,37 @@ describe('buildQuoteReportHtml — renders exactly resolveVisibleTiers(...) (mig
       for (const marker of c.hide) expect(html).not.toContain(marker)
     })
   }
+})
+
+describe('buildQuoteReportHtmlFromBody', () => {
+  const base = {
+    businessName: 'Acme Electrical',
+    jobType: 'downlights',
+    good: { label: 'Good', subtotal_ex_gst: 1000, line_items: [] } as QuoteReportTier,
+    better: null,
+    best: null,
+    selectedTier: null,
+  }
+
+  it('renders the supplied body verbatim inside the report chrome', () => {
+    const html = buildQuoteReportHtmlFromBody(base, '<h2>Custom body</h2><p>Hello world body</p>')
+    expect(html).toContain('<h2>Custom body</h2><p>Hello world body</p>')
+    expect(html).toContain('Acme Electrical') // chrome (branding) still present
+  })
+
+  it('substitutes the body without leaking the default scope/tier markup', () => {
+    // A custom body must NOT also emit the default "Your quote" tier section.
+    const html = buildQuoteReportHtmlFromBody(base, '<p>Only this</p>')
+    expect(html).toContain('<p>Only this</p>')
+    expect(html).not.toContain('>GOOD<')
+  })
+
+  it('buildQuoteReportHtml (default body) still renders the tier + chrome', () => {
+    // The refactor is output-identical for the default path — the pre-existing
+    // suite above already asserts the exact markup; this is a belt-and-braces smoke.
+    const html = buildQuoteReportHtml(base)
+    expect(html).toContain('Acme Electrical')
+    expect(html).toContain('GOOD')
+    expect(html).toContain('Your quote')
+  })
 })
