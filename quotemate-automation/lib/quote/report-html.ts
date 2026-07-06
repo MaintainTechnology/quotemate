@@ -114,6 +114,17 @@ function tierSection(
   </section>`
 }
 
+/** The three Good/Better/Best `<section>`s, in order — shared by the customer
+ *  PDF (buildQuoteReportHtml) and the document serializer (report-doc/serialize).
+ *  Prices come from good/better/best, so both surfaces render identical tiers. */
+export function renderQuoteTiersHtml(
+  input: Pick<QuoteReportInput, 'good' | 'better' | 'best' | 'selectedTier'>,
+): string {
+  return (['good', 'better', 'best'] as const)
+    .map((key) => tierSection(key, input[key], input.selectedTier === key))
+    .join('')
+}
+
 /** Per-trade default "Please Note" disclaimers (R7). */
 const QUOTE_PLEASE_NOTE = [
   'Headline tier prices include 10% GST; line items are shown ex GST.',
@@ -129,9 +140,7 @@ export function buildQuoteReportHtml(input: QuoteReportInput): string {
   })
   const branding = input.branding ?? brandingFromName(input.businessName)
   const job = prettyJobType(input.jobType)
-  const tiers = (['good', 'better', 'best'] as const)
-    .map((key) => tierSection(key, input[key], input.selectedTier === key))
-    .join('')
+  const tiers = renderQuoteTiersHtml(input)
 
   // Mig 146 — eyebrow / intro / heading wording follows how many tiers are
   // actually visible. The caller (lib/quote/pdf.ts) has already filtered
