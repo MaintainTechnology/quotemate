@@ -88,7 +88,7 @@ export function TradesMenu() {
             >
               <span className="font-medium">{t.label}</span>
               {t.region && (
-                <span className="font-mono text-[0.6rem] uppercase tracking-[0.12em] text-text-dim">
+                <span className="font-mono text-[0.75rem] uppercase tracking-[0.1em] text-text-dim">
                   {t.region}
                 </span>
               )}

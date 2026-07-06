@@ -8,6 +8,21 @@
 // after the intake insert returns its id (so we deliberately omit it).
 
 import type { DetectedBuilding, SolarEstimate } from './types'
+import { MAX_REQUESTED_SYSTEM_KW } from './limits'
+
+/**
+ * Normalise the customer's requested size to a value the solar_estimates
+ * `requested_system_kw` CHECK constraint (null OR 0 < kw <= MAX) will always
+ * accept. Any non-finite/non-positive request → null (no preference); a
+ * request above the ceiling is clamped to it rather than allowed to fail the
+ * INSERT. Defence-in-depth: the API/re-draft layers already bound the input,
+ * but persistence must never hard-fail on a stored size (the 2026-07-06
+ * "could not save your estimate" regression — see lib/solar/limits.ts).
+ */
+function clampRequestedSystemKw(value: number | null | undefined): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null
+  return Math.min(value, MAX_REQUESTED_SYSTEM_KW)
+}
 
 export type SolarCustomer = {
   name?: string
@@ -92,7 +107,7 @@ export function buildSolarRowPayloads(args: {
     install_year: estimate.context.install_year,
     network: estimate.context.network,
     electrical_phase: electricalPhase,
-    requested_system_kw: estimate.context.requested_system_kw ?? null,
+    requested_system_kw: clampRequestedSystemKw(estimate.context.requested_system_kw),
     coverage_source: estimate.coverage_source,
     imagery_quality: estimate.roof.imagery_quality,
     imagery_date: estimate.roof.imagery_date,

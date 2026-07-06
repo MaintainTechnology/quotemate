@@ -316,9 +316,9 @@ export function MetricGrid({
     <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 1, background: 'var(--ink-line)', border: '1px solid var(--ink-line)', borderRadius: 'var(--qm-r-sm)', overflow: 'hidden' }}>
       {items.map((m, i) => (
         <div key={i} style={{ background: 'var(--ink-card)', padding: '14px 12px' }}>
-          <div style={{ ...MONO, fontSize: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.11em', color: 'var(--text-dim)' }}>{m.k}</div>
+          <div style={{ ...MONO, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-dim)' }}>{m.k}</div>
           <div style={{ marginTop: 7, ...MONO, fontWeight: 800, fontSize: valueSize, color: valueColor, fontVariantNumeric: 'tabular-nums' }}>{m.v}</div>
-          {m.sub ? <div style={{ marginTop: 5, ...MONO, fontSize: 7.5, textTransform: 'uppercase', letterSpacing: '0.09em', color: 'var(--text-sec)' }}>{m.sub}</div> : null}
+          {m.sub ? <div style={{ marginTop: 5, ...MONO, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-sec)' }}>{m.sub}</div> : null}
         </div>
       ))}
     </div>

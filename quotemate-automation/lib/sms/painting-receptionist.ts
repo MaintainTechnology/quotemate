@@ -222,3 +222,20 @@ export function isActivePaintingFlow(prev: PaintingConversationState | null | un
   const step = prev.last_step ?? null
   return step !== null && step !== 'closed'
 }
+
+/** PURE — should the painting receptionist engage this turn?
+ *
+ *  Mirror of shouldEngageRoofing: normally engages on an active painting
+ *  flow OR a fresh painting enquiry, but when a follow-up pin is active on
+ *  the thread (the tradie chased a DIFFERENT quote), a stale painting_state
+ *  must NOT resume — only a genuinely new painting enquiry may engage.
+ *  (Spec 2026-07-05 Part A2.) */
+export function shouldEngagePainting(
+  prev: PaintingConversationState | null | undefined,
+  inbound: string,
+  followupPinActive: boolean,
+): boolean {
+  const canResume = isActivePaintingFlow(prev) && !followupPinActive
+  const isNewEnquiry = looksLikePaintingEnquiry(inbound)
+  return canResume || isNewEnquiry
+}

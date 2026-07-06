@@ -1,6 +1,6 @@
-// QuoteMax home — Maintain design system, premium "command-centre"
-// reinvention. Deep navy canvas, orange accent, all-caps display, square
-// corners, borders over shadows. Depth comes from a restrained twin glow
+// QuoteMax home — the "command-centre" design system: warm-charcoal canvas,
+// Caterpillar-yellow accent, all-caps display, rounded corners, borders over
+// shadows. Depth comes from a restrained twin glow
 // + film grain + lit panel edges (see globals.css), never from drop
 // shadows. The hero carries a live SMS-thread demo so the product shows
 // itself rather than being described twice.
@@ -57,16 +57,15 @@ export default function Home() {
       <TrustStrip />
       <PoweredBy />
       <HowItWorks />
-      <OnTheTools />
       <Trades />
       <Shift />
       <CoveredTrades />
       <Numbers />
       <Pricing />
       <BuiltForAustralia />
+      <AppDownload />
       <Faq />
       <ClosingCta />
-      <AppDownload />
       <Footer />
       <MarqueeBar />
       <CookieConsent />
@@ -88,7 +87,7 @@ function Hero() {
       <div className="relative z-10 mx-auto grid max-w-[88rem] items-center gap-12 px-6 py-20 md:py-28 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16">
         <div>
           <div className={`mb-5 ${RISE}`}>
-            <span className="inline-flex items-center gap-2 rounded-md border border-ink-line bg-ink/40 px-3 py-1.5 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-text-sec">
+            <span className="inline-flex items-center gap-2 rounded-md border border-ink-line bg-ink/40 px-3 py-1.5 font-mono text-[0.75rem] font-semibold uppercase tracking-[0.16em] text-text-sec">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/brand/au-flag.svg"
@@ -99,7 +98,7 @@ function Hero() {
             </span>
           </div>
           <div className={RISE}>
-            <Eyebrow>QuoteMax: We will do the quoting for you. You will never quote again</Eyebrow>
+            <Eyebrow>AI quoting for Australian tradies</Eyebrow>
           </div>
           <h1
             className={`mt-6 font-extrabold uppercase leading-[0.95] tracking-[-0.04em] text-[clamp(2.6rem,6.5vw,5.5rem)] [overflow-wrap:anywhere] ${RISE}`}
@@ -195,7 +194,7 @@ function HeroTile({
         tone="hero"
         position={position}
       />
-      <figcaption className="photo-caption absolute inset-x-0 bottom-0 px-2.5 pb-2 pt-6 font-mono text-[0.6rem] font-semibold uppercase tracking-[0.16em] text-white">
+      <figcaption className="photo-caption absolute inset-x-0 bottom-0 px-2.5 pb-2 pt-6 font-mono text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-white">
         {caption}
       </figcaption>
     </figure>
@@ -245,7 +244,7 @@ function PoweredBy() {
   return (
     <section className="border-b border-ink-line">
       <div className="mx-auto max-w-[88rem] px-6 py-14">
-        <p className="text-center font-mono text-[0.72rem] font-semibold uppercase tracking-[0.24em] text-text-dim">
+        <p className="text-center font-mono text-[0.75rem] font-semibold uppercase tracking-[0.24em] text-text-dim">
           Powered by
         </p>
         <div className="mt-8 overflow-hidden [mask-image:linear-gradient(to_right,transparent,#000_8%,#000_92%,transparent)] [-webkit-mask-image:linear-gradient(to_right,transparent,#000_8%,#000_92%,transparent)]">
@@ -290,7 +289,7 @@ function TrustChip({
   children: React.ReactNode
 }) {
   return (
-    <li className="inline-flex items-center gap-2 rounded-md border border-ink-line px-3 py-1.5 font-mono text-[0.7rem] uppercase tracking-[0.1em] text-text-dim">
+    <li className="inline-flex items-center gap-2 rounded-md border border-ink-line px-3 py-1.5 font-mono text-[0.75rem] uppercase tracking-[0.1em] text-text-dim">
       {icon ? (
         <span className="text-accent-soft" aria-hidden="true">
           {icon}
@@ -358,7 +357,7 @@ function HowItWorks() {
                 position="center 30%"
               />
               <figcaption className="photo-caption absolute inset-x-0 bottom-0 p-5 pt-12">
-                <span className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-white">
+                <span className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.16em] text-white">
                   You stay on the tools
                 </span>
               </figcaption>
@@ -388,7 +387,7 @@ function Trades() {
           <Reveal>
             <TradePanel
               label="Electrical"
-              state="NSW · Electrical pilot"
+              state="Live · NSW"
               image={{
                 src: "/marketing/trade-electrical.jpg",
                 alt: "Australian electrician in a yellow hard hat smiling while working at a power box",
@@ -413,7 +412,7 @@ function Trades() {
           <Reveal delay={130}>
             <TradePanel
               label="Plumbing"
-              state="QLD · Plumbing pilot"
+              state="Live · QLD"
               image={{
                 src: "/marketing/trade-plumbing.jpg",
                 alt: "Plumber fixing a leaky faucet under a kitchen sink",
@@ -432,27 +431,30 @@ function Trades() {
           </Reveal>
         </div>
 
-        {/* Next in line — roofing, solar and painting are being wired now,
-            shown as upcoming (not yet pilot-live) so the imagery stays honest. */}
+        {/* More trades on the same platform — roofing, solar and painting
+            are live too, each clickable through to its trade page. */}
         <Reveal delay={120}>
           <div className="mt-8">
-            <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
-              Next in line
+            <span className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+              More trades
             </span>
             <div className="mt-4 grid gap-4 sm:grid-cols-3">
-              <UpcomingTrade
+              <TradeTile
+                href="/trades/roofing"
                 src="/marketing/trade-roofing.jpg"
                 alt="Roofer using a cordless drill while working on a metal roof"
                 label="Roofing"
                 position="center 35%"
               />
-              <UpcomingTrade
+              <TradeTile
+                href="/trades/solar"
                 src="/marketing/trade-solar.jpg"
                 alt="Installers mounting solar panels at a rooftop power station"
                 label="Solar"
                 position="center 62%"
               />
-              <UpcomingTrade
+              <TradeTile
+                href="/trades/painting"
                 src="/marketing/trade-painting.jpg"
                 alt="Two painters rolling fresh paint onto an interior wall"
                 label="Painting"
@@ -477,7 +479,7 @@ function Trades() {
             <div className="flex flex-col items-start justify-center gap-5 p-6 md:p-8">
               <p className="max-w-2xl text-base leading-relaxed text-text-sec md:text-lg">
                 Not on the list yet? Carpenters, cabinetmakers, HVAC and the
-                rest &mdash; tell us your trade and we&rsquo;ll line you up for
+                rest. Tell us your trade and we&rsquo;ll line you up for
                 the next pilot.
               </p>
               <SecondaryCTA href="/signup">Request your trade</SecondaryCTA>
@@ -518,11 +520,11 @@ function Shift() {
 
         <div className="mt-14 grid gap-px overflow-hidden rounded-2xl border border-ink-line bg-ink-line">
           <div className="hidden grid-cols-[1fr_auto_1fr] items-center gap-6 bg-ink-deep px-6 py-4 md:grid">
-            <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+            <span className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
               The usual
             </span>
             <span aria-hidden="true" />
-            <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-accent">
+            <span className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.16em] text-accent">
               With QuoteMax
             </span>
           </div>
@@ -588,7 +590,7 @@ function Pricing() {
             <span className="text-accent">one missed job.</span>
           </h2>
           <p className="mt-6 max-w-2xl text-lg leading-relaxed text-text-sec">
-            Pick a plan and QuoteMax is quoting the same day —
+            Pick a plan and QuoteMax is quoting the same day.
             Starter Monthly comes with a 14-day free trial. We never take a cut
             of your jobs. The only fixed price is the $99 site visit, credited
             straight back to the job.
@@ -623,7 +625,7 @@ function Faq() {
     },
     {
       q: "What does it cost?",
-      a: "Plans start at $49/mo, and the Starter Monthly plan comes with a 14-day free trial — see the pricing page for the full breakdown. We never take a cut of your jobs; the only fixed price is the $99 site visit, credited back to the job.",
+      a: "Plans start at $49/mo, and the Starter Monthly plan comes with a 14-day free trial. See the pricing page for the full breakdown. We never take a cut of your jobs; the only fixed price is the $99 site visit, credited back to the job.",
     },
     {
       q: "Which trades are live?",
@@ -690,12 +692,11 @@ function ClosingCta() {
 }
 
 /* ─── App download (iOS + Android · coming soon) ──────────────── */
-// The final content band before the footer. Mirrors the OnTheTools
-// composition (device left, copy right). The apps aren't shipped yet, so
-// the store badges are deliberately NON-interactive and clearly marked
-// "coming soon" — no dead links, no fake store pages (see /ux ethical
-// design). The one real action is the "get notified" link into signup,
-// so a keen tradie isn't left at a dead end.
+// An image feature band (device left, copy right). The apps aren't
+// shipped yet, so the store badges are deliberately NON-interactive and
+// clearly marked "coming soon" — no dead links, no fake store pages (see
+// /ux ethical design). The one real action is the "get notified" link
+// into signup, so a keen tradie isn't left at a dead end.
 function AppDownload() {
   return (
     <section id="app" className="border-b border-ink-line scroll-mt-20">
@@ -704,7 +705,7 @@ function AppDownload() {
           <AppPhone />
         </Reveal>
         <Reveal delay={120}>
-          <span className="inline-flex items-center gap-2 rounded-md border border-accent/40 bg-accent/10 px-3 py-1.5 font-mono text-[0.66rem] font-semibold uppercase tracking-[0.16em] text-accent-soft">
+          <span className="inline-flex items-center gap-2 rounded-md border border-accent/40 bg-accent/10 px-3 py-1.5 font-mono text-[0.75rem] font-semibold uppercase tracking-[0.16em] text-accent-soft">
             <span
               className="h-1.5 w-1.5 rounded-full bg-accent motion-safe:animate-[pulse-soft_2.4s_ease-in-out_infinite]"
               aria-hidden="true"
@@ -716,7 +717,7 @@ function AppDownload() {
             <span className="text-accent">in your pocket.</span>
           </h2>
           <p className="mt-6 max-w-md text-lg leading-relaxed text-text-sec">
-            Approve drafts, check your pipeline, and get paid &mdash; from the
+            Approve drafts, check your pipeline, and get paid, from the
             ute, the roof, or the couch. The iOS and Android apps are still on
             the workbench; we&rsquo;re building them now.
           </p>
@@ -752,21 +753,21 @@ function StoreBadge({ platform }: { platform: "apple" | "google" }) {
   return (
     <div
       role="img"
-      aria-label={`${label} — coming soon`}
+      aria-label={`${label} · coming soon`}
       className="inline-flex cursor-default select-none items-center gap-3 rounded-lg border border-ink-line bg-ink-card px-4 py-3"
     >
       <span className="text-text-pri" aria-hidden="true">
         {isApple ? <AppleGlyph /> : <PlayGlyph />}
       </span>
       <span className="flex flex-col leading-none">
-        <span className="font-mono text-[0.55rem] uppercase tracking-[0.14em] text-text-dim">
+        <span className="font-mono text-[0.75rem] uppercase tracking-[0.08em] text-text-dim">
           {top}
         </span>
         <span className="mt-1 text-[0.95rem] font-semibold tracking-tight text-text-pri">
           {label}
         </span>
       </span>
-      <span className="ml-1.5 self-start rounded border border-accent/40 bg-accent/10 px-1.5 py-0.5 font-mono text-[0.5rem] font-semibold uppercase tracking-[0.12em] text-accent-soft">
+      <span className="ml-1.5 self-start rounded border border-accent/40 bg-accent/10 px-1.5 py-0.5 font-mono text-[0.75rem] font-semibold uppercase tracking-[0.06em] text-accent-soft">
         Soon
       </span>
     </div>
@@ -787,7 +788,7 @@ function AppPhone() {
       />
       <Image
         src="/marketing/app-iphone-quotemax.png"
-        alt="The QuoteMax mobile site on an iPhone — drafts your quote before they hang up"
+        alt="The QuoteMax mobile site on an iPhone. Drafts your quote before they hang up"
         width={1022}
         height={2082}
         sizes="(max-width: 768px) 264px, 300px"
@@ -826,10 +827,10 @@ function SmsDemo() {
   return (
     <div className="edge-lit overflow-hidden rounded-2xl border border-ink-line bg-ink-card">
       <div className="flex items-center justify-between border-b border-ink-line px-4 py-3">
-        <span className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+        <span className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-text-dim">
           Live example · SMS intake
         </span>
-        <span className="flex items-center gap-1.5 font-mono text-[0.6rem] font-semibold uppercase tracking-[0.14em] text-teal-glow">
+        <span className="flex items-center gap-1.5 font-mono text-[0.75rem] font-semibold uppercase tracking-[0.08em] text-teal-glow">
           <span className="h-1.5 w-1.5 rounded-full bg-teal-glow motion-safe:animate-[pulse-soft_2.4s_ease-in-out_infinite]" />
           Online
         </span>
@@ -854,10 +855,10 @@ function SmsDemo() {
         style={{ animationDelay: "3900ms" }}
       >
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-accent">
+          <span className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-accent">
             Quote drafted · under a minute
           </span>
-          <span className="font-mono text-[0.58rem] uppercase tracking-[0.14em] text-text-dim">
+          <span className="font-mono text-[0.75rem] uppercase tracking-[0.08em] text-text-dim">
             Sample
           </span>
         </div>
@@ -870,7 +871,7 @@ function SmsDemo() {
               className="absolute inset-x-0 top-0 h-0.5 bg-accent"
               aria-hidden="true"
             />
-            <div className="font-mono text-[0.55rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+            <div className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-text-dim">
               Sample quote
             </div>
             <div className="mt-1.5 font-mono text-xl font-bold tabular-nums text-accent">
@@ -907,7 +908,7 @@ function Bubble({
         }`}
       >
         {!inbound && (
-          <span className="mb-1 block font-mono text-[0.55rem] font-semibold uppercase tracking-[0.16em] text-accent">
+          <span className="mb-1 block font-mono text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-accent">
             QuoteMax
           </span>
         )}
@@ -1004,7 +1005,7 @@ function TradePanel({
             <h3 className="font-extrabold uppercase tracking-tight text-white text-2xl md:text-3xl">
               {label}
             </h3>
-            <span className="shrink-0 pb-1 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-white/90">
+            <span className="shrink-0 pb-1 font-mono text-[0.75rem] uppercase tracking-[0.14em] text-white/90">
               {state}
             </span>
           </div>
@@ -1014,14 +1015,14 @@ function TradePanel({
           <h3 className="font-extrabold uppercase tracking-tight text-2xl md:text-3xl">
             {label}
           </h3>
-          <span className="shrink-0 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
+          <span className="shrink-0 font-mono text-[0.75rem] uppercase tracking-[0.14em] text-text-dim">
             {state}
           </span>
         </div>
       )}
 
       <div className="p-6 md:p-8">
-        <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-accent">
+        <span className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.16em] text-accent">
           Auto-quoted
         </span>
         <ul className="mt-3 grid gap-2">
@@ -1039,7 +1040,7 @@ function TradePanel({
         </ul>
 
         <div className="mt-7 border-t border-ink-line pt-7">
-          <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+          <span className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
             $99 site visit
           </span>
           <ul className="mt-3 grid gap-2">
@@ -1061,21 +1062,26 @@ function TradePanel({
   )
 }
 
-// A compact upcoming-trade card — a brand-tinted photo with the trade name
-// and an honest "Coming soon" marker so it never reads as a live pilot.
-function UpcomingTrade({
+// A compact live-trade card — a brand-tinted photo with the trade name,
+// clickable through to its trade page. Present-tense, no "coming soon".
+function TradeTile({
+  href,
   src,
   alt,
   label,
   position,
 }: {
+  href: string
   src: string
   alt: string
   label: string
   position?: string
 }) {
   return (
-    <figure className="edge-lit relative overflow-hidden rounded-2xl border border-ink-line">
+    <Link
+      href={href}
+      className="edge-lit group relative block overflow-hidden rounded-2xl border border-ink-line transition-colors hover:border-text-dim focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
+    >
       <DuotoneImage
         src={src}
         alt={alt}
@@ -1087,11 +1093,14 @@ function UpcomingTrade({
         <span className="font-extrabold uppercase tracking-tight text-white text-lg">
           {label}
         </span>
-        <span className="shrink-0 pb-0.5 font-mono text-[0.58rem] font-semibold uppercase tracking-[0.16em] text-white/90">
-          Coming soon
+        <span
+          className="shrink-0 pb-0.5 font-mono text-white transition-transform duration-300 group-hover:translate-x-0.5"
+          aria-hidden="true"
+        >
+          &rarr;
         </span>
       </figcaption>
-    </figure>
+    </Link>
   )
 }
 
@@ -1105,39 +1114,6 @@ function Stat({ value, label }: { value: string; label: string }) {
         {label}
       </div>
     </div>
-  )
-}
-
-/* ─── On the tools (image feature band) ───────────────────────── */
-
-function OnTheTools() {
-  return (
-    <section className="border-b border-ink-line">
-      <div className="mx-auto grid max-w-[88rem] items-center gap-10 px-6 py-24 md:grid-cols-2 md:gap-16 md:py-32">
-        <Reveal>
-          <DuotoneImage
-            src="/marketing/home-on-the-tools.jpg"
-            alt="Tradesperson drafting a quote on a tablet at the back of the ute"
-            aspect="aspect-[4/3]"
-            sizes="(max-width: 768px) 100vw, 50vw"
-            position="center 40%"
-            className="edge-lit rounded-2xl border border-ink-line"
-          />
-        </Reveal>
-        <Reveal delay={120}>
-          <Eyebrow>From the field</Eyebrow>
-          <h2 className="mt-6 font-extrabold uppercase leading-[1.02] tracking-[-0.03em] text-[clamp(1.9rem,3.6vw,3rem)]">
-            Stay on the <span className="text-accent">tools</span>. QuoteMax does
-            the quoting.
-          </h2>
-          <p className="mt-6 max-w-md text-lg leading-relaxed text-text-sec">
-            The text lands while you&rsquo;re up a ladder. QuoteMax asks the
-            questions, prices the job against your book, and has a clean quote
-            waiting in your dashboard by the time you&rsquo;re back in the ute.
-          </p>
-        </Reveal>
-      </div>
-    </section>
   )
 }
 
@@ -1242,11 +1218,11 @@ function BuiltForAustralia() {
           </h2>
           <p className="mt-6 max-w-md text-lg leading-relaxed text-text-sec">
             GST handled, licence details on every quote, NSW and QLD conventions
-            baked in. Built with sparkies and plumbers &mdash; for the crews
+            baked in. Built with sparkies and plumbers, for the crews
             who&rsquo;d rather be on site than chasing paperwork at 11pm.
           </p>
           <div className="mt-8">
-            <PrimaryCTA href="/signup">Get started</PrimaryCTA>
+            <PrimaryCTA href="/signup">Get my QuoteMax</PrimaryCTA>
           </div>
         </Reveal>
         <Reveal delay={120}>

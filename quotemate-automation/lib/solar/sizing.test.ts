@@ -479,25 +479,29 @@ describe('sizeSolarSystem — preferred system size anchors the tiers', () => {
     expect(top.export_limited).toBe(true)
   })
 
-  it('caps an oversized preferred request at the public quote maximum', () => {
+  it('caps an oversized preferred request at the public quote maximum (100 kW)', () => {
+    // A roof big enough (300 panels × 400 W = 120 kW) that the 100 kW public
+    // quote ceiling — not the roof — is the binding constraint. Request 120 kW
+    // → clamp to MAX_REQUESTED_SYSTEM_KW (100) → anchor = round(100000/400) =
+    // 250 panels (100.0 kW). Never above the ceiling even with roof to spare.
     const giantRoof: SolarRoofFacts = {
       ...BIG_ROOF,
-      max_panels_count: 160,
+      max_panels_count: 300,
       panel_configs: [
-        { panels_count: 88, yearly_energy_dc_kwh: 52800 },
-        { panels_count: 128, yearly_energy_dc_kwh: 76800 },
-        { panels_count: 160, yearly_energy_dc_kwh: 96000 },
+        { panels_count: 138, yearly_energy_dc_kwh: 82800 },
+        { panels_count: 200, yearly_energy_dc_kwh: 120000 },
+        { panels_count: 250, yearly_energy_dc_kwh: 150000 },
       ],
     }
     const r = sizeSolarSystem({
       roof: giantRoof,
       panelType: 'standard_panels',
       config: DEFAULT_SOLAR_CONFIG,
-      context: { ...CONTEXT, phase: 'unknown', requested_size_kw: 80 },
+      context: { ...CONTEXT, phase: 'unknown', requested_size_kw: 120 },
     })
     const top = r.tiers[r.tiers.length - 1]
-    expect(top.system_kw_dc).toBe(40)
-    expect(top.panels_count).toBe(100)
+    expect(top.system_kw_dc).toBe(100)
+    expect(top.panels_count).toBe(250)
     expect(top.export_limited).toBe(true)
   })
 

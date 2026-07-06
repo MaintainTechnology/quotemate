@@ -117,7 +117,7 @@ export function MobileNav() {
           </ul>
 
           <div className="border-b border-ink-line/70 py-4">
-            <span className="font-mono text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-text-dim">
+            <span className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
               Trades
             </span>
             <ul className="mt-2.5 grid grid-cols-2 gap-2">
@@ -126,7 +126,7 @@ export function MobileNav() {
                   <Link
                     href={t.href}
                     onClick={close}
-                    className="block rounded-md border border-ink-line px-3 py-2 text-sm font-semibold uppercase tracking-tight text-text-pri transition-colors hover:border-text-dim hover:bg-ink-card hover:text-accent"
+                    className="flex min-h-11 items-center justify-center rounded-md border border-ink-line px-3 py-2 text-sm font-semibold uppercase tracking-tight text-text-pri transition-colors hover:border-text-dim hover:bg-ink-card hover:text-accent"
                   >
                     {t.label}
                   </Link>

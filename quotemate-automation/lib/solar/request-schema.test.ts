@@ -55,4 +55,21 @@ describe('SolarEstimateRequestSchema', () => {
     })
     expect(r.success).toBe(true)
   })
+
+  it('accepts the 100 kW ceiling and rejects a size above it', () => {
+    // The Zod ceiling MUST equal the DB check (solar_estimates
+    // requested_system_kw <= 100). Regression (2026-07-06): a looser input
+    // bound let a request through validation that then failed the INSERT.
+    const atCeiling = SolarEstimateRequestSchema.safeParse({
+      address: { address: '1 Test St', postcode: '2000', state: 'NSW' },
+      requested_size_kw: 100,
+    })
+    expect(atCeiling.success).toBe(true)
+
+    const aboveCeiling = SolarEstimateRequestSchema.safeParse({
+      address: { address: '1 Test St', postcode: '2000', state: 'NSW' },
+      requested_size_kw: 101,
+    })
+    expect(aboveCeiling.success).toBe(false)
+  })
 })

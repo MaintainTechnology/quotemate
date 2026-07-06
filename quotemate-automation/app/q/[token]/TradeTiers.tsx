@@ -145,7 +145,7 @@ export function TradeTiers({
                   </div>
                 ) : priceExpired ? (
                   <div className="border border-warning/40 px-4 py-3 text-center font-mono text-[0.72rem] uppercase tracking-[0.14em] text-warning">
-                    Price expired — reply for a refreshed quote
+                    Price expired · reply for a refreshed quote
                   </div>
                 ) : href ? (
                   <Link
@@ -156,7 +156,7 @@ export function TradeTiers({
                   </Link>
                 ) : (
                   <div className="border border-ink-line px-4 py-3 text-center font-mono text-[0.72rem] uppercase tracking-[0.14em] text-text-dim">
-                    Confirm to unlock
+                    Reply to SMS to confirm
                   </div>
                 )}
               </div>

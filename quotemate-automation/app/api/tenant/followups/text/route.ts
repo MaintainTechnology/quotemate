@@ -211,7 +211,17 @@ export async function POST(req: Request) {
         last_message_at: nowIso,
         updated_at: nowIso,
       }
-      if (followupQuote) update.followup_quote = followupQuote
+      if (followupQuote) {
+        update.followup_quote = followupQuote
+        // A1 (spec 2026-07-05): a follow-up always concerns an ALREADY-
+        // completed quote, so any half-finished roof/paint intake still
+        // parked on this shared phone thread is stale by definition. Clear
+        // it here so the deterministic roofing/painting receptionists can't
+        // resume it and hijack the customer's reply ("Yes" → "how steep is
+        // the roof?"). Defence-in-depth with the inbound pin-guard (A2).
+        update.roofing_state = null
+        update.painting_state = null
+      }
       await supabase
         .from('sms_conversations')
         .update(update)
@@ -226,7 +236,9 @@ export async function POST(req: Request) {
           conversation_type: 'customer_quote',
           status: 'open',
           last_message_at: nowIso,
-          ...(followupQuote ? { followup_quote: followupQuote } : {}),
+          ...(followupQuote
+            ? { followup_quote: followupQuote, roofing_state: null, painting_state: null }
+            : {}),
         })
         .select('id')
         .single()

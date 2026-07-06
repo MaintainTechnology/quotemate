@@ -155,15 +155,9 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
 
   return (
     <div className="max-w-4xl">
-      <h2 className="font-extrabold uppercase tracking-tight text-text-pri text-2xl">
-        Billing &amp; plan
-      </h2>
-      <p className="mt-2 text-sm leading-relaxed text-text-sec">
-        Your QuoteMax subscription. Starter Monthly comes with a 14-day free
-        trial; every other plan starts right away. Switch plans or manage your
-        card anytime — prices are AUD, ex-GST.
-      </p>
-
+      {/* Header (title + description) is rendered centrally by <TabHeader>
+          in the dashboard shell, like every other tab — no local heading
+          here, or it renders twice. */}
       {justSubscribed && (
         <div className="mt-6 border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-text-pri">
           You&rsquo;re all set — your subscription is active. It can take a few

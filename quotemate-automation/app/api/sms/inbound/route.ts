@@ -18,10 +18,10 @@ import {
 } from '@/lib/sms/twilio-validator'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { decideNextTurn, type ConversationTurn } from '@/lib/sms/dialog'
-import { looksLikeRoofingEnquiry, toRoofingRequest } from '@/lib/sms/roofing-intake'
+import { toRoofingRequest } from '@/lib/sms/roofing-intake'
 import {
   advanceRoofing,
-  isActiveRoofingFlow,
+  shouldEngageRoofing,
   type RoofingConversationState,
 } from '@/lib/sms/roofing-receptionist'
 import {
@@ -40,10 +40,10 @@ import { buildQuoteKbText } from '@/lib/filestore/minimize'
 import { measureAndPriceRoofs } from '@/lib/roofing/measure'
 import { generateRoofAfterImage } from '@/lib/roofing/roof-after'
 import type { MultiRoofQuote } from '@/lib/roofing/types'
-import { looksLikePaintingEnquiry, toPaintingRequest } from '@/lib/sms/painting-intake'
+import { toPaintingRequest } from '@/lib/sms/painting-intake'
 import {
   advancePainting,
-  isActivePaintingFlow,
+  shouldEngagePainting,
   type PaintingConversationState,
 } from '@/lib/sms/painting-receptionist'
 import {
@@ -55,7 +55,11 @@ import {
 } from '@/lib/sms/painting-compose'
 import { runAndSavePaintingQuote } from '@/lib/painting/quote-dispatch'
 import { notifyPaintingTradie } from '@/lib/painting/release'
-import { formatActiveFollowupContext } from '@/lib/sms/followup-context'
+import {
+  formatActiveFollowupContext,
+  parseFollowupQuoteContext,
+  isFollowupContextActive,
+} from '@/lib/sms/followup-context'
 import { buildGpoInspectionOverride } from '@/lib/sms/gpo-guard'
 import {
   resolveEnabledSharedAssembliesForDialog,
@@ -386,8 +390,9 @@ async function handleRoofingTurn(args: {
   fromNumber: string
   tenantId: string | null
   firstName: string | null
+  followupPinActive: boolean
 }): Promise<boolean> {
-  const { conversationId, turns, toNumber, fromNumber, tenantId, firstName } = args
+  const { conversationId, turns, toNumber, fromNumber, tenantId, firstName, followupPinActive } = args
   const prevState = (args.roofingStateRaw ?? null) as RoofingConversationState | null
 
   const latestInbound =
@@ -397,8 +402,10 @@ async function handleRoofingTurn(args: {
   // a reply), or THIS message reads like a roofing enquiry. A closed flow
   // (quote sent / cancelled / booked) is NOT active, so an unrelated
   // follow-up never re-quotes — only a fresh roofing enquiry reopens it.
-  const activeFlow = isActiveRoofingFlow(prevState)
-  if (!activeFlow && !looksLikeRoofingEnquiry(latestInbound)) return false
+  // When a follow-up pin is active the thread was just chased about a
+  // DIFFERENT quote, so a stale roofing_state must not resume — only a
+  // genuinely new roofing enquiry may engage (spec 2026-07-05 Part A2).
+  if (!shouldEngageRoofing(prevState, latestInbound, followupPinActive)) return false
 
   const decision = advanceRoofing(prevState, latestInbound)
 
@@ -707,8 +714,9 @@ async function handlePaintingTurn(args: {
   fromNumber: string
   tenantId: string | null
   firstName: string | null
+  followupPinActive: boolean
 }): Promise<boolean> {
-  const { conversationId, turns, toNumber, fromNumber, tenantId, firstName } = args
+  const { conversationId, turns, toNumber, fromNumber, tenantId, firstName, followupPinActive } = args
   const prevState = (args.paintingStateRaw ?? null) as PaintingConversationState | null
 
   const latestInbound =
@@ -716,9 +724,10 @@ async function handlePaintingTurn(args: {
 
   // Engage only if we're in an ACTIVE painting flow (mid-gather / awaiting a
   // reply), or THIS message reads like a painting enquiry. A closed flow is
-  // NOT active, so an unrelated follow-up never re-quotes.
-  const activeFlow = isActivePaintingFlow(prevState)
-  if (!activeFlow && !looksLikePaintingEnquiry(latestInbound)) return false
+  // NOT active, so an unrelated follow-up never re-quotes. When a follow-up
+  // pin is active a stale painting_state must not resume — only a genuinely
+  // new painting enquiry may engage (spec 2026-07-05 Part A2).
+  if (!shouldEngagePainting(prevState, latestInbound, followupPinActive)) return false
 
   const decision = advancePainting(prevState, latestInbound)
 
@@ -1597,6 +1606,20 @@ export async function POST(req: Request) {
       }))
       const inboundCount = turns.filter(t => t.direction === 'inbound').length
 
+      // Is a follow-up pin active on this thread? The tradie may have just
+      // chased a DIFFERENT quote (e.g. Ceiling Fans) on the customer's
+      // shared phone thread, which can carry stale roofing_state /
+      // painting_state from an earlier trade enquiry. Read the pin ONCE,
+      // before the deterministic receptionists, so a stale trade flow can't
+      // hijack a follow-up reply ("Yes" → "how steep is the roof?"). The pin
+      // lives in the followup_quote column (immune to slot-merge) and is
+      // already on the `conversation` row (loaded with select('*')).
+      // (Spec 2026-07-05 Part A2.)
+      const followupPinActive = isFollowupContextActive(
+        parseFollowupQuoteContext((conversation as Record<string, unknown>).followup_quote),
+        Date.now(),
+      )
+
       // ─────── SMS roofing receptionist (flag-gated) ───────
       // When enabled, a roofing enquiry (or an in-progress roofing thread)
       // is handled by the deterministic roofing receptionist instead of
@@ -1613,6 +1636,7 @@ export async function POST(req: Request) {
             fromNumber,
             tenantId: tenant?.id ?? null,
             firstName: customer?.first_name ?? guessFirstName(turns) ?? null,
+            followupPinActive,
           })
           if (handledRoofing) {
             console.log('[sms/inbound:after] handled by roofing receptionist', { conversationId })
@@ -1640,6 +1664,7 @@ export async function POST(req: Request) {
             fromNumber,
             tenantId: tenant?.id ?? null,
             firstName: customer?.first_name ?? guessFirstName(turns) ?? null,
+            followupPinActive,
           })
           if (handledPainting) {
             console.log('[sms/inbound:after] handled by painting receptionist', { conversationId })

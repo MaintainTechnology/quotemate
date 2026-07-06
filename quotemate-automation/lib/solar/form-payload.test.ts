@@ -91,4 +91,12 @@ describe('buildSolarFormPayload — phase + preferred size', () => {
   it('allows a 40 kW preferred size through to the API payload', () => {
     expect(buildSolarFormPayload({ ...base, requestedSizeKw: '40' }).requested_size_kw).toBe(40)
   })
+
+  it('accepts a preferred size up to the 100 kW ceiling and drops values above it', () => {
+    // Regression (2026-07-06): the ceiling MUST match the DB check. A value at
+    // the ceiling flows through; one above it is treated as no preference (so
+    // it never persists a size the solar_estimates INSERT would reject).
+    expect(buildSolarFormPayload({ ...base, requestedSizeKw: '100' }).requested_size_kw).toBe(100)
+    expect('requested_size_kw' in buildSolarFormPayload({ ...base, requestedSizeKw: '150' })).toBe(false)
+  })
 })

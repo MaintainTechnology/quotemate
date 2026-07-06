@@ -321,4 +321,32 @@ describe('buildSolarRowPayloads — phase + requested size columns', () => {
     expect(out.solarEstimate.electrical_phase).toBe('unknown')
     expect(out.solarEstimate.requested_system_kw).toBe(40)
   })
+
+  it('clamps a persisted requested size to the DB ceiling (defence-in-depth)', () => {
+    // Regression (2026-07-06): the persisted requested_system_kw MUST satisfy
+    // the solar_estimates check (null OR 0 < kw <= 100) for ANY caller — a
+    // value above the ceiling is clamped to 100 rather than allowed to fail
+    // the INSERT with "could not save your estimate".
+    const oversized: SolarEstimate = {
+      ...estimate,
+      context: { ...estimate.context, requested_system_kw: 250 },
+    }
+    const out = buildSolarRowPayloads({
+      estimate: oversized,
+      tenantId: 'TENANT1',
+      address: { address: '1 Test St, Sydney', postcode: '2000', state: 'NSW' },
+    })
+    expect(out.solarEstimate.requested_system_kw).toBe(100)
+
+    const nonFinite: SolarEstimate = {
+      ...estimate,
+      context: { ...estimate.context, requested_system_kw: Number.NaN },
+    }
+    const outNaN = buildSolarRowPayloads({
+      estimate: nonFinite,
+      tenantId: 'TENANT1',
+      address: { address: '1 Test St, Sydney', postcode: '2000', state: 'NSW' },
+    })
+    expect(outNaN.solarEstimate.requested_system_kw).toBe(null)
+  })
 })

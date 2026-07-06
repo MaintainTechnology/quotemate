@@ -70,7 +70,7 @@
     --accent-ink: #2B2422;
     --text-pri: #241E1B;
     --text-sec: #5E544E;
-    --text-dim: #837870;
+    --text-dim: #6E645C;
     --teal-glow: #8A7D6A;
     --teal-deep: #6E6354;
     --success-bright: #15803D;
@@ -97,7 +97,7 @@
   --accent-ink: #2B2422;
   --text-pri: #241E1B;
   --text-sec: #5E544E;
-  --text-dim: #837870;
+  --text-dim: #6E645C;
   --teal-glow: #8A7D6A;
   --teal-deep: #6E6354;
   --success-bright: #15803D;
@@ -298,13 +298,13 @@ body {
 .link-underline:focus-visible {
   outline: 2px solid var(--accent-soft);
   outline-offset: 3px;
-  border-radius: 1px;
+  border-radius: 0;
 }
 
 /* ════════════════════════════════════════════════════════════════════
    Premium reinvention layer (home marketing page).
    Command-centre depth + film grain + lit edges — all inside the brand:
-   borders over shadows, square corners, orange + teal-glow only.
+   borders over shadows, rounded corners, warm charcoal + Caterpillar yellow.
    ════════════════════════════════════════════════════════════════════ */
 
 /* Anchor links clear the sticky nav before settling. */
@@ -460,7 +460,7 @@ html {
     rgba(15, 12, 10, 0.4) 45%,
     transparent 100%
   );
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  text-shadow: 0 1px 3px rgba(15, 12, 10, 0.55);
 }
 
 /* DARK theme — deepen the scrim toward the ink canvas and pull more colour
@@ -500,9 +500,40 @@ html {
    ════════════════════════════════════════════════════════════════════ */
 .bg-accent { color: var(--accent-ink); }
 .bg-accent.text-white { color: var(--accent-ink); }
-:root[data-theme="light"] .text-accent { color: var(--accent-ink); }
+/* Light theme: yellow-as-text is unreadable on cream, so accent words fall
+   back to charcoal. Weight alone can't distinguish an already-bold display
+   headline, so the emphasis is carried by a yellow highlighter underline —
+   yellow stays a FILL, never the text colour. text-decoration underlines
+   per-line, and the em-based thickness self-scales from hero to inline. */
+:root[data-theme="light"] .text-accent {
+  color: var(--accent-ink);
+  text-decoration-line: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 0.09em;
+  text-underline-offset: 0.12em;
+}
 @media (prefers-color-scheme: light) {
-  :root:not([data-theme]) .text-accent { color: var(--accent-ink); }
+  :root:not([data-theme]) .text-accent {
+    color: var(--accent-ink);
+    text-decoration-line: underline;
+    text-decoration-color: var(--accent);
+    text-decoration-thickness: 0.09em;
+    text-underline-offset: 0.12em;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   Global focus ring — the brand promises an always-visible keyboard
+   focus indicator (2px accent-soft at 2px offset). :where() keeps this at
+   0 specificity, so any component that declares its own focus style still
+   wins; this only fills the gap where interactive elements fell back to
+   the thin UA default outline on the warm-charcoal canvas.
+   ════════════════════════════════════════════════════════════════════ */
+:where(a, button, input, select, textarea, summary,
+  [role="button"], [role="tab"], [role="switch"], [role="link"],
+  [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 2px;
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -576,7 +607,7 @@ html {
 
   --text-pri: #241E1B;
   --text-sec: #5E544E;
-  --text-dim: #837870;
+  --text-dim: #6E645C;
 
   --success-bright: #15803D;
   --warning-bright: #B45309;

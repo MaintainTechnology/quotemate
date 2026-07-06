@@ -2,8 +2,8 @@
 
 // The three plan cards with a Monthly / Annual billing toggle. Shared by
 // the homepage pricing section (variant="home") and the dedicated
-// /pricing page (variant="full"). Maintain design system — square cards,
-// orange accent on the featured (Pro) tier, mono tabular-nums for prices.
+// /pricing page (variant="full"). The "command-centre" system: rounded cards,
+// Caterpillar-yellow accent on the featured (Pro) tier, mono tabular-nums.
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -77,8 +77,8 @@ function BillingToggle({
           Annual
         </ToggleButton>
       </div>
-      <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-accent">
-        Save ~17% — 2 months free
+      <span className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.14em] text-accent">
+        Save ~17% · 2 months free
       </span>
     </div>
   )
@@ -123,6 +123,7 @@ function CheckoutButton({
 }) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   async function start() {
     // Stash the choice so it survives signup + email verification; the
@@ -132,6 +133,7 @@ function CheckoutButton({
       router.push(`/signup?plan=${plan}&interval=${interval}`)
     }
     setLoading(true)
+    setError(null)
     try {
       const supabase = getBrowserSupabase()
       const { data } = await supabase.auth.getSession()
@@ -148,25 +150,31 @@ function CheckoutButton({
         },
         body: JSON.stringify({ plan, interval }),
       })
+      if (!res.ok) {
+        setError("Couldn't start checkout. Please try again in a moment.")
+        return
+      }
       const json = (await res.json()) as { url?: string }
       if (json.url) {
         window.location.assign(json.url)
         return
       }
-      // Authed but not onboarded (no tenant) or an error → onboarding.
+      // Authed but no tenant yet → finish onboarding first.
       goSignup()
     } catch {
-      goSignup()
+      setError("Couldn't start checkout. Check your connection and try again.")
     } finally {
       setLoading(false)
     }
   }
 
   return (
+    <>
     <button
       type="button"
       onClick={start}
       disabled={loading}
+      aria-describedby={error ? `${plan}-checkout-error` : undefined}
       className={`mt-7 inline-flex items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-semibold uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep disabled:opacity-60 ${
         featured
           ? "bg-accent text-white hover:bg-accent-press"
@@ -179,6 +187,16 @@ function CheckoutButton({
           ? "Start free trial"
           : "Get started"}
     </button>
+      {error && (
+        <p
+          id={`${plan}-checkout-error`}
+          role="alert"
+          className="mt-2 text-xs font-medium text-danger-bright"
+        >
+          {error}
+        </p>
+      )}
+    </>
   )
 }
 
@@ -200,7 +218,7 @@ function PlanCard({ plan, annual }: { plan: Plan; annual: boolean }) {
             className="absolute inset-x-0 top-0 h-0.5 bg-accent"
             aria-hidden="true"
           />
-          <span className="absolute right-5 top-5 rounded-md bg-accent px-2.5 py-1 font-mono text-[0.6rem] font-bold uppercase tracking-[0.12em] text-white">
+          <span className="absolute right-5 top-5 rounded-md bg-accent px-2.5 py-1 font-mono text-[0.75rem] font-bold uppercase tracking-[0.1em] text-accent-ink">
             Most popular
           </span>
         </>
@@ -209,7 +227,7 @@ function PlanCard({ plan, annual }: { plan: Plan; annual: boolean }) {
       <h3 className="font-extrabold uppercase tracking-tight text-text-pri text-2xl">
         {plan.name}
       </h3>
-      <p className="mt-1.5 font-mono text-[0.72rem] uppercase tracking-[0.1em] text-text-dim">
+      <p className="mt-1.5 font-mono text-[0.75rem] uppercase tracking-[0.1em] text-text-dim">
         {plan.tagline}
       </p>
 
@@ -243,7 +261,7 @@ function PlanCard({ plan, annual }: { plan: Plan; annual: boolean }) {
       />
 
       {plan.inheritsFrom && (
-        <p className="mt-7 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-text-dim">
+        <p className="mt-7 font-mono text-[0.75rem] font-semibold uppercase tracking-[0.12em] text-text-dim">
           Everything in {plan.inheritsFrom}, plus:
         </p>
       )}

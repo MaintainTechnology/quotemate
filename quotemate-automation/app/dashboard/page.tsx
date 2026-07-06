@@ -74,6 +74,8 @@ import {
   Check,
   Banknote,
   CreditCard,
+  Landmark,
+  Wallet,
   Shield,
   Home,
   Megaphone,
@@ -94,7 +96,6 @@ import {
   Bell,
   PanelLeftClose,
   PanelLeftOpen,
-  Plus,
   ChevronDown,
   type LucideProps,
 } from 'lucide-react'
@@ -913,7 +914,10 @@ export default function DashboardPage() {
             )}
             {tab === 'calendar' && <CalendarTab accessToken={accessToken} />}
             {tab === 'followups' && (
-              <FollowupsTab accessToken={accessToken} />
+              <FollowupsTab
+                accessToken={accessToken}
+                onGoToCalendar={() => setTab('calendar')}
+              />
             )}
             {tab === 'chats' && (
               <ChatsTab accessToken={accessToken} isMultiTrade={
@@ -1191,11 +1195,11 @@ function Shell({
               <button
                 type="button"
                 onClick={() => topbar.setTab('quotes')}
-                aria-label="New quote"
+                aria-label="Review queue"
                 className="inline-flex h-11 md:h-9 items-center gap-2 rounded-ctl bg-accent px-3 sm:px-4 text-[13px] font-bold text-accent-ink transition-colors cursor-pointer hover:bg-accent-press"
               >
-                <Plus size={16} strokeWidth={2.25} aria-hidden="true" className="shrink-0" />
-                <span className="hidden sm:inline">New quote</span>
+                <FileText size={16} strokeWidth={2.25} aria-hidden="true" className="shrink-0" />
+                <span className="hidden sm:inline">Review queue</span>
               </button>
             )}
             {topbar && (
@@ -2570,7 +2574,7 @@ function OverviewTab({
       <section className="grid grid-cols-2 gap-px overflow-hidden rounded-card edge-lit border border-ink-line bg-ink-line motion-safe:animate-[fade-up_380ms_cubic-bezier(0.22,1,0.36,1)_both] sm:grid-cols-3 lg:grid-cols-6">
         {metrics.map((m) => (
           <div key={m.k} className="bg-ink-card px-5 py-4 sm:px-[22px] sm:py-[18px]">
-            <div className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.13em] text-text-dim">
+            <div className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.13em] text-text-dim">
               {m.k}
             </div>
             <div
@@ -2579,7 +2583,7 @@ function OverviewTab({
             >
               {m.v}
             </div>
-            <div className="mt-[7px] font-mono text-[8.5px] font-semibold uppercase tracking-[0.1em] text-text-sec">
+            <div className="mt-[7px] font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-text-sec">
               {m.sub}
             </div>
           </div>
@@ -2604,31 +2608,31 @@ function OverviewTab({
             <button
               type="button"
               onClick={() => setTab('quotes')}
-              className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-accent transition-colors cursor-pointer hover:text-accent-press"
+              className="font-mono text-[0.6875rem] font-bold uppercase tracking-[0.14em] text-accent transition-colors cursor-pointer hover:text-accent-press"
             >
               View all {activeQuotes} →
             </button>
           </header>
           {latestQuotes.length === 0 ? (
-            <div className="px-5 py-8 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+            <div className="px-5 py-8 font-mono text-[0.75rem] uppercase tracking-[0.14em] text-text-dim">
               No quotes drafted yet. Customer SMS or calls will land here.
             </div>
           ) : (
             <div>
               <div className="hidden grid-cols-[minmax(94px,1.4fr)_minmax(108px,1.7fr)_46px_76px_116px] gap-3 border-b border-ink-line px-5 py-2.5 sm:grid">
-                <span className="font-mono text-[9px] font-bold uppercase tracking-[0.13em] text-text-dim">
+                <span className="font-mono text-[0.6875rem] font-bold uppercase tracking-[0.13em] text-text-dim">
                   Customer
                 </span>
-                <span className="font-mono text-[9px] font-bold uppercase tracking-[0.13em] text-text-dim">
+                <span className="font-mono text-[0.6875rem] font-bold uppercase tracking-[0.13em] text-text-dim">
                   Job
                 </span>
-                <span className="font-mono text-[9px] font-bold uppercase tracking-[0.13em] text-text-dim">
+                <span className="font-mono text-[0.6875rem] font-bold uppercase tracking-[0.13em] text-text-dim">
                   Ch
                 </span>
-                <span className="text-right font-mono text-[9px] font-bold uppercase tracking-[0.13em] text-text-dim">
+                <span className="text-right font-mono text-[0.6875rem] font-bold uppercase tracking-[0.13em] text-text-dim">
                   Value
                 </span>
-                <span className="text-right font-mono text-[9px] font-bold uppercase tracking-[0.13em] text-text-dim">
+                <span className="text-right font-mono text-[0.6875rem] font-bold uppercase tracking-[0.13em] text-text-dim">
                   Status
                 </span>
               </div>
@@ -2668,7 +2672,7 @@ function OverviewTab({
                       {val}
                     </span>
                     <span
-                      className="inline-flex items-center gap-1.5 justify-self-end px-2 py-[3px] font-mono text-[9px] font-bold uppercase tracking-[0.1em]"
+                      className="inline-flex items-center gap-1.5 justify-self-end px-2 py-[3px] font-mono text-[0.6875rem] font-bold uppercase tracking-[0.1em]"
                       style={{
                         border: `1px solid color-mix(in srgb, ${pill.color} 45%, transparent)`,
                         color: pill.color,
@@ -2761,7 +2765,7 @@ function OverviewTab({
                   {channelChips.map((c) => (
                     <span
                       key={c.label}
-                      className="inline-flex flex-1 items-center justify-center gap-1.5 py-1.5 font-mono text-[8.5px] font-bold uppercase tracking-[0.1em]"
+                      className="inline-flex flex-1 items-center justify-center gap-1.5 py-1.5 font-mono text-[0.6875rem] font-bold uppercase tracking-[0.1em]"
                       style={{
                         border: `1px solid color-mix(in srgb, ${
                           c.live ? 'var(--success-bright)' : 'var(--warning-bright)'
@@ -2891,8 +2895,8 @@ function OverviewHeader({
           onClick={onNewQuote}
           className="inline-flex items-center gap-2 rounded-ctl bg-accent px-4 py-2.5 font-mono text-[0.62rem] font-bold uppercase tracking-[0.1em] text-accent-ink transition-colors cursor-pointer hover:bg-accent-press"
         >
-          <Plus size={15} strokeWidth={2.25} aria-hidden="true" />
-          New quote
+          <FileText size={15} strokeWidth={2.25} aria-hidden="true" />
+          Review queue
         </button>
       </div>
     </header>
@@ -3304,7 +3308,7 @@ function SmsEstimatorCard({
             history for review.
           </p>
           {error && <p className="mt-2 text-sm text-warning">{error}</p>}
-          {savedAt && !error && <p className="mt-2 font-mono text-xs text-teal-glow">✓ Saved</p>}
+          {savedAt && !error && <p className="mt-2 font-mono text-xs text-success-bright">✓ Saved</p>}
         </div>
         <button
           type="button"
@@ -3314,11 +3318,11 @@ function SmsEstimatorCard({
           disabled={busy}
           className={`rounded-ctl inline-flex items-center gap-2 border px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] transition-colors focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50 ${
             enabled
-              ? 'border-teal-glow/60 bg-teal-glow/10 text-teal-glow'
+              ? 'border-accent bg-success-bright/10 text-success-bright'
               : 'border-ink-line text-text-dim hover:border-accent hover:text-accent'
           }`}
         >
-          <span aria-hidden="true" className={`inline-block h-2 w-2 ${enabled ? 'bg-teal-glow' : 'bg-text-dim'}`} />
+          <span aria-hidden="true" className={`inline-block h-2 w-2 ${enabled ? 'bg-success-bright' : 'bg-text-dim'}`} />
           {busy ? 'Saving…' : enabled ? 'On' : 'Off'}
         </button>
       </div>
@@ -3916,7 +3920,95 @@ type PayoutJob = {
   net_cents: number
   completed_at: string | null
   release_state: 'released' | 'in_flight' | 'awaiting'
-  payout: { id: string; amount_cents: number | null; created_at: string | null } | null
+  payout: {
+    id: string
+    amount_cents: number | null
+    created_at: string | null
+    status?: string | null
+    arrival_date?: number | null
+  } | null
+}
+
+// Live account details from /api/tenant/payouts (Stripe-sourced, best-effort).
+type PayoutAccount = {
+  has_account: boolean
+  charges_enabled: boolean
+  payouts_enabled: boolean
+  details_submitted: boolean
+  onboarded_at: string | null
+  bank: { bank_name: string | null; last4: string | null; currency: string | null } | null
+  payout_schedule: string | null
+  balance: { available_cents: number; pending_cents: number; currency: string } | null
+  requirements_due: number
+}
+
+type PayoutSummary = {
+  heldCents: number
+  paidOutCents: number
+  thisMonthCents: number
+  feesCents: number
+  jobsPaid: number
+  jobsAwaiting: number
+}
+
+// Derive the headline figures from the jobs list. Client-side so "this month"
+// respects the tradie's local timezone; the list is capped at 200 rows
+// server-side, comfortably above real per-tradie payout volume.
+function summarisePayouts(jobs: PayoutJob[]): PayoutSummary {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = now.getMonth()
+  let heldCents = 0
+  let paidOutCents = 0
+  let thisMonthCents = 0
+  let feesCents = 0
+  let jobsPaid = 0
+  let jobsAwaiting = 0
+  for (const j of jobs) {
+    feesCents += j.platform_fee_cents ?? 0
+    // A released payout that bounced (failed) or was canceled never reached
+    // the bank — the funds returned to the Stripe balance — so it must not be
+    // counted as "paid out". The red "Failed" row already surfaces it; we just
+    // keep it out of the money totals rather than double-counting into held.
+    const bounced = j.payout?.status === 'failed' || j.payout?.status === 'canceled'
+    if (j.release_state === 'released' && !bounced) {
+      const amt = j.payout?.amount_cents ?? j.net_cents
+      paidOutCents += amt
+      jobsPaid += 1
+      const d = j.payout?.created_at ? new Date(j.payout.created_at) : null
+      if (d && d.getFullYear() === y && d.getMonth() === m) thisMonthCents += amt
+    } else if (j.release_state !== 'released') {
+      heldCents += j.net_cents
+      jobsAwaiting += 1
+    }
+  }
+  return { heldCents, paidOutCents, thisMonthCents, feesCents, jobsPaid, jobsAwaiting }
+}
+
+// Live Stripe payout state → label + colour. Absent (Stripe unreachable) falls
+// back to the plain release date in the list.
+const PAYOUT_STATUS_UI: Record<string, { label: string; tone: string }> = {
+  paid: { label: 'Paid', tone: 'text-success-bright' },
+  in_transit: { label: 'In transit', tone: 'text-warning-bright' },
+  pending: { label: 'Processing', tone: 'text-warning-bright' },
+  canceled: { label: 'Canceled', tone: 'text-danger-bright' },
+  failed: { label: 'Failed', tone: 'text-danger-bright' },
+}
+
+function fmtDayMonth(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) return '—'
+  // Stripe arrival_date is unix seconds; DB timestamps are ISO strings.
+  const d = typeof value === 'number' ? new Date(value * 1000) : new Date(value)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
+}
+
+function payoutScheduleLabel(schedule: string | null): string {
+  if (!schedule || schedule === 'manual') return 'Released when you mark a job complete'
+  if (schedule === 'daily') return 'Automatic daily payouts'
+  if (schedule === 'weekly') return 'Automatic weekly payouts'
+  if (schedule === 'monthly') return 'Automatic monthly payouts'
+  return `Automatic ${schedule} payouts`
 }
 
 const PAYOUT_BLOCK_COPY: Record<string, string> = {
@@ -3949,6 +4041,7 @@ function payoutJobLabel(j: PayoutJob): string {
 
 function PayoutJobsSection({ accessToken }: { accessToken: string | null }) {
   const [jobs, setJobs] = useState<PayoutJob[] | null>(null)
+  const [account, setAccount] = useState<PayoutAccount | null>(null)
   const [loadErr, setLoadErr] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
@@ -3963,6 +4056,7 @@ function PayoutJobsSection({ accessToken }: { accessToken: string | null }) {
       const json = await res.json().catch(() => null)
       if (res.ok && json?.ok) {
         setJobs(json.jobs as PayoutJob[])
+        setAccount((json.account as PayoutAccount) ?? null)
         setLoadErr(null)
       } else {
         setLoadErr(json?.error ?? `Couldn’t load payouts (HTTP ${res.status}).`)
@@ -4014,9 +4108,22 @@ function PayoutJobsSection({ accessToken }: { accessToken: string | null }) {
 
   const awaiting = (jobs ?? []).filter((j) => j.release_state !== 'released')
   const released = (jobs ?? []).filter((j) => j.release_state === 'released')
+  const summary = summarisePayouts(jobs ?? [])
+  // Skip the overview for a just-onboarded account with nothing to show yet
+  // (no jobs, no bank/balance) — it would be an all-zero card.
+  const showOverview =
+    jobs !== null && (jobs.length > 0 || !!account?.bank || !!account?.balance)
 
   return (
     <>
+      {showOverview && (
+        <PayoutOverview
+          account={account}
+          summary={summary}
+          truncated={(jobs?.length ?? 0) >= 200}
+        />
+      )}
+
       <Card title="Money held for you">
         {loadErr && <ErrorBanner>{loadErr}</ErrorBanner>}
         {actionMsg && (
@@ -4070,34 +4177,174 @@ function PayoutJobsSection({ accessToken }: { accessToken: string | null }) {
       {released.length > 0 && (
         <Card title="Paid out">
           <ul className="divide-y divide-ink-line">
-            {released.map((j) => (
-              <li
-                key={j.quote_id}
-                className="flex flex-wrap items-center justify-between gap-3 py-3.5"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold capitalize text-text-pri">
-                    {payoutJobLabel(j)}
-                  </p>
-                  <p className="mt-0.5 text-xs text-text-dim">
-                    Released{' '}
-                    {j.payout?.created_at
-                      ? new Date(j.payout.created_at).toLocaleDateString('en-AU', {
-                          day: 'numeric',
-                          month: 'short',
-                        })
-                      : '—'}
-                  </p>
-                </div>
-                <span className="font-mono text-sm font-bold text-success-bright">
-                  {fmtAudCents(j.payout?.amount_cents ?? j.net_cents)}
-                </span>
-              </li>
-            ))}
+            {released.map((j) => {
+              const status = j.payout?.status ?? null
+              const st = status ? PAYOUT_STATUS_UI[status] : null
+              const inTransit = status === 'in_transit' || status === 'pending'
+              const amountTone =
+                status === 'failed' || status === 'canceled'
+                  ? 'text-danger-bright'
+                  : inTransit
+                    ? 'text-text-pri'
+                    : 'text-success-bright'
+              return (
+                <li
+                  key={j.quote_id}
+                  className="flex flex-wrap items-center justify-between gap-3 py-3.5"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold capitalize text-text-pri">
+                      {payoutJobLabel(j)}
+                    </p>
+                    <p className="mt-0.5 text-xs text-text-dim">
+                      {status === 'failed'
+                        ? 'Payout failed — funds returned to your balance'
+                        : status === 'canceled'
+                          ? 'Payout canceled'
+                          : inTransit && j.payout?.arrival_date
+                            ? `Arriving ${fmtDayMonth(j.payout.arrival_date)}`
+                            : `Released ${fmtDayMonth(j.payout?.created_at)}`}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {st && (
+                      <span
+                        className={`font-mono text-[0.6rem] font-semibold uppercase tracking-[0.12em] ${st.tone}`}
+                      >
+                        {st.label}
+                      </span>
+                    )}
+                    <span className={`font-mono text-sm font-bold tabular-nums ${amountTone}`}>
+                      {fmtAudCents(j.payout?.amount_cents ?? j.net_cents)}
+                    </span>
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         </Card>
       )}
     </>
+  )
+}
+
+// ─── Payouts overview — headline figures + destination & balance ──
+//
+// Sits above the held/paid-out lists. The four figures are derived from the
+// jobs list (summarisePayouts); the destination + Stripe balance come from
+// the live account enrichment on /api/tenant/payouts and degrade gracefully
+// to nothing when Stripe is unreachable.
+
+function PayoutOverview({
+  account,
+  summary,
+  truncated,
+}: {
+  account: PayoutAccount | null
+  summary: PayoutSummary
+  /** True when the job list hit the server cap, so the totals cover only the
+   *  most recent jobs rather than the tradie's full history. */
+  truncated?: boolean
+}) {
+  const bank = account?.bank ?? null
+  const balance = account?.balance ?? null
+  const showDestination = !!bank || !!balance || !!account?.payout_schedule
+  const requirementsDue = account?.requirements_due ?? 0
+
+  return (
+    <Card title="Your payouts">
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-4">
+        <Figure
+          label="Held for you"
+          value={fmtAudCents(summary.heldCents)}
+          sub={summary.jobsAwaiting === 1 ? '1 job awaiting' : `${summary.jobsAwaiting} jobs awaiting`}
+          accent
+        />
+        <Figure
+          label="Paid out"
+          value={fmtAudCents(summary.paidOutCents)}
+          sub={summary.jobsPaid === 1 ? '1 job released' : `${summary.jobsPaid} jobs released`}
+        />
+        <Figure label="This month" value={fmtAudCents(summary.thisMonthCents)} sub="released to bank" />
+        <Figure label="Platform fees" value={fmtAudCents(summary.feesCents)} sub="2% per job" />
+      </dl>
+
+      {showDestination && (
+        <div className="mt-6 flex flex-col gap-4 border-t border-ink-line pt-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2.5">
+            <Landmark size={16} strokeWidth={2} className="shrink-0 text-text-dim" aria-hidden="true" />
+            <div className="min-w-0">
+              <p className="truncate text-sm text-text-pri">
+                {bank
+                  ? `${bank.bank_name ?? 'Bank account'}${bank.last4 ? ` ···· ${bank.last4}` : ''}`
+                  : 'Bank account on file with Stripe'}
+              </p>
+              <p className="mt-0.5 font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
+                {payoutScheduleLabel(account?.payout_schedule ?? null)}
+              </p>
+            </div>
+          </div>
+
+          {balance && (
+            <div className="flex items-center gap-2.5 sm:justify-end">
+              <Wallet size={16} strokeWidth={2} className="shrink-0 text-text-dim" aria-hidden="true" />
+              <div className="sm:text-right">
+                <p className="font-mono text-sm tabular-nums text-text-pri">
+                  {fmtAudCents(balance.available_cents)} available
+                </p>
+                <p className="mt-0.5 font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
+                  {fmtAudCents(balance.pending_cents)} still settling
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {requirementsDue > 0 && (
+        <p className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-warning-bright">
+          <Shield size={14} strokeWidth={2} className="mt-0.5 shrink-0" aria-hidden="true" />
+          <span>
+            Stripe still needs {requirementsDue} detail{requirementsDue === 1 ? '' : 's'} to keep
+            your payouts flowing — use the payout setup button above to finish.
+          </span>
+        </p>
+      )}
+
+      {truncated && (
+        <p className="mt-4 text-[0.7rem] text-text-dim">
+          Totals cover your 200 most recent paid jobs.
+        </p>
+      )}
+    </Card>
+  )
+}
+
+function Figure({
+  label,
+  value,
+  sub,
+  accent,
+}: {
+  label: string
+  value: string
+  sub?: string
+  accent?: boolean
+}) {
+  return (
+    <div>
+      <dt className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
+        {label}
+      </dt>
+      <dd
+        className={`mt-1.5 font-mono text-xl font-bold tabular-nums sm:text-2xl ${
+          accent ? 'text-accent' : 'text-text-pri'
+        }`}
+      >
+        {value}
+      </dd>
+      {sub && <dd className="mt-0.5 text-[0.7rem] text-text-dim">{sub}</dd>}
+    </div>
   )
 }
 
@@ -6465,7 +6712,7 @@ function ServicesTab({
                         className={`rounded-card relative inline-block h-5 w-10 border transition-colors ${
                           live
                             ? 'border-accent bg-accent/20'
-                            : 'border-ink-line bg-ink-base group-hover:border-text-dim'
+                            : 'border-ink-line bg-ink group-hover:border-text-dim'
                         }`}
                       >
                         <span
@@ -6489,7 +6736,7 @@ function ServicesTab({
                   {/* Expanded detail — full description, exclusions,
                       pricing breakdown using the tradie's hourly rate. */}
                   {isOpen && (
-                    <div className="border-t border-ink-line/70 px-4 py-4 ml-5 mr-4 bg-ink-base/30 space-y-4 text-xs">
+                    <div className="border-t border-ink-line/70 px-4 py-4 ml-5 mr-4 bg-ink/30 space-y-4 text-xs">
                       {svc.description && (
                         <div>
                           <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-text-dim mb-1">
@@ -6890,7 +7137,7 @@ function PreferredBrandsCard({
                       <select
                         value={value}
                         onChange={(e) => change(row.category, e.target.value)}
-                        className="rounded-ctl bg-ink-base border border-ink-line text-text-pri text-sm px-3 py-2 focus:outline-none focus:border-accent"
+                        className="rounded-ctl bg-ink border border-ink-line text-text-pri text-sm px-3 py-2 focus:outline-none focus:border-accent"
                       >
                         <option value="" className="bg-white text-black">
                           Any (use catalogue default)
@@ -7070,7 +7317,7 @@ function CustomServiceForm({
             value={trade}
             onChange={(e) => setTrade(e.target.value)}
             aria-label="Trade for this service"
-            className="rounded-ctl bg-ink-base border border-ink-line text-text-pri text-xs font-mono uppercase tracking-[0.14em] px-2.5 py-1.5 focus:outline-none focus:border-accent"
+            className="rounded-ctl bg-ink border border-ink-line text-text-pri text-xs font-mono uppercase tracking-[0.14em] px-2.5 py-1.5 focus:outline-none focus:border-accent"
           >
             {tenantTrades.map((t) => (
               <option key={t} value={t}>
@@ -7093,7 +7340,7 @@ function CustomServiceForm({
           required
           maxLength={120}
           placeholder="e.g. Install pool light"
-          className="rounded-ctl w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent"
+          className="rounded-ctl w-full bg-ink border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent"
         />
       </FormField>
 
@@ -7104,7 +7351,7 @@ function CustomServiceForm({
           maxLength={500}
           rows={2}
           placeholder="Mount, terminate, test on existing circuit"
-          className="rounded-ctl w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent resize-y"
+          className="rounded-ctl w-full bg-ink border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent resize-y"
         />
       </FormField>
 
@@ -7116,7 +7363,7 @@ function CustomServiceForm({
           value={category}
           onChange={(e) => setCategory(e.target.value)}
           aria-label="Grounding category for this service"
-          className="rounded-ctl w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent"
+          className="rounded-ctl w-full bg-ink border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent"
         >
           <option value="">Auto-detect from name (recommended)</option>
           {CATEGORIES.map((c) => (
@@ -7135,7 +7382,7 @@ function CustomServiceForm({
             onChange={(e) => setDefaultUnit(e.target.value)}
             maxLength={30}
             placeholder="each"
-            className="rounded-ctl w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent"
+            className="rounded-ctl w-full bg-ink border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent"
           />
         </FormField>
         <FormField label="Sundries / equipment price (ex-GST)" required>
@@ -7148,7 +7395,7 @@ function CustomServiceForm({
             step="0.01"
             required
             placeholder="80.00"
-            className="rounded-ctl w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent"
+            className="rounded-ctl w-full bg-ink border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent"
           />
         </FormField>
         <FormField label="Default labour hours">
@@ -7160,7 +7407,7 @@ function CustomServiceForm({
             max={80}
             step="0.25"
             placeholder="2.0"
-            className="rounded-ctl w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent"
+            className="rounded-ctl w-full bg-ink border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent"
           />
         </FormField>
       </div>
@@ -7172,7 +7419,7 @@ function CustomServiceForm({
           maxLength={500}
           rows={2}
           placeholder="Excludes new wiring runs and ceiling repair"
-          className="rounded-ctl w-full bg-ink-base border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent resize-y"
+          className="rounded-ctl w-full bg-ink border border-ink-line text-text-pri px-3 py-2 text-sm focus:outline-none focus:border-accent resize-y"
         />
       </FormField>
 
@@ -10703,7 +10950,7 @@ function CatalogueTab({
                           className={`rounded-card relative inline-block h-5 w-10 border transition-colors ${
                             r.active
                               ? 'border-accent bg-accent/20'
-                              : 'border-ink-line bg-ink-base group-hover:border-text-dim'
+                              : 'border-ink-line bg-ink group-hover:border-text-dim'
                           }`}
                         >
                           <span
@@ -11790,7 +12037,13 @@ function EstimatingTab({
   )
 }
 
-function FollowupsTab({ accessToken }: { accessToken: string | null }) {
+function FollowupsTab({
+  accessToken,
+  onGoToCalendar,
+}: {
+  accessToken: string | null
+  onGoToCalendar: () => void
+}) {
   const [rows, setRows] = useState<FollowupItem[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -11812,6 +12065,12 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
   // Category filter + free-text search to tame a long follow-up stack.
   const [category, setCategory] = useState<string>(ALL_CATEGORY)
   const [query, setQuery] = useState('')
+  // Paid deposits with no visit time yet (e.g. a paid $99 inspection). These
+  // correctly leave the chase queue the moment they're paid, so a paid
+  // inspection can look like it "vanished" from the follow-up workflow. We
+  // surface a breadcrumb to the Calendar tab (its "Paid · needs a time"
+  // block) so the tradie can find it.
+  const [bookedCount, setBookedCount] = useState(0)
 
   const load = useCallback(async () => {
     if (!accessToken) {
@@ -11862,6 +12121,31 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
       cancelled = true
     }
   }, [load])
+
+  // Best-effort: how many paid quotes are waiting on a time (they live in the
+  // Calendar tab's "Paid · needs a time" block). Drives the breadcrumb below.
+  useEffect(() => {
+    if (!accessToken) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/tenant/calendar', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          cache: 'no-store',
+        })
+        if (!res.ok) return
+        const json = (await res.json()) as { toSchedule?: unknown[] }
+        if (!cancelled) {
+          setBookedCount(Array.isArray(json.toSchedule) ? json.toSchedule.length : 0)
+        }
+      } catch {
+        /* non-fatal — the breadcrumb just won't show */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken])
 
   // Bump the History panel's refresh key for one quote — used after a
   // call or text auto-logs an event server-side so the open panel
@@ -12057,9 +12341,31 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
         } ago with no payment, plus SMS leads with no quote.`
       : 'Quotes not yet paid, plus SMS leads with no quote.'
 
+  // Breadcrumb to the Calendar tab for paid-but-unscheduled quotes — so a
+  // paid inspection that has left this queue doesn't look lost.
+  const bookedBanner =
+    bookedCount > 0 ? (
+      <button
+        type="button"
+        onClick={onGoToCalendar}
+        className="rounded-ctl mb-4 flex w-full items-center justify-between gap-3 border border-teal-glow/40 bg-teal-glow/10 px-4 py-3 text-left transition-colors hover:border-teal-glow cursor-pointer"
+      >
+        <span className="text-sm text-text-sec">
+          <span className="font-semibold text-text-pri">
+            {bookedCount} paid {bookedCount === 1 ? 'deposit' : 'deposits'}
+          </span>{' '}
+          waiting on a visit time — a quote leaves this list once it&apos;s paid.
+        </span>
+        <span className="whitespace-nowrap font-mono text-[0.62rem] uppercase tracking-[0.16em] text-teal-glow">
+          Calendar →
+        </span>
+      </button>
+    ) : null
+
   if (list.length === 0) {
     return (
       <Card subtitle={`${thresholdNote} Nothing to chase right now.`}>
+        {bookedBanner}
         <p className="text-sm text-text-dim">
           No follow-ups. Every quote is already paid or accepted — or you
           have contacted everyone. New quotes and SMS leads (people who
@@ -12077,6 +12383,7 @@ function FollowupsTab({ accessToken }: { accessToken: string | null }) {
         done.length ? ` · ${done.length} contacted` : ''
       } · ${thresholdNote} Oldest first.`}
     >
+      {bookedBanner}
       {/* Filter + search — keep the long queue navigable */}
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative flex-1">

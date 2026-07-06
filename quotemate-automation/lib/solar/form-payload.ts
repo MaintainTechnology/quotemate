@@ -4,6 +4,7 @@
 // when not applicable.
 
 import type { SolarEstimateRequestBody } from './request-schema'
+import { MAX_REQUESTED_SYSTEM_KW } from './limits'
 
 export function buildSolarFormPayload(state: {
   address: string
@@ -62,7 +63,7 @@ export function buildSolarFormPayload(state: {
   const sizeRaw = state.requestedSizeKw?.trim().replace(/[^0-9.]/g, '')
   if (sizeRaw) {
     const kw = Number.parseFloat(sizeRaw)
-    if (Number.isFinite(kw) && kw > 0 && kw <= 100) {
+    if (Number.isFinite(kw) && kw > 0 && kw <= MAX_REQUESTED_SYSTEM_KW) {
       payload.requested_size_kw = kw
     }
   }

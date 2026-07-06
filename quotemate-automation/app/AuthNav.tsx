@@ -129,7 +129,7 @@ export default function AuthNav({ variant = 'nav' }: { variant?: Variant }) {
         href="/signup"
         className="inline-flex items-center gap-2 rounded-lg bg-accent hover:bg-accent-press text-white font-semibold min-h-11 md:min-h-0 px-4 py-2.5 text-xs uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
       >
-        Get started
+        Get my QuoteMax
         <Arrow />
       </Link>
     </>

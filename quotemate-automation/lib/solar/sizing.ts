@@ -25,12 +25,12 @@ import type {
   SolarRoutingDecision,
   SolarPhase,
 } from './types'
+import { MAX_REQUESTED_SYSTEM_KW } from './limits'
 
 /** Target panel-count fractions of the roof max for the good/middle tier.
  *  The top tier is always the roof-or-export max. */
 const GOOD_FRACTION = 0.55
 const MIDDLE_FRACTION = 0.80
-const MAX_REQUESTED_SYSTEM_KW = 40
 
 export function sizeSolarSystem(args: {
   roof: SolarRoofFacts

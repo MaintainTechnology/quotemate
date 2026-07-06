@@ -5,6 +5,7 @@
 // questions (spec §3). Enums mirror lib/solar/types.ts verbatim.
 
 import { z } from 'zod'
+import { MAX_REQUESTED_SYSTEM_KW } from './limits'
 
 const AU_STATES = ['NSW', 'VIC', 'QLD', 'SA', 'WA', 'TAS', 'ACT', 'NT'] as const
 
@@ -37,7 +38,7 @@ export const SolarEstimateRequestSchema = z.object({
   // Customer's preferred system size, kW DC (entry form, optional). Anchors
   // the tier targets in sizing.ts; roof fit and the public quote maximum still
   // apply, while export/phase constraints are shown as installer review notes.
-  requested_size_kw: z.number().positive().max(100).optional(),
+  requested_size_kw: z.number().positive().max(MAX_REQUESTED_SYSTEM_KW).optional(),
   // Optional customer contact — when a mobile is supplied the tradie-confirm
   // step texts the customer their quote (PDF link + best-effort MMS). Absent
   // → solar behaves as before (tradie-review only, customer views the page).

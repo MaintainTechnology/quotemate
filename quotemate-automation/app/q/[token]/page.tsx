@@ -552,7 +552,7 @@ export default async function PublicQuotePage(props: {
     stickyBar = {
       paid: true,
       paidSub: quote.paid_tier
-        ? `${cleanTierLabel(String(quote.paid_tier)) || String(quote.paid_tier).toUpperCase()} option — your tradie will be in touch`
+        ? `${cleanTierLabel(String(quote.paid_tier)) || String(quote.paid_tier).toUpperCase()} option · your tradie will be in touch`
         : 'Your tradie will be in touch',
     }
   } else if (isInspection && !roofingIndicative) {
@@ -573,7 +573,7 @@ export default async function PublicQuotePage(props: {
           depositPct ? ` · ${depositPct}% deposit` : ''
         }`,
         priceText: `$${fmt(fInc)}`,
-        ctaLabel: fDep ? `Pay $${fmt(fDep)}` : 'Lock it in',
+        ctaLabel: fDep ? `Pay $${fmt(fDep)} deposit` : 'Pay deposit',
         ctaHref: hasLink ? `/r/${token}/${featuredKey}` : null,
       }
     }
@@ -668,13 +668,13 @@ export default async function PublicQuotePage(props: {
           let ctaLabel: string
           let ctaHref: string | null
           if (paidThis) {
-            ctaLabel = 'Deposit received'
+            ctaLabel = 'Deposit paid'
             ctaHref = null
           } else if (disabledOther) {
             ctaLabel = 'Another option confirmed'
             ctaHref = null
           } else if (hasLink) {
-            ctaLabel = dep ? `Pay $${fmt(dep)} deposit` : 'Lock in this option'
+            ctaLabel = dep ? `Pay $${fmt(dep)} deposit` : 'Pay deposit'
             ctaHref = `/r/${token}/${k}`
           } else {
             ctaLabel = 'Reply to SMS to confirm'
@@ -766,10 +766,10 @@ export default async function PublicQuotePage(props: {
       ? { label: 'Site visit', tone: 'await' }
       : { label: 'Awaiting you', tone: 'await' }
   const heroGreeting = isInspection
-    ? `This job needs a quick on-site visit before a real price can be locked in. The visit is $99 — refundable, credited toward your final quote.`
+    ? `This job needs a quick on-site visit before a real price can be locked in. The visit is $99, refundable and credited toward your final quote.`
     : tierCount === 1
-      ? `One option below — price includes 10% GST. Tap to lock it in with a ${depositPct ?? 30}% deposit.`
-      : `${tierCount === 2 ? 'Two' : 'Three'} options below — all prices include 10% GST. Tap any tier to lock it in with a ${depositPct ?? 30}% deposit.`
+      ? `One option below. Price includes 10% GST. Tap to lock it in with a ${depositPct ?? 30}% deposit.`
+      : `${tierCount === 2 ? 'Two' : 'Three'} options below. All prices include 10% GST. Tap any tier to lock it in with a ${depositPct ?? 30}% deposit.`
 
   return (
     <QuoteChrome
@@ -835,7 +835,7 @@ export default async function PublicQuotePage(props: {
         ) : null}
 
         {/* ─── Hero photo (customer photo or AI preview, when present) ─── */}
-        {heroPhotoSrc ? <HeroPhoto src={heroPhotoSrc} alt={`${jobLabel} — job photo`} /> : null}
+        {heroPhotoSrc ? <HeroPhoto src={heroPhotoSrc} alt={`${jobLabel} · job photo`} /> : null}
 
         {/* ─── Hero ─────────────────────────────────────── */}
         <QuoteHero
@@ -989,10 +989,10 @@ export default async function PublicQuotePage(props: {
                       heading: 'Your tender',
                       labels: tierLabelsForTrade(intakeTrade),
                       blurbs: {
-                        good: 'Fixed price for the full measured scope — every surface itemised above.',
+                        good: 'Fixed price for the full measured scope. Every surface itemised above.',
                         better:
-                          'Fixed price for the full measured scope — every surface itemised above.',
-                        best: 'Fixed price for the full measured scope — every surface itemised above.',
+                          'Fixed price for the full measured scope. Every surface itemised above.',
+                        best: 'Fixed price for the full measured scope. Every surface itemised above.',
                       },
                       footnote:
                         'Priced from the measured takeoff above. Your tradie confirms the final scope before any work commences.',
@@ -1070,7 +1070,7 @@ function PriceHoldBanner({
         <p className="text-sm leading-relaxed text-text-sec sm:text-base">
           The price on this quote was held until{' '}
           <span className="font-semibold text-text-pri">{fmtHoldUntilAU(hold.holdUntil)}</span> and
-          has now lapsed. Reply to your tradie&apos;s SMS for a refreshed quote — pricing may have
+          has now lapsed. Reply to your tradie&apos;s SMS for a refreshed quote. Pricing may have
           changed.
         </p>
       </section>
@@ -1127,7 +1127,7 @@ function EarlyBirdBanner({
           <p className="text-sm leading-relaxed text-text-sec sm:text-base">
             Book your job in now and{' '}
             <span className="font-semibold text-text-pri">save {discountPct}%</span> off
-            the total — the discount locks in when you pick a time
+            the total. The discount locks in when you pick a time
             {deadline ? (
               <>
                 {' '}before <span className="font-semibold text-text-pri">{deadline}</span>
@@ -1149,11 +1149,11 @@ function EarlyBirdBanner({
 function EarlyBirdAppliedBanner({ discountPct }: { discountPct: number }) {
   return (
     <section className="mt-8 bg-success/10 border border-success/40 p-5 sm:p-6">
-      <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-[#34d399] mb-1">
+      <div className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-success-bright mb-1">
         Early-booking discount locked in
       </div>
       <p className="text-sm leading-relaxed text-text-sec sm:text-base">
-        Nice one — you booked in time. Your{' '}
+        Nice one, you booked in time. Your{' '}
         <span className="font-semibold text-text-pri">{discountPct}% discount</span> is
         applied to the prices below.
       </p>
@@ -1203,8 +1203,8 @@ function RoofingIndicativeBanner({
         <div className="mt-6">
           {paid ? (
             <div className="bg-success/10 border border-success/30 px-5 py-4 text-center">
-              <span className="font-mono text-xs uppercase tracking-[0.12em] font-semibold text-[#4ade80]">
-                Site visit booked — tradie will be in touch
+              <span className="font-mono text-xs uppercase tracking-[0.12em] font-semibold text-success-bright">
+                Site visit booked · tradie will be in touch
               </span>
             </div>
           ) : link ? (
@@ -1212,12 +1212,12 @@ function RoofingIndicativeBanner({
               href={`/r/${shareToken}/inspection`}
               className="block bg-accent hover:bg-accent-press text-white px-5 py-4 text-center transition-colors font-mono text-xs sm:text-sm uppercase tracking-[0.15em] font-bold"
             >
-              Lock in your site visit · $99 →
+              Pay $99 · site visit →
             </a>
           ) : (
             <div className="bg-ink-deep border border-ink-line px-5 py-4 text-center">
               <span className="font-mono text-xs uppercase tracking-[0.12em] text-text-dim">
-                Reply to your tradie&apos;s SMS to book
+                Reply to SMS to confirm
               </span>
             </div>
           )}
@@ -1248,7 +1248,7 @@ function InspectionBlock({
           Site visit required
         </div>
         <p className="text-base leading-relaxed text-text-pri sm:text-lg">
-          Every site is different — we can&apos;t price this safely without seeing the work in person.
+          Every site is different. We can&apos;t price this safely without seeing the work in person.
         </p>
 
         {reason ? (
@@ -1267,8 +1267,8 @@ function InspectionBlock({
         <div className="mt-6">
           {paid ? (
             <div className="bg-success/10 border border-success/30 px-5 py-4 text-center">
-              <span className="font-mono text-xs uppercase tracking-[0.12em] font-semibold text-[#4ade80]">
-                Site visit booked — tradie will be in touch
+              <span className="font-mono text-xs uppercase tracking-[0.12em] font-semibold text-success-bright">
+                Site visit booked · tradie will be in touch
               </span>
             </div>
           ) : link ? (
@@ -1276,12 +1276,12 @@ function InspectionBlock({
               href={`/r/${shareToken}/inspection`}
               className="block bg-accent hover:bg-accent-press text-white px-5 py-4 text-center transition-colors font-mono text-xs sm:text-sm uppercase tracking-[0.15em] font-bold"
             >
-              Lock in your site visit · $99 →
+              Pay $99 · site visit →
             </a>
           ) : (
             <div className="bg-ink-deep border border-ink-line px-5 py-4 text-center">
               <span className="font-mono text-xs uppercase tracking-[0.12em] text-text-dim">
-                Reply to your tradie&apos;s SMS to book
+                Reply to SMS to confirm
               </span>
             </div>
           )}

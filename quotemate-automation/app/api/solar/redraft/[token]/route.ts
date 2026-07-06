@@ -28,6 +28,7 @@ import { applySolarFeltMap } from '@/lib/solar/felt-provision'
 import { applySolarAiBrief } from '@/lib/solar/ai-brief'
 import { resolveNetworkFromPostcode } from '@/lib/solar/network-lookup'
 import { redraftEligibility, reconstructSolarInputs } from '@/lib/solar/redraft'
+import { MAX_REQUESTED_SYSTEM_KW } from '@/lib/solar/limits'
 import { applyPylonStcCrossCheck } from '@/lib/solar/pylon-aftercheck'
 import { applyOpenSolarSupplement } from '@/lib/solar/opensolar-supplement'
 import { buildSolarRowPayloads } from '@/lib/solar/persist-helpers'
@@ -72,7 +73,11 @@ export async function POST(
     if (raw && typeof raw === 'object') {
       if (raw.phase === 'single' || raw.phase === 'three') overrides.phase = raw.phase
       if (raw.desired_kw === null) overrides.desired_kw = null
-      else if (typeof raw.desired_kw === 'number' && raw.desired_kw > 0 && raw.desired_kw <= 30)
+      else if (
+        typeof raw.desired_kw === 'number' &&
+        raw.desired_kw > 0 &&
+        raw.desired_kw <= MAX_REQUESTED_SYSTEM_KW
+      )
         overrides.desired_kw = raw.desired_kw
     }
   } catch {

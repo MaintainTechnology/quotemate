@@ -68,7 +68,7 @@ function Header() {
           <p className="mt-7 max-w-2xl text-lg leading-relaxed text-text-sec">
             QuoteMax answers every text and call, drafts clean quotes in under a
             minute, and takes the deposit. Pick a plan and you&rsquo;re quoting
-            the same day — Starter Monthly comes with a 14-day free trial. We
+            the same day. Starter Monthly comes with a 14-day free trial. We
             never take a cut of your jobs.
           </p>
         </Reveal>

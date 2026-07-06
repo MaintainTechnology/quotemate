@@ -6,6 +6,7 @@ import {
   customerWantsForm,
   isActivePaintingFlow,
   nextPaintingConversationState,
+  shouldEngagePainting,
   type PaintingConversationState,
   type PaintingTurnDecision,
 } from './painting-receptionist'
@@ -165,5 +166,28 @@ describe('nextPaintingConversationState', () => {
     expect(nextPaintingConversationState({ action: 'inspection', slots: {}, reason: 'x' }).last_step).toBe('await_booking')
     expect(nextPaintingConversationState({ action: 'cancel', slots: {} }).last_step).toBe('closed')
     expect(nextPaintingConversationState({ action: 'booking', slots: {}, confirmed: true }).last_step).toBe('closed')
+  })
+})
+
+describe('shouldEngagePainting — follow-up pin guard (spec 2026-07-05 Part A2)', () => {
+  // A mid-gather painting flow still parked on the thread (awaiting scopes).
+  const activePainting: PaintingConversationState = { slots: {}, last_step: 'scopes' }
+  const closedPainting: PaintingConversationState = { slots: {}, last_step: 'closed' }
+
+  it('R-A3: stale active painting state + active pin + affirmative reply → does NOT engage (falls through to the general dialog)', () => {
+    expect(shouldEngagePainting(activePainting, 'Yes', true)).toBe(false)
+    expect(shouldEngagePainting(activePainting, 'yeah go for it', true)).toBe(false)
+  })
+
+  it('R-A4: active pin + a genuinely NEW painting enquiry → still engages', () => {
+    expect(shouldEngagePainting(activePainting, 'I want the house painted', true)).toBe(true)
+    expect(shouldEngagePainting(null, 'can you quote a repaint of the interior', true)).toBe(true)
+  })
+
+  it('no pin → behaviour is unchanged: active flow resumes, fresh enquiry engages, anything else passes through', () => {
+    expect(shouldEngagePainting(activePainting, 'Yes', false)).toBe(true) // resume active flow
+    expect(shouldEngagePainting(null, 'I want the house painted', false)).toBe(true) // fresh enquiry
+    expect(shouldEngagePainting(null, 'Yes', false)).toBe(false) // neither
+    expect(shouldEngagePainting(closedPainting, 'Yes', false)).toBe(false) // closed flow
   })
 })

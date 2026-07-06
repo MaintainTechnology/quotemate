@@ -320,3 +320,24 @@ export function isActiveRoofingFlow(prev: RoofingConversationState | null | unde
   const step = prev.last_step ?? null
   return step !== null && step !== 'closed'
 }
+
+/** PURE — should the roofing receptionist engage this turn?
+ *
+ *  Normally it engages when the thread is already an active roofing flow
+ *  (mid-gather / awaiting a reply) OR the inbound reads like a fresh roofing
+ *  enquiry. But when a follow-up pin is active on the thread — the tradie
+ *  just chased a DIFFERENT quote (e.g. Ceiling Fans) — a stale roofing_state
+ *  left on the shared phone thread must NOT resume: an affirmative reply to
+ *  the follow-up ("Yes") would otherwise be hijacked into "how steep is the
+ *  roof?". With a pin active, only a genuinely NEW roofing enquiry may
+ *  engage; a stale-state resume falls through to the general dialog, which
+ *  honours the pin. (Spec 2026-07-05 Part A2.) */
+export function shouldEngageRoofing(
+  prev: RoofingConversationState | null | undefined,
+  inbound: string,
+  followupPinActive: boolean,
+): boolean {
+  const canResume = isActiveRoofingFlow(prev) && !followupPinActive
+  const isNewEnquiry = looksLikeRoofingEnquiry(inbound)
+  return canResume || isNewEnquiry
+}

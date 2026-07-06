@@ -9,6 +9,7 @@ import {
   nextRoofingConversationState,
   parseStructureChoice,
   parseStructureFollowup,
+  shouldEngageRoofing,
   type RoofingConversationState,
 } from './roofing-receptionist'
 
@@ -277,5 +278,30 @@ describe('advanceRoofing — warm "quoted" thread (no fall-through to electrical
   })
   it('"quoted" counts as an ACTIVE flow', () => {
     expect(isActiveRoofingFlow(quoted)).toBe(true)
+  })
+})
+
+describe('shouldEngageRoofing — follow-up pin guard (spec 2026-07-05 Part A2)', () => {
+  // A mid-gather roofing flow still parked on the thread (we last asked
+  // about pitch). This is the stale state a follow-up on a DIFFERENT quote
+  // must not resume.
+  const activeRoofing: RoofingConversationState = { slots: {}, last_step: 'pitch' }
+  const closedRoofing: RoofingConversationState = { slots: {}, last_step: 'closed' }
+
+  it('R-A1: stale active roofing state + active pin + affirmative reply → does NOT engage (falls through to the general dialog)', () => {
+    expect(shouldEngageRoofing(activeRoofing, 'Yes', true)).toBe(false)
+    expect(shouldEngageRoofing(activeRoofing, 'yep sounds good', true)).toBe(false)
+  })
+
+  it('R-A2: active pin + a genuinely NEW roofing enquiry → still engages', () => {
+    expect(shouldEngageRoofing(activeRoofing, 'I need a re-roof', true)).toBe(true)
+    expect(shouldEngageRoofing(null, 'can I get a re-roof quote', true)).toBe(true)
+  })
+
+  it('no pin → behaviour is unchanged: active flow resumes, fresh enquiry engages, anything else passes through', () => {
+    expect(shouldEngageRoofing(activeRoofing, 'Yes', false)).toBe(true) // resume active flow
+    expect(shouldEngageRoofing(null, 'I need a re-roof', false)).toBe(true) // fresh enquiry
+    expect(shouldEngageRoofing(null, 'Yes', false)).toBe(false) // neither
+    expect(shouldEngageRoofing(closedRoofing, 'Yes', false)).toBe(false) // closed flow
   })
 })

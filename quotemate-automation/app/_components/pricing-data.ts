@@ -47,7 +47,7 @@ export const PLANS: Plan[] = [
     featured: true,
     inheritsFrom: "Starter",
     highlights: [
-      "Voice receptionist — 300 mins / mo",
+      "Voice receptionist · 300 mins / mo",
       "~150 quotes a month",
       "Up to 2 trades · 2 dashboard seats",
       "Your branding + 1 specialised estimator",
@@ -61,7 +61,7 @@ export const PLANS: Plan[] = [
     annual: 2990,
     inheritsFrom: "Pro",
     highlights: [
-      "Voice receptionist — 1,000 mins / mo",
+      "Voice receptionist · 1,000 mins / mo",
       "~400 quotes a month",
       "Up to 4 trades · 5 seats · 3 numbers",
       "All estimators, custom domain & priority support",

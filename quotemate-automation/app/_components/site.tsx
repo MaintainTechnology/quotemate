@@ -2,8 +2,8 @@
 // surface (/, /pricing). Extracted from app/page.tsx so the nav, footer,
 // marquee and CTAs stay identical across pages instead of drifting in
 // two copies. Server-safe: only Link + inline SVG + the AuthNav client
-// island. Maintain design system — deep navy, orange accent, all-caps
-// display, square corners, borders over shadows.
+// island. The "command-centre" system: warm charcoal, Caterpillar-yellow
+// accent, all-caps display, rounded corners, borders over shadows.
 
 import Link from "next/link"
 import AuthNav from "../AuthNav"
@@ -111,10 +111,10 @@ export function Footer() {
       </div>
       <div className="border-t border-ink-line">
         <div className="mx-auto flex max-w-[88rem] flex-col gap-2 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-          <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+          <span className="font-mono text-[0.75rem] uppercase tracking-[0.14em] text-text-dim">
             © 2026 QuoteMax
           </span>
-          <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+          <span className="font-mono text-[0.75rem] uppercase tracking-[0.14em] text-text-dim">
             Electrical NSW · Plumbing QLD
           </span>
         </div>
@@ -132,7 +132,7 @@ function FooterCol({
 }) {
   return (
     <div>
-      <span className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+      <span className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
         {title}
       </span>
       <ul className="mt-4 grid gap-2.5">
@@ -151,7 +151,7 @@ function FooterCol({
   )
 }
 
-/* ─── Orange CTA marquee (signature) ──────────────────────────── */
+/* ─── Yellow CTA marquee (signature) ──────────────────────────── */
 // A slow ticker on motion-safe browsers; the track holds the line twice
 // so the -50% loop is seamless. Reduced-motion (and no-JS) users see the
 // static leading copy.

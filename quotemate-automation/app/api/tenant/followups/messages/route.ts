@@ -81,34 +81,71 @@ export async function GET(req: Request) {
     new Set([e164, rawPhone].filter((v): v is string => !!v)),
   )
 
-  if (fromCandidates.length === 0) {
-    return Response.json({
-      ok: true,
-      customer: { name: target.name, phone: rawPhone || null },
-      messages: [],
-      last_inbound_at: null,
-      last_outbound_at: null,
-    })
-  }
-
-  const { data: convos } = await supabase
-    .from('sms_conversations')
-    .select('id')
-    .eq('tenant_id', tenant.id)
-    .in('from_number', fromCandidates)
-    .order('last_message_at', { ascending: false, nullsFirst: false })
-    .limit(10)
-
-  const convoIds = (convos ?? []).map((c) => c.id as string)
-  if (convoIds.length === 0) {
-    return Response.json({
+  const emptyResponse = () =>
+    Response.json({
       ok: true,
       customer: { name: target.name, phone: (e164 ?? rawPhone) || null },
       messages: [],
       last_inbound_at: null,
       last_outbound_at: null,
     })
+
+  // Scope the thread to the SPECIFIC quote when this is a quote follow-up.
+  // A customer with several quotes on one phone shares a single active SMS
+  // thread, so a naive phone-number merge bleeds an unrelated job's chat
+  // into this modal (e.g. a roof conversation showing under a Ceiling Fans
+  // follow-up). The follow-up thread is phone-level (intake_id may be NULL)
+  // and is scoped by the followup_quote PIN, so match by the pin first, then
+  // by the quote's own intake, and only fall back to the phone-level merge
+  // for legacy threads / no-quote leads.
+  let convoIds: string[] = []
+
+  if (quoteId) {
+    // (a) the thread this quote's follow-up was pinned onto (the ground truth)
+    const { data: pinned } = await supabase
+      .from('sms_conversations')
+      .select('id')
+      .eq('tenant_id', tenant.id)
+      .eq('followup_quote->>quote_id', quoteId)
+      .order('last_message_at', { ascending: false, nullsFirst: false })
+    convoIds = (pinned ?? []).map((c) => c.id as string)
+
+    // (b) fall back to conversations tied to this quote's own intake
+    if (convoIds.length === 0) {
+      const { data: quoteRow } = await supabase
+        .from('quotes')
+        .select('intake_id')
+        .eq('id', quoteId)
+        .eq('tenant_id', tenant.id)
+        .maybeSingle()
+      const intakeId = (quoteRow?.intake_id as string | null) ?? null
+      if (intakeId) {
+        const { data: byIntake } = await supabase
+          .from('sms_conversations')
+          .select('id')
+          .eq('tenant_id', tenant.id)
+          .eq('intake_id', intakeId)
+          .order('last_message_at', { ascending: false, nullsFirst: false })
+        convoIds = (byIntake ?? []).map((c) => c.id as string)
+      }
+    }
   }
+
+  // (c) legacy / lead fallback — merge the customer's phone threads. Only
+  //     reached when no quote-scoped thread exists (or this is a lead).
+  if (convoIds.length === 0) {
+    if (fromCandidates.length === 0) return emptyResponse()
+    const { data: convos } = await supabase
+      .from('sms_conversations')
+      .select('id')
+      .eq('tenant_id', tenant.id)
+      .in('from_number', fromCandidates)
+      .order('last_message_at', { ascending: false, nullsFirst: false })
+      .limit(10)
+    convoIds = (convos ?? []).map((c) => c.id as string)
+  }
+
+  if (convoIds.length === 0) return emptyResponse()
 
   const { data: msgs } = await supabase
     .from('sms_messages')

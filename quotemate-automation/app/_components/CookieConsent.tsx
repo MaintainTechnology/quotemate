@@ -60,7 +60,7 @@ export default function CookieConsent() {
       <div className="mx-auto flex max-w-[88rem] flex-col gap-4 px-6 py-5 md:flex-row md:items-center md:justify-between md:gap-8">
         <div className="min-w-0">
           <p className="text-sm leading-relaxed text-text-sec">
-            We use essential cookies to keep QuoteMax working &mdash; like
+            We use essential cookies to keep QuoteMax working, like
             keeping you signed in and securing the site. We don&rsquo;t use
             advertising or tracking cookies.{" "}
             <button
@@ -79,7 +79,7 @@ export default function CookieConsent() {
               className="mt-3 max-w-2xl text-sm leading-relaxed text-text-dim"
             >
               Essential cookies are required for the site to function and
-              can&rsquo;t be switched off &mdash; they cover sign-in sessions
+              can&rsquo;t be switched off. They cover sign-in sessions
               and security. We don&rsquo;t run analytics or marketing cookies.
               If that ever changes, those would stay off until you accept and
               we&rsquo;ll ask again. Your choice is stored on this device so we
@@ -91,14 +91,14 @@ export default function CookieConsent() {
           <button
             type="button"
             onClick={() => choose("rejected")}
-            className="inline-flex items-center justify-center border border-ink-line bg-transparent px-6 py-3 text-sm font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-text-dim focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
+            className="inline-flex items-center justify-center rounded-lg border border-ink-line bg-transparent px-6 py-3 text-sm font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-text-dim focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
           >
             Reject all
           </button>
           <button
             type="button"
             onClick={() => choose("accepted")}
-            className="inline-flex items-center justify-center bg-accent px-6 py-3 text-sm font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
+            className="inline-flex items-center justify-center rounded-lg bg-accent px-6 py-3 text-sm font-semibold uppercase tracking-wider text-accent-ink transition-colors hover:bg-accent-press focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
           >
             Accept all
           </button>

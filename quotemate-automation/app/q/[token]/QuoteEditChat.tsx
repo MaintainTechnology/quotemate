@@ -62,14 +62,17 @@ type ChatMessage = {
   error?: boolean
 }
 
-const ACCENT = '#FF5F00'
-const PANEL = '#16202b'
-const PANEL_2 = '#0f1722'
-const BORDER = '#243140'
-const TEXT = '#e6ebf0'
-const MUTED = '#94a3b8'
-const WARN = '#fbbf24'
-const MONO = "'Courier New', ui-monospace, monospace"
+// Brand tokens (warm charcoal + Caterpillar yellow). Referencing CSS vars keeps
+// this owner-only editor on-brand AND theme-aware (it was a hard-coded cool-blue
+// + orange palette before). Resolves via :root / .qm-quote on the quote page.
+const ACCENT = 'var(--accent)'
+const PANEL = 'var(--ink-card)'
+const PANEL_2 = 'var(--ink)'
+const BORDER = 'var(--ink-line)'
+const TEXT = 'var(--text-pri)'
+const MUTED = 'var(--text-dim)'
+const WARN = 'var(--warning-bright)'
+const MONO = 'var(--font-mono)'
 
 const SUGGESTIONS = [
   'Add a second downlight to Better',
@@ -206,7 +209,7 @@ export default function QuoteEditChat({
         background: PANEL,
         color: TEXT,
         overflow: 'hidden',
-        fontFamily: 'Inter, system-ui, sans-serif',
+        fontFamily: 'var(--font-sans)',
       }}
     >
       <button
@@ -303,7 +306,7 @@ export default function QuoteEditChat({
               disabled={loading || !input.trim()}
               style={{
                 background: ACCENT,
-                color: '#0b0f14',
+                color: 'var(--accent-ink)',
                 fontWeight: 700,
                 border: 'none',
                 borderRadius: 8,
@@ -337,7 +340,7 @@ function Bubble({
         <div
           style={{
             background: isUser ? ACCENT : PANEL_2,
-            color: isUser ? '#0b0f14' : message.error ? WARN : TEXT,
+            color: isUser ? 'var(--accent-ink)' : message.error ? WARN : TEXT,
             border: isUser ? 'none' : `1px solid ${BORDER}`,
             borderRadius: 10,
             padding: '9px 12px',
@@ -379,7 +382,7 @@ function ProposalCard({
         <div
           style={{
             borderTop: `1px solid ${BORDER}`,
-            background: 'rgba(251,191,36,0.08)',
+            background: 'color-mix(in srgb, var(--warning-bright) 12%, transparent)',
             color: WARN,
             padding: '8px 12px',
             fontSize: 12,
@@ -403,7 +406,7 @@ function ProposalCard({
             disabled={loading}
             style={{
               background: ACCENT,
-              color: '#0b0f14',
+              color: 'var(--accent-ink)',
               fontWeight: 700,
               border: 'none',
               borderRadius: 8,
