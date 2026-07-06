@@ -1,0 +1,185 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-07T12:00:00Z",
+  "title": "Design System: QuoteMax",
+  "extensions": {
+    "colorMeta": {
+      "accent": {
+        "role": "primary",
+        "displayName": "Caterpillar Yellow",
+        "canonical": "#FFC400",
+        "tonalRamp": ["#2E2300", "#4A3900", "#6B5300", "#8F6F00", "#B88E00", "#E6AC00", "#FFC400", "#FFE08A"]
+      },
+      "ink-deep": {
+        "role": "neutral",
+        "displayName": "Command Charcoal",
+        "canonical": "#16120F",
+        "tonalRamp": ["#0D0A08", "#16120F", "#1E1813", "#2B2422", "#3A322C", "#6E6354", "#A2968A", "#C3B8AC"]
+      },
+      "ink-card": {
+        "role": "neutral",
+        "displayName": "Palette Charcoal",
+        "canonical": "#2B2422",
+        "tonalRamp": ["#16120F", "#1E1813", "#2B2422", "#3A322C", "#4A4136", "#6E6354", "#A2968A", "#C3B8AC"]
+      },
+      "ink-line": {
+        "role": "neutral",
+        "displayName": "Warm Hairline",
+        "canonical": "#3A322C"
+      },
+      "text-pri": {
+        "role": "neutral",
+        "displayName": "Bone",
+        "canonical": "#F6F1EA",
+        "tonalRamp": ["#2B2422", "#5E544E", "#837870", "#A2968A", "#C3B8AC", "#D9CFC4", "#F6F1EA", "#FFFDFA"]
+      },
+      "text-sec": {
+        "role": "neutral",
+        "displayName": "Warm Grey",
+        "canonical": "#C3B8AC"
+      },
+      "text-dim": {
+        "role": "neutral",
+        "displayName": "Dim Warm Grey",
+        "canonical": "#A2968A"
+      },
+      "success": { "role": "tertiary", "displayName": "Success Green", "canonical": "#15803D" },
+      "warning": { "role": "tertiary", "displayName": "Warning Amber", "canonical": "#B45309" },
+      "danger":  { "role": "tertiary", "displayName": "Danger Red", "canonical": "#B91C1C" },
+      "paper-canvas": { "role": "neutral", "displayName": "Warm Paper (light theme)", "canonical": "#FAF8F4" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "ALL-CAPS hero and section-opening headlines, left-aligned, one or two words in accent." },
+      "headline": { "displayName": "Headline", "purpose": "ALL-CAPS section heads." },
+      "title": { "displayName": "Title", "purpose": "Card titles and sub-heads, often uppercase." },
+      "body": { "displayName": "Body", "purpose": "Sentence-case prose; measure capped at 65-75ch." },
+      "label": { "displayName": "Mono Label", "purpose": "Uppercase JetBrains Mono eyebrows, KPI labels, refs, timestamps, prices." }
+    },
+    "shadows": [
+      { "name": "lift", "value": "inset 0 1px 0 0 rgba(255,255,255,0.06)", "purpose": "Default lit-edge on dark cards — an inner top highlight used in place of a drop shadow." },
+      { "name": "menu", "value": "0 16px 40px -12px rgba(11,9,7,0.55)", "purpose": "Dropdowns and popovers." },
+      { "name": "overlay", "value": "0 24px 60px -12px rgba(11,9,7,0.7)", "purpose": "Dialogs and modals that must separate hard from the canvas." }
+    ],
+    "motion": [
+      { "name": "ease-out-expo", "value": "cubic-bezier(0.22, 1, 0.36, 1)", "purpose": "Signature easing for hero rise and scroll reveals (~640-700ms)." },
+      { "name": "ease-standard", "value": "cubic-bezier(0.4, 0, 0.2, 1)", "purpose": "Default easing for state transitions and surface flips (~320ms)." },
+      { "name": "dur-fast", "value": "200ms", "purpose": "Micro interactions." },
+      { "name": "dur-base", "value": "320ms", "purpose": "Surface flips, theme cross-fade." },
+      { "name": "dur-slow", "value": "480ms", "purpose": "Larger transitions." },
+      { "name": "dur-reveal", "value": "700ms", "purpose": "Scroll-reveal choreography." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" },
+      { "name": "2xl", "value": "1536px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The hi-vis CTA: Caterpillar-yellow fill, dark-charcoal uppercase text, square corners.",
+      "html": "<div class=\"ds-stage\"><button class=\"ds-btn-primary\">Get my QuoteMax</button></div>",
+      "css": ".ds-stage { background: #16120F; padding: 32px; display: flex; gap: 16px; align-items: center; } .ds-btn-primary { font-family: 'Manrope', system-ui, sans-serif; font-weight: 700; font-size: 15px; text-transform: uppercase; letter-spacing: 0.05em; color: #1C1812; background: #FFC400; border: none; border-radius: 0; height: 56px; padding: 0 24px; cursor: pointer; transition: background 200ms cubic-bezier(0.4,0,0.2,1); } .ds-btn-primary:hover { background: #E6AC00; } .ds-btn-primary:focus-visible { outline: 2px solid #FFD23D; outline-offset: 2px; } .ds-btn-primary:active { background: #E6AC00; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Secondary action: transparent with a warm hairline border that shifts to accent on hover.",
+      "html": "<div class=\"ds-stage\"><button class=\"ds-btn-ghost\">See how it works</button></div>",
+      "css": ".ds-stage { background: #16120F; padding: 32px; } .ds-btn-ghost { font-family: 'Manrope', system-ui, sans-serif; font-weight: 700; font-size: 15px; text-transform: uppercase; letter-spacing: 0.05em; color: #F6F1EA; background: transparent; border: 1px solid #3A322C; border-radius: 0; height: 44px; padding: 0 20px; cursor: pointer; transition: border-color 200ms, color 200ms; } .ds-btn-ghost:hover { border-color: #FFC400; color: #FFC400; } .ds-btn-ghost:focus-visible { outline: 2px solid #FFD23D; outline-offset: 2px; }"
+    },
+    {
+      "name": "Mono Eyebrow",
+      "kind": "custom",
+      "refersTo": "label",
+      "description": "The uppercase JetBrains Mono kicker that labels sections and metadata.",
+      "html": "<div class=\"ds-stage\"><span class=\"ds-eyebrow\">Live example &middot; SMS intake</span></div>",
+      "css": ".ds-stage { background: #16120F; padding: 32px; } .ds-eyebrow { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 600; font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: #A2968A; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The base surface: palette-charcoal panel, 1px warm hairline, lit top edge, square corners — no drop shadow.",
+      "html": "<div class=\"ds-stage\"><article class=\"ds-card\"><h3 class=\"ds-card-title\">Your pricing book</h3><p class=\"ds-card-body\">QuoteMax only ever uses your pricing book. You keep control of every rate.</p></article></div>",
+      "css": ".ds-stage { background: #16120F; padding: 32px; } .ds-card { background: #2B2422; border: 1px solid #3A322C; border-radius: 0; padding: 32px; box-shadow: inset 0 1px 0 0 rgba(255,255,255,0.06); max-width: 360px; } .ds-card-title { font-family: 'Manrope', system-ui, sans-serif; font-weight: 700; font-size: 20px; letter-spacing: -0.02em; color: #F6F1EA; margin: 0 0 12px; } .ds-card-body { font-family: 'Manrope', system-ui, sans-serif; font-weight: 400; font-size: 16px; line-height: 1.6; color: #C3B8AC; margin: 0; }"
+    },
+    {
+      "name": "Numbered Card",
+      "kind": "custom",
+      "refersTo": "numbered-card",
+      "description": "Signature how-it-works step: a large mono accent number beside an uppercase title.",
+      "html": "<div class=\"ds-stage\"><article class=\"ds-numbered\"><span class=\"ds-numbered-n\">01</span><div><h3 class=\"ds-numbered-title\">Customer texts your number</h3><p class=\"ds-numbered-body\">QuoteMax answers 24/7, asks the right questions, and starts the quote.</p></div></article></div>",
+      "css": ".ds-stage { background: #16120F; padding: 32px; } .ds-numbered { display: flex; gap: 20px; background: #2B2422; border: 1px solid #3A322C; border-radius: 0; padding: 32px; box-shadow: inset 0 1px 0 0 rgba(255,255,255,0.06); max-width: 420px; } .ds-numbered-n { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 700; font-size: 32px; line-height: 1; color: #FFC400; font-variant-numeric: tabular-nums; } .ds-numbered-title { font-family: 'Manrope', system-ui, sans-serif; font-weight: 800; font-size: 18px; text-transform: uppercase; letter-spacing: -0.02em; color: #F6F1EA; margin: 0 0 8px; } .ds-numbered-body { font-family: 'Manrope', system-ui, sans-serif; font-weight: 400; font-size: 15px; line-height: 1.6; color: #C3B8AC; margin: 0; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Labelled input: mono uppercase label, sunken charcoal field, hairline border shifting to accent on focus.",
+      "html": "<div class=\"ds-stage\"><label class=\"ds-field\"><span class=\"ds-field-label\">Business name</span><input class=\"ds-field-input\" type=\"text\" placeholder=\"Sparky &amp; Co\" /></label></div>",
+      "css": ".ds-stage { background: #16120F; padding: 32px; } .ds-field { display: flex; flex-direction: column; gap: 8px; max-width: 320px; } .ds-field-label { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 600; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: #A2968A; } .ds-field-input { font-family: 'Manrope', system-ui, sans-serif; font-size: 16px; color: #F6F1EA; background: #1E1813; border: 1px solid #3A322C; border-radius: 0; height: 44px; padding: 0 16px; transition: border-color 200ms; } .ds-field-input::placeholder { color: #A2968A; } .ds-field-input:focus-visible { border-color: #FFC400; outline: 2px solid #FFD23D; outline-offset: 2px; }"
+    },
+    {
+      "name": "Status Pill",
+      "kind": "chip",
+      "refersTo": "status-pill",
+      "description": "A small live-status chip: a pulsing dot plus a mono uppercase label. Dots are the only round thing.",
+      "html": "<div class=\"ds-stage\"><span class=\"ds-pill\"><span class=\"ds-pill-dot\"></span>Electrical pilot &middot; NSW</span></div>",
+      "css": ".ds-stage { background: #16120F; padding: 32px; } .ds-pill { display: inline-flex; align-items: center; gap: 8px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 600; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #C3B8AC; background: #2B2422; border: 1px solid #3A322C; border-radius: 0; padding: 6px 12px; } .ds-pill-dot { width: 8px; height: 8px; border-radius: 9999px; background: #34D27B; }"
+    },
+    {
+      "name": "Yellow Marquee Bar",
+      "kind": "custom",
+      "refersTo": "marquee",
+      "description": "Signature closing punctuation: a full-width yellow bar with dark mono text on a slow ticker.",
+      "html": "<div class=\"ds-marquee\"><div class=\"ds-marquee-track\"><span>Lock in your option &middot; 30% deposit &middot; Lock in your option &middot; 30% deposit &middot; </span><span>Lock in your option &middot; 30% deposit &middot; Lock in your option &middot; 30% deposit &middot; </span></div></div>",
+      "css": ".ds-marquee { background: #FFC400; overflow: hidden; white-space: nowrap; padding: 12px 0; } .ds-marquee-track { display: inline-flex; animation: ds-marquee 24s linear infinite; } .ds-marquee-track span { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 600; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: #1C1812; } @keyframes ds-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } } @media (prefers-reduced-motion: reduce) { .ds-marquee-track { animation: none; } }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Command Centre",
+    "overview": "QuoteMax looks like an operations deck, not a SaaS dashboard. The canvas is warm near-black charcoal (#16120F) and across it runs a single hot signal: Caterpillar yellow (#FFC400). Everything else is structure. Depth is engineered from borders, lit panel edges, a film-grain overlay and a slow-drifting topographic ridge field — never from soft drop shadows. Type is heavy and left-aligned: ALL-CAPS Manrope for display, JetBrains Mono for the eyebrows, prices and metadata that make the system read as instrumented rather than decorated. The mood is a licensed Australian tradie who respects your time: direct, engineered, a little dry, confident without shouting. The system's job is trust — the marketing landing and the customer quote page exist to make an automatically-drafted quote feel more premium and defensible than one hand-typed. Restraint reads as premium here: one accent, square corners, honest numbers doing the talking, nothing on the page that isn't earning its place. It rejects the generic-SaaS playbook, anything consumer-cutesy, the template look, and its own retired navy + orange 'Maintain' past.",
+    "keyCharacteristics": [
+      "Warm near-black charcoal canvas; one accent only — hi-vis Caterpillar yellow.",
+      "Rounded corners (soft scale: buttons/inputs ~8px, cards ~12-16px, dashboard cockpit 14/9px); status dots and avatars are full circles. Full-pill buttons are avoided.",
+      "Depth from borders + lit edges + film grain + topographic overlay, never flat fills or drop shadows.",
+      "ALL-CAPS Manrope display, left-aligned, tight tracking; JetBrains Mono for labels, prices, metadata.",
+      "Big honest numbers as the value prop; Australian English; zero emoji; no exclamation marks.",
+      "Dark is the primary brand; a 'warm paper' light theme ships for device preference."
+    ],
+    "rules": [
+      { "name": "The One Signal Rule", "body": "Yellow is the only accent — no blues, no violets, no teal, no second colour. On any screen it marks the single thing that matters next: the CTA, the price, the one highlighted word. Its scarcity is the point; keep it to <= ~10% of the surface.", "section": "colors" },
+      { "name": "The Dark-on-Yellow Rule", "body": "Text and icons on a yellow fill are always dark charcoal (#1C1812), never white. White-on-yellow fails WCAG (~1.4:1) — it is forbidden.", "section": "colors" },
+      { "name": "The Warm-Not-Blue Rule", "body": "The canvas is warm near-black (#16120F); borders, glows and neutrals all lean warm. A cool grey or a blue-black canvas breaks the brand.", "section": "colors" },
+      { "name": "The All-Caps Display Rule", "body": "Display and section headlines are ALL CAPS, weight 800, tight tracking (-0.04em), and left-aligned — never centered. The accent highlights one or two key words; body stays weight 400.", "section": "typography" },
+      { "name": "The Mono-Label Rule", "body": "Eyebrows, metadata, refs and every price or tabular figure are JetBrains Mono, uppercase for labels, wide tracking (0.14-0.18em), with tabular-nums on figures.", "section": "typography" },
+      { "name": "The Borders-Not-Shadows Rule", "body": "Structure comes from the 1px warm hairline and the lit edge, not from shadows. Reach for a cast shadow only when an element genuinely floats above the page (overlay), and tint it warm charcoal.", "section": "elevation" },
+      { "name": "The Grain Rule", "body": "A ~4.5% fractal-noise film sits fixed over dark surfaces. It is non-negotiable on hero and quote surfaces — a flat dark fill bands and reads as cheap; the grain is what makes near-black look premium.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do build depth from borders, the lit edge, film grain and the topographic overlay — never a drop shadow on a resting surface.",
+      "Do use the rounded corner scale consistently (buttons/inputs ~8px, cards ~12-16px, dashboard 14/9px); only status dots and avatar discs are full circles. Avoid full-pill buttons.",
+      "Do use Caterpillar yellow (#FFC400) as a fill on <= ~10% of a screen, always with dark-charcoal text (#1C1812) on it.",
+      "Do set display headlines in ALL-CAPS Manrope 800, left-aligned, tight tracking, with one or two words in accent.",
+      "Do use JetBrains Mono (uppercase, wide-tracked) for eyebrows, prices, refs and metadata, with tabular-nums on figures.",
+      "Do write in Australian English, present tense, tradie voice; let big honest numbers carry the value prop.",
+      "Do run photography through the duotone pass so trade photos read as native to the palette."
+    ],
+    "donts": [
+      "Don't reintroduce the retired navy (#0E1622) + orange (#FF5A1F) 'Maintain' identity. Yellow + warm charcoal is canonical.",
+      "Don't ship generic SaaS: no soft gradients, pill buttons, centered heroes, purple/violet accents, or glassmorphism.",
+      "Don't go consumer-cutesy or playful: no illustrated/toy-like treatments or oversized bubbly radii, and zero emoji, ever.",
+      "Don't look like a cheap template: no Wix/Squarespace/Framer stock blocks; bespoke structure and honest proof only.",
+      "Don't put white text on a yellow fill (fails WCAG ~1.4:1) — dark charcoal only.",
+      "Don't add a second accent colour, a gradient button, or any neon.",
+      "Don't use exclamation marks or em-dashes in customer-visible copy; use a full stop, a comma, or a middot.",
+      "Don't center display headlines, and never use a cool-grey or blue-black canvas."
+    ]
+  }
+}

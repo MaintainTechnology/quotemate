@@ -1,0 +1,6 @@
+{
+  "files": ["quotemate-automation/app/layout.tsx"],
+  "insertBefore": "</body>",
+  "commentSyntax": "jsx",
+  "cspChecked": true
+}

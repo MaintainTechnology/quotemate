@@ -134,3 +134,13 @@ Key API routes: `/api/vapi/webhook`, `/api/vapi/tools/send-sms-photo-link`, `/ap
 - **`customers.tenant_id` code fix 2026-05-20** — `lib/customers/lookup.ts`'s `findOrCreateCustomer()` now accepts a `tenantId` parameter and stamps it on insert, with heal-in-place on existing NULL rows. Callers updated: `app/api/sms/inbound/route.ts:313` (passes `tenant?.id ?? null`) and `app/api/intake/structure/route.ts:312` (passes the resolved `tenantId`). Closes the recurring orphan source.
 - **Pre-existing orphan `tenant_id IS NULL` rows** (audit 2026-05-20, 363 rows total): `calls 49/49` (100% — pre vapi_assistant_id stamping on tenants), `customers 4/4` (now self-heal via the code fix on next inbound), `sms_conversations 74/117` (legacy traffic to the dev shared number `+61481613464` + `tradie_registration` rows that are NULL-by-design until activation), `intakes 127/176` + `quotes 108/155` (parent is itself orphan — no FK source to propagate from). FK propagation via `scripts/backfill-orphan-tenant-ids.mjs --apply` resolved 1 intake; the rest are unrecoverable historical test traffic. Accept and document; do not delete (still referenced).
 - `quote_line_items` table exists but is unused (0 rows) — line items are denormalized into `quotes.good/better/best`.
+
+## Design Context (impeccable)
+
+Design sources of truth for any UI/frontend work (initialized 2026-07-06 via `/impeccable init`):
+
+- **[PRODUCT.md](PRODUCT.md)** — strategic design context: register (`brand` by default; the tradie `/dashboard`+`/admin` layer is a secondary `product` register), users, purpose, brand personality, anti-references, design principles, accessibility. Wins on strategy/voice decisions.
+- **[DESIGN.md](DESIGN.md)** + **`.impeccable/design.json`** — the visual system (DESIGN.md format spec): palette, type, elevation, components, do's/don'ts. Wins on visual decisions.
+- **[redesign/DesignSystem/](redesign/DesignSystem/)** — the canonical, fuller QuoteMax design system (tokens, foundations, React primitives, UI kits). The `quotemax-design` skill (`redesign/DesignSystem/SKILL.md`) is user-invocable.
+- **North Star:** "The Command Centre" — warm-charcoal canvas `#16120F`, one accent (Caterpillar yellow `#FFC400`), Manrope + JetBrains Mono, square corners, borders/lit-edges/grain over shadows, Australian English, zero emoji.
+- ⚠ **Retired identity:** the old navy `#0E1622` + orange `#FF5A1F` "Maintain" palette and the vendored `.claude/skills/maintain-design-system/` skill are **deprecated** — do not reintroduce. Yellow + charcoal is canonical.

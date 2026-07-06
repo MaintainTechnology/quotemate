@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [
+      "quotemate-automation/app/dashboard/page.tsx",
+      "quotemate-automation/app/q/roof/[token]/page.tsx",
+      "quotemate-automation/app/q/solar/[token]/page.tsx",
+      "quotemate-automation/app/q/[token]/RoofHeroStrip.tsx",
+      "quotemate-automation/app/q/solar/[token]/BuildingPicker.tsx",
+      "quotemate-automation/app/q/solar/[token]/SunShadeOverlay.tsx"
+    ],
+    "ignoreValues": []
+  }
+}
