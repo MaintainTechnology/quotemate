@@ -16,12 +16,15 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { renderPdfFromHtml, gotenbergConfigured } from '@/lib/pdf/gotenberg'
 import {
   buildQuoteReportHtml,
+  buildQuoteReportHtmlFromBody,
   REPORT_TEMPLATE_VERSION,
   type QuoteReportTier,
   type QuoteReportInput,
 } from './report-html'
 import { asQuoteTierMode, resolveVisibleTiers, type QuoteTierMode } from './tier-visibility'
-import { quotePdfIsStale, quotePdfSignature } from './pdf-signature'
+import { quotePdfIsStale, quotePdfSignature, hashReportContent } from './pdf-signature'
+import { serializeReportDoc } from './report-doc/serialize'
+import type { ReportDoc } from './report-doc/types'
 import { buildRoofQuoteReportHtml } from '@/lib/roofing/report-html'
 import { roofOutlineImageSrc, type RoofOutlineStructure } from '@/lib/roofing/roof-outline-svg'
 import { structureImageRefs, structureStaticMapPath } from '@/lib/roofing/structure-images'
@@ -129,6 +132,8 @@ type QuotePdfRow = {
   needs_inspection: boolean | null
   pdf_path: string | null
   pdf_signature: string | null
+  report_doc: unknown | null
+  report_style: unknown | null
 }
 
 type RoofPdfRow = {
@@ -211,7 +216,7 @@ async function loadQuoteReportContext(quoteId: string): Promise<QuoteReportConte
   const { data: quote } = await supabase()
     .from('quotes')
     .select(
-      'id, tenant_id, intake_id, share_token, good, better, best, selected_tier, scope_of_works, assumptions, estimated_timeframe, needs_inspection, pdf_path, pdf_signature',
+      'id, tenant_id, intake_id, share_token, good, better, best, selected_tier, scope_of_works, assumptions, estimated_timeframe, needs_inspection, pdf_path, pdf_signature, report_doc, report_style',
     )
     .eq('id', quoteId)
     .maybeSingle<QuotePdfRow>()
@@ -275,6 +280,26 @@ function buildQuoteReportInput(
 }
 
 /**
+ * Flag-gated (FULL_QUOTE_DOC): render the customer document body from report_doc
+ * (via the deterministic serializer) inside the SAME chrome the PDF uses, else
+ * today's template. The doc's pricing node renders from the same
+ * tier-visibility-filtered good/better/best on `input`, so prices stay grounded,
+ * tier-gated, and Stripe-consistent — free text never becomes a price.
+ */
+function renderQuoteDocumentHtml(input: QuoteReportInput, reportDoc: unknown | null): string {
+  if (process.env.FULL_QUOTE_DOC === 'true' && reportDoc && typeof reportDoc === 'object') {
+    const body = serializeReportDoc(reportDoc as ReportDoc, {
+      good: input.good,
+      better: input.better,
+      best: input.best,
+      selectedTier: input.selectedTier,
+    })
+    return buildQuoteReportHtmlFromBody(input, body)
+  }
+  return buildQuoteReportHtml(input)
+}
+
+/**
  * The report as self-contained HTML (the exact document Gotenberg renders to
  * PDF), for the dashboard quote viewer's inline, editable preview. Returns null
  * for a missing or inspection-routed quote (mirrors ensureQuotePdf). Reads the
@@ -285,7 +310,7 @@ export async function renderQuoteReportHtml(quoteId: string): Promise<string | n
   const ctx = await loadQuoteReportContext(quoteId)
   if (!ctx) return null
   const branding = await loadTenantBranding(supabase(), ctx.quote.tenant_id, ctx.intakeTrade)
-  return buildQuoteReportHtml(buildQuoteReportInput(ctx, branding))
+  return renderQuoteDocumentHtml(buildQuoteReportInput(ctx, branding), ctx.quote.report_doc)
 }
 
 /**
@@ -312,11 +337,20 @@ export async function ensureQuotePdf(
     // A tradie flipping the Pricing-settings tier mode (or a template bump)
     // changes the signature, so the next download/send regenerates instead of
     // serving a stale Good/Better/Best PDF.
+    // Fold the document content hash into the signature ONLY when the doc render
+    // is active, so a report_doc/report_style edit regenerates the PDF. Flag off
+    // ⇒ docHash '' ⇒ signature byte-identical to the pre-Phase-1 format (no
+    // spurious regeneration of existing cached PDFs).
+    const docHash =
+      process.env.FULL_QUOTE_DOC === 'true'
+        ? hashReportContent(quote.report_doc, quote.report_style)
+        : ''
     const freshSignature = quotePdfSignature({
       templateVersion: REPORT_TEMPLATE_VERSION,
       tierMode,
       visibleTierKeys,
       recommendedTier,
+      docHash,
     })
     if (
       !quotePdfIsStale({
@@ -330,7 +364,7 @@ export async function ensureQuotePdf(
     }
 
     const branding = await loadTenantBranding(supabase(), quote.tenant_id, intakeTrade)
-    const html = buildQuoteReportHtml(buildQuoteReportInput(ctx, branding))
+    const html = renderQuoteDocumentHtml(buildQuoteReportInput(ctx, branding), quote.report_doc)
     const pdf = await renderQuotePdfCapped(html, `quote:${quoteId}`)
     const path = await storePdf(`quotes/${quoteId}.pdf`, pdf)
     await supabase()
