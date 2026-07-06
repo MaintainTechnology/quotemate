@@ -22,10 +22,15 @@ export function quotePdfSignature(args: {
   tierMode: QuoteTierMode
   visibleTierKeys: readonly TierKey[]
   recommendedTier: string | null
+  /** Content hash of report_doc + report_style (hashReportContent). Omitted /
+   *  empty for legacy quotes with no document → signature is byte-identical to
+   *  the pre-Phase-0 format, so those cached PDFs are NOT force-regenerated. */
+  docHash?: string | null
 }): string {
-  return `v${args.templateVersion}|${args.tierMode}|t=${args.visibleTierKeys.join('+')}|r=${
+  const base = `v${args.templateVersion}|${args.tierMode}|t=${args.visibleTierKeys.join('+')}|r=${
     args.recommendedTier ?? ''
   }`
+  return args.docHash ? `${base}|d=${args.docHash}` : base
 }
 
 /**
@@ -43,4 +48,29 @@ export function quotePdfIsStale(args: {
   if (args.regenerate) return true
   if (!args.pdfPath) return true
   return args.storedSignature !== args.freshSignature
+}
+
+/**
+ * Stable content hash of a quote's document + style override, for the PDF cache
+ * signature (§10.2). A tiny dependency-free FNV-1a over a key-sorted JSON string
+ * so it stays edge-safe and pure (no node:crypto). Null document → '' (legacy
+ * quotes keep their pre-Phase-0 signature — see quotePdfSignature.docHash).
+ */
+export function hashReportContent(reportDoc: unknown | null, reportStyle: unknown | null): string {
+  if (reportDoc == null && reportStyle == null) return ''
+  const json = stableStringify({ d: reportDoc ?? null, s: reportStyle ?? null })
+  let h = 0x811c9dc5
+  for (let i = 0; i < json.length; i++) {
+    h ^= json.charCodeAt(i)
+    h = Math.imul(h, 0x01000193)
+  }
+  return (h >>> 0).toString(16)
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null'
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
+  const obj = value as Record<string, unknown>
+  const keys = Object.keys(obj).sort()
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(',')}}`
 }
