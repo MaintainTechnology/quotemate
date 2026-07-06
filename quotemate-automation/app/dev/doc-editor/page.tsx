@@ -5,8 +5,7 @@
 // QuoteDocumentEditor with sample content and echoes the live ReportDoc so a
 // Playwright pass can assert typing/toolbar/locked-node behaviour.
 
-import { useState } from 'react'
-import QuoteDocumentEditor from '../../dashboard/quote/[token]/QuoteDocumentEditor'
+import QuoteDocumentWorkspace from '../../dashboard/quote/[token]/QuoteDocumentWorkspace'
 import type { ReportDoc } from '../../../lib/quote/report-doc/types'
 
 const SAMPLE: ReportDoc = {
@@ -36,16 +35,16 @@ const SAMPLE_TIERS = {
 }
 
 export default function DevDocEditorPage() {
-  const [doc, setDoc] = useState<ReportDoc>(SAMPLE)
   return (
     <div className="dev-wrap">
       <style>{EDITOR_CSS}</style>
       <h1 className="dev-h1">Document editor harness</h1>
-      <QuoteDocumentEditor value={SAMPLE} tiers={SAMPLE_TIERS} onChange={setDoc} />
-      <details className="dev-json">
-        <summary>Live ReportDoc JSON</summary>
-        <pre data-testid="doc-json">{JSON.stringify(doc, null, 2)}</pre>
-      </details>
+      <QuoteDocumentWorkspace
+        initialDoc={SAMPLE}
+        initialStyle={{}}
+        tiers={SAMPLE_TIERS}
+        onEditPrices={() => window.alert('→ opens the grounded Pricing section (Task E dashboard wiring)')}
+      />
     </div>
   )
 }
@@ -79,4 +78,19 @@ const EDITOR_CSS = `
   .qm-tier-price { font-size: 19px; font-weight: 800; color: #0f1722; margin: 4px 0 1px; }
   .qm-tier-label { font-size: 11px; color: #8b98a6; }
   .qm-pricing-empty { font-size: 12px; }
+
+  .qm-workspace { display: flex; flex-direction: column; }
+  .qm-brand-bar { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; padding: 12px 14px; background: #16202b; border: 1px solid #d7e0ea; border-bottom: none; border-radius: 14px 14px 0 0; }
+  .qm-brand-field { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; color: #93a4b6; text-transform: uppercase; letter-spacing: .06em; }
+  .qm-brand-field select { font-size: 13px; padding: 5px 8px; border-radius: 7px; border: 1px solid #33404e; background: #0e1720; color: #eaf1f8; text-transform: none; }
+  .qm-swatches { display: flex; gap: 6px; }
+  .qm-swatch { width: 22px; height: 22px; border-radius: 6px; border: 2px solid transparent; cursor: pointer; padding: 0; }
+  .qm-swatch.is-on { border-color: #fff; box-shadow: 0 0 0 2px #16202b, 0 0 0 4px #fff; }
+  .qm-workspace .qm-doc-shell { border-radius: 0; box-shadow: none; }
+  .qm-savebar { display: flex; align-items: center; gap: 14px; padding: 12px 14px; background: #0d141d; border: 1px solid #d7e0ea; border-top: none; border-radius: 0 0 14px 14px; }
+  .qm-save-state { font-size: 12px; font-family: ui-monospace, monospace; color: #e8b44a; margin-right: auto; }
+  .qm-save-saved { color: #46c08a; }
+  .qm-save-error { color: #e9705a; }
+  .qm-save-btn { font-size: 13px; font-weight: 800; color: #160a02; background: #ff5f00; border: none; border-radius: 9px; padding: 10px 16px; cursor: pointer; }
+  .qm-save-btn:disabled { opacity: .45; cursor: default; }
 `
