@@ -12,8 +12,17 @@
 // adapter (bodyMode / capabilities / pdfUrl) — this component knows nothing
 // trade-specific, which is what lets new trades light up without touching it.
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import dynamic from 'next/dynamic'
 import TradieEditor, { type EditorApi } from '@/app/q/[token]/TradieEditor'
+import { getBrowserSupabase } from '@/lib/supabase/client'
+import type { ReportDoc } from '@/lib/quote/report-doc/types'
+import type { ReportStyle } from '@/lib/quote/report-doc/style'
+import type { DocEditorTiers } from './QuoteDocumentEditor'
+
+// Lazy-load the TipTap workspace so its bundle only loads when FULL_QUOTE_DOC is
+// on and the owner is editing — the default (flag-off) viewer never ships TipTap.
+const QuoteDocumentWorkspace = dynamic(() => import('./QuoteDocumentWorkspace'), { ssr: false })
 
 type Tier = {
   label?: string
@@ -36,6 +45,11 @@ export default function QuoteReportViewerClient(props: {
   gstRegistered: boolean
   needsInspection: boolean
   paid: boolean
+  /** Phase 1 living-document editor — flag-gated (default off ⇒ current viewer). */
+  docEditorEnabled?: boolean
+  reportDoc?: ReportDoc
+  reportStyle?: ReportStyle
+  selectedTier?: 'good' | 'better' | 'best' | null
   bodyMode: 'pdf-inline' | 'download-only'
   pdfUrl: string
   /** Live HTML render of the report (same document the PDF is built from).
@@ -53,6 +67,10 @@ export default function QuoteReportViewerClient(props: {
     gstRegistered,
     needsInspection,
     paid,
+    docEditorEnabled,
+    reportDoc,
+    reportStyle,
+    selectedTier,
     bodyMode,
     pdfUrl,
     htmlUrl,
@@ -62,10 +80,38 @@ export default function QuoteReportViewerClient(props: {
 
   const [api, setApi] = useState<EditorApi | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
+  const [token, setToken] = useState<string | null>(null)
+
+  // Owner-gated document save needs the tradie's Supabase access token
+  // client-side (same source TradieEditor uses). Only fetched when the flag is on.
+  useEffect(() => {
+    if (!docEditorEnabled) return
+    let alive = true
+    getBrowserSupabase()
+      .auth.getSession()
+      .then(({ data }) => {
+        if (alive) setToken(data.session?.access_token ?? null)
+      })
+    return () => {
+      alive = false
+    }
+  }, [docEditorEnabled])
 
   const owner = !!api?.canEdit // owner of an unpaid quote (resolved by TradieEditor)
   const canEdit = capabilities.manualEdit && owner && !needsInspection && !paid
   const canAi = capabilities.aiEdit && owner && !needsInspection && !paid
+
+  const toDocTier = (t: Tier): DocEditorTiers['good'] =>
+    t ? { label: t.label ?? '', subtotal_ex_gst: t.subtotal_ex_gst ?? 0 } : null
+  const docTiers: DocEditorTiers = {
+    good: toDocTier(tiers.good),
+    better: toDocTier(tiers.better),
+    best: toDocTier(tiers.best),
+    selectedTier: selectedTier ?? null,
+  }
+  // Flag on + owner (+ token loaded) ⇒ the living-document workspace replaces the
+  // read-only preview. Flag off ⇒ this is always false and nothing below changes.
+  const showWorkspace = !!docEditorEnabled && canEdit
 
   const disabledReason = useMemo(() => {
     if (!capabilities.manualEdit) return `Editing isn’t available for ${trade} quotes yet — view & download only.`
@@ -132,7 +178,16 @@ export default function QuoteReportViewerClient(props: {
 
       {/* ─── Report body ─── */}
       <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
-        {htmlSrc ? (
+        {showWorkspace && reportDoc && token ? (
+          <QuoteDocumentWorkspace
+            quoteId={quoteId}
+            authToken={token}
+            initialDoc={reportDoc}
+            initialStyle={reportStyle ?? {}}
+            tiers={docTiers}
+            onEditPrices={() => api?.openEditor()}
+          />
+        ) : htmlSrc ? (
           <>
             <div className="mb-2 flex items-center gap-2 font-mono text-[0.6rem] uppercase tracking-[0.12em] text-text-dim">
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />

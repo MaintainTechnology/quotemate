@@ -11,6 +11,9 @@
 import { createClient } from '@supabase/supabase-js'
 import { notFound } from 'next/navigation'
 import { getReportAdapter } from '@/lib/quote/report-adapters/registry'
+import { buildDefaultReportDoc } from '@/lib/quote/report-doc/seed'
+import type { ReportDoc } from '@/lib/quote/report-doc/types'
+import type { ReportStyle } from '@/lib/quote/report-doc/style'
 import QuoteReportViewerClient from './QuoteReportViewerClient'
 
 export const dynamic = 'force-dynamic'
@@ -29,7 +32,9 @@ export default async function DashboardQuoteViewerPage({
 
   const { data: quote } = await supabase
     .from('quotes')
-    .select('id, intake_id, tenant_id, good, better, best, needs_inspection, paid_at')
+    .select(
+      'id, intake_id, tenant_id, good, better, best, needs_inspection, paid_at, selected_tier, scope_of_works, assumptions, report_doc, report_style',
+    )
     .eq('share_token', token)
     .maybeSingle()
   if (!quote) notFound()
@@ -37,7 +42,7 @@ export default async function DashboardQuoteViewerPage({
   // Trade lives on the intake (legacy rows without it default to electrical,
   // matching /q/[token]).
   const { data: intake } = quote.intake_id
-    ? await supabase.from('intakes').select('trade').eq('id', quote.intake_id).maybeSingle()
+    ? await supabase.from('intakes').select('trade, job_type').eq('id', quote.intake_id).maybeSingle()
     : { data: null }
   const trade = ((intake?.trade as string | null | undefined) ?? 'electrical').trim() || 'electrical'
 
@@ -57,6 +62,18 @@ export default async function DashboardQuoteViewerPage({
   const adapter = getReportAdapter(trade)
   type ViewerTier = Parameters<typeof QuoteReportViewerClient>[0]['tiers']['good']
 
+  // Phase 1 living-document editor, flag-gated (default off ⇒ prod unchanged).
+  // Seed a default document from the quote's fields when none is stored yet, so
+  // the editor opens with today's title/scope/pricing/assumptions.
+  const docEditorEnabled = process.env.FULL_QUOTE_DOC === 'true'
+  const reportDoc =
+    (quote.report_doc as ReportDoc | null) ??
+    buildDefaultReportDoc({
+      title: ((intake?.job_type as string | null | undefined) ?? '').replace(/_/g, ' ').trim(),
+      scopeOfWorks: quote.scope_of_works as string | null,
+      assumptions: quote.assumptions as string[] | null,
+    })
+
   return (
     <QuoteReportViewerClient
       quoteId={quote.id as string}
@@ -65,6 +82,10 @@ export default async function DashboardQuoteViewerPage({
       gstRegistered={gstRegistered}
       needsInspection={!!quote.needs_inspection}
       paid={!!quote.paid_at}
+      docEditorEnabled={docEditorEnabled}
+      reportDoc={reportDoc}
+      reportStyle={(quote.report_style as ReportStyle | null) ?? {}}
+      selectedTier={(quote.selected_tier as 'good' | 'better' | 'best' | null) ?? null}
       bodyMode={adapter.bodyMode}
       pdfUrl={adapter.pdfPath(token)}
       // Live, edit-reactive HTML render of the same report the PDF is built
