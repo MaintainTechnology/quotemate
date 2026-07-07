@@ -261,6 +261,18 @@ export async function runEstimation(
     // Opus 4.7 ignores temperature — AI SDK warns on every call if it's
     // set. Determinism here comes from the strict tool-call grounding +
     // pricing book lookup, not from temperature.
+    //
+    // Sentry AI/LLM monitoring: opt this call into the AI SDK's OTel spans so
+    // Sentry.vercelAIIntegration() records model, token usage, latency and
+    // tool calls. recordInputs/Outputs stay FALSE — prompts + drafts carry
+    // customer PII. (This is the proof-of-life site; roll out to the other AI
+    // call sites once spans are confirmed in the Sentry AI dashboard.)
+    experimental_telemetry: {
+      isEnabled: true,
+      functionId: 'estimate.run',
+      recordInputs: false,
+      recordOutputs: false,
+    },
   })
 
   const cacheMeta = (result.providerMetadata as any)?.anthropic

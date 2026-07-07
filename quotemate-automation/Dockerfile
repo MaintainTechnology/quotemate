@@ -28,6 +28,15 @@ ENV NODE_ENV=production
 # baked into the client bundle. Railway/Vercel inject these from the
 # project's environment variable settings; locally pass via --build-arg
 # or just let them be missing (page.tsx etc. read them at runtime).
+#
+# Sentry source-map upload runs during `pnpm build` (post-build hook under
+# Turbopack) ONLY when SENTRY_AUTH_TOKEN is present. Pass it as a build arg:
+#   docker build --build-arg SENTRY_AUTH_TOKEN=... .
+# On Railway, add SENTRY_AUTH_TOKEN as a build variable. This stage is
+# discarded (only `runner` ships), so the token never lands in the final image.
+# Absent → build still succeeds, just uploads no maps (traces stay minified).
+ARG SENTRY_AUTH_TOKEN=""
+ENV SENTRY_AUTH_TOKEN=$SENTRY_AUTH_TOKEN
 RUN pnpm build
 
 # ─── Stage 3: minimal runtime ────────────────────────────────────────

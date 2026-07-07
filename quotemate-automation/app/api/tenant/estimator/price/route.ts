@@ -63,6 +63,7 @@ export async function POST(req: Request) {
       .update({ priced_bom: bom, priced_at: pricedAt, updated_at: pricedAt })
       .eq('id', extractionId)
       .eq('tenant_id', tenant.id)
+      .eq('trade', 'electrical') // shared table — never write an electrical BOM onto a paint extraction
       .select('id')
       .maybeSingle()
     persisted = Boolean(saved)

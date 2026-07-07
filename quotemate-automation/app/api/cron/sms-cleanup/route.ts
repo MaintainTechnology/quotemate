@@ -13,6 +13,7 @@
 // rare (a conversation row can only exist post-first-message in our
 // inbound route) and falling back to created_at would be guessing.
 // ════════════════════════════════════════════════════════════════════
+import * as Sentry from '@sentry/nextjs'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -41,31 +42,43 @@ export async function GET(req: Request) {
     return Response.json({ ok: false, error: 'unauthorised' }, { status: 401 })
   }
 
-  const cutoffMs = Date.now() - 24 * 60 * 60 * 1000
-  const cutoffIso = new Date(cutoffMs).toISOString()
+  // Sentry Cron monitoring — records a check-in (start/finish/duration) each
+  // run so a silent cron failure is visible. No `schedule` is declared here
+  // on purpose: this cron's real schedule lives outside vercel.json (Vercel
+  // dashboard / external scheduler), so hardcoding a crontab would produce
+  // false "missed run" alerts. Configure the schedule in the Sentry monitor UI
+  // once confirmed. NB: automaticVercelMonitors is a no-op under Turbopack —
+  // this manual wrap is the correct pattern. (Reference impl — replicate the
+  // pattern across the other cron routes; for `after()`-based crons wrap the
+  // after() callback body, not the GET handler, or the monitor closes early.)
+  return Sentry.withMonitor('cron-sms-cleanup', async () => {
+    const cutoffMs = Date.now() - 24 * 60 * 60 * 1000
+    const cutoffIso = new Date(cutoffMs).toISOString()
 
-  const { data, error } = await supabase
-    .from('sms_conversations')
-    .update({ status: 'abandoned', updated_at: new Date().toISOString() })
-    .eq('status', 'open')
-    .lt('last_message_at', cutoffIso)
-    .select('id, from_number, last_message_at')
+    const { data, error } = await supabase
+      .from('sms_conversations')
+      .update({ status: 'abandoned', updated_at: new Date().toISOString() })
+      .eq('status', 'open')
+      .lt('last_message_at', cutoffIso)
+      .select('id, from_number, last_message_at')
 
-  if (error) {
-    console.error('[cron/sms-cleanup] sweep failed', error)
-    return Response.json({ ok: false, error: error.message }, { status: 500 })
-  }
+    if (error) {
+      // console.error is forwarded to Sentry Logs via consoleLoggingIntegration.
+      console.error('[cron/sms-cleanup] sweep failed', error)
+      return Response.json({ ok: false, error: error.message }, { status: 500 })
+    }
 
-  const swept = data?.length ?? 0
-  console.log('[cron/sms-cleanup] swept', {
-    swept,
-    cutoff: cutoffIso,
-    sample: data?.slice(0, 3).map(r => ({
-      id: r.id,
-      from: r.from_number,
-      last_message_at: r.last_message_at,
-    })),
+    const swept = data?.length ?? 0
+    console.log('[cron/sms-cleanup] swept', {
+      swept,
+      cutoff: cutoffIso,
+      sample: data?.slice(0, 3).map(r => ({
+        id: r.id,
+        from: r.from_number,
+        last_message_at: r.last_message_at,
+      })),
+    })
+
+    return Response.json({ ok: true, swept, cutoff: cutoffIso })
   })
-
-  return Response.json({ ok: true, swept, cutoff: cutoffIso })
 }

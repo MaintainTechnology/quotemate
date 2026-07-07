@@ -69,6 +69,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 
   const { id } = await ctx.params
 
+  // Scoped to trade='electrical' as well as the tenant: `plan_extractions` is
+  // shared with Commercial Painting (trade='commercial_painting'), and this is
+  // the electrical Estimator's run page — a paint extraction id must 404 here
+  // rather than render through the electrical viewer.
   const { data, error } = await supabase
     .from('plan_extractions')
     .select(
@@ -76,6 +80,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     )
     .eq('id', id)
     .eq('tenant_id', tenant.id)
+    .eq('trade', 'electrical')
     .maybeSingle()
 
   if (error) return Response.json({ ok: false, error: error.message }, { status: 500 })
@@ -105,6 +110,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     .update({ corrected_items: corrected, priced_bom: null, priced_at: null, updated_at: new Date().toISOString() })
     .eq('id', id)
     .eq('tenant_id', tenant.id)
+    .eq('trade', 'electrical') // never let electrical-shaped corrections land on a paint extraction
     .select('id')
     .maybeSingle()
 
