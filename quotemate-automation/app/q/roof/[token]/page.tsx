@@ -40,6 +40,8 @@ import { indicativeCombinedTiers } from '@/lib/sms/roofing-compose'
 import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
 import { RoofMap, type RoofMapBuilding } from '@/app/dashboard/roofing/_components/RoofMap'
 import { QuoteChrome, type StickyBar } from '../../_chrome/QuoteChrome'
+import { AcceptBlock } from '../../_chrome/AcceptBlock'
+import { resolveAcceptView } from '@/lib/quote/accept'
 import { tradeIcon } from '../../_chrome/icons'
 import {
   QuoteSheet,
@@ -430,6 +432,36 @@ export default async function RoofingQuotePage({
     }
   }
 
+  // Roofing site-visit payment + acceptance (mig 165) — SEPARATE best-effort
+  // read so a deploy before the migration simply reads not-paid/not-accepted
+  // rather than failing this live page. A roof price is ALWAYS confirmed on
+  // site, so the only on-page money action is the refundable $99 site visit;
+  // the accept block records acceptance then routes to /r/roof/<token>/
+  // inspection (previously this surface had no on-page payment at all).
+  let roofPaidAt: string | null = null
+  let roofAcceptedAt: string | null = null
+  {
+    const { data: pay } = await supabase
+      .from('roofing_measurements')
+      .select('paid_at, customer_accepted_at')
+      .eq('public_token', token)
+      .maybeSingle()
+    if (pay) {
+      roofPaidAt = (pay.paid_at as string | null) ?? null
+      roofAcceptedAt = (pay.customer_accepted_at as string | null) ?? null
+    }
+  }
+  const roofAcceptView = resolveAcceptView({
+    token,
+    tier: 'better',
+    isPaid: !!roofPaidAt,
+    pricesVisible: false, // roof price is always confirmed on site → $99 visit
+    priceExpired: false,
+    priceLabel: null,
+    siteVisitFee: '$99',
+    inspectionHref: `/r/roof/${token}/inspection`,
+  })
+
   return (
     <QuoteChrome trade={{ label: 'Roof', icon: tradeIcon('roof') }} sticky={sticky}>
       <QuoteSheet label={`Quote ${row.public_token.slice(0, 8).toUpperCase()}`}>
@@ -607,6 +639,11 @@ export default async function RoofingQuotePage({
               : 'Reply YES to our text and we send your full priced options for this roof.'
           }
         />
+
+        {/* ── Explicit "Accept & book $99 site visit" (Gap #1/#3/#4). The roof
+            price is always confirmed on site, so the refundable $99 visit is
+            the on-page action — no more "reply to SMS" dead end. ── */}
+        <AcceptBlock token={token} view={roofAcceptView} alreadyAccepted={!!roofAcceptedAt} />
 
         {/* Combined solar add-on note under the tiers. */}
         {solarApplies && (

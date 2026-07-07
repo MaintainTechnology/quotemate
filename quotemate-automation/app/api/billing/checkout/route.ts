@@ -1,12 +1,19 @@
-// POST /api/billing/checkout — start a subscription Checkout for the authed
+// POST /api/billing/checkout — start OR change a subscription for the authed
 // tradie. Body: { plan: 'starter'|'pro'|'crew', interval: 'month'|'year' }.
-// Returns { url } to redirect to Stripe Checkout (14-day trial on Starter
-// Monthly only; every other plan/interval bills immediately).
+//
+// Two paths, auto-selected from whether the tenant already has a live
+// subscription (trialing|active|past_due):
+//   • Live subscription  → update it IN PLACE, prorated (no second sub, no
+//     duplicate charge). Returns { updated: true, plan, interval }.
+//   • No live subscription → start a new subscription Checkout (14-day trial
+//     on Starter Monthly only). Returns { url } to redirect to Stripe.
 
 import { tenantFromBearer, billingAdmin } from '@/lib/billing/auth'
 import {
   getOrCreateCustomer,
   createSubscriptionCheckout,
+  updateSubscriptionToPlan,
+  isUpdatableStatus,
   isPlanId,
   isInterval,
 } from '@/lib/stripe/billing'
@@ -32,6 +39,25 @@ export async function POST(req: Request) {
 
   const tenant = auth.tenant
   try {
+    // ── Existing live subscription → change plan IN PLACE (prorated) ──
+    // Guard against the double-billing bug: never open a second
+    // subscription Checkout when one is already live. Reuse the existing
+    // subscription and let Stripe prorate. The webhook reconciles tenants.*.
+    if (tenant.stripe_subscription_id && isUpdatableStatus(tenant.subscription_status)) {
+      // No-op if they're already exactly on this plan+interval.
+      if (tenant.subscription_plan === plan && tenant.subscription_interval === interval) {
+        return Response.json({ updated: true, plan, interval, unchanged: true })
+      }
+      await updateSubscriptionToPlan({
+        tenantId: tenant.id,
+        subscriptionId: tenant.stripe_subscription_id,
+        plan,
+        interval,
+      })
+      return Response.json({ updated: true, plan, interval })
+    }
+
+    // ── No live subscription → start a new one via Checkout ──
     const customerId = await getOrCreateCustomer({
       tenantId: tenant.id,
       email: tenant.owner_email ?? auth.userEmail,

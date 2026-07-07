@@ -73,6 +73,14 @@ export type TradieAnalyticsInput = {
 export type TradieAnalyticsOptions = {
   now: Date
   weeks: number
+  /** Optional inclusive window as ISO instants [from, to] scoping the headline
+   *  / funnel / speed / splits / needs-attention aggregates. The client resolves
+   *  these on its own clock (lib/dashboard/period.ts) so scoping matches the
+   *  tradie's local calendar. Absent (both undefined) = all-time, the historical
+   *  behaviour. The weekly-trend chart deliberately ignores this and stays a
+   *  rolling `weeks`-long trend. */
+  from?: string
+  to?: string
 }
 
 // ─── Output shape ──────────────────────────────────────────────────────
@@ -146,15 +154,47 @@ function distinct<T>(values: (T | null | undefined)[]): number {
   return set.size
 }
 
+/** Inclusive absolute-instant window test on a created_at timestamp. Bounds are
+ *  epoch-ms, or null for an open side; no bounds = always true. Mirrors inPeriod
+ *  (lib/dashboard/period.ts) so the server scoping matches the client's KPI
+ *  scoping exactly — comparing instants, not date slices, so there is no
+ *  UTC-vs-local calendar-day skew at window edges. */
+function inInstantWindow(
+  createdAt: string | null,
+  fromMs: number | null,
+  toMs: number | null,
+): boolean {
+  if (fromMs == null && toMs == null) return true
+  if (!createdAt) return false
+  const t = Date.parse(createdAt)
+  if (Number.isNaN(t)) return false
+  if (fromMs != null && t < fromMs) return false
+  if (toMs != null && t > toMs) return false
+  return true
+}
+
 // ─── Core ──────────────────────────────────────────────────────────────
 
 export function buildTradieAnalytics(
   input: TradieAnalyticsInput,
   opts: TradieAnalyticsOptions,
 ): TradieAnalytics {
-  const { now, weeks } = opts
-  const { quotes, intakes, calls } = input
-  const customerChats = input.sms.filter(isCustomerChat)
+  const { now, weeks, from, to } = opts
+  // Window the aggregation inputs. All-time (no from/to) leaves every row in,
+  // so the historical output is byte-identical. The weekly-trend chart below
+  // deliberately reads the UNwindowed input arrays for its rolling context.
+  const fromMs =
+    from != null && !Number.isNaN(Date.parse(from)) ? Date.parse(from) : null
+  const toMs =
+    to != null && !Number.isNaN(Date.parse(to)) ? Date.parse(to) : null
+  const inWin = (c: string | null) => inInstantWindow(c, fromMs, toMs)
+  const quotes = input.quotes.filter((q) => inWin(q.created_at))
+  const intakes = input.intakes.filter((i) => inWin(i.created_at))
+  const calls = input.calls.filter((c) => inWin(c.created_at))
+  const customers = input.customers.filter((c) => inWin(c.created_at))
+  const customerChats = input.sms
+    .filter(isCustomerChat)
+    .filter((s) => inWin(s.created_at))
 
   // Headline volume counters ----------------------------------------------
   const peopleTexting = distinct(customerChats.map((s) => s.from_number))
@@ -163,7 +203,7 @@ export function buildTradieAnalytics(
   const uniqueCustomers =
     uniqueConsumersFromIntakes > 0
       ? uniqueConsumersFromIntakes
-      : input.customers.length
+      : customers.length
 
   const processedQuotes = quotes.filter(
     (q) => !q.needs_inspection && toNum(q.total_inc_gst) != null,
@@ -201,7 +241,11 @@ export function buildTradieAnalytics(
   const inspectionsToBook = quotes.filter((q) => q.needs_inspection === true).length
 
   // Speed to quote: median minutes from request to drafted quote ----------
-  const intakeCreatedById = new Map(intakes.map((i) => [i.id, i.created_at]))
+  // Map over ALL intakes (not just windowed) so a windowed quote can still
+  // pair with its request even if that request lands just outside the window.
+  const intakeCreatedById = new Map(
+    input.intakes.map((i) => [i.id, i.created_at]),
+  )
   const minutes: number[] = []
   for (const q of quotes) {
     if (!q.intake_id) continue
@@ -243,7 +287,13 @@ export function buildTradieAnalytics(
     speedToQuoteMinutes,
     funnel,
     // Reuse the shared, DST-safe weekly bucketing (tenants:[] → signups unused).
-    weeklyTrend: computeWeeklyTrends({ quotes, intakes, tenants: [] }, weeks, now),
+    // Always the full rolling `weeks` window — a period filter scopes the
+    // headline numbers, not this trend line's context.
+    weeklyTrend: computeWeeklyTrends(
+      { quotes: input.quotes, intakes: input.intakes, tenants: [] },
+      weeks,
+      now,
+    ),
     channelSplit: computeChannelSplit(intakes, customerChats),
     topJobTypes,
   }

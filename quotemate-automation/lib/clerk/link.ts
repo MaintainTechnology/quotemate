@@ -4,20 +4,28 @@
 // calls; this holds the rules so they're unit-testable (same pattern as
 // lib/billing/entitlements.ts).
 
-/** The subscription plan every linked tradie account is recorded under. */
+/**
+ * @deprecated Not a real plan tier. The link step must NOT invent a
+ * subscription plan — the authoritative plan (starter|pro|crew|null) is synced
+ * from Stripe by the webhook into both tenants.subscription_plan and Clerk
+ * publicMetadata.subscription (see lib/clerk/metadata.ts). Kept only so old
+ * references resolve; do not write it into any entitlement-consumed column.
+ */
 export const PROFESSIONAL_PLAN = 'professional'
 
 export type AccountPublicMetadata = {
-  plan: string
   is_admin: boolean
 }
 
 /**
- * The publicMetadata to stamp on a tradie/admin account's Clerk user: always
- * the professional plan; `is_admin` true only for a designated admin.
+ * The publicMetadata to stamp on a tradie/admin account's Clerk user at link
+ * time: identity/admin only. `is_admin` is true only for a designated admin.
+ * The subscription is NOT set here — it is owned by the Stripe webhook, which
+ * writes publicMetadata.subscription = { plan, status, interval } with the REAL
+ * tier. This avoids the old bug of stamping the invalid 'professional' plan.
  */
 export function accountPublicMetadata(opts: { isAdmin: boolean }): AccountPublicMetadata {
-  return { plan: PROFESSIONAL_PLAN, is_admin: opts.isAdmin }
+  return { is_admin: opts.isAdmin }
 }
 
 /**

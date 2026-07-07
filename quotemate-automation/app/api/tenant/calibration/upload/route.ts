@@ -1,10 +1,12 @@
 // POST /api/tenant/calibration/upload — A5 invoice upload entry point.
 //
-// Accepts a base64-encoded invoice image, runs Gemini vision extraction,
+// Accepts a base64-encoded invoice image OR PDF, runs Gemini extraction,
 // persists the upload + extraction to the DB, and returns the structured
 // extraction back to the caller so the dashboard can show it immediately.
 //
-// V1 scope (image only — PDF support is later):
+// Accepted types: image/jpeg | image/png | image/webp | image/heic |
+// application/pdf. Gemini reads PDFs natively (each page as an image), so a
+// single-page invoice PDF flows through the same path as a photo.
 //   1. POST body: { image_base64, mime_type }  (multipart later)
 //   2. Insert invoice_uploads row with status='extracting'
 //   3. Call extractInvoice(...)
@@ -12,9 +14,10 @@
 //      On failure: flip status='failed' + set error
 //   5. Return { ok: true|false, upload_id, extraction?, error? }
 //
-// Synchronous — extraction takes ~3-10s for an image, well within the
-// route timeout. If we add PDF support we'll fan extraction out to
-// after()/queue. Single-tenant scoped; no cross-tenant access.
+// Synchronous — extraction takes ~3-10s, well within the route timeout. The
+// client caps file size so the base64 JSON body stays under the platform
+// request-body limit (Vercel ~4.5 MB). Single-tenant scoped; no cross-tenant
+// access.
 
 import { after } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -35,7 +38,13 @@ const supabase = createClient(
 
 const BodySchema = z.object({
   image_base64: z.string().min(1),
-  mime_type: z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/heic']),
+  mime_type: z.enum([
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/heic',
+    'application/pdf',
+  ]),
 })
 
 async function tenantFromBearer(req: Request) {
@@ -159,6 +168,7 @@ export async function POST(req: Request) {
         'image/png': 'png',
         'image/webp': 'webp',
         'image/heic': 'heic',
+        'application/pdf': 'pdf',
       }
       const fileExt = ext2mime[mimeType] ?? mimeType.split('/')[1] ?? 'bin'
       const storedPath = await storeQuoteAsset(

@@ -35,6 +35,13 @@ type Props = {
   /** Price hold lapsed → suppress the Pay Deposit CTA (customer must reply
    *  for a refreshed quote). Defaults false. */
   priceExpired?: boolean
+  /** Whether these tiers are a CONFIRMED, deposit-payable price (e.g. a
+   *  commercial-painting tender). When true the per-tier CTA links to
+   *  /r/<token>/<tier>, which mints a fresh Stripe Session per click — no
+   *  pre-stored stripeLinks needed. When false (default) the price is
+   *  indicative (e.g. roofing on-site) and the deposit CTA is withheld in
+   *  favour of the $99 site-visit path shown above the cards. */
+  depositEnabled?: boolean
   /** Section heading. Defaults to a roofing-appropriate heading. */
   heading?: string
   /** Per-tier labels. Defaults to roofing framing. */
@@ -83,6 +90,7 @@ export function TradeTiers({
   isPaid,
   paidTier,
   priceExpired = false,
+  depositEnabled = false,
   heading,
   labels = ROOF_TIER_LABEL,
   blurbs = ROOF_TIER_BLURB,
@@ -102,7 +110,13 @@ export function TradeTiers({
           const exGst = asNumber(tier.subtotal_ex_gst) * (1 - appliedDiscountPct / 100)
           const priceInc = incGst(exGst)
           const dep = deposit(priceInc, depositPct)
-          const href = !priceExpired && stripeLinks[key] ? `/r/${token}/${key}` : null
+          // A confirmed, deposit-payable tier links straight to the short-link
+          // (which mints a fresh Session per click); an indicative tier has no
+          // deposit CTA. stripeLinks is retained only as a legacy fallback.
+          const href =
+            !priceExpired && (depositEnabled || stripeLinks[key])
+              ? `/r/${token}/${key}`
+              : null
           const recommended = selectedTier === key
           const paid = isPaid && paidTier === key
           const dimmed = isPaid && paidTier !== key

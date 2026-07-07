@@ -284,6 +284,59 @@ export async function createCheckoutSessionForTier(opts: {
 }
 
 /**
+ * Roofing site-visit path: a single $99 refundable site-visit Checkout
+ * Session for the DEDICATED roofing surface (/q/roof/[token]), which is
+ * backed by roofing_measurements — NOT the quotes table — and previously had
+ * no on-page payment at all. Keyed by metadata.roofing_token (not quote_id)
+ * so the webhook records it on roofing_measurements.paid_at, mirroring the
+ * painting_token branch. Success returns to the roofing quote page.
+ */
+export async function createRoofingSiteVisitSession(opts: {
+  token: string
+  address: string | null
+  customerEmail?: string | null
+  appUrl: string
+  /** Tenant's live connected account — routes the charge via Connect with
+   *  the 2% platform fee. Omitted/null → platform-direct (legacy). */
+  connect?: ConnectDestination | null
+}): Promise<string | null> {
+  const stripe = getStripe()
+  const session = await stripe.checkout.sessions.create({
+    mode: 'payment',
+    line_items: [
+      {
+        price_data: {
+          currency: 'aud',
+          product_data: {
+            name: `QuoteMax — roof site visit${opts.address ? ` · ${opts.address}` : ''}`,
+            description: 'Refundable site-visit deposit. Credited toward your final roofing quote when you proceed.',
+          },
+          unit_amount: INSPECTION_FEE_AUD_CENTS,
+        },
+        quantity: 1,
+      },
+    ],
+    customer_email: opts.customerEmail || undefined,
+    success_url: `${opts.appUrl}/q/roof/${opts.token}?paid=1&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${opts.appUrl}/q/roof/${opts.token}`,
+    metadata: {
+      roofing_token: opts.token,
+      tier: 'inspection',
+      fee_aud_cents: String(INSPECTION_FEE_AUD_CENTS),
+      ...(opts.connect ? connectSessionMetadata(INSPECTION_FEE_AUD_CENTS, opts.connect) : {}),
+    },
+    payment_intent_data: {
+      metadata: {
+        roofing_token: opts.token,
+        tier: 'inspection',
+      },
+      ...(opts.connect ? connectPaymentIntentExtras(INSPECTION_FEE_AUD_CENTS, opts.connect) : {}),
+    },
+  })
+  return session.url ?? null
+}
+
+/**
  * Inspection-required path: create a single Stripe Checkout Session for
  * the $99 refundable site-visit deposit. Sets metadata.tier='inspection'
  * so the webhook can record it on the quote correctly.

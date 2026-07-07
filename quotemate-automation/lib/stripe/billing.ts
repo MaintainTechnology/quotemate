@@ -83,8 +83,21 @@ export async function getOrCreateCustomer(opts: {
   existingCustomerId: string | null
   persist: (customerId: string) => Promise<void>
 }): Promise<string> {
-  if (opts.existingCustomerId) return opts.existingCustomerId
   const stripe = getStripe()
+  // Reuse the persisted customer only if it still exists in Stripe. A stale id
+  // (customer deleted, or a different Stripe account/dataset — routine in test
+  // mode) would otherwise make every checkout throw "No such customer" forever.
+  // Verify-then-reuse, else self-heal by creating a fresh one and persisting it.
+  if (opts.existingCustomerId) {
+    try {
+      const existing = await stripe.customers.retrieve(opts.existingCustomerId)
+      if (existing && !(existing as { deleted?: boolean }).deleted) {
+        return opts.existingCustomerId
+      }
+    } catch {
+      /* resource_missing / invalid id — fall through and create a fresh one */
+    }
+  }
   const customer = await stripe.customers.create({
     email: opts.email ?? undefined,
     name: opts.name ?? undefined,
@@ -128,6 +141,40 @@ export async function createSubscriptionCheckout(opts: {
   })
   if (!session.url) throw new Error('Stripe did not return a Checkout URL')
   return session.url
+}
+
+/**
+ * Change an EXISTING subscription to a new plan/interval IN PLACE, prorated —
+ * never a second subscription. Swaps the single line item to the new
+ * `qm_<plan>_<interval>` price with `proration_behavior:'create_prorations'`,
+ * so Stripe credits unused time and charges only the difference (a mid-annual
+ * switch is a prorated adjustment, not a fresh full-year charge). Mirrors the
+ * admin route (app/api/admin/customers/[id]/subscription/route.ts). The
+ * tenants.* mirror is reconciled by the customer.subscription.updated webhook.
+ */
+export async function updateSubscriptionToPlan(opts: {
+  tenantId: string
+  subscriptionId: string
+  plan: PlanId
+  interval: BillingInterval
+}): Promise<void> {
+  const stripe = getStripe()
+  const price = await resolvePriceId(opts.plan, opts.interval)
+  const sub = await stripe.subscriptions.retrieve(opts.subscriptionId)
+  const itemId = sub.items?.data?.[0]?.id
+  if (!itemId) throw new Error('subscription has no line item to update')
+  await stripe.subscriptions.update(opts.subscriptionId, {
+    items: [{ id: itemId, price }],
+    proration_behavior: 'create_prorations',
+    metadata: { tenant_id: opts.tenantId, plan: opts.plan, interval: opts.interval },
+  })
+}
+
+/** Statuses in which a subscription is live and can be updated in place
+ *  (rather than starting a new one). Matches entitlements' ACTIVE set. */
+const UPDATABLE_STATUSES = new Set(['trialing', 'active', 'past_due'])
+export function isUpdatableStatus(status: string | null | undefined): boolean {
+  return !!status && UPDATABLE_STATUSES.has(status)
 }
 
 /** Create a Customer Portal session for self-service management. */

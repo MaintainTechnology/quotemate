@@ -25,6 +25,6 @@ create unique index if not exists idx_tenants_clerk_user_id
   where clerk_user_id is not null;
 
 comment on column public.tenants.clerk_user_id is
-  'Clerk user id (user_...) linked to this tenant''s owner. Set by scripts/link-accounts-clerk.ts; the Clerk user holds plan + is_admin in publicMetadata.';
+  'Clerk user id (user_...) linked to this tenant''s owner. Set by scripts/link-accounts-clerk.ts. The Clerk user holds is_admin + a subscription mirror (publicMetadata.subscription = {plan,status,interval}) synced by the Stripe webhook. SOURCE OF TRUTH for billing is Stripe → tenants.subscription_* (Supabase); Clerk metadata is the app-facing mirror, not an independent authority.';
 
 notify pgrst, 'reload schema';

@@ -9,7 +9,8 @@
 import { after } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getStripe } from '@/lib/stripe/client'
-import { subscriptionToTenantPatch } from '@/lib/stripe/billing'
+import { subscriptionToTenantPatch, isUpdatableStatus } from '@/lib/stripe/billing'
+import { syncSubscriptionToClerk } from '@/lib/clerk/metadata'
 import { pipelineLog } from '@/lib/log/pipeline'
 import { bookingStateOnPaid, shouldFinaliseBookingOnPaid } from '@/lib/quote/booking'
 import { notifyBookingConfirmed } from '@/lib/quote/booking-notify'
@@ -68,6 +69,50 @@ async function recordPaintingDeposit(
   log.ok('painting deposit recorded', { painting_token: token, tier, session: session.id })
 }
 
+/**
+ * Record a roofing $99 site-visit deposit on roofing_measurements (mig 165).
+ * Roofing site-visit sessions carry metadata.roofing_token (not quote_id) —
+ * the dedicated /q/roof surface has no quotes row — so they're handled here,
+ * mirroring recordPaintingDeposit. Idempotent on paid_stripe_session_id;
+ * never throws.
+ */
+async function recordRoofingSiteVisit(
+  token: string,
+  session: Stripe.Checkout.Session,
+  log: ReturnType<typeof pipelineLog>,
+): Promise<void> {
+  const { data: existing } = await supabase
+    .from('roofing_measurements')
+    .select('public_token, paid_at, paid_stripe_session_id')
+    .eq('public_token', token)
+    .maybeSingle()
+  if (!existing) {
+    log.err('roofing job not found for site-visit deposit', null, { roofing_token: token })
+    return
+  }
+  if (existing.paid_stripe_session_id === session.id) {
+    log.ok('duplicate roofing site-visit event, skipping', { roofing_token: token, session: session.id })
+    return
+  }
+  if (existing.paid_at) {
+    log.ok('roofing job already paid (different session), skipping', { roofing_token: token })
+    return
+  }
+  const { error } = await supabase
+    .from('roofing_measurements')
+    .update({
+      paid_at: new Date().toISOString(),
+      paid_tier: 'inspection',
+      paid_stripe_session_id: session.id,
+    })
+    .eq('public_token', token)
+  if (error) {
+    log.err('roofing site-visit update failed', error.message, { roofing_token: token })
+    return
+  }
+  log.ok('roofing site-visit recorded', { roofing_token: token, session: session.id })
+}
+
 export async function POST(req: Request) {
   const log = pipelineLog('dispatch')
   log.step('stripe webhook received')
@@ -99,7 +144,7 @@ export async function POST(req: Request) {
     event.type === 'customer.subscription.updated' ||
     event.type === 'customer.subscription.deleted'
   ) {
-    await syncSubscriptionToTenant(event.data.object as Stripe.Subscription, log)
+    await syncSubscriptionToTenant(event.data.object as Stripe.Subscription, event.type, log)
     return Response.json({ received: true })
   }
 
@@ -124,6 +169,16 @@ export async function POST(req: Request) {
   const paintingToken = session.metadata?.painting_token
   if (paintingToken) {
     await recordPaintingDeposit(paintingToken, session, log)
+    return Response.json({ received: true })
+  }
+
+  // Roofing $99 site-visit (dedicated /q/roof surface) → roofing_measurements,
+  // NOT the quotes table. Keyed by metadata.roofing_token (mig 165); handled
+  // BEFORE the quotes path so a roofing session (no quote_id) never logs a
+  // spurious "missing quote_id" error.
+  const roofingToken = session.metadata?.roofing_token
+  if (roofingToken) {
+    await recordRoofingSiteVisit(roofingToken, session, log)
     return Response.json({ received: true })
   }
 
@@ -338,7 +393,7 @@ async function applyTenantSubscription(
     return
   }
 
-  const { data: updatedRows, error } = await q.select('id')
+  const { data: updatedRows, error } = await q.select('id, clerk_user_id')
   if (error) {
     log.err('subscription sync update failed', error.message, {
       tenant_id: opts.tenantId,
@@ -351,6 +406,19 @@ async function applyTenantSubscription(
     status: patch.subscription_status,
     plan: patch.subscription_plan,
   })
+
+  // Mirror the REAL subscription onto Clerk publicMetadata — the authoritative,
+  // app-facing copy of the plan (Clerk is primary login; this keeps its
+  // metadata in lockstep with Stripe). Best-effort: never fails the webhook.
+  const clerkUserId = (updatedRows?.[0]?.clerk_user_id as string | undefined) ?? null
+  if (clerkUserId) {
+    const synced = await syncSubscriptionToClerk(clerkUserId, {
+      plan: (patch.subscription_plan as string | null) ?? null,
+      status: (patch.subscription_status as string | null) ?? null,
+      interval: (patch.subscription_interval as string | null) ?? null,
+    })
+    if (synced) log.ok('subscription mirrored to Clerk metadata', { clerk_user_id: clerkUserId })
+  }
 
   // Apply the plan→features map to trades[] when the plan changes (feature
   // toggles, migration 138). Best-effort + idempotent: adds the plan's granted
@@ -377,10 +445,72 @@ async function applyTenantSubscription(
   }
 }
 
-async function syncSubscriptionToTenant(sub: Stripe.Subscription, log: Log) {
+/** Load the tenant's currently-tracked subscription for the sibling guard.
+ *  Matches the same way applyTenantSubscription does (tenant_id else customer). */
+async function loadTenantSubscription(opts: {
+  tenantId: string | null
+  customerId: string | null
+}): Promise<
+  { id: string; stripe_subscription_id: string | null; subscription_status: string | null } | null
+> {
+  const base = supabase.from('tenants').select('id, stripe_subscription_id, subscription_status')
+  const q = opts.tenantId
+    ? base.eq('id', opts.tenantId)
+    : opts.customerId
+      ? base.eq('stripe_customer_id', opts.customerId)
+      : null
+  if (!q) return null
+  const { data } = await q.maybeSingle()
+  return (data as {
+    id: string
+    stripe_subscription_id: string | null
+    subscription_status: string | null
+  } | null) ?? null
+}
+
+async function syncSubscriptionToTenant(
+  subPayload: Stripe.Subscription,
+  eventType: string,
+  log: Log,
+) {
+  const isDeleted = eventType === 'customer.subscription.deleted'
+
+  // Out-of-order / retried webhooks can carry a STALE payload — e.g. a
+  // re-delivered `updated` with status:'active' arriving AFTER the sub was
+  // cancelled. Re-fetch the authoritative state for created/updated so a stale
+  // event can't resurrect a dead subscription. `deleted` is terminal — trust it.
+  let sub = subPayload
+  if (!isDeleted) {
+    try {
+      sub = await getStripe().subscriptions.retrieve(subPayload.id)
+    } catch (e) {
+      log.err('subscription re-fetch failed; using event payload', e instanceof Error ? e.message : String(e), {
+        sub: subPayload.id,
+      })
+    }
+  }
+
   const tenantId = (sub.metadata?.tenant_id as string | undefined) ?? null
   const customerId =
     typeof sub.customer === 'string' ? sub.customer : (sub.customer?.id ?? null)
+
+  // Sibling guard: a tenant tracks exactly ONE subscription. If it already
+  // tracks a DIFFERENT, still-live sub, don't let a sibling sub's event clobber
+  // the active plan (last-write-wins would otherwise flap plan/features).
+  const current = await loadTenantSubscription({ tenantId, customerId })
+  if (
+    current?.stripe_subscription_id &&
+    current.stripe_subscription_id !== sub.id &&
+    isUpdatableStatus(current.subscription_status)
+  ) {
+    log.ok('ignoring sibling subscription event — tenant tracks a different live sub', {
+      tenant_id: current.id,
+      event_sub: sub.id,
+      tracked_sub: current.stripe_subscription_id,
+    })
+    return
+  }
+
   await applyTenantSubscription(
     { tenantId, customerId, patch: subscriptionToTenantPatch(sub) },
     log,

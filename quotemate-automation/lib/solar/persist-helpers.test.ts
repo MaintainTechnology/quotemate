@@ -151,6 +151,19 @@ describe('buildSolarRowPayloads', () => {
     // an id; the helper must NOT invent one.
     expect('intake_id' in out.quote).toBe(false)
   })
+
+  it('populates good/better/best so the deposit short-link mints a Session', () => {
+    // Regression fix: solar left these NULL, so /r/<token>/<tier> returned
+    // "No payment link for this tier" (404) even on a clean estimate.
+    // subtotal_ex_gst must be net_inc_gst / 1.10 so the generic checkout's
+    // ×1.10 reproduces the exact net-inc-GST price the /q/solar page showed.
+    expect(out.quote.better).toEqual({ label: '6.6 kW solar', subtotal_ex_gst: 7290 })
+    // 7290 × 1.10 = 8019 = the displayed net_inc_gst → deposit matches the page.
+    expect(Math.round(out.quote.better!.subtotal_ex_gst * 1.1)).toBe(8019)
+    // Tiers absent from the estimate stay null (checkout skips them).
+    expect(out.quote.good).toBeNull()
+    expect(out.quote.best).toBeNull()
+  })
 })
 
 describe('buildSolarRowPayloads — inspection_required branch', () => {
@@ -280,6 +293,12 @@ describe('buildSolarRowPayloads — tier fallback (no better tier → first tier
     expect(out.quote.selected_tier).toBe('good')
     expect(out.quote.subtotal_ex_gst).toBe(4860)
     expect(out.quote.total_inc_gst).toBe(5346)
+  })
+
+  it('populates the good deposit tier (and leaves better/best null)', () => {
+    expect(out.quote.good).toEqual({ label: '4.4 kW solar', subtotal_ex_gst: 4860 })
+    expect(out.quote.better).toBeNull()
+    expect(out.quote.best).toBeNull()
   })
 })
 

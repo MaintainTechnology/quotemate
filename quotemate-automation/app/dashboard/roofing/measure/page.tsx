@@ -12,7 +12,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 import { FeatureGate } from '@/app/dashboard/_components/FeatureGate'
 import type {
@@ -522,24 +522,15 @@ function RoofingMeasurePageInner() {
         {errMsg && <Notice tone="warn" label="Measurement could not complete">{errMsg}</Notice>}
       </section>
 
-      {/* ── Measuring / saving — one loading state until the measurement is
-            persisted, then we navigate to its own page (/m/[measure_token]).
-            The measurement is no longer rendered inline below the form. ── */}
-      {(busy || (resp?.ok === true && saveState !== 'error')) && (
-        <section className="relative z-10 mx-auto mt-10 max-w-6xl px-6 sm:px-10">
-          <div className="rounded-card border border-ink-line border-l-4 border-l-accent bg-ink-card p-7 sm:p-9">
-            <div className="flex items-center gap-3 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
-              <Spinner />
-              {busy ? 'Measuring all structures…' : 'Saving measurement & opening its page…'}
-            </div>
-            <p className="mt-3 text-base text-text-sec">
-              We&rsquo;re measuring every structure at this property and saving the
-              result as its own measurement. You&rsquo;ll be taken to the measurement
-              page to review each structure and choose which to include in the quote.
-            </p>
-          </div>
-        </section>
-      )}
+      {/* ── Measuring / saving — a blocking full-screen popup until the
+            measurement is persisted, then we navigate to its own page
+            (/m/[measure_token]). The status was previously an inline card
+            below the form; it now floats over the whole screen so the tradie
+            can't miss it. The measurement itself is never rendered inline. ── */}
+      <MeasureProgressModal
+        open={busy || (resp?.ok === true && saveState !== 'error')}
+        busy={busy}
+      />
 
       {/* ── Results (fallback) — shown only if persistence failed, so the
             tradie still sees the measured structures and can retry Save. ── */}
@@ -1088,6 +1079,83 @@ function Notice({ tone, label, children }: { tone: 'warn' | 'accent'; label: str
     <div className={`rounded-card mt-6 border border-ink-line ${border} border-l-4 bg-ink-card px-5 py-4`}>
       <div className={`font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] ${labelColour}`}>{label}</div>
       <p className="mt-1 text-base text-text-sec">{children}</p>
+    </div>
+  )
+}
+
+/** Full-screen, blocking progress popup shown while a property is being
+ *  measured and the resulting measurement is saved. Non-dismissible by design —
+ *  it clears itself when navigation to /m/[measure_token] happens (success) or
+ *  when a save error drops back to the inline fallback result below the form.
+ *  Replaces the old inline card that used to sit under the form. */
+function MeasureProgressModal({ open, busy }: { open: boolean; busy: boolean }) {
+  const dialogRef = useRef<HTMLDivElement>(null)
+
+  // While open: lock background scroll (restored on close/unmount) and move
+  // focus into the dialog so a screen reader announces its name + description
+  // and keyboard focus isn't left stranded on the now-disabled background
+  // submit button.
+  useEffect(() => {
+    if (!open) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    dialogRef.current?.focus()
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [open])
+
+  if (!open) return null
+
+  return (
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-busy="true"
+      aria-labelledby="measure-progress-title"
+      aria-describedby="measure-progress-desc"
+      tabIndex={-1}
+      // Non-dismissible, self-clearing dialog with no interactive controls of
+      // its own — swallow Tab so focus can't wander to the form / footer that
+      // are hidden behind the overlay.
+      onKeyDown={(e) => {
+        if (e.key === 'Tab') e.preventDefault()
+      }}
+      className="qm-measure-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6 outline-none backdrop-blur-sm"
+    >
+      <div className="qm-measure-card rounded-card w-full max-w-lg border border-ink-line border-l-4 border-l-accent bg-ink-card p-7 sm:p-9">
+        <div
+          id="measure-progress-title"
+          role="status"
+          aria-live="polite"
+          className="flex items-center gap-3 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent"
+        >
+          {/* Accent (not white) spinner so it stays visible on the white
+              ink-card in light mode as well as the dark card in dark mode.
+              Square, to match the Command Centre spinners elsewhere; the spin
+              is dropped under prefers-reduced-motion. */}
+          <span className="inline-block h-3.5 w-3.5 animate-spin border-2 border-accent/30 border-t-accent motion-reduce:animate-none" aria-hidden="true" />
+          {busy ? 'Measuring all structures…' : 'Saving measurement & opening its page…'}
+        </div>
+        <p id="measure-progress-desc" className="mt-3 text-base text-text-sec">
+          We&rsquo;re measuring every structure at this property and saving the
+          result as its own measurement. You&rsquo;ll be taken to the measurement
+          page to review each structure and choose which to include in the quote.
+        </p>
+      </div>
+      <style>{`
+        @keyframes qmMeasureOverlayIn { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes qmMeasureCardIn {
+          from { opacity: 0; transform: translateY(8px) scale(0.985) }
+          to { opacity: 1; transform: translateY(0) scale(1) }
+        }
+        .qm-measure-overlay { animation: qmMeasureOverlayIn 160ms ease-out }
+        .qm-measure-card { animation: qmMeasureCardIn 220ms cubic-bezier(0.16, 1, 0.3, 1) }
+        @media (prefers-reduced-motion: reduce) {
+          .qm-measure-overlay, .qm-measure-card { animation: none }
+        }
+      `}</style>
     </div>
   )
 }

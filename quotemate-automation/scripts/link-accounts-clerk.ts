@@ -3,8 +3,10 @@
 //
 // For every tradie/admin account (a tenant owner):
 //   1. ensure a Clerk user exists for the owner's email (create if missing),
-//   2. stamp Clerk publicMetadata { plan: 'professional', is_admin },
-//   3. write tenants.clerk_user_id + tenants.subscription_plan = 'professional'.
+//   2. stamp Clerk publicMetadata { is_admin } (identity/admin only — the
+//      subscription plan is owned by Stripe, synced by the webhook into
+//      publicMetadata.subscription; NEVER invent a plan here),
+//   3. write tenants.clerk_user_id (leave subscription_plan to the webhook).
 // Then normalise is_admin across ALL Clerk users so it is FALSE for every
 // account except the admin_users allow-list (the DB source of truth).
 //
@@ -17,7 +19,6 @@
 import pg from 'pg'
 import { createClerkClient } from '@clerk/backend'
 import {
-  PROFESSIONAL_PLAN,
   accountPublicMetadata,
   adminEmailSet,
   deriveUsername,
@@ -122,21 +123,21 @@ async function main() {
       if (apply) {
         await db.query(
           `update public.tenants
-              set clerk_user_id = $1, subscription_plan = $2
-            where id = $3`,
-          [user.id, PROFESSIONAL_PLAN, t.id],
+              set clerk_user_id = $1
+            where id = $2`,
+          [user.id, t.id],
         )
       }
       linked++
       console.log(
-        `${apply ? 'LINK ' : 'PLAN '} ${label.padEnd(22)} email=${email.padEnd(42)} ` +
-          `clerk=${user.id} plan=${PROFESSIONAL_PLAN} is_admin=${isAdmin}` +
+        `${apply ? 'LINK ' : 'LINK?'} ${label.padEnd(22)} email=${email.padEnd(42)} ` +
+          `clerk=${user.id} is_admin=${isAdmin}` +
           `${didCreate ? ' (created)' : ''}`,
       )
     } else {
       console.log(
         `WOULD ${label.padEnd(22)} email=${email.padEnd(42)} ` +
-          `plan=${PROFESSIONAL_PLAN} is_admin=${isAdmin} (create Clerk user + link)`,
+          `is_admin=${isAdmin} (create Clerk user + link)`,
       )
     }
   }

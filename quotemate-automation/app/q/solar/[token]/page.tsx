@@ -72,6 +72,8 @@ import {
 } from '@/lib/solar/felt-provision'
 import type { SolarAiBriefRecord } from '@/lib/solar/ai-brief'
 import { QuoteChrome, type StickyBar } from '../../_chrome/QuoteChrome'
+import { AcceptBlock } from '../../_chrome/AcceptBlock'
+import { resolveAcceptView } from '@/lib/quote/accept'
 import { tradeIcon } from '../../_chrome/icons'
 import {
   QuoteSheet,
@@ -316,6 +318,43 @@ export default async function SolarQuotePage({
       ctaHref: null,
     }
   }
+
+  // ── Explicit "Accept & confirm" block (Gap #1/#3). A confirmed clean
+  // estimate accepts + proceeds to the deposit (the /r/<token>/<tier> mint now
+  // works — solar quotes carry good/better/best, migration-era fix); a
+  // genuinely held estimate (inspection-routed OR flagged, which never
+  // auto-confirms) accepts + books the refundable $99 site visit. A clean
+  // estimate still mid-auto-confirm shows the pre-confirm notice + auto-refresh
+  // instead, so we don't flash a premature $99 CTA that becomes a deposit a
+  // second later.
+  // Solar payment records on the twin QUOTES row (share_token == this token)
+  // via the generic /r deposit → Stripe webhook; solar_estimates itself has no
+  // paid_at column. Best-effort so a solar estimate without a twin quotes row
+  // (or a pre-fix legacy row) simply reads not-paid rather than throwing.
+  let solarPaidAt: string | null = null
+  {
+    const { data: q } = await supabase
+      .from('quotes')
+      .select('paid_at')
+      .eq('share_token', token)
+      .maybeSingle()
+    solarPaidAt = (q?.paid_at as string | null) ?? null
+  }
+  const solarPaid = !!solarPaidAt
+
+  const solarDeposit = featuredCard ? Math.round(featuredCard.netIncGst * 0.3) : 0
+  const solarAcceptView = resolveAcceptView({
+    token,
+    tier: (solarHeadlineTierKey ?? featuredCard?.tier ?? 'better') as 'good' | 'better' | 'best',
+    isPaid: solarPaid,
+    pricesVisible: view.showPrices,
+    priceExpired: false,
+    priceLabel: view.showPrices && featuredCard ? `$${money(featuredCard.netIncGst)} inc GST` : null,
+    depositLabel: view.showPrices && featuredCard ? `30% deposit ($${money(solarDeposit)})` : null,
+    siteVisitFee: '$99',
+  })
+  const showSolarAccept =
+    solarPaid || view.showPrices || view.inspectionRequired || !eligibleForAutoConfirm
 
   return (
     <QuoteChrome trade={{ label: 'Solar', icon: tradeIcon('solar') }} sticky={sticky}>
@@ -789,6 +828,10 @@ export default async function SolarQuotePage({
             })}
           />
         )}
+
+        {/* ── Explicit "Accept & confirm" (Gap #1/#3): deposit for a confirmed
+            estimate, refundable $99 site visit for a held/flagged one. ── */}
+        {showSolarAccept ? <AcceptBlock token={token} view={solarAcceptView} /> : null}
 
         {/* Always-visible assumptions panel — value, source, meaning, direction. */}
         <SheetSection eyebrow="Assumptions — shown, not hidden" eyebrowAccent>

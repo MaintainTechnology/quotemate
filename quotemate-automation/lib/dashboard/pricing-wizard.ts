@@ -181,6 +181,34 @@ const CATEGORY_LABELS: Record<string, string> = {
   rainwater_tank:    'Rainwater tanks',
   water_filter:      'Water filters',
   leak_detection:    'Leak detection',
+  // ── Live catalogue slugs (shared_materials.category) ──────────────
+  // The wizard's Step 3 is driven off the ACTUAL catalogue categories the
+  // estimator grounds against (see buildPreferencesBlock in
+  // lib/estimate/run.ts), so these MUST carry a friendly label too or a
+  // real category renders as its raw slug. Electrical catalogue:
+  ceiling_fan:       'Ceiling fans',
+  safety_switch:     'Safety switches (RCBOs)',
+  sundries:          'Sundries / consumables',
+  // Plumbing catalogue:
+  hws_electric:      'Electric hot water',
+  hws_gas:           'Gas hot water',
+  hws_heat_pump:     'Heat-pump hot water',
+  tapware_basin:     'Basin / bath tapware',
+  tapware_kitchen:   'Kitchen tapware',
+  tapware_laundry:   'Laundry tapware',
+  tapware_outdoor:   'Outdoor / garden taps',
+  toilet_repair:     'Toilet repairs (cistern)',
+}
+
+/** Human label for a catalogue category slug. Uses the curated
+ *  CATEGORY_LABELS map when present, else a title-cased humanisation of the
+ *  slug so a brand-new catalogue category never renders as a raw
+ *  `snake_case` token in the wizard. */
+export function labelForCategory(slug: string): string {
+  const mapped = CATEGORY_LABELS[slug]
+  if (mapped) return mapped
+  const s = slug.replace(/[_-]+/g, ' ').trim()
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : slug
 }
 
 export function categoriesForTrades(trades: ReadonlyArray<string>): WizardCategory[] {

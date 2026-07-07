@@ -154,9 +154,15 @@ function CheckoutButton({
         setError("Couldn't start checkout. Please try again in a moment.")
         return
       }
-      const json = (await res.json()) as { url?: string }
+      const json = (await res.json()) as { url?: string; updated?: boolean }
       if (json.url) {
         window.location.assign(json.url)
+        return
+      }
+      // Existing subscriber → plan changed in place (prorated), no Checkout.
+      // Send them to the dashboard billing tab to see the updated state.
+      if (json.updated) {
+        window.location.assign("/dashboard?tab=billing&switched=1")
         return
       }
       // Authed but no tenant yet → finish onboarding first.

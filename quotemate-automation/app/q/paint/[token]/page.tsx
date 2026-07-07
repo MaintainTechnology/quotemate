@@ -17,6 +17,8 @@ import { asQuoteTierMode, resolveVisibleTiers, type QuoteTierMode } from '@/lib/
 import { canShowPaintingPrices } from '@/lib/painting/publish-gate'
 import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
 import { QuoteChrome, type StickyBar } from '../../_chrome/QuoteChrome'
+import { AcceptBlock } from '../../_chrome/AcceptBlock'
+import { resolveAcceptView } from '@/lib/quote/accept'
 import { tradeIcon } from '../../_chrome/icons'
 import {
   QuoteSheet, Letterhead, QuoteHero, StatGrid, Scope,
@@ -280,6 +282,22 @@ export default async function PaintingQuotePage(props: { params: Promise<{ token
   const heroLine1 = addrSegs.length >= 2 ? `${addrSegs.slice(0, -1).join(', ')},` : cleanAddr
   const heroLine2 = addrSegs.length >= 2 ? addrSegs[addrSegs.length - 1] : undefined
 
+  // Explicit "Accept & confirm" block (Gap #1/#3). Residential painting already
+  // has a working per-tier deposit via /r/paint/<token>/<tier> (mints fresh),
+  // so the accept block confirms the featured tier and routes there. Rendered
+  // only in the priced/released (deposit) state or once paid — a held/on-site
+  // paint quote keeps its existing note (no $99 checkout exists for painting).
+  const paintAcceptView = resolveAcceptView({
+    token,
+    tier: (featured?.tier ?? 'better') as 'good' | 'better' | 'best',
+    isPaid: paid,
+    pricesVisible: showTiers,
+    priceExpired: false,
+    priceLabel: featured ? `${aud(featured.inc_gst)} inc GST` : null,
+    depositHref: featured ? `/r/paint/${token}/${featured.tier}` : undefined,
+  })
+  const showPaintAccept = (showTiers && !!featured) || paid
+
   const heroStatus: { label: string; tone: 'await' | 'booked' } = paid
     ? { label: 'Deposit paid', tone: 'booked' }
     : inspection
@@ -345,6 +363,10 @@ export default async function PaintingQuotePage(props: { params: Promise<{ token
             tiers={quoteTiers}
           />
         ) : null}
+
+        {/* ── Explicit "Accept & confirm" — deposit on a released/priced quote,
+            confirmation once paid. ── */}
+        {showPaintAccept ? <AcceptBlock token={token} view={paintAcceptView} /> : null}
 
         <CredentialFooter rows={footerRows} />
       </QuoteSheet>

@@ -21,8 +21,8 @@ import { BrandMark } from '@/app/_components/BrandMark'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 import {
   buildPatchPayload,
-  categoriesForTrades,
   commonBrandsForTrades,
+  labelForCategory,
   STEP_LABELS,
   type BrandPreferences,
   type RateCard,
@@ -43,6 +43,11 @@ type AssemblySummary = {
   trade: string
   category: string | null
   enabled: boolean
+  // Custom assemblies (tenant_custom_assemblies) carry their OWN id, which is
+  // NOT a shared_assemblies id. They must be saved via `custom_services`, not
+  // `services` — the latter hits tenant_service_offerings' FK to
+  // shared_assemblies and 500s. Tracked here so handleFinish can route them.
+  isCustom: boolean
 }
 
 type Tenant = {
@@ -62,6 +67,11 @@ type LoadedState = {
     after_hours_multiplier?: number | null
   }
   brands: Record<string, string | null>
+  // The tenant's ACTUAL material categories (shared_materials.category), per
+  // trade — the ones the estimator grounds brand hints against. Step 3 is
+  // driven off these so a saved preference slug always matches the catalogue
+  // instead of a hand-maintained list that silently drifts out of sync.
+  materialCategories: Array<{ trade: string; category: string }>
 }
 
 export default function PricingWizardPage() {
@@ -177,6 +187,10 @@ export default function PricingWizardPage() {
             trade: String(s.trade ?? ''),
             category: s.category ?? null,
             enabled: !!s.enabled,
+            // /api/tenant/me stamps is_custom on every service row (shared →
+            // false, tenant_custom_assemblies → true). Preserve it so the save
+            // can route custom toggles to the right table.
+            isCustom: !!s.is_custom,
           }))
           .filter((a) => a.id.length > 0)
 
@@ -199,7 +213,22 @@ export default function PricingWizardPage() {
           }
         }
 
-        setLoaded({ tenant, assemblies, pricing, brands: brandsMap })
+        // Real catalogue categories the tenant can actually set a preferred
+        // brand for. /api/tenant/me returns `material_categories` as
+        // [{ trade, category, brands }] derived from shared_materials — the
+        // same list the estimator's grounding join uses. Driving Step 3 off
+        // this guarantees every saved slug matches the catalogue.
+        const materialCategories = (Array.isArray(data.material_categories)
+          ? (data.material_categories as Array<{ trade?: string; category?: string }>)
+          : []
+        )
+          .map((mc) => ({
+            trade: String(mc.trade ?? ''),
+            category: String(mc.category ?? ''),
+          }))
+          .filter((mc) => mc.category.length > 0)
+
+        setLoaded({ tenant, assemblies, pricing, brands: brandsMap, materialCategories })
 
         // Pre-fill the rate-card inputs with whatever is already on the
         // tradie's book.
@@ -230,7 +259,22 @@ export default function PricingWizardPage() {
         ? [loaded.tenant.trade]
         : []) as string[]
 
-  const categories: WizardCategory[] = categoriesForTrades(tradeList)
+  // Step-3 categories come from the tenant's REAL catalogue (loaded above),
+  // scoped to the trade(s) in play and de-duplicated by slug (a slug like
+  // `sundries` exists in more than one trade). This replaces the old
+  // hand-maintained per-trade list, whose slugs had drifted out of sync with
+  // shared_materials.category — so most saved brand picks were silently
+  // dropped by the estimator's grounding join.
+  const tradeSet = new Set(tradeList.map((t) => t.toLowerCase()))
+  const seenCategory = new Set<string>()
+  const categories: WizardCategory[] = (loaded?.materialCategories ?? [])
+    .filter((mc) => tradeSet.has(mc.trade.toLowerCase()))
+    .filter((mc) => {
+      if (seenCategory.has(mc.category)) return false
+      seenCategory.add(mc.category)
+      return true
+    })
+    .map((mc) => ({ slug: mc.category, label: labelForCategory(mc.category) }))
   const quickFillBrands: string[] = commonBrandsForTrades(tradeList)
 
   // Step-2 list — scoped to one trade when ?trade= is set.
@@ -301,6 +345,30 @@ export default function PricingWizardPage() {
         setError('Nothing to save — fill in at least the rate card.')
         return
       }
+
+      // Split the flat service-toggle map into shared vs custom. Custom
+      // assemblies (tenant_custom_assemblies) MUST go under `custom_services`
+      // — sending their ids under `services` makes /api/tenant/me upsert them
+      // into tenant_service_offerings, whose assembly_id FK-references
+      // shared_assemblies, so the whole PATCH 500s. This is the fix for the
+      // "Save failed (500)" any tradie with a custom service hit on finish.
+      if (body.services) {
+        const customIds = new Set(
+          (loaded?.assemblies ?? []).filter((a) => a.isCustom).map((a) => a.id),
+        )
+        const sharedToggles: Record<string, boolean> = {}
+        const customToggles: Record<string, boolean> = {}
+        for (const [id, enabled] of Object.entries(
+          body.services as Record<string, boolean>,
+        )) {
+          if (customIds.has(id)) customToggles[id] = enabled
+          else sharedToggles[id] = enabled
+        }
+        if (Object.keys(sharedToggles).length > 0) body.services = sharedToggles
+        else delete body.services
+        if (Object.keys(customToggles).length > 0) body.custom_services = customToggles
+      }
+
       if (tradeScope) {
         // Trade-scoped run — never touch the other trades' books, services
         // or brands. The rate card goes to this trade's pricing_book row
@@ -310,8 +378,8 @@ export default function PricingWizardPage() {
           body.pricing_by_trade = { [tradeScope]: body.pricing }
           delete body.pricing
         }
+        const allowed = new Set(visibleAssemblies.map((a) => a.id))
         if (body.services) {
-          const allowed = new Set(visibleAssemblies.map((a) => a.id))
           const scoped = Object.fromEntries(
             Object.entries(body.services as Record<string, boolean>).filter(([id]) =>
               allowed.has(id),
@@ -320,8 +388,18 @@ export default function PricingWizardPage() {
           if (Object.keys(scoped).length > 0) body.services = scoped
           else delete body.services
         }
+        if (body.custom_services) {
+          const scoped = Object.fromEntries(
+            Object.entries(body.custom_services as Record<string, boolean>).filter(([id]) =>
+              allowed.has(id),
+            ),
+          )
+          if (Object.keys(scoped).length > 0) body.custom_services = scoped
+          else delete body.custom_services
+        }
         if (body.material_preferences) {
-          const allowedCats = new Set(categoriesForTrades([tradeScope]).map((c) => c.slug))
+          // `categories` is already scoped to this trade's real catalogue.
+          const allowedCats = new Set(categories.map((c) => c.slug))
           const scoped = Object.fromEntries(
             Object.entries(body.material_preferences as Record<string, string | null>).filter(
               ([cat]) => allowedCats.has(cat),
@@ -342,7 +420,14 @@ export default function PricingWizardPage() {
       })
       const data = await res.json()
       if (!res.ok || data?.error) {
-        setError(data?.error ?? `Save failed (${res.status})`)
+        // The route reports partial-failure detail in `errors` (array); the
+        // top-level `error` covers auth/parse failures. Surface whichever is
+        // present so a save failure is diagnosable instead of a bare 500.
+        const detail =
+          Array.isArray(data?.errors) && data.errors.length > 0
+            ? data.errors.join('; ')
+            : null
+        setError(data?.error ?? detail ?? `Save failed (${res.status})`)
         return
       }
       setInfo('Saved. Redirecting to your dashboard…')

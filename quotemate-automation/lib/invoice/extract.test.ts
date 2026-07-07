@@ -119,6 +119,29 @@ describe('extractInvoice', () => {
     expect(r.extraction.quantity).toBe(6)
   })
 
+  it('accepts application/pdf uploads (mime is passed straight to Gemini)', async () => {
+    const fakeJson = JSON.stringify({
+      scope_description: 'Installed 4 double power points',
+      total_inc_gst: 620,
+      job_type_guess: 'power_points',
+      quantity: 4,
+    })
+    let sentMime: string | undefined
+    const fakeFetch = async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? '{}'))
+      sentMime = body?.contents?.[0]?.parts?.[1]?.inline_data?.mime_type
+      return mkResponse(fakeJson)
+    }
+    const r = await extractInvoice(
+      { imageBase64: 'JVBERi0=', mimeType: 'application/pdf' },
+      { apiKey: 'fake', fetchFn: fakeFetch as unknown as typeof fetch },
+    )
+    if (!r.ok) throw new Error(`expected ok, got: ${r.reason} — ${r.message}`)
+    expect(sentMime).toBe('application/pdf')
+    expect(r.extraction.total_inc_gst).toBe(620)
+    expect(r.extraction.job_type_guess).toBe('power_points')
+  })
+
   it('strips code fences around JSON output', async () => {
     const fakeJson = '```json\n{"scope_description":"Replaced taps","total_inc_gst":420}\n```'
     const fakeFetch = async () => mkResponse(fakeJson)

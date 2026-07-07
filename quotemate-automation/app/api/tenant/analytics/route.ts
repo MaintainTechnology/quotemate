@@ -44,6 +44,15 @@ export async function GET(req: Request) {
     ? Math.min(26, Math.max(4, Math.trunc(weeksRaw)))
     : 8
 
+  // Optional reporting-period window. The client resolves the bounds on its own
+  // clock and sends them as absolute ISO instants, so the scope matches the
+  // tradie's local calendar (not the server's UTC clock) with no day-edge skew.
+  // Only parseable timestamps are honoured; anything else = all-time.
+  const okInstant = (v: string | null): string | undefined =>
+    v && !Number.isNaN(Date.parse(v)) ? v : undefined
+  const from = okInstant(url.searchParams.get('from'))
+  const to = okInstant(url.searchParams.get('to'))
+
   try {
     const [quotes, intakes, calls, sms, customers] = await Promise.all([
       supabase
@@ -86,7 +95,7 @@ export async function GET(req: Request) {
         sms: (sms.data ?? []) as TradieSmsRow[],
         customers: (customers.data ?? []) as TradieCustomerRow[],
       },
-      { now: new Date(), weeks },
+      { now: new Date(), weeks, from, to },
     )
 
     return Response.json({ ok: true, analytics })

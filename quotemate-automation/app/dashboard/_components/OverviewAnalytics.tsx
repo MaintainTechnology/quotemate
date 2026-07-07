@@ -14,6 +14,7 @@
 
 import { useEffect, useState } from 'react'
 import type { TradieAnalytics } from '@/lib/dashboard/tradie-analytics'
+import { type Period, periodLabel, periodRange } from '@/lib/dashboard/period'
 import { SplitBars, TrendBars } from '@/app/_components/MetricCharts'
 
 type NavTab = 'quotes' | 'chats'
@@ -26,9 +27,17 @@ const CARD = 'rounded-card edge-lit'
 export function OverviewAnalytics({
   accessToken,
   setTab,
+  onFollowUpCold,
+  period = 'all',
 }: {
   accessToken: string | null
   setTab: (tab: NavTab) => void
+  // Opens the Chats tab pre-filtered to cold (abandoned) conversations. When
+  // omitted, the cold CTA just opens Chats unfiltered.
+  onFollowUpCold?: () => void
+  // Reporting-period window shared with the Overview KPIs. 'all' = the
+  // historical all-time aggregate.
+  period?: Period
 }) {
   const [data, setData] = useState<TradieAnalytics | null>(null)
   const [state, setState] = useState<LoadState>('loading')
@@ -40,7 +49,15 @@ export function OverviewAnalytics({
     // Initial state is already 'loading'; we intentionally do NOT reset to
     // loading synchronously here (avoids a cascading render + a flash on
     // re-fetch — the prior data stays until the new response lands).
-    fetch('/api/tenant/analytics?weeks=8', {
+    // Resolve the window on THIS (browser) clock so it matches the Overview
+    // KPIs, which scope with the same local calendar dates.
+    const range = periodRange(period, new Date())
+    const qs = new URLSearchParams({ weeks: '8' })
+    if (range) {
+      qs.set('from', range.start.toISOString())
+      qs.set('to', range.end.toISOString())
+    }
+    fetch(`/api/tenant/analytics?${qs.toString()}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
       cache: 'no-store',
     })
@@ -64,7 +81,7 @@ export function OverviewAnalytics({
     return () => {
       cancelled = true
     }
-  }, [accessToken])
+  }, [accessToken, period])
 
   return (
     <section
@@ -79,7 +96,7 @@ export function OverviewAnalytics({
           Who&rsquo;s reaching out &amp; what&rsquo;s been processed
         </h2>
         <span className="font-mono text-[0.58rem] uppercase tracking-[0.14em] text-text-dim">
-          Last 8 weeks
+          {periodLabel(period)}
         </span>
       </header>
 
@@ -91,7 +108,9 @@ export function OverviewAnalytics({
           Couldn&rsquo;t load your activity: {err}
         </div>
       )}
-      {state === 'ready' && data && <AnalyticsBody data={data} setTab={setTab} />}
+      {state === 'ready' && data && (
+        <AnalyticsBody data={data} setTab={setTab} onFollowUpCold={onFollowUpCold} />
+      )}
     </section>
   )
 }
@@ -101,9 +120,11 @@ export function OverviewAnalytics({
 function AnalyticsBody({
   data,
   setTab,
+  onFollowUpCold,
 }: {
   data: TradieAnalytics
   setTab: (tab: NavTab) => void
+  onFollowUpCold?: () => void
 }) {
   const h = data.headline
   const isEmpty =
@@ -128,7 +149,7 @@ function AnalyticsBody({
 
   return (
     <div className="space-y-5">
-      <NeedsAttention data={data} setTab={setTab} />
+      <NeedsAttention data={data} setTab={setTab} onFollowUpCold={onFollowUpCold} />
 
       {/* Communication + throughput counters — the headline volumes. */}
       <div className={`${CARD} overflow-hidden grid grid-cols-2 md:grid-cols-4 gap-px bg-ink-line border border-ink-line`}>
@@ -191,9 +212,11 @@ function AnalyticsBody({
 function NeedsAttention({
   data,
   setTab,
+  onFollowUpCold,
 }: {
   data: TradieAnalytics
   setTab: (tab: NavTab) => void
+  onFollowUpCold?: () => void
 }) {
   const n = data.needsAttention
   const actions = [
@@ -207,7 +230,10 @@ function NeedsAttention({
       count: n.coldChats,
       label: n.coldChats === 1 ? 'chat went cold' : 'chats went cold',
       cta: 'Follow up',
-      onClick: () => setTab('chats'),
+      // Open Chats filtered to the cold (abandoned) conversations this count
+      // refers to, so "Follow up" lands on exactly those rows — not the full
+      // 30-row list. Falls back to an unfiltered open when no handler wired.
+      onClick: onFollowUpCold ?? (() => setTab('chats')),
     },
     n.inspectionsToBook > 0 && {
       count: n.inspectionsToBook,

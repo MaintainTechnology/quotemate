@@ -52,11 +52,24 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  // The plan the visitor pre-selected on /pricing before signing up. We use it
+  // to PRE-SELECT the card + interval so they can review (and flip to Monthly)
+  // before confirming — we no longer auto-redirect them to Stripe on mount.
+  const [pendingPlan, setPendingPlan] = useState<string | null>(
+    () => readPlanIntent()?.plan ?? null,
+  )
   // Read the post-checkout redirect flag (?subscribed=1) once, at mount.
   const [justSubscribed] = useState(
     () =>
       typeof window !== 'undefined' &&
       new URLSearchParams(window.location.search).get('subscribed') === '1',
+  )
+  // ?switched=1 — an existing subscriber changed plans in place (prorated).
+  const [justSwitched] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('switched') === '1',
   )
 
   // Load subscription state on mount / when the token arrives. All setState
@@ -76,13 +89,19 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
         setStatus(json)
         setLoading(false)
         // Plan-intent hand-off: a signed-out visitor picked a plan on
-        // /pricing before signing up. Now that they're onboarded, auto-start
-        // that plan's Checkout — once — unless they already have a sub.
+        // /pricing before signing up. Now that they're onboarded, PRE-SELECT
+        // that plan + interval and prompt them to confirm — we do NOT auto-
+        // redirect to Stripe, so they can still switch Monthly⇄Annual first
+        // (the Stripe hosted page has no interval toggle).
         const active = !!json.status && ACTIVE_STATES.has(json.status)
         const intent = readPlanIntent()
         if (intent && !active) {
           clearPlanIntent()
-          await doCheckout(intent.plan, intent.interval) // redirects to Stripe
+          setPendingPlan(intent.plan)
+          setAnnual(intent.interval !== 'month')
+          setNotice(
+            `You picked the ${intent.plan[0].toUpperCase() + intent.plan.slice(1)} plan. Choose Monthly or Annual below, then confirm to start.`,
+          )
         }
         return
       } catch (e) {
@@ -95,13 +114,29 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken])
+
+  // Re-pull the subscription mirror after an in-place plan change (the webhook
+  // reconciles tenants.* async, so this may lag a beat — the notice covers it).
+  async function refreshStatus() {
+    if (!accessToken) return
+    try {
+      const res = await fetch('/api/billing/status', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: 'no-store',
+      })
+      if (!res.ok) return
+      setStatus((await res.json()) as Status)
+    } catch {
+      /* non-fatal — the notice already told them it worked */
+    }
+  }
 
   async function doCheckout(planId: string, interval: 'month' | 'year') {
     if (!accessToken) return
     setBusy(planId)
     setError(null)
+    setNotice(null)
     try {
       const res = await fetch('/api/billing/checkout', {
         method: 'POST',
@@ -111,9 +146,30 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
         },
         body: JSON.stringify({ plan: planId, interval }),
       })
-      const json = (await res.json()) as { url?: string; error?: string; detail?: string }
+      const json = (await res.json()) as {
+        url?: string
+        updated?: boolean
+        unchanged?: boolean
+        plan?: string
+        interval?: string
+        error?: string
+        detail?: string
+      }
+      // New subscription → redirect to Stripe Checkout.
       if (json.url) {
         window.location.assign(json.url)
+        return
+      }
+      // Existing subscription changed IN PLACE (prorated) — no redirect.
+      if (json.updated) {
+        const label = json.plan ? json.plan[0].toUpperCase() + json.plan.slice(1) : 'your plan'
+        setPendingPlan(null)
+        setNotice(
+          json.unchanged
+            ? `You're already on the ${label} plan (${json.interval === 'year' ? 'annual' : 'monthly'}).`
+            : `Switched to the ${label} plan (${json.interval === 'year' ? 'annual' : 'monthly'}). Stripe has prorated the difference — no duplicate charge.`,
+        )
+        await refreshStatus()
         return
       }
       setError(json.detail || json.error || 'Could not start checkout')
@@ -165,9 +221,26 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
         </div>
       )}
 
+      {justSwitched && (
+        <div className="mt-6 border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-text-pri">
+          Your plan has been updated — Stripe prorated the difference, so
+          there&rsquo;s no duplicate charge. It can take a few seconds to show
+          below; refresh if needed.
+        </div>
+      )}
+
       {error && (
         <div className="mt-6 border border-danger/50 bg-danger/10 px-4 py-3 text-sm text-text-pri">
           {error}
+        </div>
+      )}
+
+      {notice && (
+        <div
+          role="status"
+          className="mt-6 border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-text-pri"
+        >
+          {notice}
         </div>
       )}
 
@@ -272,12 +345,17 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
         {PLANS.map((plan) => {
           const isCurrent =
             hasActive && currentPlan === plan.id && status?.interval === (annual ? 'year' : 'month')
+          const isPending = !hasActive && pendingPlan === plan.id
           const perMonth = annual ? annualPerMonth(plan) : plan.monthly
           return (
             <div
               key={plan.id}
               className={`rounded-card flex h-full flex-col border bg-ink-card p-6 ${
-                plan.featured ? 'border-accent/50' : 'border-ink-line'
+                isPending
+                  ? 'border-accent ring-2 ring-accent/60'
+                  : plan.featured
+                    ? 'border-accent/50'
+                    : 'border-ink-line'
               }`}
             >
               <div className="flex items-center justify-between">

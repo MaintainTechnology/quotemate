@@ -59,6 +59,13 @@ import {
   quoteTradeLabel,
 } from '@/lib/dashboard/quote-filters'
 import {
+  type Period,
+  PERIODS,
+  inPeriod,
+  periodLabel,
+  periodRange,
+} from '@/lib/dashboard/period'
+import {
   LayoutDashboard,
   FileText,
   MessageSquare,
@@ -448,6 +455,11 @@ export default function DashboardPage() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('overview')
+  // Chats-tab filter. The Overview "chats went cold" CTA flips this to 'cold'
+  // so the Chats tab lands on just the abandoned conversations that count
+  // refers to — not the full recent list. Reset to 'all' whenever the user
+  // leaves Chats (effect below) so a later plain visit starts unfiltered.
+  const [chatFilter, setChatFilter] = useState<'all' | 'cold'>('all')
   // Desktop rail fold (reference design) — persisted so the tradie's
   // choice survives reloads. Read after mount to keep SSR/CSR in sync.
   const [railCollapsed, setRailCollapsed] = useState(false)
@@ -537,6 +549,14 @@ export default function DashboardPage() {
     if (isFeatureTab(tab) && !isTabEnabled(tab, trades)) setTab('overview')
     if (isHubTab(tab) && !hubEnabled(hubTrade(tab), trades)) setTab('overview')
   }, [data, tab])
+
+  // Reset the Chats filter once the tradie navigates away from Chats, so the
+  // cold-only view set by the "chats went cold" CTA doesn't stick to the next
+  // plain visit. Entering Chats via the CTA sets 'cold' then switches tab in
+  // the same batch, so this never clobbers that intent.
+  useEffect(() => {
+    if (tab !== 'chats') setChatFilter('all')
+  }, [tab])
 
   // Lazily probe is_admin once the access token lands. Fails CLOSED — any
   // network/server hiccup leaves isAdmin false so the link stays hidden.
@@ -883,7 +903,15 @@ export default function DashboardPage() {
             >
             {tab !== 'overview' && !isHubTab(tab) && <TabHeader tab={tab} />}
             {tab === 'overview' && (
-              <OverviewTab data={data} accessToken={accessToken} setTab={setTab} />
+              <OverviewTab
+                data={data}
+                accessToken={accessToken}
+                setTab={setTab}
+                onFollowUpColdChats={() => {
+                  setChatFilter('cold')
+                  setTab('chats')
+                }}
+              />
             )}
             {tab === 'account' && (
               <AccountTab
@@ -947,9 +975,14 @@ export default function DashboardPage() {
               />
             )}
             {tab === 'chats' && (
-              <ChatsTab accessToken={accessToken} isMultiTrade={
-                Array.isArray(data.tenant.trades) && data.tenant.trades.length > 1
-              } />
+              <ChatsTab
+                accessToken={accessToken}
+                isMultiTrade={
+                  Array.isArray(data.tenant.trades) && data.tenant.trades.length > 1
+                }
+                filter={chatFilter}
+                onFilterChange={setChatFilter}
+              />
             )}
             {tab === 'roofing' && <RoofingHubTab accessToken={accessToken} />}
             {tab === 'signage' && <SignageHubTab accessToken={accessToken} />}
@@ -1023,6 +1056,25 @@ export default function DashboardPage() {
                     </p>
                     <span className="mt-5 inline-flex items-center gap-2 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-accent transition-colors group-hover:text-accent-press">
                       Open CRM &amp; email <span aria-hidden="true">&rarr;</span>
+                    </span>
+                  </div>
+                </Link>
+                <Link
+                  href="/dashboard/studio"
+                  className="rounded-card group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
+                >
+                  <span className="font-mono text-5xl font-bold leading-none text-accent sm:text-6xl">
+                    STUDIO
+                  </span>
+                  <div className="flex-1">
+                    <h3 className="font-extrabold uppercase tracking-[-0.02em] text-2xl text-text-pri sm:text-[1.75rem]">
+                      Brand Studio
+                    </h3>
+                    <p className="mt-4 text-base leading-relaxed text-text-sec">
+                      Make on-brand social posts from the QuoteMax design system — edit the copy, live-preview each slide, and export a LinkedIn carousel PDF or a single PNG.
+                    </p>
+                    <span className="mt-5 inline-flex items-center gap-2 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-accent transition-colors group-hover:text-accent-press">
+                      Open studio <span aria-hidden="true">&rarr;</span>
                     </span>
                   </div>
                 </Link>
@@ -2413,26 +2465,54 @@ function OverviewTab({
   data,
   accessToken,
   setTab,
+  onFollowUpColdChats,
 }: {
   data: DashboardData
   accessToken: string | null
   setTab: (t: Tab) => void
+  // Opens the Chats tab filtered to cold (abandoned) conversations — wired to
+  // the Activity view's "chats went cold" CTA.
+  onFollowUpColdChats: () => void
 }) {
+  const router = useRouter()
+  // Open a specific quote's in-dashboard workspace (/dashboard/quote/[token]) —
+  // the review / PDF-edit page each Quotes-tab card links to. Falls back to the
+  // Quotes list only if the quote somehow has no share token to route by.
+  const openQuote = useCallback(
+    (q: Quote) => {
+      if (q.share_token) router.push(`/dashboard/quote/${q.share_token}`)
+      else setTab('quotes')
+    },
+    [router, setTab],
+  )
+  // Reporting-period filter for the performance KPIs + recent-quotes list.
+  // Resolved on the browser clock so "this week/month" tracks the tradie's
+  // local calendar (OverviewAnalytics sends the same bounds to the server).
+  const [period, setPeriod] = useState<Period>('all')
+  const periodWindow = periodRange(period, new Date())
+  const scopedQuotes = periodWindow
+    ? data.quotes.filter((q) => inPeriod(q.created_at, periodWindow))
+    : data.quotes
+  const scopedCount = scopedQuotes.length
+
   const enabledServices = data.services.filter((s) => s.enabled).length
   const totalServices = data.services.length
+  // "View all" navigates to the full Quotes tab, so it keeps the all-time total.
   const activeQuotes = data.quotes.length
+  // In review is the LIVE backlog — deliberately NOT period-scoped, so an older
+  // quote still awaiting send is never hidden by picking a narrow window.
   const draftQuotes = data.quotes.filter((q) =>
     ['drafted', 'awaiting_review', 'review'].includes(q.status),
   ).length
 
-  // Pipeline numbers — the money/conversion view the tradie actually
-  // cares about. A quote counts as "accepted" if its status is
-  // 'accepted' OR a deposit has landed (deposit_paid overrides status
+  // Pipeline numbers — the money/conversion view the tradie actually cares
+  // about, scoped to the selected period. A quote counts as "accepted" if its
+  // status is 'accepted' OR a deposit has landed (deposit_paid overrides status
   // in the QuoteCard badge ordering, same logic applied here).
-  const acceptedQuotes = data.quotes.filter(
+  const acceptedQuotes = scopedQuotes.filter(
     (q) => q.deposit_paid || (q.status ?? '').toLowerCase() === 'accepted',
   )
-  const quotedValue = data.quotes.reduce(
+  const quotedValue = scopedQuotes.reduce(
     (sum, q) => sum + (toNum(q.total_inc_gst) ?? 0),
     0,
   )
@@ -2441,10 +2521,10 @@ function OverviewTab({
     0,
   )
   const conversionPct =
-    activeQuotes > 0
-      ? Math.round((acceptedQuotes.length / activeQuotes) * 100)
+    scopedCount > 0
+      ? Math.round((acceptedQuotes.length / scopedCount) * 100)
       : 0
-  const avgQuoteValue = activeQuotes > 0 ? quotedValue / activeQuotes : 0
+  const avgQuoteValue = scopedCount > 0 ? quotedValue / scopedCount : 0
 
   const tenant = data.tenant
   const smsNumber = tenant.twilio_sms_number
@@ -2458,10 +2538,10 @@ function OverviewTab({
   const isStubVapi = !!assistantId && assistantId.startsWith('vapi-stub-')
   const needsProvisioning = !smsNumber || !assistantId
 
-  // Recent quotes preview — top 5 by created_at desc. data.quotes is
-  // already ordered desc by the /api/tenant/me endpoint, so this is a
+  // Recent quotes preview — top 5 by created_at desc within the selected
+  // period. scopedQuotes preserves the endpoint's desc order, so this stays a
   // pure client-side slice.
-  const latestQuotes = data.quotes.slice(0, 5)
+  const latestQuotes = scopedQuotes.slice(0, 5)
 
   // Recent chats — fetched lazily on Overview mount so the Chats tab can
   // keep doing its own larger fetch independently. 5-row preview only;
@@ -2515,7 +2595,7 @@ function OverviewTab({
     {
       k: 'Quoted',
       v: `$${formatMoney(Math.round(quotedValue))}`,
-      sub: `${activeQuotes} draft${activeQuotes === 1 ? '' : 's'}`,
+      sub: `${scopedCount} draft${scopedCount === 1 ? '' : 's'}`,
       color: 'var(--accent)',
     },
     {
@@ -2527,7 +2607,7 @@ function OverviewTab({
     {
       k: 'Conversion',
       v: `${conversionPct}%`,
-      sub: `${acceptedQuotes.length} of ${activeQuotes}`,
+      sub: `${acceptedQuotes.length} of ${scopedCount}`,
       color: 'var(--text-dim)',
     },
     {
@@ -2583,6 +2663,8 @@ function OverviewTab({
               : `${draftQuotes} quotes need your review. The rest are drafted and waiting.`
         }
         onNewQuote={() => setTab('quotes')}
+        period={period}
+        onPeriod={setPeriod}
       />
 
       {/* TOP-LEVEL VIEW SWITCH — Overview | Your activity. */}
@@ -2642,7 +2724,9 @@ function OverviewTab({
           </header>
           {latestQuotes.length === 0 ? (
             <div className="px-5 py-8 font-mono text-[0.75rem] uppercase tracking-[0.14em] text-text-dim">
-              No quotes drafted yet. Customer SMS or calls will land here.
+              {period === 'all'
+                ? 'No quotes drafted yet. Customer SMS or calls will land here.'
+                : `No quotes in ${periodLabel(period).toLowerCase()}.`}
             </div>
           ) : (
             <div>
@@ -2673,7 +2757,7 @@ function OverviewTab({
                   <button
                     key={q.id}
                     type="button"
-                    onClick={() => setTab('quotes')}
+                    onClick={() => openQuote(q)}
                     className="grid w-full grid-cols-[1fr_auto] items-center gap-3 border-b border-ink-line px-5 py-3 text-left transition-colors cursor-pointer last:border-b-0 hover:bg-ink-deep/40 sm:grid-cols-[minmax(94px,1.4fr)_minmax(108px,1.7fr)_46px_76px_116px]"
                   >
                     <div className="min-w-0">
@@ -2753,7 +2837,7 @@ function OverviewTab({
               </p>
               <button
                 type="button"
-                onClick={() => setTab('quotes')}
+                onClick={() => openQuote(attnQuote)}
                 className="mt-3.5 inline-flex w-full items-center justify-center gap-2 rounded-ctl bg-accent px-3 py-2.5 text-[12px] font-bold uppercase tracking-wide text-accent-ink transition-colors cursor-pointer hover:bg-accent-press"
               >
                 Review quote →
@@ -2870,7 +2954,12 @@ function OverviewTab({
           {/* YOUR ACTIVITY — communication + conversion analytics not shown by
               the money-first Pipeline/KPI rows above. Lazy-fetches its own
               aggregate on first view. */}
-          <OverviewAnalytics accessToken={accessToken} setTab={setTab} />
+          <OverviewAnalytics
+            accessToken={accessToken}
+            setTab={setTab}
+            onFollowUpCold={onFollowUpColdChats}
+            period={period}
+          />
         </div>
       )}
 
@@ -2885,10 +2974,14 @@ function OverviewHeader({
   firstName,
   subtitle,
   onNewQuote,
+  period,
+  onPeriod,
 }: {
   firstName: string
   subtitle: string
   onNewQuote: () => void
+  period: Period
+  onPeriod: (p: Period) => void
 }) {
   const hour = new Date().getHours()
   const greeting =
@@ -2905,18 +2998,10 @@ function OverviewHeader({
         <p className="mt-2.5 max-w-xl text-sm text-text-sec">{subtitle}</p>
       </div>
       <div className="flex items-center gap-2.5 shrink-0">
-        {/* Period indicator — the reference's "This month" slot. Static
-            (the KPIs below are all-time), so it reads as a label rather
-            than a dead dropdown. */}
-        <span className="inline-flex items-center gap-2 rounded-ctl border border-ink-line px-3.5 py-2 font-mono text-[0.62rem] font-bold uppercase tracking-[0.13em] text-text-sec">
-          <CalendarDays
-            size={14}
-            strokeWidth={1.75}
-            aria-hidden="true"
-            className="text-text-dim"
-          />
-          All time
-        </span>
+        {/* Period filter — the reference's "This month" slot, now a live
+            reporting-window control that scopes the KPIs, recent quotes and
+            the Your-activity analytics below. */}
+        <PeriodPicker period={period} onChange={onPeriod} />
         <button
           type="button"
           onClick={onNewQuote}
@@ -2927,6 +3012,101 @@ function OverviewHeader({
         </button>
       </div>
     </header>
+  )
+}
+
+/** Reporting-period dropdown — the header's live time-window control. Follows
+ *  the dashboard's own menu idiom (pointerdown + Escape to close, aria-expanded
+ *  trigger, rounded lit-edge panel). Selecting a period scopes the Overview
+ *  performance KPIs, the recent-quotes list, and the Your-activity analytics. */
+function PeriodPicker({
+  period,
+  onChange,
+}: {
+  period: Period
+  onChange: (p: Period) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef<HTMLDivElement | null>(null)
+  const btnRef = useRef<HTMLButtonElement | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: PointerEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node))
+        setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpen(false)
+        btnRef.current?.focus()
+      }
+    }
+    document.addEventListener('pointerdown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`Reporting period: ${periodLabel(period)}`}
+        className="inline-flex items-center gap-2 rounded-ctl border border-ink-line px-3.5 py-2 font-mono text-[0.62rem] font-bold uppercase tracking-[0.13em] text-text-sec transition-colors cursor-pointer hover:border-text-dim hover:text-text-pri"
+      >
+        <CalendarDays
+          size={14}
+          strokeWidth={1.75}
+          aria-hidden="true"
+          className="text-text-dim"
+        />
+        {periodLabel(period)}
+        <ChevronDown
+          size={13}
+          strokeWidth={2}
+          aria-hidden="true"
+          className={`text-text-dim transition-transform ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-[calc(100%+8px)] z-40 min-w-[168px] overflow-hidden rounded-card edge-lit border border-ink-line bg-ink-card py-1 shadow-[0_16px_40px_-12px_rgba(11,9,7,0.55)]"
+        >
+          {PERIODS.map((p) => {
+            const active = p.key === period
+            return (
+              <button
+                key={p.key}
+                type="button"
+                role="menuitemradio"
+                aria-checked={active}
+                onClick={() => {
+                  onChange(p.key)
+                  setOpen(false)
+                  btnRef.current?.focus()
+                }}
+                className={`flex w-full items-center justify-between gap-3 px-3.5 py-2 text-left font-mono text-[0.62rem] font-bold uppercase tracking-[0.12em] transition-colors ${
+                  active
+                    ? 'text-accent'
+                    : 'text-text-sec hover:bg-ink-deep/40 hover:text-text-pri'
+                }`}
+              >
+                {p.label}
+                {active && <Check size={13} strokeWidth={2.5} aria-hidden="true" />}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -3694,6 +3874,36 @@ function AccountTab({
 // POSTs /api/stripe/connect/start and redirects to Stripe-hosted
 // onboarding.
 
+// Map an error payload from the payout endpoints (connect/start,
+// connect/refresh) to tradie-facing copy. We deliberately NEVER surface the
+// raw Stripe developer `detail` (e.g. the Accounts v1 deprecation notice, or
+// an internal "account_create_failed" reason) — a tradie should only ever see
+// a plain-English next step. The raw payload stays in the Network response for
+// us to inspect; the server keeps the real diagnostics.
+function friendlyPayoutError(
+  json: { error?: string; detail?: string } | null,
+  httpStatus: number,
+): string {
+  switch (json?.error) {
+    case 'provisioning_disabled':
+      return 'Payout setup isn’t switched on yet — QuoteMax is finishing the rollout. Check back shortly.'
+    case 'connect_not_enabled':
+      return 'Payouts aren’t available just yet — QuoteMax is finishing the payments setup on our side. Please check back shortly.'
+    case 'unauthorized':
+      return 'Your session expired — refresh the page and sign in again.'
+    case 'account_create_failed':
+    case 'account_validate_failed':
+    case 'account_persist_failed':
+    case 'stale_account_heal_failed':
+    case 'link_create_failed':
+    case 'sync_failed':
+    case 'sync_persist_failed':
+      return 'We couldn’t reach Stripe to set up your payouts just now. Please try again in a moment — if it keeps happening, contact QuoteMax support.'
+    default:
+      return `Something went wrong setting up payouts (HTTP ${httpStatus}). Please try again shortly.`
+  }
+}
+
 function PayoutsTab({
   data,
   accessToken,
@@ -3734,9 +3944,7 @@ function PayoutsTab({
         if (json?.ok) {
           if (json.synced) onSynced?.()
         } else if (!soft) {
-          setErr(
-            json?.detail || json?.error || `Couldn’t refresh payout status (HTTP ${res.status}).`,
-          )
+          setErr(friendlyPayoutError(json, res.status))
         }
       } catch (e) {
         if (!soft) setErr(e instanceof Error ? e.message : String(e))
@@ -3790,17 +3998,7 @@ function PayoutsTab({
         window.location.href = json.url as string
         return
       }
-      if (json?.error === 'provisioning_disabled') {
-        setErr(
-          'Payout setup isn’t switched on yet — QuoteMax is finishing the rollout. Check back shortly.',
-        )
-      } else {
-        setErr(
-          json?.detail ||
-            json?.error ||
-            `Couldn’t start payout setup (HTTP ${res.status}).`,
-        )
-      }
+      setErr(friendlyPayoutError(json, res.status))
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
     } finally {
@@ -5680,9 +5878,32 @@ function CalibrationCard({ accessToken }: { accessToken: string | null }) {
   const [uploading, setUploading] = useState(false)
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
+  const { getToken, isSignedIn } = useAuth()
+
+  // Clerk session tokens are short-lived (~60s). The dashboard captures ONE
+  // token at mount and threads it down as `accessToken`; by the time a tradie
+  // clicks into General pricing that token has usually expired, so the
+  // calibration API 401s ("couldn't load calibration: unauthorized"). Mint a
+  // FRESH token immediately before every request — getToken() refreshes under
+  // the hood — falling back to the prop for legacy Supabase-session users.
+  //
+  // Held in a ref so freshToken() is a STABLE callback (empty deps): the load
+  // effect below then fires exactly once, instead of re-running every time
+  // Clerk hands back a new getToken identity.
+  const authRef = useRef({ getToken, isSignedIn, accessToken })
+  authRef.current = { getToken, isSignedIn, accessToken }
+  const freshToken = useCallback(async (): Promise<string | null> => {
+    const a = authRef.current
+    if (a.isSignedIn) {
+      const t = await a.getToken().catch(() => null)
+      if (t) return t
+    }
+    return a.accessToken
+  }, [])
 
   const load = useCallback(async () => {
-    if (!accessToken) {
+    const token = await freshToken()
+    if (!token) {
       setErr('Not signed in')
       setLoading(false)
       return
@@ -5691,7 +5912,7 @@ function CalibrationCard({ accessToken }: { accessToken: string | null }) {
     setErr(null)
     try {
       const res = await fetch('/api/tenant/calibration', {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       })
       if (!res.ok) {
@@ -5705,22 +5926,36 @@ function CalibrationCard({ accessToken }: { accessToken: string | null }) {
     } finally {
       setLoading(false)
     }
-  }, [accessToken])
+  }, [freshToken])
 
   useEffect(() => {
     void load()
   }, [load])
 
   async function onFile(file: File) {
-    if (!accessToken) return
-    if (!/^image\/(jpeg|png|webp|heic)$/.test(file.type)) {
-      setMsg('Only JPEG, PNG, WEBP or HEIC images are accepted in v1.')
+    const token = await freshToken()
+    if (!token) {
+      setMsg('Not signed in — reload the page and try again.')
+      return
+    }
+    if (!/^(image\/(jpeg|png|webp|heic)|application\/pdf)$/.test(file.type)) {
+      setMsg('Only JPG, PNG, WEBP, HEIC or PDF invoices are accepted.')
+      return
+    }
+    // Guard the base64/JSON upload path against the platform request-body
+    // limit (Vercel caps function request bodies at ~4.5 MB). Base64 inflates
+    // bytes by ~33%, so cap the raw file at 3 MB → ~4 MB on the wire. Most
+    // single-page invoice PDFs and photos sit well under this.
+    const MAX_BYTES = 3 * 1024 * 1024
+    if (file.size > MAX_BYTES) {
+      setMsg('File too large (max 3 MB). Screenshot the invoice or export a smaller PDF.')
       return
     }
     setUploading(true)
     setMsg(null)
     try {
-      // Read file → base64 (no data: prefix; strip the header).
+      // Read file → base64 (no data: prefix; strip the header). Identical for
+      // PDF bytes and image bytes — Gemini reads the document natively.
       const buf = await file.arrayBuffer()
       const bytes = new Uint8Array(buf)
       let bin = ''
@@ -5729,7 +5964,7 @@ function CalibrationCard({ accessToken }: { accessToken: string | null }) {
       const res = await fetch('/api/tenant/calibration/upload', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ image_base64: base64, mime_type: file.type }),
@@ -5753,14 +5988,15 @@ function CalibrationCard({ accessToken }: { accessToken: string | null }) {
   }
 
   async function actOnSuggestion(trade: string, accept: boolean) {
-    if (!accessToken) return
+    const token = await freshToken()
+    if (!token) return
     setBusyAction(trade)
     setMsg(null)
     try {
       const res = await fetch('/api/tenant/calibration/accept', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ trade, accept }),
@@ -5800,11 +6036,11 @@ function CalibrationCard({ accessToken }: { accessToken: string | null }) {
       <div className="rounded-card mb-4 border border-dashed border-ink-line bg-ink-card p-4">
         <label className="block">
           <span className="font-mono text-[0.65rem] uppercase tracking-[0.15em] text-text-dim block mb-2">
-            Upload invoice image (JPG / PNG / WEBP / HEIC)
+            Upload invoice (JPG / PNG / WEBP / HEIC / PDF)
           </span>
           <input
             type="file"
-            accept="image/jpeg,image/png,image/webp,image/heic"
+            accept="image/jpeg,image/png,image/webp,image/heic,application/pdf,.pdf"
             disabled={uploading}
             onChange={(e) => {
               const f = e.target.files?.[0]
@@ -13400,12 +13636,28 @@ function FollowupThread({
 // to reveal the full transcript. Complement to the inline transcript
 // embedded on each Quote card in the Quotes tab.
 
+/** A "cold" chat mirrors the Overview analytics `coldChats` definition
+ *  (lib/dashboard/tradie-analytics.ts): a real customer SMS conversation
+ *  (not a tradie-registration thread) that was abandoned mid-dialog. Voice
+ *  calls have no abandoned state, so they never count as cold. */
+function isColdChat(c: ChatRow): boolean {
+  return (
+    c.channel === 'sms' &&
+    c.conversation_type !== 'tradie_registration' &&
+    (c.status ?? '').toLowerCase() === 'abandoned'
+  )
+}
+
 function ChatsTab({
   accessToken,
   isMultiTrade,
+  filter,
+  onFilterChange,
 }: {
   accessToken: string | null
   isMultiTrade: boolean
+  filter: 'all' | 'cold'
+  onFilterChange: (f: 'all' | 'cold') => void
 }) {
   const [chats, setChats] = useState<ChatRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -13470,7 +13722,14 @@ function ChatsTab({
     )
   }
 
-  return <ChatsList chats={chats} isMultiTrade={isMultiTrade} />
+  return (
+    <ChatsList
+      chats={chats}
+      isMultiTrade={isMultiTrade}
+      filter={filter}
+      onFilterChange={onFilterChange}
+    />
+  )
 }
 
 /** Renders the paginated chat list. Split out from `ChatsTab` so the
@@ -13479,11 +13738,17 @@ function ChatsTab({
 function ChatsList({
   chats,
   isMultiTrade,
+  filter,
+  onFilterChange,
 }: {
   chats: ChatRow[]
   isMultiTrade: boolean
+  filter: 'all' | 'cold'
+  onFilterChange: (f: 'all' | 'cold') => void
 }) {
-  const total = chats.length
+  const coldCount = chats.filter(isColdChat).length
+  const shown = filter === 'cold' ? chats.filter(isColdChat) : chats
+  const total = shown.length
   const {
     page,
     setPage,
@@ -13491,27 +13756,89 @@ function ChatsList({
     pageItems: visibleChats,
     startIndex,
     endIndex,
-  } = usePagination(chats, { urlKey: 'chat_page' })
+    // resetKey snaps back to page 1 when the filter changes (cold has fewer
+    // rows than all) while preserving a deep-linked page on first mount.
+  } = usePagination(shown, { urlKey: 'chat_page', resetKey: filter })
+
+  const subtitle =
+    filter === 'cold'
+      ? `${total} cold conversation${total === 1 ? '' : 's'} · chats that went quiet mid-flow — worth a nudge.`
+      : `${total} conversation${total === 1 ? '' : 's'} · click a row to expand the full thread.`
 
   return (
-    <Card
-      subtitle={`${total} conversation${total === 1 ? '' : 's'} · click a row to expand the full thread.`}
-    >
-      <div className="space-y-2">
-        {visibleChats.map((c) => (
-          <ChatCard key={c.id} chat={c} isMultiTrade={isMultiTrade} />
-        ))}
+    <Card subtitle={subtitle}>
+      {/* Filter toggle — All vs the cold (abandoned) subset the Overview
+          "chats went cold" CTA deep-links into. */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <ChatFilterButton
+          active={filter === 'all'}
+          onClick={() => onFilterChange('all')}
+          label="All"
+          count={chats.length}
+        />
+        <ChatFilterButton
+          active={filter === 'cold'}
+          onClick={() => onFilterChange('cold')}
+          label="Went cold"
+          count={coldCount}
+        />
       </div>
-      <PaginationControls
-        page={page}
-        totalPages={totalPages}
-        onPageChange={setPage}
-        startIndex={startIndex}
-        endIndex={endIndex}
-        total={total}
-        unit="conversations"
-      />
+
+      {shown.length === 0 ? (
+        <p className="px-1 py-6 text-sm text-text-dim">
+          {filter === 'cold'
+            ? 'No cold chats right now — every conversation either converted or is still live.'
+            : 'No conversations yet.'}
+        </p>
+      ) : (
+        <>
+          <div className="space-y-2">
+            {visibleChats.map((c) => (
+              <ChatCard key={c.id} chat={c} isMultiTrade={isMultiTrade} />
+            ))}
+          </div>
+          <PaginationControls
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            startIndex={startIndex}
+            endIndex={endIndex}
+            total={total}
+            unit="conversations"
+          />
+        </>
+      )}
     </Card>
+  )
+}
+
+/** Small pill toggle for the Chats filter row. Matches the dashboard's mono,
+ *  uppercase, square-cornered control language. */
+function ChatFilterButton({
+  active,
+  onClick,
+  label,
+  count,
+}: {
+  active: boolean
+  onClick: () => void
+  label: string
+  count: number
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`rounded-ctl inline-flex items-center gap-2 border px-3 py-1.5 font-mono text-[0.62rem] font-bold uppercase tracking-[0.14em] transition-colors ${
+        active
+          ? 'border-accent bg-accent/10 text-accent'
+          : 'border-ink-line bg-ink-card text-text-dim hover:border-text-dim hover:text-text-pri'
+      }`}
+    >
+      {label}
+      <span className="tabular-nums opacity-80">{count}</span>
+    </button>
   )
 }
 

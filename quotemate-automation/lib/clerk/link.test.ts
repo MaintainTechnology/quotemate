@@ -4,7 +4,6 @@
 
 import { describe, it, expect } from 'vitest'
 import {
-  PROFESSIONAL_PLAN,
   accountPublicMetadata,
   mergePublicMetadata,
   adminEmailSet,
@@ -14,9 +13,9 @@ import {
 } from './link'
 
 describe('accountPublicMetadata', () => {
-  it('records the professional plan for every account', () => {
-    expect(accountPublicMetadata({ isAdmin: false }).plan).toBe(PROFESSIONAL_PLAN)
-    expect(accountPublicMetadata({ isAdmin: true }).plan).toBe('professional')
+  it('does NOT stamp a subscription plan — Stripe owns the plan; link is identity/admin only', () => {
+    expect('plan' in accountPublicMetadata({ isAdmin: false })).toBe(false)
+    expect('plan' in accountPublicMetadata({ isAdmin: true })).toBe(false)
   })
 
   it('sets is_admin true for admins and false otherwise', () => {

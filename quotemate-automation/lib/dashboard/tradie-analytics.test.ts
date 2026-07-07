@@ -130,6 +130,51 @@ describe('awaitingReview matches the app canonical review set', () => {
   })
 })
 
+describe('buildTradieAnalytics (period window)', () => {
+  // Window to 1–3 Jul 2026 (as absolute instants): of the fixture only
+  // q2 / i2 / s1 / s3 land inside.
+  const w = buildTradieAnalytics(fixture(), {
+    now: NOW,
+    weeks: 4,
+    from: '2026-07-01T00:00:00Z',
+    to: '2026-07-03T23:59:59Z',
+  })
+
+  it('scopes headline counters to the window', () => {
+    expect(w.headline.totalQuotes).toBe(1) // q2 only (q1 30-Jun, q3 24-Jun out)
+    expect(w.headline.totalRequests).toBe(1) // i2 only
+    expect(w.headline.totalCalls).toBe(0) // all calls fall before 1 Jul
+    expect(w.headline.totalChats).toBe(2) // s1 + s3 (s2 20-Jun out, s4 registration)
+    expect(w.headline.processedQuotes).toBe(1) // q2 priced, not inspection
+    expect(w.headline.uniqueCustomers).toBe(1) // cu2 via i2
+  })
+
+  it('scopes funnel + actionables to the window', () => {
+    expect(w.funnel).toEqual([
+      { label: 'Requests', count: 1 },
+      { label: 'Quotes', count: 1 },
+      { label: 'Sent', count: 1 },
+      { label: 'Accepted', count: 1 },
+    ])
+    expect(w.needsAttention.awaitingReview).toBe(0) // q3 (drafted) is out of window
+    expect(w.topJobTypes).toEqual([{ label: 'Downlights', count: 1 }])
+  })
+
+  it('still pairs speed-to-quote using intakes outside the window', () => {
+    expect(w.speedToQuoteMinutes).toBe(120) // q2 (in window) ↔ i2
+  })
+
+  it('leaves the rolling weekly trend period-independent', () => {
+    // The trend reads the UNwindowed inputs — identical to the all-time run.
+    expect(w.weeklyTrend).toHaveLength(4)
+    expect(w.weeklyTrend[3]).toMatchObject({
+      weekStart: '2026-06-29',
+      quotes: 2,
+      intakes: 2,
+    })
+  })
+})
+
 describe('buildTradieAnalytics (empty)', () => {
   it('produces no NaN/undefined on an empty account', () => {
     const empty: TradieAnalyticsInput = {

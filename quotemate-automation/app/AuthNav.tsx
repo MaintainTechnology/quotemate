@@ -120,7 +120,7 @@ export default function AuthNav({ variant = 'nav' }: { variant?: Variant }) {
   ) : (
     <>
       <Link
-        href="/signin"
+        href="/sign-in"
         className="inline-flex items-center min-h-11 md:min-h-0 px-3 py-2 text-sm font-semibold uppercase tracking-wider text-text-sec hover:text-text-pri transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep"
       >
         Sign in

@@ -17,6 +17,13 @@ const nextConfig: NextConfig = {
   // mupdf is a WASM package loaded at runtime by the estimator's tiled-refine
   // pass — keep it external so the bundler doesn't try to inline the .wasm.
   serverExternalPackages: ["mupdf"],
+  // Ship the studio render route's on-disk assets — the bundled woff fonts and
+  // the pre-baked duotone photos — into its serverless function bundle so
+  // next/og can read them at runtime on Vercel (lib/ and public/ files read via
+  // fs are not traced automatically).
+  outputFileTracingIncludes: {
+    "/api/studio/render": ["./lib/studio/fonts/**", "./public/studio/photos/**"],
+  },
   async headers() {
     return [
       {

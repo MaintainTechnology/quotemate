@@ -40,6 +40,8 @@ import { generatePreviewImage } from '@/lib/ig-engine/generate'
 import { generateSampleImages } from '@/lib/ig-engine/samples'
 import { PreviewSection } from './PreviewSection'
 import TradieEditor from './TradieEditor'
+import { AcceptBlock } from '../_chrome/AcceptBlock'
+import { resolveAcceptView } from '@/lib/quote/accept'
 import { computePriceHoldUntil, priceHoldStatus, fmtHoldUntilAU } from '@/lib/quote/hold'
 import { advanceQuoteStatus } from '@/lib/quote/lifecycle'
 import {
@@ -168,6 +170,20 @@ export default async function PublicQuotePage(props: {
       ebExpiresAt = (eb.early_bird_expires_at as string | null) ?? null
       ebAppliedPct = Number(eb.applied_discount_pct ?? 0)
     }
+  }
+
+  // Customer acceptance (migration 164) — SEPARATE best-effort select so a
+  // deploy that lands before the migration applies simply reads null (the
+  // "Accepted · continue" hint stays off) instead of failing the main select
+  // and 404-ing this live public page. Mirrors the early-bird block above.
+  let customerAcceptedAt: string | null = null
+  {
+    const { data: ca } = await supabase
+      .from('quotes')
+      .select('customer_accepted_at')
+      .eq('id', quote.id)
+      .maybeSingle()
+    if (ca) customerAcceptedAt = (ca.customer_accepted_at as string | null) ?? null
   }
 
   // v5 multi-trade: must fetch intake before pricing_book so we can filter
@@ -560,14 +576,20 @@ export default async function PublicQuotePage(props: {
       tierLabel: '$99 site visit · refundable',
       priceText: '$99',
       ctaLabel: 'Pay $99',
-      ctaHref: stripeLinks.inspection ? `/r/${token}/inspection` : null,
+      // /r/<token>/inspection mints a fresh $99 Session per click — no stored
+      // stripe_links.inspection needed (roofing/commercial save routes never
+      // wrote one). Always link so the CTA is never dead.
+      ctaHref: `/r/${token}/inspection`,
     }
   } else if (featuredKey) {
     const fTier = quote[featuredKey] as Tier
     if (fTier) {
       const fInc = tierIncGst(fTier)
       const fDep = deposit(fInc, depositPct)
-      const hasLink = !priceExpired && !!stripeLinks[featuredKey]
+      // /r mints a fresh Session from good/better/best per click, so the CTA
+      // no longer depends on a pre-stored stripe_links[tier] (which roofing /
+      // commercial never wrote). Gate only on price-hold expiry.
+      const hasLink = !priceExpired
       stickyBar = {
         tierLabel: `${cleanTierLabel(fTier.label) || featuredKey.toUpperCase()} option${
           depositPct ? ` · ${depositPct}% deposit` : ''
@@ -578,6 +600,24 @@ export default async function PublicQuotePage(props: {
       }
     }
   }
+
+  // ── Explicit "Accept quote & confirm site visit" block (Gap #1/#3). The
+  // accept block is the single primary accept-and-proceed action for a PRICED
+  // quote (deposit path) and the paid confirmation. Inspection/held quotes are
+  // owned by the InspectionBlock / RoofingIndicativeBanner $99 CTA above, so
+  // the block is rendered only when !isInspection.
+  const acceptFeaturedTier = featuredKey ? (quote[featuredKey] as Tier) : null
+  const acceptInc = acceptFeaturedTier ? tierIncGst(acceptFeaturedTier) : 0
+  const acceptDep = deposit(acceptInc, depositPct)
+  const acceptView = resolveAcceptView({
+    token,
+    tier: (featuredKey ?? 'better') as 'good' | 'better' | 'best',
+    isPaid,
+    pricesVisible: !isInspection,
+    priceExpired,
+    priceLabel: acceptFeaturedTier ? `$${fmt(acceptInc)} inc GST` : null,
+    depositLabel: acceptDep ? `${depositPct ?? 30}% deposit ($${fmt(acceptDep)})` : null,
+  })
 
   // Map the visible generic (electrical/plumbing) tiers → kit TierCards.
   const genericTiers: QuoteTier[] = tradeFormat.usesGenericCard
@@ -592,7 +632,10 @@ export default async function PublicQuotePage(props: {
           const recommended = showRecommendedBadge && quote.selected_tier === k
           const paidThis = isPaid && quote.paid_tier === k
           const disabledOther = isPaid && quote.paid_tier !== k
-          const hasLink = !priceExpired && !!stripeLinks[k]
+          // /r/<token>/<tier> mints a fresh Stripe Session per click from the
+          // good/better/best jsonb, so the deposit CTA works without a
+          // pre-stored stripe_links[tier]. Gate only on the price hold.
+          const hasLink = !priceExpired
           const lineItems = Array.isArray(t?.line_items) ? t!.line_items! : []
           // Compact bullets: up to 4 line-item descriptions.
           const bullets: string[] = lineItems.slice(0, 4).map((li) => {
@@ -938,7 +981,6 @@ export default async function PublicQuotePage(props: {
           <SheetSection pad="20px 24px">
             <InspectionBlock
               reason={quote.inspection_reason}
-              link={stripeLinks.inspection}
               shareToken={token}
               paid={isPaid}
             />
@@ -952,7 +994,6 @@ export default async function PublicQuotePage(props: {
             {roofingIndicative ? (
               <RoofingIndicativeBanner
                 reason={quote.inspection_reason}
-                link={stripeLinks.inspection}
                 shareToken={token}
                 paid={isPaid}
               />
@@ -971,6 +1012,11 @@ export default async function PublicQuotePage(props: {
               isPaid={isPaid}
               paidTier={(quote.paid_tier as string | null) ?? null}
               priceExpired={priceExpired}
+              // A commercial-painting tender is a CONFIRMED price → its per-tier
+              // deposit CTA is live; a roofing on-site (indicative) quote is
+              // priced from satellite only → deposit withheld, $99 site visit
+              // (banner above) is the path.
+              depositEnabled={isCommercialPaint}
               // Roofing keeps its roofing-specific copy (component default), but
               // an on-site (indicative) roofing quote gets an indicative footnote.
               // Any other non-generic trade gets neutral labels so it still
@@ -1017,6 +1063,17 @@ export default async function PublicQuotePage(props: {
             tiers={genericTiers}
           />
         )}
+
+        {/* ─── Explicit "Accept & confirm" — the primary accept action on a
+            priced quote (records acceptance, then deposit). Inspection/held
+            quotes use the $99 CTA in the block above instead. ─── */}
+        {!isInspection ? (
+          <AcceptBlock
+            token={token}
+            view={acceptView}
+            alreadyAccepted={!!customerAcceptedAt}
+          />
+        ) : null}
 
         {/* ─── Things to be aware of (risk flags) ───────── */}
         {Array.isArray(quote.risk_flags) && quote.risk_flags.length > 0 ? (
@@ -1167,12 +1224,10 @@ function EarlyBirdAppliedBanner({ discountPct }: { discountPct: number }) {
 // AND a clear next step, instead of the price-free InspectionBlock.
 function RoofingIndicativeBanner({
   reason,
-  link,
   shareToken,
   paid,
 }: {
   reason: string | null
-  link: string | undefined
   shareToken: string
   paid: boolean
 }) {
@@ -1207,19 +1262,15 @@ function RoofingIndicativeBanner({
                 Site visit booked · tradie will be in touch
               </span>
             </div>
-          ) : link ? (
+          ) : (
+            // /r/<token>/inspection mints a fresh $99 Session per click — no
+            // stored stripe_links.inspection needed — so this CTA always works.
             <a
               href={`/r/${shareToken}/inspection`}
               className="block bg-accent hover:bg-accent-press text-white px-5 py-4 text-center transition-colors font-mono text-xs sm:text-sm uppercase tracking-[0.15em] font-bold"
             >
               Pay $99 · site visit →
             </a>
-          ) : (
-            <div className="bg-ink-deep border border-ink-line px-5 py-4 text-center">
-              <span className="font-mono text-xs uppercase tracking-[0.12em] text-text-dim">
-                Reply to SMS to confirm
-              </span>
-            </div>
           )}
         </div>
       </div>
@@ -1229,12 +1280,10 @@ function RoofingIndicativeBanner({
 
 function InspectionBlock({
   reason,
-  link,
   shareToken,
   paid,
 }: {
   reason: string | null
-  link: string | undefined
   shareToken: string
   paid: boolean
 }) {
@@ -1271,19 +1320,15 @@ function InspectionBlock({
                 Site visit booked · tradie will be in touch
               </span>
             </div>
-          ) : link ? (
+          ) : (
+            // /r/<token>/inspection mints a fresh $99 Session per click — no
+            // stored stripe_links.inspection needed — so this CTA always works.
             <a
               href={`/r/${shareToken}/inspection`}
               className="block bg-accent hover:bg-accent-press text-white px-5 py-4 text-center transition-colors font-mono text-xs sm:text-sm uppercase tracking-[0.15em] font-bold"
             >
               Pay $99 · site visit →
             </a>
-          ) : (
-            <div className="bg-ink-deep border border-ink-line px-5 py-4 text-center">
-              <span className="font-mono text-xs uppercase tracking-[0.12em] text-text-dim">
-                Reply to SMS to confirm
-              </span>
-            </div>
           )}
         </div>
       </div>

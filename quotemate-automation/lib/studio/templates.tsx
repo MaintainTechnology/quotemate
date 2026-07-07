@@ -29,6 +29,14 @@ function words(text: string): { w: string; hl: boolean }[] {
     last = re.lastIndex
   }
   if (last < text.length) push(text.slice(last), false)
+  // Attach a lone trailing punctuation token to the previous word so a highlight
+  // like "{under a minute}." doesn't render as "MINUTE ." with a gap.
+  for (let i = out.length - 1; i > 0; i--) {
+    if (/^[.,;:!?)]+$/.test(out[i].w)) {
+      out[i - 1].w += out[i].w
+      out.splice(i, 1)
+    }
+  }
   return out
 }
 

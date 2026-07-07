@@ -70,6 +70,30 @@ export function buildSolarRowPayloads(args: {
   const netInc = selected?.net_inc_gst ?? 0
   const gst = Math.max(0, netInc - netEx)
 
+  // Good/Better/Best jsonb for the DEPOSIT path. The customer deposit funnels
+  // through the generic short-link /r/<token>/<tier> (app/r/[token]/[tier]),
+  // whose fresh-Session mint reads quotes.good/better/best and re-applies GST
+  // as subtotal_ex_gst × 1.10 (lib/stripe/checkout.tierIncGstCents). Before
+  // this, solar left these columns NULL, so the mint returned null and the
+  // deposit link 404'd ("No payment link for this tier") — even for a clean,
+  // confirmed estimate. We store subtotal_ex_gst = net_inc_gst / 1.10 so the
+  // checkout's ×1.10 reproduces the EXACT net-inc-GST price the /q/solar page
+  // showed, and the 30% deposit charged always matches what the customer saw.
+  // (The /q/solar page renders from solar_estimates.estimate, not these
+  // columns — they exist purely to drive a correct deposit Session.)
+  const solarCheckoutTier = (
+    t: { system_kw_dc?: number; net_inc_gst?: number } | null | undefined,
+  ): { label: string; subtotal_ex_gst: number } | null => {
+    if (!t || !t.net_inc_gst || t.net_inc_gst <= 0) return null
+    return {
+      label: `${t.system_kw_dc ?? 0} kW solar`,
+      subtotal_ex_gst: Math.round((t.net_inc_gst / 1.1) * 100) / 100,
+    }
+  }
+  const goodTier = solarCheckoutTier(priceTiers.find((t) => t.tier === 'good'))
+  const betterTier = solarCheckoutTier(priceTiers.find((t) => t.tier === 'better'))
+  const bestTier = solarCheckoutTier(priceTiers.find((t) => t.tier === 'best'))
+
   const intake = {
     tenant_id: tenantId,
     trade: 'solar' as const,
@@ -154,6 +178,12 @@ export function buildSolarRowPayloads(args: {
     gst,
     total_inc_gst: netInc,
     routing_decision: estimate.routing.decision,
+    // Deposit-path tiers (see solarCheckoutTier above). Null on an
+    // inspection-routed estimate is fine — that path uses the $99 site-visit
+    // Session, which needs no tiers.
+    good: goodTier,
+    better: betterTier,
+    best: bestTier,
   }
 
   return { intake, solarEstimate, quote }
