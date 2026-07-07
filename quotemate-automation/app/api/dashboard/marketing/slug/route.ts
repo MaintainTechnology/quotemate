@@ -4,26 +4,22 @@
 // Auth: Authorization: Bearer <supabase access token>.
 
 import { z } from 'zod'
-import { marketingSupabase as supabase, userFromBearer, tenantForUser } from '@/lib/marketing/auth'
+import { marketingSupabase as supabase, tenantFromBearer } from '@/lib/marketing/auth'
 import { slugifyBusinessName } from '@/lib/marketing/qr'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: Request) {
-  const user = await userFromBearer(req)
-  if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  const tenant = await tenantForUser(user.id)
-  if (!tenant) return Response.json({ error: 'no_tenant' }, { status: 404 })
+  const tenant = await tenantFromBearer(req)
+  if (!tenant) return Response.json({ error: 'unauthorized' }, { status: 401 })
   return Response.json({ slug: tenant.slug })
 }
 
 const PatchBody = z.object({ slug: z.string().trim().min(2).max(40) })
 
 export async function PATCH(req: Request) {
-  const user = await userFromBearer(req)
-  if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  const tenant = await tenantForUser(user.id)
-  if (!tenant) return Response.json({ error: 'no_tenant' }, { status: 404 })
+  const tenant = await tenantFromBearer(req)
+  if (!tenant) return Response.json({ error: 'unauthorized' }, { status: 401 })
 
   let raw: unknown
   try {

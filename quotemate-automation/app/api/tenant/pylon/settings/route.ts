@@ -8,6 +8,7 @@
 // typo is caught immediately rather than failing silently at draft time.
 
 import { createClient } from '@supabase/supabase-js'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 import { fetchPylonComponent, pylonEnabled, type PylonComponentKind } from '@/lib/pylon/client'
 import { parsePylonSkuSettings, type PylonSkuSettings } from '@/lib/solar/pylon-hardware'
 
@@ -26,18 +27,9 @@ function gateOpen(): boolean {
 }
 
 async function tenantFromBearer(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id, pylon_settings')
-    .eq('owner_user_id', data.user.id)
-    .maybeSingle()
-  return tenant ?? null
+  // Dual-auth: Clerk session token OR legacy Supabase token → tenant row.
+  const resolved = await resolveTenantRequest(supabase, req, 'id, pylon_settings')
+  return (resolved?.tenant ?? null) as { id: string; pylon_settings: unknown } | null
 }
 
 export async function GET(req: Request) {

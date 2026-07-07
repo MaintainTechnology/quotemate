@@ -39,6 +39,7 @@ import {
 } from '@/lib/quote/display'
 import { asQuoteTierMode } from '@/lib/quote/tier-visibility'
 import { computePriceHoldUntil } from '@/lib/quote/hold'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,18 +57,20 @@ export async function POST(
     return Response.json({ error: 'missing_quote_id' }, { status: 400 })
   }
 
-  // ─── Auth ──
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) {
+  // ─── Auth (dual-auth: Clerk OR legacy Supabase token) ──
+  const resolved = await resolveTenantRequest(
+    supabase,
+    req,
+    'id, twilio_sms_number, business_name',
+  )
+  if (!resolved) {
     return Response.json({ error: 'unauthorized' }, { status: 401 })
   }
-  const token = auth.slice(7).trim()
-  if (!token) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  const { data: userData, error: userErr } = await supabase.auth.getUser(token)
-  if (userErr || !userData.user) {
-    return Response.json({ error: 'unauthorized' }, { status: 401 })
-  }
-  const userId = userData.user.id
+  const tenant = resolved.tenant as {
+    id: string
+    twilio_sms_number: string | null
+    business_name: string | null
+  } | null
 
   // ─── Load quote + verify ownership + state ──
   const { data: quote, error: qErr } = await supabase
@@ -83,13 +86,7 @@ export async function POST(
     return Response.json({ error: 'unscoped_quote' }, { status: 403 })
   }
 
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id, owner_user_id, twilio_sms_number, business_name')
-    .eq('id', quote.tenant_id)
-    .maybeSingle()
-  if (!tenant) return Response.json({ error: 'tenant_missing' }, { status: 404 })
-  if (tenant.owner_user_id !== userId) {
+  if (!tenant || quote.tenant_id !== tenant.id) {
     return Response.json({ error: 'forbidden' }, { status: 403 })
   }
 

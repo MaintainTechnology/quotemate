@@ -11,6 +11,7 @@
 // 403 — so the endpoint doesn't leak the existence of another tenant's doc.
 
 import { createClient } from '@supabase/supabase-js'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 import { downloadQuotePdf } from '@/lib/quote/pdf'
 
 export const dynamic = 'force-dynamic'
@@ -23,19 +24,9 @@ const supabase = createClient(
 )
 
 async function tenantFromBearer(req: Request): Promise<{ id: string } | null> {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id')
-    .eq('owner_user_id', data.user.id)
-    .maybeSingle()
-  if (!tenant) return null
-  return tenant as { id: string }
+  // Dual-auth: Clerk session token OR legacy Supabase token → tenant row.
+  const resolved = await resolveTenantRequest(supabase, req, 'id')
+  return (resolved?.tenant ?? null) as { id: string } | null
 }
 
 // Derive a sensible Content-Type from the stored file's extension. Quotes

@@ -19,6 +19,7 @@ import {
 } from '@/lib/solar/dashboard-view'
 import { feltTabEnabled } from '@/lib/felt/client'
 import { resolvePylonStages } from '@/lib/solar/pylon-stage'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,36 +28,19 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-async function userFromBearer(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  return data.user
-}
-
 // How many estimates to return per call — recency over archive, matching
 // the Chats tab. Hits the solar_estimates_tenant_idx (tenant_id, created_at
 // desc) composite index for an efficient scan.
 const ESTIMATE_LIMIT = 50
 
 export async function GET(req: Request) {
-  const user = await userFromBearer(req)
-  if (!user) {
+  // Dual-auth: Clerk session token (→ clerk_user_id) OR legacy Supabase token
+  // (→ owner_user_id). Same tenant lookup as /api/tenant/me + /chats.
+  const resolved = await resolveTenantRequest(supabase, req, 'id')
+  if (!resolved) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
-
-  // Resolve the caller's tenant — same lookup as /api/tenant/me + /chats.
-  const { data: tenant, error: tenantErr } = await supabase
-    .from('tenants')
-    .select('id')
-    .eq('owner_user_id', user.id)
-    .maybeSingle()
-  if (tenantErr) {
-    return Response.json({ ok: false, error: tenantErr.message }, { status: 500 })
-  }
+  const tenant = resolved.tenant as { id: string } | null
   if (!tenant) {
     return Response.json({ ok: false, error: 'no_tenant' }, { status: 404 })
   }

@@ -17,6 +17,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { parseVapiTranscript } from '@/lib/voice/parse-transcript'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,16 +25,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
-
-async function userFromBearer(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  return data.user
-}
 
 // How many conversations to return per call. Tradies eyeballing the
 // last few days of inbound traffic need recency, not paginated archive.
@@ -45,20 +36,13 @@ const CHAT_LIMIT = 30
 const MESSAGE_CAP_PER_CONVO = 60
 
 export async function GET(req: Request) {
-  const user = await userFromBearer(req)
-  if (!user) {
+  // Dual-auth: Clerk session token (→ clerk_user_id) OR legacy Supabase token
+  // (→ owner_user_id). Same resolver as /api/tenant/me.
+  const resolved = await resolveTenantRequest(supabase, req, 'id')
+  if (!resolved) {
     return Response.json({ error: 'unauthorized' }, { status: 401 })
   }
-
-  // Resolve the caller's tenant — same lookup pattern as /api/tenant/me.
-  const { data: tenant, error: tenantErr } = await supabase
-    .from('tenants')
-    .select('id')
-    .eq('owner_user_id', user.id)
-    .maybeSingle()
-  if (tenantErr) {
-    return Response.json({ error: tenantErr.message }, { status: 500 })
-  }
+  const tenant = resolved.tenant as { id: string } | null
   if (!tenant) {
     return Response.json({ error: 'no_tenant' }, { status: 404 })
   }

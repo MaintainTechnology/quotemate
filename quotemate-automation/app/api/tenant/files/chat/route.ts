@@ -12,6 +12,7 @@
 // back { answer, citations }.
 
 import { createClient } from '@supabase/supabase-js'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 import { searchTenantStore, ensureTenantStore } from '@/lib/filestore/tenant-store'
 
 export const dynamic = 'force-dynamic'
@@ -32,18 +33,13 @@ type TenantRow = {
 }
 
 async function tenantFromBearer(req: Request): Promise<TenantRow | null> {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id, business_name, file_store_id')
-    .eq('owner_user_id', data.user.id)
-    .maybeSingle<TenantRow>()
-  return tenant ?? null
+  // Dual-auth: Clerk session token OR legacy Supabase token → tenant row.
+  const resolved = await resolveTenantRequest(
+    supabase,
+    req,
+    'id, business_name, file_store_id',
+  )
+  return (resolved?.tenant ?? null) as TenantRow | null
 }
 
 type Citation = {

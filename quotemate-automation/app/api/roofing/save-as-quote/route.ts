@@ -27,6 +27,7 @@ import { z } from 'zod'
 import { generateShareToken } from '@/lib/stripe/checkout'
 import { buildTierObjects, splitAddress } from '@/lib/roofing/save-as-quote-helpers'
 import type { RoofMetrics, RoofingQuotePrice } from '@/lib/roofing/types'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 
@@ -99,26 +100,16 @@ const SaveRequestSchema = z.object({
     .optional(),
 })
 
-async function userAndTenant(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id, business_name')
-    .eq('owner_user_id', data.user.id)
-    .maybeSingle()
-  if (!tenant) return null
-  return { user: data.user, tenant }
-}
-
 export async function POST(req: Request) {
-  const ctx = await userAndTenant(req)
-  if (!ctx) {
+  // Dual-auth: Clerk session token (→ clerk_user_id) OR legacy Supabase token
+  // (→ owner_user_id). This route needs a tenant to attribute the quote to.
+  const resolved = await resolveTenantRequest(supabase, req, 'id, business_name')
+  if (!resolved) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  }
+  const tenant = resolved.tenant as { id: string; business_name: string | null } | null
+  if (!tenant) {
+    return Response.json({ ok: false, error: 'no_tenant' }, { status: 404 })
   }
 
   let body: unknown
@@ -145,7 +136,7 @@ export async function POST(req: Request) {
   // alongside the inputs the tradie provided. The deterministic
   // pricing engine derives everything from this snapshot.
   const intakePayload = {
-    tenant_id: ctx.tenant.id,
+    tenant_id: tenant.id,
     trade: 'roofing',
     job_type: inputs.intent || 'full_reroof',
     address: street,
@@ -206,7 +197,7 @@ export async function POST(req: Request) {
   const gst = Math.max(0, tierTotalInc - tierTotalEx)
 
   const quotePayload = {
-    tenant_id: ctx.tenant.id,
+    tenant_id: tenant.id,
     intake_id: intakeRow.id,
     status: 'draft',
     share_token: shareToken,

@@ -11,6 +11,7 @@ import { MeasureAllRequestSchema } from '@/lib/roofing/request-schema'
 import { measureAndPriceRoofs } from '@/lib/roofing/measure'
 import { MockRoofingProvider } from '@/lib/roofing/providers/mock'
 import { effectiveRateCardFromOverlay } from '@/lib/roofing/rate-card-overlay'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,24 +20,19 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
+// Dual-auth: Clerk session token (→ clerk_user_id) OR legacy Supabase token
+// (→ owner_user_id). Tenant is optional — a missing tenant just means no
+// rate-card overrides, not an auth failure, so we never 404.
 async function userAndTenantFromBearer(
   req: Request,
 ): Promise<{ userId: string; tenantId: string | null; primaryTrade: string | null } | null> {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id, trade')
-    .eq('owner_user_id', data.user.id)
-    .maybeSingle()
+  const resolved = await resolveTenantRequest(supabase, req, 'id, trade')
+  if (!resolved) return null
+  const tenant = resolved.tenant as { id?: string; trade?: string | null } | null
   return {
-    userId: data.user.id,
-    tenantId: (tenant?.id as string | undefined) ?? null,
-    primaryTrade: (tenant?.trade as string | null | undefined) ?? null,
+    userId: resolved.identity.userId,
+    tenantId: tenant?.id ?? null,
+    primaryTrade: tenant?.trade ?? null,
   }
 }
 

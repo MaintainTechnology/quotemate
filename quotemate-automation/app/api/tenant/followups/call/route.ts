@@ -10,6 +10,7 @@
 // abused to dial arbitrary numbers.
 
 import { createClient } from '@supabase/supabase-js'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 import {
   resolveFollowupTarget,
   resolveLeadTarget,
@@ -28,25 +29,18 @@ const supabase = createClient(
 const E164 = /^\+\d{8,15}$/
 
 async function tenantFromBearer(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id, business_name, twilio_voice_number, owner_mobile')
-    .eq('owner_user_id', data.user.id)
-    .maybeSingle()
-  return (
-    (tenant as {
-      id: string
-      business_name: string
-      twilio_voice_number: string | null
-      owner_mobile: string | null
-    } | null) ?? null
+  // Dual-auth: Clerk session token OR legacy Supabase token → tenant row.
+  const resolved = await resolveTenantRequest(
+    supabase,
+    req,
+    'id, business_name, twilio_voice_number, owner_mobile',
   )
+  return (resolved?.tenant ?? null) as {
+    id: string
+    business_name: string
+    twilio_voice_number: string | null
+    owner_mobile: string | null
+  } | null
 }
 
 export async function POST(req: Request) {

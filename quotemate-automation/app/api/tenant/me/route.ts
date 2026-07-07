@@ -15,6 +15,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { UpdateSchema } from '@/lib/tenant/update-schema'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 import { parseVapiTranscript } from '@/lib/voice/parse-transcript'
 import {
   normalizeServiceDelta,
@@ -46,58 +47,43 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-async function userFromBearer(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  return data.user
-}
-
 // ─── GET /api/tenant/me ────────────────────────────────────────────
 export async function GET(req: Request) {
-  const user = await userFromBearer(req)
-  if (!user) {
+  // Dual-auth: accept a Clerk session token (→ clerk_user_id) OR the legacy
+  // Supabase access token (→ owner_user_id). Resolver loads the tenant row.
+  const resolved = await resolveTenantRequest(supabase, req, '*')
+  if (!resolved) {
     return Response.json({ error: 'unauthorized' }, { status: 401 })
   }
+  const { identity } = resolved
+  let tenant = resolved.tenant
 
-  // Tradie's tenant row — primary lookup by owner_user_id.
-  const primary = await supabase
-    .from('tenants')
-    .select('*')
-    .eq('owner_user_id', user.id)
-    .maybeSingle()
-
-  if (primary.error) {
-    return Response.json({ error: primary.error.message }, { status: 500 })
-  }
-
-  let tenant = primary.data
-
-  // Self-heal: a tenant row CAN exist with owner_user_id = NULL when the
-  // activate wizard submitted without the URL carry-through (an earlier
-  // bug). On the next signed-in load we backfill the link via email so
-  // the tradie isn't permanently bounced to onboarding.
-  if (!tenant && user.email) {
+  // Self-heal: a tenant row CAN exist UNLINKED (owner_user_id / clerk_user_id
+  // NULL) — e.g. the activate wizard submitted without the URL carry-through,
+  // or a brand-new Clerk identity not yet linked. On the next signed-in load
+  // we backfill the PROVIDER-APPROPRIATE link column via an email match so the
+  // tradie isn't permanently bounced to onboarding. (Clerk session tokens may
+  // omit the email claim; when they do this simply no-ops, because every
+  // migrated tenant is already linked by clerk_user_id.)
+  if (!tenant && identity.email) {
+    const linkColumn = identity.provider === 'clerk' ? 'clerk_user_id' : 'owner_user_id'
     const { data: byEmail } = await supabase
       .from('tenants')
       .select('*')
-      .eq('owner_email', user.email.toLowerCase())
+      .eq('owner_email', identity.email.toLowerCase())
       .maybeSingle()
     if (byEmail) {
       const { error: linkErr } = await supabase
         .from('tenants')
-        .update({ owner_user_id: user.id })
+        .update({ [linkColumn]: identity.userId })
         .eq('id', byEmail.id)
       if (!linkErr) {
-        console.log('[tenant/me] backfilled owner_user_id from email match', {
+        console.log('[tenant/me] backfilled tenant link from email match', {
           tenantId: byEmail.id,
-          email: user.email,
-          userId: user.id,
+          provider: identity.provider,
+          linkColumn,
         })
-        tenant = { ...byEmail, owner_user_id: user.id }
+        tenant = { ...byEmail, [linkColumn]: identity.userId }
       } else {
         console.warn('[tenant/me] backfill update failed', linkErr.message)
         tenant = byEmail
@@ -550,8 +536,9 @@ export async function GET(req: Request) {
 // single-trade tenants.
 
 export async function PATCH(req: Request) {
-  const user = await userFromBearer(req)
-  if (!user) {
+  // Dual-auth resolve (Clerk → clerk_user_id, else Supabase → owner_user_id).
+  const resolved = await resolveTenantRequest(supabase, req, 'id, owner_user_id')
+  if (!resolved) {
     return Response.json({ error: 'unauthorized' }, { status: 401 })
   }
 
@@ -591,15 +578,8 @@ export async function PATCH(req: Request) {
     serviceDeltaEntries = normalizeServiceDelta(deltaParsed.data)
   }
 
-  // Find the tradie's tenant
-  const { data: tenant, error: tenantErr } = await supabase
-    .from('tenants')
-    .select('id, owner_user_id')
-    .eq('owner_user_id', user.id)
-    .maybeSingle()
-  if (tenantErr) {
-    return Response.json({ error: tenantErr.message }, { status: 500 })
-  }
+  // The caller's tenant, already resolved by clerk_user_id or owner_user_id.
+  const tenant = resolved.tenant as { id: string; owner_user_id: string | null } | null
   if (!tenant) {
     return Response.json({ error: 'no_tenant' }, { status: 404 })
   }

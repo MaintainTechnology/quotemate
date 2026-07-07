@@ -8,6 +8,7 @@
 // Google Solar footprint lookup (mock fallback when no key is set).
 
 import { createClient } from '@supabase/supabase-js'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 import { EstimateRequestSchema } from '@/lib/painting/request-schema'
 import { estimatePainting } from '@/lib/painting/measure'
 import { effectivePaintingRateCardFromOverlay } from '@/lib/painting/rate-card-overlay'
@@ -23,27 +24,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
-
-async function userAndTenantFromBearer(
-  req: Request,
-): Promise<{ userId: string; tenantId: string | null; primaryTrade: string | null } | null> {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id, trade')
-    .eq('owner_user_id', data.user.id)
-    .maybeSingle()
-  return {
-    userId: data.user.id,
-    tenantId: (tenant?.id as string | undefined) ?? null,
-    primaryTrade: (tenant?.trade as string | null | undefined) ?? null,
-  }
-}
 
 /** Best-effort — fetch the per-tenant painting rate-card overlay from
  *  pricing_book.overlays.painting_rate_card and shallow-merge it onto the
@@ -83,9 +63,16 @@ async function loadPaintingOverlay(
 }
 
 export async function POST(req: Request) {
-  const auth = await userAndTenantFromBearer(req)
-  if (!auth) {
+  // Dual-auth: Clerk session token OR legacy Supabase token. Tenant is
+  // optional — no tenant just means the default painting rate card.
+  const resolved = await resolveTenantRequest(supabase, req, 'id, trade')
+  if (!resolved) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  }
+  const tenantRow = resolved.tenant as { id?: string; trade?: string | null } | null
+  const auth = {
+    tenantId: (tenantRow?.id as string | undefined) ?? null,
+    primaryTrade: (tenantRow?.trade as string | null | undefined) ?? null,
   }
 
   let body: unknown

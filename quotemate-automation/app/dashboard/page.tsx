@@ -21,6 +21,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '@clerk/nextjs'
 import Link from 'next/link'
 import { CATEGORIES } from '@/lib/estimate/categories'
 import {
@@ -475,16 +476,35 @@ export default function DashboardPage() {
   // enforces admin on every /admin/* route (the link is just UX).
   const [isAdmin, setIsAdmin] = useState(false)
 
+  // Clerk session (dual-auth Supabase↔Clerk). getToken() yields a Clerk JWT
+  // the API verifies (→ clerk_user_id); clerkLoaded gates the mount effect so
+  // we don't misfire the sign-in bounce before Clerk has hydrated.
+  const {
+    getToken,
+    isLoaded: clerkLoaded,
+    isSignedIn: clerkSignedIn,
+    signOut: clerkSignOut,
+  } = useAuth()
+
   // On mount: confirm we have a session, then load the dashboard payload.
   useEffect(() => {
     let cancelled = false
+    if (!clerkLoaded) return // wait for Clerk to hydrate so getToken() is reliable
     ;(async () => {
+      // Dual-auth: prefer a Clerk session token; fall back to the legacy
+      // Supabase session so users mid-migration are never bounced out.
       const supabase = getBrowserSupabase()
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData.session?.access_token ?? null
+      let token: string | null = null
+      if (clerkSignedIn) {
+        token = await getToken().catch(() => null)
+      }
       if (!token) {
-        // Not signed in → bounce to /signin.
-        router.replace('/signin')
+        const { data: sessionData } = await supabase.auth.getSession()
+        token = sessionData.session?.access_token ?? null
+      }
+      if (!token) {
+        // Not signed in to either provider → bounce to Clerk sign-in.
+        router.replace('/sign-in')
         return
       }
       if (cancelled) return
@@ -505,7 +525,7 @@ export default function DashboardPage() {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [clerkLoaded])
 
   // If a deep-link (?tab=) or a remembered tab points at a feature the tenant
   // doesn't have (no gating slug in trades[]), fall back to overview once the
@@ -767,9 +787,16 @@ export default function DashboardPage() {
   }
 
   async function signOut() {
+    // Dual-auth: clear BOTH sessions so sign-out is complete regardless of
+    // which provider the tradie logged in with.
     const supabase = getBrowserSupabase()
-    await supabase.auth.signOut()
-    router.replace('/signin')
+    await supabase.auth.signOut().catch(() => {})
+    try {
+      await clerkSignOut()
+    } catch {
+      /* ignore — Supabase sign-out already ran */
+    }
+    router.replace('/sign-in')
   }
 
   if (loadError) {

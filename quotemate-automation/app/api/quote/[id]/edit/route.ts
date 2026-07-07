@@ -49,6 +49,7 @@ import {
 } from '@/lib/estimate/validate'
 import { tradeGroundingMode } from '@/lib/quote/report-adapters/registry'
 import { shouldNotifyOnEdit } from '@/lib/quote/notify-policy'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -104,19 +105,24 @@ export async function POST(
 ) {
   const { id: quoteId } = await params
 
-  // ─── Auth ───────────────────────────────────────────────────
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) {
+  // ─── Auth (dual-auth: Clerk OR legacy Supabase token) ───────
+  // Resolve the caller's own tenant (with the Connect columns the Stripe
+  // re-issue below needs) up front; the ownership check moves to comparing
+  // quote.tenant_id against this resolved tenant.id.
+  const resolved = await resolveTenantRequest(
+    supabase,
+    req,
+    'id, stripe_connect_account_id, stripe_connect_charges_enabled, stripe_connect_payouts_enabled',
+  )
+  if (!resolved) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
-  const token = auth.slice(7).trim()
-  if (!token) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-
-  const { data: userData, error: userErr } = await supabase.auth.getUser(token)
-  if (userErr || !userData.user) {
-    return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  }
-  const userId = userData.user.id
+  const tenant = resolved.tenant as {
+    id: string
+    stripe_connect_account_id: string | null
+    stripe_connect_charges_enabled: boolean | null
+    stripe_connect_payouts_enabled: boolean | null
+  } | null
 
   // ─── Parse body ─────────────────────────────────────────────
   let raw: unknown
@@ -188,14 +194,7 @@ export async function POST(
     )
   }
 
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select(
-      'id, owner_user_id, stripe_connect_account_id, stripe_connect_charges_enabled, stripe_connect_payouts_enabled',
-    )
-    .eq('id', quote.tenant_id)
-    .maybeSingle()
-  if (!tenant || tenant.owner_user_id !== userId) {
+  if (!tenant || quote.tenant_id !== tenant.id) {
     return Response.json({ ok: false, error: 'not_owner' }, { status: 403 })
   }
 

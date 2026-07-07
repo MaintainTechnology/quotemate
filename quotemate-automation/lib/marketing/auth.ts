@@ -3,6 +3,7 @@
 // extracted here so the qr / slug routes don't each re-declare it.
 
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const marketingSupabase: SupabaseClient = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -24,13 +25,30 @@ export type TenantRow = {
   business_name: string
   slug: string | null
   twilio_sms_number: string | null
+  owner_user_id: string | null
 }
 
 export async function tenantForUser(userId: string): Promise<TenantRow | null> {
   const { data } = await marketingSupabase
     .from('tenants')
-    .select('id, business_name, slug, twilio_sms_number')
+    .select('id, business_name, slug, twilio_sms_number, owner_user_id')
     .eq('owner_user_id', userId)
     .maybeSingle()
   return (data as TenantRow | null) ?? null
+}
+
+/**
+ * DUAL-AUTH tenant resolution for the dashboard marketing routes. Accepts a
+ * Clerk session token (→ tenants.clerk_user_id) OR a legacy Supabase access
+ * token (→ tenants.owner_user_id). Returns the caller's tenant row, or null on
+ * any auth failure OR when the authed caller has no tenant yet — callers answer
+ * 401 uniformly (same convention as lib/tenant/bearer.ts).
+ */
+export async function tenantFromBearer(req: Request): Promise<TenantRow | null> {
+  const resolved = await resolveTenantRequest(
+    marketingSupabase,
+    req,
+    'id, business_name, slug, twilio_sms_number, owner_user_id',
+  )
+  return (resolved?.tenant as TenantRow | null) ?? null
 }

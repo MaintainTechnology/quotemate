@@ -8,6 +8,7 @@
 // is no Street View imagery for the address.
 
 import { createClient } from '@supabase/supabase-js'
+import { resolveIdentityRequest } from '@/lib/tenant/from-request'
 import {
   buildStreetViewMetadataUrl,
   buildStreetViewUrl,
@@ -21,15 +22,6 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-async function authed(req: Request): Promise<boolean> {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return false
-  const token = auth.slice(7).trim()
-  if (!token) return false
-  const { data, error } = await supabase.auth.getUser(token)
-  return !error && !!data.user
-}
-
 function composeLocation(url: URL): string {
   const address = (url.searchParams.get('address') ?? '').trim()
   const postcode = (url.searchParams.get('postcode') ?? '').trim()
@@ -38,7 +30,9 @@ function composeLocation(url: URL): string {
 }
 
 export async function GET(req: Request) {
-  if (!(await authed(req))) {
+  // Dual-auth gate: Clerk session token OR legacy Supabase token.
+  const identity = await resolveIdentityRequest(supabase, req)
+  if (!identity) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
   const apiKey = process.env.GOOGLE_MAPS_API_KEY

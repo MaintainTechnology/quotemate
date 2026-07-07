@@ -15,6 +15,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { buildStaticMapUrl, type StaticMapInput } from '@/lib/roofing/google-maps'
+import { resolveIdentityRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,16 +23,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
-
-async function userIdFromBearer(req: Request): Promise<string | null> {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  return data.user.id
-}
 
 type Marker = NonNullable<StaticMapInput['markers']>[number]
 
@@ -50,8 +41,10 @@ function parseMarkers(raw: string | null): Marker[] | undefined {
 }
 
 export async function GET(req: Request) {
-  const userId = await userIdFromBearer(req)
-  if (!userId) {
+  // Dual-auth gate: Clerk session token OR legacy Supabase token. This proxy
+  // only needs a valid signed-in tradie (no tenant query).
+  const identity = await resolveIdentityRequest(supabase, req)
+  if (!identity) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
 

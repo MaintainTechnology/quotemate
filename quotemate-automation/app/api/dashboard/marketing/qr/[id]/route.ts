@@ -2,7 +2,7 @@
 // or change status (pause/archive/reactivate). Ownership-checked.
 
 import { z } from 'zod'
-import { marketingSupabase as supabase, userFromBearer, tenantForUser } from '@/lib/marketing/auth'
+import { marketingSupabase as supabase, tenantFromBearer } from '@/lib/marketing/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,10 +15,8 @@ const PatchBody = z.object({
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params
-  const user = await userFromBearer(req)
-  if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  const tenant = await tenantForUser(user.id)
-  if (!tenant) return Response.json({ error: 'no_tenant' }, { status: 404 })
+  const tenant = await tenantFromBearer(req)
+  if (!tenant) return Response.json({ error: 'unauthorized' }, { status: 401 })
 
   let raw: unknown
   try {

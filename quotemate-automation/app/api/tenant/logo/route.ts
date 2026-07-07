@@ -9,6 +9,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { uploadTenantLogo, MAX_LOGO_BYTES, ALLOWED_LOGO_MIME } from '@/lib/storage/upload'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 // node:crypto + the Supabase client need the Node.js runtime.
 export const runtime = 'nodejs'
@@ -18,32 +19,15 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-async function userFromBearer(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  return data.user
-}
-
 export async function POST(req: Request) {
-  const user = await userFromBearer(req)
-  if (!user) {
+  // Dual-auth: Clerk session token (→ clerk_user_id) OR legacy Supabase token
+  // (→ owner_user_id). The logo is scoped/written to THIS tenant only — a user
+  // can never change another tenant's branding.
+  const resolved = await resolveTenantRequest(supabase, req, 'id')
+  if (!resolved) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
-
-  // Resolve the signed-in user's tenant. The logo is scoped/written to THIS
-  // tenant only — a user can never change another tenant's branding.
-  const { data: tenant, error: tErr } = await supabase
-    .from('tenants')
-    .select('id')
-    .eq('owner_user_id', user.id)
-    .maybeSingle()
-  if (tErr) {
-    return Response.json({ ok: false, error: tErr.message }, { status: 500 })
-  }
+  const tenant = resolved.tenant as { id: string } | null
   if (!tenant) {
     return Response.json({ ok: false, error: 'no_tenant' }, { status: 404 })
   }

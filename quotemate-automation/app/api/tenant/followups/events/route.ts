@@ -17,6 +17,7 @@
 // foreign quote ids).
 
 import { createClient } from '@supabase/supabase-js'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,19 +36,16 @@ const NOTE_OUTCOMES = new Set([
 ])
 
 async function authed(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id')
-    .eq('owner_user_id', data.user.id)
-    .maybeSingle()
-  if (!tenant) return null
-  return { tenantId: (tenant as { id: string }).id, userId: data.user.id }
+  // Dual-auth: Clerk session token (→ clerk_user_id) OR legacy Supabase token.
+  // actor_user_id is a uuid → auth.users FK, so it must hold the SUPABASE auth
+  // id (tenant.owner_user_id) — a Clerk `user_…` string is not a valid uuid.
+  const resolved = await resolveTenantRequest(supabase, req, 'id, owner_user_id')
+  if (!resolved || !resolved.tenant) return null
+  const t = resolved.tenant as { id: string; owner_user_id: string | null }
+  return {
+    tenantId: t.id,
+    userId: t.owner_user_id,
+  }
 }
 
 // ─── GET ───────────────────────────────────────────────────────────

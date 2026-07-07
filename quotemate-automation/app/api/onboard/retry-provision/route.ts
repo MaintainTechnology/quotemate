@@ -19,6 +19,7 @@ import { runProvisioning } from '@/lib/onboard/run-provisioning'
 import { setTwilioSmsWebhook } from '@/lib/twilio/set-sms-webhook'
 import { isStubTwilioNumber, isStubVapiId } from '@/lib/onboard/health'
 import { computePreflight } from '@/lib/onboard/preflight-logic'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,19 +28,15 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-async function userFromBearer(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  return data.user
-}
-
 export async function POST(req: Request) {
-  const user = await userFromBearer(req)
-  if (!user) {
+  // Dual-auth: resolve the caller's tenant by clerk_user_id or owner_user_id,
+  // never a client-supplied id, so users only re-provision their own tenant.
+  const resolved = await resolveTenantRequest(
+    supabase,
+    req,
+    'id, business_name, owner_first_name, owner_mobile, trade, trades, twilio_sms_number, vapi_assistant_id, status',
+  )
+  if (!resolved) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
 
@@ -48,16 +45,17 @@ export async function POST(req: Request) {
   const { summary } = computePreflight(process.env)
   const provisioningMode = { twilio: summary.twilio_mode, vapi: summary.vapi_mode }
 
-  const { data: tenant, error: tErr } = await supabase
-    .from('tenants')
-    .select(
-      'id, business_name, owner_first_name, owner_mobile, trade, trades, twilio_sms_number, vapi_assistant_id, status',
-    )
-    .eq('owner_user_id', user.id)
-    .maybeSingle()
-  if (tErr) {
-    return Response.json({ ok: false, error: tErr.message }, { status: 500 })
-  }
+  const tenant = resolved.tenant as {
+    id: string
+    business_name: string | null
+    owner_first_name: string | null
+    owner_mobile: string | null
+    trade: string | null
+    trades: string[] | null
+    twilio_sms_number: string | null
+    vapi_assistant_id: string | null
+    status: string | null
+  } | null
   if (!tenant) {
     return Response.json({ ok: false, error: 'no_tenant' }, { status: 404 })
   }
@@ -114,7 +112,7 @@ export async function POST(req: Request) {
 
   const result = await runProvisioning(supabase, {
     tenantId: tenant.id,
-    businessName: tenant.business_name,
+    businessName: tenant.business_name ?? '',
     trade: tradesArr[0],
     trades: tradesArr,
     ownerFirstName: tenant.owner_first_name ?? 'mate',

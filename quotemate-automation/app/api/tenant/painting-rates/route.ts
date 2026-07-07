@@ -7,6 +7,7 @@
 // Auth: bearer Supabase access token → tenant via owner_user_id.
 
 import { createClient } from '@supabase/supabase-js'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 import {
   EDITABLE_SCOPES,
   buildPaintingOverlayFromInputs,
@@ -23,19 +24,9 @@ const supabase = createClient(
 )
 
 async function tenantFromBearer(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id, trade, trades')
-    .eq('owner_user_id', data.user.id)
-    .maybeSingle()
-  if (!tenant) return null
-  return tenant as { id: string; trade: string | null }
+  // Dual-auth: Clerk session token OR legacy Supabase token → tenant row.
+  const resolved = await resolveTenantRequest(supabase, req, 'id, trade, trades')
+  return (resolved?.tenant ?? null) as { id: string; trade: string | null } | null
 }
 
 async function findPrimaryPricingBook(tenant: {

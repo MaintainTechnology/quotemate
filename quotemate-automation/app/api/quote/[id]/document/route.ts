@@ -15,6 +15,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { sanitizeReportDoc } from '@/lib/quote/report-doc/sanitize'
 import { validateReportStyle } from '@/lib/quote/report-doc/style'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -27,18 +28,12 @@ const supabase = createClient(
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id: quoteId } = await params
 
-  // ─── Auth (identity from Bearer only) ───────────────────────
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) {
+  // ─── Auth (dual-auth: Clerk OR legacy Supabase token) ───────
+  const resolved = await resolveTenantRequest(supabase, req, 'id')
+  if (!resolved) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
-  const token = auth.slice(7).trim()
-  if (!token) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  const { data: userData, error: userErr } = await supabase.auth.getUser(token)
-  if (userErr || !userData.user) {
-    return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  }
-  const userId = userData.user.id
+  const tenant = resolved.tenant as { id: string } | null
 
   // ─── Body ───────────────────────────────────────────────────
   let raw: unknown
@@ -71,12 +66,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return Response.json({ ok: false, error: 'cannot_edit_inspection_quote' }, { status: 409 })
   }
 
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id, owner_user_id')
-    .eq('id', quote.tenant_id)
-    .maybeSingle()
-  if (!tenant || tenant.owner_user_id !== userId) {
+  if (!tenant || quote.tenant_id !== tenant.id) {
     return Response.json({ ok: false, error: 'not_owner' }, { status: 403 })
   }
 

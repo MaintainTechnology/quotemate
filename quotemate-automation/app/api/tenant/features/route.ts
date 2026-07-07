@@ -4,6 +4,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { tenantFeatureSlugs } from '@/lib/features/catalog'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,29 +14,15 @@ const supabase = createClient(
 )
 
 export async function GET(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) {
+  // Dual-auth: Clerk session token (→ clerk_user_id) OR legacy Supabase token
+  // (→ owner_user_id). No token → 401. A missing tenant deliberately degrades
+  // to empty trades (page guards treat "no features" as the safe closed
+  // state) rather than 404 — preserving the original behaviour.
+  const resolved = await resolveTenantRequest(supabase, req, 'trades')
+  if (!resolved) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
-  const token = auth.slice(7).trim()
-  if (!token) {
-    return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  }
-
-  const { data: userData, error: userErr } = await supabase.auth.getUser(token)
-  if (userErr || !userData.user) {
-    return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  }
-
-  const { data: tenant, error } = await supabase
-    .from('tenants')
-    .select('trades')
-    .eq('owner_user_id', userData.user.id)
-    .maybeSingle()
-  if (error) {
-    return Response.json({ ok: false, error: error.message }, { status: 500 })
-  }
-
+  const tenant = resolved.tenant as { trades?: string[] | null } | null
   const trades: string[] = Array.isArray(tenant?.trades) ? (tenant!.trades as string[]) : []
   return Response.json({ ok: true, trades, features: tenantFeatureSlugs(trades) })
 }

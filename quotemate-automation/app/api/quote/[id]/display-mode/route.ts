@@ -21,6 +21,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,18 +48,12 @@ export async function PATCH(
     return Response.json({ error: 'missing_quote_id' }, { status: 400 })
   }
 
-  // ─── Auth: who is the caller? ──
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) {
+  // ─── Auth: who is the caller? (dual-auth: Clerk OR legacy Supabase token) ──
+  const resolved = await resolveTenantRequest(supabase, req, 'id')
+  if (!resolved) {
     return Response.json({ error: 'unauthorized' }, { status: 401 })
   }
-  const token = auth.slice(7).trim()
-  if (!token) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  const { data: userData, error: userErr } = await supabase.auth.getUser(token)
-  if (userErr || !userData.user) {
-    return Response.json({ error: 'unauthorized' }, { status: 401 })
-  }
-  const userId = userData.user.id
+  const tenant = resolved.tenant as { id: string } | null
 
   // ─── Parse body ──
   let body: unknown
@@ -93,13 +88,7 @@ export async function PATCH(
     return Response.json({ error: 'unscoped_quote' }, { status: 403 })
   }
 
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id, owner_user_id')
-    .eq('id', quote.tenant_id)
-    .maybeSingle()
-  if (!tenant) return Response.json({ error: 'tenant_missing' }, { status: 404 })
-  if (tenant.owner_user_id !== userId) {
+  if (!tenant || quote.tenant_id !== tenant.id) {
     return Response.json({ error: 'forbidden' }, { status: 403 })
   }
 

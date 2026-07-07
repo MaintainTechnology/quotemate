@@ -13,6 +13,7 @@
 // the same auth check before mutating.
 
 import { createClient } from '@supabase/supabase-js'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,22 +28,20 @@ export async function GET(
 ) {
   const { id: quoteId } = await params
 
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) {
+  // Dual-auth: Clerk session token (→ clerk_user_id) OR legacy Supabase token
+  // (→ owner_user_id). resolveTenantRequest returns null for a missing / empty
+  // / invalid token, so the three legacy reason codes (no_session / empty_bearer
+  // / bad_token) collapse to 'no_session' — the caller only needs owner:false to
+  // keep the edit affordance hidden.
+  const resolved = await resolveTenantRequest(supabase, req, 'id, business_name')
+  if (!resolved) {
     return Response.json({ owner: false, reason: 'no_session' })
   }
-  const token = auth.slice(7).trim()
-  if (!token) return Response.json({ owner: false, reason: 'empty_bearer' })
+  const tenant = resolved.tenant as { id: string; business_name: string | null } | null
 
-  const { data: userData, error: userErr } = await supabase.auth.getUser(token)
-  if (userErr || !userData.user) {
-    return Response.json({ owner: false, reason: 'bad_token' })
-  }
-  const userId = userData.user.id
-
-  // Pull the quote → tenant, then check whether `tenants.owner_user_id`
-  // matches the caller. The single round trip keeps the latency of the
-  // page-load owner check below 100ms.
+  // Load the quote and confirm the caller's resolved tenant owns it. The
+  // single round trip keeps the latency of the page-load owner check below
+  // 100ms.
   const { data: quote } = await supabase
     .from('quotes')
     .select('id, tenant_id, paid_at')
@@ -55,12 +54,7 @@ export async function GET(
     return Response.json({ owner: false, reason: 'unscoped_quote' })
   }
 
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id, owner_user_id, business_name')
-    .eq('id', quote.tenant_id)
-    .maybeSingle()
-  if (!tenant || tenant.owner_user_id !== userId) {
+  if (!tenant || quote.tenant_id !== tenant.id) {
     return Response.json({ owner: false, reason: 'not_owner' })
   }
 

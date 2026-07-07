@@ -23,6 +23,7 @@ import {
   type ChatEditTier,
   type ChatEditTiers,
 } from '@/lib/quote/chat-edit'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -101,19 +102,12 @@ export async function POST(
 ) {
   const { id: quoteId } = await params
 
-  // ─── Auth ───────────────────────────────────────────────────
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) {
+  // ─── Auth (dual-auth: Clerk OR legacy Supabase token) ───────
+  const resolved = await resolveTenantRequest(supabase, req, 'id')
+  if (!resolved) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
-  const token = auth.slice(7).trim()
-  if (!token) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-
-  const { data: userData, error: userErr } = await supabase.auth.getUser(token)
-  if (userErr || !userData.user) {
-    return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  }
-  const userId = userData.user.id
+  const tenant = resolved.tenant as { id: string } | null
 
   // ─── Parse body ─────────────────────────────────────────────
   let raw: unknown
@@ -161,12 +155,7 @@ export async function POST(
     )
   }
 
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id, owner_user_id')
-    .eq('id', quote.tenant_id)
-    .maybeSingle()
-  if (!tenant || tenant.owner_user_id !== userId) {
+  if (!tenant || quote.tenant_id !== tenant.id) {
     return Response.json({ ok: false, error: 'not_owner' }, { status: 403 })
   }
 

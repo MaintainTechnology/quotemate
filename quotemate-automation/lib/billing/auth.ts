@@ -7,6 +7,7 @@
 // (CLAUDE.md) — isolation is enforced here by the owner_user_id filter.
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 let _admin: SupabaseClient | null = null
 
@@ -44,24 +45,14 @@ const TENANT_COLS =
 export async function tenantFromBearer(
   req: Request,
 ): Promise<{ userId: string; userEmail: string | null; tenant: BillingTenant | null } | null> {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-
-  const sb = billingAdmin()
-  const { data, error } = await sb.auth.getUser(token)
-  if (error || !data.user) return null
-
-  const { data: tenant } = await sb
-    .from('tenants')
-    .select(TENANT_COLS)
-    .eq('owner_user_id', data.user.id)
-    .maybeSingle()
-
+  // Dual-auth: Clerk session token (→ clerk_user_id) OR legacy Supabase token
+  // (→ owner_user_id). userId is the resolved provider id (Clerk user_… or the
+  // Supabase uuid); callers here key off the tenant, not the raw id.
+  const resolved = await resolveTenantRequest(billingAdmin(), req, TENANT_COLS)
+  if (!resolved) return null
   return {
-    userId: data.user.id,
-    userEmail: data.user.email ?? null,
-    tenant: (tenant as BillingTenant | null) ?? null,
+    userId: resolved.identity.userId,
+    userEmail: resolved.identity.email,
+    tenant: (resolved.tenant as BillingTenant | null) ?? null,
   }
 }

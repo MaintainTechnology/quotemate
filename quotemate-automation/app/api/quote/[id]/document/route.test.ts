@@ -68,7 +68,9 @@ describe('POST /api/quote/[id]/document — auth & guards', () => {
   })
 
   it('403 not_owner when the tenant owner differs', async () => {
-    state.tenant = { id: 't1', owner_user_id: 'someone-else' }
+    // New model: the caller resolves to their OWN tenant (a different tenant than
+    // the quote's t1), so quote.tenant_id !== resolved tenant id → not_owner.
+    state.tenant = { id: 'other-tenant', owner_user_id: 'owner-1' }
     const res = await post({ report_doc: doc })
     expect(res.status).toBe(403)
     expect(await res.json()).toMatchObject({ error: 'not_owner' })

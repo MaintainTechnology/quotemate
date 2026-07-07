@@ -9,6 +9,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
+import { resolveIdentityRequest } from '@/lib/tenant/from-request'
 import { parseGeocode } from '@/lib/painting/providers/solar'
 
 export const dynamic = 'force-dynamic'
@@ -23,15 +24,6 @@ const BodySchema = z.object({
   postcode: z.string().max(12).optional(),
   state: z.string().max(8).optional(),
 })
-
-async function authed(req: Request): Promise<boolean> {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return false
-  const token = auth.slice(7).trim()
-  if (!token) return false
-  const { data, error } = await supabase.auth.getUser(token)
-  return !error && !!data.user
-}
 
 type LatLngBox = { south: number; west: number; north: number; east: number }
 
@@ -50,7 +42,9 @@ function parseBoundingBox(body: unknown): LatLngBox | null {
 }
 
 export async function POST(req: Request) {
-  if (!(await authed(req))) {
+  // Dual-auth gate: Clerk session token OR legacy Supabase token.
+  const identity = await resolveIdentityRequest(supabase, req)
+  if (!identity) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
   const apiKey = process.env.GOOGLE_MAPS_API_KEY

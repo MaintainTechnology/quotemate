@@ -13,6 +13,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { tenantHasFeature } from './catalog'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -28,28 +29,13 @@ export type FeatureGateResult =
  * Returns the tenant on success, or a {status, body} the route returns as-is.
  */
 export async function requireFeature(req: Request, slug: string): Promise<FeatureGateResult> {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) {
+  // Dual-auth: Clerk session token (→ clerk_user_id) OR legacy Supabase token
+  // (→ owner_user_id) → the caller's tenant.
+  const resolved = await resolveTenantRequest(supabase, req, 'id, trade, trades')
+  if (!resolved) {
     return { ok: false, status: 401, body: { ok: false, error: 'unauthorized' } }
   }
-  const token = auth.slice(7).trim()
-  if (!token) {
-    return { ok: false, status: 401, body: { ok: false, error: 'unauthorized' } }
-  }
-
-  const { data: userData, error: userErr } = await supabase.auth.getUser(token)
-  if (userErr || !userData.user) {
-    return { ok: false, status: 401, body: { ok: false, error: 'unauthorized' } }
-  }
-
-  const { data: tenant, error: tErr } = await supabase
-    .from('tenants')
-    .select('id, trade, trades')
-    .eq('owner_user_id', userData.user.id)
-    .maybeSingle()
-  if (tErr) {
-    return { ok: false, status: 500, body: { ok: false, error: tErr.message } }
-  }
+  const tenant = resolved.tenant as { id: string; trade: string | null; trades: string[] | null } | null
   if (!tenant) {
     return { ok: false, status: 404, body: { ok: false, error: 'no_tenant' } }
   }

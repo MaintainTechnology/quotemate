@@ -25,6 +25,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { expireCheckoutSession } from '@/lib/stripe/checkout'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,16 +33,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
-
-async function userFromBearer(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  return data.user
-}
 
 export type TradeJobSummary = {
   id: string
@@ -60,14 +51,11 @@ const aud = (n: number) =>
   '$' + Math.round(n).toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 
 export async function GET(req: Request) {
-  const user = await userFromBearer(req)
-  if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
-
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id')
-    .eq('owner_user_id', user.id)
-    .maybeSingle()
+  // Dual-auth: Clerk session token (→ clerk_user_id) OR legacy Supabase token
+  // (→ owner_user_id).
+  const resolved = await resolveTenantRequest(supabase, req, 'id')
+  if (!resolved) return Response.json({ error: 'unauthorized' }, { status: 401 })
+  const tenant = resolved.tenant as { id: string } | null
   if (!tenant) return Response.json({ error: 'no_tenant' }, { status: 404 })
   const tenantId = tenant.id
 
@@ -189,14 +177,11 @@ const TRADE_TABLES: Record<string, string> = {
 }
 
 export async function DELETE(req: Request) {
-  const user = await userFromBearer(req)
-  if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
-
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id')
-    .eq('owner_user_id', user.id)
-    .maybeSingle()
+  // Dual-auth: Clerk session token (→ clerk_user_id) OR legacy Supabase token
+  // (→ owner_user_id).
+  const resolved = await resolveTenantRequest(supabase, req, 'id')
+  if (!resolved) return Response.json({ error: 'unauthorized' }, { status: 401 })
+  const tenant = resolved.tenant as { id: string } | null
   if (!tenant) return Response.json({ error: 'no_tenant' }, { status: 404 })
 
   let body: unknown

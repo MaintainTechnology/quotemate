@@ -15,6 +15,7 @@ import {
   type TradieQuoteRow,
   type TradieSmsRow,
 } from '@/lib/dashboard/tradie-analytics'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,42 +24,16 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-async function userFromBearer(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  return data.user
-}
-
-/** Resolve the signed-in user's tenant id (owner_user_id, then owner_email). */
-async function resolveTenantId(userId: string, email: string | undefined) {
-  const primary = await supabase
-    .from('tenants')
-    .select('id')
-    .eq('owner_user_id', userId)
-    .maybeSingle()
-  if (primary.data?.id) return primary.data.id as string
-  if (email) {
-    const byEmail = await supabase
-      .from('tenants')
-      .select('id')
-      .eq('owner_email', email.toLowerCase())
-      .maybeSingle()
-    if (byEmail.data?.id) return byEmail.data.id as string
-  }
-  return null
-}
-
 export async function GET(req: Request) {
-  const user = await userFromBearer(req)
-  if (!user) {
+  // Dual-auth: Clerk session token (→ clerk_user_id) OR legacy Supabase token
+  // (→ owner_user_id). The unlinked-row email self-heal now lives in
+  // /api/tenant/me, which the dashboard always loads first, so by the time
+  // analytics runs the tenant link exists for either provider.
+  const resolved = await resolveTenantRequest(supabase, req, 'id')
+  if (!resolved) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
-
-  const tenantId = await resolveTenantId(user.id, user.email)
+  const tenantId = (resolved.tenant as { id: string } | null)?.id
   if (!tenantId) {
     return Response.json({ ok: false, error: 'no_tenant' }, { status: 404 })
   }

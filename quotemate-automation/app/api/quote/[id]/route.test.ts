@@ -87,10 +87,10 @@ describe('DELETE /api/quote/[id]', () => {
 
   it('403 on a legacy unscoped quote (tenant_id null)', async () => {
     authedUser()
-    h.results.push({
-      data: { id: 'quote-1', tenant_id: null, paid_at: null },
-      error: null,
-    })
+    h.results.push(
+      { data: { id: 'tenant-1', owner_user_id: 'user-1' }, error: null }, // resolver: caller's own tenant
+      { data: { id: 'quote-1', tenant_id: null, paid_at: null }, error: null },
+    )
     const res = await DELETE(delReq(), params)
     expect(res.status).toBe(403)
     expect(await res.json()).toMatchObject({ error: 'unscoped_quote' })
@@ -98,10 +98,13 @@ describe('DELETE /api/quote/[id]', () => {
 
   it('409 once a deposit has been paid', async () => {
     authedUser()
-    h.results.push({
-      data: { id: 'quote-1', tenant_id: 'tenant-1', paid_at: '2026-06-01T00:00:00Z' },
-      error: null,
-    })
+    h.results.push(
+      { data: { id: 'tenant-1', owner_user_id: 'user-1' }, error: null }, // resolver: caller's own tenant
+      {
+        data: { id: 'quote-1', tenant_id: 'tenant-1', paid_at: '2026-06-01T00:00:00Z' },
+        error: null,
+      },
+    )
     const res = await DELETE(delReq(), params)
     expect(res.status).toBe(409)
     expect(await res.json()).toMatchObject({ error: 'quote_already_paid' })
@@ -110,8 +113,10 @@ describe('DELETE /api/quote/[id]', () => {
   it("403 when the caller does not own the quote's tenant", async () => {
     authedUser('intruder')
     h.results.push(
+      // Resolver loads the CALLER's own tenant (tenant-2) — different from the
+      // quote's tenant-1, which is now what trips not_owner.
+      { data: { id: 'tenant-2', owner_user_id: 'intruder' }, error: null },
       { data: { id: 'quote-1', tenant_id: 'tenant-1', paid_at: null }, error: null },
-      { data: { id: 'tenant-1', owner_user_id: 'user-1' }, error: null },
     )
     const res = await DELETE(delReq(), params)
     expect(res.status).toBe(403)
@@ -121,6 +126,7 @@ describe('DELETE /api/quote/[id]', () => {
   it('deletes an owned, unpaid quote — expires sessions, filters by id AND tenant_id AND paid_at IS NULL', async () => {
     authedUser()
     h.results.push(
+      { data: { id: 'tenant-1', owner_user_id: 'user-1' }, error: null }, // resolver: caller's own tenant
       {
         data: {
           id: 'quote-1',
@@ -130,7 +136,6 @@ describe('DELETE /api/quote/[id]', () => {
         },
         error: null,
       },
-      { data: { id: 'tenant-1', owner_user_id: 'user-1' }, error: null },
       { data: [{ id: 'quote-1' }], error: null }, // delete removed one row
     )
     const res = await DELETE(delReq(), params)
@@ -154,11 +159,11 @@ describe('DELETE /api/quote/[id]', () => {
   it('409 when the delete matches zero rows (quote paid between load and delete)', async () => {
     authedUser()
     h.results.push(
+      { data: { id: 'tenant-1', owner_user_id: 'user-1' }, error: null }, // resolver: caller's own tenant
       {
         data: { id: 'quote-1', tenant_id: 'tenant-1', paid_at: null, stripe_links: null },
         error: null,
       },
-      { data: { id: 'tenant-1', owner_user_id: 'user-1' }, error: null },
       { data: [], error: null }, // webhook won the race — nothing matched
     )
     const res = await DELETE(delReq(), params)

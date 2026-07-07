@@ -10,6 +10,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { fetchBuildingInsights, resolveSolarOpts } from '@/lib/roofing/solar-api'
+import { resolveIdentityRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,17 +19,11 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-async function authed(req: Request): Promise<boolean> {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return false
-  const token = auth.slice(7).trim()
-  if (!token) return false
-  const { data, error } = await supabase.auth.getUser(token)
-  return !error && !!data.user
-}
-
 export async function GET(req: Request) {
-  if (!(await authed(req))) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  // Dual-auth gate: Clerk session token OR legacy Supabase token. This route
+  // only needs a valid signed-in tradie (no tenant query).
+  const identity = await resolveIdentityRequest(supabase, req)
+  if (!identity) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
 
   const u = new URL(req.url)
   const lat = Number(u.searchParams.get('lat'))

@@ -16,6 +16,7 @@ import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { buildStaticMapUrl } from '@/lib/roofing/google-maps'
 import { verifyAndClassify } from '@/lib/roofing/vision-verify'
+import { resolveIdentityRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -33,19 +34,11 @@ const RequestSchema = z.object({
   address: z.string().min(3),
 })
 
-async function userIdFromBearer(req: Request): Promise<string | null> {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  return data.user.id
-}
-
 export async function POST(req: Request) {
-  const userId = await userIdFromBearer(req)
-  if (!userId) {
+  // Dual-auth gate: Clerk session token OR legacy Supabase token. This route
+  // only needs a valid signed-in tradie (no tenant query).
+  const identity = await resolveIdentityRequest(supabase, req)
+  if (!identity) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
 

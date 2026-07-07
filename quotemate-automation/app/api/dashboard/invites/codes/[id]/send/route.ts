@@ -10,6 +10,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { isPlatformAdmin } from '@/lib/onboard/invitation-codes'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 import { appBaseUrl } from '@/lib/email/links'
 import { normaliseAuMobile } from '@/lib/phone/au'
 import { sendEmail } from '@/lib/email/resend'
@@ -27,16 +28,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
-
-async function userFromBearer(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  return data.user
-}
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -61,8 +52,10 @@ function resolveBase(req: Request): string {
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params // Next 16: params is a Promise
-  const user = await userFromBearer(req)
-  if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
+  // Dual-auth: Clerk session token (→ clerk_user_id) OR legacy Supabase token
+  // (→ owner_user_id). The resolved tenant is the caller's own tenant row.
+  const resolved = await resolveTenantRequest(supabase, req, 'id, business_name, owner_user_id')
+  if (!resolved) return Response.json({ error: 'unauthorized' }, { status: 401 })
 
   let raw: unknown
   try {
@@ -88,17 +81,20 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   // caller to own that tenant. Capture the business name for the message copy.
   let businessName = 'QuoteMax'
   if (code.tenant_id === null) {
-    if (!isPlatformAdmin(user.id)) return Response.json({ error: 'forbidden' }, { status: 403 })
+    // isPlatformAdmin is keyed by the SUPABASE auth id (owner_user_id for a
+    // Clerk caller, or the Supabase caller's own id).
+    const subjectId =
+      (resolved.tenant as { owner_user_id: string | null } | null)?.owner_user_id ??
+      (resolved.identity.provider === 'supabase' ? resolved.identity.userId : null)
+    if (!subjectId || !isPlatformAdmin(subjectId)) {
+      return Response.json({ error: 'forbidden' }, { status: 403 })
+    }
   } else {
-    const { data: tenant } = await supabase
-      .from('tenants')
-      .select('id, business_name')
-      .eq('owner_user_id', user.id)
-      .maybeSingle()
+    const tenant = resolved.tenant as { id: string; business_name: string | null } | null
     if (!tenant || tenant.id !== code.tenant_id) {
       return Response.json({ error: 'forbidden' }, { status: 403 })
     }
-    if (tenant.business_name) businessName = tenant.business_name as string
+    if (tenant.business_name) businessName = tenant.business_name
   }
 
   // A revoked code can never be redeemed — refuse to send it.

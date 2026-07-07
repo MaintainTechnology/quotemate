@@ -12,6 +12,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { listManageableTrades } from '@/lib/trades/manageable'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,30 +21,18 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-async function userFromBearer(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  return data.user
-}
-
 export async function GET(req: Request) {
-  const user = await userFromBearer(req)
-  if (!user) {
+  // Dual-auth: Clerk session token (→ clerk_user_id) OR legacy Supabase token
+  // (→ owner_user_id).
+  const resolved = await resolveTenantRequest(supabase, req, 'id, trade, trades')
+  if (!resolved) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
-
-  const { data: tenant, error: tErr } = await supabase
-    .from('tenants')
-    .select('id, trade, trades')
-    .eq('owner_user_id', user.id)
-    .maybeSingle()
-  if (tErr) {
-    return Response.json({ ok: false, error: tErr.message }, { status: 500 })
-  }
+  const tenant = resolved.tenant as {
+    id: string
+    trade: string | null
+    trades: string[] | null
+  } | null
   if (!tenant) {
     return Response.json({ ok: false, error: 'no_tenant' }, { status: 404 })
   }

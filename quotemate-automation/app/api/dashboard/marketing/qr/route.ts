@@ -5,16 +5,14 @@
 // Auth: Authorization: Bearer <supabase access token>.
 
 import { z } from 'zod'
-import { marketingSupabase as supabase, userFromBearer, tenantForUser } from '@/lib/marketing/auth'
+import { marketingSupabase as supabase, tenantFromBearer } from '@/lib/marketing/auth'
 import { generateShortCode, slugifyBusinessName } from '@/lib/marketing/qr'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: Request) {
-  const user = await userFromBearer(req)
-  if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  const tenant = await tenantForUser(user.id)
-  if (!tenant) return Response.json({ error: 'no_tenant' }, { status: 404 })
+  const tenant = await tenantFromBearer(req)
+  if (!tenant) return Response.json({ error: 'unauthorized' }, { status: 401 })
 
   const { data, error } = await supabase
     .from('marketing_qrs')
@@ -53,10 +51,8 @@ async function ensureSlug(tenant: { id: string; business_name: string; slug: str
 }
 
 export async function POST(req: Request) {
-  const user = await userFromBearer(req)
-  if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  const tenant = await tenantForUser(user.id)
-  if (!tenant) return Response.json({ error: 'no_tenant' }, { status: 404 })
+  const tenant = await tenantFromBearer(req)
+  if (!tenant) return Response.json({ error: 'unauthorized' }, { status: 401 })
 
   let raw: unknown
   try {
@@ -99,7 +95,7 @@ export async function POST(req: Request) {
         campaign: body.campaign || null,
         destination_type: body.destination_type,
         destination_config,
-        created_by: user.id,
+        created_by: tenant.owner_user_id,
       })
       .select('id, short_code')
       .single()

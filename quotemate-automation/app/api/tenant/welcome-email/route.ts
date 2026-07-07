@@ -15,6 +15,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { sendWelcomeEmailOnce } from '@/lib/onboard/welcome-email'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,33 +24,17 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-async function userFromBearer(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  return data.user
-}
-
 export async function POST(req: Request) {
-  const user = await userFromBearer(req)
-  if (!user) {
+  // Dual-auth: Clerk session token (→ clerk_user_id) OR legacy Supabase token.
+  const resolved = await resolveTenantRequest(
+    supabase,
+    req,
+    'id, status, welcome_email_sent_at, owner_email, business_name, owner_first_name, twilio_sms_number, trades',
+  )
+  if (!resolved) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
-
-  const { data: tenant, error } = await supabase
-    .from('tenants')
-    .select(
-      'id, status, welcome_email_sent_at, owner_email, business_name, owner_first_name, twilio_sms_number, trades',
-    )
-    .eq('owner_user_id', user.id)
-    .maybeSingle()
-
-  if (error) {
-    return Response.json({ ok: false, error: error.message }, { status: 500 })
-  }
+  const tenant = resolved.tenant as Parameters<typeof sendWelcomeEmailOnce>[1] | null
   if (!tenant) {
     return Response.json({ ok: false, error: 'no_tenant' }, { status: 404 })
   }

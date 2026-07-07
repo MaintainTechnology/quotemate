@@ -103,8 +103,10 @@ describe('POST /api/quote/[id]/complete', () => {
   it("403 when the caller doesn't own the quote's tenant", async () => {
     authedUser('intruder')
     h.results.push(
+      // Resolver loads the CALLER's own tenant (tenant-2) — different from the
+      // quote's tenant-1, which is now what trips not_owner.
+      { data: { ...ownerTenant, id: 'tenant-2', owner_user_id: 'intruder' }, error: null },
       { data: paidQuote, error: null },
-      { data: ownerTenant, error: null },
     )
     const res = await POST(req(), params)
     expect(res.status).toBe(403)
@@ -113,8 +115,8 @@ describe('POST /api/quote/[id]/complete', () => {
   it('409 on an unpaid quote', async () => {
     authedUser()
     h.results.push(
+      { data: ownerTenant, error: null }, // resolver: caller's own tenant
       { data: { ...paidQuote, paid_at: null }, error: null },
-      { data: ownerTenant, error: null },
     )
     const res = await POST(req(), params)
     expect(res.status).toBe(409)
@@ -124,8 +126,8 @@ describe('POST /api/quote/[id]/complete', () => {
   it('marks complete and releases the net payout (paid − 2% fee)', async () => {
     authedUser()
     h.results.push(
+      { data: ownerTenant, error: null }, // resolver: caller's own tenant
       { data: paidQuote, error: null }, // quote
-      { data: ownerTenant, error: null }, // tenant
       { data: null, error: null }, // completed_at stamp
       { data: [{ id: 'quote-1' }], error: null }, // claim wins
       { data: null, error: null }, // payout stamp
@@ -154,6 +156,7 @@ describe('POST /api/quote/[id]/complete', () => {
   it('is idempotent once released', async () => {
     authedUser()
     h.results.push(
+      { data: ownerTenant, error: null }, // resolver: caller's own tenant
       {
         data: {
           ...paidQuote,
@@ -164,7 +167,6 @@ describe('POST /api/quote/[id]/complete', () => {
         },
         error: null,
       },
-      { data: ownerTenant, error: null },
     )
     const res = await POST(req(), params)
     const json = await res.json()
@@ -175,8 +177,8 @@ describe('POST /api/quote/[id]/complete', () => {
   it('completes but blocks the release on a legacy platform-direct payment', async () => {
     authedUser()
     h.results.push(
+      { data: ownerTenant, error: null }, // resolver: caller's own tenant
       { data: { ...paidQuote, stripe_connect_destination: null }, error: null },
-      { data: ownerTenant, error: null },
       { data: null, error: null }, // completed_at stamp
     )
     const res = await POST(req(), params)
@@ -193,8 +195,8 @@ describe('POST /api/quote/[id]/complete', () => {
   it('hands the claim back when the payout create fails (retryable)', async () => {
     authedUser()
     h.results.push(
+      { data: ownerTenant, error: null }, // resolver: caller's own tenant
       { data: paidQuote, error: null },
-      { data: ownerTenant, error: null },
       { data: null, error: null }, // completed_at stamp
       { data: [{ id: 'quote-1' }], error: null }, // claim wins
       { data: null, error: null }, // claim release
@@ -215,8 +217,8 @@ describe('POST /api/quote/[id]/complete', () => {
   it('reports release_in_progress when a concurrent request already holds the claim', async () => {
     authedUser()
     h.results.push(
+      { data: ownerTenant, error: null }, // resolver: caller's own tenant
       { data: paidQuote, error: null },
-      { data: ownerTenant, error: null },
       { data: null, error: null }, // completed_at stamp
       { data: [], error: null }, // claim lost
     )

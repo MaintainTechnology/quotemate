@@ -12,6 +12,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { isAdminUser } from '@/lib/admin-loader/auth'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,18 +22,17 @@ const supabase = createClient(
 )
 
 export async function GET(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) {
+  // Dual-auth: resolve the caller (Clerk or Supabase) + their tenant row.
+  const resolved = await resolveTenantRequest(supabase, req, 'owner_user_id')
+  if (!resolved) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
-  const token = auth.slice(7).trim()
-  if (!token) {
-    return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  }
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) {
-    return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  }
-  const admin = await isAdminUser(supabase, data.user.id)
-  return Response.json({ ok: true, is_admin: admin, user_id: data.user.id })
+  // admin_users is keyed by the SUPABASE auth id. For a Clerk caller that is
+  // the mapped tenant.owner_user_id; for a Supabase caller it's their own id.
+  const tenant = resolved.tenant as { owner_user_id: string | null } | null
+  const subjectId =
+    tenant?.owner_user_id ??
+    (resolved.identity.provider === 'supabase' ? resolved.identity.userId : null)
+  const admin = subjectId ? await isAdminUser(supabase, subjectId) : false
+  return Response.json({ ok: true, is_admin: admin, user_id: resolved.identity.userId })
 }

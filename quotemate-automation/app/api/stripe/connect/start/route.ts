@@ -16,6 +16,7 @@
 // a "coming soon" state instead of a broken redirect.
 
 import { createClient } from '@supabase/supabase-js'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 import {
   provisionStripeConnectAccount,
   createConnectOnboardingLink,
@@ -31,31 +32,25 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-async function userFromBearer(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  return data.user
+type ConnectTenant = {
+  id: string
+  owner_email: string
+  business_name: string
+  stripe_connect_account_id: string | null
 }
 
 export async function POST(req: Request) {
-  const user = await userFromBearer(req)
-  if (!user) {
+  // Dual-auth: Clerk session token (→ clerk_user_id) OR legacy Supabase token
+  // (→ owner_user_id) → the caller's own tenant row.
+  const resolved = await resolveTenantRequest(
+    supabase,
+    req,
+    'id, owner_email, business_name, stripe_connect_account_id',
+  )
+  if (!resolved) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
-
-  const { data: tenant, error: tErr } = await supabase
-    .from('tenants')
-    .select('id, owner_email, business_name, stripe_connect_account_id')
-    .eq('owner_user_id', user.id)
-    .maybeSingle()
-
-  if (tErr) {
-    return Response.json({ ok: false, error: tErr.message }, { status: 500 })
-  }
+  const tenant = resolved.tenant as ConnectTenant | null
   if (!tenant) {
     return Response.json({ ok: false, error: 'no_tenant' }, { status: 404 })
   }

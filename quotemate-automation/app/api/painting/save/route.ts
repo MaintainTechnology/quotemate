@@ -9,6 +9,7 @@
 // Auth: same bearer-token pattern as the rest of the painting surface.
 
 import { createClient } from '@supabase/supabase-js'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 import { SavePaintingSchema } from '@/lib/painting/request-schema'
 import { buildSavedPaintingRow } from '@/lib/painting/save-row'
 
@@ -19,21 +20,24 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
+// Dual-auth: Clerk session token (→ clerk_user_id) OR legacy Supabase token
+// (→ owner_user_id). Tenant is optional — GET/POST fall back to the caller's
+// user id (created_by) when no tenant row exists.
 async function userAndTenantFromBearer(
   req: Request,
-): Promise<{ userId: string; tenantId: string | null } | null> {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id')
-    .eq('owner_user_id', data.user.id)
-    .maybeSingle()
-  return { userId: data.user.id, tenantId: (tenant?.id as string | undefined) ?? null }
+): Promise<{ userId: string | null; tenantId: string | null } | null> {
+  const resolved = await resolveTenantRequest(supabase, req, 'id, owner_user_id')
+  if (!resolved) return null
+  const tenant = resolved.tenant as { id?: string; owner_user_id?: string | null } | null
+  // created_by is a uuid → auth.users FK, and the GET fallback filters on it,
+  // so use the SUPABASE auth id (tenant.owner_user_id for a Clerk caller; the
+  // caller's own id for a Supabase caller). Never a Clerk `user_…` string.
+  const supabaseUserId =
+    tenant?.owner_user_id ?? (resolved.identity.provider === 'supabase' ? resolved.identity.userId : null)
+  return {
+    userId: supabaseUserId,
+    tenantId: (tenant?.id as string | undefined) ?? null,
+  }
 }
 
 export async function POST(req: Request) {

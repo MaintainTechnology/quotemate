@@ -28,6 +28,7 @@ import {
   type TenantConnectState,
 } from '@/lib/stripe/connect'
 import { pipelineLog } from '@/lib/log/pipeline'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -37,24 +38,25 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-async function userFromBearer(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  return data.user
-}
-
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const log = pipelineLog('dispatch')
   const { id: quoteId } = await ctx.params
 
-  const user = await userFromBearer(req)
-  if (!user) {
+  // ─── Auth (dual-auth: Clerk OR legacy Supabase token) ───────
+  const resolved = await resolveTenantRequest(
+    supabase,
+    req,
+    'id, stripe_connect_account_id, stripe_connect_charges_enabled, stripe_connect_payouts_enabled',
+  )
+  if (!resolved) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
+  const tenant = resolved.tenant as {
+    id: string
+    stripe_connect_account_id: string | null
+    stripe_connect_charges_enabled: boolean | null
+    stripe_connect_payouts_enabled: boolean | null
+  } | null
 
   const { data: quote } = await supabase
     .from('quotes')
@@ -68,14 +70,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return Response.json({ ok: false, error: 'unscoped_quote' }, { status: 403 })
   }
 
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select(
-      'id, owner_user_id, stripe_connect_account_id, stripe_connect_charges_enabled, stripe_connect_payouts_enabled',
-    )
-    .eq('id', quote.tenant_id)
-    .maybeSingle()
-  if (!tenant || tenant.owner_user_id !== user.id) {
+  if (!tenant || quote.tenant_id !== tenant.id) {
     return Response.json({ ok: false, error: 'not_owner' }, { status: 403 })
   }
 

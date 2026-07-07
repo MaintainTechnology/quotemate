@@ -6,6 +6,7 @@
 // only owner_email set.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { resolveIdentityRequest } from '@/lib/tenant/from-request'
 
 export type OrgContext = { userId: string; orgId: string }
 
@@ -13,14 +14,23 @@ export async function orgFromBearer(
   supabase: SupabaseClient,
   req: Request,
 ): Promise<OrgContext | null> {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  const user = data.user
+  // Dual-auth: Clerk session token OR legacy Supabase token. orgs.owner_user_id
+  // is a SUPABASE auth id, so for a Clerk caller we map clerk_user_id → the
+  // tenant's owner_user_id (+ owner_email) before the org lookup + self-heal.
+  const identity = await resolveIdentityRequest(supabase, req)
+  if (!identity) return null
+  let userId = identity.userId
+  let userEmail = identity.email
+  if (identity.provider === 'clerk') {
+    const { data: t } = await supabase
+      .from('tenants')
+      .select('owner_user_id, owner_email')
+      .eq('clerk_user_id', identity.userId)
+      .maybeSingle()
+    userId = (t?.owner_user_id as string | null) ?? identity.userId
+    userEmail = userEmail ?? ((t?.owner_email as string | null) ?? null)
+  }
+  const user = { id: userId, email: userEmail }
 
   // Primary: an org owned by this user.
   const primary = await supabase

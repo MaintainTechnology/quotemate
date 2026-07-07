@@ -13,6 +13,7 @@
 // the per-trade filter scopes the payload by what the tradie does.
 
 import { createClient } from '@supabase/supabase-js'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,19 +23,11 @@ const supabase = createClient(
 )
 
 async function tenantFromBearer(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id, trade, trades')
-    .eq('owner_user_id', data.user.id)
-    .maybeSingle()
-  if (!tenant) return null
-  return tenant as { id: string; trade: string | null; trades: string[] | null }
+  // Dual-auth: Clerk session token (→ clerk_user_id) OR legacy Supabase token
+  // (→ owner_user_id). No token or no tenant → null (call site 401s).
+  const resolved = await resolveTenantRequest(supabase, req, 'id, trade, trades')
+  if (!resolved || !resolved.tenant) return null
+  return resolved.tenant as { id: string; trade: string | null; trades: string[] | null }
 }
 
 function tradesOf(tenant: { trade: string | null; trades: string[] | null }): string[] {

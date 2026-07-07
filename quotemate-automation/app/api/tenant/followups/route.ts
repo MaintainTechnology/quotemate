@@ -15,6 +15,7 @@
 // touch another's leads.
 
 import { createClient } from '@supabase/supabase-js'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 import {
   FOLLOWUP_MIN_AGE_HOURS,
   ageHoursSince,
@@ -37,19 +38,10 @@ const supabase = createClient(
 )
 
 async function tenantFromBearer(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id')
-    .eq('owner_user_id', data.user.id)
-    .maybeSingle()
-  if (!tenant) return null
-  return tenant as { id: string }
+  // Dual-auth: Clerk session token (→ clerk_user_id) OR legacy Supabase token
+  // (→ owner_user_id). null = no valid token OR no tenant → caller 401s.
+  const resolved = await resolveTenantRequest(supabase, req, 'id')
+  return (resolved?.tenant ?? null) as { id: string } | null
 }
 
 // Columns the follow-up selector + the dashboard card need.

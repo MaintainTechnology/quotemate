@@ -22,6 +22,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { expireCheckoutSession } from '@/lib/stripe/checkout'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,19 +37,12 @@ export async function DELETE(
 ) {
   const { id: quoteId } = await params
 
-  // ─── Auth ───────────────────────────────────────────────────
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) {
+  // ─── Auth (dual-auth: Clerk OR legacy Supabase token) ───────
+  const resolved = await resolveTenantRequest(supabase, req, 'id')
+  if (!resolved) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
-  const token = auth.slice(7).trim()
-  if (!token) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-
-  const { data: userData, error: userErr } = await supabase.auth.getUser(token)
-  if (userErr || !userData.user) {
-    return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  }
-  const userId = userData.user.id
+  const tenant = resolved.tenant as { id: string } | null
 
   // ─── Load + authorise ───────────────────────────────────────
   const { data: quote } = await supabase
@@ -64,12 +58,7 @@ export async function DELETE(
     return Response.json({ ok: false, error: 'quote_already_paid' }, { status: 409 })
   }
 
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id, owner_user_id')
-    .eq('id', quote.tenant_id)
-    .maybeSingle()
-  if (!tenant || tenant.owner_user_id !== userId) {
+  if (!tenant || quote.tenant_id !== tenant.id) {
     return Response.json({ ok: false, error: 'not_owner' }, { status: 403 })
   }
 

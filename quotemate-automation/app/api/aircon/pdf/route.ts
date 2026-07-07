@@ -10,6 +10,7 @@
 import { after } from 'next/server'
 import { createHash } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 import { renderPdfFromHtml, gotenbergConfigured } from '@/lib/pdf/gotenberg'
 import { storeQuoteAsset } from '@/lib/quote/pdf'
 import { archiveAndIngestQuote } from '@/lib/filestore/ingest-quote'
@@ -25,26 +26,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
-
-async function tenantFromBearer(
-  req: Request,
-): Promise<{ id: string | null; businessName: string } | null> {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id, business_name')
-    .eq('owner_user_id', data.user.id)
-    .maybeSingle()
-  return {
-    id: (tenant?.id as string | undefined) ?? null,
-    businessName: (tenant?.business_name as string | undefined) ?? 'Your installer',
-  }
-}
 
 // PII-minimized markdown summary for the KB (specs/files-tab.md constraints).
 // Sizing + product names + climate zone only — never the address or prices
@@ -91,9 +72,16 @@ function looksLikeRecommendation(v: unknown): v is AcRecommendation {
 }
 
 export async function POST(req: Request) {
-  const tenant = await tenantFromBearer(req)
-  if (!tenant) {
+  // Dual-auth: Clerk session token OR legacy Supabase token. Tenant is
+  // optional — the business name falls back to a generic default.
+  const resolved = await resolveTenantRequest(supabase, req, 'id, business_name')
+  if (!resolved) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  }
+  const tenantRow = resolved.tenant as { id?: string; business_name?: string } | null
+  const tenant = {
+    id: (tenantRow?.id as string | undefined) ?? null,
+    businessName: (tenantRow?.business_name as string | undefined) ?? 'Your installer',
   }
 
   if (!gotenbergConfigured()) {

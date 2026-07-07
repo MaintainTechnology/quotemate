@@ -161,7 +161,9 @@ describe('POST /api/quote/[id]/chat-edit — guards', () => {
   })
 
   it('403 when the caller is not the tenant owner', async () => {
-    state.tenant = { id: 't1', owner_user_id: 'someone-else' }
+    // New model: the caller resolves to their OWN tenant (a different tenant than
+    // the quote's t1), so quote.tenant_id !== resolved tenant id → not_owner.
+    state.tenant = { id: 'other-tenant', owner_user_id: 'owner-1' }
     const res = await POST(req(VALID_BODY, 'tok'), params)
     expect(res.status).toBe(403)
     expect((await res.json()).error).toBe('not_owner')

@@ -10,6 +10,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
+import { resolveIdentityRequest } from '@/lib/tenant/from-request'
 import { buildRefinePrompt } from '@/lib/painting/repaint-prompt'
 import { geminiProvider } from '@/lib/ig-engine/providers/gemini'
 
@@ -29,15 +30,6 @@ const BodySchema = z.object({
   instruction: z.string().trim().min(2).max(300),
 })
 
-async function authed(req: Request): Promise<boolean> {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return false
-  const token = auth.slice(7).trim()
-  if (!token) return false
-  const { data, error } = await supabase.auth.getUser(token)
-  return !error && !!data.user
-}
-
 /** Pull the mime + base64 out of a data URL. */
 function parseDataUrl(s: string): { mime: string; base64: string } | null {
   const m = /^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/.exec(s)
@@ -46,7 +38,9 @@ function parseDataUrl(s: string): { mime: string; base64: string } | null {
 }
 
 export async function POST(req: Request) {
-  if (!(await authed(req))) {
+  // Dual-auth gate: Clerk session token OR legacy Supabase token.
+  const identity = await resolveIdentityRequest(supabase, req)
+  if (!identity) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
   if (!process.env.GEMINI_API_KEY) {

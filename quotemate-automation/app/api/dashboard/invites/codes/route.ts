@@ -9,6 +9,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { generateInvitationCode, isPlatformAdmin, normalizeCustomCode } from '@/lib/onboard/invitation-codes'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,32 +18,28 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-async function userFromBearer(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  return data.user
-}
+type CodesTenant = { id: string; business_name: string; owner_user_id: string | null }
 
-async function tenantForUser(userId: string) {
-  const { data } = await supabase
-    .from('tenants')
-    .select('id, business_name')
-    .eq('owner_user_id', userId)
-    .maybeSingle()
-  return data
+/** The Supabase auth id used to key isPlatformAdmin / PLATFORM_ADMIN_USER_IDS.
+ *  For a Clerk caller that is the mapped tenant.owner_user_id; for a Supabase
+ *  caller it's their own id. Null when neither is available (→ not admin). */
+function platformSubjectId(
+  identity: { provider: 'clerk' | 'supabase'; userId: string },
+  tenant: CodesTenant | null,
+): string | null {
+  return tenant?.owner_user_id ?? (identity.provider === 'supabase' ? identity.userId : null)
 }
 
 export async function GET(req: Request) {
-  const user = await userFromBearer(req)
-  if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  const tenant = await tenantForUser(user.id)
+  // Dual-auth: Clerk session token (→ clerk_user_id) OR legacy Supabase token
+  // (→ owner_user_id) → the caller's own tenant row.
+  const resolved = await resolveTenantRequest(supabase, req, 'id, business_name, owner_user_id')
+  if (!resolved) return Response.json({ error: 'unauthorized' }, { status: 401 })
+  const tenant = resolved.tenant as CodesTenant | null
   if (!tenant) return Response.json({ error: 'no_tenant' }, { status: 404 })
 
-  const admin = isPlatformAdmin(user.id)
+  const subjectId = platformSubjectId(resolved.identity, tenant)
+  const admin = subjectId ? isPlatformAdmin(subjectId) : false
   let query = supabase
     .from('onboarding_codes')
     .select('id, code, tenant_id, campaign, description, quota_total, quota_used, status, expires_at, created_at')
@@ -71,10 +68,11 @@ const GenerateBody = z.object({
 })
 
 export async function POST(req: Request) {
-  const user = await userFromBearer(req)
-  if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  const tenant = await tenantForUser(user.id)
+  const resolved = await resolveTenantRequest(supabase, req, 'id, business_name, owner_user_id')
+  if (!resolved) return Response.json({ error: 'unauthorized' }, { status: 401 })
+  const tenant = resolved.tenant as CodesTenant | null
   if (!tenant) return Response.json({ error: 'no_tenant' }, { status: 404 })
+  const subjectId = platformSubjectId(resolved.identity, tenant)
 
   let raw: unknown
   try {
@@ -89,7 +87,7 @@ export async function POST(req: Request) {
   const body = parsed.data
 
   // R2 authorization: only platform admins may mint platform-wide codes.
-  if (body.scope === 'platform' && !isPlatformAdmin(user.id)) {
+  if (body.scope === 'platform' && !(subjectId && isPlatformAdmin(subjectId))) {
     return Response.json({ error: 'forbidden_scope' }, { status: 403 })
   }
   const tenantId = body.scope === 'platform' ? null : tenant.id
@@ -116,7 +114,7 @@ export async function POST(req: Request) {
         description: body.description || null,
         quota_total: body.quota_total,
         expires_at: body.expires_at || null,
-        created_by: user.id,
+        created_by: tenant.owner_user_id,
       })
       .select('id, code')
       .single()
@@ -145,7 +143,7 @@ export async function POST(req: Request) {
         description: body.description || null,
         quota_total: body.quota_total,
         expires_at: body.expires_at || null,
-        created_by: user.id,
+        created_by: tenant.owner_user_id,
       })
       .select('id, code')
       .single()

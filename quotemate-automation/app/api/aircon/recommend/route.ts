@@ -4,6 +4,7 @@
 // /api/painting/estimate. Read-only (no tenant-data write in Phase 1).
 
 import { createClient } from '@supabase/supabase-js'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 import { RecommendRequestSchema } from '@/lib/aircon/request-schema'
 import { climateZoneForPostcode } from '@/lib/aircon/climate'
 import { sizeAircon } from '@/lib/aircon/sizing'
@@ -17,27 +18,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
-
-async function userAndTenantFromBearer(
-  req: Request,
-): Promise<{ userId: string; tenantId: string | null; primaryTrade: string | null } | null> {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id, trade')
-    .eq('owner_user_id', data.user.id)
-    .maybeSingle()
-  return {
-    userId: data.user.id,
-    tenantId: (tenant?.id as string | undefined) ?? null,
-    primaryTrade: (tenant?.trade as string | null | undefined) ?? null,
-  }
-}
 
 /** Best-effort — read overlays.aircon_rate_card for this tenant. */
 async function loadAcOverlay(
@@ -56,9 +36,16 @@ async function loadAcOverlay(
 }
 
 export async function POST(req: Request) {
-  const auth = await userAndTenantFromBearer(req)
-  if (!auth) {
+  // Dual-auth: Clerk session token OR legacy Supabase token. Tenant is
+  // optional — no tenant just means the default aircon rate card.
+  const resolved = await resolveTenantRequest(supabase, req, 'id, trade')
+  if (!resolved) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  }
+  const tenantRow = resolved.tenant as { id?: string; trade?: string | null } | null
+  const auth = {
+    tenantId: (tenantRow?.id as string | undefined) ?? null,
+    primaryTrade: (tenantRow?.trade as string | null | undefined) ?? null,
   }
 
   let body: unknown

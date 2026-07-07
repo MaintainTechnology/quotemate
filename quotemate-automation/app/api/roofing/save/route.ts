@@ -19,6 +19,7 @@ import {
 } from '@/lib/roofing/selection'
 import type { SolarQuoteAddon } from '@/lib/roofing/solar'
 import { detectSolarForJob, loadRoofingRateCard } from '@/lib/roofing/solar-detect'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 // Server-side solar/skylight vision (Gemini aerial per structure + an optional
@@ -31,24 +32,24 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
+// Dual-auth: Clerk session token (→ clerk_user_id) OR legacy Supabase token
+// (→ owner_user_id). Tenant is optional here — a job still saves under the
+// caller (created_by) when no tenant row exists, so we never 404.
 async function userAndTenantFromBearer(
   req: Request,
-): Promise<{ userId: string; tenantId: string | null; primaryTrade: string | null } | null> {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id, trade')
-    .eq('owner_user_id', data.user.id)
-    .maybeSingle()
+): Promise<{ userId: string | null; tenantId: string | null; primaryTrade: string | null } | null> {
+  const resolved = await resolveTenantRequest(supabase, req, 'id, trade, owner_user_id')
+  if (!resolved) return null
+  const tenant = resolved.tenant as { id?: string; trade?: string | null; owner_user_id?: string | null } | null
+  // created_by is a uuid → auth.users FK, so it must hold the SUPABASE auth id:
+  // tenant.owner_user_id for a Clerk caller, the caller's own id for a Supabase
+  // caller. Never a Clerk `user_…` string (which isn't a valid uuid).
+  const supabaseUserId =
+    tenant?.owner_user_id ?? (resolved.identity.provider === 'supabase' ? resolved.identity.userId : null)
   return {
-    userId: data.user.id,
-    tenantId: (tenant?.id as string | undefined) ?? null,
-    primaryTrade: (tenant?.trade as string | null | undefined) ?? null,
+    userId: supabaseUserId,
+    tenantId: tenant?.id ?? null,
+    primaryTrade: tenant?.trade ?? null,
   }
 }
 

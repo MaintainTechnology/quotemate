@@ -16,6 +16,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { passwordSchema } from '@/lib/auth/password'
+import { resolveIdentityRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,22 +33,22 @@ const BodySchema = z.object({
   new_password: passwordSchema,
 })
 
-async function userFromBearer(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await admin.auth.getUser(token)
-  if (error || !data.user) return null
-  return data.user
-}
-
 export async function POST(req: Request) {
-  const user = await userFromBearer(req)
-  if (!user) {
+  // Dual-auth: authenticate a Clerk session token OR a legacy Supabase token.
+  const identity = await resolveIdentityRequest(admin, req)
+  if (!identity) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
-  if (!user.email) {
+  // This route mutates the SUPABASE auth store. A Clerk-provider caller changes
+  // their password in Clerk's own UI, not here — so authenticate them but refuse
+  // the change rather than writing to the wrong store.
+  if (identity.provider === 'clerk') {
+    return Response.json(
+      { ok: false, error: 'password_managed_by_clerk' },
+      { status: 409 },
+    )
+  }
+  if (!identity.email) {
     // Password change requires an email to re-verify the current password
     // against. Every tradie account is created with an email, so this is a
     // defensive guard rather than an expected path.
@@ -93,7 +94,7 @@ export async function POST(req: Request) {
     { auth: { autoRefreshToken: false, persistSession: false } },
   )
   const { error: signInErr } = await verifier.auth.signInWithPassword({
-    email: user.email,
+    email: identity.email,
     password: current_password,
   })
   if (signInErr) {
@@ -104,7 +105,7 @@ export async function POST(req: Request) {
   }
 
   // ─── 2. Apply the new password ──────────────────────────────────
-  const { error: updateErr } = await admin.auth.admin.updateUserById(user.id, {
+  const { error: updateErr } = await admin.auth.admin.updateUserById(identity.userId, {
     password: new_password,
   })
   if (updateErr) {

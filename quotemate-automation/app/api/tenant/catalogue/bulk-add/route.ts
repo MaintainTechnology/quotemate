@@ -19,6 +19,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { granularToGroundingCategory } from '@/lib/catalogue/category-mapping'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,19 +33,11 @@ const BulkAddSchema = z.object({
 })
 
 async function tenantFromBearer(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id, trade, trades')
-    .eq('owner_user_id', data.user.id)
-    .maybeSingle()
-  if (!tenant) return null
-  return tenant as { id: string; trade: string | null; trades: string[] | null }
+  // Dual-auth: Clerk session token OR legacy Supabase token. Resolver
+  // returns null for missing/invalid token AND authed-but-no-tenant;
+  // both collapse to null so the call sites' existing 401 stays unchanged.
+  const resolved = await resolveTenantRequest(supabase, req, 'id, trade, trades')
+  return (resolved?.tenant ?? null) as { id: string; trade: string | null; trades: string[] | null } | null
 }
 
 function tradesOf(tenant: { trade: string | null; trades: string[] | null }): string[] {

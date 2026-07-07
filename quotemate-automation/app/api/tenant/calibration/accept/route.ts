@@ -23,6 +23,7 @@
 // endpoint can read that, write it back, and flag status='superseded'.
 
 import { createClient } from '@supabase/supabase-js'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
 import { z } from 'zod'
 import {
   buildCalibrationReport,
@@ -45,22 +46,18 @@ const BodySchema = z.object({
 })
 
 async function userAndTenantFromBearer(req: Request) {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data.user) return null
-  const { data: tenant } = await supabase
-    .from('tenants')
-    .select('id, trade, trades')
-    .eq('owner_user_id', data.user.id)
-    .maybeSingle()
-  if (!tenant) return null
-  return {
-    userId: data.user.id,
-    tenant: tenant as { id: string; trade: string | null; trades: string[] | null },
+  // Dual-auth: Clerk session token (→ clerk_user_id) OR legacy Supabase token.
+  // accepted_by_user_id / rejected_by_user_id are uuid → auth.users FKs, so
+  // stamp the SUPABASE auth id (tenant.owner_user_id), never a Clerk id.
+  const resolved = await resolveTenantRequest(supabase, req, 'id, trade, trades, owner_user_id')
+  if (!resolved || !resolved.tenant) return null
+  const tenant = resolved.tenant as {
+    id: string
+    trade: string | null
+    trades: string[] | null
+    owner_user_id: string | null
   }
+  return { userId: tenant.owner_user_id, tenant }
 }
 
 export async function POST(req: Request) {
