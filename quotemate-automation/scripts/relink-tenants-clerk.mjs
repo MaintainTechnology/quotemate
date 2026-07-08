@@ -11,7 +11,11 @@ import { createClerkClient } from '@clerk/backend'
 
 const { Client } = pg
 const APPLY = process.argv.includes('--apply')
-const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY })
+// Prefer PROD_CLERK_SECRET_KEY (passed inline for the live instance) so it is
+// NOT clobbered by --env-file=.env.local (which carries the sk_test dev key).
+const secretKey = process.env.PROD_CLERK_SECRET_KEY || process.env.CLERK_SECRET_KEY
+console.log(`Clerk instance: ${secretKey?.startsWith('sk_live') ? 'LIVE (production)' : 'TEST (development)'}`)
+const clerk = createClerkClient({ secretKey })
 const c = new Client({ connectionString: process.env.SUPABASE_DB_URL, ssl: { rejectUnauthorized: false } })
 
 async function currentClerkIdForEmail(email) {

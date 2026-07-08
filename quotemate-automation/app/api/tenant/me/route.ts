@@ -73,19 +73,28 @@ export async function GET(req: Request) {
       .eq('owner_email', identity.email.toLowerCase())
       .maybeSingle()
     if (byEmail) {
-      const { error: linkErr } = await supabase
-        .from('tenants')
-        .update({ [linkColumn]: identity.userId })
-        .eq('id', byEmail.id)
-      if (!linkErr) {
-        console.log('[tenant/me] backfilled tenant link from email match', {
-          tenantId: byEmail.id,
-          provider: identity.provider,
-          linkColumn,
-        })
-        tenant = { ...byEmail, [linkColumn]: identity.userId }
+      // Backfill the link ONLY when it is currently unset. If the column already
+      // holds an id, it belongs to the OTHER Clerk instance sharing this DB
+      // (dev sk_test vs prod sk_live) — overwriting it would break that
+      // environment (the see-saw). In that case resolve READ-ONLY. The primary
+      // recovery path is the email fallback in lib/tenant/current.ts.
+      if (!byEmail[linkColumn]) {
+        const { error: linkErr } = await supabase
+          .from('tenants')
+          .update({ [linkColumn]: identity.userId })
+          .eq('id', byEmail.id)
+        if (!linkErr) {
+          console.log('[tenant/me] backfilled unlinked tenant from email match', {
+            tenantId: byEmail.id,
+            provider: identity.provider,
+            linkColumn,
+          })
+          tenant = { ...byEmail, [linkColumn]: identity.userId }
+        } else {
+          console.warn('[tenant/me] backfill update failed', linkErr.message)
+          tenant = byEmail
+        }
       } else {
-        console.warn('[tenant/me] backfill update failed', linkErr.message)
         tenant = byEmail
       }
     }

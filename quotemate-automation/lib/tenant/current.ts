@@ -22,6 +22,15 @@ export type Identity = { provider: AuthProvider; userId: string; email: string |
 export type ResolveDeps = {
   supabase: SupabaseClient
   verifyClerk: (token: string) => Promise<{ sub: string; email: string | null } | null>
+  /** Optional email resolver — fetches the caller's email when the token's
+   *  claims don't carry one (Clerk session tokens omit `email` by default).
+   *  Used ONLY as a fallback after the primary id lookup misses, so a tenant
+   *  can still be resolved by its STABLE owner_email. This is what lets ONE
+   *  shared Supabase DB serve BOTH Clerk instances (dev `sk_test` + prod
+   *  `sk_live`): a single clerk_user_id column can only equal one instance's
+   *  id, but the email matches either way. In prod this is wired in
+   *  lib/tenant/from-request.ts to Clerk's users.getUser. */
+  resolveEmail?: (identity: Identity) => Promise<string | null>
 }
 
 /** Extract the token from an `Authorization: Bearer <token>` header. */
@@ -91,5 +100,28 @@ export async function tenantFromRequest(
     .select(columns)
     .eq(column, identity.userId)
     .maybeSingle()
-  return { identity, tenant: (data as Record<string, unknown> | null) ?? null }
+  let tenant = (data as Record<string, unknown> | null) ?? null
+
+  // Fallback: resolve by the caller's STABLE owner_email when the id lookup
+  // missed. A tenants.clerk_user_id column can hold only ONE Clerk instance's
+  // id, so a DB shared by the dev (test) + prod (live) instances misses for
+  // whichever instance isn't currently stored — matching by email recovers the
+  // tenant either way. READ-ONLY: we never write the id back, so the other
+  // environment keeps resolving too (no see-saw). No-ops when no email is
+  // available (e.g. a Clerk token with no email claim and no resolveEmail dep).
+  if (!tenant) {
+    const email =
+      identity.email ??
+      (deps.resolveEmail ? await deps.resolveEmail(identity).catch(() => null) : null)
+    if (email) {
+      const { data: byEmail } = await deps.supabase
+        .from('tenants')
+        .select(columns)
+        .eq('owner_email', email.toLowerCase())
+        .maybeSingle()
+      tenant = (byEmail as Record<string, unknown> | null) ?? null
+    }
+  }
+
+  return { identity, tenant }
 }

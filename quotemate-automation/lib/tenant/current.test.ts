@@ -171,4 +171,85 @@ describe('tenantFromRequest', () => {
     expect(res).toBeNull()
     expect(fake.calls).toEqual([])
   })
+
+  // ── Email fallback (shared DB used by two Clerk instances) ──────────────
+  // A fake whose tenant lookup returns a DIFFERENT row per filter column, so we
+  // can assert the id lookup misses and the owner_email lookup hits. It has NO
+  // update()/from-write path, so any attempt to overwrite the link would throw —
+  // proving the fallback is read-only.
+  function fakeByColumn(rowByColumn: Record<string, Record<string, unknown> | null>) {
+    const calls: { column: string; value: unknown }[] = []
+    return {
+      calls,
+      client: {
+        auth: { getUser: vi.fn(async () => ({ data: { user: { id: 'supa-uuid', email: null } }, error: null })) },
+        from() {
+          return {
+            select() {
+              return {
+                eq(column: string, value: unknown) {
+                  calls.push({ column, value })
+                  return { maybeSingle: async () => ({ data: rowByColumn[column] ?? null, error: null }) }
+                },
+              }
+            },
+          }
+        },
+      } as never,
+    }
+  }
+
+  it('falls back to owner_email when the Clerk id lookup misses (read-only)', async () => {
+    const fake = fakeByColumn({ clerk_user_id: null, owner_email: { id: 'tenant-9' } })
+    const resolveEmail = vi.fn(async () => 'Tradie@Example.com')
+    const res = await tenantFromRequest(reqWith(`Bearer ${CLERK_DEV_TOKEN}`), {
+      supabase: fake.client,
+      verifyClerk: vi.fn(async () => ({ sub: 'user_abc', email: null })),
+      resolveEmail,
+    })
+    expect(res?.tenant).toEqual({ id: 'tenant-9' })
+    expect(fake.calls).toEqual([
+      { column: 'clerk_user_id', value: 'user_abc' },
+      { column: 'owner_email', value: 'tradie@example.com' }, // lower-cased
+    ])
+    expect(resolveEmail).toHaveBeenCalledOnce()
+  })
+
+  it('skips the email fallback entirely when the id lookup hits (no wasted Clerk call)', async () => {
+    const fake = fakeByColumn({ clerk_user_id: { id: 'tenant-1' } })
+    const resolveEmail = vi.fn(async () => 'x@y.com')
+    const res = await tenantFromRequest(reqWith(`Bearer ${CLERK_DEV_TOKEN}`), {
+      supabase: fake.client,
+      verifyClerk: vi.fn(async () => ({ sub: 'user_abc', email: null })),
+      resolveEmail,
+    })
+    expect(res?.tenant).toEqual({ id: 'tenant-1' })
+    expect(resolveEmail).not.toHaveBeenCalled()
+    expect(fake.calls).toEqual([{ column: 'clerk_user_id', value: 'user_abc' }])
+  })
+
+  it('does not fall back when no email is available', async () => {
+    const fake = fakeByColumn({ clerk_user_id: null, owner_email: { id: 'tenant-9' } })
+    const res = await tenantFromRequest(reqWith(`Bearer ${CLERK_DEV_TOKEN}`), {
+      supabase: fake.client,
+      verifyClerk: vi.fn(async () => ({ sub: 'user_abc', email: null })),
+      // no resolveEmail, and the token carried no email
+    })
+    expect(res?.tenant).toBeNull()
+    expect(fake.calls).toEqual([{ column: 'clerk_user_id', value: 'user_abc' }])
+  })
+
+  it('returns null when both the id and email lookups miss', async () => {
+    const fake = fakeByColumn({ clerk_user_id: null, owner_email: null })
+    const res = await tenantFromRequest(reqWith(`Bearer ${CLERK_DEV_TOKEN}`), {
+      supabase: fake.client,
+      verifyClerk: vi.fn(async () => ({ sub: 'user_abc', email: null })),
+      resolveEmail: vi.fn(async () => 'x@y.com'),
+    })
+    expect(res?.tenant).toBeNull()
+    expect(fake.calls).toEqual([
+      { column: 'clerk_user_id', value: 'user_abc' },
+      { column: 'owner_email', value: 'x@y.com' },
+    ])
+  })
 })

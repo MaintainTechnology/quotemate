@@ -126,7 +126,7 @@ import { HistoricalHint } from './_components/HistoricalHint'
 import { SavedJobsSection, savedJobTradeKey } from './_components/SavedJobsSection'
 import CommercialPaintingTab from './_components/commercial-painting/CommercialPaintingTab'
 import { PaginationControls, usePagination } from './_components/Pagination'
-import { StatusPill, StatGrid, TONE_LEFT_RAIL, type Tone } from './_components/quote-ui'
+import { StatusPill, type Tone } from './_components/quote-ui'
 import { BrandMark } from '@/app/_components/BrandMark'
 import ThemeToggle from '@/app/_components/ThemeToggle'
 import { ErrorBanner, Field, INPUT } from '../signup/page'
@@ -875,7 +875,7 @@ export default function DashboardPage() {
       tenantStatus={data.tenant.status}
       tenantSubtitle={profileSubtitle || null}
       topbar={{
-        navItems: buildNav(tenantTradeList(data.tenant)),
+        navItems: buildNav(data.quotes.length, tenantTradeList(data.tenant)),
         setTab,
         quotes: data.quotes,
       }}
@@ -894,6 +894,7 @@ export default function DashboardPage() {
         <Sidebar
           tab={tab}
           setTab={setTab}
+          quoteCount={data.quotes.length}
           isAdmin={isAdmin}
           trades={tenantTradeList(data.tenant)}
           collapsed={railCollapsed}
@@ -905,6 +906,7 @@ export default function DashboardPage() {
             <MobileTabBar
               tab={tab}
               setTab={setTab}
+              quoteCount={data.quotes.length}
               trades={tenantTradeList(data.tenant)}
             />
             {/* `key={tab}` forces a tear-down + remount when the user
@@ -1887,13 +1889,13 @@ const HUB_NAV: { slug: TradeHubSlug; label: string; icon: NavIcon }[] = [
   { slug: 'solar', label: 'Solar', icon: Sun },
 ]
 
-function buildNav(trades: ReadonlyArray<string> = []): NavItem[] {
+function buildNav(quoteCount: number, trades: ReadonlyArray<string> = []): NavItem[] {
   const items: NavItem[] = [
     { tab: 'overview', label: 'Overview', icon: LayoutDashboard },
-    // The generic cross-trade "Quotes" tab was removed from the sidebar — each
-    // trade's quotes now live in that trade's hub (below), so a quote no longer
-    // appears in two sidebar tabs at once. The combined cross-trade list is
-    // still reachable on demand via the topbar "Review queue" button.
+    // Combined cross-trade quote list (every trade in one place). The per-trade
+    // hubs (below) also show each trade's own quotes; this is the "everything"
+    // view kept alongside them.
+    { tab: 'quotes', label: 'Quotes', icon: FileText, count: quoteCount },
     { tab: 'chats', label: 'Chats', icon: MessageSquare },
     { tab: 'followups', label: 'Follow-ups', icon: PhoneCall },
     // Calendar — core tab (every tenant). Shows all bookings + self-serve requests.
@@ -1972,7 +1974,7 @@ function buildNav(trades: ReadonlyArray<string> = []): NavItem[] {
 // orphan-trade tenants) share the Price book band; Marketing, Records and
 // Account items fold into Business. visibleGroups drops any band with no row.
 const SIDEBAR_GROUPS: { label: string; tabs: Tab[] }[] = [
-  { label: 'Daily', tabs: ['overview', 'chats', 'followups', 'calendar'] },
+  { label: 'Daily', tabs: ['overview', 'quotes', 'chats', 'followups', 'calendar'] },
   { label: 'Trades', tabs: [...HUB_TABS] },
   { label: 'Price book', tabs: ['pricing', 'services', 'catalogue', 'estimating', 'recipes'] },
   {
@@ -1984,6 +1986,7 @@ const SIDEBAR_GROUPS: { label: string; tabs: Tab[] }[] = [
 function Sidebar({
   tab,
   setTab,
+  quoteCount,
   isAdmin,
   trades = [],
   collapsed = false,
@@ -1991,6 +1994,7 @@ function Sidebar({
 }: {
   tab: Tab
   setTab: (t: Tab) => void
+  quoteCount: number
   isAdmin: boolean
   trades?: ReadonlyArray<string>
   /** Icon-only rail (reference design). The state lives in DashboardPage
@@ -1998,7 +2002,7 @@ function Sidebar({
   collapsed?: boolean
   onToggleCollapse?: () => void
 }) {
-  const items = buildNav(trades)
+  const items = buildNav(quoteCount, trades)
   const byTab = new Map(items.map((i) => [i.tab, i]))
   // Resolve each group's rows up front and drop groups that have no
   // visible row on this tenant (e.g. a fully trade-gated "Estimator
@@ -2209,13 +2213,15 @@ function Sidebar({
 function MobileTabBar({
   tab,
   setTab,
+  quoteCount,
   trades = [],
 }: {
   tab: Tab
   setTab: (t: Tab) => void
+  quoteCount: number
   trades?: ReadonlyArray<string>
 }) {
-  const items = buildNav(trades)
+  const items = buildNav(quoteCount, trades)
   return (
     <nav
       // Horizontal-scroll bar keeps all six tabs on one line on
@@ -7884,6 +7890,10 @@ function QuotesTab({
   const [search, setSearch] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  // Master–detail selection: which quote the right pane shows, and — on < lg,
+  // where the two panes stack — whether the detail is open over the queue.
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false)
   const all = tradeFilter
     ? data.quotes.filter((q) => (q.trade ?? '').toLowerCase() === tradeFilter)
     : data.quotes
@@ -7928,68 +7938,14 @@ function QuotesTab({
     .filter((q) => quoteMatchesSearch(q, searchTerms))
     .sort((a, b) => compareQuotes(a, b, sort))
   const total = filtered.length
-  const {
-    page,
-    setPage,
-    totalPages,
-    pageItems: visibleQuotes,
-    startIndex,
-    endIndex,
-  } = usePagination(filtered, {
-    urlKey: tradeFilter ? `${tradeFilter}_q_page` : 'q_page',
-    resetKey: `${filter} ${sort} ${tradeSel} ${dateFrom} ${dateTo} ${search}`,
-  })
-
-  // ── Money summary band. The Quotes tab is where a tradie manages
-  //    revenue, so it leads with the totals (mirrors the Overview KPI
-  //    framing) — answering "what's my pipeline + what needs me?" first. ──
-  const quotedValue = all.reduce((s, q) => s + (toNum(q.total_inc_gst) ?? 0), 0)
-  const acceptedQuotes = all.filter(
-    (q) => q.deposit_paid || (q.status ?? '').toLowerCase() === 'accepted',
-  )
-  const convertedValue = acceptedQuotes.reduce((s, q) => s + (toNum(q.total_inc_gst) ?? 0), 0)
-  const conversion = all.length > 0 ? Math.round((acceptedQuotes.length / all.length) * 100) : 0
-  const avgQuote = all.length > 0 ? quotedValue / all.length : 0
-  const needsReview = all.filter((q) => quoteMatchesFilter(q, 'review')).length
+  const sortLabel = QUOTE_SORTS.find((s) => s.key === sort)?.label ?? 'Newest first'
+  // The detail pane always shows a quote: the one the tradie picked, else the
+  // first in the (filtered, sorted) queue — so it's never blank on load or
+  // after a filter change drops the previously-selected quote.
+  const selected = filtered.find((q) => q.id === selectedId) ?? filtered[0] ?? null
 
   return (
-    <div className="space-y-5">
-      {all.length === 0 ? (
-            <Card>
-              <p className="text-sm text-text-dim">
-                {tradeFilter
-                  ? `No ${quoteTradeLabel(tradeFilter)} quotes yet — they appear here once a customer's first quote is drafted.`
-                  : 'No quotes drafted yet. Customers texting your QuoteMax number will appear here once their first quote is drafted.'}
-              </p>
-            </Card>
-          ) : (
-            <>
-              <StatGrid
-            cols={4}
-            stats={[
-              {
-                label: 'Quoted',
-                value: `$${formatMoney(quotedValue)}`,
-                hint: `${all.length} quote${all.length === 1 ? '' : 's'} · avg $${formatMoney(avgQuote)}`,
-                hero: true,
-              },
-              {
-                label: 'Converted',
-                value: `$${formatMoney(convertedValue)}`,
-                hint: `${acceptedQuotes.length} accepted`,
-              },
-              {
-                label: 'Conversion',
-                value: `${conversion}%`,
-              },
-              {
-                label: 'Needs review',
-                value: String(needsReview),
-                tone: needsReview > 0 ? 'accent' : 'default',
-                hint: needsReview > 0 ? 'awaiting you' : 'all actioned',
-              },
-            ]}
-          />
+    <div className="space-y-4">
 
       {/* Status filter rail — lets a tradie with a long history jump
           straight to what needs action (in-review) or what converted.
@@ -8112,14 +8068,20 @@ function QuotesTab({
         )}
       </div>
 
-      <Card
-        subtitle={`${total} quote${total === 1 ? '' : 's'}${
-          filtersActive ? ' · filtered' : ''
-        } · click a row to see the scope, tier breakdown, and customer page.`}
-      >
-        {total === 0 ? (
+      {/* ── Master–detail: quote queue (left) + selected quote (right).
+          Mirrors the QuoteMax dashboard reference — a scrollable queue beside a
+          scrollable detail pane. On < lg the two stack: the queue shows first,
+          tapping a row opens the detail with a back button. ───────────────── */}
+      {total === 0 ? (
+        <Card>
           <div className="space-y-3">
-            <p className="text-sm text-text-dim">No quotes match these filters.</p>
+            <p className="text-sm text-text-dim">
+              {all.length === 0
+                ? tradeFilter
+                  ? `No ${quoteTradeLabel(tradeFilter)} quotes yet — they appear here once a customer's first quote is drafted.`
+                  : 'No quotes drafted yet. Customers texting your QuoteMax number appear here once their first quote is drafted.'
+                : 'No quotes match these filters.'}
+            </p>
             {filtersActive && (
               <button
                 type="button"
@@ -8130,33 +8092,64 @@ function QuotesTab({
               </button>
             )}
           </div>
-        ) : (
-          <>
-            <div className="space-y-2">
-              {visibleQuotes.map((q) => (
-                <QuoteCard
+        </Card>
+      ) : (
+        <div className="overflow-hidden rounded-card border border-ink-line bg-ink-card lg:grid lg:h-[calc(100dvh-18rem)] lg:min-h-[520px] lg:grid-cols-[minmax(340px,460px)_minmax(0,1fr)]">
+          {/* Queue */}
+          <div
+            className={`min-h-0 flex-col lg:flex lg:border-r lg:border-ink-line ${
+              mobileDetailOpen ? 'hidden' : 'flex'
+            }`}
+          >
+            <div className="sticky top-0 z-[5] flex items-center justify-between gap-3 border-b border-ink-line bg-ink-deep px-4 py-3.5">
+              <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-sec">
+                Quote queue · {total}
+              </span>
+              <span className="font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
+                {sortLabel}
+              </span>
+            </div>
+            <div className="min-h-0 overflow-y-auto lg:flex-1">
+              {filtered.map((q) => (
+                <QuoteQueueRow
                   key={q.id}
                   q={q}
                   isMultiTrade={isMultiTrade}
-                  accessToken={accessToken}
-                  onDeleted={onQuoteDeleted}
+                  selected={selected?.id === q.id}
+                  onSelect={() => {
+                    setSelectedId(q.id)
+                    setMobileDetailOpen(true)
+                  }}
                 />
               ))}
             </div>
-            <PaginationControls
-              page={page}
-              totalPages={totalPages}
-              onPageChange={setPage}
-              startIndex={startIndex}
-              endIndex={endIndex}
-              total={total}
-              unit="quotes"
-            />
-          </>
-        )}
-      </Card>
-            </>
-          )}
+          </div>
+
+          {/* Detail */}
+          <div
+            className={`min-h-0 flex-col bg-ink-deep lg:flex ${
+              mobileDetailOpen ? 'flex' : 'hidden'
+            }`}
+          >
+            <button
+              type="button"
+              onClick={() => setMobileDetailOpen(false)}
+              className="flex items-center gap-2 border-b border-ink-line px-4 py-3 text-left font-mono text-[0.65rem] font-bold uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-accent lg:hidden"
+            >
+              ← Back to queue
+            </button>
+            {selected && (
+              <QuoteDetail
+                key={selected.id}
+                q={selected}
+                isMultiTrade={isMultiTrade}
+                accessToken={accessToken}
+                onDeleted={onQuoteDeleted}
+              />
+            )}
+          </div>
+        </div>
+      )}
 
       {/* This trade's measure-tool estimates (roof / solar / paint) merged into
           the same tab, in a labelled section below the quotes. A null key
@@ -8273,7 +8266,144 @@ function DeleteQuoteButton({
   )
 }
 
-function QuoteCard({
+// ── Shared quote helpers for the master–detail Quotes view ─────────────
+
+// Status badges for a quote, most-actionable first (deposit paid → inspection
+// → status). Plain-language labels, not raw DB slugs. Shared by the queue row
+// and the detail header.
+function quoteBadges(q: Quote): { label: string; tone: QuoteBadgeTone }[] {
+  const isInspection = !!(q.needs_inspection || q.inspection_required)
+  const out: { label: string; tone: QuoteBadgeTone }[] = []
+  if (q.deposit_paid) out.push({ label: 'Deposit paid', tone: 'paid' })
+  if (isInspection) out.push({ label: 'Inspection required', tone: 'inspect' })
+  if (!q.deposit_paid) {
+    const raw = (q.status ?? 'draft').toLowerCase()
+    const tone: QuoteBadgeTone =
+      raw === 'accepted' ? 'accepted' : raw === 'sent' ? 'sent' : 'draft'
+    const label =
+      raw === 'accepted'
+        ? 'Accepted'
+        : raw === 'sent'
+          ? 'Sent to customer'
+          : 'Awaiting your review'
+    out.push({ label, tone })
+  }
+  return out
+}
+
+// Compact relative time for a queue row ("4 MIN AGO", "YESTERDAY"), absolute
+// past a week.
+function relTime(iso: string | null): string {
+  if (!iso) return ''
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return ''
+  const s = Math.max(0, Math.floor((Date.now() - then) / 1000))
+  if (s < 60) return 'JUST NOW'
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m} MIN AGO`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h} HR AGO`
+  const d = Math.floor(h / 24)
+  if (d === 1) return 'YESTERDAY'
+  if (d < 7) return `${d} DAYS AGO`
+  return formatDate(iso).toUpperCase()
+}
+
+// Line items denormalised into a tier's good/better/best jsonb. The dashboard
+// TierJson type narrows to subtotal, but /api/tenant/me returns the full jsonb,
+// so read line_items defensively (same shape lib/quote/report-html.ts renders).
+type DetailLineItem = {
+  description: string
+  quantity: number
+  unit: string
+  unit_price_ex_gst: number
+}
+function tierLineItems(tier: TierJson): DetailLineItem[] {
+  const raw = (tier as { line_items?: unknown } | null)?.line_items
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((li) => {
+      const o = (li ?? {}) as Record<string, unknown>
+      return {
+        description: typeof o.description === 'string' ? o.description : '',
+        quantity: toNum(o.quantity as string | number | null) ?? 1,
+        unit: typeof o.unit === 'string' ? o.unit : '',
+        unit_price_ex_gst: toNum(o.unit_price_ex_gst as string | number | null) ?? 0,
+      }
+    })
+    .filter((li) => li.description)
+}
+
+/**
+ * One row in the left "quote queue" of the master–detail Quotes view. Compact:
+ * customer + channel, job, suburb·time·(trade), value, status pill, and a 2px
+ * status bar down the left edge. Selecting it drives the right detail pane.
+ */
+function QuoteQueueRow({
+  q,
+  isMultiTrade,
+  selected,
+  onSelect,
+}: {
+  q: Quote
+  isMultiTrade: boolean
+  selected: boolean
+  onSelect: () => void
+}) {
+  const badge = quoteBadges(q)[0]
+  const tone: Tone = badge ? QUOTE_BADGE_TONE[badge.tone] : 'default'
+  const barBg = tone === 'accent' ? 'bg-accent' : tone === 'dim' ? 'bg-ink-line' : 'bg-text-dim'
+  const value = toNum(q.total_inc_gst)
+  const customerLabel = q.customer_full_name || q.customer_first_name || '—'
+  const trade = q.trade
+  const meta = [
+    q.suburb,
+    relTime(q.created_at),
+    isMultiTrade && trade ? quoteTradeLabel(trade.toLowerCase()) : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={`relative flex w-full items-start justify-between gap-3 border-b border-ink-line px-4 py-3.5 text-left transition-colors cursor-pointer ${
+        selected ? 'bg-accent/[0.06]' : 'hover:bg-ink-deep/40'
+      }`}
+    >
+      <span aria-hidden="true" className={`absolute inset-y-0 left-0 w-[2px] ${barBg}`} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-[0.95rem] font-bold text-text-pri">{customerLabel}</span>
+          {q.channel && <ChannelBadge channel={q.channel} />}
+        </div>
+        <div className="mt-1 truncate text-[0.82rem] text-text-sec">
+          {formatJobType(q.job_type)}
+        </div>
+        {meta && (
+          <div className="mt-1.5 font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">
+            {meta}
+          </div>
+        )}
+      </div>
+      <div className="flex shrink-0 flex-col items-end gap-2">
+        <span className="font-mono text-[0.95rem] font-bold tabular-nums text-text-pri">
+          {value !== null ? `$${formatMoney(value)}` : '—'}
+        </span>
+        {badge && <StatusPill label={badge.label} tone={tone} compact dot />}
+      </div>
+    </button>
+  )
+}
+
+/**
+ * Right-hand detail pane of the master–detail Quotes view (was the expanded
+ * QuoteCard body). Reference layout: header, tier options, line items, details,
+ * activity, transcript, and a pinned action bar carrying every existing action
+ * (customer page, copy deposit link, view PDF · edit, download PDF, delete).
+ */
+function QuoteDetail({
   q,
   isMultiTrade,
   accessToken,
@@ -8284,7 +8414,6 @@ function QuoteCard({
   accessToken: string | null
   onDeleted: (id: string) => void
 }) {
-  const [expanded, setExpanded] = useState(false)
   const url = q.share_token ? `/q/${q.share_token}` : null
 
   // Tier prices. Each tier JSONB stores `subtotal_ex_gst` but NOT
@@ -8311,12 +8440,6 @@ function QuoteCard({
   const bestTotal = bestSub !== null ? +(bestSub * gstRatio).toFixed(2) : null
   const customerLabel = q.customer_full_name || q.customer_first_name || '—'
   const trade = q.trade as 'electrical' | 'plumbing' | 'roofing' | null
-  // Wave 3b — surface a "Roofing" trade badge so the tradie spots a
-  // roofing quote in the list at a glance. The detailed stat strip
-  // (m² / form / storeys / hips / valleys) lives on the customer page
-  // at /q/[token] via RoofHeroStrip — extending the dashboard data
-  // model to include intake.scope here is a follow-up.
-  const isRoofingTrade = trade === 'roofing'
   // Trade-aware rendering (spec R4–R8): non-generic trades get their own tier
   // framing + a trade label instead of the bare electrical Good/Better/Best.
   const tradeFormat = resolveTradeFormat(trade)
@@ -8326,290 +8449,271 @@ function QuoteCard({
   const hasTierLadder =
     goodTotal !== null || betterTotal !== null || bestTotal !== null
 
-  // Status badges — composed in priority order:
-  //   • Deposit paid (the most actionable signal — overrides status)
-  //   • Inspection required (parallel context badge)
-  //   • Raw status as a final pill (draft / sent / accepted)
-  type Badge = {
-    label: string
-    tone: 'paid' | 'inspect' | 'draft' | 'sent' | 'accepted'
-  }
-  const badges: Badge[] = []
-  if (q.deposit_paid) badges.push({ label: 'Deposit paid', tone: 'paid' })
-  if (isInspection) badges.push({ label: 'Inspection required', tone: 'inspect' })
-  if (!q.deposit_paid) {
-    const raw = (q.status ?? 'draft').toLowerCase()
-    const tone: Badge['tone'] =
-      raw === 'accepted' ? 'accepted' : raw === 'sent' ? 'sent' : 'draft'
-    // Plain-language label instead of the raw status slug ("draft" /
-    // "awaiting_review") so a tradie reads what to do, not a database value.
-    const label =
-      raw === 'accepted'
-        ? 'Accepted'
-        : raw === 'sent'
-          ? 'Sent to customer'
-          : 'Awaiting your review'
-    badges.push({ label, tone })
-  }
-
-  // Compact badge label for the collapsed summary row. We surface the
-  // single most-actionable badge (paid > inspect > accepted > sent >
-  // draft) so the row stays one line. The full set is shown inside the
-  // expanded body.
+  const badges = quoteBadges(q)
   const primaryBadge = badges[0]
-  // Left status rail — color-codes the row for at-a-glance triage and is
-  // the status signal that survives on mobile (where the pill is hidden).
-  const railTone: Tone = primaryBadge ? QUOTE_BADGE_TONE[primaryBadge.tone] : 'default'
+  const primaryTone: Tone = primaryBadge ? QUOTE_BADGE_TONE[primaryBadge.tone] : 'default'
+  const sectionLabel =
+    'font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-dim'
+
+  // Tier whose line-item breakdown the pane previews — starts on the tradie-
+  // selected ("recommended") tier, else the first tier that has a price.
+  const tierTotals: Record<'good' | 'better' | 'best', number | null> = {
+    good: goodTotal,
+    better: betterTotal,
+    best: bestTotal,
+  }
+  const pricedTiers = (['good', 'better', 'best'] as const).filter(
+    (t) => tierTotals[t] !== null,
+  )
+  const [activeTier, setActiveTier] = useState<'good' | 'better' | 'best'>(
+    (selectedTier && tierTotals[selectedTier] !== null ? selectedTier : pricedTiers[0]) ?? 'better',
+  )
+  const activeLineItems = tierLineItems(q[activeTier])
+
+  // Synthesised activity — only events the quote's own fields imply.
+  const st = (q.status ?? '').toLowerCase()
+  const activity: { label: string; sub: string }[] = [
+    { label: 'Drafted by QuoteMax', sub: `${formatDate(q.created_at)} · ${formatTime(q.created_at)}` },
+  ]
+  if (q.deposit_paid || ['sent', 'accepted', 'paid'].includes(st))
+    activity.push({ label: 'Sent to customer', sub: '' })
+  if (q.deposit_paid) activity.push({ label: 'Deposit paid', sub: '' })
+  else if (['accepted', 'paid'].includes(st)) activity.push({ label: 'Accepted', sub: '' })
 
   return (
-    <div className={`rounded-card border border-ink-line border-l-2 ${TONE_LEFT_RAIL[railTone]} bg-ink-card motion-safe:animate-[fade-up_240ms_ease-out_both]`}>
-      {/* ── Collapsed summary row (always visible — also the trigger) ─ */}
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        aria-expanded={expanded ? 'true' : 'false'}
-        className="w-full text-left flex items-center justify-between gap-3 sm:gap-4 px-4 sm:px-5 py-3.5 hover:bg-ink-deep/40 transition-colors cursor-pointer"
-      >
-        <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-2 sm:gap-3 flex-wrap">
-            <span className="font-extrabold text-base text-text-pri tracking-tight truncate">
+    <div className="flex min-h-0 flex-1 flex-col motion-safe:animate-[fade-up_200ms_ease-out_both]">
+      {/* ── Scrollable detail body ─────────────────────────────────── */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 border-b border-ink-line px-5 py-5 sm:px-6">
+          <div className="min-w-0">
+            <div className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-accent">
+              Drafted · {formatDate(q.created_at)}
+              {q.channel ? ` · ${q.channel === 'voice' ? 'Voice' : 'SMS'}` : ''}
+            </div>
+            <h2 className="mt-1.5 font-extrabold uppercase leading-none tracking-tight text-text-pri text-[clamp(1.25rem,2.2vw,1.6rem)]">
               {customerLabel}
-            </span>
-            {q.channel && <ChannelBadge channel={q.channel} />}
-            {/* Suburb hidden < sm so the customer name + channel pill
-                fit the line. It's still in the expanded metadata grid. */}
-            {q.suburb && (
-              <span className="hidden sm:inline font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
-                · {q.suburb}
-              </span>
-            )}
-            <span className="font-mono text-[0.65rem] uppercase tracking-[0.12em] text-text-sec truncate">
-              · {formatJobType(q.job_type)}
-            </span>
-            {/* Drafted date on the row itself — "when" is a top triage
-                question; previously it was hidden until the card expanded.
-                Hidden < sm to keep the mobile row to one clean line. */}
-            <span className="hidden sm:inline font-mono text-[0.65rem] uppercase tracking-[0.12em] text-text-dim">
-              · {formatDate(q.created_at)}
-            </span>
-            {/* Trade label only when actually relevant (multi-trade) +
-                large enough to fit. */}
-            {isMultiTrade && trade && (
-              <span className="hidden sm:inline font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim font-bold">
-                · {tradeLabel(trade)}
-              </span>
-            )}
-            {/* Wave 3b — a ROOF pill flags roofing quotes in a mixed list.
-                Neutral chip (was an orange fill) so the row stays calm. */}
-            {isRoofingTrade && (
-              <span className="rounded-ctl inline-flex items-center border border-ink-line px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-[0.16em] font-bold text-text-dim">
-                Roof
-              </span>
+            </h2>
+            <p className="mt-1.5 text-sm text-text-sec">
+              {formatJobType(q.job_type)}
+              {q.suburb ? ` · ${q.suburb}` : ''}
+              {isMultiTrade && trade ? ` · ${tradeLabel(trade)}` : ''}
+            </p>
+            {url && (
+              <a
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 inline-flex font-mono text-[0.62rem] font-bold uppercase tracking-[0.14em] text-accent transition-colors hover:text-accent-press"
+              >
+                Customer page →
+              </a>
             )}
           </div>
-        </div>
-        <div className="shrink-0 flex items-center gap-2 sm:gap-3">
-          {/* Primary status pill hidden < sm — kept inside the expanded
-              body. Avoids the right rail outgrowing the price. */}
           {primaryBadge && (
-            <span className="hidden sm:inline-flex">
-              <StatusPill
-                label={primaryBadge.label}
-                tone={QUOTE_BADGE_TONE[primaryBadge.tone]}
-                compact
-                dot
-              />
-            </span>
+            <StatusPill label={primaryBadge.label} tone={primaryTone} dot />
           )}
-          <div className="text-right">
-            <div className="font-mono text-base sm:text-lg font-extrabold text-text-pri leading-none tabular-nums">
-              {selectedTotal !== null ? `$${formatMoney(selectedTotal)}` : '—'}
-            </div>
-            {q.selected_tier && (
-              <div className="mt-0.5 font-mono text-[0.55rem] uppercase tracking-[0.14em] text-accent font-bold">
-                {q.selected_tier}
-              </div>
-            )}
-          </div>
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-            className={`shrink-0 text-text-dim transition-transform duration-200 ${
-              expanded ? 'rotate-90' : ''
-            }`}
-          >
-            <path d="M9 6l6 6-6 6" />
-          </svg>
         </div>
-      </button>
 
-      {/* ── Expansion region — grid-row trick gives a CSS-only height
-          transition for variable-height content. The inner wrapper
-          uses overflow-hidden so the children clip during the
-          0fr ↔ 1fr animation. ─────────────────────────────────── */}
-      <div
-        className={`grid transition-[grid-template-rows] duration-300 ease-out ${
-          expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
-        }`}
-      >
-        <div className="overflow-hidden">
-          <div className="border-t border-ink-line">
-            {/* Metadata grid */}
-            <div className="rounded-card mx-5 mt-4 grid grid-cols-2 md:grid-cols-4 gap-px bg-ink-line border border-ink-line">
-              <MetaCell label="Work" value={formatJobType(q.job_type)} />
-              <MetaCell
-                label="Service"
-                value={trade ? tradeLabel(trade) : '—'}
-                highlight={isMultiTrade}
-              />
-              <MetaCell
-                label="Drafted"
-                value={formatDate(q.created_at)}
-                sub={formatTime(q.created_at)}
-              />
-              <MetaCell
-                label="Routing"
-                value={q.routing_decision ? formatJobType(q.routing_decision) : '—'}
-              />
+        {/* Options drafted from your pricing book — tap a tier to preview it */}
+        {hasTierLadder && (
+          <div className="border-b border-ink-line px-5 py-5 sm:px-6">
+            <div className={sectionLabel}>
+              {isBespokeTrade
+                ? `${tradeFormat.label} options`
+                : 'Options drafted from your pricing book'}
             </div>
-
-            {/* Tradie-facing historical pricing hint (informational only — does
-                not change the drafted customer price). */}
-            <HistoricalHint jobType={q.job_type} trade={trade} accessToken={accessToken} />
-
-            {/* Tier ladder — trade-aware labels (roofing → patch/re-roof/
-                upgrade) so the tradie sees the same framing the customer gets,
-                not the electrical Good/Better/Best (spec R4). */}
-            {hasTierLadder && (
-              <div className="mt-4 px-5">
-                {isBespokeTrade && (
-                  <div className="mb-2 font-mono text-[0.6rem] uppercase tracking-[0.16em] text-accent font-bold">
-                    {tradeFormat.label} options
-                  </div>
-                )}
-                <div className="grid grid-cols-3 gap-2">
-                  <TierCell label={tierLabels.good} amount={goodTotal} selected={q.selected_tier === 'good'} />
-                  <TierCell label={tierLabels.better} amount={betterTotal} selected={q.selected_tier === 'better'} />
-                  <TierCell label={tierLabels.best} amount={bestTotal} selected={q.selected_tier === 'best'} />
-                </div>
-              </div>
-            )}
-
-            {/* All status badges + actions */}
-            <div className="mt-4 px-5 pb-4 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap gap-2">
-                {q.customer_phone && (
-                  <span className="font-mono text-xs text-text-sec">
-                    {q.customer_phone}
-                  </span>
-                )}
-                {badges.map((b, i) => (
-                  <StatusPill key={i} label={b.label} tone={QUOTE_BADGE_TONE[b.tone]} />
-                ))}
-              </div>
-              <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:items-center">
-                {/* Share the customer's deposit link (spec R7). This copies
-                    the /r/{token}/{tier} short-link — it never charges from
-                    the dashboard; the real Pay Deposit button lives on the
-                    customer page. Hidden for inspection-routed quotes. */}
-                {url && !isInspection && q.share_token && (
-                  <CopyDepositLink token={q.share_token} tier={q.selected_tier} />
-                )}
-                {/* Open the in-dashboard PDF viewer where the tradie can edit
-                    the quote manually or with AI, then re-download. Hidden for
-                    inspection quotes (no priced PDF / nothing to edit). */}
-                {url && !isInspection && q.share_token && (
-                  <Link
-                    href={`/dashboard/quote/${q.share_token}`}
-                    className="rounded-ctl inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+            <div className="mt-3.5 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(148px,1fr))]">
+              {pricedTiers.map((t) => {
+                const isSel = t === selectedTier
+                const isActive = t === activeTier
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setActiveTier(t)}
+                    aria-pressed={isActive}
+                    className={`relative border p-4 text-left transition-colors cursor-pointer ${
+                      isActive
+                        ? 'border-accent bg-accent/[0.06]'
+                        : 'border-ink-line bg-ink-card hover:border-text-dim'
+                    }`}
                   >
-                    View PDF · Edit
-                  </Link>
-                )}
-                {/* Download the full quote as a PDF. Hidden for inspection-
-                    routed quotes — the /api/q/[token]/pdf route 404s those
-                    (no committable price belongs in a final-looking doc). */}
-                {url && !isInspection && (
-                  <a
-                    href={`/api/q/${q.share_token}/pdf`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-ctl inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
-                  >
-                    Download PDF ↓
-                  </a>
-                )}
-                {url && (
-                  <Link
-                    href={url}
-                    target="_blank"
-                    className="rounded-ctl inline-flex min-h-[44px] items-center justify-center gap-2 bg-accent hover:bg-accent-press text-white font-semibold px-4 py-3 text-xs uppercase tracking-wider transition-colors"
-                  >
-                    View customer page →
-                  </Link>
-                )}
-                {/* Delete — hidden once a deposit lands or the quote is
-                    accepted. deposit_paid now reflects quotes.paid_at (set by
-                    the Stripe webhook) via /api/tenant/me; the status check
-                    covers webhook-advanced quotes in older payloads. The API
-                    independently refuses paid quotes with a 409. */}
-                {!q.deposit_paid &&
-                  !['accepted', 'paid'].includes((q.status ?? '').toLowerCase()) && (
-                    <DeleteQuoteButton
-                      quoteId={q.id}
-                      accessToken={accessToken}
-                      onDeleted={onDeleted}
-                    />
-                  )}
-              </div>
-            </div>
-
-            {/* Phase B — per-quote display-mode override. Lets the tradie
-                flip THIS quote between itemised and summary even when the
-                tenant-level default is set to the other. NULL = inherit
-                the tenant preference. */}
-            <div className="px-5 pb-4">
-              <QuoteDisplayModeToggle
-                quoteId={q.id}
-                initial={q.display_mode}
-                accessToken={accessToken}
-              />
-            </div>
-
-            {/* Scope + timeframe + transcript */}
-            <div className="border-t border-ink-line px-5 py-4 space-y-4 bg-ink-deep/30">
-              {q.scope_of_works && (
-                <div>
-                  <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-text-dim font-bold mb-2">
-                    Scope of works
-                  </div>
-                  <p className="text-sm text-text-sec leading-relaxed">
-                    {q.scope_of_works}
-                  </p>
-                </div>
-              )}
-
-              {q.estimated_timeframe && (
-                <div>
-                  <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-text-dim font-bold mb-1">
-                    Estimated timeframe
-                  </div>
-                  <p className="text-sm text-text-sec">{q.estimated_timeframe}</p>
-                </div>
-              )}
-
-              {q.messages && q.messages.length > 0 && (
-                <Transcript messages={q.messages} channel={q.channel} />
-              )}
+                    {isSel && (
+                      <span className="absolute left-0 top-[-1px] bg-accent px-2 py-1 font-mono text-[0.55rem] font-bold uppercase tracking-[0.14em] text-accent-ink">
+                        Recommended
+                      </span>
+                    )}
+                    <div className={`${isSel ? 'mt-3' : ''} font-mono text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-accent`}>
+                      {tierLabels[t]}
+                    </div>
+                    <div className="mt-2 font-mono text-[1.3rem] font-bold tabular-nums text-text-pri">
+                      ${formatMoney(tierTotals[t] as number)}
+                    </div>
+                    {q[t]?.timeframe && (
+                      <div className="mt-1 text-xs text-text-dim">{q[t]?.timeframe}</div>
+                    )}
+                  </button>
+                )
+              })}
             </div>
           </div>
+        )}
+
+        {/* Line items for the previewed tier — else the scope of works */}
+        {activeLineItems.length > 0 && tierTotals[activeTier] !== null ? (
+          <div className="border-b border-ink-line px-5 py-5 sm:px-6">
+            <div className={sectionLabel}>{tierLabels[activeTier]} — line items</div>
+            <div className="mt-3 border border-ink-line">
+              {activeLineItems.map((li, i) => (
+                <div
+                  key={i}
+                  className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-ink-line px-4 py-2.5 last:border-b-0"
+                >
+                  <span className="text-[0.82rem] text-text-sec">{li.description}</span>
+                  <span className="font-mono text-[0.7rem] text-text-dim">
+                    {li.quantity} × ${formatMoney(li.unit_price_ex_gst)}
+                    {li.unit ? ` /${li.unit}` : ''}
+                  </span>
+                  <span className="min-w-[64px] text-right font-mono text-[0.82rem] tabular-nums text-text-pri">
+                    ${formatMoney(+(li.quantity * li.unit_price_ex_gst * gstRatio).toFixed(2))}
+                  </span>
+                </div>
+              ))}
+              <div className="flex items-center justify-between bg-ink-deep px-4 py-3">
+                <span className="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
+                  Total inc GST
+                </span>
+                <span className="font-mono text-[1.05rem] font-bold tabular-nums text-accent">
+                  ${formatMoney(tierTotals[activeTier] as number)}
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : q.scope_of_works ? (
+          <div className="border-b border-ink-line px-5 py-5 sm:px-6">
+            <div className={sectionLabel}>Scope of works</div>
+            <p className="mt-2 text-sm leading-relaxed text-text-sec">{q.scope_of_works}</p>
+          </div>
+        ) : null}
+
+        {/* Details: metadata grid + historical hint + timeframe + layout */}
+        <div className="border-b border-ink-line px-5 py-5 sm:px-6">
+          <div className={sectionLabel}>Details</div>
+          <div className="mt-3 grid grid-cols-2 gap-px border border-ink-line bg-ink-line sm:grid-cols-4">
+            <MetaCell label="Work" value={formatJobType(q.job_type)} />
+            <MetaCell
+              label="Service"
+              value={trade ? tradeLabel(trade) : '—'}
+              highlight={isMultiTrade}
+            />
+            <MetaCell label="Drafted" value={formatDate(q.created_at)} sub={formatTime(q.created_at)} />
+            <MetaCell
+              label="Routing"
+              value={q.routing_decision ? formatJobType(q.routing_decision) : '—'}
+            />
+          </div>
+          <HistoricalHint jobType={q.job_type} trade={trade} accessToken={accessToken} />
+          {q.estimated_timeframe && (
+            <div className="mt-3">
+              <div className={sectionLabel}>Estimated timeframe</div>
+              <p className="mt-1 text-sm text-text-sec">{q.estimated_timeframe}</p>
+            </div>
+          )}
+          <div className="mt-4">
+            <QuoteDisplayModeToggle
+              quoteId={q.id}
+              initial={q.display_mode}
+              accessToken={accessToken}
+            />
+          </div>
+        </div>
+
+        {/* Activity */}
+        <div className="border-b border-ink-line px-5 py-5 sm:px-6">
+          <div className={sectionLabel}>Activity</div>
+          <div className="mt-3.5 flex flex-col">
+            {activity.map((ev, i) => {
+              const last = i === activity.length - 1
+              return (
+                <div key={i} className="flex gap-3">
+                  <div className="flex w-[11px] shrink-0 flex-col items-center">
+                    <span
+                      aria-hidden="true"
+                      className="mt-[3px] h-[9px] w-[9px] shrink-0 rounded-full border-2 border-ink-deep bg-accent"
+                    />
+                    {!last && (
+                      <span aria-hidden="true" className="min-h-[16px] w-px flex-1 bg-ink-line" />
+                    )}
+                  </div>
+                  <div className="min-w-0 pb-4">
+                    <div className="text-[0.82rem] font-semibold text-text-pri">{ev.label}</div>
+                    {ev.sub && (
+                      <div className="mt-0.5 font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">
+                        {ev.sub}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* How QuoteMax intook the job */}
+        {q.messages && q.messages.length > 0 && (
+          <div className="border-b border-ink-line px-5 py-5 sm:px-6">
+            <div className={sectionLabel}>How QuoteMax intook the job</div>
+            <div className="mt-3">
+              <Transcript messages={q.messages} channel={q.channel} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Pinned action bar — every existing action preserved ─────── */}
+      <div className="sticky bottom-0 z-[5] border-t border-ink-line bg-ink-deep px-5 py-4 sm:px-6">
+        <div className="flex flex-wrap items-center gap-2">
+          {url && (
+            <Link
+              href={url}
+              target="_blank"
+              className="rounded-ctl inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 bg-accent px-4 py-3 text-xs font-semibold uppercase tracking-wider text-accent-ink transition-colors hover:bg-accent-press sm:flex-none"
+            >
+              View customer page →
+            </Link>
+          )}
+          {/* Copy the /r/{token}/{tier} deposit short-link (never charges from
+              the dashboard). Hidden for inspection-routed quotes. */}
+          {url && !isInspection && q.share_token && (
+            <CopyDepositLink token={q.share_token} tier={q.selected_tier} />
+          )}
+          {/* In-dashboard PDF viewer/editor. Hidden for inspection quotes. */}
+          {url && !isInspection && q.share_token && (
+            <Link
+              href={`/dashboard/quote/${q.share_token}`}
+              className="rounded-ctl inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+            >
+              View PDF · Edit
+            </Link>
+          )}
+          {/* Download the full quote PDF. Inspection quotes 404 that route. */}
+          {url && !isInspection && (
+            <a
+              href={`/api/q/${q.share_token}/pdf`}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-ctl inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+            >
+              Download PDF ↓
+            </a>
+          )}
+          {/* Delete — hidden once a deposit lands or the quote is accepted;
+              the API independently refuses paid quotes with a 409. */}
+          {!q.deposit_paid &&
+            !['accepted', 'paid'].includes((q.status ?? '').toLowerCase()) && (
+              <DeleteQuoteButton quoteId={q.id} accessToken={accessToken} onDeleted={onDeleted} />
+            )}
         </div>
       </div>
     </div>
@@ -14004,33 +14108,6 @@ function MetaCell({
       {sub && (
         <div className="font-mono text-[0.65rem] text-text-dim mt-0.5">{sub}</div>
       )}
-    </div>
-  )
-}
-
-function TierCell({
-  label,
-  amount,
-  selected,
-}: {
-  label: string
-  amount: number | null
-  selected: boolean
-}) {
-  return (
-    <div
-      className={`rounded-card px-3 py-2 border ${
-        selected
-          ? 'border-accent bg-accent/10 text-text-pri'
-          : 'border-ink-line bg-ink-card text-text-sec'
-      }`}
-    >
-      <div className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-dim">
-        {label}
-      </div>
-      <div className="mt-1 font-mono font-bold text-sm">
-        {amount !== null ? `$${formatMoney(amount)}` : '—'}
-      </div>
     </div>
   )
 }

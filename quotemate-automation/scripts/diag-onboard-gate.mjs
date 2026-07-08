@@ -12,15 +12,18 @@ const { Client } = pg
 const email = (process.argv[2] || '').trim().toLowerCase()
 const LIST = email === '--list' || !email
 
+// Prefer PROD_CLERK_SECRET_KEY so the live instance can be checked without
+// --env-file=.env.local overriding it with the sk_test dev key.
+const SECRET = process.env.PROD_CLERK_SECRET_KEY || process.env.CLERK_SECRET_KEY
 const mask = (s) => (s ? `${String(s).slice(0, 8)}…(${String(s).length} chars)` : '(unset)')
 console.log(`\n═══ Onboard-gate diagnostic ${LIST ? '(SURVEY MODE)' : `for: ${email}`} ═══`)
-console.log(`CLERK_SECRET_KEY: ${mask(process.env.CLERK_SECRET_KEY)}  (dev key starts sk_test_)`)
+console.log(`CLERK_SECRET_KEY: ${mask(SECRET)}  (dev key starts sk_test_)`)
 
 // ─── SURVEY MODE: dump every Clerk dev user + every tenant so we can spot
 //     the "pro" account and whether it is linked. ────────────────────────
 if (LIST) {
   try {
-    const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY })
+    const clerk = createClerkClient({ secretKey: SECRET })
     const res = await clerk.users.getUserList({ limit: 100 })
     const users = Array.isArray(res) ? res : res?.data ?? []
     console.log(`\n[Clerk] ${users.length} dev user(s):`)
@@ -62,7 +65,7 @@ if (LIST) {
 // ─── 1. Clerk (development instance) ────────────────────────────────
 let clerkUser = null
 try {
-  const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY })
+  const clerk = createClerkClient({ secretKey: SECRET })
   const res = await clerk.users.getUserList({ emailAddress: [email] })
   const users = Array.isArray(res) ? res : res?.data ?? []
   if (!users.length) {

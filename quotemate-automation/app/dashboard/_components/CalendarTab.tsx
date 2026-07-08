@@ -136,8 +136,18 @@ function who(ev: CalendarEvent): string {
 
 type DayGroup = { key: string; label: string; events: ScheduledEvent[] }
 
+/* ── Fonts — the SAME families the reference declares (Manrope + JetBrains
+   Mono), referenced through the app's next/font CSS variables so the exact
+   loaded faces render (literal 'Manrope'/'JetBrains Mono' names aren't
+   registered under those names by next/font). Fallback stacks mirror the
+   reference's --font-sans / --font-mono. Applied inline so the fonts match
+   the HTML with zero reliance on utility-class resolution. */
+const SANS = "var(--font-manrope), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif"
+const MONO = "var(--font-jetbrains-mono), ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace"
+
 /* ── Reference styles (verbatim from the standalone template) ─────────── */
 const EYEBROW: CSSProperties = {
+  fontFamily: MONO,
   fontSize: '10.5px',
   fontWeight: 600,
   textTransform: 'uppercase',
@@ -145,6 +155,7 @@ const EYEBROW: CSSProperties = {
   color: 'var(--text-dim)',
 }
 const H1: CSSProperties = {
+  fontFamily: SANS,
   margin: '8px 0 0',
   fontWeight: 800,
   textTransform: 'uppercase',
@@ -154,6 +165,7 @@ const H1: CSSProperties = {
   color: 'var(--text-pri)',
 }
 const BLURB: CSSProperties = {
+  fontFamily: SANS,
   margin: '9px 0 0',
   maxWidth: '64ch',
   fontSize: '13.5px',
@@ -161,6 +173,7 @@ const BLURB: CSSProperties = {
   color: 'var(--text-dim)',
 }
 const GHOST_BTN: CSSProperties = {
+  fontFamily: MONO,
   display: 'inline-flex',
   alignItems: 'center',
   border: '1px solid var(--ink-line)',
@@ -175,6 +188,7 @@ const GHOST_BTN: CSSProperties = {
   cursor: 'pointer',
 }
 const PRIMARY_BTN: CSSProperties = {
+  fontFamily: SANS,
   display: 'inline-flex',
   alignItems: 'center',
   gap: '8px',
@@ -190,12 +204,17 @@ const PRIMARY_BTN: CSSProperties = {
   textDecoration: 'none',
   cursor: 'pointer',
 }
+// .qm-edge-lit — the reference rounds these cards to 14px and clips overflow
+// so the inner rows / gap seams follow the rounded corner.
 const CARD: CSSProperties = {
   background: 'var(--ink-card)',
   border: '1px solid var(--ink-line)',
   boxShadow: 'var(--lift)',
+  borderRadius: '14px',
+  overflow: 'hidden',
 }
 const DAY_LABEL: CSSProperties = {
+  fontFamily: MONO,
   margin: '0 0 9px 2px',
   fontSize: '10px',
   fontWeight: 700,
@@ -366,12 +385,8 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
         }}
       >
         <div style={{ minWidth: 0 }}>
-          <div className="font-mono" style={EYEBROW}>
-            Daily · Calendar
-          </div>
-          <h1 className="font-sans" style={H1}>
-            Calendar
-          </h1>
+          <div style={EYEBROW}>Daily · Calendar</div>
+          <h1 style={H1}>Calendar</h1>
           <p style={BLURB}>Site visits, booked jobs and callbacks. Your week at a glance.</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -380,7 +395,6 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
             onClick={() => void load()}
             disabled={loading}
             title="Refresh bookings"
-            className="font-mono"
             style={{ ...GHOST_BTN, opacity: loading ? 0.5 : 1 }}
           >
             {loading ? 'Syncing…' : 'Sync'}
@@ -390,7 +404,6 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
             target="_blank"
             rel="noreferrer"
             aria-disabled={!tenantId}
-            className="font-sans"
             style={{ ...PRIMARY_BTN, ...(tenantId ? null : { opacity: 0.4, pointerEvents: 'none' }) }}
           >
             New booking
@@ -414,9 +427,9 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
 
       {loading && !events ? (
         <div
-          className="font-mono"
           style={{
             ...CARD,
+            fontFamily: MONO,
             padding: '20px 22px',
             fontSize: '11px',
             textTransform: 'uppercase',
@@ -428,16 +441,23 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
         </div>
       ) : (
         <>
-          {/* ── Metric strip (qm-edge-lit qm-metrics4) ── */}
+          {/* ── Metric strip (qm-edge-lit qm-metrics4 → 14px rounded, clipped) ── */}
           <section
             className="grid grid-cols-2 sm:grid-cols-4"
-            style={{ background: 'var(--ink-line)', border: '1px solid var(--ink-line)', gap: '1px', boxShadow: 'var(--lift)' }}
+            style={{
+              background: 'var(--ink-line)',
+              border: '1px solid var(--ink-line)',
+              gap: '1px',
+              boxShadow: 'var(--lift)',
+              borderRadius: '14px',
+              overflow: 'hidden',
+            }}
           >
             {metrics.map(([k, v, sub, accent]) => (
               <div key={k} style={{ background: 'var(--ink-card)', padding: '18px 22px' }}>
                 <div
-                  className="font-mono"
                   style={{
+                    fontFamily: MONO,
                     fontSize: '9.5px',
                     fontWeight: 600,
                     textTransform: 'uppercase',
@@ -448,8 +468,8 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
                   {k}
                 </div>
                 <div
-                  className="font-mono"
                   style={{
+                    fontFamily: MONO,
                     marginTop: '8px',
                     fontWeight: 800,
                     lineHeight: 1,
@@ -461,8 +481,8 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
                   {v}
                 </div>
                 <div
-                  className="font-mono"
                   style={{
+                    fontFamily: MONO,
                     marginTop: '7px',
                     fontSize: '8.5px',
                     fontWeight: 600,
@@ -491,8 +511,9 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
                     onClick={() => selectDay(k)}
                     aria-pressed={selected}
                     aria-label={`${weekdayAbbrev(k)} ${dayNum(k)}${eventDays.has(k) ? ' — has bookings' : ''}`}
-                    className={`qmcal-day font-mono${selected ? ' is-selected' : ''}`}
+                    className={`qmcal-day${selected ? ' is-selected' : ''}`}
                     style={{
+                      fontFamily: MONO,
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
@@ -539,9 +560,7 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
             {/* Paid · needs a time — money-in-hand, no slot yet */}
             {toSchedule.length > 0 && (
               <div>
-                <div className="font-mono" style={{ ...DAY_LABEL, color: 'var(--warning-bright)' }}>
-                  Paid · needs a time
-                </div>
+                <div style={{ ...DAY_LABEL, color: 'var(--warning-bright)' }}>Paid · needs a time</div>
                 <div style={CARD}>
                   {toSchedule.map((ev) => (
                     <AgendaRow
@@ -557,8 +576,8 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
                   ))}
                 </div>
                 <div
-                  className="font-mono"
                   style={{
+                    fontFamily: MONO,
                     marginTop: '8px',
                     fontSize: '9px',
                     textTransform: 'uppercase',
@@ -574,8 +593,8 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
             {isEmpty ? (
               <div style={{ ...CARD, padding: '32px', textAlign: 'center' }}>
                 <div
-                  className="font-mono"
                   style={{
+                    fontFamily: MONO,
                     fontSize: '10px',
                     fontWeight: 600,
                     textTransform: 'uppercase',
@@ -596,10 +615,7 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
                     }}
                     style={{ scrollMarginTop: '16px' }}
                   >
-                    <div
-                      className="font-mono"
-                      style={{ ...DAY_LABEL, color: g.key === selectedKey ? 'var(--accent)' : 'var(--text-dim)' }}
-                    >
+                    <div style={{ ...DAY_LABEL, color: g.key === selectedKey ? 'var(--accent)' : 'var(--text-dim)' }}>
                       {g.label}
                     </div>
                     <div style={CARD}>
@@ -624,18 +640,11 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
 
                 {past.length > 0 && (
                   <div style={{ opacity: 0.6 }}>
-                    <div
-                      className="font-mono"
-                      style={{ ...DAY_LABEL, color: 'var(--text-dim)' }}
-                    >
-                      Past
-                    </div>
+                    <div style={{ ...DAY_LABEL, color: 'var(--text-dim)' }}>Past</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                       {past.map((g) => (
                         <div key={g.key}>
-                          <div className="font-mono" style={DAY_LABEL}>
-                            {g.label}
-                          </div>
+                          <div style={DAY_LABEL}>{g.label}</div>
                           <div style={CARD}>
                             {g.events.map((ev) => (
                               <AgendaRow
@@ -709,8 +718,8 @@ function AgendaRow({
       }}
     >
       <span
-        className="font-mono"
         style={{
+          fontFamily: MONO,
           fontSize: '12px',
           fontWeight: 700,
           color: 'var(--text-sec)',
@@ -721,12 +730,12 @@ function AgendaRow({
         {time}
       </span>
       <div style={{ minWidth: 0, flex: 1 }}>
-        <div className="font-sans" style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text-pri)' }}>
+        <div style={{ fontFamily: SANS, fontWeight: 700, fontSize: '14px', color: 'var(--text-pri)' }}>
           {title}
         </div>
         <div
-          className="font-mono"
           style={{
+            fontFamily: MONO,
             marginTop: '2px',
             fontSize: '9.5px',
             textTransform: 'uppercase',
@@ -748,8 +757,8 @@ function AgendaRow({
             confirm.onConfirm()
           }}
           disabled={confirm.pending}
-          className="font-mono"
           style={{
+            fontFamily: MONO,
             flexShrink: 0,
             display: 'inline-flex',
             alignItems: 'center',
