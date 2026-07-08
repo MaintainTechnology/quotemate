@@ -1,0 +1,243 @@
+/* ════════════════════════════════════════════════════════════════════
+   QuoteMax — BASE & SIGNATURE UTILITIES
+   Element resets + the brand's reusable surface motifs: film grain, lit
+   edges, the accent card-sweep, the topographic canvas glow, the yellow
+   marquee, the duotone photo treatment and the animated link underline.
+   All depend only on the design tokens, so they follow the theme.
+   ════════════════════════════════════════════════════════════════════ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  scroll-padding-top: 5rem;
+}
+
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--surface-canvas);
+  color: var(--text-heading);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-body);
+  font-feature-settings: 'ss01', 'cv11';   /* Manrope stylistic alternates */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Cross-fade surfaces, borders and text on the light/dark flip. Zero
+   specificity via :where() so per-element transitions still win.
+   box-shadow is excluded so focus rings stay instant. */
+:where(*, *::before, *::after) {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-duration: var(--dur-base);
+  transition-timing-function: var(--ease-out-expo);
+}
+
+/* Visible keyboard focus everywhere. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* ─── Display / mono helpers ──────────────────────────────────────── */
+.qm-display {
+  font-family: var(--font-display);
+  font-weight: var(--fw-extrabold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-display);
+  line-height: var(--leading-display);
+}
+.qm-eyebrow {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  color: var(--text-muted);
+}
+.qm-mono {
+  font-family: var(--font-mono);
+}
+.qm-highlight {
+  color: var(--text-accent);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   CANVASES
+   ════════════════════════════════════════════════════════════════════ */
+
+/* Marketing canvas — a restrained twin glow at the top of the page: a
+   cool warm-charcoal lift with a single yellow ember. Gives the flat dark
+   base the depth of an ops dashboard instead of a painted wall. */
+.qm-marketing-canvas {
+  position: relative;
+  background-color: var(--surface-canvas);
+  background-image:
+    radial-gradient(1180px 560px at 26% -12%, var(--glow-cool) 0%, transparent 60%),
+    radial-gradient(760px 420px at 88% -6%, var(--glow-warm) 0%, transparent 58%);
+  background-repeat: no-repeat;
+}
+
+/* App canvas — a soft lift across the top of the viewport fading into the
+   flat base by ~520px down. For full-page app shells (the dashboard). */
+.qm-app-canvas {
+  background-color: var(--surface-canvas);
+  background-image: radial-gradient(1100px 520px at 50% 0, var(--canvas-radial) 0%, transparent 72%);
+  background-repeat: no-repeat;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   FILM GRAIN — kills the banding that makes flat dark UIs read as cheap.
+   Fixed, non-interactive. Apply .qm-noise to a full-bleed aria-hidden div,
+   OR set .qm-grain on a positioned container to grain just that surface.
+   ════════════════════════════════════════════════════════════════════ */
+.qm-noise {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  opacity: var(--grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.qm-grain {
+  position: relative;
+}
+.qm-grain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: var(--grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   LIT EDGE — a 1px inner top highlight so a bordered panel reads as a
+   lifted plate. Not a drop shadow; the brand stays shadow-free on dark.
+   ════════════════════════════════════════════════════════════════════ */
+.qm-edge-lit {
+  box-shadow: var(--lift);
+}
+
+/* ACCENT SWEEP — a 2px brand line drawing across a card's top edge on
+   hover / focus-within. Sits over the card border (hence the -1px). */
+.qm-card-sweep {
+  position: relative;
+}
+.qm-card-sweep::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  right: -1px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-soft));
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--dur-slow) var(--ease-out-expo);
+  pointer-events: none;
+}
+.qm-card-sweep:hover::before,
+.qm-card-sweep:focus-within::before {
+  transform: scaleX(1);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   ANIMATED LINK UNDERLINE — draws left to right on hover/focus.
+   ════════════════════════════════════════════════════════════════════ */
+.qm-link-underline {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-size: 0% 1px;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  transition: background-size 260ms ease, color var(--dur-fast) ease;
+  text-decoration: none;
+}
+.qm-link-underline:hover,
+.qm-link-underline:focus-visible {
+  background-size: 100% 1px;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   YELLOW MARQUEE — the signature closing CTA ticker. Text on yellow is
+   ALWAYS dark ink. Track holds the content twice so -50% loops seamlessly.
+   ════════════════════════════════════════════════════════════════════ */
+.qm-marquee {
+  overflow: hidden;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.qm-marquee__track {
+  display: flex;
+  width: max-content;
+  animation: qm-marquee 36s linear infinite;
+}
+.qm-marquee:hover .qm-marquee__track {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .qm-marquee__track { animation: none; }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   DUOTONE PHOTO TREATMENT — stock trade photos warmed toward the palette
+   so they read as native to the brand. Desaturate + warm via filter, then
+   a multiply scrim tints shadows to warm charcoal and a soft-light pass
+   lifts highlights toward the accent. Decorative only; meaning lives in alt.
+   Markup:  <figure class="qm-duotone"><img class="qm-duotone__img" …></figure>
+   ════════════════════════════════════════════════════════════════════ */
+.qm-duotone {
+  position: relative;
+  overflow: hidden;
+  /* --duo-shadow / --duo-highlight / --duo-edge are theme tokens (colors.css) */
+}
+.qm-duotone__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: grayscale(0.6) sepia(0.18) saturate(0.95) contrast(1.05) brightness(0.92);
+}
+.qm-duotone::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--duo-shadow);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+.qm-duotone::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(160deg, var(--duo-highlight) 0%, transparent 55%),
+    linear-gradient(180deg, transparent 40%, var(--duo-edge) 100%);
+  mix-blend-mode: soft-light;
+  pointer-events: none;
+}
+:root[data-theme="light"] .qm-duotone__img,
+.qm-light .qm-duotone__img {
+  filter: grayscale(0.5) sepia(0.2) saturate(1.05) contrast(1.03) brightness(1.02);
+}
+
+/* Caption legibility — text laid over a photo's lower edge sits on a
+   guaranteed dark gradient + soft shadow so it clears AA in both themes. */
+.qm-photo-caption {
+  background: linear-gradient(0deg, rgba(15, 12, 10, 0.82) 0%, rgba(15, 12, 10, 0.42) 45%, transparent 100%);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  color: #fff;
+}

@@ -1,0 +1,64 @@
+/* ════════════════════════════════════════════════════════════════════
+   QuoteMax — TYPOGRAPHY TOKENS
+   Manrope for everything visible; JetBrains Mono for eyebrows, tags and
+   metadata. Display is ALL CAPS, left-aligned, heavy (700–900), tight
+   tracking (-0.04em), with the accent colour highlighting one or two
+   key words.
+   ════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ─── FAMILIES ──────────────────────────────────────────────────── */
+  --font-sans: 'Manrope', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, Consolas, monospace;
+  --font-display: var(--font-sans);
+
+  /* ─── WEIGHTS ───────────────────────────────────────────────────── */
+  --fw-regular: 400;   /* @kind font */
+  --fw-medium: 500;    /* @kind font */
+  --fw-semibold: 600;  /* @kind font */
+  --fw-bold: 700;      /* @kind font */
+  --fw-extrabold: 800; /* @kind font */
+
+  /* ─── SIZE SCALE (rem) ──────────────────────────────────────────── */
+  --text-xs:   0.75rem;   /* 12px — mono captions             */
+  --text-sm:   0.875rem;  /* 14px — small body                */
+  --text-base: 1rem;      /* 16px — body                      */
+  --text-lg:   1.125rem;  /* 18px — lead body                 */
+  --text-xl:   1.25rem;   /* 20px — card titles               */
+  --text-2xl:  1.5rem;    /* 24px — sub-heads                 */
+  --text-3xl:  1.875rem;  /* 30px                             */
+  --text-4xl:  2.25rem;   /* 36px                             */
+  --text-5xl:  3rem;      /* 48px                             */
+  --text-6xl:  3.75rem;   /* 60px                             */
+  --text-7xl:  4.5rem;    /* 72px — hero                      */
+
+  /* Fluid display sizes — match the live marketing + quote surfaces. */
+  --display-hero:    clamp(2.6rem, 6.5vw, 5.5rem);   /* @kind font */
+  --display-section: clamp(2rem, 4vw, 3.25rem);      /* @kind font */
+  --display-sub:     clamp(1.9rem, 3.6vw, 3rem);     /* @kind font */
+
+  /* ─── TRACKING (letter-spacing) ─────────────────────────────────── */
+  --tracking-display: -0.04em;   /* big all-caps headlines           */
+  --tracking-tight:   -0.02em;   /* card titles, sub-heads           */
+  --tracking-normal:  0;
+  --tracking-eyebrow: 0.18em;    /* mono eyebrows                    */
+  --tracking-label:   0.14em;    /* mono chips / metadata            */
+
+  /* ─── LINE HEIGHT ───────────────────────────────────────────────── */
+  --leading-display: 0.95;   /* stacked all-caps display             */
+  --leading-tight:   1.05;
+  --leading-snug:    1.3;
+  --leading-body:    1.6;
+
+  /* ─── THEME-AWARE HIGHLIGHT COLOUR ──────────────────────────────────
+     Yellow highlights key words on the dark canvas. On cream it is
+     unreadable as text, so highlighted words fall back to charcoal —
+     emphasis then comes from WEIGHT, not colour. Author highlighted
+     words with `color: var(--text-accent)`. */
+  --text-accent: var(--accent);
+}
+
+:root[data-theme="light"],
+.qm-light {
+  --text-accent: var(--accent-ink);
+}

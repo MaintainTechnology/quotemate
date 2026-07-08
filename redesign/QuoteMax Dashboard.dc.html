@@ -1,0 +1,1529 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/quotemax-design-system-638aa1f7-d131-4260-9f6b-5bba3e058741/tokens/fonts.css">
+  <link rel="stylesheet" href="_ds/quotemax-design-system-638aa1f7-d131-4260-9f6b-5bba3e058741/tokens/colors.css">
+  <link rel="stylesheet" href="_ds/quotemax-design-system-638aa1f7-d131-4260-9f6b-5bba3e058741/tokens/typography.css">
+  <link rel="stylesheet" href="_ds/quotemax-design-system-638aa1f7-d131-4260-9f6b-5bba3e058741/tokens/spacing.css">
+  <link rel="stylesheet" href="_ds/quotemax-design-system-638aa1f7-d131-4260-9f6b-5bba3e058741/tokens/effects.css">
+  <link rel="stylesheet" href="_ds/quotemax-design-system-638aa1f7-d131-4260-9f6b-5bba3e058741/tokens/motion.css">
+  <link rel="stylesheet" href="_ds/quotemax-design-system-638aa1f7-d131-4260-9f6b-5bba3e058741/base.css">
+  <script src="_ds/quotemax-design-system-638aa1f7-d131-4260-9f6b-5bba3e058741/_ds_bundle.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    html, body { height: 100%; }
+    body { margin: 0; background: var(--ink-deep); color: var(--text-pri); font-family: var(--font-sans); }
+    *, *::before, *::after { box-sizing: border-box; }
+    /* base.css applies a global .32s theme-flip transition on background/color/border to every element;
+       under streaming/hot-reload those transitions can wedge mid-flight and hold paint at transparent.
+       Kill the global one; per-element inline transitions (hovers, sidebar width) still apply. */
+    *, *::before, *::after { transition-property: none; }
+    .qm-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+    .qm-scroll::-webkit-scrollbar-thumb { background: var(--ink-line); border: 2px solid var(--ink-deep); }
+    .qm-scroll::-webkit-scrollbar-track { background: transparent; }
+    .qm-navbtn:hover { background: color-mix(in srgb, var(--ink) 60%, transparent) !important; color: var(--text-pri) !important; }
+    .qm-panelbtn:hover { background: var(--ink-card) !important; border-color: color-mix(in srgb, var(--accent) 50%, var(--ink-line)) !important; color: var(--accent) !important; }
+    .qm-panelbtn:active { background: var(--ink) !important; }
+    .qm-row:hover { background: color-mix(in srgb, var(--ink) 55%, transparent) !important; }
+    .qm-seeall:hover { color: var(--accent-press) !important; }
+    .qm-chip:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--ink-line)) !important; }
+    button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-soft); outline-offset: 2px; }
+    .qm-edge-lit { border-radius: 14px; overflow: hidden; }
+    .qm-chip { border-radius: 12px; }
+    .qm-navbtn { border-radius: 8px; }
+    [data-theme="light"] .qm-topbar, .qm-light .qm-topbar { background: var(--ink-card) !important; }
+    .qm-editicon { opacity: 0; transition: opacity .12s ease; }
+    .qm-row:hover .qm-editicon { opacity: 1; }
+    .qm-fillwrap { min-height: 100%; }
+    .qm-fillgrid { flex: 1 1 auto; align-items: stretch !important; }
+    .qm-pricebook { display: flex; flex-direction: column; }
+    .qm-pricebook > .qm-row { flex: 1 1 0; }
+    .qm-railfill { margin-top: auto; }
+    @media (max-width: 1180px) { .qm-fillgrid { flex: 0 0 auto; } .qm-pricebook > .qm-row { flex: 0 0 auto; } }
+    @keyframes qm-rise-row { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+    @media (max-width: 1180px) { .qm-ov-grid { grid-template-columns: 1fr !important; } }
+    @media (max-width: 1280px) {
+      .qm-md-quotes { grid-template-columns: minmax(280px, 0.88fr) minmax(0, 1.12fr) !important; }
+      .qm-md-chats { grid-template-columns: minmax(240px, 0.78fr) minmax(0, 1.22fr) !important; }
+    }
+    @media (max-width: 1024px) { .qm-metrics { grid-template-columns: repeat(3, minmax(0,1fr)) !important; } .qm-metrics4 { grid-template-columns: repeat(2, minmax(0,1fr)) !important; } }
+    @media (max-width: 620px) { .qm-metrics, .qm-metrics4 { grid-template-columns: repeat(2, minmax(0,1fr)) !important; } }
+  </style>
+  <template id="__bundler_thumbnail">
+    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-label="QuoteMax">
+      <rect width="100" height="100" fill="#16120F"></rect>
+      <rect x="30" y="34" width="40" height="27" rx="7" fill="#FFC400"></rect>
+      <path d="M39 59 L39 70 L49 60 Z" fill="#FFC400"></path>
+      <path d="M41 47 L47 53 L59 41" fill="none" stroke="#16120F" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path>
+    </svg>
+  </template>
+</helmet>
+<div class="qm-app-canvas {{ themeClass }}" style="position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden;background:var(--ink-deep);color:var(--text-pri)">
+  <div class="qm-noise" aria-hidden="true" style="display:{{ grainDisplay }}"></div>
+
+  <header class="qm-topbar" style="position:relative;z-index:20;display:flex;align-items:center;gap:18px;height:60px;padding:0 18px 0 20px;border-bottom:1px solid var(--ink-line);background:var(--ink-deep)">
+    <div style="display:flex;align-items:center;gap:11px;flex-shrink:0">
+      <svg width="28" height="28" viewBox="0 0 64 64" role="img" aria-label="QuoteMax" style="display:block"><rect width="64" height="64" fill="#FFC400"></rect><rect x="13" y="14" width="38" height="26" rx="7" fill="#1C1812"></rect><path d="M20 39 L20 50 L31 40 Z" fill="#1C1812"></path><path d="M23 27 L29.5 33.5 L41 21" fill="none" stroke="#FFC400" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      <span style="font-family:var(--font-sans);font-weight:800;text-transform:uppercase;letter-spacing:-0.02em;font-size:15px;color:var(--text-pri)">QuoteMax</span>
+    </div>
+
+    <label onClick="{{ openPalette }}" style="flex:0 1 440px;display:flex;align-items:center;gap:10px;height:38px;padding:0 12px;background:var(--ink);border:1px solid var(--ink-line);border-radius:9px;cursor:pointer">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+      <input type="text" readOnly placeholder="Search quotes, customers, jobs" style="flex:1;min-width:0;border:0;background:transparent;outline:none;color:var(--text-pri);font-family:var(--font-sans);font-size:13px;cursor:pointer;pointer-events:none" />
+      <span aria-hidden="true" style="flex-shrink:0;display:inline-flex;align-items:center;border:1px solid var(--ink-line);border-radius:5px;padding:2px 6px;font-family:var(--font-mono);font-size:10px;font-weight:600;color:var(--text-dim)">⌘K</span>
+    </label>
+
+    <div style="flex:1"></div>
+
+    <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+      <button type="button" onClick="{{ goQuotes }}" style="display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 16px;border:1px solid transparent;border-radius:9px;background:var(--accent);color:var(--accent-ink);font-family:var(--font-sans);font-weight:700;font-size:13px;white-space:nowrap;cursor:pointer">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>New quote</button>
+      <div style="position:relative">
+        <button type="button" aria-label="Notifications" onClick="{{ toggleNotif }}" style="position:relative;display:grid;place-items:center;width:38px;height:38px;border:1px solid var(--ink-line);border-radius:9px;background:transparent;color:var(--text-sec);cursor:pointer">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.268 21a2 2 0 0 0 3.464 0"></path><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"></path></svg>
+          <sc-if value="{{ notifDot }}" hint-placeholder-val="{{ true }}">
+            <span aria-hidden="true" style="position:absolute;top:8px;right:9px;width:6px;height:6px;border-radius:9999px;background:var(--accent);border:1.5px solid var(--ink-deep)"></span>
+          </sc-if>
+        </button>
+        <sc-if value="{{ notifOpen }}" hint-placeholder-val="{{ false }}">
+          <div onClick="{{ closeNotif }}" style="position:fixed;inset:0;z-index:110"></div>
+          <div class="qm-edge-lit" style="position:absolute;right:0;top:46px;z-index:115;width:min(350px,88vw);background:var(--ink-card);border:1px solid var(--ink-line);overflow:hidden">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--ink-line)">
+              <span style="font-family:var(--font-mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-pri)">Notifications</span>
+              <span style="font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim)">Today</span>
+            </div>
+            <sc-for list="{{ notifs }}" as="n" hint-placeholder-count="4">
+              <button type="button" class="qm-row" onClick="{{ n.onGo }}" style="display:block;width:100%;text-align:left;cursor:pointer;border:0;border-bottom:1px solid var(--ink-line);background:transparent;padding:12px 16px;transition:background-color .15s ease">
+                <div style="font-family:var(--font-sans);font-weight:600;font-size:13px;color:var(--text-pri)">{{ n.title }}</div>
+                <div style="margin-top:3px;font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim)">{{ n.time }}</div>
+              </button>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+      <button type="button" aria-label="Toggle theme" onClick="{{ toggleTheme }}" style="display:grid;place-items:center;width:38px;height:38px;border:1px solid var(--ink-line);border-radius:9px;background:transparent;color:var(--text-sec);cursor:pointer">{{ themeIconEl }}</button>
+      <span aria-hidden="true" style="width:1px;height:28px;background:var(--ink-line);margin:0 2px"></span>
+      <button type="button" style="display:flex;align-items:center;gap:9px;border:0;background:transparent;cursor:pointer;padding:3px">
+        <span style="display:inline-grid;place-items:center;width:34px;height:34px;border-radius:8px;background:var(--accent);color:var(--accent-ink);font-family:var(--font-mono);font-weight:700;font-size:14px">J</span>
+        <span style="text-align:left;line-height:1.2">
+          <span style="display:block;font-family:var(--font-sans);font-weight:700;font-size:13px;color:var(--text-pri)">Jeph</span>
+          <span style="display:block;font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim)">Hartley Electrical</span>
+        </span>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+    </div>
+  </header>
+
+  <div style="flex:1;display:grid;grid-template-columns:auto 1fr;min-height:0">
+    <aside class="qm-scroll" style="width:{{ sidebarWidth }};flex-shrink:0;display:flex;flex-direction:column;overflow-x:hidden;overflow-y:auto;border-right:1px solid var(--ink-line);background:var(--ink-deep);min-height:0;transition:width .28s cubic-bezier(0.22,1,0.36,1)">
+      <div style="display:flex;align-items:center;justify-content:{{ collapseJustify }};gap:8px;padding:12px 14px 6px;min-height:30px">
+        <sc-if value="{{ showLabels }}" hint-placeholder-val="{{ true }}">
+          <span style="flex:1;font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:var(--text-dim)">Workspace</span>
+        </sc-if>
+        <button type="button" class="qm-panelbtn" aria-label="{{ collapseAria }}" title="{{ collapseAria }}" onClick="{{ toggleCollapse }}" style="display:grid;place-items:center;width:30px;height:30px;flex-shrink:0;border:1px solid var(--ink-line);border-radius:8px;background:transparent;color:var(--text-sec);cursor:pointer;transition:background-color .15s ease,border-color .15s ease,color .15s ease">{{ collapsePanelIcon }}</button>
+      </div>
+      <nav style="display:flex;flex-direction:column;gap:13px;padding:8px 12px 14px;flex:1">
+        <sc-for list="{{ navGroups }}" as="group" hint-placeholder-count="4">
+          <div>
+            <sc-if value="{{ group.showHeader }}" hint-placeholder-val="{{ true }}">
+              <div style="padding:0 10px 7px;font-family:var(--font-mono);font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-dim)">{{ group.title }}</div>
+            </sc-if>
+            <div style="display:flex;flex-direction:column;gap:2px">
+              <sc-for list="{{ group.items }}" as="item" hint-placeholder-count="5">
+                <button type="button" class="qm-navbtn" title="{{ item.label }}" onClick="{{ item.onSelect }}" style="{{ item.btnStyle }}">
+                  <span aria-hidden="true" style="position:absolute;left:0;top:7px;bottom:7px;width:2px;background:{{ item.barBg }}"></span>
+                  {{ item.iconEl }}
+                  <sc-if value="{{ item.showLabel }}" hint-placeholder-val="{{ true }}">
+                    <span style="flex:1">{{ item.label }}</span>
+                  </sc-if>
+                  <sc-if value="{{ item.showBadge }}" hint-placeholder-val="{{ false }}">
+                    <span style="font-family:var(--font-mono);font-size:10px;font-weight:700;color:var(--accent-ink);background:var(--accent);padding:2px 7px">{{ item.count }}</span>
+                  </sc-if>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </nav>
+    </aside>
+
+    <main style="display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden">
+      <sc-if value="{{ isOverview }}" hint-placeholder-val="{{ true }}">
+        <div data-screen-label="Overview" class="qm-scroll" style="overflow-y:auto;flex:1;min-height:0">
+          <div style="max-width:96rem;width:100%;margin:0 auto;padding:28px clamp(28px,3vw,52px) 56px;display:flex;flex-direction:column;gap:20px">
+
+            <header style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px">
+              <div>
+                <div style="font-family:var(--font-mono);font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.18em;color:var(--text-dim)">QuoteMax · Overview</div>
+                <h1 style="margin:8px 0 0;font-family:var(--font-sans);font-weight:800;text-transform:uppercase;letter-spacing:-0.03em;font-size:clamp(1.8rem,2.6vw,2.7rem);line-height:1;color:var(--text-pri)">Good morning, <span style="color:var(--accent)">Jeph</span></h1>
+                <p style="margin:9px 0 0;font-size:13.5px;color:var(--text-dim)">One quote needs your review. The rest are drafted and waiting.</p>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <button type="button" style="display:inline-flex;align-items:center;gap:8px;border:1px solid var(--ink-line);background:transparent;color:var(--text-sec);padding:9px 14px;font-family:var(--font-mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.13em;white-space:nowrap;cursor:pointer">This month
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+                <button type="button" onClick="{{ goQuotes }}" style="display:inline-flex;align-items:center;gap:8px;border:1px solid transparent;background:var(--accent);color:var(--accent-ink);padding:10px 16px;font-family:var(--font-sans);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap;cursor:pointer">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>New quote</button>
+              </div>
+            </header>
+
+            <section class="qm-edge-lit qm-metrics" style="background:var(--ink-line);border:1px solid var(--ink-line);display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:1px">
+              <sc-for list="{{ metrics }}" as="m" hint-placeholder-count="6">
+                <div style="{{ m.cellStyle }}">
+                  <div style="font-family:var(--font-mono);font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.13em;color:var(--text-dim)">{{ m.k }}</div>
+                  <div style="margin-top:8px;font-family:var(--font-mono);font-weight:800;line-height:1;font-size:clamp(1.4rem,1.85vw,2.35rem);font-variant-numeric:tabular-nums;color:{{ m.vColor }}">{{ m.v }}</div>
+                  <div style="margin-top:7px;font-family:var(--font-mono);font-size:8.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-sec);min-height:12px">{{ m.sub }}</div>
+                </div>
+              </sc-for>
+            </section>
+
+            <div class="qm-ov-grid" style="display:grid;grid-template-columns:minmax(0,1.75fr) minmax(300px,430px);gap:20px;align-items:start">
+
+              <section class="qm-edge-lit" style="background:var(--ink-card);border:1px solid var(--ink-line);min-width:0">
+                <header style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--ink-line)">
+                  <div style="display:flex;align-items:baseline;gap:11px">
+                    <span style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--accent)">01</span>
+                    <h2 style="margin:0;font-family:var(--font-mono);font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-pri)">Recent quotes</h2>
+                  </div>
+                  <button type="button" class="qm-seeall" onClick="{{ goQuotes }}" style="border:0;background:transparent;cursor:pointer;font-family:var(--font-mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.14em;color:var(--accent)">View all 20 →</button>
+                </header>
+                <div style="display:grid;grid-template-columns:minmax(94px,1.4fr) minmax(108px,1.7fr) 46px 76px 116px;gap:12px;padding:10px 20px;border-bottom:1px solid var(--ink-line)">
+                  <span style="font-family:var(--font-mono);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.13em;color:var(--text-dim)">Customer</span>
+                  <span style="font-family:var(--font-mono);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.13em;color:var(--text-dim)">Job</span>
+                  <span style="font-family:var(--font-mono);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.13em;color:var(--text-dim)">Ch</span>
+                  <span style="text-align:right;font-family:var(--font-mono);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.13em;color:var(--text-dim)">Value</span>
+                  <span style="text-align:right;font-family:var(--font-mono);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.13em;color:var(--text-dim)">Status</span>
+                </div>
+                <sc-for list="{{ recentRows }}" as="r" hint-placeholder-count="6">
+                  <button type="button" class="qm-row" onClick="{{ r.onSelect }}" style="display:grid;grid-template-columns:minmax(94px,1.4fr) minmax(108px,1.7fr) 46px 76px 116px;gap:12px;align-items:center;width:100%;text-align:left;cursor:pointer;border:0;border-bottom:1px solid var(--ink-line);background:transparent;padding:12px 18px;transition:background-color .15s ease">
+                    <div style="min-width:0">
+                      <div style="font-family:var(--font-sans);font-weight:700;font-size:13.5px;color:var(--text-pri);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.name }}</div>
+                      <div style="margin-top:2px;font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim)">{{ r.suburb }}</div>
+                    </div>
+                    <span style="font-size:12.5px;color:var(--text-sec);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">{{ r.job }}</span>
+                    <span style="font-family:var(--font-mono);font-size:9px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-dim)">{{ r.channel }}</span>
+                    <span style="text-align:right;font-family:var(--font-mono);font-weight:700;font-size:13.5px;color:{{ r.valueColor }};font-variant-numeric:tabular-nums">{{ r.valueText }}</span>
+                    <span style="justify-self:end;display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid {{ r.scBorder }};font-family:var(--font-mono);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:{{ r.sc }}">
+                      <span aria-hidden="true" style="width:5px;height:5px;border-radius:9999px;background:{{ r.sc }};animation:{{ r.dotAnim }}"></span>{{ r.sl }}</span>
+                  </button>
+                </sc-for>
+              </section>
+
+              <div style="display:flex;flex-direction:column;gap:18px;min-width:0">
+
+                <section class="qm-edge-lit qm-card-sweep" style="position:relative;background:var(--ink-card);border:1px solid var(--ink-line);border-left:2px solid var(--warning-bright);padding:18px">
+                  <div style="display:flex;align-items:center;gap:7px;font-family:var(--font-mono);font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.14em;color:var(--warning-bright)">
+                    <span aria-hidden="true" style="width:6px;height:6px;border-radius:9999px;background:var(--warning-bright);animation:qm-pulse-soft 2.4s ease-in-out infinite"></span>Needs your attention</div>
+                  <div style="margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+                    <span style="font-family:var(--font-sans);font-weight:700;font-size:15px;color:var(--text-pri)">Jon · Chandler</span>
+                    <span style="font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim)">SMS · 4 min</span>
+                  </div>
+                  <p style="margin:6px 0 0;font-size:12.5px;line-height:1.5;color:var(--text-dim)">QuoteMax drafted this one. It needs a couple of details before you can send.</p>
+                  <button type="button" onClick="{{ openAttn }}" style="margin-top:14px;width:100%;display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid transparent;background:var(--accent);color:var(--accent-ink);padding:11px;font-family:var(--font-sans);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:0.06em;cursor:pointer">Review quote →</button>
+                </section>
+
+                <section class="qm-edge-lit" style="background:var(--ink-card);border:1px solid var(--ink-line);padding:18px">
+                  <div style="font-family:var(--font-mono);font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-dim)">Your QuoteMax number</div>
+                  <div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+                    <span style="font-family:var(--font-mono);font-weight:700;font-size:18px;letter-spacing:-0.01em;color:var(--text-pri)">+61 468 048 422</span>
+                    <button type="button" onClick="{{ copyNumber }}" aria-label="Copy number" style="display:grid;place-items:center;width:32px;height:32px;border:1px solid var(--ink-line);background:transparent;color:var(--text-sec);cursor:pointer">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg></button>
+                  </div>
+                  <div style="margin-top:14px;display:flex;gap:8px">
+                    <span style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:6px;border:1px solid color-mix(in srgb, var(--success-bright) 40%, transparent);font-family:var(--font-mono);font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--success-bright)"><span aria-hidden="true" style="width:5px;height:5px;border-radius:9999px;background:var(--success-bright)"></span>SMS</span>
+                    <span style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:6px;border:1px solid color-mix(in srgb, var(--success-bright) 40%, transparent);font-family:var(--font-mono);font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--success-bright)"><span aria-hidden="true" style="width:5px;height:5px;border-radius:9999px;background:var(--success-bright)"></span>Voice</span>
+                    <span style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:6px;border:1px solid color-mix(in srgb, var(--success-bright) 40%, transparent);font-family:var(--font-mono);font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--success-bright)"><span aria-hidden="true" style="width:5px;height:5px;border-radius:9999px;background:var(--success-bright)"></span>AI</span>
+                  </div>
+                </section>
+
+                <section class="qm-edge-lit" style="background:var(--ink-card);border:1px solid var(--ink-line)">
+                  <header style="display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid var(--ink-line)">
+                    <h2 style="margin:0;font-family:var(--font-mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-pri)">Recent chats</h2>
+                    <button type="button" class="qm-seeall" onClick="{{ goChats }}" style="border:0;background:transparent;cursor:pointer;font-family:var(--font-mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.14em;color:var(--accent)">Open →</button>
+                  </header>
+                  <sc-for list="{{ miniChats }}" as="c" hint-placeholder-count="3">
+                    <button type="button" class="qm-row" onClick="{{ c.onSelect }}" style="display:flex;align-items:center;gap:11px;width:100%;text-align:left;cursor:pointer;border:0;border-bottom:1px solid var(--ink-line);background:transparent;padding:11px 16px;transition:background-color .15s ease">
+                      <span style="display:inline-grid;place-items:center;width:30px;height:30px;flex-shrink:0;background:var(--ink);border:1px solid var(--ink-line);color:var(--text-pri);font-family:var(--font-mono);font-weight:700;font-size:11px">{{ c.initial }}</span>
+                      <div style="min-width:0;flex:1">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                          <span style="font-family:var(--font-sans);font-weight:700;font-size:13px;color:var(--text-pri)">{{ c.who }}</span>
+                          <span style="flex-shrink:0;font-family:var(--font-mono);font-size:9px;color:var(--text-dim)">{{ c.when }}</span>
+                        </div>
+                        <div style="margin-top:2px;font-size:11.5px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.preview }}</div>
+                      </div>
+                    </button>
+                  </sc-for>
+                </section>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ isQuotes }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="Quotes" class="qm-md-quotes" style="display:grid;grid-template-columns:minmax(360px,470px) minmax(0,1fr);flex:1;min-height:0">
+          <div class="qm-scroll" style="overflow-y:auto;min-height:0;border-right:1px solid var(--ink-line)">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;border-bottom:1px solid var(--ink-line);position:sticky;top:0;background:var(--ink-deep);z-index:5">
+              <span style="font-family:var(--font-mono);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-sec)">Quote queue · {{ quotesCount }}</span>
+              <span style="font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.14em;color:var(--text-dim)">Newest first</span>
+            </div>
+            <sc-for list="{{ quoteRows }}" as="q" hint-placeholder-count="6">
+              <button type="button" class="qm-row" onClick="{{ q.onSelect }}" style="{{ q.rowStyle }}">
+                <span aria-hidden="true" style="position:absolute;left:0;top:0;bottom:0;width:2px;background:{{ q.barBg }}"></span>
+                <div style="min-width:0;flex:1">
+                  <div style="display:flex;align-items:center;gap:9px">
+                    <span style="font-family:var(--font-sans);font-weight:700;font-size:14.5px;color:var(--text-pri);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ q.name }}</span>
+                    <span style="flex-shrink:0;font-family:var(--font-mono);font-size:9px;color:var(--text-dim)">{{ q.ref }}</span>
+                  </div>
+                  <div style="margin-top:4px;font-size:13px;color:var(--text-sec);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ q.job }}</div>
+                  <div style="margin-top:6px;font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim)">{{ q.meta }}</div>
+                </div>
+                <div style="display:flex;flex-direction:column;align-items:flex-end;gap:9px;flex-shrink:0">
+                  <span style="font-family:var(--font-mono);font-weight:700;font-size:15px;color:{{ q.valueColor }};font-variant-numeric:tabular-nums">{{ q.valueText }}</span>
+                  <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid {{ q.scBorder }};font-family:var(--font-mono);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:{{ q.sc }}">
+                    <span aria-hidden="true" style="width:5px;height:5px;border-radius:9999px;background:{{ q.sc }};animation:{{ q.dotAnim }}"></span>{{ q.sl }}</span>
+                </div>
+              </button>
+            </sc-for>
+          </div>
+
+          <div class="qm-scroll" style="overflow-y:auto;min-height:0;display:flex;flex-direction:column;background:var(--ink-deep)">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:20px 24px;border-bottom:1px solid var(--ink-line)">
+              <div style="min-width:0">
+                <div style="font-family:var(--font-mono);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.16em;color:var(--accent)">Drafted · {{ detail.secs }}s · {{ detail.ref }}</div>
+                <h2 style="margin:8px 0 0;font-family:var(--font-sans);font-weight:800;text-transform:uppercase;letter-spacing:-0.02em;font-size:23px;line-height:1;color:var(--text-pri)">{{ detail.name }}</h2>
+                <p style="margin:6px 0 0;font-size:13.5px;color:var(--text-sec)">{{ detail.job }} · {{ detail.suburb }}</p>
+                <button type="button" class="qm-seeall" onClick="{{ detail.openProfile }}" style="margin-top:7px;padding:0;border:0;background:transparent;cursor:pointer;font-family:var(--font-mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.14em;color:var(--accent)">Customer profile →</button>
+              </div>
+              <span style="flex-shrink:0;display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border:1px solid {{ detail.statusBorder }};font-family:var(--font-mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.13em;color:{{ detail.statusColor }}">
+                <span aria-hidden="true" style="width:6px;height:6px;border-radius:9999px;background:{{ detail.statusColor }};animation:{{ detail.statusPulse }}"></span>{{ detail.statusLabel }}</span>
+            </div>
+
+            <sc-if value="{{ detail.hasTiers }}" hint-placeholder-val="{{ true }}">
+              <div>
+                <div style="padding:20px 24px;border-bottom:1px solid var(--ink-line)">
+                  <div style="font-family:var(--font-mono);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-dim)">Options drafted from your pricing book</div>
+                  <div style="margin-top:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">
+                    <sc-for list="{{ detail.tiers }}" as="t" hint-placeholder-count="3">
+                      <div class="qm-edge-lit" style="position:relative;background:var(--ink-card);border:1px solid {{ t.borderColor }};padding:16px 16px 18px">
+                        <sc-if value="{{ t.recommended }}" hint-placeholder-val="{{ false }}">
+                          <span style="position:absolute;top:-1px;left:0;background:var(--accent);color:var(--accent-ink);font-family:var(--font-mono);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.14em;padding:4px 9px">Recommended</span>
+                        </sc-if>
+                        <div style="margin-top:{{ t.mt }}px;font-family:var(--font-mono);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.14em;color:var(--accent)">{{ t.tier }}</div>
+                        <div style="margin-top:9px;font-family:var(--font-mono);font-weight:700;font-size:22px;color:var(--text-pri);font-variant-numeric:tabular-nums">{{ t.priceText }}</div>
+                        <div style="margin-top:3px;font-size:12px;color:var(--text-dim)">Deposit {{ t.depositText }} · 30%</div>
+                        <p style="margin:11px 0 0;font-size:12.5px;line-height:1.5;color:var(--text-sec)">{{ t.what }}</p>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+
+                <div style="padding:20px 24px;border-bottom:1px solid var(--ink-line)">
+                  <div style="font-family:var(--font-mono);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-dim)">Recommended — line items</div>
+                  <div style="margin-top:12px;border:1px solid var(--ink-line)">
+                    <sc-for list="{{ detail.lineItems }}" as="li" hint-placeholder-count="4">
+                      <div style="display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:14px;padding:11px 15px;border-bottom:1px solid var(--ink-line)">
+                        <span style="font-size:13px;color:var(--text-sec)">{{ li.d }}</span>
+                        <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-dim)">{{ li.qr }}</span>
+                        <sc-if value="{{ detail.editing }}" hint-placeholder-val="{{ false }}">
+                          <input value="{{ li.editVal }}" onChange="{{ li.onAmount }}" inputMode="numeric" style="width:92px;text-align:right;font-family:var(--font-mono);font-size:13px;color:var(--text-pri);background:var(--ink);border:1px solid color-mix(in srgb, var(--accent) 45%, var(--ink-line));padding:5px 9px;outline:none" />
+                        </sc-if>
+                        <sc-if value="{{ detail.notEditing }}" hint-placeholder-val="{{ true }}">
+                          <span style="font-family:var(--font-mono);font-size:13px;color:var(--text-pri);font-variant-numeric:tabular-nums;min-width:64px;text-align:right">{{ li.amountText }}</span>
+                        </sc-if>
+                      </div>
+                    </sc-for>
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 15px;background:var(--ink)">
+                      <span style="font-family:var(--font-mono);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.14em;color:var(--text-dim)">Total inc GST</span>
+                      <span style="font-family:var(--font-mono);font-weight:700;font-size:17px;color:var(--accent);font-variant-numeric:tabular-nums">{{ detail.totalText }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div style="padding:20px 24px;border-bottom:1px solid var(--ink-line)">
+                  <div style="font-family:var(--font-mono);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-dim)">Activity</div>
+                  <div style="margin-top:14px;display:flex;flex-direction:column">
+                    <sc-for list="{{ detail.timeline }}" as="ev" hint-placeholder-count="4">
+                      <div style="display:flex;gap:13px">
+                        <div style="display:flex;flex-direction:column;align-items:center;width:11px;flex-shrink:0">
+                          <span aria-hidden="true" style="width:9px;height:9px;border-radius:9999px;background:{{ ev.dotBg }};border:2px solid {{ ev.dotBorder }};margin-top:3px;flex-shrink:0"></span>
+                          <sc-if value="{{ ev.line }}" hint-placeholder-val="{{ true }}">
+                            <span aria-hidden="true" style="width:1px;flex:1;min-height:16px;background:var(--ink-line)"></span>
+                          </sc-if>
+                        </div>
+                        <div style="padding-bottom:15px;min-width:0">
+                          <div style="font-family:var(--font-sans);font-weight:600;font-size:13px;color:{{ ev.labelColor }}">{{ ev.label }}</div>
+                          <div style="margin-top:2px;font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim)">{{ ev.time }}</div>
+                        </div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+
+                <div style="padding:20px 24px;border-bottom:1px solid var(--ink-line)">
+                  <div style="font-family:var(--font-mono);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-dim)">How QuoteMax intook the job</div>
+                  <div style="margin-top:14px;display:grid;gap:10px">
+                    <sc-for list="{{ detail.transcript }}" as="m" hint-placeholder-count="4">
+                      <div style="display:flex;justify-content:{{ m.rowJustify }}">
+                        <div style="{{ m.bubbleStyle }}">
+                          <sc-if value="{{ m.showSender }}" hint-placeholder-val="{{ false }}">
+                            <span style="display:block;margin-bottom:4px;font-family:var(--font-mono);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--accent)">{{ m.senderLabel }}</span>
+                          </sc-if>
+                          {{ m.text }}
+                        </div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+
+                <div style="position:sticky;bottom:0;background:var(--ink-deep);border-top:1px solid var(--ink-line);padding:16px 24px">
+                  <sc-if value="{{ detail.sent }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;align-items:center;justify-content:center;gap:10px;border:1px solid color-mix(in srgb, var(--success-bright) 45%, transparent);background:color-mix(in srgb, var(--success-bright) 12%, transparent);color:var(--success-bright);padding:14px;font-family:var(--font-mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.14em">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 7 17l-5-5"></path><path d="m22 10-7.5 7.5L13 16"></path></svg>
+                      Sent to {{ detail.sentName }}</div>
+                  </sc-if>
+                  <sc-if value="{{ detail.notSent }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:flex;gap:10px">
+                      <button type="button" onClick="{{ detail.approveSend }}" style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid transparent;background:var(--accent);color:var(--accent-ink);padding:13px 20px;font-family:var(--font-sans);font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:0.06em;cursor:pointer">Approve &amp; send →</button>
+                      <button type="button" onClick="{{ detail.toggleEdit }}" style="display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--ink-line);background:transparent;color:var(--text-pri);padding:13px 22px;font-family:var(--font-sans);font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:0.06em;cursor:pointer">{{ detail.editLabel }}</button>
+                    </div>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ detail.noTiers }}" hint-placeholder-val="{{ false }}">
+              <div style="flex:1;display:flex;flex-direction:column">
+                <div style="padding:24px;border-bottom:1px solid var(--ink-line)">
+                  <div class="qm-edge-lit" style="background:var(--ink-card);border:1px solid var(--ink-line);border-left:2px solid var(--warning-bright);padding:18px 20px">
+                    <div style="font-family:var(--font-sans);font-weight:800;text-transform:uppercase;letter-spacing:-0.01em;font-size:16px;color:var(--text-pri)">{{ detail.needTitle }}</div>
+                    <p style="margin:9px 0 0;font-size:13.5px;line-height:1.55;color:var(--text-sec);max-width:52ch">{{ detail.needMsg }}</p>
+                  </div>
+                </div>
+                <div style="padding:20px 24px">
+                  <div style="font-family:var(--font-mono);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-dim)">How QuoteMax intook the job</div>
+                  <div style="margin-top:14px;display:grid;gap:10px">
+                    <sc-for list="{{ detail.transcript }}" as="m" hint-placeholder-count="4">
+                      <div style="display:flex;justify-content:{{ m.rowJustify }}">
+                        <div style="{{ m.bubbleStyle }}">
+                          <sc-if value="{{ m.showSender }}" hint-placeholder-val="{{ false }}">
+                            <span style="display:block;margin-bottom:4px;font-family:var(--font-mono);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--accent)">{{ m.senderLabel }}</span>
+                          </sc-if>
+                          {{ m.text }}
+                        </div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+                <div style="margin-top:auto;position:sticky;bottom:0;background:var(--ink-deep);border-top:1px solid var(--ink-line);padding:16px 24px;display:flex;gap:10px">
+                  <button type="button" onClick="{{ goChats }}" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--ink-line);background:transparent;color:var(--text-pri);padding:13px 20px;font-family:var(--font-sans);font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:0.06em;cursor:pointer">Open chat →</button>
+                  <button type="button" style="display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--ink-line);background:transparent;color:var(--text-sec);padding:13px 20px;font-family:var(--font-sans);font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:0.06em;cursor:pointer">Draft manually</button>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ isChats }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="Chats" class="qm-md-chats" style="display:grid;grid-template-columns:minmax(290px,390px) minmax(0,1fr);flex:1;min-height:0">
+          <div class="qm-scroll" style="overflow-y:auto;min-height:0;border-right:1px solid var(--ink-line)">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;border-bottom:1px solid var(--ink-line);position:sticky;top:0;background:var(--ink-deep);z-index:5">
+              <span style="font-family:var(--font-mono);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-sec)">Conversations · 5</span>
+              <span style="font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.14em;color:var(--text-dim)">All channels</span>
+            </div>
+            <sc-for list="{{ chatList }}" as="c" hint-placeholder-count="5">
+              <button type="button" class="qm-row" onClick="{{ c.onSelect }}" style="{{ c.rowStyle }}">
+                <div style="display:flex;align-items:center;gap:11px">
+                  <span style="{{ c.avatarStyle }}">{{ c.initial }}</span>
+                  <div style="min-width:0;flex:1">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                      <span style="font-family:var(--font-sans);font-weight:700;font-size:14px;color:var(--text-pri)">{{ c.who }}</span>
+                      <span style="flex-shrink:0;font-family:var(--font-mono);font-size:9.5px;color:var(--text-dim)">{{ c.when }}</span>
+                    </div>
+                    <div style="margin-top:2px;font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim)">{{ c.meta }}</div>
+                  </div>
+                </div>
+                <div style="margin-top:8px;font-size:12.5px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.preview }}</div>
+              </button>
+            </sc-for>
+          </div>
+
+          <div class="qm-scroll" style="overflow-y:auto;min-height:0;display:flex;flex-direction:column;background:var(--ink-deep)">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 20px;border-bottom:1px solid var(--ink-line);position:sticky;top:0;background:var(--ink-deep);z-index:5">
+              <span style="font-family:var(--font-mono);font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-dim)">{{ chatThread.label }}</span>
+              <div style="display:flex;align-items:center;gap:10px">
+                <button type="button" onClick="{{ draftFromChat }}" style="display:inline-flex;align-items:center;gap:7px;border:1px solid var(--ink-line);background:transparent;color:var(--text-pri);padding:7px 12px;font-family:var(--font-mono);font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;cursor:pointer">Draft quote →</button>
+                <span style="display:inline-flex;align-items:center;gap:7px;padding:5px 10px;border:1px solid color-mix(in srgb, var(--success-bright) 45%, transparent);font-family:var(--font-mono);font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.13em;color:var(--success-bright)">
+                  <span aria-hidden="true" style="width:6px;height:6px;border-radius:9999px;background:var(--success-bright);animation:qm-pulse-soft 2.4s ease-in-out infinite"></span>Online</span>
+              </div>
+            </div>
+            <div style="padding:26px 30px;display:grid;gap:12px;max-width:880px;width:100%">
+              <sc-for list="{{ chatThread.msgs }}" as="m" hint-placeholder-count="4">
+                <div style="display:flex;justify-content:{{ m.rowJustify }}">
+                  <div style="{{ m.bubbleStyle }}">
+                    <sc-if value="{{ m.showSender }}" hint-placeholder-val="{{ false }}">
+                      <span style="display:block;margin-bottom:4px;font-family:var(--font-mono);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--accent)">{{ m.senderLabel }}</span>
+                    </sc-if>
+                    {{ m.text }}
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="margin-top:auto;position:sticky;bottom:0;background:var(--ink-deep);border-top:1px solid var(--ink-line);padding:14px 24px;display:flex;gap:10px;align-items:center">
+              <input value="{{ chatInput }}" onChange="{{ onChatInput }}" onKeyDown="{{ onChatKey }}" placeholder="Reply by SMS" style="flex:1;min-width:0;height:42px;padding:0 14px;background:var(--ink);border:1px solid var(--ink-line);color:var(--text-pri);font-family:var(--font-sans);font-size:13.5px;outline:none" />
+              <button type="button" onClick="{{ sendChat }}" style="display:inline-flex;align-items:center;gap:8px;height:42px;padding:0 18px;border:1px solid transparent;background:var(--accent);color:var(--accent-ink);font-family:var(--font-sans);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap;cursor:pointer">Send</button>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ isTrade }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="{{ trade.title }}" class="qm-scroll" style="overflow-y:auto;flex:1;min-height:0">
+          <div class="qm-fillwrap" style="max-width:96rem;width:100%;margin:0 auto;padding:28px clamp(28px,3vw,52px) 56px;display:flex;flex-direction:column;gap:20px">
+
+            <header style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px">
+              <div style="min-width:0">
+                <div style="font-family:var(--font-mono);font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.18em;color:var(--text-dim)">{{ trade.eyebrow }}</div>
+                <h1 style="margin:8px 0 0;font-family:var(--font-sans);font-weight:800;text-transform:uppercase;letter-spacing:-0.03em;font-size:clamp(1.8rem,2.6vw,2.7rem);line-height:1;color:var(--text-pri)">{{ trade.title }}</h1>
+                <p style="margin:9px 0 0;max-width:62ch;font-size:13.5px;line-height:1.5;color:var(--text-dim)">{{ trade.blurb }}</p>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <button type="button" style="display:inline-flex;align-items:center;gap:8px;border:1px solid var(--ink-line);background:transparent;color:var(--text-sec);padding:9px 14px;font-family:var(--font-mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.13em;white-space:nowrap;cursor:pointer">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>Add rate card</button>
+                <button type="button" onClick="{{ goQuotes }}" style="display:inline-flex;align-items:center;gap:8px;border:1px solid transparent;background:var(--accent);color:var(--accent-ink);padding:10px 16px;font-family:var(--font-sans);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap;cursor:pointer">New estimate →</button>
+              </div>
+            </header>
+
+            <section class="qm-edge-lit qm-metrics4" style="background:var(--ink-line);border:1px solid var(--ink-line);display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px">
+              <sc-for list="{{ trade.metrics }}" as="m" hint-placeholder-count="4">
+                <div style="background:var(--ink-card);padding:18px 22px">
+                  <div style="font-family:var(--font-mono);font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.13em;color:var(--text-dim)">{{ m.k }}</div>
+                  <div style="margin-top:8px;font-family:var(--font-mono);font-weight:800;line-height:1;font-size:clamp(1.4rem,1.85vw,2.35rem);font-variant-numeric:tabular-nums;color:{{ m.vColor }}">{{ m.v }}</div>
+                  <div style="margin-top:7px;font-family:var(--font-mono);font-size:8.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-sec);min-height:12px">{{ m.sub }}</div>
+                </div>
+              </sc-for>
+            </section>
+
+            <div class="qm-ov-grid qm-fillgrid" style="display:grid;grid-template-columns:minmax(0,1.75fr) minmax(300px,430px);gap:20px;align-items:stretch">
+
+              <section class="qm-edge-lit qm-pricebook" style="background:var(--ink-card);border:1px solid var(--ink-line);min-width:0">
+                <header style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--ink-line)">
+                  <div style="display:flex;align-items:baseline;gap:11px">
+                    <span style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--accent)">01</span>
+                    <h2 style="margin:0;font-family:var(--font-mono);font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-pri)">Price book</h2>
+                  </div>
+                  <span style="font-family:var(--font-mono);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.13em;color:var(--text-dim)">{{ trade.cardCount }} rate cards</span>
+                </header>
+                <div style="display:grid;grid-template-columns:minmax(120px,1.9fr) minmax(74px,0.85fr) 84px 92px;gap:12px;padding:10px 20px;border-bottom:1px solid var(--ink-line)">
+                  <span style="font-family:var(--font-mono);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.13em;color:var(--text-dim)">Item</span>
+                  <span style="font-family:var(--font-mono);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.13em;color:var(--text-dim)">Category</span>
+                  <span style="font-family:var(--font-mono);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.13em;color:var(--text-dim)">Unit</span>
+                  <span style="text-align:right;font-family:var(--font-mono);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.13em;color:var(--text-dim)">Rate</span>
+                </div>
+                <sc-for list="{{ trade.cards }}" as="c" hint-placeholder-count="7">
+                  <div class="qm-row" style="display:grid;grid-template-columns:minmax(120px,1.9fr) minmax(74px,0.85fr) 84px 92px;gap:12px;align-items:center;border-bottom:1px solid var(--ink-line);padding:13px 20px;transition:background-color .15s ease">
+                    <span style="font-size:14.5px;font-weight:500;color:var(--text-pri);min-width:0">{{ c.item }}</span>
+                    <span style="justify-self:start;font-family:var(--font-mono);font-size:8.5px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-sec);border:1px solid var(--ink-line);padding:2px 7px">{{ c.cat }}</span>
+                    <span style="font-family:var(--font-mono);font-size:10.5px;color:var(--text-dim);white-space:nowrap">{{ c.unit }}</span>
+                    <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">
+                      <svg class="qm-editicon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"></path></svg>
+                      <span style="font-family:var(--font-mono);font-weight:700;font-size:15px;color:var(--accent);font-variant-numeric:tabular-nums">{{ c.rateText }}</span>
+                    </div>
+                  </div>
+                </sc-for>
+              </section>
+
+              <div style="display:flex;flex-direction:column;gap:18px;min-width:0">
+                <section class="qm-edge-lit" style="background:var(--ink-card);border:1px solid var(--ink-line)">
+                  <header style="display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid var(--ink-line)">
+                    <div style="display:flex;align-items:baseline;gap:10px">
+                      <span style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--accent)">02</span>
+                      <h2 style="margin:0;font-family:var(--font-mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-pri)">Recipes</h2>
+                    </div>
+                    <span style="font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-dim)">Bundled</span>
+                  </header>
+                  <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+                    <sc-for list="{{ trade.recipes }}" as="r" hint-placeholder-count="3">
+                      <button type="button" class="qm-chip" onClick="{{ r.onSelect }}" style="{{ r.cardStyle }}">
+                        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+                          <span style="font-family:var(--font-sans);font-weight:700;font-size:14px;color:var(--text-pri)">{{ r.name }}</span>
+                          <span style="flex-shrink:0;font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums">{{ r.fromText }}</span>
+                        </div>
+                        <div style="margin-top:5px;font-size:12px;color:var(--text-dim)">{{ r.desc }}</div>
+                        <sc-if value="{{ r.selected }}" hint-placeholder-val="{{ false }}">
+                          <div style="margin-top:10px;display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--accent)">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>Loaded — review in Estimator</div>
+                        </sc-if>
+                      </button>
+                    </sc-for>
+                  </div>
+                </section>
+
+                <section class="qm-edge-lit qm-railfill" style="background:var(--ink-card);border:1px solid var(--ink-line);border-left:2px solid var(--accent);padding:18px 20px">
+                  <div style="font-family:var(--font-mono);font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.14em;color:var(--text-dim)">How QuoteMax uses this</div>
+                  <p style="margin:9px 0 0;font-size:12.5px;line-height:1.55;color:var(--text-sec)">QuoteMax drafts every quote from these rates. Update a card and future quotes use the new price automatically. Recipes bundle the common jobs so a draft is one tap.</p>
+                </section>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isPage }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="{{ page.title }}" class="qm-scroll" style="overflow-y:auto;flex:1;min-height:0">
+          <div style="max-width:96rem;width:100%;margin:0 auto;padding:28px clamp(28px,3vw,52px) 56px;display:flex;flex-direction:column;gap:20px">
+
+            <header style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px;max-width:{{ page.headMax }}">
+              <div style="min-width:0">
+                <div style="font-family:var(--font-mono);font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.18em;color:var(--text-dim)">{{ page.eyebrow }}</div>
+                <h1 style="margin:8px 0 0;font-family:var(--font-sans);font-weight:800;text-transform:uppercase;letter-spacing:-0.03em;font-size:clamp(1.8rem,2.6vw,2.7rem);line-height:1;color:var(--text-pri)">{{ page.title }}</h1>
+                <p style="margin:9px 0 0;max-width:64ch;font-size:13.5px;line-height:1.5;color:var(--text-dim)">{{ page.blurb }}</p>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <sc-if value="{{ page.hasGhost }}" hint-placeholder-val="{{ false }}">
+                  <button type="button" style="display:inline-flex;align-items:center;border:1px solid var(--ink-line);background:transparent;color:var(--text-sec);padding:9px 14px;font-family:var(--font-mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.13em;white-space:nowrap;cursor:pointer">{{ page.ghostAction }}</button>
+                </sc-if>
+                <sc-if value="{{ page.hasPrimary }}" hint-placeholder-val="{{ false }}">
+                  <button type="button" onClick="{{ page.onPrimary }}" style="display:inline-flex;align-items:center;gap:8px;border:1px solid transparent;background:var(--accent);color:var(--accent-ink);padding:10px 16px;font-family:var(--font-sans);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap;cursor:pointer">{{ page.primaryAction }}</button>
+                </sc-if>
+              </div>
+            </header>
+
+            <sc-if value="{{ page.hasMetrics }}" hint-placeholder-val="{{ false }}">
+              <section class="qm-edge-lit qm-metrics4" style="background:var(--ink-line);border:1px solid var(--ink-line);display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px">
+                <sc-for list="{{ page.metrics }}" as="m" hint-placeholder-count="4">
+                  <div style="background:var(--ink-card);padding:18px 22px">
+                    <div style="font-family:var(--font-mono);font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.13em;color:var(--text-dim)">{{ m.k }}</div>
+                    <div style="margin-top:8px;font-family:var(--font-mono);font-weight:800;line-height:1;font-size:clamp(1.4rem,1.85vw,2.35rem);font-variant-numeric:tabular-nums;color:{{ m.vColor }}">{{ m.v }}</div>
+                    <div style="margin-top:7px;font-family:var(--font-mono);font-size:8.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-sec);min-height:12px">{{ m.sub }}</div>
+                  </div>
+                </sc-for>
+              </section>
+            </sc-if>
+
+            <sc-if value="{{ page.isList }}" hint-placeholder-val="{{ false }}">
+              <div class="qm-ov-grid" style="display:grid;grid-template-columns:minmax(0,1fr);gap:20px;align-items:start">
+                <section class="qm-edge-lit" style="background:var(--ink-card);border:1px solid var(--ink-line);min-width:0">
+                  <div style="display:grid;grid-template-columns:minmax(120px,1.5fr) minmax(110px,1.4fr) minmax(90px,1fr) 92px 108px;gap:12px;padding:11px 20px;border-bottom:1px solid var(--ink-line)">
+                    <sc-for list="{{ page.cols }}" as="c" hint-placeholder-count="5">
+                      <span style="font-family:var(--font-mono);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.13em;color:var(--text-dim)">{{ c }}</span>
+                    </sc-for>
+                  </div>
+                  <sc-for list="{{ page.rows }}" as="r" hint-placeholder-count="6">
+                    <div class="qm-row" style="display:grid;grid-template-columns:minmax(120px,1.5fr) minmax(110px,1.4fr) minmax(90px,1fr) 92px 108px;gap:12px;align-items:center;border-bottom:1px solid var(--ink-line);padding:13px 20px;transition:background-color .15s ease">
+                      <div style="min-width:0">
+                        <div style="font-family:var(--font-sans);font-weight:700;font-size:13.5px;color:var(--text-pri);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.name }}</div>
+                        <div style="margin-top:2px;font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim)">{{ r.sub }}</div>
+                      </div>
+                      <span style="font-size:12.5px;color:var(--text-sec);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.job }}</span>
+                      <span style="font-family:var(--font-mono);font-size:10.5px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.when }}</span>
+                      <span style="text-align:right;font-family:var(--font-mono);font-weight:700;font-size:13px;color:{{ r.valueColor }};font-variant-numeric:tabular-nums">{{ r.valueText }}</span>
+                      <div style="justify-self:end;display:flex;flex-direction:column;align-items:flex-end;gap:7px">
+                        <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid {{ r.scBorder }};font-family:var(--font-mono);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:{{ r.sc }}">
+                          <span aria-hidden="true" style="width:5px;height:5px;border-radius:9999px;background:{{ r.sc }};animation:{{ r.dotAnim }}"></span>{{ r.sl }}</span>
+                        <sc-if value="{{ r.hasActions }}" hint-placeholder-val="{{ false }}">
+                          <div style="display:flex;gap:6px">
+                            <sc-for list="{{ r.actions }}" as="a" hint-placeholder-count="3">
+                              <button type="button" class="qm-chip" onClick="{{ a.onGo }}" style="border:1px solid var(--ink-line);background:transparent;color:var(--text-sec);padding:3px 8px;font-family:var(--font-mono);font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;cursor:pointer;transition:border-color .15s ease">{{ a.label }}</button>
+                            </sc-for>
+                          </div>
+                        </sc-if>
+                      </div>
+                    </div>
+                  </sc-for>
+                </section>
+                <sc-if value="{{ page.hasNote }}" hint-placeholder-val="{{ false }}">
+                  <section class="qm-edge-lit" style="background:var(--ink-card);border:1px solid var(--ink-line);border-left:2px solid var(--accent);padding:16px 18px">
+                    <div style="font-family:var(--font-mono);font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.14em;color:var(--text-dim)">{{ page.note.title }}</div>
+                    <p style="margin:9px 0 0;max-width:70ch;font-size:12.5px;line-height:1.55;color:var(--text-sec)">{{ page.note.body }}</p>
+                  </section>
+                </sc-if>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ page.isSettings }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:18px;max-width:920px">
+                <sc-for list="{{ page.sections }}" as="sec" hint-placeholder-count="3">
+                  <section class="qm-edge-lit" style="background:var(--ink-card);border:1px solid var(--ink-line)">
+                    <header style="display:flex;align-items:baseline;gap:11px;padding:13px 18px;border-bottom:1px solid var(--ink-line)">
+                      <span style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--accent)">{{ sec.num }}</span>
+                      <h2 style="margin:0;font-family:var(--font-mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-pri)">{{ sec.title }}</h2>
+                    </header>
+                    <sc-for list="{{ sec.rows }}" as="row" hint-placeholder-count="4">
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 18px;border-bottom:1px solid var(--ink-line)">
+                        <div style="min-width:0">
+                          <div style="font-family:var(--font-sans);font-weight:600;font-size:13.5px;color:var(--text-pri)">{{ row.label }}</div>
+                          <sc-if value="{{ row.hasDesc }}" hint-placeholder-val="{{ false }}">
+                            <div style="margin-top:2px;font-size:12px;color:var(--text-dim)">{{ row.desc }}</div>
+                          </sc-if>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:12px;flex-shrink:0">
+                          <sc-if value="{{ row.hasValue }}" hint-placeholder-val="{{ false }}">
+                            <span style="font-family:var(--font-mono);font-size:12.5px;color:var(--text-sec);text-align:right">{{ row.valueText }}</span>
+                          </sc-if>
+                          <sc-if value="{{ row.hasBadge }}" hint-placeholder-val="{{ false }}">
+                            <span style="{{ row.badgeStyle }}">{{ row.badgeText }}</span>
+                          </sc-if>
+                          <sc-if value="{{ row.hasButton }}" hint-placeholder-val="{{ false }}">
+                            <button type="button" style="border:1px solid var(--ink-line);background:transparent;color:var(--text-sec);padding:6px 12px;font-family:var(--font-mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;cursor:pointer">{{ row.buttonText }}</button>
+                          </sc-if>
+                          <sc-if value="{{ row.hasToggle }}" hint-placeholder-val="{{ false }}">
+                            <button type="button" aria-label="Toggle" onClick="{{ row.onToggle }}" style="{{ row.toggleBoxStyle }}">
+                              <sc-if value="{{ row.toggleOn }}" hint-placeholder-val="{{ false }}">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-ink)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>
+                              </sc-if>
+                            </button>
+                          </sc-if>
+                        </div>
+                      </div>
+                    </sc-for>
+                  </section>
+                </sc-for>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ page.isFiles }}" hint-placeholder-val="{{ false }}">
+              <div>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px">
+                  <div style="display:flex;align-items:center;gap:8px;font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.13em;color:var(--text-dim)">
+                    <span style="color:var(--text-sec)">All files</span><span>›</span><span>Hartley Electrical</span>
+                  </div>
+                  <label style="display:flex;align-items:center;gap:9px;height:34px;padding:0 12px;background:var(--ink-card);border:1px solid var(--ink-line);cursor:text">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+                    <input type="text" placeholder="Search files" style="border:0;background:transparent;outline:none;color:var(--text-pri);font-family:var(--font-sans);font-size:13px;width:150px" />
+                  </label>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px">
+                  <button type="button" onClick="{{ page.onUpload }}" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:74px;cursor:pointer;background:transparent;border:1.5px dashed var(--ink-line);color:var(--text-dim);padding:15px 16px">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line></svg>
+                    <span style="font-family:var(--font-mono);font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em">Drop files or click to upload</span>
+                  </button>
+                  <sc-for list="{{ page.items }}" as="f" hint-placeholder-count="8">
+                    <button type="button" class="qm-chip" style="display:flex;align-items:center;gap:13px;text-align:left;cursor:pointer;background:var(--ink-card);border:1px solid var(--ink-line);padding:15px 16px;transition:border-color .15s ease">
+                      <span style="display:grid;place-items:center;width:42px;height:42px;flex-shrink:0;background:var(--ink);border:1px solid var(--ink-line)">{{ f.iconEl }}</span>
+                      <div style="min-width:0">
+                        <div style="font-family:var(--font-sans);font-weight:600;font-size:13px;color:var(--text-pri);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ f.name }}</div>
+                        <div style="margin-top:3px;font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim)">{{ f.meta }}</div>
+                      </div>
+                    </button>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ page.isFlyer }}" hint-placeholder-val="{{ false }}">
+              <div class="qm-ov-grid" style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(260px,1fr);gap:24px;align-items:start">
+                <div style="display:flex;justify-content:center">
+                  <div class="qm-edge-lit" style="width:100%;max-width:420px;aspect-ratio:1 / 1.414;background:var(--ink-card);border:1px solid var(--ink-line);display:flex;flex-direction:column">
+                    <div style="background:var(--accent);color:var(--accent-ink);padding:22px 24px">
+                      <div style="display:flex;align-items:center;gap:10px">
+                        <svg width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" fill="#1C1812"></rect><rect x="13" y="14" width="38" height="26" rx="7" fill="#FFC400"></rect><path d="M20 39 L20 50 L31 40 Z" fill="#FFC400"></path><path d="M23 27 L29.5 33.5 L41 21" fill="none" stroke="#1C1812" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                        <span style="font-family:var(--font-sans);font-weight:800;text-transform:uppercase;letter-spacing:-0.02em;font-size:17px">Hartley Electrical</span>
+                      </div>
+                    </div>
+                    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:18px;padding:26px 24px">
+                      <div style="font-family:var(--font-sans);font-weight:800;text-transform:uppercase;letter-spacing:-0.02em;line-height:0.98;font-size:clamp(1.4rem,3.2vw,1.9rem);color:var(--text-pri)">Get a quote in under a minute</div>
+                      <p style="margin:0;font-size:13px;line-height:1.5;color:var(--text-sec)">Text or call. We reply with a clear Good / Better / Best quote, GST included.</p>
+                      <div style="display:flex;align-items:center;gap:16px;margin-top:4px">
+                        <div>
+                          <div style="font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-dim)">Text or call</div>
+                          <div style="margin-top:5px;font-family:var(--font-mono);font-weight:700;font-size:19px;letter-spacing:-0.01em;color:var(--accent)">0468 048 422</div>
+                        </div>
+                        <div style="width:74px;height:74px;flex-shrink:0;display:grid;place-items:center;background:var(--ink);border:1px solid var(--ink-line);color:var(--text-dim)">
+                          <svg width="54" height="54" viewBox="0 0 25 25" shape-rendering="crispEdges" aria-hidden="true" style="color:var(--text-sec)"><g fill="currentColor"><rect x="0" y="0" width="7" height="7"></rect><rect x="18" y="0" width="7" height="7"></rect><rect x="0" y="18" width="7" height="7"></rect></g><g fill="var(--ink)"><rect x="1" y="1" width="5" height="5"></rect><rect x="19" y="1" width="5" height="5"></rect><rect x="1" y="19" width="5" height="5"></rect></g><g fill="currentColor"><rect x="2" y="2" width="3" height="3"></rect><rect x="20" y="2" width="3" height="3"></rect><rect x="2" y="20" width="3" height="3"></rect><rect x="9" y="0" width="1" height="1"></rect><rect x="11" y="0" width="2" height="1"></rect><rect x="14" y="1" width="1" height="2"></rect><rect x="9" y="2" width="2" height="1"></rect><rect x="12" y="3" width="1" height="1"></rect><rect x="10" y="4" width="1" height="2"></rect><rect x="13" y="5" width="2" height="1"></rect><rect x="8" y="6" width="1" height="1"></rect><rect x="0" y="9" width="2" height="1"></rect><rect x="3" y="10" width="1" height="1"></rect><rect x="5" y="9" width="1" height="2"></rect><rect x="7" y="11" width="2" height="1"></rect><rect x="6" y="13" width="1" height="1"></rect><rect x="2" y="12" width="1" height="2"></rect><rect x="0" y="15" width="1" height="1"></rect><rect x="4" y="14" width="2" height="1"></rect><rect x="9" y="9" width="2" height="2"></rect><rect x="12" y="10" width="1" height="1"></rect><rect x="14" y="9" width="1" height="2"></rect><rect x="16" y="10" width="2" height="1"></rect><rect x="19" y="9" width="1" height="1"></rect><rect x="21" y="10" width="2" height="1"></rect><rect x="24" y="9" width="1" height="2"></rect><rect x="10" y="12" width="1" height="2"></rect><rect x="12" y="13" width="2" height="1"></rect><rect x="15" y="12" width="1" height="1"></rect><rect x="17" y="13" width="2" height="1"></rect><rect x="20" y="12" width="1" height="2"></rect><rect x="23" y="13" width="1" height="1"></rect><rect x="9" y="15" width="1" height="1"></rect><rect x="11" y="16" width="2" height="1"></rect><rect x="14" y="15" width="1" height="2"></rect><rect x="17" y="16" width="1" height="1"></rect><rect x="19" y="15" width="2" height="1"></rect><rect x="22" y="16" width="1" height="1"></rect><rect x="9" y="18" width="1" height="2"></rect><rect x="11" y="19" width="1" height="1"></rect><rect x="13" y="18" width="2" height="1"></rect><rect x="16" y="19" width="1" height="2"></rect><rect x="18" y="18" width="1" height="1"></rect><rect x="12" y="21" width="1" height="1"></rect><rect x="14" y="22" width="2" height="1"></rect><rect x="10" y="23" width="1" height="1"></rect><rect x="17" y="22" width="1" height="1"></rect><rect x="19" y="21" width="2" height="1"></rect><rect x="22" y="20" width="1" height="1"></rect><rect x="21" y="23" width="2" height="1"></rect><rect x="8" y="8" width="1" height="1"></rect></g></svg>
+                        </div>
+                      </div>
+                    </div>
+                    <div style="border-top:1px solid var(--ink-line);padding:14px 24px;font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.13em;color:var(--text-dim)">Electrical · Plumbing · Roofing · Sydney NSW · Lic. EC 41128</div>
+                  </div>
+                </div>
+                <div class="qm-edge-lit" style="background:var(--ink-card);border:1px solid var(--ink-line);padding:18px 20px;display:flex;flex-direction:column;gap:16px">
+                  <div style="font-family:var(--font-mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-pri)">Flyer options</div>
+                  <div>
+                    <div style="font-family:var(--font-mono);font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.13em;color:var(--text-dim)">Headline</div>
+                    <div style="margin-top:7px;padding:9px 12px;border:1px solid var(--ink-line);background:var(--ink);font-size:13px;color:var(--text-pri)">Get a quote in under a minute</div>
+                  </div>
+                  <div>
+                    <div style="font-family:var(--font-mono);font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.13em;color:var(--text-dim)">Paper size</div>
+                    <div style="margin-top:7px;display:flex;gap:2px;border:1px solid var(--ink-line);background:var(--ink);padding:3px;width:fit-content">
+                      <span style="padding:6px 15px;background:var(--accent);color:var(--accent-ink);font-family:var(--font-mono);font-size:11px;font-weight:700">A5</span>
+                      <span style="padding:6px 15px;color:var(--text-sec);font-family:var(--font-mono);font-size:11px;font-weight:700">A4</span>
+                      <span style="padding:6px 15px;color:var(--text-sec);font-family:var(--font-mono);font-size:11px;font-weight:700">DL</span>
+                    </div>
+                  </div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;padding-top:4px">
+                    <div><div style="font-family:var(--font-sans);font-weight:600;font-size:13.5px;color:var(--text-pri)">Include QR code</div><div style="margin-top:2px;font-size:12px;color:var(--text-dim)">Links to your quote line</div></div>
+                    <span style="display:grid;place-items:center;width:22px;height:22px;border:1.5px solid var(--accent);background:var(--accent)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-ink)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></span>
+                  </div>
+                  <button type="button" style="margin-top:4px;width:100%;display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid transparent;background:var(--accent);color:var(--accent-ink);padding:12px;font-family:var(--font-sans);font-weight:700;font-size:12.5px;text-transform:uppercase;letter-spacing:0.06em;cursor:pointer">Download PDF</button>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ page.isMarketing }}" hint-placeholder-val="{{ false }}">
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:18px">
+                <sc-for list="{{ page.tools }}" as="t" hint-placeholder-count="6">
+                  <div class="qm-edge-lit" style="background:var(--ink-card);border:1px solid var(--ink-line);padding:18px;display:flex;flex-direction:column;gap:12px">
+                    <span style="display:grid;place-items:center;width:42px;height:42px;background:var(--ink);border:1px solid var(--ink-line)">{{ t.iconEl }}</span>
+                    <div>
+                      <div style="font-family:var(--font-sans);font-weight:700;font-size:15px;color:var(--text-pri)">{{ t.title }}</div>
+                      <p style="margin:6px 0 0;font-size:12.5px;line-height:1.5;color:var(--text-dim)">{{ t.desc }}</p>
+                    </div>
+                    <button type="button" class="qm-seeall" onClick="{{ t.onSelect }}" style="margin-top:auto;align-self:flex-start;border:1px solid var(--ink-line);background:transparent;color:var(--text-pri);padding:8px 13px;font-family:var(--font-mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;cursor:pointer">{{ t.action }} →</button>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ page.isCalendar }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:20px">
+                <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px">
+                  <sc-for list="{{ page.week }}" as="d" hint-placeholder-count="7">
+                    <div style="{{ d.cellStyle }}">
+                      <span style="font-family:var(--font-mono);font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:{{ d.wdColor }}">{{ d.wd }}</span>
+                      <span style="font-family:var(--font-mono);font-weight:700;font-size:18px;color:{{ d.dColor }}">{{ d.d }}</span>
+                      <sc-if value="{{ d.showDot }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="width:5px;height:5px;border-radius:9999px;background:var(--accent)"></span></sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+                <sc-for list="{{ page.agenda }}" as="g" hint-placeholder-count="2">
+                  <div>
+                    <div style="margin:0 0 9px 2px;font-family:var(--font-mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-dim)">{{ g.day }}</div>
+                    <div class="qm-edge-lit" style="background:var(--ink-card);border:1px solid var(--ink-line)">
+                      <sc-for list="{{ g.items }}" as="it" hint-placeholder-count="3">
+                        <div class="qm-row" style="display:flex;align-items:center;gap:16px;padding:13px 18px;border-bottom:1px solid var(--ink-line);border-left:2px solid {{ it.barColor }};transition:background-color .15s ease">
+                          <span style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--text-sec);min-width:74px;font-variant-numeric:tabular-nums">{{ it.time }}</span>
+                          <div style="min-width:0;flex:1">
+                            <div style="font-family:var(--font-sans);font-weight:700;font-size:14px;color:var(--text-pri)">{{ it.title }}</div>
+                            <div style="margin-top:2px;font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim)">{{ it.who }}</div>
+                          </div>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ page.isRecipes }}" hint-placeholder-val="{{ false }}">
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px">
+                <sc-for list="{{ page.grid }}" as="r" hint-placeholder-count="9">
+                  <button type="button" class="qm-chip" style="text-align:left;cursor:pointer;background:var(--ink-card);border:1px solid var(--ink-line);padding:16px 17px;display:flex;flex-direction:column;gap:9px;transition:border-color .15s ease">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                      <span style="font-family:var(--font-mono);font-size:8.5px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-sec);border:1px solid var(--ink-line);padding:2px 7px">{{ r.trade }}</span>
+                      <span style="font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim)">{{ r.steps }}</span>
+                    </div>
+                    <div style="font-family:var(--font-sans);font-weight:700;font-size:15px;color:var(--text-pri)">{{ r.name }}</div>
+                    <div style="font-size:12.5px;line-height:1.45;color:var(--text-dim)">{{ r.desc }}</div>
+                    <div style="margin-top:2px;font-family:var(--font-mono);font-weight:700;font-size:13px;color:var(--accent)">{{ r.fromText }}</div>
+                  </button>
+                </sc-for>
+              </div>
+            </sc-if>
+
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isStub }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="Placeholder" style="display:grid;place-items:center;flex:1;padding:40px">
+          <div style="text-align:center;max-width:340px">
+            <div style="font-family:var(--font-sans);font-weight:800;text-transform:uppercase;letter-spacing:-0.02em;font-size:24px;color:var(--text-pri)">{{ stubLabel }}</div>
+            <p style="margin:12px 0 0;font-size:14px;line-height:1.55;color:var(--text-dim)">This surface keeps its current functionality. The redesign covers Overview, Quotes, Chats and the trade estimators.</p>
+          </div>
+        </div>
+      </sc-if>
+    </main>
+  </div>
+
+  <sc-if value="{{ paletteOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closePalette }}" style="position:fixed;inset:0;z-index:120;background:color-mix(in srgb, var(--ink-deep) 62%, transparent);display:flex;align-items:flex-start;justify-content:center;padding-top:11vh">
+      <div onClick="{{ stopClick }}" class="qm-edge-lit" style="width:min(620px,92vw);background:var(--ink-card);border:1px solid var(--ink-line);max-height:64vh;display:flex;flex-direction:column;overflow:hidden">
+        <label style="display:flex;align-items:center;gap:12px;padding:15px 18px;border-bottom:1px solid var(--ink-line);cursor:text">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+          <input value="{{ query }}" onChange="{{ onQuery }}" placeholder="Search quotes, customers, pages" style="flex:1;min-width:0;border:0;background:transparent;outline:none;color:var(--text-pri);font-family:var(--font-sans);font-size:15px" />
+          <span aria-hidden="true" style="flex-shrink:0;border:1px solid var(--ink-line);border-radius:5px;padding:2px 7px;font-family:var(--font-mono);font-size:9.5px;font-weight:600;color:var(--text-dim)">ESC</span>
+        </label>
+        <div class="qm-scroll" style="overflow-y:auto">
+          <sc-for list="{{ paletteGroups }}" as="g" hint-placeholder-count="3">
+            <sc-if value="{{ g.has }}" hint-placeholder-val="{{ true }}">
+              <div>
+                <div style="padding:11px 18px 6px;font-family:var(--font-mono);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-dim)">{{ g.title }}</div>
+                <sc-for list="{{ g.items }}" as="it" hint-placeholder-count="3">
+                  <button type="button" class="qm-row" onClick="{{ it.onGo }}" style="display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;cursor:pointer;border:0;background:transparent;padding:10px 18px;transition:background-color .15s ease">
+                    <div style="min-width:0">
+                      <div style="font-family:var(--font-sans);font-weight:600;font-size:13.5px;color:var(--text-pri)">{{ it.title }}</div>
+                      <div style="margin-top:2px;font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ it.meta }}</div>
+                    </div>
+                    <span style="flex-shrink:0;font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--text-sec);font-variant-numeric:tabular-nums">{{ it.value }}</span>
+                  </button>
+                </sc-for>
+              </div>
+            </sc-if>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ profileOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeProfile }}" style="position:fixed;inset:0;z-index:120;background:color-mix(in srgb, var(--ink-deep) 55%, transparent)"></div>
+    <aside class="qm-scroll" style="position:fixed;top:0;right:0;bottom:0;z-index:125;width:min(420px,94vw);background:var(--ink-card);border-left:1px solid var(--ink-line);overflow-y:auto">
+      <div style="display:flex;align-items:center;gap:13px;padding:18px 20px;border-bottom:1px solid var(--ink-line)">
+        <span style="display:inline-grid;place-items:center;width:42px;height:42px;background:var(--accent);color:var(--accent-ink);font-family:var(--font-mono);font-weight:700;font-size:17px">{{ profile.initial }}</span>
+        <div style="min-width:0;flex:1">
+          <div style="font-family:var(--font-sans);font-weight:800;text-transform:uppercase;letter-spacing:-0.01em;font-size:16px;color:var(--text-pri)">{{ profile.name }}</div>
+          <div style="margin-top:2px;font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-dim)">{{ profile.meta }}</div>
+        </div>
+        <button type="button" aria-label="Close" onClick="{{ closeProfile }}" style="display:grid;place-items:center;width:32px;height:32px;border:1px solid var(--ink-line);background:transparent;color:var(--text-sec);cursor:pointer">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>
+        </button>
+      </div>
+      <div style="padding:16px 20px;border-bottom:1px solid var(--ink-line);display:flex;flex-direction:column;gap:9px">
+        <div style="font-family:var(--font-mono);font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-dim)">Contact</div>
+        <div style="display:flex;justify-content:space-between;gap:10px"><span style="font-size:12.5px;color:var(--text-dim)">Mobile</span><span style="font-family:var(--font-mono);font-size:12.5px;color:var(--text-pri)">{{ profile.phone }}</span></div>
+        <div style="display:flex;justify-content:space-between;gap:10px"><span style="font-size:12.5px;color:var(--text-dim)">Email</span><span style="font-family:var(--font-mono);font-size:12.5px;color:var(--text-pri)">{{ profile.email }}</span></div>
+      </div>
+      <div style="padding:16px 20px 8px;font-family:var(--font-mono);font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-dim)">Quotes</div>
+      <sc-for list="{{ profile.quotes }}" as="pq" hint-placeholder-count="2">
+        <button type="button" class="qm-row" onClick="{{ pq.onGo }}" style="display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;cursor:pointer;border:0;border-bottom:1px solid var(--ink-line);background:transparent;padding:12px 20px;transition:background-color .15s ease">
+          <div style="min-width:0">
+            <div style="font-family:var(--font-sans);font-weight:600;font-size:13px;color:var(--text-pri);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ pq.job }}</div>
+            <div style="margin-top:2px;font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim)">{{ pq.ref }} · <span style="color:{{ pq.sc }}">{{ pq.sl }}</span></div>
+          </div>
+          <span style="flex-shrink:0;font-family:var(--font-mono);font-weight:700;font-size:13px;color:var(--text-pri);font-variant-numeric:tabular-nums">{{ pq.valueText }}</span>
+        </button>
+      </sc-for>
+      <div style="padding:16px 20px 8px;font-family:var(--font-mono);font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;color:var(--text-dim)">Chats</div>
+      <sc-for list="{{ profile.chats }}" as="pc" hint-placeholder-count="1">
+        <button type="button" class="qm-row" onClick="{{ pc.onGo }}" style="display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;cursor:pointer;border:0;border-bottom:1px solid var(--ink-line);background:transparent;padding:12px 20px;transition:background-color .15s ease">
+          <span style="font-size:13px;color:var(--text-sec);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ pc.meta }}</span>
+          <span style="flex-shrink:0;font-family:var(--font-mono);font-size:10px;color:var(--text-dim)">{{ pc.when }}</span>
+        </button>
+      </sc-for>
+    </aside>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;'dark' | 'light'&quot;,&quot;section&quot;:&quot;Appearance&quot;},&quot;defaultView&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;overview&quot;,&quot;quotes&quot;,&quot;chats&quot;],&quot;default&quot;:&quot;overview&quot;,&quot;tsType&quot;:&quot;'overview' | 'quotes' | 'chats'&quot;,&quot;section&quot;:&quot;Appearance&quot;},&quot;showGrain&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Appearance&quot;}}">
+class Component extends DCLogic {
+  state = { view: this._initView(), copied: false, stubLabel: '', selQuote: 'Q-2040', sent: {}, selChat: 'jon', collapsed: false, theme: null, selRecipe: '', toggles: {}, palette: false, query: '', notifOpen: false, notifRead: false, editQuote: false, lineEdits: {}, chatDrafts: {}, chatSent: {}, fuDone: {}, profile: '', uploads: [] };
+
+  _initView() { const v = this.props && this.props.defaultView; return ['overview', 'quotes', 'chats'].includes(v) ? v : 'overview'; }
+  money(n) { return '$' + Number(n).toLocaleString('en-AU', { maximumFractionDigits: 0 }); }
+
+  QUOTES = [
+    ['Q-2041', 'Jon', 'Chandler', 'Other — general enquiry', null, 'awaiting', 'SMS', '4 min ago', 'other', 34],
+    ['Q-2040', 'Jeph Daligdig', 'Chandler', 'Solar install — 6.6kW', 20922, 'viewed', 'SMS', '1 hr ago', 'solar', 41],
+    ['Q-2039', 'New lead', 'Chandler 4155', 'Full reroof — Colorbond', 73522, 'viewed', 'Voice', '3 hr ago', 'roof', 52],
+    ['Q-2038', 'Jeph Daligdig', 'Chandler', 'Solar install — 5kW', 8237, 'viewed', 'SMS', 'Yesterday', 'solar', 38],
+    ['Q-2037', 'Jeph Daligdig', 'Chandler', 'Solar install — 10kW', 17626, 'viewed', 'SMS', 'Yesterday', 'solar', 44],
+    ['Q-2036', 'Sam', 'Coogee', 'Hot water — replace 250L', 3180, 'accepted', 'SMS', '2 days ago', 'hotwater', 29],
+    ['Q-2035', 'Marco Felipe', 'Maroubra', 'Switchboard upgrade', null, 'sitevisit', 'Voice', '3 days ago', 'switchboard', 31],
+    ['Q-2034', 'Priya Naidu', 'Randwick', '2× ceiling fans + 3 GPOs', 940, 'paid', 'SMS', '4 days ago', 'electrical', 36],
+    ['Q-2033', 'Colin Reedy', 'Kingsford', 'Blocked drain — kitchen', 420, 'declined', 'SMS', '5 days ago', 'plumbing', 33],
+  ];
+  STAT = {
+    awaiting: ['Awaiting you', 'var(--warning-bright)', true], viewed: ['Viewed', 'var(--text-sec)', false],
+    sent: ['Sent', 'var(--success-bright)', false], sitevisit: ['Site visit', 'var(--text-dim)', false],
+    paid: ['Deposit paid', 'var(--success-bright)', false], declined: ['Declined', 'var(--danger-bright)', false],
+    accepted: ['Accepted', 'var(--success-bright)', false], expired: ['Expired', 'var(--text-dim)', false],
+  };
+  CAT = {
+    solar: { good: 'Entry 5kW — standard panels, string inverter, basic install.', better: '6.6kW system · 16× 410W panels · 5kW hybrid inverter · full install & grid connection.', best: '10kW premium · microinverters · battery-ready · 10-year monitoring.', rows: [['Solar panels — supply (16× 410W)', 0.42], ['Hybrid inverter + mounting', 0.24], ['Install & electrical works', 0.22], ['Grid connection & compliance', 0]], msgs: [['c', 'G’day, after a price on solar for a 4-bedroom place in Chandler.'], ['q', 'No worries. Single or double storey, and roughly how much is your power bill?'], ['c', 'Single storey, tile roof. Bills are about $600 a quarter.'], ['q', 'Beauty. Drafting Good/Better/Best now — a 6.6kW will suit that bill. Jeph will confirm and send.']] },
+    roof: { good: 'Restore & recoat the existing roof — clean, repair, membrane.', better: 'Full Colorbond reroof · remove existing · new sarking, ridge & flashing.', best: 'Full reroof + new gutters, downpipes & ceiling insulation.', rows: [['Remove & dispose existing roof', 0.18], ['Colorbond sheeting — supply', 0.4], ['Battens, sarking & flashing', 0.22], ['Install labour & certify', 0]], msgs: [['c', 'Need a price on a full reroof, the old tiles are leaking.'], ['q', 'How many squares roughly, and is it single or double storey?'], ['c', 'Double storey, about 220 square metres. Chandler 4155.'], ['q', 'Got it. Drafting a Colorbond reroof now — Jeph will review access and send it through.']] },
+    hotwater: { good: 'Like-for-like electric swap — supply & install.', better: 'Supply & install 250L electric · remove old unit · new tempering valve.', best: 'Upgrade to heat-pump · rebate handled · 6-year warranty.', rows: [['Hot water unit — 250L electric', 0.55], ['Install & connect', 0.3], ['Tempering valve & compliance', 0]], msgs: [['c', 'Hot water’s gone, leaking from the bottom. Coogee.'], ['q', 'Sounds like the tank’s done. Electric or gas, and how many in the house?'], ['c', 'Electric, family of four.'], ['q', 'A 250L will suit. Drafting it now — Jeph will confirm a same-day swap.']] },
+    electrical: { good: 'Like-for-like — existing wiring, standard fittings.', better: 'Supply & install · 2 ceiling fans + 3 new GPOs · tidy & test.', best: 'Premium fittings · smart switches · individual circuits.', rows: [['Ceiling fan — supply & install', 0.42], ['Power point / GPO (new)', 0.3], ['Make good, test & certify', 0]], msgs: [['c', 'After 2 ceiling fans in the bedrooms and a few power points.'], ['q', 'How many GPOs, and are the fan points already wired?'], ['c', '3 points. Fan wiring is in, just need them hung.'], ['q', 'Easy. Quote’s drafted — Jeph will send it through shortly.']] },
+    plumbing: { good: 'Clear the blockage — single access point.', better: 'Locate & clear blockage · CCTV inspection · written report.', best: 'Clear + reline the affected section · 25-year warranty.', rows: [['Locate & clear blockage', 0.55], ['CCTV drain inspection', 0.25], ['Report & make good', 0]], msgs: [['c', 'Kitchen sink’s backing up, think the drain’s blocked.'], ['q', 'How long’s it been, and is it just the kitchen or other drains too?'], ['c', 'Just the kitchen, started yesterday.'], ['q', 'Right. Drafting a locate-and-clear now — Jeph will confirm a time.']] },
+    other: { good: '', better: '', best: '', rows: [], msgs: [['c', 'Hi, after a quote please.'], ['q', 'Happy to help — what’s the job and the address?'], ['c', 'I’ll send details through shortly.'], ['q', 'No worries, ask away whenever you’re ready.']] },
+    switchboard: { good: '', better: '', best: '', rows: [], msgs: [['c', 'Reckon the switchboard needs upgrading — lights flicker when the kettle’s on.'], ['q', 'Sounds like it. Ceramic fuses or circuit breakers at the moment?'], ['c', 'Old ceramic fuses, no safety switch.'], ['q', 'Right, that’s a priority. Jeph will book a $99 site visit to quote the upgrade safely.']] },
+  };
+
+  detailFor(q) {
+    if (q.value == null) {
+      const sv = q.status === 'sitevisit';
+      return { hasTiers: false, needTitle: sv ? 'Site visit booked' : 'Needs a couple of details', needMsg: sv ? 'QuoteMax booked a $99 site visit — it will price this once you’ve seen the job. The deposit covers your callout.' : 'QuoteMax needs a little more before it can price this one. Open the chat to ask, or draft it manually.', transcript: this.buildTranscript(q.cat) };
+    }
+    const v = q.value;
+    const good = Math.round((v * 0.8) / 10) * 10, best = Math.round((v * 1.32) / 10) * 10;
+    const cat = this.CAT[q.cat] || this.CAT.other;
+    const dep = (n) => this.money(Math.round(n * 0.3));
+    const tiers = [
+      { tier: 'Good', price: good, what: cat.good, rec: false },
+      { tier: 'Better', price: v, what: cat.better, rec: true },
+      { tier: 'Best', price: best, what: cat.best, rec: false },
+    ].map((t) => ({ tier: t.tier, priceText: this.money(t.price), depositText: dep(t.price), what: t.what, recommended: t.rec, borderColor: t.rec ? 'var(--accent)' : 'var(--ink-line)', mt: t.rec ? 14 : 0 }));
+    let acc = 0; const li = [];
+    cat.rows.forEach((r, i) => { const amt = i === cat.rows.length - 1 ? v - acc : Math.round((v * r[1]) / 10) * 10; acc += amt; li.push({ d: r[0], qr: '1 × ' + this.money(amt), amountText: this.money(amt), amount: amt }); });
+    return { hasTiers: true, tiers, lineItems: li, totalText: this.money(v), transcript: this.buildTranscript(q.cat) };
+  }
+  buildTranscript(cat) {
+    const c = this.CAT[cat] || this.CAT.other;
+    return c.msgs.map((m) => { const inbound = m[0] === 'c'; return { showSender: !inbound, senderLabel: 'QuoteMax', text: m[1], rowJustify: inbound ? 'flex-start' : 'flex-end', bubbleStyle: { maxWidth: '86%', border: '1px solid ' + (inbound ? 'var(--ink-line)' : 'color-mix(in srgb, var(--accent) 35%, transparent)'), background: inbound ? 'var(--ink-deep)' : 'color-mix(in srgb, var(--accent) 10%, transparent)', color: inbound ? 'var(--text-sec)' : 'var(--text-pri)', padding: '10px 13px', fontSize: '13.5px', lineHeight: 1.45 } }; });
+  }
+  selectQuote(id) { this.setState({ selQuote: id }); }
+  approveSend() { const s = Object.assign({}, this.state.sent); s[this.state.selQuote] = true; this.setState({ sent: s }); }
+
+  quoteRows() {
+    const sel = this.state.selQuote;
+    return this.QUOTES.map((a) => {
+      const q = { id: a[0], name: a[1], suburb: a[2], job: a[3], value: a[4], status: a[5], channel: a[6], when: a[7] };
+      const st = this.STAT[q.status]; const active = sel === q.id;
+      return {
+        id: q.id, name: q.name, ref: q.id, job: q.job, meta: q.suburb + ' · ' + q.when, channel: q.channel,
+        valueText: q.value != null ? this.money(q.value) : '—', valueColor: q.value != null ? 'var(--text-pri)' : 'var(--text-dim)',
+        sl: st[0], sc: st[1], scBorder: 'color-mix(in srgb, ' + st[1] + ' 58%, transparent)', dotAnim: st[2] ? 'qm-pulse-soft 2.4s ease-in-out infinite' : 'none',
+        active, barBg: active ? 'var(--accent)' : 'transparent',
+        rowStyle: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, width: '100%', textAlign: 'left', cursor: 'pointer', border: 0, borderBottom: '1px solid var(--ink-line)', background: active ? 'var(--ink)' : 'transparent', padding: '14px 18px', position: 'relative', transition: 'background-color .15s ease' },
+        onSelect: () => this.selectQuote(q.id),
+      };
+    });
+  }
+  detailData() {
+    const a = this.QUOTES.find((x) => x[0] === this.state.selQuote) || this.QUOTES[0];
+    const q = { id: a[0], name: a[1], suburb: a[2], job: a[3], value: a[4], status: a[5], channel: a[6], when: a[7], cat: a[8], secs: a[9] };
+    const st = this.STAT[q.status];
+    const d = this.detailFor(q);
+    const out = Object.assign({ name: q.name, ref: q.id, job: q.job, suburb: q.suburb, secs: q.secs, channel: q.channel, statusLabel: st[0], statusColor: st[1], statusBorder: 'color-mix(in srgb, ' + st[1] + ' 58%, transparent)', statusPulse: st[2] ? 'qm-pulse-soft 2.4s ease-in-out infinite' : 'none', sent: !!this.state.sent[q.id], sentName: String(q.name).split(' ')[0], approveSend: () => this.approveSend() }, d);
+    out.noTiers = !out.hasTiers;
+    out.notSent = !out.sent;
+    const editing = this.state.editQuote && out.hasTiers;
+    out.editing = editing;
+    out.notEditing = !editing;
+    out.editLabel = editing ? 'Done' : 'Edit';
+    out.toggleEdit = () => this.setState((s) => ({ editQuote: !s.editQuote }));
+    out.openProfile = () => this.setState({ profile: q.name });
+    out.timeline = this.timelineFor(q);
+    if (out.lineItems) {
+      let tot = 0;
+      out.lineItems = out.lineItems.map((li, i) => {
+        const key = q.id + ':' + i;
+        const ov = this.state.lineEdits[key];
+        const amt = ov != null && ov !== '' ? (Number(String(ov).replace(/[^0-9.]/g, '')) || 0) : li.amount;
+        tot += amt;
+        return Object.assign({}, li, {
+          amountText: this.money(amt),
+          editVal: ov != null ? String(ov) : String(li.amount),
+          onAmount: (e) => { const le = Object.assign({}, this.state.lineEdits); le[key] = e.target.value; this.setState({ lineEdits: le }); },
+        });
+      });
+      out.totalText = this.money(tot);
+    }
+    return out;
+  }
+  CHATS = [
+    ['jon', 'Jon', 'Unclassified · Chandler', '2:54 pm', 'other'],
+    ['sam', 'Sam', 'Hot water · Coogee', '3:02 pm', 'hotwater'],
+    ['priya', 'Priya Naidu', 'Electrical · Randwick', 'Mon', 'electrical'],
+    ['marco', 'Marco Felipe', 'Switchboard · Maroubra', 'Tue', 'switchboard'],
+    ['colin', 'Colin Reedy', 'Plumbing · Kingsford', 'Wed', 'plumbing'],
+  ];
+  selectChat(id) { this.setState({ selChat: id }); }
+  chatList() {
+    const sel = this.state.selChat;
+    return this.CHATS.map((a) => {
+      const id = a[0], who = a[1], meta = a[2], when = a[3], cat = a[4];
+      const msgs = (this.CAT[cat] || this.CAT.other).msgs; const last = msgs[msgs.length - 1];
+      const preview = (last[0] === 'q' ? 'QuoteMax: ' : '') + last[1];
+      const active = sel === id;
+      return {
+        id, who, meta, when, initial: who[0], preview, active, onSelect: () => this.selectChat(id),
+        rowStyle: { display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer', border: 0, borderLeft: '2px solid ' + (active ? 'var(--accent)' : 'transparent'), borderBottom: '1px solid var(--ink-line)', background: active ? 'var(--ink)' : 'transparent', padding: '15px 16px', transition: 'background-color .15s ease' },
+        avatarStyle: { display: 'inline-grid', placeItems: 'center', width: '34px', height: '34px', flexShrink: 0, background: active ? 'var(--accent)' : 'var(--ink)', color: active ? 'var(--accent-ink)' : 'var(--text-pri)', border: '1px solid ' + (active ? 'transparent' : 'var(--ink-line)'), fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '13px' },
+      };
+    });
+  }
+  chatThread() {
+    const a = this.CHATS.find((x) => x[0] === this.state.selChat) || this.CHATS[0];
+    const extra = (this.state.chatSent[a[0]] || []).map((t) => ({ showSender: true, senderLabel: 'You', text: t, rowJustify: 'flex-end', bubbleStyle: { maxWidth: '86%', border: '1px solid color-mix(in srgb, var(--accent) 35%, transparent)', background: 'color-mix(in srgb, var(--accent) 10%, transparent)', color: 'var(--text-pri)', padding: '10px 13px', fontSize: '13.5px', lineHeight: 1.45 } }));
+    return { who: a[1], label: a[1] + ' · SMS intake', msgs: this.buildTranscript(a[4]).concat(extra) };
+  }
+  sendChat() {
+    const id = this.state.selChat, txt = (this.state.chatDrafts[id] || '').trim();
+    if (!txt) return;
+    const cs = Object.assign({}, this.state.chatSent); cs[id] = (cs[id] || []).concat(txt);
+    const d = Object.assign({}, this.state.chatDrafts); d[id] = '';
+    this.setState({ chatSent: cs, chatDrafts: d });
+  }
+
+  componentDidMount() {
+    if (!(window.lucide && window.lucide.icons)) {
+      this._t = setInterval(() => {
+        if (window.lucide && window.lucide.icons) { clearInterval(this._t); this._t = null; this.forceUpdate(); }
+      }, 60);
+      setTimeout(() => { if (this._t) { clearInterval(this._t); this._t = null; } }, 5000);
+    }
+    let saved = null;
+    try { saved = localStorage.getItem('qm-theme'); } catch (e) {}
+    if (saved === 'light' || saved === 'dark') this.setState({ theme: saved });
+    this._applyTheme(saved || this.resolvedTheme());
+    this._key = (e) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); this.setState((s) => ({ palette: !s.palette, query: '' })); }
+      else if (e.key === 'Escape') this.setState({ palette: false, notifOpen: false, profile: '' });
+    };
+    document.addEventListener('keydown', this._key);
+  }
+  componentWillUnmount() { if (this._t) clearInterval(this._t); clearTimeout(this._c); if (this._key) document.removeEventListener('keydown', this._key); }
+
+  pascal(n) { return String(n).split(/[-_]/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(''); }
+  camel(k) { return k.indexOf('-') === -1 ? k : k.replace(/-([a-z])/g, (_, c) => c.toUpperCase()); }
+  icon(name, opts) {
+    opts = opts || {};
+    const size = opts.size || 18, color = opts.color || 'currentColor', sw = opts.sw || 1.75;
+    const lib = (window.lucide && window.lucide.icons) || {};
+    const node = lib[this.pascal(name)] || lib[name];
+    const base = { display: 'inline-flex', flexShrink: 0, verticalAlign: 'middle' };
+    if (!node) return React.createElement('span', { 'aria-hidden': true, style: Object.assign({ width: size, height: size }, base) });
+    const kids = node.map((c, i) => { const a = c[1] || {}; const o = { key: i }; for (const k in a) o[this.camel(k)] = a[k]; return React.createElement(c[0], o); });
+    return React.createElement('svg', { xmlns: 'http://www.w3.org/2000/svg', width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: color, strokeWidth: sw, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true, style: base }, kids);
+  }
+
+  go(id, label) { this.setState({ view: id, stubLabel: label || '' }); }
+  copyNumber() {
+    try { navigator.clipboard.writeText('+61 468 048 422'); } catch (e) {}
+    this.setState({ copied: true });
+    clearTimeout(this._c); this._c = setTimeout(() => this.setState({ copied: false }), 1600);
+  }
+
+  toggleCollapse() { this.setState((s) => ({ collapsed: !s.collapsed })); }
+  resolvedTheme() { return this.state.theme || (this.props.theme === 'light' ? 'light' : 'dark'); }
+  _applyTheme(t) {
+    try {
+      const r = document.documentElement;
+      r.setAttribute('data-theme', t);
+      r.classList.toggle('qm-light', t === 'light');
+      r.classList.toggle('qm-dark', t === 'dark');
+    } catch (e) {}
+  }
+  toggleTheme() {
+    const t = this.resolvedTheme() === 'light' ? 'dark' : 'light';
+    this._applyTheme(t);
+    try { localStorage.setItem('qm-theme', t); } catch (e) {}
+    this.setState({ theme: t });
+  }
+  openQuote(id) { this.setState({ selQuote: id, view: 'quotes', stubLabel: '' }); }
+
+  topPill() {
+    const v = this.state.view;
+    const items = [['overview', 'Overview', 'layout-dashboard'], ['quotes', 'Quotes', 'file-text'], ['chats', 'Chats', 'message-square']];
+    return items.map((it) => {
+      const id = it[0], active = v === id;
+      return {
+        id, label: it[1], onSelect: () => this.go(id),
+        iconEl: this.icon(it[2], { size: 14, color: active ? 'var(--accent-ink)' : 'var(--text-sec)', sw: 2 }),
+        btnStyle: { display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 15px', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-sans)', fontWeight: active ? 700 : 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', background: active ? 'var(--accent)' : 'transparent', color: active ? 'var(--accent-ink)' : 'var(--text-sec)', transition: 'background-color .15s ease, color .15s ease' },
+      };
+    });
+  }
+
+  navGroups() {
+    const v = this.state.view, collapsed = this.state.collapsed;
+    const NAV = [
+      { title: 'Daily', items: [
+        ['overview', 'Overview', 'layout-dashboard'], ['quotes', 'Quotes', 'file-text', 20],
+        ['chats', 'Chats', 'message-square'], ['followups', 'Follow-ups', 'phone-call'], ['calendar', 'Calendar', 'calendar-days'],
+      ] },
+      { title: 'Trades', items: [
+        ['roof', 'Roof', 'home'], ['paint', 'Paint', 'paintbrush'], ['commpaint', 'Comm. Paint', 'building-2'],
+        ['ac', 'AC', 'air-vent'], ['solar', 'Solar', 'sun'], ['estimator', 'Estimator', 'scan-line'],
+      ] },
+      { title: 'Price book', items: [
+        ['pricing', 'Pricing', 'dollar-sign'], ['services', 'Services', 'wrench'], ['catalogue', 'Catalogue', 'package'],
+        ['estimating', 'Estimating', 'calculator'], ['recipes', 'Recipes', 'clipboard-list'],
+      ] },
+      { title: 'Business', items: [
+        ['marketing', 'Marketing', 'megaphone'], ['flyer', 'Flyer', 'layout-template'], ['files', 'Files', 'folder-open'],
+        ['history', 'History', 'history'], ['account', 'Account', 'user'], ['payouts', 'Payouts', 'banknote'],
+        ['billing', 'Billing', 'credit-card'], ['admin', 'Admin', 'shield'],
+      ] },
+    ];
+    return NAV.map((g) => ({
+      title: g.title, showHeader: !collapsed,
+      items: g.items.map((it) => {
+        const id = it[0], label = it[1], icn = it[2], count = it[3] || 0;
+        const active = v === id;
+        const btnStyle = {
+          display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 11, justifyContent: collapsed ? 'center' : 'flex-start',
+          width: '100%', textAlign: 'left', cursor: 'pointer',
+          border: '1px solid ' + (active ? 'color-mix(in srgb, var(--accent) 32%, var(--ink-line))' : 'transparent'),
+          background: active ? 'var(--ink-card)' : 'transparent', color: active ? 'var(--text-pri)' : 'var(--text-sec)',
+          padding: collapsed ? '10px 0' : '9px 11px', fontFamily: 'var(--font-sans)', fontSize: '13.5px', fontWeight: active ? 700 : 500,
+          position: 'relative', transition: 'background-color .15s ease, color .15s ease',
+        };
+        return { id, label, count, active, showLabel: !collapsed, showBadge: !collapsed && !!count, iconEl: this.icon(icn, { color: active ? 'var(--accent)' : 'var(--text-dim)' }), btnStyle, barBg: active ? 'var(--accent)' : 'transparent', onSelect: () => this.go(id, label) };
+      }),
+    }));
+  }
+
+  overviewTable() {
+    return this.QUOTES.slice(0, 6).map((a) => {
+      const q = { id: a[0], name: a[1], suburb: a[2], job: a[3], value: a[4], status: a[5], channel: a[6], when: a[7] };
+      const st = this.STAT[q.status];
+      return {
+        id: q.id, name: q.name, job: q.job, channel: q.channel, when: q.when, suburb: q.suburb,
+        valueText: q.value != null ? this.money(q.value) : '—',
+        valueColor: q.value != null ? 'var(--text-pri)' : 'var(--text-dim)',
+        sl: st[0], sc: st[1], scBorder: 'color-mix(in srgb, ' + st[1] + ' 58%, transparent)',
+        dotAnim: st[2] ? 'qm-pulse-soft 2.4s ease-in-out infinite' : 'none',
+        onSelect: () => this.openQuote(q.id),
+      };
+    });
+  }
+  miniChats() {
+    return this.CHATS.slice(0, 3).map((a) => {
+      const cat = a[4]; const msgs = (this.CAT[cat] || this.CAT.other).msgs; const last = msgs[msgs.length - 1];
+      return { who: a[1], initial: a[1][0], when: a[3], meta: a[2], preview: (last[0] === 'q' ? 'QuoteMax: ' : '') + last[1], onSelect: () => this.go('chats') };
+    });
+  }
+
+  TRADES = {
+    roof: {
+      eyebrow: 'Trades · Roofing', title: 'Roof Estimator',
+      blurb: 'Your roofing price book. QuoteMax drafts every reroof and restoration quote from these rates.',
+      stats: [['Rate cards', '24', 'Live', false], ['Avg reroof', '$18,400', 'Last 6 jobs', true], ['Win rate', '38%', 'Quoted → won', false], ['Updated', '2 days', 'ago', false]],
+      cards: [
+        ['Colorbond sheeting — supply & lay', 'Supply', 'per m²', 68], ['Remove & dispose existing tiles', 'Labour', 'per m²', 22],
+        ['Sarking + timber battens', 'Supply', 'per m²', 18], ['Ridge capping — supply & point', 'Supply', 'per lm', 34],
+        ['Box gutter — Colorbond', 'Supply', 'per lm', 95], ['Downpipe — 100mm', 'Supply', 'per each', 48],
+        ['Whirlybird vent', 'Supply', 'per each', 180], ['Roof restoration — clean & recoat', 'Service', 'per m²', 42],
+      ],
+      recipes: [['Full Colorbond reroof', 'Strip, sark, sheet & flash', 'From $14,800'], ['Restore & recoat', 'Clean, repair, membrane', 'From $5,400'], ['Reroof + new gutters', 'Reroof with gutter & downpipe', 'From $19,600']],
+    },
+    paint: {
+      eyebrow: 'Trades · Painting', title: 'Painting Estimator',
+      blurb: 'Your residential painting price book. Rates flow straight into drafted interior and exterior quotes.',
+      stats: [['Rate cards', '19', 'Live', false], ['Avg repaint', '$6,200', 'Last 8 jobs', true], ['Win rate', '41%', 'Quoted → won', false], ['Updated', 'Today', '', false]],
+      cards: [
+        ['Interior wall — 2 coats', 'Interior', 'per m²', 18], ['Ceiling — flat white', 'Interior', 'per m²', 16],
+        ['Doors — prep & paint (both sides)', 'Detail', 'per each', 85], ['Skirting & architraves', 'Detail', 'per lm', 12],
+        ['Exterior weatherboard — 2 coats', 'Exterior', 'per m²', 32], ['Rendered wall — 2 coats', 'Exterior', 'per m²', 28],
+        ['Feature wall — premium', 'Interior', 'per m²', 26],
+      ],
+      recipes: [['Full interior repaint', 'Walls, ceilings, doors, trim', 'From $5,800'], ['Exterior refresh', 'Weatherboard & trim, 2 coats', 'From $7,400'], ['One-room quick', 'Walls & ceiling, one room', 'From $920']],
+    },
+    commpaint: {
+      eyebrow: 'Trades · Commercial Paint', title: 'Commercial Paint Estimator',
+      blurb: 'Large-format and commercial coatings. Built for warehouses, car parks and strata contracts.',
+      stats: [['Rate cards', '16', 'Live', false], ['Avg contract', '$42,000', 'Last 4 jobs', true], ['Active jobs', '3', 'In progress', false], ['Coverage', '88%', 'of enquiries', false]],
+      cards: [
+        ['Warehouse wall — airless spray', 'Spray', 'per m²', 14], ['Epoxy floor coating — 2 pack', 'Floor', 'per m²', 46],
+        ['Line marking — 100mm', 'Marking', 'per lm', 9], ['Anti-graffiti clear coat', 'Coating', 'per m²', 22],
+        ['EWP / scissor lift — day rate', 'Access', 'per day', 420], ['After-hours loading', 'Loading', 'surcharge', '+25%'],
+        ['Height access over 3m', 'Access', 'per m²', 8],
+      ],
+      recipes: [['Warehouse fit-out', 'Walls, floor, line marking', 'From $38,500'], ['Car park refresh', 'Line marking & bollards', 'From $12,900'], ['Office strata repaint', 'Common areas, after hours', 'From $26,400']],
+    },
+    ac: {
+      eyebrow: 'Trades · Air Conditioning', title: 'AC Estimator',
+      blurb: 'Split, multi-head and ducted air conditioning. Supply and install rates for every configuration.',
+      stats: [['Rate cards', '14', 'Live', false], ['Avg install', '$3,850', 'Last 5 jobs', true], ['Win rate', '46%', 'Quoted → won', false], ['Updated', 'Yesterday', '', false]],
+      cards: [
+        ['Split 2.5kW — supply & install', 'Split', 'per each', 1450], ['Split 5.0kW+ — supply & install', 'Split', 'per each', 2350],
+        ['Multi-head outdoor unit', 'Multi', 'per each', 2100], ['Ducted — per outlet', 'Ducted', 'per outlet', 780],
+        ['Back-to-back install', 'Labour', 'per each', 650], ['Additional pipe run', 'Materials', 'per lm', 85],
+        ['Electrical connect & isolator', 'Electrical', 'per each', 280],
+      ],
+      recipes: [['Single split — back to back', '2.5kW, simple install', 'From $1,980'], ['Multi-head 3 room', 'One outdoor, three heads', 'From $6,400'], ['Ducted 6 outlet', 'Ceiling ducted, 10kW', 'From $11,800']],
+    },
+    solar: {
+      eyebrow: 'Trades · Solar', title: 'Solar Estimator',
+      blurb: 'Panels, inverters and battery storage. QuoteMax sizes the system and drafts the rebate-adjusted price.',
+      stats: [['Rate cards', '12', 'Live', false], ['Avg system', '$9,600', 'Last 6 jobs', true], ['Win rate', '33%', 'Quoted → won', false], ['Coverage', '95%', 'of enquiries', false]],
+      cards: [
+        ['Panel 440W — supply', 'Panels', 'per panel', 185], ['Hybrid inverter 5kW', 'Inverter', 'per each', 1850],
+        ['Mounting rail & clamps', 'Mounting', 'per panel', 48], ['Battery 10kWh', 'Storage', 'per each', 7200],
+        ['Grid connection & compliance', 'Compliance', 'per each', 450], ['Meter upgrade', 'Electrical', 'per each', 320],
+        ['Panel optimiser', 'Panels', 'per panel', 95],
+      ],
+      recipes: [['6.6kW starter', '16 panels, 5kW inverter', 'From $6,900'], ['10kW + battery', '24 panels, hybrid, 10kWh', 'From $18,400'], ['13kW premium', '30 panels, optimisers', 'From $14,200']],
+    },
+    estimator: {
+      eyebrow: 'Trades · Estimator', title: 'Estimator',
+      blurb: 'The cross-trade estimator. Pull rate cards from any price book to draft a job in seconds.',
+      stats: [['Price books', '6', 'All trades', false], ['Rate cards', '97', 'Across trades', true], ['Drafts today', '4', 'This morning', false], ['Avg draft', '< 1 min', 'Per quote', true]],
+      cards: [
+        ['Colorbond sheeting — supply & lay', 'Roof', 'per m²', 68], ['Interior wall — 2 coats', 'Paint', 'per m²', 18],
+        ['Split 5.0kW+ — supply & install', 'AC', 'per each', 2350], ['Panel 440W — supply', 'Solar', 'per panel', 185],
+        ['Epoxy floor coating — 2 pack', 'Comm.', 'per m²', 46], ['Switchboard upgrade', 'Electrical', 'per each', 1650],
+        ['Hot water — 250L electric', 'Plumbing', 'per each', 1180],
+      ],
+      recipes: [['Roof + gutters', 'Cross-trade reroof bundle', 'From $19,600'], ['Solar + battery', 'Solar with storage', 'From $18,400'], ['Full repaint', 'Interior & exterior', 'From $12,200']],
+    },
+  };
+  selectRecipe(key) { this.setState((s) => ({ selRecipe: s.selRecipe === key ? '' : key })); }
+  tradeData() {
+    const id = this.state.view, t = this.TRADES[id];
+    if (!t) return null;
+    return {
+      eyebrow: t.eyebrow, title: t.title, blurb: t.blurb, cardCount: t.cards.length,
+      metrics: t.stats.map((s) => ({ k: s[0], v: s[1], sub: s[2], vColor: s[3] ? 'var(--accent)' : 'var(--text-pri)' })),
+      cards: t.cards.map((c) => ({ item: c[0], cat: c[1], unit: c[2], rateText: typeof c[3] === 'number' ? this.money(c[3]) : c[3] })),
+      recipes: t.recipes.map((r, i) => {
+        const key = id + ':' + i, sel = this.state.selRecipe === key;
+        return { name: r[0], desc: r[1], fromText: r[2], selected: sel, onSelect: () => this.selectRecipe(key),
+          cardStyle: { display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer', background: sel ? 'var(--ink)' : 'transparent', border: '1px solid ' + (sel ? 'color-mix(in srgb, var(--accent) 58%, transparent)' : 'var(--ink-line)'), padding: '13px 14px', transition: 'background-color .15s ease, border-color .15s ease' } };
+      }),
+    };
+  }
+
+  PSTAT = {
+    due: ['Due', 'var(--warning-bright)', true], sent: ['Awaiting', 'var(--text-sec)', false], booked: ['Site visit', 'var(--text-dim)', false],
+    viewed: ['Viewed', 'var(--text-sec)', false], overdue: ['Overdue', 'var(--danger-bright)', false], won: ['Won', 'var(--success-bright)', false],
+    draft: ['Drafted', 'var(--text-dim)', false], declined: ['Declined', 'var(--danger-bright)', false], pending: ['Pending', 'var(--warning-bright)', false],
+    instock: ['In stock', 'var(--success-bright)', false], low: ['Low', 'var(--warning-bright)', false], order: ['On order', 'var(--text-dim)', false], paid: ['Paid', 'var(--success-bright)', false],
+  };
+  PAGES = {
+    followups: { kind: 'list', eyebrow: 'Daily · Follow-ups', title: 'Follow-ups', blurb: 'Quotes waiting on the customer. Chase the warm ones before they go cold.', primary: 'Chase all due', ghost: 'Filter',
+      metrics: [['Open', '7', 'Waiting', false], ['Due today', '2', 'Chase now', true], ['Overdue', '1', '5 days+', false], ['Won by chasing', '3', 'This month', true]],
+      cols: ['Customer', 'Job', 'When', 'Value', 'Status'],
+      rows: [['Jeph Daligdig', 'Chandler', 'Solar install 6.6kW', 'Sent 2 days ago', 20922, 'due'], ['New lead', 'Chandler 4155', 'Full reroof', 'Sent 3 days ago', 73522, 'due'], ['Sam', 'Coogee', 'Hot water replace', 'Sent 4 days ago', 3180, 'sent'], ['Marco Felipe', 'Maroubra', 'Switchboard upgrade', 'Site visit booked', null, 'booked'], ['Priya Naidu', 'Randwick', 'Ceiling fans + GPOs', 'Viewed yesterday', 940, 'viewed'], ['Colin Reedy', 'Kingsford', 'Blocked drain', 'No reply · 5 days', 420, 'overdue'], ['Dan Foley', 'Bondi', 'Switchboard + safety', 'Sent 6 days ago', 5600, 'sent']] },
+    history: { kind: 'list', eyebrow: 'Daily · History', title: 'History', blurb: 'Every quote, message and payment. The full activity trail for your account.', primary: 'Export CSV', ghost: 'This month',
+      metrics: [['Quotes all time', '20', '', false], ['This month', '20', 'Jun', false], ['Total quoted', '$178,411', 'Drafted', true], ['Avg draft', '< 1 min', 'Per quote', true]],
+      cols: ['Customer', 'Activity', 'When', 'Value', 'Type'],
+      rows: [['Jon', 'Chandler', 'Quote drafted', '4 min ago', null, 'draft'], ['New lead', 'Chandler', 'Quote drafted', '3 hr ago', 73522, 'draft'], ['Sam', 'Coogee', 'Quote sent', '2 days ago', 3180, 'sent'], ['Marco', 'Maroubra', 'Site visit booked', '3 days ago', 99, 'booked'], ['Priya', 'Randwick', 'Deposit paid', '4 days ago', 282, 'won'], ['Colin', 'Kingsford', 'Quote declined', '5 days ago', 420, 'declined']] },
+    payouts: { kind: 'list', eyebrow: 'Business · Payouts', title: 'Payouts', blurb: 'Deposits paid by customers, cleared to your bank. Runs on Stripe.', primary: 'Payout settings', ghost: 'Statements',
+      metrics: [['This month', '$282', '1 deposit', true], ['Pending', '$282', 'Clearing', false], ['Paid out', '$0', 'All time', false], ['Next payout', 'Friday', 'Weekly auto', false]],
+      cols: ['Customer', 'Job', 'Date', 'Amount', 'Status'],
+      rows: [['Priya Naidu', 'Randwick', 'Ceiling fans · 30% deposit', '4 days ago', 282, 'pending']],
+      note: ['Payouts run weekly', 'Deposits clear to your bank every Friday via Stripe. Your first payout lands once the deposit clears. QuoteMax takes no cut of your jobs.'] },
+    catalogue: { kind: 'list', eyebrow: 'Price book · Catalogue', title: 'Catalogue', blurb: 'Your materials and products with live supplier pricing. Feeds every quote.', primary: 'Add product', ghost: 'Import CSV',
+      metrics: [['Products', '128', 'Active', false], ['Categories', '9', '', false], ['Suppliers', '6', 'Linked', false], ['Updated', 'Today', '', false]],
+      cols: ['Product', 'Category', 'Supplier', 'Price', 'Stock'],
+      rows: [['Clipsal Iconic switch 1G', '3041VXA', 'Electrical', 'Clipsal', 18, 'instock'], ['LED downlight 10W dimmable', 'DL9010', 'Electrical', 'Brilliant', 24, 'instock'], ['Colorbond sheet · Monument', 'CB-MON', 'Roofing', 'BlueScope', 68, 'order'], ['Split system 2.5kW', 'FTXV25', 'HVAC', 'Daikin', 1180, 'instock'], ['Solar panel 440W mono', 'JKM440', 'Solar', 'Jinko', 185, 'instock'], ['Copper pipe 15mm · 3m', 'CU15', 'Plumbing', 'Kembla', 42, 'low'], ['Weathershield 10L', 'WS10W', 'Paint', 'Dulux', 145, 'instock']] },
+    account: { kind: 'settings', eyebrow: 'Business · Account', title: 'Account', blurb: 'Your business details, contact and preferences. Shown on every quote you send.', primary: 'Save changes', ghost: '',
+      sections: [ { num: '01', title: 'Business details', rows: [{ l: 'Business name', v: 'Hartley Electrical' }, { l: 'ABN', v: '54 302 118 774' }, { l: 'Licence', v: 'NSW EC 41128', badge: ['Verified', 'var(--success-bright)'] }, { l: 'Trades', v: 'Electrical · Plumbing · Roofing' }, { l: 'Service area', v: 'Sydney · NSW' }] },
+        { num: '02', title: 'Contact', rows: [{ l: 'Owner', v: 'Jeph Daligdig' }, { l: 'Mobile', v: '+61 468 048 422' }, { l: 'Email', v: 'jeph@hartleyelectrical.com.au' }] },
+        { num: '03', title: 'Preferences', rows: [{ l: 'Australian English', d: 'Spelling and currency', toggle: true }, { l: 'Include GST in quotes', d: '10% GST shown inc', toggle: true }, { l: 'SMS notifications', d: 'When a quote is drafted', toggle: true }] } ] },
+    pricing: { kind: 'settings', eyebrow: 'Price book · Pricing', title: 'Pricing', blurb: 'Your margins, tiers and tax rules. QuoteMax applies these to every draft.', primary: 'Save changes', ghost: '',
+      sections: [ { num: '01', title: 'Margins & markup', rows: [{ l: 'Default labour rate', v: '$95 / hr' }, { l: 'Materials markup', v: '20%' }, { l: 'Callout fee', v: '$99' }, { l: 'Minimum job', v: '$180' }] },
+        { num: '02', title: 'Good / Better / Best', rows: [{ l: 'Good tier', d: 'Entry option', v: '−20%' }, { l: 'Best tier', d: 'Premium option', v: '+32%' }, { l: 'Deposit to lock in', v: '30%' }] },
+        { num: '03', title: 'Tax', rows: [{ l: 'GST registered', d: '10% GST applied to quotes', toggle: true }, { l: 'Show ex-GST subtotal', toggle: false }] } ] },
+    services: { kind: 'settings', eyebrow: 'Price book · Services', title: 'Services', blurb: 'Which jobs QuoteMax auto-quotes. Turn a service off and it books a site visit instead.', primary: 'Save changes', ghost: '',
+      sections: [ { num: '01', title: 'Electrical', rows: [{ l: 'Power points & GPOs', toggle: true }, { l: 'Lighting & downlights', toggle: true }, { l: 'Switchboard upgrades', toggle: true }, { l: 'Ceiling fans', toggle: true }, { l: 'EV charger install', toggle: false }] },
+        { num: '02', title: 'Plumbing', rows: [{ l: 'Hot water systems', toggle: true }, { l: 'Blocked drains', toggle: true }, { l: 'Tap & toilet repairs', toggle: true }, { l: 'Gas fitting', toggle: false }] },
+        { num: '03', title: 'Roofing & Solar', rows: [{ l: 'Reroof & restoration', toggle: true }, { l: 'Gutter & downpipe', toggle: true }, { l: 'Solar install', toggle: true }, { l: 'Battery storage', toggle: false }] } ] },
+    estimating: { kind: 'settings', eyebrow: 'Price book · Estimating', title: 'Estimating', blurb: 'How QuoteMax drafts. Control auto-drafting, tiers and the assumptions it states.', primary: 'Save changes', ghost: '',
+      sections: [ { num: '01', title: 'Drafting', rows: [{ l: 'Auto-draft on message', d: 'Draft as soon as a customer texts', toggle: true }, { l: 'Ask clarifying questions', d: 'QuoteMax asks before drafting', toggle: true }, { l: 'Site visit threshold', v: '$5,000' }] },
+        { num: '02', title: 'Good / Better / Best', rows: [{ l: 'Always show three tiers', toggle: true }, { l: 'Recommend the middle tier', toggle: true }] },
+        { num: '03', title: 'Assumptions', rows: [{ l: 'State assumptions in quote', toggle: true }, { l: 'Flag risks for your review', toggle: true }] } ] },
+    billing: { kind: 'settings', eyebrow: 'Business · Billing', title: 'Billing', blurb: 'Your QuoteMax subscription, payment method and invoices.', primary: 'Manage plan', ghost: '',
+      sections: [ { num: '01', title: 'Plan', rows: [{ l: 'Current plan', v: 'QuoteMax Pro', badge: ['Active', 'var(--success-bright)'] }, { l: 'Price', v: '$49 / mo inc GST' }, { l: 'Renews', v: '13 Jun 2026' }, { l: 'Quotes this month', v: '20 · unlimited' }] },
+        { num: '02', title: 'Payment method', rows: [{ l: 'Card', v: 'Visa ···· 4242' }, { l: 'Billing email', v: 'jeph@hartleyelectrical.com.au' }] },
+        { num: '03', title: 'Invoices', rows: [{ l: 'May 2026', v: '$49', btn: 'PDF' }, { l: 'April 2026', v: '$49', btn: 'PDF' }, { l: 'March 2026', v: '$49', btn: 'PDF' }] } ] },
+    admin: { kind: 'settings', eyebrow: 'Business · Admin', title: 'Admin command centre', blurb: 'Access, integrations and account controls.', primary: '', ghost: '',
+      sections: [ { num: '01', title: 'Access', rows: [{ l: 'Role', v: 'Owner', badge: ['Admin', 'var(--accent)'] }, { l: 'Team members', v: '1' }, { l: 'Pilot cohort', v: 'Electrical · NSW' }] },
+        { num: '02', title: 'Integrations', rows: [{ l: 'Twilio', d: 'SMS & voice line', badge: ['Connected', 'var(--success-bright)'] }, { l: 'Stripe', d: 'Deposits & payouts', badge: ['Connected', 'var(--success-bright)'] }, { l: 'Google Business', d: 'Reviews & profile', badge: ['Not linked', 'var(--text-dim)'] }] },
+        { num: '03', title: 'Data', rows: [{ l: 'Export all data', d: 'Download quotes, chats and files', btn: 'Export' }, { l: 'Pause account', d: 'Stop drafting new quotes', btn: 'Pause' }] } ] },
+    files: { kind: 'files', eyebrow: 'Business · Files', title: 'Files', blurb: 'Quotes, site photos, certificates and invoices. Everything for the job in one place.', primary: 'Upload', ghost: 'New folder',
+      metrics: [['Files', '77', 'Stored', false], ['Storage', '1.4 GB', 'of 10 GB', false], ['Folders', '4', '', false], ['Shared', '2', 'Links', false]],
+      items: [['folder', 'Quotes', '20 files'], ['folder', 'Site photos', '48 photos'], ['folder', 'Certificates', '6 files'], ['folder', 'Invoices', '3 files'], ['pdf', 'Reroof-Chandler.pdf', '1.2 MB · 3 hr ago'], ['image', 'Switchboard-before.jpg', '2.4 MB · 1 day ago'], ['pdf', 'EC-Licence.pdf', '340 KB · 13 May'], ['image', 'Roof-drone-Chandler.jpg', '5.1 MB · 3 days ago']] },
+    flyer: { kind: 'flyer', eyebrow: 'Business · Flyer', title: 'Flyer & QR', blurb: 'A printable flyer with your QuoteMax number and QR code. Hand it out, stick it on the ute.', primary: 'Download PDF', ghost: 'Print' },
+    marketing: { kind: 'marketing', eyebrow: 'Business · Marketing', title: 'Marketing', blurb: 'Grow the pipeline. Request reviews, share your profile and bring in referrals.', primary: 'Share profile', ghost: '',
+      metrics: [['Profile views', '214', 'This month', false], ['Review score', '4.9', '32 reviews', true], ['Leads', '6', 'From marketing', true], ['Referrals', '2', 'Pending', false]],
+      tools: [['star', 'Request a review', 'Send a review link when a job is done', 'Send request'], ['share-2', 'Share your profile', 'Your public QuoteMax page', 'Copy link'], ['users', 'Referral program', '$50 credit for every tradie you refer', 'Invite a mate'], ['building-2', 'Google Business', 'Sync your reviews and profile', 'Connect'], ['layout-template', 'Flyer & QR', 'Printable flyer with your number', 'Open flyer', 'flyer'], ['message-square', 'SMS keyword', 'Customers text a keyword to your number', 'Set up']] },
+    calendar: { kind: 'calendar', eyebrow: 'Daily · Calendar', title: 'Calendar', blurb: 'Site visits, booked jobs and callbacks. Your week at a glance.', primary: 'New booking', ghost: 'Sync',
+      metrics: [['This week', '5', 'Bookings', false], ['Site visits', '2', '$99 each', true], ['Jobs on', '2', 'Booked', false], ['Callbacks', '1', 'Follow-up', false]],
+      week: [['Mon', '30', false, true], ['Tue', '1', true, true], ['Wed', '2', false, true], ['Thu', '3', false, false], ['Fri', '4', false, true], ['Sat', '5', false, false], ['Sun', '6', false, false]],
+      agenda: [['Today · Tue 1 Jul', [['9:00 am', 'Site visit — switchboard', 'Marco Felipe · Maroubra', 'visit'], ['11:30 am', 'Reroof inspection', 'New lead · Chandler', 'job'], ['2:00 pm', 'Callback — solar quote', 'Jeph D · Chandler', 'call']]], ['Tomorrow · Wed 2 Jul', [['8:00 am', 'Hot water swap', 'Sam · Coogee', 'job'], ['1:00 pm', 'Quote follow-up', 'Priya · Randwick', 'call']]], ['Fri 4 Jul', [['10:00 am', 'Reroof — day one', 'New lead · Chandler', 'job']]]] },
+    recipes: { kind: 'recipes', eyebrow: 'Price book · Recipes', title: 'Recipes', blurb: 'Bundled jobs across every trade. One tap drafts a full quote from your price book.', primary: 'New recipe', ghost: 'Filter',
+      metrics: [['Recipes', '9', 'Bundled', false], ['Trades', '5', 'Covered', false], ['Avg draft', '< 1 min', 'Per quote', true], ['Most used', 'Reroof', 'This month', false]],
+      grid: [['Full Colorbond reroof', 'Roof', 'Strip, sark, sheet & flash', 'From $14,800', '8 items'], ['Restore & recoat', 'Roof', 'Clean, repair, membrane', 'From $5,400', '4 items'], ['Full interior repaint', 'Paint', 'Walls, ceilings, doors, trim', 'From $5,800', '6 items'], ['Exterior refresh', 'Paint', 'Weatherboard & trim, 2 coats', 'From $7,400', '5 items'], ['Warehouse fit-out', 'Comm.', 'Walls, floor, line marking', 'From $38,500', '7 items'], ['Single split — B2B', 'AC', '2.5kW simple install', 'From $1,980', '5 items'], ['Multi-head 3 room', 'AC', 'One outdoor, three heads', 'From $6,400', '6 items'], ['6.6kW starter', 'Solar', '16 panels, 5kW inverter', 'From $6,900', '5 items'], ['10kW + battery', 'Solar', '24 panels, hybrid, 10kWh', 'From $18,400', '7 items']] },
+  };
+  isOn(k, def) { return (k in this.state.toggles) ? this.state.toggles[k] : def; }
+  toggleSetting(k, def) { this.setState((s) => { const cur = (k in s.toggles) ? s.toggles[k] : def; const t = Object.assign({}, s.toggles); t[k] = !cur; return { toggles: t }; }); }
+  metricCells(list) { return (list || []).map((s) => ({ k: s[0], v: s[1], sub: s[2], vColor: s[3] ? 'var(--accent)' : 'var(--text-pri)' })); }
+
+  pageData() {
+    const id = this.state.view, p = this.PAGES[id];
+    if (!p) return null;
+    const out = { kind: p.kind, eyebrow: p.eyebrow, title: p.title, blurb: p.blurb, primaryAction: p.primary || '', ghostAction: p.ghost || '', hasPrimary: !!p.primary, hasGhost: !!p.ghost, hasMetrics: !!p.metrics, metrics: this.metricCells(p.metrics), headMax: p.kind === 'settings' ? '920px' : 'none',
+      isList: p.kind === 'list', isSettings: p.kind === 'settings', isFiles: p.kind === 'files', isFlyer: p.kind === 'flyer', isMarketing: p.kind === 'marketing', isCalendar: p.kind === 'calendar', isRecipes: p.kind === 'recipes' };
+    if (p.kind === 'list') {
+      out.cols = p.cols;
+      const acts = { nudged: ['Nudged', 'var(--success-bright)'], snoozed: ['Snoozed', 'var(--text-dim)'], won: ['Won', 'var(--success-bright)'] };
+      out.rows = p.rows.map((r, i) => {
+        let st = this.PSTAT[r[5]] || ['', 'var(--text-dim)', false];
+        const done = id === 'followups' ? this.state.fuDone[i] : null;
+        if (done) st = [acts[done][0], acts[done][1], false];
+        const row = { name: r[0], sub: r[1], job: r[2], when: r[3], valueText: r[4] != null ? this.money(r[4]) : '—', valueColor: r[4] != null ? 'var(--text-pri)' : 'var(--text-dim)', sl: st[0], sc: st[1], scBorder: 'color-mix(in srgb, ' + st[1] + ' 58%, transparent)', dotAnim: st[2] && !done ? 'qm-pulse-soft 2.4s ease-in-out infinite' : 'none', hasActions: id === 'followups' && !done, actions: [] };
+        if (row.hasActions) row.actions = [['Nudge', 'nudged'], ['Snooze', 'snoozed'], ['Won', 'won']].map((a) => ({ label: a[0], onGo: () => this.fuAct(i, a[1]) }));
+        return row;
+      });
+      out.hasNote = !!p.note; out.note = p.note ? { title: p.note[0], body: p.note[1] } : {};
+    } else if (p.kind === 'settings') {
+      out.sections = p.sections.map((sec, si) => ({ num: sec.num, title: sec.title, rows: sec.rows.map((r, ri) => {
+        const key = id + ':' + si + ':' + ri, on = ('toggle' in r) ? this.isOn(key, r.toggle) : false;
+        return { label: r.l, desc: r.d || '', hasDesc: !!r.d, valueText: r.v || '', hasValue: ('v' in r), badgeText: r.badge ? r.badge[0] : '', hasBadge: !!r.badge,
+          badgeStyle: r.badge ? { display: 'inline-flex', alignItems: 'center', border: '1px solid color-mix(in srgb, ' + r.badge[1] + ' 58%, transparent)', color: r.badge[1], fontFamily: 'var(--font-mono)', fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', padding: '3px 8px' } : {},
+          buttonText: r.btn || '', hasButton: !!r.btn, hasToggle: ('toggle' in r), toggleOn: on, onToggle: () => this.toggleSetting(key, r.toggle),
+          toggleBoxStyle: { display: 'grid', placeItems: 'center', width: '22px', height: '22px', flexShrink: 0, border: '1.5px solid ' + (on ? 'var(--accent)' : 'var(--ink-line)'), background: on ? 'var(--accent)' : 'transparent', cursor: 'pointer', transition: 'background-color .15s ease, border-color .15s ease' } };
+      }) }));
+    } else if (p.kind === 'files') {
+      const raw = this.state.uploads.map((u) => ['image', u, 'Just now · you']).concat(p.items);
+      out.items = raw.map((f) => ({ type: f[0], name: f[1], meta: f[2], iconEl: this.icon(f[0] === 'folder' ? 'folder' : f[0] === 'pdf' ? 'file-text' : 'image', { size: 22, color: f[0] === 'folder' ? 'var(--accent)' : 'var(--text-sec)' }) }));
+      out.onUpload = () => this.addUpload();
+      out.onPrimary = () => this.addUpload();
+    } else if (p.kind === 'marketing') {
+      out.tools = p.tools.map((t) => ({ title: t[1], desc: t[2], action: t[3], iconEl: this.icon(t[0], { size: 20, color: 'var(--accent)' }), onSelect: t[4] ? () => this.go(t[4]) : () => {} }));
+    } else if (p.kind === 'calendar') {
+      out.week = p.week.map((d) => ({ wd: d[0], d: d[1], today: d[2], showDot: d[3],
+        cellStyle: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', padding: '12px 4px', background: d[2] ? 'var(--ink-card)' : 'transparent', border: '1px solid ' + (d[2] ? 'color-mix(in srgb, var(--accent) 40%, var(--ink-line))' : 'var(--ink-line)') },
+        wdColor: d[2] ? 'var(--accent)' : 'var(--text-dim)', dColor: d[2] ? 'var(--text-pri)' : 'var(--text-sec)' }));
+      out.agenda = p.agenda.map((g) => ({ day: g[0], items: g[1].map((it) => { const c = it[3] === 'visit' ? 'var(--accent)' : it[3] === 'job' ? 'var(--success-bright)' : 'var(--text-sec)';
+        return { time: it[0], title: it[1], who: it[2], barColor: c }; }) }));
+    } else if (p.kind === 'recipes') {
+      out.grid = p.grid.map((r) => ({ name: r[0], trade: r[1], desc: r[2], fromText: r[3], steps: r[4] }));
+    }
+    return out;
+  }
+
+  CHATQ = { jon: 'Q-2041', sam: 'Q-2036', priya: 'Q-2034', marco: 'Q-2035', colin: 'Q-2033' };
+  NOTIFS = [
+    { title: 'QuoteMax drafted a quote for Jon', time: '4 min ago · needs details', go: 'Q-2041' },
+    { title: 'New lead viewed the reroof quote', time: '3 hr ago · $73,522', go: 'Q-2039' },
+    { title: 'Sam accepted the hot water quote', time: '2 days ago · $3,180', go: 'Q-2036' },
+    { title: 'Priya Naidu paid a $282 deposit', time: '4 days ago · ceiling fans', go: 'Q-2034' },
+  ];
+  timelineFor(q) {
+    const st = q.status;
+    const ev = [];
+    const push = (label, time, state) => ev.push({ label, time, state });
+    push('Drafted by QuoteMax', q.when + ' · ' + q.secs + 's draft', 'done');
+    if (st === 'awaiting') push('Waiting on details', 'QuoteMax asked the customer', 'warn');
+    else if (st === 'sitevisit') push('Site visit booked', '$99 · covers your callout', 'done');
+    else {
+      push('Sent to customer', 'You approved', 'done');
+      push('Viewed by customer', 'On their phone', ['viewed', 'accepted', 'paid', 'declined', 'expired'].includes(st) ? 'done' : 'todo');
+      if (st === 'declined') push('Declined', 'Customer passed', 'bad');
+      else if (st === 'expired') push('Expired', '30 days · no reply', 'dim');
+      else {
+        push('Accepted', ['accepted', 'paid'].includes(st) ? 'Tier locked in' : 'Awaiting decision', ['accepted', 'paid'].includes(st) ? 'done' : 'todo');
+        push('Deposit paid', st === 'paid' ? '30% cleared' : '30% to lock it in', st === 'paid' ? 'done' : 'todo');
+      }
+    }
+    return ev.map((e, i) => ({ label: e.label, time: e.time, line: i < ev.length - 1,
+      dotBg: e.state === 'done' ? 'var(--success-bright)' : e.state === 'warn' ? 'var(--warning-bright)' : e.state === 'bad' ? 'var(--danger-bright)' : 'transparent',
+      dotBorder: e.state === 'todo' || e.state === 'dim' ? 'var(--ink-line)' : 'transparent',
+      labelColor: e.state === 'todo' || e.state === 'dim' ? 'var(--text-dim)' : 'var(--text-pri)' }));
+  }
+  fuAct(i, kind) { this.setState((s) => { const f = Object.assign({}, s.fuDone); f[i] = kind; return { fuDone: f }; }); }
+  addUpload() { this.setState((s) => ({ uploads: ['Site-photo-' + (s.uploads.length + 21) + '.jpg'].concat(s.uploads) })); }
+  paletteGroups() {
+    const q = this.state.query.trim().toLowerCase();
+    const hit = (s) => !q || s.toLowerCase().indexOf(q) !== -1;
+    const close = () => this.setState({ palette: false });
+    const quotes = this.QUOTES.filter((a) => hit(a[1] + ' ' + a[3] + ' ' + a[2])).slice(0, 5)
+      .map((a) => ({ title: a[1], meta: a[3] + ' · ' + a[2], value: a[4] != null ? this.money(a[4]) : a[0], onGo: () => { close(); this.openQuote(a[0]); } }));
+    const chats = this.CHATS.filter((c) => hit(c[1] + ' ' + c[2])).slice(0, 4)
+      .map((c) => ({ title: c[1], meta: c[2], value: c[3], onGo: () => { close(); this.setState({ selChat: c[0] }); this.go('chats'); } }));
+    const NAVI = [['overview', 'Overview'], ['quotes', 'Quotes'], ['chats', 'Chats'], ['followups', 'Follow-ups'], ['calendar', 'Calendar'], ['files', 'Files'], ['marketing', 'Marketing'], ['flyer', 'Flyer & QR'], ['recipes', 'Recipes'], ['pricing', 'Pricing'], ['services', 'Services'], ['catalogue', 'Catalogue'], ['billing', 'Billing'], ['account', 'Account'], ['payouts', 'Payouts'], ['history', 'History'], ['admin', 'Admin'], ['roof', 'Roof Estimator'], ['paint', 'Painting Estimator'], ['ac', 'AC Estimator'], ['solar', 'Solar Estimator']];
+    const pages = NAVI.filter((p) => hit(p[1])).slice(0, 6).map((p) => ({ title: p[1], meta: 'Go to page', value: '→', onGo: () => { close(); this.go(p[0], p[1]); } }));
+    return [{ title: 'Quotes', items: quotes, has: quotes.length > 0 }, { title: 'Chats', items: chats, has: chats.length > 0 }, { title: 'Pages', items: pages, has: pages.length > 0 }];
+  }
+  profileData() {
+    const name = this.state.profile;
+    if (!name) return { name: '', initial: '', meta: '', phone: '', email: '', quotes: [], chats: [], hasQuotes: false, hasChats: false };
+    const qs = this.QUOTES.filter((a) => a[1] === name);
+    const first = qs[0] || [];
+    const fn = name.split(' ')[0];
+    const chats = this.CHATS.filter((c) => c[1] === name || c[1] === fn);
+    return {
+      name, initial: name[0], meta: (first[2] || 'Sydney') + ' · Customer',
+      phone: '0400 ' + String(300 + name.length * 53).slice(-3) + ' ' + String(400 + name.charCodeAt(0)).slice(-3),
+      email: fn.toLowerCase() + '@gmail.com',
+      hasQuotes: qs.length > 0, hasChats: chats.length > 0,
+      quotes: qs.map((a) => { const st = this.STAT[a[5]]; return { ref: a[0], job: a[3], valueText: a[4] != null ? this.money(a[4]) : '—', sl: st[0], sc: st[1], onGo: () => { this.setState({ profile: '' }); this.openQuote(a[0]); } }; }),
+      chats: chats.map((c) => ({ who: c[1], meta: c[2], when: c[3], onGo: () => { this.setState({ profile: '', selChat: c[0] }); this.go('chats'); } })),
+    };
+  }
+
+  renderVals() {
+    const Q = (name, channel, meta, value, sl, c, pulse) => ({ name, channel, meta, value, sl, sc: c, scBorder: 'color-mix(in srgb, ' + c + ' 58%, transparent)', dotAnim: pulse ? 'qm-pulse-soft 2.4s ease-in-out infinite' : 'none' });
+    const C = (who, channel, meta, day, time, initial, preview) => ({ who, channel, meta, day, time, initial, preview });
+    return {
+      themeClass: this.resolvedTheme() === 'light' ? 'qm-light' : '',
+      themeIconEl: this.icon(this.resolvedTheme() === 'light' ? 'moon' : 'sun', { size: 16, color: 'var(--text-sec)' }),
+      toggleTheme: () => this.toggleTheme(),
+      grainDisplay: this.props.showGrain === false ? 'none' : '',
+      copyLabel: this.state.copied ? 'Copied' : 'Copy',
+      copyNumber: () => this.copyNumber(),
+      navGroups: this.navGroups(),
+      showLabels: !this.state.collapsed,
+      sidebarWidth: this.state.collapsed ? '68px' : '248px',
+      collapseJustify: this.state.collapsed ? 'center' : 'flex-start',
+      collapsePanelIcon: this.icon(this.state.collapsed ? 'panel-left-open' : 'panel-left-close', { size: 17, color: 'currentColor' }),
+      collapseAria: this.state.collapsed ? 'Expand panel' : 'Collapse panel',
+      toggleCollapse: () => this.toggleCollapse(),
+      recentRows: this.overviewTable(),
+      miniChats: this.miniChats(),
+      openAttn: () => this.openQuote('Q-2041'),
+      metrics: [
+        ['Quoted', '$178,411', '20 drafts', 'var(--accent)'],
+        ['Converted', '$0', 'None yet', 'var(--text-dim)'],
+        ['Conversion', '0%', '0 of 20', 'var(--text-dim)'],
+        ['Avg quote', '$8,921', 'Per draft', 'var(--accent)'],
+        ['In review', '1', 'Awaiting send', 'var(--warning-bright)'],
+        ['Services', '49/65', 'Auto-quote', 'var(--accent)'],
+      ].map((m) => ({ k: m[0], v: m[1], sub: m[2], vColor: m[3], cellStyle: { background: 'var(--ink-card)', padding: '18px 22px' } })),
+      latestQuotes: [
+        Q('Jon', 'SMS', 'Other · Chandler', '—', 'Awaiting you', 'var(--warning-bright)', true),
+        Q('Jeph Daligdig', 'SMS', 'Solar install · Chandler', '$20,922', 'Viewed', 'var(--text-sec)', false),
+        Q('New lead', 'Voice', 'Full reroof · Chandler 4155', '$73,522', 'Viewed', 'var(--text-sec)', false),
+        Q('Jeph Daligdig', 'SMS', 'Solar install · Chandler', '$8,237', 'Viewed', 'var(--text-sec)', false),
+        Q('Jeph Daligdig', 'SMS', 'Solar install · Chandler', '$17,626', 'Viewed', 'var(--text-sec)', false),
+      ],
+      latestChats: [
+        C('Jon', 'SMS', 'Unclassified · Chandler', '26 Jun', '2:54 pm', 'J', 'Yeah all new, roof access is easy.'),
+        C('Jon', 'SMS', 'Unclassified · Chandler', '26 Jun', '1:54 pm', 'J', 'Hey mate, after a price on some downlights.'),
+        C('Sam', 'SMS', 'Hot water · Coogee', '4 Jun', '3:02 pm', 'S', 'The old one is leaking from the bottom.'),
+        C('Sam', 'SMS', 'Toilet replace · Coogee', '4 Jun', '9:00 am', 'S', 'Can you do a back-to-wall one?'),
+        C('Sam', 'SMS', 'Out of scope · Coogee', '4 Jun', '8:56 am', 'S', 'Do you blokes do air con as well?'),
+      ],
+      isOverview: this.state.view === 'overview',
+      isQuotes: this.state.view === 'quotes',
+      isChats: this.state.view === 'chats',
+      isTrade: !!this.TRADES[this.state.view],
+      trade: this.tradeData() || { metrics: [], cards: [], recipes: [] },
+      isPage: !!this.PAGES[this.state.view],
+      page: this.pageData() || { metrics: [], rows: [], cols: [], sections: [], items: [], tools: [], week: [], agenda: [], grid: [], note: {} },
+      isStub: !['overview', 'quotes', 'chats'].includes(this.state.view) && !this.TRADES[this.state.view] && !this.PAGES[this.state.view],
+      stubLabel: this.state.stubLabel,
+      goQuotes: () => this.go('quotes'),
+      goChats: () => this.go('chats'),
+      quotesCount: this.QUOTES.length,
+      quoteRows: this.quoteRows(),
+      detail: this.detailData(),
+      chatList: this.chatList(),
+      chatThread: this.chatThread(),
+      chatInput: this.state.chatDrafts[this.state.selChat] || '',
+      onChatInput: (e) => { const d = Object.assign({}, this.state.chatDrafts); d[this.state.selChat] = e.target.value; this.setState({ chatDrafts: d }); },
+      onChatKey: (e) => { if (e.key === 'Enter') this.sendChat(); },
+      sendChat: () => this.sendChat(),
+      draftFromChat: () => { const id = this.CHATQ[this.state.selChat]; if (id) this.openQuote(id); },
+      paletteOpen: this.state.palette,
+      openPalette: () => this.setState({ palette: true, query: '' }),
+      closePalette: () => this.setState({ palette: false }),
+      stopClick: (e) => e.stopPropagation(),
+      query: this.state.query,
+      onQuery: (e) => this.setState({ query: e.target.value }),
+      paletteGroups: this.paletteGroups(),
+      notifOpen: this.state.notifOpen,
+      toggleNotif: () => this.setState((s) => ({ notifOpen: !s.notifOpen, notifRead: true })),
+      closeNotif: () => this.setState({ notifOpen: false }),
+      notifDot: !this.state.notifRead,
+      notifs: this.NOTIFS.map((n) => ({ title: n.title, time: n.time, onGo: () => { this.setState({ notifOpen: false }); this.openQuote(n.go); } })),
+      profileOpen: !!this.state.profile,
+      closeProfile: () => this.setState({ profile: '' }),
+      profile: this.profileData(),
+    };
+  }
+}
+</script>
+</body>
+</html>

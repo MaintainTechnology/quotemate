@@ -1,0 +1,14 @@
+/* ════════════════════════════════════════════════════════════════════
+   QuoteMax Design System — global entry point.
+   Consumers link THIS one file. It is an @import manifest only — every
+   token, font and base utility is reachable from here. Do not add rules
+   directly to this file.
+   ════════════════════════════════════════════════════════════════════ */
+
+@import "tokens/fonts.css";        /* webfonts — must load first          */
+@import "tokens/colors.css";       /* palette + theme resolution          */
+@import "tokens/typography.css";   /* families, scale, tracking, leading  */
+@import "tokens/spacing.css";      /* 4px grid, containers, hit targets   */
+@import "tokens/effects.css";      /* radii, borders, lift, grain, easing */
+@import "tokens/motion.css";       /* keyframes + reduced-motion          */
+@import "base.css";                /* element resets + signature motifs   */
