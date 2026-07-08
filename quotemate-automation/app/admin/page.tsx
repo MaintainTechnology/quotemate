@@ -17,7 +17,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 type WhoAmI = {
   ok: boolean
@@ -148,9 +148,11 @@ export default function AdminHomePage() {
   )
 
   useEffect(() => {
-    const sb = getBrowserSupabase()
-    sb.auth.getSession().then(async ({ data: { session } }) => {
-      const t = session?.access_token
+    void (async () => {
+      // Dual-auth: mint a fresh Clerk (or legacy Supabase) token immediately
+      // before the fetch. Clerk users have no Supabase session, so reading
+      // getSession() directly would yield a null token and a false signed-out.
+      const t = await getAuthToken()
       if (!t) {
         setAuthState('signed-out')
         return
@@ -167,7 +169,7 @@ export default function AdminHomePage() {
       } finally {
         setAuthState('ready')
       }
-    })
+    })()
   }, [])
 
   return (

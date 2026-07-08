@@ -12,7 +12,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 type HealthCheck = {
   key: string
@@ -54,11 +54,7 @@ export default function AdminTenantsPage() {
 
   async function load() {
     setState('loading')
-    const sb = getBrowserSupabase()
-    const {
-      data: { session },
-    } = await sb.auth.getSession()
-    const token = session?.access_token
+    const token = await getAuthToken()
     if (!token) {
       setState('signed-out')
       return

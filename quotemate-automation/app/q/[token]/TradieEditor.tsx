@@ -21,7 +21,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 import QuoteEditChat, { type ProposedTiers } from './QuoteEditChat'
 
 type LineItem = {
@@ -168,9 +168,7 @@ export default function TradieEditor({
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const supabase = getBrowserSupabase()
-      const { data } = await supabase.auth.getSession()
-      const token = data.session?.access_token ?? null
+      const token = await getAuthToken()
       if (!token) {
         // No session at all → can't be a tradie. Render nothing.
         if (!cancelled) setCheck({ owner: false })
@@ -328,10 +326,14 @@ export default function TradieEditor({
       // under a tradie_edit_ungrounded audit flag.
       if (force) payload.force = true
 
+      // Mint a FRESH token immediately before the fetch — accessToken was
+      // captured at mount and a Clerk default session token expires ~60s later,
+      // so a tradie editing for >1min would otherwise 401 on Save (class C).
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch(`/api/quote/${quoteId}/edit`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),

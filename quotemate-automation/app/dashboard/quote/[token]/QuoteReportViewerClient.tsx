@@ -15,7 +15,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import TradieEditor, { type EditorApi } from '@/app/q/[token]/TradieEditor'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 import type { ReportDoc } from '@/lib/quote/report-doc/types'
 import type { ReportStyle } from '@/lib/quote/report-doc/style'
 import type { DocEditorTiers } from './QuoteDocumentEditor'
@@ -87,11 +87,9 @@ export default function QuoteReportViewerClient(props: {
   useEffect(() => {
     if (!docEditorEnabled) return
     let alive = true
-    getBrowserSupabase()
-      .auth.getSession()
-      .then(({ data }) => {
-        if (alive) setToken(data.session?.access_token ?? null)
-      })
+    getAuthToken().then((t) => {
+      if (alive) setToken(t)
+    })
     return () => {
       alive = false
     }

@@ -11,6 +11,7 @@
 // updated rates instantly; saved jobs don't re-price.
 
 import { useCallback, useEffect, useState } from 'react'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 const SCOPES = [
   ['walls', 'Interior walls', 'm²'],
@@ -58,8 +59,9 @@ export function PaintRatesEditor({ accessToken }: Props) {
     setLoading(true)
     setErrMsg(null)
     try {
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch('/api/tenant/painting-rates', {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       })
       const json = (await res.json()) as GetResponse
@@ -118,9 +120,10 @@ export function PaintRatesEditor({ accessToken }: Props) {
           call_out_minimum_ex_gst: blankNull(callOut),
           gst_registered: gstMode === '' ? null : gstMode === 'true',
         }
+        const token = (await getAuthToken()) ?? accessToken
         const res = await fetch('/api/tenant/painting-rates', {
           method: 'PATCH',
-          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         })
         const json = (await res.json()) as

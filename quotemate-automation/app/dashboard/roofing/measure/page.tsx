@@ -13,7 +13,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 import { FeatureGate } from '@/app/dashboard/_components/FeatureGate'
 import type {
   MultiRoofQuote,
@@ -127,9 +127,7 @@ function RoofingMeasurePageInner() {
   const [quoteShareToken, setQuoteShareToken] = useState<string | null>(null)
 
   useEffect(() => {
-    const sb = getBrowserSupabase()
-    sb.auth.getSession().then(({ data: { session } }) => {
-      const t = session?.access_token ?? null
+    getAuthToken().then((t) => {
       setToken(t)
       setAuthState(t ? 'ready' : 'signed-out')
     })
@@ -163,9 +161,10 @@ function RoofingMeasurePageInner() {
       setQuoteShareUrl(null)
       setQuoteShareToken(null)
       try {
+        const freshToken = (await getAuthToken()) ?? token
         const res = await fetch('/api/roofing/measure-all', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          headers: { Authorization: `Bearer ${freshToken}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             address: { address: a, postcode: pc, state: st },
             inputs: { material, pitch, intent, building_year_built: yearBuilt ? Number(yearBuilt) : null },
@@ -224,9 +223,10 @@ function RoofingMeasurePageInner() {
         return
       }
       try {
+        const freshToken = (await getAuthToken()) ?? token
         const res = await fetch('/api/roofing/reverse-geocode', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          headers: { Authorization: `Bearer ${freshToken}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ lng, lat }),
         })
         const json = (await res.json()) as
@@ -292,10 +292,11 @@ function RoofingMeasurePageInner() {
     setQuoteShareToken(null)
     setErrMsg(null)
     try {
+      const freshToken = (await getAuthToken()) ?? token
       const res = await fetch('/api/roofing/save-as-quote', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${freshToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -358,9 +359,10 @@ function RoofingMeasurePageInner() {
     setSaveState('saving')
     setErrMsg(null)
     try {
+      const freshToken = (await getAuthToken()) ?? token
       const res = await fetch('/api/roofing/save', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${freshToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           address: { address, postcode, state },
           provider: resp.provider,

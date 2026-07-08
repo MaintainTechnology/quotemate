@@ -18,7 +18,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { BrandMark } from '@/app/_components/BrandMark'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 import {
   buildPatchPayload,
   commonBrandsForTrades,
@@ -99,8 +99,7 @@ export default function PricingWizardPage() {
   const [brands, setBrands] = useState<BrandPreferences>({})
 
   const token = useCallback(async () => {
-    const { data } = await getBrowserSupabase().auth.getSession()
-    return data.session?.access_token ?? null
+    return await getAuthToken()
   }, [])
 
   // Load current state on mount.

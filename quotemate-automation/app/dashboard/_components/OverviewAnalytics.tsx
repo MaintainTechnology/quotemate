@@ -16,6 +16,7 @@ import { useEffect, useState } from 'react'
 import type { TradieAnalytics } from '@/lib/dashboard/tradie-analytics'
 import { type Period, periodLabel, periodRange } from '@/lib/dashboard/period'
 import { SplitBars, TrendBars } from '@/app/_components/MetricCharts'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 type NavTab = 'quotes' | 'chats'
 type LoadState = 'loading' | 'ready' | 'error'
@@ -57,27 +58,32 @@ export function OverviewAnalytics({
       qs.set('from', range.start.toISOString())
       qs.set('to', range.end.toISOString())
     }
-    fetch(`/api/tenant/analytics?${qs.toString()}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      cache: 'no-store',
-    })
-      .then((r) => r.json())
-      .then((j) => {
-        if (cancelled) return
-        if (j?.ok) {
-          setData(j.analytics as TradieAnalytics)
-          setState('ready')
-        } else {
-          setErr(j?.error ?? 'Failed to load')
-          setState('error')
-        }
+    void (async () => {
+      // Mint a FRESH token per request — the Clerk session token captured at
+      // mount expires ~60s later, so reusing the prop 401s.
+      const token = (await getAuthToken()) ?? accessToken
+      fetch(`/api/tenant/analytics?${qs.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
       })
-      .catch(() => {
-        if (!cancelled) {
-          setErr('Network error')
-          setState('error')
-        }
-      })
+        .then((r) => r.json())
+        .then((j) => {
+          if (cancelled) return
+          if (j?.ok) {
+            setData(j.analytics as TradieAnalytics)
+            setState('ready')
+          } else {
+            setErr(j?.error ?? 'Failed to load')
+            setState('error')
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setErr('Network error')
+            setState('error')
+          }
+        })
+    })()
     return () => {
       cancelled = true
     }

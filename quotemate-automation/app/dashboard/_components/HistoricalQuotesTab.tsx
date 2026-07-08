@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Upload, Loader2, TrendingUp, Check, X, SlidersHorizontal } from 'lucide-react'
 import { PaginationControls, usePagination } from './Pagination'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 // Canonical job types — kept local so this client component doesn't import the
 // server intake schema (mirrors the dashboard's own local job-type lists).
@@ -77,8 +78,15 @@ function jobLabel(jt: string | null): string {
 }
 
 export function HistoricalQuotesTab({ accessToken }: { accessToken: string | null }) {
+  // Mint a FRESH token per request — a Clerk session token expires ~60s after
+  // the dashboard captured `accessToken` at mount, so reusing the prop 401s.
+  // getAuthToken() refreshes (Clerk) or reuses the legacy Supabase session;
+  // fall back to the prop only if it yields nothing. Callers await it.
   const authHeaders = useCallback(
-    (): Record<string, string> => (accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    async (): Promise<Record<string, string>> => {
+      const token = (await getAuthToken()) ?? accessToken
+      return token ? { Authorization: `Bearer ${token}` } : {}
+    },
     [accessToken],
   )
 
@@ -92,7 +100,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
     if (!accessToken) return
     try {
       const res = await fetch('/api/tenant/historical-quotes/analytics', {
-        headers: authHeaders(),
+        headers: await authHeaders(),
         cache: 'no-store',
       })
       if (!res.ok) return
@@ -110,7 +118,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
       if (filterJobType) params.set('job_type', filterJobType)
       if (search.trim()) params.set('q', search.trim())
       const res = await fetch(`/api/tenant/historical-quotes?${params.toString()}`, {
-        headers: authHeaders(),
+        headers: await authHeaders(),
         cache: 'no-store',
       })
       if (!res.ok) return
@@ -150,7 +158,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
       pollRef.current = window.setInterval(async () => {
         try {
           const res = await fetch(`/api/tenant/historical-quotes/batches/${batchId}`, {
-            headers: authHeaders(),
+            headers: await authHeaders(),
             cache: 'no-store',
           })
           if (!res.ok) return
@@ -186,7 +194,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
       form.append('file', file)
       const res = await fetch('/api/tenant/historical-quotes/import', {
         method: 'POST',
-        headers: authHeaders(),
+        headers: await authHeaders(),
         body: form,
       })
       const json = (await res.json()) as { batchId?: string; error?: string; detail?: string }
@@ -228,7 +236,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
       if (updates.length === 0) return
       const res = await fetch('/api/tenant/historical-quotes/review', {
         method: 'POST',
-        headers: { ...authHeaders(), 'content-type': 'application/json' },
+        headers: { ...(await authHeaders()), 'content-type': 'application/json' },
         body: JSON.stringify({ updates }),
       })
       if (res.ok) {
@@ -267,7 +275,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
     try {
       const res = await fetch('/api/tenant/historical-quotes/calibration/preview', {
         method: 'POST',
-        headers: authHeaders(),
+        headers: await authHeaders(),
       })
       if (!res.ok) return
       const json = (await res.json()) as { proposals: Proposal[] }
@@ -286,7 +294,7 @@ export function HistoricalQuotesTab({ accessToken }: { accessToken: string | nul
     try {
       const res = await fetch('/api/tenant/historical-quotes/calibration/apply', {
         method: 'POST',
-        headers: { ...authHeaders(), 'content-type': 'application/json' },
+        headers: { ...(await authHeaders()), 'content-type': 'application/json' },
         body: JSON.stringify({ job_types }),
       })
       const json = (await res.json()) as { applied?: number }

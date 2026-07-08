@@ -10,7 +10,7 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 import { CommentsThread } from '../../_components/CommentsThread'
 
 type Tenant = { id: string; businessName: string | null }
@@ -71,9 +71,7 @@ export default function AdminFilesPage() {
   }, [])
 
   useEffect(() => {
-    const sb = getBrowserSupabase()
-    sb.auth.getSession().then(({ data: { session } }) => {
-      const t = session?.access_token
+    void getAuthToken().then((t) => {
       if (!t) {
         setAuthState('signed-out')
         return
@@ -92,8 +90,9 @@ export default function AdminFilesPage() {
       setDocsLoading(true)
       setErr(null)
       try {
+        const authToken = (await getAuthToken()) ?? token
         const res = await fetch(`/api/admin/files?tenantId=${encodeURIComponent(tenantId)}`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${authToken}` },
           cache: 'no-store',
         })
         const json = (await res.json()) as { ok: boolean; documents?: FileDoc[]; error?: string }

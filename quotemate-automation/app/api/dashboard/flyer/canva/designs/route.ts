@@ -8,8 +8,8 @@
 //   edit URL (HTTP 400). Import-back works via the export API, so it isn't needed.
 // Auth: Authorization: Bearer <token>. Tenant-scoped; requires a connection.
 
-import { marketingSupabase as supabase, userFromBearer } from '@/lib/marketing/auth'
-import { tenantBrandForUser } from '@/lib/flyer/tenant'
+import { marketingSupabase as supabase } from '@/lib/marketing/auth'
+import { tenantBrandFromBearer } from '@/lib/flyer/tenant'
 import { CreateCanvaDesignBody, DEFAULT_CANVA_TITLE } from '@/lib/canva/api-logic'
 import { getValidAccessToken } from '@/lib/canva/tokens'
 import { createDesign } from '@/lib/canva/client'
@@ -17,9 +17,9 @@ import { createDesign } from '@/lib/canva/client'
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
-  const user = await userFromBearer(req)
-  if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  const tenant = await tenantBrandForUser(user.id)
+  const auth = await tenantBrandFromBearer(req)
+  if (!auth) return Response.json({ error: 'unauthorized' }, { status: 401 })
+  const tenant = auth.tenant
   if (!tenant) return Response.json({ error: 'no_tenant' }, { status: 404 })
 
   // Body is optional ({} is valid); only an optional title is accepted.
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
       edit_url: design.editUrl,
       view_url: design.viewUrl,
       status: 'editing',
-      created_by: user.id,
+      created_by: auth.userId,
     })
     .select('id')
     .single()

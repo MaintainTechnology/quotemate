@@ -11,7 +11,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 type State =
   | { phase: 'working' }
@@ -25,9 +25,7 @@ export default function StripeConnectRefresh() {
     let cancelled = false
     ;(async () => {
       try {
-        const supabase = getBrowserSupabase()
-        const { data } = await supabase.auth.getSession()
-        const token = data.session?.access_token ?? null
+        const token = await getAuthToken()
         if (!token) {
           if (!cancelled) setState({ phase: 'signin' })
           return

@@ -15,6 +15,7 @@
 
 import { useEffect, useState } from 'react'
 import { ZoomableImage } from '../../_components/ZoomableImage'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 export type GoogleStaticMapProps = {
   /** Bearer access token — the proxy gates on it. */
@@ -59,8 +60,9 @@ export function GoogleStaticMap({
             `${marker.lat},${marker.lng},${marker.color ?? 'orange'}`,
           )
         }
+        const token = (await getAuthToken()) ?? accessToken
         const res = await fetch(`/api/roofing/static-map?${params.toString()}`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: { Authorization: `Bearer ${token}` },
         })
         if (cancelled) return
         if (!res.ok) {

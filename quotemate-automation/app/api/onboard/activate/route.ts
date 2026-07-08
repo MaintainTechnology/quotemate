@@ -93,11 +93,12 @@ export async function POST(req: Request) {
       }
     }
 
-    // A9 — guarantee a sign-in-able tenant for web onboarding. SMS-initiated
-    // onboarding (intent_token present) legitimately has no auth user yet, so
-    // it stays exempt; every other path must resolve an owner_user_id or we
-    // refuse, rather than create a tenant the tradie can never sign into.
-    if (!resolvedOwnerUserId && !form.intent_token) {
+    // A9 — guarantee a sign-in-able tenant for web onboarding. A Clerk signup
+    // is sign-in-able via clerk_user_id (dual-auth resolver); a Supabase signup
+    // via owner_user_id. SMS-initiated onboarding (intent_token present) has no
+    // auth user yet so it stays exempt; every other path must resolve ONE of
+    // these or we refuse, rather than create a tenant no one can sign into.
+    if (!resolvedOwnerUserId && !form.clerk_user_id && !form.intent_token) {
       return Response.json(
         {
           ok: false,
@@ -116,6 +117,9 @@ export async function POST(req: Request) {
       .from('tenants')
       .insert({
         owner_user_id: resolvedOwnerUserId,
+        // Clerk-created signups link by clerk_user_id (owner_user_id is null for
+        // them); the dual-auth resolver reads this. Empty for Supabase signups.
+        clerk_user_id: form.clerk_user_id || null,
         business_name: form.business_name,
         owner_first_name: form.owner_first_name,
         owner_last_name: form.owner_last_name || null,

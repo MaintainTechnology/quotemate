@@ -4,8 +4,7 @@
 //   URL. The client opens it in a popup; Canva redirects to /callback when done.
 // Auth: Authorization: Bearer <token> (so we know which tenant is connecting).
 
-import { userFromBearer } from '@/lib/marketing/auth'
-import { tenantBrandForUser } from '@/lib/flyer/tenant'
+import { tenantBrandFromBearer } from '@/lib/flyer/tenant'
 import { readCanvaConfig, resolveRedirectUri } from '@/lib/canva/config'
 import {
   buildAuthorizeUrl,
@@ -19,9 +18,9 @@ import { createOauthState } from '@/lib/canva/tokens'
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: Request) {
-  const user = await userFromBearer(req)
-  if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  const tenant = await tenantBrandForUser(user.id)
+  const auth = await tenantBrandFromBearer(req)
+  if (!auth) return Response.json({ error: 'unauthorized' }, { status: 401 })
+  const tenant = auth.tenant
   if (!tenant) return Response.json({ error: 'no_tenant' }, { status: 404 })
 
   const cfg = readCanvaConfig()
@@ -35,7 +34,7 @@ export async function GET(req: Request) {
   const state = generateState()
 
   // Persist the exact redirect_uri so /callback exchanges with the same value.
-  await createOauthState({ state, tenantId: tenant.id, codeVerifier, redirectUri, connectedBy: user.id })
+  await createOauthState({ state, tenantId: tenant.id, codeVerifier, redirectUri, connectedBy: auth.userId })
 
   const url = buildAuthorizeUrl({
     clientId: cfg.clientId,

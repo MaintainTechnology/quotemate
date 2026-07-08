@@ -9,7 +9,7 @@
 // accent, numbered 3-step flow (.claude/skills/maintain-design-system).
 
 import { useCallback, useState, type ReactNode } from 'react'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 type StagedRow = {
   row_class: 'NEW' | 'UPDATE'
@@ -340,8 +340,7 @@ export default function AdminLoaderPage() {
   const [tbNewStoreName, setTbNewStoreName] = useState('')
 
   const token = useCallback(async () => {
-    const { data } = await getBrowserSupabase().auth.getSession()
-    return data.session?.access_token ?? null
+    return await getAuthToken()
   }, [])
 
   // ── Trade-book handlers ────────────────────────────────────────────

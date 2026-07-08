@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 import { BrandMark } from '@/app/_components/BrandMark'
 
 type Connection = {
@@ -55,9 +55,8 @@ const GHOST =
   'inline-flex items-center gap-2 border border-ink-line hover:border-accent text-text-pri px-4 py-2.5 text-xs uppercase tracking-[0.12em] transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
 
 async function authHeader(): Promise<Record<string, string>> {
-  const supabase = getBrowserSupabase()
-  const { data } = await supabase.auth.getSession()
-  return { Authorization: `Bearer ${data.session?.access_token ?? ''}`, 'Content-Type': 'application/json' }
+  const token = await getAuthToken()
+  return { Authorization: `Bearer ${token ?? ''}`, 'Content-Type': 'application/json' }
 }
 
 function fmtDate(iso: string | null): string {

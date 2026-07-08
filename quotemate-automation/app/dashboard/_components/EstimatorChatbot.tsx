@@ -9,6 +9,7 @@
 // Bearer token the parent already holds.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 type Citation = { title?: string; page?: number; snippet?: string }
 type ChatMessage = {
@@ -84,11 +85,12 @@ export default function EstimatorChatbot({
       ])
       setLoading(true)
       try {
+        const token = (await getAuthToken()) ?? accessToken
         const res = await fetch('/api/filestore/chat', {
           method: 'POST',
           headers: {
             'content-type': 'application/json',
-            authorization: `Bearer ${accessToken}`,
+            authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({ estimator, sessionId, query: q }),
         })

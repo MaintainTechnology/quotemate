@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CalendarDays, Loader2, Check, ExternalLink } from 'lucide-react'
 import { StatusPill, StatGrid, type Tone } from './quote-ui'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 type CalendarEvent = {
   quoteId: string
@@ -90,8 +91,15 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
   const [loading, setLoading] = useState(true)
   const [confirming, setConfirming] = useState<string | null>(null)
 
+  // Mint a FRESH token per request — a Clerk session token expires ~60s after
+  // the dashboard captured `accessToken` at mount, so reusing the prop 401s.
+  // getAuthToken() refreshes (Clerk) or reuses the legacy Supabase session;
+  // fall back to the prop only if it yields nothing. Callers await it.
   const authHeaders = useCallback(
-    (): Record<string, string> => (accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    async (): Promise<Record<string, string>> => {
+      const token = (await getAuthToken()) ?? accessToken
+      return token ? { Authorization: `Bearer ${token}` } : {}
+    },
     [accessToken],
   )
 
@@ -100,7 +108,7 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/tenant/calendar', { headers: authHeaders(), cache: 'no-store' })
+      const res = await fetch('/api/tenant/calendar', { headers: await authHeaders(), cache: 'no-store' })
       if (!res.ok) {
         setError('Couldn’t load your calendar. Please try again.')
         return
@@ -128,7 +136,7 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
     try {
       const res = await fetch(`/api/tenant/calendar/${quoteId}/confirm`, {
         method: 'POST',
-        headers: authHeaders(),
+        headers: await authHeaders(),
       })
       if (res.ok) {
         setEvents((prev) =>

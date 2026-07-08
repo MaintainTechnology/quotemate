@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from 'react'
 import { TrendingUp } from 'lucide-react'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 type HintData =
   | { count: 0 }
@@ -62,8 +63,11 @@ export function HistoricalHint({
       try {
         const params = new URLSearchParams({ job_type: jobType })
         if (trade) params.set('trade', trade)
+        // Mint a FRESH token per request — the Clerk session token captured at
+        // mount expires ~60s later, so reusing the prop 401s.
+        const token = (await getAuthToken()) ?? accessToken
         const res = await fetch(`/api/tenant/historical-quotes/hint?${params.toString()}`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
         })
         if (!res.ok) return

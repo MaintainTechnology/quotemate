@@ -10,7 +10,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 import { FeatureGate } from '@/app/dashboard/_components/FeatureGate'
 import { AddressAutocomplete } from '../roofing/_components/AddressAutocomplete'
 import { MaterialCheck } from './_components/MaterialCheck'
@@ -84,9 +84,7 @@ function PaintingEstimatePageInner() {
   const [saveErr, setSaveErr] = useState<string | null>(null)
 
   useEffect(() => {
-    const sb = getBrowserSupabase()
-    sb.auth.getSession().then(({ data: { session } }) => {
-      const t = session?.access_token ?? null
+    getAuthToken().then((t) => {
       setToken(t)
       setAuthState(t ? 'ready' : 'signed-out')
     })
@@ -128,9 +126,10 @@ function PaintingEstimatePageInner() {
     setSavedToken(null)
     setSaveErr(null)
     try {
+      const freshToken = (await getAuthToken()) ?? token
       const res = await fetch('/api/painting/estimate', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${freshToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           address: { address, postcode, state: stateCode },
           inputs: {
@@ -172,9 +171,10 @@ function PaintingEstimatePageInner() {
     setSaveState('saving')
     setSaveErr(null)
     try {
+      const freshToken = (await getAuthToken()) ?? token
       const res = await fetch('/api/painting/save', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${freshToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           address: { address, postcode, state: stateCode },
           source: estimate.provider,
@@ -488,12 +488,13 @@ function FrontOfHouse({
     }
     let cancelled = false
     let objUrl: string | null = null
-    const handle = setTimeout(() => {
+    const handle = setTimeout(async () => {
       setStatus('loading')
       setSrc(null)
+      const freshToken = (await getAuthToken()) ?? token
       const params = new URLSearchParams({ address, postcode, state })
       fetch(`/api/painting/street-view?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${freshToken}` },
       })
         .then(async (res) => {
           if (cancelled) return
@@ -610,23 +611,26 @@ function PaintPreviewSection({
     setBeforeState('loading')
     setBeforeSrc(null)
     const params = new URLSearchParams({ address, postcode, state })
-    fetch(`/api/painting/street-view?${params.toString()}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(async (res) => {
-        if (cancelled) return
-        if (!res.ok || !(res.headers.get('content-type') ?? '').startsWith('image')) {
-          setBeforeState('none')
-          return
-        }
-        const blob = await res.blob()
-        objUrl = URL.createObjectURL(blob)
-        setBeforeSrc(objUrl)
-        setBeforeState('ready')
+    void (async () => {
+      const freshToken = (await getAuthToken()) ?? token
+      fetch(`/api/painting/street-view?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${freshToken}` },
       })
-      .catch(() => {
-        if (!cancelled) setBeforeState('none')
-      })
+        .then(async (res) => {
+          if (cancelled) return
+          if (!res.ok || !(res.headers.get('content-type') ?? '').startsWith('image')) {
+            setBeforeState('none')
+            return
+          }
+          const blob = await res.blob()
+          objUrl = URL.createObjectURL(blob)
+          setBeforeSrc(objUrl)
+          setBeforeState('ready')
+        })
+        .catch(() => {
+          if (!cancelled) setBeforeState('none')
+        })
+    })()
     return () => {
       cancelled = true
       if (objUrl) URL.revokeObjectURL(objUrl)
@@ -639,9 +643,10 @@ function PaintPreviewSection({
     setErr(null)
     setAfter(null)
     try {
+      const freshToken = (await getAuthToken()) ?? token
       const res = await fetch('/api/painting/preview', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${freshToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ address, postcode, state, colour, scopes }),
       })
       const json = (await res.json()) as
@@ -669,9 +674,10 @@ function PaintPreviewSection({
     setRefining(true)
     setErr(null)
     try {
+      const freshToken = (await getAuthToken()) ?? token
       const res = await fetch('/api/painting/preview/refine', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${freshToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: after, instruction }),
       })
       const json = (await res.json()) as

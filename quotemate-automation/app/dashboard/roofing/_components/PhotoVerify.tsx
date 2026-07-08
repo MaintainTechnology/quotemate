@@ -1,5 +1,6 @@
 'use client'
 
+import { getAuthToken } from '@/lib/auth/client-token'
 // Roof photo upload + Claude vision verification.
 //
 // Flow:
@@ -100,10 +101,11 @@ export function PhotoVerify({ accessToken, address, onMaterialDetected }: Props)
         if (upErr) throw new Error(`Upload failed: ${upErr.message}`)
 
         setStage('verifying')
+        const token = (await getAuthToken()) ?? accessToken
         const res = await fetch('/api/roofing/verify-photo', {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${accessToken}`,
+            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ photoPath: path, address }),

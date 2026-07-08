@@ -11,6 +11,7 @@
 // proven setup (official Google-tiles helper + baseLayer:false).
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { getAuthToken } from '@/lib/auth/client-token'
 import { loadCesium } from '../../_components/loadCesium'
 
 type Props = {
@@ -62,9 +63,10 @@ export function RoofTilesViewer({ token, address, postcode, state }: Props) {
 
     void (async () => {
       try {
+        const authToken = (await getAuthToken()) ?? token
         const locRes = await fetch('/api/painting/3d-location', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ address, postcode, state }),
         })
         const loc = (await locRes.json()) as ({ ok: true } & Loc) | { ok: false; code?: string; detail?: string }

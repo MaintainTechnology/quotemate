@@ -1,5 +1,6 @@
 'use client'
 
+import { getAuthToken } from '@/lib/auth/client-token'
 // Roofing — existing-solar detection panel.
 //
 // Scans the property's satellite aerial (Gemini vision via
@@ -49,9 +50,10 @@ export function SolarCheck({ accessToken, address, intent, betterIncGst, bestInc
     setDetection(null)
     setAllowance(null)
     try {
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch('/api/roofing/detect-solar', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ address, intent }),
       })
       const json = (await res.json()) as DetectResponse

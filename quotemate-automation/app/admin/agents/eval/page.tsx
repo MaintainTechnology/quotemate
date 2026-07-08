@@ -8,7 +8,7 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 import { relativeTime } from '@/lib/agents/findings'
 
 type EvalRunRow = {
@@ -91,9 +91,7 @@ export default function EvalAgentPage() {
   )
 
   useEffect(() => {
-    const sb = getBrowserSupabase()
-    sb.auth.getSession().then(({ data: { session } }) => {
-      const t = session?.access_token ?? null
+    void getAuthToken().then((t) => {
       setToken(t)
       if (t) void loadRuns(t)
       // Honour ?run=<id> query param so the overview's "open run" links
@@ -110,13 +108,17 @@ export default function EvalAgentPage() {
   }, [loadRuns, loadDrilldown])
 
   const triggerRun = useCallback(async () => {
-    if (!token) return
     setBusy(true)
     setRunMsg(null)
     try {
+      const bearer = (await getAuthToken()) ?? token
+      if (!bearer) {
+        setRunMsg('Not signed in')
+        return
+      }
       const res = await fetch('/api/admin/agents/trigger/eval', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${bearer}`, 'Content-Type': 'application/json' },
         body: '{}',
       })
       const json = (await res.json()) as Record<string, unknown>
@@ -125,7 +127,7 @@ export default function EvalAgentPage() {
       } else {
         setRunMsg(`Run complete · ${json.total_score}% total`)
       }
-      await loadRuns(token)
+      await loadRuns(bearer)
     } catch (e) {
       setRunMsg(e instanceof Error ? e.message : String(e))
     } finally {

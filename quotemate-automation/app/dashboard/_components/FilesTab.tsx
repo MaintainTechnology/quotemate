@@ -23,6 +23,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { FileText, ReceiptText, Download, Eye, Search, Loader2, X, MessageSquare } from 'lucide-react'
 import { CommentsThread } from '../../_components/CommentsThread'
 import { PaginationControls, usePagination } from './Pagination'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 type FileDoc = {
   id: string
@@ -126,8 +127,11 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
     let cancelled = false
     void (async () => {
       try {
+        // Mint a FRESH token per request — the Clerk session token captured at
+        // mount expires ~60s later, so reusing the prop 401s.
+        const token = (await getAuthToken()) ?? accessToken
         const res = await fetch('/api/tenant/files', {
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
         })
         if (!res.ok) throw new Error(`status ${res.status}`)
@@ -152,8 +156,9 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
   const refreshDocs = useCallback(async () => {
     if (!accessToken) return
     try {
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch('/api/tenant/files', {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       })
       if (!res.ok) return
@@ -206,8 +211,9 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
   // Fetch the full document as a blob (bearer-authenticated). Shared by both
   // the download and the inline viewer so the auth contract stays in one place.
   async function fetchDocBlob(doc: FileDoc): Promise<Blob> {
+    const token = (await getAuthToken()) ?? accessToken
     const res = await fetch(`/api/tenant/files/${doc.id}/download`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Authorization: `Bearer ${token}` },
     })
     if (!res.ok) throw new Error(`status ${res.status}`)
     return res.blob()
@@ -288,11 +294,12 @@ export function FilesTab({ accessToken }: { accessToken: string | null }) {
     setChatError(null)
     setAnswer(null)
     try {
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch('/api/tenant/files/chat', {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ query: q }),
       })

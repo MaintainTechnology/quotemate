@@ -53,6 +53,10 @@ export const OnboardActivateSchema = z.object({
   owner_mobile: auMobile,
   // owner_user_id passed by the wizard after Supabase Auth sign up
   owner_user_id: z.string().uuid().optional().or(z.literal('')),
+  // clerk_user_id passed by the wizard after Clerk sign up (a `user_…` string,
+  // NOT a uuid). Stamped onto tenants.clerk_user_id so the dual-auth resolver
+  // links the tenant to its Clerk identity.
+  clerk_user_id: z.string().optional().or(z.literal('')),
 
   // ── Page 2: Trade & licence ────────────────────────────────
   // Multi-trade onboarding: a tradie can pick any combination of the

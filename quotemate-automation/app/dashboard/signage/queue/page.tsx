@@ -7,7 +7,7 @@
 // approve / needs-changes / escalate actions. Maintain design system.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 import { BrandTabs, withBrand, brandFromUrl, syncBrandInUrl, type BrandTab } from '../_components/BrandTabs'
 import {
   ComplianceBar,
@@ -97,9 +97,10 @@ export default function SignageQueuePage() {
 
   const load = useCallback(async (accessToken: string, brandParam: string | null) => {
     try {
+      const freshToken = (await getAuthToken()) ?? accessToken
       const brandSep = brandParam ? `&brand=${encodeURIComponent(brandParam)}` : ''
       const res = await fetch(`/api/signage/queue?status=hq_review${brandSep}`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${freshToken}` },
       })
       if (res.status === 401) {
         setAuthState('signed-out')
@@ -136,8 +137,9 @@ export default function SignageQueuePage() {
       setDetailBusy(true)
       setDetail(null)
       try {
+        const freshToken = (await getAuthToken()) ?? accessToken
         const res = await fetch(`/api/signage/assessment/${assessmentId}`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: { Authorization: `Bearer ${freshToken}` },
         })
         const json = await res.json()
         if (json.ok) setDetail({ assessment: json.assessment, verdicts: json.verdicts, advisory: json.advisory ?? [], photos: json.photos })
@@ -149,9 +151,7 @@ export default function SignageQueuePage() {
   )
 
   useEffect(() => {
-    const sb = getBrowserSupabase()
-    sb.auth.getSession().then(({ data: { session } }) => {
-      const t = session?.access_token ?? null
+    getAuthToken().then((t) => {
       setToken(t)
       if (!t) {
         setAuthState('signed-out')
@@ -185,9 +185,10 @@ export default function SignageQueuePage() {
       if (!token || !detail) return
       setDetailBusy(true)
       try {
+        const freshToken = (await getAuthToken()) ?? token
         const res = await fetch(`/api/signage/assessment/${detail.assessment.id}`, {
           method: 'PATCH',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          headers: { Authorization: `Bearer ${freshToken}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ hq_decision: decision }),
         })
         const json = await res.json()

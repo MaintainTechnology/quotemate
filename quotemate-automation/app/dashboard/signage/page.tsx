@@ -9,7 +9,7 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 import { FeatureGate } from '@/app/dashboard/_components/FeatureGate'
 import type { ShotSlot } from '@/lib/signage/types'
 import { distinctRegions, regionMatches } from '@/lib/signage/region'
@@ -91,7 +91,8 @@ function SignageHubPageInner() {
 
   const load = useCallback(async (accessToken: string, brandParam: string | null) => {
     try {
-      const headers = { Authorization: `Bearer ${accessToken}` }
+      const freshToken = (await getAuthToken()) ?? accessToken
+      const headers = { Authorization: `Bearer ${freshToken}` }
       const q = brandParam ? `?brand=${encodeURIComponent(brandParam)}` : ''
       const queueSep = brandParam ? `&brand=${encodeURIComponent(brandParam)}` : ''
       const [sweepsRes, queueRes] = await Promise.all([
@@ -128,9 +129,7 @@ function SignageHubPageInner() {
   }, [])
 
   useEffect(() => {
-    const sb = getBrowserSupabase()
-    sb.auth.getSession().then(({ data: { session } }) => {
-      const t = session?.access_token ?? null
+    getAuthToken().then((t) => {
       setToken(t)
       if (!t) {
         setAuthState('signed-out')
@@ -176,9 +175,10 @@ function SignageHubPageInner() {
       setErr(null)
       try {
         const q = brandSlug ? `?brand=${encodeURIComponent(brandSlug)}` : ''
+        const freshToken = (await getAuthToken()) ?? token
         const res = await fetch(`/api/signage/sweeps${q}`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          headers: { Authorization: `Bearer ${freshToken}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name: name.trim(),
             region: region || undefined,
@@ -373,9 +373,10 @@ function SweepCard({ sweep, token, brandSlug, onDeleted }: { sweep: Sweep; token
     if (!window.confirm(`Delete the "${sweep.name}" sweep and all its photos + results? This cannot be undone.`)) return
     setDeleting(true)
     try {
+      const freshToken = (await getAuthToken()) ?? token
       const res = await fetch(`/api/signage/sweeps/${sweep.id}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${freshToken}` },
       })
       if (res.ok) onDeleted()
     } finally {

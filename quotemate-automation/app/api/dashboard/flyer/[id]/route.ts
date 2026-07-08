@@ -4,17 +4,17 @@
 //   DELETE → remove the flyer.
 // Auth: Authorization: Bearer <token>. Every action is tenant-scoped.
 
-import { marketingSupabase as supabase, userFromBearer } from '@/lib/marketing/auth'
-import { tenantBrandForUser } from '@/lib/flyer/tenant'
+import { marketingSupabase as supabase } from '@/lib/marketing/auth'
+import { tenantBrandFromBearer } from '@/lib/flyer/tenant'
 import { PatchFlyerBody, ownershipVerdict } from '@/lib/flyer/api-logic'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params
-  const user = await userFromBearer(req)
-  if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  const tenant = await tenantBrandForUser(user.id)
+  const auth = await tenantBrandFromBearer(req)
+  if (!auth) return Response.json({ error: 'unauthorized' }, { status: 401 })
+  const tenant = auth.tenant
   if (!tenant) return Response.json({ error: 'no_tenant' }, { status: 404 })
 
   const { data: flyer } = await supabase
@@ -29,9 +29,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params
-  const user = await userFromBearer(req)
-  if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  const tenant = await tenantBrandForUser(user.id)
+  const auth = await tenantBrandFromBearer(req)
+  if (!auth) return Response.json({ error: 'unauthorized' }, { status: 401 })
+  const tenant = auth.tenant
   if (!tenant) return Response.json({ error: 'no_tenant' }, { status: 404 })
 
   let raw: unknown
@@ -60,9 +60,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 
 export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params
-  const user = await userFromBearer(req)
-  if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  const tenant = await tenantBrandForUser(user.id)
+  const auth = await tenantBrandFromBearer(req)
+  if (!auth) return Response.json({ error: 'unauthorized' }, { status: 401 })
+  const tenant = auth.tenant
   if (!tenant) return Response.json({ error: 'no_tenant' }, { status: 404 })
 
   const { data: flyer } = await supabase.from('flyers').select('tenant_id').eq('id', id).maybeSingle()

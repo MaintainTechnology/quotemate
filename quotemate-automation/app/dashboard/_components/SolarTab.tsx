@@ -33,6 +33,7 @@ import { OVERLAY_MAP_ZOOM, OVERLAY_MAP_WIDTH, OVERLAY_MAP_HEIGHT } from '@/lib/s
 import { BuildingPicker } from '@/app/q/solar/[token]/BuildingPicker'
 import { PylonHardwareCard } from './PylonHardwareCard'
 import { PaginationControls, usePagination } from './Pagination'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 type Props = {
   accessToken: string | null
@@ -173,8 +174,11 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
     setLoading(true)
     setError(null)
     try {
+      // Mint a FRESH token per request — the Clerk session token captured at
+      // mount expires ~60s later, so reusing the prop 401s.
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch('/api/tenant/solar', {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       })
       const json = (await res.json().catch(() => ({}))) as {
@@ -250,9 +254,11 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
         return next
       })
       try {
+        // Mint a FRESH token per request (`token` here is the estimate token).
+        const authToken = (await getAuthToken()) ?? accessToken
         const res = await fetch(`/api/solar/confirm/${token}`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: { Authorization: `Bearer ${authToken}` },
         })
         const json = (await res.json().catch(() => ({}))) as {
           ok?: boolean
@@ -302,10 +308,12 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
         return next
       })
       try {
+        // Mint a FRESH token per request (`token` here is the estimate token).
+        const authToken = (await getAuthToken()) ?? accessToken
         const res = await fetch(`/api/solar/redraft/${token}`, {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${accessToken}`,
+            Authorization: `Bearer ${authToken}`,
             'content-type': 'application/json',
           },
           body: JSON.stringify(overrides ?? {}),
@@ -350,11 +358,13 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
     async (token: string, buildingId: string) => {
       setSwitchingBuilding((m) => ({ ...m, [token]: true }))
       try {
+        // Mint a FRESH token per request (`token` here is the estimate token).
+        const authToken = (await getAuthToken()) ?? accessToken
         const res = await fetch(`/api/solar/q/${token}/select-building`, {
           method: 'POST',
           headers: {
             'content-type': 'application/json',
-            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
           },
           body: JSON.stringify({ building_id: buildingId }),
         })

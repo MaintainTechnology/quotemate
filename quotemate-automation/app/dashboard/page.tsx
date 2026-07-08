@@ -23,6 +23,7 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@clerk/nextjs'
 import Link from 'next/link'
+import { getAuthToken } from '@/lib/auth/client-token'
 import { CATEGORIES } from '@/lib/estimate/categories'
 import {
   defaultAvailabilityForState,
@@ -565,8 +566,9 @@ export default function DashboardPage() {
     let cancelled = false
     void (async () => {
       try {
+        const token = (await getAuthToken()) ?? accessToken
         const res = await fetch('/api/admin/whoami', {
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
         })
         if (!res.ok) return
@@ -594,10 +596,13 @@ export default function DashboardPage() {
     const status = (data?.tenant as { status?: string } | undefined)?.status
     if (status !== 'active') return
     welcomeFiredRef.current = true
-    void fetch('/api/tenant/welcome-email', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${accessToken}` },
-    }).catch(() => {
+    void (async () => {
+      const token = (await getAuthToken()) ?? accessToken
+      await fetch('/api/tenant/welcome-email', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    })().catch(() => {
       welcomeFiredRef.current = false
     })
   }, [accessToken, data])
@@ -626,11 +631,12 @@ export default function DashboardPage() {
   }
 
   async function patch(payload: Record<string, unknown>) {
-    if (!accessToken) throw new Error('not signed in')
+    const token = (await getAuthToken()) ?? accessToken
+    if (!token) throw new Error('not signed in')
     const res = await fetch('/api/tenant/me', {
       method: 'PATCH',
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
@@ -644,7 +650,7 @@ export default function DashboardPage() {
       )
     }
     // Re-fetch to confirm what landed.
-    await refresh(accessToken)
+    await refresh(token)
   }
 
   // Logo change (migration 141). Uploads the new file to /api/tenant/logo
@@ -652,19 +658,20 @@ export default function DashboardPage() {
   // then re-fetches so the Account-tab preview — and every customer quote
   // letterhead — reflects the new logo.
   async function uploadLogo(file: File): Promise<void> {
-    if (!accessToken) throw new Error('not signed in')
+    const token = (await getAuthToken()) ?? accessToken
+    if (!token) throw new Error('not signed in')
     const fd = new FormData()
     fd.append('file', file)
     const res = await fetch('/api/tenant/logo', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Authorization: `Bearer ${token}` },
       body: fd,
     })
     const body = await res.json().catch(() => ({}))
     if (!res.ok || !body.ok) {
       throw new Error(body?.error ?? `Logo upload failed (HTTP ${res.status})`)
     }
-    await refresh(accessToken)
+    await refresh(token)
   }
 
   // ── Custom-service helpers (migration 023) ───────────────────────
@@ -673,11 +680,12 @@ export default function DashboardPage() {
   // the new state. Throws a friendly Error message on failure so the
   // form can surface it inline.
   async function createCustomService(payload: Record<string, unknown>) {
-    if (!accessToken) throw new Error('not signed in')
+    const token = (await getAuthToken()) ?? accessToken
+    if (!token) throw new Error('not signed in')
     const res = await fetch('/api/tenant/services', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
@@ -686,16 +694,17 @@ export default function DashboardPage() {
     if (!res.ok) {
       throw new Error(body?.message ?? body?.error ?? `Create failed (HTTP ${res.status})`)
     }
-    await refresh(accessToken)
+    await refresh(token)
     return body as { ok: true; service: unknown }
   }
 
   async function updateCustomService(id: string, payload: Record<string, unknown>) {
-    if (!accessToken) throw new Error('not signed in')
+    const token = (await getAuthToken()) ?? accessToken
+    if (!token) throw new Error('not signed in')
     const res = await fetch(`/api/tenant/services/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
@@ -704,21 +713,22 @@ export default function DashboardPage() {
     if (!res.ok) {
       throw new Error(body?.message ?? body?.error ?? `Update failed (HTTP ${res.status})`)
     }
-    await refresh(accessToken)
+    await refresh(token)
     return body as { ok: true; service: unknown }
   }
 
   async function deleteCustomService(id: string) {
-    if (!accessToken) throw new Error('not signed in')
+    const token = (await getAuthToken()) ?? accessToken
+    if (!token) throw new Error('not signed in')
     const res = await fetch(`/api/tenant/services/${encodeURIComponent(id)}`, {
       method: 'DELETE',
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Authorization: `Bearer ${token}` },
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
       throw new Error(body?.error ?? `Delete failed (HTTP ${res.status})`)
     }
-    await refresh(accessToken)
+    await refresh(token)
   }
 
   /**
@@ -728,16 +738,18 @@ export default function DashboardPage() {
    * the caller can show e.g. "AI receptionist updated".
    */
   async function saveTrades(trades: string[]) {
-    if (!accessToken) throw new Error('not signed in')
+    if (!accessToken && !(await getAuthToken())) throw new Error('not signed in')
     // Unified Save path: POST the full desired set to /reconcile, which
     // ACTIVATES newly-selected trades (atomic activate_trade_for_tenant —
     // seeds pricing_book + service offerings + tenants.trades[]) and
     // DEACTIVATES deselected ones. This is what makes each trade's job type
     // genuinely live, not just a label.
+    const token = (await getAuthToken()) ?? accessToken
+    if (!token) throw new Error('not signed in')
     const res = await fetch('/api/tenant/trades/reconcile', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ trades }),
@@ -748,7 +760,7 @@ export default function DashboardPage() {
         body?.message ?? body?.error ?? `Trade update failed (HTTP ${res.status})`,
       )
     }
-    await refresh(accessToken)
+    await refresh(token)
     return body as {
       ok: true
       trades: string[]
@@ -765,9 +777,10 @@ export default function DashboardPage() {
    * not already on the account. Read-only GET.
    */
   async function listAvailableTrades() {
-    if (!accessToken) throw new Error('not signed in')
+    const token = (await getAuthToken()) ?? accessToken
+    if (!token) throw new Error('not signed in')
     const res = await fetch('/api/tenant/trades/available', {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Authorization: `Bearer ${token}` },
     })
     const body = await res.json().catch(() => ({}))
     if (!res.ok || body?.ok === false) {
@@ -787,11 +800,12 @@ export default function DashboardPage() {
    * the dashboard so the new trade's services appear.
    */
   async function activateTrade(trade: string) {
-    if (!accessToken) throw new Error('not signed in')
+    const token = (await getAuthToken()) ?? accessToken
+    if (!token) throw new Error('not signed in')
     const res = await fetch('/api/tenant/trades/activate', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ trade }),
@@ -802,7 +816,7 @@ export default function DashboardPage() {
         body?.message ?? body?.error ?? `Activation failed (HTTP ${res.status})`,
       )
     }
-    await refresh(accessToken)
+    await refresh(token)
     return body as { ok: true; trade: string; warning?: string }
   }
 
@@ -2555,22 +2569,26 @@ function OverviewTab({
     if (!accessToken) return
     let cancelled = false
     setChatsLoading(true)
-    fetch('/api/tenant/chats', {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      cache: 'no-store',
-    })
-      .then((r) => r.json().catch(() => ({ chats: [] })))
-      .then((j) => {
+    void (async () => {
+      // Mint a FRESH token immediately before the fetch — the `accessToken`
+      // prop was captured once at parent mount and a Clerk session token
+      // expires ~60s later, so reusing it here 401s on remount/dwell.
+      const token = (await getAuthToken()) ?? accessToken
+      try {
+        const r = await fetch('/api/tenant/chats', {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        })
+        const j = await r.json().catch(() => ({ chats: [] }))
         if (cancelled) return
         const rows = (j?.chats ?? []) as ChatRow[]
         setLatestChats(rows.slice(0, 5))
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) setLatestChats([])
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setChatsLoading(false)
-      })
+      }
+    })()
     return () => {
       cancelled = true
     }
@@ -3189,9 +3207,7 @@ function RetryProvisionButton() {
     setBusy(true)
     setErr(null)
     try {
-      const supabase = getBrowserSupabase()
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData.session?.access_token
+      const token = await getAuthToken()
       if (!token) throw new Error('not signed in')
       const res = await fetch('/api/onboard/retry-provision', {
         method: 'POST',
@@ -3936,9 +3952,10 @@ function PayoutsTab({
       setSyncing(true)
       if (!soft) setErr(null)
       try {
+        const token = (await getAuthToken()) ?? accessToken
         const res = await fetch('/api/stripe/connect/refresh', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: { Authorization: `Bearer ${token}` },
         })
         const json = await res.json().catch(() => null)
         if (json?.ok) {
@@ -3988,9 +4005,10 @@ function PayoutsTab({
     }
     setBusy(true)
     try {
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch('/api/stripe/connect/start', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
       })
       const json = await res.json().catch(() => null)
       if (res.ok && json?.ok && json.url) {
@@ -4272,10 +4290,11 @@ function PayoutJobsSection({ accessToken }: { accessToken: string | null }) {
   const [actionMsg, setActionMsg] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
-    if (!accessToken) return
     try {
+      const token = (await getAuthToken()) ?? accessToken
+      if (!token) return
       const res = await fetch('/api/tenant/payouts', {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       })
       const json = await res.json().catch(() => null)
@@ -4296,13 +4315,14 @@ function PayoutJobsSection({ accessToken }: { accessToken: string | null }) {
   }, [refresh])
 
   async function releaseJob(quoteId: string) {
-    if (!accessToken) return
     setActionMsg(null)
     setBusyId(quoteId)
     try {
+      const token = (await getAuthToken()) ?? accessToken
+      if (!token) return
       const res = await fetch(`/api/quote/${quoteId}/complete`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
       })
       const json = await res.json().catch(() => null)
       if (json?.ok && json.released) {
@@ -8280,13 +8300,23 @@ function DeleteQuoteButton({
   const [err, setErr] = useState<string | null>(null)
 
   async function doDelete() {
-    if (!accessToken) return
     setBusy(true)
     setErr(null)
     try {
+      // Mint a FRESH dual-auth token immediately before the DELETE. The
+      // `accessToken` prop was captured at mount; a Clerk default session
+      // token expires ~60s later, and this click fires long after mount.
+      // getAuthToken() returns a current Clerk (or legacy Supabase) token;
+      // fall back to the captured prop if it can't resolve one.
+      const token = (await getAuthToken()) ?? accessToken
+      if (!token) {
+        setErr('Could not delete — try again shortly.')
+        setBusy(false)
+        return
+      }
       const res = await fetch(`/api/quote/${quoteId}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
       })
       // 404 = the row is already gone (deleted in another tab) — treat as
       // success so the card can't become an undeletable phantom.
@@ -8747,21 +8777,26 @@ function QuoteDisplayModeToggle({
   const [savedAt, setSavedAt] = useState<number | null>(null)
 
   async function save(next: Mode) {
-    if (!accessToken) {
-      setError('Not signed in')
-      return
-    }
     if (next === value) return
     setError(null)
     setSubmitting(true)
     const previous = value
     setValue(next) // optimistic
     try {
+      // Mint a FRESH token immediately before the fetch — the accessToken
+      // prop is captured once at dashboard mount and a Clerk session token
+      // expires ~60s later, so reusing it on a later toggle click 401s.
+      const token = (await getAuthToken()) ?? accessToken
+      if (!token) {
+        setValue(previous)
+        setError('Not signed in')
+        return
+      }
       const res = await fetch(`/api/quote/${encodeURIComponent(quoteId)}/display-mode`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ display_mode: next }),
       })
@@ -9054,10 +9089,14 @@ function SupplierCsvUpload({
   }
 
   async function callImport(text: string, dryRun: boolean): Promise<unknown> {
+    // Mint a fresh token per request — the captured accessToken prop is
+    // stale for Clerk users (~60s default session-token lifetime), and
+    // this runs on later file-pick / commit actions. Fall back to the prop.
+    const token = (await getAuthToken()) ?? accessToken
     const res = await fetch('/api/supplier-catalogue/import', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ csvText: text, dryRun, alsoStockMine: alsoStock }),
@@ -9311,8 +9350,13 @@ function CoveragePanel({
       setLoading(true)
       setErr(null)
       try {
+        // Dual-auth: mint a fresh token immediately before the fetch. Clerk's
+        // default session token expires ~60s after capture, and this panel
+        // loads when its tab opens (well after mount), so the captured prop
+        // can be stale -> 401. Fall back to the prop for legacy Supabase.
+        const token = (await getAuthToken()) ?? accessToken
         const res = await fetch('/api/tenant/catalogue/gaps', {
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
         })
         if (!res.ok) {
@@ -9527,8 +9571,11 @@ function BrowseSupplierPanel({
     setLoading(true)
     setErr(null)
     try {
+      // Dual-auth: mint a FRESH token per fetch — the Clerk session token in
+      // the accessToken prop expires ~60s after mount, so reusing it here 401s.
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch('/api/supplier-catalogue', {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       })
       if (!res.ok) {
@@ -9575,10 +9622,14 @@ function BrowseSupplierPanel({
     setAdding(true)
     setAddMsg(null)
     try {
+      // Dual-auth: this POST is interaction-driven (fires when the tradie
+      // clicks Add, often >60s after mount), so the captured Clerk token is
+      // stale — mint a fresh one per request.
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch('/api/tenant/catalogue/bulk-add', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ supplier_catalogue_ids: [...selected] }),
@@ -10061,8 +10112,11 @@ function TierLadderPanel({
     setLoading(true)
     setErr(null)
     try {
+      // Dual-auth: mint a fresh token per fetch — a Clerk session token
+      // captured at mount (accessToken prop) expires ~60s later → 401.
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch('/api/tenant/tier-ladder', {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       })
       if (!res.ok) {
@@ -10091,11 +10145,14 @@ function TierLadderPanel({
     const key = `${category}::${tier}`
     setBusyKey(key)
     try {
+      // Dual-auth: fresh token per save — the captured accessToken prop is a
+      // ~60s Clerk session token that will 401 after it expires.
+      const token = (await getAuthToken()) ?? accessToken
       if (!catalogueId) {
         // Empty selection = delete the slot.
         const res = await fetch(
           `/api/tenant/tier-ladder?category=${encodeURIComponent(category)}&tier=${tier}`,
-          { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } },
+          { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } },
         )
         if (!res.ok) {
           const b = (await res.json().catch(() => ({}))) as { error?: string }
@@ -10105,7 +10162,7 @@ function TierLadderPanel({
         const res = await fetch('/api/tenant/tier-ladder', {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${accessToken}`,
+            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ category, tier, catalogue_id: catalogueId }),
@@ -10284,7 +10341,8 @@ function CatalogueTab({
   }, [search, categoryFilter])
 
   const load = useCallback(async () => {
-    if (!accessToken) {
+    const token = (await getAuthToken()) ?? accessToken
+    if (!token) {
       setError('Not signed in')
       setLoading(false)
       return
@@ -10293,7 +10351,7 @@ function CatalogueTab({
     setError(null)
     try {
       const res = await fetch('/api/tenant/catalogue', {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       })
       if (!res.ok) {
@@ -10314,14 +10372,15 @@ function CatalogueTab({
   }, [load])
 
   async function toggleActive(row: CatalogueRow) {
-    if (!accessToken) return
+    const token = (await getAuthToken()) ?? accessToken
+    if (!token) return
     setBusyId(row.id)
     const next = !row.active
     setRows((p) => (p ? p.map((r) => (r.id === row.id ? { ...r, active: next } : r)) : p))
     try {
       const res = await fetch(`/api/tenant/catalogue/${row.id}`, {
         method: 'PATCH',
-        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ active: next }),
       })
       if (!res.ok) {
@@ -10342,13 +10401,14 @@ function CatalogueTab({
   // granular→grounding mapping. Server-side curation means every tradie
   // gets the same starter set, deterministic.
   async function stockEssentials() {
-    if (!accessToken || essentialsBusy) return
+    const token = (await getAuthToken()) ?? accessToken
+    if (!token || essentialsBusy) return
     setEssentialsBusy(true)
     setEssentialsMsg(null)
     try {
       const res = await fetch('/api/tenant/catalogue/stock-essentials', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
       })
       const json = (await res.json().catch(() => ({}))) as {
         ok?: boolean
@@ -10375,13 +10435,14 @@ function CatalogueTab({
   }
 
   async function remove(row: CatalogueRow) {
-    if (!accessToken) return
+    const token = (await getAuthToken()) ?? accessToken
+    if (!token) return
     if (!window.confirm(`Delete "${row.name}" from your catalogue?`)) return
     setBusyId(row.id)
     try {
       const res = await fetch(`/api/tenant/catalogue/${row.id}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
       })
       if (!res.ok) {
         const b = (await res.json().catch(() => ({}))) as { error?: string }
@@ -10396,13 +10457,14 @@ function CatalogueTab({
   }
 
   async function create() {
-    if (!accessToken) return
+    const token = (await getAuthToken()) ?? accessToken
+    if (!token) return
     setSaving(true)
     setFormErr(null)
     try {
       const res = await fetch('/api/tenant/catalogue', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           trade: form.trade,
           category: form.category.trim(),
@@ -10474,7 +10536,8 @@ function CatalogueTab({
   // brand/photo/etc; the two optional money fields send null when blank
   // so they don't silently coerce to $0.
   async function update() {
-    if (!accessToken || !editingId) return
+    const token = (await getAuthToken()) ?? accessToken
+    if (!token || !editingId) return
     setSaving(true)
     setFormErr(null)
     try {
@@ -10484,7 +10547,7 @@ function CatalogueTab({
       }
       const res = await fetch(`/api/tenant/catalogue/${editingId}`, {
         method: 'PATCH',
-        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           trade: form.trade,
           category: form.category.trim(),
@@ -10518,7 +10581,8 @@ function CatalogueTab({
   // the "paste a URL" input writes to — the rest of the app only ever
   // sees a URL, whether pasted or uploaded).
   async function uploadImage(file: File) {
-    if (!accessToken) return
+    const token = (await getAuthToken()) ?? accessToken
+    if (!token) return
     setUploading(true)
     setFormErr(null)
     try {
@@ -10526,7 +10590,7 @@ function CatalogueTab({
       fd.append('file', file)
       const res = await fetch('/api/tenant/catalogue/upload', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
         body: fd,
       })
       const json = (await res.json().catch(() => ({}))) as {
@@ -11335,8 +11399,9 @@ function RecipesTab({
     setLoading(true)
     setError(null)
     try {
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch('/api/tenant/bom', {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       })
       if (!res.ok) {
@@ -11403,10 +11468,11 @@ function RecipesTab({
     setForking(true)
     setForkErr(null)
     try {
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch('/api/tenant/bom/fork', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ assembly_id: selectedAsm.id }),
@@ -11437,9 +11503,10 @@ function RecipesTab({
     setSaving(true)
     setFormErr(null)
     try {
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch('/api/tenant/bom', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           assembly_id: selectedAsm.id,
           trade: selectedAsm.trade,
@@ -11469,9 +11536,10 @@ function RecipesTab({
     if (!accessToken) return
     setBusyId(id)
     try {
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch(`/api/tenant/bom/${id}`, {
         method: 'PATCH',
-        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(fields),
       })
       if (!res.ok) {
@@ -11492,9 +11560,10 @@ function RecipesTab({
     if (!window.confirm('Remove this part from the recipe?')) return
     setBusyId(id)
     try {
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch(`/api/tenant/bom/${id}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
       })
       if (!res.ok) {
         const b = (await res.json().catch(() => ({}))) as { error?: string }
@@ -11930,8 +11999,9 @@ function EstimatingTab({
     setLoading(true)
     setError(null)
     try {
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch('/api/tenant/estimation', {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       })
       if (!res.ok) {
@@ -11986,12 +12056,13 @@ function EstimatingTab({
     setSavingId(j.assembly_id)
     setSaveErr(null)
     try {
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch(
         `/api/tenant/estimation/${encodeURIComponent(j.assembly_id)}`,
         {
           method: 'PATCH',
           headers: {
-            Authorization: `Bearer ${accessToken}`,
+            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
           // Always send both fields so a partial edit doesn't leave the
@@ -12020,9 +12091,10 @@ function EstimatingTab({
     setSavingId(j.assembly_id)
     setSaveErr(null)
     try {
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch(
         `/api/tenant/estimation/${encodeURIComponent(j.assembly_id)}`,
-        { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } },
+        { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } },
       )
       if (!res.ok) {
         const b = (await res.json().catch(() => ({}))) as { error?: string }
@@ -12349,10 +12421,11 @@ function FollowupsTab({
       // leads come back too (CRM style), so "Mark contacted" moves a row
       // to the Contacted section instead of vanishing it. Split by
       // followed_up_at below.
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch(
         '/api/tenant/followups?includeActioned=1&minAgeHours=0',
         {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       })
       if (!res.ok) {
@@ -12392,8 +12465,9 @@ function FollowupsTab({
     let cancelled = false
     ;(async () => {
       try {
+        const token = (await getAuthToken()) ?? accessToken
         const res = await fetch('/api/tenant/calendar', {
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
         })
         if (!res.ok) return
@@ -12421,10 +12495,11 @@ function FollowupsTab({
     if (!accessToken) return
     setBusyId(quoteId)
     try {
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch('/api/tenant/followups', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ quoteId, action: 'reopen' }),
@@ -12485,10 +12560,11 @@ function FollowupsTab({
     setCallBusy(rowId)
     clearRowMsg(rowId)
     try {
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch('/api/tenant/followups/call', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(
@@ -13069,10 +13145,11 @@ function FollowupLogForm({
     setSaving(true)
     setErr(null)
     try {
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch('/api/tenant/followups/events', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -13186,10 +13263,11 @@ function FollowupHistory({
     setErr(null)
     ;(async () => {
       try {
+        const token = (await getAuthToken()) ?? accessToken
         const res = await fetch(
           `/api/tenant/followups/events?quoteId=${encodeURIComponent(quoteId)}`,
           {
-            headers: { Authorization: `Bearer ${accessToken}` },
+            headers: { Authorization: `Bearer ${token}` },
             cache: 'no-store',
           },
         )
@@ -13315,14 +13393,19 @@ function FollowupTextModal({
   const segments = trimmed.length === 0 ? 0 : Math.ceil(trimmed.length / 153)
 
   async function send() {
-    if (!accessToken || !trimmed || sending) return
+    if (!trimmed || sending) return
     setSending(true)
     setErr(null)
     try {
+      // Dual-auth: mint a FRESH token immediately before the fetch. The
+      // `accessToken` prop is captured at mount and Clerk's default session
+      // token expires ~60s later (and is null for Clerk users with no
+      // Supabase session), so reusing it here 401s. Fall back to the prop.
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch('/api/tenant/followups/text', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(
@@ -13525,10 +13608,14 @@ function FollowupThread({
         const qs = conversationId
           ? `conversationId=${encodeURIComponent(conversationId)}`
           : `quoteId=${encodeURIComponent(quoteId ?? '')}`
+        // Mint a FRESH dual-auth token per fetch — Clerk's default session
+        // token expires ~60s after mint, so the prop captured at mount goes
+        // stale on reload (quote/conversation switch). Fall back to the prop.
+        const token = (await getAuthToken()) ?? accessToken
         const res = await fetch(
           `/api/tenant/followups/messages?${qs}`,
           {
-            headers: { Authorization: `Bearer ${accessToken}` },
+            headers: { Authorization: `Bearer ${token}` },
             cache: 'no-store',
           },
         )
@@ -13672,8 +13759,13 @@ function ChatsTab({
     }
     ;(async () => {
       try {
+        // Mint a FRESH dual-auth token immediately before the fetch. The
+        // `accessToken` prop is captured at mount and, for Clerk users,
+        // the session token expires ~60s later -> reusing it 401s. Fall
+        // back to the prop only if getAuthToken() yields nothing.
+        const token = (await getAuthToken()) ?? accessToken
         const res = await fetch('/api/tenant/chats', {
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
         })
         if (!res.ok) {
@@ -14314,7 +14406,12 @@ function SignageHubTab({ accessToken }: { accessToken: string | null }) {
   const [rollup, setRollup] = useState<SgRollup | null>(null)
 
   const load = useCallback(async () => {
-    if (!accessToken) {
+    // Mint a FRESH token per request — the Clerk session token captured at
+    // mount (the accessToken prop) expires ~60s later, so reusing it 401s
+    // ("unauthorized"). getAuthToken() returns a current Clerk token (or the
+    // legacy Supabase one); fall back to the prop.
+    const token = (await getAuthToken()) ?? accessToken
+    if (!token) {
       setErr('Not signed in')
       setLoading(false)
       return
@@ -14322,7 +14419,7 @@ function SignageHubTab({ accessToken }: { accessToken: string | null }) {
     setLoading(true)
     setErr(null)
     try {
-      const headers = { Authorization: `Bearer ${accessToken}` }
+      const headers = { Authorization: `Bearer ${token}` }
       const [sRes, qRes] = await Promise.all([
         fetch('/api/signage/sweeps', { headers, cache: 'no-store' }),
         fetch('/api/signage/queue?status=all', { headers, cache: 'no-store' }),
@@ -14566,7 +14663,12 @@ function PaintingHubTab({ accessToken }: { accessToken: string | null }) {
   } = usePagination(jobs ?? [], { urlKey: 'paint_page' })
 
   const loadJobs = useCallback(async () => {
-    if (!accessToken) {
+    // Mint a FRESH token per request — the Clerk session token captured at
+    // mount (the accessToken prop) expires ~60s later, so reusing it 401s
+    // ("Couldn't load saved jobs: unauthorized"). getAuthToken() returns a
+    // current Clerk token (or the legacy Supabase one); fall back to the prop.
+    const token = (await getAuthToken()) ?? accessToken
+    if (!token) {
       setJobsError('Not signed in')
       setLoadingJobs(false)
       return
@@ -14575,7 +14677,7 @@ function PaintingHubTab({ accessToken }: { accessToken: string | null }) {
     setJobsError(null)
     try {
       const res = await fetch('/api/painting/save', {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       })
       const json = (await res.json().catch(() => ({}))) as {
@@ -14759,7 +14861,12 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
   } = usePagination(jobs ?? [], { urlKey: 'roof_page' })
 
   const loadJobs = useCallback(async () => {
-    if (!accessToken) {
+    // Mint a FRESH token per request — the Clerk session token captured at
+    // mount (the accessToken prop) expires ~60s later, so reusing it 401s
+    // ("Couldn't load saved jobs: unauthorized"). getAuthToken() returns a
+    // current Clerk token (or the legacy Supabase one); fall back to the prop.
+    const token = (await getAuthToken()) ?? accessToken
+    if (!token) {
       setJobsError('Not signed in')
       setLoadingJobs(false)
       return
@@ -14768,7 +14875,7 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
     setJobsError(null)
     try {
       const res = await fetch('/api/roofing/save', {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       })
       const json = (await res.json().catch(() => ({}))) as {

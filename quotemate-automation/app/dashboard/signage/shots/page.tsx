@@ -5,7 +5,7 @@
 // asks locations to photograph with no code change. Maintain design system.
 
 import { useCallback, useEffect, useState } from 'react'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 import { BrandTabs, withBrand, brandFromUrl, syncBrandInUrl, type BrandTab } from '../_components/BrandTabs'
 import {
   BTN_DANGER_SM,
@@ -36,8 +36,9 @@ export default function SignageShotsPage() {
 
   const load = useCallback(async (t: string, brandParam: string | null) => {
     try {
+      const freshToken = (await getAuthToken()) ?? t
       const q = brandParam ? `?brand=${encodeURIComponent(brandParam)}` : ''
-      const res = await fetch(`/api/signage/brand${q}`, { headers: { Authorization: `Bearer ${t}` }, cache: 'no-store' })
+      const res = await fetch(`/api/signage/brand${q}`, { headers: { Authorization: `Bearer ${freshToken}` }, cache: 'no-store' })
       if (res.status === 401) return setAuthState('signed-out')
       const json = await res.json()
       if (json.ok) {
@@ -57,14 +58,11 @@ export default function SignageShotsPage() {
   }, [])
 
   useEffect(() => {
-    getBrowserSupabase()
-      .auth.getSession()
-      .then(({ data: { session } }) => {
-        const t = session?.access_token ?? null
-        setToken(t)
-        if (!t) return setAuthState('signed-out')
-        void load(t, brandFromUrl())
-      })
+    getAuthToken().then((t) => {
+      setToken(t)
+      if (!t) return setAuthState('signed-out')
+      void load(t, brandFromUrl())
+    })
   }, [load])
 
   const switchBrand = useCallback(
@@ -87,10 +85,11 @@ export default function SignageShotsPage() {
     setBusy(true)
     setMsg(null)
     try {
+      const freshToken = (await getAuthToken()) ?? token
       const q = brandSlug ? `?brand=${encodeURIComponent(brandSlug)}` : ''
       const res = await fetch(`/api/signage/brand${q}`, {
         method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${freshToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ shots }),
       })
       const json = await res.json()

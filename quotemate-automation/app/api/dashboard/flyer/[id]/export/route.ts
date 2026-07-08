@@ -3,8 +3,8 @@
 //   Konva stage into the flyer-assets bucket, and record their paths on the
 //   flyer row. Auth: Bearer token; ownership-checked.
 
-import { marketingSupabase as supabase, userFromBearer } from '@/lib/marketing/auth'
-import { tenantBrandForUser } from '@/lib/flyer/tenant'
+import { marketingSupabase as supabase } from '@/lib/marketing/auth'
+import { tenantBrandFromBearer } from '@/lib/flyer/tenant'
 import { ExportFlyerBody, ownershipVerdict } from '@/lib/flyer/api-logic'
 import { FLYER_BUCKET, flyerAssetPath } from '@/lib/flyer/storage'
 
@@ -23,9 +23,9 @@ function decodeDataUrl(dataUrl: string): { contentType: string; buffer: Buffer }
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params
-  const user = await userFromBearer(req)
-  if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  const tenant = await tenantBrandForUser(user.id)
+  const auth = await tenantBrandFromBearer(req)
+  if (!auth) return Response.json({ error: 'unauthorized' }, { status: 401 })
+  const tenant = auth.tenant
   if (!tenant) return Response.json({ error: 'no_tenant' }, { status: 404 })
 
   let raw: unknown

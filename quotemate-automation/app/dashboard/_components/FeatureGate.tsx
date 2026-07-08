@@ -12,7 +12,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 import { tenantHasFeature } from '@/lib/features/catalog'
 
 export type FeatureGateState = 'loading' | 'allowed' | 'denied' | 'signed-out'
@@ -22,11 +22,10 @@ export function useFeatureGate(slug: string): FeatureGateState {
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const sb = getBrowserSupabase()
-      const {
-        data: { session },
-      } = await sb.auth.getSession()
-      const token = session?.access_token
+      // Mint a FRESH token per request — a Clerk user has no Supabase session,
+      // and even a legacy Supabase token captured at mount expires. getAuthToken()
+      // returns a current Clerk token (or the legacy Supabase one), or null.
+      const token = await getAuthToken()
       if (!token) {
         if (!cancelled) setState('signed-out')
         return

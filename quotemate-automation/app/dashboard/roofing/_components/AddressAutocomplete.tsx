@@ -17,6 +17,7 @@
 // ════════════════════════════════════════════════════════════════════
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 export type AddressSuggestion = {
   id: string
@@ -73,11 +74,16 @@ export function AddressAutocomplete({
       reqRef.current = ctrl
       setBusy(true)
       try {
+        // Dual-auth: mint a FRESH token per request. The `accessToken` prop is
+        // captured once at the parent's mount and a Clerk session token expires
+        // ~60s later, so reusing it on later keystrokes 401s. Fall back to the
+        // captured prop if getAuthToken() transiently returns null.
+        const token = (await getAuthToken()) ?? accessToken
         const res = await fetch('/api/roofing/suggest-address', {
           method: 'POST',
           signal: ctrl.signal,
           headers: {
-            Authorization: `Bearer ${accessToken}`,
+            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ query: q, state }),

@@ -1,11 +1,11 @@
 // Auth-aware nav buttons for the public marketing pages.
 //
 // Mounted from both the sticky top Nav and the hero CTA block on /
-// (the home page). On mount we read the Supabase session from
-// localStorage (PKCE persist). Signed-in tradies see "Dashboard +
-// Sign out"; everyone else sees the original "Sign in + Get started"
-// pair. While the session is being resolved we render a single-pixel
-// placeholder of the same width so the layout doesn't shift.
+// (the home page). Dual-auth (Clerk↔Supabase): a tradie may be signed
+// in via Clerk (new) or the legacy Supabase session. Signed-in tradies
+// see "Dashboard + Sign out"; everyone else sees the original "Sign in +
+// Get started" pair. While the session is being resolved we render a
+// single-pixel placeholder of the same width so the layout doesn't shift.
 //
 // Server-rendered pages stay server-rendered — this is the only
 // island that needs hydration.
@@ -15,40 +15,45 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useAuth } from '@clerk/nextjs'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 
 type Variant = 'nav' | 'hero'
 
 export default function AuthNav({ variant = 'nav' }: { variant?: Variant }) {
   const router = useRouter()
-  const [authed, setAuthed] = useState<boolean | null>(null)
+  // Dual-auth: a Clerk-authed tradie has NO Supabase session, so reading only
+  // the Supabase session (as before) left them looking signed-out on the
+  // marketing pages. Read Clerk too and treat EITHER provider as signed in.
+  const { isLoaded: clerkLoaded, isSignedIn: clerkSignedIn, signOut: clerkSignOut } = useAuth()
+  const [supabaseAuthed, setSupabaseAuthed] = useState<boolean | null>(null)
   const [signingOut, setSigningOut] = useState(false)
 
-  // Resolve the session on mount + subscribe so the buttons flip
-  // immediately if the tradie signs in/out in another tab.
+  // Resolve the legacy Supabase session on mount + subscribe so the buttons
+  // flip immediately if the tradie signs in/out in another tab.
   useEffect(() => {
     let cancelled = false
     let unsub: (() => void) | undefined
     // iOS Safari in private / locked-storage mode can throw when the
     // Supabase client touches localStorage. Guard every access so a
     // failure resolves to the signed-out state instead of leaving
-    // `authed` stuck at null (which would hide the nav buttons forever).
+    // it stuck at null (which would hide the nav buttons forever).
     try {
       const supabase = getBrowserSupabase()
       ;(async () => {
         try {
           const { data } = await supabase.auth.getSession()
-          if (!cancelled) setAuthed(!!data.session)
+          if (!cancelled) setSupabaseAuthed(!!data.session)
         } catch {
-          if (!cancelled) setAuthed(false)
+          if (!cancelled) setSupabaseAuthed(false)
         }
       })()
       const { data: sub } = supabase.auth.onAuthStateChange(
-        (_event, session) => setAuthed(!!session),
+        (_event, session) => setSupabaseAuthed(!!session),
       )
       unsub = () => sub.subscription.unsubscribe()
     } catch {
-      if (!cancelled) setAuthed(false)
+      if (!cancelled) setSupabaseAuthed(false)
     }
     return () => {
       cancelled = true
@@ -59,14 +64,26 @@ export default function AuthNav({ variant = 'nav' }: { variant?: Variant }) {
   async function handleSignOut() {
     setSigningOut(true)
     try {
-      const supabase = getBrowserSupabase()
-      await supabase.auth.signOut()
-      setAuthed(false)
+      // Clear BOTH providers so sign-out is complete regardless of how the
+      // tradie logged in.
+      await getBrowserSupabase().auth.signOut().catch(() => {})
+      try {
+        await clerkSignOut()
+      } catch {
+        /* Supabase sign-out already ran */
+      }
+      setSupabaseAuthed(false)
       router.refresh()
     } finally {
       setSigningOut(false)
     }
   }
+
+  // Signed in if EITHER provider confirms it. Unknown (spacer) until Clerk has
+  // loaded AND the Supabase probe has resolved, so the buttons don't flash the
+  // signed-out state before an already-authed visitor is recognised.
+  const authed: boolean | null =
+    !clerkLoaded || supabaseAuthed === null ? null : clerkSignedIn || supabaseAuthed
 
   // While we don't yet know, render an invisible spacer so the nav
   // height stays stable — avoids the "Sign in" flashing before the

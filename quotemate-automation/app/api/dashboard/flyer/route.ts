@@ -4,8 +4,8 @@
 //          brand fields. Returns { ok, id }.
 // Auth: Authorization: Bearer <supabase access token>. Tenant-scoped.
 
-import { marketingSupabase as supabase, userFromBearer } from '@/lib/marketing/auth'
-import { tenantBrandForUser } from '@/lib/flyer/tenant'
+import { marketingSupabase as supabase } from '@/lib/marketing/auth'
+import { tenantBrandFromBearer } from '@/lib/flyer/tenant'
 import { CreateFlyerBody, DEFAULT_FLYER_NAME } from '@/lib/flyer/api-logic'
 import { getTemplate } from '@/lib/flyer/templates'
 import { buildInitialDocument } from '@/lib/flyer/document'
@@ -13,9 +13,9 @@ import { buildInitialDocument } from '@/lib/flyer/document'
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: Request) {
-  const user = await userFromBearer(req)
-  if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  const tenant = await tenantBrandForUser(user.id)
+  const auth = await tenantBrandFromBearer(req)
+  if (!auth) return Response.json({ error: 'unauthorized' }, { status: 401 })
+  const tenant = auth.tenant
   if (!tenant) return Response.json({ error: 'no_tenant' }, { status: 404 })
 
   const { data, error } = await supabase
@@ -28,9 +28,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const user = await userFromBearer(req)
-  if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  const tenant = await tenantBrandForUser(user.id)
+  const auth = await tenantBrandFromBearer(req)
+  if (!auth) return Response.json({ error: 'unauthorized' }, { status: 401 })
+  const tenant = auth.tenant
   if (!tenant) return Response.json({ error: 'no_tenant' }, { status: 404 })
 
   let raw: unknown
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
       name: parsed.data.name || DEFAULT_FLYER_NAME,
       template_id: template.id,
       document,
-      created_by: user.id,
+      created_by: auth.userId,
     })
     .select('id')
     .single()

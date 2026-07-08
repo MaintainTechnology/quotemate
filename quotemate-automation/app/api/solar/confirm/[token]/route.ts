@@ -18,6 +18,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { after } from 'next/server'
+import { resolveIdentityRequest } from '@/lib/tenant/from-request'
 import {
   confirmEligibility,
   sendCustomerSolarQuote,
@@ -46,14 +47,12 @@ export async function POST(
     return Response.json({ ok: false, error: 'invalid_token' }, { status: 400 })
   }
 
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) {
-    return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  }
-  const accessToken = auth.slice(7).trim()
+  // Dual-auth (Clerk↔Supabase): this route requires an authenticated tradie
+  // but is not tenant-scoped (release is keyed off the public_token), so a
+  // valid identity from either provider is sufficient.
   const supabase = getSupabase()
-  const { data: userData, error: userErr } = await supabase.auth.getUser(accessToken)
-  if (userErr || !userData?.user) {
+  const identity = await resolveIdentityRequest(supabase, req)
+  if (!identity) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
 

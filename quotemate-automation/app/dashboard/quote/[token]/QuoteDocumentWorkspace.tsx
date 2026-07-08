@@ -1,5 +1,6 @@
 'use client'
 
+import { getAuthToken } from '@/lib/auth/client-token'
 // The de-modaled document workspace (spec 2026-07-06 §5, Phase 1 Task E). One
 // living document: branding bar + live editor + a single "Save & Apply Edits"
 // bar. Content + branding save through the money-free POST /api/quote/[id]/
@@ -63,9 +64,13 @@ export default function QuoteDocumentWorkspace({
     setSave('saving')
     setError(null)
     try {
+      // Dual-auth: mint a FRESH token immediately before the POST. Clerk's
+      // default session token expires ~60s after mount, so the `authToken` prop
+      // captured by the parent is stale by the time the tradie clicks Save.
+      const token = (await getAuthToken()) ?? authToken
       const res = await fetch(`/api/quote/${quoteId}/document`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${authToken}` },
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
         body: JSON.stringify({ report_doc: doc, report_style: style }),
       })
       if (res.ok) {

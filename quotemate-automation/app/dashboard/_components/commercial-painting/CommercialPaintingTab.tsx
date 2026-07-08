@@ -34,6 +34,7 @@ import { PaintPricedSummary } from './PaintPricedSummary'
 import EstimatorChatbot from '../EstimatorChatbot'
 import { PaintPreviewPanel } from './PaintPreviewPanel'
 import { PaginationControls, usePagination } from '../Pagination'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 const API = '/api/tenant/commercial-painting'
 
@@ -154,14 +155,22 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
   const [viewerLoading, setViewerLoading] = useState<string | null>(null)
   const fileCache = useRef(new Map<string, { kind: 'pdf'; file: File } | { kind: 'image'; objectUrl: string }>())
 
+  // Mint a FRESH token per request — a Clerk session token expires ~60s after
+  // the dashboard captured `accessToken` at mount, so reusing the prop 401s.
+  // getAuthToken() refreshes (Clerk) or reuses the legacy Supabase session;
+  // fall back to the prop only if it yields nothing. Every call site awaits
+  // this helper, so the token is always fresh at the moment of the fetch.
   const authed = useCallback(
-    (init?: RequestInit): RequestInit => ({
-      ...init,
-      headers: {
-        ...(init?.headers ?? {}),
-        ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
-      },
-    }),
+    async (init?: RequestInit): Promise<RequestInit> => {
+      const token = (await getAuthToken()) ?? accessToken
+      return {
+        ...init,
+        headers: {
+          ...(init?.headers ?? {}),
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+      }
+    },
     [accessToken],
   )
 
@@ -178,18 +187,21 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
   // History rail for resume.
   useEffect(() => {
     if (!accessToken) return
-    fetch(`${API}/runs`, authed())
-      .then((r) => r.json())
-      .then((b) => {
-        if (b?.ok) setRecentRuns(b.runs as RunRow[])
-      })
-      .catch(() => {})
+    void (async () => {
+      const init = await authed()
+      fetch(`${API}/runs`, init)
+        .then((r) => r.json())
+        .then((b) => {
+          if (b?.ok) setRecentRuns(b.runs as RunRow[])
+        })
+        .catch(() => {})
+    })()
   }, [accessToken, authed])
 
   const loadRun = useCallback(
     async (id: string) => {
       setErrMsg(null)
-      const res = await fetch(`${API}/run/${id}`, authed())
+      const res = await fetch(`${API}/run/${id}`, await authed())
       const body = await res.json()
       if (!body?.ok) {
         setErrMsg('Could not load that run.')
@@ -262,7 +274,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
       )
     }
     try {
-      const signRes = await fetch(`${API}/upload/sign`, authed({
+      const signRes = await fetch(`${API}/upload/sign`, await authed({
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -291,7 +303,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
         }
       }
 
-      const res = await fetch(`${API}/upload/complete`, authed({
+      const res = await fetch(`${API}/upload/complete`, await authed({
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -326,7 +338,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
 
   async function setDocType(uploadId: string, docType: PaintDocType) {
     setUploads((prev) => prev.map((u) => (u.id === uploadId ? { ...u, doc_type: docType } : u)))
-    await fetch(`${API}/upload/${uploadId}`, authed({
+    await fetch(`${API}/upload/${uploadId}`, await authed({
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ doc_type: docType }),
@@ -349,7 +361,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
       // The API hands back a short-lived signed storage URL; the bytes
       // come straight from Supabase (plan sets exceed Vercel's ~4.5 MB
       // function-response cap).
-      const res = await fetch(`${API}/upload/${upload.id}/file`, authed())
+      const res = await fetch(`${API}/upload/${upload.id}/file`, await authed())
       const meta = await res.json().catch(() => null)
       if (!res.ok || !meta?.ok || !meta.url) {
         setErrMsg('Could not load that document. Please try again.')
@@ -378,7 +390,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
 
   async function removeUpload(uploadId: string) {
     try {
-      const res = await fetch(`${API}/upload/${uploadId}`, authed({ method: 'DELETE' }))
+      const res = await fetch(`${API}/upload/${uploadId}`, await authed({ method: 'DELETE' }))
       const body = await res.json().catch(() => null)
       if (res.status === 409) {
         setErrMsg(
@@ -413,13 +425,13 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
       // Persist job facts typed after the upload, so they reach the
       // saved quote + tender PDF.
       if (jobName.trim() || siteAddress.trim()) {
-        await fetch(`${API}/run/${runId}`, authed({
+        await fetch(`${API}/run/${runId}`, await authed({
           method: 'PATCH',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ job_name: jobName, site_address: siteAddress }),
         })).catch(() => {})
       }
-      const res = await fetch(`${API}/extract`, authed({
+      const res = await fetch(`${API}/extract`, await authed({
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ paintRunId: runId }),
@@ -468,7 +480,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
     setBom(null)
     setSavedQuote(null)
     try {
-      const save = await fetch(`${API}/run/${runId}`, authed({
+      const save = await fetch(`${API}/run/${runId}`, await authed({
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ extractionId: extraction.id, corrected_items: items }),
@@ -479,7 +491,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
         return
       }
       setExtraction((prev) => (prev ? { ...prev, items, hasCorrections: true } : prev))
-      const res = await fetch(`${API}/price`, authed({
+      const res = await fetch(`${API}/price`, await authed({
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -506,7 +518,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
     setSaving(true)
     setErrMsg(null)
     try {
-      const res = await fetch(`${API}/save-quote`, authed({
+      const res = await fetch(`${API}/save-quote`, await authed({
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({

@@ -9,7 +9,7 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 import {
   describeCatalogueFinding,
   relativeTime,
@@ -51,9 +51,7 @@ export default function CatalogueAgentPage() {
   }, [])
 
   useEffect(() => {
-    const sb = getBrowserSupabase()
-    sb.auth.getSession().then(({ data: { session } }) => {
-      const t = session?.access_token ?? null
+    void getAuthToken().then((t) => {
       setToken(t)
       if (t) void load(t, status)
       else setErr('Not signed in')
@@ -65,9 +63,10 @@ export default function CatalogueAgentPage() {
     setBusyRun(true)
     setRunMsg(null)
     try {
+      const authToken = (await getAuthToken()) ?? token
       const res = await fetch('/api/admin/agents/trigger/catalogue', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
         body: '{}',
       })
       const json = (await res.json()) as Record<string, unknown>
@@ -78,7 +77,7 @@ export default function CatalogueAgentPage() {
           `Sweep complete · ${String(json.rows_audited)} rows audited · ${String(json.findings_created)} new findings`,
         )
       }
-      await load(token, status)
+      await load(authToken, status)
     } catch (e) {
       setRunMsg(e instanceof Error ? e.message : String(e))
     } finally {
@@ -91,9 +90,10 @@ export default function CatalogueAgentPage() {
       if (!token) return
       setBusyRow(id)
       try {
+        const authToken = (await getAuthToken()) ?? token
         const res = await fetch(`/api/admin/agents/findings/catalogue/${id}`, {
           method: 'PATCH',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: nextStatus }),
         })
         const json = (await res.json()) as { ok: boolean; error?: string }

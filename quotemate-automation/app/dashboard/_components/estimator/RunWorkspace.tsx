@@ -9,7 +9,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 import { runStatus, type RunStatus } from '@/lib/estimation/run-status'
 import { PlanOverlay } from '../PlanOverlay'
 import { RunStatusChip } from './badges'
@@ -64,9 +64,7 @@ export function RunWorkspace({ runId }: { runId: string }) {
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const supabase = getBrowserSupabase()
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData.session?.access_token ?? null
+      const token = await getAuthToken()
       if (!token) {
         router.replace('/signin')
         return
@@ -118,9 +116,10 @@ export function RunWorkspace({ runId }: { runId: string }) {
       setPricing(true)
       setErrMsg(null)
       try {
+        const authToken = (await getAuthToken()) ?? token
         const res = await fetch('/api/tenant/estimator/price', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             // The price route only consumes count provenance — pins stay client-side.
             items: rowsToItems(rows).map((i) => ({ type: i.type, count: i.count, confidence: i.confidence, note: i.note })),
@@ -156,9 +155,10 @@ export function RunWorkspace({ runId }: { runId: string }) {
     async (item, draft) => {
       if (!accessToken) return { ok: false, error: 'Not signed in.' }
       try {
+        const token = (await getAuthToken()) ?? accessToken
         const res = await fetch('/api/tenant/services', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             trade: 'electrical',
             name: item.type,
@@ -192,9 +192,10 @@ export function RunWorkspace({ runId }: { runId: string }) {
     setNotice(null)
     const wasPriced = priced !== null || pricedAt !== null
     try {
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch(`/api/tenant/estimator/extract/${runId}`, {
         method: 'PATCH',
-        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ corrected_items: rowsToItems(rows) }),
       })
       const json = (await res.json()) as { ok: boolean; error?: string }
@@ -241,9 +242,10 @@ export function RunWorkspace({ runId }: { runId: string }) {
       fd.append('pdf', file)
       fd.append('page', String(dominantPage))
       fd.append('targets', JSON.stringify(targets))
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch('/api/tenant/estimator/refine', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
         body: fd,
       })
       const json = (await res.json()) as RefineResponse

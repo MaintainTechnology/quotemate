@@ -7,6 +7,7 @@
 
 import { useState } from 'react'
 import { Loader2, Sparkles } from 'lucide-react'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 const API = '/api/tenant/commercial-painting'
 
@@ -30,11 +31,12 @@ export function PaintPreviewPanel({
     setBusy(true)
     setErr(null)
     try {
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch(`${API}/preview`, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({ paintRunId, ...payload }),
       })

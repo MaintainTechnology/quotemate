@@ -16,6 +16,7 @@ import { FLYER_TEMPLATES } from '@/lib/flyer/templates'
 import { FLYER_IMAGE_ACCEPT, validateFlyerImage } from '@/lib/flyer/upload'
 import { customerQrs, flyerQrAction } from '@/lib/flyer/qr-presence'
 import { pdfPageSpec } from '@/lib/flyer/pdf'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 const FlyerCanvasEditor = dynamic(
   () => import('@/app/dashboard/flyer/_components/FlyerCanvasEditor'),
@@ -83,8 +84,15 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
   const [existingQrs, setExistingQrs] = useState<ExistingQr[]>([])
   const [qrBusy, setQrBusy] = useState(false)
 
+  // Mint a FRESH token per request — a Clerk session token expires ~60s after
+  // the dashboard captured `accessToken` at mount, so reusing the prop 401s.
+  // getAuthToken() refreshes (Clerk) or reuses the legacy Supabase session;
+  // fall back to the prop only if it yields nothing. Callers await it.
   const authHeaders = useCallback(
-    (): Record<string, string> => (accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    async (): Promise<Record<string, string>> => {
+      const token = (await getAuthToken()) ?? accessToken
+      return token ? { Authorization: `Bearer ${token}` } : {}
+    },
     [accessToken],
   )
 
@@ -93,7 +101,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
     // fetch await so this stays clean under react-hooks/set-state-in-effect
     // when called from the mount effect. loadingList starts true.
     try {
-      const res = await fetch('/api/dashboard/flyer', { headers: authHeaders(), cache: 'no-store' })
+      const res = await fetch('/api/dashboard/flyer', { headers: await authHeaders(), cache: 'no-store' })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'load_failed')
       setFlyers(json.flyers ?? [])
@@ -107,7 +115,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
 
   const loadQrState = useCallback(async () => {
     try {
-      const res = await fetch('/api/dashboard/marketing/qr', { headers: authHeaders(), cache: 'no-store' })
+      const res = await fetch('/api/dashboard/marketing/qr', { headers: await authHeaders(), cache: 'no-store' })
       const json = await res.json()
       const qrs = (json.qrs ?? []) as { id: string; label: string; destination_type: string }[]
       setQrAction(flyerQrAction(qrs))
@@ -173,7 +181,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
     try {
       const res = await fetch('/api/dashboard/flyer', {
         method: 'POST',
-        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
         body: JSON.stringify({ template_id: templateId }),
       })
       const json = await res.json()
@@ -190,7 +198,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
     setBusy(true)
     setError(null)
     try {
-      const res = await fetch(`/api/dashboard/flyer/${id}`, { headers: authHeaders(), cache: 'no-store' })
+      const res = await fetch(`/api/dashboard/flyer/${id}`, { headers: await authHeaders(), cache: 'no-store' })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'open_failed')
       setEditingId(json.flyer.id)
@@ -213,7 +221,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
     try {
       const res = await fetch(`/api/dashboard/flyer/${editingId}`, {
         method: 'PATCH',
-        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, document: doc }),
       })
       if (!res.ok) {
@@ -231,7 +239,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
   async function deleteFlyer(id: string) {
     setBusy(true)
     try {
-      await fetch(`/api/dashboard/flyer/${id}`, { method: 'DELETE', headers: authHeaders() })
+      await fetch(`/api/dashboard/flyer/${id}`, { method: 'DELETE', headers: await authHeaders() })
       await loadFlyers()
     } finally {
       setBusy(false)
@@ -246,7 +254,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
     }
     const fd = new FormData()
     fd.append('file', file)
-    const res = await fetch('/api/dashboard/flyer/upload', { method: 'POST', headers: authHeaders(), body: fd })
+    const res = await fetch('/api/dashboard/flyer/upload', { method: 'POST', headers: await authHeaders(), body: fd })
     const json = await res.json()
     if (!res.ok) {
       setError(json.message ?? 'Upload failed.')
@@ -301,7 +309,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
     try {
       const res = await fetch('/api/dashboard/marketing/qr', {
         method: 'POST',
-        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
         body: JSON.stringify({ label: 'Flyer QR', destination_type: 'landing' }),
       })
       const json = await res.json()
@@ -334,7 +342,7 @@ export default function FlyerDesignerTab({ accessToken }: { accessToken: string 
 
       await fetch(`/api/dashboard/flyer/${editingId}/export`, {
         method: 'POST',
-        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
         body: JSON.stringify({ png, pdf: pdfData }),
       })
       await loadFlyers()

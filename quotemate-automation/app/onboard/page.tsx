@@ -8,6 +8,7 @@
 
 import { Suspense, useState, useEffect, type FormEvent } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { useAuth } from '@clerk/nextjs'
 import { LICENCE_BODIES } from '@/lib/onboard/schema'
 import { DEFAULT_PAINTING_RATE_CARD } from '@/lib/painting/pricing'
 import {
@@ -27,6 +28,10 @@ type FormState = {
   owner_first_name: string
   owner_email: string
   owner_user_id: string
+  /** Clerk user id (user_…) for Clerk-created signups. The activate route
+   *  stamps it onto tenants.clerk_user_id so the dual-auth resolver finds the
+   *  tenant. Empty for legacy Supabase signups (which use owner_user_id). */
+  clerk_user_id: string
   owner_mobile: string
   /** Multi-select. At least one trade is required. A tradie who holds
    *  both an electrical and a plumbing licence can pick both — the
@@ -144,6 +149,7 @@ function OnboardWizardInner() {
     owner_first_name: '',
     owner_email: '',
     owner_user_id: '',
+    clerk_user_id: '',
     owner_mobile: '',
     trades: [],
     state: '',
@@ -176,8 +182,17 @@ function OnboardWizardInner() {
     default_availability: defaultAvailability(),
   })
 
+  // Clerk session id — the fallback for a Clerk signup that reached /onboard
+  // without the clerk_user_id URL param (e.g. a returning Clerk user with no
+  // tenant yet). Stamped into the form once Clerk hydrates, unless already set.
+  const { userId: clerkSessionUserId } = useAuth()
+  useEffect(() => {
+    if (!clerkSessionUserId) return
+    setForm((prev) => (prev.clerk_user_id ? prev : { ...prev, clerk_user_id: clerkSessionUserId }))
+  }, [clerkSessionUserId])
+
   // Hydrate identity fields. Source priority:
-  //   1. URL params (carried over from /signup or /auth/callback)
+  //   1. URL params (carried over from /signup, /sign-up, or /auth/callback)
   //   2. Supabase session user + user_metadata (set by /api/auth/signup)
   //
   // The session fallback is critical — without it, returning users
@@ -191,6 +206,7 @@ function OnboardWizardInner() {
       const urlFn = params.get('owner_first_name') ?? ''
       const urlEmail = params.get('owner_email') ?? ''
       const urlUserId = params.get('owner_user_id') ?? ''
+      const urlClerkId = params.get('clerk_user_id') ?? ''
       const urlMobile = params.get('owner_mobile') ?? ''
 
       if (!cancelled) {
@@ -200,12 +216,17 @@ function OnboardWizardInner() {
           owner_first_name: urlFn || prev.owner_first_name,
           owner_email: urlEmail || prev.owner_email,
           owner_user_id: urlUserId || prev.owner_user_id,
+          clerk_user_id: urlClerkId || prev.clerk_user_id,
           owner_mobile: urlMobile || prev.owner_mobile,
         }))
       }
 
-      // Pass 2 — Supabase session backfill for anything still empty
-      if (urlBn && urlFn && urlEmail && urlUserId) {
+      // Pass 2 — Supabase session backfill for anything still empty. A Clerk
+      // signup carries clerk_user_id (not owner_user_id), so treat EITHER id as
+      // "identity resolved" before deciding to hit Supabase. (The separate
+      // useAuth effect below backfills clerk_user_id from the live Clerk session
+      // for returning Clerk users who reach /onboard without the URL param.)
+      if (urlBn && urlFn && urlEmail && (urlUserId || urlClerkId)) {
         return // everything came through the URL, no need to fetch
       }
       try {
@@ -538,7 +559,7 @@ function Step1({
       <SectionHeading hint="Shows on the quotes your customers receive.">Your brand</SectionHeading>
       <div className="space-y-7">
         <LogoUpload
-          ownerUserId={form.owner_user_id}
+          ownerUserId={form.owner_user_id || form.clerk_user_id}
           logoUrl={form.logo_url}
           onUploaded={(url, path) => {
             update('logo_url', url)

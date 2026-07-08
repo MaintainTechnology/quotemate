@@ -16,6 +16,7 @@ import {
   type Plan,
 } from '@/app/_components/pricing-data'
 import { readPlanIntent, clearPlanIntent } from '@/lib/billing/plan-intent'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 type Status = {
   has_customer: boolean
@@ -79,8 +80,13 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
     let cancelled = false
     void (async () => {
       try {
+        // Mint a FRESH token per request — a Clerk session token expires ~60s
+        // after the dashboard captured `accessToken` at mount, so reusing the
+        // prop 401s. getAuthToken() refreshes (Clerk) or reuses the legacy
+        // Supabase session; fall back to the prop only if it yields nothing.
+        const token = (await getAuthToken()) ?? accessToken
         const res = await fetch('/api/billing/status', {
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
         })
         if (!res.ok) throw new Error(`status ${res.status}`)
@@ -121,8 +127,9 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
   async function refreshStatus() {
     if (!accessToken) return
     try {
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch('/api/billing/status', {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       })
       if (!res.ok) return
@@ -138,11 +145,12 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
     setError(null)
     setNotice(null)
     try {
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch('/api/billing/checkout', {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ plan: planId, interval }),
       })
@@ -189,9 +197,10 @@ export function BillingTab({ accessToken }: { accessToken: string | null }) {
     setBusy('portal')
     setError(null)
     try {
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch('/api/billing/portal', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
       })
       const json = (await res.json()) as { url?: string; error?: string; detail?: string }
       if (json.url) {

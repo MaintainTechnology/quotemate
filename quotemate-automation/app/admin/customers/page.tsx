@@ -13,7 +13,7 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 import { KNOWN_TRADES, tradeLabel } from '@/lib/admin/trades'
 
 type Customer = {
@@ -67,9 +67,7 @@ export default function AdminCustomersPage() {
   }, [])
 
   useEffect(() => {
-    const sb = getBrowserSupabase()
-    sb.auth.getSession().then(({ data: { session } }) => {
-      const t = session?.access_token
+    void getAuthToken().then((t) => {
       if (!t) {
         setAuthState('signed-out')
         return

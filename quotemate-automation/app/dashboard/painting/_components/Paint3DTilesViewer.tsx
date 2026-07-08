@@ -1,5 +1,6 @@
 'use client'
 
+import { getAuthToken } from '@/lib/auth/client-token'
 // Painting — interactive 3D fly-around with the new paint colour.
 //
 // Renders Google Photorealistic 3D Tiles in CesiumJS (loaded DIRECTLY with
@@ -93,9 +94,13 @@ export function Paint3DTilesViewer({ token, address, postcode, state, colour }: 
     void (async () => {
       try {
         // 1. Resolve the building location + footprint box (server-side key).
+        // Mint a fresh dual-auth token immediately before the fetch — the
+        // captured `token` prop can be a Clerk session token minted at mount
+        // (~60s TTL) and this effect fires late on address change.
+        const freshToken = (await getAuthToken()) ?? token
         const locRes = await fetch('/api/painting/3d-location', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          headers: { Authorization: `Bearer ${freshToken}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ address, postcode, state }),
         })
         const locJson = (await locRes.json()) as ({ ok: true } & Loc) | { ok: false; code?: string; detail?: string }

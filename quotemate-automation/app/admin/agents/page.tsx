@@ -16,7 +16,7 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 type QueueResponse = {
   ok: boolean
@@ -60,18 +60,18 @@ export default function AgentsOverviewPage() {
   }, [])
 
   useEffect(() => {
-    const sb = getBrowserSupabase()
-    sb.auth.getSession().then(({ data: { session } }) => {
-      const t = session?.access_token ?? null
+    void (async () => {
+      const t = await getAuthToken()
       setToken(t)
       if (t) void load(t)
       else setErr('Not signed in')
-    })
+    })()
   }, [load])
 
   const trigger = useCallback(
     async (agent: AgentKey) => {
-      if (!token) {
+      const authToken = (await getAuthToken()) ?? token
+      if (!authToken) {
         setErr('Not signed in')
         return
       }
@@ -81,7 +81,7 @@ export default function AgentsOverviewPage() {
         const res = await fetch(`/api/admin/agents/trigger/${agent}`, {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${authToken}`,
             'Content-Type': 'application/json',
           },
           body: '{}',
@@ -102,7 +102,7 @@ export default function AgentsOverviewPage() {
             `Tradie-Learn · ${String(json.events_seen)} events · ${String(json.patterns_created)} patterns`,
           )
         }
-        await load(token)
+        await load(authToken)
       } catch (e) {
         setLastRunSummary(
           `${agent} errored: ${e instanceof Error ? e.message : String(e)}`,

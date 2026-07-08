@@ -18,7 +18,7 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 type WhoAmI = {
   ok: boolean
@@ -95,9 +95,8 @@ export default function AdminDocsPage() {
   const [q, setQ] = useState('')
 
   useEffect(() => {
-    const sb = getBrowserSupabase()
-    sb.auth.getSession().then(async ({ data: { session } }) => {
-      const t = session?.access_token
+    ;(async () => {
+      const t = await getAuthToken()
       if (!t) {
         setAuthState('signed-out')
         return
@@ -114,7 +113,7 @@ export default function AdminDocsPage() {
       } finally {
         setAuthState('ready')
       }
-    })
+    })()
   }, [])
 
   const isAdmin = authState === 'ready' && who?.is_admin === true

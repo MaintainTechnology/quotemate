@@ -6,7 +6,7 @@
 // Maintain Technology design system.
 
 import { useCallback, useEffect, useState } from 'react'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 import { BrandTabs, withBrand, brandFromUrl, syncBrandInUrl, type BrandTab } from '../_components/BrandTabs'
 import {
   BTN_GHOST,
@@ -39,8 +39,9 @@ export default function SignageAuditPage() {
 
   const load = useCallback(async (t: string, brandParam: string | null) => {
     try {
+      const freshToken = (await getAuthToken()) ?? t
       const q = brandParam ? `?brand=${encodeURIComponent(brandParam)}` : ''
-      const res = await fetch(`/api/signage/sweeps${q}`, { headers: { Authorization: `Bearer ${t}` } })
+      const res = await fetch(`/api/signage/sweeps${q}`, { headers: { Authorization: `Bearer ${freshToken}` } })
       const json = await res.json().catch(() => ({}))
       if (json?.ok) {
         setBrand(json.brand ?? null)
@@ -54,9 +55,7 @@ export default function SignageAuditPage() {
   }, [])
 
   useEffect(() => {
-    const sb = getBrowserSupabase()
-    sb.auth.getSession().then(({ data: { session } }) => {
-      const t = session?.access_token ?? null
+    getAuthToken().then((t) => {
       setToken(t)
       if (!t) return setAuthState('signed-out')
       void load(t, brandFromUrl())
@@ -147,6 +146,7 @@ function IngestCard({ token, brandName, brandSlug }: { token: string | null; bra
       setBusy(apply ? 'saving' : 'reading')
       setErr(null)
       try {
+        const freshToken = (await getAuthToken()) ?? token
         // 1. Try to extract the PDF text in the BROWSER (works for any size).
         //    Sending only the text (~30KB) avoids the platform's request-size
         //    limit, which is what caused the "Request Entity Too Large" /
@@ -170,7 +170,7 @@ function IngestCard({ token, brandName, brandSlug }: { token: string | null; bra
         if (text.trim().length >= 200) {
           res = await fetch(`/api/signage/ingest${qs}`, {
             method: 'POST',
-            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            headers: { Authorization: `Bearer ${freshToken}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ text }),
           })
         } else if (file.size <= 4 * 1024 * 1024) {
@@ -179,7 +179,7 @@ function IngestCard({ token, brandName, brandSlug }: { token: string | null; bra
           fd.append('pdf', file)
           res = await fetch(`/api/signage/ingest${qs}`, {
             method: 'POST',
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { Authorization: `Bearer ${freshToken}` },
             body: fd,
           })
         } else {
@@ -278,10 +278,11 @@ function AuditCard({ token, brand, brandSlug }: { token: string | null; brand: B
     if (!token) return
     setBusy(true); setErr(null); setReport(null)
     try {
+      const freshToken = (await getAuthToken()) ?? token
       const fd = new FormData()
       for (const [slot, list] of Object.entries(files)) for (const f of list) fd.append(slot, f)
       const q = brandSlug ? `?brand=${encodeURIComponent(brandSlug)}` : ''
-      const res = await fetch(`/api/signage/audit${q}`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd })
+      const res = await fetch(`/api/signage/audit${q}`, { method: 'POST', headers: { Authorization: `Bearer ${freshToken}` }, body: fd })
       const json = await res.json().catch(() => null)
       if (!json) {
         setErr(res.status === 413 ? 'Those photos are too large to send together — try fewer or smaller images.' : `Server error (HTTP ${res.status}).`)
@@ -303,9 +304,10 @@ function AuditCard({ token, brand, brandSlug }: { token: string | null; brand: B
     setPdfBusy(true)
     setErr(null)
     try {
+      const freshToken = (await getAuthToken()) ?? token
       const res = await fetch('/api/signage/audit/pdf', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${freshToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ brandName: brand?.name ?? null, report }),
       })
       if (!res.ok) {

@@ -16,7 +16,7 @@
 // orange accent, uppercase display type, numbered sections, no shadows).
 
 import { useCallback, useEffect, useState } from 'react'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 import { FeatureGate } from '@/app/dashboard/_components/FeatureGate'
 import { AddressAutocomplete } from '../roofing/_components/AddressAutocomplete'
 import { RoofTilesViewer } from '../roofing/_components/RoofTilesViewer'
@@ -145,9 +145,7 @@ function AirconRecommendPageInner() {
   const [errMsg, setErrMsg] = useState<string | null>(null)
 
   useEffect(() => {
-    const sb = getBrowserSupabase()
-    sb.auth.getSession().then(({ data: { session } }) => {
-      const t = session?.access_token ?? null
+    getAuthToken().then((t) => {
       setToken(t)
       setAuthState(t ? 'ready' : 'signed-out')
     })
@@ -175,6 +173,7 @@ function AirconRecommendPageInner() {
         budget: budget ? Number(budget) : null,
       }
       try {
+        const freshToken = (await getAuthToken()) ?? token
         let res: Response
         if (planFile) {
           // Floor-plan path: vision read → real rooms → design overlay.
@@ -184,13 +183,13 @@ function AirconRecommendPageInner() {
           fd.append('inputs', JSON.stringify(inputsPayload))
           res = await fetch('/api/aircon/plan', {
             method: 'POST',
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { Authorization: `Bearer ${freshToken}` },
             body: fd,
           })
         } else {
           res = await fetch('/api/aircon/recommend', {
             method: 'POST',
-            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            headers: { Authorization: `Bearer ${freshToken}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ address: addressPayload, inputs: inputsPayload }),
           })
         }
@@ -513,9 +512,10 @@ function AirconPdfButton({
     setBusy(true)
     setErr(null)
     try {
+      const freshToken = (await getAuthToken()) ?? token
       const res = await fetch('/api/aircon/pdf', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${freshToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ address, recommendation, climateZone }),
       })
       if (!res.ok) {
@@ -621,9 +621,10 @@ function AcStaticMap({
     let objectUrl: string | null = null
     void (async () => {
       try {
+        const freshToken = (await getAuthToken()) ?? token
         const params = new URLSearchParams({ lat: String(geocode.lat), lng: String(geocode.lng) })
         const res = await fetch(`/api/aircon/static-map?${params.toString()}`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${freshToken}` },
         })
         if (cancelled || !res.ok) return
         objectUrl = URL.createObjectURL(await res.blob())

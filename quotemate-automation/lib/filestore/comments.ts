@@ -8,7 +8,8 @@
 // reaches the KB — comments live only in Postgres.
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { isAdminUser } from '@/lib/admin-loader/auth'
+import { resolveTenantRequest } from '@/lib/tenant/from-request'
+import { resolveAdminUserId } from '@/lib/admin-loader/route-auth'
 
 export type CommentAuthorRole = 'tenant' | 'admin'
 
@@ -36,30 +37,27 @@ function svc(): SupabaseClient {
 export type BearerTenant = { id: string; userId: string; business_name: string | null }
 
 export async function tenantFromBearer(req: Request): Promise<BearerTenant | null> {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await svc().auth.getUser(token)
-  if (error || !data.user) return null
-  const { data: tenant } = await svc()
-    .from('tenants')
-    .select('id, business_name')
-    .eq('owner_user_id', data.user.id)
-    .maybeSingle<{ id: string; business_name: string | null }>()
+  // Dual-auth (Clerk↔Supabase): resolve the tenant by the provider-appropriate
+  // key (clerk_user_id or owner_user_id). `userId` is pinned to the tenant's
+  // stable Supabase owner id so comment ownership (author_user_id) stays
+  // consistent whether the same owner signs in via Clerk or Supabase.
+  const resolved = await resolveTenantRequest(svc(), req, 'id, owner_user_id, business_name')
+  const tenant = resolved?.tenant as
+    | { id: string; owner_user_id: string | null; business_name: string | null }
+    | null
+    | undefined
   if (!tenant) return null
-  return { id: tenant.id, userId: data.user.id, business_name: tenant.business_name }
+  return {
+    id: tenant.id,
+    userId: tenant.owner_user_id ?? resolved!.identity.userId,
+    business_name: tenant.business_name,
+  }
 }
 
 export async function adminFromBearer(req: Request): Promise<{ userId: string } | null> {
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) return null
-  const token = auth.slice(7).trim()
-  if (!token) return null
-  const { data, error } = await svc().auth.getUser(token)
-  if (error || !data.user) return null
-  const ok = await isAdminUser(svc(), data.user.id)
-  return ok ? { userId: data.user.id } : null
+  // Dual-auth admin gate — same resolution the admin-loader routes use.
+  const userId = await resolveAdminUserId(svc(), req)
+  return userId ? { userId } : null
 }
 
 // ─── Validation ─────────────────────────────────────────────────────

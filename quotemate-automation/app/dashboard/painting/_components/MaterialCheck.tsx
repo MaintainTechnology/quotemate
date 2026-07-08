@@ -10,6 +10,7 @@
 // flag. Mirrors the roofing SolarCheck panel.
 
 import { useCallback, useState } from 'react'
+import { getAuthToken } from '@/lib/auth/client-token'
 import type { MaterialDetection, MaterialGuidance } from '@/lib/painting/material'
 
 type DetectResponse =
@@ -41,9 +42,10 @@ export function MaterialCheck({ token, address, postcode, state, yearBuilt }: Pr
     setDetection(null)
     setGuidance(null)
     try {
+      const freshToken = (await getAuthToken()) ?? token
       const res = await fetch('/api/painting/detect-material', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${freshToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ address, postcode, state, year_built: yearBuilt ?? null }),
       })
       const json = (await res.json()) as DetectResponse

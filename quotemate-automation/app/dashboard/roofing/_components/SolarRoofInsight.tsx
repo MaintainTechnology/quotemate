@@ -1,5 +1,6 @@
 'use client'
 
+import { getAuthToken } from '@/lib/auth/client-token'
 // Google Solar — aerial roof insight on /dashboard/roofing/measure.
 // Reads the selected structure's centroid and shows the Solar API's
 // per-segment roof breakdown (planes, area, measured pitch, facing) so the
@@ -42,16 +43,23 @@ export function SolarRoofInsight({ accessToken, metrics }: { accessToken: string
     }
     let cancelled = false
     setState('loading')
-    fetch(`/api/roofing/solar-insight?lat=${lat}&lng=${lng}`, { headers: { Authorization: `Bearer ${accessToken}` } })
-      .then((r) => r.json())
-      .then((j) => {
+    ;(async () => {
+      // Mint a FRESH token immediately before the fetch — the `accessToken`
+      // prop is captured once at the parent's mount and a Clerk session token
+      // expires ~60s later, long before lat/lng resolve after a measure run.
+      const token = (await getAuthToken()) ?? accessToken
+      try {
+        const r = await fetch(`/api/roofing/solar-insight?lat=${lat}&lng=${lng}`, { headers: { Authorization: `Bearer ${token}` } })
+        const j = await r.json()
         if (cancelled) return
         if (j.ok) {
           setInsight(j.insight)
           setState('ready')
         } else setState('none')
-      })
-      .catch(() => !cancelled && setState('none'))
+      } catch {
+        if (!cancelled) setState('none')
+      }
+    })()
     return () => {
       cancelled = true
     }

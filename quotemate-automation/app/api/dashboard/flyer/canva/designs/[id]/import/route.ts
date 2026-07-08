@@ -5,8 +5,8 @@
 //   { formats?: ('png'|'pdf')[] } — defaults to both.
 // Auth: Authorization: Bearer <token>. Ownership-checked; requires a connection.
 
-import { marketingSupabase as supabase, userFromBearer } from '@/lib/marketing/auth'
-import { tenantBrandForUser } from '@/lib/flyer/tenant'
+import { marketingSupabase as supabase } from '@/lib/marketing/auth'
+import { tenantBrandFromBearer } from '@/lib/flyer/tenant'
 import { ownershipVerdict } from '@/lib/flyer/api-logic'
 import { ImportCanvaBody, importFormats } from '@/lib/canva/api-logic'
 import { getValidAccessToken } from '@/lib/canva/tokens'
@@ -22,9 +22,9 @@ const CONTENT_TYPE: Record<'png' | 'pdf', string> = {
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params
-  const user = await userFromBearer(req)
-  if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  const tenant = await tenantBrandForUser(user.id)
+  const auth = await tenantBrandFromBearer(req)
+  if (!auth) return Response.json({ error: 'unauthorized' }, { status: 401 })
+  const tenant = auth.tenant
   if (!tenant) return Response.json({ error: 'no_tenant' }, { status: 404 })
 
   let raw: unknown = {}

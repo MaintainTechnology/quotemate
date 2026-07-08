@@ -9,7 +9,7 @@
 // Maintain Technology design system.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 import { AddressAutocomplete } from '@/app/dashboard/roofing/_components/AddressAutocomplete'
 import { BrandTabs, withBrand, brandFromUrl, syncBrandInUrl, type BrandTab } from '../_components/BrandTabs'
 import {
@@ -69,8 +69,9 @@ export default function SignageStudiosPage() {
 
   const load = useCallback(async (t: string, brandParam: string | null) => {
     try {
+      const freshToken = (await getAuthToken()) ?? t
       const q = brandParam ? `?brand=${encodeURIComponent(brandParam)}` : ''
-      const res = await fetch(`/api/signage/studios${q}`, { headers: { Authorization: `Bearer ${t}` }, cache: 'no-store' })
+      const res = await fetch(`/api/signage/studios${q}`, { headers: { Authorization: `Bearer ${freshToken}` }, cache: 'no-store' })
       if (res.status === 401) return setAuthState('signed-out')
       const json = await res.json()
       if (json.ok) {
@@ -87,14 +88,11 @@ export default function SignageStudiosPage() {
   }, [])
 
   useEffect(() => {
-    getBrowserSupabase()
-      .auth.getSession()
-      .then(({ data: { session } }) => {
-        const t = session?.access_token ?? null
-        setToken(t)
-        if (!t) return setAuthState('signed-out')
-        void load(t, brandFromUrl())
-      })
+    getAuthToken().then((t) => {
+      setToken(t)
+      if (!t) return setAuthState('signed-out')
+      void load(t, brandFromUrl())
+    })
   }, [load])
 
   const switchBrand = useCallback(
@@ -117,7 +115,8 @@ export default function SignageStudiosPage() {
     searchTimer.current = setTimeout(async () => {
       setSearching(true)
       try {
-        const res = await fetch(`/api/signage/places/search?q=${encodeURIComponent(placeQuery)}`, { headers: { Authorization: `Bearer ${token}` } })
+        const freshToken = (await getAuthToken()) ?? token
+        const res = await fetch(`/api/signage/places/search?q=${encodeURIComponent(placeQuery)}`, { headers: { Authorization: `Bearer ${freshToken}` } })
         const json = await res.json()
         if (!stale) setPlaces(json.ok ? (json.results ?? []) : [])
       } finally {
@@ -138,7 +137,8 @@ export default function SignageStudiosPage() {
     let stale = false
     geoTimer.current = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/signage/geocode?address=${encodeURIComponent(address)}`, { headers: { Authorization: `Bearer ${token}` } })
+        const freshToken = (await getAuthToken()) ?? token
+        const res = await fetch(`/api/signage/geocode?address=${encodeURIComponent(address)}`, { headers: { Authorization: `Bearer ${freshToken}` } })
         const json = await res.json()
         if (json.ok && !stale) {
           setLat(json.lat)
@@ -184,10 +184,11 @@ export default function SignageStudiosPage() {
       setBusy(true)
       setErr(null)
       try {
+        const freshToken = (await getAuthToken()) ?? token
         const q = brandSlug ? `?brand=${encodeURIComponent(brandSlug)}` : ''
         const res = await fetch(`/api/signage/studios${q}`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          headers: { Authorization: `Bearer ${freshToken}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name: name.trim(),
             address: address.trim() || undefined,
@@ -220,10 +221,11 @@ export default function SignageStudiosPage() {
       setBusy(true)
       setImportMsg(null)
       try {
+        const freshToken = (await getAuthToken()) ?? token
         const q = brandSlug ? `?brand=${encodeURIComponent(brandSlug)}` : ''
         const fd = new FormData()
         fd.append('csv', file)
-        const res = await fetch(`/api/signage/studios/import${q}`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd })
+        const res = await fetch(`/api/signage/studios/import${q}`, { method: 'POST', headers: { Authorization: `Bearer ${freshToken}` }, body: fd })
         const json = await res.json()
         if (!json.ok) setImportMsg(`Import failed: ${(json.issues ?? [json.error]).join('; ')}`)
         else setImportMsg(`Imported ${json.created} studio${json.created === 1 ? '' : 's'}; ${json.skipped_existing} already existed.`)
@@ -242,7 +244,8 @@ export default function SignageStudiosPage() {
       if (!token) return
       if (!window.confirm(`Delete "${s.name}"? This removes it and any sweep photos/results for it.`)) return
       try {
-        const res = await fetch(`/api/signage/studios/${s.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+        const freshToken = (await getAuthToken()) ?? token
+        const res = await fetch(`/api/signage/studios/${s.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${freshToken}` } })
         if (res.ok) await load(token, brandSlug)
       } catch {
         /* network hiccup — the row simply stays; the next action retries */
@@ -453,17 +456,20 @@ function useAuthedImage(url: string | null, token: string | null) {
     if (!url || !token) return
     let revoke: string | null = null
     let cancelled = false
-    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-      .then(async (r) => {
-        if (!r.ok || cancelled) return
-        const blob = await r.blob()
-        // Re-check after the await so we never mint an object URL the
-        // cleanup (which already ran) can't revoke.
-        if (cancelled) return
-        revoke = URL.createObjectURL(blob)
-        setImg({ key: url, src: revoke })
-      })
-      .catch(() => {})
+    void (async () => {
+      const freshToken = (await getAuthToken()) ?? token
+      fetch(url, { headers: { Authorization: `Bearer ${freshToken}` } })
+        .then(async (r) => {
+          if (!r.ok || cancelled) return
+          const blob = await r.blob()
+          // Re-check after the await so we never mint an object URL the
+          // cleanup (which already ran) can't revoke.
+          if (cancelled) return
+          revoke = URL.createObjectURL(blob)
+          setImg({ key: url, src: revoke })
+        })
+        .catch(() => {})
+    })()
     return () => {
       cancelled = true
       if (revoke) URL.revokeObjectURL(revoke)

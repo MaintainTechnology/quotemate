@@ -15,6 +15,7 @@
 // 0..100%.
 
 import { useCallback, useEffect, useState } from 'react'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 const MATERIALS = [
   ['colorbond_corrugated', 'Colorbond Corrugated'],
@@ -84,8 +85,9 @@ export function RoofRatesEditor({ accessToken }: Props) {
     setLoading(true)
     setErrMsg(null)
     try {
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch('/api/tenant/roofing-rates', {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       })
       const json = (await res.json()) as GetResponse
@@ -147,10 +149,11 @@ export function RoofRatesEditor({ accessToken }: Props) {
           upgrade_material: upgradeMat === '' ? null : upgradeMat,
           gst_registered: gstMode === '' ? null : gstMode === 'true',
         }
+        const token = (await getAuthToken()) ?? accessToken
         const res = await fetch('/api/tenant/roofing-rates', {
           method: 'PATCH',
           headers: {
-            Authorization: `Bearer ${accessToken}`,
+            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(body),

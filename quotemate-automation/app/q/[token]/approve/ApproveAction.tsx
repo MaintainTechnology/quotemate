@@ -6,7 +6,7 @@
 // /api/quote/[id]/approve, then renders a confirmation badge.
 
 import { useEffect, useState } from 'react'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 export function ApproveAction({
   quoteId,
@@ -24,11 +24,10 @@ export function ApproveAction({
 
   useEffect(() => {
     let cancelled = false
-    const client = getBrowserSupabase()
     void (async () => {
-      const { data } = await client.auth.getSession()
+      const token = await getAuthToken()
       if (cancelled) return
-      setAccessToken(data.session?.access_token ?? null)
+      setAccessToken(token)
       setSessionReady(true)
     })()
     return () => {
@@ -38,7 +37,13 @@ export function ApproveAction({
 
   async function approve() {
     if (busy || sent) return
-    if (!accessToken) {
+    // Dual-auth: mint a FRESH token immediately before the fetch. Clerk's
+    // default session token expires ~60s after it is minted, so a token
+    // captured in the mount effect would be stale by click time; and a
+    // Clerk-authed tradie has no Supabase session at all. Fall back to the
+    // mount-captured token only if getAuthToken returns nothing.
+    const token = (await getAuthToken()) ?? accessToken
+    if (!token) {
       setError('Sign in as the tradie owner to approve. (Open /signin in a new tab, then come back.)')
       return
     }
@@ -48,7 +53,7 @@ export function ApproveAction({
       const res = await fetch(`/api/quote/${encodeURIComponent(quoteId)}/approve`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       })

@@ -15,6 +15,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Loader2, Trash2 } from 'lucide-react'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 type TradeKey = 'roofing' | 'solar' | 'painting' | 'commercial-painting'
 
@@ -130,8 +131,11 @@ export function SavedJobsSection({
     let cancelled = false
     void (async () => {
       try {
+        // Mint a FRESH token per request — the Clerk session token captured at
+        // mount expires ~60s later, so reusing the prop 401s.
+        const token = (await getAuthToken()) ?? accessToken
         const res = await fetch('/api/tenant/trade-jobs', {
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: { Authorization: `Bearer ${token}` },
         })
         if (!res.ok) return
         const json = (await res.json()) as { jobs?: TradeJobSummary[] }
@@ -155,11 +159,12 @@ export function SavedJobsSection({
     setBusyKey(key)
     setDeleteError(null)
     try {
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch('/api/tenant/trade-jobs', {
         method: 'DELETE',
         headers: {
           'content-type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ trade: job.trade, id: job.id }),
       })

@@ -1,5 +1,6 @@
 'use client'
 
+import { getAuthToken } from '@/lib/auth/client-token'
 // QuoteEditChat — the AI chat box mounted INSIDE the TradieEditor modal on the
 // /q/<token> quote page (owner-only). The tradie types a plain-English change
 // ("add a second downlight to Better", "drop the smoke-alarm line"); the panel
@@ -117,7 +118,13 @@ export default function QuoteEditChat({
     async (question: string) => {
       const q = question.trim()
       if (!q || loading) return
-      if (!accessToken) {
+      // Mint a FRESH token immediately before the fetch (dual-auth): Clerk's
+      // default session token expires ~60s after mount, so the captured
+      // accessToken prop goes stale — and is null for a Clerk user whose
+      // parent read it from a (nonexistent) Supabase session. Fall back to the
+      // captured prop for genuine legacy-Supabase users.
+      const token = (await getAuthToken()) ?? accessToken
+      if (!token) {
         setMessages((m) => [
           ...m,
           { role: 'user', text: q },
@@ -137,7 +144,7 @@ export default function QuoteEditChat({
           method: 'POST',
           headers: {
             'content-type': 'application/json',
-            authorization: `Bearer ${accessToken}`,
+            authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({ instruction: q, currentTiers: getCurrentTiers() }),
         })

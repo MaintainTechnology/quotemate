@@ -13,7 +13,7 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 import type { PlatformMetrics, TenantUsageRow } from '@/lib/admin/metrics'
 import { SplitBars, TrendBars } from '@/app/_components/MetricCharts'
 
@@ -38,11 +38,7 @@ export default function AdminMetricsPage() {
     const isStale = () => reqIdRef.current !== myId
     setRefreshing(true)
     try {
-      const sb = getBrowserSupabase()
-      const {
-        data: { session },
-      } = await sb.auth.getSession()
-      const token = session?.access_token
+      const token = await getAuthToken()
       if (isStale()) return
       if (!token) {
         setState('signed-out')

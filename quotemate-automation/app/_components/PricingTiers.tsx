@@ -8,7 +8,7 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
-import { getBrowserSupabase } from "@/lib/supabase/client"
+import { getAuthToken } from "@/lib/auth/client-token"
 import { writePlanIntent } from "@/lib/billing/plan-intent"
 import {
   PLANS,
@@ -135,9 +135,7 @@ function CheckoutButton({
     setLoading(true)
     setError(null)
     try {
-      const supabase = getBrowserSupabase()
-      const { data } = await supabase.auth.getSession()
-      const token = data.session?.access_token
+      const token = await getAuthToken()
       if (!token) {
         goSignup()
         return

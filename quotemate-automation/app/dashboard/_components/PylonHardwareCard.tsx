@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Cpu } from 'lucide-react'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 type Settings = {
   module_sku?: string | null
@@ -35,8 +36,9 @@ export function PylonHardwareCard({ accessToken }: { accessToken: string | null 
     let cancelled = false
     void (async () => {
       try {
+        const token = (await getAuthToken()) ?? accessToken
         const res = await fetch('/api/tenant/pylon/settings', {
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
         })
         if (cancelled) return
@@ -61,10 +63,11 @@ export function PylonHardwareCard({ accessToken }: { accessToken: string | null 
     setError(null)
     setSaved(false)
     try {
+      const token = (await getAuthToken()) ?? accessToken
       const res = await fetch('/api/tenant/pylon/settings', {
         method: 'PUT',
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(values),

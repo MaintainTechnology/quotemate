@@ -5,8 +5,8 @@
 //   URLs for any imported PNG/PDF exports).
 // Auth: Authorization: Bearer <token>. Tenant-scoped.
 
-import { marketingSupabase as supabase, userFromBearer } from '@/lib/marketing/auth'
-import { tenantBrandForUser } from '@/lib/flyer/tenant'
+import { marketingSupabase as supabase } from '@/lib/marketing/auth'
+import { tenantBrandFromBearer } from '@/lib/flyer/tenant'
 import { isCanvaConnected } from '@/lib/canva/api-logic'
 import { readCanvaConfig } from '@/lib/canva/config'
 import { FLYER_BUCKET } from '@/lib/canva/storage'
@@ -26,9 +26,9 @@ interface DesignRow {
 }
 
 export async function GET(req: Request) {
-  const user = await userFromBearer(req)
-  if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  const tenant = await tenantBrandForUser(user.id)
+  const auth = await tenantBrandFromBearer(req)
+  if (!auth) return Response.json({ error: 'unauthorized' }, { status: 401 })
+  const tenant = auth.tenant
   if (!tenant) return Response.json({ error: 'no_tenant' }, { status: 404 })
 
   const { data: conn } = await supabase

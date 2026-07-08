@@ -4,17 +4,17 @@
 // Auth: Bearer token; tenant-scoped storage path.
 
 import { randomUUID } from 'node:crypto'
-import { marketingSupabase as supabase, userFromBearer } from '@/lib/marketing/auth'
-import { tenantBrandForUser } from '@/lib/flyer/tenant'
+import { marketingSupabase as supabase } from '@/lib/marketing/auth'
+import { tenantBrandFromBearer } from '@/lib/flyer/tenant'
 import { validateFlyerImage } from '@/lib/flyer/upload'
 import { FLYER_BUCKET, flyerUploadPath } from '@/lib/flyer/storage'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
-  const user = await userFromBearer(req)
-  if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  const tenant = await tenantBrandForUser(user.id)
+  const auth = await tenantBrandFromBearer(req)
+  if (!auth) return Response.json({ error: 'unauthorized' }, { status: 401 })
+  const tenant = auth.tenant
   if (!tenant) return Response.json({ error: 'no_tenant' }, { status: 404 })
 
   let form: FormData

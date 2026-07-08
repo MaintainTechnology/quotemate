@@ -9,7 +9,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 export function RetryPanel({ warning }: { warning: string | null }) {
   const router = useRouter()
@@ -20,9 +20,7 @@ export function RetryPanel({ warning }: { warning: string | null }) {
     setBusy(true)
     setError(null)
     try {
-      const supabase = getBrowserSupabase()
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData.session?.access_token
+      const token = await getAuthToken()
       if (!token) {
         setError('Not signed in. Open the dashboard to retry.')
         setBusy(false)

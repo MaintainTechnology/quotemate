@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { runDeviceCount, runItemCount, runStatus } from '@/lib/estimation/run-status'
+import { getAuthToken } from '@/lib/auth/client-token'
 import { RunStatusChip } from './estimator/badges'
 import { stashPlanFile } from './estimator/plan-file-store'
 import { money, type ExtractResponse, type HistoryUpload } from './estimator/types'
@@ -41,8 +42,9 @@ export function EstimatorBetaTab({ accessToken }: Props) {
     let cancelled = false
     ;(async () => {
       try {
+        const token = (await getAuthToken()) ?? accessToken
         const res = await fetch('/api/tenant/estimator/history', {
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
         })
         const json = (await res.json()) as { ok: boolean; uploads?: HistoryUpload[] }
@@ -76,9 +78,10 @@ export function EstimatorBetaTab({ accessToken }: Props) {
         const fd = new FormData()
         fd.append('pdf', file)
         fd.append('sheet_hint', sheetHint)
+        const token = (await getAuthToken()) ?? accessToken
         const res = await fetch('/api/tenant/estimator/extract', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: { Authorization: `Bearer ${token}` },
           body: fd,
         })
         const json = (await res.json()) as ExtractResponse

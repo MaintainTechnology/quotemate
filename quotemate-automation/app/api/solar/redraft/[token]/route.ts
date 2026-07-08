@@ -18,6 +18,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { after } from 'next/server'
+import { resolveIdentityRequest } from '@/lib/tenant/from-request'
 import { runSolarEstimate } from '@/lib/solar/intake'
 import { loadSolarConfig } from '@/lib/solar/config'
 import { geocodeAddress } from '@/lib/solar/geocode'
@@ -53,15 +54,10 @@ export async function POST(
     return Response.json({ ok: false, error: 'invalid_token' }, { status: 400 })
   }
 
-  const auth = req.headers.get('authorization') ?? ''
-  if (!auth.toLowerCase().startsWith('bearer ')) {
-    return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  }
+  // Dual-auth (Clerk↔Supabase) — same trust model as POST /api/solar/confirm.
   const supabase = getSupabase()
-  const { data: userData, error: userErr } = await supabase.auth.getUser(
-    auth.slice(7).trim(),
-  )
-  if (userErr || !userData?.user) {
+  const identity = await resolveIdentityRequest(supabase, req)
+  if (!identity) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
 

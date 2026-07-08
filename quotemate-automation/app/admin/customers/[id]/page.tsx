@@ -16,7 +16,7 @@
 
 import Link from 'next/link'
 import { use, useCallback, useEffect, useMemo, useState } from 'react'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 import { KNOWN_TRADES, tradeLabel } from '@/lib/admin/trades'
 
 type Customer = {
@@ -92,11 +92,7 @@ export default function AdminCustomerDetailPage({
   const [typed, setTyped] = useState('')
 
   const getToken = useCallback(async (): Promise<string | null> => {
-    const sb = getBrowserSupabase()
-    const {
-      data: { session },
-    } = await sb.auth.getSession()
-    return session?.access_token ?? null
+    return await getAuthToken()
   }, [])
 
   const load = useCallback(async () => {
@@ -145,19 +141,17 @@ export default function AdminCustomerDetailPage({
   }, [id, getToken])
 
   useEffect(() => {
-    // Defer the initial fetch into a microtask (via getSession().then) so we
-    // never call setState synchronously in the effect body — mirrors the
-    // list page and satisfies react-hooks/set-state-in-effect. load() does
-    // its own auth, so we just gate on a session existing first.
-    void getBrowserSupabase()
-      .auth.getSession()
-      .then(({ data: { session } }) => {
-        if (!session?.access_token) {
-          setAuthState('signed-out')
-          return
-        }
-        void load()
-      })
+    // Defer the initial fetch into a microtask so we never call setState
+    // synchronously in the effect body — mirrors the list page and satisfies
+    // react-hooks/set-state-in-effect. load() does its own auth, so we just
+    // gate on a token existing first (Clerk session token OR legacy Supabase).
+    void getAuthToken().then((token) => {
+      if (!token) {
+        setAuthState('signed-out')
+        return
+      }
+      void load()
+    })
   }, [load])
 
   // ── Mutation helpers ────────────────────────────────────────────────

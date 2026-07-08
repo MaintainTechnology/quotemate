@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Loader2, Check, RotateCcw, Pencil, Trash2, X } from 'lucide-react'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 type CommentDto = {
   id: string
@@ -61,9 +62,13 @@ export function CommentsThread({
   const [busy, setBusy] = useState(false)
 
   const authHeaders = useCallback(
-    (json = false): Record<string, string> => {
+    async (json = false): Promise<Record<string, string>> => {
       const h: Record<string, string> = {}
-      if (accessToken) h.Authorization = `Bearer ${accessToken}`
+      // Mint a fresh dual-auth token per request — Clerk's default session token
+      // expires ~60s after mount, so the captured `accessToken` prop is only a
+      // legacy fallback, never the primary source.
+      const token = (await getAuthToken()) ?? accessToken
+      if (token) h.Authorization = `Bearer ${token}`
       if (json) h['content-type'] = 'application/json'
       return h
     },
@@ -74,7 +79,7 @@ export function CommentsThread({
     setError(null)
     try {
       const res = await fetch(`${apiBase}/comments`, {
-        headers: authHeaders(),
+        headers: await authHeaders(),
         cache: 'no-store',
       })
       if (!res.ok) throw new Error(`status ${res.status}`)
@@ -100,7 +105,7 @@ export function CommentsThread({
     try {
       const res = await fetch(`${apiBase}/comments`, {
         method: 'POST',
-        headers: authHeaders(true),
+        headers: await authHeaders(true),
         body: JSON.stringify({ body }),
       })
       if (!res.ok) throw new Error()
@@ -121,7 +126,7 @@ export function CommentsThread({
     try {
       const res = await fetch(`${apiBase}/comments/${id}`, {
         method: 'PATCH',
-        headers: authHeaders(true),
+        headers: await authHeaders(true),
         body: JSON.stringify({ body }),
       })
       if (!res.ok) throw new Error()
@@ -142,7 +147,7 @@ export function CommentsThread({
     try {
       const res = await fetch(`${apiBase}/comments/${id}`, {
         method: 'DELETE',
-        headers: authHeaders(),
+        headers: await authHeaders(),
       })
       if (!res.ok) throw new Error()
       await load()
@@ -160,7 +165,7 @@ export function CommentsThread({
     try {
       const res = await fetch(`${apiBase}/resolve`, {
         method: 'POST',
-        headers: authHeaders(true),
+        headers: await authHeaders(true),
         body: JSON.stringify({ resolved: !data.resolved }),
       })
       if (!res.ok) throw new Error()

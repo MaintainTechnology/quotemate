@@ -12,6 +12,7 @@
 // grey placeholder. Mirrors GoogleStaticMap's blob+objectURL pattern.
 
 import { useEffect, useState } from 'react'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 export type StreetViewProps = {
   /** Bearer access token — the proxy gates on it. */
@@ -40,8 +41,9 @@ export function StreetView({ accessToken, address, heightClass = 'h-112' }: Stre
     void (async () => {
       try {
         const params = new URLSearchParams({ address, w: '640', h: '400' })
+        const token = (await getAuthToken()) ?? accessToken
         const res = await fetch(`/api/roofing/street-view?${params.toString()}`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: { Authorization: `Bearer ${token}` },
         })
         if (cancelled) return
         if (res.status === 404) {

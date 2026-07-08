@@ -1,5 +1,6 @@
 'use client'
 
+import { getAuthToken } from '@/lib/auth/client-token'
 // Canva Flyer Studio — an INLINE sub-view of the Flyer tab (not a modal/overlay).
 //
 // Rendered in place inside the dashboard Flyer tab when the tradie opens Canva,
@@ -63,14 +64,14 @@ export default function CanvaStudio({
   const [error, setError] = useState<string | null>(null)
   const [importingId, setImportingId] = useState<string | null>(null)
 
-  const authHeaders = useCallback(
-    (): Record<string, string> => (accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-    [accessToken],
-  )
+  const authHeaders = useCallback(async (): Promise<Record<string, string>> => {
+    const token = (await getAuthToken()) ?? accessToken
+    return token ? { Authorization: `Bearer ${token}` } : {}
+  }, [accessToken])
 
   const loadStatus = useCallback(async () => {
     try {
-      const res = await fetch('/api/dashboard/flyer/canva/status', { headers: authHeaders(), cache: 'no-store' })
+      const res = await fetch('/api/dashboard/flyer/canva/status', { headers: await authHeaders(), cache: 'no-store' })
       const json = (await res.json()) as StatusResponse & { error?: string }
       if (!res.ok) throw new Error(json.error ?? 'status_failed')
       setStatus({ configured: json.configured, connected: json.connected, designs: json.designs ?? [] })
@@ -114,7 +115,7 @@ export default function CanvaStudio({
     setBusy(true)
     setError(null)
     try {
-      const res = await fetch('/api/dashboard/flyer/canva/connect', { headers: authHeaders(), cache: 'no-store' })
+      const res = await fetch('/api/dashboard/flyer/canva/connect', { headers: await authHeaders(), cache: 'no-store' })
       const json = (await res.json()) as { url?: string; error?: string }
       if (!res.ok || !json.url) throw new Error(json.error ?? 'connect_failed')
       window.open(json.url, 'canva-oauth', 'popup,width=620,height=760')
@@ -128,7 +129,7 @@ export default function CanvaStudio({
   const disconnect = useCallback(async () => {
     setBusy(true)
     try {
-      await fetch('/api/dashboard/flyer/canva/disconnect', { method: 'POST', headers: authHeaders() })
+      await fetch('/api/dashboard/flyer/canva/disconnect', { method: 'POST', headers: await authHeaders() })
       await loadStatus()
     } finally {
       setBusy(false)
@@ -141,7 +142,7 @@ export default function CanvaStudio({
     try {
       const res = await fetch('/api/dashboard/flyer/canva/designs', {
         method: 'POST',
-        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       })
       const json = (await res.json()) as { id?: string; editUrl?: string; error?: string }
@@ -163,7 +164,7 @@ export default function CanvaStudio({
       try {
         const res = await fetch(`/api/dashboard/flyer/canva/designs/${designId}/import`, {
           method: 'POST',
-          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+          headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
           body: JSON.stringify({}),
         })
         const json = (await res.json()) as { ok?: boolean; error?: string }
@@ -184,7 +185,7 @@ export default function CanvaStudio({
     async (designId: string) => {
       setBusy(true)
       try {
-        await fetch(`/api/dashboard/flyer/canva/designs/${designId}`, { method: 'DELETE', headers: authHeaders() })
+        await fetch(`/api/dashboard/flyer/canva/designs/${designId}`, { method: 'DELETE', headers: await authHeaders() })
         await loadStatus()
       } finally {
         setBusy(false)

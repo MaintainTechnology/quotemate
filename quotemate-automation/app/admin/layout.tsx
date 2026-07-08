@@ -26,7 +26,9 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { ArrowLeft, LogOut } from 'lucide-react'
+import { useClerk } from '@clerk/nextjs'
 import { BrandMark } from '@/app/_components/BrandMark'
+import { getAuthToken } from '@/lib/auth/client-token'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 
 type Gate = 'checking' | 'allowed'
@@ -37,6 +39,7 @@ export default function AdminLayout({
   children: React.ReactNode
 }) {
   const router = useRouter()
+  const { signOut: clerkSignOut } = useClerk()
   // Fails CLOSED: content renders only after whoami confirms is_admin.
   // Any signed-out / non-admin / network outcome redirects away and never
   // mounts the admin children.
@@ -44,11 +47,9 @@ export default function AdminLayout({
 
   useEffect(() => {
     let cancelled = false
-    const sb = getBrowserSupabase()
 
-    sb.auth.getSession().then(async ({ data: { session } }) => {
+    getAuthToken().then(async (token) => {
       if (cancelled) return
-      const token = session?.access_token
       if (!token) {
         router.replace('/signin')
         return
@@ -81,7 +82,15 @@ export default function AdminLayout({
   }, [router])
 
   async function signOut() {
-    await getBrowserSupabase().auth.signOut()
+    // Dual-auth: clear BOTH sessions so sign-out is complete regardless of
+    // which provider the admin logged in with (a Clerk admin has no Supabase
+    // session, so the Supabase-only sign-out used to leave them signed in).
+    await getBrowserSupabase().auth.signOut().catch(() => {})
+    try {
+      await clerkSignOut()
+    } catch {
+      /* Supabase sign-out already ran */
+    }
     router.replace('/signin')
   }
 

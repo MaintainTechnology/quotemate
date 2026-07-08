@@ -8,7 +8,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 /* ─── Maintain design tokens (class shorthands) ───────────────── */
 export const INPUT =
@@ -22,9 +22,7 @@ export const TH = 'px-4 py-3 text-left font-mono text-[0.62rem] uppercase tracki
 
 /* ─── Auth ────────────────────────────────────────────────────── */
 export async function authHeader(): Promise<Record<string, string>> {
-  const supabase = getBrowserSupabase()
-  const { data } = await supabase.auth.getSession()
-  const token = data.session?.access_token ?? ''
+  const token = (await getAuthToken()) ?? ''
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
 }
 
