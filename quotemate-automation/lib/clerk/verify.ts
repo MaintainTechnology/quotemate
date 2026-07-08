@@ -36,7 +36,12 @@ export async function verifyClerkSessionToken(
 ): Promise<ClerkClaims | null> {
   if (!secretKey) return null
   try {
-    const res = await verifyToken(token, { secretKey })
+    // clockSkewInMs: @clerk/backend's default leeway is 5s, and a machine
+    // whose clock drifts ~6s behind Clerk's rejects EVERY fresh token with
+    // token-iat-in-the-future (observed on the Windows dev box, 2026-07-09 —
+    // intermittent 401s on all bearer-authed routes). 15s of leeway on a
+    // 60s-lifetime token is standard JWT practice and covers small NTP drift.
+    const res = await verifyToken(token, { secretKey, clockSkewInMs: 15_000 })
     return extractClerkClaims(res)
   } catch {
     return null

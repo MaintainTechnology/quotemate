@@ -17,6 +17,7 @@ import {
   isTradeBookingKey,
   loadTenantBookingOptions,
 } from '@/lib/quote/trade-booking'
+import { tzForState } from '@/lib/quote/availability'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { buildBookingConfirmationSms } from '@/lib/sms/templates'
 import { pipelineLog } from '@/lib/log/pipeline'
@@ -112,19 +113,22 @@ export async function POST(
       if (!r.customer_phone) return
       const { data: tenant } = await supabase
         .from('tenants')
-        .select('twilio_sms_number')
+        .select('twilio_sms_number, state')
         .eq('id', r.tenant_id)
         .maybeSingle()
+      const t = tenant as { twilio_sms_number?: string | null; state?: string | null } | null
       const appUrl = process.env.APP_URL ?? 'https://www.quotemax.com.au'
       const text = buildBookingConfirmationSms({
         firstName: r.customer_name ?? undefined,
         scheduledAt: slot,
         bookingUrl: `${appUrl}/q/${trade}/${token}`,
+        // The slot was generated in the tenant's state timezone — echo in it too.
+        timeZone: tzForState(t?.state ?? null),
       })
       await dispatchQuoteMessage({
         to: r.customer_phone,
         text,
-        from: (tenant as { twilio_sms_number?: string | null } | null)?.twilio_sms_number ?? undefined,
+        from: t?.twilio_sms_number ?? undefined,
       })
     } catch (e) {
       log.err('trade booking SMS threw (booking IS committed)', e instanceof Error ? e.message : String(e), {

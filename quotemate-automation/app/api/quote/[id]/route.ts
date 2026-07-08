@@ -47,7 +47,7 @@ export async function DELETE(
   // ─── Load + authorise ───────────────────────────────────────
   const { data: quote } = await supabase
     .from('quotes')
-    .select('id, tenant_id, paid_at, stripe_links')
+    .select('id, tenant_id, paid_at, stripe_links, share_token')
     .eq('id', quoteId)
     .maybeSingle()
   if (!quote) return Response.json({ ok: false, error: 'no_quote' }, { status: 404 })
@@ -96,6 +96,24 @@ export async function DELETE(
   }
   if (!deleted || deleted.length === 0) {
     return Response.json({ ok: false, error: 'quote_already_paid' }, { status: 409 })
+  }
+
+  // ─── Un-promote a linked roofing measurement ────────────────
+  // A promoted measurement is hidden from /api/tenant/trade-jobs while its
+  // quote_share_token is set (the quotes row is the single source of truth).
+  // Deleting that quote must clear the link or the job vanishes from every
+  // view. Matched on quote_share_token — stamped at claim time, so it's set
+  // even when the later quote_id stamp failed. Best-effort: a failure leaves
+  // a hidden saved job, never a broken delete.
+  if (quote.share_token) {
+    const { error: unlinkErr } = await supabase
+      .from('roofing_measurements')
+      .update({ quote_id: null, quote_share_token: null })
+      .eq('tenant_id', tenant.id)
+      .eq('quote_share_token', quote.share_token)
+    if (unlinkErr) {
+      console.warn('[quote/delete] roofing measurement unlink failed', unlinkErr.message)
+    }
   }
   return Response.json({ ok: true })
 }

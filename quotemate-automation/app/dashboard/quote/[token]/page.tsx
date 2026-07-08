@@ -11,6 +11,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { notFound } from 'next/navigation'
 import { getReportAdapter } from '@/lib/quote/report-adapters/registry'
+import { resolveCustomerContact } from '@/lib/quote/send-customer'
 import { buildDefaultReportDoc } from '@/lib/quote/report-doc/seed'
 import type { ReportDoc } from '@/lib/quote/report-doc/types'
 import type { ReportStyle } from '@/lib/quote/report-doc/style'
@@ -42,9 +43,21 @@ export default async function DashboardQuoteViewerPage({
   // Trade lives on the intake (legacy rows without it default to electrical,
   // matching /q/[token]).
   const { data: intake } = quote.intake_id
-    ? await supabase.from('intakes').select('trade, job_type').eq('id', quote.intake_id).maybeSingle()
+    ? await supabase
+        .from('intakes')
+        .select('trade, job_type, caller, call_id, customer_id')
+        .eq('id', quote.intake_id)
+        .maybeSingle()
     : { data: null }
   const trade = ((intake?.trade as string | null | undefined) ?? 'electrical').trim() || 'electrical'
+
+  // Customer contact on file for the "Send to Customer" panel.
+  const contact = await resolveCustomerContact(supabase, {
+    caller: (intake?.caller as { phone?: string; email?: string } | null) ?? null,
+    intakeId: (quote.intake_id as string | null) ?? null,
+    callId: (intake?.call_id as string | null) ?? null,
+    customerId: (intake?.customer_id as string | null) ?? null,
+  })
 
   // GST flag for the line-item editor's inc-GST display.
   let gstRegistered = true
@@ -82,11 +95,14 @@ export default async function DashboardQuoteViewerPage({
       gstRegistered={gstRegistered}
       needsInspection={!!quote.needs_inspection}
       paid={!!quote.paid_at}
+      customerPhone={contact.phone}
+      customerEmail={contact.email}
       docEditorEnabled={docEditorEnabled}
       reportDoc={reportDoc}
       reportStyle={(quote.report_style as ReportStyle | null) ?? {}}
       selectedTier={(quote.selected_tier as 'good' | 'better' | 'best' | null) ?? null}
       bodyMode={adapter.bodyMode}
+      editorKind={adapter.editorKind}
       pdfUrl={adapter.pdfPath(token)}
       // Live, edit-reactive HTML render of the same report the PDF is built
       // from — the viewer prefers this over the frozen PDF iframe. Every

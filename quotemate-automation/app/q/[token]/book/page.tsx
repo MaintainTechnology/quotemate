@@ -20,7 +20,7 @@ import type { ReactNode } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { resolveGoogleBookingUrl } from '@/lib/quote/booking'
+import { resolveGoogleBookingUrl, resolveNextTier } from '@/lib/quote/booking'
 import { isPriceHoldExpired } from '@/lib/quote/hold'
 import { resolveBookingOptions, buildBookedKeys, type BookingOption } from '@/lib/quote/slots'
 import { tzForState } from '@/lib/quote/availability'
@@ -34,17 +34,17 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-const PAY_TIERS = new Set(['good', 'better', 'best'])
-
 // Label for a chosen booking. An AM/PM window shows the half-day ("Mon 6 Jul
-// (morning)"); a legacy exact-time slot shows the time.
-function formatScheduled(iso: string, window?: string | null): string {
+// (morning)"); a legacy exact-time slot shows the time. Rendered in the tenant
+// timezone the slots were generated in (tzForState) so the confirmed day never
+// contradicts the chip the customer picked.
+function formatScheduled(iso: string, window?: string | null, tz = 'Australia/Sydney'): string {
   try {
     const dayLabel = new Date(iso).toLocaleString('en-AU', {
       weekday: 'long',
       day: 'numeric',
       month: 'short',
-      timeZone: 'Australia/Sydney',
+      timeZone: tz,
     })
     if (window === 'am' || window === 'pm') {
       return `${dayLabel} (${window === 'am' ? 'morning' : 'afternoon'})`
@@ -53,7 +53,7 @@ function formatScheduled(iso: string, window?: string | null): string {
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
-      timeZone: 'Australia/Sydney',
+      timeZone: tz,
     })
     return `${dayLabel}, ${time}`
   } catch {
@@ -203,14 +203,10 @@ export default async function BookingPage(props: {
       (quote as { created_at?: string | null }).created_at ?? null,
     )
 
-  // Tier to charge at the deposit step: query param (carried from the
-  // quote page tier button) → the quote's selected_tier → 'better'.
-  const tier =
-    sp.tier && PAY_TIERS.has(sp.tier)
-      ? sp.tier
-      : PAY_TIERS.has(String(quote.selected_tier))
-        ? String(quote.selected_tier)
-        : 'better'
+  // Tier the pay step charges: query param (carried from the quote page
+  // tier button — incl. the book-first $99 'inspection' fee) → the quote's
+  // selected_tier → 'better'. Shared resolver with POST /api/q/[token]/book.
+  const tier = resolveNextTier(sp.tier ?? null, quote.selected_tier as string | null)
 
   // Off-platform "book directly on the tradie's calendar" link (Google
   // Appointment). Decision: DB picker = pay-last + auto-confirmed;
@@ -229,6 +225,7 @@ export default async function BookingPage(props: {
         scheduledAt={quote.scheduled_at!}
         scheduledWindow={quote.scheduled_window as string | null}
         tradieName={tradieName}
+        tz={tz}
       />
     )
   } else if (!isPaid && isScheduled) {
@@ -239,6 +236,7 @@ export default async function BookingPage(props: {
         scheduledAt={quote.scheduled_at!}
         scheduledWindow={quote.scheduled_window as string | null}
         appliedDiscountPct={appliedDiscountPct}
+        tz={tz}
       />
     )
   } else if (!isPaid && !isScheduled && options.length > 0) {
@@ -315,10 +313,12 @@ function AlreadyScheduledState({
   scheduledAt,
   scheduledWindow,
   tradieName,
+  tz,
 }: {
   scheduledAt: string
   scheduledWindow: string | null
   tradieName: string | null
+  tz: string
 }) {
   return (
     <section className="motion-safe:animate-[fade-in_240ms_ease-out_both]">
@@ -328,7 +328,7 @@ function AlreadyScheduledState({
       </span>
       <h1 className="mt-6 text-[clamp(2rem,5vw,3.25rem)] font-extrabold uppercase leading-[1.02] tracking-[-0.03em]">
         You&apos;re <span className="text-accent">locked in</span> for{' '}
-        {formatScheduled(scheduledAt, scheduledWindow)}.
+        {formatScheduled(scheduledAt, scheduledWindow, tz)}.
       </h1>
       <p className="mt-5 max-w-[60ch] text-base leading-relaxed text-text-sec">
         Deposit received and your time is confirmed.{' '}
@@ -347,6 +347,7 @@ function ReservedPayState({
   scheduledAt,
   scheduledWindow,
   appliedDiscountPct,
+  tz,
 }: {
   token: string
   tier: string
@@ -354,6 +355,7 @@ function ReservedPayState({
   scheduledWindow: string | null
   /** v8 — realised early-booking discount %. 0 = none. */
   appliedDiscountPct: number
+  tz: string
 }) {
   const discounted = appliedDiscountPct > 0
   return (
@@ -363,7 +365,7 @@ function ReservedPayState({
         Time held
       </span>
       <h1 className="mt-6 text-[clamp(2rem,5vw,3.25rem)] font-extrabold uppercase leading-[1.02] tracking-[-0.03em]">
-        {formatScheduled(scheduledAt, scheduledWindow)} is{' '}
+        {formatScheduled(scheduledAt, scheduledWindow, tz)} is{' '}
         <span className="text-accent">held</span> for you.
       </h1>
       {discounted ? (

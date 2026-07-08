@@ -24,6 +24,7 @@ import {
   sanitizeIndices,
   structureCount,
 } from '@/lib/roofing/selection'
+import { buildSaveAsQuoteRequest } from '@/lib/roofing/save-as-quote-helpers'
 import { MeasurementReview } from './MeasurementReview'
 
 export const dynamic = 'force-dynamic'
@@ -35,6 +36,7 @@ const supabase = createClient(
 
 type Row = {
   address: string | null
+  postcode: string | null
   state: string | null
   provider: string | null
   routing: string | null
@@ -54,7 +56,7 @@ export default async function MeasurementResultsPage({
 
   const { data, error } = await supabase
     .from('roofing_measurements')
-    .select('address, state, provider, routing, quote, measure_token, public_token, included_indices')
+    .select('address, postcode, state, provider, routing, quote, measure_token, public_token, included_indices')
     .eq('measure_token', token)
     .maybeSingle()
 
@@ -63,6 +65,36 @@ export default async function MeasurementResultsPage({
   const quote = row.quote
   const count = structureCount(quote)
   if (!quote || count === 0) notFound()
+
+  // quote_share_token (migration 168) read in a SEPARATE, best-effort query so
+  // this page never breaks if it loads before the migration applies (same
+  // pattern as /p's released_at read). A linked token means this measurement
+  // was already promoted to an editable quotes row — the review UI links
+  // straight to the dashboard editor instead of re-promoting.
+  let quoteShareToken: string | null = null
+  {
+    const { data: link, error: linkErr } = await supabase
+      .from('roofing_measurements')
+      .select('quote_share_token')
+      .eq('measure_token', token)
+      .maybeSingle()
+    if (!linkErr && link) quoteShareToken = (link.quote_share_token as string | null) ?? null
+  }
+
+  // Promotion payload (spec R6d/e) — flattened server-side by the SAME pure
+  // helper the save-as-quote tests validate, so the client only POSTs it.
+  // Null when the row can't produce a valid request (no usable address), and
+  // skipped entirely once promoted (the review UI links straight to the
+  // dashboard editor — no point shipping an unused body in the RSC payload).
+  const saveAsQuoteBody = quoteShareToken
+    ? null
+    : buildSaveAsQuoteRequest({
+        address: row.address,
+        postcode: row.postcode,
+        state: row.state,
+        quote,
+        included_indices: row.included_indices,
+      })
 
   // A persisted selection wins; an untouched (NULL/empty) record falls back to
   // the roof-only default (main dwelling) — never "all structures". We pass the
@@ -114,6 +146,8 @@ export default async function MeasurementResultsPage({
           initialIncluded={included}
           primaryIndices={primaryIndices}
           selectionWasPersisted={selectionWasPersisted}
+          quoteShareToken={quoteShareToken}
+          saveAsQuoteBody={saveAsQuoteBody}
         />
       </section>
 

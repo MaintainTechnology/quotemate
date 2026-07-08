@@ -25,6 +25,7 @@ import { after } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { pipelineLog } from '@/lib/log/pipeline'
 import { BOOKING_STATE, isPriceHoldExpired } from '@/lib/quote/hold'
+import { resolveNextTier } from '@/lib/quote/booking'
 import { earlyBirdStatus } from '@/lib/quote/early-bird'
 import { resolveBookingOptions, buildBookedKeys } from '@/lib/quote/slots'
 import { tzForState } from '@/lib/quote/availability'
@@ -228,16 +229,11 @@ export async function POST(
     )
   }
 
-  // Resolve which tier's deposit to charge: the tier the customer chose
-  // on the quote page (passed through), else the quote's selected_tier,
-  // else 'better' (the canonical default).
+  // Resolve which tier the pay step charges: the tier the customer chose
+  // (passed through — incl. the book-first $99 'inspection' fee), else the
+  // quote's selected_tier, else 'better'. Shared with the /book page.
   const reqTier = typeof body.tier === 'string' ? body.tier : null
-  const tier =
-    reqTier && PAY_TIERS.has(reqTier)
-      ? reqTier
-      : PAY_TIERS.has(String(quote.selected_tier))
-        ? String(quote.selected_tier)
-        : 'better'
+  const tier = resolveNextTier(reqTier, quote.selected_tier as string | null)
   // Already-paid (legacy recovery) → booking is confirmed above, so send
   // them to the thank-you page rather than back through the deposit step.
   const next = alreadyPaid ? `/q/${token}/paid?tier=${tier}` : `/r/${token}/${tier}`

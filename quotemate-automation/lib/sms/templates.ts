@@ -559,9 +559,10 @@ export function buildConversationFollowup2hSms(opts: {
     .replace(/[^\x20-\x7E\n]/g, '')
 }
 
-// Format an ISO timestamp as a short AU Eastern label, e.g. "Thu 7 May, 9:00am".
-// ASCII output for GSM-7 SMS.
-function fmtSlotShort(iso: string): string {
+// Format an ISO timestamp as a short AU label, e.g. "Thu 7 May, 9:00am".
+// Renders in the tenant's timezone when given (slots are generated in it —
+// a Sydney-fixed echo shows a WA evening slot as the next day). ASCII for GSM-7.
+function fmtSlotShort(iso: string, timeZone = 'Australia/Sydney'): string {
   try {
     const d = new Date(iso)
     return d
@@ -572,7 +573,7 @@ function fmtSlotShort(iso: string): string {
         hour: 'numeric',
         minute: '2-digit',
         hour12: true,
-        timeZone: 'Australia/Sydney',
+        timeZone,
       })
       .replace(/ /g, ' ')          // narrow no-break space some runtimes emit
       .replace(/\s*([ap])m\b/i, '$1m')  // tighten "9:00 am" → "9:00am"
@@ -587,9 +588,11 @@ export function buildBookingConfirmationSms(opts: {
   firstName?: string
   scheduledAt: string
   bookingUrl: string
+  /** Tenant timezone (tzForState) — defaults to Sydney for legacy callers. */
+  timeZone?: string
 }): string {
   const first = (opts.firstName ?? '').split(' ')[0] || 'there'
-  const when = fmtSlotShort(opts.scheduledAt)
+  const when = fmtSlotShort(opts.scheduledAt, opts.timeZone)
   const body = `Hi ${first}, you're locked in for ${when}. The tradie will text the day before to confirm.\n\nView booking: ${opts.bookingUrl}\n\n- QuoteMax`
   return body
     .replace(/[‐-―−]/g, '-').replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
@@ -624,12 +627,15 @@ export function buildTradieBookingNotification(opts: {
    *  adds an explicit line so the tradie knows to collect the REDUCED
    *  balance on completion, not the original quoted figure. */
   earlyBirdDiscountPct?: number
+  /** Tenant timezone (tzForState) — must match the customer confirmation's
+   *  zone or the two SMSes name different days for the same slot. */
+  timeZone?: string
 }): string {
   const greet = opts.tradieFirstName ? `Hi ${opts.tradieFirstName}` : 'Hi'
   const who = opts.customerName?.split(' ')[0] || opts.customerPhone || 'a customer'
   const job = JOB_TYPE_LABEL[opts.jobType] ?? opts.jobType.replace(/_/g, ' ')
   const qty = opts.itemCount ? `${opts.itemCount} ${job}` : job
-  const when = fmtSlotShort(opts.scheduledAt)
+  const when = fmtSlotShort(opts.scheduledAt, opts.timeZone)
   const dashLine = opts.dashboardUrl ? `\nDashboard: ${opts.dashboardUrl}` : ''
   const discount = opts.earlyBirdDiscountPct ?? 0
   const discountLine =

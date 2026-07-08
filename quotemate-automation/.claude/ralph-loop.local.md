@@ -1,10 +1,10 @@
 ---
 active: true
 iteration: 1
-session_id: f508a8e2-9cfb-4122-a51c-20f82ca3afc9
-max_iterations: 0
+session_id: 95818948-5ea3-42a8-9329-6422b63faf97
+max_iterations: 20
 completion_promise: "All tests pass"
-started_at: "2026-06-26T02:30:09Z"
+started_at: "2026-07-08T20:40:54Z"
 ---
 
-Implement the Flyer Designer feature defined in specs/flyer-designer.md exactly as written. It is a template based interactive flyer editor in the quotemate-automation Next.js dashboard. Follow the spec for the data model, the 3 plus templates, the react-konva canvas editor, reuse of the existing QR builder, save and re-edit plus PNG and PDF export, migration 150 with its runner, and the full test plan. Read quotemate-automation/AGENTS.md first. After each iteration run pnpm typecheck then pnpm lint then pnpm test, and pnpm build before finishing, never regressing an existing test. Loop until all tests pass.
+Implement specs/dashboard-persistent-nav.md: persistent Dashboard navigation on every /dashboard/* sub-route via app/dashboard/layout.tsx + DashboardTopNav, TDD on the showDashboardNav helper, gates npm test + npm run typecheck, browser-verify the /dashboard/quote/[token] flow

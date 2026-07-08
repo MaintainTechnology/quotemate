@@ -37,32 +37,37 @@ type CalendarEvent = {
   address: string | null
   suburb: string | null
   source: string | null
+  /** Open link for rows not backed by quotes (roof/paint visits →
+   *  /q/<trade>/<token>). Quotes rows fall back to /q/<shareToken>. */
+  href?: string | null
 }
 type ScheduledEvent = CalendarEvent & { scheduledAt: string }
 
-const TZ = 'Australia/Sydney'
+// Fallback zone until the API's tenantTz (tzForState) arrives — bookings are
+// generated in the tenant's state timezone, so days must group in the same zone.
+const DEFAULT_TZ = 'Australia/Sydney'
 
 /* ── Date helpers ─────────────────────────────────────────────────────
-   Bookings group by Sydney calendar day. dayKey() keys an instant to a Sydney
-   YYYY-MM-DD; the week strip + agenda labels work off those bare date keys via
-   a local Date (labels/arithmetic only, never an instant), so both sides
-   compare as identical strings. */
-function dayKey(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-CA', { timeZone: TZ })
+   Bookings group by tenant-local calendar day. dayKey() keys an instant to a
+   local YYYY-MM-DD; the week strip + agenda labels work off those bare date
+   keys via a local Date (labels/arithmetic only, never an instant), so both
+   sides compare as identical strings. */
+function dayKey(iso: string, tz: string): string {
+  return new Date(iso).toLocaleDateString('en-CA', { timeZone: tz })
 }
-function todayKeySydney(): string {
-  return new Date().toLocaleDateString('en-CA', { timeZone: TZ })
+function todayKey(tz: string): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: tz })
 }
-function timeLabel(iso: string): string {
+function timeLabel(iso: string, tz: string): string {
   return new Date(iso).toLocaleTimeString('en-AU', {
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
-    timeZone: TZ,
+    timeZone: tz,
   })
 }
-function shortDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: TZ })
+function shortDate(iso: string, tz: string): string {
+  return new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: tz })
 }
 function localDate(key: string): Date {
   const [y, m, d] = key.split('-').map(Number)
@@ -235,13 +240,20 @@ export function CalendarTab({
   const [awaitingBooking, setAwaitingBooking] = useState<CalendarEvent[]>([])
   const [reviewCount, setReviewCount] = useState(0)
   const [tenantId, setTenantId] = useState<string | null>(null)
+  const [tenantTz, setTenantTz] = useState(DEFAULT_TZ)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [confirming, setConfirming] = useState<string | null>(null)
 
-  const today = useMemo(() => todayKeySydney(), [])
+  const today = useMemo(() => todayKey(tenantTz), [tenantTz])
   const [selectedKey, setSelectedKey] = useState<string>(today)
   const dayRefs = useRef<Record<string, HTMLDivElement | null>>({})
+
+  // `today` can shift once tenantTz arrives (western tenants near the Sydney
+  // midnight rollover) — re-seed the selection so "Today" stays selected.
+  useEffect(() => {
+    setSelectedKey(today)
+  }, [today])
 
   // Mint a FRESH token per request — a Clerk session token expires ~60s after
   // the dashboard captured `accessToken` at mount, so reusing the prop 401s.
@@ -269,12 +281,14 @@ export function CalendarTab({
         awaitingBooking?: CalendarEvent[]
         reviewCount?: number
         tenantId?: string | null
+        tenantTz?: string | null
       }
       setEvents(json.events ?? [])
       setToSchedule(json.toSchedule ?? [])
       setAwaitingBooking(json.awaitingBooking ?? [])
       setReviewCount(json.reviewCount ?? 0)
       setTenantId(json.tenantId ?? null)
+      setTenantTz(json.tenantTz ?? DEFAULT_TZ)
     } catch {
       setError('Couldn’t reach the server. Please try again shortly.')
     } finally {
@@ -320,7 +334,7 @@ export function CalendarTab({
     const pa: ScheduledEvent[] = []
     const days = new Set<string>()
     for (const e of scheduled) {
-      days.add(dayKey(e.scheduledAt))
+      days.add(dayKey(e.scheduledAt, tenantTz))
       ;(Date.parse(e.scheduledAt) >= now ? up : pa).push(e)
     }
 
@@ -330,7 +344,7 @@ export function CalendarTab({
     let jobsOn = 0
     let pendingScheduled = 0
     for (const e of scheduled) {
-      if (weekSet.has(dayKey(e.scheduledAt))) inWeek++
+      if (weekSet.has(dayKey(e.scheduledAt, tenantTz))) inWeek++
       const k = kindOf(e)
       if (k === 'visit') schedInspections++
       else if (k === 'call') pendingScheduled++
@@ -343,7 +357,7 @@ export function CalendarTab({
     const groupBy = (list: ScheduledEvent[], pastFirst = false): DayGroup[] => {
       const map = new Map<string, DayGroup>()
       for (const e of list) {
-        const k = dayKey(e.scheduledAt)
+        const k = dayKey(e.scheduledAt, tenantTz)
         const g = map.get(k) ?? { key: k, label: agendaLabel(k, today), events: [] }
         g.events.push(e)
         map.set(k, g)
@@ -369,7 +383,7 @@ export function CalendarTab({
         callbacks: toSchedule.length + pendingScheduled,
       },
     }
-  }, [events, toSchedule, awaitingBooking, selectedKey, today])
+  }, [events, toSchedule, awaitingBooking, selectedKey, today, tenantTz])
 
   const metrics: [string, number, string, boolean][] = [
     ['This week', stats.thisWeek, 'Bookings', false],
@@ -623,11 +637,12 @@ export function CalendarTab({
                       key={ev.quoteId}
                       time="—"
                       title={`${ev.needsInspection || ev.paidTier === 'inspection' ? 'Site visit — ' : ''}${jobLabel(ev.jobType)}`}
-                      whoText={[ev.customerName ?? 'Customer', ev.suburb, ev.customerPhone, ev.paidAt ? `paid ${shortDate(ev.paidAt)}` : null]
+                      whoText={[ev.customerName ?? 'Customer', ev.suburb, ev.customerPhone, ev.paidAt ? `paid ${shortDate(ev.paidAt, tenantTz)}` : null]
                         .filter(Boolean)
                         .join(' · ')}
                       bar="var(--warning-bright)"
                       shareToken={ev.shareToken}
+                      href={ev.href}
                     />
                   ))}
                 </div>
@@ -662,6 +677,7 @@ export function CalendarTab({
                       whoText={[ev.customerName ?? 'Customer', ev.suburb].filter(Boolean).join(' · ')}
                       bar="var(--accent)"
                       shareToken={ev.shareToken}
+                      href={ev.href}
                     />
                   ))}
                 </div>
@@ -712,11 +728,12 @@ export function CalendarTab({
                       {g.events.map((ev) => (
                         <AgendaRow
                           key={ev.quoteId}
-                          time={timeLabel(ev.scheduledAt)}
+                          time={timeLabel(ev.scheduledAt, tenantTz)}
                           title={eventTitle(ev)}
                           whoText={who(ev)}
                           bar={barColor(kindOf(ev))}
                           shareToken={ev.shareToken}
+                          href={ev.href}
                           confirm={
                             ev.bookingState === 'requested'
                               ? { pending: confirming === ev.quoteId, onConfirm: () => confirmBooking(ev.quoteId) }
@@ -739,11 +756,12 @@ export function CalendarTab({
                             {g.events.map((ev) => (
                               <AgendaRow
                                 key={ev.quoteId}
-                                time={timeLabel(ev.scheduledAt)}
+                                time={timeLabel(ev.scheduledAt, tenantTz)}
                                 title={eventTitle(ev)}
                                 whoText={who(ev)}
                                 bar={barColor(kindOf(ev))}
                                 shareToken={ev.shareToken}
+                                href={ev.href}
                               />
                             ))}
                           </div>
@@ -769,6 +787,7 @@ function AgendaRow({
   whoText,
   bar,
   shareToken,
+  href,
   confirm,
 }: {
   time: string
@@ -776,10 +795,13 @@ function AgendaRow({
   whoText: string
   bar: string
   shareToken: string | null
+  /** Direct link for rows not backed by quotes (roof/paint visits). */
+  href?: string | null
   confirm?: { pending: boolean; onConfirm: () => void }
 }) {
-  const open = shareToken
-    ? () => window.open(`/q/${shareToken}`, '_blank', 'noopener,noreferrer')
+  const target = href ?? (shareToken ? `/q/${shareToken}` : null)
+  const open = target
+    ? () => window.open(target, '_blank', 'noopener,noreferrer')
     : undefined
   return (
     <div

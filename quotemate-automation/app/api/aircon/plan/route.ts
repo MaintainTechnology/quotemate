@@ -10,6 +10,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
+import { saveAirconRecommendation, supabaseUserIdFor } from '@/lib/aircon/save-recommendation'
 import { AcAddressSchema, AcInputsSchema } from '@/lib/aircon/request-schema'
 import { climateZoneForPostcode } from '@/lib/aircon/climate'
 import { sizeAircon } from '@/lib/aircon/sizing'
@@ -51,12 +52,17 @@ function bad(error: string, status: number, extra?: Record<string, unknown>) {
 export async function POST(req: Request) {
   // Dual-auth: Clerk session token OR legacy Supabase token. Tenant is
   // optional — no tenant just means the default aircon rate card.
-  const authResolved = await resolveTenantRequest(supabase, req, 'id, trade')
+  const authResolved = await resolveTenantRequest(supabase, req, 'id, trade, owner_user_id')
   if (!authResolved) return bad('unauthorized', 401)
-  const tenantRow = authResolved.tenant as { id?: string; trade?: string | null } | null
+  const tenantRow = authResolved.tenant as
+    | { id?: string; trade?: string | null; owner_user_id?: string | null }
+    | null
   const auth = {
     tenantId: (tenantRow?.id as string | undefined) ?? null,
     primaryTrade: (tenantRow?.trade as string | null | undefined) ?? null,
+    // created_by is a uuid → auth.users FK; a Clerk `user_…` id would fail
+    // the insert, so resolve the Supabase auth id (see save-recommendation).
+    createdBy: supabaseUserIdFor(authResolved.identity, tenantRow),
   }
 
   let form: FormData
@@ -167,6 +173,15 @@ export async function POST(req: Request) {
   })
   const recommendation = recommendAircon({ sizing, inputs, rateCard })
 
+  // Persist for the Quotes tab + customer share page (migration 144) — the
+  // plan branch surfaces on the dashboard exactly like the form-only branch.
+  const saved = await saveAirconRecommendation(supabase, {
+    tenantId: auth.tenantId,
+    createdBy: auth.createdBy,
+    address,
+    recommendation,
+  })
+
   return Response.json(
     {
       ok: true,
@@ -188,6 +203,7 @@ export async function POST(req: Request) {
       },
       design,
       recommendation,
+      saved,
     },
     { status: 200 },
   )

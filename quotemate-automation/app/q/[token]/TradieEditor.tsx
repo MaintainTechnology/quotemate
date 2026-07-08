@@ -22,6 +22,7 @@ import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { getAuthToken } from '@/lib/auth/client-token'
+import { seedLineItems } from '@/lib/quote/tier-materialise'
 import QuoteEditChat, { type ProposedTiers } from './QuoteEditChat'
 
 type LineItem = {
@@ -815,7 +816,10 @@ function materialise(initial: Tiers): Record<TierKey, EditableTier | null> {
     out[k] = {
       label: t.label ?? `${k} option`,
       timeframe: t.timeframe ?? '',
-      lines: (t.line_items ?? []).map((li) => ({
+      // seedLineItems: a tier with no stored line_items (solar) opens as one
+      // whole-of-job line at the engine subtotal, so the editor isn't empty
+      // and a save round-trips the same price instead of 400ing on min(1).
+      lines: seedLineItems(t).map((li) => ({
         description: li.description ?? '',
         quantity: String(li.quantity ?? 1),
         unit: li.unit ?? 'hr',

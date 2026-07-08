@@ -321,7 +321,8 @@ export default function SignageQueuePage() {
             </div>
 
             {/* Right: detail */}
-            <div ref={detailRef} className="rounded-card scroll-mt-6 border border-ink-line bg-ink-card p-6 sm:p-7 lg:sticky lg:top-6">
+            {/* 68px offsets = the layout's h-11 dashboard bar + the original 24px gap. */}
+            <div ref={detailRef} className="rounded-card scroll-mt-[68px] border border-ink-line bg-ink-card p-6 sm:p-7 lg:sticky lg:top-[68px]">
               {!detail && !detailBusy && (
                 <EmptyState
                   title="No studio selected"

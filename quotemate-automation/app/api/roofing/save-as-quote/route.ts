@@ -23,9 +23,9 @@
 // table accepts, just bypassing the AI structuring step.
 
 import { createClient } from '@supabase/supabase-js'
-import { z } from 'zod'
 import { generateShareToken } from '@/lib/stripe/checkout'
 import { buildTierObjects, splitAddress } from '@/lib/roofing/save-as-quote-helpers'
+import { SaveAsQuoteRequestSchema } from '@/lib/roofing/save-as-quote-schema'
 import type { RoofMetrics, RoofingQuotePrice } from '@/lib/roofing/types'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
 
@@ -35,70 +35,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
-
-const SaveRequestSchema = z.object({
-  address: z.object({
-    address: z.string().min(3),
-    postcode: z.string(),
-    state: z.string(),
-  }),
-  inputs: z.object({
-    material: z.string(),
-    pitch: z.string(),
-    intent: z.string(),
-    building_year_built: z.number().int().nullable().optional(),
-  }),
-  metrics: z.object({
-    footprint_m2: z.number(),
-    sloped_area_m2: z.number().nullable(),
-    storeys: z.number().nullable(),
-    form: z.string(),
-    hips: z.number().nullable(),
-    valleys: z.number().nullable(),
-    ridge_lm: z.number().nullable().optional(),
-    polygon_geojson: z.unknown().nullable().optional(),
-    capture_date: z.string().nullable().optional(),
-  }),
-  price: z.object({
-    area_m2: z.number(),
-    effective_rate_per_m2: z.number(),
-    tiers: z.array(
-      z.object({
-        tier: z.enum(['good', 'better', 'best']),
-        label: z.string(),
-        ex_gst: z.number(),
-        inc_gst: z.number(),
-        scope: z.string(),
-        line_items: z
-          .array(
-            z.object({
-              unit: z.string(),
-              quantity: z.number(),
-              description: z.string(),
-              unit_price_ex_gst: z.number(),
-              total_ex_gst: z.number(),
-              source: z.string(),
-            }),
-          )
-          .optional(),
-      }),
-    ).length(3),
-    loadings_applied: z.array(
-      z.object({ code: z.string(), pct: z.number(), detail: z.string() }),
-    ),
-    routing: z.object({
-      decision: z.enum(['auto_quote', 'tradie_review', 'inspection_required']),
-      reason: z.string(),
-    }),
-  }),
-  customer: z
-    .object({
-      name: z.string().optional(),
-      phone: z.string().optional(),
-      email: z.string().optional(),
-    })
-    .optional(),
-})
 
 export async function POST(req: Request) {
   // Dual-auth: Clerk session token (→ clerk_user_id) OR legacy Supabase token
@@ -118,7 +54,10 @@ export async function POST(req: Request) {
   } catch {
     return Response.json({ ok: false, error: 'invalid_json' }, { status: 400 })
   }
-  const parsed = SaveRequestSchema.safeParse(body)
+  // Request contract lives in lib/roofing/save-as-quote-schema.ts so the /m
+  // promotion flattening (buildSaveAsQuoteRequest) validates against the ONE
+  // schema this route enforces.
+  const parsed = SaveAsQuoteRequestSchema.safeParse(body)
   if (!parsed.success) {
     return Response.json(
       { ok: false, error: 'invalid_request', issues: parsed.error.issues },
@@ -126,10 +65,100 @@ export async function POST(req: Request) {
     )
   }
 
-  const { address, inputs, metrics, price, customer } = parsed.data
+  const { address, inputs, metrics, price, customer, measure_token } = parsed.data
   const m = metrics as RoofMetrics
   const p = price as RoofingQuotePrice
   const { street, suburb } = splitAddress(address.address)
+
+  // Generated up front: the claim below stamps this token on the measurement
+  // BEFORE the inserts, and the quote is inserted WITH it — so a racer that
+  // loses the claim can return the winner's token even while the winner's
+  // insert is still in flight.
+  const shareToken = generateShareToken()
+  const existingResponse = (quoteId: string | null, token: string) => {
+    const origin = req.headers.get('origin') ?? process.env.NEXT_PUBLIC_APP_URL ?? ''
+    return Response.json(
+      {
+        ok: true,
+        existing: true,
+        quoteId,
+        shareToken: token,
+        shareUrl: origin ? `${origin}/q/${token}` : `/q/${token}`,
+      },
+      { status: 200 },
+    )
+  }
+
+  // ── 0. Promotion idempotency (spec tradie-onsite-quote-editing R6c,
+  //       spec quote-sync-and-roofing-workflow-fix F2) ──
+  // When /m promotes a saved measurement, a second promotion must return
+  // the existing quote instead of minting a duplicate. The old read-then-
+  // insert left a race window (two concurrent promotions each saw a NULL
+  // token and both inserted) — now the NULL→token flip is a single
+  // conditional UPDATE, so exactly one concurrent promotion can win.
+  let claimed = false
+  const releaseClaim = async () => {
+    // Roll the claim back so a retried promotion isn't stuck pointing at a
+    // quote that never got inserted. Scoped to OUR token — never clobbers a
+    // token another promotion stamped since. If THIS also fails the
+    // measurement is stuck claimed with no quote (hidden from saved jobs,
+    // idempotency returns a dead link) — loud log so it's diagnosable.
+    const { error } = await supabase
+      .from('roofing_measurements')
+      .update({ quote_share_token: null })
+      .eq('measure_token', measure_token!)
+      .eq('tenant_id', tenant.id)
+      .eq('quote_share_token', shareToken)
+    if (error) {
+      console.error(
+        '[roofing/save-as-quote] claim rollback FAILED — measurement stuck claimed',
+        { measure_token, shareToken, detail: error.message },
+      )
+    }
+  }
+  if (measure_token) {
+    const { data: measurement } = await supabase
+      .from('roofing_measurements')
+      .select('id, quote_id, quote_share_token')
+      .eq('measure_token', measure_token)
+      .eq('tenant_id', tenant.id)
+      .maybeSingle()
+    if (measurement?.quote_share_token) {
+      return existingResponse(
+        (measurement.quote_id as string | null) ?? null,
+        measurement.quote_share_token as string,
+      )
+    }
+    if (measurement) {
+      const { data: won } = await supabase
+        .from('roofing_measurements')
+        .update({ quote_share_token: shareToken })
+        .eq('measure_token', measure_token)
+        .eq('tenant_id', tenant.id)
+        .is('quote_share_token', null)
+        .select('id')
+      if (!won || won.length === 0) {
+        // Lost the race — return whatever the winner stamped.
+        const { data: after } = await supabase
+          .from('roofing_measurements')
+          .select('quote_id, quote_share_token')
+          .eq('measure_token', measure_token)
+          .eq('tenant_id', tenant.id)
+          .maybeSingle()
+        if (after?.quote_share_token) {
+          return existingResponse(
+            (after.quote_id as string | null) ?? null,
+            after.quote_share_token as string,
+          )
+        }
+        return Response.json(
+          { ok: false, error: 'promotion_conflict' },
+          { status: 409 },
+        )
+      }
+      claimed = true
+    }
+  }
 
   // ── 1. Insert intake ─────────────────────────────────────────────
   // Roofing intakes carry their measurement payload in scope jsonb
@@ -170,6 +199,7 @@ export async function POST(req: Request) {
     .select('id')
     .single()
   if (intakeErr || !intakeRow) {
+    if (claimed) await releaseClaim()
     return Response.json(
       { ok: false, error: 'intake_insert_failed', detail: intakeErr?.message ?? 'no row' },
       { status: 500 },
@@ -188,7 +218,6 @@ export async function POST(req: Request) {
   // roofs — asbestos / unknown material — already compute $0 tiers from the
   // pricer, and the pages fall back to the $99 inspection-only state for those.)
   const tiers = buildTierObjects(p)
-  const shareToken = generateShareToken()
   const inspection = p.routing.decision === 'inspection_required'
   const selectedTier =
     p.tiers[1].ex_gst > 0 ? 'better' : p.tiers[2].ex_gst > 0 ? 'best' : 'good'
@@ -226,13 +255,29 @@ export async function POST(req: Request) {
     .select('id, share_token')
     .single()
   if (quoteErr || !quoteRow) {
+    if (claimed) await releaseClaim()
     return Response.json(
       { ok: false, error: 'quote_insert_failed', detail: quoteErr?.message ?? 'no row' },
       { status: 500 },
     )
   }
 
-  // ── 3. Build the share URL ───────────────────────────────────────
+  // ── 3. Stamp the quote id onto the claimed measurement (best-effort) ──
+  // The share token was already stamped by the claim; a failure here only
+  // costs the loser-race response its quoteId, never the link itself.
+  if (claimed) {
+    const { error: linkErr } = await supabase
+      .from('roofing_measurements')
+      .update({ quote_id: quoteRow.id })
+      .eq('measure_token', measure_token!)
+      .eq('tenant_id', tenant.id)
+      .eq('quote_share_token', shareToken)
+    if (linkErr) {
+      console.warn('[roofing/save-as-quote] measurement link-back failed', linkErr.message)
+    }
+  }
+
+  // ── 4. Build the share URL ───────────────────────────────────────
   const origin = req.headers.get('origin') ?? process.env.NEXT_PUBLIC_APP_URL ?? ''
   const shareUrl = origin ? `${origin}/q/${quoteRow.share_token}` : `/q/${quoteRow.share_token}`
 

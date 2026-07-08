@@ -106,9 +106,11 @@ export default function StudioPage() {
   }
 
   return (
-    <div style={DARK} className="min-h-screen bg-ink-deep text-text-pri flex flex-col">
+    // 100vh minus the layout's h-11 dashboard bar — the studio fits one viewport.
+    <div style={DARK} className="min-h-[calc(100vh-2.75rem)] bg-ink-deep text-text-pri flex flex-col">
       {/* Header */}
-      <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-ink-line bg-ink-deep/90 px-5 py-4 backdrop-blur">
+      {/* top-11: sticks below the layout's h-11 dashboard bar. */}
+      <header className="sticky top-11 z-10 flex items-center justify-between gap-4 border-b border-ink-line bg-ink-deep/90 px-5 py-4 backdrop-blur">
         <div className="flex items-center gap-4">
           <BrandMark className="h-8 w-8" />
           <div className="flex flex-col">

@@ -37,12 +37,15 @@ import { structureStaticMapPath } from '@/lib/roofing/structure-images'
 import { edgeStat } from '@/lib/roofing/geometry-edges'
 import { buildingAttributeChips, propertyContextChips } from '@/lib/roofing/attributes-display'
 import { indicativeCombinedTiers } from '@/lib/sms/roofing-compose'
+import { roofQuoteCta } from '@/lib/roofing/quote-cta'
 import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
 import { RoofMap, type RoofMapBuilding } from '@/app/dashboard/roofing/_components/RoofMap'
 import { QuoteChrome, type StickyBar } from '../../_chrome/QuoteChrome'
+import { TradieJobBanner } from '../../_chrome/TradieJobBanner'
 import { AcceptBlock } from '../../_chrome/AcceptBlock'
 import { resolveAcceptView } from '@/lib/quote/accept'
 import { loadTenantBookingOptions, formatVisitSlot } from '@/lib/quote/trade-booking'
+import { tzForState } from '@/lib/quote/availability'
 import { SlotPicker } from '@/app/q/[token]/book/SlotPicker'
 import { tradeIcon } from '../../_chrome/icons'
 import {
@@ -365,7 +368,9 @@ export default async function RoofingQuotePage({
               : 'Top spec: upgraded sheeting and the longest cover.',
         priceText: `$${money(t.inc_gst + solarIncGst)}`,
         priceNote: `inc GST · $${money(t.ex_gst + solarExGst)} ex`,
-        ctaLabel: indicative ? 'Reply to confirm' : 'Reply to book',
+        // CTA filled in by the shared tierCta remap below (needs
+        // roofAcceptView, which isn't resolved yet at this point).
+        ctaLabel: '',
         ctaHref: null,
         // Full per-tier line detail preserved below in the breakdown section.
         items: [
@@ -387,7 +392,8 @@ export default async function RoofingQuotePage({
             : 'Top spec: upgraded sheeting and the longest cover.',
       priceText: '—',
       priceNote: 'reply to unlock',
-      ctaLabel: 'Reply YES to see prices',
+      // CTA filled in by the shared tierCta remap below.
+      ctaLabel: '',
       ctaHref: null,
     }))
   }
@@ -429,7 +435,8 @@ export default async function RoofingQuotePage({
     sticky = {
       tierLabel: `${featured.name}${indicative ? ' · indicative' : ''}`,
       priceText: featured.priceText,
-      ctaLabel: indicative ? 'Reply to confirm' : 'Reply to book',
+      // CTA filled in by the shared tierCta remap below.
+      ctaLabel: '',
       ctaHref: null,
     }
   }
@@ -479,8 +486,27 @@ export default async function RoofingQuotePage({
     inspectionHref: `/r/roof/${token}/inspection`,
   })
 
+  // One shared CTA for the tier cards + sticky bar (specs/quote-confirm-send.md
+  // task 5): priced views anchor to the on-page AcceptBlock below (#accept);
+  // while the confirm gate hides prices the CTA deep-links into the customer's
+  // SMS thread instead of the old dead null-href pill. Applied here because
+  // actionability follows roofAcceptView.mode (a paid visit leaves nothing to
+  // book, so those views keep the label-only pill).
+  const tierCta = roofQuoteCta({
+    showPrices,
+    indicative,
+    acceptActionable: roofAcceptView.mode === 'deposit' || roofAcceptView.mode === 'inspection',
+    smsNumber: identity?.twilio_sms_number ?? null,
+  })
+  quoteTiers = quoteTiers.map((t) => ({ ...t, ctaLabel: tierCta.label, ctaHref: tierCta.href }))
+  if (sticky && !sticky.paid) {
+    sticky = { ...sticky, ctaLabel: tierCta.label, ctaHref: tierCta.href }
+  }
+
   return (
     <QuoteChrome trade={{ label: 'Roof', icon: tradeIcon('roof') }} sticky={sticky}>
+      {/* Owner-only "Review & edit" pill → /m/[measure_token] (spec R3). */}
+      <TradieJobBanner trade="roofing" publicToken={row.public_token} />
       <QuoteSheet label={`Quote ${row.public_token.slice(0, 8).toUpperCase()}`}>
         <Letterhead
           name={identity?.business_name ?? 'Your roofer'}
@@ -670,7 +696,7 @@ export default async function RoofingQuotePage({
               <p style={{ margin: '12px 0 0', fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
                 Your site visit is booked for{' '}
                 <strong style={{ color: 'var(--text-pri)' }}>
-                  {formatVisitSlot(roofScheduledAt, roofScheduledWindow)}
+                  {formatVisitSlot(roofScheduledAt, roofScheduledWindow, tzForState(identity?.state ?? null))}
                 </strong>
                 . {identity?.business_name ?? 'Your roofer'} will text you the day before to confirm.
               </p>

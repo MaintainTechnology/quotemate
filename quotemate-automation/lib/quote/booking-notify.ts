@@ -19,6 +19,7 @@ import {
   buildTradieBookingNotification,
 } from '@/lib/sms/templates'
 import { pipelineLog } from '@/lib/log/pipeline'
+import { tzForState } from '@/lib/quote/availability'
 
 export async function notifyBookingConfirmed(
   supabase: SupabaseClient,
@@ -86,17 +87,21 @@ export async function notifyBookingConfirmed(
     let tenantSmsNumber: string | null = null
     let tenantOwnerMobile: string | null = null
     let tenantOwnerFirstName: string | null = null
+    let tenantState: string | null = null
     if (args.tenantId) {
       const { data: tenantRow } = await supabase
         .from('tenants')
-        .select('twilio_sms_number, owner_mobile, owner_first_name')
+        .select('twilio_sms_number, owner_mobile, owner_first_name, state')
         .eq('id', args.tenantId)
         .maybeSingle()
       tenantSmsNumber = (tenantRow?.twilio_sms_number as string | null) ?? null
       tenantOwnerMobile = (tenantRow?.owner_mobile as string | null) ?? null
       tenantOwnerFirstName =
         (tenantRow?.owner_first_name as string | null) ?? null
+      tenantState = (tenantRow?.state as string | null) ?? null
     }
+    // Slots are generated in the tenant's state timezone — echo in it too.
+    const timeZone = tzForState(tenantState)
 
     const firstName = intake?.caller?.name
     const bookingUrl = `${appUrl}/q/${args.shareToken}/book`
@@ -104,7 +109,7 @@ export async function notifyBookingConfirmed(
 
     if (callerNumber) {
       const body = args.slotIso
-        ? buildBookingConfirmationSms({ firstName, scheduledAt: args.slotIso, bookingUrl })
+        ? buildBookingConfirmationSms({ firstName, scheduledAt: args.slotIso, bookingUrl, timeZone })
         : buildDepositAwaitingSlotSms({ firstName, bookingUrl })
       const customerFrom = tenantSmsNumber ?? process.env.TWILIO_SMS_NUMBER
       sms.step('sending booking confirmation to customer', {
@@ -148,6 +153,7 @@ export async function notifyBookingConfirmed(
         quoteUrl,
         dashboardUrl: `${appUrl}/dashboard`,
         earlyBirdDiscountPct,
+        timeZone,
       })
       sms.step('notifying tradie of booking', {
         to: notifyMobile,

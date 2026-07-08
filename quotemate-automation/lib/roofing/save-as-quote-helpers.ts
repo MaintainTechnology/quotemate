@@ -1,6 +1,10 @@
 // Pure helpers used by app/api/roofing/save-as-quote — extracted so
 // vitest can test them without dragging in Supabase / Next runtime.
 
+import type { MultiRoofQuote } from './types'
+import { narrowQuoteToStructures } from '@/lib/sms/roofing-compose'
+import type { SaveAsQuoteRequest } from './save-as-quote-schema'
+
 /** PURE — split "27 Smith Street, Penrith" → { street, suburb }. */
 export function splitAddress(full: string): { street: string; suburb: string } {
   const idx = full.lastIndexOf(',')
@@ -65,4 +69,78 @@ export function buildTierObjects(price: {
     }
   }
   return { good: tierObj(0), better: tierObj(1), best: tierObj(2) }
+}
+
+/** The stored roofing_measurements fields the promotion flattening reads. */
+type StoredMeasurementRow = {
+  address: string | null
+  postcode: string | null
+  state: string | null
+  quote: MultiRoofQuote | null
+  included_indices: number[] | null
+}
+
+/** PURE (spec tradie-onsite-quote-editing R6b) — flatten a stored
+ *  roofing_measurements row into the exact body POST /api/roofing/save-as-quote
+ *  accepts, so /m can promote a saved measurement to an editable quotes row
+ *  after the fact. Mirrors the measure page's onSendAsQuote flattening:
+ *  combined tiers + area over the included structures (1-based indices,
+ *  defaulting to the primary structure), inputs/metrics from the primary,
+ *  job routing from narrowQuoteToStructures (inspection when the primary
+ *  in the selection needs it). Returns null when the row can't produce a
+ *  valid request (no quote, no structures, unusable address). */
+export function buildSaveAsQuoteRequest(
+  row: StoredMeasurementRow,
+): Omit<SaveAsQuoteRequest, 'measure_token'> | null {
+  const quote = row.quote
+  if (!quote || !Array.isArray(quote.structures) || quote.structures.length === 0) return null
+  const address = (row.address ?? '').trim()
+  if (address.length < 3) return null
+
+  // Selection: the stored 1-based include toggles; empty/null falls back to
+  // the primary structure (same default the measure page starts from).
+  const stored = (row.included_indices ?? []).filter(
+    (i) => Number.isInteger(i) && i >= 1 && i <= quote.structures.length,
+  )
+  const primaryIdx1 =
+    quote.structures.findIndex((s) => s.role === 'primary') + 1 || 1
+  const indices = stored.length > 0 ? stored : [primaryIdx1]
+
+  const narrowed = narrowQuoteToStructures(quote, indices)
+  const included = indices
+    .map((i) => quote.structures[i - 1])
+    .filter((s): s is NonNullable<typeof s> => Boolean(s))
+  const primary = included.find((s) => s.role === 'primary') ?? included[0]
+
+  return {
+    address: {
+      address,
+      postcode: row.postcode ?? '',
+      state: row.state ?? '',
+    },
+    inputs: {
+      material: primary.inputs.material,
+      pitch: primary.inputs.pitch,
+      intent: primary.inputs.intent,
+      building_year_built: primary.inputs.building_year_built ?? null,
+    },
+    metrics: {
+      footprint_m2: primary.metrics.footprint_m2,
+      sloped_area_m2: narrowed.combined.area_m2,
+      storeys: primary.metrics.storeys,
+      form: primary.metrics.form,
+      hips: primary.metrics.hips,
+      valleys: primary.metrics.valleys,
+      ridge_lm: primary.metrics.ridge_lm ?? null,
+      polygon_geojson: primary.metrics.polygon_geojson ?? null,
+      capture_date: primary.metrics.capture_date ?? null,
+    },
+    price: {
+      area_m2: narrowed.combined.area_m2,
+      effective_rate_per_m2: primary.price.effective_rate_per_m2,
+      tiers: narrowed.combined.tiers,
+      loadings_applied: primary.price.loadings_applied,
+      routing: narrowed.routing,
+    },
+  }
 }

@@ -17,7 +17,7 @@ const h = vi.hoisted(() => {
   function from(table: string) {
     const record = { table, ops: [] as Op[] }
     const builder: Record<string, unknown> = {}
-    for (const op of ['select', 'delete', 'eq', 'is', 'maybeSingle']) {
+    for (const op of ['select', 'delete', 'update', 'eq', 'is', 'maybeSingle']) {
       builder[op] = (...args: unknown[]) => {
         record.ops.push({ op, args })
         return builder
@@ -169,5 +169,83 @@ describe('DELETE /api/quote/[id]', () => {
     const res = await DELETE(delReq(), params)
     expect(res.status).toBe(409)
     expect(await res.json()).toMatchObject({ error: 'quote_already_paid' })
+  })
+
+  // Spec quote-sync-and-roofing-workflow-fix F3 — a promoted roofing
+  // measurement is hidden from /api/tenant/trade-jobs while its
+  // quote_share_token is set; deleting the promoted quote must clear the
+  // link so the job resurfaces as a saved job instead of vanishing.
+  it('un-promotes a linked roofing measurement after the delete', async () => {
+    authedUser()
+    h.results.push(
+      { data: { id: 'tenant-1', owner_user_id: 'user-1' }, error: null }, // resolver
+      {
+        data: {
+          id: 'quote-1',
+          tenant_id: 'tenant-1',
+          paid_at: null,
+          stripe_links: null,
+          share_token: 'share-1',
+        },
+        error: null,
+      },
+      { data: [{ id: 'quote-1' }], error: null }, // delete
+      { data: null, error: null }, // roofing unlink update
+    )
+    const res = await DELETE(delReq(), params)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ ok: true })
+
+    const unlink = h.queries.find((q) => q.table === 'roofing_measurements')
+    expect(unlink, 'expected a roofing_measurements unlink').toBeTruthy()
+    expect(unlink!.ops.find((o) => o.op === 'update')!.args[0]).toMatchObject({
+      quote_id: null,
+      quote_share_token: null,
+    })
+    expect(unlink!.ops).toContainEqual({ op: 'eq', args: ['quote_share_token', 'share-1'] })
+    expect(unlink!.ops).toContainEqual({ op: 'eq', args: ['tenant_id', 'tenant-1'] })
+  })
+
+  it('an unlink failure never fails the delete (best-effort)', async () => {
+    authedUser()
+    h.results.push(
+      { data: { id: 'tenant-1', owner_user_id: 'user-1' }, error: null },
+      {
+        data: {
+          id: 'quote-1',
+          tenant_id: 'tenant-1',
+          paid_at: null,
+          stripe_links: null,
+          share_token: 'share-1',
+        },
+        error: null,
+      },
+      { data: [{ id: 'quote-1' }], error: null }, // delete
+      { data: null, error: { message: 'boom' } }, // unlink fails
+    )
+    const res = await DELETE(delReq(), params)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ ok: true })
+  })
+
+  it('skips the unlink when the quote has no share_token', async () => {
+    authedUser()
+    h.results.push(
+      { data: { id: 'tenant-1', owner_user_id: 'user-1' }, error: null },
+      {
+        data: {
+          id: 'quote-1',
+          tenant_id: 'tenant-1',
+          paid_at: null,
+          stripe_links: null,
+          share_token: null,
+        },
+        error: null,
+      },
+      { data: [{ id: 'quote-1' }], error: null }, // delete
+    )
+    const res = await DELETE(delReq(), params)
+    expect(res.status).toBe(200)
+    expect(h.queries.some((q) => q.table === 'roofing_measurements')).toBe(false)
   })
 })

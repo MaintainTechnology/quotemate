@@ -68,14 +68,21 @@ export async function loadTenantBookingOptions(
 }
 
 /** Display label for a booked window: AM/PM half-day ("Fri 11 Jul (morning)")
- *  or a legacy exact time. Australia/Sydney — matches /q/[token]/book + /paid. */
-export function formatVisitSlot(iso: string, window?: string | null): string {
+ *  or a legacy exact time. Slots are GENERATED in the tenant's state timezone
+ *  (tzForState above), so the echo must render in the same zone — a WA evening
+ *  slot formatted in Sydney displays as the NEXT day. Callers with the tenant
+ *  to hand pass tzForState(state); the default keeps legacy Sydney behaviour. */
+export function formatVisitSlot(
+  iso: string,
+  window?: string | null,
+  timeZone = 'Australia/Sydney',
+): string {
   try {
     const day = new Date(iso).toLocaleString('en-AU', {
       weekday: 'short',
       day: 'numeric',
       month: 'short',
-      timeZone: 'Australia/Sydney',
+      timeZone,
     })
     if (window === 'am' || window === 'pm') {
       return `${day} (${window === 'am' ? 'morning' : 'afternoon'})`
@@ -84,7 +91,7 @@ export function formatVisitSlot(iso: string, window?: string | null): string {
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
-      timeZone: 'Australia/Sydney',
+      timeZone,
     })
     return `${day}, ${time}`
   } catch {

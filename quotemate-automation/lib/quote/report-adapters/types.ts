@@ -19,8 +19,12 @@ export type ReportBodyMode =
   | 'download-only'
 
 /** Which in-shell editor the toolbar mounts. All editable trades use the
- *  Good/Better/Best line-item editor today. */
-export type EditorKind = 'line-items' | null
+ *  Good/Better/Best line-item editor today (`line-items`), viewing/editing over
+ *  the styled full-quote HTML iframe. `block-doc` opts a trade into the TipTap
+ *  living-document workspace instead — no live adapter does yet (it needs the
+ *  report_doc serializer parity + workspace styling per the full-quote-editing
+ *  v2 spec §10.4/§13.4), so the viewer keeps every trade on the iframe. */
+export type EditorKind = 'line-items' | 'block-doc' | null
 
 /** How edits to this trade's prices are validated on save.
  *  - 'catalogue': prices must derive from the tenant's priced catalogue +

@@ -40,6 +40,7 @@ import {
 import { asQuoteTierMode } from '@/lib/quote/tier-visibility'
 import { computePriceHoldUntil } from '@/lib/quote/hold'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
+import { resolveCustomerContact } from '@/lib/quote/send-customer'
 
 export const dynamic = 'force-dynamic'
 
@@ -109,7 +110,7 @@ export async function POST(
   //      (display mode for the SMS template) ──
   const { data: intake } = await supabase
     .from('intakes')
-    .select('id, caller, suburb, job_type, scope, call_id, trade')
+    .select('id, caller, suburb, job_type, scope, call_id, customer_id, trade')
     .eq('id', quote.intake_id as string)
     .maybeSingle()
   const { data: pricingBook } = await supabase
@@ -119,24 +120,16 @@ export async function POST(
     .limit(1)
     .maybeSingle()
 
-  // Caller phone number — pull from sms_conversations (SMS path) or
-  // calls (voice path) since quotes table itself doesn't carry it.
-  let callerNumber: string | null = null
-  const { data: convo } = await supabase
-    .from('sms_conversations')
-    .select('from_number')
-    .eq('intake_id', quote.intake_id as string)
-    .maybeSingle()
-  if (convo?.from_number) {
-    callerNumber = convo.from_number as string
-  } else if (intake?.call_id) {
-    const { data: call } = await supabase
-      .from('calls')
-      .select('caller_number')
-      .eq('id', intake.call_id as string)
-      .maybeSingle()
-    callerNumber = call?.caller_number ?? null
-  }
+  // Caller phone number — shared 4-source chain (intake.caller.phone →
+  // sms_conversations → calls → customers), the same lookup the edit route
+  // proved necessary in prod; the old 2-source version here missed numbers
+  // that sat on the intake or customer row.
+  const { phone: callerNumber } = await resolveCustomerContact(supabase, {
+    caller: (intake?.caller as { phone?: string; email?: string } | null) ?? null,
+    intakeId: (quote.intake_id as string | null) ?? null,
+    callId: (intake?.call_id as string | null) ?? null,
+    customerId: (intake?.customer_id as string | null) ?? null,
+  })
 
   if (!callerNumber) {
     return Response.json(
@@ -286,14 +279,20 @@ export async function POST(
   // Drop a row into quote_followup_events so the touch-log on the
   // dashboard shows "Tradie approved + sent" alongside the other
   // post-send actions. Best-effort; never blocks success.
-  try {
-    await supabase.from('quote_followup_events').insert({
+  // Columns per migration 039: tenant_id + kind are NOT NULL and outcome is
+  // CHECK-constrained — the previous {quote_id, outcome:'approved_and_sent'}
+  // shape violated all three, so this insert had silently never written a row.
+  {
+    const { error: touchErr } = await supabase.from('quote_followup_events').insert({
+      tenant_id: quote.tenant_id,
       quote_id: quote.id,
-      outcome: 'approved_and_sent',
+      kind: 'sms',
+      outcome: 'text_sent',
       note: 'Tradie approved the quote; customer SMS dispatched.',
     })
-  } catch {
-    /* swallow — touch-log is not on the critical path */
+    if (touchErr) {
+      console.warn('[quote/approve] touch-log insert failed (send unaffected)', touchErr.message)
+    }
   }
   // Reference buildQuoteUpdatedSms so the import isn't tree-shaken in
   // tests that load the route module to read its export.

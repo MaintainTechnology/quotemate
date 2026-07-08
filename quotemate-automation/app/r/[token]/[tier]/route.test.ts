@@ -26,10 +26,25 @@ describe('resolvePayRedirect', () => {
   })
 
   it('expired does NOT block the inspection fee (no price hold on it)', () => {
+    // Since 2026-07-08 the $99 inspection is book-first like every tier
+    // (Jon's workflow: pick a time, THEN pay), so with no slot chosen the
+    // un-blocked destination is the booking page, not Stripe.
     const d = resolvePayRedirect({
       tier: 'inspection',
       paid: false,
       scheduledAt: null,
+      expired: true,
+      token,
+      appUrl: APP,
+    })
+    expect(d).toEqual({ kind: 'book', url: `${APP}/q/${token}/book?tier=inspection` })
+  })
+
+  it('inspection with a slot already held → Stripe even when expired ($99 is the last step)', () => {
+    const d = resolvePayRedirect({
+      tier: 'inspection',
+      paid: false,
+      scheduledAt: '2026-05-20T03:00:00.000Z',
       expired: true,
       token,
       appUrl: APP,

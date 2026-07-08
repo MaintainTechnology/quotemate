@@ -16,8 +16,10 @@ import { useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import TradieEditor, { type EditorApi } from '@/app/q/[token]/TradieEditor'
 import { getAuthToken } from '@/lib/auth/client-token'
+import SendQuotePanel from './SendQuotePanel'
 import type { ReportDoc } from '@/lib/quote/report-doc/types'
 import type { ReportStyle } from '@/lib/quote/report-doc/style'
+import type { EditorKind } from '@/lib/quote/report-adapters/types'
 import type { DocEditorTiers } from './QuoteDocumentEditor'
 
 // Lazy-load the TipTap workspace so its bundle only loads when FULL_QUOTE_DOC is
@@ -51,6 +53,10 @@ export default function QuoteReportViewerClient(props: {
   reportStyle?: ReportStyle
   selectedTier?: 'good' | 'better' | 'best' | null
   bodyMode: 'pdf-inline' | 'download-only'
+  /** Which in-shell editor this trade's adapter mounts. Only 'block-doc' trades
+   *  get the TipTap living-document workspace; everything else stays on the
+   *  styled full-quote HTML iframe below. */
+  editorKind?: EditorKind
   pdfUrl: string
   /** Live HTML render of the report (same document the PDF is built from).
    *  When present the viewer embeds this instead of the frozen PDF, so manual
@@ -59,6 +65,9 @@ export default function QuoteReportViewerClient(props: {
   htmlUrl?: string
   capabilities: { manualEdit: boolean; aiEdit: boolean }
   tiers: { good: Tier; better: Tier; best: Tier }
+  /** Customer contact on file (resolved server-side) for the send panel. */
+  customerPhone?: string | null
+  customerEmail?: string | null
 }) {
   const {
     quoteId,
@@ -67,11 +76,14 @@ export default function QuoteReportViewerClient(props: {
     gstRegistered,
     needsInspection,
     paid,
+    customerPhone,
+    customerEmail,
     docEditorEnabled,
     reportDoc,
     reportStyle,
     selectedTier,
     bodyMode,
+    editorKind,
     pdfUrl,
     htmlUrl,
     capabilities,
@@ -107,9 +119,14 @@ export default function QuoteReportViewerClient(props: {
     best: toDocTier(tiers.best),
     selectedTier: selectedTier ?? null,
   }
-  // Flag on + owner (+ token loaded) ⇒ the living-document workspace replaces the
-  // read-only preview. Flag off ⇒ this is always false and nothing below changes.
-  const showWorkspace = !!docEditorEnabled && canEdit
+  // The TipTap living-document workspace replaces the styled iframe ONLY for a
+  // trade whose adapter opts in with editorKind 'block-doc' (flag on + owner +
+  // token). No live adapter does yet — the block-doc render lacks report_doc
+  // serializer parity + workspace styling and is hollow for dedicated-builder
+  // trades (roofing/solar/painting render from their own tables, not report_doc)
+  // per the full-quote-editing v2 spec §10.4/§13.4 — so every trade stays on the
+  // full-quote HTML iframe below, which is the editable Word-like surface.
+  const showWorkspace = !!docEditorEnabled && canEdit && editorKind === 'block-doc'
 
   const disabledReason = useMemo(() => {
     if (!capabilities.manualEdit) return `Editing isn’t available for ${trade} quotes yet — view & download only.`
@@ -128,7 +145,8 @@ export default function QuoteReportViewerClient(props: {
   return (
     <main className="min-h-screen bg-ink-deep text-text-pri">
       {/* ─── Toolbar (modelled on the report-viewer reference) ─── */}
-      <div className="sticky top-0 z-30 border-b border-ink-line bg-ink-deep/95 backdrop-blur-sm">
+      {/* top-11: sticks below the layout's h-11 dashboard bar. */}
+      <div className="sticky top-11 z-30 border-b border-ink-line bg-ink-deep/95 backdrop-blur-sm">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-text-dim">
             Quote report · <span className="text-text-sec">{trade}</span>
@@ -143,14 +161,20 @@ export default function QuoteReportViewerClient(props: {
             >
               ✎ Edit Report
             </button>
-            <a
-              href={pdfUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-ctl inline-flex min-h-[40px] items-center gap-2 border border-ink-line px-4 py-2 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
-            >
-              ↓ Download PDF
-            </a>
+            {/* Inspection quotes have no priced PDF — /api/q/[token]/pdf 404s
+                for them (route.ts:37-42), so the button is omitted rather than
+                dead-ending the tradie on raw JSON. The body iframe still shows
+                the graceful "site visit required" placeholder. */}
+            {needsInspection ? null : (
+              <a
+                href={pdfUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-ctl inline-flex min-h-[40px] items-center gap-2 border border-ink-line px-4 py-2 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+              >
+                ↓ Download PDF
+              </a>
+            )}
             <button
               type="button"
               onClick={() => api?.openEditor({ chat: true })}
@@ -163,6 +187,12 @@ export default function QuoteReportViewerClient(props: {
                 Beta
               </span>
             </button>
+            <SendQuotePanel
+              quoteId={quoteId}
+              customerPhone={customerPhone ?? null}
+              customerEmail={customerEmail ?? null}
+              paid={paid}
+            />
           </div>
         </div>
         {disabledReason && (

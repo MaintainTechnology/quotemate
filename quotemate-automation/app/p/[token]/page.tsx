@@ -124,7 +124,10 @@ export default async function PaintEstimateResultsPage({
               : "Check the measurements, coats and pricing above. When it's right, send the full quote to the customer — they don't see a price until you do."}
           </p>
           <div className="mt-5 flex flex-wrap items-center gap-4">
-            {!inspection && !released && editableTiers.length > 0 && (
+            {/* Editable pre- AND post-release (spec tradie-onsite-quote-editing
+                R4): the on-site inspection flow edits an already-sent quote,
+                then resends via the button below. */}
+            {!inspection && editableTiers.length > 0 && (
               <EditQuotePanel estimateToken={row.estimate_token} tiers={editableTiers} />
             )}
             {!inspection && (

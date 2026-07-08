@@ -1,14 +1,18 @@
 // WP6 reorder regression coverage — book first, pay LAST.
 //
 // Locks the funnel order so a future change can't silently put payment
-// back before booking, and so the $99 inspection fee stays pay-first.
+// back before booking. Since the 2026-07-08 change (Jon's workflow:
+// select a time slot, THEN pay) the $99 inspection follows the same
+// book-first order as the deposit tiers.
 
 import { describe, expect, it } from 'vitest'
 import { BOOKING_STATE } from './hold'
 import {
   bookingStateOnPaid,
+  paidPageTarget,
   payRedirectTarget,
   resolveGoogleBookingUrl,
+  resolveNextTier,
   shouldFinaliseBookingOnPaid,
 } from './booking'
 
@@ -45,10 +49,13 @@ describe('payRedirectTarget — the flip', () => {
     ).toBe('paid')
   })
 
-  it('inspection $99 stays pay-first regardless of slot state (while unpaid)', () => {
+  it('inspection $99 is book-first too — no slot yet → pick a time (2026-07-08 requirements change)', () => {
     expect(
       payRedirectTarget({ paid: false, scheduledAt: null, tier: 'inspection' }),
-    ).toBe('stripe')
+    ).toBe('book')
+  })
+
+  it('inspection with a slot already chosen → Stripe ($99 is the last step)', () => {
     expect(
       payRedirectTarget({
         paid: false,
@@ -72,6 +79,38 @@ describe('payRedirectTarget — the flip', () => {
         tier: 'inspection',
       }),
     ).toBe('paid')
+  })
+})
+
+describe('resolveNextTier — which tier the post-booking pay step charges', () => {
+  it('passes the inspection fee through (book-first inspection must NOT fall back to a deposit tier)', () => {
+    expect(resolveNextTier('inspection', null)).toBe('inspection')
+    expect(resolveNextTier('inspection', 'best')).toBe('inspection')
+  })
+
+  it('passes a valid deposit tier through', () => {
+    expect(resolveNextTier('good', 'best')).toBe('good')
+  })
+
+  it('falls back to the quote selected_tier, then better', () => {
+    expect(resolveNextTier(null, 'best')).toBe('best')
+    expect(resolveNextTier(undefined, null)).toBe('better')
+    expect(resolveNextTier('bogus', 'nonsense')).toBe('better')
+  })
+})
+
+describe('paidPageTarget — /q/[token]/paid routing after payment', () => {
+  it('paid with no slot → send the customer straight to the booking page (Jon: auto-navigate)', () => {
+    expect(paidPageTarget({ paid: true, scheduledAt: null })).toBe('book')
+    expect(paidPageTarget({ paid: true, scheduledAt: undefined })).toBe('book')
+  })
+
+  it('paid with a slot → stay and show the booked confirmation', () => {
+    expect(paidPageTarget({ paid: true, scheduledAt: '2026-07-10T02:00:00Z' })).toBe('stay')
+  })
+
+  it('not paid (webhook + session check both unresolved) → stay, never bounce', () => {
+    expect(paidPageTarget({ paid: false, scheduledAt: null })).toBe('stay')
   })
 })
 

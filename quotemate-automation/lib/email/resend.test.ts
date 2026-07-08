@@ -29,6 +29,35 @@ describe('lib/email/resend', () => {
     expect((init as RequestInit).headers).toMatchObject({ authorization: 'Bearer test-key' })
   })
 
+  it('includes attachments in the POSTed body when provided', async () => {
+    const fetchMock = vi.fn(async (_url: string | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({ id: 'msg_att' }), { status: 200 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const r = await sendEmail({
+      to: 'a@b.com',
+      subject: 'Quote',
+      html: '<p>Quote</p>',
+      attachments: [{ filename: 'quote.pdf', content: 'cGRmYnl0ZXM=' }],
+    })
+    expect(r).toEqual({ ok: true, messageId: 'msg_att' })
+
+    const sent = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
+    expect(sent.attachments).toEqual([{ filename: 'quote.pdf', content: 'cGRmYnl0ZXM=' }])
+  })
+
+  it('omits the attachments key when none are provided', async () => {
+    const fetchMock = vi.fn(async (_url: string | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({ id: 'msg_plain' }), { status: 200 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await sendEmail({ to: 'a@b.com', subject: 's', html: 'h' })
+    const sent = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
+    expect('attachments' in sent).toBe(false)
+  })
+
   it('returns a failure union on a non-2xx response (does not throw)', async () => {
     vi.stubGlobal('fetch', vi.fn(async () =>
       new Response(JSON.stringify({ message: 'invalid to address' }), { status: 422 }),

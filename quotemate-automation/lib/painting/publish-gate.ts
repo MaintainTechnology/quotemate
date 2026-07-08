@@ -52,19 +52,23 @@ export function paintingDepositLocked(releasedAt: string | null | undefined): bo
 }
 
 export type PaintingReleaseEligibility =
-  | { ok: true; stamp: boolean }
+  | { ok: true; stamp: boolean; send: boolean }
   | { ok: false; status: number; error: string }
 
 /**
- * PURE — decide whether a "Send to customer" should stamp released_at.
- *   already released → ok, stamp:false (idempotent no-op; never re-sends)
- *   not released yet → ok, stamp:true  (stamp + send the customer quote)
+ * PURE — decide whether a "Send to customer" should stamp released_at and/or
+ * text the customer.
+ *   not released yet            → stamp + send (the first release)
+ *   already released            → no-op (idempotent; a double-click never re-texts)
+ *   already released + resend   → send again WITHOUT restamping — the tradie
+ *     explicitly asked to deliver the post-edit numbers (on-site revision flow)
  * Mirrors lib/solar/release.ts confirmEligibility (painting has no guardrail
  * flags, so there is no blocked case).
  */
 export function paintingReleaseEligibility(input: {
   alreadyReleasedAt: string | null | undefined
+  resend?: boolean
 }): PaintingReleaseEligibility {
-  if (input.alreadyReleasedAt) return { ok: true, stamp: false }
-  return { ok: true, stamp: true }
+  if (input.alreadyReleasedAt) return { ok: true, stamp: false, send: !!input.resend }
+  return { ok: true, stamp: true, send: true }
 }

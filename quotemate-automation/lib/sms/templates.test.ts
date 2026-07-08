@@ -3,7 +3,43 @@ import {
   buildTradieWebLeadAlert,
   buildIntakeRecoverySms,
   buildDepositAwaitingSlotSms,
+  buildBookingConfirmationSms,
+  buildTradieBookingNotification,
 } from './templates'
+
+describe('buildBookingConfirmationSms', () => {
+  it('renders the slot in the tenant timezone when given (Perth day, not the next Sydney day)', () => {
+    const body = buildBookingConfirmationSms({
+      firstName: 'Sara Mills',
+      scheduledAt: '2026-07-08T23:00:00+08:00', // 11pm Wed 8 Jul Perth = 1am Thu 9 Jul Sydney
+      bookingUrl: 'https://x/q/roof/tok',
+      timeZone: 'Australia/Perth',
+    })
+    expect(body).toContain('Sara')
+    expect(body).toContain('8 Jul')
+    expect(/[^\x20-\x7E\n]/.test(body)).toBe(false) // stays GSM-7 safe
+  })
+
+  it('defaults to Sydney when no timezone is given (unchanged behaviour)', () => {
+    const body = buildBookingConfirmationSms({
+      scheduledAt: '2026-07-08T23:00:00+08:00',
+      bookingUrl: 'https://x/q/roof/tok',
+    })
+    expect(body).toContain('9 Jul')
+  })
+
+  it('the tradie notification names the same tenant-local day as the customer confirmation', () => {
+    const body = buildTradieBookingNotification({
+      tradieFirstName: 'Jon',
+      customerName: 'Sara Mills',
+      jobType: 'roofing',
+      scheduledAt: '2026-07-08T23:00:00+08:00', // 11pm Wed 8 Jul Perth
+      quoteUrl: 'https://x/q/tok',
+      timeZone: 'Australia/Perth',
+    })
+    expect(body).toContain('8 Jul')
+  })
+})
 
 describe('buildDepositAwaitingSlotSms', () => {
   it('carries the booking link, greets by first name, and is GSM-7 safe', () => {

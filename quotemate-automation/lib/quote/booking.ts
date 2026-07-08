@@ -24,9 +24,9 @@ export type PayRedirectKind =
 export type PayRedirectInput = {
   paid: boolean
   scheduledAt: string | null | undefined
-  /** Stripe metadata tier. The $99 'inspection' deposit is a booking
-   *  FEE to even get a site visit — it legitimately stays pay-first and
-   *  is therefore never routed through book-first. */
+  /** Stripe metadata tier. Kept for callers/logging; since 2026-07-08 the
+   *  $99 'inspection' fee follows the same book-first order as the deposit
+   *  tiers (Jon's workflow: select a time slot, THEN pay). */
   tier: string
 }
 
@@ -35,19 +35,16 @@ export type PayRedirectInput = {
  *
  *  already paid          → 'paid'   (NEVER re-charge — including the $99
  *                          inspection fee; see ordering note below)
- *  inspection            → 'stripe' (pay-first preserved; out of scope)
- *  not paid, no slot      → 'book'   (the flip: choose a time first)
- *  not paid, slot chosen  → 'stripe' (deposit is now the last step)
+ *  not paid, no slot      → 'book'   (choose a time first — ALL tiers,
+ *                          inspection included since 2026-07-08)
+ *  not paid, slot chosen  → 'stripe' (payment is the last step)
  *
- * ORDERING MATTERS: paid is checked BEFORE inspection. While /r redirected
- * to the stored draft-time Session this was masked — a completed Session
- * refuses re-payment — but /r now mints a FRESH payable Session per click
- * (2026-07-01), so routing a paid inspection to 'stripe' would mint a new
- * $99 charge on every re-click of the old SMS link.
+ * ORDERING MATTERS: paid is checked FIRST. /r mints a FRESH payable Session
+ * per click (2026-07-01), so routing a paid quote to 'stripe' would mint a
+ * new charge on every re-click of the old SMS link.
  */
 export function payRedirectTarget(input: PayRedirectInput): PayRedirectKind {
   if (input.paid) return 'paid'
-  if (input.tier === 'inspection') return 'stripe'
   if (!input.scheduledAt) return 'book'
   return 'stripe'
 }
@@ -64,6 +61,28 @@ export function bookingStateOnPaid(
   return scheduledAt ? BOOKING_STATE.BOOKED : BOOKING_STATE.RESERVED
 }
 
+/** Deposit tiers a booking may charge. 'inspection' is valid too but is
+ *  passed through explicitly (it is a flat $99 fee, not a deposit). */
+const NEXT_PAY_TIERS = new Set(['good', 'better', 'best'])
+
+/**
+ * Which tier the pay step AFTER booking charges. Shared by the /book page
+ * and POST /api/q/[token]/book so both resolve identically:
+ *   requested 'inspection'      → 'inspection' (book-first $99 fee — must
+ *                                 never fall back to a 30% deposit tier)
+ *   requested valid deposit tier → itself
+ *   else                        → the quote's selected_tier, else 'better'.
+ */
+export function resolveNextTier(
+  requested: string | null | undefined,
+  selectedTier: string | null | undefined,
+): string {
+  if (requested === 'inspection') return 'inspection'
+  if (requested && NEXT_PAY_TIERS.has(requested)) return requested
+  if (selectedTier && NEXT_PAY_TIERS.has(selectedTier)) return selectedTier
+  return 'better'
+}
+
 /** True when paying should finalise a confirmed booking (slot already
  *  chosen). Drives the webhook: accepted + booked + prune slot + send
  *  the confirmation SMS. */
@@ -71,6 +90,21 @@ export function shouldFinaliseBookingOnPaid(
   scheduledAt: string | null | undefined,
 ): boolean {
   return !!scheduledAt
+}
+
+/**
+ * Where /q/<token>/paid sends the customer once the paid state is known
+ * (webhook, or the page's own session_id verification):
+ *   paid + no slot → 'book'  (auto-navigate to the slot picker — the $99
+ *                    inspection is date-less at payment time, and legacy
+ *                    deposits paid off old SMS links can be too)
+ *   otherwise      → 'stay'  (booked confirmation, or payment still pending)
+ */
+export function paidPageTarget(input: {
+  paid: boolean
+  scheduledAt: string | null | undefined
+}): 'book' | 'stay' {
+  return input.paid && !input.scheduledAt ? 'book' : 'stay'
 }
 
 // ── Off-platform "book directly on the tradie's calendar" option ────

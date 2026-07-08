@@ -12,7 +12,9 @@ import { useCallback, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { MultiRoofQuote, RoofMetrics, RoofStructurePrice } from '@/lib/roofing/types'
 import type { SolarQuoteAddon } from '@/lib/roofing/solar'
+import type { SaveAsQuoteRequest } from '@/lib/roofing/save-as-quote-schema'
 import { combinedTotalsForIndices } from '@/lib/roofing/selection'
+import { getAuthToken } from '@/lib/auth/client-token'
 
 function money(n: number | null | undefined): string {
   if (typeof n !== 'number' || !Number.isFinite(n)) return '0'
@@ -73,6 +75,8 @@ export function MeasurementReview({
   initialIncluded,
   primaryIndices,
   selectionWasPersisted,
+  quoteShareToken,
+  saveAsQuoteBody,
 }: {
   measureToken: string
   publicToken: string
@@ -85,6 +89,10 @@ export function MeasurementReview({
   solar: SolarQuoteAddon | null
   /** True when included_indices was actually saved (vs the read-time default). */
   selectionWasPersisted: boolean
+  /** Set once this measurement was promoted to an editable quotes row (R6). */
+  quoteShareToken: string | null
+  /** Server-flattened save-as-quote body; null when the row can't produce one. */
+  saveAsQuoteBody: Omit<SaveAsQuoteRequest, 'measure_token'> | null
 }) {
   const [included, setIncluded] = useState<number[]>(initialIncluded)
   const [saving, setSaving] = useState(false)
@@ -93,6 +101,50 @@ export function MeasurementReview({
   const [photos, setPhotos] = useState<File[]>([])
   const [rescanState, setRescanState] = useState<'idle' | 'scanning' | 'done' | 'error'>('idle')
   const [rescanMsg, setRescanMsg] = useState<string | null>(null)
+  const [promoteState, setPromoteState] = useState<'idle' | 'working'>('idle')
+  const [promoteErr, setPromoteErr] = useState<string | null>(null)
+
+  // Promote this measurement to an editable quotes row (spec R6e), then land
+  // on the dashboard editor. Idempotent server-side: a second promotion
+  // returns the existing quote's shareToken. Bearer-authed — the promotion
+  // attributes the quote to the signed-in tradie's tenant.
+  const promote = useCallback(async () => {
+    if (!saveAsQuoteBody) return
+    setPromoteErr(null)
+    const token = await getAuthToken()
+    if (!token) {
+      setPromoteErr('Sign in on the dashboard to edit this quote.')
+      return
+    }
+    setPromoteState('working')
+    try {
+      const res = await fetch('/api/roofing/save-as-quote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ...saveAsQuoteBody, measure_token: measureToken }),
+      })
+      const json = (await res.json().catch(() => ({}))) as {
+        ok?: boolean
+        shareToken?: string
+        error?: string
+        detail?: string
+      }
+      if (res.status === 401) {
+        setPromoteErr('Sign in on the dashboard to edit this quote.')
+        setPromoteState('idle')
+        return
+      }
+      if (!res.ok || !json.ok || !json.shareToken) {
+        setPromoteErr(json.detail ?? json.error ?? `Couldn't create the editable quote (HTTP ${res.status})`)
+        setPromoteState('idle')
+        return
+      }
+      router.push(`/dashboard/quote/${json.shareToken}`)
+    } catch (e) {
+      setPromoteErr(e instanceof Error ? e.message : String(e))
+      setPromoteState('idle')
+    }
+  }, [saveAsQuoteBody, measureToken, router])
 
   // Tradie photo source (R2): attach close-up roof photos and re-scan. The POST
   // merges the Anthropic photo pass with the per-structure aerial read and
@@ -212,9 +264,16 @@ export function MeasurementReview({
       const prev = included
       setIncluded(next) // optimistic
       const ok = await persist(next)
-      if (!ok) setIncluded(prev) // revert on failure
+      if (!ok) {
+        setIncluded(prev) // revert on failure
+        return
+      }
+      // Re-render the server page so the promotion payload (saveAsQuoteBody,
+      // flattened server-side from included_indices) reflects THIS toggle —
+      // otherwise "Edit & send quote" would promote the stale selection.
+      router.refresh()
     },
-    [included, persist],
+    [included, persist, router],
   )
 
   return (
@@ -238,6 +297,30 @@ export function MeasurementReview({
           >
             Download PDF <span aria-hidden="true">&darr;</span>
           </a>
+        )}
+        {/* On-site edit path (spec R6e): already promoted → straight to the
+            dashboard editor; otherwise promote-then-navigate. */}
+        {quoteShareToken ? (
+          <a
+            href={`/dashboard/quote/${quoteShareToken}`}
+            className="inline-flex items-center gap-2 border border-ink-line px-4 py-2.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text-sec hover:border-accent hover:text-accent"
+          >
+            Edit &amp; send quote <span aria-hidden="true">&rarr;</span>
+          </a>
+        ) : saveAsQuoteBody ? (
+          <button
+            type="button"
+            onClick={() => void promote()}
+            disabled={promoteState === 'working'}
+            className="inline-flex items-center gap-2 border border-ink-line px-4 py-2.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text-sec transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {promoteState === 'working' ? 'Preparing…' : (<>Edit &amp; send quote <span aria-hidden="true">&rarr;</span></>)}
+          </button>
+        ) : null}
+        {promoteErr && (
+          <span className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-warning">
+            {promoteErr}
+          </span>
         )}
         {saving && (
           <span className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text-dim">

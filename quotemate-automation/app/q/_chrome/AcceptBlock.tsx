@@ -59,6 +59,8 @@ export function AcceptBlock({
 
   return (
     <section
+      // Anchor target for the tier-card / sticky-bar "Accept & book" CTAs.
+      id="accept"
       style={{
         padding: '24px',
         borderTop: '1px solid var(--ink-line)',

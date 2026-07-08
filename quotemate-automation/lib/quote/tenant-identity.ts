@@ -21,6 +21,12 @@ export type TenantIdentity = {
   website_url: string | null
   business_address: string | null
   logo_url: string | null
+  /** AU state (e.g. 'QLD') — feeds tzForState so booked-visit labels render
+   *  in the tenant's timezone, matching how the slots were generated. */
+  state: string | null
+  /** The tenant's Twilio long code — the number the customer's quote SMS came
+   *  from, so "reply to …" CTAs can deep-link back into that thread. */
+  twilio_sms_number: string | null
 }
 
 export async function loadTenantIdentity(
@@ -31,17 +37,19 @@ export async function loadTenantIdentity(
 
   const { data: base } = await supabase
     .from('tenants')
-    .select('business_name, owner_first_name, owner_last_name, owner_mobile, owner_email')
+    .select('business_name, owner_first_name, owner_last_name, owner_mobile, owner_email, state')
     .eq('id', tenantId)
     .maybeSingle()
   if (!base) return null
   const b = base as Record<string, string | null>
 
-  // Best-effort: a pre-migration-141 deploy lacks these columns, in which case
-  // supabase-js yields data:null and we fall back to nulls (no logo/contact).
+  // Best-effort: a deploy whose tenants table lacks any of these columns
+  // (pre-migration-141 for contact/logo; unprovisioned installs for the
+  // Twilio number) yields data:null here and degrades to nulls, without
+  // taking the whole letterhead down with it.
   const { data: ex } = await supabase
     .from('tenants')
-    .select('contact_name, website_url, business_address, logo_url')
+    .select('contact_name, website_url, business_address, logo_url, twilio_sms_number')
     .eq('id', tenantId)
     .maybeSingle()
   const e = (ex ?? {}) as Record<string, string | null>
@@ -52,6 +60,8 @@ export async function loadTenantIdentity(
     owner_last_name: b.owner_last_name ?? null,
     owner_mobile: b.owner_mobile ?? null,
     owner_email: b.owner_email ?? null,
+    state: b.state ?? null,
+    twilio_sms_number: e.twilio_sms_number ?? null,
     contact_name: e.contact_name ?? null,
     website_url: e.website_url ?? null,
     business_address: e.business_address ?? null,

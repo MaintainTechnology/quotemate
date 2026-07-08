@@ -117,6 +117,148 @@ describe('GET /api/tenant/trade-jobs', () => {
       headline: '101 m²',
       href: '/q/roof/tok-roof',
     })
+
+    // Spec quote-sync-and-roofing-workflow-fix F1 — promoted measurements
+    // (quote_share_token set) are excluded: their quotes row, served by
+    // /api/tenant/me, is the single source of truth after promotion.
+    const roofing = h.queries.find((q) => q.table === 'roofing_measurements')
+    expect(roofing!.ops).toContainEqual({ op: 'is', args: ['quote_share_token', null] })
+  })
+
+  // Spec quotes-tab-sync A4 — aircon recommendations (migration 144) join the
+  // saved-jobs summaries so they surface on the Quotes tab like the other
+  // measure-tool trades.
+  it('merges aircon recommendations into TradeJobSummary jobs', async () => {
+    authedUser()
+    h.results.push(
+      { data: { id: 'tenant-1' }, error: null }, // tenants lookup
+      { data: [], error: null }, // roofing_measurements
+      { data: [], error: null }, // solar_estimates
+      { data: [], error: null }, // painting_measurements
+      { data: [], error: null }, // paint_runs
+      {
+        data: [
+          {
+            id: 'a1',
+            address: '7 Cool St',
+            routing: 'book_assessment',
+            public_token: 'tok-ac',
+            created_at: '2026-07-01T00:00:00Z',
+          },
+          {
+            // routing is a free-text column; today the engine only emits
+            // 'book_assessment', so this row exercises the fallback badge a
+            // future routing value would get.
+            id: 'a2',
+            address: '9 Breeze Ave',
+            routing: 'auto_quote',
+            public_token: null,
+            created_at: '2026-06-30T00:00:00Z',
+          },
+        ],
+        error: null,
+      }, // aircon_recommendations
+    )
+    const res = await GET(
+      new Request('http://localhost/api/tenant/trade-jobs', {
+        headers: { authorization: 'Bearer token-1' },
+      }),
+    )
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as { jobs: Array<Record<string, unknown>> }
+    expect(json.jobs).toHaveLength(2)
+    expect(json.jobs[0]).toMatchObject({
+      id: 'a1',
+      trade: 'aircon',
+      status: 'inspection', // book_assessment routes to a site visit
+      headline: 'AC recommendation',
+      href: '/q/aircon/tok-ac',
+    })
+    expect(json.jobs[1]).toMatchObject({
+      id: 'a2',
+      trade: 'aircon',
+      status: 'draft',
+      href: null,
+    })
+
+    const airconQuery = h.queries.find((q) => q.table === 'aircon_recommendations')
+    expect(airconQuery, 'expected an aircon_recommendations query').toBeTruthy()
+    expect(airconQuery!.ops).toContainEqual({ op: 'eq', args: ['tenant_id', 'tenant-1'] })
+  })
+
+  // Spec tradie-onsite-quote-editing R1 — roofing/painting rows also carry the
+  // TRADIE detail link (/m and /p, keyed by their second capability token) so
+  // the dashboard can open the editable review page, not just the customer view.
+  it('adds tradieHref for roofing (/m) and painting (/p); null elsewhere', async () => {
+    authedUser()
+    h.results.push(
+      { data: { id: 'tenant-1' }, error: null }, // tenants lookup
+      {
+        data: [
+          {
+            id: 'r1',
+            address: '126 Greens Road',
+            combined_area_m2: 180,
+            public_token: 'tok-roof',
+            measure_token: 'tok-measure',
+            confirmed_at: null,
+            routing: 'inspection_required',
+            created_at: '2026-07-03T00:00:00Z',
+          },
+          {
+            id: 'r2',
+            address: '9 No Token St',
+            combined_area_m2: 90,
+            public_token: 'tok-roof-2',
+            measure_token: null,
+            confirmed_at: null,
+            routing: 'tradie_review',
+            created_at: '2026-07-02T00:00:00Z',
+          },
+        ],
+        error: null,
+      }, // roofing_measurements
+      { data: [], error: null }, // solar_estimates
+      {
+        data: [
+          {
+            id: 'p1',
+            address: '4 Brush Lane',
+            better_inc_gst: 8400,
+            routing: 'auto_quote',
+            public_token: 'tok-paint',
+            estimate_token: 'tok-estimate',
+            created_at: '2026-07-01T00:00:00Z',
+          },
+        ],
+        error: null,
+      }, // painting_measurements
+      { data: [], error: null }, // paint_runs
+      {
+        data: [
+          {
+            id: 'a1',
+            address: '7 Cool St',
+            routing: 'auto_quote',
+            public_token: 'tok-ac',
+            created_at: '2026-06-30T00:00:00Z',
+          },
+        ],
+        error: null,
+      }, // aircon_recommendations
+    )
+    const res = await GET(
+      new Request('http://localhost/api/tenant/trade-jobs', {
+        headers: { authorization: 'Bearer token-1' },
+      }),
+    )
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as { jobs: Array<Record<string, unknown>> }
+    expect(json.jobs).toHaveLength(4)
+    expect(json.jobs[0]).toMatchObject({ id: 'r1', trade: 'roofing', tradieHref: '/m/tok-measure' })
+    expect(json.jobs[1]).toMatchObject({ id: 'r2', trade: 'roofing', tradieHref: null })
+    expect(json.jobs[2]).toMatchObject({ id: 'p1', trade: 'painting', tradieHref: '/p/tok-estimate' })
+    expect(json.jobs[3]).toMatchObject({ id: 'a1', trade: 'aircon', tradieHref: null })
   })
 })
 
@@ -169,6 +311,7 @@ describe('DELETE /api/tenant/trade-jobs', () => {
     authedUser()
     h.results.push(
       { data: { id: 'tenant-1' }, error: null }, // tenants lookup
+      { data: { id: 'r1', quote_id: null }, error: null }, // roofing pre-select (money guard)
       { data: [{ id: 'r1' }], error: null }, // delete result
     )
     const res = await DELETE(delReq({ trade: 'roofing', id: 'r1' }))
@@ -186,12 +329,27 @@ describe('DELETE /api/tenant/trade-jobs', () => {
     authedUser()
     h.results.push(
       { data: { id: 'tenant-1' }, error: null },
-      { data: [], error: null }, // delete matched nothing
+      { data: null, error: null }, // roofing pre-select misses
     )
     const res = await DELETE(delReq({ trade: 'roofing', id: 'someone-elses' }))
     expect(res.status).toBe(404)
     const del = h.queries[h.queries.length - 1]
     expect(del.table).toBe('roofing_measurements')
+  })
+
+  // Spec quote-sync-and-roofing-workflow-fix — a roofing measurement
+  // promoted to a PAID quote (mig 168 link) is that payment's source data;
+  // deletion is refused, mirroring the solar guard.
+  it('409 on a roofing measurement whose promoted quote was paid', async () => {
+    authedUser()
+    h.results.push(
+      { data: { id: 'tenant-1' }, error: null }, // tenants lookup
+      { data: { id: 'r1', quote_id: 'q9' }, error: null }, // roofing pre-select
+      { data: { paid_at: '2026-07-01T00:00:00Z' }, error: null }, // linked quote
+    )
+    const res = await DELETE(delReq({ trade: 'roofing', id: 'r1' }))
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ error: 'job_already_paid' })
   })
 
   it('409 on a painting job whose deposit was paid — payment record is immutable', async () => {
@@ -258,6 +416,25 @@ describe('DELETE /api/tenant/trade-jobs', () => {
     const del = h.queries[h.queries.length - 1]
     expect(del.table).toBe('solar_estimates')
     expect(del.ops).toContainEqual({ op: 'eq', args: ['id', 's1'] })
+    expect(del.ops).toContainEqual({ op: 'eq', args: ['tenant_id', 'tenant-1'] })
+  })
+
+  // Spec quotes-tab-sync A4 — aircon joins the DELETE allowlist. No money
+  // guard: aircon recommendations never take a deposit.
+  it('deletes an aircon recommendation, filtered by id AND tenant_id', async () => {
+    authedUser()
+    h.results.push(
+      { data: { id: 'tenant-1' }, error: null }, // tenants lookup
+      { data: [{ id: 'a1' }], error: null }, // delete result
+    )
+    const res = await DELETE(delReq({ trade: 'aircon', id: 'a1' }))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ ok: true })
+
+    const del = h.queries[h.queries.length - 1]
+    expect(del.table).toBe('aircon_recommendations')
+    expect(del.ops.some((o) => o.op === 'delete')).toBe(true)
+    expect(del.ops).toContainEqual({ op: 'eq', args: ['id', 'a1'] })
     expect(del.ops).toContainEqual({ op: 'eq', args: ['tenant_id', 'tenant-1'] })
   })
 

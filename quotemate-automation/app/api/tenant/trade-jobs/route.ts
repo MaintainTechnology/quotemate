@@ -1,6 +1,7 @@
 // /api/tenant/trade-jobs — lightweight summaries of the tradie's saved
 // trade-specific jobs that live OUTSIDE the quotes table (roofing_measurements,
-// solar_estimates, painting_measurements). Powers the dashboard Quotes-tab
+// solar_estimates, painting_measurements, paint_runs,
+// aircon_recommendations). Powers the dashboard Quotes-tab
 // "link-out summary cards" (spec R4/R8/R19, link-out variant): each card shows
 // the trade, address, a headline figure and status, and links to that job's
 // rich customer page (/q/roof, /q/solar, /q/paint) — instead of forcing those
@@ -36,7 +37,7 @@ const supabase = createClient(
 
 export type TradeJobSummary = {
   id: string
-  trade: 'roofing' | 'solar' | 'painting' | 'commercial-painting'
+  trade: 'roofing' | 'solar' | 'painting' | 'commercial-painting' | 'aircon'
   address: string | null
   /** Short headline (e.g. "182 m²", "$8,400 inc GST"). */
   headline: string | null
@@ -44,6 +45,9 @@ export type TradeJobSummary = {
   status: 'confirmed' | 'inspection' | 'draft'
   /** Link to the rich customer page, or null when no shareable token exists. */
   href: string | null
+  /** Tradie-facing detail/edit page (/m for roofing, /p for painting — keyed by
+   *  the row's second capability token). Null for trades without one. */
+  tradieHref: string | null
   createdAt: string | null
 }
 
@@ -61,102 +65,142 @@ export async function GET(req: Request) {
 
   const jobs: TradeJobSummary[] = []
 
-  // ── Roofing ──────────────────────────────────────────────
-  try {
-    const { data } = await supabase
-      .from('roofing_measurements')
-      .select('id, address, combined_area_m2, public_token, confirmed_at, routing, created_at')
-      .eq('tenant_id', tenantId)
-      .order('created_at', { ascending: false })
-      .limit(100)
-    for (const r of data ?? []) {
-      const area = typeof r.combined_area_m2 === 'number' ? r.combined_area_m2 : null
-      jobs.push({
-        id: String(r.id),
-        trade: 'roofing',
-        address: (r.address as string | null) ?? null,
-        headline: area !== null ? `${Math.round(area)} m²` : null,
-        status: r.confirmed_at
-          ? 'confirmed'
-          : r.routing === 'inspection_required'
-            ? 'inspection'
-            : 'draft',
-        href: r.public_token ? `/q/roof/${r.public_token}` : null,
-        createdAt: (r.created_at as string | null) ?? null,
-      })
-    }
-  } catch {
-    /* table absent / column drift — skip roofing */
+  // The five measure-tool reads are independent and tenant-scoped — run
+  // them concurrently. Each degrades to an empty list on error/absent
+  // table rather than failing the whole response (same contract as the old
+  // sequential try/catch blocks).
+  const settle = (q: PromiseLike<{ data: unknown }>) =>
+    Promise.resolve(q).then(
+      (r) => (Array.isArray(r.data) ? (r.data as Record<string, unknown>[]) : []),
+      () => [] as Record<string, unknown>[],
+    )
+
+  const [roofRows, solarRows, paintRows, commRows, airconRows] = await Promise.all([
+    // Roofing — promoted measurements (quote_share_token set by
+    // /api/roofing/save-as-quote) are excluded: their single source of
+    // truth is the quotes row, already surfaced by /api/tenant/me —
+    // listing both double-renders the same job (spec
+    // quote-sync-and-roofing-workflow-fix F1). Deleting the promoted quote
+    // clears the link, so the measurement resurfaces here.
+    settle(
+      supabase
+        .from('roofing_measurements')
+        .select('id, address, combined_area_m2, public_token, measure_token, confirmed_at, routing, created_at')
+        .eq('tenant_id', tenantId)
+        .is('quote_share_token', null)
+        .order('created_at', { ascending: false })
+        .limit(100),
+    ),
+    settle(
+      supabase
+        .from('solar_estimates')
+        .select('id, address, public_token, confirmed_at, created_at')
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: false })
+        .limit(100),
+    ),
+    settle(
+      supabase
+        .from('painting_measurements')
+        .select('id, address, better_inc_gst, routing, public_token, estimate_token, created_at')
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: false })
+        .limit(100),
+    ),
+    settle(
+      supabase
+        .from('paint_runs')
+        .select('id, job_name, site_address, status, public_token, created_at')
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: false })
+        .limit(100),
+    ),
+    // aircon_recommendations (migration 144) — persisted by
+    // /api/aircon/recommend.
+    settle(
+      supabase
+        .from('aircon_recommendations')
+        .select('id, address, routing, public_token, created_at')
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: false })
+        .limit(100),
+    ),
+  ])
+
+  for (const r of roofRows) {
+    const area = typeof r.combined_area_m2 === 'number' ? r.combined_area_m2 : null
+    jobs.push({
+      id: String(r.id),
+      trade: 'roofing',
+      address: (r.address as string | null) ?? null,
+      headline: area !== null ? `${Math.round(area)} m²` : null,
+      status: r.confirmed_at
+        ? 'confirmed'
+        : r.routing === 'inspection_required'
+          ? 'inspection'
+          : 'draft',
+      href: r.public_token ? `/q/roof/${r.public_token}` : null,
+      tradieHref: r.measure_token ? `/m/${r.measure_token}` : null,
+      createdAt: (r.created_at as string | null) ?? null,
+    })
   }
 
-  // ── Solar ────────────────────────────────────────────────
-  try {
-    const { data } = await supabase
-      .from('solar_estimates')
-      .select('id, address, public_token, confirmed_at, created_at')
-      .eq('tenant_id', tenantId)
-      .order('created_at', { ascending: false })
-      .limit(100)
-    for (const r of data ?? []) {
-      jobs.push({
-        id: String(r.id),
-        trade: 'solar',
-        address: (r.address as string | null) ?? null,
-        headline: 'Solar estimate',
-        status: r.confirmed_at ? 'confirmed' : 'draft',
-        href: r.public_token ? `/q/solar/${r.public_token}` : null,
-        createdAt: (r.created_at as string | null) ?? null,
-      })
-    }
-  } catch {
-    /* skip solar */
+  for (const r of solarRows) {
+    jobs.push({
+      id: String(r.id),
+      trade: 'solar',
+      address: (r.address as string | null) ?? null,
+      headline: 'Solar estimate',
+      status: r.confirmed_at ? 'confirmed' : 'draft',
+      href: r.public_token ? `/q/solar/${r.public_token}` : null,
+      tradieHref: null,
+      createdAt: (r.created_at as string | null) ?? null,
+    })
   }
 
-  // ── Residential paint ────────────────────────────────────
-  try {
-    const { data } = await supabase
-      .from('painting_measurements')
-      .select('id, address, better_inc_gst, routing, public_token, created_at')
-      .eq('tenant_id', tenantId)
-      .order('created_at', { ascending: false })
-      .limit(100)
-    for (const r of data ?? []) {
-      const better = typeof r.better_inc_gst === 'number' ? r.better_inc_gst : null
-      jobs.push({
-        id: String(r.id),
-        trade: 'painting',
-        address: (r.address as string | null) ?? null,
-        headline: better !== null ? `${aud(better)} inc GST` : null,
-        status: r.routing === 'inspection_required' ? 'inspection' : 'draft',
-        href: r.public_token ? `/q/paint/${r.public_token}` : null,
-        createdAt: (r.created_at as string | null) ?? null,
-      })
-    }
-  } catch {
-    /* skip painting */
+  for (const r of paintRows) {
+    const better = typeof r.better_inc_gst === 'number' ? r.better_inc_gst : null
+    jobs.push({
+      id: String(r.id),
+      trade: 'painting',
+      address: (r.address as string | null) ?? null,
+      headline: better !== null ? `${aud(better)} inc GST` : null,
+      status: r.routing === 'inspection_required' ? 'inspection' : 'draft',
+      href: r.public_token ? `/q/paint/${r.public_token}` : null,
+      tradieHref: r.estimate_token ? `/p/${r.estimate_token}` : null,
+      createdAt: (r.created_at as string | null) ?? null,
+    })
   }
 
-  // ── Commercial painting ──────────────────────────────────
-  try {
-    const { data } = await supabase
-      .from('paint_runs')
-      .select('id, job_name, site_address, status, public_token, created_at')
-      .eq('tenant_id', tenantId)
-      .order('created_at', { ascending: false })
-      .limit(100)
-    for (const r of data ?? []) {
-      jobs.push({
-        id: String(r.id),
-        trade: 'commercial-painting',
-        address: (r.site_address as string | null) ?? (r.job_name as string | null) ?? null,
-        headline: (r.job_name as string | null) ?? 'Painting tender',
-        status: r.status === 'priced' ? 'confirmed' : r.status === 'failed' ? 'inspection' : 'draft',
-        href: r.public_token ? `/q/commercial-paint/${r.public_token}` : null,
-        createdAt: (r.created_at as string | null) ?? null,
-      })
-    }
-  } catch {
-    /* skip commercial painting */
+  for (const r of commRows) {
+    jobs.push({
+      id: String(r.id),
+      trade: 'commercial-painting',
+      address: (r.site_address as string | null) ?? (r.job_name as string | null) ?? null,
+      headline: (r.job_name as string | null) ?? 'Painting tender',
+      status: r.status === 'priced' ? 'confirmed' : r.status === 'failed' ? 'inspection' : 'draft',
+      href: r.public_token ? `/q/commercial-paint/${r.public_token}` : null,
+      // Commercial paint's workspace lives in the dashboard tab, not a
+      // tokenised page — no tradie detail link.
+      tradieHref: null,
+      createdAt: (r.created_at as string | null) ?? null,
+    })
+  }
+
+  // book_assessment routes to a site visit, so it maps to the 'inspection'
+  // badge; everything else is a draft.
+  for (const r of airconRows) {
+    jobs.push({
+      id: String(r.id),
+      trade: 'aircon',
+      address: (r.address as string | null) ?? null,
+      headline: 'AC recommendation',
+      status: r.routing === 'book_assessment' ? 'inspection' : 'draft',
+      href: r.public_token ? `/q/aircon/${r.public_token}` : null,
+      // No tradie detail/edit page for aircon — the recommender is one-shot.
+      tradieHref: null,
+      createdAt: (r.created_at as string | null) ?? null,
+    })
   }
 
   // Newest first across all trades.
@@ -166,7 +210,7 @@ export async function GET(req: Request) {
 }
 
 // Maps a TradeJobSummary.trade to the table its rows live in. DELETE only
-// accepts these four keys — a table name is never built from raw input.
+// accepts these keys — a table name is never built from raw input.
 // Lookups go through Object.hasOwn so prototype members ("constructor",
 // "toString", …) can't sneak a non-string past the allowlist.
 const TRADE_TABLES: Record<string, string> = {
@@ -174,6 +218,8 @@ const TRADE_TABLES: Record<string, string> = {
   solar: 'solar_estimates',
   painting: 'painting_measurements',
   'commercial-painting': 'paint_runs',
+  // No money guard: aircon recommendations never take a deposit.
+  aircon: 'aircon_recommendations',
 }
 
 export async function DELETE(req: Request) {
@@ -225,6 +271,28 @@ export async function DELETE(req: Request) {
           tier,
           reason: exp.reason,
         })
+      }
+    }
+  }
+  // A roofing measurement can be linked to a promoted quotes row (mig 168).
+  // If that quote took a deposit, deleting the measurement would strand the
+  // paid job's source data — refuse, mirroring the solar guard below.
+  if (trade === 'roofing') {
+    const { data: row } = await supabase
+      .from('roofing_measurements')
+      .select('id, quote_id')
+      .eq('id', id)
+      .eq('tenant_id', tenant.id)
+      .maybeSingle()
+    if (!row) return Response.json({ error: 'not_found' }, { status: 404 })
+    if (row.quote_id) {
+      const { data: linkedQuote } = await supabase
+        .from('quotes')
+        .select('paid_at')
+        .eq('id', row.quote_id)
+        .maybeSingle()
+      if (linkedQuote?.paid_at) {
+        return Response.json({ error: 'job_already_paid' }, { status: 409 })
       }
     }
   }

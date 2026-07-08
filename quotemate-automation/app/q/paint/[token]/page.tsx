@@ -17,9 +17,11 @@ import { asQuoteTierMode, resolveVisibleTiers, type QuoteTierMode } from '@/lib/
 import { canShowPaintingPrices } from '@/lib/painting/publish-gate'
 import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
 import { QuoteChrome, type StickyBar } from '../../_chrome/QuoteChrome'
+import { TradieJobBanner } from '../../_chrome/TradieJobBanner'
 import { AcceptBlock } from '../../_chrome/AcceptBlock'
 import { resolveAcceptView } from '@/lib/quote/accept'
 import { loadTenantBookingOptions, formatVisitSlot } from '@/lib/quote/trade-booking'
+import { tzForState } from '@/lib/quote/availability'
 import { SlotPicker } from '@/app/q/[token]/book/SlotPicker'
 import { tradeIcon } from '../../_chrome/icons'
 import {
@@ -332,6 +334,8 @@ export default async function PaintingQuotePage(props: { params: Promise<{ token
 
   return (
     <QuoteChrome trade={{ label: 'Paint', icon: tradeIcon('paint') }} sticky={stickyBar}>
+      {/* Owner-only "Review & edit" pill → /p/[estimate_token] (spec R3). */}
+      <TradieJobBanner trade="painting" publicToken={row.public_token} />
       <QuoteSheet label={`Painting quote · ${business}`}>
         <Letterhead
           name={identity?.business_name ?? business}
@@ -394,7 +398,7 @@ export default async function PaintingQuotePage(props: { params: Promise<{ token
               <p style={{ margin: '12px 0 0', fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
                 Your visit is booked for{' '}
                 <strong style={{ color: 'var(--text-pri)' }}>
-                  {formatVisitSlot(paintScheduledAt, paintScheduledWindow)}
+                  {formatVisitSlot(paintScheduledAt, paintScheduledWindow, tzForState(identity?.state ?? null))}
                 </strong>
                 . {business} will text you the day before to confirm.
               </p>

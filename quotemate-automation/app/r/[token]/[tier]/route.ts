@@ -9,8 +9,8 @@
 //   price hold expired      → /q/<token>          (blocked: refresh needed)
 //   already paid           → /q/<token>/paid
 //   not paid, NO slot yet   → /q/<token>/book?tier=<tier>   (pick a time)
-//   not paid, slot chosen   → Stripe Checkout (deposit = the last step)
-//   inspection ($99 fee)   → Stripe (pay-first preserved; see booking.ts)
+//   not paid, slot chosen   → Stripe Checkout (payment = the last step)
+//   (since 2026-07-08 the $99 inspection fee is book-first too — booking.ts)
 //
 // Two hardening rules live here (both surfaced 2026-07-01):
 //

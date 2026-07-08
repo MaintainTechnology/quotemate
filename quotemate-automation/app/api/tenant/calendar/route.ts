@@ -17,6 +17,7 @@
 // the data read; isolation is the tenant_id filter.
 
 import { tenantFromBearer, billingAdmin } from '@/lib/billing/auth'
+import { tzForState } from '@/lib/quote/availability'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,6 +54,9 @@ type CalendarEvent = {
   address: string | null
   suburb: string | null
   source: string | null
+  /** Open link for rows that don't live on quotes (roof/paint visits open
+   *  /q/<trade>/<token>, not /q/<share_token>). Absent on quotes rows. */
+  href?: string | null
 }
 
 type QuoteRow = {
@@ -77,6 +81,54 @@ type IntakeRow = {
 
 const QUOTE_COLS =
   'id, share_token, scheduled_at, booking_state, status, paid_at, paid_tier, needs_inspection, intake_id'
+
+// Roofing/painting visits live in their OWN tables (migrations 165 + 167), not
+// quotes — without these reads a booked or paid $99 site visit on those
+// surfaces is invisible to the tradie's calendar.
+const TRADE_VISIT_TABLES = [
+  { table: 'roofing_measurements', jobType: 'roofing', hrefBase: '/q/roof/' },
+  { table: 'painting_measurements', jobType: 'painting', hrefBase: '/q/paint/' },
+] as const
+
+const TRADE_VISIT_COLS =
+  'id, public_token, scheduled_at, paid_at, paid_tier, customer_name, customer_phone, address'
+
+type TradeVisitRow = {
+  id: string
+  public_token: string | null
+  scheduled_at: string | null
+  paid_at: string | null
+  paid_tier: string | null
+  customer_name: string | null
+  customer_phone: string | null
+  address: string | null
+}
+
+function tradeVisitEvent(
+  row: TradeVisitRow,
+  meta: (typeof TRADE_VISIT_TABLES)[number],
+): CalendarEvent {
+  return {
+    quoteId: row.id,
+    shareToken: null,
+    href: row.public_token ? `${meta.hrefBase}${row.public_token}` : null,
+    scheduledAt: row.scheduled_at ?? null,
+    bookingState: null,
+    status: null,
+    paid: !!row.paid_at,
+    paidTier: row.paid_tier ?? null,
+    paidAt: row.paid_at ?? null,
+    // The $99 site-visit rows render as "visit"; a painting row paid on a
+    // real tier (good/better/best deposit, mig 156) is a won job, not a visit.
+    needsInspection: !row.paid_tier || row.paid_tier === 'inspection',
+    customerName: row.customer_name?.trim() || null,
+    customerPhone: row.customer_phone?.trim() || null,
+    jobType: meta.jobType,
+    address: row.address ?? null,
+    suburb: null,
+    source: null,
+  }
+}
 
 function clampIso(value: string | null, fallbackMs: number): string {
   if (value) {
@@ -227,13 +279,66 @@ export async function GET(req: Request) {
     toEvent(q, q.intake_id ? intakeMap[q.intake_id] ?? null : null),
   )
 
+  // Trade visits (roofing/painting measurement tables). The four reads are
+  // independent — run them concurrently. Best-effort per query (pattern:
+  // trade-jobs route): a failing read — e.g. a deploy before migration
+  // 165/167 — skips that table rather than 500-ing the calendar.
+  const tenantId = auth.tenant.id
+  type TradeRead = {
+    meta: (typeof TRADE_VISIT_TABLES)[number]
+    dest: CalendarEvent[]
+    query: PromiseLike<{ data: unknown; error: unknown }>
+  }
+  const tradeReads: TradeRead[] = TRADE_VISIT_TABLES.flatMap((meta) => [
+    {
+      meta,
+      dest: events,
+      query: sb
+        .from(meta.table)
+        .select(TRADE_VISIT_COLS)
+        .eq('tenant_id', tenantId)
+        .not('scheduled_at', 'is', null)
+        .gte('scheduled_at', from)
+        .lte('scheduled_at', to)
+        .order('scheduled_at', { ascending: true })
+        // supabase-js's chained generics blow TS's instantiation depth when
+        // contextually typed inside this array — collapse to the thenable shape.
+        .limit(MAX_EVENTS) as unknown as TradeRead['query'],
+    },
+    {
+      meta,
+      dest: toSchedule,
+      query: sb
+        .from(meta.table)
+        .select(TRADE_VISIT_COLS)
+        .eq('tenant_id', tenantId)
+        .is('scheduled_at', null)
+        .not('paid_at', 'is', null)
+        .gte('paid_at', paidSince)
+        .order('paid_at', { ascending: false })
+        .limit(MAX_EVENTS) as unknown as TradeRead['query'],
+    },
+  ])
+  const tradeResults = await Promise.all(tradeReads.map((r) => r.query))
+  tradeReads.forEach((r, i) => {
+    const { data, error } = tradeResults[i]
+    if (error || !data) return
+    for (const row of data as TradeVisitRow[]) r.dest.push(tradeVisitEvent(row, r.meta))
+  })
+  // Re-sort the merged lists so trade rows interleave with quotes rows.
+  events.sort((a, b) => Date.parse(a.scheduledAt ?? '') - Date.parse(b.scheduledAt ?? ''))
+  toSchedule.sort((a, b) => Date.parse(b.paidAt ?? '') - Date.parse(a.paidAt ?? ''))
+
   // tenantId powers the dashboard "New booking" button, which opens this
-  // tenant's public self-serve booking page (/book/<tenantId>).
+  // tenant's public self-serve booking page (/book/<tenantId>). tenantTz is
+  // the tenant's state timezone so the Calendar tab groups days in the same
+  // zone the slots were generated in.
   return Response.json({
     events,
     toSchedule,
     awaitingBooking,
     reviewCount: reviewCount ?? 0,
     tenantId: auth.tenant.id,
+    tenantTz: tzForState(auth.tenant.state),
   })
 }

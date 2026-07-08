@@ -12,10 +12,15 @@
 //        this point, so they show a "we'll send an invite" note instead.
 
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { BrandMark } from '@/app/_components/BrandMark'
 import { humanizeJobType } from '@/lib/sms/followup-context'
 import { buildGoogleCalendarUrl, resolveEventWindow } from '@/lib/quote/calendar'
+import { paidPageTarget } from '@/lib/quote/booking'
+import { tzForState } from '@/lib/quote/availability'
+import { finalisePaidQuote, sessionConfirmsQuote } from '@/lib/quote/paid-confirm'
+import { getStripe } from '@/lib/stripe/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,14 +30,15 @@ const supabase = createClient(
 )
 
 // AM/PM window shows the half-day ("Fri 11 Jul (morning)"); a legacy exact
-// time shows the time. Australia/Sydney to match /q/[token]/book (spec B1).
-function formatScheduled(iso: string, window?: string | null): string {
+// time shows the time. Rendered in the tenant timezone the slots were
+// generated in (tzForState) to match /q/[token]/book (spec B1).
+function formatScheduled(iso: string, window?: string | null, tz = 'Australia/Sydney'): string {
   try {
     const dayLabel = new Date(iso).toLocaleString('en-AU', {
       weekday: 'short',
       day: 'numeric',
       month: 'short',
-      timeZone: 'Australia/Sydney',
+      timeZone: tz,
     })
     if (window === 'am' || window === 'pm') {
       return `${dayLabel} (${window === 'am' ? 'morning' : 'afternoon'})`
@@ -41,7 +47,7 @@ function formatScheduled(iso: string, window?: string | null): string {
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
-      timeZone: 'Australia/Sydney',
+      timeZone: tz,
     })
     return `${dayLabel}, ${time}`
   } catch {
@@ -146,7 +152,7 @@ export default async function PaidPage(props: {
   // Best-effort enrichment — a missing tenant/intake must never break the page.
   const [{ data: tenant }, { data: intake }] = await Promise.all([
     quote.tenant_id
-      ? supabase.from('tenants').select('business_name').eq('id', quote.tenant_id).maybeSingle()
+      ? supabase.from('tenants').select('business_name, state').eq('id', quote.tenant_id).maybeSingle()
       : Promise.resolve({ data: null }),
     quote.intake_id
       ? supabase
@@ -158,35 +164,83 @@ export default async function PaidPage(props: {
   ])
 
   const tradieName = (tenant?.business_name as string | null) ?? null
+  const tz = tzForState((tenant?.state as string | null) ?? null)
   const jobType = (intake?.job_type as string | null) ?? null
   const suburb = (intake?.suburb as string | null) ?? null
   const address = (intake?.address as string | null) ?? null
 
   const scheduledAt = (quote.scheduled_at as string | null) ?? null
   const scheduledWindow = (quote.scheduled_window as string | null) ?? null
-  const tierPaid = ((quote.paid_tier as string | null) ?? sp.tier ?? null)
+
+  // Webhook race guard: Stripe redirects here immediately after payment, but
+  // paid_at is written by the async webhook. When we hold a session_id and
+  // the row isn't paid yet, verify the Session with Stripe ourselves and run
+  // the SAME claim+finalise the webhook uses (lib/quote/paid-confirm.ts —
+  // idempotent, so whichever lands second is a no-op). Without this, a
+  // customer landing before the webhook saw no confirmation and no way into
+  // booking, and simply left.
+  let paidAt = (quote.paid_at as string | null) ?? null
+  let paidTier = (quote.paid_tier as string | null) ?? null
+  if (!paidAt && sp.session_id) {
+    try {
+      const session = await getStripe().checkout.sessions.retrieve(sp.session_id)
+      const confirmed = sessionConfirmsQuote(
+        {
+          payment_status: session.payment_status,
+          metadata: session.metadata as Record<string, string> | null,
+        },
+        quote.id as string,
+      )
+      if (confirmed) {
+        const feeRaw = session.metadata?.application_fee_cents
+        const fee = feeRaw ? Number.parseInt(feeRaw, 10) : null
+        await finalisePaidQuote(supabase, {
+          quote: {
+            id: quote.id as string,
+            scheduled_at: scheduledAt,
+            intake_id: (quote.intake_id as string | null) ?? null,
+            tenant_id: (quote.tenant_id as string | null) ?? null,
+            share_token: (quote.share_token as string | null) ?? null,
+          },
+          tier: confirmed.tier,
+          sessionId: session.id,
+          amountTotalCents: session.amount_total ?? null,
+          applicationFeeCents: Number.isFinite(fee as number) ? fee : null,
+          connectDestination: session.metadata?.connect_destination ?? null,
+        })
+        // Verified paid with Stripe directly — claimed:false just means the
+        // webhook won the race a moment ago; either way the quote IS paid.
+        paidAt = new Date().toISOString()
+        paidTier = paidTier ?? confirmed.tier
+      }
+    } catch {
+      // Stripe unreachable — render from DB state; the webhook remains the
+      // authoritative fallback.
+    }
+  }
+
+  // Paid but date-less (the $99 inspection, or a deposit off an old no-slot
+  // SMS link) → take the customer straight to the slot picker rather than
+  // parking them here behind a passive link.
+  if (paidPageTarget({ paid: !!paidAt, scheduledAt }) === 'book') {
+    redirect(`/q/${token}/book`)
+  }
+
+  const tierPaid = paidTier ?? sp.tier ?? null
   const isInspection = tierPaid === 'inspection' || !!quote.needs_inspection
   const isPriced = quote.needs_inspection === false
-  const isBooked = !!(quote.paid_at && scheduledAt)
-  // Any paid-but-unscheduled quote — INCLUDING a $99 inspection deposit — can
-  // pick a time here (the whole point of the deposit is to book the visit).
-  // The /book page handles the "no slots published" case gracefully, so we
-  // don't need to load slots on this page to decide whether to show the CTA.
-  const showBookCta = !!quote.paid_at && !scheduledAt
+  const isBooked = !!(paidAt && scheduledAt)
 
   const jobLabel = humanizeJobType(jobType) ?? (isInspection ? 'Site inspection' : 'Your job')
   const who = tradieName ?? 'Your tradie'
 
-  // Status line for the confirmation card.
+  // Status line for the confirmation card. Paid-but-unscheduled never renders
+  // here — it redirected to /book above.
   let statusLine: string
   if (isBooked) {
-    statusLine = `Booked for ${formatScheduled(scheduledAt!, scheduledWindow)}${
+    statusLine = `Booked for ${formatScheduled(scheduledAt!, scheduledWindow, tz)}${
       tradieName ? ` with ${tradieName}` : ''
     }. ${who} will text you the day before.`
-  } else if (showBookCta) {
-    statusLine = isInspection
-      ? 'Deposit received. Pick your inspection time below.'
-      : 'Pick a time below to lock in your visit.'
   } else if (isInspection) {
     statusLine = `Inspection booked — ${who} will contact you shortly to confirm a time.`
   } else {
@@ -254,6 +308,9 @@ export default async function PaidPage(props: {
           <div className="mt-3">
             {tradieName ? <Row label="Tradie" value={tradieName} /> : null}
             <Row label="Job" value={jobLabel} />
+            {scheduledAt ? (
+              <Row label="Visit" value={formatScheduled(scheduledAt, scheduledWindow, tz)} />
+            ) : null}
             {suburb ? <Row label="Suburb" value={suburb} /> : null}
             <Row label="Quote ref" value={String(quote.id).slice(0, 8)} />
             {tierPaid ? <Row label="Tier paid" value={String(tierPaid).toUpperCase()} /> : null}
@@ -263,15 +320,6 @@ export default async function PaidPage(props: {
 
         {/* Actions */}
         <div className="mt-7 flex flex-wrap gap-3">
-          {showBookCta ? (
-            <a
-              href={`/q/${token}/book`}
-              className="inline-flex items-center gap-2 bg-accent px-6 py-3.5 text-sm font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press"
-            >
-              Pick a time →
-            </a>
-          ) : null}
-
           {/* B2 — priced quotes have a downloadable PDF; inspection deposits don't. */}
           {isPriced ? (
             <a
@@ -305,7 +353,7 @@ export default async function PaidPage(props: {
           ) : null}
         </div>
 
-        {scheduledAt || showBookCta ? null : isInspection ? (
+        {scheduledAt ? null : isInspection ? (
           <p className="mt-6 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
             We&apos;ll send a calendar invite once your time is confirmed.
           </p>

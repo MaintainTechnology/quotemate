@@ -13,6 +13,8 @@ export type SendEmailOptions = {
   text?: string
   from?: string
   replyTo?: string
+  /** File attachments; `content` is base64-encoded bytes. */
+  attachments?: Array<{ filename: string; content: string }>
 }
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails'
@@ -37,6 +39,7 @@ export async function sendEmail(opts: SendEmailOptions): Promise<SendEmailResult
   }
   if (opts.text) body.text = opts.text
   if (opts.replyTo) body.reply_to = opts.replyTo
+  if (opts.attachments && opts.attachments.length > 0) body.attachments = opts.attachments
 
   let res: Response
   try {

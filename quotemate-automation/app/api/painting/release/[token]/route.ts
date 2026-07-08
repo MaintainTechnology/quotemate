@@ -29,10 +29,21 @@ const APP_BASE_URL = (
   process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.quotemax.com.au'
 ).replace(/\/$/, '')
 
-export async function POST(_req: Request, ctx: { params: Promise<{ token: string }> }) {
+export async function POST(req: Request, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params
   if (!token || token.length < 8) {
     return Response.json({ ok: false, error: 'invalid_token' }, { status: 400 })
+  }
+
+  // Optional body: { resend: true } asks to re-text an already-released quote
+  // (the on-site edit → "Resend updated quote" flow). Absent/invalid body keeps
+  // the original no-body contract.
+  let resend = false
+  try {
+    const body = (await req.json()) as { resend?: unknown } | null
+    resend = body?.resend === true
+  } catch {
+    /* no body — first-release / idempotent path */
   }
 
   const { data: row } = await supabase
@@ -46,13 +57,15 @@ export async function POST(_req: Request, ctx: { params: Promise<{ token: string
 
   const eligibility = paintingReleaseEligibility({
     alreadyReleasedAt: (row.released_at as string | null) ?? null,
+    resend,
   })
   if (!eligibility.ok) {
     return Response.json({ ok: false, error: eligibility.error }, { status: eligibility.status })
   }
 
+  let releasedAt = (row.released_at as string | null) ?? null
   if (eligibility.stamp) {
-    const releasedAt = new Date().toISOString()
+    releasedAt = new Date().toISOString()
     const { error: updErr } = await supabase
       .from('painting_measurements')
       .update({ released_at: releasedAt })
@@ -60,13 +73,14 @@ export async function POST(_req: Request, ctx: { params: Promise<{ token: string
     if (updErr) {
       return Response.json({ ok: false, error: 'release_failed' }, { status: 500 })
     }
-    // First release → text the customer their full quote, AFTER the response
-    // so Send never blocks on the SMS. No-op unless a customer mobile was
-    // captured at request time.
-    after(() => sendPaintingQuoteToCustomer(supabase, { estimateToken: token, appUrl: APP_BASE_URL }))
-    return Response.json({ ok: true, released_at: releasedAt, public_token: row.public_token })
   }
 
-  // Already released — idempotent no-op (never re-texts the customer).
-  return Response.json({ ok: true, released_at: row.released_at, public_token: row.public_token })
+  if (eligibility.send) {
+    // Text the customer their full quote AFTER the response so Send never
+    // blocks on the SMS. No-op unless a customer mobile was captured at
+    // request time. Fires on first release and on an explicit resend.
+    after(() => sendPaintingQuoteToCustomer(supabase, { estimateToken: token, appUrl: APP_BASE_URL }))
+  }
+
+  return Response.json({ ok: true, released_at: releasedAt, public_token: row.public_token })
 }

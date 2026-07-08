@@ -6,15 +6,12 @@
 // for DIFFERENT sessions — possible now that /r mints a fresh Session per
 // pay click — can never both finalise the quote.
 
-import { after } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getStripe } from '@/lib/stripe/client'
 import { subscriptionToTenantPatch, isUpdatableStatus } from '@/lib/stripe/billing'
 import { syncSubscriptionToClerk } from '@/lib/clerk/metadata'
 import { pipelineLog } from '@/lib/log/pipeline'
-import { bookingStateOnPaid, shouldFinaliseBookingOnPaid } from '@/lib/quote/booking'
-import { notifyBookingConfirmed } from '@/lib/quote/booking-notify'
-import { advanceQuoteStatus } from '@/lib/quote/lifecycle'
+import { finalisePaidQuote } from '@/lib/quote/paid-confirm'
 import { applyPlanFeatures } from '@/lib/features/access'
 import type Stripe from 'stripe'
 
@@ -210,167 +207,38 @@ export async function POST(req: Request) {
     return Response.json({ received: true })
   }
 
-  // Conditional CLAIM, not a blind write: `.is('paid_at', null)` makes the
-  // read-then-write race safe. With /r minting a fresh Session per click,
-  // two live Sessions can complete near-simultaneously; both events pass
-  // the select-guard above, but only ONE can claim the row here — the
-  // loser matches zero rows and takes the duplicate branch below.
-  const { data: claimed, error } = await supabase
-    .from('quotes')
-    .update({
-      paid_at: new Date().toISOString(),
-      paid_tier: tier,
-      paid_stripe_session_id: session.id,
-    })
-    .eq('id', quoteId)
-    .is('paid_at', null)
-    .select('id')
+  // Claim + finalise — the shared path (lib/quote/paid-confirm.ts) also used
+  // by the /q/[token]/paid page's session-verification fallback. The
+  // conditional claim inside makes the race safe: whichever caller wins runs
+  // the full finalise (fund-flow stamp, booking state, slot prune,
+  // confirmation SMS, lifecycle advance); the loser is a no-op.
+  const feeCentsRaw = session.metadata?.application_fee_cents
+  const feeCents = feeCentsRaw ? Number.parseInt(feeCentsRaw, 10) : null
+  const outcome = await finalisePaidQuote(supabase, {
+    quote: {
+      id: quoteId,
+      scheduled_at: (existing.scheduled_at as string | null) ?? null,
+      intake_id: (existing.intake_id as string | null) ?? null,
+      tenant_id: (existing.tenant_id as string | null) ?? null,
+      share_token: (existing.share_token as string | null) ?? null,
+    },
+    tier,
+    sessionId: session.id,
+    amountTotalCents: session.amount_total ?? null,
+    applicationFeeCents: Number.isFinite(feeCents as number) ? feeCents : null,
+    connectDestination: session.metadata?.connect_destination ?? null,
+  })
 
-  if (error) {
-    log.err('quote update failed', error.message, { quote_id: quoteId })
+  if (outcome.error) {
     return new Response('DB update failed', { status: 500 })
   }
-  if (!claimed || claimed.length === 0) {
+  if (!outcome.claimed) {
     log.ok('payment already claimed by a concurrent event, skipping', {
       quote_id: quoteId,
       this_session: session.id,
     })
     return Response.json({ received: true })
   }
-
-  // Connect fund-flow stamp (mig 160) — the amount collected, QuoteMax's 2%
-  // fee, and the connected account the funds settled to (null for legacy
-  // platform-direct charges). The completion route reads these to compute
-  // and release the tradie's payout. Written SEPARATELY from the claim above
-  // so a not-yet-migrated DB degrades this stamp, never the payment record.
-  {
-    const feeCentsRaw = session.metadata?.application_fee_cents
-    const feeCents = feeCentsRaw ? Number.parseInt(feeCentsRaw, 10) : null
-    const { error: stampErr } = await supabase
-      .from('quotes')
-      .update({
-        paid_amount_cents: session.amount_total ?? null,
-        platform_fee_cents: Number.isFinite(feeCents as number) ? feeCents : null,
-        stripe_connect_destination: session.metadata?.connect_destination ?? null,
-      })
-      .eq('id', quoteId)
-    if (stampErr) {
-      log.err('fund-flow stamp skipped (non-fatal — apply migration 160)', stampErr.message, {
-        quote_id: quoteId,
-      })
-    }
-  }
-
-  // WP6 reorder — the deposit is the LAST step, so paying CONFIRMS the
-  // booking. If the customer picked a time before paying (the new
-  // default for every quote), finalise it now: status='accepted',
-  // booking_state='booked', free the held slot, and send the
-  // confirmation SMS (moved here from the book route so it only fires
-  // once the job is genuinely locked in). If they paid with no slot
-  // (an old SMS link, or no slots were published), fall back to
-  // 'reserved' and the /paid page prompts them to pick a time.
-  //
-  // Best-effort + isolated: paid_at is already committed above, so a
-  // failure here MUST NOT fail the webhook or undo the payment.
-  try {
-    const scheduledAt = (existing.scheduled_at as string | null) ?? null
-    const bookingState = bookingStateOnPaid(scheduledAt)
-    const finalise = shouldFinaliseBookingOnPaid(scheduledAt)
-    const nowIso = new Date().toISOString()
-
-    const patch: Record<string, unknown> = { booking_state: bookingState }
-    if (finalise) {
-      patch.status = 'accepted'
-      patch.accepted_at = nowIso
-      patch.last_status_at = nowIso
-    }
-    const { error: bsErr } = await supabase
-      .from('quotes')
-      .update(patch)
-      .eq('id', quoteId)
-    if (bsErr) {
-      log.err('booking finalise skipped (non-fatal — paid_at IS committed)', bsErr.message, {
-        quote_id: quoteId,
-        hint: 'apply migration 026 to enable quotes.booking_state',
-      })
-    } else {
-      log.ok('booking finalised on payment', {
-        quote_id: quoteId,
-        booking_state: bookingState,
-        confirmed: finalise,
-      })
-    }
-
-    if (finalise && scheduledAt) {
-      // Slot-hold model = "confirm slot on payment": the slot was NOT
-      // removed when the customer picked it, so prune it now that it's
-      // paid + booked (idempotent — only filters if still present).
-      // Mig 062 moved available_slots off the legacy `tradies` table and
-      // onto `tenants`, so the prune now targets the tenant that owns
-      // this quote.
-      const tenantId = (existing.tenant_id as string | null) ?? null
-      if (tenantId) {
-        try {
-          const { data: tr } = await supabase
-            .from('tenants')
-            .select('id, available_slots')
-            .eq('id', tenantId)
-            .maybeSingle()
-          if (tr) {
-            const slots = Array.isArray(tr.available_slots)
-              ? (tr.available_slots as string[])
-              : []
-            if (slots.includes(scheduledAt)) {
-              await supabase
-                .from('tenants')
-                .update({ available_slots: slots.filter((s) => s !== scheduledAt) })
-                .eq('id', tr.id)
-            }
-          }
-        } catch (e: any) {
-          log.err('slot prune failed (non-fatal — booking IS confirmed)', e?.message ?? String(e), {
-            quote_id: quoteId,
-          })
-        }
-      }
-
-      // Confirmation SMS to customer + tradie. Deferred via after() so
-      // Stripe gets a fast 2xx; notifyBookingConfirmed never throws.
-      after(() =>
-        notifyBookingConfirmed(supabase, {
-          quoteId,
-          intakeId: (existing.intake_id as string | null) ?? null,
-          tenantId: (existing.tenant_id as string | null) ?? null,
-          shareToken: existing.share_token as string,
-          slotIso: scheduledAt,
-        }),
-      )
-    } else {
-      // Paid with NO slot yet (a $99 inspection deposit, or no slots were
-      // published): nudge the customer over SMS to pick a time — the /paid
-      // page shows the same "Pick a time" CTA. Idempotent: the paid_at claim
-      // above means a Stripe retry hits the "already paid" early return, so
-      // this fires exactly once.
-      after(() =>
-        notifyBookingConfirmed(supabase, {
-          quoteId,
-          intakeId: (existing.intake_id as string | null) ?? null,
-          tenantId: (existing.tenant_id as string | null) ?? null,
-          shareToken: existing.share_token as string,
-          slotIso: null,
-        }),
-      )
-    }
-  } catch (e: any) {
-    log.err('booking finalise threw (non-fatal — paid_at committed)', e?.message ?? String(e), { quote_id: quoteId })
-  }
-
-  // WP7 — advance the lifecycle ladder to 'paid' so the follow-up queue
-  // stops chasing a customer who has paid (paid_at alone never moved the
-  // status column before). Monotonic + non-throwing: it won't regress an
-  // already-'accepted' quote and a failure here can't undo the committed
-  // payment. Mirrors the booking_state best-effort block above.
-  await advanceQuoteStatus(supabase, quoteId, 'paid')
 
   log.done('quote marked paid', {
     quote_id: quoteId,

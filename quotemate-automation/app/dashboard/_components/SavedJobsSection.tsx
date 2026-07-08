@@ -12,12 +12,16 @@
 // Same contract as before: bearer-token fetch, renders nothing until the
 // fetch resolves with at least one job.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Loader2, Trash2 } from 'lucide-react'
 import { getAuthToken } from '@/lib/auth/client-token'
+import { shouldRefresh } from '@/lib/dashboard/recent-activity'
+import type { TradeKey } from './saved-jobs-mode'
 
-export type TradeKey = 'roofing' | 'solar' | 'painting' | 'commercial-painting'
+// The pure render-decision helper lives in ./saved-jobs-mode (unit-tested
+// there); re-exported so the dashboard imports it alongside the component.
+export { savedJobsMode } from './saved-jobs-mode'
 
 // Mirrors the route's TradeJobSummary.
 type TradeJobSummary = {
@@ -27,16 +31,21 @@ type TradeJobSummary = {
   headline: string | null
   status: 'confirmed' | 'inspection' | 'draft'
   href: string | null
+  /** Tradie detail/edit page (/m roofing, /p painting); null elsewhere. */
+  tradieHref: string | null
   createdAt: string | null
 }
 
-const TRADE_ORDER: TradeKey[] = ['roofing', 'solar', 'painting', 'commercial-painting']
+const TRADE_ORDER: TradeKey[] = ['roofing', 'solar', 'painting', 'commercial-painting', 'aircon']
 
 const TRADE_LABEL: Record<TradeKey, string> = {
   roofing: 'Roofing',
   solar: 'Solar',
   painting: 'Painting',
   'commercial-painting': 'Commercial paint',
+  // Matches quoteTradeLabel's spelling (lib/dashboard/quote-filters.ts) so the
+  // Quotes tab's trade chips and these cards read as one vocabulary.
+  aircon: 'Air-con',
 }
 
 const TRADE_BADGE: Record<TradeKey, string> = {
@@ -44,26 +53,7 @@ const TRADE_BADGE: Record<TradeKey, string> = {
   solar: 'Solar',
   painting: 'Paint',
   'commercial-painting': 'Comm',
-}
-
-/** Map a dashboard trade-hub slug (underscore form, e.g. 'commercial_painting')
- *  to a Saved-jobs TradeKey (hyphen form). Returns null for trades with no
- *  saved-jobs table (electrical, plumbing, signage, aircon) — those hubs get
- *  no saved-jobs section. */
-export function savedJobTradeKey(hubSlug: string): TradeKey | null {
-  switch (hubSlug.toLowerCase()) {
-    case 'roofing':
-      return 'roofing'
-    case 'solar':
-      return 'solar'
-    case 'painting':
-      return 'painting'
-    case 'commercial_painting':
-    case 'commercial-painting':
-      return 'commercial-painting'
-    default:
-      return null
-  }
+  aircon: 'AC',
 }
 
 type JobSort = 'newest' | 'oldest' | 'address' | 'status'
@@ -143,6 +133,12 @@ export function SavedJobsSection({
   only?: TradeKey
 }) {
   const [jobs, setJobs] = useState<TradeJobSummary[] | null>(null)
+  // A failed fetch must never read as "no saved jobs" (spec quote-sync-and-
+  // roofing-workflow-fix F4): surface an explicit error + Retry instead.
+  const [loadError, setLoadError] = useState(false)
+  // Bumped to re-run the fetch effect (Retry button, focus-return refresh).
+  const [fetchTick, setFetchTick] = useState(0)
+  const lastFetchedRef = useRef<number | null>(null)
   const [filter, setFilter] = useState<'all' | TradeKey>('all')
   const [sort, setSort] = useState<JobSort>('newest')
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<TradeKey>>(new Set())
@@ -154,6 +150,7 @@ export function SavedJobsSection({
   useEffect(() => {
     if (!accessToken) return
     let cancelled = false
+    lastFetchedRef.current = Date.now()
     void (async () => {
       try {
         // Mint a FRESH token per request — the Clerk session token captured at
@@ -162,21 +159,43 @@ export function SavedJobsSection({
         const res = await fetch('/api/tenant/trade-jobs', {
           headers: { Authorization: `Bearer ${token}` },
         })
-        if (!res.ok) return
+        if (!res.ok) {
+          if (!cancelled) setLoadError(true)
+          return
+        }
         const json = (await res.json()) as { jobs?: TradeJobSummary[] }
         const arr = Array.isArray(json.jobs) ? json.jobs : []
         if (!cancelled) {
           setJobs(arr)
+          setLoadError(false)
           onCount?.(arr.length)
         }
       } catch {
-        /* network error — leave hidden */
+        if (!cancelled) setLoadError(true)
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [accessToken, onCount])
+  }, [accessToken, onCount, fetchTick])
+
+  // Refresh-on-return: the dashboard's returnRefreshSignal only reaches
+  // OverviewTab, and `key={tab}` remounts cover tab switches — this covers
+  // coming back to an already-mounted Quotes surface (window focus /
+  // visibility), on the same 15s throttle as /api/tenant/me.
+  useEffect(() => {
+    const onReturn = () => {
+      if (document.visibilityState !== 'visible') return
+      if (!shouldRefresh(lastFetchedRef.current, Date.now())) return
+      setFetchTick((n) => n + 1)
+    }
+    window.addEventListener('focus', onReturn)
+    document.addEventListener('visibilitychange', onReturn)
+    return () => {
+      window.removeEventListener('focus', onReturn)
+      document.removeEventListener('visibilitychange', onReturn)
+    }
+  }, [])
 
   async function deleteJob(job: TradeJobSummary) {
     if (!accessToken) return
@@ -224,6 +243,28 @@ export function SavedJobsSection({
     }
   }
 
+  // Fetch failed with nothing to show → an explicit error card, never a
+  // silent collapse that reads as "no saved jobs". A failed background
+  // refresh keeps showing the last good list instead.
+  if (!jobs && loadError) {
+    return (
+      <section
+        role="alert"
+        className="rounded-card border border-ink-line bg-ink-card px-5 py-6 text-center"
+      >
+        <div className="font-mono text-[0.7rem] font-bold uppercase tracking-[0.16em] text-text-pri">
+          Couldn&rsquo;t load saved jobs
+        </div>
+        <button
+          type="button"
+          onClick={() => setFetchTick((n) => n + 1)}
+          className="rounded-ctl mt-3 inline-flex min-h-[44px] items-center border border-ink-line px-3.5 py-2 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+        >
+          Retry
+        </button>
+      </section>
+    )
+  }
   // Not fetched yet → stay invisible (no flash). Fetched-but-empty → a proper
   // empty state when this section is its own active sub-tab, else collapse.
   if (!jobs) return null
@@ -239,8 +280,8 @@ export function SavedJobsSection({
           No saved jobs yet
         </div>
         <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-text-sec">
-          Roofing, solar and painting estimates you save from the measure tools
-          land here — kept separate from your quote pipeline.
+          Roofing, solar, painting and aircon estimates you save from the
+          measure tools land here — kept separate from your quote pipeline.
         </p>
       </section>
     )
@@ -280,7 +321,7 @@ export function SavedJobsSection({
               <>
                 {scoped.length} job{scoped.length === 1 ? '' : 's'} across{' '}
                 {visibleTrades.length} trade{visibleTrades.length === 1 ? '' : 's'} —
-                roofing, solar and painting estimates saved outside the quote pipeline.
+                measure-tool estimates saved outside the quote pipeline.
               </>
             )}
           </div>
@@ -432,6 +473,15 @@ export function SavedJobsSection({
                         </>
                       ) : (
                         <>
+                          {/* Tradie review/edit page (spec tradie-onsite-quote-editing R2). */}
+                          {job.tradieHref && (
+                            <Link
+                              href={job.tradieHref}
+                              className="rounded-ctl inline-flex min-h-[44px] items-center gap-1.5 border border-ink-line px-3.5 py-2 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+                            >
+                              Review &amp; edit →
+                            </Link>
+                          )}
                           {job.href ? (
                             <Link
                               href={job.href}

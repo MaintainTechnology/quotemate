@@ -32,10 +32,12 @@ export type BillingTenant = {
   subscription_current_period_end: string | null
   trial_ends_at: string | null
   subscription_cancel_at_period_end: boolean | null
+  /** AU state (e.g. 'QLD') — drives the tenant's timezone via tzForState. */
+  state: string | null
 }
 
 const TENANT_COLS =
-  'id, owner_email, business_name, stripe_customer_id, stripe_subscription_id, subscription_status, subscription_plan, subscription_interval, subscription_current_period_end, trial_ends_at, subscription_cancel_at_period_end'
+  'id, owner_email, business_name, stripe_customer_id, stripe_subscription_id, subscription_status, subscription_plan, subscription_interval, subscription_current_period_end, trial_ends_at, subscription_cancel_at_period_end, state'
 
 /**
  * Resolve { user, tenant } from the request's bearer token. Returns null

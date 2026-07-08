@@ -31,6 +31,16 @@ describe('getReportAdapter', () => {
     }
   })
 
+  it('no live trade opts into the block-doc workspace — keeps the styled full-quote iframe', () => {
+    // The dashboard viewer only swaps the styled HTML iframe for the TipTap
+    // living-document workspace when editorKind === 'block-doc'. That render is
+    // unfinished (no workspace styling; hollow report_doc for dedicated-builder
+    // trades), so no adapter may return it yet or roofing/etc. lose their report.
+    for (const trade of ['electrical', 'plumbing', 'solar', 'roofing', 'painting', 'commercial_painting']) {
+      expect(getReportAdapter(trade).editorKind).not.toBe('block-doc')
+    }
+  })
+
   it('is case/whitespace insensitive', () => {
     expect(getReportAdapter('  Solar ').capabilities.manualEdit).toBe(true)
     expect(getReportAdapter('  Electrical ').groundingMode).toBe('catalogue')

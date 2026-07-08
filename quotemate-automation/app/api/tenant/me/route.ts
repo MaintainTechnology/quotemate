@@ -1,7 +1,7 @@
 // /api/tenant/me — the single endpoint that powers the tradie dashboard.
 //
 // GET   → returns the authed tradie's tenant + pricing book + service
-//         offerings (with assembly labels joined) + last 20 quotes.
+//         offerings (with assembly labels joined) + last 100 quotes.
 //
 // PATCH → accepts partial updates for any of:
 //         { tenant: {...}, pricing: {...}, services: { assemblyId: bool } }
@@ -172,7 +172,9 @@ export async function GET(req: Request) {
         )
         .eq('tenant_id', tenant.id)
         .order('created_at', { ascending: false })
-        .limit(20),
+        // ponytail: 100-quote cap — server pagination when a tenant outgrows it.
+        // 20 starved multi-trade tenants: whole trades vanished from the hubs.
+        .limit(100),
       // tenant_licences arrived in migration 018 — per-trade licence
       // storage. Multi-trade tradies see one row per trade; single-trade
       // tenants see one row. Pre-018 tenants whose row hasn't been
@@ -336,10 +338,16 @@ export async function GET(req: Request) {
     created_at: string
   }
   const conversationByIntake: Record<string, { conversationId: string; messages: ConvoMessage[] }> = {}
+  // Customer-contact fallbacks. The send panel disables its buttons on a null
+  // contact, so the payload resolves the same 4-source chain the quote viewer
+  // uses (lib/quote/send-customer resolveCustomerContact): intake.caller →
+  // sms_conversations.from_number → calls.caller_number → customers row.
+  const convoPhoneByIntake: Record<string, string> = {}
+  const callPhoneByIntake: Record<string, string> = {}
   if (intakeIds.length > 0) {
     const { data: convos } = await supabase
       .from('sms_conversations')
-      .select('id, intake_id')
+      .select('id, intake_id, from_number')
       .in('intake_id', intakeIds)
     const convoToIntake: Record<string, string> = {}
     const conversationIds: string[] = []
@@ -347,6 +355,10 @@ export async function GET(req: Request) {
       if (c.intake_id && c.id) {
         convoToIntake[c.id as string] = c.intake_id as string
         conversationIds.push(c.id as string)
+        const fromNumber = ((c.from_number as string | null) ?? '').trim()
+        if (fromNumber && !convoPhoneByIntake[c.intake_id as string]) {
+          convoPhoneByIntake[c.intake_id as string] = fromNumber
+        }
       }
     }
     if (conversationIds.length > 0) {
@@ -393,17 +405,41 @@ export async function GET(req: Request) {
   if (voiceCallIds.length > 0) {
     const { data: callRows } = await supabase
       .from('calls')
-      .select('id, transcript, ended_at')
+      .select('id, transcript, ended_at, caller_number')
       .in('id', voiceCallIds)
     for (const c of callRows ?? []) {
       const intakeId = callIdToIntakeId[c.id as string]
       if (!intakeId) continue
+      const callerNumber = ((c.caller_number as string | null) ?? '').trim()
+      if (callerNumber) callPhoneByIntake[intakeId] = callerNumber
       const parsed = parseVapiTranscript(
         c.transcript as string | null,
         c.ended_at as string | null,
       )
       // Same 60-turn cap as SMS conversations.
       voiceByIntake[intakeId] = parsed.slice(0, 60)
+    }
+  }
+
+  // Contact fallback #4 — the linked customers row, one batched query.
+  const customerContactById: Record<string, { phone: string | null; email: string | null }> = {}
+  const linkedCustomerIds = Array.from(
+    new Set(
+      Object.values(intakeMap)
+        .map((i) => i.customer_id)
+        .filter((id): id is string => !!id),
+    ),
+  )
+  if (linkedCustomerIds.length > 0) {
+    const { data: custRows } = await supabase
+      .from('customers')
+      .select('id, phone, email')
+      .in('id', linkedCustomerIds)
+    for (const c of custRows ?? []) {
+      customerContactById[c.id as string] = {
+        phone: ((c.phone as string | null) ?? '').trim() || null,
+        email: ((c.email as string | null) ?? '').trim() || null,
+      }
     }
   }
 
@@ -420,6 +456,9 @@ export async function GET(req: Request) {
     const intake = q.intake_id ? intakeMap[q.intake_id] : null
     const callerName = intake?.caller?.name?.trim() || null
     const callerPhone = intake?.caller?.phone?.trim() || null
+    const linkedCustomer = intake?.customer_id
+      ? customerContactById[intake.customer_id] ?? null
+      : null
     const convo = q.intake_id ? conversationByIntake[q.intake_id] : null
     const voiceMessages = q.intake_id ? voiceByIntake[q.intake_id] : null
     // Channel resolution: voice when the intake has a call_id (Vapi-
@@ -434,7 +473,13 @@ export async function GET(req: Request) {
       ...q,
       customer_first_name: callerName?.split(' ')[0] ?? null,
       customer_full_name: callerName,
-      customer_phone: callerPhone,
+      customer_phone:
+        callerPhone ??
+        (q.intake_id ? convoPhoneByIntake[q.intake_id] ?? null : null) ??
+        (q.intake_id ? callPhoneByIntake[q.intake_id] ?? null : null) ??
+        linkedCustomer?.phone ??
+        null,
+      customer_email: (intake?.caller?.email?.trim() || null) ?? linkedCustomer?.email ?? null,
       suburb: intake?.suburb ?? null,
       job_type: intake?.job_type ?? null,
       trade: intake?.trade ?? null,

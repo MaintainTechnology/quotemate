@@ -34,6 +34,8 @@ import { AvailabilityEditor } from '@/app/_components/AvailabilityEditor'
 import { ChangePasswordCard } from './_components/ChangePasswordCard'
 import { OverviewAnalytics } from './_components/OverviewAnalytics'
 import { resolveTradeFormat, tierLabelsForTrade } from '@/lib/quote/trade-format'
+import { confirmSendCta } from '@/lib/quote/send-customer'
+import SendQuotePanel from '@/app/dashboard/quote/[token]/SendQuotePanel'
 import {
   ALL_CATEGORY,
   filterFollowups,
@@ -123,7 +125,16 @@ import { FilesTab } from './_components/FilesTab'
 import { HistoricalQuotesTab } from './_components/HistoricalQuotesTab'
 import { CalendarTab } from './_components/CalendarTab'
 import { HistoricalHint } from './_components/HistoricalHint'
-import { SavedJobsSection, savedJobTradeKey } from './_components/SavedJobsSection'
+import { SavedJobsSection, savedJobsMode } from './_components/SavedJobsSection'
+import {
+  mergeRecentActivity,
+  jobRowView,
+  attentionCandidate,
+  widgetState,
+  shouldRefresh,
+  type TradeJobSummary,
+} from '@/lib/dashboard/recent-activity'
+import { isQuotesSurface } from '@/lib/dashboard/quotes-refresh'
 import CommercialPaintingTab from './_components/commercial-painting/CommercialPaintingTab'
 import { PaginationControls, usePagination } from './_components/Pagination'
 import { StatusPill, type Tone } from './_components/quote-ui'
@@ -284,6 +295,7 @@ type Quote = {
   customer_first_name: string | null
   customer_full_name: string | null
   customer_phone: string | null
+  customer_email: string | null
   suburb: string | null
   job_type: string | null
   trade: string | null
@@ -607,8 +619,51 @@ export default function DashboardPage() {
     })
   }, [accessToken, data])
 
+  // Refresh-on-return (spec dashboard-overview-quotes-sync T6): re-pull the
+  // dashboard payload in the background when the tradie comes back — window
+  // focus / visibility, or switching back to Overview/Quotes — throttled to
+  // once per 15s. refresh() keeps the old payload until the new one lands,
+  // so a background refresh never flashes the loading skeleton.
+  const lastFetchedRef = useRef<number | null>(null)
+  // Bumped on every throttled return-refresh so OverviewTab re-pulls its own
+  // lazy fetches (trade jobs + chats) too — /api/tenant/me alone would leave
+  // the merged feed stale for work done in another browser tab.
+  const [returnRefreshSignal, setReturnRefreshSignal] = useState(0)
+  async function maybeRefreshOnReturn() {
+    if (!accessToken) return // mount effect owns the first load
+    if (!shouldRefresh(lastFetchedRef.current, Date.now())) return
+    // Stamp BEFORE any await — window 'focus' and 'visibilitychange' fire in
+    // the same tick on tab return, and both passing the guard would fire a
+    // duplicate /api/tenant/me fetch.
+    lastFetchedRef.current = Date.now()
+    setReturnRefreshSignal((n) => n + 1)
+    const token = (await getAuthToken()) ?? accessToken
+    await refresh(token)
+  }
+  useEffect(() => {
+    const onReturn = () => {
+      if (document.visibilityState !== 'visible') return
+      void maybeRefreshOnReturn()
+    }
+    window.addEventListener('focus', onReturn)
+    document.addEventListener('visibilitychange', onReturn)
+    return () => {
+      window.removeEventListener('focus', onReturn)
+      document.removeEventListener('visibilitychange', onReturn)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken])
+  useEffect(() => {
+    // Quotes surfaces (workspace + trade hubs, spec quotes-tab-sync T5) and
+    // the Overview (spec dashboard-overview-quotes-sync T6) both re-pull on
+    // return; maybeRefreshOnReturn owns the shared 15s throttle.
+    if (tab === 'overview' || isQuotesSurface(tab)) void maybeRefreshOnReturn()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab])
+
   async function refresh(token: string) {
     setLoadError(null)
+    lastFetchedRef.current = Date.now()
     try {
       const res = await fetch('/api/tenant/me', {
         headers: { Authorization: `Bearer ${token}` },
@@ -923,6 +978,7 @@ export default function DashboardPage() {
                 data={data}
                 accessToken={accessToken}
                 setTab={setTab}
+                refreshSignal={returnRefreshSignal}
                 onFollowUpColdChats={() => {
                   setChatFilter('cold')
                   setTab('chats')
@@ -2486,11 +2542,15 @@ function OverviewTab({
   data,
   accessToken,
   setTab,
+  refreshSignal = 0,
   onFollowUpColdChats,
 }: {
   data: DashboardData
   accessToken: string | null
   setTab: (t: Tab) => void
+  /** Bumped by the parent's throttled refresh-on-return so the lazy trade-
+   *  jobs + chats fetches below re-pull alongside /api/tenant/me. */
+  refreshSignal?: number
   // Opens the Chats tab filtered to cold (abandoned) conversations — wired to
   // the Activity view's "chats went cold" CTA.
   onFollowUpColdChats: () => void
@@ -2559,16 +2619,57 @@ function OverviewTab({
   const isStubVapi = !!assistantId && assistantId.startsWith('vapi-stub-')
   const needsProvisioning = !smsNumber || !assistantId
 
-  // Recent quotes preview — top 5 by created_at desc within the selected
-  // period. scopedQuotes preserves the endpoint's desc order, so this stays a
-  // pure client-side slice.
-  const latestQuotes = scopedQuotes.slice(0, 5)
+  // Measure-tool trade jobs (roofing / solar / painting / commercial
+  // painting) live OUTSIDE the quotes table — fetched lazily like the chats
+  // below and merged into the Recent-quotes feed + attention rail so work
+  // done in the trade tabs shows up on Overview (spec
+  // dashboard-overview-quotes-sync T2/T3). A failed fetch is surfaced as an
+  // explicit error strip with a retry, never silently hidden (T5).
+  const [tradeJobs, setTradeJobs] = useState<TradeJobSummary[]>([])
+  const [jobsLoading, setJobsLoading] = useState(true)
+  const [jobsError, setJobsError] = useState(false)
+  const [jobsReload, setJobsReload] = useState(0)
+  useEffect(() => {
+    if (!accessToken) return
+    let cancelled = false
+    setJobsLoading(true)
+    setJobsError(false)
+    void (async () => {
+      const token = (await getAuthToken()) ?? accessToken
+      try {
+        const r = await fetch('/api/tenant/trade-jobs', {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        })
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        const j = (await r.json()) as { jobs?: TradeJobSummary[] }
+        if (cancelled) return
+        setTradeJobs(Array.isArray(j.jobs) ? j.jobs : [])
+      } catch {
+        if (!cancelled) setJobsError(true)
+      } finally {
+        if (!cancelled) setJobsLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken, jobsReload, refreshSignal])
+
+  // Recent activity preview — pipeline quotes + measure-tool jobs merged
+  // newest-first, top 5, scoped to the selected reporting period.
+  const scopedJobs = periodWindow
+    ? tradeJobs.filter((j) => inPeriod(j.createdAt, periodWindow))
+    : tradeJobs
+  const recentFeed = mergeRecentActivity(scopedQuotes, scopedJobs)
 
   // Recent chats — fetched lazily on Overview mount so the Chats tab can
   // keep doing its own larger fetch independently. 5-row preview only;
   // clicking a row jumps to the Chats tab where the full list lives.
   const [latestChats, setLatestChats] = useState<ChatRow[]>([])
   const [chatsLoading, setChatsLoading] = useState(true)
+  const [chatsError, setChatsError] = useState(false)
+  const [chatsReload, setChatsReload] = useState(0)
 
   // Which of the two top-level views is showing: Overview | Your activity.
   const [section, setSection] = useState<OverviewSection>('overview')
@@ -2576,6 +2677,7 @@ function OverviewTab({
     if (!accessToken) return
     let cancelled = false
     setChatsLoading(true)
+    setChatsError(false)
     void (async () => {
       // Mint a FRESH token immediately before the fetch — the `accessToken`
       // prop was captured once at parent mount and a Clerk session token
@@ -2586,12 +2688,16 @@ function OverviewTab({
           headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
         })
+        // A non-OK response (expired token, transient 5xx) is an ERROR state
+        // with a retry — presenting it as "No conversations yet" hid real
+        // failures from tradies who DO have conversations.
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
         const j = await r.json().catch(() => ({ chats: [] }))
         if (cancelled) return
         const rows = (j?.chats ?? []) as ChatRow[]
         setLatestChats(rows.slice(0, 5))
       } catch {
-        if (!cancelled) setLatestChats([])
+        if (!cancelled) setChatsError(true)
       } finally {
         if (!cancelled) setChatsLoading(false)
       }
@@ -2599,7 +2705,7 @@ function OverviewTab({
     return () => {
       cancelled = true
     }
-  }, [accessToken])
+  }, [accessToken, chatsReload, refreshSignal])
 
   // KPI tone for the AI receptionist tile — green when fully live,
   // amber for stub/missing, so the tradie's eye lands on the right
@@ -2655,13 +2761,14 @@ function OverviewTab({
     },
   ]
 
-  // The single most-urgent quote for the "Needs your attention" rail card
-  // (first still-in-review quote; data.quotes is already newest-first).
-  const attnQuote = data.quotes.find((q) =>
-    ['drafted', 'awaiting_review', 'review', 'draft'].includes(
-      (q.status ?? '').toLowerCase(),
-    ),
-  )
+  // The single most-urgent item for the "Needs your attention" rail card:
+  // first still-in-review quote (data.quotes is newest-first), falling back
+  // to the newest draft measure-tool job (spec dashboard-overview-quotes-sync
+  // T3) so trade-tab work also surfaces here.
+  const attention = attentionCandidate(data.quotes, tradeJobs)
+  const attnQuote = attention?.kind === 'quote' ? attention.quote : null
+  const attnJob = attention?.kind === 'job' ? attention.job : null
+  const attnJobView = attnJob ? jobRowView(attnJob) : null
 
   // Channel-readiness chips for the number card — colour carries the same
   // live/stub/pending signal the old status pill did.
@@ -2747,11 +2854,27 @@ function OverviewTab({
               View all {activeQuotes} →
             </button>
           </header>
-          {latestQuotes.length === 0 ? (
+          {jobsError && (
+            <div className="flex items-center justify-between gap-3 border-b border-ink-line px-5 py-2.5">
+              <span className="font-mono text-[0.6875rem] uppercase tracking-[0.13em] text-warning-bright">
+                Couldn&rsquo;t load saved trade jobs.
+              </span>
+              <button
+                type="button"
+                onClick={() => setJobsReload((n) => n + 1)}
+                className="font-mono text-[0.6875rem] font-bold uppercase tracking-[0.14em] text-accent transition-colors cursor-pointer hover:text-accent-press"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          {recentFeed.length === 0 ? (
             <div className="px-5 py-8 font-mono text-[0.75rem] uppercase tracking-[0.14em] text-text-dim">
-              {period === 'all'
-                ? 'No quotes drafted yet. Customer SMS or calls will land here.'
-                : `No quotes in ${periodLabel(period).toLowerCase()}.`}
+              {jobsLoading
+                ? 'Loading…'
+                : period === 'all'
+                  ? 'No quotes drafted yet. Customer SMS or calls will land here.'
+                  : `No quotes in ${periodLabel(period).toLowerCase()}.`}
             </div>
           ) : (
             <div>
@@ -2772,7 +2895,79 @@ function OverviewTab({
                   Status
                 </span>
               </div>
-              {latestQuotes.map((q) => {
+              {recentFeed.map((row) => {
+                // Shared row shell so quote + job rows read as one table.
+                const rowClass =
+                  'grid w-full grid-cols-[1fr_auto] items-center gap-3 border-b border-ink-line px-5 py-3 text-left transition-colors cursor-pointer last:border-b-0 hover:bg-ink-deep/40 sm:grid-cols-[minmax(94px,1.4fr)_minmax(108px,1.7fr)_46px_76px_116px]'
+                if (row.kind === 'job') {
+                  // Measure-tool job row — links out to the job's customer
+                  // page (/q/roof|solar|paint|commercial-paint) in a new tab.
+                  const v = jobRowView(row.job)
+                  const cells = (
+                    <>
+                      <div className="min-w-0">
+                        <div className="truncate text-[13.5px] font-bold text-text-pri">
+                          {v.label}
+                        </div>
+                        <div className="mt-0.5 truncate font-mono text-[9px] uppercase tracking-[0.1em] text-text-dim">
+                          Saved job
+                        </div>
+                      </div>
+                      <span className="hidden min-w-0 truncate text-[12.5px] text-text-sec sm:block">
+                        {v.tradeLabel}
+                      </span>
+                      <span className="hidden font-mono text-[9px] font-bold uppercase tracking-[0.08em] text-text-dim sm:block">
+                        Tool
+                      </span>
+                      <span
+                        className="hidden text-right font-mono text-[13.5px] font-bold tabular-nums sm:block"
+                        style={{ color: v.value ? 'var(--text-pri)' : 'var(--text-dim)' }}
+                      >
+                        {v.value ?? '—'}
+                      </span>
+                      <span
+                        className="inline-flex items-center gap-1.5 justify-self-end px-2 py-[3px] font-mono text-[0.6875rem] font-bold uppercase tracking-[0.1em]"
+                        style={{
+                          border: `1px solid color-mix(in srgb, ${v.pill.color} 45%, transparent)`,
+                          color: v.pill.color,
+                        }}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`h-[5px] w-[5px] rounded-full ${
+                            v.pill.pulse
+                              ? 'motion-safe:animate-[pulse-soft_2.4s_ease-in-out_infinite]'
+                              : ''
+                          }`}
+                          style={{ background: v.pill.color }}
+                        />
+                        {v.pill.label}
+                      </span>
+                    </>
+                  )
+                  const key = `job-${row.job.trade}-${row.job.id}`
+                  return v.href ? (
+                    <a
+                      key={key}
+                      href={v.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={rowClass}
+                    >
+                      {cells}
+                    </a>
+                  ) : (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setTab('quotes')}
+                      className={rowClass}
+                    >
+                      {cells}
+                    </button>
+                  )
+                }
+                const q = row.quote
                 const pill = overviewQuotePill(q)
                 const name =
                   q.customer_full_name || q.customer_first_name || 'Customer'
@@ -2783,7 +2978,7 @@ function OverviewTab({
                     key={q.id}
                     type="button"
                     onClick={() => openQuote(q)}
-                    className="grid w-full grid-cols-[1fr_auto] items-center gap-3 border-b border-ink-line px-5 py-3 text-left transition-colors cursor-pointer last:border-b-0 hover:bg-ink-deep/40 sm:grid-cols-[minmax(94px,1.4fr)_minmax(108px,1.7fr)_46px_76px_116px]"
+                    className={rowClass}
                   >
                     <div className="min-w-0">
                       <div className="truncate text-[13.5px] font-bold text-text-pri">
@@ -2868,6 +3063,51 @@ function OverviewTab({
                 Review quote →
               </button>
             </section>
+          ) : attnJob ? (
+            // Measure-tool fallback (spec T3): no pipeline quote needs review,
+            // but a saved trade job is still in draft — surface it here so
+            // trade-tab work gets the same attention treatment.
+            <section className="card-sweep relative rounded-card edge-lit overflow-hidden border border-ink-line border-l-2 border-l-warning-bright bg-ink-card p-[18px]">
+              <div className="flex items-center gap-2 font-mono text-[9.5px] font-bold uppercase tracking-[0.14em] text-warning-bright">
+                <span
+                  aria-hidden="true"
+                  className="h-1.5 w-1.5 rounded-full bg-warning-bright motion-safe:animate-[pulse-soft_2.4s_ease-in-out_infinite]"
+                />
+                Needs your attention
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-2.5">
+                <span className="truncate text-[15px] font-bold text-text-pri">
+                  {attnJobView!.label}
+                </span>
+                <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.1em] text-text-dim">
+                  {attnJobView!.tradeLabel}
+                  {attnJob.createdAt ? ` · ${fmtRelative(attnJob.createdAt)}` : ''}
+                </span>
+              </div>
+              <p className="mt-1.5 text-[12.5px] leading-normal text-text-dim">
+                You measured this one in the{' '}
+                {attnJobView!.tradeLabel.toLowerCase()} tool. It is still a
+                draft — review and send it.
+              </p>
+              {attnJob.href ? (
+                <a
+                  href={attnJob.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3.5 inline-flex w-full items-center justify-center gap-2 rounded-ctl bg-accent px-3 py-2.5 text-[12px] font-bold uppercase tracking-wide text-accent-ink transition-colors cursor-pointer hover:bg-accent-press"
+                >
+                  Review job →
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setTab('quotes')}
+                  className="mt-3.5 inline-flex w-full items-center justify-center gap-2 rounded-ctl bg-accent px-3 py-2.5 text-[12px] font-bold uppercase tracking-wide text-accent-ink transition-colors cursor-pointer hover:bg-accent-press"
+                >
+                  Review job →
+                </button>
+              )}
+            </section>
           ) : (
             <section className="rounded-card edge-lit overflow-hidden border border-ink-line bg-ink-card p-[18px]">
               <div className="flex items-center gap-2 font-mono text-[9.5px] font-bold uppercase tracking-[0.14em] text-success-bright">
@@ -2951,21 +3191,45 @@ function OverviewTab({
                 Open →
               </button>
             </header>
-            {chatsLoading ? (
-              <div className="px-4 py-8 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
-                Loading…
-              </div>
-            ) : latestChats.length === 0 ? (
-              <div className="px-4 py-8 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
-                No conversations yet.
-              </div>
-            ) : (
-              <div>
-                {latestChats.slice(0, 3).map((c) => (
-                  <LatestChatRow key={c.id} chat={c} onOpen={() => setTab('chats')} />
-                ))}
-              </div>
-            )}
+            {(() => {
+              // Error is an explicit state with a retry — a failed fetch must
+              // never masquerade as "No conversations yet" (spec T5).
+              const state = widgetState(chatsLoading, chatsError, latestChats.length)
+              if (state === 'loading')
+                return (
+                  <div className="px-4 py-8 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+                    Loading…
+                  </div>
+                )
+              if (state === 'error')
+                return (
+                  <div className="flex items-center justify-between gap-3 px-4 py-8">
+                    <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-warning-bright">
+                      Couldn&rsquo;t load chats.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setChatsReload((n) => n + 1)}
+                      className="font-mono text-[0.65rem] font-bold uppercase tracking-[0.14em] text-accent transition-colors cursor-pointer hover:text-accent-press"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )
+              if (state === 'empty')
+                return (
+                  <div className="px-4 py-8 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
+                    No conversations yet.
+                  </div>
+                )
+              return (
+                <div>
+                  {latestChats.slice(0, 3).map((c) => (
+                    <LatestChatRow key={c.id} chat={c} onOpen={() => setTab('chats')} />
+                  ))}
+                </div>
+              )
+            })()}
           </section>
         </div>
       </div>
@@ -7900,10 +8164,11 @@ function QuotesTab({
     ? data.quotes.filter((q) => (q.trade ?? '').toLowerCase() === tradeFilter)
     : data.quotes
 
-  // In a trade hub, this trade's measure-tool estimates (roof / solar / paint)
-  // merge in as a labelled section below the quote list. null for trades with
-  // no saved-jobs table (electrical, plumbing, …) → nothing extra renders.
-  const savedJobsKey = tradeFilter ? savedJobTradeKey(tradeFilter) : null
+  // Saved measure-tool jobs: the cross-trade Workspace view shows the
+  // ALL-trades section; a matching trade hub scopes to its own trade; hubs
+  // with no saved-jobs table (electrical, plumbing, …) render nothing
+  // (specs dashboard-overview-quotes-sync T4 / quotes-tab-sync T2).
+  const savedJobs = savedJobsMode(tradeFilter)
 
   const FILTERS: { key: QuoteFilter; label: string }[] = [
     { key: 'all', label: 'All' },
@@ -8153,11 +8418,14 @@ function QuotesTab({
         </div>
       )}
 
-      {/* This trade's measure-tool estimates (roof / solar / paint) merged into
-          the same tab, in a labelled section below the quotes. A null key
-          (electrical, plumbing, …) renders nothing. */}
-      {savedJobsKey && (
-        <SavedJobsSection accessToken={accessToken} only={savedJobsKey} />
+      {/* Measure-tool estimates below the quotes: all trades on the Workspace
+          view, this trade's own in a saved-jobs hub, nothing for hubs without
+          a saved-jobs table. */}
+      {savedJobs !== null && (
+        <SavedJobsSection
+          accessToken={accessToken}
+          only={savedJobs === 'all' ? undefined : savedJobs}
+        />
       )}
     </div>
   )
@@ -8454,6 +8722,11 @@ function QuoteDetail({
   const badges = quoteBadges(q)
   const primaryBadge = badges[0]
   const primaryTone: Tone = primaryBadge ? QUOTE_BADGE_TONE[primaryBadge.tone] : 'default'
+  // "Confirm & Send" / "Send to Customer" action (specs/quote-confirm-send.md
+  // task 2) — sending a held quote IS the tradie's confirmation, so the same
+  // panel serves the "Awaiting your review" badge and the resend case. Hidden
+  // once the customer has committed, same convention as the Delete button.
+  const sendCta = confirmSendCta(q.status, q.deposit_paid)
   const sectionLabel =
     'font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-dim'
 
@@ -8676,6 +8949,16 @@ function QuoteDetail({
       {/* ── Pinned action bar — every existing action preserved ─────── */}
       <div className="sticky bottom-0 z-[5] border-t border-ink-line bg-ink-deep px-5 py-4 sm:px-6">
         <div className="flex flex-wrap items-center gap-2">
+          {sendCta.show && (
+            <SendQuotePanel
+              quoteId={q.id}
+              customerPhone={q.customer_phone}
+              customerEmail={q.customer_email}
+              paid={false}
+              label={sendCta.label}
+              dropUp
+            />
+          )}
           {url && (
             <Link
               href={url}

@@ -1,10 +1,15 @@
 // POST /api/aircon/recommend — runs property inputs through the AC
 // sizing + recommendation engine and returns an indicative result for
 // the dashboard tool. Auth: same bearer-token pattern as
-// /api/painting/estimate. Read-only (no tenant-data write in Phase 1).
+// /api/painting/estimate. A tenant-linked call also persists the result
+// to aircon_recommendations (the migration-144 TODO, spec quotes-tab-sync
+// Task 3) so it surfaces on the Quotes tab via /api/tenant/trade-jobs and
+// the customer page /q/aircon/[token]. The insert is best-effort — a
+// failure is logged and the recommendation still returns.
 
 import { createClient } from '@supabase/supabase-js'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
+import { saveAirconRecommendation, supabaseUserIdFor } from '@/lib/aircon/save-recommendation'
 import { RecommendRequestSchema } from '@/lib/aircon/request-schema'
 import { climateZoneForPostcode } from '@/lib/aircon/climate'
 import { sizeAircon } from '@/lib/aircon/sizing'
@@ -38,14 +43,19 @@ async function loadAcOverlay(
 export async function POST(req: Request) {
   // Dual-auth: Clerk session token OR legacy Supabase token. Tenant is
   // optional — no tenant just means the default aircon rate card.
-  const resolved = await resolveTenantRequest(supabase, req, 'id, trade')
+  const resolved = await resolveTenantRequest(supabase, req, 'id, trade, owner_user_id')
   if (!resolved) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
-  const tenantRow = resolved.tenant as { id?: string; trade?: string | null } | null
+  const tenantRow = resolved.tenant as
+    | { id?: string; trade?: string | null; owner_user_id?: string | null }
+    | null
   const auth = {
     tenantId: (tenantRow?.id as string | undefined) ?? null,
     primaryTrade: (tenantRow?.trade as string | null | undefined) ?? null,
+    // created_by is a uuid → auth.users FK; a Clerk `user_…` id would fail
+    // the insert, so resolve the Supabase auth id (see save-recommendation).
+    createdBy: supabaseUserIdFor(resolved.identity, tenantRow),
   }
 
   let body: unknown
@@ -91,8 +101,16 @@ export async function POST(req: Request) {
   const sizing = sizeAircon(zone, inputs, areaEvidence)
   const recommendation = recommendAircon({ sizing, inputs, rateCard })
 
+  // Persist for the Quotes tab + customer share page (migration 144).
+  const saved = await saveAirconRecommendation(supabase, {
+    tenantId: auth.tenantId,
+    createdBy: auth.createdBy,
+    address,
+    recommendation,
+  })
+
   return Response.json(
-    { ok: true, climate_zone: zone, climate_note: note, location, recommendation },
+    { ok: true, climate_zone: zone, climate_note: note, location, recommendation, saved },
     { status: 200 },
   )
 }

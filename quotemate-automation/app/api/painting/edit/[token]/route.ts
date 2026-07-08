@@ -5,18 +5,19 @@
 // capability, same trust model as /p/[token] + /api/painting/release: holding
 // the unguessable estimate_token authorises the edit; the customer only ever
 // has public_token). Lets the painter override each tier's customer-visible
-// label, scope text, and inc-GST headline BEFORE sending — they don't see a
-// price until the tradie clicks Send (publish gate), so this is a pre-release
-// edit of the held draft.
+// label, scope text, and inc-GST headline — before sending (the held-draft
+// review) or AFTER release (the on-site revision: confirm measurements at the
+// property, adjust the numbers, then resend the updated quote).
 //
 // Edits are applied by the pure lib/painting/edit.ts (ex-GST + band derive
 // from the headline), persisted back onto painting_measurements.estimate
 // (jsonb) + the denormalised better_inc_gst column. Both the customer page
 // (/q/paint/[public_token]) and the customer SMS read estimate.price.tiers
-// straight from the jsonb, so the edit flows through to both on Send.
+// straight from the jsonb, so the edit flows through immediately; a price
+// change re-mints the per-tier Stripe deposit sessions below.
 //
-// Refuses to edit an inspection-routed job (no priced tiers) or one already
-// released (it's been sent — re-quote instead). Next 16: params is a Promise.
+// Refuses to edit an inspection-routed job (no priced tiers).
+// Next 16: params is a Promise.
 // ════════════════════════════════════════════════════════════════════
 
 import { createClient } from '@supabase/supabase-js'
@@ -24,7 +25,7 @@ import { z } from 'zod'
 import { applyTierEdits, type PaintingTierEdit } from '@/lib/painting/edit'
 import type { PaintingEstimate } from '@/lib/painting/types'
 import { createPaintingCheckoutSessions } from '@/lib/stripe/painting-checkout'
-import type { StripeLinks } from '@/lib/stripe/checkout'
+import { expireCheckoutSession, type StripeLinks } from '@/lib/stripe/checkout'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -72,7 +73,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
 
   const { data: row } = await supabase
     .from('painting_measurements')
-    .select('id, estimate, released_at, routing, public_token, address')
+    .select('id, estimate, released_at, paid_at, routing, public_token, address, stripe_links')
     .eq('estimate_token', token)
     .maybeSingle()
   if (!row) {
@@ -80,6 +81,20 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   }
   if (!row.estimate) {
     return Response.json({ ok: false, error: 'no_estimate' }, { status: 409 })
+  }
+  // Transacted prices are immutable: once a deposit is paid the tiers are the
+  // record of what the customer paid against. (The old released_at gate used
+  // to block this incidentally; post-release editing made an explicit paid
+  // guard necessary.)
+  if ((row.paid_at as string | null) != null) {
+    return Response.json(
+      {
+        ok: false,
+        error: 'cannot_edit_paid_quote',
+        hint: 'The customer has already paid a deposit against these prices.',
+      },
+      { status: 409 },
+    )
   }
   // An inspection-routed job has no priced tiers to edit.
   if ((row.routing as string | null) === 'inspection_required') {
@@ -92,20 +107,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       { status: 409 },
     )
   }
-  // Already sent → the customer has seen these numbers; editing in place would
-  // silently change a quote they hold. Re-quote instead (v1 scope: edit before
-  // send only, matching the "before sending" review step).
-  if ((row.released_at as string | null) != null) {
-    return Response.json(
-      {
-        ok: false,
-        error: 'already_sent',
-        hint: 'This quote has already been sent to the customer and can no longer be edited here.',
-      },
-      { status: 409 },
-    )
-  }
-
   const { estimate: nextEstimate, betterIncGst, changed, priceChanged } = applyTierEdits(
     row.estimate as PaintingEstimate,
     parsed.data.tiers as PaintingTierEdit[],
@@ -120,12 +121,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     better_inc_gst: betterIncGst,
   }
 
-  // A price change invalidates the per-tier Stripe deposit sessions minted at
-  // save time (their unit_amount was baked from the OLD inc-GST). The customer
-  // has NOT received these links yet — they only go out on release — so we
-  // regenerate them from the edited estimate now. A Stripe miss clears them
-  // (the customer page falls back to the "contact to book" placeholder) rather
-  // than ever leaving a link that would charge a stale deposit amount.
+  // A price change invalidates the per-tier Stripe deposit sessions (their
+  // unit_amount was baked from the OLD inc-GST). On a released quote the
+  // customer already HOLDS the old links (SMS /r short-links), so besides
+  // regenerating we must EXPIRE the replaced sessions — an open Checkout tab
+  // must never complete at a price the tradie just changed. A Stripe miss
+  // clears the links (the customer page falls back to the "contact to book"
+  // placeholder) rather than ever leaving a stale payable amount.
   if (priceChanged) {
     let freshLinks: StripeLinks = {}
     try {
@@ -143,6 +145,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       freshLinks = {}
     }
     updateBody.stripe_links = freshLinks
+
+    const oldLinks = (row.stripe_links ?? {}) as StripeLinks
+    const replaced = Object.entries(oldLinks)
+      .filter(([tier, url]) => typeof url === 'string' && url && url !== freshLinks[tier as keyof StripeLinks])
+      .map(([, url]) => url as string)
+    // Best-effort (expireCheckoutSession tolerates already-expired/paid).
+    await Promise.allSettled(replaced.map((url) => expireCheckoutSession(url)))
   }
 
   const { error: updErr } = await supabase
