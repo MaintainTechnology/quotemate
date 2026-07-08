@@ -223,9 +223,17 @@ const DAY_LABEL: CSSProperties = {
   color: 'var(--text-dim)',
 }
 
-export function CalendarTab({ accessToken }: { accessToken: string | null }) {
+export function CalendarTab({
+  accessToken,
+  onGoToQuotes,
+}: {
+  accessToken: string | null
+  onGoToQuotes?: () => void
+}) {
   const [events, setEvents] = useState<CalendarEvent[] | null>(null)
   const [toSchedule, setToSchedule] = useState<CalendarEvent[]>([])
+  const [awaitingBooking, setAwaitingBooking] = useState<CalendarEvent[]>([])
+  const [reviewCount, setReviewCount] = useState(0)
   const [tenantId, setTenantId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -258,10 +266,14 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
       const json = (await res.json()) as {
         events: CalendarEvent[]
         toSchedule?: CalendarEvent[]
+        awaitingBooking?: CalendarEvent[]
+        reviewCount?: number
         tenantId?: string | null
       }
       setEvents(json.events ?? [])
       setToSchedule(json.toSchedule ?? [])
+      setAwaitingBooking(json.awaitingBooking ?? [])
+      setReviewCount(json.reviewCount ?? 0)
       setTenantId(json.tenantId ?? null)
     } catch {
       setError('Couldn’t reach the server. Please try again shortly.')
@@ -314,17 +326,19 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
 
     const weekSet = new Set(weekOf(selectedKey))
     let inWeek = 0
-    let siteVisits = 0
+    let schedInspections = 0
     let jobsOn = 0
-    let pendingInWeek = 0
+    let pendingScheduled = 0
     for (const e of scheduled) {
-      if (!weekSet.has(dayKey(e.scheduledAt))) continue
-      inWeek++
+      if (weekSet.has(dayKey(e.scheduledAt))) inWeek++
       const k = kindOf(e)
-      if (k === 'visit') siteVisits++
-      else if (k === 'call') pendingInWeek++
+      if (k === 'visit') schedInspections++
+      else if (k === 'call') pendingScheduled++
       else jobsOn++
     }
+    const inspInToSchedule = toSchedule.filter(
+      (e) => e.needsInspection || e.paidTier === 'inspection',
+    ).length
 
     const groupBy = (list: ScheduledEvent[], pastFirst = false): DayGroup[] => {
       const map = new Map<string, DayGroup>()
@@ -344,15 +358,18 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
       past: groupBy(pa, true),
       eventDays: days,
       stats: {
+        // Bookings scheduled within the selected week.
         thisWeek: inWeek,
-        siteVisits,
+        // Every $99 site-visit in play: awaiting-customer leads + any that are
+        // paid-unscheduled + any already on a day.
+        siteVisits: awaitingBooking.length + inspInToSchedule + schedInspections,
+        // Confirmed / reserved dated jobs (non-inspection).
         jobsOn,
-        // Callbacks = anything needing the tradie to act: this week's pending
-        // holds plus every paid-but-unscheduled job (no date to place them on).
-        callbacks: pendingInWeek + toSchedule.length,
+        // Needs the tradie to act: paid-but-unscheduled work + pending dated holds.
+        callbacks: toSchedule.length + pendingScheduled,
       },
     }
-  }, [events, toSchedule, selectedKey, today])
+  }, [events, toSchedule, awaitingBooking, selectedKey, today])
 
   const metrics: [string, number, string, boolean][] = [
     ['This week', stats.thisWeek, 'Bookings', false],
@@ -361,7 +378,8 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
     ['Callbacks', stats.callbacks, 'Follow-up', false],
   ]
 
-  const isEmpty = (events?.length ?? 0) === 0 && toSchedule.length === 0
+  const isEmpty =
+    (events?.length ?? 0) === 0 && toSchedule.length === 0 && awaitingBooking.length === 0
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -557,6 +575,44 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
               })}
             </div>
 
+            {/* Drafts still waiting on the tradie's review — a nudge to the
+                Quotes tab, not calendar rows (they have no date). */}
+            {reviewCount > 0 && onGoToQuotes && (
+              <button
+                type="button"
+                onClick={onGoToQuotes}
+                style={{
+                  ...CARD,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px',
+                  width: '100%',
+                  textAlign: 'left',
+                  padding: '13px 18px',
+                  borderLeft: '2px solid var(--accent)',
+                  cursor: 'pointer',
+                }}
+              >
+                <span style={{ fontFamily: SANS, fontWeight: 700, fontSize: '13.5px', color: 'var(--text-pri)' }}>
+                  {reviewCount} {reviewCount === 1 ? 'quote' : 'quotes'} awaiting your review
+                </span>
+                <span
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.12em',
+                    color: 'var(--accent)',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Review →
+                </span>
+              </button>
+            )}
+
             {/* Paid · needs a time — money-in-hand, no slot yet */}
             {toSchedule.length > 0 && (
               <div>
@@ -586,6 +642,40 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
                   }}
                 >
                   Call the customer to lock in a visit time.
+                </div>
+              </div>
+            )}
+
+            {/* Site visits the customer was quoted but hasn't booked yet —
+                inspection-routed quotes with no slot + no payment. */}
+            {awaitingBooking.length > 0 && (
+              <div>
+                <div style={{ ...DAY_LABEL, color: 'var(--accent)' }}>
+                  Site visits · awaiting customer booking
+                </div>
+                <div style={CARD}>
+                  {awaitingBooking.map((ev) => (
+                    <AgendaRow
+                      key={ev.quoteId}
+                      time="$99"
+                      title={`Site visit — ${jobLabel(ev.jobType)}`}
+                      whoText={[ev.customerName ?? 'Customer', ev.suburb].filter(Boolean).join(' · ')}
+                      bar="var(--accent)"
+                      shareToken={ev.shareToken}
+                    />
+                  ))}
+                </div>
+                <div
+                  style={{
+                    fontFamily: MONO,
+                    marginTop: '8px',
+                    fontSize: '9px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.1em',
+                    color: 'var(--text-dim)',
+                  }}
+                >
+                  Quote sent — the customer books &amp; pays the $99 site visit.
                 </div>
               </div>
             )}

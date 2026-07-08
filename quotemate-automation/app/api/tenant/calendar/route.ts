@@ -22,12 +22,20 @@ export const dynamic = 'force-dynamic'
 
 // Bound the read so a long-lived tenant never returns an unbounded history.
 const MAX_EVENTS = 500
-const DEFAULT_PAST_DAYS = 30
+// Past window widened 30 → 90 so recently-completed / recently-booked jobs
+// stay visible in the agenda's "Past" group instead of silently vanishing
+// (30 days hid nearly every real booking on active tenants).
+const DEFAULT_PAST_DAYS = 90
 const DEFAULT_FUTURE_DAYS = 120
 // Paid-but-unscheduled items have no scheduled_at to age out on, so bound
 // them by how recently they were paid — generous enough that an inspection
 // left unscheduled for weeks keeps nagging, but not unbounded.
 const TO_SCHEDULE_LOOKBACK_DAYS = 180
+// Unscheduled inspection-routed quotes ("$99 site visit" leads the customer
+// hasn't booked yet) are bounded by how recently the quote was drafted so the
+// calendar surfaces live demand without dredging up stale leads.
+const AWAITING_LOOKBACK_DAYS = 120
+const MAX_AWAITING = 100
 
 type CalendarEvent = {
   quoteId: string
@@ -146,14 +154,46 @@ export async function GET(req: Request) {
     return Response.json({ error: unschedErr.message }, { status: 500 })
   }
 
+  // Awaiting customer booking — inspection-routed quotes ("$99 site visit")
+  // with no slot AND no payment yet. These are the live demand the tradie can
+  // chase: a customer was sent a site-visit quote but hasn't booked it. Kept
+  // separate from `toSchedule` (money already in hand) and bounded by recency.
+  const awaitingSince = new Date(now - AWAITING_LOOKBACK_DAYS * 86_400_000).toISOString()
+  const { data: awaiting, error: awaitingErr } = await sb
+    .from('quotes')
+    .select(QUOTE_COLS)
+    .eq('tenant_id', auth.tenant.id)
+    .is('scheduled_at', null)
+    .is('paid_at', null)
+    .eq('needs_inspection', true)
+    .gte('created_at', awaitingSince)
+    .order('created_at', { ascending: false })
+    .limit(MAX_AWAITING)
+
+  if (awaitingErr) {
+    return Response.json({ error: awaitingErr.message }, { status: 500 })
+  }
+
+  // Count of drafted quotes still waiting on the tradie's review (no slot,
+  // routed to tradie_review). Surfaced as a nudge to the Quotes tab, not
+  // rendered as calendar rows. head:true → count only, no rows over the wire.
+  const { count: reviewCount } = await sb
+    .from('quotes')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', auth.tenant.id)
+    .is('scheduled_at', null)
+    .eq('routing_decision', 'tradie_review')
+    .eq('status', 'draft')
+
   // Join intakes for the customer-facing details (caller name/phone live in
   // the caller jsonb; job_type/address/suburb are columns; scope.source marks
-  // self-serve web bookings). One lookup covers both lists.
+  // self-serve web bookings). One lookup covers all three lists.
   const scheduledRows = (scheduled ?? []) as QuoteRow[]
   const unscheduledRows = (unscheduled ?? []) as QuoteRow[]
+  const awaitingRows = (awaiting ?? []) as QuoteRow[]
   const intakeIds = Array.from(
     new Set(
-      [...scheduledRows, ...unscheduledRows]
+      [...scheduledRows, ...unscheduledRows, ...awaitingRows]
         .map((q) => q.intake_id)
         .filter((id): id is string => !!id),
     ),
@@ -183,7 +223,17 @@ export async function GET(req: Request) {
     toEvent(q, q.intake_id ? intakeMap[q.intake_id] ?? null : null),
   )
 
+  const awaitingBooking: CalendarEvent[] = awaitingRows.map((q) =>
+    toEvent(q, q.intake_id ? intakeMap[q.intake_id] ?? null : null),
+  )
+
   // tenantId powers the dashboard "New booking" button, which opens this
   // tenant's public self-serve booking page (/book/<tenantId>).
-  return Response.json({ events, toSchedule, tenantId: auth.tenant.id })
+  return Response.json({
+    events,
+    toSchedule,
+    awaitingBooking,
+    reviewCount: reviewCount ?? 0,
+    tenantId: auth.tenant.id,
+  })
 }

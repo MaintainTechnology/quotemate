@@ -107,6 +107,8 @@ describe('GET /api/tenant/calendar', () => {
         ],
         error: null,
       }, // paid-but-unscheduled quotes
+      { data: [], error: null }, // awaiting (inspection, unscheduled+unpaid) — none
+      { data: null, count: 0, error: null }, // reviewCount (head:true count query)
       {
         data: [
           { id: 'i-sched', caller: { name: 'Mark', phone: '0400000000' }, job_type: 'downlights', address: null, suburb: 'Chandler', scope: { source: null } },

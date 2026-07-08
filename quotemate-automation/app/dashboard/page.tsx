@@ -983,7 +983,9 @@ export default function DashboardPage() {
                 }
               />
             )}
-            {tab === 'calendar' && <CalendarTab accessToken={accessToken} />}
+            {tab === 'calendar' && (
+              <CalendarTab accessToken={accessToken} onGoToQuotes={() => setTab('quotes')} />
+            )}
             {tab === 'followups' && (
               <FollowupsTab
                 accessToken={accessToken}
