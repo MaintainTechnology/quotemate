@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ZohoProvider } from '@/lib/crm/zoho'
+import { ZohoProvider, resolveZohoDc } from '@/lib/crm/zoho'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status })
@@ -90,5 +90,72 @@ describe('ZohoProvider', () => {
   it('treats HTTP 204 as an empty contact list', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 204 })))
     expect(await p.fetchContacts('tok')).toEqual([])
+  })
+
+  // ── Multi-DC (the AU/EU/IN connect fix) ────────────────────────────
+  describe('multi-DC', () => {
+    it('resolveZohoDc prefers the accounts-server URL Zoho returns', () => {
+      const dc = resolveZohoDc({
+        accountsServer: 'https://accounts.zoho.com.au/',
+        location: 'au',
+      })
+      expect(dc.accounts).toBe('https://accounts.zoho.com.au')
+      expect(dc.api).toBe('https://www.zohoapis.com.au')
+    })
+
+    it('resolveZohoDc maps a bare location code to both hosts', () => {
+      expect(resolveZohoDc({ location: 'eu' })).toEqual({
+        accounts: 'https://accounts.zoho.eu',
+        api: 'https://www.zohoapis.eu',
+      })
+    })
+
+    it('resolveZohoDc falls back to the global .com default', () => {
+      expect(resolveZohoDc()).toEqual({
+        accounts: 'https://accounts.zoho.com',
+        api: 'https://www.zohoapis.com',
+      })
+    })
+
+    it('exchangeCode hits the DC accounts host and captures api_domain', async () => {
+      const fetchMock = vi.fn(async (..._a: unknown[]) =>
+        jsonResponse({
+          access_token: 'at',
+          refresh_token: 'rt',
+          expires_in: 3600,
+          api_domain: 'https://www.zohoapis.com.au',
+        }),
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      const t = await p.exchangeCode('code', undefined, {
+        accountsServer: 'https://accounts.zoho.com.au',
+        apiDomain: 'https://www.zohoapis.com.au',
+      })
+      expect(String(fetchMock.mock.calls[0][0])).toBe(
+        'https://accounts.zoho.com.au/oauth/v2/token',
+      )
+      expect(t.apiDomain).toBe('https://www.zohoapis.com.au')
+    })
+
+    it('fetchContacts reads from the DC api host in ctx', async () => {
+      const fetchMock = vi.fn(async (..._a: unknown[]) => new Response(null, { status: 204 }))
+      vi.stubGlobal('fetch', fetchMock)
+      await p.fetchContacts('tok', { apiDomain: 'https://www.zohoapis.com.au' })
+      expect(String(fetchMock.mock.calls[0][0])).toContain(
+        'https://www.zohoapis.com.au/crm/v3/Contacts',
+      )
+    })
+
+    it('refresh hits the DC accounts host in ctx', async () => {
+      const fetchMock = vi.fn(async (..._a: unknown[]) =>
+        jsonResponse({ access_token: 'at2', expires_in: 3600 }),
+      )
+      vi.stubGlobal('fetch', fetchMock)
+      await p.refresh('rt', { accountsServer: 'https://accounts.zoho.com.au' })
+      expect(String(fetchMock.mock.calls[0][0])).toBe(
+        'https://accounts.zoho.com.au/oauth/v2/token',
+      )
+    })
   })
 })

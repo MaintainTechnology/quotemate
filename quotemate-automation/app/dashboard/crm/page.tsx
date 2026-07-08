@@ -424,7 +424,32 @@ export default function CrmPage() {
         ) : (
           /* ── Not connected: connect-first ── */
           <Section num="01" title="Connect your CRM" blurb="HubSpot or Zoho. We only read your contacts.">
-            {(status?.providers_available?.length ?? 0) === 0 ? (
+            {status === null ? (
+              /* status failed to load (401 / network) — do NOT claim "no
+                 providers configured", which is misleading when the real issue
+                 is an expired session. Offer a retry / re-sign-in. */
+              <div className="rounded-card border border-ink-line bg-ink-card p-6">
+                <p className="text-sm text-text-sec">
+                  Couldn&apos;t load your CRM settings — your session may have expired.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setError(null)
+                      setLoading(true)
+                      void load()
+                    }}
+                    className={GHOST}
+                  >
+                    Retry
+                  </button>
+                  <Link href="/signin" className={GHOST}>
+                    Sign in again
+                  </Link>
+                </div>
+              </div>
+            ) : status.providers_available.length === 0 ? (
               <div className="rounded-card border border-ink-line bg-ink-card p-6">
                 <p className="text-sm text-text-dim">
                   No CRM providers are configured on the server yet. Ask your admin to set the HubSpot / Zoho OAuth

@@ -168,7 +168,11 @@ export default async function PaidPage(props: {
   const isInspection = tierPaid === 'inspection' || !!quote.needs_inspection
   const isPriced = quote.needs_inspection === false
   const isBooked = !!(quote.paid_at && scheduledAt)
-  const showBookCta = !!quote.paid_at && !scheduledAt && !isInspection && isPriced
+  // Any paid-but-unscheduled quote — INCLUDING a $99 inspection deposit — can
+  // pick a time here (the whole point of the deposit is to book the visit).
+  // The /book page handles the "no slots published" case gracefully, so we
+  // don't need to load slots on this page to decide whether to show the CTA.
+  const showBookCta = !!quote.paid_at && !scheduledAt
 
   const jobLabel = humanizeJobType(jobType) ?? (isInspection ? 'Site inspection' : 'Your job')
   const who = tradieName ?? 'Your tradie'
@@ -179,10 +183,12 @@ export default async function PaidPage(props: {
     statusLine = `Booked for ${formatScheduled(scheduledAt!, scheduledWindow)}${
       tradieName ? ` with ${tradieName}` : ''
     }. ${who} will text you the day before.`
+  } else if (showBookCta) {
+    statusLine = isInspection
+      ? 'Deposit received. Pick your inspection time below.'
+      : 'Pick a time below to lock in your visit.'
   } else if (isInspection) {
     statusLine = `Inspection booked — ${who} will contact you shortly to confirm a time.`
-  } else if (showBookCta) {
-    statusLine = 'Pick a time below to lock in your visit.'
   } else {
     statusLine = `${who} will be in touch shortly to confirm a time.`
   }
@@ -299,7 +305,7 @@ export default async function PaidPage(props: {
           ) : null}
         </div>
 
-        {scheduledAt ? null : isInspection ? (
+        {scheduledAt || showBookCta ? null : isInspection ? (
           <p className="mt-6 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
             We&apos;ll send a calendar invite once your time is confirmed.
           </p>

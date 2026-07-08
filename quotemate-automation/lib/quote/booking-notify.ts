@@ -15,6 +15,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import {
   buildBookingConfirmationSms,
+  buildDepositAwaitingSlotSms,
   buildTradieBookingNotification,
 } from '@/lib/sms/templates'
 import { pipelineLog } from '@/lib/log/pipeline'
@@ -26,7 +27,10 @@ export async function notifyBookingConfirmed(
     intakeId: string | null
     tenantId: string | null
     shareToken: string
-    slotIso: string
+    /** The confirmed slot, or null when a deposit was paid WITHOUT a slot yet
+     *  (inspection deposit / no slots published) → sends the "pick a time"
+     *  nudge to the customer instead of the "you're locked in" confirmation. */
+    slotIso: string | null
   },
 ): Promise<void> {
   const sms = pipelineLog('dispatch', args.quoteId)
@@ -99,11 +103,9 @@ export async function notifyBookingConfirmed(
     const quoteUrl = `${appUrl}/q/${args.shareToken}`
 
     if (callerNumber) {
-      const body = buildBookingConfirmationSms({
-        firstName,
-        scheduledAt: args.slotIso,
-        bookingUrl,
-      })
+      const body = args.slotIso
+        ? buildBookingConfirmationSms({ firstName, scheduledAt: args.slotIso, bookingUrl })
+        : buildDepositAwaitingSlotSms({ firstName, bookingUrl })
       const customerFrom = tenantSmsNumber ?? process.env.TWILIO_SMS_NUMBER
       sms.step('sending booking confirmation to customer', {
         to: callerNumber,
@@ -131,8 +133,11 @@ export async function notifyBookingConfirmed(
       })
     }
 
+    // Tradie is notified only for a CONFIRMED booking (a slot exists). The
+    // deposit-paid-but-unscheduled case nudges the customer only; the tradie
+    // gets their booking SMS when the customer picks a time (book route).
     const notifyMobile = tenantOwnerMobile ?? process.env.TRADIE_NOTIFY_NUMBER
-    if (notifyMobile) {
+    if (args.slotIso && notifyMobile) {
       const tradieBody = buildTradieBookingNotification({
         tradieFirstName: tenantOwnerFirstName,
         customerName: firstName,

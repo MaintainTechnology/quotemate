@@ -19,6 +19,8 @@ import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-ident
 import { QuoteChrome, type StickyBar } from '../../_chrome/QuoteChrome'
 import { AcceptBlock } from '../../_chrome/AcceptBlock'
 import { resolveAcceptView } from '@/lib/quote/accept'
+import { loadTenantBookingOptions, formatVisitSlot } from '@/lib/quote/trade-booking'
+import { SlotPicker } from '@/app/q/[token]/book/SlotPicker'
 import { tradeIcon } from '../../_chrome/icons'
 import {
   QuoteSheet, Letterhead, QuoteHero, StatGrid, Scope,
@@ -137,20 +139,36 @@ export default async function PaintingQuotePage(props: { params: Promise<{ token
   let stripeLinks: Record<string, string> = {}
   let paid = false
   let paidTier: string | null = null
+  let paintScheduledAt: string | null = null
+  let paintScheduledWindow: string | null = null
   // `released` defaults TRUE so a pre-migration deploy and every dashboard-saved
   // quote (released at save) keep showing prices; only a HELD SMS/self-serve
   // draft (released_at null) gates them until the tradie clicks Send.
   let released = true
   const { data: payRow, error: payErr } = await supabase
     .from('painting_measurements')
-    .select('stripe_links, paid_at, paid_tier, released_at')
+    .select('stripe_links, paid_at, paid_tier, released_at, scheduled_at, scheduled_window')
     .eq('public_token', token)
     .maybeSingle()
   if (!payErr && payRow) {
     stripeLinks = (payRow.stripe_links as Record<string, string> | null) ?? {}
     paid = !!(payRow.paid_at as string | null)
     paidTier = (payRow.paid_tier as string | null) ?? null
+    paintScheduledAt = (payRow.scheduled_at as string | null) ?? null
+    paintScheduledWindow = (payRow.scheduled_window as string | null) ?? null
     released = (payRow.released_at as string | null) != null
+  }
+
+  // Self-serve visit booking (mig 167): once the deposit is paid the customer
+  // picks a half-day window right here. Load the painter's open windows ONLY in
+  // that state so an unpaid / already-booked view costs no extra query.
+  const paintTenantId = (row as { tenant_id?: string | null }).tenant_id ?? null
+  let paintBookingOptions: Awaited<ReturnType<typeof loadTenantBookingOptions>> = []
+  if (paid && !paintScheduledAt && paintTenantId) {
+    paintBookingOptions = await loadTenantBookingOptions(supabase, {
+      tenantId: paintTenantId,
+      table: 'painting_measurements',
+    })
   }
   const priceGate = canShowPaintingPrices({ releasedAt: released ? 'released' : null })
 
@@ -367,6 +385,34 @@ export default async function PaintingQuotePage(props: { params: Promise<{ token
         {/* ── Explicit "Accept & confirm" — deposit on a released/priced quote,
             confirmation once paid. ── */}
         {showPaintAccept ? <AcceptBlock token={token} view={paintAcceptView} /> : null}
+
+        {/* Self-serve visit booking — appears once the deposit is paid. Pick a
+            half-day window (or see the booked one). Mig 167. */}
+        {paid ? (
+          <SheetSection eyebrow={paintScheduledAt ? 'Visit booked' : 'Pick your visit time'} eyebrowAccent>
+            {paintScheduledAt ? (
+              <p style={{ margin: '12px 0 0', fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+                Your visit is booked for{' '}
+                <strong style={{ color: 'var(--text-pri)' }}>
+                  {formatVisitSlot(paintScheduledAt, paintScheduledWindow)}
+                </strong>
+                . {business} will text you the day before to confirm.
+              </p>
+            ) : (
+              <div style={{ marginTop: 12 }}>
+                <p style={{ margin: '0 0 14px', fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+                  Deposit received — pick a time that suits and we&apos;ll lock in your visit.
+                </p>
+                <SlotPicker
+                  token={token}
+                  options={paintBookingOptions}
+                  endpoint={`/api/q/book/paint/${token}`}
+                  labels={{ idle: 'Book this time →', submitting: 'Booking…', done: 'Booked ✓' }}
+                />
+              </div>
+            )}
+          </SheetSection>
+        ) : null}
 
         <CredentialFooter rows={footerRows} />
       </QuoteSheet>

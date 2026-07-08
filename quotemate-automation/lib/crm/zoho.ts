@@ -10,27 +10,85 @@ import {
   readOAuthConfig,
   type CrmContact,
   type CrmProvider,
+  type ProviderCtx,
   type TokenSet,
 } from '@/lib/crm/provider'
 
 const SCOPE = 'ZohoCRM.modules.contacts.READ'
 
-function accountsDomain(): string {
-  return (process.env.ZOHO_ACCOUNTS_DOMAIN || 'https://accounts.zoho.com').replace(/\/+$/, '')
+// Zoho is region-partitioned across data centres. The authorisation code is
+// issued by the USER's DC and can only be exchanged against that DC's accounts
+// host; API reads must hit that DC's api host. Zoho returns the user's DC on the
+// OAuth callback (`accounts-server` full URL and/or `location` code) and the
+// token response carries `api_domain`. This table lets us resolve a `location`
+// code to both hosts when only the code is present.
+// Ref: https://www.zoho.com/accounts/protocol/oauth/multi-dc.html
+const ZOHO_DC: Record<string, { accounts: string; api: string }> = {
+  us: { accounts: 'https://accounts.zoho.com', api: 'https://www.zohoapis.com' },
+  eu: { accounts: 'https://accounts.zoho.eu', api: 'https://www.zohoapis.eu' },
+  in: { accounts: 'https://accounts.zoho.in', api: 'https://www.zohoapis.in' },
+  au: { accounts: 'https://accounts.zoho.com.au', api: 'https://www.zohoapis.com.au' },
+  jp: { accounts: 'https://accounts.zoho.jp', api: 'https://www.zohoapis.jp' },
+  ca: { accounts: 'https://accounts.zohocloud.ca', api: 'https://www.zohoapis.ca' },
+  sa: { accounts: 'https://accounts.zoho.sa', api: 'https://www.zohoapis.sa' },
+  uk: { accounts: 'https://accounts.zoho.uk', api: 'https://www.zohoapis.uk' },
 }
-function apiDomain(): string {
-  return (process.env.ZOHO_API_DOMAIN || 'https://www.zohoapis.com').replace(/\/+$/, '')
+
+const strip = (s: string) => s.replace(/\/+$/, '')
+
+/**
+ * Resolve the accounts + api hosts for a Zoho OAuth callback. Prefers the
+ * authoritative values Zoho hands us (`accounts-server` URL, `location` code),
+ * falling back to the env-configured / global default. Exported for the
+ * callback route + tests. `apiHint` is the token response's `api_domain` when
+ * already known.
+ */
+export function resolveZohoDc(opts?: {
+  accountsServer?: string | null
+  location?: string | null
+  apiHint?: string | null
+}): { accounts: string; api: string } {
+  const loc = opts?.location?.toLowerCase().trim()
+  const byLoc = loc ? ZOHO_DC[loc] : undefined
+  const accounts = strip(
+    opts?.accountsServer?.trim() ||
+      byLoc?.accounts ||
+      process.env.ZOHO_ACCOUNTS_DOMAIN ||
+      'https://accounts.zoho.com',
+  )
+  const api = strip(
+    opts?.apiHint?.trim() ||
+      byLoc?.api ||
+      process.env.ZOHO_API_DOMAIN ||
+      'https://www.zohoapis.com',
+  )
+  return { accounts, api }
+}
+
+/** Accounts host for a call: per-connection ctx wins, else env, else global. */
+function accountsDomain(ctx?: ProviderCtx): string {
+  return strip(
+    ctx?.accountsServer?.trim() || process.env.ZOHO_ACCOUNTS_DOMAIN || 'https://accounts.zoho.com',
+  )
+}
+/** API host for a call: per-connection ctx wins, else env, else global. */
+function apiDomain(ctx?: ProviderCtx): string {
+  return strip(ctx?.apiDomain?.trim() || process.env.ZOHO_API_DOMAIN || 'https://www.zohoapis.com')
 }
 
 function toTokenSet(json: {
   access_token: string
   refresh_token?: string
   expires_in?: number
+  api_domain?: string
 }): TokenSet {
   return {
     accessToken: json.access_token,
     refreshToken: json.refresh_token ?? null,
     expiresAt: json.expires_in ? Date.now() + json.expires_in * 1000 : null,
+    // Zoho reports the DC-correct API host on every token response; persist it
+    // so later syncs read from the right data centre.
+    apiDomain: json.api_domain ? strip(json.api_domain) : null,
   }
 }
 
@@ -57,8 +115,10 @@ export class ZohoProvider implements CrmProvider {
   }
 
   // Zoho doesn't require PKCE; the codeVerifier param is accepted (to satisfy
-  // the shared interface) but unused.
-  async exchangeCode(code: string, _codeVerifier?: string): Promise<TokenSet> {
+  // the shared interface) but unused. `ctx.accountsServer` targets the user's
+  // DC — the code can ONLY be exchanged there (exchanging an AU code against
+  // the global .com host fails), so this is what fixes non-US connects.
+  async exchangeCode(code: string, _codeVerifier?: string, ctx?: ProviderCtx): Promise<TokenSet> {
     const cfg = readOAuthConfig('ZOHO')
     const body = new URLSearchParams({
       grant_type: 'authorization_code',
@@ -67,7 +127,7 @@ export class ZohoProvider implements CrmProvider {
       redirect_uri: cfg.redirectUri,
       code,
     })
-    const res = await fetch(`${accountsDomain()}/oauth/v2/token`, {
+    const res = await fetch(`${accountsDomain(ctx)}/oauth/v2/token`, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
@@ -80,7 +140,7 @@ export class ZohoProvider implements CrmProvider {
     return toTokenSet(json)
   }
 
-  async refresh(refreshToken: string): Promise<TokenSet> {
+  async refresh(refreshToken: string, ctx?: ProviderCtx): Promise<TokenSet> {
     const cfg = readOAuthConfig('ZOHO')
     const body = new URLSearchParams({
       grant_type: 'refresh_token',
@@ -88,7 +148,7 @@ export class ZohoProvider implements CrmProvider {
       client_secret: cfg.clientSecret,
       refresh_token: refreshToken,
     })
-    const res = await fetch(`${accountsDomain()}/oauth/v2/token`, {
+    const res = await fetch(`${accountsDomain(ctx)}/oauth/v2/token`, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
@@ -102,7 +162,7 @@ export class ZohoProvider implements CrmProvider {
     return { ...toTokenSet(json), refreshToken }
   }
 
-  async fetchContacts(accessToken: string): Promise<CrmContact[]> {
+  async fetchContacts(accessToken: string, ctx?: ProviderCtx): Promise<CrmContact[]> {
     const out: CrmContact[] = []
     let page = 1
     const perPage = 200
@@ -112,7 +172,7 @@ export class ZohoProvider implements CrmProvider {
         per_page: String(perPage),
         page: String(page),
       })
-      const res = await fetch(`${apiDomain()}/crm/v3/Contacts?${params.toString()}`, {
+      const res = await fetch(`${apiDomain(ctx)}/crm/v3/Contacts?${params.toString()}`, {
         headers: { authorization: `Zoho-oauthtoken ${accessToken}` },
       })
       // 204 = no more records.

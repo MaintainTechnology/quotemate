@@ -123,7 +123,7 @@ import { FilesTab } from './_components/FilesTab'
 import { HistoricalQuotesTab } from './_components/HistoricalQuotesTab'
 import { CalendarTab } from './_components/CalendarTab'
 import { HistoricalHint } from './_components/HistoricalHint'
-import { SavedJobsSection } from './_components/SavedJobsSection'
+import { SavedJobsSection, savedJobTradeKey } from './_components/SavedJobsSection'
 import CommercialPaintingTab from './_components/commercial-painting/CommercialPaintingTab'
 import { PaginationControls, usePagination } from './_components/Pagination'
 import { StatusPill, StatGrid, TONE_LEFT_RAIL, type Tone } from './_components/quote-ui'
@@ -875,7 +875,7 @@ export default function DashboardPage() {
       tenantStatus={data.tenant.status}
       tenantSubtitle={profileSubtitle || null}
       topbar={{
-        navItems: buildNav(data.quotes.length, tenantTradeList(data.tenant)),
+        navItems: buildNav(tenantTradeList(data.tenant)),
         setTab,
         quotes: data.quotes,
       }}
@@ -894,7 +894,6 @@ export default function DashboardPage() {
         <Sidebar
           tab={tab}
           setTab={setTab}
-          quoteCount={data.quotes.length}
           isAdmin={isAdmin}
           trades={tenantTradeList(data.tenant)}
           collapsed={railCollapsed}
@@ -906,7 +905,6 @@ export default function DashboardPage() {
             <MobileTabBar
               tab={tab}
               setTab={setTab}
-              quoteCount={data.quotes.length}
               trades={tenantTradeList(data.tenant)}
             />
             {/* `key={tab}` forces a tear-down + remount when the user
@@ -915,7 +913,9 @@ export default function DashboardPage() {
               key={tab}
               className="mt-4 lg:mt-0 motion-safe:animate-[fade-up_300ms_cubic-bezier(0.22,1,0.36,1)_both]"
             >
-            {tab !== 'overview' && !isHubTab(tab) && <TabHeader tab={tab} />}
+            {/* Calendar renders its own image-spec header (with Sync / New
+                booking actions), so the generic TabHeader is suppressed for it. */}
+            {tab !== 'overview' && tab !== 'calendar' && !isHubTab(tab) && <TabHeader tab={tab} />}
             {tab === 'overview' && (
               <OverviewTab
                 data={data}
@@ -1887,10 +1887,13 @@ const HUB_NAV: { slug: TradeHubSlug; label: string; icon: NavIcon }[] = [
   { slug: 'solar', label: 'Solar', icon: Sun },
 ]
 
-function buildNav(quoteCount: number, trades: ReadonlyArray<string> = []): NavItem[] {
+function buildNav(trades: ReadonlyArray<string> = []): NavItem[] {
   const items: NavItem[] = [
     { tab: 'overview', label: 'Overview', icon: LayoutDashboard },
-    { tab: 'quotes', label: 'Quotes', icon: FileText, count: quoteCount },
+    // The generic cross-trade "Quotes" tab was removed from the sidebar — each
+    // trade's quotes now live in that trade's hub (below), so a quote no longer
+    // appears in two sidebar tabs at once. The combined cross-trade list is
+    // still reachable on demand via the topbar "Review queue" button.
     { tab: 'chats', label: 'Chats', icon: MessageSquare },
     { tab: 'followups', label: 'Follow-ups', icon: PhoneCall },
     // Calendar — core tab (every tenant). Shows all bookings + self-serve requests.
@@ -1969,7 +1972,7 @@ function buildNav(quoteCount: number, trades: ReadonlyArray<string> = []): NavIt
 // orphan-trade tenants) share the Price book band; Marketing, Records and
 // Account items fold into Business. visibleGroups drops any band with no row.
 const SIDEBAR_GROUPS: { label: string; tabs: Tab[] }[] = [
-  { label: 'Daily', tabs: ['overview', 'quotes', 'chats', 'followups', 'calendar'] },
+  { label: 'Daily', tabs: ['overview', 'chats', 'followups', 'calendar'] },
   { label: 'Trades', tabs: [...HUB_TABS] },
   { label: 'Price book', tabs: ['pricing', 'services', 'catalogue', 'estimating', 'recipes'] },
   {
@@ -1981,7 +1984,6 @@ const SIDEBAR_GROUPS: { label: string; tabs: Tab[] }[] = [
 function Sidebar({
   tab,
   setTab,
-  quoteCount,
   isAdmin,
   trades = [],
   collapsed = false,
@@ -1989,7 +1991,6 @@ function Sidebar({
 }: {
   tab: Tab
   setTab: (t: Tab) => void
-  quoteCount: number
   isAdmin: boolean
   trades?: ReadonlyArray<string>
   /** Icon-only rail (reference design). The state lives in DashboardPage
@@ -1997,7 +1998,7 @@ function Sidebar({
   collapsed?: boolean
   onToggleCollapse?: () => void
 }) {
-  const items = buildNav(quoteCount, trades)
+  const items = buildNav(trades)
   const byTab = new Map(items.map((i) => [i.tab, i]))
   // Resolve each group's rows up front and drop groups that have no
   // visible row on this tenant (e.g. a fully trade-gated "Estimator
@@ -2208,15 +2209,13 @@ function Sidebar({
 function MobileTabBar({
   tab,
   setTab,
-  quoteCount,
   trades = [],
 }: {
   tab: Tab
   setTab: (t: Tab) => void
-  quoteCount: number
   trades?: ReadonlyArray<string>
 }) {
-  const items = buildNav(quoteCount, trades)
+  const items = buildNav(trades)
   return (
     <nav
       // Horizontal-scroll bar keeps all six tabs on one line on
@@ -7854,88 +7853,9 @@ function compareQuotes(a: Quote, b: Quote, sort: QuoteSort): number {
   return (b.created_at ?? '').localeCompare(a.created_at ?? '')
 }
 
-// Sub-tab bar for the Quotes tab. "Quotes" (the drafted-quote pipeline) and
-// "Saved jobs" (measure-tool estimates outside that pipeline) are distinct
-// entities that used to stack on one screen; this switches between them so
-// each is seen on its own. Tab-bar look (single accent underline on the active
-// tab) rather than pills — reads as tabs and keeps the surface calm.
-type QuoteSection = 'quotes' | 'jobs'
-
-function QuoteSectionTabs({
-  section,
-  onChange,
-  quotesCount,
-  jobsCount,
-}: {
-  section: QuoteSection
-  onChange: (s: QuoteSection) => void
-  quotesCount: number
-  jobsCount: number | null
-}) {
-  const tabs: { key: QuoteSection; label: string; count: number | null }[] = [
-    { key: 'quotes', label: 'Quotes', count: quotesCount },
-    { key: 'jobs', label: 'Saved jobs', count: jobsCount },
-  ]
-  // Full WAI-ARIA tabs pattern: role=tab/tabpanel wiring (aria-controls + the
-  // panels' aria-labelledby, below), roving tabindex (only the active tab is
-  // in the Tab order), and arrow/Home/End key movement between tabs.
-  const btnRefs = useRef<Record<QuoteSection, HTMLButtonElement | null>>({
-    quotes: null,
-    jobs: null,
-  })
-  function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    const order: QuoteSection[] = tabs.map((t) => t.key)
-    const i = order.indexOf(section)
-    let next: QuoteSection | null = null
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = order[(i + 1) % order.length]
-    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp')
-      next = order[(i - 1 + order.length) % order.length]
-    else if (e.key === 'Home') next = order[0]
-    else if (e.key === 'End') next = order[order.length - 1]
-    if (next && next !== section) {
-      e.preventDefault()
-      onChange(next)
-      btnRefs.current[next]?.focus()
-    }
-  }
-  return (
-    <div
-      role="tablist"
-      aria-label="Quotes and saved jobs"
-      onKeyDown={onKeyDown}
-      className="flex items-center gap-6 border-b border-ink-line"
-    >
-      {tabs.map((t) => {
-        const active = section === t.key
-        return (
-          <button
-            key={t.key}
-            ref={(el) => {
-              btnRefs.current[t.key] = el
-            }}
-            type="button"
-            role="tab"
-            id={`quote-tab-${t.key}`}
-            aria-selected={active}
-            aria-controls={`quote-panel-${t.key}`}
-            tabIndex={active ? 0 : -1}
-            onClick={() => onChange(t.key)}
-            className={`-mb-px inline-flex items-center gap-2 border-b-2 px-1 pb-3 pt-1 font-mono text-[0.72rem] font-bold uppercase tracking-[0.16em] transition-colors cursor-pointer ${
-              active
-                ? 'border-accent text-text-pri'
-                : 'border-transparent text-text-dim hover:text-text-pri'
-            }`}
-          >
-            {t.label}
-            {t.count != null && (
-              <span className={active ? 'text-accent' : 'text-text-dim'}>{t.count}</span>
-            )}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
+// The Quotes tab's old "Quotes | Saved jobs" sub-tab bar was removed: quotes
+// now live per-trade in each trade hub, and a trade's saved jobs merge into
+// that same hub tab (SavedJobsSection `only` mode) rather than a shared strip.
 
 function QuotesTab({
   data,
@@ -7955,8 +7875,6 @@ function QuotesTab({
     !tradeFilter &&
     Array.isArray(data.tenant.trades) && data.tenant.trades.length > 1
 
-  const [section, setSection] = useState<QuoteSection>('quotes')
-  const [savedCount, setSavedCount] = useState<number | null>(null)
   const [filter, setFilter] = useState<QuoteFilter>('all')
   const [sort, setSort] = useState<QuoteSort>('newest')
   // Extra filters (workspace + hub). Trade chips isolate one trade's quotes;
@@ -7969,6 +7887,11 @@ function QuotesTab({
   const all = tradeFilter
     ? data.quotes.filter((q) => (q.trade ?? '').toLowerCase() === tradeFilter)
     : data.quotes
+
+  // In a trade hub, this trade's measure-tool estimates (roof / solar / paint)
+  // merge in as a labelled section below the quote list. null for trades with
+  // no saved-jobs table (electrical, plumbing, …) → nothing extra renders.
+  const savedJobsKey = tradeFilter ? savedJobTradeKey(tradeFilter) : null
 
   const FILTERS: { key: QuoteFilter; label: string }[] = [
     { key: 'all', label: 'All' },
@@ -8031,52 +7954,12 @@ function QuotesTab({
 
   return (
     <div className="space-y-5">
-      {/* Saved jobs are cross-trade, so the sub-tab strip only renders on
-          the Workspace Quotes tab — a trade hub shows just that trade's
-          quote list (section stays on its 'quotes' default). */}
-      {!tradeFilter && (
-        <QuoteSectionTabs
-          section={section}
-          onChange={setSection}
-          quotesCount={all.length}
-          jobsCount={savedCount}
-        />
-      )}
-
-      {/* Saved jobs — its own sub-tab panel. Kept mounted (hidden via the
-          `hidden` attribute when the Quotes sub-tab is active) so its count
-          feeds the tab badge and switching is instant, without re-fetching
-          /api/tenant/trade-jobs each toggle. */}
-      {!tradeFilter && (
-        <div
-          role="tabpanel"
-          id="quote-panel-jobs"
-          aria-labelledby="quote-tab-jobs"
-          hidden={section !== 'jobs'}
-        >
-          <SavedJobsSection accessToken={accessToken} renderWhenEmpty onCount={setSavedCount} />
-        </div>
-      )}
-
-      {section === 'quotes' && (
-        <div
-          // Tab-panel semantics only when the sub-tab strip that owns
-          // quote-tab-quotes is actually rendered (legacy mode); in hub
-          // mode the strip is hidden and the ids would dangle.
-          {...(!tradeFilter
-            ? {
-                role: 'tabpanel',
-                id: 'quote-panel-quotes',
-                'aria-labelledby': 'quote-tab-quotes',
-              }
-            : {})}
-          className="space-y-5"
-        >
-          {all.length === 0 ? (
+      {all.length === 0 ? (
             <Card>
               <p className="text-sm text-text-dim">
-                No quotes drafted yet. Customers texting your QuoteMax number will
-                appear here once their first quote is drafted.
+                {tradeFilter
+                  ? `No ${quoteTradeLabel(tradeFilter)} quotes yet — they appear here once a customer's first quote is drafted.`
+                  : 'No quotes drafted yet. Customers texting your QuoteMax number will appear here once their first quote is drafted.'}
               </p>
             </Card>
           ) : (
@@ -8274,7 +8157,12 @@ function QuotesTab({
       </Card>
             </>
           )}
-        </div>
+
+      {/* This trade's measure-tool estimates (roof / solar / paint) merged into
+          the same tab, in a labelled section below the quotes. A null key
+          (electrical, plumbing, …) renders nothing. */}
+      {savedJobsKey && (
+        <SavedJobsSection accessToken={accessToken} only={savedJobsKey} />
       )}
     </div>
   )
@@ -8453,7 +8341,15 @@ function QuoteCard({
     const raw = (q.status ?? 'draft').toLowerCase()
     const tone: Badge['tone'] =
       raw === 'accepted' ? 'accepted' : raw === 'sent' ? 'sent' : 'draft'
-    badges.push({ label: raw, tone })
+    // Plain-language label instead of the raw status slug ("draft" /
+    // "awaiting_review") so a tradie reads what to do, not a database value.
+    const label =
+      raw === 'accepted'
+        ? 'Accepted'
+        : raw === 'sent'
+          ? 'Sent to customer'
+          : 'Awaiting your review'
+    badges.push({ label, tone })
   }
 
   // Compact badge label for the collapsed summary row. We surface the
@@ -8489,6 +8385,12 @@ function QuoteCard({
             )}
             <span className="font-mono text-[0.65rem] uppercase tracking-[0.12em] text-text-sec truncate">
               · {formatJobType(q.job_type)}
+            </span>
+            {/* Drafted date on the row itself — "when" is a top triage
+                question; previously it was hidden until the card expanded.
+                Hidden < sm to keep the mobile row to one clean line. */}
+            <span className="hidden sm:inline font-mono text-[0.65rem] uppercase tracking-[0.12em] text-text-dim">
+              · {formatDate(q.created_at)}
             </span>
             {/* Trade label only when actually relevant (multi-trade) +
                 large enough to fit. */}
@@ -15165,16 +15067,18 @@ function TradeHub({
 }) {
   const label = HUB_NAV.find((h) => h.slug === trade)?.label ?? trade
   const hasTools = HUB_TOOL_TRADES.includes(trade)
+  // Quotes-first: clicking a trade lands the tradie on that trade's quotes
+  // (the daily job), with pricing / tools / setup as secondary chips.
   const sections: HubSection[] = [
+    'quotes',
     ...(hasTools ? (['tools'] as HubSection[]) : []),
     'pricing',
     'services',
     'catalogue',
     'recipes',
     'estimating',
-    'quotes',
   ]
-  const [section, setSection] = useState<HubSection>(hasTools ? 'tools' : 'pricing')
+  const [section, setSection] = useState<HubSection>('quotes')
   const quoteCount = data.quotes.filter(
     (q) => (q.trade ?? '').toLowerCase() === trade,
   ).length
@@ -15189,9 +15093,9 @@ function TradeHub({
           {label}
         </h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-sec">
-          Everything for your {label.toLowerCase()} work in one place —{' '}
-          {hasTools ? 'tools, ' : ''}pricing, services, brands, catalogue,
-          recipes, estimating and quotes.
+          Everything for your {label.toLowerCase()} work in one place — quotes,{' '}
+          {hasTools ? 'tools, ' : ''}pricing, services, brands, catalogue, recipes
+          and estimating.
         </p>
       </header>
 

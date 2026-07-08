@@ -9,8 +9,9 @@ import { after } from 'next/server'
 import { getServiceClient } from '@/lib/supabase/admin'
 import { parseOAuthState } from '@/lib/crm/oauth-state'
 import { deriveCodeVerifier } from '@/lib/crm/pkce'
-import { isSupportedProvider } from '@/lib/crm/provider'
+import { isSupportedProvider, type ProviderCtx } from '@/lib/crm/provider'
 import { getProvider } from '@/lib/crm/registry'
+import { resolveZohoDc } from '@/lib/crm/zoho'
 import { encryptSecret } from '@/lib/crypto/encrypt'
 
 export const dynamic = 'force-dynamic'
@@ -40,9 +41,34 @@ export async function GET(req: Request) {
     }
 
     const provider = getProvider(state.provider)
+
+    // Zoho multi-DC: the code was issued by the tradie's data centre and can
+    // ONLY be exchanged against that DC's accounts host. Zoho hands us the DC on
+    // the callback (`accounts-server` URL and/or `location` code); resolve it and
+    // exchange there. HubSpot is single-DC → these are absent → ctx is empty and
+    // the provider ignores it.
+    let ctx: ProviderCtx | undefined
+    if (state.provider === 'zoho') {
+      const dc = resolveZohoDc({
+        accountsServer: searchParams.get('accounts-server'),
+        location: searchParams.get('location'),
+      })
+      ctx = { accountsServer: dc.accounts, apiDomain: dc.api }
+    }
+
     // Re-derive the PKCE verifier from the same signed state used to build the
     // authorize URL. HubSpot uses it; providers that don't require PKCE ignore it.
-    const tokens = await provider.exchangeCode(code, deriveCodeVerifier(stateParam))
+    const tokens = await provider.exchangeCode(code, deriveCodeVerifier(stateParam), ctx)
+
+    // Persist the DC coordinates so later refreshes/syncs hit the right hosts.
+    // The token response's api_domain (when present) is authoritative for reads.
+    const providerMetadata =
+      state.provider === 'zoho'
+        ? {
+            accounts_server: ctx?.accountsServer ?? null,
+            api_domain: tokens.apiDomain ?? ctx?.apiDomain ?? null,
+          }
+        : {}
 
     const supabase = getServiceClient()
     const { error } = await supabase.from('crm_connections').upsert(
@@ -52,6 +78,7 @@ export async function GET(req: Request) {
         access_token_enc: encryptSecret(tokens.accessToken),
         refresh_token_enc: tokens.refreshToken ? encryptSecret(tokens.refreshToken) : null,
         expires_at: tokens.expiresAt ? new Date(tokens.expiresAt).toISOString() : null,
+        provider_metadata: providerMetadata,
         status: 'connected',
         connected_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),

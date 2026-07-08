@@ -9,6 +9,8 @@ export function SlotPicker({
   token,
   options,
   tier,
+  endpoint,
+  labels,
 }: {
   token: string
   /** AM/PM half-day windows (or legacy exact-time slots) to choose from.
@@ -17,7 +19,20 @@ export function SlotPicker({
   /** Tier the customer chose on the quote page — passed to the book API
    *  so the deposit step at the end charges the right amount. */
   tier?: string
+  /** Where to POST the chosen slot. Defaults to the quotes book route.
+   *  The already-paid trade surfaces (roof/paint) pass their own
+   *  /api/q/book/<trade>/<token> route — there is no deposit step after, so
+   *  they also override `labels`. Whatever the endpoint returns as `next`
+   *  is where we send the customer. */
+  endpoint?: string
+  /** Button copy for the three states. Defaults suit the quotes book-then-pay
+   *  flow ("...& pay deposit"); the trade surfaces pass booking-only copy. */
+  labels?: { idle?: string; submitting?: string; done?: string }
 }) {
+  const postUrl = endpoint ?? `/api/q/${token}/book`
+  const idleLabel = labels?.idle ?? 'Hold this time & pay deposit →'
+  const submittingLabel = labels?.submitting ?? 'Holding…'
+  const doneLabel = labels?.done ?? 'Taking you to deposit…'
   const [picked, setPicked] = useState<string | null>(null)
   const [status, setStatus] = useState<Status>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -41,7 +56,7 @@ export function SlotPicker({
     setStatus('submitting')
     setErrorMessage(null)
     try {
-      const res = await fetch(`/api/q/${token}/book`, {
+      const res = await fetch(postUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slot: picked, tier }),
@@ -125,10 +140,10 @@ export function SlotPicker({
         }`}
       >
         {status === 'submitting'
-          ? 'Holding…'
+          ? submittingLabel
           : status === 'done'
-            ? 'Taking you to deposit…'
-            : 'Hold this time & pay deposit →'}
+            ? doneLabel
+            : idleLabel}
       </button>
 
       {errorMessage ? (

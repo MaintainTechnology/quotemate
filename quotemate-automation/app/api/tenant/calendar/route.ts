@@ -183,5 +183,7 @@ export async function GET(req: Request) {
     toEvent(q, q.intake_id ? intakeMap[q.intake_id] ?? null : null),
   )
 
-  return Response.json({ events, toSchedule })
+  // tenantId powers the dashboard "New booking" button, which opens this
+  // tenant's public self-serve booking page (/book/<tenantId>).
+  return Response.json({ events, toSchedule, tenantId: auth.tenant.id })
 }

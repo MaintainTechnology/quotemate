@@ -42,6 +42,8 @@ import { RoofMap, type RoofMapBuilding } from '@/app/dashboard/roofing/_componen
 import { QuoteChrome, type StickyBar } from '../../_chrome/QuoteChrome'
 import { AcceptBlock } from '../../_chrome/AcceptBlock'
 import { resolveAcceptView } from '@/lib/quote/accept'
+import { loadTenantBookingOptions, formatVisitSlot } from '@/lib/quote/trade-booking'
+import { SlotPicker } from '@/app/q/[token]/book/SlotPicker'
 import { tradeIcon } from '../../_chrome/icons'
 import {
   QuoteSheet,
@@ -440,16 +442,31 @@ export default async function RoofingQuotePage({
   // inspection (previously this surface had no on-page payment at all).
   let roofPaidAt: string | null = null
   let roofAcceptedAt: string | null = null
+  let roofScheduledAt: string | null = null
+  let roofScheduledWindow: string | null = null
   {
     const { data: pay } = await supabase
       .from('roofing_measurements')
-      .select('paid_at, customer_accepted_at')
+      .select('paid_at, customer_accepted_at, scheduled_at, scheduled_window')
       .eq('public_token', token)
       .maybeSingle()
     if (pay) {
       roofPaidAt = (pay.paid_at as string | null) ?? null
       roofAcceptedAt = (pay.customer_accepted_at as string | null) ?? null
+      roofScheduledAt = (pay.scheduled_at as string | null) ?? null
+      roofScheduledWindow = (pay.scheduled_window as string | null) ?? null
     }
+  }
+
+  // Self-serve visit booking (mig 167): once the $99 is paid the customer picks
+  // a half-day window right here. Load the tradie's open windows ONLY in that
+  // state so an unpaid / already-booked view costs no extra query.
+  let roofBookingOptions: Awaited<ReturnType<typeof loadTenantBookingOptions>> = []
+  if (roofPaidAt && !roofScheduledAt && row.tenant_id) {
+    roofBookingOptions = await loadTenantBookingOptions(supabase, {
+      tenantId: row.tenant_id,
+      table: 'roofing_measurements',
+    })
   }
   const roofAcceptView = resolveAcceptView({
     token,
@@ -644,6 +661,34 @@ export default async function RoofingQuotePage({
             price is always confirmed on site, so the refundable $99 visit is
             the on-page action — no more "reply to SMS" dead end. ── */}
         <AcceptBlock token={token} view={roofAcceptView} alreadyAccepted={!!roofAcceptedAt} />
+
+        {/* Self-serve visit booking — appears once the $99 site visit is paid.
+            Pick a half-day window (or see the booked one). Mig 167. */}
+        {roofPaidAt ? (
+          <SheetSection eyebrow={roofScheduledAt ? 'Visit booked' : 'Pick your visit time'} eyebrowAccent>
+            {roofScheduledAt ? (
+              <p style={{ margin: '12px 0 0', fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+                Your site visit is booked for{' '}
+                <strong style={{ color: 'var(--text-pri)' }}>
+                  {formatVisitSlot(roofScheduledAt, roofScheduledWindow)}
+                </strong>
+                . {identity?.business_name ?? 'Your roofer'} will text you the day before to confirm.
+              </p>
+            ) : (
+              <div style={{ marginTop: 12 }}>
+                <p style={{ margin: '0 0 14px', fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+                  Deposit received — pick a time that suits and we&apos;ll lock in your site visit.
+                </p>
+                <SlotPicker
+                  token={token}
+                  options={roofBookingOptions}
+                  endpoint={`/api/q/book/roof/${token}`}
+                  labels={{ idle: 'Book this time →', submitting: 'Booking…', done: 'Booked ✓' }}
+                />
+              </div>
+            )}
+          </SheetSection>
+        ) : null}
 
         {/* Combined solar add-on note under the tiers. */}
         {solarApplies && (

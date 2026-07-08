@@ -1047,6 +1047,129 @@ function scrubVoiceWording(reply: string): string {
     .trim()
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// Quote-link repair — defence against Sonnet mangling a customer quote link.
+//
+// When the dialog says "view the full breakdown here: <url>" it reproduces a
+// link from its own context (an earlier turn in this thread, or the follow-up
+// pin). LLMs cannot reliably copy a 32-char hex token: a single duplicated /
+// transposed character (observed live: an extra "7" in a /q/roof/<token>
+// link) makes the token miss its DB row and the page 404s. EVERY customer
+// quote surface is token-gated, so this breaks the link for any trade
+// (roof / solar / paint / electrical / ...).
+//
+// The correct link is ALREADY in the model's context, so we don't guess — we
+// harvest the known-good links and snap any corrupted copy back to the exact
+// string that was really sent. Pure + unit-tested (repair-links.test.ts).
+// ─────────────────────────────────────────────────────────────────────
+
+/** First-path-segment surfaces that carry an opaque, un-typeable token. Only
+ *  URLs under these are ever rewritten — a tenant's own site or a Google Maps
+ *  pin the model quotes is left untouched. */
+const TOKEN_SURFACE_RE = /^\/(q|r|upload|m|p)(\/|$)/i
+
+/** Bare http(s) URLs, minus any trailing sentence punctuation the model glued
+ *  on ("here: <url>."). */
+function extractUrls(text: string): string[] {
+  const out: string[] = []
+  const re = /https?:\/\/[^\s<>()"'\]]+/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text))) out.push(m[0].replace(/[.,;:!?)\]]+$/, ''))
+  return out
+}
+
+function parseUrl(url: string): URL | null {
+  try { return new URL(url) } catch { return null }
+}
+
+function isTokenSurface(url: string): boolean {
+  const u = parseUrl(url)
+  return u != null && TOKEN_SURFACE_RE.test(u.pathname)
+}
+
+/** Is a path segment an opaque token (long hex, or ≥12 chars)? */
+function isTokenSeg(seg: string): boolean {
+  return /^[0-9a-f]{16,}$/i.test(seg) || seg.length >= 12
+}
+
+/** Origin + path with token segments masked, so two copies of the SAME link
+ *  that differ only by a mangled token share a skeleton. Query ignored — a
+ *  wrong ?s= never 404s; only the token does. */
+function linkSkeleton(url: string): string | null {
+  const u = parseUrl(url)
+  if (!u) return null
+  const path = u.pathname.split('/').map((s) => (isTokenSeg(s) ? '*' : s)).join('/')
+  return `${u.origin}${path}`
+}
+
+/** The token segment(s) of a link — to pick the nearest when a thread holds
+ *  more than one link of the same shape. */
+function linkToken(url: string): string {
+  const u = parseUrl(url)
+  if (!u) return url
+  return u.pathname.split('/').filter(isTokenSeg).join('/')
+}
+
+/** Top-level surface kind (q / r / upload / m / p). */
+function surfaceKind(url: string): string {
+  return parseUrl(url)?.pathname.split('/')[1]?.toLowerCase() ?? ''
+}
+
+/** Iterative Levenshtein — tiny, no deps. */
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length
+  if (!m) return n
+  if (!n) return m
+  let prev = Array.from({ length: n + 1 }, (_, i) => i)
+  const curr = new Array<number>(n + 1)
+  for (let i = 1; i <= m; i++) {
+    curr[0] = i
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost)
+    }
+    prev = curr.slice()
+  }
+  return prev[n]
+}
+
+/**
+ * Replace every token-surface URL in `reply` with the known-good link it was
+ * copied from. Sources of truth (`sourceText`) are the model's own context:
+ * conversation history + follow-up context + memory. An exact link passes
+ * through; a link that matches a known one's SHAPE (same path, mangled token)
+ * is snapped to the nearest known token; a lone-known-link thread snaps any
+ * corrupted same-surface link to it. A link with no counterpart is left
+ * untouched (we never invent a link the model didn't have a source for). PURE.
+ */
+export function repairQuoteLinks(reply: string, sourceText: string): string {
+  if (!reply) return reply
+  const known = [...new Set(extractUrls(sourceText).filter(isTokenSurface))]
+  if (known.length === 0) return reply // no source of truth → nothing to repair against
+  return reply.replace(/https?:\/\/[^\s<>()"'\]]+/g, (raw) => {
+    const trail = raw.match(/[.,;:!?)\]]+$/)?.[0] ?? ''
+    const url = trail ? raw.slice(0, -trail.length) : raw
+    if (!isTokenSurface(url) || known.includes(url)) return raw
+    const skel = linkSkeleton(url)
+    const sameShape = known.filter((k) => linkSkeleton(k) === skel)
+    let pick: string | null = null
+    if (sameShape.length) {
+      // Snap the mangled token to the nearest same-shape known link, keeping
+      // whatever query the model chose (the page validates ?s=).
+      const tok = linkToken(url)
+      const best = sameShape.reduce((a, b) =>
+        levenshtein(linkToken(a), tok) <= levenshtein(linkToken(b), tok) ? a : b)
+      const bu = parseUrl(best)!
+      pick = `${bu.origin}${bu.pathname}${parseUrl(url)!.search}`
+    } else if (known.length === 1 && surfaceKind(url) === surfaceKind(known[0])) {
+      // One obvious same-surface link in the thread — the model simplified
+      // the path AND mangled the token; snap to the real one.
+      pick = known[0]
+    }
+    return pick ? pick + trail : raw
+  })
+}
+
 // Maps the CustomerHistoryHint to a one-line directive for Sonnet that
 // hard-references Rule 9's three cases. Forces the model to pick the
 // right opener (full intro / welcome-back / no-greeting).
@@ -1676,8 +1799,27 @@ export async function decideNextTurn(args: {
       knownSuburb: scrubState?.slots.suburb,
     })
   }
+  // Quote-link repair (defence-in-depth). Sonnet often re-quotes the
+  // customer's quote link and mangles the 32-char token (an extra/dropped
+  // char → a guaranteed 404 on the token-gated page). The correct link is
+  // in the model's own context, so snap any corrupted copy back to it. The
+  // source of truth is the FULL thread history + the follow-up pin + memory
+  // — exactly what the model was shown this turn.
+  const cleaned = scrubVoiceWording(suburbScrubbed)
+  const linkSource = [
+    args.history.map((t) => t.body).join('\n'),
+    args.followupContext ?? '',
+    memoryBlock,
+  ].join('\n')
+  const repaired = repairQuoteLinks(cleaned, linkSource)
+  if (repaired !== cleaned) {
+    console.warn('[sms/dialog] repairQuoteLinks corrected a quote link', {
+      before: cleaned.slice(0, 200),
+      after: repaired.slice(0, 200),
+    })
+  }
   return {
     ...object,
-    reply_to_send: scrubVoiceWording(suburbScrubbed),
+    reply_to_send: repaired,
   }
 }

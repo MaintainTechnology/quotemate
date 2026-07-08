@@ -345,6 +345,21 @@ export async function POST(req: Request) {
           slotIso: scheduledAt,
         }),
       )
+    } else {
+      // Paid with NO slot yet (a $99 inspection deposit, or no slots were
+      // published): nudge the customer over SMS to pick a time — the /paid
+      // page shows the same "Pick a time" CTA. Idempotent: the paid_at claim
+      // above means a Stripe retry hits the "already paid" early return, so
+      // this fires exactly once.
+      after(() =>
+        notifyBookingConfirmed(supabase, {
+          quoteId,
+          intakeId: (existing.intake_id as string | null) ?? null,
+          tenantId: (existing.tenant_id as string | null) ?? null,
+          shareToken: existing.share_token as string,
+          slotIso: null,
+        }),
+      )
     }
   } catch (e: any) {
     log.err('booking finalise threw (non-fatal — paid_at committed)', e?.message ?? String(e), { quote_id: quoteId })

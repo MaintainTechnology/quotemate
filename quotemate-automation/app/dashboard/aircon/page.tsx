@@ -967,7 +967,7 @@ function SystemSchematic({ system, rooms }: { system: 'ducted' | 'split'; rooms:
             )
           })}
           <rect x={centre.x - 34} y={centre.y - 14} width={68} height={28} className="fill-ink-deep stroke-accent" strokeWidth={1.5} />
-          <text x={centre.x} y={centre.y + 4} textAnchor="middle" className="fill-accent" fontSize={10} fontFamily="monospace">
+          <text x={centre.x} y={centre.y + 4} textAnchor="middle" className="fill-accent" fontSize={10} style={{ fontFamily: 'var(--font-jetbrains-mono), monospace' }}>
             ROOF UNIT
           </text>
         </>
@@ -982,7 +982,7 @@ function SystemSchematic({ system, rooms }: { system: 'ducted' | 'split'; rooms:
             <text x={p.x + 8} y={p.y + 26} className="fill-text-sec" fontSize={11}>
               {labels[i]}
             </text>
-            <text x={p.x + 8} y={p.y + 42} className="fill-text-dim" fontSize={9} fontFamily="monospace">
+            <text x={p.x + 8} y={p.y + 42} className="fill-text-dim" fontSize={9} style={{ fontFamily: 'var(--font-jetbrains-mono), monospace' }}>
               {room.area_m2} m² · {room.kw} kW
             </text>
             {system === 'ducted' ? (
@@ -1000,14 +1000,14 @@ function SystemSchematic({ system, rooms }: { system: 'ducted' | 'split'; rooms:
       {system === 'split' && (
         <>
           <rect x={width - 84} y={height - 36} width={76} height={26} className="fill-ink-deep stroke-accent" strokeWidth={1.5} />
-          <text x={width - 46} y={height - 19} textAnchor="middle" className="fill-accent" fontSize={9} fontFamily="monospace">
+          <text x={width - 46} y={height - 19} textAnchor="middle" className="fill-accent" fontSize={9} style={{ fontFamily: 'var(--font-jetbrains-mono), monospace' }}>
             OUTDOOR UNIT{rooms.length > 1 ? 'S' : ''}
           </text>
         </>
       )}
 
       {hidden > 0 && (
-        <text x={4} y={height - 4} className="fill-text-dim" fontSize={9} fontFamily="monospace">
+        <text x={4} y={height - 4} className="fill-text-dim" fontSize={9} style={{ fontFamily: 'var(--font-jetbrains-mono), monospace' }}>
           +{hidden} more room{hidden === 1 ? '' : 's'} not drawn
         </text>
       )}

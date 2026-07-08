@@ -10,6 +10,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { decryptSecret, encryptSecret } from '@/lib/crypto/encrypt'
 import { getProvider } from '@/lib/crm/registry'
 import { prepareContactRows } from '@/lib/crm/sync'
+import type { ProviderCtx } from '@/lib/crm/provider'
 
 export type SyncResult = { imported: number; total_fetched: number }
 
@@ -20,7 +21,7 @@ export async function syncContactsForConnection(
 ): Promise<SyncResult> {
   const { data: conn, error } = await supabase
     .from('crm_connections')
-    .select('id, provider, access_token_enc, refresh_token_enc, expires_at, status')
+    .select('id, provider, access_token_enc, refresh_token_enc, expires_at, status, provider_metadata')
     .eq('tenant_id', tenantId)
     .eq('provider', provider)
     .maybeSingle()
@@ -29,6 +30,14 @@ export async function syncContactsForConnection(
   if (!conn || !conn.access_token_enc) throw new Error('no_connection')
 
   const impl = getProvider(provider)
+
+  // Data-centre coordinates persisted at connect time (Zoho multi-DC). Undefined
+  // keys for single-DC providers, so the provider falls back to env/default.
+  const meta = (conn.provider_metadata ?? {}) as {
+    accounts_server?: string | null
+    api_domain?: string | null
+  }
+  const ctx: ProviderCtx = { accountsServer: meta.accounts_server, apiDomain: meta.api_domain }
 
   try {
     let accessToken = decryptSecret(conn.access_token_enc as string)
@@ -41,8 +50,11 @@ export async function syncContactsForConnection(
     const needsRefresh = expiresAt === null || expiresAt - Date.now() < 60_000
     if (needsRefresh && conn.refresh_token_enc) {
       const refreshToken = decryptSecret(conn.refresh_token_enc as string)
-      const next = await impl.refresh(refreshToken)
+      const next = await impl.refresh(refreshToken, ctx)
       accessToken = next.accessToken
+      // A refresh can report an updated api_domain — keep ctx current so the
+      // contact fetch below uses it.
+      if (next.apiDomain) ctx.apiDomain = next.apiDomain
       await supabase
         .from('crm_connections')
         .update({
@@ -54,7 +66,7 @@ export async function syncContactsForConnection(
         .eq('id', conn.id as string)
     }
 
-    const contacts = await impl.fetchContacts(accessToken)
+    const contacts = await impl.fetchContacts(accessToken, ctx)
     const rows = prepareContactRows(tenantId, conn.id as string, contacts)
 
     if (rows.length > 0) {

@@ -1,5 +1,24 @@
 import { describe, it, expect } from 'vitest'
-import { buildTradieWebLeadAlert, buildIntakeRecoverySms } from './templates'
+import {
+  buildTradieWebLeadAlert,
+  buildIntakeRecoverySms,
+  buildDepositAwaitingSlotSms,
+} from './templates'
+
+describe('buildDepositAwaitingSlotSms', () => {
+  it('carries the booking link, greets by first name, and is GSM-7 safe', () => {
+    const body = buildDepositAwaitingSlotSms({
+      firstName: 'Jeph Daligdig',
+      bookingUrl: 'https://quotemax.com.au/q/abc123/book',
+    })
+    expect(body).toContain('Jeph')
+    expect(body).toContain('https://quotemax.com.au/q/abc123/book')
+    expect(/[^\x20-\x7E\n]/.test(body)).toBe(false) // ASCII-only, single GSM-7 segment
+  })
+  it('falls back to "there" when no name is given', () => {
+    expect(buildDepositAwaitingSlotSms({ bookingUrl: 'https://x/book' })).toContain('there')
+  })
+})
 
 describe('buildTradieWebLeadAlert', () => {
   it('includes tradie name, customer first name, suburb and a trimmed description', () => {

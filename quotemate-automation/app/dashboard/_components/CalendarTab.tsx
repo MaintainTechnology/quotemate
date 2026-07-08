@@ -2,19 +2,23 @@
 
 // Dashboard → Calendar tab (specs/dashboard-calendar-tab.md).
 //
-// Reads the tenant's bookings from GET /api/tenant/calendar, which returns two
-// lists: `events` (quotes with a scheduled_at) render as a day-grouped agenda,
-// upcoming first, with a "Past" group at the end; `toSchedule` (PAID quotes
-// with no time chosen yet — chiefly the pay-first $99 site inspection) render
-// in a "Paid · needs a time" block above the agenda so a money-in-hand job the
-// tradie still has to arrange is never hidden. Booking state is shown with a
-// tone-coded StatusPill; a 'requested' self-serve booking can be confirmed
-// inline (POST /api/tenant/calendar/<quoteId>/confirm). Tenant-scoped via the
-// bearer token, same contract as the other dashboard tabs.
+// Presentation is a 1:1 port of the standalone reference design
+// (redesign/QuoteMax Dashboard (standalone).html → the `calendar` page): a
+// header with eyebrow / title / blurb + Sync + New booking, a 4-up metric
+// strip, a Mon–Sun week strip, and a day-grouped agenda whose rows carry a
+// left status bar (visit → accent, job → success, callback → grey). The
+// reference is square-cornered with lit edges and mono numerals; its inline
+// styles reference the same CSS-variable tokens this app already defines
+// (--ink-card / --accent / --text-* / --success-bright / --lift …), so the
+// port is faithful in both the dark and warm-paper (light) themes.
+//
+// All data is REAL and tenant-scoped: GET /api/tenant/calendar returns
+// `events` (quotes with a scheduled_at) and `toSchedule` (PAID quotes with no
+// time chosen yet — chiefly the pay-first $99 site inspection). Sync reloads;
+// New booking opens this tenant's public /book/<tenantId> page; a self-serve
+// request confirms inline; clicking a row opens its quote.
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CalendarDays, Loader2, Check, ExternalLink } from 'lucide-react'
-import { StatusPill, StatGrid, type Tone } from './quote-ui'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { getAuthToken } from '@/lib/auth/client-token'
 
 type CalendarEvent = {
@@ -34,30 +38,23 @@ type CalendarEvent = {
   suburb: string | null
   source: string | null
 }
-
-// A scheduled event is a CalendarEvent that definitely has a time — used for
-// the day-grouped agenda so the grouping helpers never see a null scheduledAt.
 type ScheduledEvent = CalendarEvent & { scheduledAt: string }
 
 const TZ = 'Australia/Sydney'
 
+/* ── Date helpers ─────────────────────────────────────────────────────
+   Bookings group by Sydney calendar day. dayKey() keys an instant to a Sydney
+   YYYY-MM-DD; the week strip + agenda labels work off those bare date keys via
+   a local Date (labels/arithmetic only, never an instant), so both sides
+   compare as identical strings. */
 function dayKey(iso: string): string {
-  const d = new Date(iso)
-  // YYYY-MM-DD in Sydney time — stable sort + group key.
-  return d.toLocaleDateString('en-CA', { timeZone: TZ })
+  return new Date(iso).toLocaleDateString('en-CA', { timeZone: TZ })
 }
-function dayLabel(iso: string): string {
-  const d = new Date(iso)
-  return d.toLocaleDateString('en-AU', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'short',
-    timeZone: TZ,
-  })
+function todayKeySydney(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: TZ })
 }
 function timeLabel(iso: string): string {
-  const d = new Date(iso)
-  return d.toLocaleTimeString('en-AU', {
+  return new Date(iso).toLocaleTimeString('en-AU', {
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
@@ -65,8 +62,49 @@ function timeLabel(iso: string): string {
   })
 }
 function shortDate(iso: string): string {
-  const d = new Date(iso)
-  return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: TZ })
+  return new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: TZ })
+}
+function localDate(key: string): Date {
+  const [y, m, d] = key.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+function keyFromLocal(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+function addDays(key: string, n: number): string {
+  const d = localDate(key)
+  d.setDate(d.getDate() + n)
+  return keyFromLocal(d)
+}
+// The Mon–Sun week containing `key` (setDate carries across month/year ends).
+function weekOf(key: string): string[] {
+  const d = localDate(key)
+  const dow = d.getDay() // 0=Sun … 6=Sat
+  d.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow)) // back to Monday
+  return Array.from({ length: 7 }, (_, i) => {
+    const dd = new Date(d)
+    dd.setDate(d.getDate() + i)
+    return keyFromLocal(dd)
+  })
+}
+function weekdayAbbrev(key: string): string {
+  return localDate(key).toLocaleDateString('en-AU', { weekday: 'short' })
+}
+function monthAbbrev(key: string): string {
+  return localDate(key).toLocaleDateString('en-AU', { month: 'short' })
+}
+function dayNum(key: string): number {
+  return localDate(key).getDate()
+}
+// "Today · Tue 1 Jul" / "Tomorrow · Wed 2 Jul" / "Fri 4 Jul" (CSS uppercases).
+function agendaLabel(key: string, today: string): string {
+  const base = `${weekdayAbbrev(key)} ${dayNum(key)} ${monthAbbrev(key)}`
+  if (key === today) return `Today · ${base}`
+  if (key === addDays(today, 1)) return `Tomorrow · ${base}`
+  return base
 }
 
 function jobLabel(jt: string | null): string {
@@ -74,27 +112,112 @@ function jobLabel(jt: string | null): string {
   return jt.charAt(0).toUpperCase() + jt.slice(1).replace(/_/g, ' ')
 }
 
-function statePill(ev: CalendarEvent): { label: string; tone: Tone } {
-  if (ev.bookingState === 'booked' || ev.paid) return { label: 'Booked', tone: 'good' }
-  if (ev.bookingState === 'confirmed') return { label: 'Confirmed', tone: 'accent' }
-  if (ev.bookingState === 'reserved') return { label: 'Pending payment', tone: 'warn' }
-  if (ev.bookingState === 'requested') return { label: 'Requested', tone: 'warn' }
-  return { label: 'Scheduled', tone: 'dim' }
+// Row triage → the reference's three bar kinds. A paid $99 inspection is a
+// "visit" (accent bar); an unconfirmed self-serve request / reserved hold is a
+// "call" (grey bar); everything else scheduled is a "job" (success bar).
+type Kind = 'visit' | 'job' | 'call'
+function kindOf(ev: CalendarEvent): Kind {
+  if (ev.needsInspection || ev.paidTier === 'inspection') return 'visit'
+  if (ev.bookingState === 'requested' || ev.bookingState === 'reserved') return 'call'
+  return 'job'
+}
+function barColor(kind: Kind): string {
+  return kind === 'visit' ? 'var(--accent)' : kind === 'job' ? 'var(--success-bright)' : 'var(--text-sec)'
+}
+function eventTitle(ev: CalendarEvent): string {
+  const job = jobLabel(ev.jobType)
+  if (ev.needsInspection || ev.paidTier === 'inspection') return `Site visit — ${job}`
+  return job
+}
+function who(ev: CalendarEvent): string {
+  const name = ev.customerName ?? 'Customer'
+  return ev.suburb ? `${name} · ${ev.suburb}` : name
 }
 
 type DayGroup = { key: string; label: string; events: ScheduledEvent[] }
 
+/* ── Reference styles (verbatim from the standalone template) ─────────── */
+const EYEBROW: CSSProperties = {
+  fontSize: '10.5px',
+  fontWeight: 600,
+  textTransform: 'uppercase',
+  letterSpacing: '0.18em',
+  color: 'var(--text-dim)',
+}
+const H1: CSSProperties = {
+  margin: '8px 0 0',
+  fontWeight: 800,
+  textTransform: 'uppercase',
+  letterSpacing: '-0.03em',
+  fontSize: 'clamp(1.8rem,2.6vw,2.7rem)',
+  lineHeight: 1,
+  color: 'var(--text-pri)',
+}
+const BLURB: CSSProperties = {
+  margin: '9px 0 0',
+  maxWidth: '64ch',
+  fontSize: '13.5px',
+  lineHeight: 1.5,
+  color: 'var(--text-dim)',
+}
+const GHOST_BTN: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  border: '1px solid var(--ink-line)',
+  background: 'transparent',
+  color: 'var(--text-sec)',
+  padding: '9px 14px',
+  fontSize: '10px',
+  fontWeight: 700,
+  textTransform: 'uppercase',
+  letterSpacing: '0.13em',
+  whiteSpace: 'nowrap',
+  cursor: 'pointer',
+}
+const PRIMARY_BTN: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '8px',
+  border: '1px solid transparent',
+  background: 'var(--accent)',
+  color: 'var(--accent-ink)',
+  padding: '10px 16px',
+  fontWeight: 700,
+  fontSize: '12px',
+  textTransform: 'uppercase',
+  letterSpacing: '0.06em',
+  whiteSpace: 'nowrap',
+  textDecoration: 'none',
+  cursor: 'pointer',
+}
+const CARD: CSSProperties = {
+  background: 'var(--ink-card)',
+  border: '1px solid var(--ink-line)',
+  boxShadow: 'var(--lift)',
+}
+const DAY_LABEL: CSSProperties = {
+  margin: '0 0 9px 2px',
+  fontSize: '10px',
+  fontWeight: 700,
+  textTransform: 'uppercase',
+  letterSpacing: '0.16em',
+  color: 'var(--text-dim)',
+}
+
 export function CalendarTab({ accessToken }: { accessToken: string | null }) {
   const [events, setEvents] = useState<CalendarEvent[] | null>(null)
   const [toSchedule, setToSchedule] = useState<CalendarEvent[]>([])
+  const [tenantId, setTenantId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [confirming, setConfirming] = useState<string | null>(null)
 
+  const today = useMemo(() => todayKeySydney(), [])
+  const [selectedKey, setSelectedKey] = useState<string>(today)
+  const dayRefs = useRef<Record<string, HTMLDivElement | null>>({})
+
   // Mint a FRESH token per request — a Clerk session token expires ~60s after
   // the dashboard captured `accessToken` at mount, so reusing the prop 401s.
-  // getAuthToken() refreshes (Clerk) or reuses the legacy Supabase session;
-  // fall back to the prop only if it yields nothing. Callers await it.
   const authHeaders = useCallback(
     async (): Promise<Record<string, string>> => {
       const token = (await getAuthToken()) ?? accessToken
@@ -116,9 +239,11 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
       const json = (await res.json()) as {
         events: CalendarEvent[]
         toSchedule?: CalendarEvent[]
+        tenantId?: string | null
       }
       setEvents(json.events ?? [])
       setToSchedule(json.toSchedule ?? [])
+      setTenantId(json.tenantId ?? null)
     } catch {
       setError('Couldn’t reach the server. Please try again shortly.')
     } finally {
@@ -140,9 +265,7 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
       })
       if (res.ok) {
         setEvents((prev) =>
-          (prev ?? []).map((e) =>
-            e.quoteId === quoteId ? { ...e, bookingState: 'confirmed' } : e,
-          ),
+          (prev ?? []).map((e) => (e.quoteId === quoteId ? { ...e, bookingState: 'confirmed' } : e)),
         )
       }
     } finally {
@@ -150,25 +273,45 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
     }
   }
 
-  // Split into upcoming vs past, then group each by Sydney day. Only events
-  // that actually carry a time land here; the paid-but-unscheduled set is
-  // rendered separately (it has no day to group on).
-  const { upcoming, past, pendingCount, upcomingCount } = useMemo(() => {
+  function selectDay(key: string) {
+    setSelectedKey(key)
+    dayRefs.current[key]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }
+
+  const week = useMemo(() => weekOf(selectedKey), [selectedKey])
+
+  const { upcoming, past, eventDays, stats } = useMemo(() => {
     const now = Date.now()
-    const all: ScheduledEvent[] = (events ?? []).filter(
+    const scheduled: ScheduledEvent[] = (events ?? []).filter(
       (e): e is ScheduledEvent => typeof e.scheduledAt === 'string',
     )
     const up: ScheduledEvent[] = []
     const pa: ScheduledEvent[] = []
-    for (const e of all) {
-      if (Date.parse(e.scheduledAt) >= now) up.push(e)
-      else pa.push(e)
+    const days = new Set<string>()
+    for (const e of scheduled) {
+      days.add(dayKey(e.scheduledAt))
+      ;(Date.parse(e.scheduledAt) >= now ? up : pa).push(e)
     }
+
+    const weekSet = new Set(weekOf(selectedKey))
+    let inWeek = 0
+    let siteVisits = 0
+    let jobsOn = 0
+    let pendingInWeek = 0
+    for (const e of scheduled) {
+      if (!weekSet.has(dayKey(e.scheduledAt))) continue
+      inWeek++
+      const k = kindOf(e)
+      if (k === 'visit') siteVisits++
+      else if (k === 'call') pendingInWeek++
+      else jobsOn++
+    }
+
     const groupBy = (list: ScheduledEvent[], pastFirst = false): DayGroup[] => {
       const map = new Map<string, DayGroup>()
       for (const e of list) {
         const k = dayKey(e.scheduledAt)
-        const g = map.get(k) ?? { key: k, label: dayLabel(e.scheduledAt), events: [] }
+        const g = map.get(k) ?? { key: k, label: agendaLabel(k, today), events: [] }
         g.events.push(e)
         map.set(k, g)
       }
@@ -176,218 +319,455 @@ export function CalendarTab({ accessToken }: { accessToken: string | null }) {
       groups.sort((a, b) => (pastFirst ? b.key.localeCompare(a.key) : a.key.localeCompare(b.key)))
       return groups
     }
+
     return {
       upcoming: groupBy(up),
       past: groupBy(pa, true),
-      pendingCount: all.filter((e) => e.bookingState === 'requested').length,
-      upcomingCount: up.length,
+      eventDays: days,
+      stats: {
+        thisWeek: inWeek,
+        siteVisits,
+        jobsOn,
+        // Callbacks = anything needing the tradie to act: this week's pending
+        // holds plus every paid-but-unscheduled job (no date to place them on).
+        callbacks: pendingInWeek + toSchedule.length,
+      },
     }
-  }, [events])
+  }, [events, toSchedule, selectedKey, today])
 
-  if (loading && !events) {
-    return (
-      <div className="rounded-card border border-ink-line bg-ink-card px-5 py-6 font-mono text-xs uppercase tracking-[0.16em] text-text-dim">
-        <Loader2 size={14} className="mr-2 inline animate-spin text-accent" />
-        Loading calendar…
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="border border-danger/50 bg-danger/10 px-4 py-3 text-sm text-text-pri">
-        {error}
-      </div>
-    )
-  }
+  const metrics: [string, number, string, boolean][] = [
+    ['This week', stats.thisWeek, 'Bookings', false],
+    ['Site visits', stats.siteVisits, '$99 each', true],
+    ['Jobs on', stats.jobsOn, 'Booked', false],
+    ['Callbacks', stats.callbacks, 'Follow-up', false],
+  ]
 
   const isEmpty = (events?.length ?? 0) === 0 && toSchedule.length === 0
 
   return (
-    <div className="max-w-4xl space-y-8">
-      <StatGrid
-        cols={3}
-        stats={[
-          { label: 'Upcoming jobs', value: upcomingCount, hero: true },
-          { label: 'To schedule', value: toSchedule.length, tone: toSchedule.length > 0 ? 'warn' : 'dim' },
-          { label: 'Pending requests', value: pendingCount, tone: pendingCount > 0 ? 'warn' : 'dim' },
-        ]}
-      />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* Row hover + interactive-day affordance — the reference's :hover rules,
+          scoped so nothing else on the page is touched. */}
+      <style>{`
+        .qmcal-row.is-click{cursor:pointer}
+        .qmcal-row:hover{background:color-mix(in srgb, var(--ink) 55%, transparent)}
+        .qmcal-day{transition:border-color .15s ease}
+        .qmcal-day:not(.is-selected):hover{border-color:color-mix(in srgb, var(--accent) 40%, var(--ink-line)) !important}
+      `}</style>
 
-      {toSchedule.length > 0 && <ToScheduleBlock events={toSchedule} />}
+      {/* ── Header ── */}
+      <header
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'flex-end',
+          justifyContent: 'space-between',
+          gap: '16px',
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div className="font-mono" style={EYEBROW}>
+            Daily · Calendar
+          </div>
+          <h1 className="font-sans" style={H1}>
+            Calendar
+          </h1>
+          <p style={BLURB}>Site visits, booked jobs and callbacks. Your week at a glance.</p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={loading}
+            title="Refresh bookings"
+            className="font-mono"
+            style={{ ...GHOST_BTN, opacity: loading ? 0.5 : 1 }}
+          >
+            {loading ? 'Syncing…' : 'Sync'}
+          </button>
+          <a
+            href={tenantId ? `/book/${tenantId}` : undefined}
+            target="_blank"
+            rel="noreferrer"
+            aria-disabled={!tenantId}
+            className="font-sans"
+            style={{ ...PRIMARY_BTN, ...(tenantId ? null : { opacity: 0.4, pointerEvents: 'none' }) }}
+          >
+            New booking
+          </a>
+        </div>
+      </header>
 
-      {isEmpty ? (
-        <div className="rounded-card border border-ink-line bg-ink-card p-8 text-center">
-          <CalendarDays size={22} className="mx-auto text-text-dim" />
-          <p className="mt-3 text-sm text-text-sec">No bookings scheduled yet.</p>
+      {error && (
+        <div
+          style={{
+            borderLeft: '2px solid var(--danger-bright)',
+            background: 'color-mix(in srgb, var(--danger-bright) 12%, transparent)',
+            padding: '12px 16px',
+            fontSize: '13px',
+            color: 'var(--text-pri)',
+          }}
+        >
+          {error}
+        </div>
+      )}
+
+      {loading && !events ? (
+        <div
+          className="font-mono"
+          style={{
+            ...CARD,
+            padding: '20px 22px',
+            fontSize: '11px',
+            textTransform: 'uppercase',
+            letterSpacing: '0.14em',
+            color: 'var(--text-dim)',
+          }}
+        >
+          Loading calendar…
         </div>
       ) : (
         <>
-          {upcoming.length > 0 && (
-            <section className="space-y-6">
-              {upcoming.map((g) => (
-                <DayBlock
-                  key={g.key}
-                  group={g}
-                  confirming={confirming}
-                  onConfirm={confirmBooking}
-                />
-              ))}
-            </section>
-          )}
+          {/* ── Metric strip (qm-edge-lit qm-metrics4) ── */}
+          <section
+            className="grid grid-cols-2 sm:grid-cols-4"
+            style={{ background: 'var(--ink-line)', border: '1px solid var(--ink-line)', gap: '1px', boxShadow: 'var(--lift)' }}
+          >
+            {metrics.map(([k, v, sub, accent]) => (
+              <div key={k} style={{ background: 'var(--ink-card)', padding: '18px 22px' }}>
+                <div
+                  className="font-mono"
+                  style={{
+                    fontSize: '9.5px',
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.13em',
+                    color: 'var(--text-dim)',
+                  }}
+                >
+                  {k}
+                </div>
+                <div
+                  className="font-mono"
+                  style={{
+                    marginTop: '8px',
+                    fontWeight: 800,
+                    lineHeight: 1,
+                    fontSize: 'clamp(1.4rem,1.85vw,2.35rem)',
+                    fontVariantNumeric: 'tabular-nums',
+                    color: accent ? 'var(--accent)' : 'var(--text-pri)',
+                  }}
+                >
+                  {v}
+                </div>
+                <div
+                  className="font-mono"
+                  style={{
+                    marginTop: '7px',
+                    fontSize: '8.5px',
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.1em',
+                    color: 'var(--text-sec)',
+                    minHeight: '12px',
+                  }}
+                >
+                  {sub}
+                </div>
+              </div>
+            ))}
+          </section>
 
-          {past.length > 0 && (
-            <section className="space-y-6">
-              <h3 className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
-                Past
-              </h3>
-              {past.map((g) => (
-                <DayBlock
-                  key={g.key}
-                  group={g}
-                  confirming={confirming}
-                  onConfirm={confirmBooking}
-                  muted
-                />
-              ))}
-            </section>
-          )}
+          {/* ── Calendar body ── */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {/* Week strip */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: '8px' }}>
+              {week.map((k) => {
+                const selected = k === selectedKey
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => selectDay(k)}
+                    aria-pressed={selected}
+                    aria-label={`${weekdayAbbrev(k)} ${dayNum(k)}${eventDays.has(k) ? ' — has bookings' : ''}`}
+                    className={`qmcal-day font-mono${selected ? ' is-selected' : ''}`}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '12px 4px',
+                      width: '100%',
+                      cursor: 'pointer',
+                      background: selected ? 'var(--ink-card)' : 'transparent',
+                      border:
+                        '1px solid ' +
+                        (selected ? 'color-mix(in srgb, var(--accent) 40%, var(--ink-line))' : 'var(--ink-line)'),
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: '9.5px',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.12em',
+                        color: selected ? 'var(--accent)' : 'var(--text-dim)',
+                      }}
+                    >
+                      {weekdayAbbrev(k)}
+                    </span>
+                    <span
+                      style={{ fontWeight: 700, fontSize: '18px', color: selected ? 'var(--text-pri)' : 'var(--text-sec)' }}
+                    >
+                      {dayNum(k)}
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        width: '5px',
+                        height: '5px',
+                        borderRadius: '9999px',
+                        background: eventDays.has(k) ? 'var(--accent)' : 'transparent',
+                      }}
+                    />
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Paid · needs a time — money-in-hand, no slot yet */}
+            {toSchedule.length > 0 && (
+              <div>
+                <div className="font-mono" style={{ ...DAY_LABEL, color: 'var(--warning-bright)' }}>
+                  Paid · needs a time
+                </div>
+                <div style={CARD}>
+                  {toSchedule.map((ev) => (
+                    <AgendaRow
+                      key={ev.quoteId}
+                      time="—"
+                      title={`${ev.needsInspection || ev.paidTier === 'inspection' ? 'Site visit — ' : ''}${jobLabel(ev.jobType)}`}
+                      whoText={[ev.customerName ?? 'Customer', ev.suburb, ev.customerPhone, ev.paidAt ? `paid ${shortDate(ev.paidAt)}` : null]
+                        .filter(Boolean)
+                        .join(' · ')}
+                      bar="var(--warning-bright)"
+                      shareToken={ev.shareToken}
+                    />
+                  ))}
+                </div>
+                <div
+                  className="font-mono"
+                  style={{
+                    marginTop: '8px',
+                    fontSize: '9px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.1em',
+                    color: 'var(--text-dim)',
+                  }}
+                >
+                  Call the customer to lock in a visit time.
+                </div>
+              </div>
+            )}
+
+            {isEmpty ? (
+              <div style={{ ...CARD, padding: '32px', textAlign: 'center' }}>
+                <div
+                  className="font-mono"
+                  style={{
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.14em',
+                    color: 'var(--text-dim)',
+                  }}
+                >
+                  No bookings scheduled yet
+                </div>
+              </div>
+            ) : (
+              <>
+                {upcoming.map((g) => (
+                  <div
+                    key={g.key}
+                    ref={(el) => {
+                      dayRefs.current[g.key] = el
+                    }}
+                    style={{ scrollMarginTop: '16px' }}
+                  >
+                    <div
+                      className="font-mono"
+                      style={{ ...DAY_LABEL, color: g.key === selectedKey ? 'var(--accent)' : 'var(--text-dim)' }}
+                    >
+                      {g.label}
+                    </div>
+                    <div style={CARD}>
+                      {g.events.map((ev) => (
+                        <AgendaRow
+                          key={ev.quoteId}
+                          time={timeLabel(ev.scheduledAt)}
+                          title={eventTitle(ev)}
+                          whoText={who(ev)}
+                          bar={barColor(kindOf(ev))}
+                          shareToken={ev.shareToken}
+                          confirm={
+                            ev.bookingState === 'requested'
+                              ? { pending: confirming === ev.quoteId, onConfirm: () => confirmBooking(ev.quoteId) }
+                              : undefined
+                          }
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                {past.length > 0 && (
+                  <div style={{ opacity: 0.6 }}>
+                    <div
+                      className="font-mono"
+                      style={{ ...DAY_LABEL, color: 'var(--text-dim)' }}
+                    >
+                      Past
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      {past.map((g) => (
+                        <div key={g.key}>
+                          <div className="font-mono" style={DAY_LABEL}>
+                            {g.label}
+                          </div>
+                          <div style={CARD}>
+                            {g.events.map((ev) => (
+                              <AgendaRow
+                                key={ev.quoteId}
+                                time={timeLabel(ev.scheduledAt)}
+                                title={eventTitle(ev)}
+                                whoText={who(ev)}
+                                bar={barColor(kindOf(ev))}
+                                shareToken={ev.shareToken}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </>
       )}
     </div>
   )
 }
 
-function DayBlock({
-  group,
-  confirming,
-  onConfirm,
-  muted = false,
+/* ── Agenda row — the reference qm-row, plus real-data affordances:
+   click-to-open the quote and an inline Confirm for self-serve requests. ─── */
+function AgendaRow({
+  time,
+  title,
+  whoText,
+  bar,
+  shareToken,
+  confirm,
 }: {
-  group: DayGroup
-  confirming: string | null
-  onConfirm: (quoteId: string) => void
-  muted?: boolean
+  time: string
+  title: string
+  whoText: string
+  bar: string
+  shareToken: string | null
+  confirm?: { pending: boolean; onConfirm: () => void }
 }) {
+  const open = shareToken
+    ? () => window.open(`/q/${shareToken}`, '_blank', 'noopener,noreferrer')
+    : undefined
   return (
-    <div className={muted ? 'opacity-70' : ''}>
-      <div className="flex items-center gap-3">
-        <span className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-accent">
-          {group.label}
-        </span>
-        <span className="h-px flex-1 bg-ink-line" aria-hidden="true" />
+    <div
+      className={`qmcal-row${open ? ' is-click' : ''}`}
+      role={open ? 'link' : undefined}
+      tabIndex={open ? 0 : undefined}
+      onClick={open}
+      onKeyDown={
+        open
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                open()
+              }
+            }
+          : undefined
+      }
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '16px',
+        padding: '13px 18px',
+        borderBottom: '1px solid var(--ink-line)',
+        borderLeft: `2px solid ${bar}`,
+        transition: 'background-color .15s ease',
+      }}
+    >
+      <span
+        className="font-mono"
+        style={{
+          fontSize: '12px',
+          fontWeight: 700,
+          color: 'var(--text-sec)',
+          minWidth: '74px',
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {time}
+      </span>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div className="font-sans" style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text-pri)' }}>
+          {title}
+        </div>
+        <div
+          className="font-mono"
+          style={{
+            marginTop: '2px',
+            fontSize: '9.5px',
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+            color: 'var(--text-dim)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {whoText}
+        </div>
       </div>
-      <ul className="rounded-card mt-3 divide-y divide-ink-line border border-ink-line bg-ink-card">
-        {group.events.map((ev) => {
-          const pill = statePill(ev)
-          const canConfirm = ev.bookingState === 'requested'
-          return (
-            <li key={ev.quoteId} className="flex flex-wrap items-center gap-3 px-4 py-3">
-              <div className="w-16 shrink-0 font-mono text-sm font-semibold tabular-nums text-text-pri">
-                {timeLabel(ev.scheduledAt)}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm text-text-pri">
-                  {ev.customerName ?? 'Customer'}
-                  {ev.jobType ? <span className="text-text-sec"> · {jobLabel(ev.jobType)}</span> : null}
-                </div>
-                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">
-                  {ev.suburb ? <span>{ev.suburb}</span> : null}
-                  {ev.customerPhone ? <span>· {ev.customerPhone}</span> : null}
-                  {ev.source === 'web_booking' ? <span className="text-accent">· self-serve</span> : null}
-                </div>
-              </div>
-              <StatusPill label={pill.label} tone={pill.tone} compact dot />
-              {canConfirm && (
-                <button
-                  type="button"
-                  onClick={() => onConfirm(ev.quoteId)}
-                  disabled={confirming === ev.quoteId}
-                  className="rounded-ctl inline-flex items-center gap-1.5 border border-ink-line px-2.5 py-1 text-[0.6rem] font-semibold uppercase tracking-wider text-text-pri hover:border-accent hover:text-accent disabled:opacity-50"
-                >
-                  {confirming === ev.quoteId ? (
-                    <Loader2 size={11} className="animate-spin" />
-                  ) : (
-                    <Check size={11} />
-                  )}
-                  Confirm
-                </button>
-              )}
-              {ev.shareToken && (
-                <a
-                  href={`/q/${ev.shareToken}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label="Open quote"
-                  className="inline-flex h-7 w-7 items-center justify-center border border-ink-line text-text-dim hover:border-accent hover:text-accent"
-                >
-                  <ExternalLink size={12} />
-                </a>
-              )}
-            </li>
-          )
-        })}
-      </ul>
+      {confirm && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            confirm.onConfirm()
+          }}
+          disabled={confirm.pending}
+          className="font-mono"
+          style={{
+            flexShrink: 0,
+            display: 'inline-flex',
+            alignItems: 'center',
+            border: '1px solid var(--ink-line)',
+            background: 'transparent',
+            color: 'var(--text-sec)',
+            padding: '5px 10px',
+            fontSize: '9px',
+            fontWeight: 700,
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+            cursor: 'pointer',
+            opacity: confirm.pending ? 0.5 : 1,
+          }}
+        >
+          {confirm.pending ? 'Confirming…' : 'Confirm'}
+        </button>
+      )}
     </div>
-  )
-}
-
-// Paid, but no time chosen yet — the $99 site inspection (pay-first, no slot)
-// or a deposit paid against an old link. Money-in-hand jobs the tradie still
-// has to arrange, so they get a prominent block above the dated agenda with
-// the customer's number to call. No day/time row — they have none.
-function ToScheduleBlock({ events }: { events: CalendarEvent[] }) {
-  return (
-    <section className="space-y-3">
-      <div className="flex items-center gap-3">
-        <span className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-warning-bright">
-          Paid · needs a time
-        </span>
-        <span className="h-px flex-1 bg-ink-line" aria-hidden="true" />
-      </div>
-      <ul className="rounded-card divide-y divide-ink-line border border-ink-line bg-ink-card">
-        {events.map((ev) => {
-          const isInspection = ev.needsInspection || ev.paidTier === 'inspection'
-          return (
-            <li
-              key={ev.quoteId}
-              className="flex flex-wrap items-center gap-3 border-l-2 border-l-warning-bright px-4 py-3"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm text-text-pri">
-                  {ev.customerName ?? 'Customer'}
-                  {ev.jobType ? <span className="text-text-sec"> · {jobLabel(ev.jobType)}</span> : null}
-                </div>
-                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">
-                  {ev.suburb ? <span>{ev.suburb}</span> : null}
-                  {ev.customerPhone ? <span>· {ev.customerPhone}</span> : null}
-                  {ev.paidAt ? <span>· paid {shortDate(ev.paidAt)}</span> : null}
-                </div>
-              </div>
-              <StatusPill
-                label={isInspection ? 'Inspection · paid' : 'Deposit paid'}
-                tone="warn"
-                compact
-                dot
-              />
-              {ev.shareToken && (
-                <a
-                  href={`/q/${ev.shareToken}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label="Open quote"
-                  className="inline-flex h-7 w-7 items-center justify-center border border-ink-line text-text-dim hover:border-accent hover:text-accent"
-                >
-                  <ExternalLink size={12} />
-                </a>
-              )}
-            </li>
-          )
-        })}
-      </ul>
-      <p className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">
-        Call the customer to lock in a visit time.
-      </p>
-    </section>
   )
 }

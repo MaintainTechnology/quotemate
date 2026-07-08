@@ -17,7 +17,7 @@ import Link from 'next/link'
 import { Loader2, Trash2 } from 'lucide-react'
 import { getAuthToken } from '@/lib/auth/client-token'
 
-type TradeKey = 'roofing' | 'solar' | 'painting' | 'commercial-painting'
+export type TradeKey = 'roofing' | 'solar' | 'painting' | 'commercial-painting'
 
 // Mirrors the route's TradeJobSummary.
 type TradeJobSummary = {
@@ -44,6 +44,26 @@ const TRADE_BADGE: Record<TradeKey, string> = {
   solar: 'Solar',
   painting: 'Paint',
   'commercial-painting': 'Comm',
+}
+
+/** Map a dashboard trade-hub slug (underscore form, e.g. 'commercial_painting')
+ *  to a Saved-jobs TradeKey (hyphen form). Returns null for trades with no
+ *  saved-jobs table (electrical, plumbing, signage, aircon) — those hubs get
+ *  no saved-jobs section. */
+export function savedJobTradeKey(hubSlug: string): TradeKey | null {
+  switch (hubSlug.toLowerCase()) {
+    case 'roofing':
+      return 'roofing'
+    case 'solar':
+      return 'solar'
+    case 'painting':
+      return 'painting'
+    case 'commercial_painting':
+    case 'commercial-painting':
+      return 'commercial-painting'
+    default:
+      return null
+  }
 }
 
 type JobSort = 'newest' | 'oldest' | 'address' | 'status'
@@ -109,6 +129,7 @@ export function SavedJobsSection({
   accessToken,
   renderWhenEmpty = false,
   onCount,
+  only,
 }: {
   accessToken: string | null
   /** When true (the section is its own active sub-tab), render an empty state
@@ -116,6 +137,10 @@ export function SavedJobsSection({
   renderWhenEmpty?: boolean
   /** Reports the current job count up so a parent tab can show a badge. */
   onCount?: (count: number) => void
+  /** Scope the section to a single trade (trade-hub mode): only that trade's
+   *  saved jobs, no category pills, a trade-specific header, and it collapses
+   *  to null when that trade has none. */
+  only?: TradeKey
 }) {
   const [jobs, setJobs] = useState<TradeJobSummary[] | null>(null)
   const [filter, setFilter] = useState<'all' | TradeKey>('all')
@@ -202,8 +227,12 @@ export function SavedJobsSection({
   // Not fetched yet → stay invisible (no flash). Fetched-but-empty → a proper
   // empty state when this section is its own active sub-tab, else collapse.
   if (!jobs) return null
-  if (jobs.length === 0) {
-    if (!renderWhenEmpty) return null
+  // Trade-hub mode (`only`) scopes to one trade; the standalone sub-tab shows all.
+  const scoped = only ? jobs.filter((j) => j.trade === only) : jobs
+  if (scoped.length === 0) {
+    // `only` collapses silently — a hub shouldn't show an empty saved-jobs card
+    // in every trade. The standalone sub-tab shows an explicit empty state.
+    if (only || !renderWhenEmpty) return null
     return (
       <section className="rounded-card border border-ink-line bg-ink-card px-5 py-10 text-center">
         <div className="font-mono text-[0.7rem] font-bold uppercase tracking-[0.16em] text-text-pri">
@@ -217,12 +246,18 @@ export function SavedJobsSection({
     )
   }
 
-  const visibleTrades = TRADE_ORDER.filter((t) => jobs.some((j) => j.trade === t))
-  const activeTrades = filter === 'all' ? visibleTrades : visibleTrades.filter((t) => t === filter)
-  const countFor = (t: TradeKey) => jobs.filter((j) => j.trade === t).length
+  const visibleTrades = only
+    ? [only]
+    : TRADE_ORDER.filter((t) => scoped.some((j) => j.trade === t))
+  const activeTrades = only
+    ? [only]
+    : filter === 'all'
+      ? visibleTrades
+      : visibleTrades.filter((t) => t === filter)
+  const countFor = (t: TradeKey) => scoped.filter((j) => j.trade === t).length
 
   const pills: { key: 'all' | TradeKey; label: string; count: number }[] = [
-    { key: 'all', label: 'All', count: jobs.length },
+    { key: 'all', label: 'All', count: scoped.length },
     ...visibleTrades.map((t) => ({ key: t, label: TRADE_LABEL[t], count: countFor(t) })),
   ]
 
@@ -232,12 +267,22 @@ export function SavedJobsSection({
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-line px-5 py-4">
         <div>
           <div className="font-mono text-[0.7rem] font-bold uppercase tracking-[0.16em] text-text-pri">
-            Saved jobs
+            {only ? `Saved ${TRADE_LABEL[only].toLowerCase()} estimates` : 'Saved jobs'}
           </div>
           <div className="mt-1 text-xs leading-relaxed text-text-sec">
-            {jobs.length} job{jobs.length === 1 ? '' : 's'} across{' '}
-            {visibleTrades.length} trade{visibleTrades.length === 1 ? '' : 's'} —
-            roofing, solar and painting estimates saved outside the quote pipeline.
+            {only ? (
+              <>
+                {scoped.length} estimate{scoped.length === 1 ? '' : 's'} saved from the{' '}
+                {TRADE_LABEL[only].toLowerCase()} measure tool — separate from your
+                quotes above.
+              </>
+            ) : (
+              <>
+                {scoped.length} job{scoped.length === 1 ? '' : 's'} across{' '}
+                {visibleTrades.length} trade{visibleTrades.length === 1 ? '' : 's'} —
+                roofing, solar and painting estimates saved outside the quote pipeline.
+              </>
+            )}
           </div>
         </div>
         <label className="flex items-center gap-2 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
@@ -256,28 +301,30 @@ export function SavedJobsSection({
         </label>
       </div>
 
-      {/* ── Category pills with counts ───────────────────────────── */}
-      <div className="flex flex-wrap gap-2 border-b border-ink-line px-5 py-3">
-        {pills.map((p) => {
-          const active = filter === p.key
-          return (
-            <button
-              key={p.key}
-              type="button"
-              onClick={() => setFilter(p.key)}
-              aria-pressed={active}
-              className={`rounded-ctl inline-flex items-center gap-2 border px-3.5 py-2 font-mono text-[0.65rem] font-bold uppercase tracking-[0.14em] transition-colors cursor-pointer ${
-                active
-                  ? 'border-accent bg-accent/10 text-accent'
-                  : 'border-ink-line bg-ink-card text-text-dim hover:border-text-dim hover:text-text-pri'
-              }`}
-            >
-              {p.label}
-              <span className={active ? 'text-accent' : 'text-text-sec'}>{p.count}</span>
-            </button>
-          )
-        })}
-      </div>
+      {/* ── Category pills with counts (multi-trade sub-tab only) ──── */}
+      {!only && (
+        <div className="flex flex-wrap gap-2 border-b border-ink-line px-5 py-3">
+          {pills.map((p) => {
+            const active = filter === p.key
+            return (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => setFilter(p.key)}
+                aria-pressed={active}
+                className={`rounded-ctl inline-flex items-center gap-2 border px-3.5 py-2 font-mono text-[0.65rem] font-bold uppercase tracking-[0.14em] transition-colors cursor-pointer ${
+                  active
+                    ? 'border-accent bg-accent/10 text-accent'
+                    : 'border-ink-line bg-ink-card text-text-dim hover:border-text-dim hover:text-text-pri'
+                }`}
+              >
+                {p.label}
+                <span className={active ? 'text-accent' : 'text-text-sec'}>{p.count}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {deleteError && (
         <div
@@ -290,7 +337,7 @@ export function SavedJobsSection({
 
       {/* ── Trade groups ─────────────────────────────────────────── */}
       {activeTrades.map((t) => {
-        const rows = jobs.filter((j) => j.trade === t).sort((a, b) => compareJobs(a, b, sort))
+        const rows = scoped.filter((j) => j.trade === t).sort((a, b) => compareJobs(a, b, sort))
         const expanded = expandedGroups.has(t)
         const shown = expanded ? rows : rows.slice(0, GROUP_PREVIEW)
         return (

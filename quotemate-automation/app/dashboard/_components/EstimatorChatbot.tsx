@@ -25,7 +25,9 @@ const PANEL_2 = '#0f1722'
 const BORDER = '#243140'
 const TEXT = '#e6ebf0'
 const MUTED = '#94a3b8'
-const MONO = "'Courier New', ui-monospace, monospace"
+// Design-system mono (JetBrains Mono, loaded via next/font on <html>). --font-mono
+// only resolves inside the .qm-quote scope, so dashboard surfaces use the raw var.
+const MONO = 'var(--font-jetbrains-mono), ui-monospace, monospace'
 
 const SUGGESTIONS: Record<'paint' | 'electrical', string[]> = {
   paint: [
@@ -130,7 +132,7 @@ export default function EstimatorChatbot({
         color: TEXT,
         overflow: 'hidden',
         marginTop: 16,
-        fontFamily: 'Inter, system-ui, sans-serif',
+        fontFamily: 'var(--font-manrope), system-ui, sans-serif',
       }}
     >
       <button

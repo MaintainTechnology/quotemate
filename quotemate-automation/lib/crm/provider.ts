@@ -23,6 +23,26 @@ export type TokenSet = {
   refreshToken: string | null
   /** Epoch ms when the access token expires, or null if unknown. */
   expiresAt: number | null
+  /**
+   * Provider-reported API base for this token, when the provider is
+   * multi-data-centre (Zoho returns `api_domain` per DC, e.g.
+   * https://www.zohoapis.com.au for AU accounts). null for single-DC
+   * providers (HubSpot). Persisted on the connection so later syncs hit the
+   * correct DC.
+   */
+  apiDomain?: string | null
+}
+
+/**
+ * Per-connection context threaded into token + API calls. Carries the OAuth
+ * data-centre coordinates for multi-DC providers (Zoho): `accountsServer` is
+ * the accounts host to run token/refresh against, `apiDomain` is the API host
+ * to run data reads against. Both are undefined for single-DC providers, which
+ * ignore this argument entirely.
+ */
+export type ProviderCtx = {
+  accountsServer?: string | null
+  apiDomain?: string | null
 }
 
 export type OAuthConfig = {
@@ -40,13 +60,15 @@ export interface CrmProvider {
   /**
    * Exchange an authorization code for tokens. `codeVerifier` carries the PKCE
    * verifier for providers that require it (HubSpot); providers that don't use
-   * PKCE ignore it.
+   * PKCE ignore it. `ctx` carries the OAuth data-centre for multi-DC providers
+   * (Zoho); single-DC providers ignore it.
    */
-  exchangeCode(code: string, codeVerifier?: string): Promise<TokenSet>
-  /** Refresh an access token. */
-  refresh(refreshToken: string): Promise<TokenSet>
-  /** Fetch all contacts (email + name), paginating as needed. */
-  fetchContacts(accessToken: string): Promise<CrmContact[]>
+  exchangeCode(code: string, codeVerifier?: string, ctx?: ProviderCtx): Promise<TokenSet>
+  /** Refresh an access token. `ctx` selects the DC for multi-DC providers. */
+  refresh(refreshToken: string, ctx?: ProviderCtx): Promise<TokenSet>
+  /** Fetch all contacts (email + name), paginating as needed. `ctx` selects the
+   *  DC's API host for multi-DC providers. */
+  fetchContacts(accessToken: string, ctx?: ProviderCtx): Promise<CrmContact[]>
 }
 
 /** Read + validate a provider's OAuth config from env. Throws if incomplete. */

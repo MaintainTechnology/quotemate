@@ -596,6 +596,18 @@ export function buildBookingConfirmationSms(opts: {
     .replace(/…/g, '...').replace(/·/g, '-').replace(/[^\x20-\x7E\n]/g, '')
 }
 
+// Customer "deposit paid, now pick a time" SMS — fires when a deposit /
+// $99 inspection is paid WITHOUT a slot chosen yet (the /paid page shows
+// the same "Pick a time" CTA). ASCII-only, GSM-7 safe.
+export function buildDepositAwaitingSlotSms(opts: {
+  firstName?: string
+  bookingUrl: string
+}): string {
+  const first = (opts.firstName ?? '').split(' ')[0] || 'there'
+  const body = `Hi ${first}, deposit received - thanks! Pick a time that suits and we'll lock it in: ${opts.bookingUrl}\n\n- QuoteMax`
+  return scrubForGsm7(body)
+}
+
 // Tradie-side booking notification — fires alongside the customer
 // confirmation. Sent to the tenant's owner_mobile (and WhatsApp where
 // configured) when a customer accepts a tier and pays the deposit.
