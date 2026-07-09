@@ -111,6 +111,42 @@ describe('GET /api/tenant/trade-jobs/owner-link', () => {
     expect(JSON.stringify(json)).not.toContain('tok-m')
   })
 
+  it('returns the workspace tab href for the owning tenant of a commercial-painting run', async () => {
+    authedUser()
+    h.results.push(
+      { data: { id: 'tenant-1' }, error: null },
+      { data: { tenant_id: 'tenant-1' }, error: null },
+    )
+    const res = await GET(req('trade=commercial-painting&token=pub-1'))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({
+      owner: true,
+      tradieHref: '/dashboard?tab=commercial-painting',
+    })
+  })
+
+  it('returns the workspace tab href for the owning tenant of an aircon recommendation', async () => {
+    authedUser()
+    h.results.push(
+      { data: { id: 'tenant-1' }, error: null },
+      { data: { tenant_id: 'tenant-1' }, error: null },
+    )
+    const res = await GET(req('trade=aircon&token=pub-1'))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ owner: true, tradieHref: '/dashboard?tab=aircon' })
+  })
+
+  it('hides the workspace href from a different tenant (aircon)', async () => {
+    authedUser()
+    h.results.push(
+      { data: { id: 'tenant-1' }, error: null },
+      { data: { tenant_id: 'tenant-2' }, error: null },
+    )
+    const res = await GET(req('trade=aircon&token=pub-1'))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ owner: false, tradieHref: null })
+  })
+
   it('owner:false for an unknown token and for a NULL-tenant row', async () => {
     for (const rowData of [null, { tenant_id: null, measure_token: 'tok-m' }]) {
       h.results.length = 0

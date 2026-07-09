@@ -714,6 +714,10 @@ html {
    and let the sheet flow the full page as a clean document. */
 @media print {
   .qm-quote .qm-print-hide { display: none !important; }
+  /* Owner-only tradie pills portal to <body> — OUTSIDE .qm-quote — so the
+     scoped rule above can't reach them. Unscoped so a signed-in owner's
+     Ctrl+P never stamps tradie chrome over the customer document. */
+  .qm-tradie-pill { display: none !important; }
   .qm-quote { min-height: 0 !important; }
   .qm-quote main { padding: 0 !important; }
   .qm-quote .qm-sheet {

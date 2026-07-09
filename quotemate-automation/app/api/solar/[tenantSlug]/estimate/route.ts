@@ -231,6 +231,24 @@ export async function POST(
     )
   }
 
+  // Stamp the estimate with its token-twinned quote (mig 100 FK, on delete
+  // set null): merged dashboard views treat the quotes row as the single
+  // source of truth — /api/tenant/trade-jobs hides linked estimates, and
+  // deleting the quote nulls the link so the estimate resurfaces as a saved
+  // job. Also arms the solar DELETE money guard, which reads quote_id.
+  // Best-effort: a failed stamp only double-renders this job until
+  // scripts/backfill-solar-quote-links.mjs next runs.
+  const { error: linkErr } = await supabase
+    .from('solar_estimates')
+    .update({ quote_id: quoteRow.id })
+    .eq('intake_id', intakeRow.id)
+  if (linkErr) {
+    console.warn('[solar/estimate] quote_link_failed', {
+      tenant: tenant.id,
+      detail: linkErr.message,
+    })
+  }
+
   // ── Decide auto-release (Path B). A CLEAN, priced estimate is sent to
   // the customer automatically — no forced confirm click. A flagged or
   // inspection-routed estimate stays human-in-loop. Decided synchronously

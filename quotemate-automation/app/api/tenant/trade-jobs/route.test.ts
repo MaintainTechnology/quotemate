@@ -123,6 +123,12 @@ describe('GET /api/tenant/trade-jobs', () => {
     // /api/tenant/me, is the single source of truth after promotion.
     const roofing = h.queries.find((q) => q.table === 'roofing_measurements')
     expect(roofing!.ops).toContainEqual({ op: 'is', args: ['quote_share_token', null] })
+
+    // Solar estimates are token-twinned with a quotes row at creation —
+    // quote-linked estimates are excluded for the same reason (the unified
+    // Quotes queue would otherwise show every solar job twice).
+    const solar = h.queries.find((q) => q.table === 'solar_estimates')
+    expect(solar!.ops).toContainEqual({ op: 'is', args: ['quote_id', null] })
   })
 
   // Spec quotes-tab-sync A4 — aircon recommendations (migration 144) join the

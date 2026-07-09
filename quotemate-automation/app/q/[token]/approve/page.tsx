@@ -19,6 +19,7 @@
 import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { TradieDashboardPill } from '../../_chrome/TradieDashboardPill'
 import { ApproveAction } from './ApproveAction'
 
 export const dynamic = 'force-dynamic'
@@ -62,6 +63,9 @@ export default async function ApprovePage(props: {
 
   return (
     <main className="min-h-screen bg-ink-deep text-text-pri">
+      {/* Owner-only route back — the page is share_token-public, so the
+          dashboard link must stay invisible to customers who hold the URL. */}
+      <TradieDashboardPill quoteId={quote.id as string} />
       <header className="border-b border-ink-line bg-ink-deep/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4 sm:px-6">
           <Link href="/" className="font-extrabold uppercase tracking-tight text-accent">

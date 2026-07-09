@@ -235,7 +235,7 @@ export default function TradieEditor({
     const returnTo =
       (pathname ?? `/q/${quoteId}`) + (wantsEdit ? '?edit=1' : '')
     return createPortal(
-      <div className="fixed top-16 right-3 z-[70] max-w-[95vw]">
+      <div className="qm-tradie-pill fixed top-16 right-3 z-[70] max-w-[95vw]">
         <div className="flex flex-wrap items-center gap-3 bg-accent text-white px-4 py-2.5 shadow-lg">
           <span className="font-mono text-[0.6rem] uppercase tracking-[0.18em] font-bold">
             Sign in to edit
@@ -456,11 +456,22 @@ export default function TradieEditor({
     <>
       {/* ─── Floating tradie-mode banner (suppressed in embedded viewer) ─── */}
       {!hideBanner && (
-      <div className="fixed top-16 right-3 z-40 max-w-[90vw]">
-        <div className="flex items-center gap-3 bg-accent text-white px-4 py-2.5 shadow-lg">
+      // qm-tradie-pill: portalled outside .qm-quote, so the scoped
+      // qm-print-hide rule can't reach it — an unscoped @media print rule
+      // hides it instead.
+      <div className="qm-tradie-pill fixed top-16 right-3 z-40 max-w-[90vw]">
+        <div className="flex flex-wrap items-center justify-end gap-3 bg-accent text-white px-4 py-2.5 shadow-lg">
           <span className="font-mono text-[0.6rem] uppercase tracking-[0.18em] font-bold">
             Tradie · {check.tenantBusinessName ?? 'You'}
           </span>
+          {/* Always-available route back — SMS-opened quote links have no
+              history to go "back" to, so the owner pill carries the nav. */}
+          <Link
+            href="/dashboard"
+            className="font-mono text-[0.65rem] uppercase tracking-[0.14em] font-bold border border-accent-ink/50 text-accent-ink px-3 py-1 hover:bg-accent-ink/10 transition-colors whitespace-nowrap"
+          >
+            ← Dashboard
+          </Link>
           {check.paid ? (
             <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em]">
               Paid · cannot edit

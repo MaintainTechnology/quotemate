@@ -1,7 +1,7 @@
-// Pure render-decision helpers for the Quotes tab "Saved jobs" section
-// (spec quotes-tab-sync Task 2/4). Kept free of client-component imports so
-// they unit-test without a DOM: SavedJobsSection.tsx re-exports them for the
-// dashboard, and the tests import this module directly.
+// Pure scope-decision helpers for the measure-tool jobs merged into the
+// Quotes-tab queue (originally spec quotes-tab-sync Task 2/4, for the since-
+// removed standalone "Saved jobs" section). Kept free of client-component
+// imports so they unit-test without a DOM.
 
 /** Trades whose measure-tool jobs live outside the quotes table and are
  *  served by /api/tenant/trade-jobs. */
@@ -29,10 +29,10 @@ export function savedJobTradeKey(hubSlug: string): TradeKey | null {
   }
 }
 
-/** Which SavedJobsSection variant a QuotesTab mount renders: the cross-trade
- *  workspace (no tradeFilter) shows every trade's saved jobs ('all'), a mapped
- *  trade hub shows only its own (TradeKey), and a trade with no saved-jobs
- *  table shows nothing (null). */
+/** Which measure-tool jobs a QuotesTab mount merges into its queue: the
+ *  cross-trade workspace (no tradeFilter) takes every trade ('all'), a mapped
+ *  trade hub only its own (TradeKey), and a trade with no measure-tool
+ *  table none at all (null — the trade-jobs fetch is skipped). */
 export function savedJobsMode(tradeFilter?: string): TradeKey | 'all' | null {
   if (!tradeFilter) return 'all'
   return savedJobTradeKey(tradeFilter)

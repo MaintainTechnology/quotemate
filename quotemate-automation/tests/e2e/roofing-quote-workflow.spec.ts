@@ -3,8 +3,9 @@
 // Seeds a promoted roofing quote (the exact shape POST /api/roofing/
 // save-as-quote inserts: intakes row trade='roofing' + quotes row with
 // buildTierObjects-shaped tiers) and walks the customer surface:
-// quote page renders the tiers → the accept/deposit short-link routes
-// book-first → picking a slot reserves the booking on the quotes row.
+// quote page renders the tiers → the pre-promotion /q/roof link redirects
+// to the live quote → the accept/deposit short-link routes book-first →
+// picking a slot reserves the booking on the quotes row.
 // Payment finalisation and the calendar feed stay covered by vitest
 // (lib/quote/paid-confirm.test.ts, app/api/tenant/calendar/route.test.ts).
 //
@@ -24,6 +25,9 @@ const seedable = Boolean(url && key)
 test.describe.configure({ mode: 'serial' })
 
 const token = `e2e${randomBytes(12).toString('hex')}`
+// public_token of the seeded source measurement (the pre-promotion customer
+// link) — /q/roof/<this> must redirect to /q/<token> once promoted.
+const publicToken = `e2e${randomBytes(12).toString('hex')}`
 
 // Mirrors lib/roofing/save-as-quote-helpers buildTierObjects output.
 const tierObj = (label: string, ex: number) => ({
@@ -115,10 +119,23 @@ test.describe('Roofing quote workflow (promoted quote)', () => {
       .single()
     if (quoteErr || !quote) throw new Error(`quote seed failed: ${quoteErr?.message}`)
     quoteId = quote.id as string
+
+    // The source measurement, already promoted (mig 168 link-back stamped) —
+    // exactly what save-as-quote leaves behind. Its old customer link must
+    // now bounce to the live quote.
+    const { error: measureErr } = await supabase.from('roofing_measurements').insert({
+      tenant_id: tenantId,
+      address: '27 Smith Street',
+      public_token: publicToken,
+      quote_id: quoteId,
+      quote_share_token: token,
+    })
+    if (measureErr) throw new Error(`measurement seed failed: ${measureErr.message}`)
   })
 
   test.afterAll(async () => {
     const supabase = createClient(url!, key!)
+    await supabase.from('roofing_measurements').delete().eq('public_token', publicToken)
     await supabase.from('quotes').delete().eq('share_token', token)
     if (intakeId) await supabase.from('intakes').delete().eq('id', intakeId)
     if (tenantId) await supabase.from('tenants').delete().eq('id', tenantId)
@@ -131,6 +148,18 @@ test.describe('Roofing quote workflow (promoted quote)', () => {
     ).toBeVisible()
     // Better-tier inc-GST figure (22,000) is on the page.
     await expect(page.getByText(/22,000/).first()).toBeVisible()
+  })
+
+  test('the pre-promotion /q/roof link redirects to the live quote', async ({ page }) => {
+    // Old SMS'd measurement links must not keep serving the frozen
+    // pre-promotion snapshot (stale prices) once a quotes row owns the job.
+    // Browser-follow rather than asserting the raw 307: redirect() may emit
+    // a meta tag instead of a status code in streaming contexts.
+    await page.goto(`/q/roof/${publicToken}`)
+    await expect(page).toHaveURL(new RegExp(`/q/${token}$`))
+    await expect(
+      page.getByText('Full colorbond re-roof over approximately 200 m2.'),
+    ).toBeVisible()
   })
 
   test('the accept/deposit short-link routes book-first to the slot picker', async ({

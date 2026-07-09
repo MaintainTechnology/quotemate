@@ -16,6 +16,7 @@
 // Maintain Technology brand: dark navy, vibrant orange, all-caps display.
 
 import { createClient } from '@supabase/supabase-js'
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import type { MultiRoofQuote } from '@/lib/roofing/types'
 import {
@@ -109,6 +110,13 @@ export default async function MeasurementResultsPage({
   return (
     <main className="min-h-screen bg-ink-deep text-text-pri">
       <section className="mx-auto max-w-5xl px-6 pt-14 pb-10 sm:px-10">
+        {/* measure_token holders are tradies by construction — static link. */}
+        <Link
+          href="/dashboard"
+          className="mb-4 inline-flex items-center gap-2 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-text-pri"
+        >
+          ← Dashboard
+        </Link>
         <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
           QuoteMax · Roofing · Measurement
         </div>

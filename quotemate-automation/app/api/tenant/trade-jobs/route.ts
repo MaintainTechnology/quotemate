@@ -91,11 +91,17 @@ export async function GET(req: Request) {
         .order('created_at', { ascending: false })
         .limit(100),
     ),
+    // Solar — estimates are token-twinned with a quotes row at creation
+    // (no promotion step), so a quote-linked estimate would double-render
+    // in every merged view (Overview feed, unified Quotes queue). Same
+    // single-source-of-truth rule as roofing above: the quotes row wins;
+    // only estimates whose quote insert failed (quote_id null) surface here.
     settle(
       supabase
         .from('solar_estimates')
         .select('id, address, public_token, confirmed_at, created_at')
         .eq('tenant_id', tenantId)
+        .is('quote_id', null)
         .order('created_at', { ascending: false })
         .limit(100),
     ),

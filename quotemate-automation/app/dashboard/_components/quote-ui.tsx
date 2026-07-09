@@ -21,25 +21,31 @@ export function delay(ms: number): CSSProperties {
 }
 
 /* ── Status language — ONE tone vocabulary, no more drift ───────────── */
-export type Tone = 'good' | 'warn' | 'accent' | 'dim' | 'default'
+export type Tone = 'good' | 'success' | 'warn' | 'danger' | 'accent' | 'dim' | 'default'
 
 const TONE_TEXT: Record<Tone, string> = {
   good: 'text-teal-glow',
+  success: 'text-success-bright',
   warn: 'text-warning-bright',
+  danger: 'text-danger-bright',
   accent: 'text-accent',
   dim: 'text-text-dim',
   default: 'text-text-pri',
 }
 const TONE_CHIP: Record<Tone, string> = {
   good: 'border-teal-glow/60 text-teal-glow',
-  warn: 'border-warning-bright/70 text-warning-bright',
+  success: 'border-success-bright/60 text-success-bright',
+  warn: 'border-warning-bright/60 text-warning-bright',
+  danger: 'border-danger-bright/60 text-danger-bright',
   accent: 'border-accent/70 bg-accent/10 text-accent',
   dim: 'border-ink-line text-text-dim',
   default: 'border-ink-line text-text-sec',
 }
 const TONE_FILL: Record<Tone, string> = {
   good: 'bg-teal-glow',
+  success: 'bg-success-bright',
   warn: 'bg-warning-bright',
+  danger: 'bg-danger-bright',
   accent: 'bg-accent',
   dim: 'bg-ink-line',
   default: 'bg-ink-line',
@@ -47,32 +53,45 @@ const TONE_FILL: Record<Tone, string> = {
 /** Left status rail (3px) — at-a-glance triage colour for a list row. */
 export const TONE_LEFT_RAIL: Record<Tone, string> = {
   good: 'border-l-teal-glow',
+  success: 'border-l-success-bright',
   warn: 'border-l-warning-bright',
+  danger: 'border-l-danger-bright',
   accent: 'border-l-accent',
   dim: 'border-l-ink-line',
   default: 'border-l-ink-line',
 }
 
 /** Bordered mono status pill. `dot` adds a tone-coloured indicator so the
- *  signal survives even at the most compact size (e.g. mobile rows). */
+ *  signal survives even at the most compact size (e.g. mobile rows).
+ *  `pulse` breathes the dot — reserved for the one status that needs the
+ *  tradie's action right now (reference: "Awaiting you"). */
 export function StatusPill({
   label,
   tone = 'default',
   dot = false,
   compact = false,
+  pulse = false,
 }: {
   label: string
   tone?: Tone
   dot?: boolean
   compact?: boolean
+  pulse?: boolean
 }) {
   return (
     <span
       className={`rounded-ctl inline-flex items-center gap-1.5 border font-mono font-semibold uppercase tracking-[0.12em] ${
-        compact ? 'px-2 py-0.5 text-[0.58rem]' : 'px-2.5 py-1 text-[0.64rem]'
+        compact ? 'px-2 py-[3px] text-[0.58rem]' : 'px-[11px] py-1.5 text-[0.64rem]'
       } ${TONE_CHIP[tone]}`}
     >
-      {dot && <span className={`h-1.5 w-1.5 rounded-full ${TONE_FILL[tone]}`} aria-hidden="true" />}
+      {dot && (
+        <span
+          className={`h-1.5 w-1.5 rounded-full ${TONE_FILL[tone]} ${
+            pulse ? 'motion-safe:animate-[pulse-soft_2.4s_ease-in-out_infinite]' : ''
+          }`}
+          aria-hidden="true"
+        />
+      )}
       {label}
     </span>
   )

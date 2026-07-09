@@ -16,6 +16,7 @@ import { createClient } from '@supabase/supabase-js'
 import type { AcRecommendation, AcOption } from '@/lib/aircon/types'
 import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
 import { QuoteChrome } from '../../_chrome/QuoteChrome'
+import { TradieJobBanner } from '../../_chrome/TradieJobBanner'
 import { tradeIcon } from '../../_chrome/icons'
 import {
   QuoteSheet, Letterhead, QuoteHero, StatGrid, TierCards, GoodToKnow, CredentialFooter,
@@ -122,6 +123,8 @@ export default async function AirconQuotePage(props: { params: Promise<{ token: 
         ctaHref: null,
       }}
     >
+      {/* Owner-only nav back to the dashboard (renders nothing for customers). */}
+      <TradieJobBanner trade="aircon" publicToken={token} editLabel="Open workspace" />
       <QuoteSheet label="Air-con recommendation">
         <Letterhead
           name={identity?.business_name ?? business}

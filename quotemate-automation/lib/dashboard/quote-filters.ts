@@ -46,21 +46,31 @@ export function quoteMatchesSearch(q: FilterableQuote, terms: string[]): boolean
   return terms.every((t) => haystack.includes(t))
 }
 
+/** Inclusive [from, to] calendar-date test on an ISO timestamp. Either
+ *  bound may be '' to leave that side open; both empty = no date filter
+ *  (always true). A null/empty timestamp is excluded once any bound is set.
+ *  Shared by the quote AND trade-job date filters (lib/dashboard/quote-queue). */
+export function dateInRange(
+  iso: string | null,
+  from: string,
+  to: string,
+): boolean {
+  if (!from && !to) return true
+  const day = (iso ?? '').slice(0, 10)
+  if (!day) return false
+  if (from && day < from) return false
+  if (to && day > to) return false
+  return true
+}
+
 /** Inclusive [from, to] date-range test against the quote's created_at,
- *  compared on the calendar date (YYYY-MM-DD). Either bound may be '' to
- *  leave that side open; both empty = no date filter (always true). A quote
- *  with no created_at is excluded once any bound is set. */
+ *  compared on the calendar date (YYYY-MM-DD). */
 export function quoteInDateRange(
   q: FilterableQuote,
   from: string,
   to: string,
 ): boolean {
-  if (!from && !to) return true
-  const day = (q.created_at ?? '').slice(0, 10)
-  if (!day) return false
-  if (from && day < from) return false
-  if (to && day > to) return false
-  return true
+  return dateInRange(q.created_at, from, to)
 }
 
 /** Match a quote's trade against a selected slug. 'all' matches every quote;

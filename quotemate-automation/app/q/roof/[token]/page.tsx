@@ -25,7 +25,7 @@
 
 import type { CSSProperties } from 'react'
 import { createClient } from '@supabase/supabase-js'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import type {
   MultiRoofQuote,
   RoofMaterial,
@@ -152,6 +152,25 @@ export default async function RoofingQuotePage({
 
   if (error || !data) notFound()
   const row = data as Row
+
+  // Promoted measurement (mig 168): its single source of truth is the quotes
+  // row (spec quote-sync-and-roofing-workflow-fix F1) — old SMS'd /q/roof
+  // links must land on the live, tradie-editable quote, not this frozen
+  // pre-promotion snapshot with stale prices. Exception: a measurement that
+  // already took its own site-visit payment stays — this page is that
+  // payment's receipt + booking surface. Both columns post-date 081, so
+  // they're read best-effort (like the mig-165 payment block below): a
+  // pre-migration DB just skips the redirect.
+  {
+    const { data: promo } = await supabase
+      .from('roofing_measurements')
+      .select('quote_share_token, paid_at')
+      .eq('public_token', token)
+      .maybeSingle()
+    if (promo?.quote_share_token && !promo.paid_at) {
+      redirect(`/q/${promo.quote_share_token}`)
+    }
+  }
 
   // Tradie identity for the letterhead (logo + Contact / Phone / Email),
   // matching the reference quote surface. Best-effort: degrades to null when

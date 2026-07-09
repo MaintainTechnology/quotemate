@@ -13,6 +13,7 @@ import { createClient } from '@supabase/supabase-js'
 import type { PricedPaintBom } from '@/lib/commercial-painting/types'
 import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
 import { QuoteChrome } from '../../_chrome/QuoteChrome'
+import { TradieJobBanner } from '../../_chrome/TradieJobBanner'
 import { tradeIcon } from '../../_chrome/icons'
 import {
   QuoteSheet, Letterhead, QuoteHero, StatGrid, SheetSection,
@@ -92,6 +93,8 @@ export default async function CommercialPaintQuotePage(props: {
           : { tierLabel: 'Tender', priceText: 'Pricing in progress', ctaLabel: 'Awaiting takeoff' }
       }
     >
+      {/* Owner-only nav back to the dashboard + the pricing workspace tab. */}
+      <TradieJobBanner trade="commercial-painting" publicToken={token} editLabel="Edit pricing" />
       <QuoteSheet label="Painting tender">
         <Letterhead
           name={business}

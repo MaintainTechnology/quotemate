@@ -94,6 +94,13 @@ export default async function PaintEstimateResultsPage({
   return (
     <main className="min-h-screen bg-ink-deep text-text-pri">
       <section className="relative z-10 mx-auto max-w-6xl px-6 pt-14 pb-2 sm:px-10">
+        {/* estimate_token holders are tradies by construction — static link. */}
+        <Link
+          href="/dashboard"
+          className="mb-4 inline-flex items-center gap-2 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-text-pri"
+        >
+          ← Dashboard
+        </Link>
         <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
           QuoteMax · Painting · Estimate
         </div>

@@ -72,6 +72,7 @@ import {
 } from '@/lib/solar/felt-provision'
 import type { SolarAiBriefRecord } from '@/lib/solar/ai-brief'
 import { QuoteChrome, type StickyBar } from '../../_chrome/QuoteChrome'
+import { TradieDashboardPill } from '../../_chrome/TradieDashboardPill'
 import { AcceptBlock } from '../../_chrome/AcceptBlock'
 import { resolveAcceptView } from '@/lib/quote/accept'
 import { tradeIcon } from '../../_chrome/icons'
@@ -332,13 +333,17 @@ export default async function SolarQuotePage({
   // paid_at column. Best-effort so a solar estimate without a twin quotes row
   // (or a pre-fix legacy row) simply reads not-paid rather than throwing.
   let solarPaidAt: string | null = null
+  // Twin quote id feeds the owner-gated "← Dashboard" pill (the solar page has
+  // no TradieEditor, so without it the signed-in tradie has no route back).
+  let twinQuoteId: string | null = null
   {
     const { data: q } = await supabase
       .from('quotes')
-      .select('paid_at')
+      .select('id, paid_at')
       .eq('share_token', token)
       .maybeSingle()
     solarPaidAt = (q?.paid_at as string | null) ?? null
+    twinQuoteId = (q?.id as string | null) ?? null
   }
   const solarPaid = !!solarPaidAt
 
@@ -358,6 +363,13 @@ export default async function SolarQuotePage({
 
   return (
     <QuoteChrome trade={{ label: 'Solar', icon: tradeIcon('solar') }} sticky={sticky}>
+      {/* Owner-only route back to the dashboard + the sync-safe edit surface
+          (SolarTab re-draft/confirm updates solar_estimates AND the twin
+          quotes row together — unlike the line-item editor, which would change
+          the charged deposit without changing this page's displayed prices). */}
+      {twinQuoteId && (
+        <TradieDashboardPill quoteId={twinQuoteId} editHref="/dashboard?tab=solar" />
+      )}
       {/* Reveal the heatmap + priced result without a manual reload once
           the estimate route's after() job finishes (renders nothing). */}
       {pendingAssets && <HeatmapAutoRefresh pending={pendingAssets} />}

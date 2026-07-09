@@ -19,13 +19,18 @@ const supabase = createClient(
 )
 
 // trade → { table, tradie-token column, tradie-page prefix }. Own-key lookup
-// only — never build a table name from raw input.
+// only — never build a table name from raw input. Trades without a tokenised
+// tradie page (commercial-painting, aircon) return a static dashboard
+// workspace href instead — their edit surface is a dashboard tab, so there is
+// no capability token to protect, only the owner check itself.
 const TRADE_LOOKUP: Record<
   string,
-  { table: string; tokenColumn: string; prefix: string }
+  { table: string; tokenColumn?: string; prefix?: string; staticHref?: string }
 > = {
   roofing: { table: 'roofing_measurements', tokenColumn: 'measure_token', prefix: '/m' },
   painting: { table: 'painting_measurements', tokenColumn: 'estimate_token', prefix: '/p' },
+  'commercial-painting': { table: 'paint_runs', staticHref: '/dashboard?tab=commercial-painting' },
+  aircon: { table: 'aircon_recommendations', staticHref: '/dashboard?tab=aircon' },
 }
 
 export async function GET(req: Request) {
@@ -46,7 +51,7 @@ export async function GET(req: Request) {
 
   const { data: row } = await supabase
     .from(lookup.table)
-    .select(`tenant_id, ${lookup.tokenColumn}`)
+    .select(lookup.tokenColumn ? `tenant_id, ${lookup.tokenColumn}` : 'tenant_id')
     .eq('public_token', token)
     .maybeSingle()
 
@@ -58,6 +63,9 @@ export async function GET(req: Request) {
     return Response.json({ owner: false, tradieHref: null })
   }
 
+  if (!lookup.tokenColumn) {
+    return Response.json({ owner: true, tradieHref: lookup.staticHref ?? null })
+  }
   const tradieToken = (rec[lookup.tokenColumn] ?? null) as string | null
   return Response.json({
     owner: true,

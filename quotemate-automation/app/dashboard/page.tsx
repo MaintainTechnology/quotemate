@@ -60,7 +60,18 @@ import {
   quoteMatchesTrade,
   tradeOptionsFromQuotes,
   quoteTradeLabel,
+  dateInRange,
 } from '@/lib/dashboard/quote-filters'
+import {
+  jobQueueKey,
+  jobTradeSlug,
+  jobMatchesFilter,
+  jobMatchesSearch,
+  queueTradeOptions,
+  compareQueueEntries,
+  type QueueJob,
+  type QueueEntry,
+} from '@/lib/dashboard/quote-queue'
 import {
   type Period,
   PERIODS,
@@ -125,7 +136,7 @@ import { FilesTab } from './_components/FilesTab'
 import { HistoricalQuotesTab } from './_components/HistoricalQuotesTab'
 import { CalendarTab } from './_components/CalendarTab'
 import { HistoricalHint } from './_components/HistoricalHint'
-import { SavedJobsSection, savedJobsMode } from './_components/SavedJobsSection'
+import { savedJobsMode } from './_components/saved-jobs-mode'
 import {
   mergeRecentActivity,
   jobRowView,
@@ -8086,12 +8097,15 @@ type QuoteBadgeTone = 'paid' | 'inspect' | 'draft' | 'sent' | 'accepted'
 // (draft / sent / inspection), with the single orange accent reserved for the
 // money event a tradie actually wants to spot — a paid/accepted quote. No
 // teal/amber here; the multi-hue treatment read as noise (see redesign brief).
+// Reference status palette (QuoteMax dashboard): money-in and sent states
+// read green, "awaiting your review" reads amber (the actionable one — its
+// dot pulses), inspection/site-visit reads quiet.
 const QUOTE_BADGE_TONE: Record<QuoteBadgeTone, Tone> = {
-  paid: 'accent',
-  accepted: 'accent',
-  inspect: 'default',
-  sent: 'dim',
-  draft: 'dim',
+  paid: 'success',
+  accepted: 'success',
+  inspect: 'dim',
+  sent: 'success',
+  draft: 'warn',
 }
 
 // The "Saved jobs" strip (roofing/solar/painting/commercial jobs living
@@ -8109,25 +8123,10 @@ const QUOTE_SORTS: { key: QuoteSort; label: string }[] = [
   { key: 'value_asc', label: 'Lowest value' },
 ]
 
-function compareQuotes(a: Quote, b: Quote, sort: QuoteSort): number {
-  if (sort === 'oldest') return (a.created_at ?? '').localeCompare(b.created_at ?? '')
-  if (sort === 'value_desc' || sort === 'value_asc') {
-    const av = toNum(a.total_inc_gst)
-    const bv = toNum(b.total_inc_gst)
-    // Unpriced quotes (inspection-routed) sink to the bottom for both
-    // value sorts rather than sorting as $0.
-    if (av === null && bv === null) return 0
-    if (av === null) return 1
-    if (bv === null) return -1
-    return sort === 'value_desc' ? bv - av : av - bv
-  }
-  // newest
-  return (b.created_at ?? '').localeCompare(a.created_at ?? '')
-}
-
-// The Quotes tab's old "Quotes | Saved jobs" sub-tab bar was removed: quotes
-// now live per-trade in each trade hub, and a trade's saved jobs merge into
-// that same hub tab (SavedJobsSection `only` mode) rather than a shared strip.
+// Sorting the merged queue (quotes + measure-tool jobs) lives in
+// lib/dashboard/quote-queue.ts (compareQueueEntries) so it unit-tests
+// without React. The old standalone "Saved jobs" section is gone: measure-
+// tool jobs are first-class rows in the queue itself.
 
 function QuotesTab({
   data,
@@ -8164,11 +8163,72 @@ function QuotesTab({
     ? data.quotes.filter((q) => (q.trade ?? '').toLowerCase() === tradeFilter)
     : data.quotes
 
-  // Saved measure-tool jobs: the cross-trade Workspace view shows the
-  // ALL-trades section; a matching trade hub scopes to its own trade; hubs
-  // with no saved-jobs table (electrical, plumbing, …) render nothing
-  // (specs dashboard-overview-quotes-sync T4 / quotes-tab-sync T2).
-  const savedJobs = savedJobsMode(tradeFilter)
+  // Measure-tool jobs (roofing / solar / painting / commercial paint /
+  // aircon) merge INTO the queue as first-class rows — one list, one set of
+  // counts, so work done in a trade tool can never look "lost" next to the
+  // pipeline quotes (pilot feedback: "they're not appearing here in the
+  // quote queue"). Mode: the cross-trade Workspace view takes every trade,
+  // a matching trade hub scopes to its own, and hubs with no measure-tool
+  // table (electrical, plumbing, …) skip the fetch entirely.
+  const jobsMode = savedJobsMode(tradeFilter)
+  const [jobs, setJobs] = useState<QueueJob[] | null>(null)
+  // A failed fetch must never silently read as "no saved jobs" — surface an
+  // explicit strip with a Retry instead (same contract as the Overview
+  // widgets).
+  const [jobsError, setJobsError] = useState(false)
+  const [jobsTick, setJobsTick] = useState(0)
+  const jobsFetchedRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!accessToken || jobsMode === null) return
+    let cancelled = false
+    jobsFetchedRef.current = Date.now()
+    void (async () => {
+      try {
+        // Mint a FRESH token per request — the Clerk session token captured
+        // at mount expires ~60s later, so reusing the prop 401s.
+        const token = (await getAuthToken()) ?? accessToken
+        const res = await fetch('/api/tenant/trade-jobs', {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const json = (await res.json()) as { jobs?: QueueJob[] }
+        if (cancelled) return
+        setJobs(Array.isArray(json.jobs) ? json.jobs : [])
+        setJobsError(false)
+      } catch {
+        if (!cancelled) setJobsError(true)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken, jobsMode, jobsTick])
+
+  // Refresh-on-return for the job rows: `key={tab}` remounts cover tab
+  // switches; this covers window focus / visibility on an already-mounted
+  // Quotes surface, throttled to the same 15s as /api/tenant/me.
+  useEffect(() => {
+    const onReturn = () => {
+      if (document.visibilityState !== 'visible') return
+      if (!shouldRefresh(jobsFetchedRef.current, Date.now())) return
+      setJobsTick((n) => n + 1)
+    }
+    window.addEventListener('focus', onReturn)
+    document.addEventListener('visibilitychange', onReturn)
+    return () => {
+      window.removeEventListener('focus', onReturn)
+      document.removeEventListener('visibilitychange', onReturn)
+    }
+  }, [])
+
+  // Queue-scoped jobs: every trade on the Workspace view, one trade in a hub.
+  const queueJobs =
+    jobsMode === null
+      ? []
+      : jobsMode === 'all'
+        ? (jobs ?? [])
+        : (jobs ?? []).filter((j) => j.trade === jobsMode)
 
   const FILTERS: { key: QuoteFilter; label: string }[] = [
     { key: 'all', label: 'All' },
@@ -8180,7 +8240,7 @@ function QuotesTab({
   // Trade chips only make sense on the cross-trade Workspace view — a hub is
   // already one trade. Derived from the quotes present so empty trades don't
   // show a dead chip.
-  const tradeOptions = tradeOptionsFromQuotes(all)
+  const tradeOptions = queueTradeOptions(tradeOptionsFromQuotes(all), queueJobs)
   const showTradeChips = !tradeFilter && tradeOptions.length > 1
   const searchTerms = parseSearchTerms(search)
   const filtersActive =
@@ -8198,18 +8258,41 @@ function QuotesTab({
     setDateTo('')
   }
 
-  const filtered = all
-    .filter((q) => quoteMatchesFilter(q, filter))
-    .filter((q) => quoteMatchesTrade(q, tradeSel))
-    .filter((q) => quoteInDateRange(q, dateFrom, dateTo))
-    .filter((q) => quoteMatchesSearch(q, searchTerms))
-    .sort((a, b) => compareQuotes(a, b, sort))
+  // ONE merged queue: pipeline quotes + measure-tool jobs, filtered by the
+  // same status / trade / date / search controls, sorted together (unpriced
+  // jobs sink on the value sorts exactly like inspection-routed quotes).
+  const filtered: QueueEntry<Quote>[] = [
+    ...all
+      .filter((q) => quoteMatchesFilter(q, filter))
+      .filter((q) => quoteMatchesTrade(q, tradeSel))
+      .filter((q) => quoteInDateRange(q, dateFrom, dateTo))
+      .filter((q) => quoteMatchesSearch(q, searchTerms))
+      .map((q) => ({
+        kind: 'quote' as const,
+        key: q.id,
+        at: q.created_at ?? null,
+        value: toNum(q.total_inc_gst),
+        quote: q,
+      })),
+    ...queueJobs
+      .filter((j) => jobMatchesFilter(j, filter))
+      .filter((j) => tradeSel === 'all' || jobTradeSlug(j) === tradeSel)
+      .filter((j) => dateInRange(j.createdAt, dateFrom, dateTo))
+      .filter((j) => jobMatchesSearch(j, searchTerms))
+      .map((j) => ({
+        kind: 'job' as const,
+        key: jobQueueKey(j),
+        at: j.createdAt,
+        value: null,
+        job: j,
+      })),
+  ].sort((a, b) => compareQueueEntries(a, b, sort))
   const total = filtered.length
   const sortLabel = QUOTE_SORTS.find((s) => s.key === sort)?.label ?? 'Newest first'
-  // The detail pane always shows a quote: the one the tradie picked, else the
+  // The detail pane always shows a row: the one the tradie picked, else the
   // first in the (filtered, sorted) queue — so it's never blank on load or
-  // after a filter change drops the previously-selected quote.
-  const selected = filtered.find((q) => q.id === selectedId) ?? filtered[0] ?? null
+  // after a filter change drops the previously-selected row.
+  const selected = filtered.find((e) => e.key === selectedId) ?? filtered[0] ?? null
 
   return (
     <div className="space-y-4">
@@ -8219,7 +8302,9 @@ function QuotesTab({
           The sort select on the right re-orders the filtered list. */}
       <div className="flex flex-wrap items-center gap-2">
         {FILTERS.map((f) => {
-          const count = all.filter((q) => quoteMatchesFilter(q, f.key)).length
+          const count =
+            all.filter((q) => quoteMatchesFilter(q, f.key)).length +
+            queueJobs.filter((j) => jobMatchesFilter(j, f.key)).length
           const active = filter === f.key
           return (
             <button
@@ -8268,8 +8353,9 @@ function QuotesTab({
             const active = tradeSel === t
             const count =
               t === 'all'
-                ? all.length
-                : all.filter((q) => (q.trade ?? '').toLowerCase() === t).length
+                ? all.length + queueJobs.length
+                : all.filter((q) => (q.trade ?? '').toLowerCase() === t).length +
+                  queueJobs.filter((j) => jobTradeSlug(j) === t).length
             return (
               <button
                 key={t}
@@ -8335,6 +8421,27 @@ function QuotesTab({
         )}
       </div>
 
+      {/* Measure-tool fetch failure — say so; silently hiding job rows is
+          exactly the "quotes disappear from the queue" bug this merge fixes. */}
+      {jobsError && jobs === null && jobsMode !== null && (
+        <div
+          role="alert"
+          className="rounded-ctl flex flex-wrap items-center justify-between gap-2 border border-danger/50 bg-danger/10 px-4 py-2.5 text-xs text-text-pri"
+        >
+          <span>
+            Couldn&rsquo;t load your measure-tool estimates — the queue may be
+            incomplete.
+          </span>
+          <button
+            type="button"
+            onClick={() => setJobsTick((n) => n + 1)}
+            className="rounded-ctl inline-flex items-center border border-ink-line px-3 py-1.5 font-mono text-[0.62rem] font-bold uppercase tracking-[0.14em] text-text-pri transition-colors cursor-pointer hover:border-accent hover:text-accent"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* ── Master–detail: quote queue (left) + selected quote (right).
           Mirrors the QuoteMax dashboard reference — a scrollable queue beside a
           scrollable detail pane. On < lg the two stack: the queue shows first,
@@ -8343,10 +8450,10 @@ function QuotesTab({
         <Card>
           <div className="space-y-3">
             <p className="text-sm text-text-dim">
-              {all.length === 0
+              {all.length + queueJobs.length === 0
                 ? tradeFilter
-                  ? `No ${quoteTradeLabel(tradeFilter)} quotes yet — they appear here once a customer's first quote is drafted.`
-                  : 'No quotes drafted yet. Customers texting your QuoteMax number appear here once their first quote is drafted.'
+                  ? `No ${quoteTradeLabel(tradeFilter)} quotes yet — pipeline quotes and measure-tool estimates land here as soon as they're drafted.`
+                  : 'No quotes yet. Customer quotes drafted from your QuoteMax number and estimates saved from the measure tools both land here.'
                 : 'No quotes match these filters.'}
             </p>
             {filtersActive && (
@@ -8361,34 +8468,47 @@ function QuotesTab({
           </div>
         </Card>
       ) : (
-        <div className="overflow-hidden rounded-card border border-ink-line bg-ink-card lg:grid lg:h-[calc(100dvh-18rem)] lg:min-h-[520px] lg:grid-cols-[minmax(340px,460px)_minmax(0,1fr)]">
+        <div className="overflow-hidden rounded-card edge-lit border border-ink-line bg-ink-deep lg:grid lg:h-[calc(100dvh-18rem)] lg:min-h-[520px] lg:grid-cols-[minmax(360px,470px)_minmax(0,1fr)]">
           {/* Queue */}
           <div
             className={`min-h-0 flex-col lg:flex lg:border-r lg:border-ink-line ${
               mobileDetailOpen ? 'hidden' : 'flex'
             }`}
           >
-            <div className="sticky top-0 z-[5] flex items-center justify-between gap-3 border-b border-ink-line bg-ink-deep px-4 py-3.5">
-              <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-sec">
+            <div className="sticky top-0 z-[5] flex items-center justify-between gap-3 border-b border-ink-line bg-ink-deep px-[18px] py-[15px]">
+              <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-text-sec">
                 Quote queue · {total}
               </span>
-              <span className="font-mono text-[0.62rem] uppercase tracking-[0.14em] text-text-dim">
+              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-dim">
                 {sortLabel}
               </span>
             </div>
             <div className="min-h-0 overflow-y-auto lg:flex-1">
-              {filtered.map((q) => (
-                <QuoteQueueRow
-                  key={q.id}
-                  q={q}
-                  isMultiTrade={isMultiTrade}
-                  selected={selected?.id === q.id}
-                  onSelect={() => {
-                    setSelectedId(q.id)
-                    setMobileDetailOpen(true)
-                  }}
-                />
-              ))}
+              {filtered.map((e) =>
+                e.kind === 'quote' ? (
+                  <QuoteQueueRow
+                    key={e.key}
+                    q={e.quote}
+                    isMultiTrade={isMultiTrade}
+                    selected={selected?.key === e.key}
+                    onSelect={() => {
+                      setSelectedId(e.key)
+                      setMobileDetailOpen(true)
+                    }}
+                  />
+                ) : (
+                  <JobQueueRow
+                    key={e.key}
+                    job={e.job}
+                    isMultiTrade={isMultiTrade}
+                    selected={selected?.key === e.key}
+                    onSelect={() => {
+                      setSelectedId(e.key)
+                      setMobileDetailOpen(true)
+                    }}
+                  />
+                ),
+              )}
             </div>
           </div>
 
@@ -8405,28 +8525,35 @@ function QuotesTab({
             >
               ← Back to queue
             </button>
-            {selected && (
-              <QuoteDetail
-                key={selected.id}
-                q={selected}
-                isMultiTrade={isMultiTrade}
-                accessToken={accessToken}
-                onDeleted={onQuoteDeleted}
-              />
-            )}
+            {selected &&
+              (selected.kind === 'quote' ? (
+                <QuoteDetail
+                  key={selected.key}
+                  q={selected.quote}
+                  isMultiTrade={isMultiTrade}
+                  accessToken={accessToken}
+                  onDeleted={onQuoteDeleted}
+                />
+              ) : (
+                <JobQueueDetail
+                  key={selected.key}
+                  job={selected.job}
+                  accessToken={accessToken}
+                  onDeleted={(j) => {
+                    setJobs((prev) =>
+                      (prev ?? []).filter(
+                        (x) => !(x.trade === j.trade && x.id === j.id),
+                      ),
+                    )
+                    setSelectedId(null)
+                    setMobileDetailOpen(false)
+                  }}
+                />
+              ))}
           </div>
         </div>
       )}
 
-      {/* Measure-tool estimates below the quotes: all trades on the Workspace
-          view, this trade's own in a saved-jobs hub, nothing for hubs without
-          a saved-jobs table. */}
-      {savedJobs !== null && (
-        <SavedJobsSection
-          accessToken={accessToken}
-          only={savedJobs === 'all' ? undefined : savedJobs}
-        />
-      )}
     </div>
   )
 }
@@ -8622,7 +8749,6 @@ function QuoteQueueRow({
 }) {
   const badge = quoteBadges(q)[0]
   const tone: Tone = badge ? QUOTE_BADGE_TONE[badge.tone] : 'default'
-  const barBg = tone === 'accent' ? 'bg-accent' : tone === 'dim' ? 'bg-ink-line' : 'bg-text-dim'
   const value = toNum(q.total_inc_gst)
   const customerLabel = q.customer_full_name || q.customer_first_name || '—'
   const trade = q.trade
@@ -8638,17 +8764,22 @@ function QuoteQueueRow({
       type="button"
       onClick={onSelect}
       aria-pressed={selected}
-      className={`relative flex w-full items-start justify-between gap-3 border-b border-ink-line px-4 py-3.5 text-left transition-colors cursor-pointer ${
-        selected ? 'bg-accent/[0.06]' : 'hover:bg-ink-deep/40'
+      className={`relative flex w-full items-center justify-between gap-3 border-b border-ink-line px-[18px] py-3.5 text-left transition-colors cursor-pointer ${
+        selected ? 'bg-ink' : 'hover:bg-ink/55'
       }`}
     >
-      <span aria-hidden="true" className={`absolute inset-y-0 left-0 w-[2px] ${barBg}`} />
+      {/* Reference: the 2px left bar marks the SELECTED row; triage colour
+          lives in the status pill alone. */}
+      <span
+        aria-hidden="true"
+        className={`absolute inset-y-0 left-0 w-[2px] ${selected ? 'bg-accent' : 'bg-transparent'}`}
+      />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate text-[0.95rem] font-bold text-text-pri">{customerLabel}</span>
+          <span className="truncate text-[14.5px] font-bold text-text-pri">{customerLabel}</span>
           {q.channel && <ChannelBadge channel={q.channel} />}
         </div>
-        <div className="mt-1 truncate text-[0.82rem] text-text-sec">
+        <div className="mt-1 truncate text-[13px] text-text-sec">
           {formatJobType(q.job_type)}
         </div>
         {meta && (
@@ -8657,13 +8788,234 @@ function QuoteQueueRow({
           </div>
         )}
       </div>
-      <div className="flex shrink-0 flex-col items-end gap-2">
-        <span className="font-mono text-[0.95rem] font-bold tabular-nums text-text-pri">
+      <div className="flex shrink-0 flex-col items-end gap-[9px]">
+        <span
+          className={`font-mono text-[15px] font-bold tabular-nums ${
+            value !== null ? 'text-text-pri' : 'text-text-dim'
+          }`}
+        >
           {value !== null ? `$${formatMoney(value)}` : '—'}
         </span>
-        {badge && <StatusPill label={badge.label} tone={tone} compact dot />}
+        {badge && (
+          <StatusPill label={badge.label} tone={tone} compact dot pulse={tone === 'warn'} />
+        )}
       </div>
     </button>
+  )
+}
+
+// Status badge for a measure-tool job row — same restrained vocabulary as
+// quoteBadges so both row kinds read as one queue. A draft job is work
+// awaiting the tradie, exactly like an unsent pipeline quote.
+function jobBadge(status: QueueJob['status']): { label: string; tone: QuoteBadgeTone } {
+  if (status === 'confirmed') return { label: 'Confirmed', tone: 'accepted' }
+  if (status === 'inspection') return { label: 'Inspection required', tone: 'inspect' }
+  return { label: 'Awaiting your review', tone: 'draft' }
+}
+
+/**
+ * One measure-tool job row in the merged quote queue. Mirrors QuoteQueueRow's
+ * layout: the address stands in for the customer, the headline figure
+ * (area / $ / recommendation) for the job line, and the meta row names the
+ * measure tool so a tradie can tell the row kinds apart at a glance.
+ */
+function JobQueueRow({
+  job,
+  isMultiTrade,
+  selected,
+  onSelect,
+}: {
+  job: QueueJob
+  isMultiTrade: boolean
+  selected: boolean
+  onSelect: () => void
+}) {
+  const badge = jobBadge(job.status)
+  const tone: Tone = QUOTE_BADGE_TONE[badge.tone]
+  const tradeLabel = quoteTradeLabel(jobTradeSlug(job))
+  const meta = [
+    relTime(job.createdAt),
+    isMultiTrade ? tradeLabel : null,
+    'Measure tool',
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={`relative flex w-full items-center justify-between gap-3 border-b border-ink-line px-[18px] py-3.5 text-left transition-colors cursor-pointer ${
+        selected ? 'bg-ink' : 'hover:bg-ink/55'
+      }`}
+    >
+      <span
+        aria-hidden="true"
+        className={`absolute inset-y-0 left-0 w-[2px] ${selected ? 'bg-accent' : 'bg-transparent'}`}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-[14.5px] font-bold text-text-pri">
+            {job.address ?? 'No address'}
+          </span>
+        </div>
+        <div className="mt-1 truncate text-[13px] text-text-sec">
+          {job.headline ?? `${tradeLabel} estimate`}
+        </div>
+        {meta && (
+          <div className="mt-1.5 font-mono text-[0.6rem] uppercase tracking-[0.1em] text-text-dim">
+            {meta}
+          </div>
+        )}
+      </div>
+      <div className="flex shrink-0 flex-col items-end gap-[9px]">
+        <StatusPill label={badge.label} tone={tone} compact dot pulse={tone === 'warn'} />
+      </div>
+    </button>
+  )
+}
+
+/**
+ * Right-pane detail for a measure-tool job row — the job's key facts plus the
+ * actions the old standalone saved-jobs card offered: open the tradie
+ * review/edit page, open the customer page, delete (two-step confirm against
+ * the tenant-scoped DELETE /api/tenant/trade-jobs; jobs linked to a paid
+ * quote are refused server-side with a 409).
+ */
+function JobQueueDetail({
+  job,
+  accessToken,
+  onDeleted,
+}: {
+  job: QueueJob
+  accessToken: string | null
+  onDeleted: (job: QueueJob) => void
+}) {
+  const [confirming, setConfirming] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const badge = jobBadge(job.status)
+  const tradeLabel = quoteTradeLabel(jobTradeSlug(job))
+  const actionBtn =
+    'rounded-ctl inline-flex min-h-[44px] items-center gap-1.5 border border-ink-line px-3.5 py-2 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent'
+
+  async function doDelete() {
+    if (!accessToken) return
+    setBusy(true)
+    setErr(null)
+    try {
+      // Fresh dual-auth token — the prop was minted at mount and a Clerk
+      // session token expires ~60s later.
+      const token = (await getAuthToken()) ?? accessToken
+      const res = await fetch('/api/tenant/trade-jobs', {
+        method: 'DELETE',
+        headers: {
+          'content-type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ trade: job.trade, id: job.id }),
+      })
+      // 404 = already gone (deleted in another tab) — treat as success so a
+      // stale row can't become permanently undeletable.
+      if (!res.ok && res.status !== 404) {
+        const json = (await res.json().catch(() => ({}))) as { error?: string }
+        setErr(
+          res.status === 409 || json.error === 'job_already_paid'
+            ? "That job took a deposit — it can't be deleted."
+            : 'Could not delete that job — try again shortly.',
+        )
+        return
+      }
+      onDeleted(job)
+    } catch {
+      setErr('Could not delete that job — try again shortly.')
+    } finally {
+      setBusy(false)
+      setConfirming(false)
+    }
+  }
+
+  return (
+    <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+      <div className="space-y-2">
+        <div className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+          {tradeLabel} · Measure-tool estimate
+        </div>
+        <h3 className="text-lg font-bold text-text-pri">{job.address ?? 'No address'}</h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusPill label={badge.label} tone={QUOTE_BADGE_TONE[badge.tone]} compact dot />
+          {job.createdAt && (
+            <span className="font-mono text-[0.62rem] uppercase tracking-[0.12em] text-text-dim">
+              {formatDate(job.createdAt)}
+            </span>
+          )}
+        </div>
+        {job.headline && <p className="text-sm text-text-sec">{job.headline}</p>}
+      </div>
+
+      <p className="text-xs leading-relaxed text-text-dim">
+        Saved from the {tradeLabel.toLowerCase()} measure tool — it sits in
+        this queue alongside your pipeline quotes.
+      </p>
+
+      {err && (
+        <div
+          role="alert"
+          className="rounded-ctl border border-danger/50 bg-danger/10 px-3 py-2 text-xs text-text-pri"
+        >
+          {err}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        {job.tradieHref && (
+          <Link href={job.tradieHref} className={actionBtn}>
+            Review &amp; edit →
+          </Link>
+        )}
+        {job.href && (
+          <Link href={job.href} target="_blank" className={actionBtn}>
+            Customer page →
+          </Link>
+        )}
+        {confirming ? (
+          <>
+            <span className="font-mono text-[0.62rem] uppercase tracking-[0.12em] text-danger">
+              Delete this job?
+            </span>
+            <button
+              type="button"
+              onClick={() => void doDelete()}
+              disabled={busy}
+              className="rounded-ctl inline-flex min-h-[44px] items-center gap-1.5 border border-danger/60 bg-danger/10 px-3.5 py-2 text-[0.65rem] font-semibold uppercase tracking-wider text-danger transition-colors hover:bg-danger/20 disabled:opacity-50"
+            >
+              {busy ? <Loader2 size={13} className="animate-spin" /> : null}
+              {busy ? 'Deleting…' : 'Delete'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirming(false)}
+              disabled={busy}
+              className={actionBtn}
+            >
+              Cancel
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setConfirming(true)
+              setErr(null)
+            }}
+            className="rounded-ctl inline-flex min-h-[44px] items-center gap-1.5 border border-ink-line px-3.5 py-2 text-[0.65rem] font-semibold uppercase tracking-wider text-text-dim transition-colors hover:border-danger hover:text-danger"
+          >
+            <Trash2 size={14} />
+            Delete
+          </button>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -8786,7 +9138,12 @@ function QuoteDetail({
             )}
           </div>
           {primaryBadge && (
-            <StatusPill label={primaryBadge.label} tone={primaryTone} dot />
+            <StatusPill
+              label={primaryBadge.label}
+              tone={primaryTone}
+              dot
+              pulse={primaryTone === 'warn'}
+            />
           )}
         </div>
 
@@ -8798,7 +9155,7 @@ function QuoteDetail({
                 ? `${tradeFormat.label} options`
                 : 'Options drafted from your pricing book'}
             </div>
-            <div className="mt-3.5 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(148px,1fr))]">
+            <div className="mt-3.5 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(160px,1fr))]">
               {pricedTiers.map((t) => {
                 const isSel = t === selectedTier
                 const isActive = t === activeTier
@@ -8808,25 +9165,23 @@ function QuoteDetail({
                     type="button"
                     onClick={() => setActiveTier(t)}
                     aria-pressed={isActive}
-                    className={`relative border p-4 text-left transition-colors cursor-pointer ${
-                      isActive
-                        ? 'border-accent bg-accent/[0.06]'
-                        : 'border-ink-line bg-ink-card hover:border-text-dim'
+                    className={`relative rounded-card edge-lit overflow-hidden border bg-ink-card p-4 pb-[18px] text-left transition-colors cursor-pointer ${
+                      isActive ? 'border-accent' : 'border-ink-line hover:border-accent/55'
                     }`}
                   >
                     {isSel && (
-                      <span className="absolute left-0 top-[-1px] bg-accent px-2 py-1 font-mono text-[0.55rem] font-bold uppercase tracking-[0.14em] text-accent-ink">
+                      <span className="absolute left-0 top-[-1px] bg-accent px-[9px] py-1 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-accent-ink">
                         Recommended
                       </span>
                     )}
-                    <div className={`${isSel ? 'mt-3' : ''} font-mono text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-accent`}>
+                    <div className={`${isSel ? 'mt-3.5' : ''} font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-accent`}>
                       {tierLabels[t]}
                     </div>
-                    <div className="mt-2 font-mono text-[1.3rem] font-bold tabular-nums text-text-pri">
+                    <div className="mt-[9px] font-mono text-[22px] font-bold tabular-nums text-text-pri">
                       ${formatMoney(tierTotals[t] as number)}
                     </div>
                     {q[t]?.timeframe && (
-                      <div className="mt-1 text-xs text-text-dim">{q[t]?.timeframe}</div>
+                      <div className="mt-[3px] text-[12px] text-text-dim">{q[t]?.timeframe}</div>
                     )}
                   </button>
                 )
@@ -8843,23 +9198,23 @@ function QuoteDetail({
               {activeLineItems.map((li, i) => (
                 <div
                   key={i}
-                  className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-ink-line px-4 py-2.5 last:border-b-0"
+                  className="grid grid-cols-[1fr_auto_auto] items-center gap-3.5 border-b border-ink-line px-[15px] py-[11px] last:border-b-0"
                 >
-                  <span className="text-[0.82rem] text-text-sec">{li.description}</span>
-                  <span className="font-mono text-[0.7rem] text-text-dim">
+                  <span className="text-[13px] text-text-sec">{li.description}</span>
+                  <span className="font-mono text-[11px] text-text-dim">
                     {li.quantity} × ${formatMoney(li.unit_price_ex_gst)}
                     {li.unit ? ` /${li.unit}` : ''}
                   </span>
-                  <span className="min-w-[64px] text-right font-mono text-[0.82rem] tabular-nums text-text-pri">
+                  <span className="min-w-[64px] text-right font-mono text-[13px] tabular-nums text-text-pri">
                     ${formatMoney(+(li.quantity * li.unit_price_ex_gst * gstRatio).toFixed(2))}
                   </span>
                 </div>
               ))}
-              <div className="flex items-center justify-between bg-ink-deep px-4 py-3">
-                <span className="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
+              <div className="flex items-center justify-between bg-ink px-[15px] py-3">
+                <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-text-dim">
                   Total inc GST
                 </span>
-                <span className="font-mono text-[1.05rem] font-bold tabular-nums text-accent">
+                <span className="font-mono text-[17px] font-bold tabular-nums text-accent">
                   ${formatMoney(tierTotals[activeTier] as number)}
                 </span>
               </div>
@@ -8963,7 +9318,7 @@ function QuoteDetail({
             <Link
               href={url}
               target="_blank"
-              className="rounded-ctl inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 bg-accent px-4 py-3 text-xs font-semibold uppercase tracking-wider text-accent-ink transition-colors hover:bg-accent-press sm:flex-none"
+              className="rounded-ctl inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 whitespace-nowrap bg-accent px-5 py-[13px] text-[13px] font-semibold uppercase tracking-[0.06em] text-accent-ink transition-colors hover:bg-accent-press"
             >
               View customer page →
             </Link>
@@ -8977,7 +9332,7 @@ function QuoteDetail({
           {url && !isInspection && q.share_token && (
             <Link
               href={`/dashboard/quote/${q.share_token}`}
-              className="rounded-ctl inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+              className="rounded-ctl inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-[18px] py-[13px] text-[13px] font-semibold uppercase tracking-[0.06em] text-text-pri transition-colors hover:border-accent hover:text-accent"
             >
               View PDF · Edit
             </Link>
@@ -8988,7 +9343,7 @@ function QuoteDetail({
               href={`/api/q/${q.share_token}/pdf`}
               target="_blank"
               rel="noreferrer"
-              className="rounded-ctl inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+              className="rounded-ctl inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-[18px] py-[13px] text-[13px] font-semibold uppercase tracking-[0.06em] text-text-pri transition-colors hover:border-accent hover:text-accent"
             >
               Download PDF ↓
             </a>
