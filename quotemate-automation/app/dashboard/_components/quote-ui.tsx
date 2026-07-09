@@ -32,14 +32,21 @@ const TONE_TEXT: Record<Tone, string> = {
   dim: 'text-text-dim',
   default: 'text-text-pri',
 }
+// One calm, neutral container for EVERY status — soft surface fill + hairline
+// border + neutral text, identical across tones. Colour survives only in the
+// dot (TONE_FILL), so a column of cards reads as one quiet instrument panel
+// instead of a rainbow of outline pills (the "AI slap" the multi-hue borders
+// gave off). Same move the ChannelBadge already made. The one actionable
+// state (warn → "Awaiting your review") earns heavier text + a pulsing dot,
+// not a louder colour.
 const TONE_CHIP: Record<Tone, string> = {
-  good: 'border-teal-glow/60 text-teal-glow',
-  success: 'border-success-bright/60 text-success-bright',
-  warn: 'border-warning-bright/60 text-warning-bright',
-  danger: 'border-danger-bright/60 text-danger-bright',
-  accent: 'border-accent/70 bg-accent/10 text-accent',
-  dim: 'border-ink-line text-text-dim',
-  default: 'border-ink-line text-text-sec',
+  good: 'border-ink-line bg-ink-deep text-text-sec',
+  success: 'border-ink-line bg-ink-deep text-text-sec',
+  warn: 'border-ink-line bg-ink-deep text-text-pri',
+  danger: 'border-ink-line bg-ink-deep text-text-pri',
+  accent: 'border-ink-line bg-ink-deep text-text-pri',
+  dim: 'border-ink-line bg-ink-deep text-text-dim',
+  default: 'border-ink-line bg-ink-deep text-text-sec',
 }
 const TONE_FILL: Record<Tone, string> = {
   good: 'bg-teal-glow',
@@ -61,10 +68,11 @@ export const TONE_LEFT_RAIL: Record<Tone, string> = {
   default: 'border-l-ink-line',
 }
 
-/** Bordered mono status pill. `dot` adds a tone-coloured indicator so the
- *  signal survives even at the most compact size (e.g. mobile rows).
- *  `pulse` breathes the dot — reserved for the one status that needs the
- *  tradie's action right now (reference: "Awaiting you"). */
+/** Neutral, fully-rounded status chip. The container is the same calm pill for
+ *  every status; the tone-coloured `dot` is the only hue, so the signal still
+ *  survives at the most compact size (e.g. mobile rows) without the pill itself
+ *  shouting. `pulse` breathes the dot — reserved for the one status that needs
+ *  the tradie's action right now ("Awaiting your review"). */
 export function StatusPill({
   label,
   tone = 'default',
@@ -80,8 +88,8 @@ export function StatusPill({
 }) {
   return (
     <span
-      className={`rounded-ctl inline-flex items-center gap-1.5 border font-mono font-semibold uppercase tracking-[0.12em] ${
-        compact ? 'px-2 py-[3px] text-[0.58rem]' : 'px-[11px] py-1.5 text-[0.64rem]'
+      className={`inline-flex items-center gap-1.5 rounded-full border font-mono font-semibold uppercase tracking-[0.12em] ${
+        compact ? 'px-2.5 py-[3px] text-[0.58rem]' : 'px-3 py-1.5 text-[0.64rem]'
       } ${TONE_CHIP[tone]}`}
     >
       {dot && (

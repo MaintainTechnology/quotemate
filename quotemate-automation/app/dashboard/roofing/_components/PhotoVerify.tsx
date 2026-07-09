@@ -22,6 +22,7 @@ import { getAuthToken } from '@/lib/auth/client-token'
 import { useCallback, useRef, useState } from 'react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 import type { RoofMaterial } from '@/lib/roofing/types'
+import { StatusPill } from '../../_components/quote-ui'
 
 export type VisionVerdict = {
   match: boolean | null
@@ -256,26 +257,23 @@ function VerdictPanel({
     )
   }
   if (stage === 'done' && verdict) {
-    const matchTone: 'good' | 'warn' | 'idle' =
-      verdict.match === true ? 'good' : verdict.match === false ? 'warn' : 'idle'
+    const tone = verdict.match === true ? 'success' : verdict.match === false ? 'warn' : 'dim'
     return (
       <div className="space-y-4">
         <div>
-          <div
-            className={`font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] ${
-              matchTone === 'good' ? 'text-teal-glow' :
-              matchTone === 'warn' ? 'text-warning' :
-              'text-text-dim'
-            }`}
-          >
-            {!hadReference
-              ? 'Single-image classification'
-              : verdict.match === true
-                ? '✓ Photo matches Google satellite view'
-                : verdict.match === false
-                  ? '✗ Photo does NOT match the address'
-                  : '? Inconclusive — confirm manually'}
-          </div>
+          <StatusPill
+            label={
+              !hadReference
+                ? 'Single-image classification'
+                : verdict.match === true
+                  ? '✓ Photo matches Google satellite view'
+                  : verdict.match === false
+                    ? '✗ Photo does NOT match the address'
+                    : '? Inconclusive — confirm manually'
+            }
+            tone={tone}
+            dot
+          />
           <p className="mt-1 text-base text-text-sec">{verdict.reason}</p>
         </div>
         <div>

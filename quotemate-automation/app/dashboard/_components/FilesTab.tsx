@@ -22,6 +22,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { FileText, ReceiptText, Download, Eye, Search, Loader2, X, MessageSquare } from 'lucide-react'
 import { CommentsThread } from '../../_components/CommentsThread'
+import { StatusPill, type Tone } from './quote-ui'
 import { PaginationControls, usePagination } from './Pagination'
 import { getAuthToken } from '@/lib/auth/client-token'
 
@@ -60,14 +61,14 @@ function fmtBytes(b: number | null): string {
 }
 
 function StatePill({ state }: { state: string }) {
-  const tone =
+  const tone: Tone =
     state === 'active'
-      ? 'border-success/50 text-success'
+      ? 'success'
       : state === 'pending'
-        ? 'border-accent/50 text-accent'
+        ? 'accent'
         : state === 'failed'
-          ? 'border-danger/50 text-danger'
-          : 'border-ink-line text-text-dim'
+          ? 'danger'
+          : 'dim'
   const label =
     state === 'active'
       ? 'Indexed'
@@ -78,13 +79,7 @@ function StatePill({ state }: { state: string }) {
           : state === 'skipped'
             ? 'Skipped'
             : state
-  return (
-    <span
-      className={`border px-2 py-0.5 font-mono text-[0.55rem] font-semibold uppercase tracking-[0.12em] ${tone}`}
-    >
-      {label}
-    </span>
-  )
+  return <StatusPill label={label} tone={tone} dot compact />
 }
 
 export function FilesTab({ accessToken }: { accessToken: string | null }) {

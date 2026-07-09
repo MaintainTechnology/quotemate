@@ -16,6 +16,7 @@ import {
   useRef,
   useState,
   type ComponentType,
+  type CSSProperties,
   type FormEvent,
   type ReactNode,
 } from 'react'
@@ -64,6 +65,7 @@ import {
 } from '@/lib/dashboard/quote-filters'
 import {
   jobQueueKey,
+  jobTradieCtaLabel,
   jobTradeSlug,
   jobMatchesFilter,
   jobMatchesSearch,
@@ -146,6 +148,13 @@ import {
   type TradeJobSummary,
 } from '@/lib/dashboard/recent-activity'
 import { isQuotesSurface } from '@/lib/dashboard/quotes-refresh'
+import {
+  clearTabCache,
+  isFresh,
+  readTabCache,
+  writeTabCache,
+} from '@/lib/dashboard/tab-cache'
+import { BootBanner } from './_components/BootBanner'
 import CommercialPaintingTab from './_components/commercial-painting/CommercialPaintingTab'
 import { PaginationControls, usePagination } from './_components/Pagination'
 import { StatusPill, type Tone } from './_components/quote-ui'
@@ -896,6 +905,9 @@ export default function DashboardPage() {
     } catch {
       /* ignore — Supabase sign-out already ran */
     }
+    // Cached tab data is tenant-scoped — never let it leak into the next
+    // account that signs in on this device (specs/dashboard-performance.md R4).
+    clearTabCache()
     router.replace('/sign-in')
   }
 
@@ -916,9 +928,14 @@ export default function DashboardPage() {
   }
 
   if (!data) {
+    // BootBanner overlays the skeleton (specs/dashboard-performance.md R2):
+    // the same banner app/dashboard/loading.tsx paints during the chunk
+    // download stays up through hydration → Clerk → /api/tenant/me, so the
+    // whole boot reads as one continuous loading screen with no flash.
     return (
       <Shell businessName={null} onSignOut={signOut} wide>
         <DashboardSkeleton />
+        <BootBanner />
       </Shell>
     )
   }
@@ -975,15 +992,17 @@ export default function DashboardPage() {
               quoteCount={data.quotes.length}
               trades={tenantTradeList(data.tenant)}
             />
-            {/* `key={tab}` forces a tear-down + remount when the user
-                switches tabs, so the inner fade-in keyframe re-fires. */}
-            <div
-              key={tab}
-              className="mt-4 lg:mt-0 motion-safe:animate-[fade-up_300ms_cubic-bezier(0.22,1,0.36,1)_both]"
-            >
+            {/* No key here (specs/dashboard-performance.md R3): keying by
+                tab forced a tear-down + remount of the whole content wrapper
+                on every switch just to replay the fade. Tab components still
+                swap via the conditional renders below; their data survives
+                revisits in lib/dashboard/tab-cache. */}
+            <div className="mt-4 lg:mt-0 motion-safe:animate-[fade-up_300ms_cubic-bezier(0.22,1,0.36,1)_both]">
             {/* Calendar renders its own image-spec header (with Sync / New
-                booking actions), so the generic TabHeader is suppressed for it. */}
-            {tab !== 'overview' && tab !== 'calendar' && !isHubTab(tab) && <TabHeader tab={tab} />}
+                booking actions), so the generic TabHeader is suppressed for it.
+                Chats is a full-bleed two-pane workspace with its own rail
+                header (specs/chats-tab-redesign.md) — no TabHeader either. */}
+            {tab !== 'overview' && tab !== 'calendar' && tab !== 'chats' && !isHubTab(tab) && <TabHeader tab={tab} />}
             {tab === 'overview' && (
               <OverviewTab
                 data={data}
@@ -1060,14 +1079,21 @@ export default function DashboardPage() {
               />
             )}
             {tab === 'chats' && (
-              <ChatsTab
-                accessToken={accessToken}
-                isMultiTrade={
-                  Array.isArray(data.tenant.trades) && data.tenant.trades.length > 1
-                }
-                filter={chatFilter}
-                onFilterChange={setChatFilter}
-              />
+              /* Escape the content wrapper's gutters + bottom padding so the
+                 two-pane conversations workspace runs full-bleed on the
+                 canvas (no card containers — spec R1). Top padding is only
+                 cancelled at lg where the chrome above is just the topnav. */
+              <div className="-mx-4 -mb-20 sm:-mx-6 lg:-mx-8 lg:-mt-6">
+                <ChatsTab
+                  accessToken={accessToken}
+                  isMultiTrade={
+                    Array.isArray(data.tenant.trades) && data.tenant.trades.length > 1
+                  }
+                  filter={chatFilter}
+                  onFilterChange={setChatFilter}
+                  onGoToQuotes={() => setTab('quotes')}
+                />
+              </div>
             )}
             {tab === 'roofing' && <RoofingHubTab accessToken={accessToken} />}
             {tab === 'signage' && <SignageHubTab accessToken={accessToken} />}
@@ -2470,16 +2496,16 @@ function TabHeader({ tab }: { tab: Exclude<Tab, 'overview' | HubTab> }) {
  *  pill reads identically on both themes; the review state pulses. */
 function overviewQuotePill(q: Quote): {
   label: string
-  color: string
+  tone: Tone
   pulse: boolean
 } {
   if (q.deposit_paid || (q.status ?? '').toLowerCase() === 'accepted')
-    return { label: 'Accepted', color: 'var(--success-bright)', pulse: false }
+    return { label: 'Accepted', tone: 'success', pulse: false }
   const s = (q.status ?? 'draft').toLowerCase()
-  if (s === 'sent') return { label: 'Sent', color: 'var(--text-sec)', pulse: false }
+  if (s === 'sent') return { label: 'Sent', tone: 'dim', pulse: false }
   if (q.needs_inspection || q.inspection_required)
-    return { label: 'Site visit', color: 'var(--text-dim)', pulse: false }
-  return { label: 'Awaiting you', color: 'var(--warning-bright)', pulse: true }
+    return { label: 'Site visit', tone: 'dim', pulse: false }
+  return { label: 'Awaiting you', tone: 'warn', pulse: true }
 }
 
 // The Overview page is split into two top-level views: the money-first
@@ -2936,23 +2962,14 @@ function OverviewTab({
                       >
                         {v.value ?? '—'}
                       </span>
-                      <span
-                        className="inline-flex items-center gap-1.5 justify-self-end px-2 py-[3px] font-mono text-[0.6875rem] font-bold uppercase tracking-[0.1em]"
-                        style={{
-                          border: `1px solid color-mix(in srgb, ${v.pill.color} 45%, transparent)`,
-                          color: v.pill.color,
-                        }}
-                      >
-                        <span
-                          aria-hidden="true"
-                          className={`h-[5px] w-[5px] rounded-full ${
-                            v.pill.pulse
-                              ? 'motion-safe:animate-[pulse-soft_2.4s_ease-in-out_infinite]'
-                              : ''
-                          }`}
-                          style={{ background: v.pill.color }}
+                      <span className="justify-self-end">
+                        <StatusPill
+                          label={v.pill.label}
+                          tone={v.pill.tone}
+                          dot
+                          compact
+                          pulse={v.pill.pulse}
                         />
-                        {v.pill.label}
                       </span>
                     </>
                   )
@@ -3013,23 +3030,8 @@ function OverviewTab({
                     >
                       {val}
                     </span>
-                    <span
-                      className="inline-flex items-center gap-1.5 justify-self-end px-2 py-[3px] font-mono text-[0.6875rem] font-bold uppercase tracking-[0.1em]"
-                      style={{
-                        border: `1px solid color-mix(in srgb, ${pill.color} 45%, transparent)`,
-                        color: pill.color,
-                      }}
-                    >
-                      <span
-                        aria-hidden="true"
-                        className={`h-[5px] w-[5px] rounded-full ${
-                          pill.pulse
-                            ? 'motion-safe:animate-[pulse-soft_2.4s_ease-in-out_infinite]'
-                            : ''
-                        }`}
-                        style={{ background: pill.color }}
-                      />
-                      {pill.label}
+                    <span className="justify-self-end">
+                      <StatusPill label={pill.label} tone={pill.tone} dot compact pulse={pill.pulse} />
                     </span>
                   </button>
                 )
@@ -3150,28 +3152,8 @@ function OverviewTab({
                 </div>
                 <div className="mt-3.5 flex gap-2">
                   {channelChips.map((c) => (
-                    <span
-                      key={c.label}
-                      className="inline-flex flex-1 items-center justify-center gap-1.5 py-1.5 font-mono text-[0.6875rem] font-bold uppercase tracking-[0.1em]"
-                      style={{
-                        border: `1px solid color-mix(in srgb, ${
-                          c.live ? 'var(--success-bright)' : 'var(--warning-bright)'
-                        } 40%, transparent)`,
-                        color: c.live
-                          ? 'var(--success-bright)'
-                          : 'var(--warning-bright)',
-                      }}
-                    >
-                      <span
-                        aria-hidden="true"
-                        className="h-[5px] w-[5px] rounded-full"
-                        style={{
-                          background: c.live
-                            ? 'var(--success-bright)'
-                            : 'var(--warning-bright)',
-                        }}
-                      />
-                      {c.label}
+                    <span key={c.label} className="flex flex-1 justify-center">
+                      <StatusPill label={c.label} tone={c.live ? 'success' : 'warn'} dot compact />
                     </span>
                   ))}
                 </div>
@@ -3525,27 +3507,12 @@ function RetryProvisionButton() {
 }
 
 function Pill({ tone, label }: { tone: 'ok' | 'warn' | 'dim'; label: string }) {
-  const cls =
-    tone === 'ok'
-      ? 'text-success-bright border-success-bright/50 bg-success/15'
-      : tone === 'warn'
-        ? 'text-warning-bright border-warning-bright/50 bg-warning/15'
-        : 'text-text-dim border-ink-line bg-ink-card'
   return (
-    <span
-      className={`rounded-ctl inline-flex items-center gap-2 font-mono text-[0.65rem] uppercase tracking-[0.16em] font-bold px-3 py-1.5 border ${cls}`}
-    >
-      <span
-        className={`h-1.5 w-1.5 rounded-full ${
-          tone === 'ok'
-            ? 'bg-success-bright'
-            : tone === 'warn'
-              ? 'bg-warning-bright'
-              : 'bg-text-dim'
-        }`}
-      />
-      {label}
-    </span>
+    <StatusPill
+      label={label}
+      tone={tone === 'ok' ? 'success' : tone === 'warn' ? 'warn' : 'dim'}
+      dot
+    />
   )
 }
 
@@ -3680,13 +3647,13 @@ function LatestQuoteRow({
   const status = (q.status ?? 'draft').toLowerCase()
   const isPaid = !!q.deposit_paid
   const isInspect = !!(q.needs_inspection || q.inspection_required)
-  const tone = isPaid
-    ? 'border-success-bright/50 text-success-bright'
+  const tone: Tone = isPaid
+    ? 'success'
     : isInspect
-      ? 'border-warning-bright/50 text-warning-bright'
+      ? 'warn'
       : status === 'accepted'
-        ? 'border-accent/60 text-accent'
-        : 'border-ink-line text-text-sec'
+        ? 'success'
+        : 'dim'
   const badge = isPaid
     ? 'Paid'
     : isInspect
@@ -3714,11 +3681,9 @@ function LatestQuoteRow({
         <div className="font-mono text-sm font-bold text-text-pri">
           {total !== null ? `$${formatMoney(total)}` : '—'}
         </div>
-        <span
-          className={`rounded-ctl mt-1 inline-flex items-center font-mono text-[0.55rem] uppercase tracking-[0.14em] font-bold px-1.5 py-0.5 border ${tone}`}
-        >
-          {badge}
-        </span>
+        <div className="mt-1 flex justify-end">
+          <StatusPill label={badge} tone={tone} dot compact />
+        </div>
       </div>
     </button>
   )
@@ -4307,10 +4272,10 @@ function PayoutsTab({
   }
 
   const statusUi = {
-    ready: { dot: 'bg-success-bright', label: 'Payouts active', tone: 'text-success-bright' },
-    verifying: { dot: 'bg-warning-bright', label: 'Verifying with Stripe', tone: 'text-warning-bright' },
-    incomplete: { dot: 'bg-warning-bright', label: 'Setup incomplete', tone: 'text-warning-bright' },
-    not_started: { dot: 'bg-text-dim', label: 'Not set up', tone: 'text-text-dim' },
+    ready: { label: 'Payouts active', tone: 'success' as Tone },
+    verifying: { label: 'Verifying with Stripe', tone: 'warn' as Tone },
+    incomplete: { label: 'Setup incomplete', tone: 'warn' as Tone },
+    not_started: { label: 'Not set up', tone: 'dim' as Tone },
   }[status]
 
   return (
@@ -4319,15 +4284,7 @@ function PayoutsTab({
         <div className="space-y-5">
           {/* Live status line */}
           <div className="flex items-center gap-2.5">
-            <span
-              className={`h-2.5 w-2.5 rounded-full ${statusUi.dot}`}
-              aria-hidden="true"
-            />
-            <span
-              className={`font-mono text-[0.7rem] uppercase tracking-[0.16em] font-bold ${statusUi.tone}`}
-            >
-              {statusUi.label}
-            </span>
+            <StatusPill label={statusUi.label} tone={statusUi.tone} dot />
           </div>
 
           {status === 'ready' && (
@@ -4512,12 +4469,12 @@ function summarisePayouts(jobs: PayoutJob[]): PayoutSummary {
 
 // Live Stripe payout state → label + colour. Absent (Stripe unreachable) falls
 // back to the plain release date in the list.
-const PAYOUT_STATUS_UI: Record<string, { label: string; tone: string }> = {
-  paid: { label: 'Paid', tone: 'text-success-bright' },
-  in_transit: { label: 'In transit', tone: 'text-warning-bright' },
-  pending: { label: 'Processing', tone: 'text-warning-bright' },
-  canceled: { label: 'Canceled', tone: 'text-danger-bright' },
-  failed: { label: 'Failed', tone: 'text-danger-bright' },
+const PAYOUT_STATUS_UI: Record<string, { label: string; tone: Tone }> = {
+  paid: { label: 'Paid', tone: 'success' },
+  in_transit: { label: 'In transit', tone: 'warn' },
+  pending: { label: 'Processing', tone: 'warn' },
+  canceled: { label: 'Canceled', tone: 'danger' },
+  failed: { label: 'Failed', tone: 'danger' },
 }
 
 function fmtDayMonth(value: string | number | null | undefined): string {
@@ -4734,13 +4691,7 @@ function PayoutJobsSection({ accessToken }: { accessToken: string | null }) {
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
-                    {st && (
-                      <span
-                        className={`font-mono text-[0.6rem] font-semibold uppercase tracking-[0.12em] ${st.tone}`}
-                      >
-                        {st.label}
-                      </span>
-                    )}
+                    {st && <StatusPill label={st.label} tone={st.tone} dot compact />}
                     <span className={`font-mono text-sm font-bold tabular-nums ${amountTone}`}>
                       {fmtAudCents(j.payout?.amount_cents ?? j.net_cents)}
                     </span>
@@ -7241,7 +7192,7 @@ function ServicesTab({
                             existing always_inspection flag. */}
                         {svc.always_inspection && (
                           <span
-                            className="font-mono text-[0.55rem] uppercase tracking-[0.18em] px-2 py-0.5 border border-warning/40 text-warning"
+                            className="font-mono text-[0.55rem] uppercase tracking-[0.18em] px-2 py-0.5 border border-ink-line text-text-dim"
                             title="Always books a $99 paid inspection. Turning this on does NOT auto-price it — the AI tells the customer a site visit is needed."
                           >
                             inspection only
@@ -7400,25 +7351,22 @@ function ServicesTab({
                           </span>
                         )}
                         {svc.is_custom && (
-                          <span className="font-mono text-[0.55rem] uppercase tracking-[0.18em] px-2 py-1 border border-accent/40 text-accent">
+                          <span className="font-mono text-[0.55rem] uppercase tracking-[0.18em] px-2 py-1 border border-ink-line text-text-dim">
                             custom
                           </span>
                         )}
-                        <span
-                          className={`font-mono text-[0.55rem] uppercase tracking-[0.18em] px-2 py-1 border ${
+                        <StatusPill
+                          label={
                             !live
-                              ? 'border-ink-line text-text-dim'
+                              ? 'Off — not offered'
                               : svc.always_inspection
-                                ? 'border-warning/40 text-warning'
-                                : 'border-accent/40 text-accent'
-                          }`}
-                        >
-                          {!live
-                            ? 'Off — not offered'
-                            : svc.always_inspection
-                              ? 'Always routes to paid inspection'
-                              : 'AI will auto-quote'}
-                        </span>
+                                ? 'Always routes to paid inspection'
+                                : 'AI will auto-quote'
+                          }
+                          tone={!live ? 'dim' : svc.always_inspection ? 'warn' : 'success'}
+                          dot
+                          compact
+                        />
                       </div>
 
                       {/* Edit + Delete affordances for tenant-owned
@@ -8093,13 +8041,11 @@ function quoteMatchesFilter(q: Quote, f: QuoteFilter): boolean {
 // source of truth so the collapsed left-rail, the summary pill, and the
 // expanded badge set can never drift apart.
 type QuoteBadgeTone = 'paid' | 'inspect' | 'draft' | 'sent' | 'accepted'
-// Restrained, cohesive vocabulary: neutral greyscale for the resting states
-// (draft / sent / inspection), with the single orange accent reserved for the
-// money event a tradie actually wants to spot — a paid/accepted quote. No
-// teal/amber here; the multi-hue treatment read as noise (see redesign brief).
-// Reference status palette (QuoteMax dashboard): money-in and sent states
-// read green, "awaiting your review" reads amber (the actionable one — its
-// dot pulses), inspection/site-visit reads quiet.
+// The chip container is now neutral for every status (see StatusPill) — this
+// tone map only drives the small dot's hue, the single surviving colour cue:
+// progress/money-in states (paid / accepted / sent) read a quiet green, the
+// actionable "awaiting your review" reads amber (its dot pulses), and
+// inspection/site-visit stays grey. No more multi-hue outline pills.
 const QUOTE_BADGE_TONE: Record<QuoteBadgeTone, Tone> = {
   paid: 'success',
   accepted: 'success',
@@ -8171,7 +8117,12 @@ function QuotesTab({
   // a matching trade hub scopes to its own, and hubs with no measure-tool
   // table (electrical, plumbing, …) skip the fetch entirely.
   const jobsMode = savedJobsMode(tradeFilter)
-  const [jobs, setJobs] = useState<QueueJob[] | null>(null)
+  // R4 (specs/dashboard-performance.md): hydrate from the last visit's jobs
+  // so a tab revisit paints instantly — the effect below then skips the
+  // network entirely while the entry is inside the 15s window.
+  const [jobs, setJobs] = useState<QueueJob[] | null>(
+    () => readTabCache<QueueJob[]>('trade-jobs')?.data ?? null,
+  )
   // A failed fetch must never silently read as "no saved jobs" — surface an
   // explicit strip with a Retry instead (same contract as the Overview
   // widgets).
@@ -8181,6 +8132,13 @@ function QuotesTab({
   useEffect(() => {
     if (!accessToken || jobsMode === null) return
     let cancelled = false
+    // Fresh cache entry → already rendered via the state initializer; a
+    // stale entry stays painted while the fetch below revalidates it.
+    const cached = readTabCache<QueueJob[]>('trade-jobs')
+    if (cached) {
+      jobsFetchedRef.current = cached.fetchedAt
+      if (jobsTick === 0 && isFresh(cached, Date.now())) return
+    }
     jobsFetchedRef.current = Date.now()
     void (async () => {
       try {
@@ -8194,7 +8152,9 @@ function QuotesTab({
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const json = (await res.json()) as { jobs?: QueueJob[] }
         if (cancelled) return
-        setJobs(Array.isArray(json.jobs) ? json.jobs : [])
+        const list = Array.isArray(json.jobs) ? json.jobs : []
+        writeTabCache('trade-jobs', list, Date.now())
+        setJobs(list)
         setJobsError(false)
       } catch {
         if (!cancelled) setJobsError(true)
@@ -8205,9 +8165,10 @@ function QuotesTab({
     }
   }, [accessToken, jobsMode, jobsTick])
 
-  // Refresh-on-return for the job rows: `key={tab}` remounts cover tab
-  // switches; this covers window focus / visibility on an already-mounted
-  // Quotes surface, throttled to the same 15s as /api/tenant/me.
+  // Refresh-on-return for the job rows: the conditional tab render covers
+  // tab switches (served from tab-cache inside 15s); this covers window
+  // focus / visibility on an already-mounted Quotes surface, throttled to
+  // the same 15s as /api/tenant/me.
   useEffect(() => {
     const onReturn = () => {
       if (document.visibilityState !== 'visible') return
@@ -8970,7 +8931,7 @@ function JobQueueDetail({
       <div className="flex flex-wrap items-center gap-2">
         {job.tradieHref && (
           <Link href={job.tradieHref} className={actionBtn}>
-            Review &amp; edit →
+            {jobTradieCtaLabel(job)} →
           </Link>
         )}
         {job.href && (
@@ -12427,12 +12388,12 @@ function RecipesTab({
                       )}
                       <div className="mt-1.5 flex flex-wrap items-center gap-2">
                         {priced ? (
-                          <span className="inline-block px-1.5 py-0.5 border border-accent/40 text-accent font-mono text-[0.55rem] uppercase tracking-[0.15em]">
+                          <span className="inline-block px-1.5 py-0.5 border border-ink-line text-text-dim font-mono text-[0.55rem] uppercase tracking-[0.15em]">
                             {badgeLabel('catalogue', 'long')}
                           </span>
                         ) : (
                           <span
-                            className="inline-block px-1.5 py-0.5 border border-warning/50 text-warning font-mono text-[0.55rem] uppercase tracking-[0.15em]"
+                            className="inline-block px-1.5 py-0.5 border border-ink-line text-text-dim font-mono text-[0.55rem] uppercase tracking-[0.15em]"
                             title="No active Catalogue product in this category. The AI will fall back to a generic price (or inspection). Add a Catalogue product with this exact category to use your real product + price."
                           >
                             {badgeLabel('generic', 'long')}
@@ -12854,12 +12815,12 @@ function EstimatingTab({
                           {b.required ? '' : ' (optional)'}
                         </span>
                         {priced ? (
-                          <span className="px-1.5 py-0.5 border border-accent/40 text-accent font-mono text-[0.5rem] uppercase tracking-[0.14em]">
+                          <span className="px-1.5 py-0.5 border border-ink-line text-text-dim font-mono text-[0.5rem] uppercase tracking-[0.14em]">
                             {badgeLabel('catalogue', 'short')}
                           </span>
                         ) : (
                           <span
-                            className="px-1.5 py-0.5 border border-warning/50 text-warning font-mono text-[0.5rem] uppercase tracking-[0.14em]"
+                            className="px-1.5 py-0.5 border border-ink-line text-text-dim font-mono text-[0.5rem] uppercase tracking-[0.14em]"
                             title="No active Catalogue product in this category — the AI uses a generic price. Add a Catalogue product with this exact category to use your real product + price."
                           >
                             {badgeLabel('generic', 'short')}
@@ -13485,17 +13446,12 @@ function FollowupsTab({
                     <span className="font-extrabold text-text-pri truncate">
                       {name}
                     </span>
-                    <span
-                      className={`font-mono text-[0.6rem] uppercase tracking-[0.16em] font-bold px-2 py-0.5 border ${
-                        isDone
-                          ? 'border-success-bright/50 text-success-bright'
-                          : opened
-                            ? 'border-warning-bright/50 text-warning-bright'
-                            : 'border-accent/60 text-accent'
-                      }`}
-                    >
-                      {f.followup_reason}
-                    </span>
+                    <StatusPill
+                      label={f.followup_reason}
+                      tone={isDone ? 'success' : opened ? 'warn' : 'dim'}
+                      dot
+                      compact
+                    />
                     {isLead && (
                       <span className="font-mono text-[0.6rem] uppercase tracking-[0.16em] font-bold px-2 py-0.5 border border-ink-line text-text-dim">
                         SMS lead
@@ -14386,23 +14342,36 @@ function ChatsTab({
   isMultiTrade,
   filter,
   onFilterChange,
+  onGoToQuotes,
 }: {
   accessToken: string | null
   isMultiTrade: boolean
   filter: 'all' | 'cold'
   onFilterChange: (f: 'all' | 'cold') => void
+  onGoToQuotes: () => void
 }) {
-  const [chats, setChats] = useState<ChatRow[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  // R4 (specs/dashboard-performance.md): hydrate from the cached
+  // conversations so a tab revisit paints instantly — any cache entry (even
+  // stale) means no "Loading…" flash; the effect below revalidates silently.
+  const [chats, setChats] = useState<ChatRow[] | null>(
+    () => readTabCache<ChatRow[]>('chats')?.data ?? null,
+  )
+  const [fetchError, setFetchError] = useState<string | null>(null)
+  const [fetching, setFetching] = useState(
+    () => readTabCache<ChatRow[]>('chats') === null,
+  )
+  // No token → derived error, no fetch effect runs (avoids a synchronous
+  // setState inside the effect, which the react-hooks lint forbids).
+  const error = accessToken ? fetchError : 'Not signed in'
+  const loading = accessToken ? fetching : false
 
   useEffect(() => {
+    if (!accessToken) return
     let cancelled = false
-    if (!accessToken) {
-      setError('Not signed in')
-      setLoading(false)
-      return
-    }
+    // Fresh cache entry → already rendered via the state initializers; a
+    // stale entry stays painted while the fetch below revalidates it.
+    const cached = readTabCache<ChatRow[]>('chats')
+    if (cached && isFresh(cached, Date.now())) return
     ;(async () => {
       try {
         // Mint a FRESH dual-auth token immediately before the fetch. The
@@ -14419,13 +14388,18 @@ function ChatsTab({
           throw new Error(body?.error ?? `HTTP ${res.status}`)
         }
         const json = (await res.json()) as { chats: ChatRow[] }
-        if (!cancelled) setChats(json.chats ?? [])
-      } catch (err: unknown) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : String(err))
+          writeTabCache('chats', json.chats ?? [], Date.now())
+          setChats(json.chats ?? [])
+        }
+      } catch (err: unknown) {
+        // Background-revalidate failure must not replace a cached view the
+        // tradie is already reading with an error banner.
+        if (!cancelled && !cached) {
+          setFetchError(err instanceof Error ? err.message : String(err))
         }
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) setFetching(false)
       }
     })()
     return () => {
@@ -14433,126 +14407,212 @@ function ChatsTab({
     }
   }, [accessToken])
 
+  // Bare-canvas states — the two-pane workspace has no card containers,
+  // so its loading / error / empty states sit directly on the page too.
   if (loading) {
     return (
-      <Card>
-        <p className="font-mono text-xs uppercase tracking-[0.16em] text-text-dim">
-          Loading conversations…
-        </p>
-      </Card>
+      <p className="border-t border-ink-line p-6 font-mono text-xs uppercase tracking-[0.16em] text-text-dim">
+        Loading conversations…
+      </p>
     )
   }
   if (error) {
     return (
-      <Card>
+      <div className="border-t border-ink-line p-6">
         <ErrorBanner>{error}</ErrorBanner>
-      </Card>
+      </div>
     )
   }
   if (!chats || chats.length === 0) {
     return (
-      <Card>
-        <p className="text-sm text-text-dim">
-          No conversations yet. Customers who text your QuoteMax number
-          will appear here.
-        </p>
-      </Card>
+      <p className="border-t border-ink-line p-6 text-sm text-text-dim">
+        No conversations yet. Customers who text your QuoteMax number
+        will appear here.
+      </p>
     )
   }
 
   return (
-    <ChatsList
+    <ChatsSplitView
       chats={chats}
       isMultiTrade={isMultiTrade}
       filter={filter}
       onFilterChange={onFilterChange}
+      onGoToQuotes={onGoToQuotes}
+      accessToken={accessToken}
     />
   )
 }
 
-/** Renders the paginated chat list. Split out from `ChatsTab` so the
- *  Load-more state is scoped to the rendered list — opening Chats fresh
- *  always starts at the first page. */
-function ChatsList({
+/** Two-pane conversations workspace (specs/chats-tab-redesign.md): a
+ *  scrollable rail of conversations (left) + the selected live thread with
+ *  an SMS composer (right), sitting directly on the canvas — no cards.
+ *  Below md a single pane shows: the rail first, then the thread once a
+ *  row is tapped, with a back control in the thread header. */
+function ChatsSplitView({
   chats,
   isMultiTrade,
   filter,
   onFilterChange,
+  onGoToQuotes,
+  accessToken,
 }: {
   chats: ChatRow[]
   isMultiTrade: boolean
   filter: 'all' | 'cold'
   onFilterChange: (f: 'all' | 'cold') => void
+  onGoToQuotes: () => void
+  accessToken: string | null
 }) {
   const coldCount = chats.filter(isColdChat).length
   const shown = filter === 'cold' ? chats.filter(isColdChat) : chats
-  const total = shown.length
-  const {
-    page,
-    setPage,
-    totalPages,
-    pageItems: visibleChats,
-    startIndex,
-    endIndex,
-    // resetKey snaps back to page 1 when the filter changes (cold has fewer
-    // rows than all) while preserving a deep-linked page on first mount.
-  } = usePagination(shown, { urlKey: 'chat_page', resetKey: filter })
 
-  const subtitle =
-    filter === 'cold'
-      ? `${total} cold conversation${total === 1 ? '' : 's'} · chats that went quiet mid-flow — worth a nudge.`
-      : `${total} conversation${total === 1 ? '' : 's'} · click a row to expand the full thread.`
+  // null = nothing tapped yet: desktop falls back to the first row, mobile
+  // stays on the rail. A selection the cold filter hides degrades the same
+  // way, so flipping filters can never strand the thread pane.
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const selected =
+    (selectedId ? shown.find((c) => c.id === selectedId) : undefined) ??
+    shown[0] ??
+    null
+  const mobileThreadOpen =
+    selectedId !== null && shown.some((c) => c.id === selectedId)
+
+  // Session-sent replies per conversation — appended client-side as "You"
+  // bubbles so a send never needs a refetch. Keyed by conversation id and
+  // held here (not in the thread) so they survive switching threads.
+  const [sentByConvo, setSentByConvo] = useState<Record<string, ConvoMessage[]>>({})
+  // Composer drafts per conversation, so switching threads keeps a
+  // half-typed reply (the thread component remounts per chat).
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  // Send in-flight / error, ALSO keyed by conversation id and held here —
+  // ChatThread remounts on every selection change, so thread-local send
+  // state would reset mid-flight and let a second Send fire a duplicate
+  // customer SMS after switching away and back.
+  const [sendingByConvo, setSendingByConvo] = useState<Record<string, boolean>>({})
+  const [sendErrorByConvo, setSendErrorByConvo] = useState<Record<string, string | null>>({})
+
+  // Fill the viewport below whatever chrome sits above (sticky topnav, and
+  // the mobile tab strip below lg) so both panes scroll independently.
+  // Measured rather than hard-coded — the chrome height varies per
+  // breakpoint. Falls back to topnav-only (61px: the h-[60px] bar + 1px
+  // border, the same offset the sidebar pins to) before first measure.
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const [chromeTop, setChromeTop] = useState(61)
+  useEffect(() => {
+    const measure = () => {
+      const el = rootRef.current
+      if (!el) return
+      setChromeTop(Math.max(61, Math.round(el.getBoundingClientRect().top)))
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [])
 
   return (
-    <Card subtitle={subtitle}>
-      {/* Filter toggle — All vs the cold (abandoned) subset the Overview
-          "chats went cold" CTA deep-links into. */}
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <ChatFilterButton
-          active={filter === 'all'}
-          onClick={() => onFilterChange('all')}
-          label="All"
-          count={chats.length}
-        />
-        <ChatFilterButton
-          active={filter === 'cold'}
-          onClick={() => onFilterChange('cold')}
-          label="Went cold"
-          count={coldCount}
-        />
+    <div
+      ref={rootRef}
+      style={{ '--chats-h': `calc(100dvh - ${chromeTop}px)` } as CSSProperties}
+      className="border-t border-ink-line md:grid md:h-[var(--chats-h)] md:min-h-0 md:grid-cols-[minmax(290px,390px)_minmax(0,1fr)] md:overflow-hidden"
+    >
+      {/* ── Conversation rail ─────────────────────────────────────── */}
+      <div
+        className={`${mobileThreadOpen ? 'hidden md:block' : ''} md:min-h-0 md:overflow-y-auto md:border-r md:border-ink-line`}
+      >
+        <div className="sticky top-[61px] z-[5] flex items-center justify-between gap-3 border-b border-ink-line bg-ink-deep px-[18px] py-[15px] md:top-0">
+          <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-text-sec">
+            Conversations · {shown.length}
+          </span>
+          {/* All / Went-cold filter — lives in the reference's "All
+              channels" slot so the Overview cold-chats CTA deep-link
+              keeps working. */}
+          <div className="flex shrink-0 items-center gap-3">
+            <RailFilterButton
+              active={filter === 'all'}
+              onClick={() => onFilterChange('all')}
+              label="All"
+              count={chats.length}
+            />
+            <RailFilterButton
+              active={filter === 'cold'}
+              onClick={() => onFilterChange('cold')}
+              label="Went cold"
+              count={coldCount}
+            />
+          </div>
+        </div>
+        {shown.length === 0 ? (
+          <p className="px-[18px] py-6 text-sm text-text-dim">
+            {filter === 'cold'
+              ? 'No cold chats right now — every conversation either converted or is still live.'
+              : 'No conversations yet.'}
+          </p>
+        ) : (
+          shown.map((c) => (
+            <ChatRailRow
+              key={c.id}
+              chat={c}
+              // Explicit tap → active everywhere. The desktop first-row
+              // fallback is only VISUALLY current (the thread pane shows
+              // it), so it gets md-scoped styling and no aria-current —
+              // on mobile no thread is open, marking a row current would
+              // be a lie to screen readers.
+              active={mobileThreadOpen && selectedId === c.id}
+              fallbackActive={!mobileThreadOpen && selected?.id === c.id}
+              isMultiTrade={isMultiTrade}
+              onSelect={() => setSelectedId(c.id)}
+            />
+          ))
+        )}
       </div>
 
-      {shown.length === 0 ? (
-        <p className="px-1 py-6 text-sm text-text-dim">
-          {filter === 'cold'
-            ? 'No cold chats right now — every conversation either converted or is still live.'
-            : 'No conversations yet.'}
-        </p>
-      ) : (
-        <>
-          <div className="space-y-2">
-            {visibleChats.map((c) => (
-              <ChatCard key={c.id} chat={c} isMultiTrade={isMultiTrade} />
-            ))}
-          </div>
-          <PaginationControls
-            page={page}
-            totalPages={totalPages}
-            onPageChange={setPage}
-            startIndex={startIndex}
-            endIndex={endIndex}
-            total={total}
-            unit="conversations"
+      {/* ── Thread pane ───────────────────────────────────────────── */}
+      <div
+        className={`${mobileThreadOpen ? 'flex' : 'hidden md:flex'} min-h-[var(--chats-h)] flex-col bg-ink-deep md:min-h-0 md:overflow-y-auto`}
+      >
+        {selected ? (
+          <ChatThread
+            key={selected.id}
+            chat={selected}
+            sent={sentByConvo[selected.id] ?? []}
+            draft={drafts[selected.id] ?? ''}
+            onDraft={(v) =>
+              setDrafts((prev) => ({ ...prev, [selected.id]: v }))
+            }
+            onSent={(m) =>
+              setSentByConvo((prev) => ({
+                ...prev,
+                [selected.id]: [...(prev[selected.id] ?? []), m],
+              }))
+            }
+            sending={sendingByConvo[selected.id] ?? false}
+            sendError={sendErrorByConvo[selected.id] ?? null}
+            onSendingChange={(v) =>
+              setSendingByConvo((prev) => ({ ...prev, [selected.id]: v }))
+            }
+            onSendError={(v) =>
+              setSendErrorByConvo((prev) => ({ ...prev, [selected.id]: v }))
+            }
+            accessToken={accessToken}
+            isMultiTrade={isMultiTrade}
+            onGoToQuotes={onGoToQuotes}
+            onBack={() => setSelectedId(null)}
           />
-        </>
-      )}
-    </Card>
+        ) : (
+          <p className="p-6 font-mono text-[10px] uppercase tracking-[0.14em] text-text-dim">
+            Select a conversation
+          </p>
+        )}
+      </div>
+    </div>
   )
 }
 
-/** Small pill toggle for the Chats filter row. Matches the dashboard's mono,
- *  uppercase, square-cornered control language. */
-function ChatFilterButton({
+/** Mono label-style filter toggle in the rail header — the reference's
+ *  "All channels" idiom, made interactive. Hit area is expanded to ≥44px
+ *  with an invisible pseudo-element so the dense header stays dense. */
+function RailFilterButton({
   active,
   onClick,
   label,
@@ -14568,142 +14628,318 @@ function ChatFilterButton({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`rounded-ctl inline-flex items-center gap-2 border px-3 py-1.5 font-mono text-[0.62rem] font-bold uppercase tracking-[0.14em] transition-colors ${
-        active
-          ? 'border-accent bg-accent/10 text-accent'
-          : 'border-ink-line bg-ink-card text-text-dim hover:border-text-dim hover:text-text-pri'
+      className={`relative cursor-pointer font-mono text-[10px] font-bold uppercase tracking-[0.14em] transition-colors after:absolute after:-inset-x-1.5 after:-inset-y-[15px] focus-visible:outline-2 focus-visible:outline-accent ${
+        active ? 'text-accent' : 'text-text-dim hover:text-text-pri'
       }`}
     >
-      {label}
-      <span className="tabular-nums opacity-80">{count}</span>
+      {label} <span className="tabular-nums">{count}</span>
     </button>
   )
 }
 
-function ChatCard({ chat, isMultiTrade }: { chat: ChatRow; isMultiTrade: boolean }) {
-  const [expanded, setExpanded] = useState(false)
-  const trade = chat.job_type
-    ? deriveTradeFromJobType(chat.job_type)
-    : null
-  const inboundCount = chat.messages.filter((m) => m.direction === 'inbound').length
-
-  // Status badge tone:
-  //   done           → green (completed dialog)
-  //   structuring    → amber (quote drafting in progress)
-  //   open           → grey (mid-dialog)
-  //   anything else  → grey (default)
-  const statusTone =
-    chat.status === 'done'
-      ? 'bg-success/15 text-success-bright border-success-bright/50'
-      : chat.status === 'structuring'
-        ? 'bg-warning/15 text-warning-bright border-warning-bright/50'
-        : 'bg-ink-deep text-text-dim border-ink-line'
+/** One conversation in the rail. Active row gets the 2px accent left bar +
+ *  sunken background per the reference rowStyle/avatarStyle. */
+function ChatRailRow({
+  chat,
+  active,
+  fallbackActive,
+  isMultiTrade,
+  onSelect,
+}: {
+  chat: ChatRow
+  /** Explicitly selected (tapped) — styled current at every breakpoint
+   *  and announced via aria-current. */
+  active: boolean
+  /** Desktop-only first-row fallback: the thread pane shows this row
+   *  without a tap. Styled current from md up only (below md no thread
+   *  is visible) and never announced as current. */
+  fallbackActive: boolean
+  isMultiTrade: boolean
+  onSelect: () => void
+}) {
+  const who = chat.first_name || chat.from_number || 'Unknown caller'
+  const initial = (who.replace(/[^a-zA-Z0-9]/g, '')[0] ?? '#').toUpperCase()
+  const last = chat.messages[chat.messages.length - 1]
+  // Reference prefixes outbound previews with the sender, so a rail scan
+  // shows who spoke last.
+  const preview = last
+    ? `${last.direction === 'outbound' ? 'QuoteMax: ' : ''}${last.body}`
+    : '—'
+  const trade = chat.job_type ? deriveTradeFromJobType(chat.job_type) : null
+  const meta = [
+    chat.job_type ? formatJobType(chat.job_type) : 'Unclassified',
+    isMultiTrade && trade ? trade : null,
+    chat.suburb,
+    chat.channel === 'voice' ? 'Voice' : 'SMS',
+    chat.conversation_type === 'tradie_registration' ? 'Tradie signup' : null,
+    chat.intake_id ? 'Quote drafted' : null,
+    isColdChat(chat) ? 'Went cold' : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 
   return (
-    <div className="rounded-card border border-ink-line bg-ink-card motion-safe:animate-[fade-up_240ms_ease-out_both]">
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        aria-expanded={expanded ? 'true' : 'false'}
-        className="w-full flex items-start justify-between gap-3 sm:gap-4 px-3 sm:px-4 py-3 text-left hover:bg-ink-deep/40 transition-colors cursor-pointer"
-      >
-        <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <span className="font-semibold text-text-pri">
-              {chat.first_name || chat.from_number || 'Unknown caller'}
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-current={active ? 'true' : undefined}
+      className={`block w-full cursor-pointer border-b border-l-2 border-b-ink-line px-4 py-[15px] text-left transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent ${
+        active
+          ? 'border-l-accent bg-ink'
+          : fallbackActive
+            ? 'border-l-transparent bg-transparent hover:bg-ink/55 md:border-l-accent md:bg-ink'
+            : 'border-l-transparent hover:bg-ink/55'
+      }`}
+    >
+      <div className="flex items-center gap-[11px]">
+        <span
+          aria-hidden="true"
+          className={`inline-grid h-[34px] w-[34px] shrink-0 place-items-center border font-mono text-[13px] font-bold ${
+            active
+              ? 'border-transparent bg-accent text-accent-ink'
+              : fallbackActive
+                ? 'border-ink-line bg-ink text-text-pri md:border-transparent md:bg-accent md:text-accent-ink'
+                : 'border-ink-line bg-ink text-text-pri'
+          }`}
+        >
+          {initial}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate text-sm font-bold text-text-pri">
+              {who}
             </span>
-            <ChannelBadge channel={chat.channel} />
-            {chat.suburb && (
-              <span className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
-                · {chat.suburb}
-              </span>
-            )}
-          </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-            <span className="font-mono uppercase tracking-[0.12em] text-text-sec">
-              {chat.job_type ? formatJobType(chat.job_type) : 'Unclassified'}
-              {isMultiTrade && trade ? ` · ${trade}` : ''}
+            <span className="shrink-0 font-mono text-[9.5px] text-text-dim">
+              {relTime(chat.last_message_at ?? chat.created_at)}
             </span>
-            <span className="text-text-dim">·</span>
-            <span className="font-mono text-text-dim whitespace-nowrap">
-              {chat.last_message_at
-                ? `${formatDate(chat.last_message_at)} ${formatTime(chat.last_message_at)}`
-                : formatDate(chat.created_at)}
-            </span>
-            {chat.from_number && (
-              <>
-                <span className="hidden sm:inline text-text-dim">·</span>
-                <span className="hidden sm:inline font-mono text-text-dim">{chat.from_number}</span>
-              </>
-            )}
           </div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <span
-              className={`rounded-ctl inline-flex items-center font-mono text-[0.6rem] uppercase tracking-[0.14em] font-bold px-2 py-0.5 border ${statusTone}`}
-            >
-              {chat.status ?? 'unknown'}
-            </span>
-            {chat.intake_id && (
-              <span className="rounded-ctl inline-flex items-center font-mono text-[0.6rem] uppercase tracking-[0.14em] font-bold px-2 py-0.5 border border-accent/60 bg-accent/10 text-accent">
-                Quote drafted
-              </span>
-            )}
-            {chat.conversation_type === 'tradie_registration' && (
-              <span className="rounded-ctl inline-flex items-center font-mono text-[0.6rem] uppercase tracking-[0.14em] font-bold px-2 py-0.5 border border-text-sec/40 bg-text-sec/5 text-text-sec">
-                Tradie signup
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="shrink-0 flex items-center gap-2.5">
-          <div className="text-right">
-            <div className="font-mono text-xs text-text-dim tabular-nums">
-              {inboundCount} in · {chat.messages.length - inboundCount} out
-            </div>
-            <div className="mt-0.5 font-mono text-[0.55rem] uppercase tracking-[0.14em] text-text-dim">
-              {chat.turn_count} turn{chat.turn_count === 1 ? '' : 's'}
-            </div>
-          </div>
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-            className={`shrink-0 text-text-dim transition-transform duration-200 ${
-              expanded ? 'rotate-90' : ''
-            }`}
-          >
-            <path d="M9 6l6 6-6 6" />
-          </svg>
-        </div>
-      </button>
-
-      {/* Grid-row trick gives a CSS-only height transition. Keeps the
-          markup mounted so the transcript fades in/out smoothly instead
-          of popping when the user toggles. */}
-      <div
-        className={`grid transition-[grid-template-rows] duration-300 ease-out ${
-          expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
-        }`}
-      >
-        <div className="overflow-hidden">
-          <div className="border-t border-ink-line px-4 py-3 bg-ink-deep/30">
-            {chat.messages.length > 0 ? (
-              <Transcript messages={chat.messages} channel={chat.channel} />
-            ) : (
-              <p className="font-mono text-[0.65rem] uppercase tracking-[0.14em] text-text-dim">
-                No messages recorded on this conversation.
-              </p>
-            )}
+          <div className="mt-0.5 truncate font-mono text-[9px] uppercase tracking-[0.1em] text-text-dim">
+            {meta}
           </div>
         </div>
       </div>
-    </div>
+      <div className="mt-2 truncate text-[12.5px] text-text-dim">
+        {preview}
+      </div>
+    </button>
+  )
+}
+
+/** Status chip in the thread header — the reference "Online" badge mapped
+ *  to honest conversation states. */
+function threadStatusChip(chat: ChatRow): {
+  label: string
+  tone: Tone
+  pulse: boolean
+} {
+  const s = (chat.status ?? '').toLowerCase()
+  if (s === 'open') return { label: 'Live', tone: 'success', pulse: true }
+  if (s === 'structuring') return { label: 'Drafting', tone: 'warn', pulse: true }
+  if (s === 'done') return { label: 'Completed', tone: 'success', pulse: false }
+  if (s === 'abandoned') return { label: 'Went cold', tone: 'warn', pulse: false }
+  return { label: chat.status ?? 'Unknown', tone: 'dim', pulse: false }
+}
+
+/** The live thread: sticky meta header, message bubbles (customer left,
+ *  QuoteMax/You right per the reference), and the SMS composer. Remounts
+ *  per conversation (keyed at the call site); all send state lives in the
+ *  parent keyed by conversation id, so an in-flight send survives thread
+ *  switches and can never double-fire. */
+function ChatThread({
+  chat,
+  sent,
+  draft,
+  onDraft,
+  onSent,
+  sending,
+  sendError,
+  onSendingChange,
+  onSendError,
+  accessToken,
+  isMultiTrade,
+  onGoToQuotes,
+  onBack,
+}: {
+  chat: ChatRow
+  sent: ConvoMessage[]
+  draft: string
+  onDraft: (v: string) => void
+  onSent: (m: ConvoMessage) => void
+  sending: boolean
+  sendError: string | null
+  onSendingChange: (v: boolean) => void
+  onSendError: (v: string | null) => void
+  accessToken: string | null
+  isMultiTrade: boolean
+  onGoToQuotes: () => void
+  onBack: () => void
+}) {
+  const messages = sent.length ? [...chat.messages, ...sent] : chat.messages
+  const inboundCount = messages.filter((m) => m.direction === 'inbound').length
+  const status = threadStatusChip(chat)
+  const who = chat.first_name || chat.from_number || 'Unknown caller'
+  const trade = chat.job_type ? deriveTradeFromJobType(chat.job_type) : null
+  const headerMeta = [
+    chat.channel === 'voice' ? 'Voice intake' : 'SMS intake',
+    // When a name exists the number is no longer the row/header title, so
+    // carry it here — the tradie must always be able to see the number.
+    chat.first_name && chat.from_number ? chat.from_number : null,
+    isMultiTrade && trade ? trade : null,
+    `${inboundCount} in`,
+    `${messages.length - inboundCount} out`,
+    chat.channel === 'sms' && chat.turn_count
+      ? `${chat.turn_count} turn${chat.turn_count === 1 ? '' : 's'}`
+      : null,
+    chat.channel === 'voice' && chat.duration_seconds
+      ? `${Math.floor(chat.duration_seconds / 60)}:${String(chat.duration_seconds % 60).padStart(2, '0')}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
+  const canReply = chat.channel === 'sms' && Boolean(chat.from_number)
+
+  async function submitReply(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const text = draft.trim()
+    if (!text || sending) return
+    onSendingChange(true)
+    onSendError(null)
+    try {
+      const token = (await getAuthToken()) ?? accessToken
+      const res = await fetch(`/api/tenant/chats/${chat.id}/reply`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ body: text }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.error ?? `HTTP ${res.status}`)
+      onSent(json.message as ConvoMessage)
+      onDraft('')
+    } catch (err: unknown) {
+      onSendError(err instanceof Error ? err.message : String(err))
+    } finally {
+      onSendingChange(false)
+    }
+  }
+
+  return (
+    <>
+      <div className="sticky top-[61px] z-[5] flex items-center justify-between gap-3 border-b border-ink-line bg-ink-deep px-4 py-[11px] md:top-0 md:px-5 md:py-[15px]">
+        <div className="flex min-w-0 items-center">
+          <button
+            type="button"
+            onClick={onBack}
+            aria-label="Back to conversations"
+            className="-ml-2 mr-1 inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center text-text-dim transition-colors hover:text-text-pri focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent md:hidden"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M15 6l-6 6 6 6" />
+            </svg>
+          </button>
+          <span className="truncate font-mono text-[10.5px] font-semibold uppercase tracking-[0.16em] text-text-dim">
+            {who} · {headerMeta}
+          </span>
+        </div>
+        <div className="flex shrink-0 items-center gap-2.5">
+          {chat.intake_id && (
+            /* Reference labels this "Draft quote →" — the honest live
+               action once a quote exists is opening it. */
+            <button
+              type="button"
+              onClick={onGoToQuotes}
+              className="relative inline-flex cursor-pointer items-center gap-[7px] border border-ink-line bg-transparent px-3 py-[7px] font-mono text-[9.5px] font-bold uppercase tracking-[0.12em] text-text-pri transition-colors after:absolute after:-inset-x-1 after:-inset-y-[11px] hover:border-accent focus-visible:outline-2 focus-visible:outline-accent"
+            >
+              Open quote →
+            </button>
+          )}
+          <StatusPill label={status.label} tone={status.tone} dot compact pulse={status.pulse} />
+        </div>
+      </div>
+
+      <div className="grid w-full max-w-[880px] gap-3 px-5 py-[26px] md:px-[30px]">
+        {messages.length === 0 ? (
+          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-dim">
+            No messages recorded on this conversation.
+          </p>
+        ) : (
+          messages.map((m, i) => {
+            const inbound = m.direction === 'inbound'
+            // Anything past the fetched history was sent from this composer
+            // in-session → label it "You" instead of "QuoteMax".
+            const mine = i >= chat.messages.length
+            return (
+              <div
+                key={i}
+                className={`flex ${inbound ? 'justify-start' : 'justify-end'}`}
+              >
+                <div
+                  title={`${formatDate(m.created_at)} ${formatTime(m.created_at)}`}
+                  className={`max-w-[86%] whitespace-pre-wrap break-words px-[13px] py-2.5 text-[13.5px] leading-[1.45] ${
+                    inbound
+                      ? 'border border-ink-line bg-ink-deep text-text-sec'
+                      : 'border border-accent/35 bg-accent/10 text-text-pri'
+                  }`}
+                >
+                  {!inbound && (
+                    <span className="mb-1 block font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-accent">
+                      {mine ? 'You' : 'QuoteMax'}
+                    </span>
+                  )}
+                  {m.body}
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+
+      <div className="sticky bottom-0 mt-auto border-t border-ink-line bg-ink-deep px-4 py-3.5 md:px-6">
+        {canReply ? (
+          <>
+            <form className="flex items-center gap-2.5" onSubmit={submitReply}>
+              <input
+                value={draft}
+                onChange={(e) => onDraft(e.target.value)}
+                placeholder="Reply by SMS"
+                aria-label="Reply by SMS"
+                disabled={sending}
+                className="h-11 min-w-0 flex-1 border border-ink-line bg-ink px-3.5 text-[13.5px] text-text-pri outline-none transition-colors placeholder:text-text-dim focus:border-accent disabled:opacity-60"
+              />
+              <button
+                type="submit"
+                disabled={sending || !draft.trim()}
+                className="inline-flex h-11 cursor-pointer items-center gap-2 bg-accent px-[18px] text-xs font-bold uppercase tracking-[0.06em] text-accent-ink transition-colors hover:bg-accent-press focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {sending ? 'Sending…' : 'Send'}
+              </button>
+            </form>
+            {sendError && (
+              <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.12em] text-danger-bright">
+                Send failed — {sendError}
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-dim">
+            Voice call — no SMS thread
+          </p>
+        )}
+      </div>
+    </>
   )
 }
 
@@ -15226,21 +15462,17 @@ function SgStat({ label, value, tone }: { label: string; value: number; tone?: '
 }
 
 function SgChip({ state, overall }: { state: string; overall: string | null }) {
-  const { label, cls } =
+  const { label, tone }: { label: string; tone: Tone } =
     overall === 'pass'
-      ? { label: 'Compliant', cls: 'text-teal-glow border-teal-glow' }
+      ? { label: 'Compliant', tone: 'success' }
       : overall === 'fix_needed'
-        ? { label: 'To fix', cls: 'text-warning border-warning' }
+        ? { label: 'To fix', tone: 'warn' }
         : overall === 'needs_review'
-          ? { label: 'Needs review', cls: 'text-accent border-accent' }
+          ? { label: 'Needs review', tone: 'warn' }
           : state === 'submitted'
-            ? { label: 'Scoring…', cls: 'text-text-dim border-ink-line' }
-            : { label: 'Awaiting', cls: 'text-text-dim border-ink-line' }
-  return (
-    <span className={`border px-2.5 py-1 font-mono text-[0.64rem] font-semibold uppercase tracking-[0.12em] ${cls}`}>
-      {label}
-    </span>
-  )
+            ? { label: 'Scoring…', tone: 'dim' }
+            : { label: 'Awaiting', tone: 'dim' }
+  return <StatusPill label={label} tone={tone} dot compact />
 }
 
 // ─── Painting hub tab (Phase 1 scaffold) ───────────────────────────
@@ -15524,17 +15756,8 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
 
   return (
     <div className="space-y-7">
-      <div>
-        <h2 className="font-extrabold uppercase tracking-[-0.025em] text-[clamp(1.5rem,2.6vw,2.25rem)] leading-[1.1] text-text-pri">
-          Roof tools
-        </h2>
-        <p className="mt-3 max-w-2xl text-base leading-relaxed text-text-sec">
-          Type any address, get a Geoscape-derived sloped area plus a
-          three-tier price band at your current rates. Phase 1 — every
-          roofing quote needs your sign-off before send.
-        </p>
-      </div>
-
+      {/* No inner heading — the tab shell already renders the "Roof tools"
+          header from TAB_COPY, and doubling it read as a rendering bug. */}
       <Link
         href="/dashboard/roofing/measure"
         className="rounded-card group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
@@ -15849,12 +16072,10 @@ function TradeHub({
         })}
       </div>
 
-      {/* `key={section}` re-fires the fade-in on section switch, matching
-          the top-level tab behaviour. */}
-      <div
-        key={section}
-        className="motion-safe:animate-[fade-up_300ms_cubic-bezier(0.22,1,0.36,1)_both]"
-      >
+      {/* No key (specs/dashboard-performance.md R3) — keying by section
+          remounted the whole hub body on every chip click just to replay
+          the fade; sections still swap via the conditional renders below. */}
+      <div className="motion-safe:animate-[fade-up_300ms_cubic-bezier(0.22,1,0.36,1)_both]">
         {section === 'tools' && trade === 'electrical' && (
           <EstimatorBetaTab accessToken={accessToken} />
         )}

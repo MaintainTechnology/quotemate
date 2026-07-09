@@ -17,6 +17,7 @@ import { MaterialCheck } from './_components/MaterialCheck'
 import { Paint3DTilesViewer } from './_components/Paint3DTilesViewer'
 import { PaintResultView } from './_components/PaintResultView'
 import { ZoomableImage } from '../_components/ZoomableImage'
+import { StatusPill } from '../_components/quote-ui'
 import type {
   PaintScope,
   PaintingEstimate,
@@ -907,11 +908,10 @@ function Breadcrumb() {
 
 function AuthBadge({ state }: { state: 'loading' | 'signed-out' | 'ready' }) {
   const label = state === 'loading' ? 'Checking session…' : state === 'signed-out' ? 'Not signed in — sign in to estimate' : 'Signed in — ready to estimate'
-  const dot = state === 'ready' ? 'bg-teal-glow' : state === 'signed-out' ? 'bg-accent' : 'bg-text-dim'
+  const tone = state === 'ready' ? 'good' : state === 'signed-out' ? 'accent' : 'dim'
   return (
-    <div className="rounded-ctl mt-10 inline-flex items-center gap-3 border border-ink-line bg-ink-card px-5 py-3">
-      <span className={`h-2.5 w-2.5 ${dot}`} aria-hidden="true" />
-      <span className="font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-sec">{label}</span>
+    <div className="mt-10">
+      <StatusPill label={label} tone={tone} dot />
     </div>
   )
 }

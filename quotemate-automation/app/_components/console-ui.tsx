@@ -83,11 +83,16 @@ export function TableShell({ loading, empty, emptyText, head, children }: { load
 }
 
 export function StatusPill({ status }: { status: string }) {
-  const tone =
-    status === 'active' ? 'text-success border-success/40'
-      : status === 'paused' ? 'text-warning border-warning/40'
-      : 'text-text-dim border-ink-line'
-  return <span className={`inline-flex border px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-[0.12em] ${tone}`}>{status}</span>
+  const dot =
+    status === 'active' ? 'bg-success-bright'
+      : status === 'paused' ? 'bg-warning-bright'
+      : 'bg-ink-line'
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-ink-line bg-ink-deep px-2.5 py-[3px] font-mono text-[0.58rem] font-semibold uppercase tracking-[0.12em] text-text-sec">
+      <span className={`h-1.5 w-1.5 rounded-full ${dot}`} aria-hidden="true" />
+      {status}
+    </span>
+  )
 }
 
 export function ActionBtn({ children, onClick, danger }: { children: ReactNode; onClick: () => void; danger?: boolean }) {

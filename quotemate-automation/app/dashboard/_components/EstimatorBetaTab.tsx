@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation'
 import { runDeviceCount, runItemCount, runStatus } from '@/lib/estimation/run-status'
 import { getAuthToken } from '@/lib/auth/client-token'
 import { RunStatusChip } from './estimator/badges'
+import { StatusPill } from './quote-ui'
 import { stashPlanFile } from './estimator/plan-file-store'
 import { money, type ExtractResponse, type HistoryUpload } from './estimator/types'
 import { PaginationControls, usePagination } from './Pagination'
@@ -223,9 +224,7 @@ export function EstimatorBetaTab({ accessToken }: Props) {
         )}
 
         <p className="mt-6 border-t border-ink-line pt-4 text-xs leading-relaxed text-text-dim">
-          <span className="border border-warning px-1.5 py-0.5 font-mono text-[0.6rem] font-semibold uppercase tracking-[0.14em] text-warning">
-            Beta
-          </span>{' '}
+          <StatusPill label="Beta" tone="dim" compact />{' '}
           The AI reads the plan’s legend and counts symbols. Dense areas (GPO clusters, downlight grids) are the
           least reliable and come back flagged <span className="text-warning">low</span> — verify every count
           before quoting. Your PDF is analysed live and never stored on our servers.

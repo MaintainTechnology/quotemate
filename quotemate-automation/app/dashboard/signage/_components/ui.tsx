@@ -11,6 +11,7 @@
 import Link from 'next/link'
 import { useEffect, useRef } from 'react'
 import { withBrand } from './BrandTabs'
+import { StatusPill, type Tone as PillTone } from '../../_components/quote-ui'
 
 /* ── Motion ──────────────────────────────────────────────────────────
    Static animate class + inline animation-delay. (A template-literal
@@ -146,19 +147,18 @@ const TONE_TEXT: Record<Tone, string> = {
   accent: 'text-accent',
   dim: 'text-text-dim',
 }
-const TONE_CHIP: Record<Tone, string> = {
-  good: 'border-teal-glow text-teal-glow',
-  warn: 'border-warning-bright text-warning-bright',
-  accent: 'border-accent text-accent',
-  dim: 'border-ink-line text-text-dim',
+// Signage's four tones fold onto the shared neutral StatusPill: the pill body
+// is calm for every status and only the dot carries the hue. "Needs review"
+// (accent) folds into warn — it's an action state, not a highlight.
+const CHIP_PILL_TONE: Record<Tone, PillTone> = {
+  good: 'success',
+  warn: 'warn',
+  accent: 'warn',
+  dim: 'dim',
 }
 
 export function Chip({ label, tone, compact }: { label: string; tone: Tone; compact?: boolean }) {
-  return (
-    <span className={`rounded-ctl inline-flex items-center border px-2.5 py-1 font-mono ${compact ? 'text-[0.62rem]' : 'text-[0.68rem]'} font-semibold uppercase tracking-[0.12em] ${TONE_CHIP[tone]}`}>
-      {label}
-    </span>
-  )
+  return <StatusPill label={label} tone={CHIP_PILL_TONE[tone]} dot compact={compact} />
 }
 
 export function overallTone(overall: string | null): { label: string; tone: Tone } {

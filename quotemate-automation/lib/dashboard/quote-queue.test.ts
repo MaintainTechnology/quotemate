@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest'
 import {
   jobQueueKey,
   jobTradeSlug,
+  jobTradieCtaLabel,
   jobMatchesFilter,
   jobMatchesSearch,
   queueTradeOptions,
@@ -25,6 +26,15 @@ const job = (over: Partial<QueueJob> = {}): QueueJob => ({
   tradieHref: '/m/tok-m',
   createdAt: '2026-07-01T00:00:00Z',
   ...over,
+})
+
+describe('jobTradieCtaLabel', () => {
+  it('names the tradie link by what it opens per trade', () => {
+    expect(jobTradieCtaLabel(job())).toBe('Measurement results')
+    expect(jobTradieCtaLabel(job({ trade: 'painting' }))).toBe('Estimate results')
+    expect(jobTradieCtaLabel(job({ trade: 'solar' }))).toBe('Review & edit')
+    expect(jobTradieCtaLabel(job({ trade: 'commercial-painting' }))).toBe('Review & edit')
+  })
 })
 
 describe('jobQueueKey / jobTradeSlug', () => {

@@ -94,7 +94,7 @@ describe('jobRowView', () => {
     expect(v.tradeLabel).toBe('Roofing')
     expect(v.pill).toEqual({
       label: 'Awaiting you',
-      color: 'var(--warning-bright)',
+      tone: 'warn',
       pulse: true,
     })
   })
@@ -107,12 +107,12 @@ describe('jobRowView', () => {
   it('maps confirmed → Accepted tone and inspection → Site visit tone', () => {
     expect(jobRowView(job({ status: 'confirmed' })).pill).toEqual({
       label: 'Accepted',
-      color: 'var(--success-bright)',
+      tone: 'success',
       pulse: false,
     })
     expect(jobRowView(job({ status: 'inspection' })).pill).toEqual({
       label: 'Site visit',
-      color: 'var(--text-dim)',
+      tone: 'dim',
       pulse: false,
     })
   })

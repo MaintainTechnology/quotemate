@@ -22,6 +22,7 @@ import { AddressAutocomplete } from '../roofing/_components/AddressAutocomplete'
 import { RoofTilesViewer } from '../roofing/_components/RoofTilesViewer'
 import { ZoomableImage } from '../_components/ZoomableImage'
 import { FloorPlanOverlay } from '../_components/FloorPlanOverlay'
+import { StatusPill } from '../_components/quote-ui'
 import type { AcLocationEvidence } from '@/lib/aircon/location'
 import type {
   AcOption,
@@ -672,7 +673,7 @@ function PlanRoomsPanel({ plan }: { plan: PlanReadout }) {
           Plan read · {plan.filename}
         </span>
         <Chip label={`page ${plan.page}`} />
-        <Chip label={plan.dimensioned ? 'dimensioned' : 'no printed dimensions'} accent={plan.dimensioned} />
+        <Chip label={plan.dimensioned ? 'dimensioned' : 'no printed dimensions'} />
         <Chip label={`${plan.total_area_m2} m² total`} />
         {plan.stated_total_area_m2 != null && <Chip label={`plan states ${plan.stated_total_area_m2} m²`} />}
       </div>
@@ -842,11 +843,7 @@ function OptionCard({ option: o, rooms }: { option: AcOption; rooms: RoomLoad[] 
           </p>
           <h3 className="mt-1 text-2xl font-extrabold uppercase tracking-[-0.01em]">{o.system_type}</h3>
         </div>
-        {o.best_fit && (
-          <span className="bg-accent px-3 py-1 font-mono text-[0.68rem] font-bold uppercase tracking-[0.12em] text-white">
-            Best fit
-          </span>
-        )}
+        {o.best_fit && <StatusPill label="Best fit" tone="accent" dot />}
       </div>
 
       <p className="mt-3 text-3xl font-extrabold leading-none sm:text-4xl">

@@ -1,11 +1,11 @@
-// Phase 0 exit gate (admin bulk loader §12/§13) — Voice path.
+// Voice-prompt builder tests.
 //
-// buildVoiceSystemPrompt / buildVoiceFirstMessage were extracted VERBATIM
-// from the duplicated buildSystemPrompt() copies in provision.ts and
-// update-assistant.ts. The inline snapshots below pin the composed output
-// byte-for-byte so the extraction (and any future edit) cannot silently
-// change what the Vapi assistant is told. They also confirm a brand-new
-// trade name composes correctly (the §3 voice blocker was only the type).
+// buildVoiceSystemPrompt composes a multi-trade receptionist prompt that MIRRORS
+// the SMS receptionist. electrical/plumbing questions are sourced from
+// lib/sms/assumptions.ts (mustAskLines) — the assertions below import that SAME
+// source, so if the SMS MUST-ASK set changes but the voice prompt doesn't, these
+// tests break. That is the no-drift guarantee. The other trades come from
+// lib/vapi/trade-questions.ts and are asserted against it directly.
 
 import { describe, it, expect } from 'vitest'
 import {
@@ -13,14 +13,19 @@ import {
   buildVoiceFirstMessage,
   buildVoiceSystemPrompt,
 } from './voice-prompt'
+import { mustAskLines } from '../sms/assumptions'
+import { VOICE_TRADE_QUESTIONS } from './trade-questions'
 
 describe('renderTradeLabel', () => {
   it('returns the single trade as-is', () => {
     expect(renderTradeLabel(['electrical'])).toBe('electrical')
   })
-  it('joins multiple trades with " or "', () => {
-    expect(renderTradeLabel(['electrical', 'plumbing'])).toBe(
-      'electrical or plumbing',
+  it('joins two trades with " or "', () => {
+    expect(renderTradeLabel(['electrical', 'plumbing'])).toBe('electrical or plumbing')
+  })
+  it('joins 3+ trades as a natural list (no repeated "or")', () => {
+    expect(renderTradeLabel(['electrical', 'plumbing', 'roofing'])).toBe(
+      'electrical, plumbing or roofing',
     )
   })
 })
@@ -42,76 +47,131 @@ describe('buildVoiceFirstMessage', () => {
   })
   it('a voice_greeting override replaces the composed greeting', () => {
     expect(
-      buildVoiceFirstMessage('Acme', ['electrical'], {
-        greeting: 'Custom greeting.',
-      }),
+      buildVoiceFirstMessage('Acme', ['electrical'], { greeting: 'Custom greeting.' }),
     ).toBe('Custom greeting.')
   })
 })
 
-describe('buildVoiceSystemPrompt', () => {
-  it('single-trade system prompt (electrical)', () => {
-    expect(buildVoiceSystemPrompt('Bright Spark Electric', ['electrical']))
-      .toMatchInlineSnapshot(`
-      "You are the AI receptionist for Bright Spark Electric, an Australian electrical contractor.
-
-      Your job is to greet the caller, capture the key details for their electrical job (location, what they need done, when), and confirm what you heard at the end of the call. Do NOT quote prices on the phone — a structured quote will be drafted automatically after the call and sent via SMS.
-
-      TONE: Australian, professional, friendly. Plain English. No filler. Match the cadence of a busy suburban tradie's receptionist.
-
-      WHAT TO ASK:
-      1. First name
-      2. Suburb / location of the job
-      3. What electrical work they need (use plain language; recognise the easy-5 job types for electrical)
-      4. When they need it done (urgent / this week / flexible)
-      5. Confirm what you heard before ending
-
-      WHAT NOT TO DO:
-      - Never quote prices on the call.
-      - Never promise a tradie will attend on a specific day.
-      - If the job sounds dangerous (smell gas, sparks, burst pipe, water through ceiling), flag it as an emergency and ask if they need urgent attention.
-
-      When the caller confirms the summary, thank them and end the call. The quote will arrive by SMS within a couple of minutes."
-    `)
-  })
-
-  it('multi-trade system prompt (electrical + plumbing)', () => {
-    expect(buildVoiceSystemPrompt('Acme Trades', ['electrical', 'plumbing']))
-      .toMatchInlineSnapshot(`
-      "You are the AI receptionist for Acme Trades, an Australian electrical and plumbing contractor.
-
-      Your job is to greet the caller, capture the key details for their electrical or plumbing job (location, what they need done, when), and confirm what you heard at the end of the call. Do NOT quote prices on the phone — a structured quote will be drafted automatically after the call and sent via SMS.
-
-      TONE: Australian, professional, friendly. Plain English. No filler. Match the cadence of a busy suburban tradie's receptionist.
-
-      WHAT TO ASK:
-      1. First name
-      2. Suburb / location of the job
-      3. What electrical or plumbing work they need (use plain language; recognise the easy-5 job types for electrical and recognise the easy-5 job types for plumbing)
-      4. When they need it done (urgent / this week / flexible)
-      5. Confirm what you heard before ending
-
-      WHAT NOT TO DO:
-      - Never quote prices on the call.
-      - Never promise a tradie will attend on a specific day.
-      - If the job sounds dangerous (smell gas, sparks, burst pipe, water through ceiling), flag it as an emergency and ask if they need urgent attention.
-
-      When the caller confirms the summary, thank them and end the call. The quote will arrive by SMS within a couple of minutes."
-    `)
-  })
-
-  it('composes for a brand-new trade name (type widened — §3 voice blocker)', () => {
-    const prompt = buildVoiceSystemPrompt('Hammer & Co', ['carpentry'])
-    expect(prompt).toContain('an Australian carpentry contractor')
-    expect(prompt).toContain('their carpentry job')
-    expect(prompt).toContain('recognise the easy-5 job types for carpentry')
+describe('buildVoiceSystemPrompt — shared behaviour', () => {
+  it('always states no price on the call + read-back handshake + endCall', () => {
+    const p = buildVoiceSystemPrompt('Bright Spark Electric', ['electrical'])
+    expect(p).toContain('an Australian electrical contractor')
+    expect(p).toContain('NEVER quote a price')
+    expect(p).toContain('read the scope back')
+    expect(p).toContain('endCall')
+    expect(p).toContain('EMERGENCY OVERRIDE')
   })
 
   it('a voice_system_prompt override replaces the composed prompt', () => {
     expect(
-      buildVoiceSystemPrompt('Acme', ['electrical'], {
-        systemPrompt: 'CUSTOM PROMPT',
-      }),
+      buildVoiceSystemPrompt('Acme', ['electrical'], { systemPrompt: 'CUSTOM PROMPT' }),
     ).toBe('CUSTOM PROMPT')
+  })
+})
+
+describe('buildVoiceSystemPrompt — electrical/plumbing mirror SMS assumptions (no drift)', () => {
+  it('electrical-only carries every easy-5 electrical MUST-ASK line and no plumbing lines', () => {
+    const p = buildVoiceSystemPrompt('Bright Spark Electric', ['electrical'])
+    for (const jt of ['downlights', 'power_points', 'ceiling_fans', 'smoke_alarms', 'outdoor_lighting'] as const) {
+      for (const q of mustAskLines(jt)) expect(p).toContain(q)
+    }
+    // No plumbing question tree leaks into an electrical-only prompt.
+    expect(p).not.toContain(mustAskLines('hot_water')[0])
+    expect(p).not.toContain('PLUMBING JOBS')
+    // Commercial electrical estimation (plan take-off) has its own branch.
+    expect(p).toContain('plan take-off / electrical estimation')
+  })
+
+  it('plumbing-only carries every plumbing MUST-ASK line and no electrical lines', () => {
+    const p = buildVoiceSystemPrompt('Peppers Plumbing', ['plumbing'])
+    for (const jt of ['blocked_drain', 'hot_water', 'tap_repair', 'tap_replace', 'toilet_repair', 'toilet_replace'] as const) {
+      for (const q of mustAskLines(jt)) expect(p).toContain(q)
+    }
+    expect(p).not.toContain(mustAskLines('downlights')[0])
+    expect(p).not.toContain('ELECTRICAL JOBS')
+  })
+
+  it('electrical + plumbing carries both trees', () => {
+    const p = buildVoiceSystemPrompt('Acme Trades', ['electrical', 'plumbing'])
+    expect(p).toContain('ELECTRICAL JOBS')
+    expect(p).toContain('PLUMBING JOBS')
+    expect(p).toContain(mustAskLines('downlights')[0])
+    expect(p).toContain(mustAskLines('hot_water')[0])
+  })
+})
+
+describe('buildVoiceSystemPrompt — qualify-only trades (lead capture, no auto-quote)', () => {
+  it('roofing gets its questions + closing, no electrical questions, no price', () => {
+    const p = buildVoiceSystemPrompt('Top Roof Co', ['roofing'])
+    for (const q of VOICE_TRADE_QUESTIONS.roofing.questions) expect(p).toContain(q)
+    expect(p).toContain(VOICE_TRADE_QUESTIONS.roofing.closing)
+    expect(p).toContain('no price on the call')
+    expect(p).not.toContain(mustAskLines('downlights')[0])
+  })
+
+  it('all seven trades compose without collision', () => {
+    const p = buildVoiceSystemPrompt('Everything Trades', [
+      'electrical', 'plumbing', 'roofing', 'painting', 'solar', 'aircon', 'commercial_painting',
+    ])
+    expect(p).toContain('ELECTRICAL JOBS')
+    expect(p).toContain('PLUMBING JOBS')
+    expect(p).toContain('ROOFING (lead capture')
+    expect(p).toContain('PAINTING (lead capture')
+    expect(p).toContain('SOLAR (lead capture')
+    expect(p).toContain('AIRCON (lead capture')
+    expect(p).toContain('COMMERCIAL PAINTING (lead capture')
+  })
+})
+
+describe('buildVoiceSystemPrompt — Supabase custom-service MUST-ASK (mirrors SMS)', () => {
+  const services = [
+    {
+      name: 'Install EV charger',
+      description: 'Wall-mounted EV charger',
+      always_inspection: false,
+      clarifying_questions: [
+        'Is the charger on-site, and which model is it?',
+        'Roughly how far is the parking spot from the switchboard?',
+      ],
+    },
+    {
+      name: 'Switchboard upgrade',
+      always_inspection: true,
+      clarifying_questions: ['Old ceramic fuses or modern breakers?'],
+    },
+  ]
+
+  it('renders each enabled service and its DB MUST-ASK questions', () => {
+    const p = buildVoiceSystemPrompt('Acme', ['electrical'], undefined, services)
+    expect(p).toContain('Install EV charger')
+    expect(p).toContain('Is the charger on-site, and which model is it?')
+    expect(p).toContain('MUST ASK before you finish')
+  })
+
+  it('splits auto-quote vs inspection-only by always_inspection', () => {
+    const p = buildVoiceSystemPrompt('Acme', ['electrical'], undefined, services)
+    expect(p).toContain('AUTO-QUOTE services')
+    expect(p).toContain('INSPECTION-ONLY services')
+    expect(p).toContain('Switchboard upgrade')
+  })
+
+  it('omits the section entirely when no custom services are passed', () => {
+    const p = buildVoiceSystemPrompt('Acme', ['electrical'])
+    expect(p).not.toContain('SERVICES THIS BUSINESS OFFERS')
+  })
+})
+
+describe('buildVoiceSystemPrompt — unknown / widened trade', () => {
+  it('a registered-but-unscripted trade falls back to a generic lead-capture block', () => {
+    const p = buildVoiceSystemPrompt('Sign Guys', ['signage'])
+    expect(p).toContain('an Australian signage contractor')
+    expect(p).toContain('SIGNAGE (lead capture')
+    expect(p).toContain('What exactly do you need done?')
+  })
+
+  it('composes for a brand-new trade name (type widened — §3 voice blocker)', () => {
+    const p = buildVoiceSystemPrompt('Hammer & Co', ['carpentry'])
+    expect(p).toContain('an Australian carpentry contractor')
+    expect(p).toContain('carpentry job')
   })
 })

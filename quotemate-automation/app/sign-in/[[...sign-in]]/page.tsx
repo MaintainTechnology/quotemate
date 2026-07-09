@@ -40,7 +40,11 @@ export default function ClerkSignInPage() {
         </>
       }
     >
-      <SignIn />
+      {/* Land straight on the dashboard after auth
+          (specs/dashboard-performance.md R1). fallbackRedirectUrl still
+          yields to an explicit ?redirect_url deep-link, so guarded flows
+          keep their destination. */}
+      <SignIn fallbackRedirectUrl="/dashboard" />
     </ClerkAuthShell>
   );
 }

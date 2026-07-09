@@ -37,6 +37,17 @@ export const jobQueueKey = (j: Pick<QueueJob, 'trade' | 'id'>): string =>
 export const jobTradeSlug = (j: Pick<QueueJob, 'trade'>): string =>
   j.trade.toLowerCase().replace(/-/g, '_')
 
+/** Label for the tradie detail link — names the destination per trade
+ *  (roofing → the /m measurement-results page, painting → the /p estimate
+ *  page) so the queue CTA says what the tradie will land on. Trades whose
+ *  tradieHref is a workspace keep the generic label. */
+export function jobTradieCtaLabel(j: Pick<QueueJob, 'trade'>): string {
+  const t = jobTradeSlug(j)
+  if (t === 'roofing') return 'Measurement results'
+  if (t === 'painting') return 'Estimate results'
+  return 'Review & edit'
+}
+
 /** Status-rail bucket for a measure-tool job. draft = awaiting the tradie
  *  (the same reading the Overview attention rail uses); inspection maps to
  *  the Inspection chip. A confirmed job matches only 'all' — it is neither

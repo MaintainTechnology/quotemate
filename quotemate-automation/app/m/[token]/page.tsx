@@ -13,11 +13,15 @@
 // The tradie can include/exclude each structure here — that selection is the
 // authoritative source of truth the customer quote + PDF narrow to.
 //
-// Maintain Technology brand: dark navy, vibrant orange, all-caps display.
+// Presentation: the same Command Centre sheet language as the customer quote
+// surface (app/q/_chrome — `.qm-quote` scoped dark palette, QuoteSheet +
+// Letterhead), at a wider sheet width for the tradie's desktop review. The
+// interactive review (MeasurementReview) inherits the scoped tokens.
 
 import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import type { CSSProperties } from 'react'
 import type { MultiRoofQuote } from '@/lib/roofing/types'
 import {
   defaultStructureIndices,
@@ -26,6 +30,9 @@ import {
   structureCount,
 } from '@/lib/roofing/selection'
 import { buildSaveAsQuoteRequest } from '@/lib/roofing/save-as-quote-helpers'
+import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
+import { QuoteSheet, Letterhead } from '../../q/_chrome/parts'
+import { QuoteMaxMark } from '../../q/_chrome/icons'
 import { MeasurementReview } from './MeasurementReview'
 
 export const dynamic = 'force-dynamic'
@@ -45,6 +52,7 @@ type Row = {
   measure_token: string
   public_token: string
   included_indices: number[] | null
+  tenant_id: string | null
 }
 
 export default async function MeasurementResultsPage({
@@ -57,7 +65,7 @@ export default async function MeasurementResultsPage({
 
   const { data, error } = await supabase
     .from('roofing_measurements')
-    .select('address, postcode, state, provider, routing, quote, measure_token, public_token, included_indices')
+    .select('address, postcode, state, provider, routing, quote, measure_token, public_token, included_indices, tenant_id')
     .eq('measure_token', token)
     .maybeSingle()
 
@@ -81,6 +89,10 @@ export default async function MeasurementResultsPage({
       .maybeSingle()
     if (!linkErr && link) quoteShareToken = (link.quote_share_token as string | null) ?? null
   }
+
+  // Tradie letterhead identity — best-effort, degrades to a generic name when
+  // the row predates tenant stamping.
+  const identity = await loadTenantIdentity(supabase, row.tenant_id)
 
   // Promotion payload (spec R6d/e) — flattened server-side by the SAME pure
   // helper the save-as-quote tests validate, so the client only POSTs it.
@@ -108,62 +120,128 @@ export default async function MeasurementResultsPage({
   const primaryIndices = primaryStructureIndices(quote)
 
   return (
-    <main className="min-h-screen bg-ink-deep text-text-pri">
-      <section className="mx-auto max-w-5xl px-6 pt-14 pb-10 sm:px-10">
+    <div
+      className="qm-quote"
+      data-qm-theme="dark"
+      style={
+        {
+          minHeight: '100dvh',
+          display: 'flex',
+          flexDirection: 'column',
+          background: 'var(--ink-deep)',
+          color: 'var(--text-pri)',
+          // Wider sheet than the customer quote — this is a desktop review
+          // surface; the structure cards and stat grids earn the room.
+          '--qm-sheet-w': '1200px',
+        } as CSSProperties
+      }
+    >
+      <div className="noise-overlay" aria-hidden="true" />
+
+      {/* ── tradie top bar — mirrors the customer chrome at tradie intent ── */}
+      <header
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 20,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 16,
+          height: 56,
+          padding: '0 20px',
+          borderBottom: '1px solid var(--ink-line)',
+          background: 'var(--ink-deep)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+          <QuoteMaxMark size={24} />
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.16em',
+              color: 'var(--text-dim)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Tradie · Measurement results
+          </span>
+        </div>
         {/* measure_token holders are tradies by construction — static link. */}
         <Link
           href="/dashboard"
-          className="mb-4 inline-flex items-center gap-2 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-text-pri"
+          className="inline-flex items-center gap-2 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-text-pri"
         >
           ← Dashboard
         </Link>
-        <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
-          QuoteMax · Roofing · Measurement
-        </div>
-        <h1 className="mt-3 font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2rem,5vw,3.5rem)]">
-          Measurement <span className="text-accent">results</span>
-        </h1>
-        {row.address && <p className="mt-4 text-lg text-text-sec">{row.address}</p>}
-        <p className="mt-3 max-w-2xl text-base leading-relaxed text-text-sec">
-          Every structure measured at this property
-          {row.provider ? ` (via ${row.provider})` : ''}. Untick any structure
-          you don&rsquo;t want in the job — your selection is what the customer
-          quote and the PDF are priced from.
-        </p>
+      </header>
 
-        {/* Satellite / aerial view of the property (same source the customer
-            quote page uses), keyed by the customer public_token. */}
-        <div className="mt-8 overflow-hidden border border-ink-line bg-ink-card">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={`/api/roofing/q/${row.public_token}/static-map`}
-            alt={`Satellite view of the roof at ${row.address ?? 'the property'}`}
-            className="h-112 w-full object-cover sm:h-128"
+      <main style={{ position: 'relative', flex: 1, minHeight: 0, padding: '0 16px 40px' }}>
+        <QuoteSheet label={`Roofing measurement · ${row.address ?? 'measured property'}`}>
+          <Letterhead
+            name={identity?.business_name ?? 'Your roofing team'}
+            credential="Roofing · measurement review"
+            logoUrl={identity?.logo_url ?? null}
+            contactName={contactDisplayName(identity)}
+            phone={(identity?.owner_mobile ?? '').trim() || null}
+            email={(identity?.owner_email ?? '').trim() || null}
           />
-          <div className="px-5 py-3 font-mono text-xs uppercase tracking-[0.16em] text-text-dim">
-            Google satellite view
-          </div>
-        </div>
 
-        <MeasurementReview
-          measureToken={row.measure_token}
-          publicToken={row.public_token}
-          routing={row.routing}
-          structures={quote.structures}
-          solar={quote.solar ?? null}
-          initialIncluded={included}
-          primaryIndices={primaryIndices}
-          selectionWasPersisted={selectionWasPersisted}
-          quoteShareToken={quoteShareToken}
-          saveAsQuoteBody={saveAsQuoteBody}
-        />
-      </section>
+          <div className="px-6 pb-10 sm:px-10">
+            <div className="pt-8">
+              <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-accent">
+                QuoteMax · Roofing · Measurement
+              </div>
+              <h1 className="mt-3 font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(1.9rem,4.2vw,3.2rem)]">
+                Measurement <span className="qm-accentword">results</span>
+              </h1>
+              {row.address && <p className="mt-4 text-lg text-text-sec">{row.address}</p>}
+              <p className="mt-3 max-w-2xl text-base leading-relaxed text-text-sec">
+                Every structure measured at this property
+                {row.provider ? ` (via ${row.provider})` : ''}. Untick any structure
+                you don&rsquo;t want in the job. Your selection is what the customer
+                quote and the PDF are priced from.
+              </p>
+            </div>
+
+            {/* Satellite / aerial view of the property (same source the customer
+                quote page uses), keyed by the customer public_token. */}
+            <div className="mt-8 overflow-hidden border border-ink-line bg-ink-card">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`/api/roofing/q/${row.public_token}/static-map`}
+                alt={`Satellite view of the roof at ${row.address ?? 'the property'}`}
+                className="h-112 w-full object-cover sm:h-128"
+              />
+              <div className="border-t border-ink-line px-5 py-3 font-mono text-xs uppercase tracking-[0.16em] text-text-dim">
+                Google satellite view
+              </div>
+            </div>
+
+            <MeasurementReview
+              measureToken={row.measure_token}
+              publicToken={row.public_token}
+              routing={row.routing}
+              structures={quote.structures}
+              solar={quote.solar ?? null}
+              initialIncluded={included}
+              primaryIndices={primaryIndices}
+              selectionWasPersisted={selectionWasPersisted}
+              quoteShareToken={quoteShareToken}
+              saveAsQuoteBody={saveAsQuoteBody}
+            />
+          </div>
+        </QuoteSheet>
+      </main>
 
       <div className="bg-accent px-6 py-5 text-center text-white">
         <span className="font-mono text-sm font-semibold uppercase tracking-[0.16em]">
           QuoteMax · Roofing · Measurement
         </span>
       </div>
-    </main>
+    </div>
   )
 }

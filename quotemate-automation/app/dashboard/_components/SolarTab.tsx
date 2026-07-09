@@ -29,6 +29,7 @@ import type {
   SolarEstimateStatus,
   SolarEstimateViewModel,
 } from '@/lib/solar/dashboard-view'
+import { StatusPill, type Tone } from './quote-ui'
 import { OVERLAY_MAP_ZOOM, OVERLAY_MAP_WIDTH, OVERLAY_MAP_HEIGHT } from '@/lib/solar/layout-overlay'
 import { BuildingPicker } from '@/app/q/solar/[token]/BuildingPicker'
 import { PylonHardwareCard } from './PylonHardwareCard'
@@ -45,24 +46,12 @@ type Props = {
 
 const STATUS_META: Record<
   SolarEstimateStatus,
-  { label: string; cls: string }
+  { label: string; tone: Tone; pulse?: boolean }
 > = {
-  awaiting_confirmation: {
-    label: 'Awaiting review',
-    cls: 'border-warning-bright/50 text-warning-bright',
-  },
-  confirmed: {
-    label: 'Released',
-    cls: 'border-success-bright/50 text-success-bright',
-  },
-  paid: {
-    label: 'Deposit paid',
-    cls: 'border-success-bright/50 text-success-bright',
-  },
-  flagged: {
-    label: 'Needs review',
-    cls: 'border-warning/50 text-warning',
-  },
+  awaiting_confirmation: { label: 'Awaiting review', tone: 'warn', pulse: true },
+  confirmed: { label: 'Released', tone: 'success' },
+  paid: { label: 'Deposit paid', tone: 'success' },
+  flagged: { label: 'Needs review', tone: 'warn' },
 }
 
 function fmtMoney(n: number | null): string {
@@ -88,15 +77,12 @@ function fmtDate(iso: string): string {
 type SolarSub = 'instant' | 'felt'
 
 /** Felt map provisioning chip copy + tone, by felt.status. */
-const FELT_CHIP: Record<
-  string,
-  { label: string; cls: string }
-> = {
-  ready: { label: 'Map ready', cls: 'border-teal-glow/40 text-teal-glow' },
-  partial: { label: 'Map building…', cls: 'border-warning-bright/50 text-warning-bright' },
-  provisioning: { label: 'Map building…', cls: 'border-warning-bright/50 text-warning-bright' },
-  pending: { label: 'Map building…', cls: 'border-warning-bright/50 text-warning-bright' },
-  failed: { label: 'Map unavailable', cls: 'border-warning/50 text-warning' },
+const FELT_CHIP: Record<string, { label: string; tone: Tone }> = {
+  ready: { label: 'Map ready', tone: 'good' },
+  partial: { label: 'Map building…', tone: 'warn' },
+  provisioning: { label: 'Map building…', tone: 'warn' },
+  pending: { label: 'Map building…', tone: 'warn' },
+  failed: { label: 'Map unavailable', tone: 'warn' },
 }
 
 function TabButton({
@@ -540,11 +526,12 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                       {/* Felt map provisioning state (Felt tab spec
                           2026-06-13) — felt-variant rows only. */}
                       {e.quoteVariant === 'felt' && e.feltStatus && FELT_CHIP[e.feltStatus] && (
-                        <span
-                          className={`border ${FELT_CHIP[e.feltStatus].cls} px-3 py-1 font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em]`}
-                        >
-                          {FELT_CHIP[e.feltStatus].label}
-                        </span>
+                        <StatusPill
+                          label={FELT_CHIP[e.feltStatus].label}
+                          tone={FELT_CHIP[e.feltStatus].tone}
+                          dot
+                          compact
+                        />
                       )}
                       {/* Live Pylon pipeline stage of the pushed lead
                           (supplements build 2026-06-13). */}
@@ -554,12 +541,12 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                             href={e.pylonLeadUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="border border-teal-glow/40 px-3 py-1 font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-teal-glow transition-colors hover:border-teal-glow"
+                            className="inline-flex items-center rounded-full border border-ink-line bg-ink-deep px-2.5 py-[3px] font-mono text-[0.58rem] font-semibold uppercase tracking-[0.12em] text-text-sec transition-colors hover:border-accent hover:text-accent"
                           >
                             Pylon: {e.pylonStage}
                           </a>
                         ) : (
-                          <span className="border border-teal-glow/40 px-3 py-1 font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-teal-glow">
+                          <span className="inline-flex items-center rounded-full border border-ink-line bg-ink-deep px-2.5 py-[3px] font-mono text-[0.58rem] font-semibold uppercase tracking-[0.12em] text-text-sec">
                             Pylon: {e.pylonStage}
                           </span>
                         ))}
@@ -575,11 +562,7 @@ export function SolarTab({ accessToken, tenantId, appUrl }: Props) {
                           OpenSolar project
                         </a>
                       )}
-                      <span
-                        className={`border ${meta.cls} px-3 py-1 font-mono text-[0.66rem] font-semibold uppercase tracking-[0.14em]`}
-                      >
-                        {meta.label}
-                      </span>
+                      <StatusPill label={meta.label} tone={meta.tone} dot compact pulse={meta.pulse} />
                     </div>
                   </div>
 

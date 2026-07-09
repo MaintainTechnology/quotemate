@@ -34,6 +34,7 @@ import { PaintPricedSummary } from './PaintPricedSummary'
 import EstimatorChatbot from '../EstimatorChatbot'
 import { PaintPreviewPanel } from './PaintPreviewPanel'
 import { PaginationControls, usePagination } from '../Pagination'
+import { StatusPill, type Tone } from '../quote-ui'
 import { getAuthToken } from '@/lib/auth/client-token'
 
 const API = '/api/tenant/commercial-painting'
@@ -63,22 +64,19 @@ const EXTRACT_STEPS = [
   'Reconciling against the measurements doc…',
 ] as const
 
-// Run lifecycle → a scannable, colour-coded chip for the history rail.
-// The brand's fill shades (success/danger/accent) sit behind white text;
-// idle 'draft' is a quiet outline. Keep labels human, not the raw enum.
-const RUN_STATUS: Record<string, { label: string; chip: string }> = {
-  draft: { label: 'Draft', chip: 'border border-ink-line bg-ink-deep text-text-dim' },
-  // Amber (not accent) so the brand orange stays reserved for the
-  // *selected* run; white-on-warning clears WCAG AA where white-on-accent
-  // would not at this chip size.
-  extracting: { label: 'Extracting', chip: 'bg-warning text-white' },
-  ready: { label: 'Ready', chip: 'bg-[var(--teal-deep)] text-white' },
-  priced: { label: 'Priced', chip: 'bg-success text-white' },
-  failed: { label: 'Failed', chip: 'bg-danger text-white' },
+// Run lifecycle → one calm neutral chip for the history rail; colour now
+// lives only in the tone dot (extracting pulses in place of the old inline
+// spinner). Keep labels human, not the raw enum.
+const RUN_STATUS: Record<string, { label: string; tone: Tone; pulse?: boolean }> = {
+  draft: { label: 'Draft', tone: 'dim' },
+  extracting: { label: 'Extracting', tone: 'warn', pulse: true },
+  ready: { label: 'Ready', tone: 'good' },
+  priced: { label: 'Priced', tone: 'success' },
+  failed: { label: 'Failed', tone: 'danger' },
 }
 
-function runStatusMeta(status: string): { label: string; chip: string } {
-  return RUN_STATUS[status] ?? { label: status, chip: 'border border-ink-line bg-ink-deep text-text-dim' }
+function runStatusMeta(status: string): { label: string; tone: Tone; pulse?: boolean } {
+  return RUN_STATUS[status] ?? { label: status, tone: 'dim' }
 }
 
 type UploadRow = {
@@ -960,14 +958,7 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
                   >
                     {/* Status gutter — fixed width so the job names line up. */}
                     <span className="flex w-24 shrink-0 sm:w-28">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-2 py-0.5 font-mono text-[0.6rem] font-semibold uppercase tracking-[0.1em] ${meta.chip}`}
-                      >
-                        {r.status === 'extracting' && (
-                          <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-                        )}
-                        {meta.label}
-                      </span>
+                      <StatusPill label={meta.label} tone={meta.tone} dot compact pulse={meta.pulse} />
                     </span>
 
                     {/* Job identity. */}

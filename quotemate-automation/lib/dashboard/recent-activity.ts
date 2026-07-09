@@ -63,21 +63,23 @@ export function mergeRecentActivity<Q extends { created_at?: string | null }>(
  *  both row kinds read as one table (Accepted / Site visit / Awaiting you). */
 export function tradeJobPill(status: TradeJobSummary['status']): {
   label: string
-  color: string
+  tone: 'success' | 'warn' | 'dim'
   pulse: boolean
 } {
+  // Tone drives only the StatusPill dot now (neutral chip body); this maps
+  // 1:1 to overviewQuotePill so both row kinds still read as one table.
   if (status === 'confirmed')
-    return { label: 'Accepted', color: 'var(--success-bright)', pulse: false }
+    return { label: 'Accepted', tone: 'success', pulse: false }
   if (status === 'inspection')
-    return { label: 'Site visit', color: 'var(--text-dim)', pulse: false }
-  return { label: 'Awaiting you', color: 'var(--warning-bright)', pulse: true }
+    return { label: 'Site visit', tone: 'dim', pulse: false }
+  return { label: 'Awaiting you', tone: 'warn', pulse: true }
 }
 
 /** Everything a Recent-quotes table row needs to render a trade job. */
 export function jobRowView(job: TradeJobSummary): {
   label: string
   value: string | null
-  pill: { label: string; color: string; pulse: boolean }
+  pill: { label: string; tone: 'success' | 'warn' | 'dim'; pulse: boolean }
   href: string | null
   tradeLabel: string
 } {

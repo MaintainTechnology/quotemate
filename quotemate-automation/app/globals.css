@@ -192,6 +192,13 @@ body {
   to   { opacity: 1; }
 }
 
+/* Boot-banner logo glow (specs/dashboard-performance.md R2) — soft orange
+   pulse behind the QuoteMax lockup while the dashboard loads. */
+@keyframes boot-glow {
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(255, 90, 31, 0.3)); }
+  50%      { filter: drop-shadow(0 0 22px rgba(255, 90, 31, 0.7)); }
+}
+
 /* Soft breathe — used on the live account-status indicator in the
    dashboard nav so an "active" account reads as a live signal. */
 @keyframes pulse-soft {
@@ -520,6 +527,15 @@ html {
     text-decoration-thickness: 0.09em;
     text-underline-offset: 0.12em;
   }
+}
+
+/* A self-contained dark quote surface (.qm-quote[data-qm-theme="dark"]) can
+   sit inside a light ROOT theme (e.g. the tradie /m page). There the
+   highlighter shim above would paint .text-accent dark-on-dark — restore
+   true accent text within the local dark scope, whatever the root theme. */
+:root .qm-quote[data-qm-theme="dark"] .text-accent {
+  color: var(--accent);
+  text-decoration-line: none;
 }
 
 /* ════════════════════════════════════════════════════════════════════

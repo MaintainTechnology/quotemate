@@ -34,6 +34,7 @@ import { SolarRoofInsight } from '../_components/SolarRoofInsight'
 import { RoofTilesViewer } from '../_components/RoofTilesViewer'
 import { SolarCheck } from '../_components/SolarCheck'
 import { StreetView } from '../_components/StreetView'
+import { StatusPill } from '../../_components/quote-ui'
 
 type MultiResponse =
   | {
@@ -966,13 +967,11 @@ function PropertyContextStrip({ quote }: { quote: MultiRoofQuote }) {
 function RoutingStrip({ routing }: { routing: RoofingRoutingDecision }) {
   const tone =
     routing.decision === 'inspection_required' ? 'warn' :
-    routing.decision === 'auto_quote' ? 'good' : 'accent'
+    routing.decision === 'auto_quote' ? 'success' : 'accent'
   return (
-    <div className={`rounded-card mt-8 border border-ink-line border-l-4 ${routingBorder(tone)} bg-ink-card px-6 py-5 sm:px-8`}>
-      <div className={`font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] ${routingLabelColour(tone)}`}>
-        Job routing · {routing.decision.replace('_', ' ')}
-      </div>
-      <p className="mt-1 text-base text-text-sec">{routing.reason}</p>
+    <div className="rounded-card mt-8 border border-ink-line bg-ink-card px-6 py-5 sm:px-8">
+      <StatusPill label={`Job routing · ${routing.decision.replace('_', ' ')}`} tone={tone} dot />
+      <p className="mt-2 text-base text-text-sec">{routing.reason}</p>
     </div>
   )
 }
@@ -1025,8 +1024,8 @@ function PitchProvenance({ metrics, declaredPitch }: { metrics: RoofMetrics; dec
   const measured = metrics.pitch_source === 'measured' && metrics.pitch_degrees != null
   if (measured) {
     return (
-      <div className="rounded-ctl mt-4 inline-flex flex-wrap items-center gap-x-2 gap-y-1 border border-accent/40 bg-accent/5 px-3 py-2 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.12em]">
-        <span className="text-accent">◳ Pitch {metrics.pitch_degrees}° measured</span>
+      <div className="rounded-ctl mt-4 inline-flex flex-wrap items-center gap-x-2 gap-y-1 border border-ink-line bg-ink-deep px-3 py-2 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.12em]">
+        <span className="text-text-sec">◳ Pitch {metrics.pitch_degrees}° measured</span>
         <span className="text-text-dim">
           · Google aerial {metrics.imagery_date ?? 'date n/a'}
           {metrics.imagery_quality ? ` · ${metrics.imagery_quality} quality` : ''}
@@ -1180,16 +1179,6 @@ function Spinner() {
   return <span className="inline-block h-3.5 w-3.5 animate-spin border-2 border-white/40 border-t-white" aria-hidden="true" />
 }
 
-function routingBorder(t: 'warn' | 'good' | 'accent'): string {
-  if (t === 'warn') return 'border-l-warning'
-  if (t === 'good') return 'border-l-teal-glow'
-  return 'border-l-accent'
-}
-function routingLabelColour(t: 'warn' | 'good' | 'accent'): string {
-  if (t === 'warn') return 'text-warning'
-  if (t === 'good') return 'text-teal-glow'
-  return 'text-accent'
-}
 
 function formatMoney(n: number): string {
   return n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })

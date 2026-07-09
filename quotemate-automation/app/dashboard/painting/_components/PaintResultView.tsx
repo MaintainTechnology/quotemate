@@ -6,6 +6,7 @@
 // directive and no hooks: this is a shared component usable in either tree.
 
 import type { PaintingEstimate, PaintingRoutingDecision } from '@/lib/painting/types'
+import { StatusPill } from '../../_components/quote-ui'
 
 export function PaintResultView({
   estimate,
@@ -183,10 +184,8 @@ function RoutingStrip({ routing }: { routing: PaintingRoutingDecision }) {
 }
 
 function ConfidenceBadge({ confidence }: { confidence: 'high' | 'medium' | 'low' }) {
-  const colour = confidence === 'high' ? 'text-teal-glow' : confidence === 'medium' ? 'text-accent' : 'text-warning'
-  return (
-    <span className={`font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] ${colour}`}>{confidence} confidence</span>
-  )
+  const tone = confidence === 'high' ? 'good' : confidence === 'medium' ? 'accent' : 'warn'
+  return <StatusPill label={`${confidence} confidence`} tone={tone} dot />
 }
 
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {

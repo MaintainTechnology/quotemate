@@ -15,6 +15,7 @@ import type {
   ReconcileFlag,
 } from '@/lib/commercial-painting/types'
 import { PAINT_SYSTEMS, MAX_LABOUR_RATE_PER_HR } from '@/lib/commercial-painting/types'
+import { StatusPill, type Tone } from '../quote-ui'
 
 const SYSTEM_LABELS: Record<PaintSystem, string> = {
   spray_matt: 'Spray matt (exposed ceiling)',
@@ -42,27 +43,27 @@ function rowsToItems(rows: Row[]): PaintTakeoffItem[] {
 }
 
 function SourceChip({ row }: { row: Row }) {
-  const styles: Record<string, string> = {
-    both: 'border-teal-glow/60 text-teal-glow',
-    measurements: 'border-teal-glow/60 text-teal-glow',
-    plan: 'border-ink-line text-text-dim',
-    manual: 'border-accent/60 text-accent',
-  }
-  const labels: Record<string, string> = {
-    both: row.delta_pct != null && Math.abs(row.delta_pct) > 10 ? `Δ ${row.delta_pct > 0 ? '+' : ''}${row.delta_pct}%` : 'Matched',
-    measurements: 'Measured',
-    plan: 'Plan only',
-    manual: 'Manual',
-  }
   const flaggedDelta = row.source === 'both' && row.delta_pct != null && Math.abs(row.delta_pct) > 10
+  const label =
+    row.source === 'both'
+      ? flaggedDelta
+        ? `Δ ${row.delta_pct! > 0 ? '+' : ''}${row.delta_pct}%`
+        : 'Matched'
+      : row.source === 'measurements'
+        ? 'Measured'
+        : row.source === 'plan'
+          ? 'Plan only'
+          : 'Manual'
+  const tone: Tone = flaggedDelta
+    ? 'warn'
+    : row.source === 'manual'
+      ? 'accent'
+      : row.source === 'plan'
+        ? 'dim'
+        : 'good'
   return (
-    <span
-      title={row.note}
-      className={`rounded-ctl inline-flex border px-1.5 py-0.5 font-mono text-[0.6rem] font-semibold uppercase tracking-[0.08em] ${
-        flaggedDelta ? 'border-warning text-warning' : styles[row.source]
-      }`}
-    >
-      {labels[row.source]}
+    <span title={row.note}>
+      <StatusPill label={label} tone={tone} dot compact />
     </span>
   )
 }

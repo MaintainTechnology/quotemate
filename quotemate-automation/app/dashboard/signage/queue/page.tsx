@@ -24,6 +24,7 @@ import {
   StateGlyph,
   TopoBackdrop,
 } from '../_components/ui'
+import { StatusPill, type Tone } from '../../_components/quote-ui'
 
 type QueueItem = {
   id: string
@@ -372,8 +373,18 @@ function DetailPanel({
       </div>
 
       {assessment.hq_decision && (
-        <div className="rounded-card mt-3 inline-block border border-ink-line border-l-4 border-l-teal-glow bg-ink-deep px-3 py-1.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-teal-glow">
-          HQ: {assessment.hq_decision.replace('_', ' ')}
+        <div className="mt-3">
+          <StatusPill
+            label={`HQ: ${assessment.hq_decision.replace('_', ' ')}`}
+            tone={
+              assessment.hq_decision === 'approved'
+                ? 'success'
+                : assessment.hq_decision === 'escalated'
+                  ? 'danger'
+                  : 'warn'
+            }
+            dot
+          />
         </div>
       )}
 
@@ -516,18 +527,14 @@ function glyphState(status: Verdict['status']): 'compliant' | 'fix' | 'review' {
 // How the two stages combined for this rule (null when Step 2 didn't run).
 function StageBadge({ stage }: { stage: ProvStage }) {
   if (!stage) return null
-  const map: Record<Exclude<ProvStage, null>, { label: string; cls: string }> = {
-    agreed: { label: 'DB + file store agree', cls: 'text-teal-glow border-teal-glow' },
-    conflict: { label: 'Stages disagree', cls: 'text-warning-bright border-warning-bright' },
-    kb_only: { label: 'File-store flag', cls: 'text-accent border-accent' },
-    db_only: { label: 'DB only', cls: 'text-text-dim border-ink-line' },
+  const map: Record<Exclude<ProvStage, null>, { label: string; tone: Tone }> = {
+    agreed: { label: 'DB + file store agree', tone: 'success' },
+    conflict: { label: 'Stages disagree', tone: 'warn' },
+    kb_only: { label: 'File-store flag', tone: 'accent' },
+    db_only: { label: 'DB only', tone: 'dim' },
   }
-  const { label, cls } = map[stage]
-  return (
-    <span className={`border px-1.5 py-0.5 font-mono text-[0.64rem] font-semibold uppercase tracking-[0.1em] ${cls}`}>
-      {label}
-    </span>
-  )
+  const { label, tone } = map[stage]
+  return <StatusPill label={label} tone={tone} dot compact />
 }
 
 function rank(s: Verdict['status']): number {
