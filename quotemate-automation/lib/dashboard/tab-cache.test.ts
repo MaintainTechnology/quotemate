@@ -7,6 +7,8 @@ import {
   clearTabCache,
   isFresh,
   readTabCache,
+  staleTabCache,
+  tabCacheKey,
   writeTabCache,
 } from './tab-cache'
 
@@ -69,5 +71,31 @@ describe('clearTabCache', () => {
     clearTabCache()
     expect(readTabCache('chats')).toBeNull()
     expect(readTabCache('trade-jobs')).toBeNull()
+  })
+})
+
+describe('tabCacheKey', () => {
+  test('scopes a surface to a tenant — different tenants get different keys', () => {
+    expect(tabCacheKey('chats', 't-1')).toBe('chats:t-1')
+    expect(tabCacheKey('chats', 't-2')).not.toBe(tabCacheKey('chats', 't-1'))
+  })
+
+  test('same tenant, different surface → different keys', () => {
+    expect(tabCacheKey('chats', 't-1')).not.toBe(tabCacheKey('trade-jobs', 't-1'))
+  })
+})
+
+describe('staleTabCache', () => {
+  test('keeps the data but makes the entry stale (paint-then-revalidate)', () => {
+    writeTabCache('chats:t-1', [{ id: 'c1' }], 10_000)
+    staleTabCache('chats:t-1')
+    const entry = readTabCache<Array<{ id: string }>>('chats:t-1')
+    expect(entry?.data).toEqual([{ id: 'c1' }])
+    expect(isFresh(entry, 10_001)).toBe(false)
+  })
+
+  test('no-op on a missing key', () => {
+    staleTabCache('never-written')
+    expect(readTabCache('never-written')).toBeNull()
   })
 })

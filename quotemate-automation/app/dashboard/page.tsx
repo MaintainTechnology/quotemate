@@ -152,6 +152,8 @@ import {
   clearTabCache,
   isFresh,
   readTabCache,
+  staleTabCache,
+  tabCacheKey,
   writeTabCache,
 } from '@/lib/dashboard/tab-cache'
 import { BootBanner } from './_components/BootBanner'
@@ -928,16 +930,14 @@ export default function DashboardPage() {
   }
 
   if (!data) {
-    // BootBanner overlays the skeleton (specs/dashboard-performance.md R2):
-    // the same banner app/dashboard/loading.tsx paints during the chunk
-    // download stays up through hydration → Clerk → /api/tenant/me, so the
-    // whole boot reads as one continuous loading screen with no flash.
-    return (
-      <Shell businessName={null} onSignOut={signOut} wide>
-        <DashboardSkeleton />
-        <BootBanner />
-      </Shell>
-    )
+    // Same banner app/dashboard/loading.tsx paints during the chunk
+    // download, kept up through hydration → Clerk → /api/tenant/me so the
+    // whole boot reads as one continuous loading screen (spec R2). Banner
+    // ONLY — a Shell+skeleton beneath the opaque overlay is dead render
+    // work, and refresh() is time-bounded (30s AbortSignal) so a hung
+    // fetch lands on the error screen (Retry + sign-out) instead of
+    // trapping the tradie behind an undismissable white screen.
+    return <BootBanner />
   }
 
   // Compact subtitle for the top-nav profile chip — "Electrical · NSW"
