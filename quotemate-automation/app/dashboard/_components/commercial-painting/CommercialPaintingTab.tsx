@@ -92,6 +92,7 @@ type RunRow = {
   site_address: string | null
   status: string
   created_at: string
+  public_token: string | null
 }
 
 type ExtractionState = {
@@ -944,13 +945,13 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
               const title = r.job_name?.trim() || r.site_address?.trim() || 'Untitled run'
               const subAddress = r.job_name?.trim() && r.site_address?.trim() ? r.site_address.trim() : null
               return (
-                <li key={r.id}>
+                <li key={r.id} className="flex items-stretch">
                   <button
                     type="button"
                     disabled={extracting || pricing || saving}
                     onClick={() => void loadRun(r.id)}
                     aria-current={isActive ? 'true' : undefined}
-                    className={`group flex w-full cursor-pointer items-center gap-4 border-l-2 px-4 py-3.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50 ${
+                    className={`group flex w-full min-w-0 flex-1 cursor-pointer items-center gap-4 border-l-2 px-4 py-3.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50 ${
                       isActive
                         ? 'border-l-accent bg-accent/10 hover:bg-accent/20'
                         : 'border-l-transparent bg-ink-deep hover:border-l-accent/50 hover:bg-ink'
@@ -997,6 +998,23 @@ export default function CommercialPaintingTab({ accessToken }: { accessToken: st
                       />
                     </span>
                   </button>
+                  {/* Customer tender page — sibling anchor (never nested in the
+                      row button) so keyboard users get both targets. Mirrors
+                      the button's resting/active/disabled painting so the row
+                      reads as one piece edge to edge. */}
+                  {r.public_token && (
+                    <a
+                      href={`/q/commercial-paint/${r.public_token}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-disabled={extracting || pricing || saving ? 'true' : undefined}
+                      className={`flex shrink-0 items-center border-l border-ink-line px-4 font-mono text-[0.62rem] font-semibold uppercase tracking-[0.12em] transition-colors hover:text-text-pri ${
+                        isActive ? 'bg-accent/10 text-text-sec' : 'bg-ink-deep text-text-dim'
+                      } ${extracting || pricing || saving ? 'pointer-events-none opacity-50' : ''}`}
+                    >
+                      Customer →
+                    </a>
+                  )}
                 </li>
               )
             })}

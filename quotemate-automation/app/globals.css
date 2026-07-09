@@ -192,11 +192,12 @@ body {
   to   { opacity: 1; }
 }
 
-/* Boot-banner logo glow (specs/dashboard-performance.md R2) — soft orange
-   pulse behind the QuoteMax lockup while the dashboard loads. */
+/* Boot-banner logo glow (specs/dashboard-performance.md R2) — soft accent
+   pulse behind the QuoteMax lockup while the dashboard loads. Uses the
+   canonical --accent token, never a hardcoded retired-palette colour. */
 @keyframes boot-glow {
-  0%, 100% { filter: drop-shadow(0 0 6px rgba(255, 90, 31, 0.3)); }
-  50%      { filter: drop-shadow(0 0 22px rgba(255, 90, 31, 0.7)); }
+  0%, 100% { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 30%, transparent)); }
+  50%      { filter: drop-shadow(0 0 22px color-mix(in srgb, var(--accent) 70%, transparent)); }
 }
 
 /* Soft breathe — used on the live account-status indicator in the
@@ -532,10 +533,18 @@ html {
 /* A self-contained dark quote surface (.qm-quote[data-qm-theme="dark"]) can
    sit inside a light ROOT theme (e.g. the tradie /m page). There the
    highlighter shim above would paint .text-accent dark-on-dark — restore
-   true accent text within the local dark scope, whatever the root theme. */
-:root .qm-quote[data-qm-theme="dark"] .text-accent {
+   true accent text within the local dark scope. Scoped to EXACTLY the roots
+   where the shim fires, so dark-root visitors (customer quote pages) keep
+   their untouched cascade — incl. explicit underline utilities. */
+:root[data-theme="light"] .qm-quote[data-qm-theme="dark"] .text-accent {
   color: var(--accent);
   text-decoration-line: none;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .qm-quote[data-qm-theme="dark"] .text-accent {
+    color: var(--accent);
+    text-decoration-line: none;
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════════

@@ -11,7 +11,9 @@ export async function GET(req: Request) {
 
   const { data, error } = await estimatorSupabase
     .from('paint_runs')
-    .select('id, job_name, site_address, status, created_at, updated_at')
+    // public_token → the customer tender page (/q/commercial-paint/…); safe
+    // to return here because the list is bearer-authed and tenant-scoped.
+    .select('id, job_name, site_address, status, created_at, updated_at, public_token')
     .eq('tenant_id', tenant.id)
     .order('created_at', { ascending: false })
     .limit(15)

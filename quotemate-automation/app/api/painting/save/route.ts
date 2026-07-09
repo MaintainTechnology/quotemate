@@ -103,7 +103,10 @@ export async function GET(req: Request) {
   let q = supabase
     .from('painting_measurements')
     .select(
-      'id, address, postcode, state, customer_name, source, scopes, floor_area_m2, total_area_m2, confidence, better_inc_gst, routing, public_token, created_at',
+      // estimate_token is the tradie capability link (/p/…) — safe here
+      // because this list is bearer-authed and tenant-scoped (the owner is
+      // exactly who the token belongs to).
+      'id, address, postcode, state, customer_name, source, scopes, floor_area_m2, total_area_m2, confidence, better_inc_gst, routing, public_token, estimate_token, created_at',
     )
     .order('created_at', { ascending: false })
     .limit(100)

@@ -690,6 +690,9 @@ export default function DashboardPage() {
       const res = await fetch('/api/tenant/me', {
         headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
+        // Bounded so a hung connection can't leave the boot banner up
+        // forever — the catch below lands on the error screen with Retry.
+        signal: AbortSignal.timeout(30_000),
       })
       if (res.status === 404) {
         // Authed but no tenant row yet → finish onboarding wizard.
@@ -702,8 +705,15 @@ export default function DashboardPage() {
       }
       const json = (await res.json()) as DashboardData
       setData(json)
-    } catch (err: any) {
-      setLoadError(err?.message ?? 'Failed to load dashboard')
+    } catch (err: unknown) {
+      // AbortSignal.timeout rejects with a DOMException named TimeoutError.
+      setLoadError(
+        err instanceof Error && err.name === 'TimeoutError'
+          ? 'The dashboard took too long to load — try again.'
+          : err instanceof Error && err.message
+            ? err.message
+            : 'Failed to load dashboard',
+      )
     }
   }
 
@@ -992,12 +1002,12 @@ export default function DashboardPage() {
               quoteCount={data.quotes.length}
               trades={tenantTradeList(data.tenant)}
             />
-            {/* No key here (specs/dashboard-performance.md R3): keying by
-                tab forced a tear-down + remount of the whole content wrapper
-                on every switch just to replay the fade. Tab components still
-                swap via the conditional renders below; their data survives
-                revisits in lib/dashboard/tab-cache. */}
-            <div className="mt-4 lg:mt-0 motion-safe:animate-[fade-up_300ms_cubic-bezier(0.22,1,0.36,1)_both]">
+            {/* No key and no per-switch fade here (spec R3): keying by tab
+                forced a full tear-down + remount just to replay the fade
+                (the spec allows dropping it). Tab components still swap via
+                the conditional renders below; their data survives revisits
+                in lib/dashboard/tab-cache. */}
+            <div className="mt-4 lg:mt-0">
             {/* Calendar renders its own image-spec header (with Sync / New
                 booking actions), so the generic TabHeader is suppressed for it.
                 Chats is a full-bleed two-pane workspace with its own rail
@@ -1086,6 +1096,7 @@ export default function DashboardPage() {
               <div className="-mx-4 -mb-20 sm:-mx-6 lg:-mx-8 lg:-mt-6">
                 <ChatsTab
                   accessToken={accessToken}
+                  tenantId={data.tenant.id}
                   isMultiTrade={
                     Array.isArray(data.tenant.trades) && data.tenant.trades.length > 1
                   }
@@ -1193,7 +1204,11 @@ export default function DashboardPage() {
             )}
             {tab === 'flyer' && <FlyerDesignerTab accessToken={accessToken} />}
             {isHubTab(tab) && (
+              // key={tab}: a DIFFERENT hub is a different workspace — remount
+              // so section state can't bleed a section the next hub doesn't
+              // have (same-hub section clicks no longer remount, spec R3).
               <TradeHub
+                key={tab}
                 trade={hubTrade(tab)}
                 data={data}
                 accessToken={accessToken}
@@ -1219,51 +1234,6 @@ export default function DashboardPage() {
 }
 
 // ─── Shell + Status badge ─────────────────────────────────────────
-
-/** Structural placeholder while /api/tenant/me loads. Mirrors the
- *  Overview layout (sidebar rail, hero card, pipeline strip, KPI row,
- *  two panels) so nothing jumps when the real content lands — the
- *  pulse runs only for motion-safe users. */
-function DashboardSkeleton() {
-  return (
-    <div
-      className="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-stretch"
-      role="status"
-      aria-label="Loading your portal"
-    >
-      {/* Flush-left sidebar skeleton */}
-      <div className="hidden lg:block self-stretch border-r border-ink-line bg-ink-deep">
-        <div className="sticky top-[61px] space-y-2 p-3">
-          {[0, 1, 2, 3, 4, 5].map((i) => (
-            <div
-              key={i}
-              className="h-9 rounded-lg bg-ink-card motion-safe:animate-pulse"
-            />
-          ))}
-        </div>
-      </div>
-      {/* Content skeleton — mirrors the 6-cell KPI strip + 2-column grid */}
-      <div className="min-w-0">
-        <div className="mx-auto w-full max-w-[96rem] space-y-6 px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
-          <div className="space-y-2.5">
-            <div className="h-3 w-40 bg-ink-card motion-safe:animate-pulse" />
-            <div className="h-9 w-72 max-w-full bg-ink-card motion-safe:animate-pulse" />
-          </div>
-          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-card border border-ink-line bg-ink-line sm:grid-cols-3 lg:grid-cols-6">
-            {[0, 1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="h-24 bg-ink-card motion-safe:animate-pulse" />
-            ))}
-          </div>
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.75fr)_minmax(300px,430px)]">
-            <div className="rounded-card h-80 border border-ink-line bg-ink-card motion-safe:animate-pulse" />
-            <div className="rounded-card h-80 border border-ink-line bg-ink-card motion-safe:animate-pulse" />
-          </div>
-          <span className="sr-only">Loading your portal…</span>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 /** Live context the authenticated topbar needs for the reference-design
  *  chrome — the ⌘K command palette and the notifications bell. Loading and
@@ -8119,9 +8089,11 @@ function QuotesTab({
   const jobsMode = savedJobsMode(tradeFilter)
   // R4 (specs/dashboard-performance.md): hydrate from the last visit's jobs
   // so a tab revisit paints instantly — the effect below then skips the
-  // network entirely while the entry is inside the 15s window.
+  // network entirely while the entry is inside the 15s window. The key is
+  // tenant-scoped: tab data must never survive an account switch.
+  const jobsCacheKey = tabCacheKey('trade-jobs', data.tenant.id)
   const [jobs, setJobs] = useState<QueueJob[] | null>(
-    () => readTabCache<QueueJob[]>('trade-jobs')?.data ?? null,
+    () => readTabCache<QueueJob[]>(jobsCacheKey)?.data ?? null,
   )
   // A failed fetch must never silently read as "no saved jobs" — surface an
   // explicit strip with a Retry instead (same contract as the Overview
@@ -8134,12 +8106,11 @@ function QuotesTab({
     let cancelled = false
     // Fresh cache entry → already rendered via the state initializer; a
     // stale entry stays painted while the fetch below revalidates it.
-    const cached = readTabCache<QueueJob[]>('trade-jobs')
-    if (cached) {
+    const cached = readTabCache<QueueJob[]>(jobsCacheKey)
+    if (cached && isFresh(cached, Date.now())) {
       jobsFetchedRef.current = cached.fetchedAt
-      if (jobsTick === 0 && isFresh(cached, Date.now())) return
+      return
     }
-    jobsFetchedRef.current = Date.now()
     void (async () => {
       try {
         // Mint a FRESH token per request — the Clerk session token captured
@@ -8153,17 +8124,25 @@ function QuotesTab({
         const json = (await res.json()) as { jobs?: QueueJob[] }
         if (cancelled) return
         const list = Array.isArray(json.jobs) ? json.jobs : []
-        writeTabCache('trade-jobs', list, Date.now())
+        // ONE clock for the cache window and the focus-return throttle, and
+        // only a SUCCESS advances it — a failed refresh must not swallow
+        // the next 15s of retries.
+        const fetchedAt = Date.now()
+        writeTabCache(jobsCacheKey, list, fetchedAt)
+        jobsFetchedRef.current = fetchedAt
         setJobs(list)
         setJobsError(false)
       } catch {
-        if (!cancelled) setJobsError(true)
+        if (!cancelled) {
+          setJobsError(true)
+          jobsFetchedRef.current = null
+        }
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [accessToken, jobsMode, jobsTick])
+  }, [accessToken, jobsMode, jobsTick, jobsCacheKey])
 
   // Refresh-on-return for the job rows: the conditional tab render covers
   // tab switches (served from tab-cache inside 15s); this covers window
@@ -8383,8 +8362,10 @@ function QuotesTab({
       </div>
 
       {/* Measure-tool fetch failure — say so; silently hiding job rows is
-          exactly the "quotes disappear from the queue" bug this merge fixes. */}
-      {jobsError && jobs === null && jobsMode !== null && (
+          exactly the "quotes disappear from the queue" bug this merge fixes.
+          Shown even when cached rows are painted below: a failed revalidate
+          means the queue may be stale, and the tradie gets the Retry. */}
+      {jobsError && jobsMode !== null && (
         <div
           role="alert"
           className="rounded-ctl flex flex-wrap items-center justify-between gap-2 border border-danger/50 bg-danger/10 px-4 py-2.5 text-xs text-text-pri"
@@ -8501,11 +8482,13 @@ function QuotesTab({
                   job={selected.job}
                   accessToken={accessToken}
                   onDeleted={(j) => {
-                    setJobs((prev) =>
-                      (prev ?? []).filter(
-                        (x) => !(x.trade === j.trade && x.id === j.id),
-                      ),
+                    const next = (jobs ?? []).filter(
+                      (x) => !(x.trade === j.trade && x.id === j.id),
                     )
+                    // Keep the cache in step so the deleted job can't
+                    // resurrect from a fresh entry on the next revisit.
+                    writeTabCache(jobsCacheKey, next, Date.now())
+                    setJobs(next)
                     setSelectedId(null)
                     setMobileDetailOpen(false)
                   }}
@@ -14339,12 +14322,14 @@ function isColdChat(c: ChatRow): boolean {
 
 function ChatsTab({
   accessToken,
+  tenantId,
   isMultiTrade,
   filter,
   onFilterChange,
   onGoToQuotes,
 }: {
   accessToken: string | null
+  tenantId: string
   isMultiTrade: boolean
   filter: 'all' | 'cold'
   onFilterChange: (f: 'all' | 'cold') => void
@@ -14353,25 +14338,29 @@ function ChatsTab({
   // R4 (specs/dashboard-performance.md): hydrate from the cached
   // conversations so a tab revisit paints instantly — any cache entry (even
   // stale) means no "Loading…" flash; the effect below revalidates silently.
+  // Tenant-scoped key: tab data must never survive an account switch.
+  const chatsCacheKey = tabCacheKey('chats', tenantId)
   const [chats, setChats] = useState<ChatRow[] | null>(
-    () => readTabCache<ChatRow[]>('chats')?.data ?? null,
+    () => readTabCache<ChatRow[]>(chatsCacheKey)?.data ?? null,
   )
   const [fetchError, setFetchError] = useState<string | null>(null)
-  const [fetching, setFetching] = useState(
-    () => readTabCache<ChatRow[]>('chats') === null,
-  )
-  // No token → derived error, no fetch effect runs (avoids a synchronous
-  // setState inside the effect, which the react-hooks lint forbids).
+  const [chatsTick, setChatsTick] = useState(0)
+  const chatsFetchedRef = useRef<number | null>(null)
+  // Both derived — no stored `fetching` flag to drift out of step: loading
+  // exactly while there is nothing to show and nothing has failed.
   const error = accessToken ? fetchError : 'Not signed in'
-  const loading = accessToken ? fetching : false
+  const loading = !!accessToken && chats === null && !fetchError
 
   useEffect(() => {
     if (!accessToken) return
     let cancelled = false
-    // Fresh cache entry → already rendered via the state initializers; a
+    // Fresh cache entry → already rendered via the state initializer; a
     // stale entry stays painted while the fetch below revalidates it.
-    const cached = readTabCache<ChatRow[]>('chats')
-    if (cached && isFresh(cached, Date.now())) return
+    const cached = readTabCache<ChatRow[]>(chatsCacheKey)
+    if (cached && isFresh(cached, Date.now())) {
+      chatsFetchedRef.current = cached.fetchedAt
+      return
+    }
     ;(async () => {
       try {
         // Mint a FRESH dual-auth token immediately before the fetch. The
@@ -14389,23 +14378,45 @@ function ChatsTab({
         }
         const json = (await res.json()) as { chats: ChatRow[] }
         if (!cancelled) {
-          writeTabCache('chats', json.chats ?? [], Date.now())
-          setChats(json.chats ?? [])
+          const list = json.chats ?? []
+          // ONE clock for the cache window and the focus-return throttle;
+          // only a success advances it.
+          const fetchedAt = Date.now()
+          writeTabCache(chatsCacheKey, list, fetchedAt)
+          chatsFetchedRef.current = fetchedAt
+          setChats(list)
+          setFetchError(null)
         }
       } catch (err: unknown) {
-        // Background-revalidate failure must not replace a cached view the
-        // tradie is already reading with an error banner.
-        if (!cancelled && !cached) {
+        if (!cancelled) {
           setFetchError(err instanceof Error ? err.message : String(err))
+          // Let the next focus-return retry immediately instead of being
+          // swallowed by the 15s throttle.
+          chatsFetchedRef.current = null
         }
-      } finally {
-        if (!cancelled) setFetching(false)
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [accessToken])
+  }, [accessToken, chatsTick, chatsCacheKey])
+
+  // Refresh-on-return, same contract as the Quotes queue: an already-open
+  // Chats tab revalidates on window focus / visibility, throttled to the
+  // shared 15s window — a list left up overnight can't stay silently stale.
+  useEffect(() => {
+    const onReturn = () => {
+      if (document.visibilityState !== 'visible') return
+      if (!shouldRefresh(chatsFetchedRef.current, Date.now())) return
+      setChatsTick((n) => n + 1)
+    }
+    window.addEventListener('focus', onReturn)
+    document.addEventListener('visibilitychange', onReturn)
+    return () => {
+      window.removeEventListener('focus', onReturn)
+      document.removeEventListener('visibilitychange', onReturn)
+    }
+  }, [])
 
   // Bare-canvas states — the two-pane workspace has no card containers,
   // so its loading / error / empty states sit directly on the page too.
@@ -14416,7 +14427,10 @@ function ChatsTab({
       </p>
     )
   }
-  if (error) {
+  // A failed fetch with NOTHING painted is a full error state; a failed
+  // background revalidate over a cached list becomes the strip below, so
+  // the tradie keeps the data and gets an honest Retry.
+  if (error && !chats) {
     return (
       <div className="border-t border-ink-line p-6">
         <ErrorBanner>{error}</ErrorBanner>
@@ -14433,14 +14447,35 @@ function ChatsTab({
   }
 
   return (
+    <>
+      {error && (
+        <div
+          role="alert"
+          className="rounded-ctl mx-4 mt-3 flex flex-wrap items-center justify-between gap-2 border border-danger/50 bg-danger/10 px-4 py-2.5 text-xs text-text-pri md:mx-5"
+        >
+          <span>
+            Couldn&rsquo;t refresh conversations — showing the last loaded
+            list.
+          </span>
+          <button
+            type="button"
+            onClick={() => setChatsTick((n) => n + 1)}
+            className="rounded-ctl inline-flex items-center border border-ink-line px-3 py-1.5 font-mono text-[0.62rem] font-bold uppercase tracking-[0.14em] text-text-pri transition-colors cursor-pointer hover:border-accent hover:text-accent"
+          >
+            Retry
+          </button>
+        </div>
+      )}
     <ChatsSplitView
       chats={chats}
+      onMutated={() => staleTabCache(chatsCacheKey)}
       isMultiTrade={isMultiTrade}
       filter={filter}
       onFilterChange={onFilterChange}
       onGoToQuotes={onGoToQuotes}
       accessToken={accessToken}
     />
+    </>
   )
 }
 
@@ -14451,6 +14486,7 @@ function ChatsTab({
  *  row is tapped, with a back control in the thread header. */
 function ChatsSplitView({
   chats,
+  onMutated,
   isMultiTrade,
   filter,
   onFilterChange,
@@ -14458,6 +14494,10 @@ function ChatsSplitView({
   accessToken,
 }: {
   chats: ChatRow[]
+  /** Called after a mutation the cached conversations list can't see
+   *  (e.g. a reply sent) — marks the tab cache stale so the next Chats
+   *  mount revalidates instead of serving the pre-send transcript. */
+  onMutated: () => void
   isMultiTrade: boolean
   filter: 'all' | 'cold'
   onFilterChange: (f: 'all' | 'cold') => void
@@ -14580,12 +14620,16 @@ function ChatsSplitView({
             onDraft={(v) =>
               setDrafts((prev) => ({ ...prev, [selected.id]: v }))
             }
-            onSent={(m) =>
+            onSent={(m) => {
               setSentByConvo((prev) => ({
                 ...prev,
                 [selected.id]: [...(prev[selected.id] ?? []), m],
               }))
-            }
+              // The cached list now lags this thread — stale-mark it so the
+              // next Chats mount revalidates instead of resurrecting the
+              // pre-send transcript for up to 15s.
+              onMutated()
+            }}
             sending={sendingByConvo[selected.id] ?? false}
             sendError={sendErrorByConvo[selected.id] ?? null}
             onSendingChange={(v) =>
@@ -15496,6 +15540,7 @@ type SavedPaintJob = {
   better_inc_gst: number | null
   routing: string | null
   public_token: string | null
+  estimate_token: string | null
   created_at: string
 }
 
@@ -15557,18 +15602,8 @@ function PaintingHubTab({ accessToken }: { accessToken: string | null }) {
   }, [loadJobs])
   return (
     <div className="space-y-7">
-      <div>
-        <h2 className="font-extrabold uppercase tracking-[-0.025em] text-[clamp(1.5rem,2.6vw,2.25rem)] leading-[1.1] text-text-pri">
-          Paint tools
-        </h2>
-        <p className="mt-3 max-w-2xl text-base leading-relaxed text-text-sec">
-          Type any address, pick the surfaces, and get an estimated
-          paintable area plus a Good / Better / Best range. Phase 1 scaffold
-          — every estimate is a range with a confidence band, and low
-          confidence routes to a site measure. Tradie signs off before send.
-        </p>
-      </div>
-
+      {/* No inner heading — the tab shell already renders the "Paint tools"
+          header from TAB_COPY, and doubling it read as a rendering bug. */}
       <Link
         href="/dashboard/painting"
         className="rounded-card group flex flex-col gap-6 border border-ink-line bg-ink-card p-7 transition-colors hover:border-accent sm:flex-row sm:items-start sm:gap-8 sm:p-9"
@@ -15640,8 +15675,31 @@ function PaintingHubTab({ accessToken }: { accessToken: string | null }) {
                         {` · ${formatDate(j.created_at)}`}
                       </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-3">
+                    <div className="flex shrink-0 flex-wrap items-center gap-3">
                       <Pill tone={inspection ? 'warn' : 'ok'} label={inspection ? 'Inspection' : 'Quote'} />
+                      {/* Same three CTAs the quotes queue offers, so the hub's
+                          list never strands a job behind a status pill.
+                          hover:text-text-pri, not hover:text-accent — the
+                          light-theme accent shim covers only the static
+                          .text-accent class, so a hover:text-accent label
+                          would flash yellow-on-cream (~1.6:1). */}
+                      {j.estimate_token && (
+                        <Link
+                          href={`/p/${j.estimate_token}`}
+                          className="py-1.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-text-pri"
+                        >
+                          Estimate results →
+                        </Link>
+                      )}
+                      {j.public_token && (
+                        <Link
+                          href={`/q/paint/${j.public_token}`}
+                          target="_blank"
+                          className="py-1.5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-text-pri"
+                        >
+                          Customer page →
+                        </Link>
+                      )}
                       {j.public_token && !inspection && (
                         <a
                           href={`/api/q/paint/${j.public_token}/pdf`}
@@ -15952,8 +16010,9 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
 // signage, painting, commercial-painting, aircon, estimator, solar).
 // Every section reuses the existing tab component with tradeFilter set,
 // so behaviour and save paths are identical — only the scope changes.
-// Section state is local: switching hubs remounts via the parent's
-// key={tab}, so each hub opens on its default section.
+// Section state is local: switching hubs remounts via the explicit
+// key={tab} on the <TradeHub> element in DashboardPage, so each hub
+// opens on its default section.
 
 type HubSection =
   | 'tools'
@@ -16072,10 +16131,10 @@ function TradeHub({
         })}
       </div>
 
-      {/* No key (specs/dashboard-performance.md R3) — keying by section
+      {/* No key and no per-switch fade (spec R3) — keying by section
           remounted the whole hub body on every chip click just to replay
           the fade; sections still swap via the conditional renders below. */}
-      <div className="motion-safe:animate-[fade-up_300ms_cubic-bezier(0.22,1,0.36,1)_both]">
+      <div>
         {section === 'tools' && trade === 'electrical' && (
           <EstimatorBetaTab accessToken={accessToken} />
         )}

@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 // Interactive structure picker for the Measurement Results page (/m/[token]).
 // Each structure has an include/exclude toggle; toggling persists to
@@ -54,7 +54,7 @@ const TIER_NAME: Record<'good' | 'better' | 'best', string> = {
 }
 
 /**
- * PURE — combined inc/ex-GST + area over the INCLUDED structures (1-based).
+ * PURE â€” combined inc/ex-GST + area over the INCLUDED structures (1-based).
  * Delegates to THE canonical helper so this tradie-facing total matches the
  * customer quote page + PDF exactly: inspection-routed structures stay listed
  * but are never priced into the headline total.
@@ -106,7 +106,7 @@ export function MeasurementReview({
 
   // Promote this measurement to an editable quotes row (spec R6e), then land
   // on the dashboard editor. Idempotent server-side: a second promotion
-  // returns the existing quote's shareToken. Bearer-authed — the promotion
+  // returns the existing quote's shareToken. Bearer-authed â€” the promotion
   // attributes the quote to the signed-in tradie's tenant.
   const promote = useCallback(async () => {
     if (!saveAsQuoteBody) return
@@ -192,8 +192,8 @@ export function MeasurementReview({
 
   // Secondary-structure contribution. The headline total is canonical
   // (combinedTotalsForIndices); the secondaries' marginal $ is derived as
-  // combined(included) − combined(included ∩ primary) through the SAME helper,
-  // never a free-form re-sum — so it can never drift from the headline. An
+  // combined(included) âˆ’ combined(included âˆ© primary) through the SAME helper,
+  // never a free-form re-sum â€” so it can never drift from the headline. An
   // included-but-inspection secondary contributes $0 (the helper prices only
   // quotable structures), so the delta is honest about what actually adds money.
   const secondaryIncluded = useMemo(
@@ -212,8 +212,8 @@ export function MeasurementReview({
   const secondaryAddsMoney = secondaryDeltaIncGst.some((v) => v > 0)
 
   // The non-default-selection notice fires only when the current set differs
-  // from the roof-only default (i.e. ≥1 secondary is in) and there is more than
-  // one structure to choose from — so it never nags on a primary-only or
+  // from the roof-only default (i.e. â‰¥1 secondary is in) and there is more than
+  // one structure to choose from â€” so it never nags on a primary-only or
   // single-structure job.
   const isPrimaryOnly = useMemo(() => {
     const primarySet = new Set(primaryIndices)
@@ -269,7 +269,7 @@ export function MeasurementReview({
         return
       }
       // Re-render the server page so the promotion payload (saveAsQuoteBody,
-      // flattened server-side from included_indices) reflects THIS toggle —
+      // flattened server-side from included_indices) reflects THIS toggle â€”
       // otherwise "Edit & send quote" would promote the stale selection.
       router.refresh()
     },
@@ -298,7 +298,7 @@ export function MeasurementReview({
             Download PDF <span aria-hidden="true">&darr;</span>
           </a>
         )}
-        {/* On-site edit path (spec R6e): already promoted → straight to the
+        {/* On-site edit path (spec R6e): already promoted â†’ straight to the
             dashboard editor; otherwise promote-then-navigate. */}
         {quoteShareToken ? (
           <a
@@ -314,34 +314,34 @@ export function MeasurementReview({
             disabled={promoteState === 'working'}
             className="inline-flex items-center gap-2 border border-ink-line px-4 py-2.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text-sec transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {promoteState === 'working' ? 'Preparing…' : (<>Edit &amp; send quote <span aria-hidden="true">&rarr;</span></>)}
+            {promoteState === 'working' ? 'Preparingâ€¦' : (<>Edit &amp; send quote <span aria-hidden="true">&rarr;</span></>)}
           </button>
         ) : null}
         {promoteErr && (
-          <span className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-warning">
+          <span className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-warning-bright">
             {promoteErr}
           </span>
         )}
         {saving && (
           <span className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text-dim">
-            Saving…
+            Savingâ€¦
           </span>
         )}
       </div>
 
       {err && (
         <div className="mt-4 border border-ink-line border-l-4 border-l-warning bg-ink-card px-5 py-3">
-          <p className="font-mono text-[0.74rem] font-semibold uppercase tracking-[0.14em] text-warning">{err}</p>
+          <p className="font-mono text-[0.74rem] font-semibold uppercase tracking-[0.14em] text-warning-bright">{err}</p>
         </div>
       )}
 
-      {/* Non-default selection notice — only when ≥1 secondary is in the job. */}
+      {/* Non-default selection notice â€” only when â‰¥1 secondary is in the job. */}
       {showSelectionNotice && (
         <div className="mt-6 border border-ink-line border-l-4 border-l-accent bg-ink-card px-5 py-3">
           <p className="text-sm text-text-sec">
             {selectionWasPersisted
               ? `Showing your saved selection: main dwelling + ${secondaryCount} secondary structure${secondaryCount === 1 ? '' : 's'}. Untick any to remove it from the quote.`
-              : `Including ${secondaryCount} secondary structure${secondaryCount === 1 ? '' : 's'} by default — untick any you don’t want in the quote.`}
+              : `Including ${secondaryCount} secondary structure${secondaryCount === 1 ? '' : 's'} by default â€” untick any you donâ€™t want in the quote.`}
           </p>
         </div>
       )}
@@ -367,15 +367,15 @@ export function MeasurementReview({
       {/* Combined total of the included structures */}
       <div className="mt-8 border border-ink-line border-l-4 border-l-accent bg-ink-card p-6 sm:p-8">
         <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
-          Combined total · {combined.count} structure{combined.count === 1 ? '' : 's'} included
-          {combined.area ? ` · ${combined.area.toFixed(0)} m²` : ''}
+          Combined total Â· {combined.count} structure{combined.count === 1 ? '' : 's'} included
+          {combined.area ? ` Â· ${combined.area.toFixed(0)} mÂ²` : ''}
         </div>
         {secondaryCount > 0 && (
           <div className="mt-1.5 font-mono text-[0.72rem] uppercase tracking-[0.14em] text-text-dim">
             Includes {secondaryCount} secondary structure{secondaryCount === 1 ? '' : 's'}
             {secondaryAddsMoney
               ? ` adding $${money(secondaryDeltaIncGst[1])} (re-roof, inc GST)`
-              : ' — quoted on site'}
+              : ' â€” quoted on site'}
           </div>
         )}
         <div className="mt-5 grid gap-5 sm:grid-cols-3">
@@ -388,7 +388,7 @@ export function MeasurementReview({
                 ${money(combined.incGst[i])}
               </div>
               <div className="mt-1 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
-                inc GST · ${money(combined.exGst[i])} ex GST
+                inc GST Â· ${money(combined.exGst[i])} ex GST
               </div>
               {secondaryCount > 0 && secondaryDeltaIncGst[i] > 0 && (
                 <div className="mt-1 font-mono text-[0.66rem] uppercase tracking-[0.12em] text-text-dim">
@@ -400,7 +400,7 @@ export function MeasurementReview({
         </div>
       </div>
 
-      {/* Existing solar / skylights — persisted detection (save-time aerial +
+      {/* Existing solar / skylights â€” persisted detection (save-time aerial +
           any tradie photo re-scan). Applied solar is added to ALL tier totals on
           the customer quote; skylights are flagged only (never auto-priced). */}
       <div className="mt-6 border border-ink-line border-l-4 border-l-accent bg-ink-card p-6 sm:p-7">
@@ -410,15 +410,15 @@ export function MeasurementReview({
         <p className="mt-2 text-base text-text-sec">
           {solar?.detection
             ? solar.detection.summary_note
-            : 'Not scanned yet — attach close-up roof photos below to check for panels and skylights.'}
+            : 'Not scanned yet â€” attach close-up roof photos below to check for panels and skylights.'}
         </p>
 
         {solar?.detection?.has_solar && solar.allowance && (
           <div className={`mt-4 border border-ink-line border-l-4 ${solarApplies ? 'border-l-accent' : 'border-l-warning'} bg-ink-deep p-4`}>
-            <div className={`font-mono text-[0.74rem] font-semibold uppercase tracking-[0.16em] ${solarApplies ? 'text-accent' : 'text-warning'}`}>
+            <div className={`font-mono text-[0.74rem] font-semibold uppercase tracking-[0.16em] ${solarApplies ? 'text-accent' : 'text-warning-bright'}`}>
               {solarApplies
-                ? `Solar detach & reinstate · +$${money(solar.allowance.inc_gst)} inc GST added to every tier`
-                : 'Solar flagged — not auto-priced (low confidence or not a full re-roof)'}
+                ? `Solar detach & reinstate Â· +$${money(solar.allowance.inc_gst)} inc GST added to every tier`
+                : 'Solar flagged â€” not auto-priced (low confidence or not a full re-roof)'}
             </div>
             <p className="mt-2 text-sm text-text-sec">{solar.allowance.electrician_note}</p>
           </div>
@@ -426,11 +426,11 @@ export function MeasurementReview({
 
         {solar?.detection?.has_skylight && (
           <p className="mt-3 text-sm text-text-sec">
-            {solar.detection.skylight_count} skylight{solar.detection.skylight_count === 1 ? '' : 's'} flagged — add a re-flash line if the re-roof disturbs {solar.detection.skylight_count === 1 ? 'it' : 'them'} (not auto-priced).
+            {solar.detection.skylight_count} skylight{solar.detection.skylight_count === 1 ? '' : 's'} flagged â€” add a re-flash line if the re-roof disturbs {solar.detection.skylight_count === 1 ? 'it' : 'them'} (not auto-priced).
           </p>
         )}
 
-        {/* Per-structure attribution — which building each read came from (R3). */}
+        {/* Per-structure attribution â€” which building each read came from (R3). */}
         {solar?.perStructure && solar.perStructure.length > 0 && (
           <div className="mt-4 space-y-2">
             {solar.perStructure.map((ps, i) => (
@@ -443,12 +443,12 @@ export function MeasurementReview({
         )}
 
         {solar?.structuresSkipped ? (
-          <p className="mt-3 font-mono text-[0.72rem] uppercase tracking-[0.14em] text-warning">
-            {solar.structuresSkipped} more structure{solar.structuresSkipped === 1 ? '' : 's'} not scanned — re-scan with photos to cover {solar.structuresSkipped === 1 ? 'it' : 'them'}.
+          <p className="mt-3 font-mono text-[0.72rem] uppercase tracking-[0.14em] text-warning-bright">
+            {solar.structuresSkipped} more structure{solar.structuresSkipped === 1 ? '' : 's'} not scanned â€” re-scan with photos to cover {solar.structuresSkipped === 1 ? 'it' : 'them'}.
           </p>
         ) : null}
 
-        {/* Tradie photo source (R2) — attach close-up roof photos and re-scan. */}
+        {/* Tradie photo source (R2) â€” attach close-up roof photos and re-scan. */}
         <div className="mt-5 border-t border-ink-line pt-4">
           <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
             Attach roof photos &amp; re-scan
@@ -471,11 +471,11 @@ export function MeasurementReview({
               disabled={rescanState === 'scanning' || photos.length === 0}
               className="inline-flex items-center gap-2 bg-accent px-4 py-2 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {rescanState === 'scanning' ? 'Scanning…' : `Re-scan${photos.length ? ` (${photos.length})` : ''}`}
+              {rescanState === 'scanning' ? 'Scanningâ€¦' : `Re-scan${photos.length ? ` (${photos.length})` : ''}`}
             </button>
           </div>
           {rescanMsg && (
-            <p className={`mt-2 text-sm ${rescanState === 'error' ? 'text-warning' : 'text-text-sec'}`}>{rescanMsg}</p>
+            <p className={`mt-2 text-sm ${rescanState === 'error' ? 'text-warning-bright' : 'text-text-sec'}`}>{rescanMsg}</p>
           )}
         </div>
       </div>
@@ -509,9 +509,9 @@ function StructureCard({
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
-              {structure.role === 'primary' ? 'Main dwelling' : 'Secondary structure'} · {String(index + 1).padStart(2, '0')}
+              {structure.role === 'primary' ? 'Main dwelling' : 'Secondary structure'} Â· {String(index + 1).padStart(2, '0')}
             </div>
-            {/* Explicit state — legible from text alone, not just the card opacity. */}
+            {/* Explicit state â€” legible from text alone, not just the card opacity. */}
             <span
               className={`inline-flex items-center border px-2 py-0.5 font-mono text-[0.62rem] font-semibold uppercase tracking-[0.14em] ${
                 isIncluded ? 'border-accent text-accent' : 'border-ink-line text-text-dim'
@@ -537,14 +537,14 @@ function StructureCard({
       <div className="mt-5 grid gap-4 sm:grid-cols-4">
         <MiniStat
           label="Sloped area"
-          value={m.sloped_area_m2 != null ? `${Math.round(m.sloped_area_m2)} m²` : '—'}
-          hint={m.footprint_m2 ? `Footprint ${Math.round(m.footprint_m2)} m²` : ''}
+          value={m.sloped_area_m2 != null ? `${Math.round(m.sloped_area_m2)} mÂ²` : 'â€”'}
+          hint={m.footprint_m2 ? `Footprint ${Math.round(m.footprint_m2)} mÂ²` : ''}
         />
         <MiniStat label="Roof form" value={formLabel(m.form)} hint={m.storeys != null ? `${m.storeys}-storey` : ''} />
-        <MiniStat label="Hips · valleys" value={`${m.hips ?? '?'} · ${m.valleys ?? '?'}`} />
+        <MiniStat label="Hips Â· valleys" value={`${m.hips ?? '?'} Â· ${m.valleys ?? '?'}`} />
         <MiniStat
           label="Pitch"
-          value={m.pitch_source === 'measured' && m.pitch_degrees != null ? `${m.pitch_degrees}°` : structure.inputs.pitch}
+          value={m.pitch_source === 'measured' && m.pitch_degrees != null ? `${m.pitch_degrees}Â°` : structure.inputs.pitch}
           hint={m.pitch_source === 'measured' ? 'measured' : 'declared'}
         />
       </div>
@@ -564,7 +564,7 @@ function StructureCard({
 
       {inspection && (
         <div className="mt-5 border border-ink-line border-l-4 border-l-warning bg-ink-deep px-4 py-3 text-sm text-text-sec">
-          <span className="font-semibold text-text-pri">Indicative — confirmed on site.</span>{' '}
+          <span className="font-semibold text-text-pri">Indicative â€” confirmed on site.</span>{' '}
           {p.routing?.reason ?? 'This structure needs a quick look on site before we can price it.'}{' '}
           The customer sees these prices as an indicative estimate, subject to the on-site visit.
         </div>
