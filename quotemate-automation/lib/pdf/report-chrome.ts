@@ -4,7 +4,9 @@
 // One premium document shell — branded header (tenant logo, falling back
 // to the business name), a thank-you intro, the body slot (each trade's
 // own content), a "Please Note" block and a repeating footer — rendered
-// by Gotenberg (lib/pdf/gotenberg.ts) to A4 portrait.
+// by Gotenberg (lib/pdf/gotenberg.ts) as ONE continuous page (A4 width,
+// content-derived height). The body width is pinned to the printable width;
+// that is load-bearing, not cosmetic — see gotenberg.ts.
 //
 // Design system: the LIVE Caterpillar palette in app/globals.css, LIGHT
 // "warm paper" variant (locked — spec specs/quote-pdf-branding.md D3).
@@ -14,6 +16,8 @@
 // White-label: NO "QuoteMax" string or mark appears here.
 // Pure & deterministic (pass `generatedAt`); unit-tested.
 // ════════════════════════════════════════════════════════════════════
+
+import { PDF_CONTENT_WIDTH_IN } from './gotenberg'
 
 /** HTML-escape a user-influenced string. Shared by every trade builder. */
 export const esc = (s: string): string =>
@@ -211,9 +215,15 @@ export function renderReportDocument(branding: TenantBranding, doc: ReportDocume
   *{ box-sizing:border-box; }
   html,body{ background:var(--paper); }
   body{
-    margin:0; color:var(--pri);
+    margin:0 auto; color:var(--pri);
     font-family:'Manrope','Segoe UI',-apple-system,system-ui,Arial,sans-serif;
     font-size:12px; line-height:1.55;
+    /* Pin the layout width to the printable width. Gotenberg renders this
+       document as ONE continuous page, and it derives that page's height by
+       measuring the document at the browser viewport width — so the width
+       must not depend on the viewport, or the tail gets clipped. See the
+       SINGLE-PAGE / WIDTH CONTRACT in lib/pdf/gotenberg.ts. */
+    width:${PDF_CONTENT_WIDTH_IN}in;
     /* reserve room for the repeating fixed footer so content never overlaps */
     padding-bottom:64px;
   }

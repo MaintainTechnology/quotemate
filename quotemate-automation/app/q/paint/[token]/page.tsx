@@ -13,6 +13,11 @@
 
 import { createClient } from '@supabase/supabase-js'
 import type { PaintingEstimate, PaintScope, PaintingPriceTier } from '@/lib/painting/types'
+import { composePaintLocation } from '@/lib/painting/paint-after'
+import {
+  buildStreetViewMetadataUrl,
+  parseStreetViewMetadata,
+} from '@/lib/painting/streetview'
 import { asQuoteTierMode, resolveVisibleTiers, type QuoteTierMode } from '@/lib/quote/tier-visibility'
 import { canShowPaintingPrices } from '@/lib/painting/publish-gate'
 import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
@@ -57,7 +62,7 @@ export default async function PaintingQuotePage(props: { params: Promise<{ token
   const { data: row } = await supabase
     .from('painting_measurements')
     .select(
-      'address, postcode, state, scopes, confidence, routing, estimate, public_token, customer_name, created_at, tenant_id, tenants:tenant_id(business_name)',
+      'address, postcode, state, scopes, confidence, routing, estimate, public_token, customer_name, created_at, tenant_id, preview_status, tenants:tenant_id(business_name)',
     )
     .eq('public_token', token)
     .maybeSingle()
@@ -323,6 +328,34 @@ export default async function PaintingQuotePage(props: { params: Promise<{ token
     : inspection
       ? { label: 'On-site measure', tone: 'await' }
       : { label: 'Awaiting you', tone: 'await' }
+  // Property imagery (spec quote-visual-parity R3) — FREE Street View metadata
+  // check at render so the section only appears when Google actually has a
+  // pano here (no broken frames; mirrors /p/[token]). The AI repaint figure
+  // shows ONLY when the render is already cached — a customer page load must
+  // never trigger a billable Gemini render.
+  let hasPano = false
+  const mapsKey = process.env.GOOGLE_MAPS_API_KEY
+  if (mapsKey && row.address) {
+    try {
+      const metaRes = await fetch(
+        buildStreetViewMetadataUrl(
+          {
+            location: composePaintLocation({
+              address: String(row.address),
+              postcode: (row.postcode as string | null) ?? null,
+              state: (row.state as string | null) ?? null,
+            }),
+          },
+          { apiKey: mapsKey },
+        ),
+      )
+      hasPano = parseStreetViewMetadata(await metaRes.json().catch(() => null)).ok
+    } catch {
+      /* best-effort — page renders without the imagery section */
+    }
+  }
+  const showAfterImage = (row.preview_status as string | null) === 'ready'
+
   const heroGreeting = inspection
     ? (estimate.price?.routing?.reason ??
         "This job needs a quick on-site measure before we can lock a price. We'll be in touch to book a time.")
@@ -356,6 +389,67 @@ export default async function PaintingQuotePage(props: { params: Promise<{ token
         />
 
         {statItems.length > 0 ? <StatGrid items={statItems} /> : null}
+
+        {/* ── Property imagery — Street View "before" + cached AI repaint
+            "after" via the token-gated /api/painting/q/[token] proxies
+            (spec quote-visual-parity R3; mirrors /p/[token]). ── */}
+        {hasPano ? (
+          <SheetSection eyebrow="Your property" eyebrowAccent>
+            <div
+              style={{
+                display: 'grid',
+                gap: 14,
+                marginTop: 12,
+                gridTemplateColumns: showAfterImage ? 'repeat(auto-fit, minmax(260px, 1fr))' : '1fr',
+              }}
+            >
+              <figure style={{ margin: 0, border: '1px solid var(--ink-line)', background: 'var(--ink-card)' }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/api/painting/q/${row.public_token}/street-view`}
+                  alt={`Street View of the front of ${row.address ?? 'the property'}`}
+                  style={{ width: '100%', height: 280, objectFit: 'cover', display: 'block' }}
+                />
+                <figcaption
+                  style={{
+                    borderTop: '1px solid var(--ink-line)',
+                    padding: '10px 14px',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 11,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.14em',
+                    color: 'var(--text-dim)',
+                  }}
+                >
+                  Front of the property · Google Street View
+                </figcaption>
+              </figure>
+              {showAfterImage ? (
+                <figure style={{ margin: 0, border: '1px solid var(--ink-line)', background: 'var(--ink-card)' }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/api/painting/q/${row.public_token}/after-image`}
+                    alt={`AI preview of ${row.address ?? 'the property'} freshly repainted`}
+                    style={{ width: '100%', height: 280, objectFit: 'cover', display: 'block' }}
+                  />
+                  <figcaption
+                    style={{
+                      borderTop: '1px solid var(--ink-line)',
+                      padding: '10px 14px',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 11,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.14em',
+                      color: 'var(--text-dim)',
+                    }}
+                  >
+                    Fresh repaint · AI preview
+                  </figcaption>
+                </figure>
+              ) : null}
+            </div>
+          </SheetSection>
+        ) : null}
 
         {scopeItems.length > 0 ? (
           <Scope

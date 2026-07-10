@@ -26,8 +26,13 @@ import {
  *
  *   v2 (2026-06-25): tier-count-aware eyebrow / intro / heading — a single-tier
  *   quote no longer prints "Good / Better / Best".
+ *   v3 (2026-07-10): property-visuals section (satellite/aerial image + the
+ *   customer page's measurement stat grid) for roofing / commercial-painting
+ *   quotes — spec specs/quote-visual-parity.md R1.
+ *   v4 (2026-07-10): PDFs render as ONE continuous page (Gotenberg singlePage)
+ *   instead of A4 page-by-page; the shared chrome pins the body width.
  */
-export const REPORT_TEMPLATE_VERSION = 2
+export const REPORT_TEMPLATE_VERSION = 4
 
 export type QuoteReportLineItem = {
   description: string
@@ -43,6 +48,16 @@ export type QuoteReportTier = {
   line_items?: QuoteReportLineItem[]
 } | null
 
+/** The customer page's property evidence (satellite/aerial image + measurement
+ *  stat grid) mirrored into the report — spec quote-visual-parity R1. */
+export type QuoteReportPropertyVisuals = {
+  /** Data URI (PDF) or token-gated proxy URL (live HTML preview); null = stats only. */
+  imageSrc: string | null
+  caption: string
+  stats: Array<{ label: string; value: string }>
+  disclaimer: string | null
+}
+
 export type QuoteReportInput = {
   businessName: string
   /** Full white-label branding; when omitted, derived from businessName. */
@@ -52,6 +67,7 @@ export type QuoteReportInput = {
   scopeOfWorks?: string | null
   assumptions?: string[] | null
   estimatedTimeframe?: string | null
+  propertyVisuals?: QuoteReportPropertyVisuals | null
   good: QuoteReportTier
   better: QuoteReportTier
   best: QuoteReportTier
@@ -136,6 +152,33 @@ export function buildQuoteReportHtml(input: QuoteReportInput): string {
   return buildQuoteReportHtmlFromBody(input, buildDefaultQuoteBody(input))
 }
 
+/** The property-visuals `<section>` — image (when available), stat grid,
+ *  disclaimer. Empty string when the input carries neither image nor stats. */
+function propertyVisualsSection(v: QuoteReportPropertyVisuals | null | undefined): string {
+  if (!v) return ''
+  if (!v.imageSrc && v.stats.length === 0) return ''
+  const img = v.imageSrc
+    ? `<figure style="margin:0 0 10px;"><img src="${v.imageSrc}" alt="${esc(
+        v.caption,
+      )}" style="width:100%;max-width:640px;display:block;" /><figcaption class="mono" style="font-size:9px;color:var(--dim);margin-top:4px;">${esc(
+        v.caption,
+      )}</figcaption></figure>`
+    : ''
+  // The chrome's .statgrid is a non-wrapping flex row — chunk into rows of ≤4
+  // so a fully-populated roofing scope (8 stats) stays legible in print.
+  const statCell = (s: { label: string; value: string }) =>
+    `<div class="stat"><div class="v">${esc(s.value)}</div><div class="l">${esc(s.label)}</div></div>`
+  const statRows: string[] = []
+  for (let i = 0; i < v.stats.length; i += 4) {
+    statRows.push(`<div class="statgrid">${v.stats.slice(i, i + 4).map(statCell).join('')}</div>`)
+  }
+  const stats = statRows.join('')
+  const disclaimer = v.disclaimer
+    ? `<p class="note">${esc(v.disclaimer)}</p>`
+    : ''
+  return `<h2>Your property</h2>${img}${stats}${disclaimer}`
+}
+
 /** The default report body — scope of works + Good/Better/Best + assumptions,
  *  exactly as before the report-doc split. Used when a quote has no report_doc. */
 function buildDefaultQuoteBody(input: QuoteReportInput): string {
@@ -147,6 +190,7 @@ function buildDefaultQuoteBody(input: QuoteReportInput): string {
   if (input.scopeOfWorks) {
     body += `<h2>Scope of works</h2><div class="scope">${esc(input.scopeOfWorks)}</div>`
   }
+  body += propertyVisualsSection(input.propertyVisuals)
   body += `<h2>${multiTier ? 'Your options' : 'Your quote'}</h2>${tiers}`
   if (assumptions.length > 0) {
     body += `<h2>Assumptions</h2><ul class="bullets">${assumptions

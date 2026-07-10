@@ -4,6 +4,7 @@ import {
   extractEaveHeight,
   extractZoning,
   absoluteLink,
+  pickSummaryById,
 } from './geoscape-enrich'
 import type { PaintAddressInput } from '../types'
 
@@ -121,5 +122,50 @@ describe('absoluteLink', () => {
     expect(absoluteLink('https://api.psma.com.au/v1', '/v1/buildings/x/area')).toBe(
       'https://api.psma.com.au/v1/buildings/x/area',
     )
+  })
+})
+
+describe('pickSummaryById', () => {
+  const summary = (buildingId: string) => ({ buildingId, relatedAddressCount: 1, links: {} })
+
+  it('returns the summary matching the requested building id', () => {
+    expect(pickSummaryById([summary('b0'), summary('b1')], 'b1')?.buildingId).toBe('b1')
+  })
+
+  it('returns null when the id is absent (caller falls back to best)', () => {
+    expect(pickSummaryById([summary('b0')], 'nope')).toBeNull()
+    expect(pickSummaryById([], 'b0')).toBeNull()
+  })
+})
+
+describe('enrichFromGeoscape — targeted building', () => {
+  it('fetches the requested building instead of the best-ranked one', async () => {
+    const other = {
+      buildingId: 'bldshed222',
+      coverageType: 'Urban',
+      relatedAddressIds: ['a', 'b'],
+      links: {
+        area: '/v1/buildings/bldshed222/area',
+        averageEaveHeight: '/v1/buildings/bldshed222/averageEaveHeight',
+        estimatedLevels: '/v1/buildings/bldshed222/estimatedLevels',
+        zonings: '/v1/buildings/bldshed222/zonings',
+      },
+    }
+    const fetchImpl = router([
+      { when: (u) => u.includes('/addresses'), body: FIXTURES.addresses },
+      { when: (u) => u.includes('/buildings?'), body: { data: [FIXTURES.buildings.data[0], other] } },
+      { when: (u) => u.includes('bldshed222/estimatedLevels'), body: { estimatedLevels: 1 } },
+      { when: (u) => u.includes('bldshed222/averageEaveHeight'), body: { averageEaveHeight: 2.4 } },
+      { when: (u) => u.includes('bldshed222/zonings'), body: { zonings: [] } },
+      { when: (u) => u.includes('bldshed222/area'), body: { area: 38.2 } },
+    ])
+    const res = await enrichFromGeoscape(ADDR, {
+      apiKey: 'k',
+      fetchImpl,
+      buildingId: 'bldshed222',
+    })
+    expect(res.patch.footprint_m2).toBe(38.2)
+    expect(res.patch.storeys).toBe(1)
+    expect(res.patch.eave_height_m).toBe(2.4)
   })
 })

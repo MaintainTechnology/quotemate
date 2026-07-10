@@ -192,12 +192,27 @@ body {
   to   { opacity: 1; }
 }
 
-/* Boot-banner logo glow (specs/dashboard-performance.md R2) — soft accent
-   pulse behind the QuoteMax lockup while the dashboard loads. Uses the
-   canonical --accent token, never a hardcoded retired-palette colour. */
+/* Boot-banner heartbeat (specs/dashboard-performance.md R2) — the QuoteMax
+   lockup expands and contracts like a beating heart (lub-dub, then rest)
+   while the accent glow layer behind it swells in sync. Uses the canonical
+   --accent token, never a hardcoded retired-palette colour. */
+@keyframes boot-heartbeat {
+  0%, 40%, 100% { transform: scale(1); }
+  10%           { transform: scale(1.07); }
+  20%           { transform: scale(1); }
+  30%           { transform: scale(1.05); }
+}
 @keyframes boot-glow {
-  0%, 100% { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 30%, transparent)); }
-  50%      { filter: drop-shadow(0 0 22px color-mix(in srgb, var(--accent) 70%, transparent)); }
+  0%, 40%, 100% { opacity: 0.35; transform: scale(0.92); }
+  10%           { opacity: 1;    transform: scale(1.12); }
+  20%           { opacity: 0.55; transform: scale(0.97); }
+  30%           { opacity: 0.85; transform: scale(1.06); }
+}
+/* Wordmark breathes from near-transparent to fully visible on the same
+   cycle, so the whole lockup reads as one pulse. */
+@keyframes boot-breathe {
+  0%, 100% { opacity: 0.3; }
+  50%      { opacity: 1; }
 }
 
 /* Soft breathe — used on the live account-status indicator in the
@@ -559,6 +574,77 @@ html {
   [tabindex]:not([tabindex="-1"])):focus-visible {
   outline: 2px solid var(--accent-soft);
   outline-offset: 2px;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   DASHBOARD INTERACTION LAYER
+   Scoped to .qm-dash (app/dashboard/layout.tsx) — one block instead of a
+   hover/active utility on each of the ~250 controls and cards.
+
+   These rules only ever set `transform` and `box-shadow`. Colour on hover
+   stays owned by each component's own `hover:bg-` and `hover:border-`
+   utilities, which this never touches. Both properties are GPU-composited,
+   so the whole layer costs no layout or paint.
+
+   Hover is gated behind (hover: hover) so a tap on a touch screen cannot
+   leave a card stuck in its lifted state.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* Opt the interactive surfaces into transform + shadow transitions. The
+   global :where(*) rule above animates colour only, and a `transition-
+   colors` utility would otherwise pin transition-property back to colour
+   — hence a real class selector here rather than :where(). The colour
+   timing is re-declared verbatim so nothing loses its existing fade. */
+.qm-dash :is(button, a, [role="button"], .rounded-card) {
+  transition:
+    background-color 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    fill 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    stroke 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 140ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (hover: hover) {
+  /* Trade-hub cards (.rounded-card.group) lift off the canvas and cast a
+     warm accent-tinted glow. var(--lift) is composed back in so .edge-lit
+     cards keep their 1px top highlight while hovered. */
+  :where(.qm-dash .rounded-card.group):hover {
+    transform: translateY(-2px);
+    box-shadow:
+      var(--lift),
+      0 10px 26px -14px color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+
+  /* Buttons and button-shaped links rise 1px — enough to read as live. */
+  :where(.qm-dash button, .qm-dash a.rounded-ctl):hover:not(
+      :disabled,
+      [aria-disabled="true"]
+    ) {
+    transform: translateY(-1px);
+  }
+}
+
+/* Press. Declared after the hover block so it wins on a hovered click. */
+:where(.qm-dash button, .qm-dash a.rounded-ctl, .qm-dash [role="button"]):active:not(
+    :disabled,
+    [aria-disabled="true"]
+  ) {
+  transform: scale(0.97);
+}
+
+/* The cards press too, but softer — they are large, so a 3% squash reads
+   as a slam. */
+:where(.qm-dash .rounded-card.group):active {
+  transform: scale(0.995);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qm-dash :is(button, a, [role="button"], .rounded-card):hover,
+  .qm-dash :is(button, a, [role="button"], .rounded-card):active {
+    transform: none;
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════════

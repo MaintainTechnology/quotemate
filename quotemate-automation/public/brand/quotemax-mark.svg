@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="QuoteMax">
+  <title>QuoteMax</title>
+  <rect width="64" height="64" fill="#FFC400"></rect>
+  <rect x="13" y="14" width="38" height="26" rx="7" fill="#1C1812"></rect>
+  <path d="M20 39 L20 50 L31 40 Z" fill="#1C1812"></path>
+  <path d="M23 27 L29.5 33.5 L41 21" fill="none" stroke="#FFC400" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>

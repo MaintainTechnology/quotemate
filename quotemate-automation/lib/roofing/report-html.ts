@@ -7,6 +7,7 @@
 
 import type { MultiRoofQuote, RoofStructurePrice, RoofMetrics, RoofMaterial } from './types'
 import type { RoofDisplayRow } from './selection'
+import { ZONE_COLOR_HEX, type ZoneColor, type LayoutMaterialItem } from './layout-plan'
 import {
   renderReportDocument,
   renderPart,
@@ -58,6 +59,22 @@ export type RoofReportInput = {
    * unchanged. (spec specs/roofing-pdf-multi-structure-images.md R3)
    */
   structureImages?: { label: string; src: string | null }[]
+  /**
+   * AI work-strategy layout map (spec quote-visual-parity R6e): the aerial +
+   * the deterministic colour-coded zone overlay + the plan's legend. Only ever
+   * built from a CACHED plan (roofing_measurements.layout_plan when
+   * layout_status = 'ready') — the PDF never triggers generation. Null ⇒
+   * today's PDF unchanged.
+   */
+  layoutOverlay?: {
+    header: string
+    aerialSrc: string
+    overlaySrc: string
+    legend: Array<{ color: ZoneColor; label: string }>
+    /** Deterministic material estimates (layoutMaterials over the whole-job
+     *  metrics) — rendered with each item's basis + use for transparency. */
+    materials?: { items: LayoutMaterialItem[]; note: string | null } | null
+  } | null
   generatedAt?: Date
 }
 
@@ -245,6 +262,57 @@ export function buildRoofQuoteReportHtml(input: RoofReportInput): string {
       thumbSrc: input.mapImageSrc,
       thumbCaption: 'Aerial reference — measured from satellite imagery.',
     })
+  }
+
+  // AI work-strategy layout map — aerial with the colour-coded zone overlay
+  // stacked on top (Gotenberg prints positioned elements fine), then the
+  // legend as swatch + label rows (spec quote-visual-parity R6e).
+  if (input.layoutOverlay) {
+    const lo = input.layoutOverlay
+    const legend = lo.legend
+      .map(
+        (l, i) =>
+          `<div style="display:flex;align-items:flex-start;gap:8px;margin-top:6px;">` +
+          `<span style="font-family:'JetBrains Mono','Courier New',monospace;font-size:9px;font-weight:700;letter-spacing:0.1em;margin-top:2px;color:${ZONE_COLOR_HEX[l.color]};">${String(i + 1).padStart(2, '0')}</span>` +
+          `<span style="width:12px;height:12px;flex:0 0 auto;margin-top:2px;display:inline-block;background:${ZONE_COLOR_HEX[l.color]};border:1px solid var(--line);"></span>` +
+          `<span style="font-size:11px;line-height:1.45;">${esc(l.label)}</span></div>`,
+      )
+      .join('')
+    body += `
+  <h2>Your roof layout map</h2>
+  <p class="note">${esc(lo.header)}</p>
+  <div class="figure">
+    <div style="position:relative;width:100%;aspect-ratio:4 / 3;overflow:hidden;border:1px solid var(--line);">
+      <img src="${lo.aerialSrc}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;">
+      <img src="${lo.overlaySrc}" alt="" style="position:absolute;inset:0;width:100%;height:100%;">
+    </div>
+    <div style="padding:8px 10px;border-top:1px solid var(--line);">${legend}</div>
+    <figcaption>Colour-coded work zones over the measured aerial — how each part of the job is approached.</figcaption>
+  </div>`
+
+    // Estimated materials — each quantity with its arithmetic (basis) and
+    // where it goes (use). Deterministic: derived from the measured geometry.
+    if (lo.materials && lo.materials.items.length > 0) {
+      const rows = lo.materials.items
+        .map(
+          (m) => `
+      <tr>
+        <td><b>${esc(m.item)}</b><br>
+          <span style="font-size:9.5px;color:var(--dim);">How: ${esc(m.basis)}</span><br>
+          <span style="font-size:9.5px;color:var(--dim);">Where: ${esc(m.use)}</span></td>
+        <td class="num" style="white-space:nowrap;vertical-align:top;"><b>${m.qty.toLocaleString('en-AU')} ${esc(m.unit)}</b></td>
+      </tr>`,
+        )
+        .join('')
+      body += `
+  <h2>Estimated materials</h2>
+  <table>
+    <thead><tr><th>Material</th><th class="num">Estimate</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  ${lo.materials.note ? `<p class="note">${esc(lo.materials.note)}</p>` : ''}
+  <p class="note">All quantities are derived from the measured roof geometry — your roofer confirms final counts on site.</p>`
+    }
   }
 
   // Per-structure breakdown table (kept from the prior report).

@@ -13,12 +13,18 @@
 // page — the unguessable token is the capability). Service-role read because
 // this is a sharing surface; only the columns rendered below are exposed.
 //
-// Maintain Technology brand: dark navy, vibrant orange, all-caps display.
+// QuoteMax Command Centre brand: warm charcoal, Caterpillar-yellow accent,
+// all-caps display (the old navy/orange Maintain palette is retired).
 
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import type { PaintingEstimate } from '@/lib/painting/types'
+import { composePaintLocation } from '@/lib/painting/paint-after'
+import {
+  buildStreetViewMetadataUrl,
+  parseStreetViewMetadata,
+} from '@/lib/painting/streetview'
 import { PaintResultView } from '@/app/dashboard/painting/_components/PaintResultView'
 import { SendToCustomerButton } from './SendToCustomerButton'
 import { EditQuotePanel, type EditableTier } from './EditQuotePanel'
@@ -34,10 +40,12 @@ type Row = {
   address: string | null
   postcode: string | null
   state: string | null
+  scopes: string[] | null
   estimate: PaintingEstimate | null
   public_token: string
   estimate_token: string
   created_at: string
+  released_at: string | null
 }
 
 export default async function PaintEstimateResultsPage({
@@ -50,7 +58,9 @@ export default async function PaintEstimateResultsPage({
 
   const { data, error } = await supabase
     .from('painting_measurements')
-    .select('address, postcode, state, estimate, public_token, estimate_token, created_at')
+    .select(
+      'address, postcode, state, scopes, estimate, public_token, estimate_token, created_at, released_at',
+    )
     .eq('estimate_token', token)
     .maybeSingle()
 
@@ -59,20 +69,11 @@ export default async function PaintEstimateResultsPage({
   const estimate = row.estimate
   if (!estimate) notFound()
 
-  // released_at (migration 157) read in a SEPARATE, best-effort query so this
-  // dashboard-reachable page never breaks if it loads before the migration
-  // applies. Default true → a dashboard-saved quote (and the pre-migration
-  // state) reads as already sent; a held SMS/form draft (released_at null)
-  // shows the "Send to customer" button.
-  let released = true
-  {
-    const { data: rel, error: relErr } = await supabase
-      .from('painting_measurements')
-      .select('released_at')
-      .eq('estimate_token', token)
-      .maybeSingle()
-    if (!relErr && rel) released = (rel.released_at as string | null) != null
-  }
+  // released_at (migration 157): null = a held SMS/form draft that still
+  // shows the "Send to customer" button; dashboard saves are released at
+  // save time. (Was a separate best-effort query while the migration rolled
+  // out — long since applied, so it's part of the main select now.)
+  const released = row.released_at != null
 
   const inspection = estimate.price?.routing?.decision === 'inspection_required'
   // Editable tier shape for the tradie pre-send edit panel (only the
@@ -90,6 +91,31 @@ export default async function PaintEstimateResultsPage({
     month: 'long',
     year: 'numeric',
   })
+
+  // FREE Street View metadata check at render — the imagery section only
+  // appears when Google actually has a pano here (no broken frames), same
+  // posture as /m/[token]'s always-available satellite block.
+  let hasPano = false
+  const mapsKey = process.env.GOOGLE_MAPS_API_KEY
+  if (mapsKey && row.address) {
+    try {
+      const metaRes = await fetch(
+        buildStreetViewMetadataUrl(
+          {
+            location: composePaintLocation({
+              address: row.address,
+              postcode: row.postcode,
+              state: row.state,
+            }),
+          },
+          { apiKey: mapsKey },
+        ),
+      )
+      hasPano = parseStreetViewMetadata(await metaRes.json().catch(() => null)).ok
+    } catch {
+      /* best-effort — page renders without the imagery section */
+    }
+  }
 
   return (
     <main className="min-h-screen bg-ink-deep text-text-pri">
@@ -114,6 +140,43 @@ export default async function PaintEstimateResultsPage({
           {date}
         </div>
       </section>
+
+      {/* Property imagery — Google Street View "before" + cached AI repaint
+          "after", both via the token-gated /api/painting/q/[token] proxies
+          (mirrors /m/[token]'s satellite block). */}
+      {hasPano && (
+        <section className="relative z-10 mx-auto mt-8 max-w-6xl px-6 sm:px-10">
+          <div className="grid gap-5 md:grid-cols-2">
+            <figure className="border border-ink-line bg-ink-card">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`/api/painting/q/${row.public_token}/street-view`}
+                alt={`Street View of the front of ${row.address ?? 'the property'}`}
+                className="h-72 w-full object-cover sm:h-80"
+              />
+              <figcaption className="border-t border-ink-line px-4 py-2.5 font-mono text-xs uppercase tracking-[0.14em] text-text-dim">
+                Front of the property · Google Street View
+              </figcaption>
+            </figure>
+            {/* The AI preview repaints the EXTERIOR — only meaningful (and
+                only generated, see lib/painting/paint-after.ts) when the job
+                includes exterior scope. */}
+            {(row.scopes ?? []).includes('exterior') && (
+              <figure className="border border-ink-line bg-ink-card">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/api/painting/q/${row.public_token}/after-image`}
+                  alt={`AI preview of ${row.address ?? 'the property'} freshly repainted`}
+                  className="h-72 w-full object-cover sm:h-80"
+                />
+                <figcaption className="border-t border-ink-line px-4 py-2.5 font-mono text-xs uppercase tracking-[0.14em] text-text-dim">
+                  Fresh repaint · AI preview
+                </figcaption>
+              </figure>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* Full priced breakdown — the same view the tradie sees inline on the
           estimate tool. */}
@@ -140,13 +203,15 @@ export default async function PaintEstimateResultsPage({
             {!inspection && (
               <SendToCustomerButton estimateToken={row.estimate_token} released={released} />
             )}
+            {/* Filled accent primary — matches /m/[token]'s "Open customer
+                quote" (MeasurementReview action row). */}
             <Link
               href={customerPath}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-2 border border-ink-line px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-text-pri transition-colors hover:border-accent hover:text-accent"
+              className="inline-flex items-center gap-2 bg-accent px-5 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-accent-ink transition-colors hover:bg-accent-press"
             >
-              {inspection ? 'Open customer quote' : 'Preview customer quote'} <span aria-hidden="true">&rarr;</span>
+              Open customer quote <span aria-hidden="true">&rarr;</span>
             </Link>
             {!inspection && (
               <a

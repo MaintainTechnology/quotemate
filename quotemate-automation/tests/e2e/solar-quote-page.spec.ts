@@ -88,9 +88,15 @@ test.describe('Solar customer quote page', () => {
   test('renders the hero, assumptions, and mandatory compliance copy', async ({ page }) => {
     await page.goto(`/q/solar/${token}`)
     await expect(page.getByRole('heading', { level: 1 })).toContainText(/solar/i)
-    await expect(page.getByText('1 Test Street, Sydney NSW 2000')).toBeVisible()
+    // .first(): the address renders in the hero AND the accuracy disclaimer.
+    await expect(page.getByText('1 Test Street, Sydney NSW 2000').first()).toBeVisible()
+    // Copy source of truth: lib/solar/confidence-chip.ts — the accuracy
+    // disclaimer for an aerial-imagery estimate. (The old dated "Indicative
+    // layout based on Google aerial imagery, 14 Mar 2025." wording was
+    // retired; the hero-overlay caption only renders when the seeded row
+    // carries roof geometry, which this minimal fixture doesn't.)
     await expect(
-      page.getByText(/Indicative layout based on Google aerial imagery, 14 Mar 2025\./),
+      page.getByText(/Estimate accuracy ±20% based on aerial imagery\./).first(),
     ).toBeVisible()
     await expect(page.getByText('Assumptions')).toBeVisible()
     await expect(
@@ -101,7 +107,8 @@ test.describe('Solar customer quote page', () => {
 
   test('hides prices and the deposit CTA before tradie confirmation', async ({ page }) => {
     await page.goto(`/q/solar/${token}`)
-    await expect(page.getByText('Estimate drafted')).toBeVisible()
+    // .first(): the drafted badge renders in the status card AND the footer.
+    await expect(page.getByText('Estimate drafted').first()).toBeVisible()
     await expect(
       page.getByText(
         'We have estimated the system size and output. Your installer will review the price before it is released.',

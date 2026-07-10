@@ -81,6 +81,11 @@ export async function GET(req: Request) {
       colour_change_extra: o.colour_change_extra ?? null,
       call_out_minimum_ex_gst: o.call_out_minimum_ex_gst ?? null,
       gst_registered: o.gst_registered ?? null,
+      // Materials + labour take-off knobs — the editor round-trips these;
+      // omitting them here made saved values load blank (and then be wiped
+      // on the next save).
+      production_rate_per_unit: o.production_rate_per_unit ?? {},
+      takeoff: o.takeoff ?? null,
     },
     has_pricing_book: !!book,
   })
@@ -141,6 +146,12 @@ export async function PATCH(req: Request) {
       : {}),
     ...(built.overlay.production_rate_per_unit === undefined && prevCard.production_rate_per_unit != null
       ? { production_rate_per_unit: prevCard.production_rate_per_unit }
+      : {}),
+    // Same carry-forward for the take-off knobs: a PATCH from a caller that
+    // doesn't surface them (e.g. onboarding) must not wipe a tenant's saved
+    // coverage / $-per-litre / crew / sundries config.
+    ...(built.overlay.takeoff === undefined && prevCard.takeoff != null
+      ? { takeoff: prevCard.takeoff }
       : {}),
   }
   const nextOverlays = { ...existingOverlays, painting_rate_card: mergedCard }

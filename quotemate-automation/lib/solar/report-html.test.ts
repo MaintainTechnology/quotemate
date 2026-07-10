@@ -38,6 +38,28 @@ describe('buildSolarQuoteReportHtml — legacy (no premium)', () => {
   })
 })
 
+// Spec specs/quote-visual-parity.md R5 — the customer page's "roof with
+// panels" AI visual (the CACHED panels-after render) appears in the PDF too.
+// The caller (lib/quote/pdf.ts) passes the URL only when
+// solar_estimates.panels_image_status === 'ready', so the PDF never triggers
+// a billable render.
+describe('buildSolarQuoteReportHtml — panels-after figure (spec quote-visual-parity R5)', () => {
+  it('renders the captioned figure when panelsAfterUrl is passed', () => {
+    const html = buildSolarQuoteReportHtml({
+      ...BASE,
+      estimate: makeFixtureEstimate(),
+      panelsAfterUrl: 'https://example.test/api/solar/q/tok/panels-after',
+    })
+    expect(html).toContain('https://example.test/api/solar/q/tok/panels-after')
+    expect(html).toContain('Your roof with panels')
+  })
+
+  it('omits the figure when panelsAfterUrl is absent', () => {
+    const html = buildSolarQuoteReportHtml({ ...BASE, estimate: makeFixtureEstimate() })
+    expect(html).not.toContain('Your roof with panels')
+  })
+})
+
 describe('buildSolarQuoteReportHtml — on-heatmap sun-score labels (2026-06-13)', () => {
   /** Estimate whose plane carries quantiles (scores) + an on-image anchor. */
   function anchoredEstimate(withAnchors: boolean) {

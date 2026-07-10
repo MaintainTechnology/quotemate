@@ -140,3 +140,71 @@ describe('hourly pricing model', () => {
     }
   })
 })
+
+describe('takeoff card (materials + labour knobs)', () => {
+  it('parses and round-trips a takeoff overlay', () => {
+    const r = parsePaintingRateOverlay({
+      takeoff: {
+        sundries_pct: 0.1,
+        crew_size: 3,
+        price_per_litre: { wall_paint: 18 },
+        coverage_per_litre: { exterior_paint: 12 },
+      },
+    })
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.overlay.takeoff?.sundries_pct).toBe(0.1)
+      expect(r.overlay.takeoff?.crew_size).toBe(3)
+      expect(r.overlay.takeoff?.price_per_litre?.wall_paint).toBe(18)
+    }
+  })
+
+  it('rejects out-of-range takeoff values', () => {
+    expect(parsePaintingRateOverlay({ takeoff: { sundries_pct: 0.6 } }).ok).toBe(false)
+    expect(parsePaintingRateOverlay({ takeoff: { crew_size: 0 } }).ok).toBe(false)
+    expect(parsePaintingRateOverlay({ takeoff: { hours_per_day: 20 } }).ok).toBe(false)
+    expect(parsePaintingRateOverlay({ takeoff: { coverage_per_litre: { wall_paint: -1 } } }).ok).toBe(false)
+  })
+
+  it('merges takeoff knobs onto the default card, record-wise', () => {
+    const card = mergePaintingRateCard(DEFAULT_PAINTING_RATE_CARD, {
+      takeoff: { crew_size: 3, price_per_litre: { trim_enamel: 25 } },
+    })
+    expect(card.takeoff?.crew_size).toBe(3)
+    expect(card.takeoff?.price_per_litre?.trim_enamel).toBe(25)
+    // untouched knobs fall back at compute time — the merged card only
+    // carries what the tenant set
+    expect(card.takeoff?.sundries_pct).toBeUndefined()
+  })
+
+  it('builds a takeoff overlay from editor inputs, coercing strings and dropping blanks', () => {
+    const r = buildPaintingOverlayFromInputs({
+      takeoff: {
+        sundries_pct: '0.12',
+        crew_size: '3',
+        hours_per_day: '',
+        price_per_litre: { wall_paint: '16', ceiling_paint: '' },
+      },
+    })
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.overlay.takeoff?.sundries_pct).toBe(0.12)
+      expect(r.overlay.takeoff?.crew_size).toBe(3)
+      expect(r.overlay.takeoff?.hours_per_day).toBeUndefined()
+      expect(r.overlay.takeoff?.price_per_litre?.wall_paint).toBe(16)
+      expect(r.overlay.takeoff?.price_per_litre?.ceiling_paint).toBeUndefined()
+    }
+  })
+
+  it('collects issues for bad takeoff editor inputs', () => {
+    const r = buildPaintingOverlayFromInputs({
+      takeoff: { crew_size: 'lots', sundries_pct: '0.9' },
+    })
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.issues.map((i) => i.field)).toEqual(
+        expect.arrayContaining(['takeoff.crew_size', 'takeoff.sundries_pct']),
+      )
+    }
+  })
+})

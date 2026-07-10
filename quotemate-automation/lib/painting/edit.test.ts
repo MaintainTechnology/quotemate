@@ -137,4 +137,41 @@ describe('applyTierEdits', () => {
     expect(applyTierEdits(e, [{ tier: 'good', label: 'Budget' }]).priceChanged).toBe(false)
     expect(applyTierEdits(e, [{ tier: 'good', inc_gst: 2500 }]).priceChanged).toBe(true)
   })
+
+  it('recomputes take-off margins against the edited tier prices', () => {
+    const e = estimate()
+    const takeoffTier = (t: 'good' | 'better' | 'best') => ({
+      tier: t,
+      products: [],
+      sundries_ex_gst: 0,
+      materials_ex_gst: 400,
+      labour_hours: 10,
+      labour_ex_gst: 850,
+      crew_size: 2,
+      days_on_site: 1,
+      // Stale on purpose — as if computed from the ORIGINAL prices.
+      margin_ex_gst: 999,
+      margin_pct: 0.5,
+      sundries_note: '',
+      labour_note: '',
+      margin_note: '',
+    })
+    e.takeoff = { tiers: [takeoffTier('good'), takeoffTier('better'), takeoffTier('best')] }
+
+    // Better edited to $4,400 inc ($4,000 ex at the 1.1 GST factor).
+    const res = applyTierEdits(e, [{ tier: 'better', inc_gst: 4400 }])
+    const better = res.estimate.takeoff!.tiers.find((t) => t.tier === 'better')!
+    expect(better.margin_ex_gst).toBe(4000 - 400 - 850)
+    expect(better.margin_pct).toBe(+((4000 - 400 - 850) / 4000).toFixed(4))
+    // Untouched tiers get their margin refreshed against their (unchanged)
+    // price too — never left at the stale stamped value.
+    const good = res.estimate.takeoff!.tiers.find((t) => t.tier === 'good')!
+    expect(good.margin_ex_gst).toBe(2000 - 400 - 850)
+  })
+
+  it('leaves the take-off untouched on a no-op edit', () => {
+    const e = estimate()
+    const res = applyTierEdits(e, [{ tier: 'better', inc_gst: 0 }])
+    expect(res.estimate.takeoff).toBe(e.takeoff)
+  })
 })

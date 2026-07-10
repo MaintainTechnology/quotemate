@@ -5,7 +5,9 @@
 // patches onto the base (Solar) PropertyFacts.
 //
 // Merge rules:
-//   • non-null only; the Solar footprint is never overwritten.
+//   • non-null only; the Solar footprint is never overwritten — EXCEPT when
+//     the tradie explicitly picked a structure (opts.targeted): then the
+//     Geoscape footprint/storeys ARE the building of interest and override.
 //   • storeys: Geoscape fills it when the base provider had none (the user's
 //     declared storeys is re-applied AFTER enrichment in measure.ts, so it
 //     always wins).
@@ -36,10 +38,14 @@ export type EnrichmentSources = {
   propradar?: PropRadarEnrichResult
 }
 
-/** PURE — merge enrichment patches onto base facts (non-null only). */
+/** PURE — merge enrichment patches onto base facts (non-null only). With
+ *  `opts.targeted` (structure explicitly chosen) the Geoscape footprint and
+ *  storeys OVERRIDE the base — Solar's findClosest may have measured a
+ *  different building than the one the tradie picked. */
 export function applyEnrichment(
   base: PropertyFacts,
   sources: EnrichmentSources,
+  opts: { targeted?: boolean } = {},
 ): { facts: PropertyFacts; notes: string[] } {
   const f: PropertyFacts = { ...base }
   const notes: string[] = []
@@ -47,10 +53,12 @@ export function applyEnrichment(
   const geo = sources.geoscape
   if (geo) {
     const p = geo.patch
-    if (p.storeys != null && !(f.storeys && f.storeys > 0)) f.storeys = p.storeys
+    if (p.storeys != null && (opts.targeted || !(f.storeys && f.storeys > 0))) {
+      f.storeys = p.storeys
+    }
     if (p.eave_height_m != null) f.eave_height_m = p.eave_height_m
     if (p.property_type != null && f.property_type == null) f.property_type = p.property_type
-    if (p.footprint_m2 != null && !(f.footprint_m2 && f.footprint_m2 > 0)) {
+    if (p.footprint_m2 != null && (opts.targeted || !(f.footprint_m2 && f.footprint_m2 > 0))) {
       f.footprint_m2 = p.footprint_m2
     }
     notes.push(...geo.notes)
@@ -97,5 +105,11 @@ export async function enrichPaintingFacts(
     enrichFromGeoscape(address, opts.geoscape),
     enrichFromPropRadar(address, opts.propradar),
   ])
-  return applyEnrichment(base, { geoscape, propradar })
+  // A geoscape buildingId means a structure was explicitly chosen — its
+  // values override the base provider's (see applyEnrichment).
+  return applyEnrichment(
+    base,
+    { geoscape, propradar },
+    { targeted: !!opts.geoscape?.buildingId },
+  )
 }

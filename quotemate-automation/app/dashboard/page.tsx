@@ -8840,8 +8840,6 @@ function JobQueueDetail({
   const [err, setErr] = useState<string | null>(null)
   const badge = jobBadge(job.status)
   const tradeLabel = quoteTradeLabel(jobTradeSlug(job))
-  const actionBtn =
-    'rounded-ctl inline-flex min-h-[44px] items-center gap-1.5 border border-ink-line px-3.5 py-2 text-[0.65rem] font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent'
 
   async function doDelete() {
     if (!accessToken) return
@@ -8880,84 +8878,123 @@ function JobQueueDetail({
   }
 
   return (
-    <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
-      <div className="space-y-2">
-        <div className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
-          {tradeLabel} · Measure-tool estimate
+    <div className="flex min-h-0 flex-1 flex-col motion-safe:animate-[fade-up_200ms_ease-out_both]">
+      {/* ── Scrollable detail body (mirrors QuoteDetail) ───────────── */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 border-b border-ink-line px-5 py-5 sm:px-6">
+          <div className="min-w-0">
+            <div className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-accent">
+              {tradeLabel} · Measure-tool estimate
+              {job.createdAt ? ` · ${formatDate(job.createdAt)}` : ''}
+            </div>
+            <h2 className="mt-1.5 font-extrabold uppercase leading-none tracking-tight text-text-pri text-[clamp(1.25rem,2.2vw,1.6rem)]">
+              {job.address ?? 'No address'}
+            </h2>
+            {job.href && (
+              <a
+                href={job.href}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 inline-flex font-mono text-[0.62rem] font-bold uppercase tracking-[0.14em] text-accent transition-colors hover:text-accent-press"
+              >
+                Customer page →
+              </a>
+            )}
+          </div>
+          <StatusPill label={badge.label} tone={QUOTE_BADGE_TONE[badge.tone]} dot />
         </div>
-        <h3 className="text-lg font-bold text-text-pri">{job.address ?? 'No address'}</h3>
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusPill label={badge.label} tone={QUOTE_BADGE_TONE[badge.tone]} compact dot />
-          {job.createdAt && (
-            <span className="font-mono text-[0.62rem] uppercase tracking-[0.12em] text-text-dim">
-              {formatDate(job.createdAt)}
-            </span>
-          )}
+
+        {/* Estimate headline — same visual weight as a tier-card price */}
+        {job.headline && (
+          <div className="border-b border-ink-line px-5 py-5 sm:px-6">
+            <div className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+              Estimate
+            </div>
+            <div className="mt-[9px] font-mono text-[22px] font-bold tabular-nums text-text-pri">
+              {job.headline}
+            </div>
+          </div>
+        )}
+
+        {/* Details */}
+        <div className="border-b border-ink-line px-5 py-5 sm:px-6">
+          <div className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+            Details
+          </div>
+          <p className="mt-2 text-sm leading-relaxed text-text-sec">
+            Saved from the {tradeLabel.toLowerCase()} measure tool — it sits in
+            this queue alongside your pipeline quotes.
+          </p>
         </div>
-        {job.headline && <p className="text-sm text-text-sec">{job.headline}</p>}
       </div>
 
-      <p className="text-xs leading-relaxed text-text-dim">
-        Saved from the {tradeLabel.toLowerCase()} measure tool — it sits in
-        this queue alongside your pipeline quotes.
-      </p>
-
-      {err && (
-        <div
-          role="alert"
-          className="rounded-ctl border border-danger/50 bg-danger/10 px-3 py-2 text-xs text-text-pri"
-        >
-          {err}
-        </div>
-      )}
-
-      <div className="flex flex-wrap items-center gap-2">
-        {job.tradieHref && (
-          <Link href={job.tradieHref} className={actionBtn}>
-            {jobTradieCtaLabel(job)} →
-          </Link>
-        )}
-        {job.href && (
-          <Link href={job.href} target="_blank" className={actionBtn}>
-            Customer page →
-          </Link>
-        )}
-        {confirming ? (
-          <>
-            <span className="font-mono text-[0.62rem] uppercase tracking-[0.12em] text-danger">
-              Delete this job?
+      {/* ── Pinned action bar (mirrors QuoteDetail) ────────────────── */}
+      <div className="sticky bottom-0 z-[5] border-t border-ink-line bg-ink-deep px-5 py-4 sm:px-6">
+        <div className="flex flex-wrap items-center gap-2">
+          {job.tradieHref && (
+            <Link
+              href={job.tradieHref}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-ctl inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 whitespace-nowrap bg-accent px-5 py-[13px] text-[13px] font-semibold uppercase tracking-[0.06em] text-accent-ink transition-colors hover:bg-accent-press"
+            >
+              {jobTradieCtaLabel(job)} →
+            </Link>
+          )}
+          {job.href && (
+            <Link
+              href={job.href}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-ctl inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-[18px] py-[13px] text-[13px] font-semibold uppercase tracking-[0.06em] text-text-pri transition-colors hover:border-accent hover:text-accent"
+            >
+              View customer page →
+            </Link>
+          )}
+          {err && (
+            <span
+              role="alert"
+              className="self-center font-mono text-[0.62rem] uppercase tracking-[0.12em] text-danger"
+            >
+              {err}
             </span>
+          )}
+          {confirming ? (
+            <span className="flex items-stretch gap-2">
+              <button
+                type="button"
+                onClick={() => void doDelete()}
+                disabled={busy}
+                className="rounded-ctl inline-flex min-h-[44px] items-center justify-center gap-2 border border-danger/60 bg-danger/10 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-danger transition-colors hover:bg-danger/20 disabled:opacity-50"
+              >
+                {busy ? <Loader2 size={13} className="animate-spin" /> : null}
+                {busy ? 'Deleting…' : 'Yes, delete'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirming(false)}
+                disabled={busy}
+                className="rounded-ctl inline-flex min-h-[44px] items-center justify-center border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </span>
+          ) : (
             <button
               type="button"
-              onClick={() => void doDelete()}
-              disabled={busy}
-              className="rounded-ctl inline-flex min-h-[44px] items-center gap-1.5 border border-danger/60 bg-danger/10 px-3.5 py-2 text-[0.65rem] font-semibold uppercase tracking-wider text-danger transition-colors hover:bg-danger/20 disabled:opacity-50"
+              onClick={() => {
+                setConfirming(true)
+                setErr(null)
+              }}
+              aria-label="Delete job"
+              className="rounded-ctl inline-flex min-h-[44px] items-center justify-center gap-2 border border-ink-line px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-dim transition-colors hover:border-danger hover:text-danger"
             >
-              {busy ? <Loader2 size={13} className="animate-spin" /> : null}
-              {busy ? 'Deleting…' : 'Delete'}
+              <Trash2 size={13} />
+              Delete
             </button>
-            <button
-              type="button"
-              onClick={() => setConfirming(false)}
-              disabled={busy}
-              className={actionBtn}
-            >
-              Cancel
-            </button>
-          </>
-        ) : (
-          <button
-            type="button"
-            onClick={() => {
-              setConfirming(true)
-              setErr(null)
-            }}
-            className="rounded-ctl inline-flex min-h-[44px] items-center gap-1.5 border border-ink-line px-3.5 py-2 text-[0.65rem] font-semibold uppercase tracking-wider text-text-dim transition-colors hover:border-danger hover:text-danger"
-          >
-            <Trash2 size={14} />
-            Delete
-          </button>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )
@@ -16033,6 +16070,16 @@ const HUB_SECTION_LABELS: Record<HubSection, string> = {
   quotes: 'Quotes',
 }
 
+const HUB_SECTION_ICONS: Record<HubSection, NavIcon> = {
+  tools: Wrench,
+  pricing: DollarSign,
+  services: ClipboardList,
+  catalogue: Package,
+  recipes: LayoutTemplate,
+  estimating: Calculator,
+  quotes: FileText,
+}
+
 /** Trades that ship an interactive tool panel (the old tool tabs).
  *  Plumbing has no standalone tool yet, so its hub starts on Pricing. */
 const HUB_TOOL_TRADES: readonly TradeHubSlug[] = [
@@ -16083,44 +16130,75 @@ function TradeHub({
   ).length
 
   return (
-    <div>
-      <header className="mb-6">
+    <section
+      className="-mx-4 -mb-20 min-h-[calc(100dvh-4rem)] sm:-mx-6 lg:-mx-8 lg:-mt-6"
+      aria-labelledby={`trade-hub-title-${trade}`}
+    >
+      <header className="border-b border-ink-line bg-ink-deep px-4 pt-6 sm:px-6 sm:pt-7 lg:px-8 lg:pt-8 xl:px-10">
         <div className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-text-dim">
           QuoteMax · Dashboard · Trades
         </div>
-        <h1 className="mt-1.5 font-extrabold uppercase tracking-tight text-text-pri text-[clamp(1.5rem,3vw,2rem)]">
+        <h1
+          id={`trade-hub-title-${trade}`}
+          className="mt-2 font-extrabold uppercase leading-none tracking-[-0.035em] text-text-pri text-[clamp(1.9rem,4vw,3rem)]"
+        >
           {label}
         </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-sec">
+        <p className="mt-3 max-w-3xl text-base leading-relaxed text-text-sec">
           Everything for your {label.toLowerCase()} work in one place — quotes,{' '}
           {hasTools ? 'tools, ' : ''}pricing, services, brands, catalogue, recipes
           and estimating.
         </p>
-      </header>
+        <dl className="mt-5 flex flex-wrap items-center gap-x-7 gap-y-2 border-y border-ink-line py-3">
+          <div className="flex items-baseline gap-2">
+            <dt className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim">
+              Sections
+            </dt>
+            <dd className="font-mono text-sm font-bold tabular-nums text-text-pri">
+              {String(sections.length).padStart(2, '0')}
+            </dd>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <dt className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-text-dim">
+              Quotes
+            </dt>
+            <dd className="font-mono text-sm font-bold tabular-nums text-text-pri">
+              {String(quoteCount).padStart(2, '0')}
+            </dd>
+          </div>
+        </dl>
 
       {/* Section chips — plain toggle buttons (aria-pressed), matching the
           QuoteFilter rail pattern, rather than a role=tablist that would
           promise roving-tabindex/arrow-key behaviour we don't implement. */}
-      <div className="mb-6 flex flex-wrap gap-2" aria-label={`${label} sections`}>
+      <nav
+        className="grid grid-cols-2 gap-2 py-4 sm:flex sm:flex-wrap"
+        aria-label={`${label} sections`}
+      >
         {sections.map((s) => {
           const active = s === section
+          const Icon = HUB_SECTION_ICONS[s]
           return (
             <button
               key={s}
               type="button"
               aria-pressed={active}
+              aria-controls={`trade-hub-panel-${trade}`}
               onClick={() => setSection(s)}
-              className={`rounded-ctl inline-flex items-center gap-2 border px-3.5 py-2 font-mono text-[0.65rem] font-bold uppercase tracking-[0.14em] transition-colors cursor-pointer ${
+              className={`inline-flex min-h-11 cursor-pointer items-center justify-start gap-2 border px-3.5 py-2.5 text-left font-mono text-xs font-bold uppercase tracking-[0.12em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep sm:justify-center sm:px-4 ${
                 active
-                  ? 'border-accent bg-accent/10 text-accent'
-                  : 'border-ink-line bg-ink-card text-text-dim hover:border-text-dim hover:text-text-pri'
+                  ? 'border-accent bg-accent text-accent-ink'
+                  : 'border-ink-line bg-transparent text-text-sec hover:border-text-dim hover:bg-ink-card hover:text-text-pri'
               }`}
             >
-              {HUB_SECTION_LABELS[s]}
+              <Icon size={16} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
+              <span>{HUB_SECTION_LABELS[s]}</span>
               {s === 'quotes' && quoteCount > 0 && (
                 <span
-                  className={`font-mono text-[0.6rem] tabular-nums px-1.5 py-0.5 border ${
-                    active ? 'border-accent/60 text-accent' : 'border-ink-line text-text-sec'
+                  className={`border px-1.5 py-0.5 font-mono text-[0.65rem] tabular-nums ${
+                    active
+                      ? 'border-accent-ink/35 text-accent-ink'
+                      : 'border-ink-line text-text-pri'
                   }`}
                 >
                   {quoteCount}
@@ -16129,12 +16207,18 @@ function TradeHub({
             </button>
           )
         })}
-      </div>
+      </nav>
+      </header>
 
       {/* No key and no per-switch fade (spec R3) — keying by section
           remounted the whole hub body on every chip click just to replay
           the fade; sections still swap via the conditional renders below. */}
-      <div>
+      <div
+        id={`trade-hub-panel-${trade}`}
+        role="region"
+        aria-label={`${label} ${HUB_SECTION_LABELS[section]}`}
+        className="px-4 py-6 sm:px-6 sm:py-7 lg:px-8 lg:py-8 xl:px-10"
+      >
         {section === 'tools' && trade === 'electrical' && (
           <EstimatorBetaTab accessToken={accessToken} />
         )}
@@ -16242,6 +16326,6 @@ function TradeHub({
           />
         )}
       </div>
-    </div>
+    </section>
   )
 }

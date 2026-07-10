@@ -31,7 +31,8 @@ import type { PropertyDataProvider } from './providers/base'
 import { MockPropertyProvider } from './providers/mock'
 import { SolarPropertyProvider } from './providers/solar'
 import { measurePaintableArea } from './area'
-import { calculatePaintingPrice, requiresInspection } from './pricing'
+import { DEFAULT_PAINTING_RATE_CARD, calculatePaintingPrice, requiresInspection } from './pricing'
+import { computePaintingTakeoff } from './takeoff'
 import { enrichPaintingFacts, type EnrichPaintingOpts } from './enrich'
 
 export type EstimateOpts = {
@@ -96,7 +97,30 @@ export async function estimatePainting(
 
   // Enrich the base (Solar) facts with Geoscape + PropRadar building data.
   // No-ops per provider without its API key, so this never breaks the estimate.
-  const { facts: enriched } = await enrichPaintingFacts(address, lookup.facts, opts.enrich)
+  // A chosen structure (picker) targets the Geoscape lookup at THAT building —
+  // its footprint/storeys/eave then override the base (see applyEnrichment).
+  const enrichOpts: EnrichPaintingOpts = inputs.structure?.building_id
+    ? {
+        ...opts.enrich,
+        geoscape: { ...opts.enrich?.geoscape, buildingId: inputs.structure.building_id },
+      }
+    : (opts.enrich ?? {})
+  const { facts: base } = await enrichPaintingFacts(address, lookup.facts, enrichOpts)
+
+  // Stamp which structure this estimate measures (display provenance).
+  const enriched: typeof base = inputs.structure
+    ? {
+        ...base,
+        structure_label: inputs.structure.label ?? inputs.structure.building_id,
+        structure_role: inputs.structure.role ?? null,
+        capture_note: [
+          base.capture_note,
+          `Estimating the selected structure: ${inputs.structure.label ?? inputs.structure.building_id}.`,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+      }
+    : base
 
   // The user's declared storeys always wins over any provider/enricher value
   // (floor area + exterior area scale with it).
@@ -127,6 +151,15 @@ export async function estimatePainting(
     rateCard: opts.rateCard,
   })
 
+  // Materials + labour take-off — derived FROM the priced tiers, never fed
+  // back into them (display/ordering intelligence for the tradie surfaces).
+  const takeoff = computePaintingTakeoff({
+    measurement,
+    inputs,
+    price,
+    rateCard: opts.rateCard ?? DEFAULT_PAINTING_RATE_CARD,
+  })
+
   return {
     ok: true,
     estimate: {
@@ -135,6 +168,7 @@ export async function estimatePainting(
       measurement,
       price,
       warnings: lookup.warnings,
+      takeoff,
     },
   }
 }

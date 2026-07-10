@@ -68,6 +68,17 @@ export type PaintUserInputs = {
    */
   storeys?: 1 | 2 | 3
   /**
+   * Which structure at the address to measure (Geoscape building id from
+   * /api/painting/structures). When set, enrichment targets THIS building
+   * and its footprint/storeys/eave OVERRIDE the base provider's values.
+   * Omitted ⇒ today's single-building behaviour, byte-identical.
+   */
+  structure?: {
+    building_id: string
+    label?: string
+    role?: 'primary' | 'secondary'
+  }
+  /**
    * Customer/tradie-supplied internal floor area, in m². When present it
    * overrides whatever the property-data provider returned and pins
    * confidence to HIGH — this is the "paste the floor plan figure" path.
@@ -123,6 +134,10 @@ export type PropertyFacts = {
   eave_height_m?: number | null
   /** Off-street parking spaces (PropRadar). Enrichment-only, optional. */
   car_spaces?: number | null
+  /** Which structure at the address this estimate measures — set when the
+   *  tradie explicitly picked one (display provenance). Optional. */
+  structure_label?: string | null
+  structure_role?: 'primary' | 'secondary' | null
 }
 
 /** Operator-actionable failure codes from a property-data lookup. */
@@ -218,6 +233,78 @@ export type PaintingRateCard = {
    *  ceilings / exterior, lm/hr for trim. Converts area → hours in hourly mode.
    *  Absent ⇒ DEFAULT_PAINTING_PRODUCTION_RATES. */
   production_rate_per_unit?: Record<PaintScope, number>
+
+  // ── Materials + labour take-off knobs (optional; display/ordering only —
+  // NEVER read by calculatePaintingPrice, so quoted numbers can't move) ──
+  /** Tenant-tuned take-off levers. Absent keys fall back to
+   *  DEFAULT_PAINTING_TAKEOFF_CARD at compute time (lib/painting/takeoff.ts). */
+  takeoff?: Partial<PaintingTakeoffCard>
+}
+
+/** The paint products a job consumes. Trim coverage is lm/L; the rest m²/L. */
+export type PaintProduct =
+  | 'wall_paint'
+  | 'ceiling_paint'
+  | 'trim_enamel'
+  | 'exterior_paint'
+  | 'primer_sealer'
+
+/** Tenant-tunable levers for the materials + labour take-off. AU units:
+ *  litres, m²/lm, $ ex-GST. */
+export type PaintingTakeoffCard = {
+  /** Spread rate per litre PER COAT — m²/L (trim: lm/L). */
+  coverage_per_litre: Partial<Record<PaintProduct, number>>
+  /** Trade price per litre, ex-GST. */
+  price_per_litre: Partial<Record<PaintProduct, number>>
+  /** Best tier pays this uplift on PAINT prices (not primer/sundries). */
+  premium_price_uplift_pct: number
+  /** Prep consumables (filler, caulk, tape, drop sheets) as a fraction of
+   *  the product subtotal. */
+  sundries_pct: number
+  /** Painters on site — converts hours to days. */
+  crew_size: number
+  /** Working hours per painter per day (AU standard 7.6). */
+  hours_per_day: number
+}
+
+/** One product line of the take-off, per tier. */
+export type PaintingTakeoffProduct = {
+  product: PaintProduct
+  litres: number
+  litres_low: number
+  litres_high: number
+  /** Whole retail packs covering `litres`, largest first. */
+  packs: Array<{ size_l: number; count: number }>
+  /** Packed litres × $/L (Best pays the premium uplift on paint). */
+  cost_ex_gst: number
+  /** Human derivation of this line ("380 m² × 2 coats ÷ 16 m²/L = …").
+   *  Display-only — never parsed. */
+  note: string
+}
+
+/** The materials + labour picture for one tier. TRADIE-ONLY — margin and
+ *  labour cost must never render on customer surfaces. */
+export type PaintingTakeoffTier = {
+  tier: 'good' | 'better' | 'best'
+  products: PaintingTakeoffProduct[]
+  sundries_ex_gst: number
+  materials_ex_gst: number
+  labour_hours: number
+  labour_ex_gst: number
+  crew_size: number
+  days_on_site: number
+  margin_ex_gst: number
+  /** margin_ex_gst ÷ tier ex_gst, as a fraction (0 when the tier is $0). */
+  margin_pct: number
+  /** Human derivations (display-only, never parsed). */
+  sundries_note: string
+  labour_note: string
+  margin_note: string
+}
+
+/** Deterministic materials + labour take-off across the three tiers. */
+export type PaintingTakeoff = {
+  tiers: [PaintingTakeoffTier, PaintingTakeoffTier, PaintingTakeoffTier]
 }
 
 /** A single price tier on the customer quote — carries a low/high band. */
@@ -296,4 +383,7 @@ export type PaintingEstimate = {
   measurement: PaintMeasurement
   price: PaintingQuotePrice
   warnings: string[]
+  /** Materials + labour take-off (tradie-only display). Absent on estimates
+   *  saved before the feature shipped — UIs hide the section, never crash. */
+  takeoff?: PaintingTakeoff
 }

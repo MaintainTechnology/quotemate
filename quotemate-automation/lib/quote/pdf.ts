@@ -5,7 +5,7 @@
 //   roofing                → roofing_measurements row → .pdf_path
 //
 // Storage: private `quote-pdfs` bucket
-//   quotes/<quoteId>.pdf   ·   roofs/<token>.pdf
+//   quotes/<quoteId>.pdf   ·   roofs/<token>-v2.pdf
 //
 // Customers download via the stable token routes (/api/q/[token]/pdf,
 // /api/q/roof/[token]/pdf — lazy-generate on first hit); the MMS attach
@@ -22,12 +22,23 @@ import {
   type QuoteReportInput,
 } from './report-html'
 import { asQuoteTierMode, resolveVisibleTiers, type QuoteTierMode } from './tier-visibility'
+import { quotePropertyVisuals } from './property-visuals'
 import { quotePdfIsStale, quotePdfSignature, hashReportContent } from './pdf-signature'
 import { serializeReportDoc } from './report-doc/serialize'
 import type { ReportDoc } from './report-doc/types'
 import { buildRoofQuoteReportHtml } from '@/lib/roofing/report-html'
 import { roofOutlineImageSrc, type RoofOutlineStructure } from '@/lib/roofing/roof-outline-svg'
 import { structureImageRefs, structureStaticMapPath } from '@/lib/roofing/structure-images'
+import {
+  combinedLayoutMetrics,
+  layoutMaterials,
+  type LayoutPlan,
+} from '@/lib/roofing/layout-plan'
+import {
+  layoutMapView,
+  layoutOverlayImageSrc,
+  type LayoutOverlayStructure,
+} from '@/lib/roofing/layout-overlay-svg'
 import type { MultiRoofQuote } from '@/lib/roofing/types'
 import type { RoofDisplayRow } from '@/lib/roofing/selection'
 import { buildSolarQuoteReportHtml } from '@/lib/solar/report-html'
@@ -45,6 +56,16 @@ import { prepareImage } from '@/lib/pdf/image'
 
 const BUCKET = 'quote-pdfs'
 const APP_URL = (process.env.APP_URL ?? 'https://www.quotemax.com.au').replace(/\/$/, '')
+
+// Storage-path revision markers (spec quote-visual-parity): painting/solar/
+// roofing rows have no pdf_signature column, so the path itself marks which
+// template era a cached PDF came from — pre-marker paths regenerate once.
+// Bumped 2026-07-10 (roofing introduced at -v2): PDFs now render as ONE
+// continuous page rather than A4 page-by-page, so every cached paginated PDF
+// regenerates exactly once on its next download.
+const PAINT_PDF_REV = '-v3'
+const SOLAR_PDF_REV = '-v3'
+const ROOF_PDF_REV = '-v2'
 
 let _client: SupabaseClient | null = null
 function supabase(): SupabaseClient {
@@ -143,6 +164,9 @@ type RoofPdfRow = {
   quote: MultiRoofQuote | null
   routing: string | null
   pdf_path: string | null
+  /** AI layout plan cache (migration 170) — embed ONLY when 'ready'. */
+  layout_status: string | null
+  layout_plan: LayoutPlan | null
 }
 
 type SolarPdfRow = {
@@ -156,6 +180,9 @@ type SolarPdfRow = {
   quote_variant?: string | null
   felt?: { thumbnail_url?: string | null; map_url?: string | null; status?: string | null } | null
   ai_brief?: import('@/lib/solar/ai-brief').SolarAiBriefRecord | null
+  /** Cached "roof with panels" AI render — embed ONLY when status is 'ready'. */
+  panels_image_status?: string | null
+  panels_image_path?: string | null
 }
 
 type PaintingPdfRow = {
@@ -165,12 +192,17 @@ type PaintingPdfRow = {
   estimate: PaintingEstimate | null
   routing: string | null
   pdf_path: string | null
+  /** Cached AI repaint (migration 169) — embed ONLY when status is 'ready'. */
+  preview_status: string | null
+  preview_image_path: string | null
 }
 
 type IntakePdfRow = {
   job_type: string | null
   caller: { name?: string } | null
   trade: string | null
+  address: string | null
+  scope: unknown
 }
 
 /**
@@ -226,7 +258,7 @@ async function loadQuoteReportContext(quoteId: string): Promise<QuoteReportConte
   const intakeRes = quote.intake_id
     ? await supabase()
         .from('intakes')
-        .select('job_type, caller, trade')
+        .select('job_type, caller, trade, address, scope')
         .eq('id', quote.intake_id)
         .maybeSingle<IntakePdfRow>()
     : { data: null as IntakePdfRow | null }
@@ -256,13 +288,32 @@ async function loadQuoteReportContext(quoteId: string): Promise<QuoteReportConte
   return { quote, intake, intakeTrade, tierMode, visibleTierKeys, visibleTierSet, recommendedTier }
 }
 
+/** True for the trades whose customer page shows property evidence the report
+ *  must mirror (spec quote-visual-parity R1). */
+function hasPropertyVisuals(trade: string): boolean {
+  return trade === 'roofing' || trade === 'commercial_painting'
+}
+
+/** The satellite proxy query the customer page's RoofHeroStrip uses. */
+function staticMapQuery(address: string): string {
+  const p = new URLSearchParams()
+  p.set('address', address)
+  p.set('zoom', '20')
+  p.set('w', '640')
+  p.set('h', '420')
+  return p.toString()
+}
+
 /** Shape the QuoteReportInput both the PDF and the inline HTML render from —
- *  identical output guarantees the on-screen HTML matches the downloaded PDF. */
+ *  identical output guarantees the on-screen HTML matches the downloaded PDF.
+ *  `visualsImageSrc` is the pre-resolved property image (data URI for the PDF,
+ *  token-gated proxy URL for the live preview, null when unavailable). */
 function buildQuoteReportInput(
   ctx: QuoteReportContext,
   branding: Awaited<ReturnType<typeof loadTenantBranding>>,
+  visualsImageSrc: string | null = null,
 ): QuoteReportInput {
-  const { quote, intake, visibleTierSet, recommendedTier } = ctx
+  const { quote, intake, intakeTrade, visibleTierSet, recommendedTier } = ctx
   return {
     businessName: branding.businessName,
     branding,
@@ -271,6 +322,7 @@ function buildQuoteReportInput(
     scopeOfWorks: quote.scope_of_works,
     assumptions: quote.assumptions,
     estimatedTimeframe: quote.estimated_timeframe,
+    propertyVisuals: quotePropertyVisuals(intakeTrade, intake?.scope ?? null, visualsImageSrc),
     good: visibleTierSet.has('good') ? quote.good : null,
     better: visibleTierSet.has('better') ? quote.better : null,
     best: visibleTierSet.has('best') ? quote.best : null,
@@ -310,7 +362,17 @@ export async function renderQuoteReportHtml(quoteId: string): Promise<string | n
   const ctx = await loadQuoteReportContext(quoteId)
   if (!ctx) return null
   const branding = await loadTenantBranding(supabase(), ctx.quote.tenant_id, ctx.intakeTrade)
-  return renderQuoteDocumentHtml(buildQuoteReportInput(ctx, branding), ctx.quote.report_doc)
+  // Live preview: reference the token-gated satellite proxy directly (relative
+  // URL — the preview renders on the app origin), exactly like the customer
+  // page's RoofHeroStrip. The PDF path embeds a data URI instead.
+  const visualsImageSrc =
+    hasPropertyVisuals(ctx.intakeTrade) && ctx.intake?.address
+      ? `/api/q/${ctx.quote.share_token}/static-map?${staticMapQuery(ctx.intake.address)}`
+      : null
+  return renderQuoteDocumentHtml(
+    buildQuoteReportInput(ctx, branding, visualsImageSrc),
+    ctx.quote.report_doc,
+  )
 }
 
 /**
@@ -364,7 +426,21 @@ export async function ensureQuotePdf(
     }
 
     const branding = await loadTenantBranding(supabase(), quote.tenant_id, intakeTrade)
-    const html = renderQuoteDocumentHtml(buildQuoteReportInput(ctx, branding), quote.report_doc)
+    // Property visuals image (roofing / commercial painting) — fetched via the
+    // same token-gated satellite proxy the customer page uses, embedded as a
+    // data URI (mirrors ensureRoofQuotePdf). Best-effort: prepareImage never
+    // throws; null just renders the stats-only block.
+    const visualsImageSrc =
+      hasPropertyVisuals(intakeTrade) && ctx.intake?.address
+        ? await prepareImage(
+            `${APP_URL}/api/q/${quote.share_token}/static-map?${staticMapQuery(ctx.intake.address)}`,
+            { maxEdge: 640 },
+          )
+        : null
+    const html = renderQuoteDocumentHtml(
+      buildQuoteReportInput(ctx, branding, visualsImageSrc),
+      quote.report_doc,
+    )
     const pdf = await renderQuotePdfCapped(html, `quote:${quoteId}`)
     const path = await storePdf(`quotes/${quoteId}.pdf`, pdf)
     await supabase()
@@ -394,14 +470,18 @@ export async function ensureRoofQuotePdf(
     if (!gotenbergConfigured()) return null
     const { data: row } = await supabase()
       .from('roofing_measurements')
-      .select('public_token, tenant_id, address, quote, routing, pdf_path')
+      .select('public_token, tenant_id, address, quote, routing, pdf_path, layout_status, layout_plan')
       .eq('public_token', publicToken)
       .maybeSingle<RoofPdfRow>()
     if (!row) return null
     // Inspection-routed roofs carry no committable price — no quote PDF
     // (mirrors the paint/solar guard; defense-in-depth behind the UI gate).
     if (row.routing === 'inspection_required') return null
-    if (row.pdf_path && !opts.regenerate && !opts.quote) return row.pdf_path
+    // '-v2' path marker = rendered as a single continuous page. A pre-marker
+    // cached PDF (paginated A4) regenerates once on the next download.
+    if (row.pdf_path && row.pdf_path.includes(ROOF_PDF_REV) && !opts.regenerate && !opts.quote) {
+      return row.pdf_path
+    }
 
     const quote = opts.quote ?? row.quote
     if (!quote) return null
@@ -476,6 +556,45 @@ export async function ensureRoofQuotePdf(
       )
     }
 
+    // AI work-strategy layout map (spec quote-visual-parity R6e) — the CACHED
+    // plan only; drawn from stored geometry over the fit-to-geometry aerial
+    // (layoutMapView — the SAME view the ?fit=1 static map renders, so the
+    // overlay stays aligned and every structure is framed).
+    let layoutOverlay: Parameters<typeof buildRoofQuoteReportHtml>[0]['layoutOverlay'] = null
+    if (row.layout_status === 'ready' && row.layout_plan && row.quote?.structures?.length) {
+      const overlayStructures: LayoutOverlayStructure[] = row.quote.structures.map((s) => ({
+        polygon: s.metrics?.polygon_geojson ?? null,
+        form: s.metrics?.form ?? 'unknown',
+      }))
+      const view = layoutMapView(overlayStructures, { width: 640, height: 480 })
+      const overlaySrc = view
+        ? layoutOverlayImageSrc({
+            zones: row.layout_plan.zones,
+            structures: overlayStructures,
+            center: view.center,
+            zoom: view.zoom,
+            width: 640,
+            height: 480,
+          })
+        : null
+      const aerialSrc = await prepareImage(
+        `${APP_URL}/api/roofing/q/${publicToken}/static-map?fit=1`,
+      )
+      if (overlaySrc && aerialSrc) {
+        layoutOverlay = {
+          header: row.layout_plan.header,
+          aerialSrc,
+          overlaySrc,
+          legend: row.layout_plan.zones.map((z) => ({ color: z.color, label: z.label })),
+          // Deterministic whole-job material estimates with basis + use.
+          materials: layoutMaterials(
+            combinedLayoutMetrics(row.quote.structures),
+            row.layout_plan.mode,
+          ),
+        }
+      }
+    }
+
     const html = buildRoofQuoteReportHtml({
       businessName: branding.businessName,
       branding,
@@ -486,10 +605,11 @@ export async function ensureRoofQuotePdf(
       outlineImageSrc,
       mapImageSrc,
       structureImages,
+      layoutOverlay,
       quoteViewUrl: `${APP_URL}/q/roof/${publicToken}`,
     })
     const pdf = await renderQuotePdfCapped(html, `roof:${publicToken}`)
-    const path = await storePdf(`roofs/${publicToken}.pdf`, pdf)
+    const path = await storePdf(`roofs/${publicToken}${ROOF_PDF_REV}.pdf`, pdf)
     await supabase().from('roofing_measurements').update({ pdf_path: path }).eq('public_token', publicToken)
     return path
   } catch (e) {
@@ -516,12 +636,18 @@ export async function ensureSolarQuotePdf(
     if (!gotenbergConfigured()) return null
     const { data: row } = await supabase()
       .from('solar_estimates')
-      .select('public_token, tenant_id, address, estimate, routing, pdf_path, quote_variant, felt, ai_brief')
+      .select(
+        'public_token, tenant_id, address, estimate, routing, pdf_path, quote_variant, felt, ai_brief, panels_image_status, panels_image_path',
+      )
       .eq('public_token', publicToken)
       .maybeSingle<SolarPdfRow>()
     if (!row) return null
     if (row.routing === 'inspection_required') return null
-    if (row.pdf_path && !opts.regenerate) return row.pdf_path
+    // '-v2' path marker = rendered WITH the panels-after figure availability
+    // (spec quote-visual-parity R5); pre-marker cached PDFs regenerate once.
+    if (row.pdf_path && row.pdf_path.includes(SOLAR_PDF_REV) && !opts.regenerate) {
+      return row.pdf_path
+    }
 
     const estimate = row.estimate
     if (!estimate) return null
@@ -550,6 +676,12 @@ export async function ensureSolarQuotePdf(
       fluxImageUrl: estimate.context.sun?.flux_image_path
         ? `${APP_URL}/api/solar/q/${publicToken}/flux-heatmap`
         : null,
+      // "Roof with panels" AI visual (spec quote-visual-parity R5) — only the
+      // CACHED render is referenced, so the PDF never triggers a Gemini bill.
+      panelsAfterUrl:
+        row.panels_image_status === 'ready' && row.panels_image_path
+          ? `${APP_URL}/api/solar/q/${publicToken}/panels-after`
+          : null,
       // Felt variant (spec 2026-06-13 §4.7-8): the PDF carries the map
       // thumbnail + live link (an iframe can't print) and the grounded
       // AI brief. Instant rows pass null and render identically to today.
@@ -563,7 +695,7 @@ export async function ensureSolarQuotePdf(
       aiBrief: row.quote_variant === 'felt' ? (row.ai_brief ?? null) : null,
     })
     const pdf = await renderQuotePdfCapped(html, `solar:${publicToken}`)
-    const path = await storePdf(`solar/${publicToken}.pdf`, pdf)
+    const path = await storePdf(`solar/${publicToken}${SOLAR_PDF_REV}.pdf`, pdf)
     await supabase().from('solar_estimates').update({ pdf_path: path }).eq('public_token', publicToken)
     return path
   } catch (e) {
@@ -590,28 +722,47 @@ export async function ensurePaintingPdf(
     if (!gotenbergConfigured()) return null
     const { data: row } = await supabase()
       .from('painting_measurements')
-      .select('public_token, tenant_id, address, estimate, routing, pdf_path')
+      .select(
+        'public_token, tenant_id, address, estimate, routing, pdf_path, preview_status, preview_image_path',
+      )
       .eq('public_token', publicToken)
       .maybeSingle<PaintingPdfRow>()
     if (!row) return null
     if (row.routing === 'inspection_required') return null
-    if (row.pdf_path && !opts.regenerate) return row.pdf_path
+    // '-v2' path marker = rendered WITH the property imagery (spec
+    // quote-visual-parity R2). A pre-imagery cached PDF (no marker)
+    // regenerates once on the next download — self-heal without a migration.
+    if (row.pdf_path && row.pdf_path.includes(PAINT_PDF_REV) && !opts.regenerate) {
+      return row.pdf_path
+    }
 
     const estimate = row.estimate
     if (!estimate) return null
-    const branding = await loadTenantBranding(supabase(), row.tenant_id, 'painting')
+
+    // Property imagery (spec quote-visual-parity R2) — the same token-gated
+    // proxies the /p and /q/paint pages use, embedded as data URIs.
+    // Street View is a plain proxy fetch; the AI repaint embeds ONLY when the
+    // render is already cached ('ready') so PDF generation never bills Gemini.
+    // Branding + the two image fetches are independent — run them together.
+    const [branding, streetViewSrc, afterImageSrc] = await Promise.all([
+      loadTenantBranding(supabase(), row.tenant_id, 'painting'),
+      prepareImage(`${APP_URL}/api/painting/q/${publicToken}/street-view`, { maxEdge: 640 }),
+      row.preview_status === 'ready' && row.preview_image_path
+        ? prepareImage(`${APP_URL}/api/painting/q/${publicToken}/after-image`, { maxEdge: 640 })
+        : Promise.resolve(null),
+    ])
 
     const html = buildPaintingQuoteReportHtml({
       businessName: branding.businessName,
       branding,
       address: row.address ?? '',
       estimate,
-      // No /q/paint/[token] customer page exists yet — omit the live link
-      // so the PDF footer never points at a 404.
-      quoteViewUrl: null,
+      streetViewSrc,
+      afterImageSrc,
+      quoteViewUrl: `${APP_URL}/q/paint/${publicToken}`,
     })
     const pdf = await renderQuotePdfCapped(html, `paint:${publicToken}`)
-    const path = await storePdf(`paint/${publicToken}.pdf`, pdf)
+    const path = await storePdf(`paint/${publicToken}${PAINT_PDF_REV}.pdf`, pdf)
     await supabase().from('painting_measurements').update({ pdf_path: path }).eq('public_token', publicToken)
     return path
   } catch (e) {

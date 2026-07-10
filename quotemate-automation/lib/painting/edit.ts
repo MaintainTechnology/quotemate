@@ -137,5 +137,26 @@ export function applyTierEdits(
       manual_override: true,
     },
   }
+
+  // The persisted take-off carries margins stamped from the ORIGINAL tier
+  // prices — refresh them against the edited prices so the tradie panel
+  // never contradicts the headline. Materials/labour are price-independent
+  // and carry over unchanged. (jsonb-sourced: guard the array shape.)
+  const takeoffTiers = estimate.takeoff?.tiers
+  if (Array.isArray(takeoffTiers)) {
+    nextEstimate.takeoff = {
+      ...estimate.takeoff!,
+      tiers: takeoffTiers.map((t) => {
+        const ex = nextTiers.find((p) => p.tier === t.tier)?.ex_gst ?? 0
+        const margin = round2(ex - t.materials_ex_gst - t.labour_ex_gst)
+        return {
+          ...t,
+          margin_ex_gst: margin,
+          margin_pct: ex > 0 ? Math.round((margin / ex) * 10000) / 10000 : 0,
+        }
+      }) as NonNullable<PaintingEstimate['takeoff']>['tiers'],
+    }
+  }
+
   return { estimate: nextEstimate, betterIncGst: betterInc(nextTiers), changed: true, priceChanged }
 }

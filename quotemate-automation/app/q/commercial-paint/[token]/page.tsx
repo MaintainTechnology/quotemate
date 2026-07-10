@@ -112,6 +112,40 @@ export default async function CommercialPaintQuotePage(props: {
           issued={`Prepared ${date}`}
         />
 
+        {/* ── Site aerial — token-gated Google Maps Static proxy (spec
+            quote-visual-parity R4). Only when the run has a site address. ── */}
+        {address ? (
+          <SheetSection eyebrow="Your site" eyebrowAccent>
+            <figure
+              style={{
+                margin: '12px 0 0',
+                border: '1px solid var(--ink-line)',
+                background: 'var(--ink-card)',
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`/api/commercial-paint/q/${token}/static-map`}
+                alt={`Aerial view of ${address}`}
+                style={{ width: '100%', height: 300, objectFit: 'cover', display: 'block' }}
+              />
+              <figcaption
+                style={{
+                  borderTop: '1px solid var(--ink-line)',
+                  padding: '10px 14px',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.14em',
+                  color: 'var(--text-dim)',
+                }}
+              >
+                Site aerial · Google Maps
+              </figcaption>
+            </figure>
+          </SheetSection>
+        ) : null}
+
         {!bom ? (
           <SheetSection eyebrow="Pricing in progress" eyebrowAccent>
             <p style={{ margin: '12px 0 0', fontSize: 14, lineHeight: 1.55, color: 'var(--text-sec)' }}>

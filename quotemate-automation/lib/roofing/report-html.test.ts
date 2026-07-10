@@ -35,6 +35,92 @@ const baseQuote = {
   inspection_structures: ['Shed'],
 } as unknown as MultiRoofQuote
 
+// Spec specs/quote-visual-parity.md R6e — the roofing PDF carries the AI
+// work-strategy layout map (aerial + colour-coded zone overlay + legend)
+// once the tradie has generated it. Null renders today's PDF unchanged.
+describe('buildRoofQuoteReportHtml — layout overlay (spec quote-visual-parity R6)', () => {
+  const layoutOverlay = {
+    header: 'Please see the roof layout map below to provide clarity on your quote!',
+    aerialSrc: 'data:image/jpeg;base64,AERIAL',
+    overlaySrc: 'data:image/svg+xml;base64,OVERLAY',
+    legend: [
+      { color: 'teal' as const, label: 'Install NEW Colorbond sheeting to replace existing.' },
+      { color: 'red' as const, label: 'Ground-up scaffolding to the work-area perimeter for WHS.' },
+    ],
+  }
+
+  it('renders the header, both images, and every legend entry when supplied', () => {
+    const html = buildRoofQuoteReportHtml({
+      businessName: 'Apex Roofing',
+      address: '12 Sample St',
+      quote: baseQuote,
+      layoutOverlay,
+    })
+    expect(html).toContain('Please see the roof layout map below')
+    expect(html).toContain('data:image/jpeg;base64,AERIAL')
+    expect(html).toContain('data:image/svg+xml;base64,OVERLAY')
+    expect(html).toContain('Install NEW Colorbond sheeting to replace existing.')
+    expect(html).toContain('Ground-up scaffolding to the work-area perimeter for WHS.')
+  })
+
+  it('omits the section entirely when layoutOverlay is null/absent', () => {
+    const html = buildRoofQuoteReportHtml({
+      businessName: 'Apex Roofing',
+      address: '12 Sample St',
+      quote: baseQuote,
+    })
+    expect(html).not.toContain('roof layout map')
+    expect(html).not.toContain('Estimated materials')
+  })
+
+  it('renders the estimated-materials table with basis and use when supplied', () => {
+    const html = buildRoofQuoteReportHtml({
+      businessName: 'Apex Roofing',
+      address: '12 Sample St',
+      quote: baseQuote,
+      layoutOverlay: {
+        ...layoutOverlay,
+        materials: {
+          items: [
+            {
+              item: 'Colorbond sheets',
+              qty: 71,
+              unit: 'sheets',
+              basis: '268 m² measured sloped roof ÷ 4.19 m² per sheet + 10% cutting waste',
+              use: 'New roof sheeting across the measured roof surface.',
+            },
+            {
+              item: 'Edge protection',
+              qty: 69,
+              unit: 'lm',
+              basis: '69 lm building perimeter from the measured footprint outline',
+              use: 'Guardrail around the work-area perimeter (WHS).',
+            },
+          ],
+          note: null,
+        },
+      },
+    })
+    expect(html).toContain('Estimated materials')
+    expect(html).toContain('Colorbond sheets')
+    expect(html).toContain('71 sheets')
+    expect(html).toContain('268 m² measured sloped roof')
+    expect(html).toContain('Guardrail around the work-area perimeter')
+    expect(html).toMatch(/measured .*geometry/i)
+  })
+
+  it('renders the layout map without materials when materials is absent', () => {
+    const html = buildRoofQuoteReportHtml({
+      businessName: 'Apex Roofing',
+      address: '12 Sample St',
+      quote: baseQuote,
+      layoutOverlay,
+    })
+    expect(html).toContain('Please see the roof layout map below')
+    expect(html).not.toContain('Estimated materials')
+  })
+})
+
 describe('buildRoofQuoteReportHtml', () => {
   const html = buildRoofQuoteReportHtml({
     businessName: 'Apex Roofing',

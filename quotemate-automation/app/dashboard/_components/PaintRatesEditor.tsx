@@ -12,6 +12,9 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { getAuthToken } from '@/lib/auth/client-token'
+import { DEFAULT_PAINTING_PRODUCTION_RATES } from '@/lib/painting/pricing'
+import { DEFAULT_PAINTING_TAKEOFF_CARD } from '@/lib/painting/takeoff'
+import type { PaintProduct } from '@/lib/painting/types'
 
 const SCOPES = [
   ['walls', 'Interior walls', 'm²'],
@@ -21,6 +24,23 @@ const SCOPES = [
 ] as const
 
 type ScopeKey = (typeof SCOPES)[number][0]
+
+// Take-off products (lib/painting/takeoff.ts). Trim coverage is linear.
+const PRODUCTS = [
+  ['wall_paint', 'Wall paint', 'm²/L'],
+  ['ceiling_paint', 'Ceiling paint', 'm²/L'],
+  ['trim_enamel', 'Trim enamel', 'lm/L'],
+  ['exterior_paint', 'Exterior paint', 'm²/L'],
+  ['primer_sealer', 'Primer / sealer', 'm²/L'],
+] as const
+
+const EMPTY_PRODUCTS: Record<PaintProduct, string> = {
+  wall_paint: '',
+  ceiling_paint: '',
+  trim_enamel: '',
+  exterior_paint: '',
+  primer_sealer: '',
+}
 
 type Defaults = {
   rate_per_unit: Record<ScopeKey, number>
@@ -47,6 +67,12 @@ export function PaintRatesEditor({ accessToken }: Props) {
   const [colourExtra, setColourExtra] = useState('')
   const [callOut, setCallOut] = useState('')
   const [gstMode, setGstMode] = useState<'' | 'true' | 'false'>('')
+  // Materials & labour take-off knobs (+ production rates for labour hours).
+  const [coverage, setCoverage] = useState<Record<PaintProduct, string>>(EMPTY_PRODUCTS)
+  const [litrePrice, setLitrePrice] = useState<Record<PaintProduct, string>>(EMPTY_PRODUCTS)
+  const [production, setProduction] = useState<Record<ScopeKey, string>>({ walls: '', ceilings: '', trim: '', exterior: '' })
+  const [crew, setCrew] = useState('')
+  const [sundries, setSundries] = useState('')
   const [hasPricingBook, setHasPricingBook] = useState(true)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -76,6 +102,13 @@ export function PaintRatesEditor({ accessToken }: Props) {
         colour_change_extra?: number | null
         call_out_minimum_ex_gst?: number | null
         gst_registered?: boolean | null
+        production_rate_per_unit?: Partial<Record<ScopeKey, number>>
+        takeoff?: {
+          coverage_per_litre?: Partial<Record<PaintProduct, number>>
+          price_per_litre?: Partial<Record<PaintProduct, number>>
+          sundries_pct?: number | null
+          crew_size?: number | null
+        }
       }
       setRates({
         walls: numStr(o.rate_per_unit?.walls),
@@ -89,6 +122,28 @@ export function PaintRatesEditor({ accessToken }: Props) {
       setColourExtra(pctStr(o.colour_change_extra))
       setCallOut(numStr(o.call_out_minimum_ex_gst))
       setGstMode(o.gst_registered === true ? 'true' : o.gst_registered === false ? 'false' : '')
+      setCoverage({
+        wall_paint: numStr(o.takeoff?.coverage_per_litre?.wall_paint),
+        ceiling_paint: numStr(o.takeoff?.coverage_per_litre?.ceiling_paint),
+        trim_enamel: numStr(o.takeoff?.coverage_per_litre?.trim_enamel),
+        exterior_paint: numStr(o.takeoff?.coverage_per_litre?.exterior_paint),
+        primer_sealer: numStr(o.takeoff?.coverage_per_litre?.primer_sealer),
+      })
+      setLitrePrice({
+        wall_paint: numStr(o.takeoff?.price_per_litre?.wall_paint),
+        ceiling_paint: numStr(o.takeoff?.price_per_litre?.ceiling_paint),
+        trim_enamel: numStr(o.takeoff?.price_per_litre?.trim_enamel),
+        exterior_paint: numStr(o.takeoff?.price_per_litre?.exterior_paint),
+        primer_sealer: numStr(o.takeoff?.price_per_litre?.primer_sealer),
+      })
+      setProduction({
+        walls: numStr(o.production_rate_per_unit?.walls),
+        ceilings: numStr(o.production_rate_per_unit?.ceilings),
+        trim: numStr(o.production_rate_per_unit?.trim),
+        exterior: numStr(o.production_rate_per_unit?.exterior),
+      })
+      setCrew(numStr(o.takeoff?.crew_size))
+      setSundries(pctStr(o.takeoff?.sundries_pct))
     } catch (e) {
       setErrMsg(e instanceof Error ? e.message : String(e))
     } finally {
@@ -119,6 +174,22 @@ export function PaintRatesEditor({ accessToken }: Props) {
           colour_change_extra: pctToFrac(colourExtra),
           call_out_minimum_ex_gst: blankNull(callOut),
           gst_registered: gstMode === '' ? null : gstMode === 'true',
+          production_rate_per_unit: {
+            walls: blankNull(production.walls),
+            ceilings: blankNull(production.ceilings),
+            trim: blankNull(production.trim),
+            exterior: blankNull(production.exterior),
+          },
+          takeoff: {
+            coverage_per_litre: Object.fromEntries(
+              PRODUCTS.map(([k]) => [k, blankNull(coverage[k])]),
+            ),
+            price_per_litre: Object.fromEntries(
+              PRODUCTS.map(([k]) => [k, blankNull(litrePrice[k])]),
+            ),
+            crew_size: blankNull(crew),
+            sundries_pct: pctToFrac(sundries),
+          },
         }
         const token = (await getAuthToken()) ?? accessToken
         const res = await fetch('/api/tenant/painting-rates', {
@@ -148,7 +219,7 @@ export function PaintRatesEditor({ accessToken }: Props) {
         setSaving(false)
       }
     },
-    [accessToken, rates, doubleStorey, premium, goodFrac, colourExtra, callOut, gstMode, load],
+    [accessToken, rates, doubleStorey, premium, goodFrac, colourExtra, callOut, gstMode, coverage, litrePrice, production, crew, sundries, load],
   )
 
   if (!hasPricingBook) {
@@ -213,6 +284,51 @@ export function PaintRatesEditor({ accessToken }: Props) {
         <PctInput label="Colour change" value={colourExtra} onChange={setColourExtra} defaultValue={defaults ? defaults.colour_change_extra * 100 : null} error={fieldErrors.colour_change_extra} disabled={loading || saving} hint="Extra prep when the colour changes." />
       </div>
 
+      <SectionHeader title="Materials take-off" subtitle="Litres = area × coats ÷ coverage, rounded up to 1/4/10/15 L packs. Blank = the AU default. Feeds the Materials & labour panel, never the quoted price." />
+      <div className="mt-4 grid gap-5 sm:grid-cols-2">
+        {PRODUCTS.map(([key, label, covUnit]) => {
+          const covDef = DEFAULT_PAINTING_TAKEOFF_CARD.coverage_per_litre[key]
+          const priceDef = DEFAULT_PAINTING_TAKEOFF_CARD.price_per_litre[key]
+          const covErr = fieldErrors[`takeoff.coverage_per_litre.${key}`]
+          const priceErr = fieldErrors[`takeoff.price_per_litre.${key}`]
+          return (
+            <div key={key} className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <FieldLabel>{label} coverage</FieldLabel>
+                <PlainInput value={coverage[key]} onChange={(v) => setCoverage((c) => ({ ...c, [key]: v }))} placeholder={covDef !== undefined ? String(covDef) : ''} suffix={covUnit} disabled={loading || saving} hasError={!!covErr} ariaLabel={`${label} coverage`} />
+                <Caption error={covErr} defaultHint={covDef !== undefined ? `Default ${covDef} ${covUnit}` : ''} />
+              </label>
+              <label className="block">
+                <FieldLabel>{label} price</FieldLabel>
+                <UnitInput value={litrePrice[key]} onChange={(v) => setLitrePrice((c) => ({ ...c, [key]: v }))} placeholder={priceDef !== undefined ? String(priceDef) : ''} unit="L" disabled={loading || saving} hasError={!!priceErr} ariaLabel={`${label} price per litre`} />
+                <Caption error={priceErr} defaultHint={priceDef !== undefined ? `Default $${priceDef}/L ex GST` : ''} />
+              </label>
+            </div>
+          )
+        })}
+      </div>
+
+      <SectionHeader title="Labour take-off" subtitle="Production rates convert measured area into hours; crew size turns hours into days on site." />
+      <div className="mt-4 grid gap-5 sm:grid-cols-2">
+        {SCOPES.map(([key, label, unit]) => {
+          const def = DEFAULT_PAINTING_PRODUCTION_RATES[key]
+          const fe = fieldErrors[`production_rate_per_unit.${key}`]
+          return (
+            <label key={key} className="block">
+              <FieldLabel>{label} pace</FieldLabel>
+              <PlainInput value={production[key]} onChange={(v) => setProduction((p) => ({ ...p, [key]: v }))} placeholder={String(def)} suffix={`${unit}/hr`} disabled={loading || saving} hasError={!!fe} ariaLabel={`${label} production rate`} />
+              <Caption error={fe} defaultHint={`Default ${def} ${unit}/hr`} />
+            </label>
+          )
+        })}
+        <label className="block">
+          <FieldLabel>Crew size</FieldLabel>
+          <PlainInput value={crew} onChange={setCrew} placeholder={String(DEFAULT_PAINTING_TAKEOFF_CARD.crew_size)} suffix="painters" disabled={loading || saving} hasError={!!fieldErrors['takeoff.crew_size']} ariaLabel="Crew size" />
+          <Caption error={fieldErrors['takeoff.crew_size']} defaultHint={`Default ${DEFAULT_PAINTING_TAKEOFF_CARD.crew_size} · turns hours into days on site`} />
+        </label>
+        <PctInput label="Prep & sundries" value={sundries} onChange={setSundries} defaultValue={DEFAULT_PAINTING_TAKEOFF_CARD.sundries_pct * 100} error={fieldErrors['takeoff.sundries_pct']} disabled={loading || saving} hint="Filler, caulk, tape, drop sheets — % of materials." />
+      </div>
+
       <SectionHeader title="Minimum & GST" subtitle="A per-job floor so tiny jobs aren't underpriced, plus the GST flag." />
       <div className="mt-4 grid gap-5 sm:grid-cols-2">
         <label className="block">
@@ -235,7 +351,7 @@ export function PaintRatesEditor({ accessToken }: Props) {
         <button type="submit" disabled={loading || saving || !accessToken} className="rounded-ctl inline-flex items-center gap-2 bg-accent px-6 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50">
           {saving ? (<><span className="inline-block h-3.5 w-3.5 animate-spin border-2 border-white/40 border-t-white" aria-hidden="true" /> Saving…</>) : (<>Save rates <span aria-hidden="true">&rarr;</span></>)}
         </button>
-        <button type="button" onClick={() => { setRates({ walls: '', ceilings: '', trim: '', exterior: '' }); setDoubleStorey(''); setPremium(''); setGoodFrac(''); setColourExtra(''); setCallOut(''); setGstMode('') }} disabled={loading || saving} className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim hover:text-accent disabled:opacity-50">
+        <button type="button" onClick={() => { setRates({ walls: '', ceilings: '', trim: '', exterior: '' }); setDoubleStorey(''); setPremium(''); setGoodFrac(''); setColourExtra(''); setCallOut(''); setGstMode(''); setCoverage(EMPTY_PRODUCTS); setLitrePrice(EMPTY_PRODUCTS); setProduction({ walls: '', ceilings: '', trim: '', exterior: '' }); setCrew(''); setSundries('') }} disabled={loading || saving} className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim hover:text-accent disabled:opacity-50">
           Reset all to default
         </button>
       </div>
@@ -263,6 +379,19 @@ function Caption({ error, defaultHint }: { error?: string; defaultHint?: string 
     <div className="mt-2 flex flex-wrap items-center justify-between gap-2 font-mono text-xs text-text-dim">
       <span>{defaultHint ?? ''}</span>
       {error && <span className="text-warning">{error}</span>}
+    </div>
+  )
+}
+
+/** Bare numeric input with a unit suffix (no $ prefix) — coverage / pace / crew. */
+function PlainInput({ value, onChange, placeholder, suffix, disabled, hasError, ariaLabel }: { value: string; onChange: (v: string) => void; placeholder: string; suffix: string; disabled: boolean; hasError: boolean; ariaLabel: string }) {
+  return (
+    <div className="relative mt-2">
+      {/* step="any": coverage (m²/L) and pace (m²/hr) are naturally
+          fractional — step={1} would make the browser block the submit on a
+          stepMismatch with no visible error. The server clamps ranges. */}
+      <input type="number" inputMode="decimal" min={0} step="any" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} disabled={disabled} aria-label={ariaLabel} className={`rounded-ctl w-full border bg-ink-deep px-4 py-3 pr-16 font-mono text-base text-text-pri placeholder:text-text-dim focus:outline-none ${hasError ? 'border-warning' : 'border-ink-line focus:border-accent'}`} />
+      <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-xs text-text-dim">{suffix}</span>
     </div>
   )
 }

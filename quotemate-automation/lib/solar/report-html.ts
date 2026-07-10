@@ -48,6 +48,10 @@ export type SolarReportInput = {
   /** Absolute URL of the cached roof irradiance heatmap (sun & shade
    *  build 2026-06-13). Absent → the figure is omitted from the PDF. */
   fluxImageUrl?: string | null
+  /** Absolute URL of the CACHED "roof with panels" AI render the customer
+   *  page shows (spec quote-visual-parity R5). The caller passes it only
+   *  when panels_image_status === 'ready' — never triggers a render. */
+  panelsAfterUrl?: string | null
   /** Felt map snapshot for felt-variant quotes (spec 2026-06-13 §4.7-8).
    *  Gotenberg can't print an iframe, so the PDF carries the static
    *  thumbnail + the live-map link instead. Absent → omitted. */
@@ -419,6 +423,17 @@ export function buildSolarQuoteReportHtml(input: SolarReportInput): string {
   )} kW solar system, sized to your roof and capped to your network's export limit. Prices are net of the STC rebate and include GST.</div>`
 
   body += feltSections(input)
+
+  // Cached AI "roof with panels" visual (spec quote-visual-parity R5) —
+  // the same image the customer page shows at /api/solar/q/[token]/panels-after.
+  if (input.panelsAfterUrl) {
+    body +=
+      '<h2>Your roof with panels</h2>' +
+      renderFigure(
+        input.panelsAfterUrl,
+        'AI visualisation of your roof with the proposed panels installed — layout is indicative; final placement is confirmed on site.',
+      )
+  }
 
   body += premiumSections(input)
 

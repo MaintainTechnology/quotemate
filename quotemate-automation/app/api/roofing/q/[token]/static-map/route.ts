@@ -6,6 +6,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { buildStaticMapUrl } from '@/lib/roofing/google-maps'
+import { layoutMapView, type LayoutOverlayStructure } from '@/lib/roofing/layout-overlay-svg'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,8 +58,19 @@ export async function GET(req: Request, ctx: { params: Promise<{ token: string }
 
   // Optional 1-based building index — centre the image on that structure
   // (used for the per-building roof-photo MMS on multi-building parcels).
-  const bRaw = new URL(req.url).searchParams.get('b')
+  const params = new URL(req.url).searchParams
+  const bRaw = params.get('b')
   const b = bRaw != null && /^\d{1,2}$/.test(bRaw) ? Number(bRaw) : null
+  // ?fit=1 — frame EVERY measured structure (the layout-map view). The SVG
+  // overlay computes the identical centre/zoom via layoutMapView, so the
+  // zone borders stay aligned with the imagery. ?z=15..21 overrides the fit
+  // zoom (the layout figure's interactive zoom) while keeping the fit centre.
+  const fit = params.get('fit') === '1'
+  const zRaw = params.get('z')
+  const zOverride =
+    fit && zRaw != null && /^\d{1,2}$/.test(zRaw) && Number(zRaw) >= 15 && Number(zRaw) <= 21
+      ? Number(zRaw)
+      : null
 
   const { data: row, error } = await supabase
     .from('roofing_measurements')
@@ -75,8 +87,29 @@ export async function GET(req: Request, ctx: { params: Promise<{ token: string }
   }
 
   const address = (row.address as string | null) ?? undefined
-  const vertex = vertexForBuilding(row.quote, b)
-  const center = vertex ? { lat: vertex[1], lng: vertex[0] } : undefined
+  let center: { lat: number; lng: number } | undefined
+  let zoom = 20
+  let marker = true
+  if (fit) {
+    const structures = ((row.quote as { structures?: unknown[] } | null)?.structures ?? []).map(
+      (s): LayoutOverlayStructure => ({
+        polygon:
+          (s as { metrics?: { polygon_geojson?: LayoutOverlayStructure['polygon'] } })?.metrics
+            ?.polygon_geojson ?? null,
+        form: 'unknown',
+      }),
+    )
+    const view = layoutMapView(structures, { width: 640, height: 480 })
+    if (view) {
+      center = view.center
+      zoom = zOverride ?? view.zoom
+      marker = false // the overlay carries the annotations; no pin needed
+    }
+  }
+  if (!center) {
+    const vertex = vertexForBuilding(row.quote, b)
+    center = vertex ? { lat: vertex[1], lng: vertex[0] } : undefined
+  }
   if (!address && !center) {
     return Response.json({ ok: false, error: 'no_location' }, { status: 400 })
   }
@@ -87,9 +120,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ token: string }
       {
         address: center ? undefined : address,
         center,
-        zoom: 20,
+        zoom,
         size: { width: 640, height: 480 },
-        markers: center ? [{ lat: center.lat, lng: center.lng, color: 'orange' }] : undefined,
+        markers:
+          center && marker ? [{ lat: center.lat, lng: center.lng, color: 'orange' }] : undefined,
       },
       { apiKey },
     )

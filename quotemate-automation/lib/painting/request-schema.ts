@@ -24,6 +24,15 @@ export const PaintInputsSchema = z.object({
   colour_change: z.boolean(),
   storeys: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
   manual_floor_area_m2: z.number().positive().max(2000).optional().nullable(),
+  /** Which structure at the address to measure (Geoscape building id from
+   *  /api/painting/structures). Optional — absent ⇒ single-building path. */
+  structure: z
+    .object({
+      building_id: z.string().min(1).max(80),
+      label: z.string().max(80).optional(),
+      role: z.enum(['primary', 'secondary']).optional(),
+    })
+    .optional(),
 })
 
 export const EstimateRequestSchema = z.object({

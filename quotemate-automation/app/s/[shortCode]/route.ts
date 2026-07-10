@@ -82,15 +82,20 @@ export async function GET(req: Request, ctx: { params: Promise<{ shortCode: stri
   if (!dest.number) {
     return Response.redirect(origin, 302)
   }
+  // Canonical Command Centre palette (warm charcoal + Caterpillar yellow,
+  // square corners, dark ink on the accent fill) — the raw-HTML route has
+  // no Tailwind, so the tokens are inlined as literal hex.
   return htmlResponse(
     `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Text for a quote</title>
 <meta http-equiv="refresh" content="0;url=${dest.smsUri}">
-<style>body{font-family:system-ui;padding:2.5rem 1.5rem;text-align:center;color:#111}a.btn{display:inline-block;margin-top:1.25rem;background:#ff5a1f;color:#fff;text-decoration:none;font-weight:600;padding:.9rem 1.6rem;border-radius:8px}</style>
+<style>body{font-family:system-ui;margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#16120F;color:#F5EFE6}main{max-width:26rem;padding:2.5rem 1.5rem;text-align:center;border:1px solid #372E24;background:#211B15}h2{margin:0;font-weight:800;text-transform:uppercase;letter-spacing:-.01em}p{color:#A89880}a.btn{display:inline-block;margin-top:1.25rem;background:#FFC400;color:#1C1812;text-decoration:none;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:.9rem 1.6rem;border-radius:0}</style>
 </head><body>
+<main>
 <h2>Opening your messages…</h2>
 <p>Tap below if it doesn't open automatically.</p>
 <a class="btn" href="${dest.smsUri}">Text us for a quote</a>
+</main>
 <script>location.href=${JSON.stringify(dest.smsUri)}</script>
 </body></html>`,
   )

@@ -184,10 +184,11 @@ export function buildPropertyPinGeoJson(
 }
 
 // ── FSL styles (Felt Style Language v2.3) ────────────────────────────
-// Colour direction: dim navy → Maintain orange — matches the flux PNG
-// ramp the instant path renders and the brand accent (#FF5A1F).
+// Colour direction: warm charcoal → Caterpillar yellow — the canonical
+// QuoteMax accent (#FFC400); the retired navy/orange Maintain palette is
+// gone from these layers.
 
-const FLUX_RAMP = ['#1B2433', '#3D3A55', '#7A4A56', '#B85A45', '#E8470F', '#FF7A45', '#FFC83D']
+const FLUX_RAMP = ['#1C1812', '#372E24', '#5C4A33', '#8A6E3F', '#C49A2E', '#FFC400', '#FFD23D']
 
 /** Panels: continuous colour ramp on per-panel yearly kWh + popup. */
 export function panelLayoutFsl(): Record<string, unknown> {
@@ -204,9 +205,9 @@ export function panelLayoutFsl(): Record<string, unknown> {
       items: ['yearly_kwh', 'orientation'],
     },
     paint: {
-      color: ['#2D3A4F', '#FF5A1F', '#FFC83D'],
+      color: ['#372E24', '#FFC400', '#FFD23D'],
       opacity: 0.92,
-      strokeColor: '#0E1622',
+      strokeColor: '#16120F',
       strokeWidth: 0.8,
     },
   }
@@ -263,16 +264,16 @@ export function planeMarkersFsl(): Record<string, unknown> {
       items: ['orientation', 'pitch_degrees', 'area_m2', 'panels_count', 'sun_relative_pct'],
     },
     paint: {
-      color: ['#FFC83D', '#FF7A45', '#FF5A1F', '#7A8699'],
+      color: ['#FFC400', '#FFD23D', '#14B8A6', '#7A8699'],
       size: 12,
       opacity: 0.95,
-      strokeColor: '#0E1622',
+      strokeColor: '#16120F',
       strokeWidth: 1,
     },
     label: {
       color: '#FFFFFF',
       fontSize: 12,
-      haloColor: '#0E1622',
+      haloColor: '#16120F',
       haloWidth: 1.5,
     },
   }

@@ -12,10 +12,13 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
+  // `qm-dash` scopes the dashboard interaction layer in globals.css (hover
+  // lift + press states). A plain static wrapper — no transform, no overflow
+  // — so the nav's `sticky top-0` still resolves against the viewport.
   return (
-    <>
+    <div className="qm-dash">
       <DashboardTopNav />
       {children}
-    </>
+    </div>
   )
 }

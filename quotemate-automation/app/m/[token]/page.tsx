@@ -34,6 +34,9 @@ import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-ident
 import { QuoteSheet, Letterhead } from '../../q/_chrome/parts'
 import { QuoteMaxMark } from '../../q/_chrome/icons'
 import { MeasurementReview } from './MeasurementReview'
+import { RoofLayoutSection } from './RoofLayoutSection'
+import { combinedLayoutMetrics, type LayoutPlan } from '@/lib/roofing/layout-plan'
+import { layoutMapView, type LayoutOverlayStructure } from '@/lib/roofing/layout-overlay-svg'
 
 export const dynamic = 'force-dynamic'
 
@@ -118,6 +121,32 @@ export default async function MeasurementResultsPage({
     Array.isArray(row.included_indices) && row.included_indices.length > 0
   const included = sanitized.length > 0 ? sanitized : defaultStructureIndices(quote)
   const primaryIndices = primaryStructureIndices(quote)
+
+  // AI layout plan (spec quote-visual-parity R6) — separate best-effort read
+  // (migration 170 pattern, mirrors the quote_share_token read above).
+  let layoutStatus: string | null = null
+  let layoutPlan: LayoutPlan | null = null
+  {
+    const { data: lp, error: lpErr } = await supabase
+      .from('roofing_measurements')
+      .select('layout_status, layout_plan')
+      .eq('measure_token', token)
+      .maybeSingle()
+    if (!lpErr && lp) {
+      layoutStatus = (lp.layout_status as string | null) ?? null
+      layoutPlan = (lp.layout_plan as LayoutPlan | null) ?? null
+    }
+  }
+
+  // Overlay inputs: the fit-to-geometry view shared with the ?fit=1 static
+  // map, the per-structure geometry, and summed metrics for the deterministic
+  // material quantities.
+  const overlayStructures: LayoutOverlayStructure[] = quote.structures.map((s) => ({
+    polygon: s.metrics?.polygon_geojson ?? null,
+    form: s.metrics?.form ?? 'unknown',
+  }))
+  const layoutView = layoutMapView(overlayStructures, { width: 640, height: 480 })
+  const materialsMetrics = combinedLayoutMetrics(quote.structures)
 
   return (
     <div
@@ -220,6 +249,17 @@ export default async function MeasurementResultsPage({
                 Google satellite view
               </div>
             </div>
+
+            {/* AI work-strategy layout map — generate here; the customer page
+                and PDF read the cached plan (spec quote-visual-parity R6). */}
+            <RoofLayoutSection
+              publicToken={row.public_token}
+              structures={overlayStructures}
+              view={layoutView}
+              materialsMetrics={materialsMetrics}
+              initialStatus={layoutStatus}
+              initialPlan={layoutPlan}
+            />
 
             <MeasurementReview
               measureToken={row.measure_token}

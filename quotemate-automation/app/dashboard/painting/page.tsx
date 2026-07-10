@@ -9,8 +9,9 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { getAuthToken } from '@/lib/auth/client-token'
+import { paintProgressOpen, paintProgressTitle } from '@/lib/painting/progress'
 import { FeatureGate } from '@/app/dashboard/_components/FeatureGate'
 import { AddressAutocomplete } from '../roofing/_components/AddressAutocomplete'
 import { MaterialCheck } from './_components/MaterialCheck'
@@ -22,6 +23,7 @@ import type {
   PaintScope,
   PaintingEstimate,
 } from '@/lib/painting/types'
+import type { PaintStructureOption } from '@/lib/painting/structures'
 
 type EstimateResponse =
   | { ok: true; estimate: PaintingEstimate }
@@ -74,6 +76,11 @@ function PaintingEstimatePageInner() {
   const [storeys, setStoreys] = useState<1 | 2 | 3>(1)
   const [colourChange, setColourChange] = useState(false)
   const [manualArea, setManualArea] = useState('')
+  // Structures detected at the address (Geoscape) — lets the tradie pick
+  // WHICH building the estimate measures. <2 results ⇒ picker hidden and
+  // the single-building path runs unchanged.
+  const [structures, setStructures] = useState<PaintStructureOption[]>([])
+  const [structureId, setStructureId] = useState<string | null>(null)
 
   const [busy, setBusy] = useState(false)
   const [resp, setResp] = useState<EstimateResponse | null>(null)
@@ -94,6 +101,13 @@ function PaintingEstimatePageInner() {
   const toggleScope = useCallback((s: PaintScope) => {
     setScopes((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]))
   }, [])
+
+  // The chosen structure rides the estimate/save inputs ONLY when there is a
+  // real choice to make (≥2 detected structures).
+  const selectedStructure =
+    structures.length >= 2
+      ? (structures.find((s) => s.building_id === structureId) ?? null)
+      : null
 
   // Core estimate run, callable without a form event so the "Recalculate"
   // affordance (after the tradie edits their rates) can re-run it. The
@@ -122,6 +136,10 @@ function PaintingEstimatePageInner() {
     }
     setBusy(true)
     setErrMsg(null)
+    // Clear the previous run's result: a thrown fetch below would otherwise
+    // leave a stale resp.ok===true that re-opens the progress modal (hiding
+    // the error) AND re-fires the auto-save with the OLD estimate.
+    setResp(null)
     setSaveState('idle')
     setSavedId(null)
     setSavedToken(null)
@@ -141,6 +159,13 @@ function PaintingEstimatePageInner() {
             storeys,
             colour_change: colourChange,
             manual_floor_area_m2: manualArea ? Number(manualArea) : null,
+            structure: selectedStructure
+              ? {
+                  building_id: selectedStructure.building_id,
+                  label: selectedStructure.label,
+                  role: selectedStructure.role,
+                }
+              : undefined,
           },
         }),
       })
@@ -155,7 +180,7 @@ function PaintingEstimatePageInner() {
     } finally {
       setBusy(false)
     }
-  }, [token, address, postcode, stateCode, scopes, coats, condition, ceiling, storeys, colourChange, manualArea])
+  }, [token, address, postcode, stateCode, scopes, coats, condition, ceiling, storeys, colourChange, manualArea, selectedStructure])
 
   const runEstimate = useCallback(
     (e: React.FormEvent) => {
@@ -187,6 +212,13 @@ function PaintingEstimatePageInner() {
             storeys,
             colour_change: colourChange,
             manual_floor_area_m2: manualArea ? Number(manualArea) : null,
+            structure: selectedStructure
+              ? {
+                  building_id: selectedStructure.building_id,
+                  label: selectedStructure.label,
+                  role: selectedStructure.role,
+                }
+              : undefined,
           },
           estimate,
         }),
@@ -209,7 +241,7 @@ function PaintingEstimatePageInner() {
       setSaveState('error')
       setSaveErr(e instanceof Error ? e.message : String(e))
     }
-  }, [token, estimate, address, postcode, stateCode, scopes, coats, condition, ceiling, storeys, colourChange, manualArea, router])
+  }, [token, estimate, address, postcode, stateCode, scopes, coats, condition, ceiling, storeys, colourChange, manualArea, selectedStructure, router])
 
   // Auto-persist the moment an estimate completes — no manual "Save job"
   // step needed. onSave writes the painting_measurements row (minting both
@@ -226,6 +258,39 @@ function PaintingEstimatePageInner() {
       void onSave()
     }
   }, [resp, saveState, busy, onSave])
+
+  // Detect the structures at this address (Geoscape, ~6 credits) once it's
+  // plausibly complete — gated on a 4-digit postcode so partial addresses
+  // don't spend credits on the wrong property. Best-effort: any failure
+  // leaves the picker hidden and the single-building path unchanged.
+  useEffect(() => {
+    setStructures([])
+    setStructureId(null)
+    const ready = !!token && address.trim().length >= 5 && /^\d{4}$/.test(postcode)
+    if (!ready) return
+    let cancelled = false
+    const handle = setTimeout(async () => {
+      try {
+        const freshToken = (await getAuthToken()) ?? token
+        const res = await fetch('/api/painting/structures', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${freshToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address, postcode, state: stateCode }),
+        })
+        const json = (await res.json()) as { ok: boolean; structures?: PaintStructureOption[] }
+        if (cancelled || !json.ok || !Array.isArray(json.structures)) return
+        setStructures(json.structures)
+        const primary = json.structures.find((s) => s.role === 'primary') ?? json.structures[0]
+        setStructureId(primary ? primary.building_id : null)
+      } catch {
+        /* detection is best-effort — picker stays hidden */
+      }
+    }, 800)
+    return () => {
+      cancelled = true
+      clearTimeout(handle)
+    }
+  }, [token, address, postcode, stateCode])
 
   return (
     <main className="min-h-screen bg-ink-deep text-text-pri">
@@ -360,6 +425,52 @@ function PaintingEstimatePageInner() {
         )}
       </section>
 
+      {/* ── Structure picker — which building does the estimate measure? */}
+      {structures.length >= 2 && (
+        <section className="relative z-10 mx-auto mt-5 max-w-6xl px-6 sm:px-10">
+          <div className="rounded-card border border-ink-line bg-ink-card p-6 sm:p-7">
+            <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
+              Structures at this address
+            </div>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-sec">
+              Geoscape found {structures.length} structures here. Pick which one the paint
+              estimate measures — the main dwelling is pre-selected.
+            </p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {structures.map((s) => {
+                const active = s.building_id === structureId
+                return (
+                  <label
+                    key={s.building_id}
+                    className={`rounded-card flex cursor-pointer items-start gap-3 border bg-ink-deep p-4 transition-colors ${
+                      active ? 'border-accent' : 'border-ink-line hover:border-accent/55'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="paint-structure"
+                      checked={active}
+                      onChange={() => setStructureId(s.building_id)}
+                      className="mt-1 h-4 w-4 accent-accent"
+                    />
+                    <span className="min-w-0">
+                      <span className="block font-mono text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-accent">
+                        {s.role === 'primary' ? 'Main dwelling' : 'Secondary structure'}
+                      </span>
+                      <span className="mt-1 block text-sm font-semibold text-text-pri">{s.label}</span>
+                      <span className="mt-0.5 block font-mono text-xs text-text-dim">
+                        {Math.round(s.area_m2)} m² footprint
+                        {s.storeys ? ` · ${s.storeys} ${s.storeys === 1 ? 'storey' : 'storeys'}` : ''}
+                      </span>
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* ── Front of the house (Street View) ──────────────────────── */}
       {/* Original intent: the moment a valid address is entered, show the
           Google Street View photo of the front of the house so the tradie
@@ -451,6 +562,15 @@ function PaintingEstimatePageInner() {
           (PricingTab → PaintRatesEditor). Tune rates there; re-run an
           estimate here with the ↻ button on the result panel. */}
 
+      {/* Blocking centred progress popup — mirrors roofing's
+          MeasureProgressModal: opens on submit, stays up through the
+          auto-save + navigation to /p/[estimate_token]; only a save error
+          clears it (dropping to the inline result + manual Save retry). */}
+      <PaintProgressModal
+        open={paintProgressOpen({ busy, respOk: resp?.ok === true, saveState })}
+        busy={busy}
+      />
+
       <div className="relative z-10 mt-16 bg-accent px-6 py-5 text-center text-white">
         <span className="font-mono text-sm font-semibold uppercase tracking-[0.16em]">QuoteMax · Paint estimate</span>
       </div>
@@ -475,13 +595,12 @@ function FrontOfHouse({
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'none'>('idle')
 
   useEffect(() => {
-    // Only look the property up once the address is plausibly complete —
-    // enough characters AND a 4-digit postcode (filled by picking an
-    // autocomplete suggestion or typed into the postcode field). This keeps
-    // us from hammering the Street View API on every keystroke. A short
-    // debounce coalesces the address/postcode/state updates a suggestion
-    // fires together into a single lookup.
-    const ready = !!token && address.trim().length >= 5 && /^\d{4}$/.test(postcode)
+    // Look the property up once the address is plausibly complete. The
+    // 600 ms debounce (not a postcode gate) is what protects the billed
+    // Street View endpoint from per-keystroke calls — the route's FREE
+    // metadata pre-check absorbs partial-address misses. Requiring a
+    // postcode here meant a hand-typed address showed nothing at all.
+    const ready = !!token && address.trim().length >= 5
     if (!ready) {
       setStatus('idle')
       setSrc(null)
@@ -519,9 +638,6 @@ function FrontOfHouse({
     }
   }, [token, address, postcode, state])
 
-  // Nothing to show until there's a complete-enough address.
-  if (status === 'idle') return null
-
   return (
     <section className="relative z-10 mx-auto mt-5 max-w-6xl px-6 sm:px-10">
       <div className="rounded-card border border-ink-line bg-ink-card p-6 sm:p-7">
@@ -533,6 +649,13 @@ function FrontOfHouse({
           the right property before you estimate.
         </p>
         <div className="mt-4">
+          {status === 'idle' && (
+            <div className="rounded-card flex h-56 items-center justify-center border border-ink-line bg-ink-deep">
+              <span className="font-mono text-xs uppercase tracking-[0.14em] text-text-dim">
+                Enter an address to load Street View
+              </span>
+            </div>
+          )}
           {status === 'loading' && (
             <div className="rounded-card flex h-56 items-center justify-center border border-ink-line bg-ink-deep text-text-dim">
               <Spinner />
@@ -912,6 +1035,81 @@ function AuthBadge({ state }: { state: 'loading' | 'signed-out' | 'ready' }) {
   return (
     <div className="mt-10">
       <StatusPill label={label} tone={tone} dot />
+    </div>
+  )
+}
+
+/** Full-screen, blocking progress popup shown while the paintable area is
+ *  estimated and the resulting job is saved. Non-dismissible by design — it
+ *  clears itself when navigation to /p/[estimate_token] happens (success) or
+ *  when a save error drops back to the inline result below the form. Mirrors
+ *  roofing's MeasureProgressModal (app/dashboard/roofing/measure/page.tsx). */
+function PaintProgressModal({ open, busy }: { open: boolean; busy: boolean }) {
+  const dialogRef = useRef<HTMLDivElement>(null)
+
+  // While open: lock background scroll (restored on close/unmount) and move
+  // focus into the dialog so a screen reader announces its name + description
+  // and keyboard focus isn't left stranded on the now-disabled background
+  // submit button.
+  useEffect(() => {
+    if (!open) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    dialogRef.current?.focus()
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [open])
+
+  if (!open) return null
+
+  return (
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-busy="true"
+      aria-labelledby="paint-progress-title"
+      aria-describedby="paint-progress-desc"
+      tabIndex={-1}
+      // Non-dismissible, self-clearing dialog with no interactive controls of
+      // its own — swallow Tab so focus can't wander to the form / footer that
+      // are hidden behind the overlay.
+      onKeyDown={(e) => {
+        if (e.key === 'Tab') e.preventDefault()
+      }}
+      className="qm-paint-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6 outline-none backdrop-blur-sm"
+    >
+      <div className="qm-paint-card rounded-card w-full max-w-lg border border-ink-line border-l-4 border-l-accent bg-ink-card p-7 sm:p-9">
+        <div
+          id="paint-progress-title"
+          role="status"
+          aria-live="polite"
+          className="flex items-center gap-3 font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent"
+        >
+          {/* Accent (not white) spinner so it stays visible on the white
+              ink-card in light mode as well as the dark card in dark mode. */}
+          <span className="inline-block h-3.5 w-3.5 animate-spin border-2 border-accent/30 border-t-accent motion-reduce:animate-none" aria-hidden="true" />
+          {paintProgressTitle(busy)}
+        </div>
+        <p id="paint-progress-desc" className="mt-3 text-base text-text-sec">
+          We&rsquo;re measuring the paintable area at this property and saving
+          the estimate as its own job. You&rsquo;ll be taken to its results
+          page to review and send the quote.
+        </p>
+      </div>
+      <style>{`
+        @keyframes qmPaintOverlayIn { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes qmPaintCardIn {
+          from { opacity: 0; transform: translateY(8px) scale(0.985) }
+          to { opacity: 1; transform: translateY(0) scale(1) }
+        }
+        .qm-paint-overlay { animation: qmPaintOverlayIn 160ms ease-out }
+        .qm-paint-card { animation: qmPaintCardIn 220ms cubic-bezier(0.16, 1, 0.3, 1) }
+        @media (prefers-reduced-motion: reduce) {
+          .qm-paint-overlay, .qm-paint-card { animation: none }
+        }
+      `}</style>
     </div>
   )
 }

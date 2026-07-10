@@ -25,6 +25,11 @@ export type PaintingReportInput = {
   address: string
   estimate: PaintingEstimate
   quoteViewUrl?: string | null
+  /** Street View frontage photo (data URI) — spec quote-visual-parity R2. */
+  streetViewSrc?: string | null
+  /** Cached AI repaint preview (data URI); pass ONLY when already rendered —
+   *  the PDF path must never trigger a billable Gemini render. */
+  afterImageSrc?: string | null
   generatedAt?: Date
 }
 
@@ -89,6 +94,25 @@ export function buildPaintingQuoteReportHtml(input: PaintingReportInput): string
   const loadings = price.manual_override ? [] : price.loadings_applied ?? []
 
   let body = ''
+
+  // Property imagery — the same figures the /p and /q/paint pages show
+  // (spec quote-visual-parity R2). Omitted cleanly when unavailable.
+  const figures: Array<{ src: string; caption: string }> = []
+  if (input.streetViewSrc)
+    figures.push({ src: input.streetViewSrc, caption: 'Front of the property · Google Street View' })
+  if (input.afterImageSrc)
+    figures.push({ src: input.afterImageSrc, caption: 'Fresh repaint · AI preview' })
+  if (figures.length > 0) {
+    body += `<div style="display:flex;gap:10px;margin:0 0 14px;">${figures
+      .map(
+        (f) => `<figure style="margin:0;flex:1;min-width:0;"><img src="${f.src}" alt="${esc(
+          f.caption,
+        )}" style="width:100%;display:block;" /><figcaption class="mono" style="font-size:9px;color:var(--dim);margin-top:4px;">${esc(
+          f.caption,
+        )}</figcaption></figure>`,
+      )
+      .join('')}</div>`
+  }
 
   if (isInspection) {
     body += `<h2>Next step: on-site measure</h2>

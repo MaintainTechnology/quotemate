@@ -26,6 +26,7 @@ import {
   pickBestSummary,
   extractStoreys,
   extractArea,
+  type BuildingSummary,
 } from '@/lib/roofing/providers/geoscape'
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
@@ -34,6 +35,17 @@ export type GeoscapeEnrichOpts = {
   apiKey?: string
   baseUrl?: string
   fetchImpl?: FetchLike
+  /** Target a SPECIFIC structure (id from /api/painting/structures) instead
+   *  of the best-ranked building. Unknown id falls back to the best. */
+  buildingId?: string
+}
+
+/** PURE — the summary matching a requested building id, or null. */
+export function pickSummaryById(
+  summaries: BuildingSummary[],
+  buildingId: string,
+): BuildingSummary | null {
+  return summaries.find((s) => s.buildingId === buildingId) ?? null
 }
 
 /** The subset of PropertyFacts a Geoscape lookup can fill. */
@@ -73,9 +85,13 @@ export async function enrichFromGeoscape(
   const addressId = pickAddressId(addrBody)
   if (!addressId) return EMPTY
 
-  // 2. addressId → best building summary (carries the sub-resource links)
+  // 2. addressId → building summary: the tradie's chosen structure when a
+  //    buildingId was passed (structure picker), else the best-ranked one.
   const listBody = await get(`${base}/buildings?addressId=${encodeURIComponent(addressId)}`)
-  const best = pickBestSummary(pickBuildingSummaries(listBody))
+  const summaries = pickBuildingSummaries(listBody)
+  const best =
+    (opts.buildingId ? pickSummaryById(summaries, opts.buildingId) : null) ??
+    pickBestSummary(summaries)
   if (!best) return EMPTY
 
   const link = (key: string, fallback: string) =>

@@ -6,6 +6,7 @@ import {
   buildQuoteReportHtml,
   buildQuoteReportHtmlFromBody,
   incGst,
+  REPORT_TEMPLATE_VERSION,
   type QuoteReportTier,
 } from './report-html'
 import { resolveVisibleTiers, type QuoteTierMode } from './tier-visibility'
@@ -185,6 +186,94 @@ describe('buildQuoteReportHtml — renders exactly resolveVisibleTiers(...) (mig
       for (const marker of c.hide) expect(html).not.toContain(marker)
     })
   }
+})
+
+// Spec specs/quote-visual-parity.md R1 — the property-visuals section brings
+// the customer page's satellite image + measurement stat grid into the same
+// report the PDF and the dashboard live preview render from.
+describe('buildQuoteReportHtml — propertyVisuals (spec quote-visual-parity R1)', () => {
+  const base = {
+    businessName: 'Atomic Roofing',
+    jobType: 'full_reroof',
+    scopeOfWorks: 'Re-roof priced across 1 structure.',
+    good: null,
+    better: tier('Re-roof, all structures', 29055),
+    best: null,
+  }
+  const visuals = {
+    imageSrc: 'data:image/png;base64,AAAA',
+    caption: 'Your roof, from above · Google Maps',
+    stats: [
+      { label: 'Sloped area', value: '194 m²' },
+      { label: 'Material', value: 'Colorbond <Corrugated>' },
+    ],
+    disclaimer:
+      'The numbers are calculated from satellite imagery — your final price is locked after our on-site inspection.',
+  }
+
+  it('renders the image, caption, stats and disclaimer when provided', () => {
+    const html = buildQuoteReportHtml({ ...base, propertyVisuals: visuals })
+    expect(html).toContain('data:image/png;base64,AAAA')
+    expect(html).toContain('Your roof, from above')
+    expect(html).toContain('Sloped area')
+    expect(html).toContain('194 m²')
+    expect(html).toContain('locked after our on-site inspection')
+  })
+
+  it('places the section between the scope of works and the tiers', () => {
+    const html = buildQuoteReportHtml({ ...base, propertyVisuals: visuals })
+    const scopeAt = html.indexOf('Re-roof priced across 1 structure.')
+    const visualsAt = html.indexOf('Your roof, from above')
+    const tierAt = html.indexOf('BETTER')
+    expect(scopeAt).toBeGreaterThan(-1)
+    expect(visualsAt).toBeGreaterThan(scopeAt)
+    expect(tierAt).toBeGreaterThan(visualsAt)
+  })
+
+  it('renders stats-only (no <img>) when imageSrc is null', () => {
+    const html = buildQuoteReportHtml({
+      ...base,
+      propertyVisuals: { ...visuals, imageSrc: null },
+    })
+    expect(html).toContain('Sloped area')
+    expect(html).not.toContain('data:image/png;base64,AAAA')
+  })
+
+  it('escapes HTML in stat values and caption', () => {
+    const html = buildQuoteReportHtml({ ...base, propertyVisuals: visuals })
+    expect(html).toContain('Colorbond &lt;Corrugated&gt;')
+    expect(html).not.toContain('<Corrugated>')
+  })
+
+  it('body is identical to today when propertyVisuals is null or omitted', () => {
+    const omitted = buildQuoteReportHtml(base)
+    const explicitNull = buildQuoteReportHtml({ ...base, propertyVisuals: null })
+    expect(explicitNull).toBe(omitted)
+    expect(omitted).not.toContain('Your roof, from above')
+  })
+
+  it('REPORT_TEMPLATE_VERSION is bumped to 4 so cached PDFs regenerate', () => {
+    expect(REPORT_TEMPLATE_VERSION).toBe(4)
+  })
+
+  it('chunks a full 8-stat roofing grid into rows of 4 (the chrome statgrid does not wrap)', () => {
+    const eightStats = [
+      'Sloped area', 'Material', 'Roof form', 'Pitch',
+      'Hips · valleys', 'Ridge', 'Storeys', 'Footprint',
+    ].map((label, i) => ({ label, value: `v${i}` }))
+    const html = buildQuoteReportHtml({
+      ...base,
+      propertyVisuals: { ...visuals, stats: eightStats },
+    })
+    const grids = html.match(/<div class="statgrid">/g) ?? []
+    expect(grids.length).toBe(2)
+    // 4 or fewer stats stay in a single grid.
+    const small = buildQuoteReportHtml({
+      ...base,
+      propertyVisuals: { ...visuals, stats: eightStats.slice(0, 4) },
+    })
+    expect((small.match(/<div class="statgrid">/g) ?? []).length).toBe(1)
+  })
 })
 
 describe('buildQuoteReportHtmlFromBody', () => {

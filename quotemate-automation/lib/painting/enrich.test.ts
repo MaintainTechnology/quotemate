@@ -58,6 +58,31 @@ describe('applyEnrichment', () => {
     expect(facts.bedrooms).toBeNull()
   })
 
+  it('targeted structure: the chosen building OVERRIDES the Solar footprint and storeys', () => {
+    // When the tradie explicitly picked a structure, Solar's findClosest
+    // footprint belongs to the wrong building — the Geoscape values for the
+    // chosen structure win.
+    const { facts } = applyEnrichment(
+      { ...BASE, storeys: 2 },
+      { geoscape: { patch: { footprint_m2: 38.2, storeys: 1, eave_height_m: 2.4 }, notes: [] } },
+      { targeted: true },
+    )
+    expect(facts.footprint_m2).toBe(38.2)
+    expect(facts.storeys).toBe(1)
+    expect(facts.eave_height_m).toBe(2.4)
+  })
+
+  it('untargeted merge is unchanged by the opts parameter', () => {
+    const a = applyEnrichment(BASE, {
+      geoscape: { patch: { footprint_m2: 213.9, storeys: 2 }, notes: [] },
+    })
+    const b = applyEnrichment(BASE, {
+      geoscape: { patch: { footprint_m2: 213.9, storeys: 2 }, notes: [] },
+    }, {})
+    expect(a).toEqual(b)
+    expect(a.facts.footprint_m2).toBe(150)
+  })
+
   it('does not override storeys already set on the base', () => {
     const { facts } = applyEnrichment({ ...BASE, storeys: 1 }, {
       geoscape: { patch: { storeys: 3 }, notes: [] },

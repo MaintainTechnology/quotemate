@@ -34,6 +34,17 @@ import type {
 } from '@/lib/roofing/types'
 import { partitionRoofQuote, resolveEffectiveIndices } from '@/lib/roofing/selection'
 import { structureStaticMapPath } from '@/lib/roofing/structure-images'
+import {
+  ZONE_COLOR_HEX,
+  combinedLayoutMetrics,
+  layoutMaterials,
+  type LayoutPlan,
+} from '@/lib/roofing/layout-plan'
+import {
+  layoutMapView,
+  layoutOverlayImageSrc,
+  type LayoutOverlayStructure,
+} from '@/lib/roofing/layout-overlay-svg'
 import { edgeStat } from '@/lib/roofing/geometry-edges'
 import { buildingAttributeChips, propertyContextChips } from '@/lib/roofing/attributes-display'
 import { indicativeCombinedTiers } from '@/lib/sms/roofing-compose'
@@ -41,6 +52,7 @@ import { roofQuoteCta } from '@/lib/roofing/quote-cta'
 import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
 import { RoofMap, type RoofMapBuilding } from '@/app/dashboard/roofing/_components/RoofMap'
 import { QuoteChrome, type StickyBar } from '../../_chrome/QuoteChrome'
+import { RoofLayoutMapFigure } from '../../_chrome/RoofLayoutMapFigure'
 import { TradieJobBanner } from '../../_chrome/TradieJobBanner'
 import { AcceptBlock } from '../../_chrome/AcceptBlock'
 import { resolveAcceptView } from '@/lib/quote/accept'
@@ -183,6 +195,21 @@ export default async function RoofingQuotePage({
 
   // Confirm gate — prices show only after the customer confirms over SMS.
   const confirmed = row.confirmed_at != null
+
+  // AI layout plan (spec quote-visual-parity R6e) — READ-ONLY here: the
+  // customer page renders the cached plan and never triggers generation.
+  // Separate best-effort query (migration 170 pattern).
+  let layoutPlan: LayoutPlan | null = null
+  {
+    const { data: lp, error: lpErr } = await supabase
+      .from('roofing_measurements')
+      .select('layout_status, layout_plan')
+      .eq('public_token', token)
+      .maybeSingle()
+    if (!lpErr && lp && lp.layout_status === 'ready') {
+      layoutPlan = (lp.layout_plan as LayoutPlan | null) ?? null
+    }
+  }
 
   // Which structures to show on the priced view. The tradie's persisted
   // selection (included_indices) is the source of truth; a ?s= link or the
@@ -773,6 +800,151 @@ export default async function RoofingQuotePage({
             ))}
           </div>
         </SheetSection>
+
+        {/* AI work-strategy layout map (spec quote-visual-parity R6e) —
+            colour-coded zones over the aerial + legend, from the CACHED plan
+            the tradie generated on /m. No prices, no quantities here.
+            IMPORTANT: built from the FULL stored quote, never the narrowed
+            subset — the plan's zone.structureIndex is 1-based into the FULL
+            quote and the no-?b aerial centres on its first vertex (mirrors
+            ensureRoofQuotePdf). */}
+        {confirmed && layoutPlan && fullQuote?.structures?.length
+          ? (() => {
+              const overlayStructures: LayoutOverlayStructure[] = fullQuote.structures.map((s) => ({
+                polygon: s.metrics?.polygon_geojson ?? null,
+                form: s.metrics?.form ?? 'unknown',
+              }))
+              // Fit-to-geometry view shared with the ?fit=1 static map.
+              const view = layoutMapView(overlayStructures, { width: 640, height: 480 })
+              const overlaySrc = view
+                ? layoutOverlayImageSrc({
+                    zones: layoutPlan.zones,
+                    structures: overlayStructures,
+                    center: view.center,
+                    zoom: view.zoom,
+                    width: 640,
+                    height: 480,
+                  })
+                : null
+              if (!overlaySrc) return null
+              const materials = layoutMaterials(
+                combinedLayoutMetrics(fullQuote.structures),
+                layoutPlan.mode,
+              )
+              return (
+                <SheetSection eyebrow="Roof layout map" eyebrowAccent>
+                  <p style={{ margin: '12px 0 0', fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+                    {layoutPlan.header}
+                  </p>
+                  <div
+                    style={{
+                      marginTop: 14,
+                      border: '1px solid var(--ink-line)',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <RoofLayoutMapFigure
+                      publicToken={row.public_token}
+                      zones={layoutPlan.zones}
+                      structures={overlayStructures}
+                      view={view!}
+                      address={row.address}
+                    />
+                  </div>
+                  <ul style={{ margin: '14px 0 0', padding: 0, listStyle: 'none', display: 'grid', gap: 8 }}>
+                    {layoutPlan.zones.map((z, i) => (
+                      <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                        <span
+                          style={{
+                            marginTop: 2,
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: 10,
+                            fontWeight: 700,
+                            letterSpacing: '0.12em',
+                            color: ZONE_COLOR_HEX[z.color],
+                          }}
+                        >
+                          {String(i + 1).padStart(2, '0')}
+                        </span>
+                        <span
+                          aria-hidden
+                          style={{
+                            marginTop: 3,
+                            width: 13,
+                            height: 13,
+                            flexShrink: 0,
+                            display: 'inline-block',
+                            background: ZONE_COLOR_HEX[z.color],
+                            border: '1px solid var(--ink-line)',
+                          }}
+                        />
+                        <span style={{ fontSize: 13.5, lineHeight: 1.45, color: 'var(--text-sec)' }}>{z.label}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  {/* Estimated materials — deterministic whole-job estimates
+                      with each quantity's arithmetic and where it goes. */}
+                  {materials.items.length > 0 ? (
+                    <div style={{ marginTop: 18, borderTop: '1px solid var(--ink-line)', paddingTop: 14 }}>
+                      <div
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 11,
+                          fontWeight: 600,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.16em',
+                          color: 'var(--text-dim)',
+                        }}
+                      >
+                        Estimated materials
+                      </div>
+                      <ul style={{ margin: '6px 0 0', padding: 0, listStyle: 'none' }}>
+                        {materials.items.map((m) => (
+                          <li
+                            key={m.item}
+                            style={{ padding: '10px 0', borderBottom: '1px solid color-mix(in srgb, var(--ink-line) 60%, transparent)' }}
+                          >
+                            <div
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'baseline',
+                                gap: 16,
+                                fontFamily: 'var(--font-mono)',
+                                fontSize: 13.5,
+                                fontVariantNumeric: 'tabular-nums',
+                              }}
+                            >
+                              <span style={{ color: 'var(--text-pri)' }}>{m.item}</span>
+                              <span style={{ whiteSpace: 'nowrap', fontWeight: 600, color: 'var(--text-pri)' }}>
+                                {m.qty.toLocaleString('en-AU')} {m.unit}
+                              </span>
+                            </div>
+                            <p style={{ margin: '4px 0 0', fontSize: 12, lineHeight: 1.5, color: 'var(--text-dim)' }}>
+                              <span style={{ color: 'var(--text-sec)' }}>How:</span> {m.basis}
+                            </p>
+                            <p style={{ margin: '2px 0 0', fontSize: 12, lineHeight: 1.5, color: 'var(--text-dim)' }}>
+                              <span style={{ color: 'var(--text-sec)' }}>Where:</span> {m.use}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                      {materials.note ? (
+                        <p style={{ margin: '10px 0 0', fontSize: 12, lineHeight: 1.5, color: 'var(--text-dim)' }}>
+                          {materials.note}
+                        </p>
+                      ) : null}
+                      <p style={{ margin: '10px 0 0', fontSize: 12, lineHeight: 1.5, color: 'var(--text-dim)' }}>
+                        Quantities are estimated from the measured roof geometry — your roofer confirms
+                        final counts on site.
+                      </p>
+                    </div>
+                  ) : null}
+                </SheetSection>
+              )
+            })()
+          : null}
 
         {/* AI "after re-roof" preview — generated FROM the satellite aerial.
             Shown after the breakdown so a slow render can never hide the quote. */}

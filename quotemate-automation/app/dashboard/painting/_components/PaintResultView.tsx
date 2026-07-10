@@ -16,7 +16,7 @@ export function PaintResultView({
   /** Optional client-side action (e.g. a Recalculate button) rendered top-right. */
   headerAction?: React.ReactNode
 }) {
-  const { facts, measurement, price, warnings, provider } = estimate
+  const { facts, measurement, price, warnings, provider, takeoff } = estimate
   return (
     <section className="relative z-10 mx-auto mt-10 max-w-6xl px-6 pb-4 sm:px-10">
       <div className="flex flex-wrap items-center gap-3">
@@ -51,6 +51,19 @@ export function PaintResultView({
           <Stat label="Building footprint" value={facts.footprint_m2 != null ? `${Math.round(facts.footprint_m2)} m²` : '—'} hint={facts.footprint_m2 != null ? 'roof outprint' : 'not provided'} />
           <Stat label="Land size" value={facts.land_size_m2 != null ? `${Math.round(facts.land_size_m2)} m²` : '—'} />
           <Stat label="Type · built" value={`${facts.property_type ?? '—'}${facts.year_built ? ` · ${facts.year_built}` : ''}`} hint={facts.has_floor_plan ? 'floor plan available' : ''} />
+          {facts.structure_label && (
+            <Stat
+              label="Structure"
+              value={facts.structure_label}
+              hint={
+                facts.structure_role === 'primary'
+                  ? 'main dwelling — selected by you'
+                  : facts.structure_role === 'secondary'
+                    ? 'secondary structure — selected by you'
+                    : 'selected by you'
+              }
+            />
+          )}
           {facts.eave_height_m != null && (
             <Stat label="Eave height" value={`${facts.eave_height_m.toFixed(1)} m`} hint="ground to eave" />
           )}
@@ -153,6 +166,91 @@ export function PaintResultView({
         </div>
       )}
 
+      {/* Materials & labour take-off — this component only mounts on the
+          tradie surfaces (dashboard estimate + /p); the customer page and
+          PDF build their own markup and never receive margin/labour cost. */}
+      {takeoff && (
+        <div className="rounded-card mt-6 border border-ink-line border-l-4 border-l-accent bg-ink-card p-6 sm:p-7">
+          <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">Materials &amp; labour</div>
+          <p className="mt-2 text-xs text-text-dim">
+            What the job consumes per tier — litres round up to whole packs, labour uses your
+            production rates. Margin = tier price − materials − labour. Tune coverage, $/L, crew
+            and sundries in the Pricing tab.
+          </p>
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
+            {takeoff.tiers.map((t) => (
+              <div key={t.tier} className="rounded-card border border-ink-line bg-ink-deep p-4">
+                <div className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-sec">{t.tier}</div>
+                <div className="mt-3 space-y-1.5 font-mono text-xs">
+                  {t.products.map((p) => (
+                    <div key={p.product} className="flex items-baseline justify-between gap-2">
+                      <span className="text-text-dim">{productWords(p.product)}</span>
+                      <span className="tabular-nums text-text-pri">
+                        {p.litres.toFixed(1)} L → {p.packs.map((k) => `${k.count}×${k.size_l}L`).join(' + ') || '—'}
+                      </span>
+                    </div>
+                  ))}
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-text-dim">Prep &amp; sundries</span>
+                    <span className="tabular-nums text-text-pri">${money(t.sundries_ex_gst)}</span>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-2 border-t border-ink-line pt-1.5">
+                    <span className="text-text-sec">Materials (ex GST)</span>
+                    <span className="font-semibold tabular-nums text-text-pri">${money(t.materials_ex_gst)}</span>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-text-dim">
+                      Labour · {t.labour_hours.toFixed(1)} h · {t.crew_size} painters · ~{t.days_on_site}{' '}
+                      {t.days_on_site === 1 ? 'day' : 'days'}
+                    </span>
+                    <span className="tabular-nums text-text-pri">${money(t.labour_ex_gst)}</span>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-2 border-t border-ink-line pt-1.5">
+                    <span className="font-semibold uppercase tracking-[0.1em] text-text-sec">Margin (ex GST) · tradie only</span>
+                    <span className={`font-bold tabular-nums ${t.margin_ex_gst >= 0 ? 'text-accent' : 'text-warning'}`}>
+                      ${money(t.margin_ex_gst)} · {Math.round(t.margin_pct * 100)}%
+                    </span>
+                  </div>
+                  {/* Derivation notes — absent on estimates saved before the
+                      notes shipped, so every line is guarded. */}
+                  {(t.products.some((p) => p.note) || t.labour_note) && (
+                    <details className="mt-1.5">
+                      <summary className="cursor-pointer list-item font-mono text-[11px] uppercase tracking-[0.12em] text-text-dim transition-colors hover:text-accent">
+                        How these numbers were built
+                      </summary>
+                      <div className="mt-2 space-y-1.5 font-mono text-[11px] leading-relaxed text-text-dim">
+                        {t.products
+                          .filter((p) => p.note)
+                          .map((p) => (
+                            <p key={p.product}>
+                              <span className="text-text-sec">{productWords(p.product)}</span> — {p.note}
+                            </p>
+                          ))}
+                        {t.sundries_note && (
+                          <p>
+                            <span className="text-text-sec">Prep &amp; sundries</span> — {t.sundries_note}
+                          </p>
+                        )}
+                        {t.labour_note && (
+                          <p>
+                            <span className="text-text-sec">Labour</span> — {t.labour_note}
+                          </p>
+                        )}
+                        {t.margin_note && (
+                          <p>
+                            <span className="text-text-sec">Margin</span> — {t.margin_note}
+                          </p>
+                        )}
+                      </div>
+                    </details>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Derivation notes + warnings */}
       <div className="rounded-card mt-6 border border-ink-line border-l-4 border-l-accent bg-ink-card p-6 sm:p-7">
         <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">How this was derived</div>
@@ -206,6 +304,17 @@ function sourceWords(s: PaintingEstimate['measurement']['floor_area_source']): s
     case 'manual': return 'entered by hand'
     default: return 'estimated'
   }
+}
+
+function productWords(p: string): string {
+  const words: Record<string, string> = {
+    wall_paint: 'Wall paint',
+    ceiling_paint: 'Ceiling paint',
+    trim_enamel: 'Trim enamel',
+    exterior_paint: 'Exterior paint',
+    primer_sealer: 'Primer / sealer',
+  }
+  return words[p] ?? p
 }
 
 function money(n: number): string {

@@ -26,7 +26,7 @@
 
 import { z } from 'zod'
 import { DEFAULT_PAINTING_RATE_CARD } from './pricing'
-import type { PaintScope, PaintingRateCard } from './types'
+import type { PaintProduct, PaintScope, PaintingRateCard } from './types'
 
 export const MAX_RATE_PER_UNIT = 200
 export const MAX_CALL_OUT_EX_GST = 5000
@@ -37,6 +37,13 @@ export const MAX_FRACTION = 2
 export const MAX_HOURLY_RATE = 2000
 /** Throughput ceiling (units/hour) — well above any real painter's pace. */
 export const MAX_PRODUCTION_RATE = 200
+/** Take-off clamps: coverage m²/L (trim lm/L), trade $/L, prep fraction,
+ *  crew headcount, working hours per day. */
+export const MAX_COVERAGE_PER_LITRE = 200
+export const MAX_PRICE_PER_LITRE = 500
+export const MAX_SUNDRIES_PCT = 0.5
+export const MAX_CREW_SIZE = 10
+export const MAX_HOURS_PER_DAY = 12
 
 export const EDITABLE_SCOPES: ReadonlyArray<PaintScope> = [
   'walls',
@@ -45,7 +52,28 @@ export const EDITABLE_SCOPES: ReadonlyArray<PaintScope> = [
   'exterior',
 ] as const
 
+export const EDITABLE_PRODUCTS: ReadonlyArray<PaintProduct> = [
+  'wall_paint',
+  'ceiling_paint',
+  'trim_enamel',
+  'exterior_paint',
+  'primer_sealer',
+] as const
+
 const Rate = z.number().positive('Rate must be greater than 0').max(MAX_RATE_PER_UNIT, `Rate must be at most $${MAX_RATE_PER_UNIT}`)
+const Coverage = z.number().positive('Coverage must be greater than 0').max(MAX_COVERAGE_PER_LITRE)
+const LitrePrice = z.number().positive('Price must be greater than 0').max(MAX_PRICE_PER_LITRE, `Price must be at most $${MAX_PRICE_PER_LITRE}`)
+/** Partial per-product numeric map (wall_paint / ceiling_paint / …). */
+const ProductMap = (value: z.ZodTypeAny) =>
+  z
+    .object({
+      wall_paint: value.optional().nullable(),
+      ceiling_paint: value.optional().nullable(),
+      trim_enamel: value.optional().nullable(),
+      exterior_paint: value.optional().nullable(),
+      primer_sealer: value.optional().nullable(),
+    })
+    .partial()
 const Fraction = z.number().min(0, 'Must be 0% or more').max(MAX_FRACTION, `Must be at most ${MAX_FRACTION * 100}%`)
 const UnitFraction = z.number().positive('Must be greater than 0%').max(1, 'Must be at most 100%')
 const Money = z.number().min(0).max(MAX_CALL_OUT_EX_GST)
@@ -81,6 +109,23 @@ export const PaintingRateOverlaySchema = z.object({
       exterior: Production.optional().nullable(),
     })
     .partial()
+    .optional(),
+  // Materials + labour take-off knobs (lib/painting/takeoff.ts). Display
+  // levers only — never read by calculatePaintingPrice.
+  takeoff: z
+    .object({
+      coverage_per_litre: ProductMap(Coverage).optional(),
+      price_per_litre: ProductMap(LitrePrice).optional(),
+      premium_price_uplift_pct: Fraction.optional().nullable(),
+      sundries_pct: z
+        .number()
+        .min(0, 'Must be 0% or more')
+        .max(MAX_SUNDRIES_PCT, `Must be at most ${MAX_SUNDRIES_PCT * 100}%`)
+        .optional()
+        .nullable(),
+      crew_size: z.number().int('Crew must be a whole number').min(1, 'Crew must be at least 1').max(MAX_CREW_SIZE).optional().nullable(),
+      hours_per_day: z.number().positive('Must be greater than 0').max(MAX_HOURS_PER_DAY).optional().nullable(),
+    })
     .optional(),
 })
 
@@ -143,6 +188,29 @@ export function mergePaintingRateCard(
     merged = { ...merged, production_rate_per_unit: map }
   }
 
+  // Take-off knobs. The merged card carries ONLY what the tenant set —
+  // resolveTakeoffCard (lib/painting/takeoff.ts) applies defaults at
+  // compute time, so an unset knob tracks future default changes.
+  if (overlay.takeoff) {
+    const t = overlay.takeoff
+    const next: NonNullable<PaintingRateCard['takeoff']> = { ...(merged.takeoff ?? {}) }
+    for (const key of ['coverage_per_litre', 'price_per_litre'] as const) {
+      const src = t[key]
+      if (!src) continue
+      const map = { ...(next[key] ?? {}) } as Partial<Record<PaintProduct, number>>
+      for (const p of EDITABLE_PRODUCTS) {
+        const v = (src as Partial<Record<PaintProduct, number | null | undefined>>)[p]
+        if (typeof v === 'number' && Number.isFinite(v)) map[p] = v
+      }
+      if (Object.keys(map).length > 0) next[key] = map
+    }
+    if (num(t.premium_price_uplift_pct)) next.premium_price_uplift_pct = t.premium_price_uplift_pct as number
+    if (num(t.sundries_pct)) next.sundries_pct = t.sundries_pct as number
+    if (num(t.crew_size)) next.crew_size = t.crew_size as number
+    if (num(t.hours_per_day)) next.hours_per_day = t.hours_per_day as number
+    if (Object.keys(next).length > 0) merged = { ...merged, takeoff: next }
+  }
+
   return merged
 }
 
@@ -168,6 +236,14 @@ export type DashboardInputs = {
   pricing_model?: 'sqm' | 'hourly' | null
   hourly_rate?: number | string | null
   production_rate_per_unit?: Partial<Record<PaintScope, number | string | null | undefined>>
+  takeoff?: {
+    coverage_per_litre?: Partial<Record<PaintProduct, number | string | null | undefined>>
+    price_per_litre?: Partial<Record<PaintProduct, number | string | null | undefined>>
+    premium_price_uplift_pct?: number | string | null
+    sundries_pct?: number | string | null
+    crew_size?: number | string | null
+    hours_per_day?: number | string | null
+  }
 }
 
 /** PURE — turn a partial editor body into a validated overlay, dropping
@@ -243,6 +319,48 @@ export function buildPaintingOverlayFromInputs(inputs: DashboardInputs): ParseOv
       cleaned[s] = n
     }
     if (Object.keys(cleaned).length > 0) overlay.production_rate_per_unit = cleaned
+  }
+
+  // Take-off knobs.
+  if (inputs.takeoff) {
+    const t = inputs.takeoff
+    const cleaned: NonNullable<PaintingRateOverlay['takeoff']> = {}
+
+    for (const [key, max] of [
+      ['coverage_per_litre', MAX_COVERAGE_PER_LITRE],
+      ['price_per_litre', MAX_PRICE_PER_LITRE],
+    ] as const) {
+      const src = t[key]
+      if (!src) continue
+      const map: Partial<Record<PaintProduct, number>> = {}
+      for (const p of EDITABLE_PRODUCTS) {
+        const raw = src[p]
+        if (raw === null || raw === undefined || raw === '') continue
+        const n = typeof raw === 'number' ? raw : Number(raw)
+        if (!Number.isFinite(n) || n <= 0) { issues.push({ field: `takeoff.${key}.${p}`, message: 'Must be greater than 0.' }); continue }
+        if (n > max) { issues.push({ field: `takeoff.${key}.${p}`, message: `Must be at most ${max}.` }); continue }
+        map[p] = n
+      }
+      if (Object.keys(map).length > 0) cleaned[key] = map
+    }
+
+    const numeric = [
+      ['premium_price_uplift_pct', t.premium_price_uplift_pct, 0, MAX_FRACTION, false],
+      ['sundries_pct', t.sundries_pct, 0, MAX_SUNDRIES_PCT, false],
+      ['crew_size', t.crew_size, 1, MAX_CREW_SIZE, true],
+      ['hours_per_day', t.hours_per_day, 0, MAX_HOURS_PER_DAY, false],
+    ] as const
+    for (const [key, raw, min, max, integer] of numeric) {
+      if (raw === null || raw === undefined || raw === '') continue
+      const n = typeof raw === 'number' ? raw : Number(raw)
+      if (!Number.isFinite(n)) { issues.push({ field: `takeoff.${key}`, message: 'Must be a number.' }); continue }
+      if (integer && !Number.isInteger(n)) { issues.push({ field: `takeoff.${key}`, message: 'Must be a whole number.' }); continue }
+      if (n < min || (key === 'hours_per_day' && n <= 0)) { issues.push({ field: `takeoff.${key}`, message: `Must be at least ${min || 'greater than 0'}.` }); continue }
+      if (n > max) { issues.push({ field: `takeoff.${key}`, message: `Must be at most ${max}.` }); continue }
+      cleaned[key] = n
+    }
+
+    if (Object.keys(cleaned).length > 0) overlay.takeoff = cleaned
   }
 
   if (issues.length > 0) return { ok: false, issues }
