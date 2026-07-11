@@ -54,7 +54,7 @@ describe('geminiProvider.renderImage', () => {
     else process.env.GEMINI_API_KEY = prevKey
   })
 
-  it('sends systemInstruction + user text + Gemini-3 image config (temp 1.0 + high thinking)', async () => {
+  it('sends systemInstruction + user text + deterministic image config (temp 0 + top_p 0 + high thinking + 1K)', async () => {
     await geminiProvider.renderImage({
       system: 'SYS',
       user: 'USER',
@@ -64,12 +64,14 @@ describe('geminiProvider.renderImage', () => {
     expect(body.systemInstruction.parts[0].text).toBe('SYS')
     expect(body.contents[0].role).toBe('user')
     expect(body.contents[0].parts[0]).toEqual({ text: 'USER' })
-    // Gemini 3: default temperature 1.0 (lowering it degrades output) +
-    // thinkingLevel 'high' for instruction adherence on image renders.
-    expect(body.generation_config.temperature).toBe(1)
+    // Deterministic preview render: temperature + top_p pinned to 0,
+    // thinkingLevel 'high' for adherence, resolution fixed at 1K. No
+    // aspect_ratio here (none derived) → model auto-selects framing.
+    expect(body.generation_config.temperature).toBe(0)
+    expect(body.generation_config.top_p).toBe(0)
     expect(body.generation_config.response_modalities).toEqual(['IMAGE'])
     expect(body.generation_config.thinking_config).toEqual({ thinking_level: 'high' })
-    expect(body.generation_config.image_config).toBeUndefined()
+    expect(body.generation_config.image_config).toEqual({ image_size: '1K' })
   })
 
   it('attaches source image then labelled reference image, in order', async () => {
@@ -103,7 +105,9 @@ describe('geminiProvider.renderImage', () => {
     expect(body.contents[0].parts[0].text).toBe('USER\n\nFIX THE COUNT')
   })
 
-  it('passes aspect ratio through as image_config.aspect_ratio', async () => {
+  it('omits aspect_ratio by default (auto framing) even when one is passed', async () => {
+    // GEMINI_IMAGE_ASPECT defaults to 'auto' → the model self-selects
+    // framing, so a caller-derived ratio is intentionally not forwarded.
     await geminiProvider.renderImage({
       system: 'SYS',
       user: 'USER',
@@ -111,7 +115,7 @@ describe('geminiProvider.renderImage', () => {
     })
     const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit]
     const body = JSON.parse(init.body as string)
-    expect(body.generation_config.image_config).toEqual({ aspect_ratio: '16:9' })
+    expect(body.generation_config.image_config).toEqual({ image_size: '1K' })
   })
 
   it('returns the inline image bytes from the response', async () => {

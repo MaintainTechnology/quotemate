@@ -60,10 +60,14 @@ function ctx(overrides: Partial<PromptContext> = {}): PromptContext {
 }
 
 describe('buildPreviewPromptV2 — pruned prompt', () => {
-  it('stays within the 600-word ceiling', () => {
+  it('stays within the word ceiling', () => {
     const p = buildPreviewPromptV2(ctx())
     const total = wordCount(p.system) + wordCount(p.user)
-    expect(total).toBeLessThanOrEqual(600)
+    // Ceiling raised from 600 → 800 to absorb the ~185-word standing
+    // RENDER_ENGINE_PREAMBLE (fixed overhead on every render). The
+    // job-specific body is still pruned; the cap keeps total prompt
+    // length bounded so image-model attention isn't diluted.
+    expect(total).toBeLessThanOrEqual(800)
     expect(total).toBeGreaterThan(120) // still substantive
   })
 

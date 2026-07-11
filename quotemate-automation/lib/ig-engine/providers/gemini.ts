@@ -26,19 +26,35 @@ const DEFAULT_IMAGE_MODEL =
 const DEFAULT_TEXT_MODEL =
   process.env.GEMINI_TEXT_MODEL ?? DEFAULT_IMAGE_MODEL
 
-// ── Gemini 3 instruction-following levers ───────────────────────────
-// Verified against ai.google.dev (2026-06): for Gemini 3, Google STRONGLY
-// recommends keeping temperature at its default 1.0 — lowering it risks
-// "looping or degraded performance" — and driving adherence with
-// thinkingLevel + system rules, NOT top_p/top_k. gemini-3-pro-image-preview
-// supports thinkingConfig for image generation; thinkingLevel 'high' makes
-// it reason through complex / negative-constraint prompts before rendering.
-// Both are env-overridable so they can be tuned or disabled without a
-// deploy (set GEMINI_IMAGE_THINKING_LEVEL=off to drop the field entirely).
+// ── Gemini image generation levers ──────────────────────────────────
+// DELIBERATE: QuoteMax renders quote previews, where reproducibility beats
+// variety — so temperature + top_p default to 0 for the most deterministic,
+// prompt-literal output. NOTE this OVERRIDES Google's general Gemini-3
+// guidance (ai.google.dev, 2026-06), which recommends leaving temperature
+// at 1.0 and warns that lowering it "risks looping or degraded performance";
+// top_p is also undocumented for the image models and may be ignored. The
+// real adherence levers remain thinkingLevel + the system rules — watch for
+// repeated/degraded renders and revert via GEMINI_IMAGE_TEMPERATURE /
+// GEMINI_IMAGE_TOP_P if it regresses.
+// thinkingLevel 'high' makes the model reason through complex /
+// negative-constraint prompts before rendering. Image size is fixed at 1K
+// (flash-lite's native resolution). All env-overridable without a deploy.
 const IMAGE_TEMPERATURE = (() => {
   const v = Number(process.env.GEMINI_IMAGE_TEMPERATURE)
-  return Number.isFinite(v) ? v : 1
+  return Number.isFinite(v) ? v : 0
 })()
+const IMAGE_TOP_P = (() => {
+  const v = Number(process.env.GEMINI_IMAGE_TOP_P)
+  return Number.isFinite(v) ? v : 0
+})()
+const IMAGE_SIZE = (process.env.GEMINI_IMAGE_SIZE ?? '1K').trim()
+// Aspect ratio. 'auto' (default) omits aspect_ratio so Gemini self-selects
+// framing. Any other value re-enables passing the caller-derived source
+// ratio (image-config.ts) — the anti-crop behaviour — without a code change:
+// set GEMINI_IMAGE_ASPECT=source to restore it.
+const IMAGE_ASPECT_MODE = (process.env.GEMINI_IMAGE_ASPECT ?? 'auto')
+  .trim()
+  .toLowerCase()
 const IMAGE_THINKING_LEVEL = (process.env.GEMINI_IMAGE_THINKING_LEVEL ?? 'high')
   .trim()
   .toLowerCase()
@@ -116,6 +132,7 @@ async function renderImage(req: RenderImageRequest): Promise<ImageBytes> {
     contents: [{ role: 'user', parts: userParts }],
     generation_config: {
       temperature: req.temperature ?? IMAGE_TEMPERATURE,
+      top_p: IMAGE_TOP_P,
       response_modalities: ['IMAGE'],
       // High thinking = the Gemini-3 image adherence lever (complex /
       // negative-constraint prompts). Image output → never add
@@ -124,9 +141,16 @@ async function renderImage(req: RenderImageRequest): Promise<ImageBytes> {
       ...(IMAGE_THINKING_LEVEL && IMAGE_THINKING_LEVEL !== 'off' && IMAGE_THINKING_LEVEL !== 'none'
         ? { thinking_config: { thinking_level: IMAGE_THINKING_LEVEL } }
         : {}),
-      ...(req.aspectRatio
-        ? { image_config: { aspect_ratio: req.aspectRatio } }
-        : {}),
+      // Resolution fixed at 1K (flash-lite native). aspect_ratio omitted by
+      // default (IMAGE_ASPECT_MODE='auto') → model self-selects framing; set
+      // GEMINI_IMAGE_ASPECT=source to pass the caller-derived source ratio
+      // instead (stops Gemini reframing the customer's room).
+      image_config: {
+        image_size: IMAGE_SIZE,
+        ...(IMAGE_ASPECT_MODE !== 'auto' && req.aspectRatio
+          ? { aspect_ratio: req.aspectRatio }
+          : {}),
+      },
     },
   }
 
