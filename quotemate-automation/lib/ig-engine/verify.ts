@@ -27,7 +27,7 @@
 import type { ProductImage } from './product-image'
 
 const GEMINI_TEXT_MODEL =
-  process.env.GEMINI_VERIFY_MODEL ?? 'gemini-3-pro-image-preview'
+  process.env.GEMINI_VERIFY_MODEL ?? 'gemini-3.1-flash-lite-image'
 const GEMINI_ENDPOINT = (model: string) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
 

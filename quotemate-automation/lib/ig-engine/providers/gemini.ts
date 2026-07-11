@@ -1,8 +1,8 @@
 // ════════════════════════════════════════════════════════════════════
 // IG Engine — Gemini provider adapter.
 //
-// Wraps the v1beta generateContent REST API for Nano Banana Pro
-// (gemini-3-pro-image-preview by default). Two operations:
+// Wraps the v1beta generateContent REST API for the Nano Banana family
+// (gemini-3.1-flash-lite-image by default). Two operations:
 //   · renderImage  — image out, with optional source + reference images.
 //   · generateText — text out (vision input optional), used by the judge.
 //
@@ -22,7 +22,7 @@ import type {
 } from './base'
 
 const DEFAULT_IMAGE_MODEL =
-  process.env.GEMINI_IMAGE_MODEL ?? 'gemini-3-pro-image-preview'
+  process.env.GEMINI_IMAGE_MODEL ?? 'gemini-3.1-flash-lite-image'
 const DEFAULT_TEXT_MODEL =
   process.env.GEMINI_TEXT_MODEL ?? DEFAULT_IMAGE_MODEL
 

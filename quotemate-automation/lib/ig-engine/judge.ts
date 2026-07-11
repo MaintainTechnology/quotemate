@@ -35,7 +35,7 @@ import { geminiProvider } from './providers/gemini'
 // path; anything else is forwarded to the Gemini provider as the
 // per-call model override.
 const JUDGE_MODEL =
-  process.env.PREVIEW_JUDGE_MODEL ?? 'gemini-3-pro-image-preview'
+  process.env.PREVIEW_JUDGE_MODEL ?? 'gemini-3.1-flash-lite-image'
 
 /** PURE — is the configured judge a Claude model (→ AI SDK path)? */
 export function isClaudeJudgeModel(model: string = JUDGE_MODEL): boolean {
