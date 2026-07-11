@@ -37,6 +37,11 @@ vi.mock('next/server', () => ({ after: (fn: () => unknown) => void fn() }))
 vi.mock('@/lib/painting/release', () => ({
   sendPaintingQuoteToCustomer: vi.fn(async () => ({ sent: true })),
 }))
+// The route pre-warms the AI repaint before the send — stub it so the test
+// never depends on Gemini/Maps env.
+vi.mock('@/lib/painting/paint-after', () => ({
+  generatePaintAfterImage: vi.fn(async () => ({ ok: false, status: 'skipped' })),
+}))
 
 import { POST } from './route'
 import { sendPaintingQuoteToCustomer } from '@/lib/painting/release'

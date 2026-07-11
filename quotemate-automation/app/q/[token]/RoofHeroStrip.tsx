@@ -41,9 +41,13 @@ type Props = {
    *  resolves the share_token → tenant_id and confirms read access. */
   shareToken: string
   stats: Stats
+  /** When the quote is linked to a roofing measurement, the polygon-centred
+   *  roofing proxy path (e.g. /api/roofing/q/<mt>/static-map?b=1) — geocoding
+   *  the address text can land on the wrong building on large parcels. */
+  staticMapPath?: string | null
 }
 
-export function RoofHeroStrip({ address, suburb, shareToken, stats }: Props) {
+export function RoofHeroStrip({ address, suburb, shareToken, stats, staticMapPath }: Props) {
   const [imgSrc, setImgSrc] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -56,10 +60,11 @@ export function RoofHeroStrip({ address, suburb, shareToken, stats }: Props) {
         params.set('zoom', '20')
         params.set('w', '640')
         params.set('h', '420')
-        // Public share-token gates the request; the proxy server-side
-        // resolves it to a tenant before calling Google.
+        // Prefer the measurement-linked, polygon-centred proxy; fall back to
+        // the address-geocoded share-token proxy for unlinked quotes.
         const res = await fetch(
-          `/api/q/${encodeURIComponent(shareToken)}/static-map?${params.toString()}`,
+          staticMapPath ??
+            `/api/q/${encodeURIComponent(shareToken)}/static-map?${params.toString()}`,
         )
         if (cancelled) return
         if (!res.ok) {
@@ -76,7 +81,7 @@ export function RoofHeroStrip({ address, suburb, shareToken, stats }: Props) {
     return () => {
       cancelled = true
     }
-  }, [address, shareToken])
+  }, [address, shareToken, staticMapPath])
 
   useEffect(() => {
     return () => {

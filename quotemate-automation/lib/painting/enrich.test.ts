@@ -72,6 +72,26 @@ describe('applyEnrichment', () => {
     expect(facts.eave_height_m).toBe(2.4)
   })
 
+  it('targeted mode ignores the whole-property listing floor area', () => {
+    // PropRadar's listing floor area describes the DWELLING; when the tradie
+    // targeted a specific structure it must not beat that structure's
+    // footprint in resolveFloorArea (a shed priced at the house's 180 m²).
+    const { facts } = applyEnrichment(
+      BASE,
+      {
+        geoscape: { patch: { footprint_m2: 38.2, storeys: 1 }, notes: [] },
+        propradar: {
+          patch: { floor_area_m2: 180, floor_area_source: 'listing' },
+          notes: [],
+          found: true,
+        },
+      },
+      { targeted: true },
+    )
+    expect(facts.floor_area_m2).toBeNull()
+    expect(facts.footprint_m2).toBe(38.2)
+  })
+
   it('untargeted merge is unchanged by the opts parameter', () => {
     const a = applyEnrichment(BASE, {
       geoscape: { patch: { footprint_m2: 213.9, storeys: 2 }, notes: [] },

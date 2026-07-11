@@ -222,6 +222,22 @@ export default async function PublicQuotePage(props: {
   // app/api/roofing/save-as-quote/route.ts) — surface all of it.
   const roofStats = isRoofing ? roofScopeStats(intake?.scope) : null
 
+  // Wrong-roof fix: when this quote was promoted FROM a measurement, centre
+  // the hero satellite on the MEASURED building polygon (the roofing proxy's
+  // ?b=1) instead of geocoding the address text — on large/rural parcels the
+  // geocode pin regularly lands on the wrong building.
+  let roofHeroMapPath: string | null = null
+  if (isRoofing) {
+    const { data: linkedRoof } = await supabase
+      .from('roofing_measurements')
+      .select('public_token')
+      .eq('quote_share_token', token)
+      .maybeSingle()
+    if (linkedRoof?.public_token) {
+      roofHeroMapPath = `/api/roofing/q/${linkedRoof.public_token}/static-map?b=1`
+    }
+  }
+
   // Commercial painting: the tender's measured takeoff (intake.scope
   // summary + the per-surface line items wrapped into the tender tier),
   // plus a link to the rich /q/commercial-paint page when the saved_quote
@@ -957,6 +973,7 @@ export default async function PublicQuotePage(props: {
               suburb={(intake.suburb as string | null | undefined) ?? null}
               shareToken={token}
               stats={roofStats}
+              staticMapPath={roofHeroMapPath}
             />
           </SheetSection>
         )}

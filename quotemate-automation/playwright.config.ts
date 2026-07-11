@@ -12,6 +12,12 @@
 import { defineConfig } from '@playwright/test'
 
 const PORT = Number(process.env.PLAYWRIGHT_PORT ?? 3100)
+// Clerk dev-browser handshakes are origin-bound: against 127.0.0.1 the
+// handshake can 307-loop forever, leaving ClerkProvider "loading" and the
+// whole app UN-HYDRATED (buttons render but do nothing). localhost is the
+// origin the Clerk dev instance actually settles on — use it for any spec
+// that clicks; PLAYWRIGHT_HOST=127.0.0.1 restores the old behaviour.
+const HOST = process.env.PLAYWRIGHT_HOST ?? 'localhost'
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -20,7 +26,7 @@ export default defineConfig({
   fullyParallel: true,
   reporter: [['list']],
   use: {
-    baseURL: `http://127.0.0.1:${PORT}`,
+    baseURL: `http://${HOST}:${PORT}`,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },

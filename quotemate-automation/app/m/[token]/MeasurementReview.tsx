@@ -8,7 +8,7 @@
 //
 // Indices are 1-based (matches included_indices + narrowQuoteToStructures).
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { MultiRoofQuote, RoofMetrics, RoofStructurePrice } from '@/lib/roofing/types'
 import type { SolarQuoteAddon } from '@/lib/roofing/solar'
@@ -95,6 +95,11 @@ export function MeasurementReview({
   saveAsQuoteBody: Omit<SaveAsQuoteRequest, 'measure_token'> | null
 }) {
   const [included, setIncluded] = useState<number[]>(initialIncluded)
+  // Broadcast the live selection to sibling client islands — the roof layout
+  // map (RoofLayoutSection) re-frames and re-zones itself on every toggle.
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('qm:roof-selection', { detail: { indices: included } }))
+  }, [included])
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const router = useRouter()

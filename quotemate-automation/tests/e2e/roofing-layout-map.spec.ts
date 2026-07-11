@@ -141,23 +141,28 @@ test.describe('Roofing customer layout map (/q/roof/[token])', () => {
     await expect(
       page.getByText('Please see the roof layout map below', { exact: false }),
     ).toBeVisible()
-    // Legend entries (zone labels) rendered verbatim.
+    // Zone labels render verbatim (on-map callout AND the legend below).
     await expect(
-      page.getByText('Install NEW Colorbond (Custom Orb) roof sheeting to replace existing.'),
+      page.getByText('Install NEW Colorbond (Custom Orb) roof sheeting to replace existing.').first(),
     ).toBeVisible()
     await expect(
-      page.getByText('Ground-up scaffolding to the work-area perimeter for WHS.'),
+      page.getByText('Ground-up scaffolding to the work-area perimeter for WHS.').first(),
     ).toBeVisible()
-    // The deterministic overlay image (SVG data URI) stacked over the aerial.
-    const overlay = page.locator('img[alt="Colour-coded work zones"]')
-    await expect(overlay).toHaveCount(1)
-    await expect(overlay).toHaveAttribute('src', /^data:image\/svg\+xml;base64,/)
     // Estimated materials with basis/use transparency (customer view).
     await expect(page.getByText('Estimated materials')).toBeVisible()
     await expect(page.getByText('Colorbond sheets')).toBeVisible()
     // sheets = ceil(194 / 4.191 × 1.1) = 51
     await expect(page.getByText('51 sheets')).toBeVisible()
     await expect(page.getByText(/measured sloped roof/).first()).toBeVisible()
+
+    // Interactive MapLibre figure: the map container boots with pan/zoom/
+    // rotate controls — ± buttons and the compass (click = reset north).
+    const mapFigure = page.getByTestId('layout-map')
+    await expect(mapFigure).toBeVisible()
+    await expect(mapFigure.locator('.maplibregl-ctrl-zoom-in')).toBeVisible({ timeout: 20000 })
+    await expect(mapFigure.locator('.maplibregl-ctrl-compass')).toBeVisible()
+    // The on-map ZONE callout ties to the numbered legend below.
+    await expect(mapFigure.getByText('ZONE 01')).toBeVisible()
   })
 
   test('renders no layout section when no plan is cached', async ({ page }) => {
@@ -165,7 +170,7 @@ test.describe('Roofing customer layout map (/q/roof/[token])', () => {
     // The priced view renders…
     await expect(page.getByText('12 Sample St', { exact: false }).first()).toBeVisible()
     // …but no layout map section.
-    expect(await page.locator('img[alt="Colour-coded work zones"]').count()).toBe(0)
+    expect(await page.getByTestId('layout-map').count()).toBe(0)
     expect(await page.getByText('Please see the roof layout map below').count()).toBe(0)
   })
 })

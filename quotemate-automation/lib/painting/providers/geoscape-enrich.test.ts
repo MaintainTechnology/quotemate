@@ -167,5 +167,26 @@ describe('enrichFromGeoscape — targeted building', () => {
     expect(res.patch.footprint_m2).toBe(38.2)
     expect(res.patch.storeys).toBe(1)
     expect(res.patch.eave_height_m).toBe(2.4)
+    expect(res.matched_building_id).toBe('bldshed222')
+  })
+
+  it('returns EMPTY on an unknown building id — never silently retargets', () => {
+    // A miss must NOT fall back to the best-ranked building: the caller
+    // applies a targeted money override, and a silent fallback would force
+    // the WRONG building's footprint onto the estimate.
+    const fetchImpl = router([
+      { when: (u) => u.includes('/addresses'), body: FIXTURES.addresses },
+      { when: (u) => u.includes('/buildings?'), body: FIXTURES.buildings },
+      { when: (u) => u.includes('estimatedLevels'), body: FIXTURES.levels },
+      { when: (u) => u.includes('averageEaveHeight'), body: FIXTURES.eave },
+      { when: (u) => u.includes('zonings'), body: FIXTURES.zonings },
+      { when: (u) => u.includes('/area'), body: FIXTURES.area },
+    ])
+    return enrichFromGeoscape(ADDR, { apiKey: 'k', fetchImpl, buildingId: 'bld-unknown' }).then(
+      (res) => {
+        expect(res.patch).toEqual({})
+        expect(res.matched_building_id ?? null).toBeNull()
+      },
+    )
   })
 })

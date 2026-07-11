@@ -12,6 +12,7 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getAuthToken } from '@/lib/auth/client-token'
 import { paintProgressOpen, paintProgressTitle } from '@/lib/painting/progress'
+import { PAINT_COLOUR_SWATCHES } from '@/lib/painting/colours'
 import { FeatureGate } from '@/app/dashboard/_components/FeatureGate'
 import { AddressAutocomplete } from '../roofing/_components/AddressAutocomplete'
 import { MaterialCheck } from './_components/MaterialCheck'
@@ -108,6 +109,11 @@ function PaintingEstimatePageInner() {
     structures.length >= 2
       ? (structures.find((s) => s.building_id === structureId) ?? null)
       : null
+  // Snapshot of the structure the CURRENT estimate ran with — onSave must
+  // persist this, not the live selection (a detection response landing
+  // mid-estimate would otherwise make inputs.structure disagree with the
+  // estimate that was actually computed).
+  const estimateStructureRef = useRef<PaintStructureOption | null>(null)
 
   // Core estimate run, callable without a form event so the "Recalculate"
   // affordance (after the tradie edits their rates) can re-run it. The
@@ -144,6 +150,10 @@ function PaintingEstimatePageInner() {
     setSavedId(null)
     setSavedToken(null)
     setSaveErr(null)
+    // Freeze the structure THIS estimate runs with — onSave persists the
+    // snapshot so a detection response landing mid-flight can't desync the
+    // saved inputs from the computed estimate.
+    estimateStructureRef.current = selectedStructure
     try {
       const freshToken = (await getAuthToken()) ?? token
       const res = await fetch('/api/painting/estimate', {
@@ -159,11 +169,11 @@ function PaintingEstimatePageInner() {
             storeys,
             colour_change: colourChange,
             manual_floor_area_m2: manualArea ? Number(manualArea) : null,
-            structure: selectedStructure
+            structure: estimateStructureRef.current
               ? {
-                  building_id: selectedStructure.building_id,
-                  label: selectedStructure.label,
-                  role: selectedStructure.role,
+                  building_id: estimateStructureRef.current.building_id,
+                  label: estimateStructureRef.current.label,
+                  role: estimateStructureRef.current.role,
                 }
               : undefined,
           },
@@ -212,11 +222,12 @@ function PaintingEstimatePageInner() {
             storeys,
             colour_change: colourChange,
             manual_floor_area_m2: manualArea ? Number(manualArea) : null,
-            structure: selectedStructure
+            // The snapshot from estimate time — never the live selection.
+            structure: estimateStructureRef.current
               ? {
-                  building_id: selectedStructure.building_id,
-                  label: selectedStructure.label,
-                  role: selectedStructure.role,
+                  building_id: estimateStructureRef.current.building_id,
+                  label: estimateStructureRef.current.label,
+                  role: estimateStructureRef.current.role,
                 }
               : undefined,
           },
@@ -241,7 +252,7 @@ function PaintingEstimatePageInner() {
       setSaveState('error')
       setSaveErr(e instanceof Error ? e.message : String(e))
     }
-  }, [token, estimate, address, postcode, stateCode, scopes, coats, condition, ceiling, storeys, colourChange, manualArea, selectedStructure, router])
+  }, [token, estimate, address, postcode, stateCode, scopes, coats, condition, ceiling, storeys, colourChange, manualArea, router])
 
   // Auto-persist the moment an estimate completes — no manual "Save job"
   // step needed. onSave writes the painting_measurements row (minting both
@@ -683,22 +694,8 @@ function FrontOfHouse({
 
 // ─── Visual repaint preview ─────────────────────────────────────────
 
-const COLOUR_SWATCHES = [
-  'Surfmist off-white',
-  'Dulux Natural White',
-  'Dulux Vivid White',
-  'Lexicon Quarter',
-  'Hog Bristle',
-  'Monument charcoal',
-  'Basalt grey',
-  'Woodland Grey',
-  'Shale Grey',
-  'Sage green',
-  'Hamptons blue',
-  'Terracotta',
-  'Heritage red',
-  'Charcoal black',
-] as const
+// Shared with the token-page repaint picker (lib/painting/colours.ts).
+const COLOUR_SWATCHES = PAINT_COLOUR_SWATCHES
 
 function PaintPreviewSection({
   token,

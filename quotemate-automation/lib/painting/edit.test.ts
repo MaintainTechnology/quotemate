@@ -154,7 +154,7 @@ describe('applyTierEdits', () => {
       margin_pct: 0.5,
       sundries_note: '',
       labour_note: '',
-      margin_note: '',
+      margin_note: 'Better $999 ex GST − materials $400 − labour $850',
     })
     e.takeoff = { tiers: [takeoffTier('good'), takeoffTier('better'), takeoffTier('best')] }
 
@@ -167,6 +167,9 @@ describe('applyTierEdits', () => {
     // price too — never left at the stale stamped value.
     const good = res.estimate.takeoff!.tiers.find((t) => t.tier === 'good')!
     expect(good.margin_ex_gst).toBe(2000 - 400 - 850)
+    // The derivation NOTE must follow the refreshed numbers — a stale note
+    // would contradict the margin line rendered directly above it.
+    expect(better.margin_note).toBe('Better $4,000 ex GST − materials $400 − labour $850')
   })
 
   it('leaves the take-off untouched on a no-op edit', () => {

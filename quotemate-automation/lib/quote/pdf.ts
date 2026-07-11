@@ -40,7 +40,7 @@ import {
   type LayoutOverlayStructure,
 } from '@/lib/roofing/layout-overlay-svg'
 import type { MultiRoofQuote } from '@/lib/roofing/types'
-import type { RoofDisplayRow } from '@/lib/roofing/selection'
+import { resolveEffectiveIndices, type RoofDisplayRow } from '@/lib/roofing/selection'
 import { buildSolarQuoteReportHtml } from '@/lib/solar/report-html'
 import {
   buildSolarPremiumQuote,
@@ -63,9 +63,24 @@ const APP_URL = (process.env.APP_URL ?? 'https://www.quotemax.com.au').replace(/
 // Bumped 2026-07-10 (roofing introduced at -v2): PDFs now render as ONE
 // continuous page rather than A4 page-by-page, so every cached paginated PDF
 // regenerates exactly once on its next download.
-const PAINT_PDF_REV = '-v3'
+// -v4 (2026-07-11): + aerial figure and the customer Materials & time table.
+// -v5 (2026-07-11): imagery reorganised — photos row + before/after repaint
+// pair; the cached AI render's timestamp joins the path marker so a
+// customer recolour regenerates the PDF (see ensurePaintingPdf).
+// -v6 (2026-07-11): + price-build derivation tail and "How we measured"
+// notes (customer-safe detail parity with /q/paint).
+// -v7 (2026-07-11): price-build shows per-surface COST (no false rate
+// equation / double-counted multiplier rows); PDF honours the tenant's
+// quote_tier_mode so a single-price tenant no longer reveals hidden tiers.
+const PAINT_PDF_REV = '-v7'
 const SOLAR_PDF_REV = '-v3'
-const ROOF_PDF_REV = '-v2'
+// Bump WHENEVER the layout figure's view/compositing maths change, or cached
+// PDFs keep serving a figure whose aerial and zone overlay were projected by
+// different code (the misaligned-borders report).
+//   -v3 (2026-07-11): selection-aware layout-map framing.
+//   -v4 (2026-07-11): fixed-metre ring offsets (fractional scaling pushed the
+//   far wings of large L-shaped roofs metres off the roofline).
+const ROOF_PDF_REV = '-v4'
 
 let _client: SupabaseClient | null = null
 function supabase(): SupabaseClient {
@@ -167,6 +182,9 @@ type RoofPdfRow = {
   /** AI layout plan cache (migration 170) — embed ONLY when 'ready'. */
   layout_status: string | null
   layout_plan: LayoutPlan | null
+  /** Tradie selection — the layout map frames ONLY these structures. */
+  included_indices: number[] | null
+  confirmed_structure: number | null
 }
 
 type SolarPdfRow = {
@@ -470,16 +488,22 @@ export async function ensureRoofQuotePdf(
     if (!gotenbergConfigured()) return null
     const { data: row } = await supabase()
       .from('roofing_measurements')
-      .select('public_token, tenant_id, address, quote, routing, pdf_path, layout_status, layout_plan')
+      .select(
+        'public_token, tenant_id, address, quote, routing, pdf_path, layout_status, layout_plan, included_indices, confirmed_structure',
+      )
       .eq('public_token', publicToken)
       .maybeSingle<RoofPdfRow>()
     if (!row) return null
     // Inspection-routed roofs carry no committable price — no quote PDF
     // (mirrors the paint/solar guard; defense-in-depth behind the UI gate).
     if (row.routing === 'inspection_required') return null
-    // '-v2' path marker = rendered as a single continuous page. A pre-marker
-    // cached PDF (paginated A4) regenerates once on the next download.
-    if (row.pdf_path && row.pdf_path.includes(ROOF_PDF_REV) && !opts.regenerate && !opts.quote) {
+    // Path rev marker (see ROOF_PDF_REV) — a cached PDF from an older figure/
+    // template era regenerates once on the next download. A cached PDF is
+    // valid even for narrowed (opts.quote) calls: the narrowed quote derives
+    // from the persisted selection, and the selection-update route NULLS
+    // pdf_path on change (app/api/roofing/measurement/[token]/route.ts), so a
+    // surviving pdf_path always reflects the current selection.
+    if (row.pdf_path && row.pdf_path.includes(ROOF_PDF_REV) && !opts.regenerate) {
       return row.pdf_path
     }
 
@@ -557,38 +581,64 @@ export async function ensureRoofQuotePdf(
     }
 
     // AI work-strategy layout map (spec quote-visual-parity R6e) — the CACHED
-    // plan only; drawn from stored geometry over the fit-to-geometry aerial
-    // (layoutMapView — the SAME view the ?fit=1 static map renders, so the
-    // overlay stays aligned and every structure is framed).
+    // plan only, SELECTION-AWARE (user rule 2026-07-11): the aerial frames
+    // exactly the structures the tradie ticked (one selected → zoomed to it
+    // alone; two → both; all → all), only their zones draw, and the material
+    // estimates sum only the selected structures. The ?fit=1&sel= static map
+    // and layoutMapView compute the identical subset view, keeping the
+    // overlay aligned with the imagery.
     let layoutOverlay: Parameters<typeof buildRoofQuoteReportHtml>[0]['layoutOverlay'] = null
     if (row.layout_status === 'ready' && row.layout_plan && row.quote?.structures?.length) {
       const overlayStructures: LayoutOverlayStructure[] = row.quote.structures.map((s) => ({
         polygon: s.metrics?.polygon_geojson ?? null,
         form: s.metrics?.form ?? 'unknown',
       }))
-      const view = layoutMapView(overlayStructures, { width: 640, height: 480 })
-      const overlaySrc = view
-        ? layoutOverlayImageSrc({
-            zones: row.layout_plan.zones,
-            structures: overlayStructures,
-            center: view.center,
-            zoom: view.zoom,
-            width: 640,
-            height: 480,
-          })
-        : null
-      const aerialSrc = await prepareImage(
-        `${APP_URL}/api/roofing/q/${publicToken}/static-map?fit=1`,
+      const effective = resolveEffectiveIndices(
+        {
+          included: row.included_indices,
+          confirmedStructure: row.confirmed_structure,
+          paramIndices: null,
+        },
+        row.quote,
       )
+      const includedSet = new Set(effective)
+      const visibleZones =
+        includedSet.size > 0
+          ? row.layout_plan.zones.filter((z) => includedSet.has(z.structureIndex))
+          : row.layout_plan.zones
+      const includedOverlayStructures =
+        effective.length > 0
+          ? effective.map((i) => overlayStructures[i - 1]).filter(Boolean)
+          : overlayStructures
+      const includedStructures =
+        effective.length > 0
+          ? effective.map((i) => row.quote!.structures[i - 1]).filter(Boolean)
+          : row.quote.structures
+      const view = layoutMapView(includedOverlayStructures, { width: 640, height: 480 })
+      const overlaySrc =
+        view && visibleZones.length > 0
+          ? layoutOverlayImageSrc({
+              zones: visibleZones,
+              structures: overlayStructures,
+              center: view.center,
+              zoom: view.zoom,
+              width: 640,
+              height: 480,
+            })
+          : null
+      const sel = effective.length > 0 ? `&sel=${effective.join(',')}` : ''
+      const aerialSrc = overlaySrc
+        ? await prepareImage(`${APP_URL}/api/roofing/q/${publicToken}/static-map?fit=1${sel}`)
+        : null
       if (overlaySrc && aerialSrc) {
         layoutOverlay = {
           header: row.layout_plan.header,
           aerialSrc,
           overlaySrc,
-          legend: row.layout_plan.zones.map((z) => ({ color: z.color, label: z.label })),
-          // Deterministic whole-job material estimates with basis + use.
+          legend: visibleZones.map((z) => ({ color: z.color, label: z.label })),
+          // Deterministic material estimates over the SELECTED structures.
           materials: layoutMaterials(
-            combinedLayoutMetrics(row.quote.structures),
+            combinedLayoutMetrics(includedStructures),
             row.layout_plan.mode,
           ),
         }
@@ -729,25 +779,59 @@ export async function ensurePaintingPdf(
       .maybeSingle<PaintingPdfRow>()
     if (!row) return null
     if (row.routing === 'inspection_required') return null
-    // '-v2' path marker = rendered WITH the property imagery (spec
-    // quote-visual-parity R2). A pre-imagery cached PDF (no marker)
-    // regenerates once on the next download — self-heal without a migration.
-    if (row.pdf_path && row.pdf_path.includes(PAINT_PDF_REV) && !opts.regenerate) {
+    // Rev path marker = rendered by the current layout (spec
+    // quote-visual-parity R2) — a stale cached PDF regenerates once on the
+    // next download; self-heal without a migration. When an AI repaint is
+    // cached, the render's timestamp (painting/<id>/after-<ts>.<ext>) is
+    // appended so a customer recolour also invalidates the PDF — the PDF
+    // always embeds the CURRENT colour choice.
+    const wantAfter = row.preview_status === 'ready' && !!row.preview_image_path
+    const afterStamp = wantAfter
+      ? ((row.preview_image_path as string).match(/after-(\d+)/)?.[1] ?? 'r')
+      : null
+    const paintRev = afterStamp ? `${PAINT_PDF_REV}-${afterStamp}` : PAINT_PDF_REV
+    if (row.pdf_path && row.pdf_path.includes(paintRev) && !opts.regenerate) {
       return row.pdf_path
     }
 
     const estimate = row.estimate
     if (!estimate) return null
 
+    // Honour the tenant's painting tier mode (mig 142) so a single-price
+    // tenant's PDF shows one option, exactly like /q/paint — never revealing
+    // the hidden Good/Best tiers, their relation rows or materials. Mirrors
+    // ensureRoofQuotePdf and the /q/paint page's own tier gating.
+    const paintTiers = estimate.price?.tiers ?? []
+    let paintTierMode: QuoteTierMode = 'single'
+    if (row.tenant_id) {
+      const { data: ppb } = await supabase()
+        .from('pricing_book')
+        .select('quote_tier_mode')
+        .eq('tenant_id', row.tenant_id)
+        .eq('trade', 'painting')
+        .maybeSingle<{ quote_tier_mode: string | null }>()
+      paintTierMode = asQuoteTierMode(ppb?.quote_tier_mode ?? null)
+    }
+    const paintVisibleTierKeys = resolveVisibleTiers({
+      mode: paintTierMode,
+      present: {
+        good: paintTiers.some((t) => t.tier === 'good'),
+        better: paintTiers.some((t) => t.tier === 'better'),
+        best: paintTiers.some((t) => t.tier === 'best'),
+      },
+      selectedTier: 'better',
+    })
+
     // Property imagery (spec quote-visual-parity R2) — the same token-gated
     // proxies the /p and /q/paint pages use, embedded as data URIs.
-    // Street View is a plain proxy fetch; the AI repaint embeds ONLY when the
-    // render is already cached ('ready') so PDF generation never bills Gemini.
-    // Branding + the two image fetches are independent — run them together.
-    const [branding, streetViewSrc, afterImageSrc] = await Promise.all([
+    // Street View + the aerial are plain proxy fetches; the AI repaint
+    // embeds ONLY when the render is already cached ('ready') so PDF
+    // generation never bills Gemini. All fetches are independent.
+    const [branding, streetViewSrc, aerialSrc, afterImageSrc] = await Promise.all([
       loadTenantBranding(supabase(), row.tenant_id, 'painting'),
       prepareImage(`${APP_URL}/api/painting/q/${publicToken}/street-view`, { maxEdge: 640 }),
-      row.preview_status === 'ready' && row.preview_image_path
+      prepareImage(`${APP_URL}/api/painting/q/${publicToken}/static-map`, { maxEdge: 640 }),
+      wantAfter
         ? prepareImage(`${APP_URL}/api/painting/q/${publicToken}/after-image`, { maxEdge: 640 })
         : Promise.resolve(null),
     ])
@@ -757,12 +841,14 @@ export async function ensurePaintingPdf(
       branding,
       address: row.address ?? '',
       estimate,
+      visibleTierKeys: paintVisibleTierKeys,
       streetViewSrc,
+      aerialSrc,
       afterImageSrc,
       quoteViewUrl: `${APP_URL}/q/paint/${publicToken}`,
     })
     const pdf = await renderQuotePdfCapped(html, `paint:${publicToken}`)
-    const path = await storePdf(`paint/${publicToken}${PAINT_PDF_REV}.pdf`, pdf)
+    const path = await storePdf(`paint/${publicToken}${paintRev}.pdf`, pdf)
     await supabase().from('painting_measurements').update({ pdf_path: path }).eq('public_token', publicToken)
     return path
   } catch (e) {

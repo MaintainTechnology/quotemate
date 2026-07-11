@@ -12,6 +12,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -2502,6 +2503,32 @@ function SectionTabs({
 }) {
   const idx = OVERVIEW_SECTIONS.findIndex((s) => s.id === active)
 
+  // Sliding accent pill — glides between tabs instead of the fill snapping
+  // from one to the next. Measured off each tab's own box so it tracks the
+  // real (unequal) label widths, and re-measures on resize. The pill is
+  // absolutely positioned, so its left:0 sits at the list's PADDING-box left;
+  // we express the target as the offset from that same origin. Both boxes are
+  // read via getBoundingClientRect (border-box coords) + clientLeft so the
+  // alignment is exact across engines, where offsetLeft's border handling
+  // differs. The pill is the only moving part; buttons just swap text colour
+  // above it. Set once measured (never animates in from the origin).
+  const listRef = useRef<HTMLDivElement | null>(null)
+  const btnRefs = useRef<(HTMLButtonElement | null)[]>([])
+  const [pill, setPill] = useState<{ left: number; width: number } | null>(null)
+  useLayoutEffect(() => {
+    const measure = () => {
+      const list = listRef.current
+      const btn = btnRefs.current[idx]
+      if (!list || !btn) return
+      const originLeft = list.getBoundingClientRect().left + list.clientLeft
+      const r = btn.getBoundingClientRect()
+      setPill({ left: r.left - originLeft, width: r.width })
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [idx])
+
   function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
     e.preventDefault()
@@ -2513,16 +2540,30 @@ function SectionTabs({
 
   return (
     <div
+      ref={listRef}
       role="tablist"
       aria-label="Dashboard section"
       onKeyDown={onKeyDown}
-      className="inline-flex gap-1 rounded-ctl edge-lit border border-ink-line bg-ink-card p-1 motion-safe:animate-[fade-up_380ms_cubic-bezier(0.22,1,0.36,1)_both]"
+      className="relative inline-flex gap-1 rounded-ctl edge-lit border border-ink-line bg-ink-card p-1 motion-safe:animate-[fade-up_380ms_cubic-bezier(0.22,1,0.36,1)_both]"
     >
-      {OVERVIEW_SECTIONS.map((s) => {
+      {/* The one moving part: a single accent pill that glides under the active
+          tab. transform + width only, so it stays GPU-composited. Reduced-
+          motion drops the transition classes and it snaps instantly. */}
+      {pill && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute bottom-1 top-1 left-0 rounded-[6px] bg-accent will-change-transform motion-safe:transition-[transform,width] motion-safe:duration-[420ms] motion-safe:ease-[cubic-bezier(0.22,1,0.36,1)]"
+          style={{ width: pill.width, transform: `translateX(${pill.left}px)` }}
+        />
+      )}
+      {OVERVIEW_SECTIONS.map((s, i) => {
         const on = s.id === active
         return (
           <button
             key={s.id}
+            ref={(el) => {
+              btnRefs.current[i] = el
+            }}
             type="button"
             role="tab"
             id={`section-tab-${s.id}`}
@@ -2531,10 +2572,10 @@ function SectionTabs({
             tabIndex={on ? 0 : -1}
             onClick={() => onChange(s.id)}
             className={[
-              'rounded-[6px] px-4 py-2 font-mono text-[11px] font-bold uppercase tracking-[0.14em] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
-              on
-                ? 'bg-accent text-accent-ink'
-                : 'text-text-dim hover:text-text-sec',
+              // z-10 keeps the label above the pill; the active label reads as
+              // dark-on-yellow, the rest as dim text over the bare plate.
+              'relative z-10 rounded-[6px] px-4 py-2 font-mono text-[11px] font-bold uppercase tracking-[0.14em] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
+              on ? 'text-accent-ink' : 'text-text-dim hover:text-text-sec',
             ].join(' ')}
           >
             {s.label}
@@ -2819,9 +2860,13 @@ function OverviewTab({
       {/* KPI STRIP — one seamed 6-cell instrument cluster (the reference's
           command-centre metrics row). Cells share 1px ink-line seams inside
           a single rounded, lit-edge container. */}
-      <section className="grid grid-cols-2 gap-px overflow-hidden rounded-card edge-lit border border-ink-line bg-ink-line motion-safe:animate-[fade-up_380ms_cubic-bezier(0.22,1,0.36,1)_both] sm:grid-cols-3 lg:grid-cols-6">
-        {metrics.map((m) => (
-          <div key={m.k} className="bg-ink-card px-5 py-4 sm:px-[22px] sm:py-[18px]">
+      <section className="grid grid-cols-2 gap-px overflow-hidden rounded-card edge-lit border border-ink-line bg-ink-line sm:grid-cols-3 lg:grid-cols-6">
+        {metrics.map((m, i) => (
+          <div
+            key={m.k}
+            className="qm-rise bg-ink-card px-5 py-4 sm:px-[22px] sm:py-[18px]"
+            style={{ '--i': i } as CSSProperties}
+          >
             <div className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.13em] text-text-dim">
               {m.k}
             </div>
@@ -15944,7 +15989,13 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
                       <div className="mt-3 flex items-center gap-4">
                         {j.public_token && (
                           <a
-                            href={`/q/roof/${j.public_token}`}
+                            // ?full=1 — the tradie's View opens the RICH
+                            // measurement page (satellite + structures +
+                            // layout map, live selection pricing) even after
+                            // promotion; without it the promoted redirect
+                            // landed on the generic quote whose geocoded hero
+                            // often showed the wrong building.
+                            href={`/q/roof/${j.public_token}?full=1`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-accent hover:underline"
@@ -16168,46 +16219,51 @@ function TradeHub({
           </div>
         </dl>
 
-      {/* Section chips — plain toggle buttons (aria-pressed), matching the
-          QuoteFilter rail pattern, rather than a role=tablist that would
-          promise roving-tabindex/arrow-key behaviour we don't implement. */}
-      <nav
-        className="grid grid-cols-2 gap-2 py-4 sm:flex sm:flex-wrap"
-        aria-label={`${label} sections`}
-      >
-        {sections.map((s) => {
-          const active = s === section
-          const Icon = HUB_SECTION_ICONS[s]
-          return (
-            <button
-              key={s}
-              type="button"
-              aria-pressed={active}
-              aria-controls={`trade-hub-panel-${trade}`}
-              onClick={() => setSection(s)}
-              className={`inline-flex min-h-11 cursor-pointer items-center justify-start gap-2 border px-3.5 py-2.5 text-left font-mono text-xs font-bold uppercase tracking-[0.12em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep sm:justify-center sm:px-4 ${
-                active
-                  ? 'border-accent bg-accent text-accent-ink'
-                  : 'border-ink-line bg-transparent text-text-sec hover:border-text-dim hover:bg-ink-card hover:text-text-pri'
-              }`}
-            >
-              <Icon size={16} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
-              <span>{HUB_SECTION_LABELS[s]}</span>
-              {s === 'quotes' && quoteCount > 0 && (
-                <span
-                  className={`border px-1.5 py-0.5 font-mono text-[0.65rem] tabular-nums ${
-                    active
-                      ? 'border-accent-ink/35 text-accent-ink'
-                      : 'border-ink-line text-text-pri'
-                  }`}
-                >
-                  {quoteCount}
-                </span>
-              )}
-            </button>
-          )
-        })}
-      </nav>
+        {/* Section filters stay as aria-pressed buttons instead of a tablist:
+            the existing interaction uses normal document tab order rather
+            than roving arrow-key focus. */}
+        <nav
+          className="grid grid-cols-2 gap-2 py-4 sm:flex sm:flex-wrap"
+          aria-label={`${label} sections`}
+        >
+          {sections.map((s) => {
+            const active = s === section
+            const Icon = HUB_SECTION_ICONS[s]
+            return (
+              <button
+                key={s}
+                type="button"
+                aria-pressed={active}
+                aria-controls={`trade-hub-panel-${trade}`}
+                onClick={() => setSection(s)}
+                className={`inline-flex min-h-11 cursor-pointer items-center justify-start gap-2 border px-3.5 py-2.5 text-left font-mono text-xs font-bold uppercase tracking-[0.12em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep sm:justify-center sm:px-4 ${
+                  active
+                    ? 'border-accent bg-accent text-accent-ink'
+                    : 'border-ink-line bg-transparent text-text-sec hover:border-text-dim hover:bg-ink-card hover:text-text-pri'
+                }`}
+              >
+                <Icon
+                  size={16}
+                  strokeWidth={1.75}
+                  aria-hidden="true"
+                  className="shrink-0"
+                />
+                <span>{HUB_SECTION_LABELS[s]}</span>
+                {s === 'quotes' && quoteCount > 0 && (
+                  <span
+                    className={`border px-1.5 py-0.5 font-mono text-[0.65rem] tabular-nums ${
+                      active
+                        ? 'border-accent-ink/35 text-accent-ink'
+                        : 'border-ink-line text-text-pri'
+                    }`}
+                  >
+                    {quoteCount}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </nav>
       </header>
 
       {/* No key and no per-switch fade (spec R3) — keying by section

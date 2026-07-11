@@ -128,10 +128,18 @@ const centroidOf = (pts: Pt[]): Pt => [
   pts.reduce((s, p) => s + p[1], 0) / pts.length,
 ]
 
-/** Scale a projected ring about its centroid (k<1 = inset, k>1 = dilate). */
-function scaledRing(pts: Pt[], k: number): Pt[] {
+/** Move every vertex a FIXED pixel distance along its centroid ray —
+ *  positive = outward (dilate), negative = inward (inset). A fractional
+ *  scale factor pushed the far wings of large L-shaped roofs much further
+ *  than near ones (the misaligned-borders report). */
+function offsetRing(pts: Pt[], px: number): Pt[] {
   const [cx, cy] = centroidOf(pts)
-  return pts.map(([x, y]) => [cx + (x - cx) * k, cy + (y - cy) * k] as Pt)
+  return pts.map(([x, y]) => {
+    const dist = Math.hypot(x - cx, y - cy)
+    if (dist < 1e-6) return [x, y] as Pt
+    const k = Math.max(0.2, (dist + px) / dist)
+    return [cx + (x - cx) * k, cy + (y - cy) * k] as Pt
+  })
 }
 
 export type LayoutMapView = { center: { lat: number; lng: number }; zoom: number }
@@ -247,22 +255,12 @@ export function buildLayoutOverlaySvg(args: LayoutOverlayArgs): string | null {
     if (zone.placement === 'structure') {
       const stacked = structureOutlines.get(zone.structureIndex) ?? 0
       structureOutlines.set(zone.structureIndex, stacked + 1)
-      let ring = projected
-      if (stacked > 0) {
-        const [cxp, cyp] = anchor
-        const maxDist = Math.max(...projected.map(([x, y]) => Math.hypot(x - cxp, y - cyp)), 1)
-        // Never collapse past half the footprint, however many zones stack.
-        const k = Math.max(0.5, 1 - (STACK_INSET_PX * stacked) / maxDist)
-        ring = scaledRing(projected, k)
-      }
+      const ring = stacked > 0 ? offsetRing(projected, -STACK_INSET_PX * stacked) : projected
       strokedPolygon(ring, hex)
     } else if (zone.placement === 'perimeter') {
-      // Dilate about the pixel centroid so the ring sits ~10px outside the
-      // footprint — reads as "around the work area", not the roof itself.
-      const [cxp, cyp] = anchor
-      const maxDist = Math.max(...projected.map(([x, y]) => Math.hypot(x - cxp, y - cyp)), 1)
-      const dilated = scaledRing(projected, 1 + 10 / maxDist)
-      strokedPolygon(dilated, hex, '10 6')
+      // Fixed ~10px outside the footprint — reads as "around the work area",
+      // not the roof itself.
+      strokedPolygon(offsetRing(projected, 10), hex, '10 6')
     } else if (zone.placement === 'point') {
       // Model-localised feature, clamped into the footprint's bbox so a bad
       // localisation can never mark the neighbour's yard.

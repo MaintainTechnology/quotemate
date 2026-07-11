@@ -58,6 +58,9 @@ export type PaintAfterDeps = {
     sourceImage: ImageBytes
     aspectRatio: '4:3'
   }) => Promise<ImageBytes>
+  /** Chosen repaint colour (customer/tradie picker). Blank/absent ⇒ the
+   *  prompt's default "fresh, clean modern off-white". */
+  colour?: string | null
 }
 
 export type PaintAfterResult =
@@ -111,13 +114,10 @@ export async function generatePaintAfterImage(
   if (row.preview_status === 'ready' && row.preview_image_path) {
     return { ok: true, path: row.preview_image_path as string }
   }
-  // The repaint prompt recolours the EXTERIOR (repaint-prompt.ts). An
-  // interior-only job would pay for — and show the customer — an exterior
-  // recolour the quote doesn't include, so skip unless exterior is in scope.
+  // The repaint prompt recolours the EXTERIOR (repaint-prompt.ts). Product
+  // decision 2026-07-11: interior-only jobs get the preview too — it is a
+  // colour VISUALISATION of the property, not a claim about quoted scope.
   const scopes = (Array.isArray(row.scopes) ? row.scopes : []) as PaintScope[]
-  if (!scopes.includes('exterior')) {
-    return { ok: false, status: 'skipped', error: 'interior_only' }
-  }
 
   // CAS claim — only proceed if nobody else is mid-generation.
   const { data: claimed } = await supabase
@@ -135,7 +135,7 @@ export async function generatePaintAfterImage(
       postcode: (row.postcode as string | null) ?? null,
       state: (row.state as string | null) ?? null,
     })
-    const prompt = buildRepaintPrompt({ colour: '', scopes })
+    const prompt = buildRepaintPrompt({ colour: deps?.colour ?? '', scopes })
     const out = await render({
       system: prompt.system,
       user: prompt.user,

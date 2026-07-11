@@ -11,6 +11,7 @@
 // so the <img> on /p/[token] always shows something.
 
 import { createClient } from '@supabase/supabase-js'
+import { z } from 'zod'
 import { generatePaintAfterImage, composePaintLocation } from '@/lib/painting/paint-after'
 import {
   buildStreetViewMetadataUrl,
@@ -106,4 +107,66 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     if (stored) return stored
   }
   return streetViewFallback(loc)
+}
+
+const RepaintSchema = z.object({ colour: z.string().min(1).max(80) })
+
+/**
+ * POST — regenerate the AI repaint in a chosen colour (the picker on
+ * /p/[token] and /q/paint/[token]). Token-gated like the GET; billable, so
+ * additionally gated on a RELEASED row, and refused while another render
+ * is in flight (the reset below never clobbers a 'generating' claim). The
+ * colour lives only in the rendered image — no schema change.
+ */
+export async function POST(req: Request, ctx: { params: Promise<{ token: string }> }) {
+  const { token } = await ctx.params
+  if (!token || token.length < 8) {
+    return Response.json({ ok: false, error: 'bad_token' }, { status: 400 })
+  }
+
+  let body: unknown
+  try {
+    body = await req.json()
+  } catch {
+    return Response.json({ ok: false, error: 'invalid_json' }, { status: 400 })
+  }
+  const parsed = RepaintSchema.safeParse(body)
+  if (!parsed.success) {
+    return Response.json({ ok: false, error: 'invalid_request' }, { status: 400 })
+  }
+
+  const { data: row } = await supabase
+    .from('painting_measurements')
+    .select('scopes, released_at, preview_image_path')
+    .eq('public_token', token)
+    .maybeSingle()
+  if (!row) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
+  if (!row.released_at) {
+    return Response.json({ ok: false, error: 'not_released' }, { status: 409 })
+  }
+
+  // Conditional reset — refuse while a render is mid-flight so two pickers
+  // can't double-bill; generatePaintAfterImage then CAS-claims as usual.
+  const { data: reset } = await supabase
+    .from('painting_measurements')
+    .update({ preview_status: null, preview_image_path: null })
+    .eq('public_token', token)
+    .or('preview_status.is.null,preview_status.eq.idle,preview_status.eq.ready,preview_status.eq.failed')
+    .select('id')
+    .maybeSingle()
+  if (!reset) return Response.json({ ok: false, error: 'busy' }, { status: 409 })
+
+  // Old render is now unreferenced — best-effort cleanup.
+  if (row.preview_image_path) {
+    await supabase.storage
+      .from('intake-photos')
+      .remove([row.preview_image_path as string])
+      .catch(() => {})
+  }
+
+  const gen = await generatePaintAfterImage(token, { colour: parsed.data.colour })
+  if (!gen.ok) {
+    return Response.json({ ok: false, error: gen.status }, { status: 502 })
+  }
+  return Response.json({ ok: true })
 }

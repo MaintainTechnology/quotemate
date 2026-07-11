@@ -27,6 +27,11 @@ export function toPaintStructureOptions(
   const out: PaintStructureOption[] = []
   for (const b of buildings) {
     if (!b.building_id || !(typeof b.area_m2 === 'number' && b.area_m2 > 0)) continue
+    // Synthetic ids — MultiPolygon sub-splits ('bldX#N') and index
+    // fallbacks ('b0') — never appear in Geoscape's /buildings list, so the
+    // targeted enricher could never fetch them; offering them would let the
+    // money override land on the wrong building. Only real ids are pickable.
+    if (b.building_id.includes('#') || /^b\d+$/.test(b.building_id)) continue
     out.push({
       building_id: b.building_id,
       label: b.label,

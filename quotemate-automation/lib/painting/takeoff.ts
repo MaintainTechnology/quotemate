@@ -133,11 +133,63 @@ const packedLitres = (packs: Array<{ size_l: number; count: number }>): number =
 // ── Derivation-note formatting (display-only strings, never parsed) ──
 
 /** Number with trailing zeros stripped, max 2 dp ("1", "0.7", "47.5"). */
-const fmtNum = (n: number): string => String(Math.round(n * 100) / 100)
+const fmtNum = (n: number): string => String(roundTo(n, 2))
 /** $/L and $/hr — whole dollars bare, else 2 dp ("14", "17.50"). */
 const fmtRate = (n: number): string => (Number.isInteger(n) ? String(n) : n.toFixed(2))
 /** Whole AU dollars with grouping ("14,879"). */
 const aud = (n: number): string => Math.round(n).toLocaleString('en-AU')
+
+/** Customer-facing product names (shared with the tradie result view). */
+export const PAINT_PRODUCT_WORDS: Record<PaintProduct, string> = {
+  wall_paint: 'Wall paint',
+  ceiling_paint: 'Ceiling paint',
+  trim_enamel: 'Trim enamel',
+  exterior_paint: 'Exterior paint',
+  primer_sealer: 'Primer / sealer',
+}
+
+export type CustomerTakeoffTier = {
+  tier: 'good' | 'better' | 'best'
+  /** e.g. "Wall paint — 47.5 L (3×15 L + 1×4 L)" — quantities only. */
+  materials: string[]
+  /** e.g. "≈10 days on site · 2 painters (143.8 h)". */
+  time_on_site: string
+}
+
+/**
+ * PURE — the CUSTOMER-safe view of the take-off: paint quantities and time
+ * on site only. Never includes internal costs, rates or margin (those are
+ * tradie-only); jsonb-sourced, so every shape is guarded and old rows
+ * without a take-off yield [].
+ */
+export function customerTakeoff(
+  takeoff: PaintingTakeoff | null | undefined,
+): CustomerTakeoffTier[] {
+  const tiers = takeoff?.tiers
+  if (!Array.isArray(tiers)) return []
+  return tiers.map((t) => ({
+    tier: t.tier,
+    materials: (Array.isArray(t.products) ? t.products : []).map((p) => {
+      const packs = (Array.isArray(p.packs) ? p.packs : [])
+        .map((k) => `${k.count}×${k.size_l} L`)
+        .join(' + ')
+      return `${PAINT_PRODUCT_WORDS[p.product] ?? p.product} — ${fmtNum(p.litres)} L${packs ? ` (${packs})` : ''}`
+    }),
+    time_on_site: `≈${t.days_on_site} day${t.days_on_site === 1 ? '' : 's'} on site · ${t.crew_size} painter${t.crew_size === 1 ? '' : 's'} (${fmtNum(t.labour_hours)} h)`,
+  }))
+}
+
+/** PURE — the margin derivation line. Shared with lib/painting/edit.ts so a
+ *  tier-price edit refreshes the note alongside the margin numbers. */
+export function paintingMarginNote(
+  tier: 'good' | 'better' | 'best',
+  exGst: number,
+  materialsExGst: number,
+  labourExGst: number,
+): string {
+  const tierWord = tier.charAt(0).toUpperCase() + tier.slice(1)
+  return `${tierWord} $${aud(exGst)} ex GST − materials $${aud(materialsExGst)} − labour $${aud(labourExGst)}`
+}
 
 /** The physical coat count each tier is built from: Good is the 1-coat
  *  refresh; Better and Best use the job's configured coats. */
@@ -273,7 +325,6 @@ export function computePaintingTakeoff(args: {
     // ── Margin ──
     const tierPrice = price.tiers.find((t) => t.tier === tier)?.ex_gst ?? 0
     const margin = roundTo(tierPrice - materials - labourCost, 2)
-    const tierWord = tier.charAt(0).toUpperCase() + tier.slice(1)
 
     return {
       tier,
@@ -288,7 +339,7 @@ export function computePaintingTakeoff(args: {
       margin_pct: tierPrice > 0 ? roundTo(margin / tierPrice, 4) : 0,
       sundries_note: `${fmtNum(card.sundries_pct * 100)}% of product cost — filler, caulk, tape, drop sheets`,
       labour_note: labourNote,
-      margin_note: `${tierWord} $${aud(tierPrice)} ex GST − materials $${aud(materials)} − labour $${aud(labourCost)}`,
+      margin_note: paintingMarginNote(tier, tierPrice, materials, labourCost),
     }
   }
 

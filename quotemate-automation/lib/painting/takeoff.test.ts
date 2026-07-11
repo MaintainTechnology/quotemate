@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_PAINTING_TAKEOFF_CARD,
   computePaintingTakeoff,
+  customerTakeoff,
   packsForLitres,
 } from './takeoff'
 import { DEFAULT_PAINTING_RATE_CARD, calculatePaintingPrice } from './pricing'
@@ -287,6 +288,30 @@ describe('computePaintingTakeoff — derivation notes', () => {
     expect(better.labour_note).toBe(
       'exterior 200 m² ÷ 2 m²/hr × 1 (coats · prep · colour) = 150 h @ $85/hr · 2 painters × 7.6 h/day ≈ 10 days · exterior +50% access',
     )
+  })
+})
+
+// ── Customer-safe summary ───────────────────────────────────────────
+
+describe('customerTakeoff', () => {
+  it('summarises quantities and time with NO internal dollars or margin', () => {
+    const view = customerTakeoff(takeoffFor(INPUTS))
+    expect(view).toHaveLength(3)
+    const better = view.find((v) => v.tier === 'better')!
+    expect(better.materials).toEqual([
+      'Wall paint — 47.5 L (3×15 L + 1×4 L)',
+      'Trim enamel — 5.3 L (1×10 L)',
+    ])
+    expect(better.time_on_site).toBe('≈10 days on site · 2 painters (143.8 h)')
+    // Customer-safe: nothing money-shaped anywhere.
+    const all = JSON.stringify(view)
+    expect(all).not.toContain('$')
+    expect(all.toLowerCase()).not.toContain('margin')
+  })
+
+  it('returns [] for an estimate without a take-off (old rows)', () => {
+    expect(customerTakeoff(undefined)).toEqual([])
+    expect(customerTakeoff({ tiers: 'nope' } as never)).toEqual([])
   })
 })
 

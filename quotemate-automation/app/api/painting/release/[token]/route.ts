@@ -14,6 +14,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { after } from 'next/server'
 import { paintingReleaseEligibility } from '@/lib/painting/publish-gate'
+import { generatePaintAfterImage } from '@/lib/painting/paint-after'
 import { sendPaintingQuoteToCustomer } from '@/lib/painting/release'
 
 export const dynamic = 'force-dynamic'
@@ -79,7 +80,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     // Text the customer their full quote AFTER the response so Send never
     // blocks on the SMS. No-op unless a customer mobile was captured at
     // request time. Fires on first release and on an explicit resend.
-    after(() => sendPaintingQuoteToCustomer(supabase, { estimateToken: token, appUrl: APP_BASE_URL }))
+    // The AI repaint is warmed FIRST so the PDF the send renders embeds it
+    // (no-op when already cached; best-effort — never throws).
+    after(async () => {
+      await generatePaintAfterImage(row.public_token as string)
+      await sendPaintingQuoteToCustomer(supabase, { estimateToken: token, appUrl: APP_BASE_URL })
+    })
   }
 
   return Response.json({ ok: true, released_at: releasedAt, public_token: row.public_token })

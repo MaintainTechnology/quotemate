@@ -36,15 +36,12 @@ import { partitionRoofQuote, resolveEffectiveIndices } from '@/lib/roofing/selec
 import { structureStaticMapPath } from '@/lib/roofing/structure-images'
 import {
   ZONE_COLOR_HEX,
+  ZONE_TEXT_HEX,
   combinedLayoutMetrics,
   layoutMaterials,
   type LayoutPlan,
 } from '@/lib/roofing/layout-plan'
-import {
-  layoutMapView,
-  layoutOverlayImageSrc,
-  type LayoutOverlayStructure,
-} from '@/lib/roofing/layout-overlay-svg'
+import type { LayoutOverlayStructure } from '@/lib/roofing/layout-overlay-svg'
 import { edgeStat } from '@/lib/roofing/geometry-edges'
 import { buildingAttributeChips, propertyContextChips } from '@/lib/roofing/attributes-display'
 import { indicativeCombinedTiers } from '@/lib/sms/roofing-compose'
@@ -151,10 +148,11 @@ export default async function RoofingQuotePage({
   searchParams,
 }: {
   params: Promise<{ token: string }>
-  searchParams: Promise<{ s?: string | string[] }>
+  searchParams: Promise<{ s?: string | string[]; full?: string }>
 }) {
   const { token } = await params
   if (!token || token.length < 8) notFound()
+  const sp = await searchParams
 
   const { data, error } = await supabase
     .from('roofing_measurements')
@@ -168,12 +166,16 @@ export default async function RoofingQuotePage({
   // Promoted measurement (mig 168): its single source of truth is the quotes
   // row (spec quote-sync-and-roofing-workflow-fix F1) — old SMS'd /q/roof
   // links must land on the live, tradie-editable quote, not this frozen
-  // pre-promotion snapshot with stale prices. Exception: a measurement that
-  // already took its own site-visit payment stays — this page is that
-  // payment's receipt + booking surface. Both columns post-date 081, so
-  // they're read best-effort (like the mig-165 payment block below): a
-  // pre-migration DB just skips the redirect.
-  {
+  // pre-promotion snapshot with stale prices. Exceptions:
+  //   • a measurement that already took its own site-visit payment stays —
+  //     this page is that payment's receipt + booking surface;
+  //   • ?full=1 — the dashboard's Saved-roofing-job "View" opens THIS rich
+  //     measurement view (satellite + structures + layout map, priced from
+  //     the live selection); without it the tradie landed on the generic
+  //     promoted quote whose geocoded hero often showed the WRONG building.
+  // Both columns post-date 081, so they're read best-effort (like the
+  // mig-165 payment block below): a pre-migration DB just skips the redirect.
+  if (sp.full !== '1') {
     const { data: promo } = await supabase
       .from('roofing_measurements')
       .select('quote_share_token, paid_at')
@@ -215,7 +217,7 @@ export default async function RoofingQuotePage({
   // selection (included_indices) is the source of truth; a ?s= link or the
   // single pick stamped at confirm time can only NARROW it further, never
   // widen past what the tradie included.
-  const paramIndices = parseIndices((await searchParams).s, allStructures.length)
+  const paramIndices = parseIndices(sp.s, allStructures.length)
   const effectiveIndices = resolveEffectiveIndices(
     {
       included: row.included_indices,
@@ -619,7 +621,9 @@ export default async function RoofingQuotePage({
               <img
                 src={structureStaticMapPath(row.public_token, img.index1Based)}
                 alt={`Satellite view of ${img.label} at ${row.address ?? 'the property'}`}
-                style={{ display: 'block', width: '100%', height: 214, objectFit: 'cover' }}
+                // Full 4:3 frame (the source is 640×480) — a short letterbox
+                // crop hid most of the roof (user feedback 2026-07-11).
+                style={{ display: 'block', width: '100%', aspectRatio: '4 / 3', objectFit: 'cover' }}
               />
               <figcaption
                 style={{
@@ -801,40 +805,40 @@ export default async function RoofingQuotePage({
           </div>
         </SheetSection>
 
-        {/* AI work-strategy layout map (spec quote-visual-parity R6e) —
-            colour-coded zones over the aerial + legend, from the CACHED plan
-            the tradie generated on /m. No prices, no quantities here.
-            IMPORTANT: built from the FULL stored quote, never the narrowed
-            subset — the plan's zone.structureIndex is 1-based into the FULL
-            quote and the no-?b aerial centres on its first vertex (mirrors
-            ensureRoofQuotePdf). */}
+        {/* AI work-strategy layout map (spec quote-visual-parity R6e) — an
+            INTERACTIVE map (drag-pan, zoom, rotate, compass reset) drawing the
+            CACHED plan's zones as geographic layers. Selection-aware: only the
+            structures INCLUDED in the job are framed, zoned, and counted —
+            zone.structureIndex stays 1-based into the FULL quote. */}
         {confirmed && layoutPlan && fullQuote?.structures?.length
           ? (() => {
               const overlayStructures: LayoutOverlayStructure[] = fullQuote.structures.map((s) => ({
                 polygon: s.metrics?.polygon_geojson ?? null,
                 form: s.metrics?.form ?? 'unknown',
               }))
-              // Fit-to-geometry view shared with the ?fit=1 static map.
-              const view = layoutMapView(overlayStructures, { width: 640, height: 480 })
-              const overlaySrc = view
-                ? layoutOverlayImageSrc({
-                    zones: layoutPlan.zones,
-                    structures: overlayStructures,
-                    center: view.center,
-                    zoom: view.zoom,
-                    width: 640,
-                    height: 480,
-                  })
-                : null
-              if (!overlaySrc) return null
+              const includedSet = new Set(effectiveIndices)
+              const visibleZones =
+                includedSet.size > 0
+                  ? layoutPlan.zones.filter((z) => includedSet.has(z.structureIndex))
+                  : layoutPlan.zones
+              if (visibleZones.length === 0) return null
+              if (!overlayStructures.some((s) => s.polygon)) return null
+              const includedStructures = effectiveIndices
+                .map((i) => fullQuote.structures[i - 1])
+                .filter(Boolean)
               const materials = layoutMaterials(
-                combinedLayoutMetrics(fullQuote.structures),
+                combinedLayoutMetrics(
+                  includedStructures.length > 0 ? includedStructures : fullQuote.structures,
+                ),
                 layoutPlan.mode,
               )
               return (
                 <SheetSection eyebrow="Roof layout map" eyebrowAccent>
                   <p style={{ margin: '12px 0 0', fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
                     {layoutPlan.header}
+                  </p>
+                  <p style={{ margin: '6px 0 0', fontFamily: 'var(--font-mono)', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-dim)' }}>
+                    Drag to pan · scroll or ± to zoom · right-click drag to rotate · compass resets north
                   </p>
                   <div
                     style={{
@@ -844,15 +848,13 @@ export default async function RoofingQuotePage({
                     }}
                   >
                     <RoofLayoutMapFigure
-                      publicToken={row.public_token}
-                      zones={layoutPlan.zones}
+                      zones={visibleZones}
                       structures={overlayStructures}
-                      view={view!}
-                      address={row.address}
+                      fitIndices={effectiveIndices}
                     />
                   </div>
                   <ul style={{ margin: '14px 0 0', padding: 0, listStyle: 'none', display: 'grid', gap: 8 }}>
-                    {layoutPlan.zones.map((z, i) => (
+                    {visibleZones.map((z, i) => (
                       <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                         <span
                           style={{
@@ -861,7 +863,7 @@ export default async function RoofingQuotePage({
                             fontSize: 10,
                             fontWeight: 700,
                             letterSpacing: '0.12em',
-                            color: ZONE_COLOR_HEX[z.color],
+                            color: ZONE_TEXT_HEX[z.color],
                           }}
                         >
                           {String(i + 1).padStart(2, '0')}
@@ -955,7 +957,9 @@ export default async function RoofingQuotePage({
               <img
                 src={`/api/roofing/q/${row.public_token}/after-image`}
                 alt={`AI preview of the property with a new ${primaryMaterialLabel ?? ''} roof`}
-                style={{ display: 'block', width: '100%', height: 300, objectFit: 'cover' }}
+                // Full 4:3 frame — the 300px letterbox crop made the AI
+                // preview unreadably small (user feedback 2026-07-11).
+                style={{ display: 'block', width: '100%', aspectRatio: '4 / 3', objectFit: 'cover' }}
               />
               <span
                 aria-hidden="true"

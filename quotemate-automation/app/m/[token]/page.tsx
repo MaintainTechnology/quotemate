@@ -35,8 +35,8 @@ import { QuoteSheet, Letterhead } from '../../q/_chrome/parts'
 import { QuoteMaxMark } from '../../q/_chrome/icons'
 import { MeasurementReview } from './MeasurementReview'
 import { RoofLayoutSection } from './RoofLayoutSection'
-import { combinedLayoutMetrics, type LayoutPlan } from '@/lib/roofing/layout-plan'
-import { layoutMapView, type LayoutOverlayStructure } from '@/lib/roofing/layout-overlay-svg'
+import type { LayoutPlan } from '@/lib/roofing/layout-plan'
+import type { LayoutOverlayStructure } from '@/lib/roofing/layout-overlay-svg'
 
 export const dynamic = 'force-dynamic'
 
@@ -138,15 +138,22 @@ export default async function MeasurementResultsPage({
     }
   }
 
-  // Overlay inputs: the fit-to-geometry view shared with the ?fit=1 static
-  // map, the per-structure geometry, and summed metrics for the deterministic
-  // material quantities.
+  // Overlay inputs: per-structure geometry for the interactive map, plus
+  // per-structure metric snapshots so the layout section recomputes framing,
+  // zones AND material quantities client-side as the tradie toggles
+  // structures in/out (the review broadcasts 'qm:roof-selection').
   const overlayStructures: LayoutOverlayStructure[] = quote.structures.map((s) => ({
     polygon: s.metrics?.polygon_geojson ?? null,
     form: s.metrics?.form ?? 'unknown',
   }))
-  const layoutView = layoutMapView(overlayStructures, { width: 640, height: 480 })
-  const materialsMetrics = combinedLayoutMetrics(quote.structures)
+  const structureMetrics = quote.structures.map((s) => ({
+    metrics: {
+      sloped_area_m2: s.metrics?.sloped_area_m2 ?? null,
+      ridge_lm: s.metrics?.ridge_lm ?? null,
+      footprint_m2: s.metrics?.footprint_m2 ?? null,
+      polygon_geojson: s.metrics?.polygon_geojson ?? null,
+    },
+  }))
 
   return (
     <div
@@ -255,8 +262,8 @@ export default async function MeasurementResultsPage({
             <RoofLayoutSection
               publicToken={row.public_token}
               structures={overlayStructures}
-              view={layoutView}
-              materialsMetrics={materialsMetrics}
+              includedIndices={included}
+              structureMetrics={structureMetrics}
               initialStatus={layoutStatus}
               initialPlan={layoutPlan}
             />

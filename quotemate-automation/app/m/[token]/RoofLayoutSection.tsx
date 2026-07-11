@@ -9,26 +9,36 @@
 // layoutMaterials — never LLM numbers). Customer surfaces only ever read the
 // cached plan; generation lives here.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
+  combinedLayoutMetrics,
   layoutMaterials,
   ZONE_COLOR_HEX,
-  type LayoutMaterialMetrics,
+  ZONE_TEXT_HEX,
   type LayoutPlan,
 } from '@/lib/roofing/layout-plan'
-import type {
-  LayoutMapView,
-  LayoutOverlayStructure,
-} from '@/lib/roofing/layout-overlay-svg'
+import type { LayoutOverlayStructure } from '@/lib/roofing/layout-overlay-svg'
 import { RoofLayoutMapFigure } from '@/app/q/_chrome/RoofLayoutMapFigure'
+import type { GeoJSONPolygon } from '@/lib/roofing/types'
+
+/** Per-structure metric snapshot for live material recomputes on toggle. */
+export type LayoutStructureMetrics = {
+  metrics: {
+    sloped_area_m2: number | null
+    ridge_lm: number | null
+    footprint_m2: number | null
+    polygon_geojson: GeoJSONPolygon | null
+  }
+}
 
 type Props = {
   publicToken: string
   structures: LayoutOverlayStructure[]
-  /** Fit-to-geometry view (layoutMapView) — MUST match the ?fit=1 static map
-   *  so the overlay stays aligned with the imagery. */
-  view: LayoutMapView | null
-  materialsMetrics: LayoutMaterialMetrics
+  /** 1-based indices of the structures currently INCLUDED in the job — the
+   *  map frames only these, and only their zones/materials render. Live: the
+   *  review's include/exclude toggles broadcast 'qm:roof-selection'. */
+  includedIndices: number[]
+  structureMetrics: LayoutStructureMetrics[]
   initialStatus: string | null
   initialPlan: LayoutPlan | null
 }
@@ -36,8 +46,8 @@ type Props = {
 export function RoofLayoutSection({
   publicToken,
   structures,
-  view,
-  materialsMetrics,
+  includedIndices,
+  structureMetrics,
   initialStatus,
   initialPlan,
 }: Props) {
@@ -46,9 +56,31 @@ export function RoofLayoutSection({
   )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [selection, setSelection] = useState<number[]>(includedIndices)
 
-  // No polygon geometry → no overlay to draw; hide the whole section.
-  if (!view) return null
+  // Live selection from the review's include/exclude toggles — the map
+  // re-frames, and zones + materials re-filter, on every tick.
+  useEffect(() => {
+    const onSelection = (e: Event) => {
+      const indices = (e as CustomEvent<{ indices?: number[] }>).detail?.indices
+      if (Array.isArray(indices)) setSelection(indices)
+    }
+    window.addEventListener('qm:roof-selection', onSelection)
+    return () => window.removeEventListener('qm:roof-selection', onSelection)
+  }, [])
+
+  // No polygon geometry → no map to draw; hide the whole section.
+  if (!structures.some((s) => s.polygon)) return null
+
+  const includedSet = new Set(selection)
+  const visibleZones = plan
+    ? plan.zones.filter((z) => includedSet.size === 0 || includedSet.has(z.structureIndex))
+    : []
+  const includedMetrics =
+    selection.length > 0
+      ? selection.map((i) => structureMetrics[i - 1]).filter(Boolean)
+      : structureMetrics
+  const materialsMetrics = combinedLayoutMetrics(includedMetrics)
 
   async function generate() {
     setBusy(true)
@@ -98,29 +130,29 @@ export function RoofLayoutSection({
             {busy ? 'Analysing the roof…' : 'Generate layout map'}
           </button>
           {error ? (
-            <p className="mt-3 font-mono text-xs text-warning">{error}</p>
+            <p className="mt-3 font-mono text-xs text-warning-bright">{error}</p>
           ) : null}
         </div>
       ) : (
         <div className="mt-3 border border-ink-line bg-ink-card">
           <p className="border-b border-ink-line px-5 py-3 text-sm text-text-sec">{plan.header}</p>
 
-          {/* Aerial + zone overlay with true zoom controls — the image and
-              the overlay share one centre/zoom so borders stay aligned. */}
+          {/* Interactive map — drag to pan, scroll/± to zoom, right-click drag
+              to rotate, compass to reset north. Frames the SELECTED structures
+              and shows only their zones. */}
           <RoofLayoutMapFigure
-            publicToken={publicToken}
-            zones={plan.zones}
+            zones={visibleZones}
             structures={structures}
-            view={view}
+            fitIndices={selection}
           />
 
           {/* Legend — numbered to match the ZONE tags on the map callouts. */}
           <ul className="grid gap-2 border-t border-ink-line px-5 py-4 sm:grid-cols-2">
-            {plan.zones.map((z, i) => (
+            {visibleZones.map((z, i) => (
               <li key={i} className="flex items-start gap-3">
                 <span
                   className="mt-0.5 font-mono text-[0.65rem] font-bold tracking-[0.12em]"
-                  style={{ color: ZONE_COLOR_HEX[z.color] }}
+                  style={{ color: ZONE_TEXT_HEX[z.color] }}
                 >
                   {String(i + 1).padStart(2, '0')}
                 </span>

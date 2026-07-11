@@ -73,7 +73,10 @@ export function applyEnrichment(
     if (p.property_type != null) f.property_type = p.property_type // more specific — overrides zoning
     if (p.land_size_m2 != null) f.land_size_m2 = p.land_size_m2
     if (p.year_built != null) f.year_built = p.year_built
-    if (p.floor_area_m2 != null) {
+    // A listing floor area describes the WHOLE dwelling — when a specific
+    // structure was targeted it must not beat that structure's footprint in
+    // resolveFloorArea (a shed would be priced at the house's floor area).
+    if (p.floor_area_m2 != null && !opts.targeted) {
       f.floor_area_m2 = p.floor_area_m2
       f.floor_area_source = p.floor_area_source ?? 'listing'
     }
@@ -100,16 +103,17 @@ export async function enrichPaintingFacts(
   address: PaintAddressInput,
   base: PropertyFacts,
   opts: EnrichPaintingOpts = {},
-): Promise<{ facts: PropertyFacts; notes: string[] }> {
+): Promise<{ facts: PropertyFacts; notes: string[]; structureTargeted: boolean }> {
   const [geoscape, propradar] = await Promise.all([
     enrichFromGeoscape(address, opts.geoscape),
     enrichFromPropRadar(address, opts.propradar),
   ])
-  // A geoscape buildingId means a structure was explicitly chosen — its
-  // values override the base provider's (see applyEnrichment).
-  return applyEnrichment(
-    base,
-    { geoscape, propradar },
-    { targeted: !!opts.geoscape?.buildingId },
-  )
+  // Targeted ONLY when the requested structure was actually fetched — a
+  // Geoscape miss/failure returns an EMPTY patch with no matched id, and the
+  // estimate must then fall back to honest address-level behaviour (no
+  // override, no "estimating the selected structure" claim).
+  const requested = opts.geoscape?.buildingId
+  const structureTargeted = !!requested && geoscape.matched_building_id === requested
+  const merged = applyEnrichment(base, { geoscape, propradar }, { targeted: structureTargeted })
+  return { ...merged, structureTargeted }
 }

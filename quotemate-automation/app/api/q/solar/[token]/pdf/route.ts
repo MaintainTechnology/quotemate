@@ -37,10 +37,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     )
   }
 
-  let path = row.pdf_path as string | null
-  if (!path) {
-    path = await ensureSolarQuotePdf(token)
-  }
+  // ALWAYS delegate — ensureSolarQuotePdf owns cached-vs-regenerate via the
+  // SOLAR_PDF_REV path marker, so PDFs cached by an older template era
+  // self-heal on the next download (a row.pdf_path pre-check bypassed that).
+  const path = await ensureSolarQuotePdf(token)
   if (!path) {
     return Response.json({ ok: false, error: 'PDF unavailable right now — try again shortly' }, { status: 503 })
   }

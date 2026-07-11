@@ -14,6 +14,8 @@
 import { createClient } from '@supabase/supabase-js'
 import type { PaintingEstimate, PaintScope, PaintingPriceTier } from '@/lib/painting/types'
 import { composePaintLocation } from '@/lib/painting/paint-after'
+import { customerTakeoff } from '@/lib/painting/takeoff'
+import { customerMeasurementNotes } from '@/lib/painting/customer-notes'
 import {
   buildStreetViewMetadataUrl,
   parseStreetViewMetadata,
@@ -22,6 +24,7 @@ import { asQuoteTierMode, resolveVisibleTiers, type QuoteTierMode } from '@/lib/
 import { canShowPaintingPrices } from '@/lib/painting/publish-gate'
 import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
 import { QuoteChrome, type StickyBar } from '../../_chrome/QuoteChrome'
+import { RepaintPreviewFigure } from '../../_chrome/RepaintPreviewFigure'
 import { TradieJobBanner } from '../../_chrome/TradieJobBanner'
 import { AcceptBlock } from '../../_chrome/AcceptBlock'
 import { resolveAcceptView } from '@/lib/quote/accept'
@@ -330,9 +333,10 @@ export default async function PaintingQuotePage(props: { params: Promise<{ token
       : { label: 'Awaiting you', tone: 'await' }
   // Property imagery (spec quote-visual-parity R3) — FREE Street View metadata
   // check at render so the section only appears when Google actually has a
-  // pano here (no broken frames; mirrors /p/[token]). The AI repaint figure
-  // shows ONLY when the render is already cached — a customer page load must
-  // never trigger a billable Gemini render.
+  // pano here (no broken frames; mirrors /p/[token]). The AI repaint
+  // AUTO-generates on first load (product decision 2026-07-11); the
+  // after-image route's released_at gate still means a held draft can never
+  // bill a Gemini render.
   let hasPano = false
   const mapsKey = process.env.GOOGLE_MAPS_API_KEY
   if (mapsKey && row.address) {
@@ -354,7 +358,21 @@ export default async function PaintingQuotePage(props: { params: Promise<{ token
       /* best-effort — page renders without the imagery section */
     }
   }
-  const showAfterImage = (row.preview_status as string | null) === 'ready'
+  const afterImageReady = (row.preview_status as string | null) === 'ready'
+  // Customer-safe take-off (quantities + time on site, no internal costs),
+  // limited to the tiers this quote actually shows.
+  const customerTiers = customerTakeoff(estimate.takeoff).filter((c) =>
+    visibleTierKeys.includes(c.tier),
+  )
+  // Customer-safe price derivation (mirrors the PDF's "How your price was
+  // built" table). The rates shown are the CHARGE side of the quote —
+  // internal costs and margin never render on customer surfaces. Suppressed
+  // after a manual tier edit: the derivation would no longer reconcile with
+  // the hand-set headline prices.
+  const bd0 = estimate.price?.breakdown
+  const breakdown =
+    !estimate.price?.manual_override && bd0 && (bd0.surfaces?.length ?? 0) > 0 ? bd0 : null
+  const measuredNotes = customerMeasurementNotes(measurement?.notes)
 
   const heroGreeting = inspection
     ? (estimate.price?.routing?.reason ??
@@ -390,9 +408,10 @@ export default async function PaintingQuotePage(props: { params: Promise<{ token
 
         {statItems.length > 0 ? <StatGrid items={statItems} /> : null}
 
-        {/* ── Property imagery — Street View "before" + cached AI repaint
-            "after" via the token-gated /api/painting/q/[token] proxies
-            (spec quote-visual-parity R3; mirrors /p/[token]). ── */}
+        {/* ── Property imagery via the token-gated /api/painting/q/[token]
+            proxies (spec quote-visual-parity R3; mirrors /p/[token]).
+            Top row: the real photos (Street View frontage + aerial).
+            Below: the before/after repaint block with the colour picker. ── */}
         {hasPano ? (
           <SheetSection eyebrow="Your property" eyebrowAccent>
             <div
@@ -400,15 +419,17 @@ export default async function PaintingQuotePage(props: { params: Promise<{ token
                 display: 'grid',
                 gap: 14,
                 marginTop: 12,
-                gridTemplateColumns: showAfterImage ? 'repeat(auto-fit, minmax(260px, 1fr))' : '1fr',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
               }}
             >
               <figure style={{ margin: 0, border: '1px solid var(--ink-line)', background: 'var(--ink-card)' }}>
+                {/* The source photo is 4:3 — an aspect-ratio box shows the
+                    whole property instead of a fixed-height crop. */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={`/api/painting/q/${row.public_token}/street-view`}
                   alt={`Street View of the front of ${row.address ?? 'the property'}`}
-                  style={{ width: '100%', height: 280, objectFit: 'cover', display: 'block' }}
+                  style={{ width: '100%', aspectRatio: '4 / 3', objectFit: 'cover', display: 'block' }}
                 />
                 <figcaption
                   style={{
@@ -424,29 +445,34 @@ export default async function PaintingQuotePage(props: { params: Promise<{ token
                   Front of the property · Google Street View
                 </figcaption>
               </figure>
-              {showAfterImage ? (
-                <figure style={{ margin: 0, border: '1px solid var(--ink-line)', background: 'var(--ink-card)' }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={`/api/painting/q/${row.public_token}/after-image`}
-                    alt={`AI preview of ${row.address ?? 'the property'} freshly repainted`}
-                    style={{ width: '100%', height: 280, objectFit: 'cover', display: 'block' }}
-                  />
-                  <figcaption
-                    style={{
-                      borderTop: '1px solid var(--ink-line)',
-                      padding: '10px 14px',
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 11,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.14em',
-                      color: 'var(--text-dim)',
-                    }}
-                  >
-                    Fresh repaint · AI preview
-                  </figcaption>
-                </figure>
-              ) : null}
+              <figure style={{ margin: 0, border: '1px solid var(--ink-line)', background: 'var(--ink-card)' }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/api/painting/q/${row.public_token}/static-map`}
+                  alt={`Aerial view of ${row.address ?? 'the property'}`}
+                  style={{ width: '100%', aspectRatio: '4 / 3', objectFit: 'cover', display: 'block' }}
+                />
+                <figcaption
+                  style={{
+                    borderTop: '1px solid var(--ink-line)',
+                    padding: '10px 14px',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 11,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.14em',
+                    color: 'var(--text-dim)',
+                  }}
+                >
+                  Aerial view · Google Maps
+                </figcaption>
+              </figure>
+            </div>
+            <div style={{ marginTop: 14 }}>
+              <RepaintPreviewFigure
+                publicToken={row.public_token}
+                address={row.address}
+                initialReady={afterImageReady}
+              />
             </div>
           </SheetSection>
         ) : null}
@@ -478,6 +504,176 @@ export default async function PaintingQuotePage(props: { params: Promise<{ token
             intro={`Prices are inc-GST estimates derived from ${source} and your declared scope. The final price is confirmed after a quick on-site check.`}
             tiers={quoteTiers}
           />
+        ) : null}
+
+        {/* ── How your price was built — customer-safe derivation. Each row
+            is the already-computed ex-GST cost of a measured surface (rates,
+            coats, prep and colour allowance are baked into that cost), so the
+            surface costs sum EXACTLY to the subtotal — no separate multiplier
+            step (that would double-count). Tier-relation rows are shown only
+            when the call-out floor did not override them. Same content as the
+            PDF table (lib/painting/report-html.ts). ── */}
+        {showTiers && breakdown ? (() => {
+          const tierLabel = (k: 'good' | 'better' | 'best') =>
+            tiers.find((t) => t.tier === k)?.label
+          const betterLabel = tierLabel('better') ?? 'Better'
+          // Small-job floor overrides the surface-derived tier prices, so the
+          // "= Better × N%" rows would no longer reconcile — suppress them.
+          const floorApplied = !!estimate.price?.call_out_minimum_applied
+          const rows: Array<{ k: string; v: string; strong?: boolean }> = []
+          for (const s of breakdown.surfaces) {
+            const unit = s.unit === 'lm' ? 'lm' : 'm²'
+            rows.push({
+              k: `${SCOPE_LABEL[s.scope] ?? titleCase(String(s.scope))} · ${Math.round(s.quantity)} ${unit}`,
+              v: aud(s.line_ex_gst),
+            })
+          }
+          if (Number.isFinite(breakdown.better_ex_gst)) {
+            rows.push({ k: 'Subtotal (ex GST)', v: aud(breakdown.better_ex_gst), strong: true })
+          }
+          if (!floorApplied && visibleTierKeys.includes('good') && tierLabel('good') && Number.isFinite(breakdown.good_refresh_fraction)) {
+            rows.push({
+              k: `${tierLabel('good')} = ${betterLabel} ×`,
+              v: `${Math.round(breakdown.good_refresh_fraction * 100)}%`,
+            })
+          }
+          if (!floorApplied && visibleTierKeys.includes('best') && tierLabel('best') && Number.isFinite(breakdown.premium_uplift_pct)) {
+            rows.push({
+              k: `${tierLabel('best')} = ${betterLabel} ×`,
+              v: `${Math.round((1 + breakdown.premium_uplift_pct) * 100)}%`,
+            })
+          }
+          if (Number.isFinite(breakdown.gst_factor) && breakdown.gst_factor > 1) {
+            rows.push({ k: 'GST', v: `+ ${Math.round((breakdown.gst_factor - 1) * 100)}%` })
+          }
+          if (floorApplied && Number.isFinite(breakdown.call_out_minimum_ex_gst) && breakdown.call_out_minimum_ex_gst > 0) {
+            rows.push({ k: 'Call-out minimum applied', v: aud(breakdown.call_out_minimum_ex_gst) })
+          }
+          const loadings = estimate.price?.loadings_applied ?? []
+          return (
+            <SheetSection eyebrow="How your price was built" eyebrowAccent>
+              <p style={{ margin: '12px 0 0', fontSize: 13, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+                Your {betterLabel} price is the sum of each measured surface below. Each cost
+                already includes the coats, surface preparation and prep consumables (filler,
+                caulk, tape and drop sheets); headline prices above include GST.
+              </p>
+              <div style={{ marginTop: 14, border: '1px solid var(--ink-line)', background: 'var(--ink-card)', padding: '6px 16px' }}>
+                {rows.map((r, i) => (
+                  <div
+                    key={`${r.k}-${i}`}
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      padding: '9px 0',
+                      borderTop: i === 0 ? 'none' : '1px solid var(--ink-line)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 12.5,
+                      color: r.strong ? 'var(--text-pri)' : 'var(--text-sec)',
+                      fontWeight: r.strong ? 600 : 400,
+                    }}
+                  >
+                    <span>{r.k}</span>
+                    <span style={{ fontVariantNumeric: 'tabular-nums', color: r.strong ? 'var(--accent)' : 'var(--text-pri)' }}>
+                      {r.v}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {loadings.length > 0 ? (
+                <div style={{ marginTop: 10, fontSize: 12.5, lineHeight: 1.6, color: 'var(--text-sec)' }}>
+                  {loadings.map((l) => (
+                    <div key={l.code}>+ {l.detail}</div>
+                  ))}
+                </div>
+              ) : null}
+            </SheetSection>
+          )
+        })() : null}
+
+        {/* ── How we measured — measurement provenance, standalone so it shows
+            whenever notes exist (independent of the price-build section and a
+            manual tier edit), matching the PDF exactly. ── */}
+        {measuredNotes.length > 0 ? (
+          <SheetSection eyebrow="How we measured" eyebrowAccent>
+            <ul style={{ margin: '12px 0 0', paddingLeft: 18, fontSize: 13, lineHeight: 1.6, color: 'var(--text-sec)' }}>
+              {measuredNotes.map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+              <li>A painter confirms all measurements on site before works commence.</li>
+            </ul>
+          </SheetSection>
+        ) : null}
+
+        {/* ── Materials & time on site — the CUSTOMER-safe take-off view:
+            paint quantities and duration per option. Internal costs, rates
+            and margin never render on customer surfaces. ── */}
+        {!inspection && priceGate.showPrices && customerTiers.length > 0 ? (
+          <SheetSection eyebrow="Materials & time on site" eyebrowAccent>
+            <p style={{ margin: '12px 0 0', fontSize: 13, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+              What each option uses on your property — litres round up to whole retail packs, and
+              time on site is an estimate at standard working days, confirmed before works commence.
+            </p>
+            <div
+              style={{
+                display: 'grid',
+                gap: 12,
+                marginTop: 14,
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              }}
+            >
+              {customerTiers.map((c) => {
+                const tierLabel = visibleTiers.find((t) => t.tier === c.tier)?.label ?? c.tier
+                return (
+                  <div
+                    key={c.tier}
+                    style={{ border: '1px solid var(--ink-line)', background: 'var(--ink-card)', padding: '14px 16px' }}
+                  >
+                    <div
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 10,
+                        fontWeight: 600,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.14em',
+                        color: 'var(--accent)',
+                      }}
+                    >
+                      {tierLabel}
+                    </div>
+                    <ul style={{ margin: '10px 0 0', padding: 0, listStyle: 'none' }}>
+                      {c.materials.map((m) => (
+                        <li
+                          key={m}
+                          style={{
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: 12,
+                            lineHeight: 1.6,
+                            color: 'var(--text-sec)',
+                          }}
+                        >
+                          {m}
+                        </li>
+                      ))}
+                    </ul>
+                    <div
+                      style={{
+                        marginTop: 10,
+                        paddingTop: 10,
+                        borderTop: '1px solid var(--ink-line)',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 12,
+                        color: 'var(--text-pri)',
+                      }}
+                    >
+                      {c.time_on_site}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </SheetSection>
         ) : null}
 
         {/* ── Explicit "Accept & confirm" — deposit on a released/priced quote,

@@ -53,7 +53,14 @@ export type GeoscapePaintPatch = Partial<
   Pick<PropertyFacts, 'storeys' | 'eave_height_m' | 'property_type' | 'footprint_m2'>
 >
 
-export type GeoscapeEnrichResult = { patch: GeoscapePaintPatch; notes: string[] }
+export type GeoscapeEnrichResult = {
+  patch: GeoscapePaintPatch
+  notes: string[]
+  /** When a buildingId was requested: the id actually fetched (=== the
+   *  request on a hit). Absent/null on a miss — the caller must NOT apply
+   *  a targeted override in that case. */
+  matched_building_id?: string | null
+}
 
 const EMPTY: GeoscapeEnrichResult = { patch: {}, notes: [] }
 
@@ -87,11 +94,13 @@ export async function enrichFromGeoscape(
 
   // 2. addressId → building summary: the tradie's chosen structure when a
   //    buildingId was passed (structure picker), else the best-ranked one.
+  //    A requested id that is NOT in the list returns EMPTY — never a silent
+  //    fallback, because the caller applies a targeted money override.
   const listBody = await get(`${base}/buildings?addressId=${encodeURIComponent(addressId)}`)
   const summaries = pickBuildingSummaries(listBody)
-  const best =
-    (opts.buildingId ? pickSummaryById(summaries, opts.buildingId) : null) ??
-    pickBestSummary(summaries)
+  const matched = opts.buildingId ? pickSummaryById(summaries, opts.buildingId) : null
+  if (opts.buildingId && !matched) return EMPTY
+  const best = matched ?? pickBestSummary(summaries)
   if (!best) return EMPTY
 
   const link = (key: string, fallback: string) =>
@@ -126,7 +135,7 @@ export async function enrichFromGeoscape(
   const footprint = extractArea(areaBody)
   if (footprint != null) patch.footprint_m2 = Math.round(footprint * 10) / 10
 
-  return { patch, notes }
+  return { patch, notes, matched_building_id: matched?.buildingId ?? null }
 }
 
 /** PURE — turn a relative /v1/… link into an absolute URL on baseUrl's host. */

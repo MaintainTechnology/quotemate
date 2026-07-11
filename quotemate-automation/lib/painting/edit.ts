@@ -21,6 +21,7 @@
 // ════════════════════════════════════════════════════════════════════
 
 import type { PaintingEstimate, PaintingPriceTier } from './types'
+import { paintingMarginNote } from './takeoff'
 
 export type PaintingTierEdit = {
   tier: 'good' | 'better' | 'best'
@@ -153,6 +154,8 @@ export function applyTierEdits(
           ...t,
           margin_ex_gst: margin,
           margin_pct: ex > 0 ? Math.round((margin / ex) * 10000) / 10000 : 0,
+          // The derivation note must follow the refreshed numbers.
+          margin_note: paintingMarginNote(t.tier, ex, t.materials_ex_gst, t.labour_ex_gst),
         }
       }) as NonNullable<PaintingEstimate['takeoff']>['tiers'],
     }

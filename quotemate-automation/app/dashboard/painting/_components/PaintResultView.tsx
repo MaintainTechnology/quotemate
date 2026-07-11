@@ -207,8 +207,10 @@ export function PaintResultView({
                   </div>
                   <div className="flex items-baseline justify-between gap-2 border-t border-ink-line pt-1.5">
                     <span className="font-semibold uppercase tracking-[0.1em] text-text-sec">Margin (ex GST) · tradie only</span>
-                    <span className={`font-bold tabular-nums ${t.margin_ex_gst >= 0 ? 'text-accent' : 'text-warning'}`}>
-                      ${money(t.margin_ex_gst)} · {Math.round(t.margin_pct * 100)}%
+                    <span className={`font-bold tabular-nums ${t.margin_ex_gst >= 0 ? 'text-accent' : 'text-warning-bright'}`}>
+                      {t.margin_ex_gst < 0 ? '−' : ''}${money(Math.abs(t.margin_ex_gst))} ·{' '}
+                      {t.margin_pct < 0 ? '−' : ''}
+                      {Math.abs(Math.round(t.margin_pct * 100))}%
                     </span>
                   </div>
                   {/* Derivation notes — absent on estimates saved before the

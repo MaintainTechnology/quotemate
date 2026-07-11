@@ -59,6 +59,13 @@ export const ZONE_COLOR_HEX: Record<ZoneColor, string> = {
   green: '#22C55E',
 }
 
+/** Zone accent for TEXT on the dark Command Centre cards — identical to
+ *  ZONE_COLOR_HEX except 'black', which is unreadable on charcoal. */
+export const ZONE_TEXT_HEX: Record<ZoneColor, string> = {
+  ...ZONE_COLOR_HEX,
+  black: '#94A3B8',
+}
+
 /** Distinct palette per job mode — repairs read warm/urgent, a re-roof reads
  *  as full-coverage works, an upgrade adds the premium/removal accents. */
 export const MODE_PALETTES: Record<LayoutMode, readonly ZoneColor[]> = {

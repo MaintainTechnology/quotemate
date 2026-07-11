@@ -71,6 +71,13 @@ export async function GET(req: Request, ctx: { params: Promise<{ token: string }
     fit && zRaw != null && /^\d{1,2}$/.test(zRaw) && Number(zRaw) >= 15 && Number(zRaw) <= 21
       ? Number(zRaw)
       : null
+  // ?sel=1,3 — frame only these 1-based structures (the tradie's selection;
+  // the PDF layout map computes the identical subset view via layoutMapView).
+  const selRaw = params.get('sel')
+  const sel =
+    fit && selRaw != null && /^\d{1,2}(,\d{1,2})*$/.test(selRaw)
+      ? [...new Set(selRaw.split(',').map(Number))]
+      : null
 
   const { data: row, error } = await supabase
     .from('roofing_measurements')
@@ -99,7 +106,14 @@ export async function GET(req: Request, ctx: { params: Promise<{ token: string }
         form: 'unknown',
       }),
     )
-    const view = layoutMapView(structures, { width: 640, height: 480 })
+    const subset =
+      sel && sel.length > 0
+        ? sel.map((i) => structures[i - 1]).filter((s): s is LayoutOverlayStructure => !!s)
+        : structures
+    const view = layoutMapView(subset.length > 0 ? subset : structures, {
+      width: 640,
+      height: 480,
+    })
     if (view) {
       center = view.center
       zoom = zOverride ?? view.zoom

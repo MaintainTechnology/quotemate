@@ -648,6 +648,71 @@ html {
 }
 
 /* ════════════════════════════════════════════════════════════════════
+   DASHBOARD PREMIUM MOTION PRIMITIVES
+   Two reusable, GPU-only building blocks the cockpit composes with.
+
+   `.qm-rise` — a staggered entrance. Each element lifts + fades on a
+   delay read from its own `--i` custom property, so a row/grid of items
+   assembles in sequence ("console powering on") from one shared class
+   rather than a per-item animation-delay literal. Cap the index at the
+   call site (6 KPI cells ⇒ ~270ms total) so the cascade stays snappy.
+
+   `.qm-shimmer` — a premium skeleton. A warm bone sheen sweeps across a
+   loading plate instead of the flat opacity pulse; reads engineered, not
+   dead. Neutral highlight (never the yellow signal — loading isn't the
+   one thing that matters next). Both collapse to instant under
+   prefers-reduced-motion.
+   ════════════════════════════════════════════════════════════════════ */
+
+@keyframes qm-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.qm-rise {
+  animation: qm-rise 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+
+.qm-shimmer {
+  position: relative;
+  overflow: hidden;
+  background: var(--ink-card);
+}
+.qm-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--text-pri) 7%, transparent) 50%,
+    transparent 100%
+  );
+  animation: qm-shimmer 1.5s ease-in-out infinite;
+}
+@keyframes qm-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qm-rise {
+    animation: none;
+  }
+  .qm-shimmer::after {
+    animation: none;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════
    QUOTEMAX QUOTE SURFACE  ·  squared editorial "command-center" theme
    ────────────────────────────────────────────────────────────────────
    Scoped to the customer-facing /q/* full-quote pages. This is the

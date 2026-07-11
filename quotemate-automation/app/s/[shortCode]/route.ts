@@ -89,7 +89,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ shortCode: stri
     `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Text for a quote</title>
 <meta http-equiv="refresh" content="0;url=${dest.smsUri}">
-<style>body{font-family:system-ui;margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#16120F;color:#F5EFE6}main{max-width:26rem;padding:2.5rem 1.5rem;text-align:center;border:1px solid #372E24;background:#211B15}h2{margin:0;font-weight:800;text-transform:uppercase;letter-spacing:-.01em}p{color:#A89880}a.btn{display:inline-block;margin-top:1.25rem;background:#FFC400;color:#1C1812;text-decoration:none;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:.9rem 1.6rem;border-radius:0}</style>
+<style>body{font-family:system-ui;margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#16120F;color:#F6F1EA}main{max-width:26rem;padding:2.5rem 1.5rem;text-align:center;border:1px solid #3A322C;background:#2B2422}h2{margin:0;font-weight:800;text-transform:uppercase;letter-spacing:-.01em}p{color:#A2968A}a.btn{display:inline-block;margin-top:1.25rem;background:#FFC400;color:#1C1812;text-decoration:none;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:.9rem 1.6rem;border-radius:0}</style>
 </head><body>
 <main>
 <h2>Opening your messages…</h2>

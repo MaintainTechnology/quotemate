@@ -38,29 +38,30 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     )
   }
 
-  let path = row.pdf_path as string | null
-  if (!path) {
-    // Render the PDF from the tradie's persisted structure selection
-    // (included_indices), not the full quote — this is the fix for the PDF
-    // summing ALL detected structures regardless of what was checked. The
-    // headline total covers the INCLUDED quotable structures only; excluded
-    // and inspection-routed structures are LISTED (displayRows) but never
-    // priced into the total. The selection-update route nulls pdf_path on
-    // change, so this regenerates.
-    const fullQuote = (row.quote ?? null) as MultiRoofQuote | null
-    const effective = resolveEffectiveIndices(
-      {
-        included: row.included_indices as number[] | null,
-        confirmedStructure: row.confirmed_structure as number | null,
-      },
-      fullQuote,
-    )
-    const partition = fullQuote ? partitionRoofQuote(fullQuote, effective) : null
-    path = await ensureRoofQuotePdf(
-      token,
-      partition ? { quote: partition.narrowed, displayRows: partition.rows } : {},
-    )
-  }
+  // ALWAYS delegate to ensureRoofQuotePdf — it owns the cached-vs-regenerate
+  // decision via the path rev marker, so a PDF cached by an older template/
+  // figure era self-heals on the next download (serving row.pdf_path directly
+  // here bypassed that check and pinned stale PDFs forever).
+  //
+  // The PDF renders from the tradie's persisted structure selection
+  // (included_indices), not the full quote: the headline total covers the
+  // INCLUDED quotable structures only; excluded and inspection-routed
+  // structures are LISTED (displayRows) but never priced into the total. The
+  // selection-update route nulls pdf_path on change, so a cached PDF always
+  // reflects the current selection.
+  const fullQuote = (row.quote ?? null) as MultiRoofQuote | null
+  const effective = resolveEffectiveIndices(
+    {
+      included: row.included_indices as number[] | null,
+      confirmedStructure: row.confirmed_structure as number | null,
+    },
+    fullQuote,
+  )
+  const partition = fullQuote ? partitionRoofQuote(fullQuote, effective) : null
+  const path = await ensureRoofQuotePdf(
+    token,
+    partition ? { quote: partition.narrowed, displayRows: partition.rows } : {},
+  )
   if (!path) {
     return Response.json({ ok: false, error: 'PDF unavailable right now — try again shortly' }, { status: 503 })
   }

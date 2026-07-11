@@ -19,12 +19,17 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
+import type { CSSProperties } from 'react'
 import type { PaintingEstimate } from '@/lib/painting/types'
 import { composePaintLocation } from '@/lib/painting/paint-after'
 import {
   buildStreetViewMetadataUrl,
   parseStreetViewMetadata,
 } from '@/lib/painting/streetview'
+import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
+import { QuoteSheet, Letterhead } from '../../q/_chrome/parts'
+import { QuoteMaxMark } from '../../q/_chrome/icons'
+import { RepaintPreviewFigure } from '../../q/_chrome/RepaintPreviewFigure'
 import { PaintResultView } from '@/app/dashboard/painting/_components/PaintResultView'
 import { SendToCustomerButton } from './SendToCustomerButton'
 import { EditQuotePanel, type EditableTier } from './EditQuotePanel'
@@ -46,6 +51,8 @@ type Row = {
   estimate_token: string
   created_at: string
   released_at: string | null
+  tenant_id: string | null
+  preview_status: string | null
 }
 
 export default async function PaintEstimateResultsPage({
@@ -59,7 +66,7 @@ export default async function PaintEstimateResultsPage({
   const { data, error } = await supabase
     .from('painting_measurements')
     .select(
-      'address, postcode, state, scopes, estimate, public_token, estimate_token, created_at, released_at',
+      'address, postcode, state, scopes, estimate, public_token, estimate_token, created_at, released_at, tenant_id, preview_status',
     )
     .eq('estimate_token', token)
     .maybeSingle()
@@ -68,6 +75,10 @@ export default async function PaintEstimateResultsPage({
   const row = data as Row
   const estimate = row.estimate
   if (!estimate) notFound()
+
+  // Tenant letterhead — same identity block the roofing measurement page and
+  // the customer quote chrome use. Best-effort: null renders a generic head.
+  const identity = await loadTenantIdentity(supabase, row.tenant_id)
 
   // released_at (migration 157): null = a held SMS/form draft that still
   // shows the "Send to customer" button; dashboard saves are released at
@@ -118,62 +129,134 @@ export default async function PaintEstimateResultsPage({
   }
 
   return (
-    <main className="min-h-screen bg-ink-deep text-text-pri">
-      <section className="relative z-10 mx-auto max-w-6xl px-6 pt-14 pb-2 sm:px-10">
+    <div
+      className="qm-quote"
+      data-qm-theme="dark"
+      style={
+        {
+          minHeight: '100dvh',
+          display: 'flex',
+          flexDirection: 'column',
+          background: 'var(--ink-deep)',
+          color: 'var(--text-pri)',
+          // Wider sheet than the customer quote — this is a desktop review
+          // surface, same width as the roofing measurement results page.
+          '--qm-sheet-w': '1200px',
+        } as CSSProperties
+      }
+    >
+      <div className="noise-overlay" aria-hidden="true" />
+
+      {/* ── tradie top bar — mirrors the roofing measurement chrome ── */}
+      <header
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 20,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 16,
+          height: 56,
+          padding: '0 20px',
+          borderBottom: '1px solid var(--ink-line)',
+          background: 'var(--ink-deep)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+          <QuoteMaxMark size={24} />
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.16em',
+              color: 'var(--text-dim)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Tradie · Paint estimate
+          </span>
+        </div>
         {/* estimate_token holders are tradies by construction — static link. */}
         <Link
           href="/dashboard"
-          className="mb-4 inline-flex items-center gap-2 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-text-pri"
+          className="inline-flex items-center gap-2 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-dim transition-colors hover:text-text-pri"
         >
           ← Dashboard
         </Link>
-        <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-accent">
-          QuoteMax · Painting · Estimate
-        </div>
-        <h1 className="mt-3 font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(2rem,5vw,3.5rem)]">
-          Estimate <span className="text-accent">results</span>
-        </h1>
-        {row.address && <p className="mt-4 text-lg text-text-sec">{row.address}</p>}
-        <div className="mt-2 font-mono text-sm text-text-dim">
-          {[row.postcode, row.state].filter(Boolean).join(' ')}
-          {row.postcode || row.state ? ' · ' : ''}
-          {date}
-        </div>
-      </section>
+      </header>
 
-      {/* Property imagery — Google Street View "before" + cached AI repaint
-          "after", both via the token-gated /api/painting/q/[token] proxies
-          (mirrors /m/[token]'s satellite block). */}
+      <main style={{ position: 'relative', flex: 1, minHeight: 0, padding: '0 16px 40px' }}>
+        <QuoteSheet label={`Paint estimate · ${row.address ?? 'estimated property'}`}>
+          <Letterhead
+            name={identity?.business_name ?? 'Your painting team'}
+            credential="Painting · estimate review"
+            logoUrl={identity?.logo_url ?? null}
+            contactName={contactDisplayName(identity)}
+            phone={(identity?.owner_mobile ?? '').trim() || null}
+            email={(identity?.owner_email ?? '').trim() || null}
+          />
+
+          <div className="px-6 sm:px-10">
+            <div className="pt-8">
+              <div className="font-mono text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-accent">
+                QuoteMax · Painting · Estimate
+              </div>
+              <h1 className="mt-3 font-extrabold uppercase leading-[0.95] tracking-[-0.035em] text-[clamp(1.9rem,4.2vw,3.2rem)]">
+                Estimate <span className="qm-accentword">results</span>
+              </h1>
+              {row.address && <p className="mt-4 text-lg text-text-sec">{row.address}</p>}
+              <div className="mt-2 font-mono text-sm text-text-dim">
+                {[row.postcode, row.state].filter(Boolean).join(' ')}
+                {row.postcode || row.state ? ' · ' : ''}
+                {date}
+              </div>
+            </div>
+          </div>
+
+          {/* Property imagery via the token-gated /api/painting/q/[token]
+          proxies (mirrors /m/[token]'s satellite block). Top row: the real
+          photos (Street View frontage + aerial). Below: the before/after
+          repaint block — every paint job gets the AI colour visualisation
+          (product decision 2026-07-11), auto-generated on first load. */}
       {hasPano && (
         <section className="relative z-10 mx-auto mt-8 max-w-6xl px-6 sm:px-10">
           <div className="grid gap-5 md:grid-cols-2">
             <figure className="border border-ink-line bg-ink-card">
+              {/* The source photo is 4:3 — an aspect-ratio box shows the
+                  whole property instead of a fixed-height crop. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={`/api/painting/q/${row.public_token}/street-view`}
                 alt={`Street View of the front of ${row.address ?? 'the property'}`}
-                className="h-72 w-full object-cover sm:h-80"
+                className="block w-full object-cover"
+                style={{ aspectRatio: '4 / 3' }}
               />
               <figcaption className="border-t border-ink-line px-4 py-2.5 font-mono text-xs uppercase tracking-[0.14em] text-text-dim">
                 Front of the property · Google Street View
               </figcaption>
             </figure>
-            {/* The AI preview repaints the EXTERIOR — only meaningful (and
-                only generated, see lib/painting/paint-after.ts) when the job
-                includes exterior scope. */}
-            {(row.scopes ?? []).includes('exterior') && (
-              <figure className="border border-ink-line bg-ink-card">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`/api/painting/q/${row.public_token}/after-image`}
-                  alt={`AI preview of ${row.address ?? 'the property'} freshly repainted`}
-                  className="h-72 w-full object-cover sm:h-80"
-                />
-                <figcaption className="border-t border-ink-line px-4 py-2.5 font-mono text-xs uppercase tracking-[0.14em] text-text-dim">
-                  Fresh repaint · AI preview
-                </figcaption>
-              </figure>
-            )}
+            <figure className="border border-ink-line bg-ink-card">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`/api/painting/q/${row.public_token}/static-map`}
+                alt={`Aerial view of ${row.address ?? 'the property'}`}
+                className="block w-full object-cover"
+                style={{ aspectRatio: '4 / 3' }}
+              />
+              <figcaption className="border-t border-ink-line px-4 py-2.5 font-mono text-xs uppercase tracking-[0.14em] text-text-dim">
+                Aerial view · Google Maps
+              </figcaption>
+            </figure>
+          </div>
+          <div className="mt-5">
+            <RepaintPreviewFigure
+              publicToken={row.public_token}
+              address={row.address}
+              initialReady={row.preview_status === 'ready'}
+            />
           </div>
         </section>
       )}
@@ -235,12 +318,14 @@ export default async function PaintEstimateResultsPage({
           </p>
         </div>
       </section>
+        </QuoteSheet>
+      </main>
 
       <div className="bg-accent px-6 py-5 text-center text-white">
         <span className="font-mono text-sm font-semibold uppercase tracking-[0.16em]">
           QuoteMax · Painting · Estimate
         </span>
       </div>
-    </main>
+    </div>
   )
 }

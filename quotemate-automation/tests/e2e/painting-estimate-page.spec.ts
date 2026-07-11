@@ -129,8 +129,6 @@ test.describe('Painting tradie results page (/p/[token])', () => {
         postcode: '4151',
         state: 'QLD',
         source: 'solar',
-        // exterior included: the AI after-image figure (and its generation)
-        // is gated on exterior scope — interior-only jobs show Street View only.
         scopes: ['walls', 'exterior'],
         floor_area_m2: 180,
         total_area_m2: 380,
@@ -167,6 +165,11 @@ test.describe('Painting tradie results page (/p/[token])', () => {
     // image subresources finishing under full-suite parallel load.
     await page.goto(`/p/${estimateToken}`, { waitUntil: 'domcontentloaded' })
 
+    // Quote-page chrome — the same sheet furniture as the roofing
+    // measurement page: sticky tradie top bar + letterhead sheet.
+    await expect(page.getByText('Tradie · Paint estimate')).toBeVisible()
+    await expect(page.getByText('Painting · estimate review').first()).toBeVisible()
+
     // Title block + estimate content.
     await expect(page.getByRole('heading', { level: 1 })).toContainText(/estimate/i)
     await expect(page.getByText('21 Greens Rd, Coorparoo').first()).toBeVisible()
@@ -189,14 +192,17 @@ test.describe('Painting tradie results page (/p/[token])', () => {
       page.getByText(/send to customer|sent to customer/i).first(),
     ).toBeVisible()
 
-    // Imagery: markup consistency — when the section renders, both images
-    // must point at the token-scoped proxies. This seed includes 'exterior'
-    // scope, so the (exterior-gated) AI after-image renders whenever the
-    // street-view figure does; when Street View has no pano the whole
-    // section is absent. Either way the counts match.
-    const before = page.locator(`img[src="/api/painting/q/${publicToken}/street-view"]`)
-    const after = page.locator(`img[src="/api/painting/q/${publicToken}/after-image"]`)
-    expect(await before.count()).toBe(await after.count())
+    // Imagery: when the section renders, the Street View photo appears
+    // twice (photos row + the before pane of the repaint block), the
+    // auto-generated after figure renders with its caption + colour picker,
+    // and every src points at a token-scoped proxy. This seed's
+    // preview_status is 'generating', so the after <img> serves the route's
+    // Street View fallback — no billable render.
+    const street = page.locator(`img[src="/api/painting/q/${publicToken}/street-view"]`)
+    const repaint = page.getByText('Fresh repaint · AI preview')
+    const picker = page.getByText('Try a colour')
+    expect(await street.count()).toBe(2 * (await repaint.count()))
+    expect(await picker.count()).toBe(await repaint.count())
 
     // Materials & labour take-off — tradie surface shows it…
     await expect(page.getByText('Materials & labour').first()).toBeVisible()

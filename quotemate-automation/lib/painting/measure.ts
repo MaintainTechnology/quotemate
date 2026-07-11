@@ -105,22 +105,40 @@ export async function estimatePainting(
         geoscape: { ...opts.enrich?.geoscape, buildingId: inputs.structure.building_id },
       }
     : (opts.enrich ?? {})
-  const { facts: base } = await enrichPaintingFacts(address, lookup.facts, enrichOpts)
+  const { facts: base, structureTargeted } = await enrichPaintingFacts(
+    address,
+    lookup.facts,
+    enrichOpts,
+  )
 
-  // Stamp which structure this estimate measures (display provenance).
-  const enriched: typeof base = inputs.structure
-    ? {
-        ...base,
-        structure_label: inputs.structure.label ?? inputs.structure.building_id,
-        structure_role: inputs.structure.role ?? null,
-        capture_note: [
-          base.capture_note,
-          `Estimating the selected structure: ${inputs.structure.label ?? inputs.structure.building_id}.`,
-        ]
-          .filter(Boolean)
-          .join(' · '),
-      }
-    : base
+  // Stamp which structure this estimate measures (display provenance) — but
+  // ONLY when the targeted Geoscape fetch actually hit that building. On a
+  // miss the numbers are address-level, and claiming the selected structure
+  // would label one building while pricing another.
+  const structureLabel = inputs.structure
+    ? (inputs.structure.label ?? inputs.structure.building_id)
+    : null
+  const enriched: typeof base =
+    inputs.structure && structureTargeted
+      ? {
+          ...base,
+          structure_label: structureLabel,
+          structure_role: inputs.structure.role ?? null,
+          capture_note: [base.capture_note, `Estimating the selected structure: ${structureLabel}.`]
+            .filter(Boolean)
+            .join(' · '),
+        }
+      : inputs.structure
+        ? {
+            ...base,
+            capture_note: [
+              base.capture_note,
+              `Could not target the selected structure (${structureLabel}) — estimated from the address-level data instead.`,
+            ]
+              .filter(Boolean)
+              .join(' · '),
+          }
+        : base
 
   // The user's declared storeys always wins over any provider/enricher value
   // (floor area + exterior area scale with it).

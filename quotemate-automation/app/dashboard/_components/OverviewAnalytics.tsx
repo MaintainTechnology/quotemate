@@ -341,15 +341,15 @@ function SpeedCard({ minutes }: { minutes: number | null }) {
 function AnalyticsSkeleton() {
   return (
     <div className="space-y-5" aria-hidden="true">
-      <div className={`${CARD} h-16 bg-ink-card border border-ink-line motion-safe:animate-pulse`} />
+      <div className={`${CARD} h-16 bg-ink-card border border-ink-line qm-shimmer`} />
       <div className={`${CARD} overflow-hidden grid grid-cols-2 md:grid-cols-4 gap-px bg-ink-line border border-ink-line`}>
         {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="h-24 bg-ink-card motion-safe:animate-pulse" />
+          <div key={i} className="h-24 bg-ink-card qm-shimmer" />
         ))}
       </div>
       <div className="grid gap-5 md:grid-cols-2">
-        <div className={`${CARD} h-44 bg-ink-card border border-ink-line motion-safe:animate-pulse`} />
-        <div className={`${CARD} h-44 bg-ink-card border border-ink-line motion-safe:animate-pulse`} />
+        <div className={`${CARD} h-44 bg-ink-card border border-ink-line qm-shimmer`} />
+        <div className={`${CARD} h-44 bg-ink-card border border-ink-line qm-shimmer`} />
       </div>
     </div>
   )

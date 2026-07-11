@@ -67,22 +67,21 @@ const ROW: FakeRow = {
 const png = { base64: Buffer.from('img').toString('base64'), mime: 'image/png' }
 
 describe('generatePaintAfterImage', () => {
-  it('skips (no render, no claim) when the job has no exterior scope', async () => {
-    // An interior-only repaint preview would show the customer an exterior
-    // recolour the quote does not include — and bill a Gemini render for it.
-    const { client, updates } = fakeClient({
+  it('renders for interior-only jobs too (exterior colour visualisation)', async () => {
+    // Product decision 2026-07-11: every paint job gets the colour preview —
+    // the render shows the property exterior in the chosen colour even when
+    // the quoted scope is interior (it is a visualisation, not a scope claim).
+    const { client, uploads } = fakeClient({
       row: { ...ROW, scopes: ['walls', 'ceilings'] },
       claim: { id: ROW.id },
     })
-    const render = vi.fn()
     const res = await generatePaintAfterImage('tok', {
       client,
       fetchSource: vi.fn(async () => png),
-      render,
+      render: vi.fn(async () => png),
     })
-    expect(res).toEqual({ ok: false, status: 'skipped', error: 'interior_only' })
-    expect(render).not.toHaveBeenCalled()
-    expect(updates).toHaveLength(0)
+    expect(res.ok).toBe(true)
+    expect(uploads).toHaveLength(1)
   })
 
   it('short-circuits to the stored path when the preview is already ready', async () => {
@@ -111,6 +110,22 @@ describe('generatePaintAfterImage', () => {
     })
     expect(res).toEqual({ ok: false, status: 'busy' })
     expect(render).not.toHaveBeenCalled()
+  })
+
+  it('feeds a chosen colour into the repaint prompt', async () => {
+    const { client } = fakeClient({ row: { ...ROW, scopes: ['exterior'] }, claim: { id: ROW.id } })
+    const render = vi.fn(async (req: { user: string }) => {
+      expect(req.user).toContain('Monument charcoal')
+      return png
+    })
+    const res = await generatePaintAfterImage('tok', {
+      client,
+      fetchSource: vi.fn(async () => png),
+      render,
+      colour: 'Monument charcoal',
+    })
+    expect(res.ok).toBe(true)
+    expect(render).toHaveBeenCalledTimes(1)
   })
 
   it('renders, uploads under painting/<id>/, and marks the row ready', async () => {
