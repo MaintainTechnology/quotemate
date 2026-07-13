@@ -97,6 +97,59 @@ function requireApiKey(): string {
   return key
 }
 
+// ── Transient-failure retry ─────────────────────────────────────────
+// Gemini returns 429 (RESOURCE_EXHAUSTED — per-minute/day quota exhausted)
+// and 503 (model overloaded) under load; Google's guidance for both is "back
+// off and retry". Without this a single momentary spike surfaced as a hard
+// failure to every caller — the roof layout-map button showed "Gemini HTTP
+// 429". Bounded + capped so retries never blow the caller's Vercel
+// maxDuration. All env-tunable without a deploy; GEMINI_RETRY_ATTEMPTS=1
+// disables retrying entirely.
+const intEnv = (raw: string | undefined, def: number, min: number, max: number): number => {
+  const n = Number(raw)
+  return Number.isFinite(n) ? Math.min(Math.max(Math.trunc(n), min), max) : def
+}
+const RETRY_ATTEMPTS = () => intEnv(process.env.GEMINI_RETRY_ATTEMPTS, 3, 1, 6)
+const RETRY_BASE_MS = () => intEnv(process.env.GEMINI_RETRY_BASE_MS, 800, 0, 60_000)
+const RETRY_MAX_DELAY_MS = () => intEnv(process.env.GEMINI_RETRY_MAX_DELAY_MS, 15_000, 0, 60_000)
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+
+/** Honour a numeric `Retry-After` (seconds — what generativelanguage returns);
+ *  the HTTP-date form is ignored. Returns ms, or 0 when absent/unparseable. */
+function retryAfterMs(header: string | null | undefined): number {
+  const secs = Number((header ?? '').trim())
+  return Number.isFinite(secs) && secs > 0 ? secs * 1000 : 0
+}
+
+/** POST to Gemini with bounded exponential backoff on transient (429/503)
+ *  statuses. Returns the parsed JSON body; throws `Gemini HTTP <status>:
+ *  <body>` when the non-2xx is non-transient or retries are exhausted — the
+ *  body is included so logs show WHICH quota tripped (per-minute vs per-day). */
+async function geminiPost(url: string, body: unknown): Promise<GeminiResponse> {
+  const attempts = RETRY_ATTEMPTS()
+  let lastErr = 'Gemini request failed'
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (res.ok) return (await res.json()) as GeminiResponse
+    const errText = await res.text().catch(() => '')
+    lastErr = `Gemini HTTP ${res.status}${errText ? `: ${errText.slice(0, 500)}` : ''}`
+    const transient = res.status === 429 || res.status === 503
+    if (!transient || attempt === attempts) throw new Error(lastErr)
+    const backoff = RETRY_BASE_MS() * 2 ** (attempt - 1)
+    const delay = Math.min(
+      Math.max(backoff, retryAfterMs(res.headers?.get?.('retry-after'))),
+      RETRY_MAX_DELAY_MS(),
+    )
+    if (delay > 0) await sleep(delay)
+  }
+  throw new Error(lastErr)
+}
+
 // ── renderImage ─────────────────────────────────────────────────────
 async function renderImage(req: RenderImageRequest): Promise<ImageBytes> {
   const key = requireApiKey()
@@ -154,16 +207,7 @@ async function renderImage(req: RenderImageRequest): Promise<ImageBytes> {
     },
   }
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) {
-    const errText = (await res.text()).slice(0, 500)
-    throw new Error(`Gemini HTTP ${res.status}: ${errText}`)
-  }
-  const data = (await res.json()) as GeminiResponse
+  const data = await geminiPost(url, body)
   const parts = data.candidates?.[0]?.content?.parts ?? []
   const imagePart = parts.find(p => p.inline_data?.data || p.inlineData?.data)
   const inline = imagePart?.inline_data ?? imagePart?.inlineData
@@ -206,16 +250,10 @@ async function generateText(req: TextRequest): Promise<string> {
   } else {
     generationConfig.response_modalities = ['TEXT']
   }
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts }],
-      generation_config: generationConfig,
-    }),
+  const data = await geminiPost(url, {
+    contents: [{ role: 'user', parts }],
+    generation_config: generationConfig,
   })
-  if (!res.ok) throw new Error(`Gemini HTTP ${res.status}`)
-  const data = (await res.json()) as GeminiResponse
   const text = data.candidates?.[0]?.content?.parts?.find(p => p.text)?.text ?? ''
   return text
 }

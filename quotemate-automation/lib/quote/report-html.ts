@@ -31,8 +31,11 @@ import {
  *   quotes — spec specs/quote-visual-parity.md R1.
  *   v4 (2026-07-10): PDFs render as ONE continuous page (Gotenberg singlePage)
  *   instead of A4 page-by-page; the shared chrome pins the body width.
+ *   v5 (2026-07-13): roofing property-visuals aerial now centres on the measured
+ *   building polygon, not the geocoded (street-only) address — cached PDFs with
+ *   the wrong-building image self-heal on next download.
  */
-export const REPORT_TEMPLATE_VERSION = 4
+export const REPORT_TEMPLATE_VERSION = 5
 
 export type QuoteReportLineItem = {
   description: string

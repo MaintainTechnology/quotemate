@@ -17,6 +17,7 @@ import dynamic from 'next/dynamic'
 import TradieEditor, { type EditorApi } from '@/app/q/[token]/TradieEditor'
 import { getAuthToken } from '@/lib/auth/client-token'
 import SendQuotePanel from './SendQuotePanel'
+import TierSelect from './TierSelect'
 import type { ReportDoc } from '@/lib/quote/report-doc/types'
 import type { ReportStyle } from '@/lib/quote/report-doc/style'
 import type { EditorKind } from '@/lib/quote/report-adapters/types'
@@ -187,6 +188,20 @@ export default function QuoteReportViewerClient(props: {
                 Beta
               </span>
             </button>
+            {/* Pick which single tier the quote sends as (roofing defaults to
+                'better'/Re-roof, but the tiers are different jobs). Hidden for
+                inspection quotes (no committable tiers) and single-option quotes
+                (TierSelect self-hides). Sets selected_tier, then refreshes the
+                live preview — Send/Download then use the chosen tier. */}
+            {!needsInspection && (
+              <TierSelect
+                quoteId={quoteId}
+                tiers={tiers}
+                initialSelected={selectedTier ?? null}
+                disabled={paid}
+                onChanged={() => setReloadKey((k) => k + 1)}
+              />
+            )}
             <SendQuotePanel
               quoteId={quoteId}
               customerPhone={customerPhone ?? null}

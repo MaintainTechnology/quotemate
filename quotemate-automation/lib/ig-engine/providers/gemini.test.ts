@@ -242,6 +242,61 @@ describe('per-call model override', () => {
   })
 })
 
+describe('transient-failure retry', () => {
+  const prevKey = process.env.GEMINI_API_KEY
+  const prevBase = process.env.GEMINI_RETRY_BASE_MS
+  let fetchSpy: ReturnType<typeof vi.spyOn>
+
+  beforeEach(() => {
+    process.env.GEMINI_API_KEY = 'test-key'
+    // Zero backoff so the retry loop runs instantly in tests (no Retry-After
+    // header on the mock → delay stays 0).
+    process.env.GEMINI_RETRY_BASE_MS = '0'
+    fetchSpy = vi.spyOn(globalThis, 'fetch')
+  })
+  afterEach(() => {
+    fetchSpy.mockRestore()
+    if (prevKey === undefined) delete process.env.GEMINI_API_KEY
+    else process.env.GEMINI_API_KEY = prevKey
+    if (prevBase === undefined) delete process.env.GEMINI_RETRY_BASE_MS
+    else process.env.GEMINI_RETRY_BASE_MS = prevBase
+  })
+
+  it('retries a 429 then succeeds on the next attempt', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(jsonResponse({ error: { status: 'RESOURCE_EXHAUSTED' } }, false, 429))
+      .mockResolvedValueOnce(jsonResponse(IMAGE_OK))
+    const out = await geminiProvider.renderImage({ system: 'SYS', user: 'USER' })
+    expect(out).toEqual({ base64: 'AAA', mime: 'image/png' })
+    expect(fetchSpy).toHaveBeenCalledTimes(2)
+  })
+
+  it('retries a 503 (overloaded) on generateText then succeeds', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(jsonResponse({}, false, 503))
+      .mockResolvedValueOnce(jsonResponse(TEXT_OK))
+    const out = await geminiProvider.generateText!({ prompt: 'classify' })
+    expect(out).toBe('YES — matches.')
+    expect(fetchSpy).toHaveBeenCalledTimes(2)
+  })
+
+  it('gives up after exhausting retries on a persistent 429, including the body', async () => {
+    fetchSpy.mockResolvedValue(jsonResponse({ error: 'quota exceeded' }, false, 429))
+    await expect(
+      geminiProvider.renderImage({ system: 'SYS', user: 'USER' }),
+    ).rejects.toThrow(/Gemini HTTP 429.*quota exceeded/)
+    expect(fetchSpy).toHaveBeenCalledTimes(3) // default GEMINI_RETRY_ATTEMPTS
+  })
+
+  it('does NOT retry a non-transient 400 — fails on the first attempt', async () => {
+    fetchSpy.mockResolvedValue(jsonResponse({ error: 'bad request' }, false, 400))
+    await expect(
+      geminiProvider.renderImage({ system: 'SYS', user: 'USER' }),
+    ).rejects.toThrow(/Gemini HTTP 400/)
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('geminiProvider.capabilities', () => {
   it('advertises edit, text-to-image and vision', () => {
     expect(geminiProvider.name).toBe('gemini')

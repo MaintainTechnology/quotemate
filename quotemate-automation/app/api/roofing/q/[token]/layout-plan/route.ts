@@ -57,5 +57,11 @@ export async function POST(_req: Request, ctx: { params: Promise<{ token: string
     return Response.json({ ok: true, plan: result.plan })
   }
   const status = result.status === 'busy' ? 409 : result.status === 'skipped' ? 422 : 502
-  return Response.json({ ok: false, status: result.status, error: result.error ?? null }, { status })
+  // A rate-limit failure (429/RESOURCE_EXHAUSTED) is transient and the button
+  // is safe to re-click — surface that instead of the raw Gemini error string.
+  const rateLimited = /\b429\b|RESOURCE_EXHAUSTED/.test(result.error ?? '')
+  const error = rateLimited
+    ? 'The map service is rate-limited right now — give it a minute and try again.'
+    : (result.error ?? null)
+  return Response.json({ ok: false, status: result.status, error, rateLimited }, { status })
 }

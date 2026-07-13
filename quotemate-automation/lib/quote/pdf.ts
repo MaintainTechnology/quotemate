@@ -23,6 +23,7 @@ import {
 } from './report-html'
 import { asQuoteTierMode, resolveVisibleTiers, type QuoteTierMode } from './tier-visibility'
 import { quotePropertyVisuals } from './property-visuals'
+import { hasPropertyVisuals, propertyVisualsImagePath } from './visuals-image-path'
 import { quotePdfIsStale, quotePdfSignature, hashReportContent } from './pdf-signature'
 import { serializeReportDoc } from './report-doc/serialize'
 import type { ReportDoc } from './report-doc/types'
@@ -306,20 +307,29 @@ async function loadQuoteReportContext(quoteId: string): Promise<QuoteReportConte
   return { quote, intake, intakeTrade, tierMode, visibleTierKeys, visibleTierSet, recommendedTier }
 }
 
-/** True for the trades whose customer page shows property evidence the report
- *  must mirror (spec quote-visual-parity R1). */
-function hasPropertyVisuals(trade: string): boolean {
-  return trade === 'roofing' || trade === 'commercial_painting'
-}
-
-/** The satellite proxy query the customer page's RoofHeroStrip uses. */
-function staticMapQuery(address: string): string {
-  const p = new URLSearchParams()
-  p.set('address', address)
-  p.set('zoom', '20')
-  p.set('w', '640')
-  p.set('h', '420')
-  return p.toString()
+/**
+ * Resolve the root-relative property-visuals image path for a quote. Roofing
+ * quotes linked to a saved measurement centre on the MEASURED building polygon
+ * (matching the customer page's RoofHeroStrip) — geocoding the street-only
+ * intake address lands on the wrong building on large/rural parcels. Non-roofing
+ * trades skip the DB read. Null when the trade has no property visuals.
+ */
+async function resolveVisualsImagePath(
+  trade: string,
+  shareToken: string,
+  address: string | null,
+): Promise<string | null> {
+  if (!hasPropertyVisuals(trade)) return null
+  let linkedRoofPublicToken: string | null = null
+  if (trade === 'roofing') {
+    const { data } = await supabase()
+      .from('roofing_measurements')
+      .select('public_token')
+      .eq('quote_share_token', shareToken)
+      .maybeSingle<{ public_token: string | null }>()
+    linkedRoofPublicToken = data?.public_token ?? null
+  }
+  return propertyVisualsImagePath({ trade, shareToken, address, linkedRoofPublicToken })
 }
 
 /** Shape the QuoteReportInput both the PDF and the inline HTML render from —
@@ -382,11 +392,13 @@ export async function renderQuoteReportHtml(quoteId: string): Promise<string | n
   const branding = await loadTenantBranding(supabase(), ctx.quote.tenant_id, ctx.intakeTrade)
   // Live preview: reference the token-gated satellite proxy directly (relative
   // URL — the preview renders on the app origin), exactly like the customer
-  // page's RoofHeroStrip. The PDF path embeds a data URI instead.
-  const visualsImageSrc =
-    hasPropertyVisuals(ctx.intakeTrade) && ctx.intake?.address
-      ? `/api/q/${ctx.quote.share_token}/static-map?${staticMapQuery(ctx.intake.address)}`
-      : null
+  // page's RoofHeroStrip (roofing centres on the measured polygon, not the
+  // geocoded address). The PDF path embeds a data URI instead.
+  const visualsImageSrc = await resolveVisualsImagePath(
+    ctx.intakeTrade,
+    ctx.quote.share_token,
+    ctx.intake?.address ?? null,
+  )
   return renderQuoteDocumentHtml(
     buildQuoteReportInput(ctx, branding, visualsImageSrc),
     ctx.quote.report_doc,
@@ -446,15 +458,17 @@ export async function ensureQuotePdf(
     const branding = await loadTenantBranding(supabase(), quote.tenant_id, intakeTrade)
     // Property visuals image (roofing / commercial painting) — fetched via the
     // same token-gated satellite proxy the customer page uses, embedded as a
-    // data URI (mirrors ensureRoofQuotePdf). Best-effort: prepareImage never
+    // data URI (mirrors ensureRoofQuotePdf). Roofing centres on the measured
+    // polygon (not the geocoded street address). Best-effort: prepareImage never
     // throws; null just renders the stats-only block.
-    const visualsImageSrc =
-      hasPropertyVisuals(intakeTrade) && ctx.intake?.address
-        ? await prepareImage(
-            `${APP_URL}/api/q/${quote.share_token}/static-map?${staticMapQuery(ctx.intake.address)}`,
-            { maxEdge: 640 },
-          )
-        : null
+    const visualsPath = await resolveVisualsImagePath(
+      intakeTrade,
+      quote.share_token,
+      ctx.intake?.address ?? null,
+    )
+    const visualsImageSrc = visualsPath
+      ? await prepareImage(`${APP_URL}${visualsPath}`, { maxEdge: 640 })
+      : null
     const html = renderQuoteDocumentHtml(
       buildQuoteReportInput(ctx, branding, visualsImageSrc),
       quote.report_doc,
