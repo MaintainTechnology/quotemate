@@ -28,6 +28,47 @@ describe('incGst', () => {
   })
 })
 
+describe('buildQuoteReportHtml — roofing layout overlay', () => {
+  const base = {
+    businessName: 'Pilot Roofer',
+    jobType: 'full_reroof',
+    good: tier('Patch', 1000),
+    better: tier('Re-roof', 2500),
+    best: tier('Upgrade', 4000),
+    selectedTier: 'better' as const,
+    quoteViewUrl: 'https://example.com/q/tok',
+  }
+
+  it('renders the roof layout map + estimated materials when an overlay is supplied', () => {
+    const html = buildQuoteReportHtml({
+      ...base,
+      layoutOverlay: {
+        header: "G'day! Here is your re-roofing plan.",
+        aerialSrc: 'data:image/png;base64,AAAA',
+        overlaySrc: 'data:image/svg+xml;base64,BBBB',
+        legend: [{ color: 'teal', label: 'Full re-sheeting of main dwelling' }],
+        materials: {
+          items: [
+            { item: 'Colorbond corrugated sheets', qty: 154, unit: 'sheets', basis: '586 m² ÷ 4.19 m² per sheet', use: 'New roof sheeting.' },
+          ],
+          note: null,
+        },
+      },
+    })
+    expect(html).toContain('Your roof layout map')
+    expect(html).toContain('Estimated materials')
+    expect(html).toContain('Full re-sheeting of main dwelling')
+    expect(html).toContain('Colorbond corrugated sheets')
+    expect(html).toContain('154 sheets')
+  })
+
+  it('omits the layout section entirely when no overlay is supplied (every other trade)', () => {
+    const html = buildQuoteReportHtml(base)
+    expect(html).not.toContain('Your roof layout map')
+    expect(html).not.toContain('Estimated materials')
+  })
+})
+
 describe('buildQuoteReportHtml', () => {
   const html = buildQuoteReportHtml({
     businessName: 'Pilot Sparky',
@@ -252,8 +293,8 @@ describe('buildQuoteReportHtml — propertyVisuals (spec quote-visual-parity R1)
     expect(omitted).not.toContain('Your roof, from above')
   })
 
-  it('REPORT_TEMPLATE_VERSION is bumped to 4 so cached PDFs regenerate', () => {
-    expect(REPORT_TEMPLATE_VERSION).toBe(4)
+  it('REPORT_TEMPLATE_VERSION is bumped to 6 so cached PDFs regenerate (roofing layout map + materials)', () => {
+    expect(REPORT_TEMPLATE_VERSION).toBe(6)
   })
 
   it('chunks a full 8-stat roofing grid into rows of 4 (the chrome statgrid does not wrap)', () => {

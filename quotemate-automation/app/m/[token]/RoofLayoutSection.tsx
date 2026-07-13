@@ -19,16 +19,28 @@ import {
 } from '@/lib/roofing/layout-plan'
 import type { LayoutOverlayStructure } from '@/lib/roofing/layout-overlay-svg'
 import { RoofLayoutMapFigure } from '@/app/q/_chrome/RoofLayoutMapFigure'
-import type { GeoJSONPolygon } from '@/lib/roofing/types'
+import type {
+  GeoJSONPolygon,
+  RoofMaterial,
+  RoofStructureRole,
+  PitchBucket,
+} from '@/lib/roofing/types'
 
-/** Per-structure metric snapshot for live material recomputes on toggle. */
+/** Per-structure metric snapshot for live material recomputes on toggle. Carries
+ *  the material + edge-work inputs so the live BOM is material-aware (matches the
+ *  cached PDF / customer view). */
 export type LayoutStructureMetrics = {
+  role?: RoofStructureRole
   metrics: {
     sloped_area_m2: number | null
     ridge_lm: number | null
     footprint_m2: number | null
     polygon_geojson: GeoJSONPolygon | null
+    hips?: number | null
+    valleys?: number | null
+    pitch_degrees?: number | null
   }
+  inputs?: { material?: RoofMaterial; pitch?: PitchBucket }
 }
 
 type Props = {

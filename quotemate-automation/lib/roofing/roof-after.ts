@@ -17,7 +17,10 @@
 import { createClient } from '@supabase/supabase-js'
 import { buildStaticMapUrl } from '@/lib/roofing/google-maps'
 import { geminiProvider } from '@/lib/ig-engine/providers/gemini'
+import { replicateProvider } from '@/lib/ig-engine/providers/replicate'
+import { huggingfaceProvider } from '@/lib/ig-engine/providers/huggingface'
 import { buildRoofAfterPrompt } from '@/lib/roofing/roof-after-prompt'
+import { pickRoofingImageProvider } from '@/lib/roofing/roof-after-provider'
 import type { MultiRoofQuote, RoofMaterial } from '@/lib/roofing/types'
 
 const supabase = createClient(
@@ -62,7 +65,18 @@ export type RoofAfterResult =
  * Gemini. Best-effort: never throws; records 'failed' on error.
  */
 export async function generateRoofAfterImage(token: string): Promise<RoofAfterResult> {
-  if (!process.env.GEMINI_API_KEY) return { ok: false, status: 'skipped', error: 'GEMINI_API_KEY missing' }
+  // Roofing image gen prefers Replicate (Nano Banana Pro) — the direct Gemini
+  // image API is free-tier quota-limited (429). Falls back to Gemini when
+  // REPLICATE_API_TOKEN isn't set; force with ROOFING_IMAGE_PROVIDER.
+  const providerName = pickRoofingImageProvider({
+    override: process.env.ROOFING_IMAGE_PROVIDER,
+    hasReplicate: !!process.env.REPLICATE_API_TOKEN?.trim(),
+    hasGemini: !!process.env.GEMINI_API_KEY?.trim(),
+    hasHuggingFace: !!(process.env.HUGGING_FACE_API_TOKEN ?? process.env.HF_TOKEN)?.trim(),
+  })
+  if (!providerName) {
+    return { ok: false, status: 'skipped', error: 'no roofing image provider (REPLICATE_API_TOKEN / GEMINI_API_KEY / HUGGING_FACE_API_TOKEN)' }
+  }
   if (!process.env.GOOGLE_MAPS_API_KEY) return { ok: false, status: 'skipped', error: 'GOOGLE_MAPS_API_KEY missing' }
 
   const { data: row } = await supabase
@@ -106,7 +120,13 @@ export async function generateRoofAfterImage(token: string): Promise<RoofAfterRe
     const satBytes = Buffer.from(await satRes.arrayBuffer())
 
     const prompt = buildRoofAfterPrompt(primaryMaterial(quote))
-    const out = await geminiProvider.renderImage({
+    const provider =
+      providerName === 'replicate'
+        ? replicateProvider
+        : providerName === 'huggingface'
+          ? huggingfaceProvider
+          : geminiProvider
+    const out = await provider.renderImage({
       system: prompt.system,
       user: prompt.user,
       sourceImage: { base64: satBytes.toString('base64'), mime: satMime },

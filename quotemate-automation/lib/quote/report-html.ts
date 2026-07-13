@@ -16,6 +16,7 @@ import {
   aud2,
   type TenantBranding,
 } from '../pdf/report-chrome'
+import { renderRoofLayoutSectionHtml, type RoofLayoutOverlay } from '@/lib/roofing/report-html'
 
 /**
  * Bump whenever buildQuoteReportHtml's output changes in a way that should
@@ -34,8 +35,11 @@ import {
  *   v5 (2026-07-13): roofing property-visuals aerial now centres on the measured
  *   building polygon, not the geocoded (street-only) address — cached PDFs with
  *   the wrong-building image self-heal on next download.
+ *   v6 (2026-07-13): roofing quotes-row PDF now includes the roof layout map +
+ *   estimated materials (from the linked measurement) — cached roofing quote PDFs
+ *   regenerate to add them.
  */
-export const REPORT_TEMPLATE_VERSION = 5
+export const REPORT_TEMPLATE_VERSION = 6
 
 export type QuoteReportLineItem = {
   description: string
@@ -71,6 +75,10 @@ export type QuoteReportInput = {
   assumptions?: string[] | null
   estimatedTimeframe?: string | null
   propertyVisuals?: QuoteReportPropertyVisuals | null
+  /** Roofing quotes only: the AI work-strategy layout map + estimated materials,
+   *  sourced from the linked roofing_measurements (null for every other trade or
+   *  when the tradie hasn't generated a plan). Renders after propertyVisuals. */
+  layoutOverlay?: RoofLayoutOverlay | null
   good: QuoteReportTier
   better: QuoteReportTier
   best: QuoteReportTier
@@ -194,6 +202,8 @@ function buildDefaultQuoteBody(input: QuoteReportInput): string {
     body += `<h2>Scope of works</h2><div class="scope">${esc(input.scopeOfWorks)}</div>`
   }
   body += propertyVisualsSection(input.propertyVisuals)
+  // Roofing: the layout map + estimated materials (from the linked measurement).
+  if (input.layoutOverlay) body += renderRoofLayoutSectionHtml(input.layoutOverlay)
   body += `<h2>${multiTier ? 'Your options' : 'Your quote'}</h2>${tiers}`
   if (assumptions.length > 0) {
     body += `<h2>Assumptions</h2><ul class="bullets">${assumptions

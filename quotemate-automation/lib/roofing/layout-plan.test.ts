@@ -20,8 +20,9 @@ import {
   generateWithFallback,
   type LayoutPlan,
 } from './layout-plan'
+import type { RoofMaterial } from './types'
 
-describe('generateWithFallback (Claude primary → Gemini fallback)', () => {
+describe('generateWithFallback (primary → fallback combinator)', () => {
   it('returns the primary result when it succeeds non-empty', async () => {
     const out = await generateWithFallback(
       async () => 'CLAUDE',
@@ -246,8 +247,8 @@ describe('layoutMaterials', () => {
     const { items, note } = layoutMaterials(metrics, 'reroof')
     const byItem = Object.fromEntries(items.map((i) => [i.item, i]))
     // sheets = ceil(200 / (0.762 × 5.5) × 1.1) = ceil(52.49…) = 53
-    expect(byItem['Colorbond sheets'].qty).toBe(53)
-    expect(byItem['Colorbond sheets'].unit).toBe('sheets')
+    expect(byItem['Colorbond corrugated sheets'].qty).toBe(53)
+    expect(byItem['Colorbond corrugated sheets'].unit).toBe('sheets')
     // screws = ceil(200 × 9)
     expect(byItem['Roofing screws'].qty).toBe(1800)
     // battens = ceil(200 × 1.1)
@@ -268,10 +269,10 @@ describe('layoutMaterials', () => {
     }
     const byItem = Object.fromEntries(items.map((i) => [i.item, i]))
     // Sheets: the measured area, the per-sheet cover, and the waste factor.
-    expect(byItem['Colorbond sheets'].basis).toContain('200 m²')
-    expect(byItem['Colorbond sheets'].basis).toMatch(/4\.19 m² .*sheet/)
-    expect(byItem['Colorbond sheets'].basis).toContain('10% cutting waste')
-    expect(byItem['Colorbond sheets'].use).toMatch(/sheeting/i)
+    expect(byItem['Colorbond corrugated sheets'].basis).toContain('200 m²')
+    expect(byItem['Colorbond corrugated sheets'].basis).toMatch(/4\.19 m² .*sheet/)
+    expect(byItem['Colorbond corrugated sheets'].basis).toContain('10% cutting waste')
+    expect(byItem['Colorbond corrugated sheets'].use).toMatch(/sheeting/i)
     // Screws: the fixing density.
     expect(byItem['Roofing screws'].basis).toContain('9 screws/m²')
     // Ridge capping: from the measured ridge/hip lines.
@@ -309,6 +310,50 @@ describe('layoutMaterials', () => {
     const { items } = layoutMaterials({ sloped_area_m2: null, ridge_lm: null, footprint_m2: 0, polygon_geojson: null }, 'reroof')
     expect(items).toEqual([])
   })
+
+  // ── Tier 1: material-aware BOM ──────────────────────────────────────
+  it('a TILE roof emits tiles + battens + pointing — NO sheets or screws', () => {
+    const { items } = layoutMaterials({ ...metrics, material: 'concrete_tile' }, 'reroof')
+    const names = items.map((i) => i.item)
+    expect(names).toContain('Concrete roof tiles')
+    expect(names).not.toContain('Colorbond corrugated sheets')
+    expect(names).not.toContain('Roofing screws')
+    const byItem = Object.fromEntries(items.map((i) => [i.item, i]))
+    // tiles = ceil(200 × 10 × 1.05)
+    expect(byItem['Concrete roof tiles'].qty).toBe(2100)
+    expect(byItem['Concrete roof tiles'].unit).toBe('tiles')
+    // battens = ceil(200 × 2.6) — tighter tile gauge
+    expect(byItem['Battens'].qty).toBe(520)
+    // tile ridge line reads as pointing, not metal capping
+    expect(names).toContain('Ridge & hip pointing')
+  })
+
+  it('KLIPLOK uses concealed clips (~4/m²), not pierced screws (~9/m²)', () => {
+    const { items } = layoutMaterials({ ...metrics, material: 'colorbond_kliplok' }, 'reroof')
+    const byItem = Object.fromEntries(items.map((i) => [i.item, i]))
+    expect(byItem['Colorbond Kliplok sheets']).toBeTruthy()
+    expect(byItem['Fixing clips'].qty).toBe(800) // 200 × 4, not 1800
+    expect(byItem['Fixing clips'].unit).toBe('clips')
+    expect(items.map((i) => i.item)).not.toContain('Roofing screws')
+  })
+
+  // ── Tier 2: geometry-derived lines ──────────────────────────────────
+  it('adds an insulation blanket on re-roof / upgrade, not on patch', () => {
+    const reroof = layoutMaterials(metrics, 'reroof').items.map((i) => i.item)
+    expect(reroof).toContain('Insulation blanket')
+    const patch = layoutMaterials(metrics, 'patch_repair').items.map((i) => i.item)
+    expect(patch).not.toContain('Insulation blanket')
+  })
+
+  it('adds valley flashing from the measured valley length (deriveEdgeWorks basis)', () => {
+    const { items } = layoutMaterials({ ...metrics, valleys_lm: 12.4 }, 'reroof')
+    const valley = items.find((i) => i.item === 'Valley flashing')!
+    expect(valley).toBeTruthy()
+    expect(valley.qty).toBe(13) // ceil(12.4)
+    expect(valley.unit).toBe('lm')
+    // no valley length → no line
+    expect(layoutMaterials(metrics, 'reroof').items.find((i) => i.item === 'Valley flashing')).toBeUndefined()
+  })
 })
 
 // Shared metrics derivation for /m, /q/roof and the PDF — sums the job,
@@ -337,6 +382,25 @@ describe('combinedLayoutMetrics', () => {
     const m = combinedLayoutMetrics([{ metrics: { sloped_area_m2: null, ridge_lm: null, footprint_m2: 0, polygon_geojson: null } }])
     expect(m.sloped_area_m2).toBeNull()
     expect(m.ridge_lm).toBeNull()
+  })
+
+  it('resolves the job material (primary structure) and sums valley length', () => {
+    const withInputs = (
+      material: RoofMaterial,
+      valleys: number,
+      footprint: number,
+      role: 'primary' | 'secondary',
+    ) => ({
+      role,
+      inputs: { material, pitch: 'standard' as const },
+      metrics: { sloped_area_m2: 100, ridge_lm: 10, footprint_m2: footprint, polygon_geojson: null, hips: 4, valleys },
+    })
+    const m = combinedLayoutMetrics([
+      withInputs('concrete_tile', 2, 160, 'primary'),
+      withInputs('colorbond_corrugated', 1, 40, 'secondary'),
+    ])
+    expect(m.material).toBe('concrete_tile') // the primary dwelling drives the BOM
+    expect(m.valleys_lm).toBeGreaterThan(0) // valley length summed across structures
   })
 })
 

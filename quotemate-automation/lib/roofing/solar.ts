@@ -11,7 +11,8 @@
 //   • AERIAL — the Google satellite aerial the measure tool already fetches
 //     (Gemini vision; see app/api/roofing/detect-solar).
 //   • PHOTOS — customer-uploaded or tradie-attached close-up roof photos
-//     (Claude/Anthropic vision; mirrors lib/roofing/vision-verify.ts).
+//     (Hugging Face open VLM primary → Anthropic Claude fallback; see
+//     lib/roofing/vision-provider, mirrors lib/roofing/vision-verify.ts).
 // mergeSolarDetections combines them: the booleans are OR-ed, the counts
 // come from the higher-confidence source, and a disagreement hedges the
 // confidence down so a shaky read never auto-prices.
@@ -26,6 +27,7 @@
 // ════════════════════════════════════════════════════════════════════
 
 import type { RoofJobIntent, RoofingRateCard } from './types'
+import { roofingVisionParsed, type VisionImage } from './vision-provider'
 
 export type SolarConfidence = 'high' | 'medium' | 'low'
 
@@ -434,38 +436,27 @@ const PHOTO_VISION_MODEL = process.env.ROOFING_VISION_MODEL ?? 'claude-sonnet-4-
 export type RoofPhoto = { base64: string; mime: string }
 
 /**
- * Best-effort Claude vision detection of solar + skylights from one or
- * more close-up roof photos. Returns a SolarDetection tagged source:'photo',
- * or null when the key is missing / no photos / the call or parse fails.
+ * Best-effort vision detection of solar + skylights from one or more close-up
+ * roof photos — Hugging Face open VLM primary, Anthropic Claude fallback
+ * (lib/roofing/vision-provider). Returns a SolarDetection tagged source:'photo',
+ * or null when there are no photos / no provider / the call + parse both fail.
  */
 export async function detectSolarFromPhotos(
   photos: RoofPhoto[],
   opts: { model?: string } = {},
 ): Promise<SolarDetection | null> {
-  if (!process.env.ANTHROPIC_API_KEY) return null
   if (!Array.isArray(photos) || photos.length === 0) return null
-  try {
-    const { anthropic } = await import('@ai-sdk/anthropic')
-    const { generateText } = await import('ai')
-
-    const content: Array<
-      | { type: 'text'; text: string }
-      | { type: 'image'; image: string; mediaType: string }
-    > = [{ type: 'text', text: buildPhotoSolarDetectPrompt() }]
-    // Cap the number of images sent to keep the call bounded.
-    for (const p of photos.slice(0, 6)) {
-      content.push({ type: 'image', image: p.base64, mediaType: p.mime })
-    }
-
-    const { text } = await generateText({
-      model: anthropic(opts.model ?? PHOTO_VISION_MODEL),
-      temperature: 0,
-      messages: [{ role: 'user' as const, content }],
-    })
-    return parseSolarDetection(text, 'photo')
-  } catch {
-    return null
-  }
+  // Cap the number of images sent to keep the call bounded.
+  const images: VisionImage[] = photos.slice(0, 6).map((p) => ({ base64: p.base64, mime: p.mime }))
+  const result = await roofingVisionParsed<SolarDetection>({
+    prompt: buildPhotoSolarDetectPrompt(),
+    images,
+    model: { claude: opts.model ?? PHOTO_VISION_MODEL },
+    // Any parseable detection is a valid answer (has_solar true or false) — the
+    // downstream merge weighs confidence, so accept the HF read when it parses.
+    parse: (t) => parseSolarDetection(t, 'photo'),
+  })
+  return result?.value ?? null
 }
 
 export const __test_only__ = { ELECTRICIAN_NOTE, round2, maxNullable, joinAnd }

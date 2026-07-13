@@ -27,7 +27,7 @@ import { hasPropertyVisuals, propertyVisualsImagePath } from './visuals-image-pa
 import { quotePdfIsStale, quotePdfSignature, hashReportContent } from './pdf-signature'
 import { serializeReportDoc } from './report-doc/serialize'
 import type { ReportDoc } from './report-doc/types'
-import { buildRoofQuoteReportHtml } from '@/lib/roofing/report-html'
+import { buildRoofQuoteReportHtml, type RoofLayoutOverlay } from '@/lib/roofing/report-html'
 import { roofOutlineImageSrc, type RoofOutlineStructure } from '@/lib/roofing/roof-outline-svg'
 import { structureImageRefs, structureStaticMapPath } from '@/lib/roofing/structure-images'
 import {
@@ -332,6 +332,79 @@ async function resolveVisualsImagePath(
   return propertyVisualsImagePath({ trade, shareToken, address, linkedRoofPublicToken })
 }
 
+/** Build the roof layout-map + estimated-materials overlay from a
+ *  roofing_measurements row — CACHED plan only (never generates). Shared by the
+ *  roofing-native PDF and the generic quotes-row PDF/HTML so a roofing quote
+ *  carries the layout map + BOM whichever report renders it. */
+async function buildRoofLayoutOverlay(row: {
+  layout_status: string | null
+  layout_plan: LayoutPlan | null
+  quote: MultiRoofQuote | null
+  included_indices: number[] | null
+  confirmed_structure: number | null
+  public_token: string
+}): Promise<RoofLayoutOverlay | null> {
+  if (!(row.layout_status === 'ready' && row.layout_plan && row.quote?.structures?.length)) return null
+  const overlayStructures: LayoutOverlayStructure[] = row.quote.structures.map((s) => ({
+    polygon: s.metrics?.polygon_geojson ?? null,
+    form: s.metrics?.form ?? 'unknown',
+  }))
+  const effective = resolveEffectiveIndices(
+    { included: row.included_indices, confirmedStructure: row.confirmed_structure, paramIndices: null },
+    row.quote,
+  )
+  const includedSet = new Set(effective)
+  const visibleZones =
+    includedSet.size > 0
+      ? row.layout_plan.zones.filter((z) => includedSet.has(z.structureIndex))
+      : row.layout_plan.zones
+  const includedOverlayStructures =
+    effective.length > 0
+      ? effective.map((i) => overlayStructures[i - 1]).filter(Boolean)
+      : overlayStructures
+  const includedStructures =
+    effective.length > 0
+      ? effective.map((i) => row.quote!.structures[i - 1]).filter(Boolean)
+      : row.quote.structures
+  const view = layoutMapView(includedOverlayStructures, { width: 640, height: 480 })
+  const overlaySrc =
+    view && visibleZones.length > 0
+      ? layoutOverlayImageSrc({
+          zones: visibleZones,
+          structures: overlayStructures,
+          center: view.center,
+          zoom: view.zoom,
+          width: 640,
+          height: 480,
+        })
+      : null
+  if (!overlaySrc) return null
+  const sel = effective.length > 0 ? `&sel=${effective.join(',')}` : ''
+  const aerialSrc = await prepareImage(`${APP_URL}/api/roofing/q/${row.public_token}/static-map?fit=1${sel}`)
+  if (!aerialSrc) return null
+  return {
+    header: row.layout_plan.header,
+    aerialSrc,
+    overlaySrc,
+    legend: visibleZones.map((z) => ({ color: z.color, label: z.label })),
+    materials: layoutMaterials(combinedLayoutMetrics(includedStructures), row.layout_plan.mode),
+  }
+}
+
+/** Resolve the roof layout overlay for a GENERIC quotes-row roofing quote by
+ *  looking up the linked roofing_measurements (quote_share_token == share_token,
+ *  the same link the customer page + aerial use). Null for non-roofing / unlinked
+ *  quotes or when the tradie hasn't generated a plan. */
+async function resolveRoofLayoutForQuote(shareToken: string): Promise<RoofLayoutOverlay | null> {
+  const { data: row } = await supabase()
+    .from('roofing_measurements')
+    .select('layout_status, layout_plan, quote, included_indices, confirmed_structure, public_token')
+    .eq('quote_share_token', shareToken)
+    .maybeSingle()
+  if (!row) return null
+  return buildRoofLayoutOverlay(row as Parameters<typeof buildRoofLayoutOverlay>[0])
+}
+
 /** Shape the QuoteReportInput both the PDF and the inline HTML render from —
  *  identical output guarantees the on-screen HTML matches the downloaded PDF.
  *  `visualsImageSrc` is the pre-resolved property image (data URI for the PDF,
@@ -340,6 +413,7 @@ function buildQuoteReportInput(
   ctx: QuoteReportContext,
   branding: Awaited<ReturnType<typeof loadTenantBranding>>,
   visualsImageSrc: string | null = null,
+  layoutOverlay: RoofLayoutOverlay | null = null,
 ): QuoteReportInput {
   const { quote, intake, intakeTrade, visibleTierSet, recommendedTier } = ctx
   return {
@@ -351,6 +425,7 @@ function buildQuoteReportInput(
     assumptions: quote.assumptions,
     estimatedTimeframe: quote.estimated_timeframe,
     propertyVisuals: quotePropertyVisuals(intakeTrade, intake?.scope ?? null, visualsImageSrc),
+    layoutOverlay,
     good: visibleTierSet.has('good') ? quote.good : null,
     better: visibleTierSet.has('better') ? quote.better : null,
     best: visibleTierSet.has('best') ? quote.best : null,
@@ -399,8 +474,11 @@ export async function renderQuoteReportHtml(quoteId: string): Promise<string | n
     ctx.quote.share_token,
     ctx.intake?.address ?? null,
   )
+  // Roofing: the layout map + estimated materials from the linked measurement.
+  const layoutOverlay =
+    ctx.intakeTrade === 'roofing' ? await resolveRoofLayoutForQuote(ctx.quote.share_token) : null
   return renderQuoteDocumentHtml(
-    buildQuoteReportInput(ctx, branding, visualsImageSrc),
+    buildQuoteReportInput(ctx, branding, visualsImageSrc, layoutOverlay),
     ctx.quote.report_doc,
   )
 }
@@ -469,8 +547,13 @@ export async function ensureQuotePdf(
     const visualsImageSrc = visualsPath
       ? await prepareImage(`${APP_URL}${visualsPath}`, { maxEdge: 640 })
       : null
+    // Roofing: layout map + estimated materials from the linked measurement, so
+    // the downloadable/sent quote PDF carries them (they live on the measurement,
+    // not the quotes row).
+    const layoutOverlay =
+      intakeTrade === 'roofing' ? await resolveRoofLayoutForQuote(quote.share_token) : null
     const html = renderQuoteDocumentHtml(
-      buildQuoteReportInput(ctx, branding, visualsImageSrc),
+      buildQuoteReportInput(ctx, branding, visualsImageSrc, layoutOverlay),
       quote.report_doc,
     )
     const pdf = await renderQuotePdfCapped(html, `quote:${quoteId}`)
@@ -594,70 +677,10 @@ export async function ensureRoofQuotePdf(
       )
     }
 
-    // AI work-strategy layout map (spec quote-visual-parity R6e) — the CACHED
-    // plan only, SELECTION-AWARE (user rule 2026-07-11): the aerial frames
-    // exactly the structures the tradie ticked (one selected → zoomed to it
-    // alone; two → both; all → all), only their zones draw, and the material
-    // estimates sum only the selected structures. The ?fit=1&sel= static map
-    // and layoutMapView compute the identical subset view, keeping the
-    // overlay aligned with the imagery.
-    let layoutOverlay: Parameters<typeof buildRoofQuoteReportHtml>[0]['layoutOverlay'] = null
-    if (row.layout_status === 'ready' && row.layout_plan && row.quote?.structures?.length) {
-      const overlayStructures: LayoutOverlayStructure[] = row.quote.structures.map((s) => ({
-        polygon: s.metrics?.polygon_geojson ?? null,
-        form: s.metrics?.form ?? 'unknown',
-      }))
-      const effective = resolveEffectiveIndices(
-        {
-          included: row.included_indices,
-          confirmedStructure: row.confirmed_structure,
-          paramIndices: null,
-        },
-        row.quote,
-      )
-      const includedSet = new Set(effective)
-      const visibleZones =
-        includedSet.size > 0
-          ? row.layout_plan.zones.filter((z) => includedSet.has(z.structureIndex))
-          : row.layout_plan.zones
-      const includedOverlayStructures =
-        effective.length > 0
-          ? effective.map((i) => overlayStructures[i - 1]).filter(Boolean)
-          : overlayStructures
-      const includedStructures =
-        effective.length > 0
-          ? effective.map((i) => row.quote!.structures[i - 1]).filter(Boolean)
-          : row.quote.structures
-      const view = layoutMapView(includedOverlayStructures, { width: 640, height: 480 })
-      const overlaySrc =
-        view && visibleZones.length > 0
-          ? layoutOverlayImageSrc({
-              zones: visibleZones,
-              structures: overlayStructures,
-              center: view.center,
-              zoom: view.zoom,
-              width: 640,
-              height: 480,
-            })
-          : null
-      const sel = effective.length > 0 ? `&sel=${effective.join(',')}` : ''
-      const aerialSrc = overlaySrc
-        ? await prepareImage(`${APP_URL}/api/roofing/q/${publicToken}/static-map?fit=1${sel}`)
-        : null
-      if (overlaySrc && aerialSrc) {
-        layoutOverlay = {
-          header: row.layout_plan.header,
-          aerialSrc,
-          overlaySrc,
-          legend: visibleZones.map((z) => ({ color: z.color, label: z.label })),
-          // Deterministic material estimates over the SELECTED structures.
-          materials: layoutMaterials(
-            combinedLayoutMetrics(includedStructures),
-            row.layout_plan.mode,
-          ),
-        }
-      }
-    }
+    // AI work-strategy layout map + estimated materials — CACHED plan only,
+    // selection-aware. Extracted (buildRoofLayoutOverlay) so the generic
+    // quotes-row PDF/HTML reuses the identical overlay.
+    const layoutOverlay = await buildRoofLayoutOverlay(row)
 
     const html = buildRoofQuoteReportHtml({
       businessName: branding.businessName,

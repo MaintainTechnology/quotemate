@@ -147,11 +147,16 @@ export default async function MeasurementResultsPage({
     form: s.metrics?.form ?? 'unknown',
   }))
   const structureMetrics = quote.structures.map((s) => ({
+    role: s.role,
+    inputs: { material: s.inputs?.material, pitch: s.inputs?.pitch },
     metrics: {
       sloped_area_m2: s.metrics?.sloped_area_m2 ?? null,
       ridge_lm: s.metrics?.ridge_lm ?? null,
       footprint_m2: s.metrics?.footprint_m2 ?? null,
       polygon_geojson: s.metrics?.polygon_geojson ?? null,
+      hips: s.metrics?.hips ?? null,
+      valleys: s.metrics?.valleys ?? null,
+      pitch_degrees: s.metrics?.pitch_degrees ?? null,
     },
   }))
 

@@ -25,12 +25,14 @@
 import type { ImageProvider } from './base'
 import { geminiProvider } from './gemini'
 import { stabilityProvider } from './stability'
+import { replicateProvider } from './replicate'
 
-export type ImageGenProvider = 'stability' | 'gemini'
+export type ImageGenProvider = 'stability' | 'gemini' | 'replicate'
 
 /** PURE-ish (reads env): which generator the engine should use. */
 export function imageProviderName(): ImageGenProvider {
   const override = (process.env.IG_IMAGE_PROVIDER || '').trim().toLowerCase()
+  if (override === 'replicate') return 'replicate'
   if (override === 'stability') return 'stability'
   if (override === 'gemini') return 'gemini'
   return process.env.STABILITY_NIM_URL?.trim() ? 'stability' : 'gemini'
@@ -38,18 +40,27 @@ export function imageProviderName(): ImageGenProvider {
 
 /** The selected image-generation provider instance. */
 export function selectImageProvider(): ImageProvider {
-  return imageProviderName() === 'stability' ? stabilityProvider : geminiProvider
+  const name = imageProviderName()
+  if (name === 'replicate') return replicateProvider
+  if (name === 'stability') return stabilityProvider
+  return geminiProvider
 }
 
 /**
  * Is the selected generator actually configured to run? Mirrors the
  * per-provider credential the generators previously guarded on:
+ *   · replicate → REPLICATE_API_TOKEN must be set
  *   · stability → STABILITY_NIM_URL must be set
  *   · gemini    → GEMINI_API_KEY must be set
  * Returns the missing-config reason when not ready (for a clean skip).
  */
 export function imageGenReadiness(): { ready: boolean; provider: ImageGenProvider; reason: string } {
   const provider = imageProviderName()
+  if (provider === 'replicate') {
+    return process.env.REPLICATE_API_TOKEN?.trim()
+      ? { ready: true, provider, reason: '' }
+      : { ready: false, provider, reason: 'REPLICATE_API_TOKEN missing' }
+  }
   if (provider === 'stability') {
     return process.env.STABILITY_NIM_URL?.trim()
       ? { ready: true, provider, reason: '' }

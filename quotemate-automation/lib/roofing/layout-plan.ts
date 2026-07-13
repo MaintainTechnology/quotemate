@@ -15,15 +15,23 @@
 // generate) — house DI pattern (lib/painting/paint-after.ts).
 // ════════════════════════════════════════════════════════════════════
 
-// The classifier runs Anthropic Claude (claude-sonnet-4-6) as PRIMARY with
-// Gemini (gemini-3.1-flash-lite-image) as the fallback on error/empty.
+// The classifier runs Gemini (gemini-3.1-flash-lite-image) as PRIMARY with
+// Anthropic Claude (claude-sonnet-4-6) as the fallback on error/empty.
 //
 // NOTE: supabase / anthropic / gemini / google-maps are imported DYNAMICALLY
 // inside the provider fns — the pure parts of this module (palettes, parser,
 // materials) are consumed by a client component (/m RoofLayoutSection) and must
 // not drag server SDKs into the browser bundle.
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { GeoJSONPolygon, RoofForm } from './types'
+import type {
+  GeoJSONPolygon,
+  RoofForm,
+  RoofMaterial,
+  RoofMetrics,
+  RoofStructureRole,
+  PitchBucket,
+} from './types'
+import { deriveEdgeWorks } from './pricing'
 
 export type LayoutMode = 'patch_repair' | 'reroof' | 'upgrade'
 
@@ -236,12 +244,51 @@ export function parseLayoutPlan(
 }
 
 // ── Deterministic material quantities ────────────────────────────────
-// Named coefficients; ALL arithmetic here — never from the LLM.
-const SHEET_COVER_M = 0.762 // Custom Orb effective cover width
-const SHEET_AVG_LEN_M = 5.5 // typical residential sheet length
-const WASTE_FACTOR = 1.1 // 10% cutting waste
-const SCREWS_PER_M2 = 9
-const BATTEN_LM_PER_M2 = 1.1
+// Per-material Bill-of-Materials; ALL arithmetic here — never from the LLM.
+// The job's fused material (Geoscape × Solar, tradie-confirmed) selects the
+// template: metal profiles emit sheets/screws(or clips)/battens with
+// profile-specific coefficients; tile emits tiles/battens/pointing and NO
+// sheets/screws (the tile/Kliplok correctness fix).
+
+const WASTE_METAL = 1.1 // 10% metal cutting waste
+const WASTE_TILE = 1.05 // 5% tile breakage/waste
+
+type MetalSpec = {
+  kind: 'metal'
+  label: string
+  coverM: number // effective cover width per sheet
+  sheetLenM: number // typical sheet length
+  fixingsPerM2: number // screws (pierced-fix) or clips (concealed-fix)
+  fixingName: 'screws' | 'concealed clips'
+  battenLmPerM2: number
+  waste: number
+}
+type TileSpec = {
+  kind: 'tile'
+  label: string
+  tilesPerM2: number
+  battenLmPerM2: number
+  waste: number
+}
+export type RoofMaterialSpec = MetalSpec | TileSpec
+
+/** Per-material BOM coefficients. Metal cover widths are AU profile standards
+ *  (Custom Orb / Trimdek 0.762 m, Spandek / Kliplok ~0.70 m); Kliplok is
+ *  CONCEALED-fix (~4 clips/m²) not pierced (~9 screws/m²) — the corrugated
+ *  template over-counted its fixings. Tile battens run tighter (per-tile gauge
+ *  ≈ 2.6 lm/m²). Defaults here; a later tier moves them to the rate-card overlay. */
+export const ROOF_MATERIAL_SPEC: Record<RoofMaterial, RoofMaterialSpec> = {
+  colorbond_corrugated: { kind: 'metal', label: 'Colorbond corrugated sheets', coverM: 0.762, sheetLenM: 5.5, fixingsPerM2: 9, fixingName: 'screws', battenLmPerM2: 1.1, waste: WASTE_METAL },
+  colorbond_trimdek: { kind: 'metal', label: 'Colorbond Trimdek sheets', coverM: 0.762, sheetLenM: 5.5, fixingsPerM2: 9, fixingName: 'screws', battenLmPerM2: 1.1, waste: WASTE_METAL },
+  colorbond_spandek: { kind: 'metal', label: 'Colorbond Spandek sheets', coverM: 0.7, sheetLenM: 5.5, fixingsPerM2: 9, fixingName: 'screws', battenLmPerM2: 1.1, waste: WASTE_METAL },
+  colorbond_kliplok: { kind: 'metal', label: 'Colorbond Kliplok sheets', coverM: 0.7, sheetLenM: 5.5, fixingsPerM2: 4, fixingName: 'concealed clips', battenLmPerM2: 1.1, waste: WASTE_METAL },
+  concrete_tile: { kind: 'tile', label: 'Concrete roof tiles', tilesPerM2: 10, battenLmPerM2: 2.6, waste: WASTE_TILE },
+  terracotta_tile: { kind: 'tile', label: 'Terracotta roof tiles', tilesPerM2: 10, battenLmPerM2: 2.6, waste: WASTE_TILE },
+  // Asbestos-suspect roofs route to inspection (rarely a priced BOM); keep a safe
+  // generic metal template + a confirm-on-site label if one ever renders.
+  cement_sheet: { kind: 'metal', label: 'Roof sheets (material TBC — asbestos-suspect, confirm on site)', coverM: 0.9, sheetLenM: 3.0, fixingsPerM2: 6, fixingName: 'screws', battenLmPerM2: 1.1, waste: WASTE_METAL },
+  unknown: { kind: 'metal', label: 'Roof sheets', coverM: 0.762, sheetLenM: 5.5, fixingsPerM2: 9, fixingName: 'screws', battenLmPerM2: 1.1, waste: WASTE_METAL },
+}
 
 const M_PER_DEG_LAT = 110_574
 const M_PER_DEG_LNG_EQUATOR = 111_320
@@ -251,6 +298,12 @@ export type LayoutMaterialMetrics = {
   ridge_lm: number | null
   footprint_m2: number
   polygon_geojson: GeoJSONPolygon | null
+  /** Job material (primary structure) → selects the BOM template. Defaults to
+   *  colorbond_corrugated when absent (legacy callers). */
+  material?: RoofMaterial
+  /** Summed valley length (deriveEdgeWorks — the SAME basis pricing charges
+   *  valley flashing on) so materials and the priced edge-works never drift. */
+  valleys_lm?: number | null
 }
 
 /** Footprint perimeter in metres from the polygon ring (equirectangular, the
@@ -285,30 +338,60 @@ function perimeterM(
 }
 
 type StructureMetricsLike = {
+  role?: RoofStructureRole
   metrics?: {
     sloped_area_m2?: number | null
     ridge_lm?: number | null
     footprint_m2?: number | null
     polygon_geojson?: GeoJSONPolygon | null
+    /** Edge-work inputs — let combinedLayoutMetrics reuse deriveEdgeWorks so the
+     *  BOM's valley flashing matches the priced valley flashing exactly. */
+    hips?: number | null
+    valleys?: number | null
+    pitch_degrees?: number | null
   } | null
+  /** The tradie's confirmed job inputs — material selects the BOM template. */
+  inputs?: { material?: RoofMaterial; pitch?: PitchBucket } | null
 }
 
 /** Whole-job metrics for layoutMaterials, shared by /m, /q/roof and the PDF:
  *  sums across every structure; keeps the exact ring perimeter only when one
  *  structure IS the whole job (multi-structure jobs fall back to the
- *  footprint approximation so edge protection isn't quoted off one building). */
+ *  footprint approximation so edge protection isn't quoted off one building).
+ *  Also resolves the job MATERIAL (primary structure) and sums valley length
+ *  via deriveEdgeWorks — the same basis pricing charges valley flashing on. */
 export function combinedLayoutMetrics(
   structures: readonly StructureMetricsLike[],
 ): LayoutMaterialMetrics {
   const sloped = structures.reduce((s, x) => s + (x.metrics?.sloped_area_m2 ?? 0), 0)
   const ridge = structures.reduce((s, x) => s + (x.metrics?.ridge_lm ?? 0), 0)
   const footprint = structures.reduce((s, x) => s + (x.metrics?.footprint_m2 ?? 0), 0)
+
+  const valleysLm = structures.reduce((sum, x) => {
+    if (!x.metrics) return sum
+    const edge = deriveEdgeWorks(
+      {
+        footprint_m2: x.metrics.footprint_m2 ?? 0,
+        hips: x.metrics.hips ?? null,
+        valleys: x.metrics.valleys ?? null,
+        pitch_degrees: x.metrics.pitch_degrees ?? null,
+      } as RoofMetrics,
+      x.inputs?.pitch ?? 'standard',
+    )
+    return sum + (edge.valleys_lm ?? 0)
+  }, 0)
+
+  // Material from the primary structure (largest dwelling), else the first.
+  const primary = structures.find((x) => x.role === 'primary') ?? structures[0]
+
   return {
     sloped_area_m2: sloped || null,
     ridge_lm: ridge || null,
     footprint_m2: footprint,
     polygon_geojson:
       structures.length === 1 ? (structures[0]?.metrics?.polygon_geojson ?? null) : null,
+    material: primary?.inputs?.material,
+    valleys_lm: valleysLm || null,
   }
 }
 
@@ -335,39 +418,82 @@ export function layoutMaterials(
 ): { items: LayoutMaterialItem[]; note: string | null } {
   const items: LayoutMaterialItem[] = []
   const sloped = metrics.sloped_area_m2
+  const spec = ROOF_MATERIAL_SPEC[metrics.material ?? 'colorbond_corrugated']
+  const wastePct = Math.round((spec.waste - 1) * 100)
+
   if (sloped !== null && sloped > 0) {
     const area = Math.round(sloped)
-    const coverM2 = Math.round(SHEET_COVER_M * SHEET_AVG_LEN_M * 100) / 100 // 4.19
-    items.push({
-      item: 'Colorbond sheets',
-      qty: ceilQty((sloped / (SHEET_COVER_M * SHEET_AVG_LEN_M)) * WASTE_FACTOR),
-      unit: 'sheets',
-      basis: `${area} m² measured sloped roof ÷ ${coverM2} m² per sheet (${SHEET_COVER_M} m effective cover × ${SHEET_AVG_LEN_M} m average length) + 10% cutting waste`,
-      use: 'New roof sheeting across the measured roof surface.',
-    })
-    items.push({
-      item: 'Roofing screws',
-      qty: ceilQty(sloped * SCREWS_PER_M2),
-      unit: 'screws',
-      basis: `${area} m² × ${SCREWS_PER_M2} screws/m² (standard corrugated fixing density)`,
-      use: 'Fixing the new sheets to the battens, including laps and flashings.',
-    })
+    if (spec.kind === 'metal') {
+      const coverM2 = Math.round(spec.coverM * spec.sheetLenM * 100) / 100
+      items.push({
+        item: spec.label,
+        qty: ceilQty((sloped / (spec.coverM * spec.sheetLenM)) * spec.waste),
+        unit: 'sheets',
+        basis: `${area} m² measured sloped roof ÷ ${coverM2} m² per sheet (${spec.coverM} m effective cover × ${spec.sheetLenM} m average length) + ${wastePct}% cutting waste`,
+        use: 'New roof sheeting across the measured roof surface.',
+      })
+      const clips = spec.fixingName === 'concealed clips'
+      items.push({
+        item: clips ? 'Fixing clips' : 'Roofing screws',
+        qty: ceilQty(sloped * spec.fixingsPerM2),
+        unit: clips ? 'clips' : 'screws',
+        basis: `${area} m² × ${spec.fixingsPerM2} ${spec.fixingName}/m² (${clips ? 'concealed-fix profile' : 'pierced-fix density'})`,
+        use: clips
+          ? 'Concealed clips securing the sheets to the battens.'
+          : 'Fixing the new sheets to the battens, including laps and flashings.',
+      })
+    } else {
+      items.push({
+        item: spec.label,
+        qty: ceilQty(sloped * spec.tilesPerM2 * spec.waste),
+        unit: 'tiles',
+        basis: `${area} m² × ${spec.tilesPerM2} tiles/m² + ${wastePct}% breakage`,
+        use: 'New roof tiles across the measured roof surface.',
+      })
+    }
     items.push({
       item: 'Battens',
-      qty: ceilQty(sloped * BATTEN_LM_PER_M2),
+      qty: ceilQty(sloped * spec.battenLmPerM2),
       unit: 'lm',
-      basis: `${area} m² × ${BATTEN_LM_PER_M2} lm of batten per m² of roof (typical 900 mm spacing plus trims)`,
-      use: 'Roof battens under the new sheeting.',
+      basis: `${area} m² × ${spec.battenLmPerM2} lm of batten per m² of roof (${spec.kind === 'tile' ? 'tile gauge spacing' : 'typical 900 mm spacing plus trims'})`,
+      use: `Roof battens under the new ${spec.kind === 'tile' ? 'tiles' : 'sheeting'}.`,
     })
+    // Insulation blanket — a full re-roof / upgrade lays new anticon blanket
+    // under the roof (Zone 01 labels it "new insulation blanket"); patch/repair does not.
+    if (mode !== 'patch_repair') {
+      items.push({
+        item: 'Insulation blanket',
+        qty: area,
+        unit: 'm²',
+        basis: `${area} m² measured sloped roof (anticon blanket rolled under the new ${spec.kind === 'tile' ? 'tiles' : 'sheets'})`,
+        use: 'Thermal / acoustic blanket across the roof surface.',
+      })
+    }
   }
   if (metrics.ridge_lm !== null && metrics.ridge_lm > 0) {
     const ridge = Math.round(metrics.ridge_lm)
+    const tile = spec.kind === 'tile'
     items.push({
-      item: 'Ridge capping',
+      item: tile ? 'Ridge & hip pointing' : 'Ridge capping',
       qty: ceilQty(metrics.ridge_lm),
       unit: 'lm',
       basis: `${ridge} lm of ridge and hip lines measured from the aerial`,
-      use: 'Capping every ridge and hip line, scribed and sealed.',
+      use: tile
+        ? 'Bedding & pointing every ridge and hip line.'
+        : 'Capping every ridge and hip line, scribed and sealed.',
+    })
+  }
+  // Valley flashing — from the MEASURED valley count via deriveEdgeWorks, the
+  // SAME basis the pricing engine charges valley flashing on, so the BOM and the
+  // priced edge-works never drift.
+  if (metrics.valleys_lm != null && metrics.valleys_lm > 0) {
+    const v = Math.round(metrics.valleys_lm)
+    items.push({
+      item: 'Valley flashing',
+      qty: ceilQty(metrics.valleys_lm),
+      unit: 'lm',
+      basis: `${v} lm across the measured valleys`,
+      use: 'New valley flashing / trays where roof planes meet.',
     })
   }
   const perim = perimeterM(metrics)
@@ -425,7 +551,7 @@ export type LayoutPlanDeps = {
   client?: SupabaseClient
   /** Fetch the satellite aerial the model reasons over. */
   fetchAerial?: (args: { address: string | null; quote: unknown }) => Promise<ImageBytes>
-  /** Structured-JSON vision call. Default: Anthropic Claude primary → Gemini
+  /** Structured-JSON vision call. Default: Gemini primary → Anthropic Claude
    *  fallback (generateWithFallback). Tests inject a mock to bypass both. */
   generate?: (args: {
     prompt: string
@@ -514,8 +640,8 @@ Respond with STRICT JSON only — no prose, no code fences — exactly this shap
   ]
 }`
 
-/** Primary — Anthropic Claude vision (same SDK pattern as vision-verify.ts).
- *  Throws when the key is missing so the caller falls back to Gemini. */
+/** Fallback — Anthropic Claude vision (same SDK pattern as vision-verify.ts).
+ *  Throws when the key is missing so generateWithFallback's error propagates. */
 async function anthropicLayoutGenerate(args: LayoutGenerateArgs): Promise<string> {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not set')
   const { anthropic } = await import('@ai-sdk/anthropic')
@@ -536,7 +662,7 @@ async function anthropicLayoutGenerate(args: LayoutGenerateArgs): Promise<string
   return text
 }
 
-/** Fallback — Gemini structured-JSON vision (the previous default). */
+/** Primary — Gemini structured-JSON vision. */
 async function geminiLayoutGenerate(args: LayoutGenerateArgs): Promise<string> {
   const { geminiProvider } = await import('@/lib/ig-engine/providers/gemini')
   if (!geminiProvider.generateText) throw new Error('gemini generateText unavailable')
@@ -592,16 +718,16 @@ export async function generateRoofLayoutPlan(
   }
   const supabase = deps?.client ?? (await serviceClient())
   const fetchAerial = deps?.fetchAerial ?? fetchAerialDefault
-  // Default: Anthropic Claude primary → Gemini fallback (on error / empty). Tests
+  // Default: Gemini primary → Anthropic Claude fallback (on error / empty). Tests
   // inject deps.generate to bypass both.
   const generate =
     deps?.generate ??
     ((args: LayoutGenerateArgs) =>
       generateWithFallback(
-        () => anthropicLayoutGenerate(args),
         () => geminiLayoutGenerate(args),
+        () => anthropicLayoutGenerate(args),
         (reason) =>
-          console.warn('[roofing/layout-plan] Claude primary unavailable — falling back to Gemini', {
+          console.warn('[roofing/layout-plan] Gemini primary unavailable — falling back to Claude', {
             reason,
           }),
       ))

@@ -15,6 +15,7 @@
 // ════════════════════════════════════════════════════════════════════
 
 import type { RoofMaterial } from './types'
+import { roofingVisionParsed, type VisionImage } from './vision-provider'
 
 const DEFAULT_MODEL = process.env.ROOFING_VISION_MODEL ?? 'claude-sonnet-4-6'
 
@@ -175,61 +176,36 @@ export type VerifyArgs = {
 }
 
 /**
- * Best-effort Claude vision verification. Returns a VisionVerdict.
- * NEVER throws on operational failure — falls back to the inconclusive
- * verdict so the upstream flow stays robust.
+ * Best-effort roofing photo verification — Hugging Face open VLM primary,
+ * Anthropic Claude fallback (lib/roofing/vision-provider). Returns a
+ * VisionVerdict; NEVER throws — falls back to the inconclusive verdict when no
+ * provider yields a usable read, so the upstream flow stays robust.
  */
 export async function verifyAndClassify(args: VerifyArgs): Promise<VisionVerdict> {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return {
+  const prompt = buildVisionPrompt({
+    address: args.address,
+    hasReferenceImage: !!args.referenceImage,
+  })
+  const images: VisionImage[] = [args.customerPhoto]
+  if (args.referenceImage) images.push(args.referenceImage)
+
+  const result = await roofingVisionParsed<VisionVerdict>({
+    prompt,
+    images,
+    model: { claude: args.model ?? DEFAULT_MODEL },
+    parse: (t) => parseVisionResponse(t),
+    // The open-VLM primary must give a REAL read (a match verdict OR a
+    // classified material) to be accepted; a fully-inconclusive HF answer falls
+    // through to Claude — the material/asbestos call is worth the backstop.
+    isUsable: (v) => v.match !== null || v.material !== 'unknown',
+  })
+  return (
+    result?.value ?? {
       match: null,
-      reason: 'ANTHROPIC_API_KEY not set — skipping vision check.',
+      reason: 'Vision check unavailable — no provider succeeded.',
       material: 'unknown',
       materialConfidence: 'low',
       redFlags: [],
     }
-  }
-  try {
-    // Dynamic import — keeps the test imports light (matches the
-    // pattern used in lib/ig-engine/judge.ts).
-    const { anthropic } = await import('@ai-sdk/anthropic')
-    const { generateText } = await import('ai')
-
-    const prompt = buildVisionPrompt({
-      address: args.address,
-      hasReferenceImage: !!args.referenceImage,
-    })
-
-    const content: Array<
-      | { type: 'text'; text: string }
-      | { type: 'image'; image: string; mediaType: string }
-    > = [{ type: 'text', text: prompt }]
-    content.push({
-      type: 'image',
-      image: args.customerPhoto.base64,
-      mediaType: args.customerPhoto.mime,
-    })
-    if (args.referenceImage) {
-      content.push({
-        type: 'image',
-        image: args.referenceImage.base64,
-        mediaType: args.referenceImage.mime,
-      })
-    }
-
-    const { text } = await generateText({
-      model: anthropic(args.model ?? DEFAULT_MODEL),
-      temperature: 0,
-      messages: [{ role: 'user' as const, content }],
-    })
-    return parseVisionResponse(text)
-  } catch (e) {
-    return {
-      match: null,
-      reason: `Vision check failed: ${e instanceof Error ? e.message : String(e)}`,
-      material: 'unknown',
-      materialConfidence: 'low',
-      redFlags: [],
-    }
-  }
+  )
 }

@@ -23,6 +23,7 @@
     "@ai-sdk/anthropic": "^3.0.71",
     "@clerk/backend": "3.8.5",
     "@clerk/nextjs": "^7.5.10",
+    "@huggingface/inference": "^4.13.23",
     "@sentry/nextjs": "^10.63.0",
     "@supabase/supabase-js": "^2.105.1",
     "@tiptap/core": "^3.27.1",
