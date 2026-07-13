@@ -63,6 +63,12 @@ export type SolarRoofInsight = {
   /** Sum of roof-segment areas (m²) — used to sanity-check that
    *  findClosest snapped to the same building Geoscape measured. */
   totalSegmentAreaM2: number
+  /** Google's DSM-measured total roof (sloped) area in m² from
+   *  `wholeRoofStats.areaMeters2` — the pitched surface across all planes.
+   *  Null when the response omits it. Preferred over footprint ÷ cos(pitch)
+   *  on HIGH-quality imagery (accounts for hips/valleys/complex geometry).
+   *  Optional so pre-existing insight literals (tests) stay valid. */
+  measuredRoofAreaM2?: number | null
   imageryQuality: ImageryQuality
   /** ISO date (YYYY-MM-DD) the imagery was captured, when present. */
   imageryDate: string | null
@@ -133,6 +139,19 @@ const DEFAULT_ACCEPT_QUALITIES: ImageryQuality[] = ['HIGH', 'MEDIUM']
 // but a 3×+ blow-out almost always means a wrong (bigger) building.
 export const MAX_SOLAR_AREA_RATIO = 3.0
 export const MIN_SOLAR_AREA_RATIO = 0.33
+
+/** PURE — is Google's measured whole-roof area a sane multiple of the Geoscape
+ *  footprint? A pitched roof + eaves legitimately exceeds the flat footprint,
+ *  but a 3×+ blow-out (malformed wholeRoofStats, or findClosest snapping to a
+ *  bigger building) must never price. Guards the value that actually becomes
+ *  sloped_area_m2 — distinct from the segment-sum guard in enrichMetricsWithSolar,
+ *  which validates a different field (totalSegmentAreaM2). */
+export function measuredAreaWithinFootprint(areaM2: number, footprintM2: number): boolean {
+  if (!Number.isFinite(areaM2) || areaM2 <= 0) return false
+  if (!Number.isFinite(footprintM2) || footprintM2 <= 0) return false
+  const ratio = areaM2 / footprintM2
+  return ratio >= MIN_SOLAR_AREA_RATIO && ratio <= MAX_SOLAR_AREA_RATIO
+}
 
 // ── Config resolution ───────────────────────────────────────────────
 
@@ -255,11 +274,20 @@ export function parseBuildingInsights(body: unknown): SolarRoofInsight | null {
   const mean = weightedMeanPitchDegrees(segments)
   if (mean === null) return null
 
+  // Google's own DSM-measured whole-roof area (all planes, pitch-corrected),
+  // when present — the most accurate sloped area we can get.
+  const wholeRoof = (potential as Record<string, unknown>).wholeRoofStats
+  const measuredRoofAreaM2 =
+    wholeRoof && typeof wholeRoof === 'object'
+      ? numberOrNull((wholeRoof as Record<string, unknown>).areaMeters2)
+      : null
+
   return {
     segments,
     segmentCount: segments.length,
     weightedMeanPitchDegrees: mean,
     totalSegmentAreaM2: segments.reduce((acc, s) => acc + s.areaMeters2, 0),
+    measuredRoofAreaM2: measuredRoofAreaM2 && measuredRoofAreaM2 > 0 ? measuredRoofAreaM2 : null,
     imageryQuality: normaliseQuality(b.imageryQuality),
     imageryDate: formatImageryDate(b.imageryDate),
   }
@@ -328,8 +356,27 @@ export function applySolarInsight(
     warnings.push(
       `Measured roof pitch ≈ ${deg}° (very steep) from Google Solar imagery — routing to inspection so fall-protection access can be priced on site.`,
     )
+  } else if (
+    insight.imageryQuality === 'HIGH' &&
+    insight.measuredRoofAreaM2 != null &&
+    measuredAreaWithinFootprint(insight.measuredRoofAreaM2, metrics.footprint_m2)
+  ) {
+    // HIGH-quality imagery: use Google's DSM-measured whole-roof area directly —
+    // more accurate than footprint ÷ cos(mean pitch) on hip/valley/complex roofs
+    // (it captures every plane + overhang). Clamped to a sane multiple of the
+    // footprint here (measuredAreaWithinFootprint) so a malformed whole-roof stat
+    // can't inflate the priced area; otherwise fall through to the cos-θ derive.
+    enriched.sloped_area_m2 = round1(insight.measuredRoofAreaM2)
+    enriched.measured_roof_area_m2 = round1(insight.measuredRoofAreaM2)
+    enriched.area_source = 'measured'
+    warnings.push(
+      `Sloped roof area ${Math.round(insight.measuredRoofAreaM2)} m² measured directly from Google Solar imagery (all planes).`,
+    )
   } else {
+    // Measured pitch, but area derived from the Geoscape footprint ÷ cos(pitch)
+    // (MEDIUM imagery, or no whole-roof area in the response).
     enriched.sloped_area_m2 = slopedAreaFromPitchDegrees(metrics.footprint_m2, deg)
+    enriched.area_source = 'derived'
   }
 
   if (bucket !== inputs.pitch) {

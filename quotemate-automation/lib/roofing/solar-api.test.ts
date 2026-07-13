@@ -5,6 +5,7 @@ import {
   enrichMetricsWithSolar,
   fetchBuildingInsights,
   formatImageryDate,
+  measuredAreaWithinFootprint,
   normaliseQuality,
   parseBuildingInsights,
   pitchDegreesToBucket,
@@ -244,6 +245,48 @@ describe('applySolarInsight', () => {
     const out = applySolarInsight(metrics(), inputs({ pitch: 'unknown' }), insightFixture({ weightedMeanPitchDegrees: 22 }))
     expect(out.inputs.pitch).toBe('standard')
     expect(out.metrics.sloped_area_m2).not.toBeNull()
+  })
+
+  it('prefers Google’s measured roof area over cos-θ on HIGH imagery', () => {
+    const out = applySolarInsight(
+      metrics({ footprint_m2: 200 }),
+      inputs({ pitch: 'standard' }),
+      insightFixture({ weightedMeanPitchDegrees: 22, imageryQuality: 'HIGH', measuredRoofAreaM2: 231.4 }),
+    )
+    expect(out.metrics.sloped_area_m2).toBe(231.4) // measured, not 200/cos(22°)≈215.7
+    expect(out.metrics.measured_roof_area_m2).toBe(231.4)
+    expect(out.metrics.area_source).toBe('measured')
+  })
+
+  it('derives area (cos-θ) at MEDIUM imagery even when a measured area is present', () => {
+    const out = applySolarInsight(
+      metrics({ footprint_m2: 200 }),
+      inputs({ pitch: 'standard' }),
+      insightFixture({ weightedMeanPitchDegrees: 22, imageryQuality: 'MEDIUM', measuredRoofAreaM2: 231.4 }),
+    )
+    expect(out.metrics.sloped_area_m2).toBeCloseTo(215.7, 0)
+    expect(out.metrics.area_source).toBe('derived')
+  })
+
+  it('rejects an absurd measured area (>3× footprint) and falls back to cos-θ', () => {
+    const out = applySolarInsight(
+      metrics({ footprint_m2: 200 }),
+      inputs({ pitch: 'standard' }),
+      insightFixture({ weightedMeanPitchDegrees: 22, imageryQuality: 'HIGH', measuredRoofAreaM2: 900 }),
+    )
+    expect(out.metrics.sloped_area_m2).toBeCloseTo(215.7, 0) // derived, not 900
+    expect(out.metrics.area_source).toBe('derived')
+  })
+})
+
+describe('measuredAreaWithinFootprint', () => {
+  it('accepts a pitched roof + eaves (footprint..3× band), rejects blow-outs + junk', () => {
+    expect(measuredAreaWithinFootprint(230, 200)).toBe(true) // 1.15×
+    expect(measuredAreaWithinFootprint(560, 200)).toBe(true) // 2.8× within ≤3× band
+    expect(measuredAreaWithinFootprint(700, 200)).toBe(false) // 3.5× blow-out
+    expect(measuredAreaWithinFootprint(0, 200)).toBe(false)
+    expect(measuredAreaWithinFootprint(230, 0)).toBe(false)
+    expect(measuredAreaWithinFootprint(NaN, 200)).toBe(false)
   })
 })
 

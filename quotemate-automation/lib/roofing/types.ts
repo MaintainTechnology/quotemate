@@ -28,6 +28,25 @@ export type RoofMaterial =
   | 'cement_sheet' // asbestos-suspect on pre-1990 builds → forced inspection
   | 'unknown'
 
+/**
+ * Where a merged measurement field's value came from, once Geoscape and the
+ * Google Solar API are fused (mergeMeasurement). Lets the tradie /m page and any
+ * audit show provenance per field — measured beats derived beats declared.
+ */
+export type RoofFieldSource = 'google_solar' | 'geoscape' | 'declared' | 'derived'
+
+/** Per-field provenance for a fused RoofMetrics. Every entry optional so a
+ *  legacy / single-source measurement simply omits the ones it can't attribute. */
+export type RoofFieldSources = {
+  footprint?: RoofFieldSource
+  pitch?: RoofFieldSource
+  sloped_area?: RoofFieldSource
+  form?: RoofFieldSource
+  storeys?: RoofFieldSource
+  material?: RoofFieldSource
+  existing_solar?: RoofFieldSource
+}
+
 /** Customer-declared pitch bucket. Phase 1 — no LiDAR-derived pitch yet. */
 export type PitchBucket =
   | 'shallow' // < 20°
@@ -149,6 +168,20 @@ export type RoofMetrics = {
   imagery_quality?: 'HIGH' | 'MEDIUM' | 'LOW' | null
   /** ISO date (YYYY-MM-DD) the Solar imagery was captured. */
   imagery_date?: string | null
+  /** Google Solar's DSM-measured total roof (sloped) area in m² — the actual
+   *  pitched surface across all planes, more accurate on hip/complex roofs than
+   *  footprint ÷ cos(pitch). Populated only at HIGH imagery quality. */
+  measured_roof_area_m2?: number | null
+  /** Where sloped_area_m2 came from: 'measured' (Google DSM roof area),
+   *  'derived' (footprint × pitch correction, measured or declared pitch). */
+  area_source?: 'measured' | 'derived'
+  // ── Fused-measurement provenance + suggestions (mergeMeasurement) ────
+  /** Per-field provenance once Geoscape + Google Solar are merged. */
+  field_sources?: RoofFieldSources
+  /** Roof material Geoscape classified for this building, mapped to our enum —
+   *  a SUGGESTION to pre-fill/flag (asbestos), never a silent pricing override
+   *  of the tradie's declared material. Null when Geoscape has no confident read. */
+  suggested_material?: RoofMaterial | null
   // ── Geoscape premium building attributes (optional, additive) ────────
   // Populated by lib/roofing/providers/geoscape.ts from the paid Buildings
   // API roof / height / solar sub-resources. Absent on mock / manual /

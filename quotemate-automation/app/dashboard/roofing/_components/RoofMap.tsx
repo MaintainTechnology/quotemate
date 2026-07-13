@@ -32,6 +32,7 @@ import {
   type ClassifiedEdge,
   type EdgeKind,
 } from '@/lib/roofing/map-utils'
+import { resolveGoogleSatelliteSource } from '@/lib/roofing/google-tiles'
 
 // ── Edge / fill colours (Maintain palette) ──────────────────────────
 const FILL_COLOUR = '#FFC400' // accent
@@ -135,20 +136,41 @@ export function RoofMap({
           : polygon
         const centroid = polygonCentroid(firstPolygon) ?? [151.2093, -33.8688]
 
-        const map = new maplibre.Map({
-          container: containerRef.current,
-          style: {
-            version: 8,
-            sources: {
-              'esri-imagery': {
-                type: 'raster',
+        // Prefer Google satellite (Map Tiles API) so the tradie measures over the
+        // SAME imagery the customer's layout map + quote use; fall back to free
+        // Esri World Imagery when no Map Tiles key is set or the session can't be
+        // minted. The Geoscape polygon overlay is drawn at true coordinates either
+        // way, so switching the basemap never moves the measured borders.
+        const google = await resolveGoogleSatelliteSource().catch(() => null)
+        if (cancelled || !containerRef.current) return
+        const basemap = google
+          ? {
+              id: 'google-satellite',
+              source: {
+                type: 'raster' as const,
+                tiles: google.tiles,
+                tileSize: 256,
+                attribution: google.attribution,
+                maxzoom: google.maxzoom,
+              },
+            }
+          : {
+              id: 'esri-imagery',
+              source: {
+                type: 'raster' as const,
                 tiles: [ESRI_TILE_URL],
                 tileSize: 256,
                 attribution: ESRI_ATTRIBUTION,
                 maxzoom: 19,
               },
-            },
-            layers: [{ id: 'esri-imagery', type: 'raster', source: 'esri-imagery' }],
+            }
+
+        const map = new maplibre.Map({
+          container: containerRef.current,
+          style: {
+            version: 8,
+            sources: { [basemap.id]: basemap.source },
+            layers: [{ id: basemap.id, type: 'raster', source: basemap.id }],
           },
           center: centroid,
           zoom: firstPolygon ? 18 : 12,

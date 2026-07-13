@@ -54,6 +54,12 @@ const STROKE_W = 2.5
  *  so a later zone never paints over an earlier one. */
 const STACK_INSET_PX = 7
 
+/** Typical eave/gutter overhang past the surveyed (ground) footprint — the
+ *  visible roof edge in the aerial sits ~this far OUTSIDE the Geoscape polygon,
+ *  so structure outlines are nudged out by it to trace the roofline rather than
+ *  the ground outline. Tunable knob; bump if borders read inside the roof. */
+const EAVE_OVERHANG_M = 0.3
+
 // ── Label callout metrics ────────────────────────────────────────────
 const BOX_W = 186
 const BOX_PAD = 8
@@ -117,6 +123,12 @@ function worldPx(lng: number, lat: number, zoom: number): [number, number] {
   const sinLat = Math.min(Math.max(Math.sin((lat * Math.PI) / 180), -0.9999), 0.9999)
   const y = (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * size
   return [x, y]
+}
+
+/** Metres per screen pixel at a Web-Mercator zoom + latitude (scale-1 256 tiles),
+ *  matching worldPx — converts a real-world overhang to a pixel offset. */
+function metresPerPixel(lat: number, zoom: number): number {
+  return (156543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom)
 }
 
 type Pt = [number, number]
@@ -211,6 +223,11 @@ export function buildLayoutOverlaySvg(args: LayoutOverlayArgs): string | null {
     return Number.isFinite(px) && Number.isFinite(py) ? [px, py] : null
   }
 
+  // Eave overhang in screen pixels at this view — structure outlines nudge out
+  // by this so the border traces the visible roofline, not the ground footprint.
+  // Clamped so a zoomed-out multi-structure view can't over-dilate.
+  const eavePx = Math.min(12, Math.max(0, EAVE_OVERHANG_M / metresPerPixel(center.lat, zoom)))
+
   // Project each structure's footprint ring once.
   const projectedRings: Array<Pt[] | null> = structures.map((s) => {
     const ring = outerRing(s.polygon)
@@ -255,7 +272,9 @@ export function buildLayoutOverlaySvg(args: LayoutOverlayArgs): string | null {
     if (zone.placement === 'structure') {
       const stacked = structureOutlines.get(zone.structureIndex) ?? 0
       structureOutlines.set(zone.structureIndex, stacked + 1)
-      const ring = stacked > 0 ? offsetRing(projected, -STACK_INSET_PX * stacked) : projected
+      // Base outline traces the eave (footprint + overhang); each stacked zone
+      // insets inward from there so overlapping zone colours stay visible.
+      const ring = offsetRing(projected, eavePx - STACK_INSET_PX * stacked)
       strokedPolygon(ring, hex)
     } else if (zone.placement === 'perimeter') {
       // Fixed ~10px outside the footprint — reads as "around the work area",

@@ -17,8 +17,53 @@ import {
   layoutClaimFilter,
   STALE_CLAIM_MS,
   generateRoofLayoutPlan,
+  generateWithFallback,
   type LayoutPlan,
 } from './layout-plan'
+
+describe('generateWithFallback (Claude primary → Gemini fallback)', () => {
+  it('returns the primary result when it succeeds non-empty', async () => {
+    const out = await generateWithFallback(
+      async () => 'CLAUDE',
+      async () => 'GEMINI',
+    )
+    expect(out).toBe('CLAUDE')
+  })
+
+  it('falls back to Gemini when Claude throws (e.g. no key / rate limit)', async () => {
+    const reasons: string[] = []
+    const out = await generateWithFallback(
+      async () => {
+        throw new Error('ANTHROPIC_API_KEY not set')
+      },
+      async () => 'GEMINI',
+      (r) => reasons.push(r),
+    )
+    expect(out).toBe('GEMINI')
+    expect(reasons.join(' ')).toMatch(/ANTHROPIC_API_KEY/)
+  })
+
+  it('falls back when Claude returns empty/whitespace', async () => {
+    const out = await generateWithFallback(
+      async () => '   ',
+      async () => 'GEMINI',
+    )
+    expect(out).toBe('GEMINI')
+  })
+
+  it('propagates the fallback error when BOTH providers fail', async () => {
+    await expect(
+      generateWithFallback(
+        async () => {
+          throw new Error('claude down')
+        },
+        async () => {
+          throw new Error('gemini down')
+        },
+      ),
+    ).rejects.toThrow('gemini down')
+  })
+})
 
 // ── Mode mapping ──────────────────────────────────────────────────────
 describe('layoutModeForJob', () => {

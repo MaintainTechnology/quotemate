@@ -18,6 +18,7 @@ import { layoutPlanGeoJson } from '@/lib/roofing/layout-geojson'
 import type { LayoutOverlayStructure } from '@/lib/roofing/layout-overlay-svg'
 import { ZONE_COLOR_HEX, ZONE_TEXT_HEX, type LayoutZone } from '@/lib/roofing/layout-plan'
 import { polygonBBox, type BBox } from '@/lib/roofing/map-utils'
+import { resolveGoogleSatelliteSource } from '@/lib/roofing/google-tiles'
 
 const ESRI_TILE_URL =
   'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
@@ -90,20 +91,42 @@ export function RoofLayoutMapFigure({ zones, structures, fitIndices }: Props) {
           ? [(bounds.west + bounds.east) / 2, (bounds.south + bounds.north) / 2]
           : [151.2093, -33.8688]
 
-        const map = new maplibre.Map({
-          container: containerRef.current,
-          style: {
-            version: 8,
-            sources: {
-              'esri-imagery': {
-                type: 'raster',
+        // Prefer Google satellite (Map Tiles API) so the customer's layout map
+        // matches the rest of the quote imagery; fall back to free Esri World
+        // Imagery when no Map Tiles key is set / the session can't mint. Zones
+        // are GEOGRAPHIC layers, so they stay glued to the roof either way.
+        // NOTE: this map is customer-facing — Google tiles bill on customer
+        // interaction (Esri did not); the key gate controls that spend.
+        const google = await resolveGoogleSatelliteSource().catch(() => null)
+        if (cancelled || !containerRef.current) return
+        const basemap = google
+          ? {
+              id: 'google-satellite',
+              source: {
+                type: 'raster' as const,
+                tiles: google.tiles,
+                tileSize: 256,
+                attribution: google.attribution,
+                maxzoom: google.maxzoom,
+              },
+            }
+          : {
+              id: 'esri-imagery',
+              source: {
+                type: 'raster' as const,
                 tiles: [ESRI_TILE_URL],
                 tileSize: 256,
                 attribution: ESRI_ATTRIBUTION,
                 maxzoom: 19,
               },
-            },
-            layers: [{ id: 'esri-imagery', type: 'raster', source: 'esri-imagery' }],
+            }
+
+        const map = new maplibre.Map({
+          container: containerRef.current,
+          style: {
+            version: 8,
+            sources: { [basemap.id]: basemap.source },
+            layers: [{ id: basemap.id, type: 'raster', source: basemap.id }],
           },
           center,
           zoom: 18,

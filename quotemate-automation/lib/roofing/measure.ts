@@ -39,6 +39,7 @@ import {
   solarEnabled,
   type SolarEnrichmentOpts,
 } from './solar-api'
+import { mergeMeasurement } from './merge-metrics'
 import {
   fetchPropertyContext,
   propertyContextWarnings,
@@ -147,6 +148,13 @@ export async function measureAndPriceRoof(
   } else {
     metrics = reapplyPitchToMetrics(raw.metrics, inputs)
   }
+
+  // Fuse Geoscape + Solar provenance and the Geoscape material suggestion onto
+  // the metrics (pure; runs Solar-on or -off). Pricing still uses the declared
+  // material — the suggestion + asbestos safety warning are for tradie review.
+  const fused = mergeMeasurement({ metrics, inputs: effectiveInputs })
+  metrics = fused.metrics
+  warnings.push(...fused.warnings)
 
   const price = calculateRoofingPrice({
     metrics,
@@ -262,15 +270,17 @@ export async function measureAndPriceRoofs(
     }
     if (solarOn) {
       const enriched = await enrichMetricsWithSolar(b.metrics, merged, solarOpts)
+      const fused = mergeMeasurement({ metrics: enriched.metrics, inputs: enriched.inputs })
       built.push({
-        input: { buildingId: b.buildingId, role: b.role, metrics: enriched.metrics, inputs: enriched.inputs },
-        enrichWarnings: enriched.warnings,
+        input: { buildingId: b.buildingId, role: b.role, metrics: fused.metrics, inputs: enriched.inputs },
+        enrichWarnings: [...enriched.warnings, ...fused.warnings],
       })
     } else {
-      const metrics = reapplyPitchToMetrics(b.metrics, merged)
+      const declaredMetrics = reapplyPitchToMetrics(b.metrics, merged)
+      const fused = mergeMeasurement({ metrics: declaredMetrics, inputs: merged })
       built.push({
-        input: { buildingId: b.buildingId, role: b.role, metrics, inputs: merged },
-        enrichWarnings: [],
+        input: { buildingId: b.buildingId, role: b.role, metrics: fused.metrics, inputs: merged },
+        enrichWarnings: fused.warnings,
       })
     }
   }

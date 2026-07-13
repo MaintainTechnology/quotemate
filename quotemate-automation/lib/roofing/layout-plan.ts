@@ -15,10 +15,13 @@
 // generate) — house DI pattern (lib/painting/paint-after.ts).
 // ════════════════════════════════════════════════════════════════════
 
-// NOTE: supabase / gemini / google-maps are imported DYNAMICALLY inside the
-// orchestrator — the pure parts of this module (palettes, parser, materials)
-// are consumed by a client component (/m RoofLayoutSection) and must not
-// drag server SDKs into the browser bundle.
+// The classifier runs Anthropic Claude (claude-sonnet-4-6) as PRIMARY with
+// Gemini (gemini-3.1-flash-lite-image) as the fallback on error/empty.
+//
+// NOTE: supabase / anthropic / gemini / google-maps are imported DYNAMICALLY
+// inside the provider fns — the pure parts of this module (palettes, parser,
+// materials) are consumed by a client component (/m RoofLayoutSection) and must
+// not drag server SDKs into the browser bundle.
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { GeoJSONPolygon, RoofForm } from './types'
 
@@ -422,7 +425,8 @@ export type LayoutPlanDeps = {
   client?: SupabaseClient
   /** Fetch the satellite aerial the model reasons over. */
   fetchAerial?: (args: { address: string | null; quote: unknown }) => Promise<ImageBytes>
-  /** Structured-JSON vision call (defaults to Gemini generateText). */
+  /** Structured-JSON vision call. Default: Anthropic Claude primary → Gemini
+   *  fallback (generateWithFallback). Tests inject a mock to bypass both. */
   generate?: (args: {
     prompt: string
     image: ImageBytes
@@ -484,6 +488,92 @@ async function fetchAerialDefault(args: {
   return { base64: bytes.toString('base64'), mime }
 }
 
+// ── Vision providers: Anthropic Claude (primary) → Gemini (fallback) ──
+// The classifier prompt + schema are provider-agnostic; parseLayoutPlan coerces
+// defensively, so either provider's JSON parses. Claude needs the JSON shape in
+// the prompt (no server-side responseSchema); Gemini enforces it via responseSchema.
+
+type LayoutGenerateArgs = { prompt: string; image: ImageBytes; schema: Record<string, unknown> }
+
+/** Claude has no server-side response schema, so we spell the JSON shape out —
+ *  parseLayoutPlan then strips fences + validates colours/placements/indices. */
+const LAYOUT_JSON_INSTRUCTION = `
+
+Respond with STRICT JSON only — no prose, no code fences — exactly this shape:
+{
+  "header": "<one-line friendly header inviting the customer to read the map>",
+  "zones": [
+    {
+      "color": "<one of the palette colours listed above>",
+      "label": "<work description, tradie-style, under 90 chars, NO prices>",
+      "placement": "perimeter" | "ridge" | "structure" | "point",
+      "structureIndex": <1-based integer>,
+      "x_pct": <0-100, ONLY for a 'point' zone>,
+      "y_pct": <0-100, ONLY for a 'point' zone>
+    }
+  ]
+}`
+
+/** Primary — Anthropic Claude vision (same SDK pattern as vision-verify.ts).
+ *  Throws when the key is missing so the caller falls back to Gemini. */
+async function anthropicLayoutGenerate(args: LayoutGenerateArgs): Promise<string> {
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not set')
+  const { anthropic } = await import('@ai-sdk/anthropic')
+  const { generateText } = await import('ai')
+  const model =
+    process.env.ROOFING_LAYOUT_MODEL ?? process.env.ROOFING_VISION_MODEL ?? 'claude-sonnet-4-6'
+  const content: Array<
+    { type: 'text'; text: string } | { type: 'image'; image: string; mediaType: string }
+  > = [
+    { type: 'text', text: args.prompt + LAYOUT_JSON_INSTRUCTION },
+    { type: 'image', image: args.image.base64, mediaType: args.image.mime },
+  ]
+  const { text } = await generateText({
+    model: anthropic(model),
+    temperature: 0,
+    messages: [{ role: 'user' as const, content }],
+  })
+  return text
+}
+
+/** Fallback — Gemini structured-JSON vision (the previous default). */
+async function geminiLayoutGenerate(args: LayoutGenerateArgs): Promise<string> {
+  const { geminiProvider } = await import('@/lib/ig-engine/providers/gemini')
+  if (!geminiProvider.generateText) throw new Error('gemini generateText unavailable')
+  return geminiProvider.generateText({
+    prompt: args.prompt,
+    images: [args.image],
+    responseSchema: args.schema,
+    temperature: 0,
+  })
+}
+
+/**
+ * PURE-ish combinator — run `primary`; on a thrown error OR an empty/whitespace
+ * result, run `fallback` and return that. `onFallback` fires (for logging) when
+ * the fallback is taken. Both providers throwing → the fallback's error
+ * propagates (the orchestrator marks the plan failed).
+ *
+ * ponytail: fallback triggers on throw/empty, NOT on "parsed but no valid zones"
+ * — Claude at temp 0 with the explicit JSON shape is reliable there; a rare junk
+ * parse fails the plan and the tradie re-clicks. Upgrade to parse-aware fallback
+ * only if that shows up in practice.
+ */
+export async function generateWithFallback(
+  primary: () => Promise<string>,
+  fallback: () => Promise<string>,
+  onFallback?: (reason: string) => void,
+): Promise<string> {
+  try {
+    const out = await primary()
+    if (out && out.trim()) return out
+    onFallback?.('primary returned empty')
+  } catch (e) {
+    onFallback?.(e instanceof Error ? e.message : String(e))
+  }
+  return fallback()
+}
+
 /**
  * Generate (or serve the cached) layout plan for a roofing measurement,
  * keyed by public_token. Tradie-initiated only (the /m page action) —
@@ -493,26 +583,28 @@ export async function generateRoofLayoutPlan(
   publicToken: string,
   deps?: LayoutPlanDeps,
 ): Promise<LayoutPlanResult> {
-  if (!deps?.generate && !process.env.GEMINI_API_KEY) {
-    return { ok: false, status: 'skipped', error: 'GEMINI_API_KEY missing' }
+  // Either LLM can classify the layout — skip only when NEITHER key is set.
+  if (!deps?.generate && !process.env.ANTHROPIC_API_KEY && !process.env.GEMINI_API_KEY) {
+    return { ok: false, status: 'skipped', error: 'no LLM key (ANTHROPIC_API_KEY / GEMINI_API_KEY) set' }
   }
   if (!deps?.fetchAerial && !process.env.GOOGLE_MAPS_API_KEY) {
     return { ok: false, status: 'skipped', error: 'GOOGLE_MAPS_API_KEY missing' }
   }
   const supabase = deps?.client ?? (await serviceClient())
   const fetchAerial = deps?.fetchAerial ?? fetchAerialDefault
+  // Default: Anthropic Claude primary → Gemini fallback (on error / empty). Tests
+  // inject deps.generate to bypass both.
   const generate =
     deps?.generate ??
-    (async (args: { prompt: string; image: ImageBytes; schema: Record<string, unknown> }) => {
-      const { geminiProvider } = await import('@/lib/ig-engine/providers/gemini')
-      if (!geminiProvider.generateText) throw new Error('gemini generateText unavailable')
-      return geminiProvider.generateText({
-        prompt: args.prompt,
-        images: [args.image],
-        responseSchema: args.schema,
-        temperature: 0,
-      })
-    })
+    ((args: LayoutGenerateArgs) =>
+      generateWithFallback(
+        () => anthropicLayoutGenerate(args),
+        () => geminiLayoutGenerate(args),
+        (reason) =>
+          console.warn('[roofing/layout-plan] Claude primary unavailable — falling back to Gemini', {
+            reason,
+          }),
+      ))
 
   const { data: row } = await supabase
     .from('roofing_measurements')
