@@ -9,8 +9,10 @@
 //   4. intake support          — the intake structurer handles the trade
 //   5. licence schema          — a per-state licence body label exists
 //
-// electrical + plumbing satisfy all five (the live pilot trades). Newer
-// product surfaces (roofing / solar / commercial painting) run on their
+// electrical + plumbing satisfy all five (the live pilot trades). Painting
+// and roofing satisfy them too via the deterministic-trade exemption below
+// (they price from a rate card, not an assembly catalogue + LLM estimator).
+// The remaining product surfaces (solar / commercial painting) run on their
 // own bespoke flows and are NOT wired into this self-serve pipeline, so
 // they fail here and are reported with exactly what's missing — which is
 // what scripts/check-trade-readiness.mjs prints before an onboarding batch.
@@ -40,8 +42,10 @@ export const CANDIDATE_TRADES = [
 // no system prompt to find and no assembly catalogue to quote from (a painter
 // prices from pricing_book.overlays.painting_rate_card, not shared_assemblies),
 // so a missing trade_prompts row OR an empty catalogue must NOT gate the trade
-// out. Residential painting (lib/painting/pricing.ts) is the first such trade.
-const DETERMINISTIC_TRADES = new Set<string>(['painting'])
+// out. Residential painting (lib/painting/pricing.ts) is the first such trade;
+// roofing (lib/roofing/pricing.ts — sloped area from the measured footprint ×
+// a per-m² rate card in pricing_book.overlays.roofing_rate_card) is the second.
+const DETERMINISTIC_TRADES = new Set<string>(['painting', 'roofing'])
 
 /** True when this trade prices via a deterministic engine, not the LLM estimator. */
 export function isDeterministicTrade(trade: string): boolean {

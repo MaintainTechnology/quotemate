@@ -1,23 +1,30 @@
 // ════════════════════════════════════════════════════════════════════
-// IG Engine — Hugging Face image-EDIT provider (EXPERIMENTAL).
+// IG Engine — Hugging Face image-EDIT provider. PRIMARY for the trade
+// "after" renders (roofing re-roof + painting repaint) as of 2026-07-14.
 //
 // Wraps HF Inference Providers image-to-image (FLUX.1-Kontext-dev by default)
-// for instruction-based editing — the roofing "after re-roof" recolor. Opt-in
-// per render via the roofing selector (ROOFING_IMAGE_PROVIDER=huggingface);
-// needs HUGGING_FACE_API_TOKEN.
+// for instruction-based editing. Selected by lib/ig-engine/providers/edit-select.ts,
+// which prefers this provider whenever HUGGING_FACE_API_TOKEN is set (Replicate,
+// then Gemini, remain the fallbacks).
 //
-// ⚠ EXPERIMENTAL + NOT GEMINI: Google's image models are NOT on Hugging Face —
-// this is an OPEN model (FLUX Kontext / Qwen-Image-Edit).
+// ⚠ NOT GEMINI: Google's image models are NOT on Hugging Face — this is an OPEN
+// model (FLUX Kontext / Qwen-Image-Edit), so the render's look differs.
 //
 // WHY THE CLIENT: HF's raw REST is chat-only; for image tasks each partner
-// (fal-ai / replicate / nebius / …) has its OWN request+response format, and the
+// (fal-ai / replicate / wavespeed / …) has its OWN request+response format, and the
 // editing models are NOT on the free `hf-inference` provider. The official
 // @huggingface/inference client normalises all of that AND does provider:'auto'
 // routing (picks a partner that actually serves the model) — which is why a raw
 // fetch to hf-inference 400'd with "Model not supported by provider hf-inference".
 // Default provider is 'auto'; force one with HF_IMAGE_PROVIDER=fal-ai|replicate|…
-// and the model with HF_IMAGE_MODEL. Callers wrap this best-effort; on failure
-// roof-after records 'failed' and the page shows the plain satellite.
+// and the model with HF_IMAGE_MODEL. Measured 2026-07-14 on a 640×480 satellite
+// tile: fal-ai ~7s, replicate ~6s, wavespeed ~18s, auto ~13s.
+//
+// TIMEOUT: the call is aborted after HF_IMAGE_TIMEOUT_MS (default 90s). A partner
+// request was observed to hang and never settle, which would otherwise burn the
+// route's whole maxDuration budget. Callers wrap this best-effort; on failure (or
+// timeout) roof-after/paint-after record 'failed' and the page shows the plain
+// satellite / Street View photo.
 // ════════════════════════════════════════════════════════════════════
 
 import type {
@@ -28,8 +35,12 @@ import type {
 } from './base'
 
 const DEFAULT_MODEL = 'black-forest-labs/FLUX.1-Kontext-dev'
+const DEFAULT_TIMEOUT_MS = 90_000
 
-const CAPABILITIES: ProviderCapabilities = { edit: true, textToImage: true, vision: false }
+// textToImage: false — renderImage below REQUIRES a source image (the HF task is
+// image-to-image). Claiming otherwise would invite a caller to route a prompt-only
+// render here and get a throw.
+const CAPABILITIES: ProviderCapabilities = { edit: true, textToImage: false, vision: false }
 
 function requireToken(): string {
   const t = (process.env.HUGGING_FACE_API_TOKEN ?? process.env.HF_TOKEN ?? '').trim()
@@ -52,6 +63,12 @@ export function hfImageProvider(): string | undefined {
   return p && p !== 'auto' ? p : undefined
 }
 
+/** PURE — abort budget for one render. Env override for slow partners. */
+export function hfTimeoutMs(): number {
+  const n = Number((process.env.HF_IMAGE_TIMEOUT_MS ?? '').trim())
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_TIMEOUT_MS
+}
+
 /** PURE — fold system + user (+ extraStrict) into the single instruction the
  *  edit model consumes (HF image-to-image has one flat prompt field). */
 export function buildHfImagePrompt(req: RenderImageRequest): string {
@@ -67,7 +84,12 @@ export function detectMime(buf: Uint8Array): string {
   return 'image/png'
 }
 
-type HfClient = { imageToImage: (args: Record<string, unknown>) => Promise<Blob> }
+type HfClient = {
+  imageToImage: (
+    args: Record<string, unknown>,
+    options?: { signal?: AbortSignal },
+  ) => Promise<Blob>
+}
 
 /** DEPENDENCY-OPTIONAL runtime load of @huggingface/inference. Uses a NON-LITERAL
  *  specifier so tsc + the bundler stay green even when the package isn't installed
@@ -97,13 +119,18 @@ async function renderImage(req: RenderImageRequest): Promise<ImageBytes> {
   })
   const provider = hfImageProvider()
 
-  const out: Blob = await client.imageToImage({
-    model: hfImageModel(req.model),
-    inputs,
-    parameters: { prompt: buildHfImagePrompt(req) },
-    // Omit for provider:'auto' (the client default → picks a partner that serves the model).
-    ...(provider ? { provider } : {}),
-  })
+  const out: Blob = await client.imageToImage(
+    {
+      model: hfImageModel(req.model),
+      inputs,
+      parameters: { prompt: buildHfImagePrompt(req) },
+      // Omit for provider:'auto' (the client default → picks a partner that serves the model).
+      ...(provider ? { provider } : {}),
+    },
+    // A hung partner request would otherwise never settle — abort it so the
+    // caller records 'failed' fast and falls back to the un-edited photo.
+    { signal: AbortSignal.timeout(hfTimeoutMs()) },
+  )
 
   const buf = new Uint8Array(await out.arrayBuffer())
   return { base64: Buffer.from(buf).toString('base64'), mime: out.type || detectMime(buf) }

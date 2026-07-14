@@ -214,11 +214,20 @@ export async function POST(req: Request) {
           overlays: { painting_rate_card },
         }
       }
+      // Electrical / plumbing: the superRefine guarantees the three labour
+      // rates are present, so the fallbacks below are inert for them.
+      // Roofing: prices from a deterministic per-m² rate card keyed off the
+      // measured roof geometry (lib/roofing/pricing.ts) and never reads these
+      // columns — but a roofing-ONLY tenant supplies no labour rates at all,
+      // so they'd insert as null and trip the table's NOT NULLs. Fall back to
+      // the same harmless placeholders painting uses. The tradie's real
+      // roofing levers live in overlays.roofing_rate_card (defaulted by
+      // DEFAULT_ROOFING_RATE_CARD until they edit them on the dashboard).
       return {
         ...base,
-        hourly_rate: form.hourly_rate,
-        call_out_minimum: form.call_out_minimum,
-        default_markup_pct: form.default_markup_pct,
+        hourly_rate: form.hourly_rate ?? 110,
+        call_out_minimum: form.call_out_minimum ?? 150,
+        default_markup_pct: form.default_markup_pct ?? 0,
       }
     })
     const { error: pbErr } = await supabase.from('pricing_book').insert(pricingRows)

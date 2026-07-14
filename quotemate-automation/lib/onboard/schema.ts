@@ -60,13 +60,13 @@ export const OnboardActivateSchema = z.object({
 
   // ── Page 2: Trade & licence ────────────────────────────────
   // Multi-trade onboarding: a tradie can pick any combination of the
-  // supported trades (e.g. electrical + plumbing + painting). min(1) so
-  // every tenant has at least one trade; max(3) so we don't accidentally
-  // accept stale / duplicated strings from a buggy wizard build.
+  // supported trades (e.g. electrical + plumbing + painting + roofing).
+  // min(1) so every tenant has at least one trade; max(4) so we don't
+  // accidentally accept stale / duplicated strings from a buggy wizard build.
   trades: z
-    .array(z.enum(['electrical', 'plumbing', 'painting']))
+    .array(z.enum(['electrical', 'plumbing', 'painting', 'roofing']))
     .min(1, 'Pick at least one trade')
-    .max(3, 'Pick from electrical, plumbing and painting'),
+    .max(4, 'Pick from electrical, plumbing, painting and roofing'),
   state: z.enum(['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'ACT', 'NT']),
   abn: z.string().trim().max(20).optional().or(z.literal('')),
   licence_type: z.string().trim().max(20).optional().or(z.literal('')),
@@ -168,9 +168,9 @@ export const OnboardActivateSchema = z.object({
 
     // Labour trades (electrical / plumbing) price by the hour, so a tenant
     // that selects either must supply the three core labour rates — they
-    // drive that trade's estimator. Painting prices from a rate card
-    // instead, so a painting-only tenant is exempt (the labour fields stay
-    // blank and the painting rates fall back to sensible defaults).
+    // drive that trade's estimator. Painting and roofing price from a rate
+    // card instead, so a painting/roofing-only tenant is exempt (the labour
+    // fields stay blank and the rate cards fall back to sensible defaults).
     const hasLabourTrade = data.trades.some(
       (t) => t === 'electrical' || t === 'plumbing',
     )
@@ -194,18 +194,23 @@ export type OnboardActivatePayload = z.infer<typeof OnboardActivateSchema>
 // notable exception — so the painting label is empty for most states. The key still
 // being PRESENT is what lets hasLicenceSchema('painting') pass: painting is a
 // licence-OPTIONAL trade, not a licence-missing one.
+//
+// Roofing sits with the general BUILDING regulator in each state (a re-roof is
+// building work; metal roofing also pulls in the plumbing regulator in some
+// states). The label is only a pre-fill suggestion — the wizard's licence field
+// is free text, so a roof plumber can type their actual regulator over it.
 export const LICENCE_BODIES: Record<
   string,
-  { electrical: string; plumbing: string; painting: string }
+  { electrical: string; plumbing: string; painting: string; roofing: string }
 > = {
-  NSW: { electrical: 'NECA NSW',    plumbing: 'NSW Fair Trading',  painting: '' },
-  VIC: { electrical: 'ESV',         plumbing: 'VBA',               painting: '' },
-  QLD: { electrical: 'ESO QLD',     plumbing: 'QBCC',              painting: 'QBCC' },
-  WA:  { electrical: 'EnergySafety',plumbing: 'PLC WA',            painting: '' },
-  SA:  { electrical: 'OTR SA',      plumbing: 'OTR SA',            painting: '' },
-  TAS: { electrical: 'CBOS',        plumbing: 'CBOS',              painting: '' },
-  ACT: { electrical: 'ACT ESA',     plumbing: 'Access Canberra',   painting: '' },
-  NT:  { electrical: 'NT Electrical Workers Licensing', plumbing: 'NT Plumbers and Drainers Licensing', painting: '' },
+  NSW: { electrical: 'NECA NSW',    plumbing: 'NSW Fair Trading',  painting: '',      roofing: 'NSW Fair Trading' },
+  VIC: { electrical: 'ESV',         plumbing: 'VBA',               painting: '',      roofing: 'VBA' },
+  QLD: { electrical: 'ESO QLD',     plumbing: 'QBCC',              painting: 'QBCC',  roofing: 'QBCC' },
+  WA:  { electrical: 'EnergySafety',plumbing: 'PLC WA',            painting: '',      roofing: 'Building Services Board WA' },
+  SA:  { electrical: 'OTR SA',      plumbing: 'OTR SA',            painting: '',      roofing: 'CBS SA' },
+  TAS: { electrical: 'CBOS',        plumbing: 'CBOS',              painting: '',      roofing: 'CBOS' },
+  ACT: { electrical: 'ACT ESA',     plumbing: 'Access Canberra',   painting: '',      roofing: 'Access Canberra' },
+  NT:  { electrical: 'NT Electrical Workers Licensing', plumbing: 'NT Plumbers and Drainers Licensing', painting: '', roofing: 'NT Building Practitioners Board' },
 }
 
 // Trades the self-serve onboarding pipeline fully supports today. The
@@ -213,7 +218,7 @@ export const LICENCE_BODIES: Record<
 // separate exported constant so the trade-readiness gate
 // (lib/onboard/trade-readiness.ts) has a single source of truth for
 // "does onboarding have pricing defaults + intake support for this trade".
-export const ONBOARDING_TRADES = ['electrical', 'plumbing', 'painting'] as const
+export const ONBOARDING_TRADES = ['electrical', 'plumbing', 'painting', 'roofing'] as const
 
 /** True when defaultsForTrade() + the onboarding schema support this trade. */
 export function hasOnboardingPricingDefaults(trade: string): boolean {
@@ -227,7 +232,22 @@ export function hasLicenceSchema(trade: string): boolean {
 
 // Service-defaults helper — gives sensible per-trade defaults that the
 // activate endpoint applies when the tradie left advanced fields blank.
-export function defaultsForTrade(trade: 'electrical' | 'plumbing' | 'painting') {
+export function defaultsForTrade(trade: (typeof ONBOARDING_TRADES)[number]) {
+  if (trade === 'roofing') {
+    // Roofing prices from a deterministic per-m² rate card driven by the
+    // measured roof geometry (lib/roofing/pricing.ts) — hourly labour never
+    // enters the money path. These only populate the (unused) labour columns
+    // of the roofing pricing_book row so it satisfies the table's shape; the
+    // real levers live in pricing_book.overlays.roofing_rate_card, editable
+    // from the dashboard's roofing rates tab.
+    return {
+      apprentice_rate: 65,
+      senior_rate: 160,
+      after_hours_multiplier: 1.5,
+      min_labour_hours: 0,
+      risk_buffer_pct: 15,
+    }
+  }
   if (trade === 'plumbing') {
     return {
       apprentice_rate: 65,

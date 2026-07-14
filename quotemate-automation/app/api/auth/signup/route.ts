@@ -52,6 +52,53 @@ const SignupSchema = z.object({
   intent_token: z.string().trim().min(4).max(16).optional().or(z.literal('')),
 })
 
+/**
+ * An email that already has an auth user but NO tenant row is an abandoned
+ * onboarding, not a real account — the wizard never reached activation. Such a
+ * user has nothing to sign in to, so re-signup must be allowed to pick up where
+ * they left off.
+ *
+ * Returns the existing user when (and only when) BOTH hold:
+ *   1. the supplied password authenticates against that account (ownership), and
+ *   2. no tenant is linked to it (nothing to overwrite).
+ * Anything else returns null and the caller falls back to the 409.
+ */
+async function resumeAbandonedSignup(
+  email: string,
+  password: string,
+): Promise<{ id: string } | null> {
+  // Proof of ownership. Uses the anon key: a wrong password fails here exactly
+  // as it would at the sign-in page, so this grants no capability a stranger
+  // didn't already have.
+  const anon = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  )
+  const { data: signIn, error: signInErr } = await anon.auth.signInWithPassword({
+    email,
+    password,
+  })
+  if (signInErr || !signIn.user) return null
+
+  // Owner proven. Now: is this a real (activated) account, or an orphan?
+  // Match on owner_user_id OR owner_email — an activation that died before
+  // stamping owner_user_id still owns the email.
+  const { data: tenant, error: tErr } = await supabaseAdmin
+    .from('tenants')
+    .select('id')
+    .or(`owner_user_id.eq.${signIn.user.id},owner_email.eq.${email}`)
+    .maybeSingle()
+  // On a lookup error, fail closed — better a 409 than resuming over a real tenant.
+  if (tErr || tenant) return null
+
+  console.log('[auth/signup] resuming abandoned signup (auth user, no tenant)', {
+    email,
+    userId: signIn.user.id,
+  })
+  return { id: signIn.user.id }
+}
+
 export async function POST(req: Request) {
   let body: unknown
   try {
@@ -103,6 +150,17 @@ export async function POST(req: Request) {
       msg.toLowerCase().includes('already registered') ||
       msg.toLowerCase().includes('user already')
     if (isDuplicate) {
+      // The auth user is created HERE, but the tenant is only created much
+      // later by /api/onboard/activate. Anyone who abandoned the wizard — or
+      // whose activation failed — is left as an auth user with NO tenant, and
+      // a plain 409 locks them out of their own email forever. Let that case
+      // resume onboarding instead, but only on proof of ownership: the
+      // password must match the existing account. A wrong password is
+      // indistinguishable from an account-takeover attempt, so it still 409s.
+      const resumed = await resumeAbandonedSignup(email, password)
+      if (resumed) {
+        return Response.json({ ok: true, user_id: resumed.id, email, resumed: true })
+      }
       return Response.json(
         {
           ok: false,

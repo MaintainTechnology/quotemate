@@ -2,23 +2,24 @@
 // Painting — AI "after repaint" preview (mirrors lib/roofing/roof-after.ts).
 //
 // Takes the SAME Google Street View photo we show on the /p results page
-// as the SOURCE image and asks Gemini (image-to-image) to repaint the
-// exterior — building, framing and surroundings unchanged. The result is
-// cached on painting_measurements.preview_image_path (intake-photos
+// as the SOURCE image and asks the image-EDIT provider (Hugging Face
+// FLUX.1-Kontext by default — see ig-engine/providers/edit-select.ts) to
+// repaint the exterior — building, framing and surroundings unchanged. The
+// result is cached on painting_measurements.preview_image_path (intake-photos
 // bucket, migration 169) and served via the token-gated
 // /api/painting/q/[token]/after-image proxy.
 //
 // CAS-claims preview_status so two concurrent page loads don't both call
-// Gemini. Best-effort: never throws; records 'failed' on error and the
+// the provider. Best-effort: never throws; records 'failed' on error and the
 // proxy falls back to the plain Street View photo.
 //
 // Deps are injectable (client / fetchSource / render) so the flow is
-// unit-testable without Supabase or Gemini — house DI pattern
+// unit-testable without Supabase or a live provider — house DI pattern
 // (lib/painting/release.ts).
 // ════════════════════════════════════════════════════════════════════
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { geminiProvider } from '@/lib/ig-engine/providers/gemini'
+import { NO_EDIT_PROVIDER, resolveEditImageProvider } from '@/lib/ig-engine/providers/edit-select'
 import { buildRepaintPrompt } from './repaint-prompt'
 import {
   buildStreetViewMetadataUrl,
@@ -51,7 +52,7 @@ export type PaintAfterDeps = {
   client?: SupabaseClient
   /** Fetch the Street View "before" photo for the row. */
   fetchSource?: (row: SourceRow) => Promise<ImageBytes>
-  /** Image-to-image render (defaults to Gemini). */
+  /** Image-to-image render (defaults to the selected provider — HF first). */
   render?: (req: {
     system: string
     user: string
@@ -95,15 +96,18 @@ export async function generatePaintAfterImage(
   token: string,
   deps?: PaintAfterDeps,
 ): Promise<PaintAfterResult> {
-  if (!deps?.render && !process.env.GEMINI_API_KEY) {
-    return { ok: false, status: 'skipped', error: 'GEMINI_API_KEY missing' }
+  // Hugging Face (FLUX.1-Kontext) is the primary image-edit provider; Replicate
+  // then Gemini are the fallbacks. Force one with PAINTING_IMAGE_PROVIDER.
+  const provider = deps?.render ? null : resolveEditImageProvider(process.env.PAINTING_IMAGE_PROVIDER)
+  if (!deps?.render && !provider) {
+    return { ok: false, status: 'skipped', error: NO_EDIT_PROVIDER }
   }
   if (!deps?.fetchSource && !process.env.GOOGLE_MAPS_API_KEY) {
     return { ok: false, status: 'skipped', error: 'GOOGLE_MAPS_API_KEY missing' }
   }
   const supabase = deps?.client ?? serviceClient()
   const fetchSource = deps?.fetchSource ?? fetchStreetViewSource
-  const render = deps?.render ?? ((req) => geminiProvider.renderImage(req))
+  const render = deps?.render ?? ((req) => provider!.renderImage(req))
 
   const { data: row } = await supabase
     .from('painting_measurements')

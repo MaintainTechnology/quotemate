@@ -2,13 +2,17 @@
 //
 // Flow (mirrors lib/roofing/roof-after.ts, but stateless — painting
 // estimates aren't persisted, so the image is returned inline rather than
-// stored): Street View photo of the house → base64 → Gemini image-to-image
+// stored): Street View photo of the house → base64 → image-to-image edit
 // with a "repaint ONLY the exterior in <colour>" prompt → return the
 // edited image as a data URL.
 //
+// The provider is selected by ig-engine/providers/edit-select.ts — Hugging
+// Face (FLUX.1-Kontext) first, then Replicate, then Gemini. Override with
+// PAINTING_IMAGE_PROVIDER.
+//
 // Auth: bearer token. Body: { address, postcode?, state?, colour?, scopes? }.
-// Gemini takes ~10–20s, so maxDuration is raised (needs Vercel Pro / Railway;
-// Hobby's 10s will time out).
+// The render takes ~10–20s, so maxDuration is raised (needs Vercel Pro /
+// Railway; Hobby's 10s will time out).
 
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
@@ -19,7 +23,7 @@ import {
   parseStreetViewMetadata,
 } from '@/lib/painting/streetview'
 import { buildRepaintPrompt } from '@/lib/painting/repaint-prompt'
-import { geminiProvider } from '@/lib/ig-engine/providers/gemini'
+import { resolveEditImageProvider } from '@/lib/ig-engine/providers/edit-select'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -46,8 +50,9 @@ export async function POST(req: Request) {
   if (!process.env.GOOGLE_MAPS_API_KEY) {
     return Response.json({ ok: false, code: 'maps_key_missing' }, { status: 200 })
   }
-  if (!process.env.GEMINI_API_KEY) {
-    return Response.json({ ok: false, code: 'gemini_key_missing' }, { status: 200 })
+  const provider = resolveEditImageProvider(process.env.PAINTING_IMAGE_PROVIDER)
+  if (!provider) {
+    return Response.json({ ok: false, code: 'image_provider_missing' }, { status: 200 })
   }
 
   let body: unknown
@@ -79,12 +84,12 @@ export async function POST(req: Request) {
     const srcMime = svRes.headers.get('content-type') ?? 'image/jpeg'
     const srcBytes = Buffer.from(await svRes.arrayBuffer())
 
-    // 2. Repaint via Gemini (image-to-image).
+    // 2. Repaint via the selected image-edit provider (image-to-image).
     const prompt = buildRepaintPrompt({
       colour: colour ?? '',
       scopes: scopes ?? ['exterior'],
     })
-    const out = await geminiProvider.renderImage({
+    const out = await provider.renderImage({
       system: prompt.system,
       user: prompt.user,
       sourceImage: { base64: srcBytes.toString('base64'), mime: srcMime },

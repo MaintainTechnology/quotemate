@@ -471,6 +471,27 @@ describe('OnboardActivateSchema — painting trade (multi-select + rate card)', 
     }
   })
 
+  it('accepts a roofing-only payload with NO labour rates (prices from the measured roof)', () => {
+    const result = OnboardActivateSchema.safeParse({ ...paintingBase, trades: ['roofing'] })
+    expect(result.success).toBe(true)
+  })
+
+  it('STILL requires labour rates when a labour trade rides alongside roofing', () => {
+    const result = OnboardActivateSchema.safeParse({ ...paintingBase, trades: ['plumbing', 'roofing'] })
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error.flatten().fieldErrors.hourly_rate).toBeDefined()
+    }
+  })
+
+  it('accepts all four trades at once', () => {
+    const result = OnboardActivateSchema.safeParse({
+      ...baseValidPayload,
+      trades: ['electrical', 'plumbing', 'painting', 'roofing'],
+    })
+    expect(result.success).toBe(true)
+  })
+
   it('rejects an unknown trade slug', () => {
     const result = OnboardActivateSchema.safeParse({
       ...baseValidPayload,

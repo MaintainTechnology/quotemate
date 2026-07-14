@@ -1,8 +1,11 @@
-// POST /api/tenant/commercial-painting/preview — Gemini "after repaint"
+// POST /api/tenant/commercial-painting/preview — AI "after repaint"
 // preview for a paint run (spec §6). Source image = the run's site_photo
 // upload (image file, or page 1 of an image-only PDF rasterised to PNG).
 // Stateless like the residential preview routes: returns data URLs
 // inline; failure is non-blocking — the quote works without a preview.
+//
+// Provider: ig-engine/providers/edit-select.ts — Hugging Face (FLUX.1-Kontext)
+// first, then Replicate, then Gemini. Override with PAINTING_IMAGE_PROVIDER.
 //
 // Body:
 //   { paintRunId, colour? }                      → initial render
@@ -15,7 +18,7 @@ import {
   buildCommercialRepaintPrompt,
   buildCommercialRefinePrompt,
 } from '@/lib/commercial-painting/preview-prompt'
-import { geminiProvider } from '@/lib/ig-engine/providers/gemini'
+import { resolveEditImageProvider } from '@/lib/ig-engine/providers/edit-select'
 import { rasterizePage, cropToPng } from '@/lib/estimation/refine'
 
 export const dynamic = 'force-dynamic'
@@ -35,7 +38,8 @@ function toDataUrl(img: ImageBytes): string {
 export async function POST(req: Request) {
   const tenant = await tenantFromBearer(req)
   if (!tenant) return Response.json({ ok: false, error: 'unauthorised' }, { status: 401 })
-  if (!process.env.GEMINI_API_KEY) {
+  const provider = resolveEditImageProvider(process.env.PAINTING_IMAGE_PROVIDER)
+  if (!provider) {
     return Response.json({ ok: false, error: 'preview_unavailable' }, { status: 503 })
   }
 
@@ -66,7 +70,7 @@ export async function POST(req: Request) {
       const source = fromDataUrl(body.refine.image)
       if (!source) return Response.json({ ok: false, error: 'invalid_refine_image' }, { status: 400 })
       const prompt = buildCommercialRefinePrompt(body.refine.instruction)
-      const out = await geminiProvider.renderImage({
+      const out = await provider.renderImage({
         system: prompt.system,
         user: prompt.user,
         sourceImage: source,
@@ -105,7 +109,7 @@ export async function POST(req: Request) {
     }
 
     const prompt = buildCommercialRepaintPrompt({ colour: body.colour })
-    const out = await geminiProvider.renderImage({
+    const out = await provider.renderImage({
       system: prompt.system,
       user: prompt.user,
       sourceImage: source,

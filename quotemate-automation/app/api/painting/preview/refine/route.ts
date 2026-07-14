@@ -4,15 +4,18 @@
 // Source is the CURRENT preview image (a data URL the client holds), not a
 // fresh Street View fetch — so changes compound. Body:
 //   { image: "data:image/...;base64,...", instruction: "paint the fence grey too" }
-// → Gemini image-to-image applies ONLY that change → returns the new image.
+// → image-to-image applies ONLY that change → returns the new image.
 //
-// Auth: bearer token. Gemini takes ~10–20s → maxDuration raised.
+// Provider: ig-engine/providers/edit-select.ts — Hugging Face (FLUX.1-Kontext)
+// first, then Replicate, then Gemini. Override with PAINTING_IMAGE_PROVIDER.
+//
+// Auth: bearer token. The render takes ~10–20s → maxDuration raised.
 
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { resolveIdentityRequest } from '@/lib/tenant/from-request'
 import { buildRefinePrompt } from '@/lib/painting/repaint-prompt'
-import { geminiProvider } from '@/lib/ig-engine/providers/gemini'
+import { resolveEditImageProvider } from '@/lib/ig-engine/providers/edit-select'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -43,8 +46,9 @@ export async function POST(req: Request) {
   if (!identity) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
-  if (!process.env.GEMINI_API_KEY) {
-    return Response.json({ ok: false, code: 'gemini_key_missing' }, { status: 200 })
+  const provider = resolveEditImageProvider(process.env.PAINTING_IMAGE_PROVIDER)
+  if (!provider) {
+    return Response.json({ ok: false, code: 'image_provider_missing' }, { status: 200 })
   }
 
   let body: unknown
@@ -63,14 +67,9 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, code: 'bad_image', detail: 'image must be a data:image/...;base64 URL' }, { status: 400 })
   }
 
-  const renderImage = geminiProvider.renderImage
-  if (!renderImage) {
-    return Response.json({ ok: false, code: 'vision_unavailable' }, { status: 200 })
-  }
-
   try {
     const prompt = buildRefinePrompt(parsed.data.instruction)
-    const out = await renderImage({
+    const out = await provider.renderImage({
       system: prompt.system,
       user: prompt.user,
       sourceImage: { base64: src.base64, mime: src.mime },

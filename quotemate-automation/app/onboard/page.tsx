@@ -21,7 +21,7 @@ import { AddressAutocomplete } from '@/app/_components/AddressAutocomplete'
 import { Field, INPUT, ErrorBanner, Arrow, RequiredLegend } from '../signup/page'
 import { FunnelShell } from '@/app/_components/funnel-shell'
 
-type Trade = 'electrical' | 'plumbing' | 'painting'
+type Trade = 'electrical' | 'plumbing' | 'painting' | 'roofing'
 
 type FormState = {
   business_name: string
@@ -79,6 +79,16 @@ type FormState = {
 }
 
 const STATES = ['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'ACT', 'NT'] as const
+
+// The trades the wizard can offer. Each is still gated at render time by
+// tradeAvailable() (/api/onboard/trades readiness), so a trade only appears
+// once its whole quote pipeline is wired.
+const TRADE_OPTIONS: ReadonlyArray<{ value: Trade; label: string }> = [
+  { value: 'electrical', label: 'Electrical' },
+  { value: 'plumbing', label: 'Plumbing' },
+  { value: 'painting', label: 'Painting' },
+  { value: 'roofing', label: 'Roofing' },
+]
 
 const STEP_META = [
   { num: '02', label: 'Trade & licence', subtitle: 'What you do, where, optional regulatory bits.' },
@@ -605,6 +615,35 @@ function Step1({
           Your trade
         </SectionHeading>
         <div className="grid gap-x-8 gap-y-7 md:grid-cols-2">
+          {/* Trade takes the full row: four pills do not fit in a half-width
+              column. The old half-width `grid grid-cols-3` sized each pill to a
+              minmax(0,1fr) track narrower than its own single-word label, so
+              "ELECTRICAL" painted straight through the button's border. Pills
+              now size to their content and wrap, and a full-width row keeps all
+              four (and any the readiness gate adds) on one line. */}
+          <div className="md:col-span-2">
+            <Field
+              label="Trade"
+              hint="Pick any that apply"
+              error={fieldErrors.trades?.[0]}
+              required
+            >
+              <div className="flex flex-wrap gap-2">
+                {TRADE_OPTIONS.filter(({ value }) => tradeAvailable(value)).map(
+                  ({ value, label }) => (
+                    <TradePill
+                      key={value}
+                      value={value}
+                      label={label}
+                      selected={form.trades.includes(value)}
+                      onToggle={toggleTrade}
+                    />
+                  ),
+                )}
+              </div>
+            </Field>
+          </div>
+
           <Field
             label="Mobile"
             hint={mobileLocked ? 'Verified via SMS · locked' : 'For your welcome text'}
@@ -620,40 +659,6 @@ function Step1({
               required
               readOnly={mobileLocked}
             />
-          </Field>
-
-          <Field
-            label="Trade"
-            hint="Pick any that apply"
-            error={fieldErrors.trades?.[0]}
-            required
-          >
-            <div className="grid grid-cols-3 gap-2">
-              {tradeAvailable('electrical') && (
-                <TradePill
-                  value="electrical"
-                  label="Electrical"
-                  selected={form.trades.includes('electrical')}
-                  onToggle={toggleTrade}
-                />
-              )}
-              {tradeAvailable('plumbing') && (
-                <TradePill
-                  value="plumbing"
-                  label="Plumbing"
-                  selected={form.trades.includes('plumbing')}
-                  onToggle={toggleTrade}
-                />
-              )}
-              {tradeAvailable('painting') && (
-                <TradePill
-                  value="painting"
-                  label="Painting"
-                  selected={form.trades.includes('painting')}
-                  onToggle={toggleTrade}
-                />
-              )}
-            </div>
           </Field>
 
           <Field label="State" required>
@@ -770,11 +775,13 @@ function Step2({
   showAdvanced: boolean
   setShowAdvanced: (v: boolean) => void
 }) {
-  // Painting prices from a $/m² rate card; electrical/plumbing price by the
-  // hour. Show each pricing block only for the trades the tenant picked, so
-  // a painter never sees labour fields and a sparky never sees paint rates.
+  // Painting and roofing price from a $/m² rate card; electrical/plumbing
+  // price by the hour. Show each pricing block only for the trades the tenant
+  // picked, so a painter never sees labour fields and a sparky never sees
+  // paint rates.
   const hasLabour = form.trades.some((t) => t === 'electrical' || t === 'plumbing')
   const hasPainting = form.trades.includes('painting')
+  const hasRoofing = form.trades.includes('roofing')
   // Hint defaults bias to plumbing rates when plumbing is the ONLY trade
   // picked, else fall back to the electrical-shaped defaults.
   const isPlumbing = form.trades.length === 1 && form.trades[0] === 'plumbing'
@@ -935,6 +942,30 @@ function Step2({
         </div>
       )}
 
+      {/* Roofing quotes price themselves from the measured roof (sloped area
+          from the footprint × a per-m² rate card), so there is nothing to type
+          here. We ship the AU default rates and the tradie tunes them on the
+          dashboard — but say so, otherwise a roofing-only tenant lands on a
+          pricing step with no pricing on it and assumes it failed to load.
+          ponytail: no rate-card editor in the wizard; the dashboard roofing
+          rates tab already owns that. Add one here if the defaults prove wrong
+          often enough that tradies quote before ever opening the dashboard. */}
+      {hasRoofing && (
+        <div className={hasLabour || hasPainting ? 'pt-10 border-t border-ink-line' : ''}>
+          <h3 className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-accent">
+            Roofing pricing
+          </h3>
+          <p className="mt-1.5 text-sm leading-relaxed text-text-sec">
+            Roofing quotes price from the roof we measure at the address — sloped
+            area against a per-m² rate for each material, plus loadings for
+            multi-storey, asbestos and complexity. You start on the Australian
+            default rates, and every one of them is editable from your dashboard
+            under <strong className="text-text-pri">Roofing rates</strong>. Every
+            roofing quote comes to you for sign-off before the customer sees it.
+          </p>
+        </div>
+      )}
+
       {/* GST registration — applies to every trade, so it's always shown. */}
       <label className="flex items-center gap-3 text-sm text-text-pri cursor-pointer">
         <input
@@ -971,6 +1002,7 @@ function Step2({
 function Step3({ form }: { form: FormState }) {
   const hasLabour = form.trades.some((t) => t === 'electrical' || t === 'plumbing')
   const hasPainting = form.trades.includes('painting')
+  const hasRoofing = form.trades.includes('roofing')
   return (
     <div className="space-y-8">
       <ReviewBlock label="Account">
@@ -1026,6 +1058,7 @@ function Step3({ form }: { form: FormState }) {
             <ReviewRow k="Exterior" v={form.painting_exterior_rate ? `$${form.painting_exterior_rate}/m²` : ''} />
           </>
         )}
+        {hasRoofing && <ReviewRow k="Roofing" v="Measured per-m² rate card (AU defaults)" />}
         <ReviewRow k="GST" v={form.gst_registered ? 'Registered' : 'Not registered'} />
       </ReviewBlock>
 
@@ -1072,7 +1105,8 @@ function TradePill({
     <button
       type="button"
       onClick={() => onToggle(value)}
-      className={`px-4 py-3.5 text-sm font-semibold uppercase tracking-wider transition-colors border focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft ${
+      aria-pressed={selected}
+      className={`whitespace-nowrap px-4 py-3.5 text-sm font-semibold uppercase tracking-wider transition-colors border focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft ${
         selected
           ? 'border-accent bg-accent text-white'
           : 'border-ink-line bg-ink-deep text-text-sec hover:border-accent-soft hover:text-text-pri'
