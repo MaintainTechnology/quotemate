@@ -27,6 +27,7 @@ import { seedTenantServiceOfferings } from '@/lib/onboard/seed-tenant-defaults'
 import { checkInvitationCode, consumeInvitationCode } from '@/lib/onboard/invitation-codes'
 import { stampFeatureProvenance } from '@/lib/features/access'
 import { computePreflight } from '@/lib/onboard/preflight-logic'
+import { ensureClerkUser } from '@/lib/clerk/ensure-user'
 
 // A step result in the activation chain — collected so the response (and the
 // /admin tenant-health view) can show exactly what succeeded vs failed,
@@ -335,6 +336,54 @@ export async function POST(req: Request) {
       })
     }
     steps.push({ step: 'feature_provenance', ok: provenanceOk, detail: provenanceErr })
+
+    // ─── 3c. Ensure a Clerk user + link it to the tenant ───────────
+    // The web funnel (/signup) creates a SUPABASE auth user only, so without
+    // this every web-onboarded tenant landed with clerk_user_id = NULL and never
+    // appeared in Clerk — it had to be backfilled by hand with
+    // scripts/link-accounts-clerk.ts. A Clerk-native signup already carries
+    // clerk_user_id (stamped on the insert above), so we skip those.
+    // Non-fatal by design: a Clerk outage must never roll back a tenant that is
+    // otherwise complete — the backfill script remains the repair path.
+    let clerkOk = true
+    let clerkDetail: string | undefined
+    if (!form.clerk_user_id) {
+      try {
+        // Admin status is keyed off admin_users (the DB source of truth), the
+        // same rule the backfill script applies. A fresh signup is never admin,
+        // but check anyway so an admin onboarding lands with the right flag.
+        let isAdmin = false
+        if (resolvedOwnerUserId) {
+          const { data: adminRow } = await supabase
+            .from('admin_users')
+            .select('user_id')
+            .eq('user_id', resolvedOwnerUserId)
+            .maybeSingle()
+          isAdmin = !!adminRow
+        }
+        const ensured = await ensureClerkUser({
+          email: form.owner_email,
+          seed: resolvedOwnerUserId ?? id,
+          isAdmin,
+        })
+        if (!ensured) {
+          clerkDetail = 'CLERK_SECRET_KEY unset — skipped'
+        } else {
+          await supabase.from('tenants').update({ clerk_user_id: ensured.id }).eq('id', id)
+          clerkDetail = ensured.created ? 'clerk user created' : 'linked to existing clerk user'
+        }
+      } catch (e: any) {
+        clerkOk = false
+        clerkDetail = e?.message ?? String(e)
+        console.warn('[activate] ensureClerkUser failed (non-fatal)', {
+          tenantId: id,
+          message: clerkDetail,
+        })
+      }
+    } else {
+      clerkDetail = 'clerk-native signup — already linked'
+    }
+    steps.push({ step: 'clerk_link', ok: clerkOk, detail: clerkDetail })
 
     // ─── Consume the invitation code (idempotent, once per tenant) ──
     // Done after the tenant row exists so the redemption ledger has a
