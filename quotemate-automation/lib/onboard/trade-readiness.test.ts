@@ -10,15 +10,32 @@ import {
   getOnboardableTrades,
 } from './trade-readiness'
 
-// Mock supabase covering the two reads the gate makes:
+// Every trade that actually has an active row in the `trades` registry today
+// (after migration 171 added roofing). Tests that don't care about the registry
+// get this as the default so they exercise the check they're actually about.
+const REGISTERED = [
+  'electrical',
+  'plumbing',
+  'painting',
+  'roofing',
+  'solar',
+  'commercial_painting',
+  'aircon',
+]
+
+// Mock supabase covering the three reads the gate makes:
 //   • shared_assemblies: select('id',{count,head}).eq('trade', t) → {count}
 //   • trade_prompts:     select(...).eq('trades.name', t).maybeSingle() → {data}
+//   • trades:            select('name').eq('name', t).eq('active', true).maybeSingle()
 function mockSupabase(opts: {
   assemblyCounts?: Record<string, number>
   promptTrades?: string[]
+  /** Trades with an ACTIVE row in the `trades` registry. */
+  registeredTrades?: string[]
 }) {
   const assemblyCounts = opts.assemblyCounts ?? {}
   const promptTrades = opts.promptTrades ?? []
+  const registeredTrades = opts.registeredTrades ?? REGISTERED
   return {
     from(table: string) {
       return {
@@ -27,6 +44,16 @@ function mockSupabase(opts: {
             eq(_col: string, val: string) {
               if (table === 'shared_assemblies') {
                 return Promise.resolve({ count: assemblyCounts[val] ?? 0, error: null })
+              }
+              if (table === 'trades') {
+                // .eq('name', t).eq('active', true).maybeSingle() — the second
+                // eq chains off this one, so return a self-similar builder.
+                const row = registeredTrades.includes(val) ? { name: val } : null
+                const builder: any = {
+                  eq: () => builder,
+                  maybeSingle: () => Promise.resolve({ data: row, error: null }),
+                }
+                return builder
               }
               // trade_prompts path
               return {
@@ -131,6 +158,41 @@ describe('checkTradeReadiness', () => {
     expect(r.checks.sharedAssemblies).toBe(true)
     expect(r.checks.estimatorPrompt).toBe(true)
     expect(r.checks.licenceSchema).toBe(true)
+  })
+
+  // ── Regression: the tenants_trade_fk bug ──────────────────────────────
+  // A tradie picked roofing and the wizard died on the final step with
+  // "insert or update on table tenants violates foreign key constraint
+  // tenants_trade_fk". Cause: roofing passed every readiness check but had no
+  // row in the `trades` registry that tenants.trade points at (migration 171).
+  // The gate must refuse to offer ANY trade the FK will reject.
+  it('gates out a trade with no `trades` registry row, even if everything else is ready', async () => {
+    const sb = mockSupabase({ registeredTrades: [] }) // registry empty
+    const r = await checkTradeReadiness(sb, 'roofing')
+    expect(r.checks.registryRow).toBe(false)
+    expect(r.ready).toBe(false)
+    expect(r.missing).toContain('active `trades` registry row (tenants.trade is FK → trades(name))')
+  })
+
+  it('marks roofing ready once it IS registered (the migration-171 fix)', async () => {
+    const sb = mockSupabase({ registeredTrades: ['roofing'] })
+    const r = await checkTradeReadiness(sb, 'roofing')
+    expect(r.checks.registryRow).toBe(true)
+    expect(r.ready).toBe(true)
+    expect(r.missing).toEqual([])
+  })
+
+  it('never offers an onboardable trade that the tenants FK would reject', async () => {
+    // The invariant, stated directly: onboardable ⊆ registered. Registry holds
+    // only electrical/plumbing → painting + roofing must drop out of the list.
+    const sb = mockSupabase({
+      assemblyCounts: { electrical: 20, plumbing: 23 },
+      registeredTrades: ['electrical', 'plumbing'],
+    })
+    const onboardable = await getOnboardableTrades(sb)
+    expect(onboardable).toEqual(expect.arrayContaining(['electrical', 'plumbing']))
+    expect(onboardable).not.toContain('roofing')
+    expect(onboardable).not.toContain('painting')
   })
 
   it('still gates out a trade that has a catalogue + prompt but no pricing/licence config', async () => {

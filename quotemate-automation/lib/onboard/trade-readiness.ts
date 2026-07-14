@@ -58,6 +58,8 @@ export interface TradeReadinessChecks {
   estimatorPrompt: boolean
   intakeRules: boolean
   licenceSchema: boolean
+  /** A row in the `trades` registry — tenants.trade is FK → trades(name). */
+  registryRow: boolean
 }
 
 export interface TradeReadiness {
@@ -77,6 +79,27 @@ async function hasSharedAssemblies(supabase: DbClient, trade: string): Promise<b
     .eq('trade', trade)
   if (error) return false
   return (count ?? 0) > 0
+}
+
+/**
+ * True when the trade has an ACTIVE row in the `trades` registry.
+ *
+ * This is not a nice-to-have: tenants.trade is FK → trades(name), so onboarding
+ * a tradie into an unregistered trade fails at the very last step of the wizard
+ * ("violates foreign key constraint tenants_trade_fk") with their auth user
+ * already created. Roofing shipped in ONBOARDING_TRADES and passed every other
+ * check here for months while missing its registry row (fixed by migration 171).
+ * Gate on it so the wizard can never again offer a trade the database rejects.
+ */
+async function hasRegistryRow(supabase: DbClient, trade: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('trades')
+    .select('name')
+    .eq('name', trade)
+    .eq('active', true)
+    .maybeSingle()
+  if (error) return false
+  return !!data
 }
 
 async function hasTradePromptRow(supabase: DbClient, trade: string): Promise<boolean> {
@@ -111,6 +134,7 @@ export async function checkTradeReadiness(
     (await hasTradePromptRow(supabase, trade))
   const intakeRules = (ONBOARDING_TRADES as readonly string[]).includes(trade)
   const licenceSchema = hasLicenceSchema(trade)
+  const registryRow = await hasRegistryRow(supabase, trade)
 
   const checks: TradeReadinessChecks = {
     pricingDefaults,
@@ -118,6 +142,7 @@ export async function checkTradeReadiness(
     estimatorPrompt,
     intakeRules,
     licenceSchema,
+    registryRow,
   }
 
   const missing: string[] = []
@@ -126,6 +151,7 @@ export async function checkTradeReadiness(
   if (!estimatorPrompt) missing.push('estimator prompt (bundled template or trade_prompts row)')
   if (!intakeRules) missing.push('intake structuring support')
   if (!licenceSchema) missing.push('licence schema (LICENCE_BODIES)')
+  if (!registryRow) missing.push('active `trades` registry row (tenants.trade is FK → trades(name))')
 
   return { trade, ready: missing.length === 0, missing, checks }
 }
