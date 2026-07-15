@@ -58,6 +58,16 @@ export const MeasureAllRequestSchema = z.object({
   address: MeasureAddressSchema,
   inputs: MeasureInputsSchema,
   perBuilding: z.record(z.string(), MeasureInputsSchema.partial()).optional(),
+  perBuildingEdges: z
+    .record(
+      z.string(),
+      z.object({
+        hips: z.number().int().min(0).max(50).nullable().optional(),
+        valleys: z.number().int().min(0).max(50).nullable().optional(),
+        box_gutter_lm: z.number().min(0).max(500).nullable().optional(),
+      }),
+    )
+    .optional(),
   use_mock_provider: z.boolean().optional(),
 })
 

@@ -524,6 +524,39 @@ describe('calculateRoofingPrice — edge works (hips/valleys)', () => {
   })
 })
 
+describe('calculateRoofingPrice — box gutter', () => {
+  const { roundTo } = __test_only__
+  const sumLineItems = (t: { line_items?: { total_ex_gst: number }[] }) =>
+    roundTo((t.line_items ?? []).reduce((a, li) => a + li.total_ex_gst, 0), 2)
+
+  it('deriveEdgeWorks passes box_gutter_lm through as a direct lm (not count×length)', () => {
+    expect(deriveEdgeWorks(baseMetrics({ box_gutter_lm: 12 }), 'standard').box_gutter_lm).toBe(12)
+    expect(deriveEdgeWorks(baseMetrics({ box_gutter_lm: null }), 'standard').box_gutter_lm).toBeNull()
+  })
+
+  it('charges a $60/lm box gutter line on every tier, kept in the sum invariant', () => {
+    const r = calculateRoofingPrice({ metrics: baseMetrics({ box_gutter_lm: 8 }), inputs: baseInputs() })
+    for (const t of r.tiers) {
+      const bg = t.line_items?.find((li) => /box gutter/i.test(li.description))
+      expect(bg).toBeDefined()
+      expect(bg?.unit).toBe('lm')
+      expect(bg?.quantity).toBe(8)
+      expect(bg?.unit_price_ex_gst).toBe(60)
+      expect(bg?.total_ex_gst).toBe(480)
+      expect(sumLineItems(t)).toBe(t.ex_gst)
+    }
+  })
+
+  it('emits no box gutter line when box_gutter_lm is null or 0', () => {
+    for (const v of [null, 0] as const) {
+      const r = calculateRoofingPrice({ metrics: baseMetrics({ box_gutter_lm: v }), inputs: baseInputs() })
+      for (const t of r.tiers) {
+        expect(t.line_items?.some((li) => /box gutter/i.test(li.description))).toBe(false)
+      }
+    }
+  })
+})
+
 describe('roundTo helper', () => {
   it('rounds to N decimal places without surprises', () => {
     const { roundTo } = __test_only__

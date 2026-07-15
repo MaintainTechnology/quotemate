@@ -378,6 +378,20 @@ describe('combinedLayoutMetrics', () => {
     expect(m.polygon_geojson).toBe(poly)
   })
 
+  it('sums each structure own perimeter so edge protection is additive (not 4×√Σfootprint)', () => {
+    const main = combinedLayoutMetrics([structure(100, 10, 80)]).perimeter_m
+    const shed = combinedLayoutMetrics([structure(50, 5, 40)]).perimeter_m
+    const both = combinedLayoutMetrics([structure(100, 10, 80), structure(50, 5, 40)]).perimeter_m
+    expect(main).toBeGreaterThan(0)
+    expect(both).toBeCloseTo((main ?? 0) + (shed ?? 0), 5)
+  })
+
+  it('edge protection lm on a 2-structure job exceeds the collapsed square approximation', () => {
+    const combined = combinedLayoutMetrics([structure(100, 10, 80), structure(50, 5, 40)])
+    const edge = layoutMaterials(combined, 'reroof').items.find((i) => i.item === 'Edge protection')!
+    expect(edge.qty).toBeGreaterThan(Math.ceil(4 * Math.sqrt(120)))
+  })
+
   it('nulls zero sums so layoutMaterials skips those items', () => {
     const m = combinedLayoutMetrics([{ metrics: { sloped_area_m2: null, ridge_lm: null, footprint_m2: 0, polygon_geojson: null } }])
     expect(m.sloped_area_m2).toBeNull()

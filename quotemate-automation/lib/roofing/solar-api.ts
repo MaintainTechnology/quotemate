@@ -140,17 +140,22 @@ const DEFAULT_ACCEPT_QUALITIES: ImageryQuality[] = ['HIGH', 'MEDIUM']
 export const MAX_SOLAR_AREA_RATIO = 3.0
 export const MIN_SOLAR_AREA_RATIO = 0.33
 
-/** PURE — is Google's measured whole-roof area a sane multiple of the Geoscape
- *  footprint? A pitched roof + eaves legitimately exceeds the flat footprint,
- *  but a 3×+ blow-out (malformed wholeRoofStats, or findClosest snapping to a
- *  bigger building) must never price. Guards the value that actually becomes
- *  sloped_area_m2 — distinct from the segment-sum guard in enrichMetricsWithSolar,
- *  which validates a different field (totalSegmentAreaM2). */
+/** PURE — is Google's measured whole-roof area physically plausible for the
+ *  Geoscape footprint? A pitched roof + eaves legitimately EXCEEDS the flat
+ *  footprint (up to the 3× upper bound), but can never be SMALLER than it — a
+ *  sub-footprint measured area (Google snapping tight, or occluded planes) is
+ *  rejected here so the caller derives sloped area from pitch instead, and a
+ *  3×+ blow-out (malformed wholeRoofStats, or findClosest snapping to a bigger
+ *  building) is likewise rejected. Guards the value that becomes sloped_area_m2
+ *  — distinct from the segment-sum guard in enrichMetricsWithSolar, which
+ *  validates a different field (totalSegmentAreaM2) with a looser lower band. */
 export function measuredAreaWithinFootprint(areaM2: number, footprintM2: number): boolean {
   if (!Number.isFinite(areaM2) || areaM2 <= 0) return false
   if (!Number.isFinite(footprintM2) || footprintM2 <= 0) return false
   const ratio = areaM2 / footprintM2
-  return ratio >= MIN_SOLAR_AREA_RATIO && ratio <= MAX_SOLAR_AREA_RATIO
+  // Physical floor: sloped area ≥ footprint. MIN_SOLAR_AREA_RATIO is deliberately
+  // NOT used here — it stays the looser lower band for the segment-sum guard.
+  return ratio >= 1 && ratio <= MAX_SOLAR_AREA_RATIO
 }
 
 // ── Config resolution ───────────────────────────────────────────────
@@ -363,9 +368,9 @@ export function applySolarInsight(
   ) {
     // HIGH-quality imagery: use Google's DSM-measured whole-roof area directly —
     // more accurate than footprint ÷ cos(mean pitch) on hip/valley/complex roofs
-    // (it captures every plane + overhang). Clamped to a sane multiple of the
-    // footprint here (measuredAreaWithinFootprint) so a malformed whole-roof stat
-    // can't inflate the priced area; otherwise fall through to the cos-θ derive.
+    // (it captures every plane + overhang). Accepted only when physically
+    // plausible (≥ footprint, ≤ 3× footprint via measuredAreaWithinFootprint); a
+    // sub-footprint or blown-out stat falls through to the cos-θ derive below.
     enriched.sloped_area_m2 = round1(insight.measuredRoofAreaM2)
     enriched.measured_roof_area_m2 = round1(insight.measuredRoofAreaM2)
     enriched.area_source = 'measured'

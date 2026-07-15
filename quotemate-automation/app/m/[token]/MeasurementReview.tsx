@@ -43,14 +43,25 @@ function formLabel(form: RoofMetrics['form']): string {
     case 'skillion': return 'Skillion'
     case 'gable_hip': return 'Gable + hip'
     case 'complex': return 'Complex'
-    default: return 'To confirm'
+    default: return 'Not classified'
+  }
+}
+
+/** Friendly provenance for a measured field's source. */
+function sourceLabel(s: string | undefined): string {
+  switch (s) {
+    case 'google_solar': return 'Google Solar'
+    case 'geoscape': return 'Geoscape estimate'
+    case 'declared': return 'you declared'
+    case 'derived': return 'derived'
+    default: return ''
   }
 }
 
 const TIER_NAME: Record<'good' | 'better' | 'best', string> = {
-  good: 'Patch / repair',
-  better: 'Re-roof',
-  best: 'Upgrade',
+  good: 'Patch',
+  better: 'Full roof replacement',
+  best: 'Upgraded roof replacement',
 }
 
 /**
@@ -108,6 +119,8 @@ export function MeasurementReview({
   const [rescanMsg, setRescanMsg] = useState<string | null>(null)
   const [promoteState, setPromoteState] = useState<'idle' | 'working'>('idle')
   const [promoteErr, setPromoteErr] = useState<string | null>(null)
+  // Index (1-based) of the structure whose edge counts are being re-priced.
+  const [edgeSaving, setEdgeSaving] = useState<number | null>(null)
 
   // Promote this measurement to an editable quotes row (spec R6e), then land
   // on the dashboard editor. Idempotent server-side: a second promotion
@@ -144,12 +157,12 @@ export function MeasurementReview({
         setPromoteState('idle')
         return
       }
-      router.push(`/dashboard/quote/${json.shareToken}`)
+      router.push(`/dashboard/quote/${json.shareToken}${routing === 'inspection_required' ? '' : '?edit=1'}`)
     } catch (e) {
       setPromoteErr(e instanceof Error ? e.message : String(e))
       setPromoteState('idle')
     }
-  }, [saveAsQuoteBody, measureToken, router])
+  }, [saveAsQuoteBody, measureToken, router, routing])
 
   // Tradie photo source (R2): attach close-up roof photos and re-scan. The POST
   // merges the Anthropic photo pass with the per-structure aerial read and
@@ -190,6 +203,37 @@ export function MeasurementReview({
       setRescanMsg(e instanceof Error ? e.message : String(e))
     }
   }, [photos, measureToken, router])
+
+  // Tradie edge override (R3.1) — PATCH the confirmed hip/valley/box-gutter
+  // counts for one structure; the server re-prices in place and we refresh to
+  // show the new tiers + box-gutter line.
+  const applyEdges = useCallback(
+    async (
+      index1: number,
+      edges: { hips: number | null; valleys: number | null; box_gutter_lm: number | null },
+    ) => {
+      setEdgeSaving(index1)
+      setErr(null)
+      try {
+        const res = await fetch(`/api/roofing/measurement/${measureToken}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ edges: [{ index: index1, ...edges }] }),
+        })
+        const json = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; detail?: string }
+        if (!res.ok || !json.ok) {
+          setErr(json.detail ?? json.error ?? 'Could not update the counts.')
+          return
+        }
+        router.refresh()
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : String(e))
+      } finally {
+        setEdgeSaving(null)
+      }
+    },
+    [measureToken, router],
+  )
 
   const combined = useMemo(() => combine(structures, included), [structures, included])
   const inspection = routing === 'inspection_required'
@@ -307,7 +351,7 @@ export function MeasurementReview({
             dashboard editor; otherwise promote-then-navigate. */}
         {quoteShareToken ? (
           <a
-            href={`/dashboard/quote/${quoteShareToken}`}
+            href={`/dashboard/quote/${quoteShareToken}${inspection ? '' : '?edit=1'}`}
             className="inline-flex items-center gap-2 border border-ink-line px-4 py-2.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text-sec hover:border-accent hover:text-accent"
           >
             Edit &amp; send quote <span aria-hidden="true">&rarr;</span>
@@ -358,12 +402,14 @@ export function MeasurementReview({
           const isIncluded = included.includes(index1)
           return (
             <StructureCard
-              key={s.buildingId ?? i}
+              key={`${s.buildingId ?? i}-${s.metrics.hips ?? ''}-${s.metrics.valleys ?? ''}-${s.metrics.box_gutter_lm ?? ''}`}
               structure={s}
               index={i}
               isIncluded={isIncluded}
-              disabled={saving}
+              disabled={saving || edgeSaving !== null}
+              savingEdges={edgeSaving === index1}
               onToggle={() => void onToggle(index1)}
+              onApplyEdges={applyEdges}
             />
           )
         })}
@@ -493,17 +539,37 @@ function StructureCard({
   index,
   isIncluded,
   disabled,
+  savingEdges,
   onToggle,
+  onApplyEdges,
 }: {
   structure: RoofStructurePrice
   index: number
   isIncluded: boolean
   disabled: boolean
+  savingEdges: boolean
   onToggle: () => void
+  onApplyEdges: (
+    index1: number,
+    edges: { hips: number | null; valleys: number | null; box_gutter_lm: number | null },
+  ) => void | Promise<void>
 }) {
   const m = structure.metrics
   const p = structure.price
   const inspection = p.routing?.decision === 'inspection_required'
+  const [hips, setHips] = useState(m.hips != null ? String(m.hips) : '')
+  const [valleys, setValleys] = useState(m.valleys != null ? String(m.valleys) : '')
+  const [boxGutter, setBoxGutter] = useState(m.box_gutter_lm != null ? String(m.box_gutter_lm) : '')
+  const num = (v: string): number | null => {
+    const n = Number(v)
+    return v.trim() === '' || !Number.isFinite(n) ? null : Math.max(0, n)
+  }
+  const submitEdges = () =>
+    void onApplyEdges(index + 1, {
+      hips: hips.trim() === '' ? null : Math.round(num(hips) ?? 0),
+      valleys: valleys.trim() === '' ? null : Math.round(num(valleys) ?? 0),
+      box_gutter_lm: num(boxGutter),
+    })
   return (
     <article
       className={`border bg-ink-card p-6 transition-colors sm:p-7 ${
@@ -539,19 +605,60 @@ function StructureCard({
         </label>
       </div>
 
-      <div className="mt-5 grid gap-4 sm:grid-cols-4">
+      <div className="mt-5 grid gap-4 sm:grid-cols-5">
         <MiniStat
           label="Sloped area"
           value={m.sloped_area_m2 != null ? `${Math.round(m.sloped_area_m2)} m²` : '—'}
           hint={m.footprint_m2 ? `Footprint ${Math.round(m.footprint_m2)} m²` : ''}
         />
-        <MiniStat label="Roof form" value={formLabel(m.form)} hint={m.storeys != null ? `${m.storeys}-storey` : ''} />
+        <MiniStat label="Roof form" value={formLabel(m.form)} hint={sourceLabel(m.field_sources?.form)} />
+        <MiniStat label="Storeys" value={m.storeys != null ? String(m.storeys) : '—'} hint={sourceLabel(m.field_sources?.storeys)} />
         <MiniStat label="Hips · valleys" value={`${m.hips ?? '?'} · ${m.valleys ?? '?'}`} />
         <MiniStat
           label="Pitch"
           value={m.pitch_source === 'measured' && m.pitch_degrees != null ? `${m.pitch_degrees}°` : structure.inputs.pitch}
           hint={m.pitch_source === 'measured' ? 'measured' : 'declared'}
         />
+      </div>
+
+      {/* Tradie-confirmed edge counts — edit + re-price (R3.1). Box gutter is not
+          auto-detected (invisible in the 2D footprint), so it starts blank. */}
+      <div className="mt-5 border-t border-ink-line pt-4">
+        <div className="mb-2 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+          Confirm counts — edit to correct, then update prices
+        </div>
+        <div className="grid max-w-md grid-cols-3 gap-3">
+          <label className="flex flex-col gap-1 text-text-sec">
+            <span className="font-mono text-[0.62rem] uppercase tracking-[0.12em]">Hips</span>
+            <input
+              type="number" min={0} step={1} value={hips} disabled={disabled}
+              onChange={(e) => setHips(e.target.value)}
+              className="border border-ink-line bg-ink-deep px-3 py-2 font-mono text-text-pri disabled:opacity-50"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-text-sec">
+            <span className="font-mono text-[0.62rem] uppercase tracking-[0.12em]">Valleys</span>
+            <input
+              type="number" min={0} step={1} value={valleys} disabled={disabled}
+              onChange={(e) => setValleys(e.target.value)}
+              className="border border-ink-line bg-ink-deep px-3 py-2 font-mono text-text-pri disabled:opacity-50"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-text-sec">
+            <span className="font-mono text-[0.62rem] uppercase tracking-[0.12em]">Box gutter (lm)</span>
+            <input
+              type="number" min={0} step={0.1} value={boxGutter} disabled={disabled}
+              onChange={(e) => setBoxGutter(e.target.value)}
+              className="border border-ink-line bg-ink-deep px-3 py-2 font-mono text-text-pri disabled:opacity-50"
+            />
+          </label>
+        </div>
+        <button
+          type="button" onClick={submitEdges} disabled={disabled}
+          className="mt-3 border border-accent bg-accent/10 px-4 py-2 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-accent disabled:opacity-50"
+        >
+          {savingEdges ? 'Updating…' : 'Update prices'}
+        </button>
       </div>
 
       {/* Per-structure tier prices */}

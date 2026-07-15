@@ -24,6 +24,11 @@ import { deriveEdgeWorks } from './pricing'
 /** Ignore near-straight vertices (collinear points on a traced outline). */
 const MIN_TURN_DEG = 25
 
+/** Ignore corners flanked by a sub-2m edge (bay-window / trace-noise jogs), so
+ *  a real 4-hip roof traced with articulation noise doesn't over-count.
+ *  ponytail: a calibration knob — raise if a footprint still over-counts. */
+const MIN_SEGMENT_M = 2
+
 /**
  * PURE — classify a footprint polygon's corners into convex vs reflex
  * counts. Projects lng/lat to local metres so turn signs are meaningful,
@@ -71,6 +76,9 @@ export function polygonCornerCounts(
     const ay = Y[i] - Y[prev]
     const bx = X[next] - X[i]
     const by = Y[next] - Y[i]
+    // Ignore corners flanked by a very short edge — a real hip/valley runs a
+    // substantial length; sub-2m jogs are bay windows / trace noise.
+    if (Math.hypot(ax, ay) < MIN_SEGMENT_M || Math.hypot(bx, by) < MIN_SEGMENT_M) continue
     const cross = ax * by - ay * bx
     const dot = ax * bx + ay * by
     const turnDeg = Math.abs((Math.atan2(cross, dot) * 180) / Math.PI)
@@ -94,7 +102,10 @@ export function edgesFromGeometry(
 ): { hips: number; valleys: number } {
   const { convex, reflex } = polygonCornerCounts(polygon)
   const hippable = form !== 'gable' && form !== 'skillion'
-  return { hips: hippable ? convex : 0, valleys: reflex }
+  // A gable-hip roof has 2 gable ends whose convex footprint corners are
+  // vertical (not hips), so exclude them from the hip count.
+  const hips = hippable ? (form === 'gable_hip' ? Math.max(0, convex - 2) : convex) : 0
+  return { hips, valleys: reflex }
 }
 
 /**

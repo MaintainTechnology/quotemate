@@ -180,6 +180,31 @@ export type MeasureRoofsOpts = MeasureRoofOpts & {
    * out falls back to the shared `inputs` argument.
    */
   perBuilding?: Record<string, Partial<RoofUserInputs>>
+  /**
+   * Per-building metric overrides keyed by buildingId — tradie-confirmed
+   * hip/valley counts and box-gutter length, applied on top of the measured
+   * geometry before pricing. Box gutter is tradie-only (invisible in the 2D
+   * footprint). Any field left out keeps the measured value.
+   */
+  perBuildingEdges?: Record<
+    string,
+    { hips?: number | null; valleys?: number | null; box_gutter_lm?: number | null }
+  >
+}
+
+/** PURE — apply tradie-confirmed edge overrides on top of measured metrics.
+ *  Undefined fields keep the measured value; box gutter defaults to null. */
+function applyEdgeOverride(
+  metrics: RoofMetrics,
+  o: { hips?: number | null; valleys?: number | null; box_gutter_lm?: number | null } | undefined,
+): RoofMetrics {
+  if (!o) return metrics
+  return {
+    ...metrics,
+    hips: o.hips !== undefined ? o.hips : metrics.hips,
+    valleys: o.valleys !== undefined ? o.valleys : metrics.valleys,
+    box_gutter_lm: o.box_gutter_lm !== undefined ? o.box_gutter_lm : metrics.box_gutter_lm ?? null,
+  }
 }
 
 export type MeasureRoofsResult =
@@ -264,6 +289,7 @@ export async function measureAndPriceRoofs(
   const built: { input: RoofStructureInput; enrichWarnings: string[] }[] = []
   for (const b of multi.buildings) {
     const override = (b.buildingId ? opts.perBuilding?.[b.buildingId] : undefined) ?? {}
+    const edgeOverride = b.buildingId ? opts.perBuildingEdges?.[b.buildingId] : undefined
     const merged: RoofUserInputs = { ...inputs, ...override }
     if (merged.building_year_built == null && propertyContext?.year_built != null) {
       merged.building_year_built = propertyContext.year_built
@@ -272,14 +298,14 @@ export async function measureAndPriceRoofs(
       const enriched = await enrichMetricsWithSolar(b.metrics, merged, solarOpts)
       const fused = mergeMeasurement({ metrics: enriched.metrics, inputs: enriched.inputs })
       built.push({
-        input: { buildingId: b.buildingId, role: b.role, metrics: fused.metrics, inputs: enriched.inputs },
+        input: { buildingId: b.buildingId, role: b.role, metrics: applyEdgeOverride(fused.metrics, edgeOverride), inputs: enriched.inputs },
         enrichWarnings: [...enriched.warnings, ...fused.warnings],
       })
     } else {
       const declaredMetrics = reapplyPitchToMetrics(b.metrics, merged)
       const fused = mergeMeasurement({ metrics: declaredMetrics, inputs: merged })
       built.push({
-        input: { buildingId: b.buildingId, role: b.role, metrics: fused.metrics, inputs: merged },
+        input: { buildingId: b.buildingId, role: b.role, metrics: applyEdgeOverride(fused.metrics, edgeOverride), inputs: merged },
         enrichWarnings: fused.warnings,
       })
     }

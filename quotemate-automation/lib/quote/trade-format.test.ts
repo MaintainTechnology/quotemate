@@ -83,9 +83,9 @@ describe('usesGenericCard', () => {
 describe('tierLabelsForTrade', () => {
   it('gives roofing its own tier framing', () => {
     expect(tierLabelsForTrade('roofing')).toEqual({
-      good: 'Patch / repair',
-      better: 'Re-roof',
-      best: 'Upgrade',
+      good: 'Patch',
+      better: 'Full roof replacement',
+      best: 'Upgraded roof replacement',
     })
   })
 

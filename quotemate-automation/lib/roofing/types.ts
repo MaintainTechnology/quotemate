@@ -142,6 +142,10 @@ export type RoofMetrics = {
   valleys: number | null
   /** Estimated total ridge length in linear metres (horizontal + hip ridges). */
   ridge_lm: number | null
+  /** Box gutter length in linear metres. Not derivable from the 2D footprint
+   *  (internal / parapet feature) — set only when a tradie confirms it on the
+   *  measure page. Null / absent = none. */
+  box_gutter_lm?: number | null
   /** GeoJSON polygon of the building footprint, EPSG:4326. */
   polygon_geojson: GeoJSONPolygon | null
   /** ISO date of the source-data capture (LiDAR survey, Geoscape refresh). */
@@ -288,6 +292,12 @@ export type RoofingRateCard = {
    */
   valley_flashing_rate_per_lm?: number
   /**
+   * Per-linear-metre rate to replace a box gutter. Mirrors the seeded
+   * `Box gutter replacement` assembly (migration 080, $60.00/lm ex-GST).
+   * Optional; the default rate card supplies it.
+   */
+  box_gutter_rate_per_lm?: number
+  /**
    * Master switch — itemise hip/valley edge works on the quote. When
    * false, no edge line items are produced and tiers reproduce the
    * pre-edge-works output exactly. Optional; defaults to true.
@@ -323,6 +333,8 @@ export type RoofingEdgeWorks = {
   valleys_count: number | null
   hips_lm: number | null
   valleys_lm: number | null
+  /** Box gutter linear metres (tradie-confirmed; a direct lm, not count×length). */
+  box_gutter_lm: number | null
   /** The per-edge length applied to the counts. */
   per_edge_length_m: number
   /** Whether per-edge length came from roof geometry or the fallback. */

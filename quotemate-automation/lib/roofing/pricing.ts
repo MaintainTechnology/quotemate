@@ -149,6 +149,7 @@ export const DEFAULT_ROOFING_RATE_CARD: RoofingRateCard = {
   // Edge-works rates — mirror the seeded assemblies in migration 080.
   ridge_hip_repoint_rate_per_lm: 12.0, // 'Repoint ridge and hip caps' (lm)
   valley_flashing_rate_per_lm: 45.0, // 'Valley flashing replacement' (lm)
+  box_gutter_rate_per_lm: 60.0, // 'Box gutter replacement' (lm)
   price_edge_works: true,
 }
 
@@ -285,6 +286,7 @@ export function deriveEdgeWorks(metrics: RoofMetrics, pitch: PitchBucket): Roofi
     valleys_count: metrics.valleys ?? null,
     hips_lm: toLm(metrics.hips),
     valleys_lm: toLm(metrics.valleys),
+    box_gutter_lm: metrics.box_gutter_lm ?? null,
     per_edge_length_m: lengthM,
     length_source: source,
   }
@@ -517,6 +519,7 @@ export function calculateRoofingPrice(args: {
   const edge = deriveEdgeWorks(metrics, inputs.pitch)
   const hipRate = rateCard.ridge_hip_repoint_rate_per_lm ?? 0
   const valleyRate = rateCard.valley_flashing_rate_per_lm ?? 0
+  const boxGutterRate = rateCard.box_gutter_rate_per_lm ?? 0
 
   const buildTier = (tier: 'good' | 'better' | 'best', baseEx: number): RoofingPriceTier => {
     const scope = tierScopeLine(
@@ -572,6 +575,19 @@ export function calculateRoofingPrice(args: {
         'Valley flashing replacement.',
         'Valley flashing (included in the re-roof scope).',
       )
+      // Box gutter is separate scope (never bundled in the per-m² sheet rate),
+      // so it's charged on every priceable tier when the tradie confirms a
+      // length. Tradie-only input — invisible in the 2D footprint.
+      if (edge.box_gutter_lm !== null && edge.box_gutter_lm > 0 && boxGutterRate > 0) {
+        line_items.push({
+          unit: 'lm',
+          quantity: edge.box_gutter_lm,
+          description: 'Box gutter replacement.',
+          unit_price_ex_gst: roundTo(boxGutterRate, 2),
+          total_ex_gst: roundTo(edge.box_gutter_lm * boxGutterRate, 2),
+          source: 'material',
+        })
+      }
     }
 
     // Tier total is the sum of its line items — keeps the invariant

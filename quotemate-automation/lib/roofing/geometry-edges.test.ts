@@ -64,6 +64,27 @@ describe('polygonCornerCounts', () => {
     expect(polygonCornerCounts(null)).toEqual({ convex: 0, reflex: 0 })
     expect(polygonCornerCounts({ type: 'Polygon', coordinates: [[[0, 0]]] })).toEqual({ convex: 0, reflex: 0 })
   })
+  it('ignores a sub-2m bay-window jog (trace noise) — a notched rectangle still counts as 4 corners', () => {
+    const MLAT = 1 / 110574
+    const MLNG = 1 / (111320 * Math.cos((Y0 * Math.PI) / 180))
+    const bLat = 1.5 * MLAT // ~1.5 m north
+    const bLng = 1.5 * MLNG // ~1.5 m east
+    const NOTCHED_RECT: GeoJSONPolygon = {
+      type: 'Polygon',
+      coordinates: [[
+        [X0, Y0],
+        [X0 + S, Y0],
+        [X0 + S, Y0 + bLat],
+        [X0 + S + bLng, Y0 + bLat],
+        [X0 + S + bLng, Y0],
+        [X0 + 2 * S, Y0],
+        [X0 + 2 * S, Y0 - 2 * S],
+        [X0, Y0 - 2 * S],
+        [X0, Y0],
+      ]],
+    }
+    expect(polygonCornerCounts(NOTCHED_RECT)).toEqual({ convex: 4, reflex: 0 })
+  })
 })
 
 describe('edgesFromGeometry', () => {
@@ -75,6 +96,11 @@ describe('edgesFromGeometry', () => {
   })
   it('an L-shaped unknown roof → hips at convex corners, 1 valley at the inside corner', () => {
     expect(edgesFromGeometry(L_SHAPE, 'unknown')).toEqual({ hips: 5, valleys: 1 })
+  })
+  it('excludes the 2 gable-end convex corners for a gable_hip roof', () => {
+    // RECT has 4 convex corners; a gable-hip roof's 2 gable ends are vertical
+    // (not hips), so hips = 4 − 2 = 2.
+    expect(edgesFromGeometry(RECT, 'gable_hip')).toEqual({ hips: 2, valleys: 0 })
   })
 })
 

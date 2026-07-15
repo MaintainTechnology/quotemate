@@ -304,6 +304,9 @@ export type LayoutMaterialMetrics = {
   /** Summed valley length (deriveEdgeWorks — the SAME basis pricing charges
    *  valley flashing on) so materials and the priced edge-works never drift. */
   valleys_lm?: number | null
+  /** Summed footprint perimeter (each structure's own outline) — edge protection
+   *  is quoted off this so a multi-structure job isn't collapsed to 4×√Σfootprint. */
+  perimeter_m?: number | null
 }
 
 /** Footprint perimeter in metres from the polygon ring (equirectangular, the
@@ -381,6 +384,18 @@ export function combinedLayoutMetrics(
     return sum + (edge.valleys_lm ?? 0)
   }, 0)
 
+  // Edge protection is quoted off the SUM of each structure's own perimeter, so
+  // a multi-structure job isn't collapsed to one 4×√Σfootprint square.
+  const perimeter_m = structures.reduce((sum, x) => {
+    const p = perimeterM({
+      sloped_area_m2: null,
+      ridge_lm: null,
+      footprint_m2: x.metrics?.footprint_m2 ?? 0,
+      polygon_geojson: x.metrics?.polygon_geojson ?? null,
+    })
+    return sum + (p?.metres ?? 0)
+  }, 0)
+
   // Material from the primary structure (largest dwelling), else the first.
   const primary = structures.find((x) => x.role === 'primary') ?? structures[0]
 
@@ -392,6 +407,7 @@ export function combinedLayoutMetrics(
       structures.length === 1 ? (structures[0]?.metrics?.polygon_geojson ?? null) : null,
     material: primary?.inputs?.material,
     valleys_lm: valleysLm || null,
+    perimeter_m: perimeter_m || null,
   }
 }
 
@@ -496,7 +512,10 @@ export function layoutMaterials(
       use: 'New valley flashing / trays where roof planes meet.',
     })
   }
-  const perim = perimeterM(metrics)
+  const perim =
+    metrics.perimeter_m != null
+      ? { metres: metrics.perimeter_m, source: 'outline' as const }
+      : perimeterM(metrics)
   if (perim !== null && perim.metres > 0) {
     items.push({
       item: 'Edge protection',

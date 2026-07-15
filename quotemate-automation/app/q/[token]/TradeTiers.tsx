@@ -10,6 +10,7 @@
 // Server component (links only). Maintain design system.
 
 import Link from 'next/link'
+import { tierLabelsForTrade } from '@/lib/quote/trade-format'
 
 type Tier = {
   label: string
@@ -52,11 +53,6 @@ type Props = {
   footnote?: string
 }
 
-const ROOF_TIER_LABEL: Record<TierKey, string> = {
-  good: 'Patch / repair',
-  better: 'Re-roof',
-  best: 'Upgrade',
-}
 const ROOF_TIER_BLURB: Record<TierKey, string> = {
   good: 'Targeted repairs to the worst-affected sections — the budget-conscious fix to buy time.',
   better: 'A full replacement of the roof covering — the recommended long-term solution.',
@@ -92,7 +88,7 @@ export function TradeTiers({
   priceExpired = false,
   depositEnabled = false,
   heading,
-  labels = ROOF_TIER_LABEL,
+  labels = tierLabelsForTrade('roofing'),
   blurbs = ROOF_TIER_BLURB,
   footnote = ROOF_FOOTNOTE,
 }: Props) {

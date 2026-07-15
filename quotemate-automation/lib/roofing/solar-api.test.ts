@@ -277,6 +277,19 @@ describe('applySolarInsight', () => {
     expect(out.metrics.sloped_area_m2).toBeCloseTo(215.7, 0) // derived, not 900
     expect(out.metrics.area_source).toBe('derived')
   })
+
+  it('derives the area (never below footprint) when HIGH measured area is under the footprint', () => {
+    // A pitched roof is never smaller than its flat footprint. A HIGH measured
+    // area below footprint (V1: 161 m² vs 208 m²) must be rejected and fall
+    // through to the footprint/cos(θ) derive, which is guaranteed ≥ footprint.
+    const out = applySolarInsight(
+      metrics({ footprint_m2: 208 }),
+      inputs(),
+      insightFixture({ weightedMeanPitchDegrees: 22, imageryQuality: 'HIGH', measuredRoofAreaM2: 161 }),
+    )
+    expect(out.metrics.sloped_area_m2!).toBeGreaterThanOrEqual(out.metrics.footprint_m2)
+    expect(out.metrics.area_source).toBe('derived')
+  })
 })
 
 describe('measuredAreaWithinFootprint', () => {
@@ -287,6 +300,11 @@ describe('measuredAreaWithinFootprint', () => {
     expect(measuredAreaWithinFootprint(0, 200)).toBe(false)
     expect(measuredAreaWithinFootprint(230, 0)).toBe(false)
     expect(measuredAreaWithinFootprint(NaN, 200)).toBe(false)
+  })
+
+  it('rejects a measured area below the footprint (a pitched roof is never smaller)', () => {
+    expect(measuredAreaWithinFootprint(161, 208)).toBe(false) // 0.77× — impossible
+    expect(measuredAreaWithinFootprint(200, 200)).toBe(true) // exactly footprint is valid
   })
 })
 

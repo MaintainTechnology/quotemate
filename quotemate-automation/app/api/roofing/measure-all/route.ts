@@ -72,7 +72,7 @@ export async function POST(req: Request) {
     )
   }
 
-  const { address, inputs, perBuilding, use_mock_provider } = parsed.data
+  const { address, inputs, perBuilding, perBuildingEdges, use_mock_provider } = parsed.data
 
   let rateCard
   if (auth.tenantId) {
@@ -86,6 +86,7 @@ export async function POST(req: Request) {
     provider: use_mock_provider ? new MockRoofingProvider() : undefined,
     rateCard,
     perBuilding,
+    perBuildingEdges,
   })
 
   if (!result.ok) {

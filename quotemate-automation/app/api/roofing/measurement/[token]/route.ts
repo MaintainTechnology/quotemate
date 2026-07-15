@@ -14,6 +14,7 @@ import type { MultiRoofQuote, RoofJobIntent } from '@/lib/roofing/types'
 import type { SolarQuoteAddon } from '@/lib/roofing/solar'
 import { denormFromSelection, sanitizeIndices, structureCount } from '@/lib/roofing/selection'
 import { detectSolarForJob, loadRoofingRateCard } from '@/lib/roofing/solar-detect'
+import { repriceWithEdgeOverrides } from '@/lib/roofing/reprice'
 
 export const dynamic = 'force-dynamic'
 // The POST re-scan runs Gemini (per structure) + an Anthropic photo pass
@@ -25,11 +26,27 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-const BodySchema = z.object({
-  included_indices: z.array(z.number().int()).min(1).max(64),
+const EdgeOverrideSchema = z.object({
+  index: z.number().int().min(1).max(64),
+  hips: z.number().int().min(0).max(50).nullable().optional(),
+  valleys: z.number().int().min(0).max(50).nullable().optional(),
+  box_gutter_lm: z.number().min(0).max(500).nullable().optional(),
 })
+const BodySchema = z
+  .object({
+    included_indices: z.array(z.number().int()).min(1).max(64).optional(),
+    edges: z.array(EdgeOverrideSchema).min(1).max(64).optional(),
+  })
+  .refine((b) => b.included_indices != null || b.edges != null, {
+    message: 'included_indices or edges required',
+  })
 
-type Row = { id: string; quote: MultiRoofQuote | null }
+type Row = {
+  id: string
+  quote: MultiRoofQuote | null
+  tenant_id: string | null
+  included_indices: number[] | null
+}
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params
@@ -53,13 +70,47 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ token: string
 
   const { data: row, error: readErr } = await supabase
     .from('roofing_measurements')
-    .select('id, quote')
+    .select('id, quote, tenant_id, included_indices')
     .eq('measure_token', token)
     .maybeSingle<Row>()
   if (readErr || !row) {
     return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
   }
 
+  // Tradie edge re-price (hips / valleys / box gutter) — re-price the stored
+  // structures in place with the confirmed counts, keeping the current
+  // selection. Distinct from the included_indices selection update below.
+  if (parsed.data.edges) {
+    if (!row.quote || structureCount(row.quote) === 0) {
+      return Response.json({ ok: false, error: 'no_quote' }, { status: 400 })
+    }
+    const rateCard = await loadRoofingRateCard(supabase, row.tenant_id, null)
+    const updatedQuote = repriceWithEdgeOverrides(row.quote, parsed.data.edges, rateCard)
+    const total = structureCount(updatedQuote)
+    const included = sanitizeIndices(
+      row.included_indices ?? Array.from({ length: total }, (_, i) => i + 1),
+      total,
+    )
+    const denorm = denormFromSelection(updatedQuote, included)
+    const { error: updErr } = await supabase
+      .from('roofing_measurements')
+      .update({
+        quote: updatedQuote,
+        combined_area_m2: denorm.combined_area_m2,
+        combined_better_inc_gst: denorm.combined_better_inc_gst,
+        structure_count: denorm.structure_count,
+        pdf_path: null,
+      })
+      .eq('id', row.id)
+    if (updErr) {
+      return Response.json({ ok: false, error: 'update_failed', detail: updErr.message }, { status: 200 })
+    }
+    return Response.json({ ok: true, repriced: true, ...denorm }, { status: 200 })
+  }
+
+  if (!parsed.data.included_indices) {
+    return Response.json({ ok: false, error: 'invalid_request' }, { status: 400 })
+  }
   const count = structureCount(row.quote)
   const included = sanitizeIndices(parsed.data.included_indices, count)
   if (included.length === 0) {

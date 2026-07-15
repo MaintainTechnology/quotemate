@@ -4,8 +4,10 @@
 
 import { describe, expect, it } from 'vitest'
 import { priceMultiRoof, type RoofStructureInput } from '@/lib/roofing/pricing'
-import type { RoofMetrics, RoofUserInputs } from '@/lib/roofing/types'
+import type { RoofMetrics, RoofUserInputs, RoofingPriceTier } from '@/lib/roofing/types'
+import type { SolarAllowance, SolarQuoteAddon } from '@/lib/roofing/solar'
 import {
+  applySolarToTiers,
   buildRoofingReplyMessage,
   buildRoofPhotoMedia,
   composeBookingMessage,
@@ -38,6 +40,48 @@ const shed: RoofStructureInput = {
 }
 
 const CTX = { address: '670 London Rd, Chandler QLD 4155', quoteUrl: 'https://www.quotemax.com.au/q/roof/abc123', firstName: 'James' }
+
+const allowance = (o: Partial<SolarAllowance> = {}): SolarAllowance => ({
+  applies: true, arrays: 2, ex_gst: 2400, inc_gst: 2640, detail: '', electrician_note: '', low_confidence: false, ...o,
+})
+
+describe('applySolarToTiers', () => {
+  const tiers: RoofingPriceTier[] = [
+    { tier: 'good', label: 'a', ex_gst: 1000, inc_gst: 1100, scope: '' },
+    { tier: 'better', label: 'b', ex_gst: 5000, inc_gst: 5500, scope: '' },
+    { tier: 'best', label: 'c', ex_gst: 6000, inc_gst: 6600, scope: '' },
+  ]
+  it('adds the allowance to better + best only, never good', () => {
+    const out = applySolarToTiers(tiers, { allowance: allowance() })
+    expect([out[0].ex_gst, out[0].inc_gst]).toEqual([1000, 1100]) // good untouched
+    expect([out[1].ex_gst, out[1].inc_gst]).toEqual([7400, 8140]) // +2400 / +2640
+    expect([out[2].ex_gst, out[2].inc_gst]).toEqual([8400, 9240])
+  })
+  it('no-ops when the allowance does not apply or is absent', () => {
+    expect(applySolarToTiers(tiers, { allowance: allowance({ applies: false }) })).toEqual(tiers)
+    expect(applySolarToTiers(tiers, null)).toEqual(tiers)
+  })
+  it('appends a solar each-line-item keeping Σ line_items === ex_gst when a tier carries line_items', () => {
+    const withLines: RoofingPriceTier[] = [
+      { tier: 'better', label: 'b', ex_gst: 5000, inc_gst: 5500, scope: '', line_items: [
+        { unit: 'sqm', quantity: 1, description: 're-roof', unit_price_ex_gst: 5000, total_ex_gst: 5000, source: 'labour' },
+      ] },
+    ]
+    const out = applySolarToTiers(withLines, { allowance: allowance() })
+    const li = out[0].line_items!
+    expect(li.some((x) => /solar/i.test(x.description))).toBe(true)
+    expect(li.reduce((a, x) => a + x.total_ex_gst, 0)).toBeCloseTo(out[0].ex_gst, 2)
+  })
+})
+
+describe('narrowQuoteToStructures preserves solar', () => {
+  it('carries the job-level solar addon through promotion', () => {
+    const base = priceMultiRoof({ structures: [house, shed] })
+    const solar = { detection: null, allowance: allowance({ arrays: 1, ex_gst: 1700, inc_gst: 1870 }) } as unknown as SolarQuoteAddon
+    const withSolar = { ...base, solar }
+    expect(narrowQuoteToStructures(withSolar, [1]).solar).toBe(solar)
+  })
+})
 
 describe('fmtAud', () => {
   it('formats whole-dollar AUD with no cents', () => {

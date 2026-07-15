@@ -2,7 +2,7 @@
 // vitest can test them without dragging in Supabase / Next runtime.
 
 import type { MultiRoofQuote } from './types'
-import { narrowQuoteToStructures } from '@/lib/sms/roofing-compose'
+import { applySolarToTiers, narrowQuoteToStructures } from '@/lib/sms/roofing-compose'
 import type { SaveAsQuoteRequest } from './save-as-quote-schema'
 
 /** PURE — split "27 Smith Street, Penrith" → { street, suburb }. */
@@ -41,31 +41,48 @@ export function buildTierObjects(price: {
 }) {
   const tierObj = (i: number) => {
     const t = price.tiers[i]
-    const line_items =
-      t.line_items && t.line_items.length > 0
-        ? t.line_items.map((li) => ({
-            unit: li.unit,
-            quantity: li.quantity,
-            description: li.description,
-            unit_price_ex_gst: li.unit_price_ex_gst,
-            total_ex_gst: li.total_ex_gst,
-            source: li.source,
-          }))
-        : [
-            {
-              unit: 'sqm',
-              quantity: Number(price.area_m2.toFixed(1)),
-              description: t.scope,
-              unit_price_ex_gst: Number(price.effective_rate_per_m2.toFixed(2)),
-              total_ex_gst: t.ex_gst,
-              source: 'labour',
-            },
-          ]
+    // Itemised tiers (hip/valley edge works alongside the sqm line) render
+    // verbatim — sum(line_items) === ex_gst by construction upstream.
+    if (t.line_items && t.line_items.length > 0) {
+      return {
+        label: t.label,
+        subtotal_ex_gst: t.ex_gst,
+        total_inc_gst: t.inc_gst,
+        line_items: t.line_items.map((li) => ({
+          unit: li.unit,
+          quantity: li.quantity,
+          description: li.description,
+          unit_price_ex_gst: li.unit_price_ex_gst,
+          total_ex_gst: li.total_ex_gst,
+          source: li.source,
+        })),
+      }
+    }
+    // Fallback single line — derive a PER-TIER unit price so
+    // quantity × unit_price === total === subtotal, the identity the edit modal
+    // and edit route recompute against. Using the shared full-reroof rate here
+    // collapsed every tier's quantity × unit_price to the Better number.
+    const area = Number(price.area_m2.toFixed(1))
+    const qty = area > 0 ? area : 1
+    const unit = Number((t.ex_gst / qty).toFixed(2))
+    const total = Number((qty * unit).toFixed(2))
+    // Keep inc-GST coherent with the (possibly cent-adjusted) ex total rather
+    // than passing the pre-adjustment value through.
+    const incFactor = t.ex_gst > 0 ? t.inc_gst / t.ex_gst : 1
     return {
       label: t.label,
-      subtotal_ex_gst: t.ex_gst,
-      total_inc_gst: t.inc_gst,
-      line_items,
+      subtotal_ex_gst: total,
+      total_inc_gst: Number((total * incFactor).toFixed(2)),
+      line_items: [
+        {
+          unit: area > 0 ? 'sqm' : 'each',
+          quantity: qty,
+          description: t.scope,
+          unit_price_ex_gst: unit,
+          total_ex_gst: total,
+          source: 'labour',
+        },
+      ],
     }
   }
   return { good: tierObj(0), better: tierObj(1), best: tierObj(2) }
@@ -138,7 +155,7 @@ export function buildSaveAsQuoteRequest(
     price: {
       area_m2: narrowed.combined.area_m2,
       effective_rate_per_m2: primary.price.effective_rate_per_m2,
-      tiers: narrowed.combined.tiers,
+      tiers: applySolarToTiers(narrowed.combined.tiers, narrowed.solar),
       loadings_applied: primary.price.loadings_applied,
       routing: narrowed.routing,
     },

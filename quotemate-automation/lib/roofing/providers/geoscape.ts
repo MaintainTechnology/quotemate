@@ -60,7 +60,7 @@ import type {
   RoofingMultiMeasurementResult,
 } from '../types'
 import { slopedAreaFromFootprint } from '../pricing'
-import { fillEdgesFromGeometry } from '../geometry-edges'
+import { edgesFromGeometry } from '../geometry-edges'
 
 /** Max buildings fetched per address — bounds Geoscape credit cost
  *  (each building = an 11-call sub-resource fan-out). */
@@ -1008,22 +1008,33 @@ export function buildingDetailsToMetrics(
     d.planarArea && d.planarArea > 0 ? d.planarArea : Math.round(computed * 10) / 10
   if (!footprint || footprint <= 0) return null
   const form = normaliseGeoscapeRoofForm(d.roofShape)
-  // Fill hip/valley counts from the footprint polygon when the form
-  // classifier can't (form 'unknown'/'complex' → null counts), so the
-  // measurement always carries real numbers instead of "?" on the UI.
-  return fillEdgesFromGeometry({
+  const base = {
     footprint_m2: Math.round(footprint * 10) / 10,
     sloped_area_m2: slopedAreaFromFootprint(footprint, defaultPitch),
     storeys: d.storeys ?? null,
     form,
-    hips: estimateHipsFromForm(form),
-    valleys: estimateValleysFromForm(form),
     ridge_lm: null,
     polygon_geojson: polygon,
     capture_date: d.captureDate ?? null,
     buildingId: d.buildingId,
     building_attributes: d.attributes ?? null,
-  })
+  }
+  // Complex roofs route to inspection — never guess their hip/valley counts.
+  if (form === 'complex') return { ...base, hips: null, valleys: null }
+  // Geometry-FIRST counts: the footprint polygon is more faithful than the
+  // coarse Geoscape form label, which hard-caps a hip roof at 4. The form
+  // constant is only a LOWER-BOUND floor — it preserves features the 2D
+  // footprint can't show (e.g. a gable-hip's internal valley) while geometry
+  // overrides upward for articulated roofs. `unknown` has no constant → pure
+  // geometry. The tradie can still correct both on the measure page.
+  const geo = edgesFromGeometry(polygon, form)
+  const floorAgainst = (geoCount: number, formCount: number | null) =>
+    formCount === null ? geoCount : Math.max(geoCount, formCount)
+  return {
+    ...base,
+    hips: floorAgainst(geo.hips, estimateHipsFromForm(form)),
+    valleys: floorAgainst(geo.valleys, estimateValleysFromForm(form)),
+  }
 }
 
 export function estimateHipsFromForm(form: RoofForm): number | null {

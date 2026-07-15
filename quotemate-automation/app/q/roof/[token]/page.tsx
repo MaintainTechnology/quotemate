@@ -44,7 +44,7 @@ import {
 import type { LayoutOverlayStructure } from '@/lib/roofing/layout-overlay-svg'
 import { edgeStat } from '@/lib/roofing/geometry-edges'
 import { buildingAttributeChips, propertyContextChips } from '@/lib/roofing/attributes-display'
-import { indicativeCombinedTiers } from '@/lib/sms/roofing-compose'
+import { applySolarToTiers, indicativeCombinedTiers } from '@/lib/sms/roofing-compose'
 import { roofQuoteCta } from '@/lib/roofing/quote-cta'
 import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
 import { RoofMap, type RoofMapBuilding } from '@/app/dashboard/roofing/_components/RoofMap'
@@ -126,9 +126,9 @@ function formLabel(form: RoofMetrics['form']): string {
 }
 
 const TIER_NAME: Record<'good' | 'better' | 'best', string> = {
-  good: 'Patch / repair',
-  better: 'Re-roof',
-  best: 'Upgrade',
+  good: 'Patch',
+  better: 'Full roof replacement',
+  best: 'Upgraded roof replacement',
 }
 
 /** Parse a `?s=2,3` query value into validated 1-based indices (or null). */
@@ -396,11 +396,14 @@ export default async function RoofingQuotePage({
   // When the gate hides prices we still render the three tier names, price-free,
   // with a "reply to unlock" label — never a price the gate intends to hide.
   const displayTiers = combinedForDisplay?.tiers ?? []
+  // Solar detach & reinstate is added to the Re-roof + Upgrade tiers ONLY (a
+  // patch doesn't detach panels) — one code path, no double-count.
+  const displayTiersWithSolar = applySolarToTiers(displayTiers, solar)
   const propertyChips = fullQuote?.property_context ? propertyContextChips(fullQuote.property_context) : []
 
   let quoteTiers: QuoteTier[]
   if (showPrices && displayTiers.length) {
-    quoteTiers = displayTiers
+    quoteTiers = displayTiersWithSolar
       // In indicative mode hide any $0 tier (e.g. asbestos has only an upgrade
       // price) so the customer never sees a "$0" option. Firm quotes show all.
       .filter((t) => !indicative || t.inc_gst > 0)
@@ -414,8 +417,8 @@ export default async function RoofingQuotePage({
             : t.tier === 'better'
               ? 'A full re-roof — what most homes get.'
               : 'Top spec: upgraded sheeting and the longest cover.',
-        priceText: `$${money(t.inc_gst + solarIncGst)}`,
-        priceNote: `inc GST · $${money(t.ex_gst + solarExGst)} ex`,
+        priceText: `$${money(t.inc_gst)}`,
+        priceNote: `inc GST · $${money(t.ex_gst)} ex`,
         // CTA filled in by the shared tierCta remap below (needs
         // roofAcceptView, which isn't resolved yet at this point).
         ctaLabel: '',
@@ -423,7 +426,7 @@ export default async function RoofingQuotePage({
         // Full per-tier line detail preserved below in the breakdown section.
         items: [
           `${TIER_NAME[t.tier]} across ${combinedForDisplay?.area_m2 ? `${Math.round(combinedForDisplay.area_m2)} m²` : 'the measured roof'}`,
-          solarIncGst > 0 ? 'Includes solar detach & reinstate' : 'Licensed & insured roofer',
+          t.tier !== 'good' && solarIncGst > 0 ? 'Includes solar detach & reinstate' : 'Licensed & insured roofer',
         ].filter(Boolean) as QuoteTier['items'],
       }))
   } else {

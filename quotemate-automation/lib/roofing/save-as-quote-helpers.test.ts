@@ -93,4 +93,49 @@ describe('buildTierObjects', () => {
     expect(t.better.line_items).toHaveLength(1)
     expect(t.better.line_items[0].unit).toBe('sqm')
   })
+
+  it('keeps the fallback line internally consistent per tier so Good/Better/Best stay differentiated', () => {
+    // Regression: the fallback used the shared full-reroof rate for every tier,
+    // so quantity × unit_price collapsed all three to the Better number
+    // (the 14k/14k/14k the edit-report showed, which the save then persisted).
+    const t = buildTierObjects(price)
+    for (const tier of [t.good, t.better, t.best]) {
+      const li = tier.line_items[0]
+      expect(Number((li.quantity * li.unit_price_ex_gst).toFixed(2))).toBe(li.total_ex_gst)
+      expect(tier.subtotal_ex_gst).toBe(li.total_ex_gst)
+    }
+    // The value the edit modal / edit route recompute per tier (Σ qty × unit_price)
+    // must stay distinct — the bug collapsed all three to the Better number.
+    const recomputed = [t.good, t.better, t.best].map((x) =>
+      Number((x.line_items[0].quantity * x.line_items[0].unit_price_ex_gst).toFixed(2)),
+    )
+    expect(new Set(recomputed).size).toBe(3)
+  })
+
+  it('bounds the fallback rounding drift to area × $0.005 on non-round data', () => {
+    const odd = {
+      area_m2: 161.3,
+      effective_rate_per_m2: 92,
+      tiers: [
+        { tier: 'good' as const,   label: 'Patch',   ex_gst: 4183.5,  inc_gst: 4601.85,  scope: 'Patch.' },
+        { tier: 'better' as const, label: 'Re-roof',  ex_gst: 14987.2, inc_gst: 16485.92, scope: 'Re-roof.' },
+        { tier: 'best' as const,   label: 'Upgrade',  ex_gst: 18211.9, inc_gst: 20033.09, scope: 'Upgrade.' },
+      ],
+    }
+    const maxDrift = odd.area_m2 * 0.005 + 0.01
+    const t = buildTierObjects(odd)
+    const cases = [
+      { tier: t.good, src: 4183.5 },
+      { tier: t.better, src: 14987.2 },
+      { tier: t.best, src: 18211.9 },
+    ]
+    for (const { tier, src } of cases) {
+      const li = tier.line_items[0]
+      // Round-trips exactly to what the edit modal recomputes …
+      expect(Number((li.quantity * li.unit_price_ex_gst).toFixed(2))).toBe(li.total_ex_gst)
+      expect(tier.subtotal_ex_gst).toBe(li.total_ex_gst)
+      // … and stays within the 2-dp unit-price bound of the true priced ex_gst.
+      expect(Math.abs(tier.subtotal_ex_gst - src)).toBeLessThanOrEqual(maxDrift)
+    }
+  })
 })

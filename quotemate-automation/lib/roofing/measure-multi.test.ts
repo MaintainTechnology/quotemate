@@ -85,6 +85,28 @@ describe('measureAndPriceRoofs — happy path with mock provider', () => {
       expect(house2.inputs.material).toBe('colorbond_trimdek')
     }
   })
+
+  it('applies per-building EDGE overrides (tradie-confirmed hips / box gutter) and re-prices', async () => {
+    const provider = new MockRoofingProvider()
+    const first = await measureAndPriceRoofs(ADDR, INPUTS, { provider })
+    expect(first.ok).toBe(true)
+    if (!first.ok) return
+    const houseId = first.quote.structures.find((s) => s.role === 'primary')!.buildingId!
+
+    const second = await measureAndPriceRoofs(ADDR, INPUTS, {
+      provider,
+      perBuildingEdges: { [houseId]: { hips: 9, box_gutter_lm: 10 } },
+    })
+    expect(second.ok).toBe(true)
+    if (!second.ok) return
+    const house2 = second.quote.structures.find((s) => s.buildingId === houseId)!
+    expect(house2.metrics.hips).toBe(9) // tradie override applied to the metrics
+    expect(house2.metrics.box_gutter_lm).toBe(10)
+    for (const t of house2.price.tiers) {
+      const bg = t.line_items?.find((li) => /box gutter/i.test(li.description))
+      expect(bg?.total_ex_gst).toBe(600) // 10 lm × $60/lm, on every priceable tier
+    }
+  })
 })
 
 describe('measureAndPriceRoofs — single-building fallback', () => {

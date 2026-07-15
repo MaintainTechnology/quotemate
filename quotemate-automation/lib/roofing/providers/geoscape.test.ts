@@ -382,6 +382,30 @@ describe('buildingResponseToMetrics', () => {
     expect(m!.hips).toBeNull()
     expect(m!.valleys).toBeNull()
   })
+
+  it('geometry-first: an articulated hip footprint is not hard-capped at 4 hips', () => {
+    // An L-shaped footprint has 5 convex + 1 reflex corner. The old form-constant
+    // path capped a 'hip' roof at 4/0; geometry now reports 5 hips / 1 valley,
+    // with the form constant kept only as a lower-bound floor.
+    const L_HIP = {
+      type: 'Polygon' as const,
+      coordinates: [[
+        [151.2, -33.8],
+        [151.2 + 0.0004, -33.8],
+        [151.2 + 0.0004, -33.8 - 0.0002],
+        [151.2 + 0.0002, -33.8 - 0.0002],
+        [151.2 + 0.0002, -33.8 - 0.0004],
+        [151.2, -33.8 - 0.0004],
+        [151.2, -33.8],
+      ]],
+    }
+    const m = buildingResponseToMetrics(
+      { footprint: L_HIP, roofForm: 'hip', buildingArea: 200 },
+      'standard',
+    )
+    expect(m!.hips).toBe(5)
+    expect(m!.valleys).toBe(1)
+  })
 })
 
 describe('estimate{Hips,Valleys}FromForm', () => {

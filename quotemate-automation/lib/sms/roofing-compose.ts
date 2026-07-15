@@ -14,6 +14,7 @@
 // ════════════════════════════════════════════════════════════════════
 
 import type { MultiRoofQuote, RoofingPriceTier, RoofStructurePrice } from '@/lib/roofing/types'
+import type { SolarAllowance } from '@/lib/roofing/solar'
 import { asQuoteTierMode, resolveVisibleTiers, type QuoteTierMode } from '@/lib/quote/tier-visibility'
 
 export type RoofingReplyContext = {
@@ -83,9 +84,9 @@ function nameSuffix(firstName?: string | null): string {
 }
 
 const ROOF_TIER_LABEL_BY_KEY: Record<'good' | 'better' | 'best', string> = {
-  good: 'Patch / repair',
-  better: 'Re-roof',
-  best: 'Upgrade',
+  good: 'Patch',
+  better: 'Full roof replacement',
+  best: 'Upgraded roof replacement',
 }
 
 /**
@@ -116,7 +117,7 @@ export function composeEstimateMessage(ctx: RoofingReplyContext): string {
     },
     selectedTier: null,
   })
-  const lines = quote.combined.tiers
+  const lines = applySolarToTiers(quote.combined.tiers, quote.solar)
     .filter((t) => visibleTierKeys.includes(t.tier))
     .map((t) => `• ${ROOF_TIER_LABEL_BY_KEY[t.tier]}: ${fmtAud(t.inc_gst)}`)
 
@@ -306,7 +307,41 @@ export function narrowQuoteToStructures(
     combined: { area_m2, tiers },
     routing,
     inspection_structures,
+    solar: quote.solar,
   }
+}
+
+/** PURE — add the solar detach & reinstate allowance to the Re-roof + Upgrade
+ *  tiers only (never Patch — a patch job doesn't detach panels). When a tier
+ *  carries line_items, append a matching `each` line so Σ line_items === ex_gst. */
+export function applySolarToTiers(
+  tiers: RoofingPriceTier[],
+  solar: { allowance: SolarAllowance | null } | null | undefined,
+): RoofingPriceTier[] {
+  const a = solar?.allowance
+  if (!a || !a.applies || a.inc_gst <= 0) return tiers
+  return tiers.map((t) => {
+    if (t.tier === 'good') return t
+    const ex_gst = round2(t.ex_gst + a.ex_gst)
+    const inc_gst = round2(t.inc_gst + a.inc_gst)
+    if (!t.line_items) return { ...t, ex_gst, inc_gst }
+    return {
+      ...t,
+      ex_gst,
+      inc_gst,
+      line_items: [
+        ...t.line_items,
+        {
+          unit: 'each' as const,
+          quantity: a.arrays,
+          description: 'Solar detach & reinstate',
+          unit_price_ex_gst: round2(a.ex_gst / Math.max(1, a.arrays)),
+          total_ex_gst: round2(a.ex_gst),
+          source: 'labour' as const,
+        },
+      ],
+    }
+  })
 }
 
 /**
