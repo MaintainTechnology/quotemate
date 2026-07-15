@@ -1,6 +1,6 @@
 # QuoteMax — Strategy & Re-evaluation
 
-> **Current iteration: v13 (2026-06-25).** v1 trade pivoted from **painting** to **electrical** in v3; v5 expanded to **multi-trade** (electrical + plumbing); v10 added roofing; v11 adds **commercial painting** as a document-driven estimator extension; v12 extended **solar** to Path B auto-send; v13 refines **roofing multi-structure selection** (roof-only read-time default + clearer Measurement Results UI). The prose in §1–§12 below is the v2 painting analysis, kept as audit-log record. See [Iteration history](#iteration-history) at the bottom for the full v3–v13 rationale.
+> **Current iteration: v15 (2026-07-15).** v1 trade pivoted from **painting** to **electrical** in v3; v5 expanded to **multi-trade** (electrical + plumbing); v10 added roofing; v11 adds **commercial painting** as a document-driven estimator extension; v12 extended **solar** to Path B auto-send; v13 refines **roofing multi-structure selection**; v14 defined semantic-edge candidates; v15 adds the Google Solar commercial-use gate. The prose in §1–§12 below is the v2 painting analysis, kept as audit-log record. See [Iteration history](#iteration-history) at the bottom for the full v3–v15 rationale.
 
 > Status: living document. Each iteration sharpens the analysis against the project assets and prior reasoning.
 
@@ -962,5 +962,99 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
 
   - A tradie wants the customer page to also show the secondaries' $ contribution (currently count-only) → flip the customer-facing breakdown on and widen the test matrix.
   - The roof-only read default surprises anyone relying on the old "NULL = all" behaviour on a quote-less row → reconsider, but the fix is to persist an explicit selection, not to restore the silent all-default.
+
+- **v14** (2026-07-15): **roofing semantic-edge candidates — Google Solar and Geoscape provide reviewable topology evidence, not survey-grade measurements.**
+
+  **What's settled:**
+
+  Google Solar's plane, DSM, RGB, and mask layers can be combined with the
+  Geoscape building footprint/height context to construct *candidate* ridge,
+  hip, valley, and eave runs for the selected main dwelling. Neither provider
+  returns these semantic line types directly, so this is a deterministic,
+  feature-flagged reconstruction and review workflow rather than a vendor
+  measurement API.
+
+  The current form/footprint estimate remains the fallback. Candidate generation
+  does not alter quote totals, customer PDFs, or the existing roofing
+  review-required release gate. A tradie must explicitly use candidates for an
+  indicative draft or approve/edit individual runs before approved totals enter
+  the existing deterministic repricing path. Eave candidates remain roof-boundary
+  measurements, not automatic gutter claims; box gutters stay manual.
+
+  **Why this is a bounded bridge, not a Phase 2 replacement:**
+
+  v10 deferred a full LiDAR pipeline until roofing volume and accuracy evidence
+  justified it. The new feature reuses already-available Google Solar data to
+  make the current Measurement Results page more auditable: it shows the
+  numbered facet assignment, coloured semantic candidates, confidence, imagery
+  dates, and an explicit tradie review surface. It does not claim the precision
+  or coverage of a dedicated LiDAR pipeline. Google/Geoscape source-date and
+  footprint alignment conflicts are a visible **needs review** condition, not a
+  value to silently merge.
+
+  **Phasing:**
+
+  1. Build labelled evaluation fixtures and source-alignment gates.
+  2. Ship read-only, server-side candidate analysis for the main dwelling behind
+     a tenant feature flag.
+  3. Add the topology-evidence review panel and audit actions.
+  4. Permit explicit candidate drafts, then approved-only canonical repricing
+     after roofer calibration.
+
+  **What stays unchanged:** roofing is review-required; money remains
+  deterministic; customer pages stay read-only; multi-structure selection
+  remains authoritative; raw provider credentials stay server-side; and the
+  Phase 2 LiDAR decision remains a separate volume/accuracy gate.
+
+  **Trigger for the next iteration:**
+
+  - Roofer-labelled results show candidate count/length accuracy is insufficient
+    after calibration → keep it evidence-only or advance the LiDAR decision.
+  - A provider term, entitlement, or imagery-retention rule prevents the planned
+    evidence surface → redesign persistence/visualisation before rollout.
+  - Pilot tradies consistently approve the candidates with low correction rates
+    → record thresholds and consider widening the tenant feature flag.
+
+- **v15** (2026-07-15): **Google Solar is a prototype-only roofing source until a commercial-use gate is cleared.**
+
+  **Correction to v14:**
+
+  The current Google Maps Platform Service Specific Terms restrict Solar API use
+  to energy-system feasibility, design/installation, or downstream energy
+  transactions, and restrict Solar Data caching to 30 days except for fixed
+  media in an energy-system downstream transaction. A general reroof
+  measurement/quote does not clearly fit that permitted use. Therefore the
+  v14 Google Solar proof of concept must not be promoted into production roofing
+  measurement without written Google permission that covers the intended use,
+  retention, derived geometry, evidence image, and attribution model.
+
+  **What's settled:**
+
+  The roofing topology feature remains valid as a source-agnostic,
+  review-required product capability, but production has two legal/commercial
+  paths: written Google approval, or a separately licensed Australian
+  aerial-DSM/3D/LiDAR source that permits rooftop take-offs. Until one path is
+  approved, Geoscape/form estimates and manual tradie overrides remain the
+  production flow; the Solar prototype is research-only.
+
+  The future implementation also records three non-negotiable money-path
+  constraints exposed by the review: generated candidates never mutate a
+  customer-visible quote; approved hip/valley **surface lengths** must override
+  the current count-to-average-length fallback explicitly; and a topology quote
+  revision must pin the original pricing-book/rate-card snapshot rather than
+  reloading current tenant rates.
+
+  **What stays unchanged:** no auto-send for roofing; mandatory tradie review;
+  Geoscape is context/footprint enrichment rather than a semantic-edge API; and
+  Phase 2 LiDAR remains a separate accuracy/volume decision.
+
+  **Trigger for the next iteration:**
+
+  - Written Google permission is obtained → record the precise scope, retention,
+    attribution, and display obligations before enabling an adapter.
+  - A licensed roof-geometry supplier is selected → record its coverage,
+    commercial rights, data-retention policy, cost, and evaluation result.
+  - Neither path is commercially viable → keep topology evidence/manual-only and
+    revisit the LiDAR investment decision with pilot demand data.
 
 - *Future iterations:* drill into specific phases (eval rubric details, onboarding flow design, hipages partnership terms, voice tier economics, full multi-tenancy refactor).

@@ -1,0 +1,71 @@
+{
+  "source": "Geoscape Buildings API v2 findByPoint",
+  "query": {
+    "latitude": -27.5028758,
+    "longitude": 153.162234,
+    "radiusMeters": 50,
+    "additionalProperties": ["height", "roof"]
+  },
+  "mainBuilding": {
+    "buildingPid": "bldd85251e0da3a",
+    "matchDistanceMetersFromV1": 0.15,
+    "capture": {
+      "date": "2025-04-29",
+      "resolution": "8cm",
+      "method": "Aerial",
+      "source": "8cm aerial"
+    },
+    "buildingAreaMeters2": 516.19,
+    "numberVertices": 19,
+    "centroid": {
+      "longitude": 153.162232564,
+      "latitude": -27.502875931
+    },
+    "height": {
+      "roofHeightMeters": 8.92,
+      "eaveHeightMeters": 7.22,
+      "roofRiseMeters": 1.7,
+      "estimatedFloors": 2
+    },
+    "roof": {
+      "shape": "Shed",
+      "maximumSlopeDegrees": 22.62,
+      "primaryMaterial": "Metal",
+      "colour": "#D9DEDD",
+      "treeOverhang": true
+    },
+    "footprint": {
+      "type": "MultiPolygon",
+      "coordinateReferenceSystem": "WGS84 longitude, latitude, elevation",
+      "note": "This is an exterior building footprint with elevation at its vertices, not individual roof-plane or typed roof-edge geometry.",
+      "coordinates": [[[
+        [153.162090545, -27.502902199, 22.270000458],
+        [153.162199728, -27.502916445, 21.809999466],
+        [153.162187054, -27.502993684, 21.719999313],
+        [153.162242922, -27.503000977, 21.659999847],
+        [153.162241025, -27.503012571, 21.729999542],
+        [153.162284427, -27.503018235, 21.559999466],
+        [153.162286083, -27.503008149, 21.459999084],
+        [153.162339145, -27.503015075, 21.520000458],
+        [153.162350926, -27.502943343, 20.879999161],
+        [153.162355645, -27.502943960, 20.950000763],
+        [153.162363944, -27.502893458, 20.870000839],
+        [153.162360845, -27.502893055, 20.829999924],
+        [153.162364087, -27.502873316, 21.090000153],
+        [153.162340269, -27.502870202, 21.049999237],
+        [153.162350816, -27.502805965, 21.319999695],
+        [153.162215820, -27.502788347, 21.969999313],
+        [153.162222744, -27.502746169, 22.030000687],
+        [153.162118391, -27.502732550, 22.250000000],
+        [153.162093886, -27.502881819, 22.290000916],
+        [153.162090545, -27.502902199, 22.270000458]
+      ]]
+    }
+  },
+  "datasetEntitlement": {
+    "buildingRoofPack": "National Building Roof, QLD, 2026-06",
+    "downloadAllowed": false,
+    "testResult": "403: not licensed to download the Roof Insight Pack"
+  },
+  "apiKeyStored": false
+}

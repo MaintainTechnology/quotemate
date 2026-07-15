@@ -115,7 +115,8 @@ Planned but not yet wired: Stripe Connect Express (marketplace fund-split), Post
 **Built and running** (as of 2026-05-18). The application lives in [`quotemate-automation/`](quotemate-automation/); the repo root holds planning docs and design assets.
 
 - **Voice and SMS intake are both live end-to-end** — a customer calls or texts a tradie's QuoteMax number, the AI captures the job, Opus drafts a Good/Better/Best quote grounded strictly in that trade's pricing book, and the customer gets a mobile quote page with a Stripe deposit (or a $99 inspection for complex jobs).
-- **Multi-trade is live**: electrical (NSW) and plumbing (QLD) run on the same platform, with 4 pilot tenants active.
+- **Multi-trade is live**: electrical (NSW), plumbing (QLD), and review-required roofing run on the same platform.
+- **Roofing measurement** uses a deterministic Geoscape/form fallback today. The planned semantic-edge feature is source-gated and remains review-required; see strategy v14/v15.
 - Current work: self-serve tradie onboarding (auto-provisioned number, pricing book, and AI brand voice per tradie).
 - Production: `quote-mate-rho.vercel.app`. Payments run in Stripe test mode.
 
@@ -146,6 +147,7 @@ Originally planned as five phases to a paid pilot launch. Where the build actual
 
 - **Electrical:** downlights, GPOs, ceiling fans, smoke alarms, outdoor / deck lighting. Switchboards, fault finding, EV chargers, underground cabling, and complex renovations are inspection-route only.
 - **Plumbing:** blocked drain, hot water, tap repair, tap replace, toilet repair, toilet replace. Gas fitting, burst pipe, and bathroom renovation are inspection-route only.
+- **Roofing:** dashboard measurement and tradie-reviewed quotes only. Complex/topology-derived edge values remain indicative until an approved imagery/LiDAR source and roofer review gate are in place.
 
 Per-state license display (NECA for NSW electrical, QBCC for QLD plumbing; ESV reserved for VIC) is shipped Phase 1. See [`docs/strategy.md`](docs/strategy.md) v3 entry for the painting → electrical pivot and v5 entry for the multi-trade expansion.
 

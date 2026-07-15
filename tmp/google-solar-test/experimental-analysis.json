@@ -1,0 +1,1115 @@
+{
+  "warning": "Experimental raster-plane assignment only. Google does not return typed roof edges; these counts are not production measurements.",
+  "raster": {
+    "width": 399,
+    "height": 400,
+    "pixelMetres": 0.25,
+    "imageryDate": {
+      "year": 2017,
+      "month": 10,
+      "day": 27
+    },
+    "imageryQuality": "MEDIUM"
+  },
+  "googleRoofSegmentCount": 22,
+  "mainBuildingMaskPixels": 8372,
+  "mainBuildingMaskAreaM2": 523.25,
+  "assignedPlaneCount": 22,
+  "fitResidualM": {
+    "median": 0.069,
+    "p90": 0.196,
+    "p99": 2.906
+  },
+  "experimentalInternalEdgeCounts": {
+    "unknown": 20,
+    "hip": 12,
+    "valley": 4,
+    "ridge": 6
+  },
+  "experimentalPerimeterRunCounts": {
+    "eave_candidate": 17
+  },
+  "planeAssignments": [
+    {
+      "index": 0,
+      "pixels": 201,
+      "centroidX": 219.6766169154229,
+      "centroidY": 262.05970149253733,
+      "medianResidualM": 0.08537528663873672,
+      "p90ResidualM": 0.2525605857372284
+    },
+    {
+      "index": 1,
+      "pixels": 181,
+      "centroidX": 210.64088397790056,
+      "centroidY": 261.03867403314916,
+      "medianResidualM": 0.1054927408695221,
+      "p90ResidualM": 0.27462038397789
+    },
+    {
+      "index": 2,
+      "pixels": 146,
+      "centroidX": 231.55479452054794,
+      "centroidY": 261.43835616438355,
+      "medianResidualM": 0.07354078441858292,
+      "p90ResidualM": 0.10073158144950867
+    },
+    {
+      "index": 3,
+      "pixels": 230,
+      "centroidX": 241.98260869565217,
+      "centroidY": 250.42608695652174,
+      "medianResidualM": 0.051910437643527985,
+      "p90ResidualM": 0.0855611115694046
+    },
+    {
+      "index": 4,
+      "pixels": 200,
+      "centroidX": 198.145,
+      "centroidY": 256.825,
+      "medianResidualM": 0.05861268937587738,
+      "p90ResidualM": 0.10042175650596619
+    },
+    {
+      "index": 5,
+      "pixels": 341,
+      "centroidX": 192.82697947214075,
+      "centroidY": 236.70087976539588,
+      "medianResidualM": 0.04489920660853386,
+      "p90ResidualM": 0.08497590571641922
+    },
+    {
+      "index": 6,
+      "pixels": 294,
+      "centroidX": 217.48639455782313,
+      "centroidY": 248.1122448979592,
+      "medianResidualM": 0.1373363584280014,
+      "p90ResidualM": 0.18178606033325195
+    },
+    {
+      "index": 7,
+      "pixels": 412,
+      "centroidX": 231.22087378640776,
+      "centroidY": 238.73543689320388,
+      "medianResidualM": 0.04507756605744362,
+      "p90ResidualM": 0.08904138952493668
+    },
+    {
+      "index": 8,
+      "pixels": 634,
+      "centroidX": 208.84384858044163,
+      "centroidY": 229.37223974763407,
+      "medianResidualM": 0.04760781675577164,
+      "p90ResidualM": 0.09314712136983871
+    },
+    {
+      "index": 9,
+      "pixels": 133,
+      "centroidX": 241.18796992481202,
+      "centroidY": 230.68421052631578,
+      "medianResidualM": 0.08283892273902893,
+      "p90ResidualM": 0.12597458064556122
+    },
+    {
+      "index": 10,
+      "pixels": 87,
+      "centroidX": 247.41379310344828,
+      "centroidY": 225.6551724137931,
+      "medianResidualM": 0.04790601506829262,
+      "p90ResidualM": 0.0694127231836319
+    },
+    {
+      "index": 11,
+      "pixels": 260,
+      "centroidX": 236.66153846153847,
+      "centroidY": 218.88076923076923,
+      "medianResidualM": 0.08397071808576584,
+      "p90ResidualM": 0.1350574940443039
+    },
+    {
+      "index": 12,
+      "pixels": 579,
+      "centroidX": 169.6027633851468,
+      "centroidY": 216.8376511226252,
+      "medianResidualM": 0.029882287606596947,
+      "p90ResidualM": 0.10339373350143433
+    },
+    {
+      "index": 13,
+      "pixels": 659,
+      "centroidX": 230.2443095599393,
+      "centroidY": 202.04552352048557,
+      "medianResidualM": 0.06006979942321777,
+      "p90ResidualM": 0.13598252832889557
+    },
+    {
+      "index": 14,
+      "pixels": 990,
+      "centroidX": 186.44747474747476,
+      "centroidY": 205.2171717171717,
+      "medianResidualM": 0.07238319516181946,
+      "p90ResidualM": 0.14838248491287231
+    },
+    {
+      "index": 15,
+      "pixels": 90,
+      "centroidX": 244.22222222222223,
+      "centroidY": 207.32222222222222,
+      "medianResidualM": 0.044117968529462814,
+      "p90ResidualM": 0.11703675240278244
+    },
+    {
+      "index": 16,
+      "pixels": 953,
+      "centroidX": 160.10703043022036,
+      "centroidY": 181.91395592864637,
+      "medianResidualM": 0.13097581267356873,
+      "p90ResidualM": 0.38351401686668396
+    },
+    {
+      "index": 17,
+      "pixels": 680,
+      "centroidX": 201.76764705882354,
+      "centroidY": 188.95,
+      "medianResidualM": 0.09271976351737976,
+      "p90ResidualM": 0.2020314633846283
+    },
+    {
+      "index": 18,
+      "pixels": 640,
+      "centroidX": 185.425,
+      "centroidY": 172.9828125,
+      "medianResidualM": 0.12503376603126526,
+      "p90ResidualM": 0.28873997926712036
+    },
+    {
+      "index": 19,
+      "pixels": 183,
+      "centroidX": 226.9071038251366,
+      "centroidY": 183.50819672131146,
+      "medianResidualM": 0.04359446093440056,
+      "p90ResidualM": 0.12507298588752747
+    },
+    {
+      "index": 20,
+      "pixels": 112,
+      "centroidX": 218.66964285714286,
+      "centroidY": 181.04464285714286,
+      "medianResidualM": 0.059776391834020615,
+      "p90ResidualM": 0.13953645527362823
+    },
+    {
+      "index": 21,
+      "pixels": 367,
+      "centroidX": 177.33514986376022,
+      "centroidY": 155.7683923705722,
+      "medianResidualM": 0.07424655556678772,
+      "p90ResidualM": 0.21167126297950745
+    }
+  ],
+  "internalEdges": [
+    {
+      "planes": [
+        12,
+        14
+      ],
+      "type": "unknown",
+      "rasterContactLengthM": 19.75,
+      "intersectionSlopeDegrees": 1.8,
+      "inwardHeightChangePerM": [
+        -0.293,
+        0.325
+      ],
+      "boundaryPixel": [
+        170.2,
+        212.4
+      ]
+    },
+    {
+      "planes": [
+        18,
+        21
+      ],
+      "type": "hip",
+      "rasterContactLengthM": 18.25,
+      "intersectionSlopeDegrees": 20.6,
+      "inwardHeightChangePerM": [
+        -0.046,
+        -0.097
+      ],
+      "boundaryPixel": [
+        184.8,
+        160.3
+      ]
+    },
+    {
+      "planes": [
+        17,
+        18
+      ],
+      "type": "valley",
+      "rasterContactLengthM": 17.5,
+      "intersectionSlopeDegrees": 19,
+      "inwardHeightChangePerM": [
+        0.274,
+        0.292
+      ],
+      "boundaryPixel": [
+        192.4,
+        181.8
+      ]
+    },
+    {
+      "planes": [
+        3,
+        7
+      ],
+      "type": "unknown",
+      "rasterContactLengthM": 16.75,
+      "intersectionSlopeDegrees": 0.5,
+      "inwardHeightChangePerM": [
+        -0.278,
+        0.563
+      ],
+      "boundaryPixel": [
+        239.3,
+        246.1
+      ]
+    },
+    {
+      "planes": [
+        5,
+        8
+      ],
+      "type": "unknown",
+      "rasterContactLengthM": 14,
+      "intersectionSlopeDegrees": 4.3,
+      "inwardHeightChangePerM": [
+        -0.401,
+        0.389
+      ],
+      "boundaryPixel": [
+        198.7,
+        237.1
+      ]
+    },
+    {
+      "planes": [
+        14,
+        17
+      ],
+      "type": "ridge",
+      "rasterContactLengthM": 12.75,
+      "intersectionSlopeDegrees": 1.4,
+      "inwardHeightChangePerM": [
+        -0.398,
+        -0.492
+      ],
+      "boundaryPixel": [
+        197.7,
+        197.8
+      ]
+    },
+    {
+      "planes": [
+        19,
+        20
+      ],
+      "type": "hip",
+      "rasterContactLengthM": 12.5,
+      "intersectionSlopeDegrees": 37.1,
+      "inwardHeightChangePerM": [
+        -0.076,
+        -0.326
+      ],
+      "boundaryPixel": [
+        222.1,
+        183
+      ]
+    },
+    {
+      "planes": [
+        2,
+        6
+      ],
+      "type": "unknown",
+      "rasterContactLengthM": 10.75,
+      "intersectionSlopeDegrees": 3.4,
+      "inwardHeightChangePerM": [
+        -0.247,
+        0.374
+      ],
+      "boundaryPixel": [
+        228.7,
+        257.5
+      ]
+    },
+    {
+      "planes": [
+        13,
+        19
+      ],
+      "type": "unknown",
+      "rasterContactLengthM": 9.25,
+      "intersectionSlopeDegrees": 24.7,
+      "inwardHeightChangePerM": [
+        -0.008,
+        -0.287
+      ],
+      "boundaryPixel": [
+        231.7,
+        186.7
+      ]
+    },
+    {
+      "planes": [
+        4,
+        6
+      ],
+      "type": "unknown",
+      "rasterContactLengthM": 9,
+      "intersectionSlopeDegrees": 1,
+      "inwardHeightChangePerM": [
+        -0.246,
+        0.293
+      ],
+      "boundaryPixel": [
+        203,
+        253.7
+      ]
+    },
+    {
+      "planes": [
+        14,
+        16
+      ],
+      "type": "unknown",
+      "rasterContactLengthM": 8.75,
+      "intersectionSlopeDegrees": 23,
+      "inwardHeightChangePerM": [
+        -0.014,
+        -0.101
+      ],
+      "boundaryPixel": [
+        160.2,
+        199.7
+      ]
+    },
+    {
+      "planes": [
+        16,
+        18
+      ],
+      "type": "ridge",
+      "rasterContactLengthM": 8.5,
+      "intersectionSlopeDegrees": 1.6,
+      "inwardHeightChangePerM": [
+        -0.579,
+        -0.38
+      ],
+      "boundaryPixel": [
+        173.1,
+        179.5
+      ]
+    },
+    {
+      "planes": [
+        6,
+        7
+      ],
+      "type": "hip",
+      "rasterContactLengthM": 8.25,
+      "intersectionSlopeDegrees": 26.2,
+      "inwardHeightChangePerM": [
+        -0.216,
+        -0.213
+      ],
+      "boundaryPixel": [
+        226.6,
+        245.9
+      ]
+    },
+    {
+      "planes": [
+        11,
+        13
+      ],
+      "type": "unknown",
+      "rasterContactLengthM": 8,
+      "intersectionSlopeDegrees": 22.2,
+      "inwardHeightChangePerM": [
+        0.019,
+        0.011
+      ],
+      "boundaryPixel": [
+        228.8,
+        217.8
+      ]
+    },
+    {
+      "planes": [
+        16,
+        21
+      ],
+      "type": "hip",
+      "rasterContactLengthM": 7.5,
+      "intersectionSlopeDegrees": 19.2,
+      "inwardHeightChangePerM": [
+        -0.102,
+        -0.278
+      ],
+      "boundaryPixel": [
+        168.2,
+        158.1
+      ]
+    },
+    {
+      "planes": [
+        8,
+        14
+      ],
+      "type": "unknown",
+      "rasterContactLengthM": 6.75,
+      "intersectionSlopeDegrees": 22.2,
+      "inwardHeightChangePerM": [
+        0.008,
+        0.025
+      ],
+      "boundaryPixel": [
+        211.5,
+        211
+      ]
+    },
+    {
+      "planes": [
+        6,
+        8
+      ],
+      "type": "hip",
+      "rasterContactLengthM": 6.75,
+      "intersectionSlopeDegrees": 22.5,
+      "inwardHeightChangePerM": [
+        -0.426,
+        -0.192
+      ],
+      "boundaryPixel": [
+        211.2,
+        241.7
+      ]
+    },
+    {
+      "planes": [
+        1,
+        4
+      ],
+      "type": "valley",
+      "rasterContactLengthM": 6.75,
+      "intersectionSlopeDegrees": 19.4,
+      "inwardHeightChangePerM": [
+        0.619,
+        0.102
+      ],
+      "boundaryPixel": [
+        207.6,
+        260.6
+      ]
+    },
+    {
+      "planes": [
+        17,
+        20
+      ],
+      "type": "unknown",
+      "rasterContactLengthM": 6,
+      "intersectionSlopeDegrees": 1.2,
+      "inwardHeightChangePerM": [
+        0.289,
+        -0.285
+      ],
+      "boundaryPixel": [
+        213.3,
+        182.8
+      ]
+    },
+    {
+      "planes": [
+        0,
+        1
+      ],
+      "type": "ridge",
+      "rasterContactLengthM": 6,
+      "intersectionSlopeDegrees": 6,
+      "inwardHeightChangePerM": [
+        -0.634,
+        -0.61
+      ],
+      "boundaryPixel": [
+        214.9,
+        261.9
+      ]
+    },
+    {
+      "planes": [
+        8,
+        13
+      ],
+      "type": "ridge",
+      "rasterContactLengthM": 5.75,
+      "intersectionSlopeDegrees": 0.8,
+      "inwardHeightChangePerM": [
+        -0.244,
+        -0.313
+      ],
+      "boundaryPixel": [
+        219.1,
+        214.7
+      ]
+    },
+    {
+      "planes": [
+        7,
+        9
+      ],
+      "type": "valley",
+      "rasterContactLengthM": 5.75,
+      "intersectionSlopeDegrees": 26.3,
+      "inwardHeightChangePerM": [
+        0.193,
+        0.072
+      ],
+      "boundaryPixel": [
+        236.3,
+        230.3
+      ]
+    },
+    {
+      "planes": [
+        5,
+        12
+      ],
+      "type": "unknown",
+      "rasterContactLengthM": 5.25,
+      "intersectionSlopeDegrees": 14.1,
+      "inwardHeightChangePerM": [
+        0.193,
+        0.025
+      ],
+      "boundaryPixel": [
+        186.9,
+        222.6
+      ]
+    },
+    {
+      "planes": [
+        4,
+        5
+      ],
+      "type": "hip",
+      "rasterContactLengthM": 5,
+      "intersectionSlopeDegrees": 15.6,
+      "inwardHeightChangePerM": [
+        -0.169,
+        -0.039
+      ],
+      "boundaryPixel": [
+        192.7,
+        253.4
+      ]
+    },
+    {
+      "planes": [
+        0,
+        2
+      ],
+      "type": "unknown",
+      "rasterContactLengthM": 4.75,
+      "intersectionSlopeDegrees": 16.5,
+      "inwardHeightChangePerM": [
+        0.542,
+        -0.053
+      ],
+      "boundaryPixel": [
+        224.9,
+        260.3
+      ]
+    },
+    {
+      "planes": [
+        9,
+        10
+      ],
+      "type": "hip",
+      "rasterContactLengthM": 4.5,
+      "intersectionSlopeDegrees": 26.5,
+      "inwardHeightChangePerM": [
+        -0.289,
+        -0.182
+      ],
+      "boundaryPixel": [
+        245.3,
+        229.7
+      ]
+    },
+    {
+      "planes": [
+        13,
+        15
+      ],
+      "type": "valley",
+      "rasterContactLengthM": 4.25,
+      "intersectionSlopeDegrees": 18.5,
+      "inwardHeightChangePerM": [
+        0.537,
+        0.16
+      ],
+      "boundaryPixel": [
+        240.4,
+        204.9
+      ]
+    },
+    {
+      "planes": [
+        10,
+        11
+      ],
+      "type": "hip",
+      "rasterContactLengthM": 4.25,
+      "intersectionSlopeDegrees": 23.5,
+      "inwardHeightChangePerM": [
+        -0.301,
+        -0.044
+      ],
+      "boundaryPixel": [
+        246.1,
+        220.6
+      ]
+    },
+    {
+      "planes": [
+        7,
+        11
+      ],
+      "type": "hip",
+      "rasterContactLengthM": 4.25,
+      "intersectionSlopeDegrees": 22.7,
+      "inwardHeightChangePerM": [
+        -0.392,
+        -0.393
+      ],
+      "boundaryPixel": [
+        225.6,
+        226.1
+      ]
+    },
+    {
+      "planes": [
+        13,
+        17
+      ],
+      "type": "hip",
+      "rasterContactLengthM": 4,
+      "intersectionSlopeDegrees": 20.4,
+      "inwardHeightChangePerM": [
+        -0.527,
+        -0.191
+      ],
+      "boundaryPixel": [
+        219.8,
+        198.1
+      ]
+    },
+    {
+      "planes": [
+        1,
+        6
+      ],
+      "type": "unknown",
+      "rasterContactLengthM": 4,
+      "intersectionSlopeDegrees": 26,
+      "inwardHeightChangePerM": [
+        -0.195,
+        0.292
+      ],
+      "boundaryPixel": [
+        213.7,
+        249.6
+      ]
+    },
+    {
+      "planes": [
+        12,
+        16
+      ],
+      "type": "unknown",
+      "rasterContactLengthM": 3.5,
+      "intersectionSlopeDegrees": 15.3,
+      "inwardHeightChangePerM": [
+        -0.01,
+        0.173
+      ],
+      "boundaryPixel": [
+        146.5,
+        210.5
+      ]
+    },
+    {
+      "planes": [
+        2,
+        3
+      ],
+      "type": "unknown",
+      "rasterContactLengthM": 3.5,
+      "intersectionSlopeDegrees": 14.8,
+      "inwardHeightChangePerM": [
+        0.027,
+        -0.028
+      ],
+      "boundaryPixel": [
+        238.2,
+        261.9
+      ]
+    },
+    {
+      "planes": [
+        11,
+        15
+      ],
+      "type": "unknown",
+      "rasterContactLengthM": 3,
+      "intersectionSlopeDegrees": 4,
+      "inwardHeightChangePerM": [
+        0.472,
+        -0.398
+      ],
+      "boundaryPixel": [
+        244.5,
+        211.5
+      ]
+    },
+    {
+      "planes": [
+        0,
+        6
+      ],
+      "type": "unknown",
+      "rasterContactLengthM": 3,
+      "intersectionSlopeDegrees": 26.8,
+      "inwardHeightChangePerM": [
+        -0.16,
+        0.462
+      ],
+      "boundaryPixel": [
+        220,
+        251.1
+      ]
+    },
+    {
+      "planes": [
+        9,
+        11
+      ],
+      "type": "ridge",
+      "rasterContactLengthM": 2.75,
+      "intersectionSlopeDegrees": 1.3,
+      "inwardHeightChangePerM": [
+        -0.525,
+        -0.618
+      ],
+      "boundaryPixel": [
+        236.7,
+        223.8
+      ]
+    },
+    {
+      "planes": [
+        3,
+        9
+      ],
+      "type": "unknown",
+      "rasterContactLengthM": 2.5,
+      "intersectionSlopeDegrees": 19.2,
+      "inwardHeightChangePerM": [
+        -0.003,
+        0.563
+      ],
+      "boundaryPixel": [
+        245.1,
+        237.8
+      ]
+    },
+    {
+      "planes": [
+        14,
+        18
+      ],
+      "type": "hip",
+      "rasterContactLengthM": 2.25,
+      "intersectionSlopeDegrees": 18.2,
+      "inwardHeightChangePerM": [
+        -0.311,
+        -0.195
+      ],
+      "boundaryPixel": [
+        174,
+        193.5
+      ]
+    },
+    {
+      "planes": [
+        5,
+        14
+      ],
+      "type": "unknown",
+      "rasterContactLengthM": 2,
+      "intersectionSlopeDegrees": 18.8,
+      "inwardHeightChangePerM": [
+        -0.107,
+        0.312
+      ],
+      "boundaryPixel": [
+        200.1,
+        218.1
+      ]
+    },
+    {
+      "planes": [
+        7,
+        8
+      ],
+      "type": "ridge",
+      "rasterContactLengthM": 2,
+      "intersectionSlopeDegrees": 1.3,
+      "inwardHeightChangePerM": [
+        -0.626,
+        -0.556
+      ],
+      "boundaryPixel": [
+        220.1,
+        233.1
+      ]
+    },
+    {
+      "planes": [
+        8,
+        11
+      ],
+      "type": "hip",
+      "rasterContactLengthM": 1.5,
+      "intersectionSlopeDegrees": 23.2,
+      "inwardHeightChangePerM": [
+        -0.522,
+        -0.327
+      ],
+      "boundaryPixel": [
+        220.3,
+        226.8
+      ]
+    },
+    {
+      "planes": [
+        3,
+        6
+      ],
+      "type": "unknown",
+      "rasterContactLengthM": 1.5,
+      "intersectionSlopeDegrees": 19.4,
+      "inwardHeightChangePerM": [
+        -0.14,
+        0.273
+      ],
+      "boundaryPixel": [
+        236.1,
+        258.8
+      ]
+    }
+  ],
+  "perimeterRuns": [
+    {
+      "plane": 16,
+      "type": "eave_candidate",
+      "rasterBoundaryPixels": 65,
+      "approximateLengthM": 16.25,
+      "outwardHeightChangePerM": -0.609,
+      "centroidPixel": [
+        151.7,
+        182
+      ]
+    },
+    {
+      "plane": 12,
+      "type": "eave_candidate",
+      "rasterBoundaryPixels": 39,
+      "approximateLengthM": 9.75,
+      "outwardHeightChangePerM": -0.294,
+      "centroidPixel": [
+        168,
+        221.8
+      ]
+    },
+    {
+      "plane": 21,
+      "type": "eave_candidate",
+      "rasterBoundaryPixels": 33,
+      "approximateLengthM": 8.25,
+      "outwardHeightChangePerM": -0.465,
+      "centroidPixel": [
+        178,
+        148.9
+      ]
+    },
+    {
+      "plane": 5,
+      "type": "eave_candidate",
+      "rasterBoundaryPixels": 31,
+      "approximateLengthM": 7.75,
+      "outwardHeightChangePerM": -0.4,
+      "centroidPixel": [
+        187.6,
+        242
+      ]
+    },
+    {
+      "plane": 3,
+      "type": "eave_candidate",
+      "rasterBoundaryPixels": 27,
+      "approximateLengthM": 6.75,
+      "outwardHeightChangePerM": -0.384,
+      "centroidPixel": [
+        246.1,
+        252
+      ]
+    },
+    {
+      "plane": 4,
+      "type": "eave_candidate",
+      "rasterBoundaryPixels": 22,
+      "approximateLengthM": 5.5,
+      "outwardHeightChangePerM": -0.37,
+      "centroidPixel": [
+        193.8,
+        261.5
+      ]
+    },
+    {
+      "plane": 18,
+      "type": "eave_candidate",
+      "rasterBoundaryPixels": 19,
+      "approximateLengthM": 4.75,
+      "outwardHeightChangePerM": -0.443,
+      "centroidPixel": [
+        196.8,
+        164
+      ]
+    },
+    {
+      "plane": 10,
+      "type": "eave_candidate",
+      "rasterBoundaryPixels": 18,
+      "approximateLengthM": 4.5,
+      "outwardHeightChangePerM": -0.666,
+      "centroidPixel": [
+        249.9,
+        225.5
+      ]
+    },
+    {
+      "plane": 13,
+      "type": "eave_candidate",
+      "rasterBoundaryPixels": 17,
+      "approximateLengthM": 4.25,
+      "outwardHeightChangePerM": -0.53,
+      "centroidPixel": [
+        242.2,
+        191
+      ]
+    },
+    {
+      "plane": 20,
+      "type": "eave_candidate",
+      "rasterBoundaryPixels": 17,
+      "approximateLengthM": 4.25,
+      "outwardHeightChangePerM": -0.759,
+      "centroidPixel": [
+        217,
+        176.4
+      ]
+    },
+    {
+      "plane": 19,
+      "type": "eave_candidate",
+      "rasterBoundaryPixels": 16,
+      "approximateLengthM": 4,
+      "outwardHeightChangePerM": -0.757,
+      "centroidPixel": [
+        233.5,
+        179.4
+      ]
+    },
+    {
+      "plane": 15,
+      "type": "eave_candidate",
+      "rasterBoundaryPixels": 15,
+      "approximateLengthM": 3.75,
+      "outwardHeightChangePerM": -0.262,
+      "centroidPixel": [
+        247,
+        205.5
+      ]
+    },
+    {
+      "plane": 0,
+      "type": "eave_candidate",
+      "rasterBoundaryPixels": 14,
+      "approximateLengthM": 3.5,
+      "outwardHeightChangePerM": -0.38,
+      "centroidPixel": [
+        220.5,
+        270.3
+      ]
+    },
+    {
+      "plane": 2,
+      "type": "eave_candidate",
+      "rasterBoundaryPixels": 13,
+      "approximateLengthM": 3.25,
+      "outwardHeightChangePerM": -0.301,
+      "centroidPixel": [
+        234,
+        266.9
+      ]
+    },
+    {
+      "plane": 17,
+      "type": "eave_candidate",
+      "rasterBoundaryPixels": 6,
+      "approximateLengthM": 1.5,
+      "outwardHeightChangePerM": -0.507,
+      "centroidPixel": [
+        199.5,
+        175.3
+      ]
+    },
+    {
+      "plane": 1,
+      "type": "eave_candidate",
+      "rasterBoundaryPixels": 5,
+      "approximateLengthM": 1.25,
+      "outwardHeightChangePerM": -0.266,
+      "centroidPixel": [
+        211,
+        271.8
+      ]
+    },
+    {
+      "plane": 11,
+      "type": "eave_candidate",
+      "rasterBoundaryPixels": 5,
+      "approximateLengthM": 1.25,
+      "outwardHeightChangePerM": -0.066,
+      "centroidPixel": [
+        250,
+        214
+      ]
+    }
+  ]
+}

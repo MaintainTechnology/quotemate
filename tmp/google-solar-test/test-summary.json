@@ -1,0 +1,29 @@
+﻿{
+    "latitude":  -27.5028758,
+    "longitude":  153.162234,
+    "geocodeStatus":  "OK",
+    "buildingInsightsStatus":  "OK",
+    "imageryQuality":  "MEDIUM",
+    "imageryDate":  {
+                        "year":  2017,
+                        "month":  10,
+                        "day":  27
+                    },
+    "roofSegmentCount":  22,
+    "wholeRoofAreaM2":  585.84607,
+    "dataLayersStatus":  "OK",
+    "downloadedLayers":  [
+                             {
+                                 "name":  "dsm.tif",
+                                 "bytes":  299535
+                             },
+                             {
+                                 "name":  "rgb.tif",
+                                 "bytes":  401644
+                             },
+                             {
+                                 "name":  "mask.tif",
+                                 "bytes":  1327
+                             }
+                         ]
+}
