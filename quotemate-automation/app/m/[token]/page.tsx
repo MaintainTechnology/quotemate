@@ -35,6 +35,7 @@ import { QuoteSheet, Letterhead } from '../../q/_chrome/parts'
 import { QuoteMaxMark } from '../../q/_chrome/icons'
 import { MeasurementReview } from './MeasurementReview'
 import { RoofLayoutSection } from './RoofLayoutSection'
+import { RoofTopologyResultSection } from './RoofTopologyResultSection'
 import type { LayoutPlan } from '@/lib/roofing/layout-plan'
 import type { LayoutOverlayStructure } from '@/lib/roofing/layout-overlay-svg'
 
@@ -121,6 +122,8 @@ export default async function MeasurementResultsPage({
     Array.isArray(row.included_indices) && row.included_indices.length > 0
   const included = sanitized.length > 0 ? sanitized : defaultStructureIndices(quote)
   const primaryIndices = primaryStructureIndices(quote)
+  const topologyStructureIndex = primaryIndices[0] ?? included[0] ?? 1
+  const topologyStructure = quote.structures[topologyStructureIndex - 1] ?? quote.structures[0]
 
   // AI layout plan (spec quote-visual-parity R6) — separate best-effort read
   // (migration 170 pattern, mirrors the quote_share_token read above).
@@ -248,19 +251,16 @@ export default async function MeasurementResultsPage({
               </p>
             </div>
 
-            {/* Satellite / aerial view of the property (same source the customer
-                quote page uses), keyed by the customer public_token. */}
-            <div className="mt-8 overflow-hidden border border-ink-line bg-ink-card">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`/api/roofing/q/${row.public_token}/static-map`}
-                alt={`Satellite view of the roof at ${row.address ?? 'the property'}`}
-                className="h-112 w-full object-cover sm:h-128"
-              />
-              <div className="border-t border-ink-line px-5 py-3 font-mono text-xs uppercase tracking-[0.16em] text-text-dim">
-                Google satellite view
-              </div>
-            </div>
+            {/* The Measurement Results image is now the real property aerial plus
+                an honest footprint-derived candidate overlay. It visualises the
+                existing estimate only; no provider-derived semantic claim and no
+                pricing mutation happen on this public capability surface. */}
+            <RoofTopologyResultSection
+              publicToken={row.public_token}
+              address={row.address}
+              structureIndex={topologyStructureIndex}
+              structure={topologyStructure}
+            />
 
             {/* AI work-strategy layout map — generate here; the customer page
                 and PDF read the cached plan (spec quote-visual-parity R6). */}

@@ -54,10 +54,23 @@ function twilioVerdict(t) {
 }
 
 // Mirror of ONBOARDING_TRADES / LICENCE_BODIES / bundled estimator trades.
-const ONBOARDING_TRADES = new Set(['electrical', 'plumbing'])
+// Keep in sync with lib/onboard/schema.ts (ONBOARDING_TRADES + defaultsForTrade)
+// and lib/onboard/trade-readiness.ts (DETERMINISTIC_TRADES). This set went stale
+// at ['electrical','plumbing'] and reported every roofing/painting tenant as
+// "not ready", i.e. a healthy tenant looked INCOMPLETE.
+const ONBOARDING_TRADES = new Set(['electrical', 'plumbing', 'painting', 'roofing'])
+
+// Trades that price from a deterministic rate card (pricing_book.overlays), not
+// from an LLM estimator over a shared_assemblies catalogue. For these, an empty
+// catalogue and a missing trade_prompts row are EXPECTED and must not gate the
+// trade out — mirrors lib/onboard/trade-readiness.ts.
+const DETERMINISTIC_TRADES = new Set(['painting', 'roofing'])
+
 const PRICING_DEFAULTS = {
   electrical: { apprentice_rate: 65, senior_rate: 160, after_hours_multiplier: 1.5, min_labour_hours: 2, risk_buffer_pct: 15 },
   plumbing: { apprentice_rate: 65, senior_rate: 160, after_hours_multiplier: 1.5, min_labour_hours: 1.5, risk_buffer_pct: 15 },
+  painting: { apprentice_rate: 55, senior_rate: 75, after_hours_multiplier: 1.5, min_labour_hours: 0, risk_buffer_pct: 10 },
+  roofing: { apprentice_rate: 65, senior_rate: 160, after_hours_multiplier: 1.5, min_labour_hours: 0, risk_buffer_pct: 15 },
 }
 
 const dbUrl = process.env.SUPABASE_DB_URL
@@ -125,10 +138,14 @@ async function hasTradePromptRow(trade) {
   }
 }
 async function tradeReady(trade) {
+  const deterministic = DETERMINISTIC_TRADES.has(trade)
   const pricingDefaults = ONBOARDING_TRADES.has(trade)
   const sa = await client.query('select count(*)::int n from shared_assemblies where trade=$1', [trade])
-  const sharedAssemblies = (sa.rows[0]?.n ?? 0) > 0
-  const estimatorPrompt = ONBOARDING_TRADES.has(trade) || (await hasTradePromptRow(trade))
+  // Deterministic trades quote from a rate card, so an empty catalogue is
+  // expected and must not gate them out (painting ships with zero assemblies).
+  const sharedAssemblies = deterministic || (sa.rows[0]?.n ?? 0) > 0
+  const estimatorPrompt =
+    ONBOARDING_TRADES.has(trade) || deterministic || (await hasTradePromptRow(trade))
   const intakeRules = ONBOARDING_TRADES.has(trade)
   const licenceSchema = ONBOARDING_TRADES.has(trade)
   return pricingDefaults && sharedAssemblies && estimatorPrompt && intakeRules && licenceSchema
@@ -205,8 +222,14 @@ try {
 
   // sms webhook (live, best-effort)
   const appUrl = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL
+  // A LOCAL APP_URL must never be compared against — let alone written to — a
+  // real Twilio number: --apply would repoint the tenant's live SMS webhook at
+  // localhost and silently kill every inbound message. Running this script from
+  // .env.local against a production tenant is the normal case, so refuse rather
+  // than trust the env.
+  const appUrlIsLocal = !!appUrl && /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:|\/|$)/i.test(appUrl)
   let numberRow = null
-  if (tenant.twilio_sms_number && !twilioStub && twilioAuth() && appUrl) {
+  if (tenant.twilio_sms_number && !twilioStub && twilioAuth() && appUrl && !appUrlIsLocal) {
     const expected = `${appUrl}/api/sms/inbound`
     numberRow = await getIncomingNumber(tenant.twilio_sms_number)
     if (numberRow) {
@@ -214,6 +237,9 @@ try {
     } else {
       record('info', 'SMS webhook → /api/sms/inbound', true, 'could not read from Twilio (number not found / API error)')
     }
+  } else if (appUrlIsLocal) {
+    // numberRow stays null → the --apply repair below is skipped too.
+    record('info', 'SMS webhook → /api/sms/inbound', true, `skipped — APP_URL is local ("${appUrl}"); refusing to check/repoint a live number against localhost`)
   } else {
     record('info', 'SMS webhook → /api/sms/inbound', true, 'skipped (stub number or missing Twilio creds / APP_URL)')
   }
@@ -287,7 +313,10 @@ try {
     }
 
     // 3. Fix SMS webhook
-    if (numberRow && appUrl) {
+    // `appUrlIsLocal` already forced numberRow to null above; re-assert it here so
+    // a future edit to the check block can't silently re-arm the footgun of
+    // repointing a live tenant's SMS webhook at localhost.
+    if (numberRow && appUrl && !appUrlIsLocal) {
       const expected = `${appUrl}/api/sms/inbound`
       if (numberRow.smsUrl !== expected) {
         const ok = await setIncomingSmsUrl(numberRow.sid, expected)

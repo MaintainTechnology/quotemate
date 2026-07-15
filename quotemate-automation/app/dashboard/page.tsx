@@ -15976,9 +15976,9 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
                     <Pill tone={inspection ? 'warn' : 'ok'} label={inspection ? 'Inspection' : 'Quote'} />
                   </div>
 
-                  {/* Two cards per job — the customer-facing saved quote (+PDF)
-                      and the tradie-facing measurement review page (/m/[token]). */}
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  {/* Saved quote, tradie-facing measurement review, and private
+                      synthetic topology-evidence preview. */}
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
                     <div className="rounded-card border border-ink-line bg-ink-card p-4">
                       <div className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-accent">
                         Saved roofing job
@@ -16038,6 +16038,23 @@ function RoofingHubTab({ accessToken }: { accessToken: string | null }) {
                         ) : (
                           <span className="font-mono text-xs text-text-dim">Re-measure to enable</span>
                         )}
+                      </div>
+                    </div>
+
+                    <div className="rounded-card border border-ink-line bg-ink-card p-4">
+                      <div className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-[#FF375F]">
+                        Topology evidence
+                      </div>
+                      <p className="mt-1 text-xs text-text-dim">
+                        Private candidate overlay · ridges, hips, valleys and eaves
+                      </p>
+                      <div className="mt-3 flex items-center gap-4">
+                        <Link
+                          href={`/dashboard/roofing/measurements/${j.id}/topology`}
+                          className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-accent hover:underline"
+                        >
+                          Open evidence &rarr;
+                        </Link>
                       </div>
                     </div>
                   </div>
