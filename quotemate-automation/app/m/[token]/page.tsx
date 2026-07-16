@@ -35,8 +35,10 @@ import { QuoteSheet, Letterhead } from '../../q/_chrome/parts'
 import { QuoteMaxMark } from '../../q/_chrome/icons'
 import { MeasurementReview } from './MeasurementReview'
 import { RoofLayoutSection } from './RoofLayoutSection'
+import { Roof3DModelSection } from './Roof3DModelSection'
 import type { LayoutPlan } from '@/lib/roofing/layout-plan'
 import type { LayoutOverlayStructure } from '@/lib/roofing/layout-overlay-svg'
+import { edgeLengthM, polygonBBox, polygonCentroid } from '@/lib/roofing/map-utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -137,6 +139,39 @@ export default async function MeasurementResultsPage({
       layoutPlan = (lp.layout_plan as LayoutPlan | null) ?? null
     }
   }
+
+  // 3D model (migration 173) — separate best-effort read, same pattern as
+  // layout_status above, so the page never breaks pre-migration.
+  let model3dStatus: string | null = null
+  {
+    const { data: m3, error: m3Err } = await supabase
+      .from('roofing_measurements')
+      .select('model3d_status')
+      .eq('measure_token', token)
+      .maybeSingle()
+    if (!m3Err && m3) model3dStatus = (m3.model3d_status as string | null) ?? null
+  }
+
+  // Capture target for the 3D model: primary structure centroid + an orbit
+  // range sized from its footprint (same framing maths as the fly-around).
+  const primaryPolygon =
+    quote.structures.find((s) => s.role === 'primary')?.metrics?.polygon_geojson ??
+    quote.structures[0]?.metrics?.polygon_geojson ??
+    null
+  const model3dCentroid = polygonCentroid(primaryPolygon)
+  const model3dBBox = polygonBBox(primaryPolygon)
+  const captureRangeM = model3dBBox
+    ? Math.max(
+        70,
+        (edgeLengthM(
+          [model3dBBox.west, model3dBBox.south],
+          [model3dBBox.east, model3dBBox.north],
+        ) /
+          2 +
+          4) *
+          4,
+      )
+    : 90
 
   // Overlay inputs: per-structure geometry for the interactive map, plus
   // per-structure metric snapshots so the layout section recomputes framing,
@@ -271,6 +306,16 @@ export default async function MeasurementResultsPage({
               structureMetrics={structureMetrics}
               initialStatus={layoutStatus}
               initialPlan={layoutPlan}
+            />
+
+            {/* Interactive 3D model (Track B — visual only; migration 173). */}
+            <Roof3DModelSection
+              measureToken={row.measure_token}
+              center={
+                model3dCentroid ? { lat: model3dCentroid[1], lng: model3dCentroid[0] } : null
+              }
+              captureRangeM={captureRangeM}
+              initialStatus={model3dStatus}
             />
 
             <MeasurementReview
