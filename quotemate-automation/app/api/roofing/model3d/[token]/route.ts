@@ -21,11 +21,37 @@ export const dynamic = 'force-dynamic'
 // needs more than Hobby's 10s (repo convention: Pro or Railway).
 export const maxDuration = 300
 
-const BodySchema = z.object({
-  // 4 orbit captures, front/left/back/right. ~250 KB each as JPEG data URLs;
-  // 8 MB cap guards the route against oversized canvases.
-  captures: z.array(z.string().min(100).max(8_000_000)).length(4),
-})
+// 2–5 labelled captures. Auto orbit sends front/left/back/right; manual mode
+// adds an optional 'top'. Tripo needs the front plus at least one side; 'top'
+// is enhanced + cached only. ~250 KB each as JPEG data URLs; 8 MB cap guards
+// against oversized canvases.
+const BodySchema = z
+  .object({
+    captures: z
+      .array(
+        z.object({
+          view: z.enum(['front', 'left', 'right', 'back', 'top']),
+          image: z.string().min(100).max(8_000_000),
+        }),
+      )
+      .min(2)
+      .max(5),
+    // Manual captures skip the enhancement-cache READ (the tradie framed
+    // these shots deliberately) but still refresh the cache.
+    mode: z.enum(['auto', 'manual']).default('auto'),
+  })
+  .superRefine((val, ctx) => {
+    const views = val.captures.map((c) => c.view)
+    if (new Set(views).size !== views.length) {
+      ctx.addIssue({ code: 'custom', message: 'duplicate views' })
+    }
+    if (!views.includes('front')) {
+      ctx.addIssue({ code: 'custom', message: 'front view is required' })
+    }
+    if (!views.some((v) => v === 'left' || v === 'back' || v === 'right')) {
+      ctx.addIssue({ code: 'custom', message: 'at least one side view (left/back/right) is required' })
+    }
+  })
 
 export async function GET(_req: Request, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params
@@ -68,7 +94,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     )
   }
 
-  const captures = parsed.data.captures
-  after(() => startModel3d(token, captures))
+  const { captures, mode } = parsed.data
+  after(() =>
+    startModel3d(token, captures, {
+      address: claimed.address,
+      reuseCache: mode !== 'manual',
+    }),
+  )
   return Response.json({ ok: true, status: 'generating' })
 }

@@ -330,7 +330,7 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
 
       const target = Cesium.Cartesian3.fromDegrees(center.lng, center.lat, groundH + 4)
       const pitch = Cesium.Math.toRadians(-32)
-      const captures: string[] = []
+      const captures: { view: string; image: string }[] = []
       for (let i = 0; i < VIEWS.length; i++) {
         const v = VIEWS[i]
         setStage(`View ${i + 1}/4 (${v.name}) — loading tiles…`)
@@ -344,7 +344,7 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
         await sleep(CAPTURE_SETTLE_MS)
         setStage(`View ${i + 1}/4 (${v.name}) — capturing…`)
         viewer.scene.render()
-        captures.push(viewer.canvas.toDataURL('image/jpeg', 0.88))
+        captures.push({ view: v.name, image: viewer.canvas.toDataURL('image/jpeg', 0.88) })
       }
 
       setPhase('submitting')
@@ -352,7 +352,7 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
       const res = await fetch(`/api/roofing/model3d/${encodeURIComponent(measureToken)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ captures }),
+        body: JSON.stringify({ captures, mode: 'auto' }),
       })
       const json = (await res.json().catch(() => null)) as { ok: boolean; error?: string } | null
       if (!json?.ok) throw new Error(json?.error ?? `Generation failed (HTTP ${res.status})`)

@@ -42,6 +42,14 @@ describe('buildMultiviewTaskBody', () => {
     })
   })
 
+  it('emits only the provided views, in canonical order (views may be omitted)', () => {
+    const body = buildMultiviewTaskBody({ right: 'r', front: 'f' }, 'v3.1-20260211')
+    expect(body.inputs).toEqual([
+      { front: { file_token: 'f' } },
+      { right: { file_token: 'r' } },
+    ])
+  })
+
   it('honours quality overrides', () => {
     const body = buildMultiviewTaskBody(tokens, 'v3.1-20260211', {
       textureQuality: 'extreme',

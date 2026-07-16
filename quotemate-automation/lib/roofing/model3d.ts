@@ -23,6 +23,11 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { geminiProvider } from '@/lib/ig-engine/providers/gemini'
 import type { ImageBytes } from '@/lib/ig-engine/providers/base'
+import {
+  getCachedEnhanced,
+  putCachedEnhanced,
+  type CaptureView,
+} from '@/lib/roofing/capture-cache'
 
 // Lazy so the pure helpers stay importable in vitest without Supabase env.
 let _supabase: SupabaseClient | null = null
@@ -53,8 +58,13 @@ const TRIPO_FACE_LIMIT = () => {
   return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 300_000
 }
 
+// Tripo's canonical multiview slots. 'top' (see CAPTURE_VIEWS) has no slot —
+// a top capture is enhanced + cached but never sent to Tripo.
 export const VIEW_ORDER = ['front', 'left', 'back', 'right'] as const
 export type ViewName = (typeof VIEW_ORDER)[number]
+
+/** One capture, labelled with the view it shows (auto orbit or manual). */
+export type LabeledCapture = { view: CaptureView; image: string }
 
 export type Model3dState = {
   status: 'idle' | 'generating' | 'ready' | 'failed'
@@ -79,12 +89,16 @@ export function parseDataUrl(input: string): ImageBytes {
  * storage cap (~60 credits ≈ US$0.60 per model at the defaults).
  */
 export function buildMultiviewTaskBody(
-  fileTokens: Record<ViewName, string>,
+  fileTokens: Partial<Record<ViewName, string>>,
   modelVersion: string,
   opts: { textureQuality?: string; faceLimit?: number } = {},
 ): Record<string, unknown> {
   return {
-    inputs: VIEW_ORDER.map((view) => ({ [view]: { file_token: fileTokens[view] } })),
+    // Only the provided Tripo slots — views may be omitted (front required
+    // upstream), and non-Tripo views ('top') never reach this map.
+    inputs: VIEW_ORDER.filter((view) => fileTokens[view]).map((view) => ({
+      [view]: { file_token: fileTokens[view] },
+    })),
     model: modelVersion,
     texture: true,
     pbr: true,
@@ -157,7 +171,7 @@ async function tripoUpload(image: ImageBytes): Promise<string> {
 }
 
 /** Create the multiview task → task_id. */
-async function tripoCreateMultiview(fileTokens: Record<ViewName, string>): Promise<string> {
+async function tripoCreateMultiview(fileTokens: Partial<Record<ViewName, string>>): Promise<string> {
   const json = await tripoFetch('/generation/multiview-to-model', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -186,12 +200,12 @@ const ENHANCE_USER =
   'Only improve sharpness, clarity and texture detail.'
 
 /**
- * Enhance one capture — BEST-EFFORT. On any Gemini failure (quota, safety,
- * network) the raw capture is used instead: a slightly soft view still
- * reconstructs; a hard fail here would waste the other three captures.
+ * Enhance one capture — BEST-EFFORT. Returns null when enhancement did NOT
+ * happen (no key / quota / safety / network) so the caller can fall back to
+ * the raw capture without poisoning the cache with unpolished images.
  */
-async function enhanceCapture(image: ImageBytes): Promise<ImageBytes> {
-  if (!process.env.GEMINI_API_KEY?.trim()) return image
+async function enhanceCapture(image: ImageBytes): Promise<ImageBytes | null> {
+  if (!process.env.GEMINI_API_KEY?.trim()) return null
   try {
     return await geminiProvider.renderImage({
       system: ENHANCE_SYSTEM,
@@ -203,7 +217,7 @@ async function enhanceCapture(image: ImageBytes): Promise<ImageBytes> {
     console.warn('[roofing/model3d] enhancement failed, using raw capture', {
       error: e instanceof Error ? e.message : String(e),
     })
-    return image
+    return null
   }
 }
 
@@ -229,33 +243,69 @@ async function markFailed(measureToken: string, error: string): Promise<void> {
 }
 
 /**
- * CAS-claim the row for a fresh generation. Returns false when another
- * request is already mid-generation (409 for the route).
+ * CAS-claim the row for a fresh generation. Returns the row's address on
+ * success (the cache key), or null when another request is already
+ * mid-generation (409 for the route).
  */
-export async function claimModel3d(measureToken: string): Promise<boolean> {
+export async function claimModel3d(
+  measureToken: string,
+): Promise<{ address: string | null } | null> {
   const { data } = await supabaseClient()
     .from('roofing_measurements')
     .update({ model3d_status: 'generating', model3d_error: null, model3d_task_id: null })
     .eq('measure_token', measureToken)
     .or('model3d_status.is.null,model3d_status.eq.failed,model3d_status.eq.ready')
-    .select('id')
+    .select('id, address')
     .maybeSingle()
-  return !!data
+  return data ? { address: (data.address as string | null) ?? null } : null
 }
 
 /**
  * The heavy start path — runs in after() once the route has fast-acked.
- * Enhance all 4 captures in parallel → upload → create the Tripo task →
- * stamp the task id. Never throws; failures land on model3d_status.
+ * Per view: reuse the address-keyed cached enhancement when allowed, else
+ * enhance via Gemini and store the result for the next generation of this
+ * property (cross-tenant by design — the token saving is the point). Then
+ * upload the Tripo-consumable views ('top' is cached only) and create the
+ * task. Never throws; failures land on model3d_status.
  */
-export async function startModel3d(measureToken: string, captures: string[]): Promise<void> {
+export async function startModel3d(
+  measureToken: string,
+  captures: LabeledCapture[],
+  opts: { address?: string | null; reuseCache?: boolean } = {},
+): Promise<void> {
   try {
-    const images = captures.map(parseDataUrl)
-    const enhanced = await Promise.all(images.map(enhanceCapture))
-    const tokens = await Promise.all(enhanced.map(tripoUpload))
-    const fileTokens = Object.fromEntries(
-      VIEW_ORDER.map((view, i) => [view, tokens[i]]),
-    ) as Record<ViewName, string>
+    const address = opts.address?.trim() || null
+    // Manual captures bypass the READ (deliberate framing wins) but still
+    // WRITE, refreshing the property's cache for future runs.
+    const reuse = opts.reuseCache !== false && !!address
+
+    const polished = await Promise.all(
+      captures.map(async ({ view, image }) => {
+        const raw = parseDataUrl(image)
+        if (reuse) {
+          const cached = await getCachedEnhanced(address!, view)
+          if (cached) return { view, image: cached, fromCache: true }
+        }
+        const enhanced = await enhanceCapture(raw)
+        // Cache only genuinely-enhanced output — a raw fallback must not
+        // become the permanent "polished" image for this address.
+        if (enhanced && address) await putCachedEnhanced(address, view, enhanced)
+        return { view, image: enhanced ?? raw, fromCache: false }
+      }),
+    )
+    const reused = polished.filter((p) => p.fromCache).length
+    if (reused > 0) {
+      console.log('[roofing/model3d] reused cached enhancements', { measureToken, reused })
+    }
+
+    const fileTokens: Partial<Record<ViewName, string>> = {}
+    await Promise.all(
+      polished
+        .filter((p) => (VIEW_ORDER as readonly string[]).includes(p.view))
+        .map(async (p) => {
+          fileTokens[p.view as ViewName] = await tripoUpload(p.image)
+        }),
+    )
     const taskId = await tripoCreateMultiview(fileTokens)
     await supabaseClient()
       .from('roofing_measurements')
