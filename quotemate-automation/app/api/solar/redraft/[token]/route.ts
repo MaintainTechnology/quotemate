@@ -21,6 +21,7 @@ import { after } from 'next/server'
 import { resolveIdentityRequest } from '@/lib/tenant/from-request'
 import { runSolarEstimate } from '@/lib/solar/intake'
 import { loadSolarConfig } from '@/lib/solar/config'
+import { depositPctFromOverlay, loadSolarTenantRates } from '@/lib/solar/rate-card-overlay'
 import { geocodeAddress } from '@/lib/solar/geocode'
 import { validateSolarAddress } from '@/lib/solar/address-validation'
 import { fetchSolarDataLayers } from '@/lib/solar/data-layers'
@@ -125,8 +126,13 @@ export async function POST(
 
   // Re-run the engine with the current config — identical wiring to the
   // estimate creation route, so a re-draft prices exactly like a fresh
-  // submission of the same details.
-  const config = await loadSolarConfig(supabase)
+  // submission of the same details (including the tenant's rate card).
+  const baseConfig = await loadSolarConfig(supabase)
+  const { config, rateCard, overlay } = await loadSolarTenantRates(
+    supabase,
+    (row.tenant_id as string | null) ?? null,
+    baseConfig,
+  )
   let redrafted: SolarEstimate
   try {
     const result = await runSolarEstimate({
@@ -139,6 +145,7 @@ export async function POST(
       phase: inputs.phase,
       requestedSizeKw: inputs.requestedSizeKw,
       config,
+      rateCard,
       opts: {
         geocode: async (input) => {
           const r = await geocodeAddress(input.address + ', ' + input.state, {
@@ -180,6 +187,8 @@ export async function POST(
     // Keep the row's variant — a re-draft must never flip a Felt quote
     // back to the instant layout (Felt tab spec 2026-06-13 §4.5).
     quoteVariant,
+    // Tenant deposit % from the solar rate card (null → keep stored/default).
+    depositPct: depositPctFromOverlay(overlay),
   })
   const {
     tenant_id: _t,

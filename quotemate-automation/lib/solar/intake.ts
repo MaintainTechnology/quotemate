@@ -47,6 +47,7 @@ import type {
   SolarRoutingDecision,
   SolarAddressValidationInsight,
   SolarDataLayersSummary,
+  SolarRateCard,
 } from './types'
 
 /**
@@ -127,6 +128,10 @@ export async function runSolarEstimate(args: {
    *  column the dashboard reads back); non-finite/non-positive → null. */
   requestedSizeKw?: number | null
   config: SolarConfig
+  /** Per-tenant rate card (pricing_book.overlays.solar_rate_card merged
+   *  onto the default). Undefined → config.default_rate_card, exactly the
+   *  pre-override behaviour. */
+  rateCard?: SolarRateCard
   opts?: SolarEnrichmentOrchestratorOpts
 }): Promise<SolarEstimate> {
   const opts = args.opts
@@ -258,7 +263,7 @@ export async function runSolarEstimate(args: {
   // economics cannot run — return empty but type-compatible structures.
   const price =
     sizing.tiers.length > 0
-      ? calculateSolarPrice({ sizing, roof, context, config })
+      ? calculateSolarPrice({ sizing, roof, context, config, rateCard: args.rateCard })
       : emptyPrice(sizing.routing)
   const economics =
     sizing.tiers.length > 0

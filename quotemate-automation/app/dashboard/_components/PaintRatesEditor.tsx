@@ -12,9 +12,17 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { getAuthToken } from '@/lib/auth/client-token'
-import { DEFAULT_PAINTING_PRODUCTION_RATES } from '@/lib/painting/pricing'
+import {
+  DEFAULT_PAINTING_HOURLY_RATE,
+  DEFAULT_PAINTING_PRODUCTION_RATES,
+  DEFAULT_PAINTING_RATE_CARD,
+} from '@/lib/painting/pricing'
 import { DEFAULT_PAINTING_TAKEOFF_CARD } from '@/lib/painting/takeoff'
 import type { PaintProduct } from '@/lib/painting/types'
+
+/** Platform deposit default (lib/stripe/painting-checkout.ts) — mirrored
+ *  here because that module is server-only (Stripe SDK). */
+const DEFAULT_DEPOSIT_PCT = 30
 
 const SCOPES = [
   ['walls', 'Interior walls', 'm²'],
@@ -73,6 +81,18 @@ export function PaintRatesEditor({ accessToken }: Props) {
   const [production, setProduction] = useState<Record<ScopeKey, string>>({ walls: '', ceilings: '', trim: '', exterior: '' })
   const [crew, setCrew] = useState('')
   const [sundries, setSundries] = useState('')
+  // Pricing model + hourly rate (schema-supported since onboarding; now
+  // finally surfaced here so a tenant can switch models post-onboarding).
+  const [pricingModel, setPricingModel] = useState<'' | 'sqm' | 'hourly'>('')
+  const [hourlyRate, setHourlyRate] = useState('')
+  // Coats + condition multipliers (previously code-only defaults).
+  const [coatsMult, setCoatsMult] = useState<Record<'1' | '2' | '3', string>>({ '1': '', '2': '', '3': '' })
+  const [condMult, setCondMult] = useState<Record<'sound' | 'minor' | 'bare', string>>({ sound: '', minor: '', bare: '' })
+  // Deposit % + the two takeoff knobs the save previously DROPPED
+  // (hours_per_day / premium_price_uplift_pct — the silent-wipe bug).
+  const [depositPct, setDepositPct] = useState('')
+  const [hoursPerDay, setHoursPerDay] = useState('')
+  const [premiumMaterialUplift, setPremiumMaterialUplift] = useState('')
   const [hasPricingBook, setHasPricingBook] = useState(true)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -108,7 +128,14 @@ export function PaintRatesEditor({ accessToken }: Props) {
           price_per_litre?: Partial<Record<PaintProduct, number>>
           sundries_pct?: number | null
           crew_size?: number | null
+          hours_per_day?: number | null
+          premium_price_uplift_pct?: number | null
         }
+        pricing_model?: 'sqm' | 'hourly' | null
+        hourly_rate?: number | null
+        coats_multiplier?: Partial<Record<'1' | '2' | '3', number>>
+        condition_multiplier?: Partial<Record<'sound' | 'minor' | 'bare', number>>
+        deposit_pct?: number | null
       }
       setRates({
         walls: numStr(o.rate_per_unit?.walls),
@@ -144,6 +171,21 @@ export function PaintRatesEditor({ accessToken }: Props) {
       })
       setCrew(numStr(o.takeoff?.crew_size))
       setSundries(pctStr(o.takeoff?.sundries_pct))
+      setPricingModel(o.pricing_model === 'sqm' || o.pricing_model === 'hourly' ? o.pricing_model : '')
+      setHourlyRate(numStr(o.hourly_rate))
+      setCoatsMult({
+        '1': numStr(o.coats_multiplier?.['1']),
+        '2': numStr(o.coats_multiplier?.['2']),
+        '3': numStr(o.coats_multiplier?.['3']),
+      })
+      setCondMult({
+        sound: numStr(o.condition_multiplier?.sound),
+        minor: numStr(o.condition_multiplier?.minor),
+        bare: numStr(o.condition_multiplier?.bare),
+      })
+      setDepositPct(numStr(o.deposit_pct))
+      setHoursPerDay(numStr(o.takeoff?.hours_per_day))
+      setPremiumMaterialUplift(pctStr(o.takeoff?.premium_price_uplift_pct))
     } catch (e) {
       setErrMsg(e instanceof Error ? e.message : String(e))
     } finally {
@@ -189,7 +231,24 @@ export function PaintRatesEditor({ accessToken }: Props) {
             ),
             crew_size: blankNull(crew),
             sundries_pct: pctToFrac(sundries),
+            // Round-tripped so a save can no longer wipe stored values
+            // (previously omitted — the silent-wipe bug).
+            hours_per_day: blankNull(hoursPerDay),
+            premium_price_uplift_pct: pctToFrac(premiumMaterialUplift),
           },
+          pricing_model: pricingModel === '' ? null : pricingModel,
+          hourly_rate: blankNull(hourlyRate),
+          coats_multiplier: {
+            '1': blankNull(coatsMult['1']),
+            '2': blankNull(coatsMult['2']),
+            '3': blankNull(coatsMult['3']),
+          },
+          condition_multiplier: {
+            sound: blankNull(condMult.sound),
+            minor: blankNull(condMult.minor),
+            bare: blankNull(condMult.bare),
+          },
+          deposit_pct: blankNull(depositPct),
         }
         const token = (await getAuthToken()) ?? accessToken
         const res = await fetch('/api/tenant/painting-rates', {
@@ -219,7 +278,7 @@ export function PaintRatesEditor({ accessToken }: Props) {
         setSaving(false)
       }
     },
-    [accessToken, rates, doubleStorey, premium, goodFrac, colourExtra, callOut, gstMode, coverage, litrePrice, production, crew, sundries, load],
+    [accessToken, rates, doubleStorey, premium, goodFrac, colourExtra, callOut, gstMode, coverage, litrePrice, production, crew, sundries, pricingModel, hourlyRate, coatsMult, condMult, depositPct, hoursPerDay, premiumMaterialUplift, load],
   )
 
   if (!hasPricingBook) {
@@ -270,6 +329,42 @@ export function PaintRatesEditor({ accessToken }: Props) {
             </label>
           )
         })}
+      </div>
+
+      <SectionHeader title="Pricing model" subtitle="Price per m²/lm (default), or hourly: your charge-out rate × the labour hours derived from the production paces below." />
+      <div className="mt-4 grid gap-5 sm:grid-cols-2">
+        <label className="block">
+          <FieldLabel>Model</FieldLabel>
+          <select aria-label="Pricing model" value={pricingModel} onChange={(e) => setPricingModel(e.target.value as '' | 'sqm' | 'hourly')} disabled={loading || saving} className="rounded-ctl mt-2 w-full border border-ink-line bg-ink-deep px-4 py-3 font-mono text-base text-text-pri focus:border-accent focus:outline-none">
+            <option value="">Default — per m² / lm</option>
+            <option value="sqm">Per m² / lm rates</option>
+            <option value="hourly">Hourly rate × production pace</option>
+          </select>
+          <Caption error={fieldErrors.pricing_model} defaultHint="Switchable any time — set at onboarding, editable here." />
+        </label>
+        <label className="block">
+          <FieldLabel>Hourly rate (ex GST)</FieldLabel>
+          <UnitInput value={hourlyRate} onChange={setHourlyRate} placeholder={String(DEFAULT_PAINTING_HOURLY_RATE)} unit="hr" disabled={loading || saving} hasError={!!fieldErrors.hourly_rate} ariaLabel="Hourly rate" />
+          <Caption error={fieldErrors.hourly_rate} defaultHint={`Default $${DEFAULT_PAINTING_HOURLY_RATE}/hr — used only in hourly mode.`} />
+        </label>
+      </div>
+
+      <SectionHeader title="Coats & condition multipliers" subtitle="Scale the base rate by coat count and substrate prep. 1.0 is neutral; 'poor' condition always routes to inspection." />
+      <div className="mt-4 grid gap-5 sm:grid-cols-3">
+        {([['1', '1 coat'], ['2', '2 coats'], ['3', '3 coats']] as const).map(([k, label]) => (
+          <label key={`coats-${k}`} className="block">
+            <FieldLabel>{label}</FieldLabel>
+            <PlainInput value={coatsMult[k]} onChange={(v) => setCoatsMult((m) => ({ ...m, [k]: v }))} placeholder={String(DEFAULT_PAINTING_RATE_CARD.coats_multiplier[Number(k) as 1 | 2 | 3])} suffix="×" disabled={loading || saving} hasError={!!fieldErrors[`coats_multiplier.${k}`]} ariaLabel={`${label} multiplier`} />
+            <Caption error={fieldErrors[`coats_multiplier.${k}`]} defaultHint={`Default ${DEFAULT_PAINTING_RATE_CARD.coats_multiplier[Number(k) as 1 | 2 | 3]}×`} />
+          </label>
+        ))}
+        {([['sound', 'Sound surface'], ['minor', 'Minor prep'], ['bare', 'Bare / full prep']] as const).map(([k, label]) => (
+          <label key={`cond-${k}`} className="block">
+            <FieldLabel>{label}</FieldLabel>
+            <PlainInput value={condMult[k]} onChange={(v) => setCondMult((m) => ({ ...m, [k]: v }))} placeholder={String(DEFAULT_PAINTING_RATE_CARD.condition_multiplier[k])} suffix="×" disabled={loading || saving} hasError={!!fieldErrors[`condition_multiplier.${k}`]} ariaLabel={`${label} multiplier`} />
+            <Caption error={fieldErrors[`condition_multiplier.${k}`]} defaultHint={`Default ${DEFAULT_PAINTING_RATE_CARD.condition_multiplier[k]}×`} />
+          </label>
+        ))}
       </div>
 
       <SectionHeader title="Tier framing" subtitle="Good is a lighter 1-coat refresh; Best is premium paint + full prep." />
@@ -327,6 +422,12 @@ export function PaintRatesEditor({ accessToken }: Props) {
           <Caption error={fieldErrors['takeoff.crew_size']} defaultHint={`Default ${DEFAULT_PAINTING_TAKEOFF_CARD.crew_size} · turns hours into days on site`} />
         </label>
         <PctInput label="Prep & sundries" value={sundries} onChange={setSundries} defaultValue={DEFAULT_PAINTING_TAKEOFF_CARD.sundries_pct * 100} error={fieldErrors['takeoff.sundries_pct']} disabled={loading || saving} hint="Filler, caulk, tape, drop sheets — % of materials." />
+        <label className="block">
+          <FieldLabel>Hours per day</FieldLabel>
+          <PlainInput value={hoursPerDay} onChange={setHoursPerDay} placeholder={String(DEFAULT_PAINTING_TAKEOFF_CARD.hours_per_day)} suffix="hrs" disabled={loading || saving} hasError={!!fieldErrors['takeoff.hours_per_day']} ariaLabel="Working hours per day" />
+          <Caption error={fieldErrors['takeoff.hours_per_day']} defaultHint={`Default ${DEFAULT_PAINTING_TAKEOFF_CARD.hours_per_day} — turns crew hours into days on site.`} />
+        </label>
+        <PctInput label="Premium paint uplift" value={premiumMaterialUplift} onChange={setPremiumMaterialUplift} defaultValue={DEFAULT_PAINTING_TAKEOFF_CARD.premium_price_uplift_pct * 100} error={fieldErrors['takeoff.premium_price_uplift_pct']} disabled={loading || saving} hint="Best-tier paint cost uplift over the trade $/L." />
       </div>
 
       <SectionHeader title="Minimum & GST" subtitle="A per-job floor so tiny jobs aren't underpriced, plus the GST flag." />
@@ -345,13 +446,21 @@ export function PaintRatesEditor({ accessToken }: Props) {
           </select>
           <Caption error={fieldErrors.gst_registered} defaultHint={defaults ? `Default ${defaults.gst_registered ? 'Yes' : 'No'}` : ''} />
         </label>
+        <label className="block">
+          <FieldLabel>Deposit (%)</FieldLabel>
+          <div className="relative mt-2">
+            <input type="number" inputMode="decimal" min={0} step={1} value={depositPct} onChange={(e) => setDepositPct(e.target.value)} placeholder={String(DEFAULT_DEPOSIT_PCT)} disabled={loading || saving} aria-label="Deposit percentage" className={`rounded-ctl w-full border bg-ink-deep px-4 py-3 pr-10 font-mono text-base text-text-pri placeholder:text-text-dim focus:outline-none ${fieldErrors.deposit_pct ? 'border-warning' : 'border-ink-line focus:border-accent'}`} />
+            <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-sm text-text-dim">%</span>
+          </div>
+          <Caption error={fieldErrors.deposit_pct} defaultHint={`Default ${DEFAULT_DEPOSIT_PCT}% of the inc-GST tier price at Stripe checkout.`} />
+        </label>
       </div>
 
       <div className="mt-7 flex flex-wrap items-center gap-4 pt-2">
         <button type="submit" disabled={loading || saving || !accessToken} className="rounded-ctl inline-flex items-center gap-2 bg-accent px-6 py-3 font-mono text-sm font-semibold uppercase tracking-[0.14em] text-white transition-colors hover:bg-accent-press disabled:cursor-not-allowed disabled:opacity-50">
           {saving ? (<><span className="inline-block h-3.5 w-3.5 animate-spin border-2 border-white/40 border-t-white" aria-hidden="true" /> Saving…</>) : (<>Save rates <span aria-hidden="true">&rarr;</span></>)}
         </button>
-        <button type="button" onClick={() => { setRates({ walls: '', ceilings: '', trim: '', exterior: '' }); setDoubleStorey(''); setPremium(''); setGoodFrac(''); setColourExtra(''); setCallOut(''); setGstMode(''); setCoverage(EMPTY_PRODUCTS); setLitrePrice(EMPTY_PRODUCTS); setProduction({ walls: '', ceilings: '', trim: '', exterior: '' }); setCrew(''); setSundries('') }} disabled={loading || saving} className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim hover:text-accent disabled:opacity-50">
+        <button type="button" onClick={() => { setRates({ walls: '', ceilings: '', trim: '', exterior: '' }); setDoubleStorey(''); setPremium(''); setGoodFrac(''); setColourExtra(''); setCallOut(''); setGstMode(''); setCoverage(EMPTY_PRODUCTS); setLitrePrice(EMPTY_PRODUCTS); setProduction({ walls: '', ceilings: '', trim: '', exterior: '' }); setCrew(''); setSundries(''); setPricingModel(''); setHourlyRate(''); setCoatsMult({ '1': '', '2': '', '3': '' }); setCondMult({ sound: '', minor: '', bare: '' }); setDepositPct(''); setHoursPerDay(''); setPremiumMaterialUplift('') }} disabled={loading || saving} className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-dim hover:text-accent disabled:opacity-50">
           Reset all to default
         </button>
       </div>

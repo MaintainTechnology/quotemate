@@ -86,6 +86,11 @@ export async function GET(req: Request) {
       // on the next save).
       production_rate_per_unit: o.production_rate_per_unit ?? {},
       takeoff: o.takeoff ?? null,
+      pricing_model: o.pricing_model ?? null,
+      hourly_rate: o.hourly_rate ?? null,
+      coats_multiplier: o.coats_multiplier ?? {},
+      condition_multiplier: o.condition_multiplier ?? {},
+      deposit_pct: o.deposit_pct ?? null,
     },
     has_pricing_book: !!book,
   })

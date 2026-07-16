@@ -52,6 +52,10 @@ export function buildSolarRowPayloads(args: {
    */
   buildings?: DetectedBuilding[]
   selectedBuildingId?: string | null
+  /** Tenant deposit % (solar rate-card overlay). Stamped onto
+   *  quotes.deposit_pct so the /r fresh-mint charges it; null/undefined
+   *  leaves the DB default (30). */
+  depositPct?: number | null
 }) {
   const { estimate, tenantId, address, customer } = args
   const inspection = estimate.routing.decision === 'inspection_required'
@@ -184,6 +188,11 @@ export function buildSolarRowPayloads(args: {
     good: goodTier,
     better: betterTier,
     best: bestTier,
+    // Per-tenant deposit % — only stamped when the rate card sets one, so
+    // rows otherwise keep the DB column default (30).
+    ...(typeof args.depositPct === 'number' && Number.isFinite(args.depositPct)
+      ? { deposit_pct: Math.round(args.depositPct) }
+      : {}),
   }
 
   return { intake, solarEstimate, quote }

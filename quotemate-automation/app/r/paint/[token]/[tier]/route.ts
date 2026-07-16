@@ -19,6 +19,8 @@ import { paintingDepositLocked } from '@/lib/painting/publish-gate'
 import { createPaintingCheckoutSessionForTier } from '@/lib/stripe/painting-checkout'
 import { expireCheckoutSession } from '@/lib/stripe/checkout'
 import { pipelineLog } from '@/lib/log/pipeline'
+import { loadPaintingRateCard } from '@/lib/painting/quote-dispatch'
+import { paintingDepositPctFromCard } from '@/lib/painting/rate-card-overlay'
 import type { PaintingEstimate } from '@/lib/painting/types'
 
 export const dynamic = 'force-dynamic'
@@ -41,7 +43,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string;
 
   const { data: row } = await getSupabase()
     .from('painting_measurements')
-    .select('paid_at, stripe_links, released_at, estimate')
+    .select('paid_at, stripe_links, released_at, estimate, tenant_id')
     .eq('public_token', token)
     .maybeSingle()
   if (!row) return new Response('Not found', { status: 404 })
@@ -62,12 +64,20 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string;
   if (!row.paid_at) {
     try {
       const estimate = (row.estimate as PaintingEstimate | null) ?? null
+      // Tenant deposit % from the painting rate card — the fresh mint must
+      // charge the same deposit the draft-time sessions did (previously the
+      // hardcoded 30% regardless of tenant settings).
+      const tenantId = (row.tenant_id as string | null) ?? null
+      const card = tenantId
+        ? await loadPaintingRateCard(getSupabase(), tenantId, null)
+        : undefined
       const fresh = estimate
         ? await createPaintingCheckoutSessionForTier({
             estimate,
             tierKey: tier as 'good' | 'better' | 'best',
             token,
             appUrl,
+            depositPct: paintingDepositPctFromCard(card) ?? undefined,
           })
         : null
       if (fresh) {

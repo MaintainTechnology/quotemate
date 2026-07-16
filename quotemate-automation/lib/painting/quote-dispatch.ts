@@ -13,7 +13,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { estimatePainting } from './measure'
 import { buildSavedPaintingRow } from './save-row'
-import { effectivePaintingRateCardFromOverlay } from './rate-card-overlay'
+import { effectivePaintingRateCardFromOverlay, paintingDepositPctFromCard } from './rate-card-overlay'
 import type { EstimateRequest } from './request-schema'
 import type { PaintingEstimate, PaintingRateCard } from './types'
 import { createPaintingCheckoutSessions } from '@/lib/stripe/painting-checkout'
@@ -40,7 +40,7 @@ export type PaintingQuoteDispatch =
 /** Best-effort — the per-tenant painting rate-card overlay, resolved exactly
  *  like app/api/painting/estimate (prefer the painting pricing_book row's
  *  card, then the primary-trade row's, then any row that carries one). */
-async function loadPaintingRateCard(
+export async function loadPaintingRateCard(
   supabase: SupabaseClient,
   tenantId: string,
   primaryTrade: string | null,
@@ -134,7 +134,9 @@ export async function runAndSavePaintingQuote(args: {
         token,
         address: args.request.address.address,
         appUrl: args.appUrl,
-        depositPct: args.depositPct,
+        // Explicit caller value wins; else the tenant rate card's deposit;
+        // else the checkout's platform default (30%).
+        depositPct: args.depositPct ?? paintingDepositPctFromCard(rateCard) ?? undefined,
       })
       if (Object.keys(stripeLinks).length > 0) {
         await args.supabase

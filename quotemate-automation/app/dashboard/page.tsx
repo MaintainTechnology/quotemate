@@ -130,6 +130,7 @@ import { tenantHasRoofingTrade } from '@/lib/roofing/tenant'
 import { tenantHasFeature } from '@/lib/features/catalog'
 import { isFeatureTab, isTabEnabled } from '@/lib/features/catalog'
 import { RoofRatesEditor } from './_components/RoofRatesEditor'
+import { SolarRatesEditor } from './_components/SolarRatesEditor'
 import { PaintRatesEditor } from './_components/PaintRatesEditor'
 import { EstimatorBetaTab } from './_components/EstimatorBetaTab'
 import { SolarTab } from './_components/SolarTab'
@@ -5505,6 +5506,14 @@ function PricingTab({
            /api/painting/estimate before pricing. */
         tenantHasFeature(tenantTrades, 'painting') && (
           <PaintRatesEditor accessToken={accessToken} />
+        )
+      )}
+      {(!tradeFilter || tradeFilter === 'solar') && !sharedOnly && (
+        /* Per-tenant Solar rates editor. Writes
+           pricing_book.overlays.solar_rate_card; read back by the solar
+           estimate / redraft / select-building routes before pricing. */
+        tenantHasFeature(tenantTrades, 'solar') && (
+          <SolarRatesEditor accessToken={accessToken} />
         )
       )}
       {!tradeFilter && (

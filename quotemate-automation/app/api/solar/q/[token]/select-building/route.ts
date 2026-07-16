@@ -30,6 +30,7 @@ import { after } from 'next/server'
 import { z } from 'zod'
 import { runSolarEstimate } from '@/lib/solar/intake'
 import { loadSolarConfig } from '@/lib/solar/config'
+import { depositPctFromOverlay, loadSolarRateOverlay, loadSolarTenantRates } from '@/lib/solar/rate-card-overlay'
 import { geocodeAddress } from '@/lib/solar/geocode'
 import { fetchSolarDataLayers } from '@/lib/solar/data-layers'
 import { applySolarSunAssets } from '@/lib/solar/sun-assets'
@@ -238,7 +239,12 @@ export async function POST(
   //    coverage gate / Solar API / dataLayers use this building's point
   //    rather than re-geocoding the address.
   if (!computed) {
-    const config = await loadSolarConfig(supabase)
+    const baseConfig = await loadSolarConfig(supabase)
+    const { config, rateCard } = await loadSolarTenantRates(
+      supabase,
+      (row.tenant_id as string | null) ?? null,
+      baseConfig,
+    )
     try {
       const result = await runSolarEstimate({
         input: inputs.input,
@@ -250,6 +256,7 @@ export async function POST(
         phase: inputs.phase,
         requestedSizeKw: inputs.requestedSizeKw,
         config,
+        rateCard,
         opts: {
           geocode: async (input) => {
             const r = await geocodeAddress(input.address + ', ' + input.state, {
@@ -319,6 +326,12 @@ export async function POST(
   const quoteVariant: 'instant' | 'felt' =
     row.quote_variant === 'felt' ? 'felt' : 'instant'
   const nextBuildings = updateBuildingStatus(buildings, buildingId, 'ready')
+  // Tenant deposit % — loaded here (not only on the cache-miss branch) so a
+  // cache-hit building switch stamps the same deposit as a fresh compute.
+  const depositOverlay = await loadSolarRateOverlay(
+    supabase,
+    (row.tenant_id as string | null) ?? null,
+  )
   const payloads = buildSolarRowPayloads({
     estimate: computed,
     tenantId: (row.tenant_id as string | null) ?? '',
@@ -326,6 +339,7 @@ export async function POST(
     quoteVariant,
     buildings: nextBuildings,
     selectedBuildingId: buildingId,
+    depositPct: depositPctFromOverlay(depositOverlay),
   })
   const estimateUpdate = omitKeys(payloads.solarEstimate, [
     'tenant_id',

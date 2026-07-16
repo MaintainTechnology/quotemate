@@ -27,6 +27,7 @@ import { buildSolarRowPayloads } from '@/lib/solar/persist-helpers'
 import { notifySolarEstimate } from '@/lib/solar/notify'
 import { runSolarEstimate } from '@/lib/solar/intake'
 import { loadSolarConfig } from '@/lib/solar/config'
+import { depositPctFromOverlay, loadSolarTenantRates } from '@/lib/solar/rate-card-overlay'
 import { dispatchQuoteMessage } from '@/lib/sms/dispatch'
 import { applyPylonStcCrossCheck } from '@/lib/solar/pylon-aftercheck'
 import { applyOpenSolarSupplement } from '@/lib/solar/opensolar-supplement'
@@ -99,7 +100,11 @@ export async function POST(
     parsed.data.variant === 'felt' && feltTabEnabled(process.env) ? 'felt' : 'instant'
 
   // ── Run the deterministic engine. ────────────────────────────────
-  const config = await loadSolarConfig(supabase)
+  const baseConfig = await loadSolarConfig(supabase)
+  // Per-tenant rates: pricing_book.overlays.solar_rate_card merged onto
+  // the defaults (+ STC-price override onto the config). No overlay →
+  // identical inputs to the pre-override behaviour.
+  const { config, rateCard, overlay } = await loadSolarTenantRates(supabase, tenant.id, baseConfig)
   // Derive DNSP/network from the postcode (for feed-in tariff + export
   // limit). Falls back to 'default' when no exact match is found, which
   // routes through config.feed_in.default_aud_per_kwh — always safe.
@@ -119,6 +124,7 @@ export async function POST(
       phase,
       requestedSizeKw: requested_size_kw ?? null,
       config,
+      rateCard,
       opts: {
         geocode: async (input) => {
           const r = await geocodeAddress(
@@ -183,6 +189,8 @@ export async function POST(
       ? { name: customer.name, phone: customer.mobile }
       : undefined,
     quoteVariant,
+    // Tenant deposit % from the solar rate card (null → DB default 30).
+    depositPct: depositPctFromOverlay(overlay),
   })
 
   const { data: intakeRow, error: intakeErr } = await supabase

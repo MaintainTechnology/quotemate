@@ -44,6 +44,12 @@ export const MAX_PRICE_PER_LITRE = 500
 export const MAX_SUNDRIES_PCT = 0.5
 export const MAX_CREW_SIZE = 10
 export const MAX_HOURS_PER_DAY = 12
+/** Coats/condition multipliers — 1.0 is neutral; cap stops a ×30 typo. */
+export const MIN_MULTIPLIER = 0.1
+export const MAX_MULTIPLIER = 3
+/** Deposit % of the inc-GST tier price charged at Stripe checkout. */
+export const MIN_DEPOSIT_PCT = 1
+export const MAX_DEPOSIT_PCT = 50
 
 export const EDITABLE_SCOPES: ReadonlyArray<PaintScope> = [
   'walls',
@@ -79,6 +85,10 @@ const UnitFraction = z.number().positive('Must be greater than 0%').max(1, 'Must
 const Money = z.number().min(0).max(MAX_CALL_OUT_EX_GST)
 const HourlyRate = z.number().positive('Hourly rate must be greater than 0').max(MAX_HOURLY_RATE, `Hourly rate must be at most $${MAX_HOURLY_RATE}`)
 const Production = z.number().positive('Must be greater than 0').max(MAX_PRODUCTION_RATE)
+const Multiplier = z
+  .number()
+  .min(MIN_MULTIPLIER, `Must be at least ${MIN_MULTIPLIER}`)
+  .max(MAX_MULTIPLIER, `Must be at most ${MAX_MULTIPLIER}`)
 
 export const PaintingRateOverlaySchema = z.object({
   rate_per_unit: z
@@ -110,6 +120,30 @@ export const PaintingRateOverlaySchema = z.object({
     })
     .partial()
     .optional(),
+  // Coats + condition multipliers — previously code-only defaults; now
+  // tenant-overridable like every other money lever. JSON object keys are
+  // strings, so the coats map uses '1'/'2'/'3' (merged back onto the
+  // numeric-keyed card). 'poor' condition never reaches pricing, so it has
+  // no override.
+  coats_multiplier: z
+    .object({
+      '1': Multiplier.optional().nullable(),
+      '2': Multiplier.optional().nullable(),
+      '3': Multiplier.optional().nullable(),
+    })
+    .partial()
+    .optional(),
+  condition_multiplier: z
+    .object({
+      sound: Multiplier.optional().nullable(),
+      minor: Multiplier.optional().nullable(),
+      bare: Multiplier.optional().nullable(),
+    })
+    .partial()
+    .optional(),
+  // Deposit % of the inc-GST tier price at Stripe checkout (default 30,
+  // previously hardcoded in lib/stripe/painting-checkout.ts).
+  deposit_pct: z.number().min(MIN_DEPOSIT_PCT).max(MAX_DEPOSIT_PCT).optional().nullable(),
   // Materials + labour take-off knobs (lib/painting/takeoff.ts). Display
   // levers only — never read by calculatePaintingPrice.
   takeoff: z
@@ -188,6 +222,32 @@ export function mergePaintingRateCard(
     merged = { ...merged, production_rate_per_unit: map }
   }
 
+  // Coats + condition multipliers (string JSON keys → numeric card keys).
+  if (overlay.coats_multiplier) {
+    const map = { ...base.coats_multiplier }
+    for (const [k, coatKey] of [['1', 1], ['2', 2], ['3', 3]] as const) {
+      const v = overlay.coats_multiplier[k]
+      if (typeof v === 'number' && Number.isFinite(v)) map[coatKey] = v
+    }
+    merged = { ...merged, coats_multiplier: map }
+  }
+  if (overlay.condition_multiplier) {
+    const map = { ...base.condition_multiplier }
+    for (const k of ['sound', 'minor', 'bare'] as const) {
+      const v = overlay.condition_multiplier[k]
+      if (typeof v === 'number' && Number.isFinite(v)) map[k] = v
+    }
+    merged = { ...merged, condition_multiplier: map }
+  }
+
+  // Deposit % — not on the base PaintingRateCard type; stashed on the
+  // returned card (typed-extension, same pattern as roofing's solar
+  // allowances) and read back via paintingDepositPctFromCard.
+  if (num(overlay.deposit_pct)) {
+    ;(merged as PaintingRateCard & { deposit_pct?: number }).deposit_pct =
+      overlay.deposit_pct as number
+  }
+
   // Take-off knobs. The merged card carries ONLY what the tenant set —
   // resolveTakeoffCard (lib/painting/takeoff.ts) applies defaults at
   // compute time, so an unset knob tracks future default changes.
@@ -214,6 +274,15 @@ export function mergePaintingRateCard(
   return merged
 }
 
+/** PURE — read the optional tenant deposit % from a merged card; null
+ *  means "use the platform default (30)". */
+export function paintingDepositPctFromCard(
+  card: PaintingRateCard | null | undefined,
+): number | null {
+  const v = (card as { deposit_pct?: unknown } | null | undefined)?.deposit_pct
+  return typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : null
+}
+
 /** Convenience — effective rate card from a raw jsonb overlay value. */
 export function effectivePaintingRateCardFromOverlay(
   overlayJson: unknown,
@@ -236,6 +305,9 @@ export type DashboardInputs = {
   pricing_model?: 'sqm' | 'hourly' | null
   hourly_rate?: number | string | null
   production_rate_per_unit?: Partial<Record<PaintScope, number | string | null | undefined>>
+  coats_multiplier?: Partial<Record<'1' | '2' | '3', number | string | null | undefined>>
+  condition_multiplier?: Partial<Record<'sound' | 'minor' | 'bare', number | string | null | undefined>>
+  deposit_pct?: number | string | null
   takeoff?: {
     coverage_per_litre?: Partial<Record<PaintProduct, number | string | null | undefined>>
     price_per_litre?: Partial<Record<PaintProduct, number | string | null | undefined>>
@@ -319,6 +391,40 @@ export function buildPaintingOverlayFromInputs(inputs: DashboardInputs): ParseOv
       cleaned[s] = n
     }
     if (Object.keys(cleaned).length > 0) overlay.production_rate_per_unit = cleaned
+  }
+
+  // Coats + condition multipliers.
+  for (const [group, keys] of [
+    ['coats_multiplier', ['1', '2', '3'] as const],
+    ['condition_multiplier', ['sound', 'minor', 'bare'] as const],
+  ] as const) {
+    const src = inputs[group]
+    if (!src) continue
+    const cleaned: Record<string, number> = {}
+    for (const k of keys) {
+      const raw = (src as Record<string, number | string | null | undefined>)[k]
+      if (raw === null || raw === undefined || raw === '') continue
+      const n = typeof raw === 'number' ? raw : Number(raw)
+      if (!Number.isFinite(n)) { issues.push({ field: `${group}.${k}`, message: 'Must be a number.' }); continue }
+      if (n < MIN_MULTIPLIER || n > MAX_MULTIPLIER) {
+        issues.push({ field: `${group}.${k}`, message: `Must be between ${MIN_MULTIPLIER} and ${MAX_MULTIPLIER}.` })
+        continue
+      }
+      cleaned[k] = n
+    }
+    if (Object.keys(cleaned).length > 0) {
+      overlay[group] = cleaned as PaintingRateOverlay[typeof group]
+    }
+  }
+
+  // Deposit % (of inc-GST tier price at checkout).
+  if (inputs.deposit_pct !== null && inputs.deposit_pct !== undefined && inputs.deposit_pct !== '') {
+    const n = typeof inputs.deposit_pct === 'number' ? inputs.deposit_pct : Number(inputs.deposit_pct)
+    if (!Number.isFinite(n) || n < MIN_DEPOSIT_PCT || n > MAX_DEPOSIT_PCT) {
+      issues.push({ field: 'deposit_pct', message: `Must be between ${MIN_DEPOSIT_PCT}% and ${MAX_DEPOSIT_PCT}%.` })
+    } else {
+      overlay.deposit_pct = n
+    }
   }
 
   // Take-off knobs.

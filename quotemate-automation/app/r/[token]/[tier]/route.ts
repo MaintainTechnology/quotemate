@@ -121,6 +121,8 @@ async function mintFreshDepositUrl(
     better: unknown
     best: unknown
     stripe_links: Record<string, string> | null
+    /** Per-quote deposit % (quotes.deposit_pct, DB default 30). */
+    deposit_pct: number | null
   },
   tier: string,
   token: string,
@@ -174,9 +176,17 @@ async function mintFreshDepositUrl(
           good: quote.good ?? null,
           better: quote.better ?? null,
           best: quote.best ?? null,
-          // 30% matches the hardcoded deposit used at draft time
-          // (createCheckoutSessionsForQuote in the estimate route).
-          deposit_pct: 30,
+          // Honour the per-quote deposit % (quotes.deposit_pct, stamped
+          // from the tenant rate card at draft time; DB default 30). The
+          // column was previously ignored here — a hardcoded 30 — so a
+          // tenant deposit change never reached the charge.
+          deposit_pct:
+            typeof quote.deposit_pct === 'number' &&
+            Number.isFinite(quote.deposit_pct) &&
+            quote.deposit_pct >= 1 &&
+            quote.deposit_pct <= 90
+              ? Math.round(quote.deposit_pct)
+              : 30,
         } as unknown as CheckoutOpts['quote'],
         tierKey: tier as 'good' | 'better' | 'best',
         intake: intake as unknown as CheckoutOpts['intake'],
@@ -219,7 +229,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
   const { data: quote } = await db()
     .from('quotes')
     .select(
-      'id, stripe_links, paid_at, scheduled_at, created_at, price_hold_until, needs_inspection, intake_id, tenant_id, good, better, best',
+      'id, stripe_links, paid_at, scheduled_at, created_at, price_hold_until, needs_inspection, intake_id, tenant_id, good, better, best, deposit_pct',
     )
     .eq('share_token', token)
     .single()
@@ -257,6 +267,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
       id: quote.id as string,
       intake_id: (quote.intake_id as string | null) ?? null,
       tenant_id: (quote.tenant_id as string | null) ?? null,
+      deposit_pct: (quote.deposit_pct as number | null) ?? null,
       good: quote.good,
       better: quote.better,
       best: quote.best,

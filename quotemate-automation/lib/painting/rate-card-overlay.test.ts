@@ -3,6 +3,7 @@ import {
   buildPaintingOverlayFromInputs,
   effectivePaintingRateCardFromOverlay,
   mergePaintingRateCard,
+  paintingDepositPctFromCard,
   parsePaintingRateOverlay,
 } from './rate-card-overlay'
 import { DEFAULT_PAINTING_RATE_CARD } from './pricing'
@@ -206,5 +207,79 @@ describe('takeoff card (materials + labour knobs)', () => {
         expect.arrayContaining(['takeoff.crew_size', 'takeoff.sundries_pct']),
       )
     }
+  })
+})
+
+describe('coats / condition multipliers + deposit (new tenant levers)', () => {
+  it('accepts, validates and merges onto the numeric-keyed card', () => {
+    const built = buildPaintingOverlayFromInputs({
+      coats_multiplier: { '1': '0.75', '3': 1.5 },
+      condition_multiplier: { bare: 1.6 },
+      deposit_pct: '20',
+    })
+    expect(built.ok).toBe(true)
+    if (!built.ok) return
+    expect(built.overlay.coats_multiplier).toEqual({ '1': 0.75, '3': 1.5 })
+    expect(built.overlay.deposit_pct).toBe(20)
+
+    const card = mergePaintingRateCard(DEFAULT_PAINTING_RATE_CARD, built.overlay)
+    expect(card.coats_multiplier[1]).toBe(0.75)
+    expect(card.coats_multiplier[2]).toBe(DEFAULT_PAINTING_RATE_CARD.coats_multiplier[2]) // untouched
+    expect(card.coats_multiplier[3]).toBe(1.5)
+    expect(card.condition_multiplier.bare).toBe(1.6)
+    expect(card.condition_multiplier.sound).toBe(DEFAULT_PAINTING_RATE_CARD.condition_multiplier.sound)
+    expect(paintingDepositPctFromCard(card)).toBe(20)
+  })
+
+  it('rejects out-of-range multipliers and deposit field-by-field', () => {
+    const built = buildPaintingOverlayFromInputs({
+      coats_multiplier: { '2': 5 },
+      condition_multiplier: { sound: 0 },
+      deposit_pct: 80,
+    })
+    expect(built.ok).toBe(false)
+    if (built.ok) return
+    const fields = built.issues.map((i) => i.field)
+    expect(fields).toContain('coats_multiplier.2')
+    expect(fields).toContain('condition_multiplier.sound')
+    expect(fields).toContain('deposit_pct')
+  })
+
+  it('write→read symmetry: the stored overlay round-trips the zod parser', () => {
+    const built = buildPaintingOverlayFromInputs({
+      coats_multiplier: { '1': 0.8, '2': 1.05, '3': 1.4 },
+      condition_multiplier: { sound: 1, minor: 1.2, bare: 1.5 },
+      deposit_pct: 15,
+      pricing_model: 'hourly',
+      hourly_rate: 95,
+    })
+    expect(built.ok).toBe(true)
+    if (!built.ok) return
+    const reparsed = parsePaintingRateOverlay(JSON.parse(JSON.stringify(built.overlay)))
+    expect(reparsed.ok).toBe(true)
+  })
+
+  it('old stored overlays (no new keys) keep their values; new levers default', () => {
+    // Shape a pre-existing tenant overlay would have — none of the new keys.
+    const card = effectivePaintingRateCardFromOverlay({
+      rate_per_unit: { walls: 32 },
+      gst_registered: true,
+    })
+    expect(card.rate_per_unit.walls).toBe(32)
+    expect(card.coats_multiplier).toEqual(DEFAULT_PAINTING_RATE_CARD.coats_multiplier)
+    expect(card.condition_multiplier).toEqual(DEFAULT_PAINTING_RATE_CARD.condition_multiplier)
+    expect(paintingDepositPctFromCard(card)).toBeNull() // → platform default 30
+  })
+
+  it('takeoff hours_per_day + premium uplift round-trip (silent-wipe regression)', () => {
+    // The editor previously omitted these two from its save body, so a save
+    // replaced the stored takeoff object without them — wiping saved values.
+    const built = buildPaintingOverlayFromInputs({
+      takeoff: { hours_per_day: 8, premium_price_uplift_pct: 0.3, crew_size: 3 },
+    })
+    expect(built.ok).toBe(true)
+    if (!built.ok) return
+    expect(built.overlay.takeoff?.hours_per_day).toBe(8)
+    expect(built.overlay.takeoff?.premium_price_uplift_pct).toBe(0.3)
   })
 })
