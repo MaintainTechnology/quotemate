@@ -305,6 +305,72 @@ describe('accessory rates (gutter / downpipe / fascia / soffit)', () => {
   })
 })
 
+describe('back-compat — old stored overlays keep their values', () => {
+  // Shape copied from a REAL production row (Ricardos Roofing): material
+  // rates + upgrade_material only, saved before the new levers existed.
+  const storedOldShape = {
+    upgrade_material: 'colorbond_corrugated',
+    reroof_rate_per_m2: {
+      concrete_tile: 145,
+      terracotta_tile: 250,
+      colorbond_kliplok: 200,
+      colorbond_spandek: 190,
+      colorbond_trimdek: 180,
+      colorbond_corrugated: 160,
+    },
+  }
+
+  it('parses an old-shape overlay including every EDITABLE material as upgrade target', () => {
+    // The PATCH validator (buildOverlayFromInputs) has always accepted any
+    // EDITABLE_MATERIALS value for upgrade_material, so stored rows may
+    // legitimately contain corrugated/spandek — the read-side Zod enum must
+    // accept what the write side stored, or the WHOLE overlay is discarded
+    // and the tenant silently prices at defaults.
+    const parsed = parseRoofingRateOverlay(storedOldShape)
+    expect(parsed.ok).toBe(true)
+  })
+
+  it('merges old values verbatim and leaves every NEW lever at its default', () => {
+    const card = effectiveRateCardFromOverlay(storedOldShape)
+    // Old values — exactly as the tradie set them.
+    expect(card.reroof_rate_per_m2.colorbond_corrugated).toBe(160)
+    expect(card.reroof_rate_per_m2.terracotta_tile).toBe(250)
+    expect(card.upgrade_material).toBe('colorbond_corrugated')
+    // New levers — untouched defaults.
+    expect(card.gutter_rate_per_lm).toBe(DEFAULT_ROOFING_RATE_CARD.gutter_rate_per_lm)
+    expect(card.downpipe_rate_per_each).toBe(DEFAULT_ROOFING_RATE_CARD.downpipe_rate_per_each)
+    expect(card.fascia_rate_per_lm).toBe(DEFAULT_ROOFING_RATE_CARD.fascia_rate_per_lm)
+    expect(card.soffit_rate_per_lm).toBe(DEFAULT_ROOFING_RATE_CARD.soffit_rate_per_lm)
+    expect(card.ridge_hip_repoint_rate_per_lm).toBe(DEFAULT_ROOFING_RATE_CARD.ridge_hip_repoint_rate_per_lm)
+    expect(card.valley_flashing_rate_per_lm).toBe(DEFAULT_ROOFING_RATE_CARD.valley_flashing_rate_per_lm)
+    expect(card.box_gutter_rate_per_lm).toBe(DEFAULT_ROOFING_RATE_CARD.box_gutter_rate_per_lm)
+    expect(card.call_out_minimum_ex_gst).toBe(DEFAULT_ROOFING_RATE_CARD.call_out_minimum_ex_gst)
+    expect(card.price_edge_works).toBe(DEFAULT_ROOFING_RATE_CARD.price_edge_works)
+  })
+
+  it('an editor save with the new fields left blank stores NO new keys', () => {
+    // The Roof-rates form sends null for blank fields — a save must not
+    // inject new-lever values the tradie never typed.
+    const built = buildOverlayFromInputs({
+      reroof_rate_per_m2: { colorbond_corrugated: 160 },
+      gutter_rate_per_lm: null,
+      downpipe_rate_per_each: null,
+      fascia_rate_per_lm: null,
+      soffit_rate_per_lm: null,
+      ridge_hip_repoint_rate_per_lm: null,
+      valley_flashing_rate_per_lm: null,
+      box_gutter_rate_per_lm: null,
+      price_edge_works: null,
+      call_out_minimum_ex_gst: null,
+      solar_detach_reinstate_base_ex_gst: null,
+      solar_detach_reinstate_per_array_ex_gst: null,
+    })
+    expect(built.ok).toBe(true)
+    if (!built.ok) return
+    expect(Object.keys(built.overlay).sort()).toEqual(['reroof_rate_per_m2'])
+  })
+})
+
 describe('edge-works rates, call-out minimum and solar allowance', () => {
   it('accepts, validates and merges every remaining pricing lever', () => {
     const built = buildOverlayFromInputs({

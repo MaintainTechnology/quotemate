@@ -109,9 +109,16 @@ export const RoofingRateOverlaySchema = z.object({
     .max(MAX_SOLAR_ALLOWANCE)
     .optional()
     .nullable(),
+  // Must accept every EDITABLE_MATERIALS value — the PATCH validator
+  // (buildOverlayFromInputs) has always allowed all seven, so stored rows
+  // can contain corrugated/spandek. A narrower read-side enum makes
+  // parseRoofingRateOverlay reject the WHOLE overlay and the tenant
+  // silently prices at defaults (found live: Ricardos Roofing).
   upgrade_material: z
     .enum([
+      'colorbond_corrugated',
       'colorbond_trimdek',
+      'colorbond_spandek',
       'colorbond_kliplok',
       'concrete_tile',
       'terracotta_tile',
@@ -501,12 +508,8 @@ export function buildOverlayFromInputs(
         message: `Upgrade material must be one of: ${EDITABLE_MATERIALS.join(', ')}.`,
       })
     } else {
-      overlay.upgrade_material = dashboard.upgrade_material as
-        | 'colorbond_trimdek'
-        | 'colorbond_kliplok'
-        | 'concrete_tile'
-        | 'terracotta_tile'
-        | 'cement_sheet'
+      overlay.upgrade_material =
+        dashboard.upgrade_material as RoofingRateOverlay['upgrade_material']
     }
   }
 
