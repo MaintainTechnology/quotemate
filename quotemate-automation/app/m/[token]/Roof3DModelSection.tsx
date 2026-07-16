@@ -31,7 +31,7 @@ type Props = {
   initialStatus: string | null
 }
 
-type Phase = 'idle' | 'capturing' | 'submitting' | 'generating' | 'ready' | 'failed'
+type Phase = 'idle' | 'capturing' | 'manual' | 'submitting' | 'generating' | 'ready' | 'failed'
 
 const MAPS_3D_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_3D_KEY ?? ''
 
@@ -54,6 +54,12 @@ const CAPTURE_SETTLE_MS = 5000
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
+// Manual capture slots — the tradie frames each one by hand. Tripo consumes
+// front/left/right/back; 'top' is enhanced + cached only (no Tripo slot).
+// Declared locally so the client bundle doesn't pull the server cache lib.
+const MANUAL_VIEWS = ['front', 'left', 'right', 'back', 'top'] as const
+type ManualView = (typeof MANUAL_VIEWS)[number]
+
 /** Resolve when the tileset has loaded the current view (or timeout). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function waitForTiles(tileset: any, timeoutMs = 20_000): Promise<void> {
@@ -69,6 +75,60 @@ function waitForTiles(tileset: any, timeoutMs = 20_000): Promise<void> {
     }
     tick()
   })
+}
+
+/**
+ * Cesium viewer over the Google Photorealistic 3D tiles, framed on the
+ * property with the ground height sampled from the tileset itself. Shared by
+ * the auto orbit capture and the manual capture mode.
+ */
+async function createCaptureViewer(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  Cesium: any,
+  container: HTMLDivElement,
+  center: { lat: number; lng: number },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<{ viewer: any; tileset: any; target: any }> {
+  Cesium.GoogleMaps.defaultApiKey = MAPS_3D_KEY
+  const viewer = new Cesium.Viewer(container, {
+    globe: false,
+    baseLayer: false,
+    baseLayerPicker: false,
+    geocoder: false,
+    homeButton: false,
+    sceneModePicker: false,
+    navigationHelpButton: false,
+    animation: false,
+    timeline: false,
+    fullscreenButton: false,
+    infoBox: false,
+    selectionIndicator: false,
+    // Required so canvas.toDataURL sees the rendered frame.
+    contextOptions: { webgl: { preserveDrawingBuffer: true } },
+  })
+  if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false
+  viewer.resolutionScale = Math.min(window.devicePixelRatio || 1, 2)
+
+  const tileset = await Cesium.createGooglePhotorealistic3DTileset(
+    { key: MAPS_3D_KEY },
+    { showCreditsOnScreen: true },
+  )
+  viewer.scene.primitives.add(tileset)
+  tileset.maximumScreenSpaceError = 4 // sharper tiles than the fly-around; captures deserve it
+
+  // Ground height from the tileset itself (no extra API call).
+  let groundH = 25
+  try {
+    const carto = Cesium.Cartographic.fromDegrees(center.lng, center.lat)
+    viewer.camera.setView({ destination: Cesium.Cartesian3.fromDegrees(center.lng, center.lat, 400) })
+    await waitForTiles(tileset)
+    const [sampled] = await viewer.scene.sampleHeightMostDetailed([carto])
+    if (sampled && Number.isFinite(sampled.height)) groundH = sampled.height
+  } catch {
+    /* fall back to 25 m */
+  }
+  const target = Cesium.Cartesian3.fromDegrees(center.lng, center.lat, groundH + 4)
+  return { viewer, tileset, target }
 }
 
 export function Roof3DModelSection({ measureToken, center, captureRangeM, initialStatus }: Props) {
@@ -87,6 +147,10 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
   const [error, setError] = useState<string | null>(null)
   const [modelLoaded, setModelLoaded] = useState(false)
   const [viewerLoading, setViewerLoading] = useState(false)
+  // Manual capture mode — the tradie frames each view by hand.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const manualViewerRef = useRef<any>(null)
+  const [manualShots, setManualShots] = useState<Partial<Record<ManualView, string>>>({})
   const [roofColor, setRoofColor] = useState('#8a4b32')
   const [wallColor, setWallColor] = useState('#d8d2c4')
   const [tinting, setTinting] = useState({ roof: false, walls: false })
@@ -271,9 +335,108 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
     return () => {
       stopPolling()
       cleanupRef.current?.()
+      try {
+        manualViewerRef.current?.destroy()
+      } catch {
+        /* already gone */
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // ── submit (shared by auto orbit + manual mode) ───────────────────
+  const submitCaptures = useCallback(
+    async (captures: { view: string; image: string }[], mode: 'auto' | 'manual') => {
+      setPhase('submitting')
+      setStage('Enhancing captures and starting the 3D build…')
+      const res = await fetch(`/api/roofing/model3d/${encodeURIComponent(measureToken)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ captures, mode }),
+      })
+      const json = (await res.json().catch(() => null)) as { ok: boolean; error?: string } | null
+      if (!json?.ok) throw new Error(json?.error ?? `Generation failed (HTTP ${res.status})`)
+      setPhase('generating')
+      setProgress(0)
+      setStage('')
+      startPolling()
+    },
+    [measureToken, startPolling],
+  )
+
+  // ── manual capture mode ───────────────────────────────────────────
+  const destroyManualViewer = useCallback(() => {
+    try {
+      manualViewerRef.current?.destroy()
+    } catch {
+      /* already gone */
+    }
+    manualViewerRef.current = null
+  }, [])
+
+  const openManual = useCallback(async () => {
+    if (!center) return
+    setError(null)
+    setManualShots({})
+    setPhase('manual')
+    setStage('Loading the 3D view…')
+    try {
+      const Cesium = await loadCesium()
+      if (!captureRef.current) throw new Error('capture container missing')
+      const { viewer, tileset, target } = await createCaptureViewer(
+        Cesium,
+        captureRef.current,
+        center,
+      )
+      manualViewerRef.current = viewer
+      viewer.camera.lookAt(
+        target,
+        new Cesium.HeadingPitchRange(
+          Cesium.Math.toRadians(15),
+          Cesium.Math.toRadians(-32),
+          captureRangeM,
+        ),
+      )
+      // Release the camera lock — the tradie orbits/zooms/tilts freely.
+      viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY)
+      await waitForTiles(tileset)
+      setStage('')
+    } catch (e) {
+      destroyManualViewer()
+      setPhase('failed')
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }, [center, captureRangeM, destroyManualViewer])
+
+  /** Snapshot the current manual view into its slot (click again = retake). */
+  const captureManualShot = useCallback((view: ManualView) => {
+    const viewer = manualViewerRef.current
+    if (!viewer) return
+    viewer.scene.render()
+    const image = viewer.canvas.toDataURL('image/jpeg', 0.88)
+    setManualShots((s) => ({ ...s, [view]: image }))
+  }, [])
+
+  const cancelManual = useCallback(() => {
+    destroyManualViewer()
+    setManualShots({})
+    setStage('')
+    setPhase('idle')
+  }, [destroyManualViewer])
+
+  const buildFromManual = useCallback(async () => {
+    const captures = MANUAL_VIEWS.filter((v) => manualShots[v]).map((v) => ({
+      view: v as string,
+      image: manualShots[v]!,
+    }))
+    destroyManualViewer()
+    try {
+      await submitCaptures(captures, 'manual')
+    } catch (e) {
+      setPhase('failed')
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }, [manualShots, destroyManualViewer, submitCaptures])
 
   // ── capture + submit ──────────────────────────────────────────────
   const generate = useCallback(async () => {
@@ -286,49 +449,10 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
     try {
       const Cesium = await loadCesium()
       if (!captureRef.current) throw new Error('capture container missing')
-      Cesium.GoogleMaps.defaultApiKey = MAPS_3D_KEY
-
-      viewer = new Cesium.Viewer(captureRef.current, {
-        globe: false,
-        baseLayer: false,
-        baseLayerPicker: false,
-        geocoder: false,
-        homeButton: false,
-        sceneModePicker: false,
-        navigationHelpButton: false,
-        animation: false,
-        timeline: false,
-        fullscreenButton: false,
-        infoBox: false,
-        selectionIndicator: false,
-        // Required so canvas.toDataURL sees the rendered frame.
-        contextOptions: { webgl: { preserveDrawingBuffer: true } },
-      })
-      if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false
-      viewer.resolutionScale = Math.min(window.devicePixelRatio || 1, 2)
-
       setStage('Loading Google 3D tiles…')
-      const tileset = await Cesium.createGooglePhotorealistic3DTileset(
-        { key: MAPS_3D_KEY },
-        { showCreditsOnScreen: true },
-      )
-      viewer.scene.primitives.add(tileset)
-      tileset.maximumScreenSpaceError = 4 // sharper tiles than the fly-around; captures deserve it
-
-      // Ground height from the tileset itself (no extra API call).
-      let groundH = 25
-      try {
-        const carto = Cesium.Cartographic.fromDegrees(center.lng, center.lat)
-        const first = Cesium.Cartesian3.fromDegrees(center.lng, center.lat, 400)
-        viewer.camera.setView({ destination: first })
-        await waitForTiles(tileset)
-        const [sampled] = await viewer.scene.sampleHeightMostDetailed([carto])
-        if (sampled && Number.isFinite(sampled.height)) groundH = sampled.height
-      } catch {
-        /* fall back to 25 m */
-      }
-
-      const target = Cesium.Cartesian3.fromDegrees(center.lng, center.lat, groundH + 4)
+      const created = await createCaptureViewer(Cesium, captureRef.current, center)
+      viewer = created.viewer
+      const { tileset, target } = created
       const pitch = Cesium.Math.toRadians(-32)
       const captures: { view: string; image: string }[] = []
       for (let i = 0; i < VIEWS.length; i++) {
@@ -347,20 +471,7 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
         captures.push({ view: v.name, image: viewer.canvas.toDataURL('image/jpeg', 0.88) })
       }
 
-      setPhase('submitting')
-      setStage('Enhancing captures and starting the 3D build…')
-      const res = await fetch(`/api/roofing/model3d/${encodeURIComponent(measureToken)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ captures, mode: 'auto' }),
-      })
-      const json = (await res.json().catch(() => null)) as { ok: boolean; error?: string } | null
-      if (!json?.ok) throw new Error(json?.error ?? `Generation failed (HTTP ${res.status})`)
-
-      setPhase('generating')
-      setProgress(0)
-      setStage('')
-      startPolling()
+      await submitCaptures(captures, 'auto')
     } catch (e) {
       setPhase('failed')
       setError(e instanceof Error ? e.message : String(e))
@@ -371,7 +482,7 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
         /* already gone */
       }
     }
-  }, [center, captureRangeM, measureToken, startPolling])
+  }, [center, captureRangeM, submitCaptures])
 
   // No geometry to aim the capture at, or no browser Maps key → hide (same
   // rule as the layout section: the feature is optional).
@@ -396,17 +507,75 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
             </p>
 
             {(phase === 'idle' || phase === 'failed') && (
-              <button
-                type="button"
-                onClick={() => void generate()}
-                disabled={busy}
-                className="mt-4 inline-flex items-center gap-2 bg-accent px-4 py-2.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-white hover:bg-accent-press disabled:opacity-60"
-              >
-                {phase === 'failed' ? 'Retry 3D model' : 'Generate 3D model'}
-              </button>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => void generate()}
+                  disabled={busy}
+                  className="inline-flex items-center gap-2 bg-accent px-4 py-2.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-white hover:bg-accent-press disabled:opacity-60"
+                >
+                  {phase === 'failed' ? 'Retry 3D model' : 'Generate 3D model'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void openManual()}
+                  disabled={busy}
+                  className="inline-flex items-center gap-2 border border-ink-line px-4 py-2.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text-pri hover:border-accent hover:text-accent disabled:opacity-60"
+                >
+                  Manual capture
+                </button>
+              </div>
             )}
 
-            {busy && (
+            {phase === 'manual' && (
+              <div className="mt-4">
+                <p className="max-w-2xl text-sm leading-relaxed text-text-sec">
+                  Frame each side yourself: drag to orbit, scroll to zoom, Ctrl+drag to tilt
+                  (tilt down for the top view). Line up a side, then tap its button below to
+                  capture — tap again to retake. Front plus one other side is the minimum;
+                  all five give the best model.
+                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {MANUAL_VIEWS.map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => captureManualShot(v)}
+                      className={`inline-flex items-center gap-2 border px-3 py-2 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] transition-colors ${
+                        manualShots[v]
+                          ? 'border-accent bg-accent/10 text-accent'
+                          : 'border-ink-line text-text-sec hover:border-accent hover:text-accent'
+                      }`}
+                    >
+                      {manualShots[v] ? '✓ ' : ''}
+                      {v}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void buildFromManual()}
+                    disabled={
+                      !manualShots.front ||
+                      !(manualShots.left || manualShots.right || manualShots.back)
+                    }
+                    className="inline-flex items-center gap-2 bg-accent px-4 py-2.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-white hover:bg-accent-press disabled:opacity-50"
+                  >
+                    Build 3D model ({Object.keys(manualShots).length}/5 views)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelManual}
+                    className="inline-flex items-center gap-2 border border-ink-line px-3 py-2 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-dim hover:border-accent hover:text-accent"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {(busy || (phase === 'manual' && stage)) && (
               <p className="mt-4 inline-flex items-center gap-3 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-text-sec">
                 <span className="inline-block h-3.5 w-3.5 animate-spin border-2 border-accent/40 border-t-accent" aria-hidden="true" />
                 {stage}
@@ -428,11 +597,13 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
 
             {error && <p className="mt-3 font-mono text-xs text-warning-bright">{error}</p>}
 
-            {/* Cesium capture stage — visible while orbiting so the tradie sees
-                the views being taken. Collapsed otherwise. */}
+            {/* Cesium capture stage — visible during the auto orbit AND in
+                manual mode (where the tradie drives it). Collapsed otherwise. */}
             <div
               ref={captureRef}
-              className={`mt-4 w-full overflow-hidden border border-ink-line bg-ink-deep ${phase === 'capturing' ? 'h-80' : 'h-0 border-0'}`}
+              className={`mt-4 w-full overflow-hidden border border-ink-line bg-ink-deep ${
+                phase === 'capturing' || phase === 'manual' ? 'h-96' : 'h-0 border-0'
+              }`}
             />
           </div>
         )}
