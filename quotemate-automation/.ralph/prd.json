@@ -9,35 +9,35 @@
       "id": "S1",
       "title": "Enhanced-capture cache lib (address-keyed)",
       "detail": "lib/roofing/capture-cache.ts: pure normalizeAddressKey + cachePathFor (tested); getCachedEnhanced/putCachedEnhanced against roof-models bucket under enhanced/{key}/{view}.jpg. Best-effort: cache failures never fail generation.",
-      "status": "pending",
+      "status": "complete",
       "priority": 1
     },
     {
       "id": "S2",
       "title": "Labeled captures end-to-end (schema + Tripo body, 2-5 views incl. top)",
       "detail": "POST body {captures:[{view,image}], mode:'auto'|'manual'} — front required, >=1 of left/back/right, top optional, views unique. buildMultiviewTaskBody emits only provided front/left/back/right slots (top excluded). Tests for partial views + top exclusion.",
-      "status": "pending",
+      "status": "complete",
       "priority": 2
     },
     {
       "id": "S3",
       "title": "Wire cache into startModel3d + labeled auto-capture client",
       "detail": "startModel3d(measureToken, captures, {address, reuseCache}): auto reuses cached enhanced per view, else enhance+store; manual always enhances+stores. Route passes row address + mode. Client auto flow posts labeled views.",
-      "status": "pending",
+      "status": "complete",
       "priority": 3
     },
     {
       "id": "S4",
       "title": "Manual capture mode UI (front/left/right/back/top)",
       "detail": "Roof3DModelSection: 'Manual capture' opens free-orbit Cesium viewer with per-view capture buttons + chips + retake; 'Build 3D model' enabled once front + one side captured; submits mode:'manual'.",
-      "status": "pending",
+      "status": "complete",
       "priority": 4
     },
     {
       "id": "S5",
       "title": "Quality gates green (completion promise: all tests pass)",
       "detail": "npx tsc --noEmit clean; FULL npx vitest run green; /m/[token] renders both Generate and Manual capture entry points.",
-      "status": "pending",
+      "status": "complete",
       "priority": 5
     }
   ]
