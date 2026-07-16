@@ -36,6 +36,17 @@ type Defaults = {
   complexity_loading_pct: number
   upgrade_material: MaterialKey
   gst_registered: boolean
+  gutter_rate_per_lm?: number
+  downpipe_rate_per_each?: number
+  fascia_rate_per_lm?: number
+  soffit_rate_per_lm?: number
+  ridge_hip_repoint_rate_per_lm?: number
+  valley_flashing_rate_per_lm?: number
+  box_gutter_rate_per_lm?: number
+  price_edge_works?: boolean
+  call_out_minimum_ex_gst?: number
+  solar_detach_reinstate_base_ex_gst?: number
+  solar_detach_reinstate_per_array_ex_gst?: number
 }
 
 type Overrides = {
@@ -45,7 +56,47 @@ type Overrides = {
   complexity_loading_pct: number | null
   upgrade_material: MaterialKey | null
   gst_registered: boolean | null
+  gutter_rate_per_lm?: number | null
+  downpipe_rate_per_each?: number | null
+  fascia_rate_per_lm?: number | null
+  soffit_rate_per_lm?: number | null
+  ridge_hip_repoint_rate_per_lm?: number | null
+  valley_flashing_rate_per_lm?: number | null
+  box_gutter_rate_per_lm?: number | null
+  price_edge_works?: boolean | null
+  call_out_minimum_ex_gst?: number | null
+  solar_detach_reinstate_base_ex_gst?: number | null
+  solar_detach_reinstate_per_array_ex_gst?: number | null
 }
+
+/** Accessory rate fields — key, label, unit hint. Quantities are entered
+ *  per measurement on the measure page; these are the tenant's rates. */
+const ACCESSORY_FIELDS = [
+  ['gutter_rate_per_lm', 'Gutter (per lm)', '/lm'],
+  ['downpipe_rate_per_each', 'Downpipe (each)', ' each'],
+  ['fascia_rate_per_lm', 'Fascia (per lm)', '/lm'],
+  ['soffit_rate_per_lm', 'Soffit / eave lining (per lm)', '/lm'],
+] as const
+
+type AccessoryKey = (typeof ACCESSORY_FIELDS)[number][0]
+
+/** Edge-works per-lm rates (hip repoint / valley flashing / box gutter). */
+const EDGE_FIELDS = [
+  ['ridge_hip_repoint_rate_per_lm', 'Ridge & hip repoint (per lm)', '/lm'],
+  ['valley_flashing_rate_per_lm', 'Valley flashing (per lm)', '/lm'],
+  ['box_gutter_rate_per_lm', 'Box gutter (per lm)', '/lm'],
+] as const
+
+type EdgeKey = (typeof EDGE_FIELDS)[number][0]
+
+/** Dollar floors / allowances — 0 is meaningful (no floor / no allowance). */
+const DOLLAR_FIELDS = [
+  ['call_out_minimum_ex_gst', 'Call-out minimum (ex GST)', 'Per-structure floor; small jobs never price below this.'],
+  ['solar_detach_reinstate_base_ex_gst', 'Solar detach & reinstate — base', 'Added once when existing panels must come off for a re-roof.'],
+  ['solar_detach_reinstate_per_array_ex_gst', 'Solar detach & reinstate — per array', 'Added per detected panel array on top of the base.'],
+] as const
+
+type DollarKey = (typeof DOLLAR_FIELDS)[number][0]
 
 type GetResponse =
   | { ok: true; materials: readonly MaterialKey[]; defaults: Defaults; overrides: Overrides; has_pricing_book: boolean }
@@ -71,6 +122,23 @@ export function RoofRatesEditor({ accessToken }: Props) {
   const [multiStorey, setMultiStorey] = useState<string>('')
   const [asbestos, setAsbestos] = useState<string>('')
   const [complexity, setComplexity] = useState<string>('')
+  const [accessories, setAccessories] = useState<Record<AccessoryKey, string>>({
+    gutter_rate_per_lm: '',
+    downpipe_rate_per_each: '',
+    fascia_rate_per_lm: '',
+    soffit_rate_per_lm: '',
+  })
+  const [edgeRates, setEdgeRates] = useState<Record<EdgeKey, string>>({
+    ridge_hip_repoint_rate_per_lm: '',
+    valley_flashing_rate_per_lm: '',
+    box_gutter_rate_per_lm: '',
+  })
+  const [dollars, setDollars] = useState<Record<DollarKey, string>>({
+    call_out_minimum_ex_gst: '',
+    solar_detach_reinstate_base_ex_gst: '',
+    solar_detach_reinstate_per_array_ex_gst: '',
+  })
+  const [edgeWorksMode, setEdgeWorksMode] = useState<'' | 'true' | 'false'>('')
   const [upgradeMat, setUpgradeMat] = useState<MaterialKey | ''>('')
   const [gstMode, setGstMode] = useState<'' | 'true' | 'false'>('')
   const [hasPricingBook, setHasPricingBook] = useState(true)
@@ -110,6 +178,25 @@ export function RoofRatesEditor({ accessToken }: Props) {
       setMultiStorey(stringifyPct(o.multi_storey_loading_pct))
       setAsbestos(stringifyPct(o.asbestos_loading_pct))
       setComplexity(stringifyPct(o.complexity_loading_pct))
+      setAccessories({
+        gutter_rate_per_lm: stringify(o.gutter_rate_per_lm ?? undefined),
+        downpipe_rate_per_each: stringify(o.downpipe_rate_per_each ?? undefined),
+        fascia_rate_per_lm: stringify(o.fascia_rate_per_lm ?? undefined),
+        soffit_rate_per_lm: stringify(o.soffit_rate_per_lm ?? undefined),
+      })
+      setEdgeRates({
+        ridge_hip_repoint_rate_per_lm: stringify(o.ridge_hip_repoint_rate_per_lm ?? undefined),
+        valley_flashing_rate_per_lm: stringify(o.valley_flashing_rate_per_lm ?? undefined),
+        box_gutter_rate_per_lm: stringify(o.box_gutter_rate_per_lm ?? undefined),
+      })
+      setDollars({
+        call_out_minimum_ex_gst: stringify(o.call_out_minimum_ex_gst ?? undefined),
+        solar_detach_reinstate_base_ex_gst: stringify(o.solar_detach_reinstate_base_ex_gst ?? undefined),
+        solar_detach_reinstate_per_array_ex_gst: stringify(o.solar_detach_reinstate_per_array_ex_gst ?? undefined),
+      })
+      setEdgeWorksMode(
+        o.price_edge_works === true ? 'true' : o.price_edge_works === false ? 'false' : '',
+      )
       setUpgradeMat((o.upgrade_material as MaterialKey | null) ?? '')
       setGstMode(
         o.gst_registered === true ? 'true' : o.gst_registered === false ? 'false' : '',
@@ -148,6 +235,17 @@ export function RoofRatesEditor({ accessToken }: Props) {
           complexity_loading_pct: complexity === '' ? null : parsePctToFraction(complexity),
           upgrade_material: upgradeMat === '' ? null : upgradeMat,
           gst_registered: gstMode === '' ? null : gstMode === 'true',
+          gutter_rate_per_lm: accessories.gutter_rate_per_lm === '' ? null : accessories.gutter_rate_per_lm,
+          downpipe_rate_per_each: accessories.downpipe_rate_per_each === '' ? null : accessories.downpipe_rate_per_each,
+          fascia_rate_per_lm: accessories.fascia_rate_per_lm === '' ? null : accessories.fascia_rate_per_lm,
+          soffit_rate_per_lm: accessories.soffit_rate_per_lm === '' ? null : accessories.soffit_rate_per_lm,
+          ridge_hip_repoint_rate_per_lm: edgeRates.ridge_hip_repoint_rate_per_lm === '' ? null : edgeRates.ridge_hip_repoint_rate_per_lm,
+          valley_flashing_rate_per_lm: edgeRates.valley_flashing_rate_per_lm === '' ? null : edgeRates.valley_flashing_rate_per_lm,
+          box_gutter_rate_per_lm: edgeRates.box_gutter_rate_per_lm === '' ? null : edgeRates.box_gutter_rate_per_lm,
+          price_edge_works: edgeWorksMode === '' ? null : edgeWorksMode === 'true',
+          call_out_minimum_ex_gst: dollars.call_out_minimum_ex_gst === '' ? null : dollars.call_out_minimum_ex_gst,
+          solar_detach_reinstate_base_ex_gst: dollars.solar_detach_reinstate_base_ex_gst === '' ? null : dollars.solar_detach_reinstate_base_ex_gst,
+          solar_detach_reinstate_per_array_ex_gst: dollars.solar_detach_reinstate_per_array_ex_gst === '' ? null : dollars.solar_detach_reinstate_per_array_ex_gst,
         }
         const token = (await getAuthToken()) ?? accessToken
         const res = await fetch('/api/tenant/roofing-rates', {
@@ -289,6 +387,99 @@ export function RoofRatesEditor({ accessToken }: Props) {
         />
       </div>
 
+      {/* ── Accessory rates ─────────────────────────────────────── */}
+      <SectionHeader
+        title="Gutters, downpipes & extras"
+        subtitle="Rates for accessory works. Quantities are confirmed per job on the measurement page — a blank quantity there means no charge."
+      />
+      <div className="mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {ACCESSORY_FIELDS.map(([key, label, unit]) => {
+          const def = defaults?.[key]
+          const fe = fieldErrors[key]
+          return (
+            <label key={key} className="block">
+              <FieldLabel>{label}</FieldLabel>
+              <CurrencyInput
+                value={accessories[key]}
+                onChange={(v) => setAccessories((a) => ({ ...a, [key]: v }))}
+                placeholder={def !== undefined ? String(def) : ''}
+                disabled={loading || saving}
+                hasError={!!fe}
+                ariaLabel={`${label} rate`}
+              />
+              <Caption error={fe} defaultHint={def !== undefined ? `Default $${def}${unit}` : 'Default unavailable'} />
+            </label>
+          )
+        })}
+      </div>
+
+      {/* ── Edge works ──────────────────────────────────────────── */}
+      <SectionHeader
+        title="Edge works"
+        subtitle="Per-lm rates for hip repoint, valley flashing and box gutter. Charged on repair scopes; included in the full re-roof $/m²."
+      />
+      <div className="mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {EDGE_FIELDS.map(([key, label, unit]) => {
+          const def = defaults?.[key]
+          const fe = fieldErrors[key]
+          return (
+            <label key={key} className="block">
+              <FieldLabel>{label}</FieldLabel>
+              <CurrencyInput
+                value={edgeRates[key]}
+                onChange={(v) => setEdgeRates((r) => ({ ...r, [key]: v }))}
+                placeholder={def !== undefined ? String(def) : ''}
+                disabled={loading || saving}
+                hasError={!!fe}
+                ariaLabel={`${label} rate`}
+              />
+              <Caption error={fe} defaultHint={def !== undefined ? `Default $${def}${unit}` : 'Default unavailable'} />
+            </label>
+          )
+        })}
+        <label className="block">
+          <FieldLabel>Itemise edge works</FieldLabel>
+          <select
+            aria-label="Itemise edge works"
+            value={edgeWorksMode}
+            onChange={(e) => setEdgeWorksMode(e.target.value as '' | 'true' | 'false')}
+            disabled={loading || saving}
+            className="rounded-ctl w-full border border-ink-line bg-ink-deep px-4 py-3 font-mono text-base text-text-pri focus:border-accent focus:outline-none"
+          >
+            <option value="">{defaults ? `Default — ${defaults.price_edge_works === false ? 'Off' : 'On'}` : '—'}</option>
+            <option value="true">On — hip/valley/box-gutter lines on quotes</option>
+            <option value="false">Off — no edge line items</option>
+          </select>
+          <Caption error={fieldErrors.price_edge_works} defaultHint="Master switch for the edge line items." />
+        </label>
+      </div>
+
+      {/* ── Job minimum + solar allowance ───────────────────────── */}
+      <SectionHeader
+        title="Job minimum & solar allowance"
+        subtitle="Dollar amounts, ex GST. Enter 0 to disable; blank falls back to the default."
+      />
+      <div className="mt-4 grid gap-5 sm:grid-cols-3">
+        {DOLLAR_FIELDS.map(([key, label, hint]) => {
+          const def = defaults?.[key]
+          const fe = fieldErrors[key]
+          return (
+            <label key={key} className="block">
+              <FieldLabel>{label}</FieldLabel>
+              <CurrencyInput
+                value={dollars[key]}
+                onChange={(v) => setDollars((d) => ({ ...d, [key]: v }))}
+                placeholder={def !== undefined ? String(def) : ''}
+                disabled={loading || saving}
+                hasError={!!fe}
+                ariaLabel={label}
+              />
+              <Caption error={fe} defaultHint={def !== undefined ? `Default $${def} — ${hint}` : hint} />
+            </label>
+          )
+        })}
+      </div>
+
       {/* ── Upgrade material + GST ──────────────────────────────── */}
       <SectionHeader
         title="Tier framing"
@@ -368,6 +559,23 @@ export function RoofRatesEditor({ accessToken }: Props) {
             setMultiStorey('')
             setAsbestos('')
             setComplexity('')
+            setAccessories({
+              gutter_rate_per_lm: '',
+              downpipe_rate_per_each: '',
+              fascia_rate_per_lm: '',
+              soffit_rate_per_lm: '',
+            })
+            setEdgeRates({
+              ridge_hip_repoint_rate_per_lm: '',
+              valley_flashing_rate_per_lm: '',
+              box_gutter_rate_per_lm: '',
+            })
+            setDollars({
+              call_out_minimum_ex_gst: '',
+              solar_detach_reinstate_base_ex_gst: '',
+              solar_detach_reinstate_per_array_ex_gst: '',
+            })
+            setEdgeWorksMode('')
             setUpgradeMat('')
             setGstMode('')
           }}

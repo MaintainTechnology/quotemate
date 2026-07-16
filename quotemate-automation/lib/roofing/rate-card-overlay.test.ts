@@ -258,3 +258,108 @@ describe('overlay — Corrugated + Spandek rates (roof-types spec)', () => {
     }
   })
 })
+
+describe('accessory rates (gutter / downpipe / fascia / soffit)', () => {
+  it('accepts, validates and merges the four accessory rates', () => {
+    const built = buildOverlayFromInputs({
+      gutter_rate_per_lm: '55',
+      downpipe_rate_per_each: 220,
+      fascia_rate_per_lm: '',
+      soffit_rate_per_lm: null,
+    })
+    expect(built.ok).toBe(true)
+    if (!built.ok) return
+    expect(built.overlay.gutter_rate_per_lm).toBe(55)
+    expect(built.overlay.downpipe_rate_per_each).toBe(220)
+    expect(built.overlay.fascia_rate_per_lm).toBeUndefined()
+
+    const merged = mergeRoofingRateCard(DEFAULT_ROOFING_RATE_CARD, built.overlay)
+    expect(merged.gutter_rate_per_lm).toBe(55)
+    expect(merged.downpipe_rate_per_each).toBe(220)
+    // Blank inputs fall back to the defaults.
+    expect(merged.fascia_rate_per_lm).toBe(DEFAULT_ROOFING_RATE_CARD.fascia_rate_per_lm)
+    expect(merged.soffit_rate_per_lm).toBe(DEFAULT_ROOFING_RATE_CARD.soffit_rate_per_lm)
+  })
+
+  it('rejects out-of-range accessory rates field-by-field', () => {
+    const built = buildOverlayFromInputs({
+      gutter_rate_per_lm: 0,
+      downpipe_rate_per_each: 5000,
+      fascia_rate_per_lm: 'abc',
+    })
+    expect(built.ok).toBe(false)
+    if (built.ok) return
+    const fields = built.issues.map((i) => i.field)
+    expect(fields).toContain('gutter_rate_per_lm')
+    expect(fields).toContain('downpipe_rate_per_each')
+    expect(fields).toContain('fascia_rate_per_lm')
+  })
+
+  it('round-trips through the stored-overlay parser', () => {
+    const parsed = parseRoofingRateOverlay({ gutter_rate_per_lm: 48, soffit_rate_per_lm: 52 })
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    const merged = mergeRoofingRateCard(DEFAULT_ROOFING_RATE_CARD, parsed.overlay)
+    expect(merged.gutter_rate_per_lm).toBe(48)
+    expect(merged.soffit_rate_per_lm).toBe(52)
+  })
+})
+
+describe('edge-works rates, call-out minimum and solar allowance', () => {
+  it('accepts, validates and merges every remaining pricing lever', () => {
+    const built = buildOverlayFromInputs({
+      ridge_hip_repoint_rate_per_lm: '15',
+      valley_flashing_rate_per_lm: 50,
+      box_gutter_rate_per_lm: 70,
+      price_edge_works: false,
+      call_out_minimum_ex_gst: 0, // 0 is meaningful — no floor
+      solar_detach_reinstate_base_ex_gst: '1200',
+      solar_detach_reinstate_per_array_ex_gst: 800,
+    })
+    expect(built.ok).toBe(true)
+    if (!built.ok) return
+    expect(built.overlay.ridge_hip_repoint_rate_per_lm).toBe(15)
+    expect(built.overlay.price_edge_works).toBe(false)
+    expect(built.overlay.call_out_minimum_ex_gst).toBe(0)
+    // The solar allowances survive the dashboard save (regression: they
+    // were previously dropped by buildOverlayFromInputs, wiping any
+    // stored override on every Roof-rates save).
+    expect(built.overlay.solar_detach_reinstate_base_ex_gst).toBe(1200)
+    expect(built.overlay.solar_detach_reinstate_per_array_ex_gst).toBe(800)
+
+    const merged = mergeRoofingRateCard(DEFAULT_ROOFING_RATE_CARD, built.overlay)
+    expect(merged.ridge_hip_repoint_rate_per_lm).toBe(15)
+    expect(merged.valley_flashing_rate_per_lm).toBe(50)
+    expect(merged.box_gutter_rate_per_lm).toBe(70)
+    expect(merged.price_edge_works).toBe(false)
+    expect(merged.call_out_minimum_ex_gst).toBe(0)
+    expect(
+      (merged as { solar_detach_reinstate_base_ex_gst?: number }).solar_detach_reinstate_base_ex_gst,
+    ).toBe(1200)
+  })
+
+  it('rejects out-of-range values field-by-field', () => {
+    const built = buildOverlayFromInputs({
+      ridge_hip_repoint_rate_per_lm: 0, // rates must be > 0
+      call_out_minimum_ex_gst: 50000, // above the typo cap
+      solar_detach_reinstate_base_ex_gst: -1,
+    })
+    expect(built.ok).toBe(false)
+    if (built.ok) return
+    const fields = built.issues.map((i) => i.field)
+    expect(fields).toContain('ridge_hip_repoint_rate_per_lm')
+    expect(fields).toContain('call_out_minimum_ex_gst')
+    expect(fields).toContain('solar_detach_reinstate_base_ex_gst')
+  })
+
+  it('flows a tenant edge rate + call-out floor into pricing via the parser', () => {
+    const card = effectiveRateCardFromOverlay({
+      valley_flashing_rate_per_lm: 55,
+      call_out_minimum_ex_gst: 900,
+      price_edge_works: true,
+    })
+    expect(card.valley_flashing_rate_per_lm).toBe(55)
+    expect(card.call_out_minimum_ex_gst).toBe(900)
+    expect(card.price_edge_works).toBe(true)
+  })
+})

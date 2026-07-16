@@ -21,6 +21,7 @@ import {
   parseRoofingRateOverlay,
 } from '@/lib/roofing/rate-card-overlay'
 import { DEFAULT_ROOFING_RATE_CARD } from '@/lib/roofing/pricing'
+import { SOLAR_ALLOWANCE_DEFAULTS } from '@/lib/roofing/solar'
 
 export const dynamic = 'force-dynamic'
 
@@ -91,6 +92,17 @@ export async function GET(req: Request) {
       complexity_loading_pct: 0,
       upgrade_material: DEFAULT_ROOFING_RATE_CARD.upgrade_material,
       gst_registered: DEFAULT_ROOFING_RATE_CARD.gst_registered,
+      gutter_rate_per_lm: DEFAULT_ROOFING_RATE_CARD.gutter_rate_per_lm,
+      downpipe_rate_per_each: DEFAULT_ROOFING_RATE_CARD.downpipe_rate_per_each,
+      fascia_rate_per_lm: DEFAULT_ROOFING_RATE_CARD.fascia_rate_per_lm,
+      soffit_rate_per_lm: DEFAULT_ROOFING_RATE_CARD.soffit_rate_per_lm,
+      ridge_hip_repoint_rate_per_lm: DEFAULT_ROOFING_RATE_CARD.ridge_hip_repoint_rate_per_lm,
+      valley_flashing_rate_per_lm: DEFAULT_ROOFING_RATE_CARD.valley_flashing_rate_per_lm,
+      box_gutter_rate_per_lm: DEFAULT_ROOFING_RATE_CARD.box_gutter_rate_per_lm,
+      price_edge_works: DEFAULT_ROOFING_RATE_CARD.price_edge_works,
+      call_out_minimum_ex_gst: DEFAULT_ROOFING_RATE_CARD.call_out_minimum_ex_gst,
+      solar_detach_reinstate_base_ex_gst: SOLAR_ALLOWANCE_DEFAULTS.base_ex_gst,
+      solar_detach_reinstate_per_array_ex_gst: SOLAR_ALLOWANCE_DEFAULTS.per_array_ex_gst,
     },
     overrides: {
       reroof_rate_per_m2: overrideObj.reroof_rate_per_m2 ?? {},
@@ -99,6 +111,17 @@ export async function GET(req: Request) {
       complexity_loading_pct: overrideObj.complexity_loading_pct ?? null,
       upgrade_material: overrideObj.upgrade_material ?? null,
       gst_registered: overrideObj.gst_registered ?? null,
+      gutter_rate_per_lm: overrideObj.gutter_rate_per_lm ?? null,
+      downpipe_rate_per_each: overrideObj.downpipe_rate_per_each ?? null,
+      fascia_rate_per_lm: overrideObj.fascia_rate_per_lm ?? null,
+      soffit_rate_per_lm: overrideObj.soffit_rate_per_lm ?? null,
+      ridge_hip_repoint_rate_per_lm: overrideObj.ridge_hip_repoint_rate_per_lm ?? null,
+      valley_flashing_rate_per_lm: overrideObj.valley_flashing_rate_per_lm ?? null,
+      box_gutter_rate_per_lm: overrideObj.box_gutter_rate_per_lm ?? null,
+      price_edge_works: overrideObj.price_edge_works ?? null,
+      call_out_minimum_ex_gst: overrideObj.call_out_minimum_ex_gst ?? null,
+      solar_detach_reinstate_base_ex_gst: overrideObj.solar_detach_reinstate_base_ex_gst ?? null,
+      solar_detach_reinstate_per_array_ex_gst: overrideObj.solar_detach_reinstate_per_array_ex_gst ?? null,
     },
     has_pricing_book: !!book,
   })

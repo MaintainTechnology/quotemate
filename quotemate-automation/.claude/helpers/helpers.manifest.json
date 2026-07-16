@@ -1,13 +1,13 @@
 {
   "manifest": {
-    "version": "3.30.0",
+    "version": "3.32.0",
     "files": {
       "auto-memory-hook.mjs": "e3e1033b24704992ddef6b31c7fa9dd7fcd9e1af7935dd77ef73402b916b31e6",
-      "hook-handler.cjs": "dc926a1a585abac85941347894632a800a9c4394e99166726017643e5b3c5950",
+      "hook-handler.cjs": "f87ec28684bfc5fd0a54c46bd2a53a3fb037defe71d0ea4b8a5cb88a2cd87a3f",
       "intelligence.cjs": "5a55d979cb7ba5c8c4f27f3b2e6d686fbb1045d180023b803da672a37e05b915",
-      "statusline.cjs": "8416172e504b03f9ec2266a47bba048578c3b1e30c5c7c97a0a8261460cd601d"
+      "statusline.cjs": "7d7bdee732e1c75b863e409afb86ce0d712f4919245e990d806da6752015bffa"
     }
   },
-  "signature": "V62Co3JaEVPFyVi0Miuo0+CdhriygvtceQlJiMKu7sBysvVUOObrueDW9j3hJ7ShWQYwLppMpndTt3EBiI9QDA==",
+  "signature": "vOWP/i+ctJpD8NNHq6RhgZnxi748YJMlSSkYILMrxytsw5bhQK3322MKyz1iwyvxzNo7Jov1hPuqeDU+vCu2CQ==",
   "algorithm": "ed25519"
 }

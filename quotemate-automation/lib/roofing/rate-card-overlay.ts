@@ -47,6 +47,15 @@ export const MIN_LOADING_PCT = 0
  *  so a typo can't add an absurd amount to a quote. */
 export const MAX_SOLAR_ALLOWANCE = 20000
 
+/** Accessory per-lm rates (gutter / fascia / soffit) share the m² cap; a
+ *  per-each downpipe rate gets its own sanity ceiling. */
+export const MAX_ACCESSORY_RATE_PER_LM = MAX_RATE_PER_M2
+export const MAX_ACCESSORY_RATE_EACH = 2000
+
+/** Call-out minimum is a per-structure dollar floor, not a rate. 0 is
+ *  meaningful (no floor); cap guards against a "$55000" typo. */
+export const MAX_CALL_OUT_MINIMUM = 10000
+
 /** Materials the editor exposes. Phase 1 covers every key in the
  *  rate card except `unknown` (which is never user-selected). */
 export const EDITABLE_MATERIALS: ReadonlyArray<RoofMaterial> = [
@@ -111,6 +120,60 @@ export const RoofingRateOverlaySchema = z.object({
     .optional()
     .nullable(),
   gst_registered: z.boolean().optional().nullable(),
+  // Accessory rates (gutter / downpipe / fascia / soffit) — priced only
+  // against tradie-confirmed quantities on the measure page.
+  gutter_rate_per_lm: z
+    .number()
+    .positive('Rate must be greater than 0')
+    .max(MAX_ACCESSORY_RATE_PER_LM, `Rate must be at most $${MAX_ACCESSORY_RATE_PER_LM}/lm`)
+    .optional()
+    .nullable(),
+  downpipe_rate_per_each: z
+    .number()
+    .positive('Rate must be greater than 0')
+    .max(MAX_ACCESSORY_RATE_EACH, `Rate must be at most $${MAX_ACCESSORY_RATE_EACH} each`)
+    .optional()
+    .nullable(),
+  fascia_rate_per_lm: z
+    .number()
+    .positive('Rate must be greater than 0')
+    .max(MAX_ACCESSORY_RATE_PER_LM, `Rate must be at most $${MAX_ACCESSORY_RATE_PER_LM}/lm`)
+    .optional()
+    .nullable(),
+  soffit_rate_per_lm: z
+    .number()
+    .positive('Rate must be greater than 0')
+    .max(MAX_ACCESSORY_RATE_PER_LM, `Rate must be at most $${MAX_ACCESSORY_RATE_PER_LM}/lm`)
+    .optional()
+    .nullable(),
+  // Edge-works rates (hip repoint / valley flashing / box gutter) + the
+  // master itemisation switch.
+  ridge_hip_repoint_rate_per_lm: z
+    .number()
+    .positive('Rate must be greater than 0')
+    .max(MAX_ACCESSORY_RATE_PER_LM, `Rate must be at most $${MAX_ACCESSORY_RATE_PER_LM}/lm`)
+    .optional()
+    .nullable(),
+  valley_flashing_rate_per_lm: z
+    .number()
+    .positive('Rate must be greater than 0')
+    .max(MAX_ACCESSORY_RATE_PER_LM, `Rate must be at most $${MAX_ACCESSORY_RATE_PER_LM}/lm`)
+    .optional()
+    .nullable(),
+  box_gutter_rate_per_lm: z
+    .number()
+    .positive('Rate must be greater than 0')
+    .max(MAX_ACCESSORY_RATE_PER_LM, `Rate must be at most $${MAX_ACCESSORY_RATE_PER_LM}/lm`)
+    .optional()
+    .nullable(),
+  price_edge_works: z.boolean().optional().nullable(),
+  // Per-structure minimum job charge (dollars ex-GST; 0 = no floor).
+  call_out_minimum_ex_gst: z
+    .number()
+    .min(0, 'Minimum must be $0 or more')
+    .max(MAX_CALL_OUT_MINIMUM, `Minimum must be at most $${MAX_CALL_OUT_MINIMUM}`)
+    .optional()
+    .nullable(),
 })
 
 export type RoofingRateOverlay = z.infer<typeof RoofingRateOverlaySchema>
@@ -196,6 +259,27 @@ export function mergeRoofingRateCard(
     merged = { ...merged, gst_registered: overlay.gst_registered }
   }
 
+  // Accessory + edge-works rates and the call-out floor — declared on the
+  // base RoofingRateCard type, so a plain spread override works.
+  for (const key of [
+    'gutter_rate_per_lm',
+    'downpipe_rate_per_each',
+    'fascia_rate_per_lm',
+    'soffit_rate_per_lm',
+    'ridge_hip_repoint_rate_per_lm',
+    'valley_flashing_rate_per_lm',
+    'box_gutter_rate_per_lm',
+    'call_out_minimum_ex_gst',
+  ] as const) {
+    const v = overlay[key]
+    if (typeof v === 'number' && Number.isFinite(v)) {
+      merged = { ...merged, [key]: v }
+    }
+  }
+  if (typeof overlay.price_edge_works === 'boolean') {
+    merged = { ...merged, price_edge_works: overlay.price_edge_works }
+  }
+
   // Complexity loading — new lever the base type does not declare.
   // Stash on the returned object so callers that read it via the
   // `withComplexityLoading` helper find it; callers that ignore it see
@@ -256,6 +340,17 @@ export type DashboardInputs = {
   complexity_loading_pct?: number | string | null
   upgrade_material?: RoofMaterial | null
   gst_registered?: boolean | null
+  gutter_rate_per_lm?: number | string | null
+  downpipe_rate_per_each?: number | string | null
+  fascia_rate_per_lm?: number | string | null
+  soffit_rate_per_lm?: number | string | null
+  ridge_hip_repoint_rate_per_lm?: number | string | null
+  valley_flashing_rate_per_lm?: number | string | null
+  box_gutter_rate_per_lm?: number | string | null
+  price_edge_works?: boolean | null
+  call_out_minimum_ex_gst?: number | string | null
+  solar_detach_reinstate_base_ex_gst?: number | string | null
+  solar_detach_reinstate_per_array_ex_gst?: number | string | null
 }
 
 /**
@@ -339,6 +434,63 @@ export function buildOverlayFromInputs(
       continue
     }
     overlay[key] = n
+  }
+
+  // ── Accessory + edge-works rates (strictly positive dollars) ─────
+  const accessoryKeys = [
+    ['gutter_rate_per_lm', dashboard.gutter_rate_per_lm, MAX_ACCESSORY_RATE_PER_LM, '/lm'],
+    ['downpipe_rate_per_each', dashboard.downpipe_rate_per_each, MAX_ACCESSORY_RATE_EACH, ' each'],
+    ['fascia_rate_per_lm', dashboard.fascia_rate_per_lm, MAX_ACCESSORY_RATE_PER_LM, '/lm'],
+    ['soffit_rate_per_lm', dashboard.soffit_rate_per_lm, MAX_ACCESSORY_RATE_PER_LM, '/lm'],
+    ['ridge_hip_repoint_rate_per_lm', dashboard.ridge_hip_repoint_rate_per_lm, MAX_ACCESSORY_RATE_PER_LM, '/lm'],
+    ['valley_flashing_rate_per_lm', dashboard.valley_flashing_rate_per_lm, MAX_ACCESSORY_RATE_PER_LM, '/lm'],
+    ['box_gutter_rate_per_lm', dashboard.box_gutter_rate_per_lm, MAX_ACCESSORY_RATE_PER_LM, '/lm'],
+  ] as const
+  for (const [key, raw, max, unitSuffix] of accessoryKeys) {
+    if (raw === null || raw === undefined || raw === '') continue
+    const n = typeof raw === 'number' ? raw : Number(raw)
+    if (!Number.isFinite(n)) {
+      issues.push({ field: key, message: 'Rate must be a number.' })
+      continue
+    }
+    if (n <= 0) {
+      issues.push({ field: key, message: 'Rate must be greater than 0.' })
+      continue
+    }
+    if (n > max) {
+      issues.push({ field: key, message: `Rate must be at most $${max}${unitSuffix}.` })
+      continue
+    }
+    overlay[key] = n
+  }
+
+  // ── Dollar floors / allowances (0 is meaningful) ─────────────────
+  const dollarKeys = [
+    ['call_out_minimum_ex_gst', dashboard.call_out_minimum_ex_gst, MAX_CALL_OUT_MINIMUM],
+    ['solar_detach_reinstate_base_ex_gst', dashboard.solar_detach_reinstate_base_ex_gst, MAX_SOLAR_ALLOWANCE],
+    ['solar_detach_reinstate_per_array_ex_gst', dashboard.solar_detach_reinstate_per_array_ex_gst, MAX_SOLAR_ALLOWANCE],
+  ] as const
+  for (const [key, raw, max] of dollarKeys) {
+    if (raw === null || raw === undefined || raw === '') continue
+    const n = typeof raw === 'number' ? raw : Number(raw)
+    if (!Number.isFinite(n)) {
+      issues.push({ field: key, message: 'Amount must be a number.' })
+      continue
+    }
+    if (n < 0) {
+      issues.push({ field: key, message: 'Amount must be $0 or more.' })
+      continue
+    }
+    if (n > max) {
+      issues.push({ field: key, message: `Amount must be at most $${max}.` })
+      continue
+    }
+    overlay[key] = n
+  }
+
+  // ── Edge-works itemisation switch ─────────────────────────────────
+  if (typeof dashboard.price_edge_works === 'boolean') {
+    overlay.price_edge_works = dashboard.price_edge_works
   }
 
   // ── Upgrade material (enum) ──────────────────────────────────────

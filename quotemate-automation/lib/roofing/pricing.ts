@@ -33,6 +33,34 @@ import type {
   RoofingRateCard,
   RoofingRoutingDecision,
 } from './types'
+import { edgeLengthM } from './map-utils'
+
+/**
+ * PURE — footprint perimeter in metres from the polygon outer ring
+ * (equirectangular, the same model as layout-plan's edge-protection basis),
+ * with a 4×√footprint fallback when no geometry is stored. Display /
+ * suggestion only — accessory quantities are always tradie-entered, never
+ * auto-priced from this estimate.
+ */
+export function footprintPerimeterM(
+  metrics: Pick<RoofMetrics, 'polygon_geojson' | 'footprint_m2'>,
+): number | null {
+  const ring = metrics.polygon_geojson?.coordinates?.[0]
+  if (Array.isArray(ring) && ring.length >= 4) {
+    let sum = 0
+    for (let i = 0; i < ring.length - 1; i++) {
+      const a = ring[i]
+      const b = ring[i + 1]
+      if (Array.isArray(a) && Array.isArray(b) && a.length >= 2 && b.length >= 2) {
+        sum += edgeLengthM([a[0], a[1]], [b[0], b[1]])
+      }
+    }
+    if (sum > 0) return roundTo(sum, 1)
+  }
+  const fp = metrics.footprint_m2
+  if (Number.isFinite(fp) && fp > 0) return roundTo(4 * Math.sqrt(fp), 1)
+  return null
+}
 
 // ── Pitch corrections ───────────────────────────────────────────────
 // Footprint × correction = sloped area. Per the standard residential
@@ -151,6 +179,12 @@ export const DEFAULT_ROOFING_RATE_CARD: RoofingRateCard = {
   valley_flashing_rate_per_lm: 45.0, // 'Valley flashing replacement' (lm)
   box_gutter_rate_per_lm: 60.0, // 'Box gutter replacement' (lm)
   price_edge_works: true,
+  // Accessory rates — AU supply + install norms (Q1 2026); per-tenant
+  // overridable via the roofing rate-card overlay.
+  gutter_rate_per_lm: 45.0, // Quad Colorbond gutter, supply + install
+  downpipe_rate_per_each: 180.0, // 90mm Colorbond downpipe, supply + install
+  fascia_rate_per_lm: 35.0, // metal fascia replacement
+  soffit_rate_per_lm: 45.0, // soffit / eave lining replacement
 }
 
 // ── Loadings ────────────────────────────────────────────────────────
@@ -234,6 +268,20 @@ const REPAIR_INTENTS: ReadonlySet<RoofJobIntent> = new Set<RoofJobIntent>([
 
 function clampRange(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, n))
+}
+
+/**
+ * PURE — classify a pitch angle in degrees into the declared PitchBucket.
+ * Mirrors the bucket boundaries documented on PitchBucket (types.ts):
+ * < 20° shallow, 20–25° standard, 26–35° steep, > 35° very_steep (which
+ * routes to inspection). Non-finite / out-of-range values are unknown.
+ */
+export function pitchBucketFromDegrees(deg: number): PitchBucket {
+  if (!Number.isFinite(deg) || deg <= 0 || deg >= 80) return 'unknown'
+  if (deg < 20) return 'shallow'
+  if (deg <= 25) return 'standard'
+  if (deg <= 35) return 'steep'
+  return 'very_steep'
 }
 
 /** PURE — usable pitch angle in degrees, preferring measured pitch. */
@@ -588,6 +636,33 @@ export function calculateRoofingPrice(args: {
           source: 'material',
         })
       }
+
+      // Accessory works (gutter / downpipes / fascia / soffit) — same trust
+      // model as box gutter: separate scope, charged on every priceable tier,
+      // and the quantity is ONLY a tradie-confirmed input (never inferred
+      // from eave length or the footprint).
+      const pushAccessory = (
+        qty: number | null | undefined,
+        rate: number | undefined,
+        unit: 'lm' | 'each',
+        description: string,
+      ) => {
+        if (qty === null || qty === undefined || !Number.isFinite(qty) || qty <= 0) return
+        const r = rate ?? 0
+        if (r <= 0) return
+        line_items.push({
+          unit,
+          quantity: qty,
+          description,
+          unit_price_ex_gst: roundTo(r, 2),
+          total_ex_gst: roundTo(qty * r, 2),
+          source: 'material',
+        })
+      }
+      pushAccessory(metrics.gutter_lm, rateCard.gutter_rate_per_lm, 'lm', 'Gutter replacement (Quad profile).')
+      pushAccessory(metrics.downpipe_count, rateCard.downpipe_rate_per_each, 'each', 'Downpipe replacement.')
+      pushAccessory(metrics.fascia_lm, rateCard.fascia_rate_per_lm, 'lm', 'Fascia replacement.')
+      pushAccessory(metrics.soffit_lm, rateCard.soffit_rate_per_lm, 'lm', 'Soffit / eave lining replacement.')
     }
 
     // Tier total is the sum of its line items — keeps the invariant

@@ -146,6 +146,18 @@ export type RoofMetrics = {
    *  (internal / parapet feature) — set only when a tradie confirms it on the
    *  measure page. Null / absent = none. */
   box_gutter_lm?: number | null
+  // ── Tradie-confirmed accessory quantities (measure-page inputs) ──────
+  // Same trust model as box_gutter_lm: NEVER inferred from the footprint or
+  // eave length — priced only when a tradie explicitly enters a quantity.
+  // Null / absent = not selected, no line item.
+  /** Gutter replacement length in linear metres (tradie-confirmed). */
+  gutter_lm?: number | null
+  /** Downpipe replacement count (tradie-confirmed). */
+  downpipe_count?: number | null
+  /** Fascia replacement length in linear metres (tradie-confirmed). */
+  fascia_lm?: number | null
+  /** Soffit / eave-lining replacement length in linear metres (tradie-confirmed). */
+  soffit_lm?: number | null
   /** GeoJSON polygon of the building footprint, EPSG:4326. */
   polygon_geojson: GeoJSONPolygon | null
   /** ISO date of the source-data capture (LiDAR survey, Geoscape refresh). */
@@ -303,6 +315,17 @@ export type RoofingRateCard = {
    * pre-edge-works output exactly. Optional; defaults to true.
    */
   price_edge_works?: boolean
+  // ── Accessory rates (tradie-confirmed quantities × these rates) ──────
+  // All optional; the default rate card supplies them and the per-tenant
+  // pricing_book.overlays.roofing_rate_card overrides them.
+  /** Per-linear-metre rate to supply + install new gutter (Quad Colorbond). */
+  gutter_rate_per_lm?: number
+  /** Per-unit rate to supply + install a downpipe. */
+  downpipe_rate_per_each?: number
+  /** Per-linear-metre rate to replace fascia. */
+  fascia_rate_per_lm?: number
+  /** Per-linear-metre rate to replace soffit / eave lining. */
+  soffit_rate_per_lm?: number
 }
 
 /**

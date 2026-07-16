@@ -14,7 +14,31 @@ import type { MultiRoofQuote, RoofMetrics, RoofStructurePrice } from '@/lib/roof
 import type { SolarQuoteAddon } from '@/lib/roofing/solar'
 import type { SaveAsQuoteRequest } from '@/lib/roofing/save-as-quote-schema'
 import { combinedTotalsForIndices } from '@/lib/roofing/selection'
+// Pure pricing helpers — the SAME functions the server reprice uses, so the
+// dependent-value preview can never drift from what saving will produce.
+import {
+  footprintPerimeterM,
+  perEdgeLength,
+  pitchBucketFromDegrees,
+  slopedAreaFromFootprint,
+} from '@/lib/roofing/pricing'
 import { getAuthToken } from '@/lib/auth/client-token'
+
+/** The PATCH `edges` entry (sans index) — dirty fields only for the new
+ *  measurement/accessory overrides; undefined = keep the stored value. */
+type EdgePatch = {
+  hips: number | null
+  valleys: number | null
+  box_gutter_lm: number | null
+  gutter_lm?: number | null
+  downpipe_count?: number | null
+  fascia_lm?: number | null
+  soffit_lm?: number | null
+  pitch_degrees?: number
+  sloped_area_m2?: number
+  form?: RoofMetrics['form']
+  storeys?: number
+}
 
 function money(n: number | null | undefined): string {
   if (typeof n !== 'number' || !Number.isFinite(n)) return '0'
@@ -208,10 +232,7 @@ export function MeasurementReview({
   // counts for one structure; the server re-prices in place and we refresh to
   // show the new tiers + box-gutter line.
   const applyEdges = useCallback(
-    async (
-      index1: number,
-      edges: { hips: number | null; valleys: number | null; box_gutter_lm: number | null },
-    ) => {
+    async (index1: number, edges: EdgePatch) => {
       setEdgeSaving(index1)
       setErr(null)
       try {
@@ -402,7 +423,7 @@ export function MeasurementReview({
           const isIncluded = included.includes(index1)
           return (
             <StructureCard
-              key={`${s.buildingId ?? i}-${s.metrics.hips ?? ''}-${s.metrics.valleys ?? ''}-${s.metrics.box_gutter_lm ?? ''}`}
+              key={`${s.buildingId ?? i}-${s.metrics.hips ?? ''}-${s.metrics.valleys ?? ''}-${s.metrics.box_gutter_lm ?? ''}-${s.metrics.pitch_degrees ?? ''}-${s.metrics.sloped_area_m2 ?? ''}-${s.metrics.form}-${s.metrics.storeys ?? ''}-${s.metrics.gutter_lm ?? ''}-${s.metrics.downpipe_count ?? ''}-${s.metrics.fascia_lm ?? ''}-${s.metrics.soffit_lm ?? ''}`}
               structure={s}
               index={i}
               isIncluded={isIncluded}
@@ -549,10 +570,7 @@ function StructureCard({
   disabled: boolean
   savingEdges: boolean
   onToggle: () => void
-  onApplyEdges: (
-    index1: number,
-    edges: { hips: number | null; valleys: number | null; box_gutter_lm: number | null },
-  ) => void | Promise<void>
+  onApplyEdges: (index1: number, edges: EdgePatch) => void | Promise<void>
 }) {
   const m = structure.metrics
   const p = structure.price
@@ -560,16 +578,76 @@ function StructureCard({
   const [hips, setHips] = useState(m.hips != null ? String(m.hips) : '')
   const [valleys, setValleys] = useState(m.valleys != null ? String(m.valleys) : '')
   const [boxGutter, setBoxGutter] = useState(m.box_gutter_lm != null ? String(m.box_gutter_lm) : '')
+  // Measurement corrections — initialised from the stored metrics; sent
+  // only when changed so an untouched field never stomps a measured value.
+  const initialPitch = m.pitch_degrees != null ? String(m.pitch_degrees) : ''
+  const initialArea = m.sloped_area_m2 != null ? String(Math.round(m.sloped_area_m2)) : ''
+  const initialStoreys = m.storeys != null ? String(m.storeys) : ''
+  const [pitchDeg, setPitchDeg] = useState(initialPitch)
+  const [areaM2, setAreaM2] = useState(initialArea)
+  const [form, setForm] = useState<RoofMetrics['form']>(m.form)
+  const [storeys, setStoreys] = useState(initialStoreys)
+  // Accessory quantities — explicit tradie inputs (blank = not selected).
+  const [gutterLm, setGutterLm] = useState(m.gutter_lm != null ? String(m.gutter_lm) : '')
+  const [downpipes, setDownpipes] = useState(m.downpipe_count != null ? String(m.downpipe_count) : '')
+  const [fasciaLm, setFasciaLm] = useState(m.fascia_lm != null ? String(m.fascia_lm) : '')
+  const [soffitLm, setSoffitLm] = useState(m.soffit_lm != null ? String(m.soffit_lm) : '')
   const num = (v: string): number | null => {
     const n = Number(v)
     return v.trim() === '' || !Number.isFinite(n) ? null : Math.max(0, n)
   }
-  const submitEdges = () =>
-    void onApplyEdges(index + 1, {
+
+  // Suggested accessory quantities from the footprint perimeter — shown as
+  // hints only, NEVER auto-priced (gutter scope is an explicit selection).
+  const perimeter = footprintPerimeterM(m)
+  const suggestedDownpipes = perimeter != null ? Math.ceil(perimeter / 12) : null
+
+  // Dependent-value preview — the SAME pure maths the server reprice runs,
+  // so the tradie sees what a pitch/area edit will change before saving.
+  const pitchDirty = pitchDeg !== initialPitch && pitchDeg.trim() !== ''
+  const areaDirty = areaM2 !== initialArea && areaM2.trim() !== ''
+  const preview = (() => {
+    if (!pitchDirty) return null
+    const deg = num(pitchDeg)
+    if (deg === null || deg <= 0) return null
+    const bucket = pitchBucketFromDegrees(deg)
+    const newArea = slopedAreaFromFootprint(m.footprint_m2, bucket)
+    const edge = perEdgeLength({ ...m, pitch_degrees: deg }, bucket)
+    const areaNote = areaDirty
+      ? 'sloped area uses your entered value'
+      : newArea != null
+        ? `sloped area recomputes to ${Math.round(newArea)} m²`
+        : 'sloped area cannot be derived — routes to inspection'
+    return `Pitch ${deg}° = ${bucket.replace('_', ' ')} · ${areaNote} · hip/valley basis ${edge.lengthM} m per edge`
+  })()
+
+  const submitEdges = () => {
+    const patch: EdgePatch = {
       hips: hips.trim() === '' ? null : Math.round(num(hips) ?? 0),
       valleys: valleys.trim() === '' ? null : Math.round(num(valleys) ?? 0),
       box_gutter_lm: num(boxGutter),
-    })
+      // Accessories are always sent (blank = null removes the line).
+      gutter_lm: num(gutterLm),
+      downpipe_count: downpipes.trim() === '' ? null : Math.round(num(downpipes) ?? 0),
+      fascia_lm: num(fasciaLm),
+      soffit_lm: num(soffitLm),
+    }
+    // Measurement corrections only when actually edited to a value.
+    if (pitchDirty) {
+      const v = num(pitchDeg)
+      if (v !== null && v > 0) patch.pitch_degrees = v
+    }
+    if (areaDirty) {
+      const v = num(areaM2)
+      if (v !== null && v > 0) patch.sloped_area_m2 = v
+    }
+    if (form !== m.form) patch.form = form
+    if (storeys !== initialStoreys && storeys.trim() !== '') {
+      const v = num(storeys)
+      if (v !== null && v >= 1) patch.storeys = Math.round(v)
+    }
+    void onApplyEdges(index + 1, patch)
+  }
   return (
     <article
       className={`border bg-ink-card p-6 transition-colors sm:p-7 ${
@@ -621,41 +699,88 @@ function StructureCard({
         />
       </div>
 
-      {/* Tradie-confirmed edge counts — edit + re-price (R3.1). Box gutter is not
-          auto-detected (invisible in the 2D footprint), so it starts blank. */}
+      {/* Tradie-confirmed measurement + accessory edits — edit + re-price
+          (R3.1). Box gutter and accessories are not auto-detected (invisible
+          in the 2D footprint), so they start blank. */}
       <div className="mt-5 border-t border-ink-line pt-4">
         <div className="mb-2 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
           Confirm counts — edit to correct, then update prices
         </div>
         <div className="grid max-w-md grid-cols-3 gap-3">
-          <label className="flex flex-col gap-1 text-text-sec">
-            <span className="font-mono text-[0.62rem] uppercase tracking-[0.12em]">Hips</span>
-            <input
-              type="number" min={0} step={1} value={hips} disabled={disabled}
-              onChange={(e) => setHips(e.target.value)}
-              className="border border-ink-line bg-ink-deep px-3 py-2 font-mono text-text-pri disabled:opacity-50"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-text-sec">
-            <span className="font-mono text-[0.62rem] uppercase tracking-[0.12em]">Valleys</span>
-            <input
-              type="number" min={0} step={1} value={valleys} disabled={disabled}
-              onChange={(e) => setValleys(e.target.value)}
-              className="border border-ink-line bg-ink-deep px-3 py-2 font-mono text-text-pri disabled:opacity-50"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-text-sec">
-            <span className="font-mono text-[0.62rem] uppercase tracking-[0.12em]">Box gutter (lm)</span>
-            <input
-              type="number" min={0} step={0.1} value={boxGutter} disabled={disabled}
-              onChange={(e) => setBoxGutter(e.target.value)}
-              className="border border-ink-line bg-ink-deep px-3 py-2 font-mono text-text-pri disabled:opacity-50"
-            />
-          </label>
+          <EditField label="Hips" value={hips} onChange={setHips} disabled={disabled} step={1} />
+          <EditField label="Valleys" value={valleys} onChange={setValleys} disabled={disabled} step={1} />
+          <EditField label="Box gutter (lm)" value={boxGutter} onChange={setBoxGutter} disabled={disabled} step={0.1} />
         </div>
+
+        {/* Measurement corrections — interconnected: pitch re-buckets and
+            re-derives sloped area + hip/valley lengths; explicit area wins. */}
+        <div className="mt-4 mb-2 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+          Measurements — adjust after inspection
+        </div>
+        <div className="grid max-w-2xl grid-cols-2 gap-3 sm:grid-cols-4">
+          <EditField
+            label="Pitch (°)" value={pitchDeg} onChange={setPitchDeg} disabled={disabled}
+            step={0.5} placeholder={structure.inputs.pitch}
+          />
+          <EditField
+            label="Sloped area (m²)" value={areaM2} onChange={setAreaM2} disabled={disabled}
+            step={1} placeholder={m.footprint_m2 ? `fp ${Math.round(m.footprint_m2)}` : undefined}
+          />
+          <label className="flex flex-col gap-1 text-text-sec">
+            <span className="font-mono text-[0.62rem] uppercase tracking-[0.12em]">Roof form</span>
+            <select
+              value={form} disabled={disabled}
+              onChange={(e) => setForm(e.target.value as RoofMetrics['form'])}
+              className="border border-ink-line bg-ink-deep px-3 py-2 font-mono text-text-pri disabled:opacity-50"
+            >
+              <option value="gable">Gable</option>
+              <option value="hip">Hip</option>
+              <option value="skillion">Skillion</option>
+              <option value="gable_hip">Gable + hip</option>
+              <option value="complex">Complex (inspect)</option>
+              {m.form === 'unknown' && <option value="unknown">Not classified</option>}
+            </select>
+          </label>
+          <EditField label="Storeys" value={storeys} onChange={setStoreys} disabled={disabled} step={1} />
+        </div>
+        {preview && (
+          <p className="mt-2 max-w-2xl font-mono text-[0.68rem] uppercase tracking-[0.1em] text-accent">
+            Will update · {preview}
+          </p>
+        )}
+
+        {/* Gutters, downpipes + extras — explicit selections, never inferred
+            from the footprint. Perimeter shown as a hint only. */}
+        <div className="mt-4 mb-2 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+          Gutters, downpipes &amp; extras — leave blank to exclude
+        </div>
+        <div className="grid max-w-2xl grid-cols-2 gap-3 sm:grid-cols-4">
+          <EditField
+            label="Gutter (lm)" value={gutterLm} onChange={setGutterLm} disabled={disabled}
+            step={0.1} placeholder={perimeter != null ? `≈${perimeter}` : undefined}
+          />
+          <EditField
+            label="Downpipes" value={downpipes} onChange={setDownpipes} disabled={disabled}
+            step={1} placeholder={suggestedDownpipes != null ? `≈${suggestedDownpipes}` : undefined}
+          />
+          <EditField
+            label="Fascia (lm)" value={fasciaLm} onChange={setFasciaLm} disabled={disabled}
+            step={0.1} placeholder={perimeter != null ? `≈${perimeter}` : undefined}
+          />
+          <EditField
+            label="Soffits (lm)" value={soffitLm} onChange={setSoffitLm} disabled={disabled}
+            step={0.1} placeholder={perimeter != null ? `≈${perimeter}` : undefined}
+          />
+        </div>
+        {perimeter != null && (
+          <p className="mt-2 text-xs text-text-dim">
+            Footprint perimeter ≈ {perimeter} m — a starting point only; enter the lengths you measured.
+          </p>
+        )}
+
         <button
           type="button" onClick={submitEdges} disabled={disabled}
-          className="mt-3 border border-accent bg-accent/10 px-4 py-2 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-accent disabled:opacity-50"
+          className="mt-4 border border-accent bg-accent/10 px-4 py-2 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-accent disabled:opacity-50"
         >
           {savingEdges ? 'Updating…' : 'Update prices'}
         </button>
@@ -682,6 +807,34 @@ function StructureCard({
         </div>
       )}
     </article>
+  )
+}
+
+function EditField({
+  label,
+  value,
+  onChange,
+  disabled,
+  step,
+  placeholder,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  disabled: boolean
+  step: number
+  placeholder?: string
+}) {
+  return (
+    <label className="flex flex-col gap-1 text-text-sec">
+      <span className="font-mono text-[0.62rem] uppercase tracking-[0.12em]">{label}</span>
+      <input
+        type="number" min={0} step={step} value={value} disabled={disabled}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        className="border border-ink-line bg-ink-deep px-3 py-2 font-mono text-text-pri placeholder:text-text-dim disabled:opacity-50"
+      />
+    </label>
   )
 }
 

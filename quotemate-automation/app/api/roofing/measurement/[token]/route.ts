@@ -31,6 +31,20 @@ const EdgeOverrideSchema = z.object({
   hips: z.number().int().min(0).max(50).nullable().optional(),
   valleys: z.number().int().min(0).max(50).nullable().optional(),
   box_gutter_lm: z.number().min(0).max(500).nullable().optional(),
+  // Accessory quantities (tradie-confirmed; null removes the line).
+  gutter_lm: z.number().min(0).max(1000).nullable().optional(),
+  downpipe_count: z.number().int().min(0).max(60).nullable().optional(),
+  fascia_lm: z.number().min(0).max(1000).nullable().optional(),
+  soffit_lm: z.number().min(0).max(1000).nullable().optional(),
+  // Measurement corrections (post-inspection). Positive values only —
+  // clearing a measurement is not supported (see lib/roofing/reprice.ts).
+  pitch_degrees: z.number().min(1).max(75).nullable().optional(),
+  sloped_area_m2: z.number().min(1).max(10000).nullable().optional(),
+  form: z
+    .enum(['gable', 'hip', 'skillion', 'gable_hip', 'complex', 'unknown'])
+    .nullable()
+    .optional(),
+  storeys: z.number().int().min(1).max(10).nullable().optional(),
 })
 const BodySchema = z
   .object({

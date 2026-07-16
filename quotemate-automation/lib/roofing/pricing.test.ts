@@ -7,8 +7,10 @@ import {
   applicableLoadings,
   calculateRoofingPrice,
   deriveEdgeWorks,
+  footprintPerimeterM,
   formLabel,
   perEdgeLength,
+  pitchBucketFromDegrees,
   requiresInspection,
   slopedAreaFromFootprint,
   __test_only__,
@@ -569,5 +571,93 @@ describe('roundTo helper', () => {
     // NaN / Infinity sanity — collapses to 0 rather than propagating.
     expect(roundTo(Number.NaN, 2)).toBe(0)
     expect(roundTo(Number.POSITIVE_INFINITY, 2)).toBe(0)
+  })
+})
+
+describe('pitchBucketFromDegrees', () => {
+  it('classifies the documented bucket boundaries', () => {
+    expect(pitchBucketFromDegrees(15)).toBe('shallow')
+    expect(pitchBucketFromDegrees(19.9)).toBe('shallow')
+    expect(pitchBucketFromDegrees(20)).toBe('standard')
+    expect(pitchBucketFromDegrees(25)).toBe('standard')
+    expect(pitchBucketFromDegrees(26)).toBe('steep')
+    expect(pitchBucketFromDegrees(35)).toBe('steep')
+    expect(pitchBucketFromDegrees(36)).toBe('very_steep')
+  })
+  it('rejects unusable values as unknown', () => {
+    expect(pitchBucketFromDegrees(0)).toBe('unknown')
+    expect(pitchBucketFromDegrees(-5)).toBe('unknown')
+    expect(pitchBucketFromDegrees(80)).toBe('unknown')
+    expect(pitchBucketFromDegrees(Number.NaN)).toBe('unknown')
+  })
+})
+
+describe('footprintPerimeterM', () => {
+  it('measures the polygon outer ring when present', () => {
+    // ~10 m × ~20 m rectangle near the equator (1e-4 deg ≈ 11.1 m lat).
+    const polygon = {
+      type: 'Polygon' as const,
+      coordinates: [[[0, 0], [0.00018, 0], [0.00018, 0.00009], [0, 0.00009], [0, 0]]],
+    }
+    const p = footprintPerimeterM({ polygon_geojson: polygon, footprint_m2: 200 })
+    expect(p).not.toBeNull()
+    expect(p!).toBeGreaterThan(50)
+    expect(p!).toBeLessThan(70)
+  })
+  it('falls back to 4×√footprint without geometry, null without either', () => {
+    expect(footprintPerimeterM({ polygon_geojson: null, footprint_m2: 100 })).toBe(40)
+    expect(footprintPerimeterM({ polygon_geojson: null, footprint_m2: 0 })).toBeNull()
+  })
+})
+
+describe('accessory line items (gutter / downpipe / fascia / soffit)', () => {
+  it('prices tradie-confirmed quantities on every priceable tier and keeps the invariant', () => {
+    const price = calculateRoofingPrice({
+      metrics: baseMetrics({ gutter_lm: 20, downpipe_count: 4, fascia_lm: 18, soffit_lm: 12 }),
+      inputs: baseInputs(),
+    })
+    for (const t of price.tiers) {
+      const items = t.line_items ?? []
+      const gutter = items.find((li) => /^Gutter replacement/.test(li.description))
+      const dp = items.find((li) => /^Downpipe/.test(li.description))
+      const fascia = items.find((li) => /^Fascia/.test(li.description))
+      const soffit = items.find((li) => /^Soffit/.test(li.description))
+      expect(gutter?.total_ex_gst).toBe(900) // 20 lm × $45
+      expect(dp?.unit).toBe('each')
+      expect(dp?.total_ex_gst).toBe(720) // 4 × $180
+      expect(fascia?.total_ex_gst).toBe(630) // 18 lm × $35
+      expect(soffit?.total_ex_gst).toBe(540) // 12 lm × $45
+      // Invariant — the tier total is exactly the sum of its line items.
+      const sum = items.reduce((acc, li) => acc + li.total_ex_gst, 0)
+      expect(t.ex_gst).toBeCloseTo(sum, 2)
+    }
+  })
+
+  it('produces no accessory lines when quantities are absent or null', () => {
+    const price = calculateRoofingPrice({
+      metrics: baseMetrics({ gutter_lm: null, downpipe_count: null }),
+      inputs: baseInputs(),
+    })
+    for (const t of price.tiers) {
+      expect(
+        (t.line_items ?? []).some((li) => /Gutter replacement|Downpipe|Fascia|Soffit/.test(li.description)),
+      ).toBe(false)
+    }
+  })
+
+  it('respects tenant rate-card overrides for accessory rates', () => {
+    const rateCard: RoofingRateCard = {
+      ...DEFAULT_ROOFING_RATE_CARD,
+      gutter_rate_per_lm: 60,
+      downpipe_rate_per_each: 250,
+    }
+    const price = calculateRoofingPrice({
+      metrics: baseMetrics({ gutter_lm: 10, downpipe_count: 2 }),
+      inputs: baseInputs(),
+      rateCard,
+    })
+    const items = price.tiers[1].line_items ?? []
+    expect(items.find((li) => /^Gutter/.test(li.description))?.total_ex_gst).toBe(600)
+    expect(items.find((li) => /^Downpipe/.test(li.description))?.total_ex_gst).toBe(500)
   })
 })
