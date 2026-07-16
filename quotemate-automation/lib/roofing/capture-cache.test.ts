@@ -1,0 +1,37 @@
+// Enhanced-capture cache — pure helper tests.
+
+import { describe, expect, it } from 'vitest'
+import { CAPTURE_VIEWS, cachePathFor, normalizeAddressKey } from './capture-cache'
+
+describe('normalizeAddressKey', () => {
+  it('is case- and punctuation-insensitive', () => {
+    expect(normalizeAddressKey('670 LONDON RD, CHANDLER QLD 4155')).toBe(
+      normalizeAddressKey('670 london rd chandler qld 4155'),
+    )
+  })
+
+  it('collapses whitespace to single hyphens', () => {
+    expect(normalizeAddressKey('  12   Smith  St ')).toBe('12-smith-st')
+  })
+
+  it('strips characters unsafe for storage paths', () => {
+    expect(normalizeAddressKey('5/2 O\'Brien St #4')).toBe('5-2-o-brien-st-4')
+    expect(normalizeAddressKey('Ünit 3, Café Lane')).toBe('unit-3-cafe-lane')
+  })
+
+  it('caps runaway input length', () => {
+    expect(normalizeAddressKey('x'.repeat(500)).length).toBeLessThanOrEqual(120)
+  })
+})
+
+describe('cachePathFor', () => {
+  it('builds enhanced/{key}/{view}', () => {
+    expect(cachePathFor('670 London Rd, Chandler QLD', 'front')).toBe(
+      'enhanced/670-london-rd-chandler-qld/front',
+    )
+  })
+
+  it('covers all five capture views', () => {
+    expect(CAPTURE_VIEWS).toEqual(['front', 'left', 'right', 'back', 'top'])
+  })
+})

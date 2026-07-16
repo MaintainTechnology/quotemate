@@ -20,3 +20,6 @@ Completion promise: "All tests pass"
 
 ## Completion promise check
 "All tests pass" — npm test: 3070 passed, 0 failed (1 skipped = .live test requiring real API keys, skipped by design).
+=== ralph/roofing-3d-capture-upgrades — progress ===
+
+[2026-07-16T15:18] PLAN: 5 stories. Base 3D feature committed. Key constraints: Tripo has no 'top' slot; cache is global by normalized address; auto reads cache, manual bypasses read but writes.

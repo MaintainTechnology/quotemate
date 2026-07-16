@@ -1,51 +1,44 @@
 {
-  "project": "Google Solar API — full feature exploitation for the Instant Solar Estimate",
-  "branch": "main",
+  "project": "Roofing 3D model — enhanced-capture cache + manual capture mode",
+  "branch": "ralph/roofing-3d-capture-upgrades",
   "completion_promise": "All tests pass",
-  "created": "2026-06-13",
-  "requirements": "Implement every unused Google Solar API capability into the solar estimate so tradie + customer get complete install information: (1) unused buildingInsights fields (sunshineQuantiles per plane + whole roof, maxSunshineHoursPerYear, maxArrayAreaMeters2, panelLifetimeYears) with derived per-plane sun scores; (2) dataLayers GeoTIFF pipeline via geoTiff:get — annual flux roof irradiance heatmap PNG, monthly flux -> real seasonal production curve, hourly shade -> shade-free window analysis, DSM -> building height/storeys hint, mask -> roof clipping; (3) cached assets in intake-photos served token-gated; (4) quote page + PDF sections surfacing all of it; (5) EXPANDED_COVERAGE experiment behind an env flag accepting BASE imagery. Money path untouched: all new data is informational/visual; pricing engine inputs unchanged.",
+  "created": "2026-07-16",
+  "requirements": "(1) Address-keyed cache of Gemini-enhanced captures: when polished screenshots already exist for a property address, reuse them (cross-tenant by design) instead of re-enhancing — saves Gemini tokens. (2) Manual capture mode: tradie takes up to 5 screenshots (front, left, right, back, top) of the photorealistic 3D map; they are polished as usual and fed to model generation. Constraint: Tripo multiview accepts only front/left/back/right — 'top' is enhanced + cached but not sent to Tripo. Auto capture reads the cache; manual capture bypasses the read (deliberate framing wins) but writes its enhanced output to the cache.",
   "stories": [
     {
       "id": "S1",
-      "title": "Roof facts: capture unused buildingInsights fields + sun scores",
-      "detail": "Extend SolarRoofFacts/SolarRoofPlane types with max_sunshine_hours_per_year, max_array_area_m2, panel_lifetime_years, whole-roof + per-plane sunshine quantiles. Parse them in roof.ts (roofSegmentStats[].stats.sunshineQuantiles, wholeRoofStats.sunshineQuantiles, solarPotential scalars). manual-fallback.ts emits nulls. New pure lib/solar/sun-score.ts deriving per-plane sun score labels (Excellent/Good/Moderate/Limited) + median sun hours from quantiles. Colocated vitest tests.",
-      "status": "complete",
+      "title": "Enhanced-capture cache lib (address-keyed)",
+      "detail": "lib/roofing/capture-cache.ts: pure normalizeAddressKey + cachePathFor (tested); getCachedEnhanced/putCachedEnhanced against roof-models bucket under enhanced/{key}/{view}.jpg. Best-effort: cache failures never fail generation.",
+      "status": "pending",
       "priority": 1
     },
     {
       "id": "S2",
-      "title": "GeoTIFF decode + pure raster analysis modules",
-      "detail": "Add geotiff dependency. lib/solar/geotiff.ts: decode GeoTIFF bytes to typed rasters (width/height/bands). Pure analysis modules operating on plain arrays: flux-render.ts (annual flux -> color-ramp PNG via pngjs, clipped by mask raster), shade-analysis.ts (12 monthly 24-band hourly-shade bitmask rasters -> per-hour sun fraction, shade-free window, monthly shade table), monthly flux -> 12 production weights, dsm-height.ts (DSM + mask -> building height m + storeys hint). Tests use geotiff writeArrayBuffer fixtures + synthetic arrays.",
-      "status": "complete",
+      "title": "Labeled captures end-to-end (schema + Tripo body, 2-5 views incl. top)",
+      "detail": "POST body {captures:[{view,image}], mode:'auto'|'manual'} — front required, >=1 of left/back/right, top optional, views unique. buildMultiviewTaskBody emits only provided front/left/back/right slots (top excluded). Tests for partial views + top exclusion.",
+      "status": "pending",
       "priority": 2
     },
     {
       "id": "S3",
-      "title": "Sun-assets generation pipeline wired into draft + redraft",
-      "detail": "data-layers.ts additionally returns the signed GeoTIFF URLs (in-memory only, never persisted). New lib/solar/sun-assets.ts: after-response job that re-fetches dataLayers, downloads annual flux + mask + monthly flux + hourly shade + DSM GeoTIFFs, runs S2 analyses, renders + uploads heatmap PNG(s) to intake-photos under solar/{rowId}/, and merges a compact context.sun summary (sun scores feed, monthly_production_kwh, shade window, building height, asset paths) into the persisted estimate jsonb. Invoked via after() in /api/solar/[tenantSlug]/estimate and /api/solar/redraft/[token]. Soft-fail everywhere.",
-      "status": "complete",
+      "title": "Wire cache into startModel3d + labeled auto-capture client",
+      "detail": "startModel3d(measureToken, captures, {address, reuseCache}): auto reuses cached enhanced per view, else enhance+store; manual always enhances+stores. Route passes row address + mode. Client auto flow posts labeled views.",
+      "status": "pending",
       "priority": 3
     },
     {
       "id": "S4",
-      "title": "Customer + PDF surfaces: sun & shade sections",
-      "detail": "Token-gated asset route /api/solar/q/[token]/sun-asset/[kind] streaming cached PNGs (mirror panels-after route). Quote page /q/solar/[token]: new pre-confirm-visible 'Sun & shade' section — annual flux heatmap image, max sunshine hours stat, per-plane sun scores, shade-free window, panel lifetime + array-area assumptions; monthly production chart consumes real monthly flux weights via existing monthly_kwh input labelled measured-irradiance. report-html.ts mirrors the section for the PDF. Tests for the view-model builders.",
-      "status": "complete",
+      "title": "Manual capture mode UI (front/left/right/back/top)",
+      "detail": "Roof3DModelSection: 'Manual capture' opens free-orbit Cesium viewer with per-view capture buttons + chips + retake; 'Build 3D model' enabled once front + one side captured; submits mode:'manual'.",
+      "status": "pending",
       "priority": 4
     },
     {
       "id": "S5",
-      "title": "EXPANDED_COVERAGE experiment behind env flag",
-      "detail": "lib/roofing/solar-api.ts: send experiments=EXPANDED_COVERAGE when enabled; recognise BASE imagery quality. coverage.ts: SOLAR_EXPANDED_COVERAGE=true admits BASE-quality insights as covered (wide confidence band, satellite-grade label); default behaviour unchanged. Confidence chip / assumptions copy reflect satellite-grade imagery. Tests for both flag states.",
-      "status": "complete",
+      "title": "Quality gates green (completion promise: all tests pass)",
+      "detail": "npx tsc --noEmit clean; FULL npx vitest run green; /m/[token] renders both Generate and Manual capture entry points.",
+      "status": "pending",
       "priority": 5
-    },
-    {
-      "id": "S6",
-      "title": "Full quality gates + ship",
-      "detail": "Run the complete vitest suite, eslint, tsc/next build. Fix all fallout. Commit per-story work is already done; final push to origin main.",
-      "status": "complete",
-      "priority": 6
     }
   ]
 }
