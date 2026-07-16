@@ -29,6 +29,8 @@ import {
   type CaptureView,
 } from '@/lib/roofing/capture-cache'
 
+export type Model3dMode = 'auto' | 'manual'
+
 // Lazy so the pure helpers stay importable in vitest without Supabase env.
 let _supabase: SupabaseClient | null = null
 function supabaseClient() {
@@ -71,6 +73,8 @@ export type Model3dState = {
   progress?: number | null
   modelUrl?: string | null
   error?: string | null
+  /** Roof-anatomy overlays (auto mode): view → signed image URL. */
+  anatomy?: Record<string, string> | null
 }
 
 // ── pure helpers (unit-tested) ──────────────────────────────────────
@@ -221,14 +225,50 @@ async function enhanceCapture(image: ImageBytes): Promise<ImageBytes | null> {
   }
 }
 
+// ── roof-anatomy annotation (auto mode, display-only) ───────────────
+
+const ANATOMY_SYSTEM =
+  'You are a roofing diagram annotator. You draw clean, precise overlay lines and small ' +
+  'text labels on aerial photographs of roofs. You never alter the underlying photograph — ' +
+  'no adding, removing, or reshaping structures.'
+
+const ANATOMY_USER =
+  'Draw colour-coded lines along the roof features of this house, with a small matching ' +
+  'text label on each: RIDGE lines in blue, HIP lines in red, VALLEY lines in green, ' +
+  'EAVE lines in magenta. Trace every visible ridge, hip, valley and eave. Keep the ' +
+  'photograph otherwise unchanged.'
+
+/**
+ * Annotate one enhanced capture with the colour-coded roof-anatomy overlay.
+ * BEST-EFFORT: display-only feature, so any failure returns null and the
+ * generation carries on. These images are NEVER sent to Tripo — painted
+ * lines would bake into the 3D model's textures.
+ */
+async function annotateCapture(image: ImageBytes): Promise<ImageBytes | null> {
+  if (!process.env.GEMINI_API_KEY?.trim()) return null
+  try {
+    return await geminiProvider.renderImage({
+      system: ANATOMY_SYSTEM,
+      user: ANATOMY_USER,
+      sourceImage: image,
+      aspectRatio: '4:3',
+    })
+  } catch (e) {
+    console.warn('[roofing/model3d] anatomy annotation failed', {
+      error: e instanceof Error ? e.message : String(e),
+    })
+    return null
+  }
+}
+
 // ── orchestration ───────────────────────────────────────────────────
 
-type Row = { id: string; model3d_status: string | null; model3d_task_id: string | null; model3d_glb_path: string | null; model3d_error: string | null }
+type Row = { id: string; model3d_status: string | null; model3d_task_id: string | null; model3d_glb_path: string | null; model3d_error: string | null; model3d_anatomy: Record<string, string> | null }
 
 async function loadRow(measureToken: string): Promise<Row | null> {
   const { data } = await supabaseClient()
     .from('roofing_measurements')
-    .select('id, model3d_status, model3d_task_id, model3d_glb_path, model3d_error')
+    .select('id, model3d_status, model3d_task_id, model3d_glb_path, model3d_error, model3d_anatomy')
     .eq('measure_token', measureToken)
     .maybeSingle()
   return (data as Row | null) ?? null
@@ -271,13 +311,15 @@ export async function claimModel3d(
 export async function startModel3d(
   measureToken: string,
   captures: LabeledCapture[],
-  opts: { address?: string | null; reuseCache?: boolean } = {},
+  opts: { address?: string | null; mode?: Model3dMode } = {},
 ): Promise<void> {
   try {
     const address = opts.address?.trim() || null
-    // Manual captures bypass the READ (deliberate framing wins) but still
-    // WRITE, refreshing the property's cache for future runs.
-    const reuse = opts.reuseCache !== false && !!address
+    const mode: Model3dMode = opts.mode ?? 'auto'
+    // Tradie-supplied captures (manual frame-ups or uploaded photos) bypass
+    // the cache READ (deliberate framing wins) but still WRITE, refreshing
+    // the property's cache for future runs.
+    const reuse = mode === 'auto' && !!address
 
     const polished = await Promise.all(
       captures.map(async ({ view, image }) => {
@@ -298,6 +340,47 @@ export async function startModel3d(
       console.log('[roofing/model3d] reused cached enhancements', { measureToken, reused })
     }
 
+    // Auto mode: roof-anatomy overlays (ridge/hip/valley/eave lines) drawn
+    // over the polished captures — display-only, cached by address, stored
+    // per measurement. Runs concurrently with the Tripo uploads below and
+    // never blocks or fails the build.
+    const anatomyWork =
+      mode === 'auto'
+        ? (async () => {
+            const row = await loadRow(measureToken)
+            if (!row) return
+            const entries = await Promise.all(
+              polished.map(async ({ view, image }) => {
+                let overlay = address ? await getCachedEnhanced(address, view, 'anatomy') : null
+                if (!overlay) {
+                  overlay = await annotateCapture(image)
+                  if (overlay && address) await putCachedEnhanced(address, view, overlay, 'anatomy')
+                }
+                if (!overlay) return null
+                const path = `roofing/${row.id}/anatomy-${view}`
+                const { error } = await supabaseClient()
+                  .storage.from(MODEL_BUCKET)
+                  .upload(path, Buffer.from(overlay.base64, 'base64'), {
+                    contentType: overlay.mime,
+                    upsert: true,
+                  })
+                return error ? null : ([view, path] as const)
+              }),
+            )
+            const anatomy = Object.fromEntries(entries.filter((e): e is [CaptureView, string] => !!e))
+            if (Object.keys(anatomy).length > 0) {
+              await supabaseClient()
+                .from('roofing_measurements')
+                .update({ model3d_anatomy: anatomy })
+                .eq('measure_token', measureToken)
+            }
+          })().catch((e) =>
+            console.warn('[roofing/model3d] anatomy pass failed', {
+              error: e instanceof Error ? e.message : String(e),
+            }),
+          )
+        : Promise.resolve()
+
     const fileTokens: Partial<Record<ViewName, string>> = {}
     await Promise.all(
       polished
@@ -311,6 +394,7 @@ export async function startModel3d(
       .from('roofing_measurements')
       .update({ model3d_task_id: taskId })
       .eq('measure_token', measureToken)
+    await anatomyWork
   } catch (e) {
     await markFailed(measureToken, e instanceof Error ? e.message : String(e))
   }
@@ -320,6 +404,19 @@ export async function startModel3d(
 async function signedModelUrl(path: string): Promise<string | null> {
   const { data } = await supabaseClient().storage.from(MODEL_BUCKET).createSignedUrl(path, 3600)
   return data?.signedUrl ?? null
+}
+
+/** Signed URLs for the anatomy overlays (view → URL), or null when none. */
+async function signedAnatomy(
+  anatomy: Record<string, string> | null,
+): Promise<Record<string, string> | null> {
+  if (!anatomy) return null
+  const out: Record<string, string> = {}
+  for (const [view, path] of Object.entries(anatomy)) {
+    const { data } = await supabaseClient().storage.from(MODEL_BUCKET).createSignedUrl(path, 3600)
+    if (data?.signedUrl) out[view] = data.signedUrl
+  }
+  return Object.keys(out).length > 0 ? out : null
 }
 
 /**
@@ -332,16 +429,17 @@ export async function pollModel3d(measureToken: string): Promise<Model3dState | 
   const row = await loadRow(measureToken)
   if (!row) return null
 
+  const anatomy = await signedAnatomy(row.model3d_anatomy)
   if (row.model3d_status === 'ready' && row.model3d_glb_path) {
-    return { status: 'ready', modelUrl: await signedModelUrl(row.model3d_glb_path) }
+    return { status: 'ready', modelUrl: await signedModelUrl(row.model3d_glb_path), anatomy }
   }
   if (row.model3d_status === 'failed') {
-    return { status: 'failed', error: row.model3d_error }
+    return { status: 'failed', error: row.model3d_error, anatomy }
   }
-  if (row.model3d_status !== 'generating') return { status: 'idle' }
+  if (row.model3d_status !== 'generating') return { status: 'idle', anatomy }
 
   // Task id not stamped yet — enhancement/upload still running in after().
-  if (!row.model3d_task_id) return { status: 'generating', progress: 0 }
+  if (!row.model3d_task_id) return { status: 'generating', progress: 0, anatomy }
 
   let task: ReturnType<typeof parseTripoTask>
   try {
@@ -349,7 +447,7 @@ export async function pollModel3d(measureToken: string): Promise<Model3dState | 
   } catch (e) {
     // Transient poll failure — keep generating; the next poll retries.
     console.warn('[roofing/model3d] poll failed', { error: e instanceof Error ? e.message : String(e) })
-    return { status: 'generating', progress: null }
+    return { status: 'generating', progress: null, anatomy }
   }
 
   if (task.status === 'success' && task.modelUrl) {
@@ -371,18 +469,18 @@ export async function pollModel3d(measureToken: string): Promise<Model3dState | 
         .from('roofing_measurements')
         .update({ model3d_status: 'ready', model3d_glb_path: path })
         .eq('measure_token', measureToken)
-      return { status: 'ready', modelUrl: await signedModelUrl(path) }
+      return { status: 'ready', modelUrl: await signedModelUrl(path), anatomy }
     } catch (e) {
       await markFailed(measureToken, e instanceof Error ? e.message : String(e))
-      return { status: 'failed', error: e instanceof Error ? e.message : String(e) }
+      return { status: 'failed', error: e instanceof Error ? e.message : String(e), anatomy }
     }
   }
 
   if (task.status === 'failed' || task.status === 'cancelled' || task.status === 'banned' || task.status === 'expired') {
     const error = task.error ?? `Tripo task ${task.status}`
     await markFailed(measureToken, error)
-    return { status: 'failed', error }
+    return { status: 'failed', error, anatomy }
   }
 
-  return { status: 'generating', progress: task.progress }
+  return { status: 'generating', progress: task.progress, anatomy }
 }

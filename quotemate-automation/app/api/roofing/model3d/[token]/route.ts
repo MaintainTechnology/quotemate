@@ -95,11 +95,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   }
 
   const { captures, mode } = parsed.data
-  after(() =>
-    startModel3d(token, captures, {
-      address: claimed.address,
-      reuseCache: mode !== 'manual',
-    }),
-  )
+  after(() => startModel3d(token, captures, { address: claimed.address, mode }))
   return Response.json({ ok: true, status: 'generating' })
 }

@@ -34,4 +34,13 @@ describe('cachePathFor', () => {
   it('covers all five capture views', () => {
     expect(CAPTURE_VIEWS).toEqual(['front', 'left', 'right', 'back', 'top'])
   })
+
+  it('separates anatomy overlays from enhanced captures', () => {
+    expect(cachePathFor('670 London Rd', 'front', 'anatomy')).toBe(
+      'anatomy/670-london-rd/front',
+    )
+    expect(cachePathFor('670 London Rd', 'front', 'enhanced')).toBe(
+      cachePathFor('670 London Rd', 'front'),
+    )
+  })
 })

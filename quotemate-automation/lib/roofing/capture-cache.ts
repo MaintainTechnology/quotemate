@@ -52,22 +52,27 @@ export function normalizeAddressKey(address: string): string {
     .slice(0, 120)
 }
 
-/** PURE — storage object path for one view's enhanced capture. */
-export function cachePathFor(address: string, view: CaptureView): string {
-  return `enhanced/${normalizeAddressKey(address)}/${view}`
+/** What's cached per address+view: the polished capture, or the Gemini
+ *  roof-anatomy annotation drawn over it (display-only, never fed to Tripo). */
+export type CacheKind = 'enhanced' | 'anatomy'
+
+/** PURE — storage object path for one view's cached image. */
+export function cachePathFor(address: string, view: CaptureView, kind: CacheKind = 'enhanced'): string {
+  return `${kind}/${normalizeAddressKey(address)}/${view}`
 }
 
 // ── storage I/O (best-effort) ───────────────────────────────────────
 
-/** The cached enhanced capture for this address+view, or null on any miss/error. */
+/** The cached image for this address+view+kind, or null on any miss/error. */
 export async function getCachedEnhanced(
   address: string,
   view: CaptureView,
+  kind: CacheKind = 'enhanced',
 ): Promise<ImageBytes | null> {
   try {
     const { data, error } = await supabaseClient()
       .storage.from(BUCKET)
-      .download(cachePathFor(address, view))
+      .download(cachePathFor(address, view, kind))
     if (error || !data) return null
     const base64 = Buffer.from(await data.arrayBuffer()).toString('base64')
     return { base64, mime: data.type || 'image/jpeg' }
@@ -76,20 +81,21 @@ export async function getCachedEnhanced(
   }
 }
 
-/** Store an enhanced capture for reuse. Never throws. */
+/** Store an image for reuse. Never throws. */
 export async function putCachedEnhanced(
   address: string,
   view: CaptureView,
   image: ImageBytes,
+  kind: CacheKind = 'enhanced',
 ): Promise<void> {
   try {
     await supabaseClient()
       .storage.from(BUCKET)
-      .upload(cachePathFor(address, view), Buffer.from(image.base64, 'base64'), {
+      .upload(cachePathFor(address, view, kind), Buffer.from(image.base64, 'base64'), {
         contentType: image.mime,
         upsert: true,
       })
   } catch {
-    /* best-effort — a failed cache write just means a re-enhance next time */
+    /* best-effort — a failed cache write just means a re-render next time */
   }
 }

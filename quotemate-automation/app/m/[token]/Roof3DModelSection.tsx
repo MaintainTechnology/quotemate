@@ -31,7 +31,7 @@ type Props = {
   initialStatus: string | null
 }
 
-type Phase = 'idle' | 'capturing' | 'manual' | 'submitting' | 'generating' | 'ready' | 'failed'
+type Phase = 'idle' | 'capturing' | 'manual' | 'upload' | 'submitting' | 'generating' | 'ready' | 'failed'
 
 const MAPS_3D_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_3D_KEY ?? ''
 
@@ -53,6 +53,29 @@ const POLL_MS = 5000
 const CAPTURE_SETTLE_MS = 5000
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+
+/** Read a picked photo, downscale to maxDim, return a JPEG data URL —
+ *  phone/drone photos are 10 MB+; the route caps captures at 8 MB. */
+async function fileToDataUrl(file: File, maxDim = 1600): Promise<string> {
+  const bmp = await createImageBitmap(file)
+  const scale = Math.min(1, maxDim / Math.max(bmp.width, bmp.height))
+  const w = Math.max(1, Math.round(bmp.width * scale))
+  const h = Math.max(1, Math.round(bmp.height * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  canvas.getContext('2d')!.drawImage(bmp, 0, 0, w, h)
+  bmp.close()
+  return canvas.toDataURL('image/jpeg', 0.88)
+}
+
+// Anatomy legend — must match the colours ANATOMY_USER asks Gemini to draw.
+const ANATOMY_LEGEND = [
+  ['Ridge', '#3b82f6'],
+  ['Hip', '#ef4444'],
+  ['Valley', '#22c55e'],
+  ['Eave', '#d946ef'],
+] as const
 
 // Manual capture slots — the tradie frames each one by hand. Tripo consumes
 // front/left/right/back; 'top' is enhanced + cached only (no Tripo slot).
@@ -151,6 +174,10 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const manualViewerRef = useRef<any>(null)
   const [manualShots, setManualShots] = useState<Partial<Record<ManualView, string>>>({})
+  // Upload-your-own-photos source (drone shots, saved screenshots).
+  const [uploadShots, setUploadShots] = useState<Partial<Record<ManualView, string>>>({})
+  // Roof-anatomy overlays (auto mode) — view → signed image URL.
+  const [anatomy, setAnatomy] = useState<Record<string, string> | null>(null)
   const [roofColor, setRoofColor] = useState('#8a4b32')
   const [wallColor, setWallColor] = useState('#d8d2c4')
   const [tinting, setTinting] = useState({ roof: false, walls: false })
@@ -301,9 +328,10 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
   const fetchStateOnce = useCallback(async (): Promise<void> => {
     const res = await fetch(`/api/roofing/model3d/${encodeURIComponent(measureToken)}`)
     const json = (await res.json().catch(() => null)) as
-      | { ok: boolean; status?: string; progress?: number | null; modelUrl?: string | null; error?: string | null }
+      | { ok: boolean; status?: string; progress?: number | null; modelUrl?: string | null; error?: string | null; anatomy?: Record<string, string> | null }
       | null
     if (!json?.ok) return
+    if (json.anatomy) setAnatomy(json.anatomy)
     if (json.status === 'ready') {
       stopPolling()
       setPhase('ready')
@@ -438,6 +466,32 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
     }
   }, [manualShots, destroyManualViewer, submitCaptures])
 
+  // ── upload-your-own-photos source ─────────────────────────────────
+  const pickUploadFile = useCallback(async (view: ManualView, file: File | null) => {
+    if (!file) return
+    try {
+      const image = await fileToDataUrl(file)
+      setUploadShots((s) => ({ ...s, [view]: image }))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }, [])
+
+  const buildFromUpload = useCallback(async () => {
+    const captures = MANUAL_VIEWS.filter((v) => uploadShots[v]).map((v) => ({
+      view: v as string,
+      image: uploadShots[v]!,
+    }))
+    try {
+      // Tradie-supplied images: same server path as manual capture — Gemini
+      // enhancement, cache write, Tripo build; no cache read, no anatomy pass.
+      await submitCaptures(captures, 'manual')
+    } catch (e) {
+      setPhase('failed')
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }, [uploadShots, submitCaptures])
+
   // ── capture + submit ──────────────────────────────────────────────
   const generate = useCallback(async () => {
     if (!center) return
@@ -500,10 +554,11 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
         {phase !== 'ready' && (
           <div className="p-6">
             <p className="max-w-2xl text-sm leading-relaxed text-text-sec">
-              Build an interactive 3D model of this property: four aerial views are captured
-              from the photorealistic 3D map, enhanced, and reconstructed into a model you can
-              rotate, zoom and recolour. Visual aid only — measurements and pricing always come
-              from the measured geometry.
+              Build an interactive 3D model of this property — choose your source: automated
+              flyover captures (with AI roof-anatomy markup), your own framed shots in the 3D
+              view, or uploaded photos. Every image is AI-polished, then reconstructed into a
+              model you can rotate, zoom and recolour. Visual aid only — measurements and
+              pricing always come from the measured geometry.
             </p>
 
             {(phase === 'idle' || phase === 'failed') && (
@@ -524,6 +579,90 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
                 >
                   Manual capture
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError(null)
+                    setUploadShots({})
+                    setPhase('upload')
+                  }}
+                  disabled={busy}
+                  className="inline-flex items-center gap-2 border border-ink-line px-4 py-2.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text-pri hover:border-accent hover:text-accent disabled:opacity-60"
+                >
+                  Upload photos
+                </button>
+              </div>
+            )}
+
+            {phase === 'upload' && (
+              <div className="mt-4">
+                <p className="max-w-2xl text-sm leading-relaxed text-text-sec">
+                  Use your own images — drone shots, saved screenshots, or site photos. Add the
+                  front plus at least one other side; all five give the best model. Each image is
+                  polished by AI before the build.
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                  {MANUAL_VIEWS.map((v) => (
+                    <label
+                      key={v}
+                      className={`flex cursor-pointer flex-col items-stretch border transition-colors ${
+                        uploadShots[v]
+                          ? 'border-accent bg-accent/10'
+                          : 'border-ink-line hover:border-accent'
+                      }`}
+                    >
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => void pickUploadFile(v, e.target.files?.[0] ?? null)}
+                      />
+                      {uploadShots[v] ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={uploadShots[v]}
+                          alt={`${v} view`}
+                          className="h-20 w-full border-b border-ink-line object-cover"
+                        />
+                      ) : (
+                        <span className="flex h-20 items-center justify-center border-b border-ink-line text-2xl text-text-dim">
+                          +
+                        </span>
+                      )}
+                      <span
+                        className={`px-2 py-1.5 text-center font-mono text-[0.68rem] font-semibold uppercase tracking-[0.14em] ${
+                          uploadShots[v] ? 'text-accent' : 'text-text-sec'
+                        }`}
+                      >
+                        {uploadShots[v] ? '✓ ' : ''}
+                        {v}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void buildFromUpload()}
+                    disabled={
+                      !uploadShots.front ||
+                      !(uploadShots.left || uploadShots.right || uploadShots.back)
+                    }
+                    className="inline-flex items-center gap-2 bg-accent px-4 py-2.5 font-mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-white hover:bg-accent-press disabled:opacity-50"
+                  >
+                    Build 3D model ({Object.keys(uploadShots).length}/5 views)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUploadShots({})
+                      setPhase('idle')
+                    }}
+                    className="inline-flex items-center gap-2 border border-ink-line px-3 py-2 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text-dim hover:border-accent hover:text-accent"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             )}
 
@@ -685,6 +824,48 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
             <p className="border-t border-ink-line px-5 py-3 text-xs text-text-dim">
               AI-reconstructed visual — drag to rotate, scroll to zoom. Colours are a preview
               aid; measurements and pricing come from the measured geometry, never this model.
+            </p>
+          </div>
+        )}
+
+        {/* Roof anatomy — Gemini-annotated overlays from the automated
+            captures (ridge/hip/valley/eave lines). Identification aid only:
+            the counts the quote uses come from the measured geometry. */}
+        {anatomy && Object.keys(anatomy).length > 0 && (
+          <div className="border-t border-ink-line px-5 py-4">
+            <div className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+              Roof anatomy (AI-annotated)
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {MANUAL_VIEWS.filter((v) => anatomy[v]).map((v) => (
+                <figure key={v}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={anatomy[v]}
+                    alt={`Roof anatomy — ${v} view with ridge, hip, valley and eave lines`}
+                    className="w-full border border-ink-line object-cover"
+                  />
+                  <figcaption className="mt-1 font-mono text-[0.65rem] uppercase tracking-[0.12em] text-text-dim">
+                    {v}
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+            <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[0.65rem] uppercase tracking-[0.12em] text-text-dim">
+              {ANATOMY_LEGEND.map(([label, colour]) => (
+                <span key={label} className="inline-flex items-center gap-1.5">
+                  <span
+                    aria-hidden
+                    className="inline-block h-0.5 w-4"
+                    style={{ background: colour }}
+                  />
+                  {label}
+                </span>
+              ))}
+            </p>
+            <p className="mt-2 text-xs text-text-dim">
+              Visual identification aid drawn by AI over the aerial captures. The hip and valley
+              counts used for pricing come from the measured geometry, not these drawings.
             </p>
           </div>
         )}
