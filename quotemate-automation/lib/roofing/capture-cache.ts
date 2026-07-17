@@ -8,10 +8,13 @@
 // generation for an address that has already been polished costs zero
 // Gemini calls.
 //
-// Storage: roof-models bucket, `enhanced/{addressKey}/{view}` (no
-// extension — the object's content-type carries the mime). Everything here
-// is BEST-EFFORT: a cache miss, read error, or write error must never fail
-// the generation; callers fall back to enhancing fresh.
+// Storage: roof-models bucket, `{kind}/v2/{addressKey}/{view}` (no
+// extension — the object's content-type carries the mime). The version
+// segment invalidates the whole cache when the enhancement contract
+// changes (v2 = neighbour-removal prompts); old objects are orphaned,
+// never deleted. Everything here is BEST-EFFORT: a cache miss, read
+// error, or write error must never fail the generation; callers fall
+// back to enhancing fresh.
 // ════════════════════════════════════════════════════════════════════
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
@@ -56,9 +59,13 @@ export function normalizeAddressKey(address: string): string {
  *  roof-anatomy annotation drawn over it (display-only, never fed to Tripo). */
 export type CacheKind = 'enhanced' | 'anatomy'
 
+// Cache schema version — bump when the enhancement contract changes so stale
+// images are never reused (v2: neighbour-removal / subject-property isolation).
+const CACHE_VERSION = 'v2'
+
 /** PURE — storage object path for one view's cached image. */
 export function cachePathFor(address: string, view: CaptureView, kind: CacheKind = 'enhanced'): string {
-  return `${kind}/${normalizeAddressKey(address)}/${view}`
+  return `${kind}/${CACHE_VERSION}/${normalizeAddressKey(address)}/${view}`
 }
 
 // ── storage I/O (best-effort) ───────────────────────────────────────

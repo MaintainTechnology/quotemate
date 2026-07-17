@@ -2,11 +2,12 @@
 // Roofing — interactive 3D model of the property (Track B: VISUAL only).
 //
 // Pipeline: the tradie's browser captures 4 orbit views (front/left/back/
-// right) of the Google Photorealistic 3D tiles → each capture is enhanced
-// by Gemini nano-banana (best-effort: raw capture on failure) → Tripo3D
-// multiview-to-model reconstructs a textured GLB → the GLB is re-hosted in
-// the intake-photos bucket (Tripo output URLs expire after ~5 minutes) and
-// served via a short-lived signed URL.
+// right) of the Google Photorealistic 3D tiles → each capture is polished
+// by Gemini nano-banana (best-effort: raw capture on failure), which also
+// REMOVES neighbouring buildings so only the subject property reaches the
+// reconstruction → Tripo3D multiview-to-model reconstructs a textured GLB
+// → the GLB is re-hosted in the intake-photos bucket (Tripo output URLs
+// expire after ~5 minutes) and served via a short-lived signed URL.
 //
 // The model NEVER feeds measurements or pricing. Ridge/hip/valley numbers
 // stay on the measured-geometry path (Geoscape + Google Solar) — an AI
@@ -118,6 +119,19 @@ export function buildMultiviewTaskBody(
   }
 }
 
+/**
+ * PURE — orbit range (m) for the capture camera, from the footprint bbox
+ * diagonal. TIGHT framing — the house should fill the shot: 0.8 × diagonal
+ * + 8 m headroom for building height at the −32° capture pitch, floored at
+ * 21 m so small sheds don't go macro; 36 m when there is no footprint.
+ * Deliberately ~20% closer than the previous max(26, d + 10) framing —
+ * the neighbours then occupy less of every capture too.
+ */
+export function captureOrbitRangeM(diagonalM: number | null): number {
+  if (typeof diagonalM !== 'number' || !Number.isFinite(diagonalM) || diagonalM <= 0) return 36
+  return Math.max(21, diagonalM * 0.8 + 8)
+}
+
 /** PURE — pick status/progress/model URL out of a Tripo task response. */
 export function parseTripoTask(body: unknown): {
   status: string
@@ -197,15 +211,18 @@ async function tripoCreateMultiview(fileTokens: Partial<Record<ViewName, string>
 
 // ── Gemini enhancement (nano-banana) ────────────────────────────────
 
-const ENHANCE_SYSTEM =
-  'You are a photo enhancement engine. You upscale and sharpen aerial photographs. ' +
-  'You never invent, add, remove, or move structures, and never change colours, ' +
-  'roof shape, proportions, or camera angle.'
+export const ENHANCE_SYSTEM =
+  'You are a photo enhancement engine for property imagery. You upscale and sharpen ' +
+  'aerial photographs, and you remove distracting neighbouring buildings from the frame ' +
+  'edges. You never change the central subject property — its geometry, roof shape, ' +
+  'colours and proportions stay exactly as photographed.'
 
-const ENHANCE_USER =
-  'Enhance this aerial capture of a house into a high-resolution, crisp, photorealistic ' +
-  'image. Preserve the exact building geometry, roof shape, colours and surroundings. ' +
-  'Only improve sharpness, clarity and texture detail.'
+export const ENHANCE_USER =
+  'Enhance this aerial capture into a high-resolution, crisp, photorealistic image. ' +
+  'Keep the central house and every structure on its own lot exactly as captured — ' +
+  'geometry, roof shape, colours, proportions. Remove neighbouring houses and buildings ' +
+  'at the frame edges, replacing them with plausible garden and greenery, so only the ' +
+  'subject property remains. Improve sharpness, clarity and texture detail.'
 
 /**
  * Enhance one capture — BEST-EFFORT. Returns null when enhancement did NOT

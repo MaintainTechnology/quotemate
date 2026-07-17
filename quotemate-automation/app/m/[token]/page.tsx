@@ -39,6 +39,7 @@ import { Roof3DModelSection } from './Roof3DModelSection'
 import type { LayoutPlan } from '@/lib/roofing/layout-plan'
 import type { LayoutOverlayStructure } from '@/lib/roofing/layout-overlay-svg'
 import { edgeLengthM, polygonBBox, polygonCentroid } from '@/lib/roofing/map-utils'
+import { captureOrbitRangeM } from '@/lib/roofing/model3d'
 
 export const dynamic = 'force-dynamic'
 
@@ -152,26 +153,23 @@ export default async function MeasurementResultsPage({
     if (!m3Err && m3) model3dStatus = (m3.model3d_status as string | null) ?? null
   }
 
-  // Capture target for the 3D model: primary structure centroid + an orbit
-  // range sized from its footprint (same framing maths as the fly-around).
+  // Capture target for the 3D model: primary structure centroid + a TIGHT
+  // orbit range from its footprint diagonal (captureOrbitRangeM — the house
+  // fills the shot; wide context margins belong to the fly-around viewer).
   const primaryPolygon =
     quote.structures.find((s) => s.role === 'primary')?.metrics?.polygon_geojson ??
     quote.structures[0]?.metrics?.polygon_geojson ??
     null
   const model3dCentroid = polygonCentroid(primaryPolygon)
   const model3dBBox = polygonBBox(primaryPolygon)
-  const captureRangeM = model3dBBox
-    ? Math.max(
-        70,
-        (edgeLengthM(
+  const captureRangeM = captureOrbitRangeM(
+    model3dBBox
+      ? edgeLengthM(
           [model3dBBox.west, model3dBBox.south],
           [model3dBBox.east, model3dBBox.north],
-        ) /
-          2 +
-          4) *
-          4,
-      )
-    : 90
+        )
+      : null,
+  )
 
   // Overlay inputs: per-structure geometry for the interactive map, plus
   // per-structure metric snapshots so the layout section recomputes framing,

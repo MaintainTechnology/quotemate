@@ -54,6 +54,22 @@ const CAPTURE_SETTLE_MS = 5000
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
+/** Centre-crop a wide canvas to 3:2 — the capture container is a letterbox
+ *  strip, so an uncropped shot drags the neighbours in at the sides; the
+ *  enhancement pass removes any remaining edge slivers. Auto captures only;
+ *  manual keeps exactly what the tradie framed. */
+function cropCenterDataUrl(source: HTMLCanvasElement, quality = 0.88): string {
+  const h = source.height
+  const w = Math.min(source.width, Math.round(h * 1.5))
+  if (w >= source.width) return source.toDataURL('image/jpeg', quality)
+  const x = Math.round((source.width - w) / 2)
+  const c = document.createElement('canvas')
+  c.width = w
+  c.height = h
+  c.getContext('2d')!.drawImage(source, x, 0, w, h, 0, 0, w, h)
+  return c.toDataURL('image/jpeg', quality)
+}
+
 /** Read a picked photo, downscale to maxDim, return a JPEG data URL —
  *  phone/drone photos are 10 MB+; the route caps captures at 8 MB. */
 async function fileToDataUrl(file: File, maxDim = 1600): Promise<string> {
@@ -111,7 +127,7 @@ async function createCaptureViewer(
   container: HTMLDivElement,
   center: { lat: number; lng: number },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): Promise<{ viewer: any; tileset: any; target: any }> {
+): Promise<{ viewer: any; tileset: any; target: any; groundH: number }> {
   Cesium.GoogleMaps.defaultApiKey = MAPS_3D_KEY
   const viewer = new Cesium.Viewer(container, {
     globe: false,
@@ -155,8 +171,11 @@ async function createCaptureViewer(
   } catch {
     /* fall back to 25 m */
   }
-  const target = Cesium.Cartesian3.fromDegrees(center.lng, center.lat, groundH + 4)
-  return { viewer, tileset, target }
+  // Aim just above ground level — aiming at roof height pushed the house to
+  // the bottom of the frame on downhill sides (terrain slope moves the roof
+  // relative to the sampled centroid height).
+  const target = Cesium.Cartesian3.fromDegrees(center.lng, center.lat, groundH + 2)
+  return { viewer, tileset, target, groundH }
 }
 
 export function Roof3DModelSection({ measureToken, center, captureRangeM, initialStatus }: Props) {
@@ -519,15 +538,34 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
       setStage('Loading Google 3D tiles…')
       const created = await createCaptureViewer(Cesium, captureRef.current, center)
       viewer = created.viewer
-      const { tileset, target } = created
-      const pitch = Cesium.Math.toRadians(-32)
+      const { tileset, groundH } = created
+      // Steep oblique (drone-style): mostly roof, no horizon — the capture
+      // should be the house, not the neighbourhood. −50° also foreshortens
+      // the near-far extent so the whole roof fits the tight orbit range.
+      const pitch = Cesium.Math.toRadians(-50)
+      // At an oblique pitch the roof sprawls toward the camera and clips the
+      // bottom of the frame. Pulling the aim point TOWARD each view's camera
+      // (by a fraction of the range) recentres the house from every heading.
+      const latRad = (center.lat * Math.PI) / 180
+      // ponytail: constant fraction tuned on real captures (0.12 clipped the
+      // near eave, 0.22 clipped the far ridge on offset-centroid lots); a
+      // bbox-projection solve is the upgrade path if more properties misframe.
+      const aimFor = (headingRad: number) => {
+        const pullM = captureRangeM * 0.16
+        return Cesium.Cartesian3.fromDegrees(
+          center.lng - (Math.sin(headingRad) * pullM) / (111_320 * Math.cos(latRad)),
+          center.lat - (Math.cos(headingRad) * pullM) / 110_540,
+          groundH + 2,
+        )
+      }
       const captures: { view: string; image: string }[] = []
       for (let i = 0; i < VIEWS.length; i++) {
         const v = VIEWS[i]
         setStage(`View ${i + 1}/4 (${v.name}) — loading tiles…`)
+        const headingRad = Cesium.Math.toRadians(v.heading)
         viewer.camera.lookAt(
-          target,
-          new Cesium.HeadingPitchRange(Cesium.Math.toRadians(v.heading), pitch, captureRangeM),
+          aimFor(headingRad),
+          new Cesium.HeadingPitchRange(headingRad, pitch, captureRangeM),
         )
         await waitForTiles(tileset)
         // Hold the view — tiles keep sharpening after they report loaded.
@@ -535,7 +573,7 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
         await sleep(CAPTURE_SETTLE_MS)
         setStage(`View ${i + 1}/4 (${v.name}) — capturing…`)
         viewer.scene.render()
-        captures.push({ view: v.name, image: viewer.canvas.toDataURL('image/jpeg', 0.88) })
+        captures.push({ view: v.name, image: cropCenterDataUrl(viewer.canvas) })
       }
 
       await submitCaptures(captures, 'auto')
