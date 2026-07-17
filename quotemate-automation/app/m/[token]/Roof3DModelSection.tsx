@@ -332,7 +332,7 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
   }, [roofColor, wallColor, tinting])
 
   // ── polling ───────────────────────────────────────────────────────
-  const fetchStateOnce = useCallback(async (): Promise<void> => {
+  const fetchStateOnce = useCallback(async (opts: { loadModel?: boolean } = {}): Promise<void> => {
     const res = await fetch(`/api/roofing/model3d/${encodeURIComponent(measureToken)}`)
     const json = (await res.json().catch(() => null)) as
       | { ok: boolean; status?: string; progress?: number | null; modelUrl?: string | null; error?: string | null; anatomy?: Record<string, string> | null; polished?: Record<string, string> | null }
@@ -343,7 +343,9 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
     if (json.status === 'ready') {
       stopPolling()
       setPhase('ready')
-      if (json.modelUrl) {
+      // Only download the (10-20 MB) model when explicitly asked — the
+      // mount-time fetch populates the image panels without the weight.
+      if (json.modelUrl && opts.loadModel !== false) {
         try {
           await loadModel(json.modelUrl)
         } catch (e) {
@@ -365,9 +367,11 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
     pollRef.current = setInterval(() => void fetchStateOnce(), POLL_MS)
   }, [fetchStateOnce, stopPolling])
 
-  // Resume an in-flight generation after a page reload.
+  // Resume an in-flight generation after a page reload, and populate the
+  // polished/anatomy panels on load (without downloading the heavy model).
   useEffect(() => {
     if (phase === 'generating' && !pollRef.current) startPolling()
+    void fetchStateOnce({ loadModel: false })
     return () => {
       stopPolling()
       cleanupRef.current?.()
