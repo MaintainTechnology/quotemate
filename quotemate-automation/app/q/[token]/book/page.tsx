@@ -267,7 +267,9 @@ export default async function BookingPage(props: {
       />
     )
   } else if (isPaid && !isScheduled && options.length > 0) {
-    // Legacy: paid before this reorder shipped, now needs to pick a time.
+    // Pay-first arrivals: the $99 inspection (paid → pick a time → thank-you,
+    // five-sections R7/D1a) and legacy paid-no-slot recoveries. Same picker,
+    // paid framing — no "pay your deposit" promise after payment.
     content = (
       <PickState
         token={token}
@@ -275,6 +277,7 @@ export default async function BookingPage(props: {
         tier={tier}
         tradieName={tradieName}
         googleUrl={googleUrl}
+        alreadyPaid
       />
     )
   } else {
@@ -549,28 +552,42 @@ function PickState({
   tier,
   tradieName,
   googleUrl,
+  alreadyPaid = false,
 }: {
   token: string
   options: BookingOption[]
   tier: string
   tradieName: string | null
   googleUrl: string | null
+  /** Pay-first flows (the $99 inspection, legacy paid-no-slot recoveries)
+   *  land here AFTER paying — the copy must confirm the time, not promise a
+   *  deposit step that already happened (five-sections R7 review polish). */
+  alreadyPaid?: boolean
 }) {
   return (
     <section className="motion-safe:animate-[fade-in_240ms_ease-out_both]">
       <StepStrip active={1} />
       <span className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-text-dim">
-        Step 01 — Choose a time
+        {alreadyPaid ? 'Paid · choose your time' : 'Step 01 — Choose a time'}
       </span>
       <h1 className="mt-3 text-[clamp(1.5rem,3.5vw,2.25rem)] font-extrabold uppercase leading-none tracking-[-0.035em]">
         Pick a time that <span className="text-accent">works</span>.
       </h1>
       <p className="mt-2 max-w-[60ch] text-sm leading-relaxed text-text-sec">
         {tradieName ? `${tradieName}'s` : "Your tradie's"} next available times —
-        pick one, then pay your deposit to lock it in (last step).
+        {alreadyPaid
+          ? ' payment received, so picking one locks your visit in.'
+          : ' pick one, then pay your deposit to lock it in (last step).'}
       </p>
       <div className="mt-6">
-        <SlotPicker token={token} options={options} tier={tier} />
+        <SlotPicker
+          token={token}
+          options={options}
+          tier={tier}
+          {...(alreadyPaid
+            ? { labels: { idle: 'Confirm this time →', submitting: 'Confirming…', done: 'Booked ✓' } }
+            : {})}
+        />
       </div>
       <GoogleBookingOption googleUrl={googleUrl} tradieName={tradieName} />
     </section>

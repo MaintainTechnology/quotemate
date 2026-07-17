@@ -96,6 +96,18 @@ describe('POST /api/roofing/save-as-quote with measure_token', () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toMatchObject({ ok: true, shareToken: 'share-new' })
 
+    // Mig 175 (five-sections R2) — the recommended tier's scope line is
+    // persisted as quotes.scope_short. selected_tier resolves to 'better'
+    // (better.ex_gst > 0), so the Better tierScopeLine is the sentence.
+    const scopeStamp = h.queries.find(
+      (q) => q.table === 'quotes' && q.ops.some((o) => o.op === 'update'),
+    )
+    expect(scopeStamp, 'expected the quotes.scope_short stamp').toBeTruthy()
+    expect(scopeStamp!.ops.find((o) => o.op === 'update')!.args[0]).toEqual({
+      scope_short: 'better scope.',
+    })
+    expect(scopeStamp!.ops).toContainEqual({ op: 'eq', args: ['id', 'quote-1'] })
+
     const updates = h.queries.filter(
       (q) => q.table === 'roofing_measurements' && q.ops.some((o) => o.op === 'update'),
     )

@@ -1,16 +1,19 @@
 // Short-link redirector — keeps the SMS body small.
 // SMS contains: https://<domain>/r/<token>/<tier>  (~ 60 chars)
 //
-// WP6 reorder (book first, pay LAST). This is the single choke-point that
-// every pay link flows through — the on-page tier buttons AND the pay
-// links already sitting in 138 customers' SMS threads. So flipping the
-// funnel here flips it everywhere ("force book-first for all"):
+// Funnel order (lib/quote/booking.ts payRedirectTarget). This is the
+// choke-point every generic pay link flows through — the on-page tier
+// buttons AND the pay links already sitting in customers' SMS threads —
+// so the order enforced here holds everywhere:
 //
-//   price hold expired      → /q/<token>          (blocked: refresh needed)
-//   already paid           → /q/<token>/paid
-//   not paid, NO slot yet   → /q/<token>/book?tier=<tier>   (pick a time)
-//   not paid, slot chosen   → Stripe Checkout (payment = the last step)
-//   (since 2026-07-08 the $99 inspection fee is book-first too — booking.ts)
+//   price hold expired            → /q/<token>       (blocked: refresh needed)
+//   already paid                  → /q/<token>/paid  (never re-charge)
+//   INSPECTION ($99), not paid    → Stripe Checkout  (PAY-FIRST since
+//                                   2026-07-17, five-sections R7/D1a: pay →
+//                                   pick a time → thank-you, matching the
+//                                   dedicated trade surfaces)
+//   deposit tier, NO slot yet     → /q/<token>/book?tier=<tier> (book-first)
+//   deposit tier, slot chosen     → Stripe Checkout (payment = the last step)
 //
 // Two hardening rules live here (both surfaced 2026-07-01):
 //

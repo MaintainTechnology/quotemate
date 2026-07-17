@@ -23,6 +23,7 @@ import { decideRouting } from '@/lib/routing/decide'
 import { advanceQuoteStatus } from '@/lib/quote/lifecycle'
 import { computePriceHoldUntil } from '@/lib/quote/hold'
 import { INSPECTION_FEE_AUD } from '@/lib/quote/money'
+import { stampScopeShort } from '@/lib/quote/scope-short'
 import { generatePreviewImage } from '@/lib/ig-engine/generate'
 import { generateSampleImages } from '@/lib/ig-engine/samples'
 import { resolvePricingBookForIntake } from '@/lib/estimate/pricing-book'
@@ -522,19 +523,13 @@ export async function POST(req: Request) {
     // page). Both estimator prompts already emit scope_short on every draft;
     // it was previously handed to the SMS builder and DISCARDED. Best-effort
     // SEPARATE update (not part of the insert) so a deploy that lands before
-    // migration 175 applies simply skips it — same defensive pattern as the
-    // early-bird stamp below.
-    if (draft.scope_short) {
-      const { error: ssErr } = await supabase
-        .from('quotes')
-        .update({ scope_short: draft.scope_short })
-        .eq('id', quote!.id)
-      if (ssErr) {
-        log.err('scope_short stamp skipped (non-fatal — apply migration 175)', ssErr.message, {
-          quote_id: quote!.id,
-        })
-      }
-    }
+    // migration 175 applies simply skips it — shared stamp, unit-tested in
+    // lib/quote/scope-short.test.ts.
+    await stampScopeShort(supabase, {
+      quoteId: quote!.id as string,
+      scopeShort: draft.scope_short ?? null,
+      source: 'estimate/draft',
+    })
 
     // v8 Phase A — stamp the early-booking discount offer.
     //

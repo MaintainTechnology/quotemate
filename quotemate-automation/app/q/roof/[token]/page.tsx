@@ -849,6 +849,9 @@ export default async function RoofingQuotePage({
                 showPrices={showPrices}
                 indicative={indicative}
                 excluded={excluded}
+                // Customers get the mode-filtered view (one option = one price
+                // row); the tradie's ?full=1 measurement view keeps all three.
+                visibleTiers={sp.full === '1' ? undefined : visibleRoofTierSet}
               />
             ))}
           </div>
@@ -1042,6 +1045,7 @@ function StructureBreakdown({
   showPrices,
   indicative = false,
   excluded = false,
+  visibleTiers,
 }: {
   structure: RoofStructurePrice
   index: number
@@ -1051,6 +1055,10 @@ function StructureBreakdown({
    *  range rather than the "priced on site" note. */
   indicative?: boolean
   excluded?: boolean
+  /** Tier keys the tenant's quote_tier_mode surfaces (five-sections R3b) —
+   *  the customer's per-structure price rows honour "one option" like the
+   *  tier cards above; the tradie's ?full=1 view passes all three. */
+  visibleTiers?: ReadonlySet<string>
 }) {
   const m = structure.metrics
   const p = structure.price
@@ -1130,9 +1138,11 @@ function StructureBreakdown({
             <NoteBox tone="var(--warning-bright)">Indicative estimate — subject to on-site confirmation.</NoteBox>
           )}
           {/* Each tier with its scope of works. In indicative mode hide $0
-              tiers (asbestos has only an upgrade price) so no "$0" is shown. */}
+              tiers (asbestos has only an upgrade price) so no "$0" is shown.
+              Mode-filtered for the customer (one option = one price row). */}
           <div style={{ marginTop: 14, display: 'grid', gap: 10 }}>
             {p.tiers
+              .filter((t) => !visibleTiers || visibleTiers.has(t.tier))
               .filter((t) => !indicative || t.inc_gst > 0)
               .map((t) => (
                 <div key={t.tier} style={{ border: '1px solid var(--ink-line)', background: 'var(--ink-deep)', padding: '14px 16px' }}>

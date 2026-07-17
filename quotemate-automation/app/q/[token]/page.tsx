@@ -885,10 +885,14 @@ export default async function PublicQuotePage(props: {
   if (isRoofing) {
     const roofTier = featuredKey ? (quote[featuredKey] as Tier) : null
     // P10 — roofing tiers carry a GST-aware stored total_inc_gst (the roofing
-    // pricer honours gst_registered); prefer it over recomputing ×1.1.
+    // pricer honours gst_registered); prefer it over recomputing ×1.1. But a
+    // realised early-booking discount must not be skipped by the stored path
+    // (price and deposit would disagree) — discounted quotes go through the
+    // money module. Unreachable today (roofing never stamps an offer), kept
+    // as a guard in case early-bird ever extends to roofing.
     const storedInc = (roofTier as { total_inc_gst?: number } | null)?.total_inc_gst
     const roofPriceInc =
-      typeof storedInc === 'number' && storedInc > 0
+      ebApp === 0 && typeof storedInc === 'number' && storedInc > 0
         ? Math.round(storedInc)
         : roofTier
           ? tierIncGst(roofTier)
