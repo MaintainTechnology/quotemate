@@ -178,6 +178,8 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
   const [uploadShots, setUploadShots] = useState<Partial<Record<ManualView, string>>>({})
   // Roof-anatomy overlays (auto mode) — view → signed image URL.
   const [anatomy, setAnatomy] = useState<Record<string, string> | null>(null)
+  // Gemini-polished captures for this property — view → signed image URL.
+  const [polished, setPolished] = useState<Record<string, string> | null>(null)
   const [roofColor, setRoofColor] = useState('#8a4b32')
   const [wallColor, setWallColor] = useState('#d8d2c4')
   const [tinting, setTinting] = useState({ roof: false, walls: false })
@@ -328,10 +330,11 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
   const fetchStateOnce = useCallback(async (): Promise<void> => {
     const res = await fetch(`/api/roofing/model3d/${encodeURIComponent(measureToken)}`)
     const json = (await res.json().catch(() => null)) as
-      | { ok: boolean; status?: string; progress?: number | null; modelUrl?: string | null; error?: string | null; anatomy?: Record<string, string> | null }
+      | { ok: boolean; status?: string; progress?: number | null; modelUrl?: string | null; error?: string | null; anatomy?: Record<string, string> | null; polished?: Record<string, string> | null }
       | null
     if (!json?.ok) return
     if (json.anatomy) setAnatomy(json.anatomy)
+    if (json.polished) setPolished(json.polished)
     if (json.status === 'ready') {
       stopPolling()
       setPhase('ready')
@@ -824,6 +827,34 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
             <p className="border-t border-ink-line px-5 py-3 text-xs text-text-dim">
               AI-reconstructed visual — drag to rotate, scroll to zoom. Colours are a preview
               aid; measurements and pricing come from the measured geometry, never this model.
+            </p>
+          </div>
+        )}
+
+        {/* Polished captures — the Gemini-enhanced views this property's
+            model is built from (address cache, so they show on repeats too). */}
+        {polished && Object.keys(polished).length > 0 && (
+          <div className="border-t border-ink-line px-5 py-4">
+            <div className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+              Polished captures (AI-enhanced)
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {MANUAL_VIEWS.filter((v) => polished[v]).map((v) => (
+                <figure key={v}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={polished[v]}
+                    alt={`Polished ${v} view of the property`}
+                    className="w-full border border-ink-line object-cover"
+                  />
+                  <figcaption className="mt-1 font-mono text-[0.65rem] uppercase tracking-[0.12em] text-text-dim">
+                    {v}
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-text-dim">
+              The AI-polished aerial views the 3D model is built from.
             </p>
           </div>
         )}

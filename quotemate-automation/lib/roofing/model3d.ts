@@ -24,6 +24,8 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { geminiProvider } from '@/lib/ig-engine/providers/gemini'
 import type { ImageBytes } from '@/lib/ig-engine/providers/base'
 import {
+  CAPTURE_VIEWS,
+  cachePathFor,
   getCachedEnhanced,
   putCachedEnhanced,
   type CaptureView,
@@ -75,6 +77,8 @@ export type Model3dState = {
   error?: string | null
   /** Roof-anatomy overlays (auto mode): view → signed image URL. */
   anatomy?: Record<string, string> | null
+  /** Gemini-polished captures for this property: view → signed image URL. */
+  polished?: Record<string, string> | null
 }
 
 // ── pure helpers (unit-tested) ──────────────────────────────────────
@@ -263,12 +267,12 @@ async function annotateCapture(image: ImageBytes): Promise<ImageBytes | null> {
 
 // ── orchestration ───────────────────────────────────────────────────
 
-type Row = { id: string; model3d_status: string | null; model3d_task_id: string | null; model3d_glb_path: string | null; model3d_error: string | null; model3d_anatomy: Record<string, string> | null }
+type Row = { id: string; address: string | null; model3d_status: string | null; model3d_task_id: string | null; model3d_glb_path: string | null; model3d_error: string | null; model3d_anatomy: Record<string, string> | null }
 
 async function loadRow(measureToken: string): Promise<Row | null> {
   const { data } = await supabaseClient()
     .from('roofing_measurements')
-    .select('id, model3d_status, model3d_task_id, model3d_glb_path, model3d_error, model3d_anatomy')
+    .select('id, address, model3d_status, model3d_task_id, model3d_glb_path, model3d_error, model3d_anatomy')
     .eq('measure_token', measureToken)
     .maybeSingle()
   return (data as Row | null) ?? null
@@ -420,6 +424,25 @@ async function signedAnatomy(
 }
 
 /**
+ * Signed URLs for the property's Gemini-polished captures (view → URL) from
+ * the address-keyed cache — shown to the tradie alongside the model.
+ * createSignedUrl errors on missing objects, so absent views drop out.
+ */
+async function signedPolished(address: string | null): Promise<Record<string, string> | null> {
+  if (!address?.trim()) return null
+  const out: Record<string, string> = {}
+  await Promise.all(
+    CAPTURE_VIEWS.map(async (view) => {
+      const { data } = await supabaseClient()
+        .storage.from(MODEL_BUCKET)
+        .createSignedUrl(cachePathFor(address, view), 3600)
+      if (data?.signedUrl) out[view] = data.signedUrl
+    }),
+  )
+  return Object.keys(out).length > 0 ? out : null
+}
+
+/**
  * Poll-and-finalize, called from GET. When the Tripo task has succeeded,
  * download the GLB IMMEDIATELY (output URLs expire in ~5 min) and re-host
  * it in storage. Idempotent: once model3d_glb_path is set the row is
@@ -429,17 +452,20 @@ export async function pollModel3d(measureToken: string): Promise<Model3dState | 
   const row = await loadRow(measureToken)
   if (!row) return null
 
-  const anatomy = await signedAnatomy(row.model3d_anatomy)
+  const [anatomy, polished] = await Promise.all([
+    signedAnatomy(row.model3d_anatomy),
+    signedPolished(row.address),
+  ])
   if (row.model3d_status === 'ready' && row.model3d_glb_path) {
-    return { status: 'ready', modelUrl: await signedModelUrl(row.model3d_glb_path), anatomy }
+    return { status: 'ready', modelUrl: await signedModelUrl(row.model3d_glb_path), anatomy, polished }
   }
   if (row.model3d_status === 'failed') {
-    return { status: 'failed', error: row.model3d_error, anatomy }
+    return { status: 'failed', error: row.model3d_error, anatomy, polished }
   }
-  if (row.model3d_status !== 'generating') return { status: 'idle', anatomy }
+  if (row.model3d_status !== 'generating') return { status: 'idle', anatomy, polished }
 
   // Task id not stamped yet — enhancement/upload still running in after().
-  if (!row.model3d_task_id) return { status: 'generating', progress: 0, anatomy }
+  if (!row.model3d_task_id) return { status: 'generating', progress: 0, anatomy, polished }
 
   let task: ReturnType<typeof parseTripoTask>
   try {
@@ -447,7 +473,7 @@ export async function pollModel3d(measureToken: string): Promise<Model3dState | 
   } catch (e) {
     // Transient poll failure — keep generating; the next poll retries.
     console.warn('[roofing/model3d] poll failed', { error: e instanceof Error ? e.message : String(e) })
-    return { status: 'generating', progress: null, anatomy }
+    return { status: 'generating', progress: null, anatomy, polished }
   }
 
   if (task.status === 'success' && task.modelUrl) {
@@ -469,18 +495,18 @@ export async function pollModel3d(measureToken: string): Promise<Model3dState | 
         .from('roofing_measurements')
         .update({ model3d_status: 'ready', model3d_glb_path: path })
         .eq('measure_token', measureToken)
-      return { status: 'ready', modelUrl: await signedModelUrl(path), anatomy }
+      return { status: 'ready', modelUrl: await signedModelUrl(path), anatomy, polished }
     } catch (e) {
       await markFailed(measureToken, e instanceof Error ? e.message : String(e))
-      return { status: 'failed', error: e instanceof Error ? e.message : String(e), anatomy }
+      return { status: 'failed', error: e instanceof Error ? e.message : String(e), anatomy, polished }
     }
   }
 
   if (task.status === 'failed' || task.status === 'cancelled' || task.status === 'banned' || task.status === 'expired') {
     const error = task.error ?? `Tripo task ${task.status}`
     await markFailed(measureToken, error)
-    return { status: 'failed', error, anatomy }
+    return { status: 'failed', error, anatomy, polished }
   }
 
-  return { status: 'generating', progress: task.progress, anatomy }
+  return { status: 'generating', progress: task.progress, anatomy, polished }
 }
