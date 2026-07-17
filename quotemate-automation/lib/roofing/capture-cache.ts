@@ -60,8 +60,9 @@ export function normalizeAddressKey(address: string): string {
 export type CacheKind = 'enhanced' | 'anatomy'
 
 // Cache schema version — bump when the enhancement contract changes so stale
-// images are never reused (v2: neighbour-removal / subject-property isolation).
-const CACHE_VERSION = 'v2'
+// images are never reused (v2: neighbour-removal / subject-property isolation;
+// v3: Nano Banana Pro polish + gutter lines in the anatomy overlay).
+const CACHE_VERSION = 'v3'
 
 /** PURE — storage object path for one view's cached image. */
 export function cachePathFor(address: string, view: CaptureView, kind: CacheKind = 'enhanced'): string {

@@ -110,6 +110,16 @@ describe('enhancement prompt contract (subject-property isolation)', () => {
     expect(ENHANCE_USER).toMatch(/sharpness/i)
     expect(ENHANCE_USER).toMatch(/photorealistic/i)
   })
+
+  it('pins the camera angle and framing — multiview reconstruction needs consistent views', () => {
+    expect(`${ENHANCE_SYSTEM} ${ENHANCE_USER}`).toMatch(/camera angle/i)
+    expect(`${ENHANCE_SYSTEM} ${ENHANCE_USER}`).toMatch(/framing/i)
+  })
+
+  it('keeps ambiguous frame-edge structures rather than erasing own-lot buildings', () => {
+    expect(ENHANCE_USER).toMatch(/unsure|uncertain|in doubt/i)
+    expect(ENHANCE_USER).toMatch(/keep it/i)
+  })
 })
 
 describe('parseTripoTask', () => {

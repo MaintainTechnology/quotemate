@@ -91,6 +91,7 @@ const ANATOMY_LEGEND = [
   ['Hip', '#ef4444'],
   ['Valley', '#22c55e'],
   ['Eave', '#d946ef'],
+  ['Gutter', '#f97316'],
 ] as const
 
 // Manual capture slots — the tradie frames each one by hand. Tripo consumes

@@ -63,6 +63,13 @@ const TRIPO_FACE_LIMIT = () => {
   return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 300_000
 }
 
+// Image model for the polish + anatomy passes — Nano Banana Pro (2K output,
+// better texture fidelity and line adherence than Flash-Lite). Scoped to the
+// roofing 3D feature; the global GEMINI_IMAGE_MODEL default stays untouched
+// for the other trades' previews.
+const MODEL3D_IMAGE_MODEL = () =>
+  process.env.ROOFING_MODEL3D_IMAGE_MODEL ?? 'gemini-3-pro-image-preview'
+
 // Tripo's canonical multiview slots. 'top' (see CAPTURE_VIEWS) has no slot —
 // a top capture is enhanced + cached but never sent to Tripo.
 export const VIEW_ORDER = ['front', 'left', 'back', 'right'] as const
@@ -122,9 +129,10 @@ export function buildMultiviewTaskBody(
 /**
  * PURE — orbit range (m) for the capture camera, from the footprint bbox
  * diagonal. TIGHT framing — the house should fill the shot: 0.8 × diagonal
- * + 8 m headroom for building height at the −32° capture pitch, floored at
- * 21 m so small sheds don't go macro; 36 m when there is no footprint.
- * Deliberately ~20% closer than the previous max(26, d + 10) framing —
+ * + 8 m headroom for building height at the capture pitch (see the auto
+ * orbit in Roof3DModelSection, tuned together with its aim-point pull),
+ * floored at 21 m so small sheds don't go macro; 36 m when there is no
+ * footprint. ~20% closer than the max(26, d + 10) framing it replaced —
  * the neighbours then occupy less of every capture too.
  */
 export function captureOrbitRangeM(diagonalM: number | null): number {
@@ -215,14 +223,17 @@ export const ENHANCE_SYSTEM =
   'You are a photo enhancement engine for property imagery. You upscale and sharpen ' +
   'aerial photographs, and you remove distracting neighbouring buildings from the frame ' +
   'edges. You never change the central subject property — its geometry, roof shape, ' +
-  'colours and proportions stay exactly as photographed.'
+  'colours and proportions stay exactly as photographed — and you never alter the ' +
+  'framing or camera angle of the photograph.'
 
 export const ENHANCE_USER =
   'Enhance this aerial capture into a high-resolution, crisp, photorealistic image. ' +
   'Keep the central house and every structure on its own lot exactly as captured — ' +
   'geometry, roof shape, colours, proportions. Remove neighbouring houses and buildings ' +
   'at the frame edges, replacing them with plausible garden and greenery, so only the ' +
-  'subject property remains. Improve sharpness, clarity and texture detail.'
+  'subject property remains. If you are unsure whether a structure belongs to the ' +
+  'central property, keep it. Do not reframe, zoom, or change the camera angle. ' +
+  'Improve sharpness, clarity and texture detail.'
 
 /**
  * Enhance one capture — BEST-EFFORT. Returns null when enhancement did NOT
@@ -232,11 +243,14 @@ export const ENHANCE_USER =
 async function enhanceCapture(image: ImageBytes): Promise<ImageBytes | null> {
   if (!process.env.GEMINI_API_KEY?.trim()) return null
   try {
+    // No aspectRatio: captures are 3:2 (auto crop) or arbitrary (manual/
+    // upload), so a fixed ratio would be a false source claim — omitting it
+    // keeps GEMINI_IMAGE_ASPECT=source from stretching the frame.
     return await geminiProvider.renderImage({
       system: ENHANCE_SYSTEM,
       user: ENHANCE_USER,
       sourceImage: image,
-      aspectRatio: '4:3',
+      model: MODEL3D_IMAGE_MODEL(),
     })
   } catch (e) {
     console.warn('[roofing/model3d] enhancement failed, using raw capture', {
@@ -256,8 +270,9 @@ const ANATOMY_SYSTEM =
 const ANATOMY_USER =
   'Draw colour-coded lines along the roof features of this house, with a small matching ' +
   'text label on each: RIDGE lines in blue, HIP lines in red, VALLEY lines in green, ' +
-  'EAVE lines in magenta. Trace every visible ridge, hip, valley and eave. Keep the ' +
-  'photograph otherwise unchanged.'
+  'EAVE lines in magenta, GUTTER lines in orange (along the roof’s outer drainage ' +
+  'edges, where gutters run). Trace every visible ridge, hip, valley, eave and gutter. ' +
+  'Keep the photograph otherwise unchanged.'
 
 /**
  * Annotate one enhanced capture with the colour-coded roof-anatomy overlay.
@@ -268,11 +283,13 @@ const ANATOMY_USER =
 async function annotateCapture(image: ImageBytes): Promise<ImageBytes | null> {
   if (!process.env.GEMINI_API_KEY?.trim()) return null
   try {
+    // No aspectRatio — same reasoning as enhanceCapture: never claim a
+    // ratio the source image may not have.
     return await geminiProvider.renderImage({
       system: ANATOMY_SYSTEM,
       user: ANATOMY_USER,
       sourceImage: image,
-      aspectRatio: '4:3',
+      model: MODEL3D_IMAGE_MODEL(),
     })
   } catch (e) {
     console.warn('[roofing/model3d] anatomy annotation failed', {
@@ -313,7 +330,15 @@ export async function claimModel3d(
 ): Promise<{ address: string | null } | null> {
   const { data } = await supabaseClient()
     .from('roofing_measurements')
-    .update({ model3d_status: 'generating', model3d_error: null, model3d_task_id: null })
+    // model3d_anatomy cleared too: row-stamped overlays were drawn over the
+    // PREVIOUS generation's polished captures — a regenerate must not keep
+    // showing them (they may pre-date the neighbour-removal contract).
+    .update({
+      model3d_status: 'generating',
+      model3d_error: null,
+      model3d_task_id: null,
+      model3d_anatomy: null,
+    })
     .eq('measure_token', measureToken)
     .or('model3d_status.is.null,model3d_status.eq.failed,model3d_status.eq.ready')
     .select('id, address')

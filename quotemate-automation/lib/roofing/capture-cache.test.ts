@@ -25,9 +25,9 @@ describe('normalizeAddressKey', () => {
 })
 
 describe('cachePathFor', () => {
-  it('builds version-segmented enhanced/v2/{key}/{view} so pre-isolation images are never reused', () => {
+  it('builds version-segmented enhanced/v3/{key}/{view} so stale-contract images are never reused', () => {
     expect(cachePathFor('670 London Rd, Chandler QLD', 'front')).toBe(
-      'enhanced/v2/670-london-rd-chandler-qld/front',
+      'enhanced/v3/670-london-rd-chandler-qld/front',
     )
   })
 
@@ -37,7 +37,7 @@ describe('cachePathFor', () => {
 
   it('separates anatomy overlays from enhanced captures (same version segment)', () => {
     expect(cachePathFor('670 London Rd', 'front', 'anatomy')).toBe(
-      'anatomy/v2/670-london-rd/front',
+      'anatomy/v3/670-london-rd/front',
     )
     expect(cachePathFor('670 London Rd', 'front', 'enhanced')).toBe(
       cachePathFor('670 London Rd', 'front'),
