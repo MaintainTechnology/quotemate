@@ -1,9 +1,10 @@
-// WP6 reorder regression coverage — book first, pay LAST.
+// Funnel-order regression coverage.
 //
-// Locks the funnel order so a future change can't silently put payment
-// back before booking. Since the 2026-07-08 change (Jon's workflow:
-// select a time slot, THEN pay) the $99 inspection follows the same
-// book-first order as the deposit tiers.
+// Deposit tiers: BOOK FIRST, PAY LAST (WP6 reorder) — locks the order so a
+// future change can't silently put payment back before booking.
+// The $99 inspection: PAY FIRST, BOOK SECOND (spec
+// customer-quote-five-sections R7, D1a — pay $99 → Stripe → booking page →
+// thank-you), matching the dedicated trade surfaces.
 
 import { describe, expect, it } from 'vitest'
 import { BOOKING_STATE } from './hold'
@@ -49,13 +50,13 @@ describe('payRedirectTarget — the flip', () => {
     ).toBe('paid')
   })
 
-  it('inspection $99 is book-first too — no slot yet → pick a time (2026-07-08 requirements change)', () => {
+  it('inspection $99 is PAY-FIRST — unpaid goes straight to Stripe (five-sections R7, D1a)', () => {
     expect(
       payRedirectTarget({ paid: false, scheduledAt: null, tier: 'inspection' }),
-    ).toBe('book')
+    ).toBe('stripe')
   })
 
-  it('inspection with a slot already chosen → Stripe ($99 is the last step)', () => {
+  it('inspection with a slot somehow pre-chosen still pays first (never bounced to /book)', () => {
     expect(
       payRedirectTarget({
         paid: false,
@@ -63,6 +64,12 @@ describe('payRedirectTarget — the flip', () => {
         tier: 'inspection',
       }),
     ).toBe('stripe')
+  })
+
+  it('deposit tiers stay BOOK-FIRST — the inspection flip must not leak (D1a scope)', () => {
+    for (const tier of ['good', 'better', 'best']) {
+      expect(payRedirectTarget({ paid: false, scheduledAt: null, tier })).toBe('book')
+    }
   })
 
   it('PAID inspection → thank-you, never a fresh $99 charge (double-charge guard)', () => {

@@ -293,8 +293,38 @@ describe('buildQuoteReportHtml — propertyVisuals (spec quote-visual-parity R1)
     expect(omitted).not.toContain('Your roof, from above')
   })
 
-  it('REPORT_TEMPLATE_VERSION is bumped to 6 so cached PDFs regenerate (roofing layout map + materials)', () => {
-    expect(REPORT_TEMPLATE_VERSION).toBe(6)
+  it('REPORT_TEMPLATE_VERSION is bumped to 7 so cached PDFs regenerate (discount + GST awareness)', () => {
+    expect(REPORT_TEMPLATE_VERSION).toBe(7)
+  })
+
+  it('v7 — tier prices honour the realised early-booking discount (P7)', () => {
+    const discounted = buildQuoteReportHtml({
+      businessName: 'Pilot Sparky',
+      jobType: 'downlights',
+      good: null,
+      better: tier('Mid-range LEDs', 1000),
+      best: null,
+      selectedTier: null,
+      appliedDiscountPct: 10,
+    })
+    // 1000 ex · 10% off → 900 ex → $990 inc, flagged as discounted.
+    expect(discounted).toContain('$990')
+    expect(discounted).toContain('10% off applied')
+    expect(discounted).not.toContain('$1,100')
+  })
+
+  it('v7 — a non-GST-registered tradie renders ex-GST headline prices (P1)', () => {
+    const noGst = buildQuoteReportHtml({
+      businessName: 'Pilot Sparky',
+      jobType: 'downlights',
+      good: null,
+      better: tier('Mid-range LEDs', 1000),
+      best: null,
+      selectedTier: null,
+      gstRegistered: false,
+    })
+    expect(noGst).toContain('$1,000')
+    expect(noGst).not.toContain('$1,100')
   })
 
   it('chunks a full 8-stat roofing grid into rows of 4 (the chrome statgrid does not wrap)', () => {

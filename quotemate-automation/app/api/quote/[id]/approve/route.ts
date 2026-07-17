@@ -77,7 +77,7 @@ export async function POST(
   const { data: quote, error: qErr } = await supabase
     .from('quotes')
     .select(
-      'id, tenant_id, intake_id, status, share_token, good, better, best, selected_tier, total_inc_gst, scope_of_works, assumptions, estimated_timeframe, needs_inspection, inspection_reason, stripe_links, deposit_pct, display_mode, price_hold_until',
+      'id, tenant_id, intake_id, status, share_token, good, better, best, selected_tier, total_inc_gst, scope_of_works, assumptions, estimated_timeframe, needs_inspection, inspection_reason, stripe_links, deposit_pct, display_mode, price_hold_until, applied_discount_pct',
     )
     .eq('id', quoteId)
     .maybeSingle()
@@ -203,6 +203,12 @@ export async function POST(
     inspection_reason: quote.inspection_reason as string | null,
     quote_view_url: `${appUrl}/q/${quote.share_token as string}`,
     pdf_url: quotePdfPath ? quotePdfUrl(quote.share_token as string) : null,
+    // P6 — the SMS prices must match what /r's freshly-minted Session
+    // charges: discounted when the customer already booked in time, and
+    // GST-conditional like every other surface (lib/quote/money.ts).
+    applied_discount_pct: (quote.applied_discount_pct as number | null) ?? 0,
+    gst_registered:
+      ((pricingBook as { gst_registered?: boolean | null } | null)?.gst_registered ?? true),
   }
   const intakeForSms = {
     job_type: (intake?.job_type as string) ?? 'other',

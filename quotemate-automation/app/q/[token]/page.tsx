@@ -24,9 +24,17 @@ import { QuoteChrome, type StickyBar } from '../_chrome/QuoteChrome'
 import { tradeIcon } from '../_chrome/icons'
 import {
   QuoteSheet, Letterhead, HeroPhoto, QuoteHero, StatGrid, Scope,
-  SheetSection, TierCards, GoodToKnow, CredentialFooter,
-  type QuoteTier, type Stat, type FooterRow,
+  SheetSection, TierCards, GoodToKnow, CredentialFooter, MediaPlaceholder,
+  type QuoteTier, type Stat, type FooterRow, type ScopeItem,
 } from '../_chrome/parts'
+import {
+  INSPECTION_FEE_AUD,
+  clampDepositPct,
+  displayDeposit,
+  displayIncGst,
+  fmtAud,
+} from '@/lib/quote/money'
+import { safeWebsiteUrl } from '@/lib/quote/tenant-identity'
 import {
   roofScopeStats,
   commercialPaintScope,
@@ -46,7 +54,6 @@ import { computePriceHoldUntil, priceHoldStatus, fmtHoldUntilAU } from '@/lib/qu
 import { advanceQuoteStatus } from '@/lib/quote/lifecycle'
 import {
   earlyBirdStatus,
-  applyEarlyBirdDiscount,
   fmtEarlyBirdDeadlineAU,
   fmtEarlyBirdRemaining,
 } from '@/lib/quote/early-bird'
@@ -126,17 +133,18 @@ function asNumber(v: number | string | null | undefined): number {
   return typeof v === 'string' ? parseFloat(v) : v
 }
 
-function fmt(n: number): string {
-  return n.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
-}
+// Money maths + formatting live in lib/quote/money.ts — the SAME functions
+// the SMS, PDF and Stripe charge derive from, so every surface shows one
+// number (spec customer-quote-five-sections R9).
+const fmt = fmtAud
 
-function incGst(exGst: number | string): number {
-  return Math.round(asNumber(exGst) * 1.10)
-}
-
-function deposit(price: number, pct: number | null | undefined): number | null {
-  if (!pct || pct <= 0) return null
-  return Math.round((price * pct) / 100)
+/** First full sentence of a scope paragraph — the same slice the customer
+ *  SMS uses (lib/sms/templates.ts pickScopeForSms) as the Section 2 fallback
+ *  for quotes drafted before migration 175 persisted scope_short. */
+function firstSentenceOf(s: string | null | undefined): string | null {
+  if (!s || !s.trim()) return null
+  const m = s.match(/^[^.]+\./)
+  return (m ? m[0] : s).trim()
 }
 
 export default async function PublicQuotePage(props: {
@@ -146,7 +154,7 @@ export default async function PublicQuotePage(props: {
 
   const { data: quote } = await supabase
     .from('quotes')
-    .select('id, intake_id, tenant_id, status, scope_of_works, assumptions, risk_flags, good, better, best, optional_upsells, estimated_timeframe, needs_inspection, inspection_reason, gst_note, selected_tier, share_token, stripe_links, paid_at, paid_tier, created_at, price_hold_until, booking_state, preview_status, preview_image_path, preview_image_paths, samples_status, sample_image_paths, display_mode')
+    .select('id, intake_id, tenant_id, status, scope_of_works, assumptions, risk_flags, good, better, best, optional_upsells, estimated_timeframe, needs_inspection, inspection_reason, gst_note, selected_tier, share_token, stripe_links, paid_at, paid_tier, created_at, price_hold_until, booking_state, preview_status, preview_image_path, preview_image_paths, samples_status, sample_image_paths, display_mode, deposit_pct')
     .eq('share_token', token)
     .maybeSingle()
 
@@ -184,6 +192,20 @@ export default async function PublicQuotePage(props: {
       .eq('id', quote.id)
       .maybeSingle()
     if (ca) customerAcceptedAt = (ca.customer_accepted_at as string | null) ?? null
+  }
+
+  // Section 2 sentence (migration 175) — SEPARATE best-effort select so a
+  // deploy that lands before the migration simply reads null and the page
+  // falls back to the first sentence of scope_of_works. Same pattern as the
+  // early-bird + acceptance blocks above.
+  let scopeShort: string | null = null
+  {
+    const { data: ss } = await supabase
+      .from('quotes')
+      .select('scope_short')
+      .eq('id', quote.id)
+      .maybeSingle()
+    if (ss) scopeShort = (ss.scope_short as string | null) ?? null
   }
 
   // v5 multi-trade: must fetch intake before pricing_book so we can filter
@@ -510,7 +532,15 @@ export default async function PublicQuotePage(props: {
     ? new Date(quote.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
     : null
 
-  const depositPct = isInspection ? null : 30
+  // P2 — honour the per-quote deposit % (quotes.deposit_pct, DB default 30).
+  // This page previously HARDCODED 30 while /r/<token>/<tier> charged the
+  // stored value — a tenant on 20% saw 30% advertised and was charged 20%.
+  const depositPct = isInspection
+    ? null
+    : clampDepositPct((quote as { deposit_pct?: number | string | null }).deposit_pct)
+  // P1 — every price on this page honours gst_registered exactly like the
+  // stored total_inc_gst (a legacy tenant-less quote defaults to registered).
+  const gstRegistered = pricingBook ? !!pricingBook.gst_registered : true
 
   // WP6 — price-hold / urgency. Use the persisted price_hold_until when
   // present (migration 026); otherwise derive it from created_at so the
@@ -554,13 +584,24 @@ export default async function PublicQuotePage(props: {
 
   // ─── Presentation-only helpers for the reskinned sheet ──────────────
   // Everything below reuses the pricing computations already established
-  // above (incGst / applyEarlyBirdDiscount / deposit / the /r/<token>/<key>
+  // above (lib/quote/money displayIncGst / displayDeposit, the /r/<token>/<key>
   // link, visibleTierSet, priceExpired, isPaid/paid_tier). No new pricing.
   const ebApp = ebApplied ? ebAppliedPct : 0
-  const tierIncGst = (t: Tier): number => {
-    const full = incGst((t as { subtotal_ex_gst?: number | string })?.subtotal_ex_gst ?? 0)
-    return ebApp > 0 ? applyEarlyBirdDiscount(full, ebApp) : full
-  }
+  // P4 — ONE discount order for every renderer on this page (lib/quote/money):
+  // discount the ex-GST base, then GST, rounded once. Previously this path
+  // rounded to inc-GST dollars FIRST then discounted while TradeTiers did the
+  // opposite — same quote, two components, off-by-a-dollar results.
+  const tierIncGst = (t: Tier): number =>
+    displayIncGst((t as { subtotal_ex_gst?: number | string })?.subtotal_ex_gst ?? 0, {
+      discountPct: ebApp,
+      gstRegistered,
+    })
+  const tierDeposit = (t: Tier): number | null =>
+    displayDeposit(
+      (t as { subtotal_ex_gst?: number | string })?.subtotal_ex_gst ?? 0,
+      depositPct,
+      { discountPct: ebApp, gstRegistered },
+    )
   const cleanTierLabel = (label: string | undefined): string =>
     (label ?? '').replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim()
 
@@ -587,11 +628,15 @@ export default async function PublicQuotePage(props: {
         ? `${cleanTierLabel(String(quote.paid_tier)) || String(quote.paid_tier).toUpperCase()} option · your tradie will be in touch`
         : 'Your tradie will be in touch',
     }
-  } else if (isInspection && !roofingIndicative) {
+  } else if (isInspection && (isRoofing || !roofingIndicative)) {
+    // Every inspection quote's sticky action is the $99 site visit. Roofing
+    // indicative quotes previously fell through to a per-tier deposit CTA the
+    // in-sheet cards deliberately withheld (spec five-sections R6) — the $99
+    // is the one thing this page sells.
     stickyBar = {
-      tierLabel: '$99 site visit · refundable',
-      priceText: '$99',
-      ctaLabel: 'Pay $99',
+      tierLabel: `$${INSPECTION_FEE_AUD} site visit · refundable`,
+      priceText: `$${INSPECTION_FEE_AUD}`,
+      ctaLabel: `Pay $${INSPECTION_FEE_AUD}`,
       // /r/<token>/inspection mints a fresh $99 Session per click — no stored
       // stripe_links.inspection needed (roofing/commercial save routes never
       // wrote one). Always link so the CTA is never dead.
@@ -601,7 +646,7 @@ export default async function PublicQuotePage(props: {
     const fTier = quote[featuredKey] as Tier
     if (fTier) {
       const fInc = tierIncGst(fTier)
-      const fDep = deposit(fInc, depositPct)
+      const fDep = tierDeposit(fTier)
       // /r mints a fresh Session from good/better/best per click, so the CTA
       // no longer depends on a pre-stored stripe_links[tier] (which roofing /
       // commercial never wrote). Gate only on price-hold expiry.
@@ -624,7 +669,7 @@ export default async function PublicQuotePage(props: {
   // the block is rendered only when !isInspection.
   const acceptFeaturedTier = featuredKey ? (quote[featuredKey] as Tier) : null
   const acceptInc = acceptFeaturedTier ? tierIncGst(acceptFeaturedTier) : 0
-  const acceptDep = deposit(acceptInc, depositPct)
+  const acceptDep = acceptFeaturedTier ? tierDeposit(acceptFeaturedTier) : null
   const acceptView = resolveAcceptView({
     token,
     tier: (featuredKey ?? 'better') as 'good' | 'better' | 'best',
@@ -641,10 +686,9 @@ export default async function PublicQuotePage(props: {
         .filter((k) => visibleTierSet.has(k) && !!quote[k])
         .map((k) => {
           const t = quote[k] as NonNullable<Tier>
-          const full = incGst((t as { subtotal_ex_gst?: number | string }).subtotal_ex_gst ?? 0)
           const discounted = ebApp > 0
-          const priceInc = discounted ? applyEarlyBirdDiscount(full, ebApp) : full
-          const dep = deposit(priceInc, depositPct)
+          const priceInc = tierIncGst(t)
+          const dep = tierDeposit(t)
           const recommended = showRecommendedBadge && quote.selected_tier === k
           const paidThis = isPaid && quote.paid_tier === k
           const disabledOther = isPaid && quote.paid_tier !== k
@@ -829,6 +873,208 @@ export default async function PublicQuotePage(props: {
     : tierCount === 1
       ? `One option below. Price includes 10% GST. Tap to lock it in with a ${depositPct ?? 30}% deposit.`
       : `${tierCount === 2 ? 'Two' : 'Three'} options below. All prices include 10% GST. Tap any tier to lock it in with a ${depositPct ?? 30}% deposit.`
+
+  // ═══ Five-section roofing layout (spec customer-quote-five-sections) ═══
+  //
+  // The page sells ONE thing for roofing: pay $99 and the tradie validates
+  // this quote in person. Overview → Job details → Trust → Price → CTA,
+  // rendered as the signature numbered cards. One option only (tier mode
+  // 'single' resolves selected_tier = better = "Full roof replacement").
+  // Electrical/plumbing keep the generic layout below — restructuring their
+  // live AI-preview/photo-upload surfaces was ruled out of scope.
+  if (isRoofing) {
+    const roofTier = featuredKey ? (quote[featuredKey] as Tier) : null
+    // P10 — roofing tiers carry a GST-aware stored total_inc_gst (the roofing
+    // pricer honours gst_registered); prefer it over recomputing ×1.1.
+    const storedInc = (roofTier as { total_inc_gst?: number } | null)?.total_inc_gst
+    const roofPriceInc =
+      typeof storedInc === 'number' && storedInc > 0
+        ? Math.round(storedInc)
+        : roofTier
+          ? tierIncGst(roofTier)
+          : 0
+    const roofTierLabel = tierLabelsForTrade('roofing')[featuredKey ?? 'better']
+    const roofDeposit = !isInspection && roofTier ? tierDeposit(roofTier) : null
+    const jobSentence = scopeShort ?? firstSentenceOf(quote.scope_of_works as string | null)
+    const websiteUrl = safeWebsiteUrl(tenantIdentity?.website_url)
+    const tradieName = tenantIdentity?.business_name ?? 'Your roofer'
+
+    const microNote: React.CSSProperties = {
+      fontFamily: 'var(--font-mono)',
+      fontSize: 9.5,
+      textTransform: 'uppercase',
+      letterSpacing: '0.12em',
+      color: 'var(--text-dim)',
+    }
+
+    const roofSections: ScopeItem[] = [
+      {
+        title: 'Overview',
+        body:
+          (quote.scope_of_works as string | null) ??
+          'Your roofing quote, measured from satellite imagery of your property.',
+      },
+      {
+        title: 'Job details',
+        body: jobSentence ?? 'Scope confirmed with you before any work is booked.',
+      },
+      {
+        title: 'Your tradie',
+        body: (
+          <div style={{ display: 'grid', gap: 12, maxWidth: 480 }}>
+            <div className="qm-print-hide">
+              <MediaPlaceholder
+                title={tradieName}
+                eyebrow="Video coming soon"
+                caption="A short introduction from your tradie"
+              />
+            </div>
+            <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.5, color: 'var(--text-sec)' }}>
+              {tradieName} is a licensed local roofing business.
+              {websiteUrl ? (
+                <>
+                  {' '}
+                  <a href={websiteUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>
+                    Visit their website
+                  </a>
+                  .
+                </>
+              ) : null}
+            </p>
+          </div>
+        ),
+      },
+      {
+        title: 'Your price',
+        body: (
+          <div>
+            <div
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontWeight: 800,
+                fontSize: 24,
+                lineHeight: 1,
+                color: 'var(--text-pri)',
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              {roofPriceInc > 0 ? `$${fmt(roofPriceInc)}` : 'Confirmed on site'}
+            </div>
+            <div style={{ marginTop: 6, ...microNote }}>
+              {roofPriceInc > 0
+                ? `${roofTierLabel} · inc GST${isInspection ? ' · indicative' : ''}`
+                : 'Priced after your site visit'}
+            </div>
+            {isInspection && roofPriceInc > 0 ? (
+              <p style={{ margin: '10px 0 0', fontSize: 12.5, lineHeight: 1.5, color: 'var(--text-dim)', maxWidth: '52ch' }}>
+                Estimated from your satellite measurement. The final price is confirmed at your site visit.
+              </p>
+            ) : null}
+          </div>
+        ),
+      },
+      {
+        title: isInspection ? 'Book your site inspection' : 'Lock it in',
+        body: (
+          <div style={{ display: 'grid', gap: 10, maxWidth: 380 }}>
+            {isPaid ? (
+              <div
+                style={{
+                  border: '1px solid color-mix(in srgb, var(--success-bright) 40%, transparent)',
+                  padding: '13px 16px',
+                  textAlign: 'center',
+                  ...microNote,
+                  color: 'var(--success-bright)',
+                }}
+              >
+                {isInspection ? 'Site visit paid · pick your time from the link we sent' : 'Deposit paid'}
+              </div>
+            ) : isInspection ? (
+              <>
+                <a
+                  href={`/r/${token}/inspection`}
+                  className="qm-cta"
+                  style={{
+                    display: 'block',
+                    textAlign: 'center',
+                    border: '1px solid transparent',
+                    background: 'var(--accent)',
+                    color: 'var(--accent-ink)',
+                    padding: '13px 16px',
+                    fontFamily: 'var(--font-sans)',
+                    fontWeight: 700,
+                    fontSize: 13,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    textDecoration: 'none',
+                  }}
+                >
+                  Book a site inspection · ${INSPECTION_FEE_AUD}
+                </a>
+                <span style={microNote}>Refundable · credited toward your final quote</span>
+              </>
+            ) : (
+              <a
+                href={`/r/${token}/${featuredKey ?? 'better'}`}
+                className="qm-cta"
+                style={{
+                  display: 'block',
+                  textAlign: 'center',
+                  border: '1px solid transparent',
+                  background: 'var(--accent)',
+                  color: 'var(--accent-ink)',
+                  padding: '13px 16px',
+                  fontFamily: 'var(--font-sans)',
+                  fontWeight: 700,
+                  fontSize: 13,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  textDecoration: 'none',
+                }}
+              >
+                {roofDeposit ? `Pay $${fmt(roofDeposit)} deposit` : 'Pay deposit'}
+              </a>
+            )}
+          </div>
+        ),
+      },
+    ]
+
+    return (
+      <QuoteChrome
+        trade={{ label: tradeFormat.label, icon: tradeIcon(intakeTrade) }}
+        sticky={stickyBar}
+      >
+        <TradieEditor
+          quoteId={quote.id as string}
+          gstRegistered={gstRegistered}
+          initialTiers={{
+            good: (quote.good as Parameters<typeof TradieEditor>[0]['initialTiers']['good']) ?? null,
+            better: (quote.better as Parameters<typeof TradieEditor>[0]['initialTiers']['better']) ?? null,
+            best: (quote.best as Parameters<typeof TradieEditor>[0]['initialTiers']['best']) ?? null,
+          }}
+        />
+        <QuoteSheet label={`Quote ${quoteRef}`}>
+          {tenantIdentity?.business_name ? (
+            <Letterhead
+              name={tenantIdentity.business_name}
+              credential={letterheadCredential}
+              phoneHref={letterheadPhoneHref}
+              logoUrl={tenantIdentity.logo_url}
+              contactName={letterheadContactName}
+              phone={ownerPhone || null}
+              email={letterheadEmail}
+            />
+          ) : null}
+          <Scope eyebrow={`Quote ${quoteRef}`} items={roofSections} />
+          <CredentialFooter
+            rows={footerRows}
+            tagline="Book the visit · We confirm on site · Licensed & insured"
+          />
+        </QuoteSheet>
+      </QuoteChrome>
+    )
+  }
 
   return (
     <QuoteChrome
@@ -1024,6 +1270,7 @@ export default async function PublicQuotePage(props: {
               token={token}
               stripeLinks={stripeLinks}
               depositPct={depositPct}
+              gstRegistered={gstRegistered}
               selectedTier={showRecommendedBadge ? ((quote.selected_tier as string | null) ?? null) : null}
               appliedDiscountPct={ebApplied ? ebAppliedPct : 0}
               isPaid={isPaid}

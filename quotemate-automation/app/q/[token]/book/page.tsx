@@ -19,7 +19,7 @@
 import type { ReactNode } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { resolveGoogleBookingUrl, resolveNextTier } from '@/lib/quote/booking'
 import { isPriceHoldExpired } from '@/lib/quote/hold'
 import { resolveBookingOptions, buildBookedKeys, type BookingOption } from '@/lib/quote/slots'
@@ -204,9 +204,17 @@ export default async function BookingPage(props: {
     )
 
   // Tier the pay step charges: query param (carried from the quote page
-  // tier button — incl. the book-first $99 'inspection' fee) → the quote's
-  // selected_tier → 'better'. Shared resolver with POST /api/q/[token]/book.
+  // tier button) → the quote's selected_tier → 'better'. Shared resolver
+  // with POST /api/q/[token]/book.
   const tier = resolveNextTier(sp.tier ?? null, quote.selected_tier as string | null)
+
+  // The $99 inspection is PAY-FIRST (spec customer-quote-five-sections R7,
+  // D1a): an UNPAID inspection visitor (old SMS link, manual URL) is routed
+  // to payment — the booking POST would 409 their pick anyway. Paid
+  // inspections fall through to the picker (the designed pay → book step).
+  if (!isPaid && (tier === 'inspection' || quote.needs_inspection)) {
+    redirect(`/r/${token}/inspection`)
+  }
 
   // Off-platform "book directly on the tradie's calendar" link (Google
   // Appointment). Decision: DB picker = pay-last + auto-confirmed;

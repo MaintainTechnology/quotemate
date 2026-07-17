@@ -1,15 +1,18 @@
 // Stripe success URL lands here. The webhook is what authoritatively marks
 // the quote paid; this page confirms the job to the customer and offers the
-// next actions. Maintain Technology design system (matches /q/[token]/book).
+// next actions. QuoteMax command-centre tokens (charcoal + the one yellow
+// accent — the retired Maintain teal/Topo treatment was removed with the
+// five-sections restructure).
 //
-// Three additions over the old thank-you stub (spec 2026-07-05 Part B):
+// This page is ALSO the thank-you page of the pay-first $99 funnel (spec
+// customer-quote-five-sections R8): quote → pay $99 → pick a time → land
+// here, where the tradie's thank-you video (face-holder placeholder in v1)
+// says we have received the request and will confirm the exact time.
+//
+// Plus the earlier Part B additions:
 //   B1 — a "What's booked" confirmation card (always shown).
-//   B2 — a "Download quote (PDF)" button whenever the quote is priced
-//        (needs_inspection === false). Inspection deposits have no priced
-//        PDF, so the button is simply omitted for them.
-//   B3 — "Add to calendar" (.ics + Google) shown only once a visit time is
-//        confirmed (scheduled_at set). Inspection deposits are date-less at
-//        this point, so they show a "we'll send an invite" note instead.
+//   B2 — a "Download quote (PDF)" button whenever the quote is priced.
+//   B3 — "Add to calendar" (.ics + Google) once a visit time is confirmed.
 
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
@@ -19,7 +22,10 @@ import { humanizeJobType } from '@/lib/sms/followup-context'
 import { buildGoogleCalendarUrl, resolveEventWindow } from '@/lib/quote/calendar'
 import { paidPageTarget } from '@/lib/quote/booking'
 import { tzForState } from '@/lib/quote/availability'
-import { finalisePaidQuote, sessionConfirmsQuote } from '@/lib/quote/paid-confirm'
+import { confirmPaidFromSession } from '@/lib/quote/paid-confirm'
+import { INSPECTION_FEE_AUD } from '@/lib/quote/money'
+import { loadTenantIdentity } from '@/lib/quote/tenant-identity'
+import { MediaPlaceholder } from '@/app/q/_chrome/parts'
 import { getStripe } from '@/lib/stripe/client'
 
 export const dynamic = 'force-dynamic'
@@ -55,33 +61,10 @@ function formatScheduled(iso: string, window?: string | null, tz = 'Australia/Sy
   }
 }
 
-function Topo() {
-  return (
-    <svg
-      className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.12]"
-      viewBox="0 0 1920 1080"
-      preserveAspectRatio="xMidYMid slice"
-      aria-hidden="true"
-    >
-      {[0, 70, 140, 210, 280, 350, 420].map((dy) => (
-        <path
-          key={dy}
-          d={`M0,${760 - dy} Q240,${600 - dy} 480,${690 - dy} T960,${640 - dy} T1440,${
-            700 - dy
-          } T1920,${610 - dy}`}
-          stroke="var(--color-teal-glow, #14B8A6)"
-          strokeWidth="1"
-          fill="none"
-        />
-      ))}
-    </svg>
-  )
-}
-
 function Shell({ token, children }: { token: string; children: React.ReactNode }) {
   return (
     <main className="relative min-h-screen overflow-hidden bg-ink-deep text-text-pri">
-      <Topo />
+      <div className="noise-overlay" aria-hidden="true" />
       <header className="relative z-10 border-b border-ink-line">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-5 py-5 sm:px-6">
           <Link href="/" className="flex items-center gap-2.5">
@@ -97,8 +80,9 @@ function Shell({ token, children }: { token: string; children: React.ReactNode }
         </div>
       </header>
       <div className="relative z-10 mx-auto max-w-2xl px-5 py-9 sm:px-6 sm:py-12">{children}</div>
+      {/* Dark-on-yellow only — white on the accent is forbidden (~1.4:1). */}
       <div className="relative z-10 bg-accent px-6 py-4 text-center">
-        <span className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-white">
+        <span className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-ink-deep">
           QuoteMax · Paid · Confirmed
         </span>
       </div>
@@ -149,11 +133,11 @@ export default async function PaidPage(props: {
     )
   }
 
-  // Best-effort enrichment — a missing tenant/intake must never break the page.
-  const [{ data: tenant }, { data: intake }] = await Promise.all([
-    quote.tenant_id
-      ? supabase.from('tenants').select('business_name, state').eq('id', quote.tenant_id).maybeSingle()
-      : Promise.resolve({ data: null }),
+  // Best-effort enrichment — a missing tenant/intake must never break the
+  // page. loadTenantIdentity carries the mig-175 thank-you video column (v1
+  // renders the face-holder placeholder regardless — no footage exists yet).
+  const [tenant, { data: intake }] = await Promise.all([
+    loadTenantIdentity(supabase, (quote.tenant_id as string | null) ?? null),
     quote.intake_id
       ? supabase
           .from('intakes')
@@ -163,8 +147,8 @@ export default async function PaidPage(props: {
       : Promise.resolve({ data: null }),
   ])
 
-  const tradieName = (tenant?.business_name as string | null) ?? null
-  const tz = tzForState((tenant?.state as string | null) ?? null)
+  const tradieName = tenant?.business_name ?? null
+  const tz = tzForState(tenant?.state ?? null)
   const jobType = (intake?.job_type as string | null) ?? null
   const suburb = (intake?.suburb as string | null) ?? null
   const address = (intake?.address as string | null) ?? null
@@ -182,48 +166,36 @@ export default async function PaidPage(props: {
   let paidAt = (quote.paid_at as string | null) ?? null
   let paidTier = (quote.paid_tier as string | null) ?? null
   if (!paidAt && sp.session_id) {
-    try {
-      const session = await getStripe().checkout.sessions.retrieve(sp.session_id)
-      const confirmed = sessionConfirmsQuote(
-        {
-          payment_status: session.payment_status,
-          metadata: session.metadata as Record<string, string> | null,
+    // Extracted + unit-tested (lib/quote/paid-confirm.test.ts). Never throws;
+    // Stripe unreachable → render from DB state, webhook stays authoritative.
+    const guard = await confirmPaidFromSession(
+      supabase,
+      (id) => getStripe().checkout.sessions.retrieve(id),
+      {
+        quote: {
+          id: quote.id as string,
+          scheduled_at: scheduledAt,
+          intake_id: (quote.intake_id as string | null) ?? null,
+          tenant_id: (quote.tenant_id as string | null) ?? null,
+          share_token: (quote.share_token as string | null) ?? null,
         },
-        quote.id as string,
-      )
-      if (confirmed) {
-        const feeRaw = session.metadata?.application_fee_cents
-        const fee = feeRaw ? Number.parseInt(feeRaw, 10) : null
-        await finalisePaidQuote(supabase, {
-          quote: {
-            id: quote.id as string,
-            scheduled_at: scheduledAt,
-            intake_id: (quote.intake_id as string | null) ?? null,
-            tenant_id: (quote.tenant_id as string | null) ?? null,
-            share_token: (quote.share_token as string | null) ?? null,
-          },
-          tier: confirmed.tier,
-          sessionId: session.id,
-          amountTotalCents: session.amount_total ?? null,
-          applicationFeeCents: Number.isFinite(fee as number) ? fee : null,
-          connectDestination: session.metadata?.connect_destination ?? null,
-        })
-        // Verified paid with Stripe directly — claimed:false just means the
-        // webhook won the race a moment ago; either way the quote IS paid.
-        paidAt = new Date().toISOString()
-        paidTier = paidTier ?? confirmed.tier
-      }
-    } catch {
-      // Stripe unreachable — render from DB state; the webhook remains the
-      // authoritative fallback.
+        sessionId: sp.session_id,
+      },
+    )
+    if (guard.paid) {
+      paidAt = new Date().toISOString()
+      paidTier = paidTier ?? guard.tier
     }
   }
 
-  // Paid but date-less (the $99 inspection, or a deposit off an old no-slot
-  // SMS link) → take the customer straight to the slot picker rather than
-  // parking them here behind a passive link.
+  // Paid but date-less — the pay-first $99 inspection (spec five-sections
+  // R7: pay → pick a time → back here), or a deposit off an old no-slot SMS
+  // link → take the customer straight to the slot picker rather than parking
+  // them here behind a passive link. Carry the tier so the picker charges/
+  // labels the right product.
   if (paidPageTarget({ paid: !!paidAt, scheduledAt }) === 'book') {
-    redirect(`/q/${token}/book`)
+    const tierParam = paidTier ?? sp.tier ?? null
+    redirect(`/q/${token}/book${tierParam ? `?tier=${encodeURIComponent(tierParam)}` : ''}`)
   }
 
   const tierPaid = paidTier ?? sp.tier ?? null
@@ -247,8 +219,13 @@ export default async function PaidPage(props: {
     statusLine = `${who} will be in touch shortly to confirm a time.`
   }
 
-  const amount =
-    quote.total_inc_gst != null
+  // What the customer actually PAID. An inspection payment is the flat $99 —
+  // promoted roofing quotes carry the tier total in total_inc_gst, which is
+  // NOT what was charged (surfaced by the five-sections live verification:
+  // the card read "Paid $22,000.00" on a $99 site-visit payment).
+  const amount = isInspection
+    ? `$${INSPECTION_FEE_AUD.toFixed(2)}`
+    : quote.total_inc_gst != null
       ? `$${Number(quote.total_inc_gst).toLocaleString('en-AU', {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
@@ -284,7 +261,7 @@ export default async function PaidPage(props: {
   return (
     <Shell token={token}>
       <section className="motion-safe:animate-[fade-in_240ms_ease-out_both]">
-        <span className="inline-flex items-center bg-teal-glow/15 px-3 py-1 font-mono text-[0.7rem] font-bold uppercase tracking-[0.16em] text-teal-glow">
+        <span className="inline-flex items-center border border-accent/45 px-3 py-1 font-mono text-[0.7rem] font-bold uppercase tracking-[0.16em] text-accent">
           {isBooked ? 'Booked · Confirmed' : 'Payment received'}
         </span>
         <h1 className="mt-6 text-[clamp(1.9rem,5vw,3.25rem)] font-extrabold uppercase leading-[1.03] tracking-[-0.03em]">
@@ -299,6 +276,22 @@ export default async function PaidPage(props: {
           )}
         </h1>
         <p className="mt-5 max-w-[60ch] text-base leading-relaxed text-text-sec">{statusLine}</p>
+
+        {/* R8 — the tradie's thank-you message (face-holder placeholder until
+            QuoteMax films them; mig 175 thankyou_video_url stays unused in v1).
+            Jon's copy: we have received your request and will be in touch to
+            confirm the exact time of the inspection. */}
+        <div className="mt-8 max-w-md">
+          <MediaPlaceholder
+            title={tradieName ?? 'Your tradie'}
+            eyebrow="Video coming soon"
+            caption="A thank-you message from your tradie"
+          />
+          <p className="mt-3 text-sm leading-relaxed text-text-sec">
+            Thanks, we have received your request and we will be in touch to
+            confirm the exact time of the {isInspection ? 'inspection' : 'visit'}.
+          </p>
+        </div>
 
         {/* B1 — confirmation card */}
         <div className="mt-8 border border-ink-line bg-ink-card p-5 sm:p-6">

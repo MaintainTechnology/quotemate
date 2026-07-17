@@ -161,11 +161,11 @@ export async function POST(
       // "3 vs 6" quantity difference across tiers. They were previously
       // unselected, so fullDraft saw no framing and a framed multi-quantity
       // quote got a spurious 422 the moment any tier was edited. NOTE:
-      // `scope_short` is NOT a quotes column — it only ever exists as an
-      // ephemeral LLM-draft field (see app/api/estimate/draft/route.ts: the
-      // insert persists scope_of_works + assumptions but not scope_short).
-      // Selecting it would 400 the whole row and break every edit, so we do
-      // NOT select it; fullDraft.scope_short stays null below.
+      // `scope_short` became a real quotes column with migration 175 (the
+      // five-sections spec ended its ephemeral, draft-only life), but it is
+      // deliberately NOT selected here: this route neither reads nor writes
+      // it (Section 2 is generated, not tradie-edited in v1), and leaving it
+      // unselected keeps this edit path working on a pre-175 database.
       'id, tenant_id, intake_id, share_token, status, paid_at, selected_tier, good, better, best, stripe_links, total_inc_gst, needs_inspection, inspection_reason, estimated_timeframe, risk_flags, applied_discount_pct, scope_of_works, assumptions',
     )
     .eq('id', quoteId)
@@ -395,9 +395,10 @@ export async function POST(
     // NOT nested inside the tier JSONB, so we read them straight off the
     // freshly-loaded row. detectCrossTierDuplicates expects scope_of_works as
     // a string and assumptions as an array; null is tolerated for each.
-    // scope_short is NOT a quotes column (it's an ephemeral draft-only field),
-    // so it stays null here — the persisted scope_of_works carries the same
-    // framing text the validator scans.
+    // scope_short is a real quotes column since migration 175 but is
+    // deliberately NOT selected on this route (neither read nor written
+    // here), so it stays null — the persisted scope_of_works carries the
+    // same framing text the validator scans.
     const fullDraft = {
       scope_of_works: (quote.scope_of_works as unknown) ?? null,
       scope_short: null,
@@ -516,6 +517,9 @@ export async function POST(
         better: nextTiers.better as StripeTierShape,
         best: nextTiers.best as StripeTierShape,
         deposit_pct: 30,
+        // P1 — the re-issued Session honours gst_registered exactly like the
+        // total_inc_gst recomputed above.
+        gst_registered: gstRegistered,
       },
       tierKey: key,
       intake: {
@@ -782,6 +786,12 @@ export async function POST(
             scope_of_works: null,
             scope_short: null,
             assumptions: null,
+            // P6 — the updated-quote SMS must print the SAME discounted,
+            // GST-correct numbers the Stripe Session (re-issued above with
+            // this exact discount) charges. Post-booking edits previously
+            // texted the full price while the link charged the discounted one.
+            applied_discount_pct: appliedDiscountPct,
+            gst_registered: gstRegistered,
           },
           {
             // Phase A/B — honour the per-quote override (if present) over

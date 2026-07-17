@@ -208,3 +208,54 @@ export async function finalisePaidQuote(
 
   return { claimed: true }
 }
+
+/**
+ * The /q/[token]/paid webhook-race guard, extracted so it is unit-testable
+ * with fakes (spec customer-quote-five-sections: the guard previously lived
+ * inline in the page with zero coverage). Stripe redirects the customer here
+ * immediately after payment, but paid_at is written by the async webhook —
+ * when the row isn't paid yet and we hold a ?session_id=, verify the Session
+ * with Stripe ourselves and run the SAME claim+finalise the webhook uses
+ * (idempotent — whichever lands second is a no-op).
+ *
+ * `retrieveSession` is injected (the page passes Stripe's
+ * checkout.sessions.retrieve) so tests never touch the network. Never throws:
+ * a Stripe outage renders from DB state and the webhook remains authoritative.
+ */
+export async function confirmPaidFromSession(
+  supabase: Db,
+  retrieveSession: (id: string) => Promise<{
+    id: string
+    payment_status?: string | null
+    amount_total?: number | null
+    metadata?: Record<string, string> | null
+  }>,
+  args: { quote: PaidQuoteRow; sessionId: string },
+): Promise<{ paid: boolean; tier: string | null }> {
+  try {
+    const session = await retrieveSession(args.sessionId)
+    const confirmed = sessionConfirmsQuote(
+      {
+        payment_status: session.payment_status,
+        metadata: (session.metadata as Record<string, string> | null) ?? null,
+      },
+      args.quote.id,
+    )
+    if (!confirmed) return { paid: false, tier: null }
+    const feeRaw = session.metadata?.application_fee_cents
+    const fee = feeRaw ? Number.parseInt(feeRaw, 10) : null
+    await finalisePaidQuote(supabase, {
+      quote: args.quote,
+      tier: confirmed.tier,
+      sessionId: session.id,
+      amountTotalCents: session.amount_total ?? null,
+      applicationFeeCents: Number.isFinite(fee as number) ? fee : null,
+      connectDestination: session.metadata?.connect_destination ?? null,
+    })
+    // Verified paid with Stripe directly — a lost claim race just means the
+    // webhook won a moment ago; either way the quote IS paid.
+    return { paid: true, tier: confirmed.tier }
+  } catch {
+    return { paid: false, tier: null }
+  }
+}

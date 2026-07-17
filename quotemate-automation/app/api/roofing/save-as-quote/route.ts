@@ -262,6 +262,25 @@ export async function POST(req: Request) {
     )
   }
 
+  // Mig 175 — Section 2's one-line job summary. Roofing never runs the LLM
+  // estimator (no scope_short is generated), so persist the recommended
+  // tier's deterministic scope line (tierScopeLine output — exactly Jon's
+  // "replace roof — new battens, sheeting and flashings" shape). Best-effort
+  // SEPARATE update so a pre-175 deploy skips it rather than failing the save.
+  {
+    const scopeShort =
+      p.tiers.find((t) => t.tier === selectedTier)?.scope ?? p.tiers[1].scope
+    if (scopeShort) {
+      const { error: ssErr } = await supabase
+        .from('quotes')
+        .update({ scope_short: scopeShort })
+        .eq('id', quoteRow.id)
+      if (ssErr) {
+        console.warn('[roofing/save-as-quote] scope_short stamp skipped (apply migration 175)', ssErr.message)
+      }
+    }
+  }
+
   // ── 3. Stamp the quote id onto the claimed measurement (best-effort) ──
   // The share token was already stamped by the claim; a failure here only
   // costs the loser-race response its quoteId, never the link itself.

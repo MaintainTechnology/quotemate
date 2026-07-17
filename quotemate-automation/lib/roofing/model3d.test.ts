@@ -2,6 +2,8 @@
 
 import { describe, expect, it } from 'vitest'
 import {
+  ANATOMY_SYSTEM,
+  ANATOMY_USER,
   ENHANCE_SYSTEM,
   ENHANCE_USER,
   buildMultiviewTaskBody,
@@ -119,6 +121,19 @@ describe('enhancement prompt contract (subject-property isolation)', () => {
   it('keeps ambiguous frame-edge structures rather than erasing own-lot buildings', () => {
     expect(ENHANCE_USER).toMatch(/unsure|uncertain|in doubt/i)
     expect(ENHANCE_USER).toMatch(/keep it/i)
+  })
+})
+
+describe('anatomy prompt contract (annotate the polished captures)', () => {
+  it('identifies every roof feature the overlay legend promises', () => {
+    for (const feature of ['ridge', 'hip', 'valley', 'eave', 'gutter']) {
+      expect(ANATOMY_USER.toLowerCase()).toContain(feature)
+    }
+  })
+
+  it('forbids altering the underlying photograph', () => {
+    expect(ANATOMY_SYSTEM).toMatch(/never alter/i)
+    expect(ANATOMY_USER).toMatch(/otherwise unchanged/i)
   })
 })
 

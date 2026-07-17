@@ -1,12 +1,19 @@
-// Book-first / pay-last funnel decisions (WP6 reorder).
+// Funnel-order decisions for the pay short-link.
 //
-// Old flow: quote → pay deposit → pick a time.  John's call: paying
-// before booking is bad UX; the deposit must be the LAST step.
+// DEPOSIT tiers (good/better/best) are BOOK-FIRST, PAY-LAST (WP6 reorder):
+// quote → pick a time (held on the quote) → pay deposit → booking
+// confirmed. Enforced at the pay short-link layer so it covers BOTH the
+// on-page tier buttons AND the pay links already sitting in customers'
+// SMS threads ("force book-first for all").
 //
-// New flow: quote → pick a time (held on the quote) → pay deposit →
-// booking confirmed. This is enforced at the pay short-link layer so it
-// covers BOTH the on-page tier buttons AND the pay links already sitting
-// in 138 customers' SMS threads ("force book-first for all").
+// The $99 INSPECTION fee is PAY-FIRST, BOOK-SECOND (spec
+// customer-quote-five-sections R7, D1a — Jon: pay $99 → Stripe → booking
+// page → thank-you). This matches the dedicated trade surfaces
+// (app/api/q/book/[trade]/[token]: "these jobs book AFTER paying"), and
+// the slot-hold rationale doesn't apply: the $99 is a flat fee, and a
+// paid-but-unscheduled inspection is chased by the /paid page's redirect
+// into the slot picker. [History: inspection was book-first 2026-07-08 →
+// 2026-07-17.]
 //
 // Pure + unit-tested (booking.test.ts) so the funnel order can't silently
 // regress. No DB / Stripe / Next here.
@@ -18,26 +25,27 @@ export type PayRedirectKind =
   | 'paid'
   /** Not paid and no slot chosen yet — must pick a time FIRST. */
   | 'book'
-  /** Slot already chosen, not paid — deposit is the final step → Stripe. */
+  /** Payment is the next step → Stripe (deposit tiers: slot already chosen;
+   *  the $99 inspection: always — it is pay-first). */
   | 'stripe'
 
 export type PayRedirectInput = {
   paid: boolean
   scheduledAt: string | null | undefined
-  /** Stripe metadata tier. Kept for callers/logging; since 2026-07-08 the
-   *  $99 'inspection' fee follows the same book-first order as the deposit
-   *  tiers (Jon's workflow: select a time slot, THEN pay). */
+  /** Stripe metadata tier. 'inspection' routes pay-first (D1a); the deposit
+   *  tiers stay book-first. */
   tier: string
 }
 
 /**
  * Where should /r/<token>/<tier> send the customer?
  *
- *  already paid          → 'paid'   (NEVER re-charge — including the $99
- *                          inspection fee; see ordering note below)
- *  not paid, no slot      → 'book'   (choose a time first — ALL tiers,
- *                          inspection included since 2026-07-08)
- *  not paid, slot chosen  → 'stripe' (payment is the last step)
+ *  already paid              → 'paid'   (NEVER re-charge — including the $99
+ *                              inspection fee; see ordering note below)
+ *  inspection, not paid       → 'stripe' (pay-first: the $99 IS the product;
+ *                              time is picked after payment — D1a)
+ *  deposit, no slot yet       → 'book'   (choose a time first)
+ *  deposit, slot chosen       → 'stripe' (payment is the last step)
  *
  * ORDERING MATTERS: paid is checked FIRST. /r mints a FRESH payable Session
  * per click (2026-07-01), so routing a paid quote to 'stripe' would mint a
@@ -45,6 +53,7 @@ export type PayRedirectInput = {
  */
 export function payRedirectTarget(input: PayRedirectInput): PayRedirectKind {
   if (input.paid) return 'paid'
+  if (input.tier === 'inspection') return 'stripe'
   if (!input.scheduledAt) return 'book'
   return 'stripe'
 }
@@ -66,9 +75,9 @@ export function bookingStateOnPaid(
 const NEXT_PAY_TIERS = new Set(['good', 'better', 'best'])
 
 /**
- * Which tier the pay step AFTER booking charges. Shared by the /book page
- * and POST /api/q/[token]/book so both resolve identically:
- *   requested 'inspection'      → 'inspection' (book-first $99 fee — must
+ * Which tier the pay step charges. Shared by the /book page and POST
+ * /api/q/[token]/book so both resolve identically:
+ *   requested 'inspection'      → 'inspection' (the pay-first $99 fee — must
  *                                 never fall back to a 30% deposit tier)
  *   requested valid deposit tier → itself
  *   else                        → the quote's selected_tier, else 'better'.

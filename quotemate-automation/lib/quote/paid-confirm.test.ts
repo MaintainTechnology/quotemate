@@ -49,7 +49,7 @@ vi.mock('next/server', () => ({
 vi.mock('@/lib/quote/booking-notify', () => ({ notifyBookingConfirmed: h.notify }))
 vi.mock('@/lib/quote/lifecycle', () => ({ advanceQuoteStatus: h.advance }))
 
-import { finalisePaidQuote, sessionConfirmsQuote } from './paid-confirm'
+import { confirmPaidFromSession, finalisePaidQuote, sessionConfirmsQuote } from './paid-confirm'
 
 const quote = {
   id: 'q-1',
@@ -143,6 +143,63 @@ describe('finalisePaidQuote', () => {
     const out = await finalisePaidQuote(sb, { quote, tier: 'good', sessionId: 'cs_4' })
     expect(out).toEqual({ claimed: false, error: 'boom' })
     expect(h.deferred).toHaveLength(0)
+  })
+})
+
+describe('confirmPaidFromSession — the /paid page webhook-race guard', () => {
+  it('a paid session for THIS quote → finalises (claim + booking) and reports paid', async () => {
+    h.results.push(
+      { data: [{ id: 'q-1' }], error: null }, // claim matched
+      { data: null, error: null }, // fund-flow stamp
+      { data: null, error: null }, // booking finalise patch
+    )
+    const retrieve = vi.fn().mockResolvedValue({
+      id: 'cs_guard',
+      payment_status: 'paid',
+      amount_total: 9900,
+      metadata: { quote_id: 'q-1', tier: 'inspection' },
+    })
+    const out = await confirmPaidFromSession(sb, retrieve, {
+      quote,
+      sessionId: 'cs_guard',
+    })
+    expect(out).toEqual({ paid: true, tier: 'inspection' })
+    expect(retrieve).toHaveBeenCalledWith('cs_guard')
+    // The claim ran with the session id — same finalise the webhook runs.
+    const claimUpdate = h.queries[0].ops.find((o) => o.op === 'update')!
+    expect(claimUpdate.args[0]).toMatchObject({
+      paid_tier: 'inspection',
+      paid_stripe_session_id: 'cs_guard',
+    })
+  })
+
+  it("a session that doesn't pay this quote → no finalise, reports unpaid", async () => {
+    const retrieve = vi.fn().mockResolvedValue({
+      id: 'cs_other',
+      payment_status: 'paid',
+      metadata: { quote_id: 'q-OTHER', tier: 'good' },
+    })
+    const out = await confirmPaidFromSession(sb, retrieve, { quote, sessionId: 'cs_other' })
+    expect(out).toEqual({ paid: false, tier: null })
+    expect(h.queries).toHaveLength(0) // nothing written
+  })
+
+  it('Stripe unreachable → never throws; renders from DB state (webhook stays authoritative)', async () => {
+    const retrieve = vi.fn().mockRejectedValue(new Error('stripe down'))
+    const out = await confirmPaidFromSession(sb, retrieve, { quote, sessionId: 'cs_down' })
+    expect(out).toEqual({ paid: false, tier: null })
+    expect(h.queries).toHaveLength(0)
+  })
+
+  it('lost the claim race to the webhook → still reports paid (the quote IS paid)', async () => {
+    h.results.push({ data: [], error: null }) // claim matched nothing
+    const retrieve = vi.fn().mockResolvedValue({
+      id: 'cs_race',
+      payment_status: 'paid',
+      metadata: { quote_id: 'q-1', tier: 'better' },
+    })
+    const out = await confirmPaidFromSession(sb, retrieve, { quote, sessionId: 'cs_race' })
+    expect(out).toEqual({ paid: true, tier: 'better' })
   })
 })
 

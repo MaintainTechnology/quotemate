@@ -25,6 +25,7 @@ import {
   type RoofingConversationState,
 } from '@/lib/sms/roofing-receptionist'
 import {
+  applySolarToTiers,
   buildRoofingReplyMessage,
   buildRoofPhotoMedia,
   composeBookingMessage,
@@ -650,7 +651,9 @@ async function handleRoofingTurn(args: {
           customer_phone: fromNumber,
           structure_count: quote.structures.length,
           combined_area_m2: quote.combined.area_m2,
-          combined_better_inc_gst: quote.combined.tiers[1]?.inc_gst ?? null,
+          // Solar-inclusive better total (applySolarToTiers) — same rule as
+          // denormFromSelection, so the dashboard list matches the customer page.
+          combined_better_inc_gst: applySolarToTiers(quote.combined.tiers, quote.solar ?? null)[1]?.inc_gst ?? null,
           routing: quote.routing.decision,
           structures: quote.structures,
           quote,

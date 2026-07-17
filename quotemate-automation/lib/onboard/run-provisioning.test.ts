@@ -137,6 +137,24 @@ describe('runProvisioning — happy path', () => {
     expect(registerArgs.assistantId).toBe('asst_test_real')
   })
 
+  it('skips the welcome SMS (welcome stays undefined) when the tenant has no mobile', async () => {
+    // Mobile is optional in the wizard — a mobile-less activation must still
+    // provision the line and activate the tenant, just with no welcome text.
+    const { supabase } = mockSupabase()
+    const provisioners = happyProvisioners()
+
+    const result = await runProvisioning(
+      supabase as any,
+      { ...STD_INPUT, ownerMobile: null },
+      provisioners,
+    )
+
+    expect(result.ok).toBe(true)
+    expect(result.activated).toBe(true)
+    expect(result.welcome).toBeUndefined()
+    expect(provisioners.welcome).not.toHaveBeenCalled()
+  })
+
   it('flags both stub paths when env flags are off (stubbed results)', async () => {
     const { supabase, updateCalls } = mockSupabase()
     const stubProvisioners = {

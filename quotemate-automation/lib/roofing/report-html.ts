@@ -6,6 +6,7 @@
 // R4/R5). Pure — unit-tested.
 
 import type { MultiRoofQuote, RoofStructurePrice, RoofMetrics, RoofMaterial } from './types'
+import { applySolarToTiers } from '../sms/roofing-compose'
 import type { RoofDisplayRow } from './selection'
 import { ZONE_COLOR_HEX, type ZoneColor, type LayoutMaterialItem } from './layout-plan'
 import {
@@ -255,9 +256,17 @@ export function buildRoofQuoteReportHtml(input: RoofReportInput): string {
   const isInspection = q.routing.decision === 'inspection_required'
   // Mig 148 — render only the tier(s) the tenant's mode surfaces (single-price
   // roofers get one option). The full combined.tiers stays in the stored quote.
-  const tiers = input.visibleTierKeys
+  // The job-level solar detach & reinstate allowance is applied to the
+  // replacement tiers (applySolarToTiers — the same one code path the customer
+  // quote page uses), so the printed dollars match the page exactly.
+  const visibleTiers = input.visibleTierKeys
     ? q.combined.tiers.filter((t) => input.visibleTierKeys!.includes(t.tier))
     : q.combined.tiers
+  const tiers = applySolarToTiers(visibleTiers, q.solar ?? null)
+  const solarApplied =
+    q.solar?.allowance?.applies === true &&
+    q.solar.allowance.inc_gst > 0 &&
+    tiers.some((t) => t.tier !== 'good' && t.ex_gst > 0)
   // The "Good / Better / Best" framing only applies when 2+ options are shown.
   const multiTier = tiers.length >= 2
 
@@ -281,6 +290,11 @@ export function buildRoofQuoteReportHtml(input: RoofReportInput): string {
         (i > 0 ? ` <span class="chip">Optional upgrade</span>` : '') +
         (t.scope ? ` <span class="caveat">(${esc(t.scope)})</span>` : ''),
     )
+    if (solarApplied) {
+      priceLines.push(
+        `<span class="caveat">Replacement option prices include detaching &amp; reinstating the existing solar panels (+${aud0(q.solar!.allowance!.inc_gst)} including GST); patch / repair excludes it.${q.solar!.allowance!.electrician_note ? ` ${esc(q.solar!.allowance!.electrician_note)}` : ''}</span>`,
+      )
+    }
     body += renderPart({
       marker: 'A',
       title: 'Roof replacement',

@@ -575,14 +575,19 @@ describe('OnboardActivateSchema — invitation_code (required)', () => {
 })
 
 describe('OnboardActivateSchema — tradie identity fields (migration 141)', () => {
-  it('rejects a web payload (no intent_token) with no logo_url', () => {
+  it('accepts a web payload (no intent_token) with no logo_url', () => {
+    // A tradie without a logo file must still be able to finish the wizard —
+    // the letterhead falls back to the business-initials monogram.
     const { logo_url, ...withoutLogo } = baseValidPayload
     void logo_url
     const result = OnboardActivateSchema.safeParse(withoutLogo)
-    expect(result.success).toBe(false)
-    if (!result.success) {
-      expect(result.error.flatten().fieldErrors.logo_url).toBeDefined()
-    }
+    expect(result.success).toBe(true)
+  })
+
+  it('accepts a web payload with an explicitly blank logo_url', () => {
+    // What the wizard actually posts when the tradie skips the upload.
+    const result = OnboardActivateSchema.safeParse({ ...baseValidPayload, logo_url: '', logo_path: '' })
+    expect(result.success).toBe(true)
   })
 
   it('accepts an SMS payload (intent_token present) with no logo_url', () => {
@@ -617,3 +622,127 @@ describe('OnboardActivateSchema — tradie identity fields (migration 141)', () 
     expect(result.success).toBe(true)
   })
 })
+
+describe('OnboardActivateSchema — roofing rate-card fields (wizard pricing step)', () => {
+  // Roofing-only payload: no labour rates, no brand fields — the spec's
+  // "activation must still succeed without them" contract.
+  const roofingOnlyPayload = {
+    business_name: 'Roo Roofing',
+    owner_first_name: 'Rick',
+    owner_email: 'rick@example.com',
+    owner_mobile: '0412345678',
+    trades: ['roofing'] as const,
+    state: 'QLD' as const,
+    invitation_code: 'ROO-TEST-7K2P',
+  }
+
+  const ROOFING_RATE_FIELDS = [
+    'roofing_corrugated_rate',
+    'roofing_trimdek_rate',
+    'roofing_spandek_rate',
+    'roofing_kliplok_rate',
+    'roofing_concrete_tile_rate',
+    'roofing_terracotta_tile_rate',
+    'roofing_cement_sheet_rate',
+  ] as const
+
+  it('accepts a roofing-only payload with no labour rates and no brand fields', () => {
+    const result = OnboardActivateSchema.safeParse(roofingOnlyPayload)
+    expect(result.success).toBe(true)
+  })
+
+  it('treats blank roofing rate fields as not provided (undefined)', () => {
+    const blanks = Object.fromEntries(ROOFING_RATE_FIELDS.map((f) => [f, '']))
+    const result = OnboardActivateSchema.safeParse({ ...roofingOnlyPayload, ...blanks })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      for (const f of ROOFING_RATE_FIELDS) {
+        expect(result.data[f]).toBeUndefined()
+      }
+    }
+  })
+
+  it('coerces string rates to numbers', () => {
+    const result = OnboardActivateSchema.safeParse({
+      ...roofingOnlyPayload,
+      roofing_corrugated_rate: '200',
+      roofing_kliplok_rate: '115',
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.roofing_corrugated_rate).toBe(200)
+      expect(result.data.roofing_kliplok_rate).toBe(115)
+    }
+  })
+
+  it('rejects a 0 rate — cement sheet stays "never auto-quoted" via blank, not 0', () => {
+    const result = OnboardActivateSchema.safeParse({
+      ...roofingOnlyPayload,
+      roofing_cement_sheet_rate: '0',
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects a rate above the $500/m² overlay cap', () => {
+    const result = OnboardActivateSchema.safeParse({
+      ...roofingOnlyPayload,
+      roofing_corrugated_rate: '501',
+    })
+    expect(result.success).toBe(false)
+  })
+})
+
+describe('OnboardActivateSchema — optional mobile + state (user clarification)', () => {
+  // Every trade-step input is optional; only the trade selection is
+  // required. Mobile is normally carried from signup, but a degraded
+  // path without one must still activate (welcome SMS is skipped).
+  const { owner_mobile: _drop, ...noMobilePayload } = {
+    business_name: 'Roo Roofing',
+    owner_first_name: 'Rick',
+    owner_email: 'rick@example.com',
+    owner_mobile: '0412345678',
+    trades: ['roofing'] as const,
+    state: 'QLD' as const,
+    invitation_code: 'ROO-TEST-7K2P',
+  }
+  void _drop
+
+  it('accepts a payload with no owner_mobile at all', () => {
+    expect(OnboardActivateSchema.safeParse(noMobilePayload).success).toBe(true)
+  })
+
+  it('accepts a blank owner_mobile', () => {
+    const result = OnboardActivateSchema.safeParse({ ...noMobilePayload, owner_mobile: '' })
+    expect(result.success).toBe(true)
+  })
+
+  it('still rejects an invalid non-empty owner_mobile', () => {
+    const result = OnboardActivateSchema.safeParse({ ...noMobilePayload, owner_mobile: '0412' })
+    expect(result.success).toBe(false)
+  })
+
+  it('accepts a payload with no state', () => {
+    const { state: _s, ...noState } = { ...noMobilePayload, owner_mobile: '0412345678' }
+    void _s
+    expect(OnboardActivateSchema.safeParse(noState).success).toBe(true)
+  })
+
+  it('accepts a blank state', () => {
+    const result = OnboardActivateSchema.safeParse({
+      ...noMobilePayload,
+      owner_mobile: '0412345678',
+      state: '',
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('still rejects a bogus state value', () => {
+    const result = OnboardActivateSchema.safeParse({
+      ...noMobilePayload,
+      owner_mobile: '0412345678',
+      state: 'XYZ',
+    })
+    expect(result.success).toBe(false)
+  })
+})
+

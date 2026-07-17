@@ -7,6 +7,7 @@
 import { priceHoldStatus, fmtHoldUntilAU } from '@/lib/quote/hold'
 import { asQuoteDisplayMode, type QuoteDisplayMode } from '@/lib/quote/display'
 import { asQuoteTierMode, resolveVisibleTiers, type QuoteTierMode } from '@/lib/quote/tier-visibility'
+import { depositCents, totalIncGstCents, dollars } from '@/lib/quote/money'
 
 /** Phase A — caller-supplied display mode flag. 'summary' suppresses the
  *  per-tier "X items + Yhr labour" component line so the SMS reads as a
@@ -129,8 +130,13 @@ export function buildQuoteUpdatedSms(intake: Intake, quote: Quote, options?: Quo
     const tier = quote[key]
     // Mig 142 — skip tiers the resolved mode hides.
     if (!tier || !visibleTierSet.has(key)) continue
-    const price = incGst(tier.subtotal_ex_gst)
-    const deposit = depositPct > 0 ? Math.round(price * depositPct / 100) : null
+    const incCents = totalIncGstCents(tier.subtotal_ex_gst, {
+      discountPct: quote.applied_discount_pct,
+      gstRegistered: quote.gst_registered,
+    })
+    const price = dollars(incCents)
+    const depCents = depositCents(incCents, depositPct)
+    const deposit = depCents > 0 ? dollars(depCents) : null
     // No "recommended" badge when only one option is shown — it IS the offer.
     const recommended = visibleTierKeys.length > 1 && quote.selected_tier === key ? ' (recommended)' : ''
 
@@ -857,6 +863,13 @@ type Quote = {
    *  SMS adds a "Price held until <date>" urgency line. Absent on legacy
    *  quotes and on the parity fixture, so this field is purely additive. */
   price_hold_until?: string | null
+  /** v8 — realised early-booking discount % (quotes.applied_discount_pct).
+   *  When > 0 the tier prices + deposits print DISCOUNTED, matching the
+   *  Stripe Session the embedded pay link mints (P6 fix). Absent/0 → the
+   *  full price, exactly as before. */
+  applied_discount_pct?: number | null
+  /** pricing_book.gst_registered (P1). Absent → treated as registered. */
+  gst_registered?: boolean | null
 }
 
 const JOB_TYPE_LABEL: Record<string, string> = {
@@ -897,10 +910,11 @@ function gsm7Safe(s: string): string {
     .replace(/[^\x20-\x7E\n]/g, '')
 }
 
-function incGst(exGstCents: number | string): number {
-  const n = typeof exGstCents === 'string' ? parseFloat(exGstCents) : exGstCents
-  return Math.round(n * 1.10)
-}
+// Tier pricing now flows through lib/quote/money.ts (displayIncGst /
+// depositCents) so the SMS prints the SAME number the page shows, the PDF
+// prints, and Stripe charges — including any realised early-booking
+// discount, which this file previously ignored (P6: SMS said "$1000
+// (deposit $300)" while the embedded link minted a $270 Session).
 
 function tierComponents(tier: Tier, jobType?: string | null, itemCount?: number | null): string {
   if (!tier?.line_items?.length) return ''
@@ -1018,8 +1032,13 @@ export function buildQuoteSms(intake: Intake, quote: Quote, options?: QuoteSmsOp
     const tier = quote[key]
     // Mig 142 — skip tiers the resolved mode hides.
     if (!tier || !visibleTierSet.has(key)) continue
-    const price = incGst(tier.subtotal_ex_gst)
-    const deposit = depositPct > 0 ? Math.round(price * depositPct / 100) : null
+    const incCents = totalIncGstCents(tier.subtotal_ex_gst, {
+      discountPct: quote.applied_discount_pct,
+      gstRegistered: quote.gst_registered,
+    })
+    const price = dollars(incCents)
+    const depCents = depositCents(incCents, depositPct)
+    const deposit = depCents > 0 ? dollars(depCents) : null
     // No "recommended" badge when only one option is shown — it IS the offer.
     const recommended = visibleTierKeys.length > 1 && quote.selected_tier === key ? ' (recommended)' : ''
 

@@ -18,8 +18,8 @@
 // re-run step 5 against the existing tenant without rebuilding it.
 
 import { createClient } from '@supabase/supabase-js'
-import { OnboardActivateSchema, defaultsForTrade } from '@/lib/onboard/schema'
-import { buildPaintingOverlayFromInputs } from '@/lib/painting/rate-card-overlay'
+import { OnboardActivateSchema } from '@/lib/onboard/schema'
+import { buildPricingRows } from '@/lib/onboard/pricing-rows'
 import { defaultAvailabilityForState } from '@/lib/quote/availability'
 import { runProvisioning } from '@/lib/onboard/run-provisioning'
 import { markIntentUsed } from '@/lib/onboard/intent-tokens'
@@ -56,7 +56,9 @@ export async function POST(req: Request) {
       )
     }
     const form = parsed.data
-    const normalisedMobile = normaliseAuMobile(form.owner_mobile)
+    // Mobile is optional (user clarification 2026-07-17): null when the
+    // tradie onboarded without one — the welcome SMS is skipped downstream.
+    const normalisedMobile = form.owner_mobile ? normaliseAuMobile(form.owner_mobile) : null
     // Primary trade — used to populate the legacy `tenants.trade` scalar
     // column for back-compat, to seed the Vapi assistant prompt, and as
     // the first row inserted into pricing_book. Multi-trade tenants get
@@ -128,7 +130,7 @@ export async function POST(req: Request) {
         owner_mobile: normalisedMobile,
         trade: primaryTrade,
         trades: form.trades,
-        state: form.state,
+        state: form.state || null,
         abn: form.abn || null,
         licence_type: form.licence_type || null,
         licence_number: form.licence_number || null,
@@ -143,7 +145,7 @@ export async function POST(req: Request) {
         // hours from the wizard, else a state-derived default so every new
         // tenant is immediately bookable.
         default_availability:
-          form.default_availability ?? defaultAvailabilityForState(form.state),
+          form.default_availability ?? defaultAvailabilityForState(form.state || null),
         status: 'onboarding',
       })
       .select('id')
@@ -161,76 +163,12 @@ export async function POST(req: Request) {
     steps.push({ step: 'tenant', ok: true })
 
     // ─── 2. Insert pricing_book row(s) ────────────────────────
-    // One row per selected trade. Labour trades (electrical / plumbing)
-    // use the shared hourly_rate / call_out_minimum / default_markup_pct
-    // the wizard collected. Painting prices from a per-m² rate card
-    // instead: its row carries the rates in overlays.painting_rate_card
-    // (read by /api/painting/estimate), and the labour columns fall back
-    // to harmless defaults so the row satisfies the table shape without
-    // ever driving a painting quote. Tradies can split rates later from
-    // the dashboard Pricing tab by editing each pricing_book individually.
-    const pricingRows = form.trades.map((t) => {
-      const d = defaultsForTrade(t)
-      const base = {
-        tenant_id: id,
-        trade: t,
-        apprentice_rate: form.apprentice_rate ?? d.apprentice_rate,
-        senior_rate: form.senior_rate ?? d.senior_rate,
-        after_hours_multiplier: form.after_hours_multiplier ?? d.after_hours_multiplier,
-        min_labour_hours: form.min_labour_hours ?? d.min_labour_hours,
-        risk_buffer_pct: form.risk_buffer_pct ?? d.risk_buffer_pct,
-        gst_registered: form.gst_registered ?? true,
-        licence_type: form.licence_type || null,
-        licence_number: form.licence_number || null,
-        licence_state: form.state,
-        licence_expiry: form.licence_expiry || null,
-      }
-      if (t === 'painting') {
-        // The schema validated these as positive numbers (or undefined).
-        const num = (v: unknown): number | undefined =>
-          typeof v === 'number' && Number.isFinite(v) ? v : undefined
-        const built = buildPaintingOverlayFromInputs({
-          rate_per_unit: {
-            walls: num(form.painting_walls_rate),
-            ceilings: num(form.painting_ceilings_rate),
-            trim: num(form.painting_trim_rate),
-            exterior: num(form.painting_exterior_rate),
-          },
-          call_out_minimum_ex_gst: num(form.painting_call_out_minimum),
-          gst_registered: form.gst_registered ?? true,
-          // Hourly painters set a model + charge-out; sqm painters leave the
-          // model at its default and these are inert.
-          pricing_model: form.painting_pricing_model ?? 'sqm',
-          hourly_rate: num(form.painting_hourly_rate),
-        })
-        // On any validation miss, persist an empty overlay so the estimator
-        // falls back to DEFAULT_PAINTING_RATE_CARD rather than bad rates.
-        const painting_rate_card = built.ok ? built.overlay : {}
-        return {
-          ...base,
-          // Labour columns are unused by painting's pricer — keep them valid.
-          hourly_rate: form.hourly_rate ?? 110,
-          call_out_minimum: form.call_out_minimum ?? 150,
-          default_markup_pct: form.default_markup_pct ?? 0,
-          overlays: { painting_rate_card },
-        }
-      }
-      // Electrical / plumbing: the superRefine guarantees the three labour
-      // rates are present, so the fallbacks below are inert for them.
-      // Roofing: prices from a deterministic per-m² rate card keyed off the
-      // measured roof geometry (lib/roofing/pricing.ts) and never reads these
-      // columns — but a roofing-ONLY tenant supplies no labour rates at all,
-      // so they'd insert as null and trip the table's NOT NULLs. Fall back to
-      // the same harmless placeholders painting uses. The tradie's real
-      // roofing levers live in overlays.roofing_rate_card (defaulted by
-      // DEFAULT_ROOFING_RATE_CARD until they edit them on the dashboard).
-      return {
-        ...base,
-        hourly_rate: form.hourly_rate ?? 110,
-        call_out_minimum: form.call_out_minimum ?? 150,
-        default_markup_pct: form.default_markup_pct ?? 0,
-      }
-    })
+    // One row per selected trade — construction lives in
+    // lib/onboard/pricing-rows.ts (pure, unit-tested) because overlay
+    // placement is subtle: painting's rate card rides its own trade row,
+    // but the roofing rate card must ride the PRIMARY trade's row (the
+    // row loadRoofingOverlay + the dashboard Roof-rates editor resolve).
+    const pricingRows = buildPricingRows(form, id)
     const { error: pbErr } = await supabase.from('pricing_book').insert(pricingRows)
 
     if (pbErr) {

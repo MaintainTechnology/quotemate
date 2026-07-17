@@ -81,7 +81,10 @@ const SOLAR_PDF_REV = '-v3'
 //   -v3 (2026-07-11): selection-aware layout-map framing.
 //   -v4 (2026-07-11): fixed-metre ring offsets (fractional scaling pushed the
 //   far wings of large L-shaped roofs metres off the roofline).
-const ROOF_PDF_REV = '-v4'
+//   -v5 (2026-07-17): solar detach & reinstate applied to replacement-tier
+//   prices (applySolarToTiers) — regenerate every cached PDF so the printed
+//   dollars match the customer quote page.
+const ROOF_PDF_REV = '-v5'
 
 let _client: SupabaseClient | null = null
 function supabase(): SupabaseClient {
@@ -171,6 +174,9 @@ type QuotePdfRow = {
   pdf_signature: string | null
   report_doc: unknown | null
   report_style: unknown | null
+  /** v8 realised early-booking discount (mig 044) — P7: the PDF must show
+   *  the same discounted price the page shows and Stripe charges. */
+  applied_discount_pct: number | null
 }
 
 type RoofPdfRow = {
@@ -255,6 +261,8 @@ type QuoteReportContext = {
   visibleTierKeys: Array<'good' | 'better' | 'best'>
   visibleTierSet: Set<'good' | 'better' | 'best'>
   recommendedTier: 'good' | 'better' | 'best' | null
+  /** pricing_book.gst_registered for this quote's tenant+trade (P1). */
+  gstRegistered: boolean
 }
 
 /**
@@ -267,7 +275,7 @@ async function loadQuoteReportContext(quoteId: string): Promise<QuoteReportConte
   const { data: quote } = await supabase()
     .from('quotes')
     .select(
-      'id, tenant_id, intake_id, share_token, good, better, best, selected_tier, scope_of_works, assumptions, estimated_timeframe, needs_inspection, pdf_path, pdf_signature, report_doc, report_style',
+      'id, tenant_id, intake_id, share_token, good, better, best, selected_tier, scope_of_works, assumptions, estimated_timeframe, needs_inspection, pdf_path, pdf_signature, report_doc, report_style, applied_discount_pct',
     )
     .eq('id', quoteId)
     .maybeSingle<QuotePdfRow>()
@@ -287,14 +295,16 @@ async function loadQuoteReportContext(quoteId: string): Promise<QuoteReportConte
   // good/better/best stays persisted; the report mirrors the customer page.
   const intakeTrade = (intake?.trade as string | null) ?? 'electrical'
   let tierMode: QuoteTierMode = 'single'
+  let gstRegistered = true
   if (quote.tenant_id) {
     const { data: pb } = await supabase()
       .from('pricing_book')
-      .select('quote_tier_mode')
+      .select('quote_tier_mode, gst_registered')
       .eq('tenant_id', quote.tenant_id)
       .eq('trade', intakeTrade)
-      .maybeSingle<{ quote_tier_mode: string | null }>()
+      .maybeSingle<{ quote_tier_mode: string | null; gst_registered: boolean | null }>()
     tierMode = asQuoteTierMode(pb?.quote_tier_mode ?? null)
+    gstRegistered = pb?.gst_registered ?? true
   }
   const visibleTierKeys = resolveVisibleTiers({
     mode: tierMode,
@@ -304,7 +314,7 @@ async function loadQuoteReportContext(quoteId: string): Promise<QuoteReportConte
   const visibleTierSet = new Set(visibleTierKeys)
   const recommendedTier = visibleTierKeys.length > 1 ? quote.selected_tier : null
 
-  return { quote, intake, intakeTrade, tierMode, visibleTierKeys, visibleTierSet, recommendedTier }
+  return { quote, intake, intakeTrade, tierMode, visibleTierKeys, visibleTierSet, recommendedTier, gstRegistered }
 }
 
 /**
@@ -430,6 +440,9 @@ function buildQuoteReportInput(
     better: visibleTierSet.has('better') ? quote.better : null,
     best: visibleTierSet.has('best') ? quote.best : null,
     selectedTier: recommendedTier,
+    // v7 — the PDF prices what the page shows and Stripe charges (P7/P1).
+    appliedDiscountPct: quote.applied_discount_pct ?? null,
+    gstRegistered: ctx.gstRegistered,
     quoteViewUrl: `${APP_URL}/q/${quote.share_token}`,
   }
 }
@@ -521,6 +534,9 @@ export async function ensureQuotePdf(
       visibleTierKeys,
       recommendedTier,
       docHash,
+      // P7 — a discount stamped at booking time (after the draft-time PDF was
+      // cached) must regenerate the PDF at the discounted price.
+      appliedDiscountPct: ctx.quote.applied_discount_pct,
     })
     if (
       !quotePdfIsStale({

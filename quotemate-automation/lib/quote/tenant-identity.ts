@@ -27,6 +27,12 @@ export type TenantIdentity = {
   /** The tenant's Twilio long code — the number the customer's quote SMS came
    *  from, so "reply to …" CTAs can deep-link back into that thread. */
   twilio_sms_number: string | null
+  /** Mig 175 — trust videos filmed by QuoteMax at onboarding. intro plays in
+   *  the quote page's trust section; thankyou on the post-booking confirmation
+   *  page. v1 renders a face-holder placeholder regardless, so these stay
+   *  null until real footage exists. */
+  intro_video_url: string | null
+  thankyou_video_url: string | null
 }
 
 export async function loadTenantIdentity(
@@ -44,12 +50,12 @@ export async function loadTenantIdentity(
   const b = base as Record<string, string | null>
 
   // Best-effort: a deploy whose tenants table lacks any of these columns
-  // (pre-migration-141 for contact/logo; unprovisioned installs for the
-  // Twilio number) yields data:null here and degrades to nulls, without
-  // taking the whole letterhead down with it.
+  // (pre-migration-141 for contact/logo; pre-175 for the trust videos;
+  // unprovisioned installs for the Twilio number) yields data:null here and
+  // degrades to nulls, without taking the whole letterhead down with it.
   const { data: ex } = await supabase
     .from('tenants')
-    .select('contact_name, website_url, business_address, logo_url, twilio_sms_number')
+    .select('contact_name, website_url, business_address, logo_url, twilio_sms_number, intro_video_url, thankyou_video_url')
     .eq('id', tenantId)
     .maybeSingle()
   const e = (ex ?? {}) as Record<string, string | null>
@@ -66,6 +72,27 @@ export async function loadTenantIdentity(
     website_url: e.website_url ?? null,
     business_address: e.business_address ?? null,
     logo_url: e.logo_url ?? null,
+    intro_video_url: e.intro_video_url ?? null,
+    thankyou_video_url: e.thankyou_video_url ?? null,
+  }
+}
+
+/**
+ * A tenant website link safe to render on a public customer page: absolute
+ * https:// only (same guard the off-platform booking link uses —
+ * lib/quote/booking.ts resolveGoogleBookingUrl), so a typo'd or plain-text
+ * value can never render a broken or javascript: link.
+ */
+export function safeWebsiteUrl(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+  try {
+    const u = new URL(trimmed)
+    if (u.protocol !== 'https:') return null
+    return u.toString()
+  } catch {
+    return null
   }
 }
 

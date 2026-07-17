@@ -90,6 +90,19 @@ export async function POST(
     )
   }
 
+  // The $99 inspection is PAY-FIRST (spec customer-quote-five-sections R7,
+  // D1a): booking follows the order the customer placed, mirroring the
+  // dedicated trade surfaces (app/api/q/book/[trade]/[token]). Deposit tiers
+  // stay book-first below.
+  const requestedTier = typeof body.tier === 'string' ? body.tier : null
+  const wantsInspection = requestedTier === 'inspection' || !!quote.needs_inspection
+  if (wantsInspection && !quote.paid_at) {
+    return Response.json(
+      { ok: false, error: 'Pay the deposit first, then pick your time.' },
+      { status: 409 },
+    )
+  }
+
   // Price-hold gate (defense in depth for the UI block): a lapsed price must
   // not be booked against a stale figure. Already-paid quotes (legacy
   // paid-then-pick recovery) have transacted and may still pick a time.
@@ -230,10 +243,10 @@ export async function POST(
   }
 
   // Resolve which tier the pay step charges: the tier the customer chose
-  // (passed through — incl. the book-first $99 'inspection' fee), else the
-  // quote's selected_tier, else 'better'. Shared with the /book page.
-  const reqTier = typeof body.tier === 'string' ? body.tier : null
-  const tier = resolveNextTier(reqTier, quote.selected_tier as string | null)
+  // (passed through — incl. the $99 'inspection' fee on the paid recovery
+  // path), else the quote's selected_tier, else 'better'. Shared with the
+  // /book page.
+  const tier = resolveNextTier(requestedTier, quote.selected_tier as string | null)
   // Already-paid (legacy recovery) → booking is confirmed above, so send
   // them to the thank-you page rather than back through the deposit step.
   const next = alreadyPaid ? `/q/${token}/paid?tier=${tier}` : `/r/${token}/${tier}`

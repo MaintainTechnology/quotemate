@@ -47,6 +47,7 @@ import { buildingAttributeChips, propertyContextChips } from '@/lib/roofing/attr
 import { applySolarToTiers, indicativeCombinedTiers } from '@/lib/sms/roofing-compose'
 import { roofQuoteCta } from '@/lib/roofing/quote-cta'
 import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
+import { asQuoteTierMode, resolveVisibleTiers } from '@/lib/quote/tier-visibility'
 import { RoofMap, type RoofMapBuilding } from '@/app/dashboard/roofing/_components/RoofMap'
 import { QuoteChrome, type StickyBar } from '../../_chrome/QuoteChrome'
 import { RoofLayoutMapFigure } from '../../_chrome/RoofLayoutMapFigure'
@@ -191,6 +192,24 @@ export default async function RoofingQuotePage({
   // tenant_id is absent or the identity columns aren't present, so the page
   // still renders (logo/contact simply hidden).
   const identity = await loadTenantIdentity(supabase, row.tenant_id ?? null)
+
+  // Mig 142 — per-tenant tier presentation mode (spec five-sections R3b).
+  // This page was the LAST customer-reachable surface rendering all three
+  // roofing tiers unconditionally while the promoted quote page, the PDF and
+  // the SMS all honoured quote_tier_mode. 'single' (the platform default and
+  // both live roofing books) resolves to 'better' — "Full roof replacement".
+  let roofTierMode = asQuoteTierMode(null)
+  if (row.tenant_id) {
+    const { data: pb } = await supabase
+      .from('pricing_book')
+      .select('quote_tier_mode')
+      .eq('tenant_id', row.tenant_id)
+      .eq('trade', 'roofing')
+      .maybeSingle()
+    roofTierMode = asQuoteTierMode(
+      (pb as { quote_tier_mode?: string | null } | null)?.quote_tier_mode,
+    )
+  }
 
   const fullQuote = row.quote
   const allStructures: RoofStructurePrice[] = Array.isArray(fullQuote?.structures) ? fullQuote!.structures : []
@@ -401,16 +420,31 @@ export default async function RoofingQuotePage({
   const displayTiersWithSolar = applySolarToTiers(displayTiers, solar)
   const propertyChips = fullQuote?.property_context ? propertyContextChips(fullQuote.property_context) : []
 
+  // Which tier keys this tenant's mode surfaces (matches the promoted quote
+  // page / PDF / SMS): 'single' → the recommended 'better' only. Presence is
+  // declared all-true because this surface always renders the full triple
+  // shape (priced or as the price-free teaser) — the MODE is the filter.
+  const visibleRoofTierKeys = resolveVisibleTiers({
+    mode: roofTierMode,
+    present: { good: true, better: true, best: true },
+    selectedTier: 'better',
+  })
+  const visibleRoofTierSet = new Set<string>(visibleRoofTierKeys)
+  // One visible option IS the offer — no badge (same rule as /q/[token]).
+  const showRoofBadge = visibleRoofTierKeys.length > 1
+
   let quoteTiers: QuoteTier[]
   if (showPrices && displayTiers.length) {
     quoteTiers = displayTiersWithSolar
+      // Mig 142 — hide tiers the tenant's mode hides (R3b).
+      .filter((t) => visibleRoofTierSet.has(t.tier))
       // In indicative mode hide any $0 tier (e.g. asbestos has only an upgrade
       // price) so the customer never sees a "$0" option. Firm quotes show all.
       .filter((t) => !indicative || t.inc_gst > 0)
       .map((t, i) => ({
         name: TIER_NAME[t.tier],
-        badge: t.tier === 'better' ? 'Most popular' : null,
-        recommended: t.tier === 'better',
+        badge: showRoofBadge && t.tier === 'better' ? 'Most popular' : null,
+        recommended: showRoofBadge && t.tier === 'better',
         blurb:
           t.tier === 'good'
             ? 'Fix what needs it. The lightest-touch option.'
@@ -430,11 +464,13 @@ export default async function RoofingQuotePage({
         ].filter(Boolean) as QuoteTier['items'],
       }))
   } else {
-    // Gate closed — price-free tier names only.
-    quoteTiers = (['good', 'better', 'best'] as const).map((tier) => ({
+    // Gate closed — price-free tier names only (mode-filtered like priced).
+    quoteTiers = (['good', 'better', 'best'] as const)
+      .filter((tier) => visibleRoofTierSet.has(tier))
+      .map((tier) => ({
       name: TIER_NAME[tier],
-      badge: tier === 'better' ? 'Most popular' : null,
-      recommended: tier === 'better',
+      badge: showRoofBadge && tier === 'better' ? 'Most popular' : null,
+      recommended: showRoofBadge && tier === 'better',
       blurb:
         tier === 'good'
           ? 'Fix what needs it. The lightest-touch option.'
@@ -726,13 +762,23 @@ export default async function RoofingQuotePage({
         {/* Choose your option — combined tier headline (or price-free gate). */}
         <TierCards
           tiers={quoteTiers}
-          heading={showPrices ? 'Patch · Re-roof · Upgrade' : 'Your three options'}
+          heading={
+            quoteTiers.length === 1
+              ? showPrices
+                ? 'Your roofing quote'
+                : 'Your option'
+              : showPrices
+                ? 'Patch · Re-roof · Upgrade'
+                : 'Your three options'
+          }
           intro={
             showPrices
               ? indicative
                 ? 'Indicative from your satellite measurement — your roofer confirms the final price on a quick on-site visit.'
                 : `All prices include GST${solarIncGst > 0 ? ' and the solar detach & reinstate allowance' : ''}. Reply to lock in your option.`
-              : 'Reply YES to our text and we send your full priced options for this roof.'
+              : quoteTiers.length === 1
+                ? 'Reply YES to our text and we send your full priced quote for this roof.'
+                : 'Reply YES to our text and we send your full priced options for this roof.'
           }
         />
 

@@ -29,6 +29,7 @@ import {
   cachePathFor,
   getCachedEnhanced,
   putCachedEnhanced,
+  type CacheKind,
   type CaptureView,
 } from '@/lib/roofing/capture-cache'
 
@@ -262,12 +263,12 @@ async function enhanceCapture(image: ImageBytes): Promise<ImageBytes | null> {
 
 // ── roof-anatomy annotation (auto mode, display-only) ───────────────
 
-const ANATOMY_SYSTEM =
+export const ANATOMY_SYSTEM =
   'You are a roofing diagram annotator. You draw clean, precise overlay lines and small ' +
   'text labels on aerial photographs of roofs. You never alter the underlying photograph — ' +
   'no adding, removing, or reshaping structures.'
 
-const ANATOMY_USER =
+export const ANATOMY_USER =
   'Draw colour-coded lines along the roof features of this house, with a small matching ' +
   'text label on each: RIDGE lines in blue, HIP lines in red, VALLEY lines in green, ' +
   'EAVE lines in magenta, GUTTER lines in orange (along the roof’s outer drainage ' +
@@ -386,46 +387,47 @@ export async function startModel3d(
       console.log('[roofing/model3d] reused cached enhancements', { measureToken, reused })
     }
 
-    // Auto mode: roof-anatomy overlays (ridge/hip/valley/eave lines) drawn
-    // over the polished captures — display-only, cached by address, stored
-    // per measurement. Runs concurrently with the Tripo uploads below and
-    // never blocks or fails the build.
-    const anatomyWork =
-      mode === 'auto'
-        ? (async () => {
-            const row = await loadRow(measureToken)
-            if (!row) return
-            const entries = await Promise.all(
-              polished.map(async ({ view, image }) => {
-                let overlay = address ? await getCachedEnhanced(address, view, 'anatomy') : null
-                if (!overlay) {
-                  overlay = await annotateCapture(image)
-                  if (overlay && address) await putCachedEnhanced(address, view, overlay, 'anatomy')
-                }
-                if (!overlay) return null
-                const path = `roofing/${row.id}/anatomy-${view}`
-                const { error } = await supabaseClient()
-                  .storage.from(MODEL_BUCKET)
-                  .upload(path, Buffer.from(overlay.base64, 'base64'), {
-                    contentType: overlay.mime,
-                    upsert: true,
-                  })
-                return error ? null : ([view, path] as const)
-              }),
-            )
-            const anatomy = Object.fromEntries(entries.filter((e): e is [CaptureView, string] => !!e))
-            if (Object.keys(anatomy).length > 0) {
-              await supabaseClient()
-                .from('roofing_measurements')
-                .update({ model3d_anatomy: anatomy })
-                .eq('measure_token', measureToken)
-            }
-          })().catch((e) =>
-            console.warn('[roofing/model3d] anatomy pass failed', {
-              error: e instanceof Error ? e.message : String(e),
-            }),
-          )
-        : Promise.resolve()
+    // Roof-anatomy overlays (ridge/hip/valley/eave/gutter lines) drawn over
+    // THIS run's polished captures — display-only, cached by address, stored
+    // per measurement. Runs for every source (auto orbit, manual, upload),
+    // concurrently with the Tripo uploads below; never blocks the build.
+    const anatomyWork = (async () => {
+      const row = await loadRow(measureToken)
+      if (!row) return
+      const entries = await Promise.all(
+        polished.map(async ({ view, image, fromCache }) => {
+          // Cached anatomy is only valid for the cached polished image it
+          // was drawn over — a freshly polished view must be re-annotated,
+          // and the write below replaces the stale cache entry.
+          let overlay =
+            address && fromCache ? await getCachedEnhanced(address, view, 'anatomy') : null
+          if (!overlay) {
+            overlay = await annotateCapture(image)
+            if (overlay && address) await putCachedEnhanced(address, view, overlay, 'anatomy')
+          }
+          if (!overlay) return null
+          const path = `roofing/${row.id}/anatomy-${view}`
+          const { error } = await supabaseClient()
+            .storage.from(MODEL_BUCKET)
+            .upload(path, Buffer.from(overlay.base64, 'base64'), {
+              contentType: overlay.mime,
+              upsert: true,
+            })
+          return error ? null : ([view, path] as const)
+        }),
+      )
+      const anatomy = Object.fromEntries(entries.filter((e): e is [CaptureView, string] => !!e))
+      if (Object.keys(anatomy).length > 0) {
+        await supabaseClient()
+          .from('roofing_measurements')
+          .update({ model3d_anatomy: anatomy })
+          .eq('measure_token', measureToken)
+      }
+    })().catch((e) =>
+      console.warn('[roofing/model3d] anatomy pass failed', {
+        error: e instanceof Error ? e.message : String(e),
+      }),
+    )
 
     const fileTokens: Partial<Record<ViewName, string>> = {}
     await Promise.all(
@@ -452,32 +454,38 @@ async function signedModelUrl(path: string): Promise<string | null> {
   return data?.signedUrl ?? null
 }
 
-/** Signed URLs for the anatomy overlays (view → URL), or null when none. */
+/** Signed URLs for the row-stamped anatomy overlays (view → URL), or null. */
 async function signedAnatomy(
   anatomy: Record<string, string> | null,
 ): Promise<Record<string, string> | null> {
   if (!anatomy) return null
   const out: Record<string, string> = {}
-  for (const [view, path] of Object.entries(anatomy)) {
-    const { data } = await supabaseClient().storage.from(MODEL_BUCKET).createSignedUrl(path, 3600)
-    if (data?.signedUrl) out[view] = data.signedUrl
-  }
+  await Promise.all(
+    Object.entries(anatomy).map(async ([view, path]) => {
+      const { data } = await supabaseClient().storage.from(MODEL_BUCKET).createSignedUrl(path, 3600)
+      if (data?.signedUrl) out[view] = data.signedUrl
+    }),
+  )
   return Object.keys(out).length > 0 ? out : null
 }
 
 /**
- * Signed URLs for the property's Gemini-polished captures (view → URL) from
- * the address-keyed cache — shown to the tradie alongside the model.
- * createSignedUrl errors on missing objects, so absent views drop out.
+ * Signed URLs (view → URL) for the property's address-keyed cache of one
+ * kind — 'enhanced' = the Gemini-polished captures, 'anatomy' = the
+ * annotated overlays drawn over them. createSignedUrl errors on missing
+ * objects, so absent views drop out.
  */
-async function signedPolished(address: string | null): Promise<Record<string, string> | null> {
+async function signedFromCache(
+  address: string | null,
+  kind: CacheKind,
+): Promise<Record<string, string> | null> {
   if (!address?.trim()) return null
   const out: Record<string, string> = {}
   await Promise.all(
     CAPTURE_VIEWS.map(async (view) => {
       const { data } = await supabaseClient()
         .storage.from(MODEL_BUCKET)
-        .createSignedUrl(cachePathFor(address, view), 3600)
+        .createSignedUrl(cachePathFor(address, view, kind), 3600)
       if (data?.signedUrl) out[view] = data.signedUrl
     }),
   )
@@ -494,10 +502,17 @@ export async function pollModel3d(measureToken: string): Promise<Model3dState | 
   const row = await loadRow(measureToken)
   if (!row) return null
 
-  const [anatomy, polished] = await Promise.all([
+  // Anatomy must show annotations of the SAME generation as the polished
+  // panel: prefer the address-keyed anatomy cache (written together with the
+  // polished cache). The row-stamped copies are only a fallback when there
+  // is no polished panel at all (e.g. no usable address) — never shown next
+  // to polished captures they weren't drawn over.
+  const [cacheAnatomy, rowAnatomy, polished] = await Promise.all([
+    signedFromCache(row.address, 'anatomy'),
     signedAnatomy(row.model3d_anatomy),
-    signedPolished(row.address),
+    signedFromCache(row.address, 'enhanced'),
   ])
+  const anatomy = cacheAnatomy ?? (polished ? null : rowAnatomy)
   if (row.model3d_status === 'ready' && row.model3d_glb_path) {
     return { status: 'ready', modelUrl: await signedModelUrl(row.model3d_glb_path), anatomy, polished }
   }

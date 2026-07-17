@@ -17,6 +17,8 @@ import {
   type TenantBranding,
 } from '../pdf/report-chrome'
 import { renderRoofLayoutSectionHtml, type RoofLayoutOverlay } from '@/lib/roofing/report-html'
+import { clampDiscountPct } from './early-bird'
+import { displayIncGst } from './money'
 
 /**
  * Bump whenever buildQuoteReportHtml's output changes in a way that should
@@ -38,8 +40,12 @@ import { renderRoofLayoutSectionHtml, type RoofLayoutOverlay } from '@/lib/roofi
  *   v6 (2026-07-13): roofing quotes-row PDF now includes the roof layout map +
  *   estimated materials (from the linked measurement) — cached roofing quote PDFs
  *   regenerate to add them.
+ *   v7 (2026-07-17): tier prices honour the realised early-booking discount
+ *   (P7 — the PDF previously showed the full price while the page + Stripe
+ *   charged the discounted one) and pricing_book.gst_registered (P1), both via
+ *   the shared lib/quote/money.ts.
  */
-export const REPORT_TEMPLATE_VERSION = 6
+export const REPORT_TEMPLATE_VERSION = 7
 
 export type QuoteReportLineItem = {
   description: string
@@ -83,16 +89,21 @@ export type QuoteReportInput = {
   better: QuoteReportTier
   best: QuoteReportTier
   selectedTier?: 'good' | 'better' | 'best' | null
+  /** v7 — realised early-booking discount % (quotes.applied_discount_pct).
+   *  When > 0 headline tier prices render DISCOUNTED, matching the page,
+   *  the SMS and the Stripe charge (P7). Absent/0 → full price. */
+  appliedDiscountPct?: number | null
+  /** v7 — pricing_book.gst_registered (P1). Absent → treated as registered. */
+  gstRegistered?: boolean | null
   quoteViewUrl?: string | null
   /** Deprecated: licence now flows via `branding.licenceLine`. Kept for back-compat. */
   licenceLine?: string | null
   generatedAt?: Date
 }
 
-/** Same inc-GST rounding the quote SMS uses. */
+/** Same inc-GST rounding every other customer surface uses (lib/quote/money). */
 export function incGst(exGst: number | string): number {
-  const n = typeof exGst === 'string' ? parseFloat(exGst) : exGst
-  return Math.round((Number.isFinite(n) ? n : 0) * 1.1)
+  return displayIncGst(exGst)
 }
 
 function prettyJobType(jobType: string): string {
@@ -103,9 +114,15 @@ function tierSection(
   key: 'good' | 'better' | 'best',
   tier: QuoteReportTier,
   selected: boolean,
+  money?: { discountPct?: number | null; gstRegistered?: boolean | null },
 ): string {
   if (!tier) return ''
-  const price = incGst(tier.subtotal_ex_gst)
+  const discountPct = clampDiscountPct(money?.discountPct)
+  const price = displayIncGst(tier.subtotal_ex_gst, {
+    discountPct,
+    gstRegistered: money?.gstRegistered,
+  })
+  const priceNote = discountPct > 0 ? `inc GST · ${discountPct}% off applied` : 'inc GST'
   const rows = (tier.line_items ?? [])
     .map(
       (li) => `
@@ -125,7 +142,7 @@ function tierSection(
       }</span>
       <span class="tier-price" style="font-size:20px;font-weight:800;">$${price.toLocaleString(
         'en-AU',
-      )} <small style="font-size:10px;font-weight:400;color:var(--dim);">inc GST</small></span>
+      )} <small style="font-size:10px;font-weight:400;color:var(--dim);">${esc(priceNote)}</small></span>
     </div>
     <div class="tier-label" style="margin-top:6px;color:var(--sec);font-weight:600;">${esc(
       tier.label ?? '',
@@ -145,10 +162,17 @@ function tierSection(
  *  PDF (buildQuoteReportHtml) and the document serializer (report-doc/serialize).
  *  Prices come from good/better/best, so both surfaces render identical tiers. */
 export function renderQuoteTiersHtml(
-  input: Pick<QuoteReportInput, 'good' | 'better' | 'best' | 'selectedTier'>,
+  input: Pick<
+    QuoteReportInput,
+    'good' | 'better' | 'best' | 'selectedTier' | 'appliedDiscountPct' | 'gstRegistered'
+  >,
 ): string {
+  const money = {
+    discountPct: input.appliedDiscountPct,
+    gstRegistered: input.gstRegistered,
+  }
   return (['good', 'better', 'best'] as const)
-    .map((key) => tierSection(key, input[key], input.selectedTier === key))
+    .map((key) => tierSection(key, input[key], input.selectedTier === key, money))
     .join('')
 }
 

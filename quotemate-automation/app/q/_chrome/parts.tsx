@@ -7,6 +7,7 @@
 // globals.css. Source: redesign/fullQuote (quotemax-design-system mockup).
 
 import type { CSSProperties, ReactNode } from 'react'
+import { businessInitials } from '@/lib/brand/monogram'
 import { CheckIcon, QuoteMaxMark } from './icons'
 
 /* ── shared type primitives ──────────────────────────────────────────── */
@@ -87,6 +88,7 @@ export function Letterhead({
     })
   }
   const hasContact = contactItems.length > 0
+  const initials = businessInitials(name)
 
   return (
     <header style={{ borderBottom: '1px solid var(--ink-line)', background: 'var(--ink-card)' }}>
@@ -98,8 +100,12 @@ export function Letterhead({
             alt={`${name} logo`}
             style={{ height: 52, width: 'auto', maxWidth: 220, objectFit: 'contain', display: 'block', flexShrink: 0 }}
           />
-        ) : (
+        ) : initials ? (
+          // No uploaded logo — the tradie's own initials, never the QuoteMax
+          // mark: this letterhead is white-label, so a customer of "Bob's
+          // Plumbing" must not be shown our brand as Bob's.
           <span
+            aria-hidden
             style={{
               display: 'inline-grid',
               placeItems: 'center',
@@ -109,11 +115,15 @@ export function Letterhead({
               background: 'var(--accent)',
               color: 'var(--accent-ink)',
               borderRadius: 'var(--qm-r-sm)',
+              ...SANS,
+              fontWeight: 800,
+              fontSize: 19,
+              letterSpacing: '-0.02em',
             }}
           >
-            <QuoteMaxMark size={28} />
+            {initials}
           </span>
-        )}
+        ) : null}
         <div style={{ minWidth: 0 }}>
           {eyebrow ? (
             <div style={{ ...MONO, fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'var(--text-dim)' }}>
@@ -282,7 +292,10 @@ export function Scope({ items, eyebrow = 'Scope of works' }: { items: ScopeItem[
           </span>
           <div style={{ minWidth: 0 }}>
             <h3 style={{ margin: 0, ...SANS, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '-0.01em', fontSize: 16.5, color: 'var(--text-pri)' }}>{s.title}</h3>
-            {s.body ? <p style={{ margin: '9px 0 0', fontSize: 14.5, lineHeight: 1.55, color: 'var(--text-sec)', whiteSpace: 'pre-line', maxWidth: '72ch' }}>{s.body}</p> : null}
+            {/* div, not p: body is a ReactNode and the five-sections layout
+                passes block content (figure/div/p) — nesting those inside a
+                <p> is invalid HTML and throws hydration errors. */}
+            {s.body ? <div style={{ margin: '9px 0 0', fontSize: 14.5, lineHeight: 1.55, color: 'var(--text-sec)', whiteSpace: 'pre-line', maxWidth: '72ch' }}>{s.body}</div> : null}
             {s.list && s.list.length ? (
               <div style={{ marginTop: 11, display: 'grid', gap: 9 }}>
                 {s.list.map((li, j) => (
@@ -418,6 +431,85 @@ export function TierCards({
         ))}
       </div>
     </section>
+  )
+}
+
+/* ── media placeholder (face-holder for the tradie trust videos) ──────
+ * v1 of the five-sections quote page ships BEFORE any tradie video exists
+ * (spec customer-quote-five-sections R4), so the trust section and the
+ * post-booking thank-you page render this static face-holder tile instead
+ * of a player. Deliberately NOT animated: a pulse reads as "loading", and
+ * nothing is loading — this is honest placeholder content. Inline SVG
+ * glyph (stroke 1.75) keeps it dependency-free and print-safe. */
+export function MediaPlaceholder({
+  title,
+  caption,
+  eyebrow,
+}: {
+  title: string
+  caption?: string | null
+  eyebrow?: string | null
+}) {
+  return (
+    <figure
+      style={{
+        margin: 0,
+        border: '1px solid var(--ink-line)',
+        background: 'var(--ink-deep)',
+        borderRadius: 'var(--qm-r-sm)',
+        overflow: 'hidden',
+      }}
+    >
+      <div
+        style={{
+          aspectRatio: '16 / 9',
+          display: 'grid',
+          placeItems: 'center',
+          background:
+            'radial-gradient(120% 100% at 50% 0%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 60%), var(--ink-card)',
+        }}
+      >
+        <div style={{ display: 'grid', justifyItems: 'center', gap: 10, padding: 20, textAlign: 'center' }}>
+          <svg
+            width="44"
+            height="44"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="var(--text-dim)"
+            strokeWidth="1.75"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="8" r="3.4" />
+            <path d="M5 19.2c1.4-3 4-4.6 7-4.6s5.6 1.6 7 4.6" />
+          </svg>
+          <div style={{ ...SANS, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '-0.01em', fontSize: 14, color: 'var(--text-pri)' }}>
+            {title}
+          </div>
+          {eyebrow ? (
+            <div style={{ ...MONO, fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--text-dim)' }}>
+              {eyebrow}
+            </div>
+          ) : null}
+        </div>
+      </div>
+      {caption ? (
+        <figcaption
+          style={{
+            padding: '10px 14px',
+            borderTop: '1px solid var(--ink-line)',
+            ...MONO,
+            fontSize: 9.5,
+            textTransform: 'uppercase',
+            letterSpacing: '0.12em',
+            color: 'var(--text-dim)',
+          }}
+        >
+          {caption}
+        </figcaption>
+      ) : null}
+    </figure>
   )
 }
 

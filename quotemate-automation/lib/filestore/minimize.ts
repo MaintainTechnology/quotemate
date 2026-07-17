@@ -188,14 +188,31 @@ function summarizeEstimate(est: Record<string, any>, pricesHidden: boolean): str
     (Array.isArray(est.combined?.tiers) && est.combined.tiers) ||
     (Array.isArray(est.tiers) && est.tiers) ||
     null
+  // Roofing only: the job-level solar detach & reinstate allowance lives beside
+  // the combined tiers and is added to the priced replacement tiers on every
+  // customer surface (applySolarToTiers) — mirror it here so the assistant
+  // quotes the same totals the quote page shows.
+  const roofSolarInc =
+    Array.isArray(est.combined?.tiers) &&
+    est.solar?.allowance?.applies === true &&
+    typeof est.solar.allowance.inc_gst === 'number' &&
+    est.solar.allowance.inc_gst > 0
+      ? (est.solar.allowance.inc_gst as number)
+      : 0
   if (tierArr && tierArr.length) {
     out.push('', '### Tiers')
     for (const t of tierArr.slice(0, 10)) {
       const label = scrub(String(t?.tier ?? t?.name ?? t?.label ?? 'tier'))
-      const total = pickNum(t, 'net_inc_gst', 'netIncGst', 'inc_gst', 'incGst', 'total_inc_gst', 'totalIncGst', 'total', 'price')
+      let total = pickNum(t, 'net_inc_gst', 'netIncGst', 'inc_gst', 'incGst', 'total_inc_gst', 'totalIncGst', 'total', 'price')
+      if (roofSolarInc > 0 && t?.tier !== 'good' && typeof total === 'number' && total > 0) {
+        total += roofSolarInc
+      }
       if (pricesHidden) out.push(`- ${label}: pricing withheld`)
       else if (typeof total === 'number') out.push(`- ${label}: ${fmtMoney(total)} inc GST`)
       else out.push(`- ${label}`)
+    }
+    if (roofSolarInc > 0 && !pricesHidden) {
+      out.push(`- replacement tiers include solar detach & reinstate (+${fmtMoney(roofSolarInc)} inc GST)`)
     }
   }
 

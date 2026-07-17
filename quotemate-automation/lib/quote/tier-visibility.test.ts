@@ -104,6 +104,15 @@ describe('resolveVisibleTiers — single mode', () => {
       }),
     ).toEqual(['best'])
   })
+
+  it("roofing 'single' resolves to the promoted quote's selected_tier = better — Jon's one \"Full roof replacement\" option (spec five-sections R3)", () => {
+    // save-as-quote stamps selected_tier from tiers[1] (= better, labelled
+    // "Full roof replacement" by trade-format); 'single' must surface exactly
+    // that one option on every roofing customer surface.
+    expect(
+      resolveVisibleTiers({ mode: 'single', present: ALL, selectedTier: 'better' }),
+    ).toEqual(['better'])
+  })
 })
 
 describe('resolveVisibleTiers — forced single tier', () => {

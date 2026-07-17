@@ -22,6 +22,7 @@ import { withRetry } from '@/lib/util/retry'
 import { decideRouting } from '@/lib/routing/decide'
 import { advanceQuoteStatus } from '@/lib/quote/lifecycle'
 import { computePriceHoldUntil } from '@/lib/quote/hold'
+import { INSPECTION_FEE_AUD } from '@/lib/quote/money'
 import { generatePreviewImage } from '@/lib/ig-engine/generate'
 import { generateSampleImages } from '@/lib/ig-engine/samples'
 import { resolvePricingBookForIntake } from '@/lib/estimate/pricing-book'
@@ -374,7 +375,9 @@ export async function POST(req: Request) {
     //               three tiers FORCED to null, even if Opus tried to hand
     //               us indicative numbers (defence-in-depth against
     //               LLM hallucination — STRICT GROUNDING #10).
-    const INSPECTION_TOTAL_INC_GST = 99
+    // Single source of truth for the fee (lib/quote/money.ts) — previously a
+    // second, independent `99` that could drift from the 9900c Stripe charges.
+    const INSPECTION_TOTAL_INC_GST = INSPECTION_FEE_AUD
     const INSPECTION_GST_AMOUNT = +(INSPECTION_TOTAL_INC_GST / 11).toFixed(2)
     const INSPECTION_SUBTOTAL_EX_GST = +(INSPECTION_TOTAL_INC_GST - INSPECTION_GST_AMOUNT).toFixed(2)
 
@@ -515,6 +518,24 @@ export async function POST(req: Request) {
     }).select().single()
     log.ok('quote inserted', { quote_id: quote!.id, total_inc_gst: total, routing: routing_decision, inspection: isInspection, share_token: shareToken.slice(0, 8) + '…' })
 
+    // Mig 175 — persist the one-line job summary (Section 2 of the quote
+    // page). Both estimator prompts already emit scope_short on every draft;
+    // it was previously handed to the SMS builder and DISCARDED. Best-effort
+    // SEPARATE update (not part of the insert) so a deploy that lands before
+    // migration 175 applies simply skips it — same defensive pattern as the
+    // early-bird stamp below.
+    if (draft.scope_short) {
+      const { error: ssErr } = await supabase
+        .from('quotes')
+        .update({ scope_short: draft.scope_short })
+        .eq('id', quote!.id)
+      if (ssErr) {
+        log.err('scope_short stamp skipped (non-fatal — apply migration 175)', ssErr.message, {
+          quote_id: quote!.id,
+        })
+      }
+    }
+
     // v8 Phase A — stamp the early-booking discount offer.
     //
     // Best-effort SEPARATE update (NOT part of the insert above): the
@@ -580,7 +601,18 @@ export async function POST(req: Request) {
       log.step('creating Stripe Checkout Sessions (one per tier, deposit only)')
       try {
         const stripeLinks = await createCheckoutSessionsForQuote({
-          quote: { id: quote!.id, good: draft.good ?? null, better: draft.better ?? null, best: draft.best ?? null, deposit_pct: 30 },
+          quote: {
+            id: quote!.id,
+            good: draft.good ?? null,
+            better: draft.better ?? null,
+            best: draft.best ?? null,
+            deposit_pct: 30,
+            // P1 — the charge honours gst_registered exactly like the stored
+            // total_inc_gst above (previously the Session was always ×1.1).
+            gst_registered:
+              ((pricingBook as { gst_registered?: boolean | null } | null)?.gst_registered ??
+                true),
+          },
           intake,
           shareToken,
           appUrl,
@@ -806,6 +838,9 @@ export async function POST(req: Request) {
           inspection_reason: draft.inspection_reason ?? null,
           quote_view_url: `${appUrl}/q/${shareToken}`,
           pdf_url: quotePdfPath ? quotePdfUrl(shareToken) : null,
+          // P1 — SMS prices honour gst_registered like every other surface.
+          gst_registered:
+            ((pricingBook as { gst_registered?: boolean | null } | null)?.gst_registered ?? true),
         }
         // Phase A — thread the tenant's display preference through to the
         // SMS so summary-mode tradies don't get "- N items + Yhr labour"

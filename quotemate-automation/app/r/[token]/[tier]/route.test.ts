@@ -25,10 +25,9 @@ describe('resolvePayRedirect', () => {
     expect(d).toEqual({ kind: 'expired', url: `${APP}/q/${token}` })
   })
 
-  it('expired does NOT block the inspection fee (no price hold on it)', () => {
-    // Since 2026-07-08 the $99 inspection is book-first like every tier
-    // (Jon's workflow: pick a time, THEN pay), so with no slot chosen the
-    // un-blocked destination is the booking page, not Stripe.
+  it('unpaid inspection → Stripe, pay-first (five-sections R7, D1a) — expiry never blocks it', () => {
+    // The $99 IS the product: pay → pick a time → thank-you, matching the
+    // dedicated trade surfaces. No price hold applies to the flat fee.
     const d = resolvePayRedirect({
       tier: 'inspection',
       paid: false,
@@ -37,10 +36,10 @@ describe('resolvePayRedirect', () => {
       token,
       appUrl: APP,
     })
-    expect(d).toEqual({ kind: 'book', url: `${APP}/q/${token}/book?tier=inspection` })
+    expect(d.kind).toBe('stripe')
   })
 
-  it('inspection with a slot already held → Stripe even when expired ($99 is the last step)', () => {
+  it('inspection with a slot already held still pays first', () => {
     const d = resolvePayRedirect({
       tier: 'inspection',
       paid: false,

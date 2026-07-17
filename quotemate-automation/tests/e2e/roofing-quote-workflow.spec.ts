@@ -141,12 +141,17 @@ test.describe('Roofing quote workflow (promoted quote)', () => {
     if (tenantId) await supabase.from('tenants').delete().eq('id', tenantId)
   })
 
-  test('the promoted quote renders with its tier pricing', async ({ page }) => {
+  test('the promoted quote renders with its recommended price', async ({ page }) => {
     await page.goto(`/q/${token}`)
+    // Five-sections restructure (spec customer-quote-five-sections R1/R2):
+    // the scope sentence now renders in BOTH the Overview and the Job-details
+    // sections (no scope_short seeded → Section 2 falls back to the first
+    // sentence of scope_of_works), so match the first occurrence.
     await expect(
-      page.getByText('Full colorbond re-roof over approximately 200 m2.'),
+      page.getByText('Full colorbond re-roof over approximately 200 m2.').first(),
     ).toBeVisible()
-    // Better-tier inc-GST figure (22,000) is on the page.
+    // Better-tier inc-GST figure (22,000) is on the page — the ONE visible
+    // option ('single' tier mode → selected_tier = better).
     await expect(page.getByText(/22,000/).first()).toBeVisible()
   })
 
@@ -158,7 +163,7 @@ test.describe('Roofing quote workflow (promoted quote)', () => {
     await page.goto(`/q/roof/${publicToken}`)
     await expect(page).toHaveURL(new RegExp(`/q/${token}$`))
     await expect(
-      page.getByText('Full colorbond re-roof over approximately 200 m2.'),
+      page.getByText('Full colorbond re-roof over approximately 200 m2.').first(),
     ).toBeVisible()
   })
 

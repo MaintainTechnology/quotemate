@@ -11,6 +11,7 @@
 
 import Link from 'next/link'
 import { tierLabelsForTrade } from '@/lib/quote/trade-format'
+import { displayDeposit, displayIncGst, fmtAud } from '@/lib/quote/money'
 
 type Tier = {
   label: string
@@ -51,6 +52,9 @@ type Props = {
   blurbs?: Record<TierKey, string>
   /** Footnote under the cards. Defaults to the roofing inspection note. */
   footnote?: string
+  /** pricing_book.gst_registered (P1) — prices honour it like every other
+   *  surface. Defaults true (every live tenant is registered today). */
+  gstRegistered?: boolean | null
 }
 
 const ROOF_TIER_BLURB: Record<TierKey, string> = {
@@ -61,20 +65,11 @@ const ROOF_TIER_BLURB: Record<TierKey, string> = {
 const ROOF_FOOTNOTE =
   'Final price is confirmed after our on-site inspection. Pricing is calculated from satellite measurements and your declared roof material and pitch.'
 
-function asNumber(v: number | string | null | undefined): number {
-  if (v === null || v === undefined) return 0
-  return typeof v === 'string' ? parseFloat(v) : v
-}
-function fmt(n: number): string {
-  return n.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
-}
-function incGst(exGst: number): number {
-  return Math.round(exGst * 1.1)
-}
-function deposit(price: number, pct: number | null | undefined): number | null {
-  if (!pct || pct <= 0) return null
-  return Math.round((price * pct) / 100)
-}
+// Money maths + formatting come from lib/quote/money.ts — the same canonical
+// order (discount the ex-GST base → GST if registered → round once) the page,
+// SMS, PDF and Stripe charge all use (P4: this file previously discounted
+// before rounding while the page rounded before discounting).
+const fmt = fmtAud
 
 export function TradeTiers({
   tiers,
@@ -91,6 +86,7 @@ export function TradeTiers({
   labels = tierLabelsForTrade('roofing'),
   blurbs = ROOF_TIER_BLURB,
   footnote = ROOF_FOOTNOTE,
+  gstRegistered,
 }: Props) {
   const keys = (['good', 'better', 'best'] as const).filter((k) => tiers[k])
   const resolvedHeading =
@@ -103,9 +99,9 @@ export function TradeTiers({
       <div className="grid gap-5 sm:gap-6 lg:grid-cols-3">
         {keys.map((key) => {
           const tier = tiers[key]!
-          const exGst = asNumber(tier.subtotal_ex_gst) * (1 - appliedDiscountPct / 100)
-          const priceInc = incGst(exGst)
-          const dep = deposit(priceInc, depositPct)
+          const money = { discountPct: appliedDiscountPct, gstRegistered }
+          const priceInc = displayIncGst(tier.subtotal_ex_gst, money)
+          const dep = displayDeposit(tier.subtotal_ex_gst, depositPct, money)
           // A confirmed, deposit-payable tier links straight to the short-link
           // (which mints a fresh Session per click); an indicative tier has no
           // deposit CTA. stripeLinks is retained only as a legacy fallback.

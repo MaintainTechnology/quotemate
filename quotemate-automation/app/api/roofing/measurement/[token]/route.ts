@@ -177,6 +177,7 @@ type RescanRow = {
   quote: MultiRoofQuote | null
   tenant_id: string | null
   provider: string | null
+  included_indices: number[] | null
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ token: string }> }) {
@@ -201,7 +202,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
 
   const { data: row, error: readErr } = await supabase
     .from('roofing_measurements')
-    .select('id, quote, tenant_id, provider')
+    .select('id, quote, tenant_id, provider, included_indices')
     .eq('measure_token', token)
     .maybeSingle<RescanRow>()
   if (readErr || !row) {
@@ -241,10 +242,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   }
 
   const updatedQuote = { ...fullQuote, solar: solarAddon }
+  // Recompute the denormalised summary from the solar-attached quote (same
+  // pattern as the PATCH branches) — the allowance changes the better total,
+  // and leaving the old value stranded the dashboard list price below what
+  // /m, /q/roof and the PDF now show.
+  const denorm = denormFromSelection(updatedQuote, row.included_indices ?? null)
   const { error: updErr } = await supabase
     .from('roofing_measurements')
     .update({
       quote: updatedQuote,
+      combined_area_m2: denorm.combined_area_m2,
+      combined_better_inc_gst: denorm.combined_better_inc_gst,
+      structure_count: denorm.structure_count,
       // Invalidate the cached PDF so it regenerates with the solar line.
       pdf_path: null,
     })

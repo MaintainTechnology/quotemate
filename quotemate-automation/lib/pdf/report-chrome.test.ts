@@ -42,4 +42,19 @@ describe('renderReportDocument — tenant logo (shared chrome)', () => {
     expect(html).toContain('class="wordmark"')
     expect(html).not.toContain('class="logo"')
   })
+
+  it('leads the wordmark with the initials monogram when there is no logo', () => {
+    const html = renderReportDocument({ businessName: 'Atomic Electrical', logoSrc: null }, doc)
+    expect(html).toContain('<span class="monogram">AE</span>')
+    // The name must still print — this header has no separate business-name line.
+    expect(html).toContain('Atomic Electrical')
+  })
+
+  it('omits the monogram when a real logo is present', () => {
+    const html = renderReportDocument(
+      { businessName: 'Atomic Electrical', logoSrc: 'data:image/png;base64,AAAA' },
+      doc,
+    )
+    expect(html).not.toContain('<span class="monogram">')
+  })
 })

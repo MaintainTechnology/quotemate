@@ -201,7 +201,7 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
   const [manualShots, setManualShots] = useState<Partial<Record<ManualView, string>>>({})
   // Upload-your-own-photos source (drone shots, saved screenshots).
   const [uploadShots, setUploadShots] = useState<Partial<Record<ManualView, string>>>({})
-  // Roof-anatomy overlays (auto mode) — view → signed image URL.
+  // Roof-anatomy overlays (all sources) — view → signed image URL.
   const [anatomy, setAnatomy] = useState<Record<string, string> | null>(null)
   // Gemini-polished captures for this property — view → signed image URL.
   const [polished, setPolished] = useState<Record<string, string> | null>(null)
@@ -358,8 +358,10 @@ export function Roof3DModelSection({ measureToken, center, captureRangeM, initia
       | { ok: boolean; status?: string; progress?: number | null; modelUrl?: string | null; error?: string | null; anatomy?: Record<string, string> | null; polished?: Record<string, string> | null }
       | null
     if (!json?.ok) return
-    if (json.anatomy) setAnatomy(json.anatomy)
-    if (json.polished) setPolished(json.polished)
+    // Mirror the server, including null — keeping stale panels (e.g. anatomy
+    // drawn over a previous generation's captures) is worse than a gap.
+    setAnatomy(json.anatomy ?? null)
+    setPolished(json.polished ?? null)
     // Metadata-only (page mount): populate the image panels but never touch
     // the phase — an async response must not undo a click (e.g. Regenerate).
     if (opts.metaOnly) return

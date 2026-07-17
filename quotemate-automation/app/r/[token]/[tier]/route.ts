@@ -135,13 +135,27 @@ async function mintFreshDepositUrl(
 
     const { data: intakeRow } = await db()
       .from('intakes')
-      .select('job_type, scope, caller')
+      .select('job_type, scope, caller, trade')
       .eq('id', quote.intake_id)
       .maybeSingle()
     const intake = {
       job_type: (intakeRow?.job_type as string) ?? 'other',
       scope: (intakeRow?.scope as { item_count?: number; description?: string } | null) ?? null,
       caller: (intakeRow?.caller as { name?: string; email?: string } | null) ?? null,
+    }
+
+    // P1 — the freshly-minted Session must honour gst_registered like every
+    // display surface and the stored total. Best-effort: no book row (legacy
+    // tenant-less quote) defaults to registered, today's behaviour.
+    let gstRegistered = true
+    if (quote.tenant_id) {
+      const { data: pb } = await db()
+        .from('pricing_book')
+        .select('gst_registered')
+        .eq('tenant_id', quote.tenant_id)
+        .eq('trade', (intakeRow?.trade as string | null) ?? 'electrical')
+        .maybeSingle()
+      gstRegistered = (pb as { gst_registered?: boolean | null } | null)?.gst_registered ?? true
     }
 
     let url: string | null = null
@@ -187,6 +201,7 @@ async function mintFreshDepositUrl(
             quote.deposit_pct <= 90
               ? Math.round(quote.deposit_pct)
               : 30,
+          gst_registered: gstRegistered,
         } as unknown as CheckoutOpts['quote'],
         tierKey: tier as 'good' | 'better' | 'best',
         intake: intake as unknown as CheckoutOpts['intake'],

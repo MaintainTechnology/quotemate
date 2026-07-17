@@ -4,6 +4,7 @@
 
 import { z } from 'zod'
 import { AvailabilitySchema } from '@/lib/quote/availability'
+import { MAX_RATE_PER_M2 } from '@/lib/roofing/rate-card-overlay'
 
 // AU mobile in E.164 (+614xxxxxxxx) or local 04xx format
 const auMobile = z
@@ -50,7 +51,11 @@ export const OnboardActivateSchema = z.object({
   owner_first_name: z.string().trim().min(1, 'First name required').max(40),
   owner_last_name: z.string().trim().max(40).optional().or(z.literal('')),
   owner_email: z.string().trim().email('Enter a valid email').max(120),
-  owner_mobile: auMobile,
+  // Optional (user clarification 2026-07-17): normally carried verified from
+  // /signup, but a mobile-less activation must succeed — the welcome SMS is
+  // skipped and tenants.owner_mobile stores null (migration 176 dropped the
+  // NOT NULL). A non-empty value must still be a valid AU mobile.
+  owner_mobile: auMobile.optional().or(z.literal('')),
   // owner_user_id passed by the wizard after Supabase Auth sign up
   owner_user_id: z.string().uuid().optional().or(z.literal('')),
   // clerk_user_id passed by the wizard after Clerk sign up (a `user_…` string,
@@ -67,7 +72,10 @@ export const OnboardActivateSchema = z.object({
     .array(z.enum(['electrical', 'plumbing', 'painting', 'roofing']))
     .min(1, 'Pick at least one trade')
     .max(4, 'Pick from electrical, plumbing, painting and roofing'),
-  state: z.enum(['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'ACT', 'NT']),
+  // Optional (user clarification 2026-07-17): when absent the tenant stores
+  // null and the booking timezone falls back to Australia/Sydney
+  // (tzForState already handles null). A non-empty value must be a real state.
+  state: z.enum(['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'ACT', 'NT']).optional().or(z.literal('')),
   abn: z.string().trim().max(20).optional().or(z.literal('')),
   licence_type: z.string().trim().max(20).optional().or(z.literal('')),
   licence_number: z.string().trim().max(40).optional().or(z.literal('')),
@@ -77,8 +85,9 @@ export const OnboardActivateSchema = z.object({
   // business_name / owner_email / owner_mobile above already cover the
   // quote's name + email + phone. These add the remaining sample-quote
   // fields: a contact-person name, website, address, and the uploaded
-  // logo's public URL + storage path. Logo is required for web onboarding
-  // (enforced by the superRefine below); SMS onboarding has no logo step.
+  // logo's public URL + storage path. Logo is optional on every channel — a
+  // tenant without one gets the business-initials monogram (lib/brand/monogram)
+  // on the quote letterhead + PDF until they upload one from the dashboard.
   contact_name: z.string().trim().max(80).optional().or(z.literal('')),
   website_url: z
     .string()
@@ -120,6 +129,22 @@ export const OnboardActivateSchema = z.object({
   painting_pricing_model: z.enum(['sqm', 'hourly']).optional(),
   painting_hourly_rate: optionalNumber(z.coerce.number().positive().max(2000)),
 
+  // ── Page 3: Pricing — roofing rate card ($/m² per material) ──
+  // The per-material re-roof rates a roofing tenant quotes from. All
+  // optional: a blank field falls back to DEFAULT_ROOFING_RATE_CARD
+  // (lib/roofing/pricing.ts). Bounds mirror the dashboard overlay
+  // validator (lib/roofing/rate-card-overlay.ts): strictly positive,
+  // ≤ $500/m² — so a 0 "never auto-quoted" cement-sheet default can only
+  // be expressed by leaving the field blank. Persisted to
+  // pricing_book.overlays.roofing_rate_card by the activate route.
+  roofing_corrugated_rate: optionalNumber(z.coerce.number().positive().max(MAX_RATE_PER_M2)),
+  roofing_trimdek_rate: optionalNumber(z.coerce.number().positive().max(MAX_RATE_PER_M2)),
+  roofing_spandek_rate: optionalNumber(z.coerce.number().positive().max(MAX_RATE_PER_M2)),
+  roofing_kliplok_rate: optionalNumber(z.coerce.number().positive().max(MAX_RATE_PER_M2)),
+  roofing_concrete_tile_rate: optionalNumber(z.coerce.number().positive().max(MAX_RATE_PER_M2)),
+  roofing_terracotta_tile_rate: optionalNumber(z.coerce.number().positive().max(MAX_RATE_PER_M2)),
+  roofing_cement_sheet_rate: optionalNumber(z.coerce.number().positive().max(MAX_RATE_PER_M2)),
+
   // ── Page 3: Pricing (advanced — all optional) ──────────────
   apprentice_rate: optionalNumber(z.coerce.number().nonnegative()),
   senior_rate: optionalNumber(z.coerce.number().nonnegative()),
@@ -153,19 +178,7 @@ export const OnboardActivateSchema = z.object({
   // Consumed once at activate via consumeInvitationCode().
   invitation_code: z.string().trim().min(1, 'Invitation code required').max(60),
 })
-  // Logo is a required field of the web onboarding wizard. SMS-initiated
-  // onboarding (intent_token present) has no logo step, so it stays optional
-  // there — the tradie adds a logo later from the dashboard. This keeps the
-  // server-side gate aligned with the wizard without breaking the SMS path.
   .superRefine((data, ctx) => {
-    if (!data.intent_token && !data.logo_url) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['logo_url'],
-        message: 'A business logo is required.',
-      })
-    }
-
     // Labour trades (electrical / plumbing) price by the hour, so a tenant
     // that selects either must supply the three core labour rates — they
     // drive that trade's estimator. Painting and roofing price from a rate

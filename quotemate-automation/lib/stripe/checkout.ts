@@ -28,6 +28,11 @@ import { getStripe } from './client'
 import { randomBytes } from 'node:crypto'
 import { clampDiscountPct } from '@/lib/quote/early-bird'
 import {
+  INSPECTION_FEE_AUD_CENTS,
+  depositCents,
+  totalIncGstCents,
+} from '@/lib/quote/money'
+import {
   connectPaymentIntentExtras,
   connectSessionMetadata,
   type ConnectDestination,
@@ -41,6 +46,9 @@ type QuoteForCheckout = {
   better: Tier
   best: Tier
   deposit_pct: number | string  // e.g. 30 = 30%
+  /** pricing_book.gst_registered — P1: the charge must match the stored
+   *  total. Omitted/null → true (every live tenant is registered today). */
+  gst_registered?: boolean | null
 }
 
 type IntakeForCheckout = {
@@ -57,11 +65,6 @@ export type StripeLinks = {
   inspection?: string
 }
 
-/** Industry-standard $99 refundable site-visit deposit. Hardcoded for v1
- *  per the SOP; move to pricing_book.inspection_fee_amount when multi-tradie
- *  configurability is needed. */
-const INSPECTION_FEE_AUD_CENTS = 9900
-
 /**
  * Generate a URL-safe share token (used in success URLs and future portal route).
  * 16 bytes → 22 chars after base64url, ~128 bits of entropy.
@@ -70,32 +73,10 @@ export function generateShareToken(): string {
   return randomBytes(16).toString('base64url')
 }
 
-function tierIncGstCents(tier: Tier): number {
-  if (!tier) return 0
-  const ex = typeof tier.subtotal_ex_gst === 'string' ? parseFloat(tier.subtotal_ex_gst) : tier.subtotal_ex_gst
-  const inc = ex * 1.10
-  return Math.round(inc * 100)
-}
-
-function depositCents(tierIncGstCents: number, depositPct: number): number {
-  return Math.round(tierIncGstCents * (depositPct / 100))
-}
-
-/**
- * v8 — apply an early-booking (whole-job) discount to a tier's inc-GST
- * cents amount. The discount reduces the WHOLE job, so it flows through
- * to the deposit proportionally. `discountPct` is clamped to the
- * platform cap (15%) so a bad value can never over-discount. A 0 /
- * missing pct returns the amount unchanged.
- */
-function discountedIncGstCents(
-  incGstCents: number,
-  discountPct: number | null | undefined,
-): number {
-  const pct = clampDiscountPct(discountPct)
-  if (pct <= 0) return incGstCents
-  return Math.round(incGstCents * (1 - pct / 100))
-}
+// Money maths (inc-GST cents, deposit cents, the $99 fee, discount order)
+// lives in lib/quote/money.ts — the SAME functions the quote page, SMS and
+// PDF display from, so the charge always matches the advertised number
+// (spec customer-quote-five-sections R9: P1/P4/P5/P8).
 
 export async function createCheckoutSessionsForQuote(opts: {
   quote: QuoteForCheckout
@@ -121,7 +102,9 @@ export async function createCheckoutSessionsForQuote(opts: {
 
   for (const [key, tier] of tiers) {
     if (!tier) continue
-    const incCents = tierIncGstCents(tier)
+    const incCents = totalIncGstCents(tier.subtotal_ex_gst, {
+      gstRegistered: opts.quote.gst_registered,
+    })
     const deposit = depositCents(incCents, depositPct)
     if (deposit <= 0) continue
 
@@ -232,9 +215,10 @@ export async function createCheckoutSessionForTier(opts: {
   const depositPct = typeof opts.quote.deposit_pct === 'string'
     ? parseFloat(opts.quote.deposit_pct)
     : opts.quote.deposit_pct
-  const fullIncCents = tierIncGstCents(tier)
+  const gstRegistered = opts.quote.gst_registered
+  const fullIncCents = totalIncGstCents(tier.subtotal_ex_gst, { gstRegistered })
   const discountPct = clampDiscountPct(opts.discountPct)
-  const incCents = discountedIncGstCents(fullIncCents, discountPct)
+  const incCents = totalIncGstCents(tier.subtotal_ex_gst, { gstRegistered, discountPct })
   const deposit = depositCents(incCents, depositPct)
   if (deposit <= 0) return null
 

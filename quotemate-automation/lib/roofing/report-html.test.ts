@@ -35,6 +35,45 @@ const baseQuote = {
   inspection_structures: ['Shed'],
 } as unknown as MultiRoofQuote
 
+// The job-level solar detach & reinstate allowance must reach the PRINTED
+// tier prices (applySolarToTiers — the same code path as the customer quote
+// page), so the PDF can never read lower than the page.
+describe('buildRoofQuoteReportHtml — solar detach & reinstate', () => {
+  const solar = {
+    detection: { has_solar: true, has_skylight: false, array_count: 2, skylight_count: 0, summary_note: '' },
+    allowance: {
+      applies: true, arrays: 2, ex_gst: 2400, inc_gst: 2640,
+      detail: '', electrician_note: 'A licensed electrician reconnects the panels.', low_confidence: false,
+    },
+  }
+  const solarQuote = { ...baseQuote, solar } as unknown as MultiRoofQuote
+
+  it('adds the allowance to the replacement tier prices, never Patch', () => {
+    const html = buildRoofQuoteReportHtml({
+      businessName: 'Apex Roofing',
+      address: '12 Sample St',
+      quote: solarQuote,
+    })
+    expect(html).toContain('$2,200') // Patch untouched
+    expect(html).toContain('$22,440') // 19,800 + 2,640
+    expect(html).toContain('$29,040') // 26,400 + 2,640
+    // The per-structure table still shows the raw per-structure better price
+    // ($19,800) by design, but the headline Best price must be solar-inclusive.
+    expect(html).not.toContain('$26,400')
+    expect(html).toMatch(/solar panels \(\+\$2,640 including GST\)/)
+  })
+  it('renders unchanged when no allowance applies', () => {
+    const html = buildRoofQuoteReportHtml({
+      businessName: 'Apex Roofing',
+      address: '12 Sample St',
+      quote: baseQuote,
+    })
+    expect(html).toContain('$19,800')
+    expect(html).toContain('$26,400')
+    expect(html).not.toMatch(/solar panels/i)
+  })
+})
+
 // Spec specs/quote-visual-parity.md R6e — the roofing PDF carries the AI
 // work-strategy layout map (aerial + colour-coded zone overlay + legend)
 // once the tradie has generated it. Null renders today's PDF unchanged.

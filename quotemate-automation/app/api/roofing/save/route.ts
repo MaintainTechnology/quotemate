@@ -115,14 +115,6 @@ export async function POST(req: Request) {
   const provided = sanitizeIndices(included_indices, count)
   const includedIndices =
     provided.length > 0 ? provided : count > 0 ? primaryStructureIndices(fullQuote) : null
-  const denorm =
-    fullQuote && includedIndices
-      ? denormFromSelection(fullQuote, includedIndices)
-      : {
-          combined_area_m2: numOrNull(readPath(quote, ['combined', 'area_m2'])),
-          combined_better_inc_gst: numOrNull(readPath(quote, ['combined', 'tiers', 1, 'inc_gst'])),
-          structure_count: structures.length,
-        }
 
   // ── Solar / skylight detection (best-effort, persisted on the quote) ──
   // The job's primary intent gates whether the allowance applies (re-roof
@@ -146,6 +138,20 @@ export async function POST(req: Request) {
   // Attach to the stored quote (additive — older payloads simply omit it).
   const quoteToStore =
     fullQuote && solarAddon ? { ...fullQuote, solar: solarAddon } : (quote ?? null)
+
+  // Denormalised summary — computed from the SOLAR-ATTACHED quote (after
+  // detection, not before), so combined_better_inc_gst carries the same
+  // allowance every display surface shows. Computing it from the pre-solar
+  // payload stored a lower dashboard-list price than /m, /q/roof and the PDF.
+  const denormQuote = (quoteToStore ?? null) as MultiRoofQuote | null
+  const denorm =
+    denormQuote && includedIndices
+      ? denormFromSelection(denormQuote, includedIndices)
+      : {
+          combined_area_m2: numOrNull(readPath(quote, ['combined', 'area_m2'])),
+          combined_better_inc_gst: numOrNull(readPath(quote, ['combined', 'tiers', 1, 'inc_gst'])),
+          structure_count: structures.length,
+        }
 
   const row = {
     tenant_id: auth.tenantId,

@@ -151,8 +151,12 @@ export function composeInspectionMessage(ctx: RoofingReplyContext): string {
   // customer never gets a price-free quote. A genuinely unpriceable roof
   // (asbestos / unknown material → $0 tiers) yields no lines and the message
   // stays price-free, as before.
+  // Solar detach & reinstate is applied to the priced replacement tiers —
+  // the SAME one code path the confirmed indicative page view uses, so the
+  // SMS ballpark can never read lower than the page it links to. The $0-tier
+  // guard keeps a genuinely unpriceable tier at $0 (no fabricated price).
   const indic = indicativeCombinedTiers(ctx.quote.structures ?? [])
-  const tierLines = indic.tiers
+  const tierLines = applySolarToTiers(indic.tiers, ctx.quote.solar)
     .filter((t) => t.inc_gst > 0)
     .map((t) => `• ${ROOF_TIER_LABEL_BY_KEY[t.tier]}: ${fmtAud(t.inc_gst)}`)
   if (tierLines.length > 0) {
@@ -313,7 +317,9 @@ export function narrowQuoteToStructures(
 
 /** PURE — add the solar detach & reinstate allowance to the Re-roof + Upgrade
  *  tiers only (never Patch — a patch job doesn't detach panels). When a tier
- *  carries line_items, append a matching `each` line so Σ line_items === ex_gst. */
+ *  carries line_items, append a matching `each` line so Σ line_items === ex_gst.
+ *  A $0 tier stays $0 — the allowance is an add-on to a priced re-roof, so an
+ *  unpriced/inspection tier can never become a fabricated solar-only price. */
 export function applySolarToTiers(
   tiers: RoofingPriceTier[],
   solar: { allowance: SolarAllowance | null } | null | undefined,
@@ -321,7 +327,7 @@ export function applySolarToTiers(
   const a = solar?.allowance
   if (!a || !a.applies || a.inc_gst <= 0) return tiers
   return tiers.map((t) => {
-    if (t.tier === 'good') return t
+    if (t.tier === 'good' || t.ex_gst <= 0) return t
     const ex_gst = round2(t.ex_gst + a.ex_gst)
     const inc_gst = round2(t.inc_gst + a.inc_gst)
     if (!t.line_items) return { ...t, ex_gst, inc_gst }

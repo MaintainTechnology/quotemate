@@ -20,7 +20,7 @@
 // ════════════════════════════════════════════════════════════════════
 
 import type { MultiRoofQuote, RoofStructurePrice } from './types'
-import { narrowQuoteToStructures } from '@/lib/sms/roofing-compose'
+import { applySolarToTiers, narrowQuoteToStructures } from '@/lib/sms/roofing-compose'
 
 /** [1..count] — every structure index, 1-based. */
 export function allStructureIndices(count: number): number[] {
@@ -116,7 +116,9 @@ export function resolveEffectiveIndices(
 /**
  * Denormalised summary for fast list views, derived from the included set.
  * Reuses narrowQuoteToStructures so the combined totals are computed by the
- * one source of truth (never re-derived free-form).
+ * one source of truth (never re-derived free-form). The better total carries
+ * the job-level solar detach & reinstate allowance (applySolarToTiers) so the
+ * dashboard list matches what the customer quote page shows.
  */
 export function denormFromSelection(
   quote: MultiRoofQuote,
@@ -128,9 +130,10 @@ export function denormFromSelection(
     quote,
     eff.length > 0 ? eff : defaultStructureIndices(quote),
   )
+  const tiers = applySolarToTiers(narrowed.combined.tiers, narrowed.solar ?? null)
   return {
     combined_area_m2: narrowed.combined.area_m2,
-    combined_better_inc_gst: narrowed.combined.tiers[1]?.inc_gst ?? 0,
+    combined_better_inc_gst: tiers[1]?.inc_gst ?? 0,
     structure_count: narrowed.structures.length,
   }
 }
@@ -142,7 +145,10 @@ export function denormFromSelection(
  * its total from here so they can never drift. Delegates to
  * narrowQuoteToStructures so there is exactly ONE summation — the total covers
  * the INCLUDED *quotable* structures only (inspection-routed ones are listed
- * but never priced into the headline). An empty/invalid selection totals zero.
+ * but never priced into the headline). The job-level solar detach & reinstate
+ * allowance is applied to the replacement tiers (applySolarToTiers) — the same
+ * add-on the customer quote page shows, so a tradie-facing total can never
+ * read lower than the customer's. An empty/invalid selection totals zero.
  */
 export function combinedTotalsForIndices(
   quote: MultiRoofQuote,
@@ -152,12 +158,13 @@ export function combinedTotalsForIndices(
   if (idx.length === 0) {
     return { count: 0, area: 0, exGst: [0, 0, 0], incGst: [0, 0, 0] }
   }
-  const t = narrowQuoteToStructures(quote, idx).combined
+  const narrowed = narrowQuoteToStructures(quote, idx)
+  const tiers = applySolarToTiers(narrowed.combined.tiers, narrowed.solar ?? null)
   return {
     count: idx.length,
-    area: t.area_m2,
-    exGst: [t.tiers[0].ex_gst, t.tiers[1].ex_gst, t.tiers[2].ex_gst],
-    incGst: [t.tiers[0].inc_gst, t.tiers[1].inc_gst, t.tiers[2].inc_gst],
+    area: narrowed.combined.area_m2,
+    exGst: [tiers[0].ex_gst, tiers[1].ex_gst, tiers[2].ex_gst],
+    incGst: [tiers[0].inc_gst, tiers[1].inc_gst, tiers[2].inc_gst],
   }
 }
 

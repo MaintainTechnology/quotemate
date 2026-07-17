@@ -61,6 +61,16 @@ describe('applySolarToTiers', () => {
     expect(applySolarToTiers(tiers, { allowance: allowance({ applies: false }) })).toEqual(tiers)
     expect(applySolarToTiers(tiers, null)).toEqual(tiers)
   })
+  it('leaves a $0 (unpriced) tier untouched — never a fabricated solar-only price', () => {
+    const zeroTiers: RoofingPriceTier[] = [
+      { tier: 'good', label: 'a', ex_gst: 0, inc_gst: 0, scope: '' },
+      { tier: 'better', label: 'b', ex_gst: 0, inc_gst: 0, scope: '' },
+      { tier: 'best', label: 'c', ex_gst: 6000, inc_gst: 6600, scope: '' },
+    ]
+    const out = applySolarToTiers(zeroTiers, { allowance: allowance() })
+    expect([out[1].ex_gst, out[1].inc_gst]).toEqual([0, 0]) // unpriced stays $0
+    expect([out[2].ex_gst, out[2].inc_gst]).toEqual([8400, 9240]) // priced tier still gets it
+  })
   it('appends a solar each-line-item keeping Σ line_items === ex_gst when a tier carries line_items', () => {
     const withLines: RoofingPriceTier[] = [
       { tier: 'better', label: 'b', ex_gst: 5000, inc_gst: 5500, scope: '', line_items: [

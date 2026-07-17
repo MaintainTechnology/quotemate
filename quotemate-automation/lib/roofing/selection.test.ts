@@ -17,7 +17,7 @@ import {
   combinedTotalsForIndices,
   partitionRoofQuote,
 } from './selection'
-import { narrowQuoteToStructures } from '@/lib/sms/roofing-compose'
+import { applySolarToTiers, narrowQuoteToStructures } from '@/lib/sms/roofing-compose'
 import type { MultiRoofQuote, RoofStructurePrice, RoofStructureRole } from './types'
 
 function tier(name: 'good' | 'better' | 'best', ex: number) {
@@ -230,6 +230,45 @@ describe('secondary marginal contribution (combined(included) − combined(prima
     }
     // inspection shed is included but never priced into the headline → +0
     expect(secondaryDeltaExBetter([1, 2], q)).toBe(0)
+  })
+})
+
+describe('solar detach & reinstate parity (job-level allowance)', () => {
+  const solar = {
+    detection: null,
+    allowance: {
+      applies: true, arrays: 2, ex_gst: 2400, inc_gst: 2640,
+      detail: '', electrician_note: '', low_confidence: false,
+    },
+  } as unknown as NonNullable<MultiRoofQuote['solar']>
+  const solarQuote: MultiRoofQuote = { ...quote, solar }
+
+  it('combinedTotalsForIndices adds the allowance to better + best only, never good', () => {
+    const withSolar = combinedTotalsForIndices(solarQuote, [1])
+    const without = combinedTotalsForIndices(quote, [1])
+    expect(withSolar.exGst[0]).toBe(without.exGst[0]) // Patch untouched
+    expect(withSolar.exGst[1]).toBe(without.exGst[1] + 2400)
+    expect(withSolar.incGst[1]).toBeCloseTo(without.incGst[1] + 2640, 2)
+    expect(withSolar.exGst[2]).toBe(without.exGst[2] + 2400)
+    expect(withSolar.incGst[2]).toBeCloseTo(without.incGst[2] + 2640, 2)
+  })
+  it('denormFromSelection stores the solar-inclusive better total (dashboard == customer)', () => {
+    const d = denormFromSelection(solarQuote, [1])
+    expect(d.combined_better_inc_gst).toBeCloseTo(Math.round(1000 * 1.1 * 100) / 100 + 2640, 2)
+  })
+  it('equals the customer-page derivation exactly (narrow → applySolarToTiers)', () => {
+    const idx = [1, 3]
+    const t = combinedTotalsForIndices(solarQuote, idx)
+    const narrowed = narrowQuoteToStructures(solarQuote, idx)
+    const page = applySolarToTiers(narrowed.combined.tiers, narrowed.solar ?? null)
+    expect(t.incGst).toEqual([page[0].inc_gst, page[1].inc_gst, page[2].inc_gst])
+    expect(t.exGst).toEqual([page[0].ex_gst, page[1].ex_gst, page[2].ex_gst])
+  })
+  it('never fabricates a price: an all-inspection ($0) job stays $0 even with an allowance', () => {
+    const q: MultiRoofQuote = { ...solarQuote, structures: [inspectionStruct(100, 1000)] }
+    const t = combinedTotalsForIndices(q, [1])
+    expect(t.exGst).toEqual([0, 0, 0])
+    expect(t.incGst).toEqual([0, 0, 0])
   })
 })
 

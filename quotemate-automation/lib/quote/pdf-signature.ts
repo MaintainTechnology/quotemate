@@ -26,10 +26,18 @@ export function quotePdfSignature(args: {
    *  empty for legacy quotes with no document → signature is byte-identical to
    *  the pre-Phase-0 format, so those cached PDFs are NOT force-regenerated. */
   docHash?: string | null
+  /** Realised early-booking discount % (quotes.applied_discount_pct). The
+   *  discount is stamped at BOOKING time — after the draft-time PDF was
+   *  cached — so it must be part of the signature or the customer keeps
+   *  downloading a full-price PDF (P7). Omitted/0 keeps the signature
+   *  byte-identical to the pre-v7 format. */
+  appliedDiscountPct?: number | null
 }): string {
-  const base = `v${args.templateVersion}|${args.tierMode}|t=${args.visibleTierKeys.join('+')}|r=${
+  let base = `v${args.templateVersion}|${args.tierMode}|t=${args.visibleTierKeys.join('+')}|r=${
     args.recommendedTier ?? ''
   }`
+  const pct = args.appliedDiscountPct ?? 0
+  if (pct > 0) base = `${base}|disc=${pct}`
   return args.docHash ? `${base}|d=${args.docHash}` : base
 }
 

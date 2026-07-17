@@ -18,6 +18,7 @@
 // ════════════════════════════════════════════════════════════════════
 
 import { PDF_CONTENT_WIDTH_IN } from './gotenberg'
+import { businessInitials } from '@/lib/brand/monogram'
 
 /** HTML-escape a user-influenced string. Shared by every trade builder. */
 export const esc = (s: string): string =>
@@ -91,7 +92,12 @@ function wordmark(b: TenantBranding): string {
   if (b.logoSrc) {
     return `<img class="logo" src="${esc(b.logoSrc)}" alt="${esc(b.businessName)}">`
   }
-  return `<div class="wordmark">${esc(b.businessName)}</div>`
+  // No logo — the initials monogram leads the wordmark, matching the mark the
+  // HTML letterhead draws for the same tenant. The name still prints: unlike
+  // the letterhead, this header has no separate business-name line.
+  const initials = businessInitials(b.businessName)
+  const mark = initials ? `<span class="monogram">${esc(initials)}</span>` : ''
+  return `${mark}<div class="wordmark">${esc(b.businessName)}</div>`
 }
 
 /** Render one bulleted scope list (shared visual vocabulary across trades). */
@@ -231,7 +237,13 @@ export function renderReportDocument(branding: TenantBranding, doc: ReportDocume
 
   /* ── Header (white-label) ── */
   header{ display:flex; justify-content:space-between; align-items:flex-start; gap:24px; }
+  .brand{ display:flex; align-items:center; gap:12px; }
   .brand .logo{ max-height:60px; max-width:230px; object-fit:contain; display:block; }
+  .brand .monogram{
+    display:inline-flex; align-items:center; justify-content:center; flex:none;
+    width:46px; height:46px; background:var(--accent); color:var(--accent-ink);
+    font-weight:800; font-size:19px; letter-spacing:-0.02em;
+  }
   .brand .wordmark{
     font-weight:800; font-size:26px; line-height:1.05; text-transform:uppercase;
     letter-spacing:-0.02em; color:var(--pri); max-width:300px;

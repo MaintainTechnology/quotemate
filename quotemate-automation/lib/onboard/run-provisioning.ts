@@ -46,7 +46,9 @@ export type ProvisioningInput = {
    *  callers keep working. */
   trades?: string[]
   ownerFirstName: string
-  ownerMobile: string // E.164
+  /** E.164, or null when the tenant onboarded without a mobile — the
+   *  welcome SMS is skipped and `welcome` stays undefined on the result. */
+  ownerMobile: string | null
   /** Pre-existing values on the tenant row — lets us skip steps we already did. */
   existing?: {
     twilioSmsNumber?: string | null
@@ -252,12 +254,16 @@ export async function runProvisioning(
   })
 
   // ── 5. Welcome SMS (non-fatal) ───────────────────────────────────
-  const welcome = await welcomeSms({
-    fromNumber: phoneNumber,
-    toMobile: input.ownerMobile,
-    firstName: input.ownerFirstName,
-    businessName: input.businessName,
-  })
+  // Skipped entirely when the tenant onboarded without a mobile —
+  // `welcome` stays undefined, the declared "didn't try" state.
+  const welcome = input.ownerMobile
+    ? await welcomeSms({
+        fromNumber: phoneNumber,
+        toMobile: input.ownerMobile,
+        firstName: input.ownerFirstName,
+        businessName: input.businessName,
+      })
+    : undefined
 
   return {
     ok: true,

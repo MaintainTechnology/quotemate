@@ -25,7 +25,7 @@ import type {
 import { combinedTotalsForIndices } from '@/lib/roofing/selection'
 import { edgeStat } from '@/lib/roofing/geometry-edges'
 import { buildingAttributeChips, propertyContextChips } from '@/lib/roofing/attributes-display'
-import { narrowQuoteToStructures } from '@/lib/sms/roofing-compose'
+import { applySolarToTiers, narrowQuoteToStructures } from '@/lib/sms/roofing-compose'
 import { RoofMap, type RoofMapBuilding } from '../_components/RoofMap'
 import { AddressAutocomplete } from '../_components/AddressAutocomplete'
 import { GoogleStaticMap } from '../_components/GoogleStaticMap'
@@ -287,7 +287,12 @@ function RoofingMeasurePageInner() {
     }
     const includedStructures = indices.map((i) => resp.quote.structures[i - 1])
     const primary = includedStructures.find((s) => s.role === 'primary') ?? includedStructures[0]
-    const combined = narrowQuoteToStructures(resp.quote, indices).combined
+    const narrowed = narrowQuoteToStructures(resp.quote, indices)
+    const combined = narrowed.combined
+    // Job-level solar detach & reinstate goes into the promoted tiers — the
+    // same one code path (applySolarToTiers) the /m promote flow and the
+    // customer page use, so the quotes row can never read lower than the page.
+    const tiersWithSolar = applySolarToTiers(narrowed.combined.tiers, narrowed.solar ?? null)
     setQuoteState('saving')
     setQuoteShareUrl(null)
     setQuoteShareToken(null)
@@ -322,7 +327,7 @@ function RoofingMeasurePageInner() {
           price: {
             area_m2: combined.area_m2,
             effective_rate_per_m2: primary.price.effective_rate_per_m2,
-            tiers: combined.tiers,
+            tiers: tiersWithSolar,
             // `combined` carries only area + tiers; routing + loadings
             // live per-structure. Take them from the primary structure
             // — its routing decision propagates to the whole job

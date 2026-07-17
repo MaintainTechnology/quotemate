@@ -92,13 +92,16 @@ const TIER_NAME: Record<'good' | 'better' | 'best', string> = {
  * PURE — combined inc/ex-GST + area over the INCLUDED structures (1-based).
  * Delegates to THE canonical helper so this tradie-facing total matches the
  * customer quote page + PDF exactly: inspection-routed structures stay listed
- * but are never priced into the headline total.
+ * but are never priced into the headline total, and the job-level solar
+ * detach & reinstate allowance is included on the replacement tiers (the
+ * customer sees those solar-inclusive totals — so must the tradie).
  */
 function combine(
   structures: RoofStructurePrice[],
   included: number[],
+  solar: SolarQuoteAddon | null,
 ): { count: number; area: number; exGst: [number, number, number]; incGst: [number, number, number] } {
-  return combinedTotalsForIndices({ structures } as unknown as MultiRoofQuote, included)
+  return combinedTotalsForIndices({ structures, solar } as unknown as MultiRoofQuote, included)
 }
 
 export function MeasurementReview({
@@ -256,7 +259,7 @@ export function MeasurementReview({
     [measureToken, router],
   )
 
-  const combined = useMemo(() => combine(structures, included), [structures, included])
+  const combined = useMemo(() => combine(structures, included, solar), [structures, included, solar])
   const inspection = routing === 'inspection_required'
   const solarApplies = solar?.allowance?.applies === true
 
@@ -271,14 +274,17 @@ export function MeasurementReview({
     [included, primaryIndices],
   )
   const secondaryCount = secondaryIncluded.length
-  const baseTotals = useMemo(() => {
+  // The delta is computed from SOLAR-LESS totals on both sides: the marginal
+  // $ of the secondaries is structural only. With solar in the operands the
+  // job-level allowance cancels when the primary is priced, but leaks into the
+  // delta when the primary is excluded/inspection-routed (base = $0, no solar)
+  // — overstating the secondaries by the whole allowance.
+  const secondaryDeltaIncGst = useMemo(() => {
     const primaryWithin = included.filter((i) => primaryIndices.includes(i))
-    return combine(structures, primaryWithin)
+    const all = combine(structures, included, null)
+    const base = combine(structures, primaryWithin, null)
+    return all.incGst.map((v, i) => v - base.incGst[i]) as [number, number, number]
   }, [structures, included, primaryIndices])
-  const secondaryDeltaIncGst = useMemo(
-    () => combined.incGst.map((v, i) => v - baseTotals.incGst[i]) as [number, number, number],
-    [combined, baseTotals],
-  )
   const secondaryAddsMoney = secondaryDeltaIncGst.some((v) => v > 0)
 
   // The non-default-selection notice fires only when the current set differs
@@ -473,8 +479,9 @@ export function MeasurementReview({
       </div>
 
       {/* Existing solar / skylights — persisted detection (save-time aerial +
-          any tradie photo re-scan). Applied solar is added to ALL tier totals on
-          the customer quote; skylights are flagged only (never auto-priced). */}
+          any tradie photo re-scan). Applied solar is added to the replacement
+          tiers (never Patch) on the customer quote AND the combined totals
+          above; skylights are flagged only (never auto-priced). */}
       <div className="mt-6 border border-ink-line border-l-4 border-l-accent bg-ink-card p-6 sm:p-7">
         <div className="font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-accent">
           Existing solar &amp; skylights
@@ -489,7 +496,9 @@ export function MeasurementReview({
           <div className={`mt-4 border border-ink-line border-l-4 ${solarApplies ? 'border-l-accent' : 'border-l-warning'} bg-ink-deep p-4`}>
             <div className={`font-mono text-[0.74rem] font-semibold uppercase tracking-[0.16em] ${solarApplies ? 'text-accent' : 'text-warning-bright'}`}>
               {solarApplies
-                ? `Solar detach & reinstate · +$${money(solar.allowance.inc_gst)} inc GST added to every tier`
+                ? combined.incGst[1] > 0
+                  ? `Solar detach & reinstate · +$${money(solar.allowance.inc_gst)} inc GST added to the replacement options (included in the combined totals above)`
+                  : `Solar detach & reinstate · +$${money(solar.allowance.inc_gst)} inc GST applies once a replacement price is confirmed on site`
                 : 'Solar flagged — not auto-priced (low confidence or not a full re-roof)'}
             </div>
             <p className="mt-2 text-sm text-text-sec">{solar.allowance.electrician_note}</p>
