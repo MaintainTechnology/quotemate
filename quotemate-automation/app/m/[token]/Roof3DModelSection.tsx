@@ -139,13 +139,18 @@ async function createCaptureViewer(
   viewer.scene.primitives.add(tileset)
   tileset.maximumScreenSpaceError = 4 // sharper tiles than the fly-around; captures deserve it
 
-  // Ground height from the tileset itself (no extra API call).
+  // Ground height from the tileset itself (no extra API call). The sample
+  // promise only resolves during render frames — in a throttled/background
+  // tab that can be never, so it races a hard timeout to the 25 m fallback.
   let groundH = 25
   try {
     const carto = Cesium.Cartographic.fromDegrees(center.lng, center.lat)
     viewer.camera.setView({ destination: Cesium.Cartesian3.fromDegrees(center.lng, center.lat, 400) })
     await waitForTiles(tileset)
-    const [sampled] = await viewer.scene.sampleHeightMostDetailed([carto])
+    const sampled = await Promise.race([
+      viewer.scene.sampleHeightMostDetailed([carto]).then((r: { height?: number }[]) => r[0]),
+      sleep(15_000).then(() => null),
+    ])
     if (sampled && Number.isFinite(sampled.height)) groundH = sampled.height
   } catch {
     /* fall back to 25 m */
