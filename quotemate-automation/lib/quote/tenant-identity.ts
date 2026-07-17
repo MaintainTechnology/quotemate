@@ -78,18 +78,26 @@ export async function loadTenantIdentity(
 }
 
 /**
- * A tenant website link safe to render on a public customer page: absolute
- * https:// only (same guard the off-platform booking link uses —
- * lib/quote/booking.ts resolveGoogleBookingUrl), so a typo'd or plain-text
- * value can never render a broken or javascript: link.
+ * A tenant website link safe to render on a public customer page: https only,
+ * so a typo'd or plain-text value can never render a broken or javascript:
+ * link. Tradies type their site scheme-less ("www.bobsroofing.com.au" — the
+ * live tenant rows all look like this), so a bare domain is normalised to
+ * https:// rather than dropped; every other scheme (http:, javascript:, …)
+ * is rejected.
  */
 export function safeWebsiteUrl(raw: string | null | undefined): string | null {
   if (!raw) return null
   const trimmed = raw.trim()
   if (!trimmed) return null
+  // Scheme-less domain ("www.site.com.au", "site.com/page") → assume https.
+  // Anything with an explicit scheme must BE https. The ':' check stops
+  // "javascript:alert(1)" being treated as a bare domain.
+  const candidate = /^[a-z][a-z0-9+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`
   try {
-    const u = new URL(trimmed)
+    const u = new URL(candidate)
     if (u.protocol !== 'https:') return null
+    // A real site link needs a dotted hostname — rejects "https://foo" typos.
+    if (!u.hostname.includes('.')) return null
     return u.toString()
   } catch {
     return null

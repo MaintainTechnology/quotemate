@@ -69,17 +69,26 @@ describe('loadTenantIdentity', () => {
 })
 
 describe('safeWebsiteUrl — the trust section link guard', () => {
-  it('accepts absolute https URLs only', () => {
+  it('accepts absolute https URLs', () => {
     expect(safeWebsiteUrl('https://ricardosroofing.example')).toBe(
       'https://ricardosroofing.example/',
     )
     expect(safeWebsiteUrl('  https://x.example/a  ')).toBe('https://x.example/a')
   })
 
-  it('rejects http, protocol-less, javascript:, blank and null values', () => {
+  it('normalises scheme-less domains to https (how tradies actually type them)', () => {
+    // Every live tenant website_url looks like this — dropping them rendered
+    // the trust-section link on ZERO quotes (found verifying the rollout).
+    expect(safeWebsiteUrl('www.quotemax.com.au')).toBe('https://www.quotemax.com.au/')
+    expect(safeWebsiteUrl('bobsroofing.com.au/about')).toBe(
+      'https://bobsroofing.com.au/about',
+    )
+  })
+
+  it('rejects http, javascript:, dotless typos, blank and null values', () => {
     expect(safeWebsiteUrl('http://x.example')).toBeNull()
-    expect(safeWebsiteUrl('ricardosroofing.example')).toBeNull()
     expect(safeWebsiteUrl('javascript:alert(1)')).toBeNull()
+    expect(safeWebsiteUrl('justaword')).toBeNull()
     expect(safeWebsiteUrl('')).toBeNull()
     expect(safeWebsiteUrl(null)).toBeNull()
     expect(safeWebsiteUrl(undefined)).toBeNull()
