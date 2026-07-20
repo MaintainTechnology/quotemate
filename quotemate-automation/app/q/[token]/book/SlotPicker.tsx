@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { BookingOption } from '@/lib/quote/slots'
 
 type Status = 'idle' | 'submitting' | 'done' | 'error'
@@ -33,23 +34,44 @@ export function SlotPicker({
   const idleLabel = labels?.idle ?? 'Hold this time & pay deposit →'
   const submittingLabel = labels?.submitting ?? 'Holding…'
   const doneLabel = labels?.done ?? 'Taking you to deposit…'
+
+  // Group by day. `options` are already future-only and date-sorted by the
+  // server (resolveBookingOptions), so no client filter or sort is needed.
+  const groups = useMemo(() => {
+    const g: { day: string; items: { iso: string; chip: string }[] }[] = []
+    for (const o of options) {
+      let row = g.find((x) => x.day === o.dayLabel)
+      if (!row) {
+        row = { day: o.dayLabel, items: [] }
+        g.push(row)
+      }
+      row.items.push({ iso: o.iso, chip: o.chipLabel })
+    }
+    return g
+  }, [options])
+
+  // Two-step, mobile-first: pick a DAY from a compact horizontal strip, then
+  // the times for that day. This keeps the picker ~2 rows tall instead of a
+  // fortnight of stacked day blocks the customer has to scroll through.
+  const [selectedDay, setSelectedDay] = useState<string | null>(groups[0]?.day ?? null)
   const [picked, setPicked] = useState<string | null>(null)
   const [status, setStatus] = useState<Status>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  // Group by day heading so the whole fortnight fits on one screen: one
-  // compact block per day, AM/PM windows as chips, blocks flow into a
-  // responsive multi-column grid. `options` are already future-only and
-  // date-sorted by the server (resolveBookingOptions), so no client filter.
-  const groups: { day: string; items: { iso: string; chip: string }[] }[] = []
-  for (const o of options) {
-    let g = groups.find((x) => x.day === o.dayLabel)
-    if (!g) {
-      g = { day: o.dayLabel, items: [] }
-      groups.push(g)
-    }
-    g.items.push({ iso: o.iso, chip: o.chipLabel })
-  }
+  // The sticky confirm bar is portaled OUT of this component's tree: a
+  // position:fixed bar nested under a transformed ancestor (the animated quote
+  // sections) gets trapped in that stacking context and hides behind the
+  // QuoteChrome deposit footer. Portaling to the nearest `.qm-quote` scope
+  // frees it (so z-30 wins over the footer's z-25) while keeping the light/dark
+  // theme tokens; on the standalone book page it falls back to document.body.
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [portalHost, setPortalHost] = useState<HTMLElement | null>(null)
+  useEffect(() => {
+    setPortalHost((rootRef.current?.closest('.qm-quote') as HTMLElement | null) ?? document.body)
+  }, [])
+
+  const activeDay = groups.find((g) => g.day === selectedDay) ?? groups[0] ?? null
+  const pickedOption = picked ? (options.find((o) => o.iso === picked) ?? null) : null
 
   async function onConfirm() {
     if (!picked) return
@@ -66,10 +88,9 @@ export function SlotPicker({
         throw new Error(json?.error ?? `Couldn't hold that time (HTTP ${res.status}).`)
       }
       setStatus('done')
-      // Book-first / pay-last: the time is now reserved on the quote.
-      // Send the customer straight to the deposit step (the LAST step) —
-      // the booking is confirmed once that's paid. `next` is the pay
-      // short-link returned by the API; fall back to a reload if absent.
+      // The endpoint returns where to send the customer next (the pay
+      // short-link for book-then-pay, or the reloaded page for the already-
+      // paid trade surfaces). Fall back to a reload if absent.
       setTimeout(() => {
         if (typeof json?.next === 'string' && json.next) {
           window.location.href = json.next as string
@@ -92,65 +113,158 @@ export function SlotPicker({
   }
 
   const locked = status === 'submitting' || status === 'done'
+  const bookLabel = status === 'submitting' ? submittingLabel : status === 'done' ? doneLabel : idleLabel
 
   return (
-    <div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {groups.map((g) => (
-          <div
-            key={g.day}
-            className="border border-ink-line bg-ink-card p-3"
-          >
-            <div className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+    <div ref={rootRef}>
+      {/* Step 1 — pick a day. Horizontal strip so a fortnight stays one row. */}
+      <div className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+        Choose a day
+      </div>
+      <div
+        className="mt-2 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:thin]"
+        role="group"
+        aria-label="Choose a day"
+      >
+        {groups.map((g) => {
+          const isSelected = g.day === (activeDay?.day ?? null)
+          return (
+            <button
+              key={g.day}
+              type="button"
+              onClick={() => setSelectedDay(g.day)}
+              disabled={locked}
+              aria-pressed={isSelected}
+              className={`shrink-0 whitespace-nowrap border px-3.5 py-2.5 text-sm font-bold tracking-tight transition-colors outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                isSelected
+                  ? 'border-accent bg-accent text-ink-deep'
+                  : 'border-ink-line bg-ink-card text-text-sec hover:border-accent/60'
+              } ${locked ? 'cursor-not-allowed opacity-50' : ''}`}
+            >
               {g.day}
-            </div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {g.items.map(({ iso, chip }) => {
-                const isPicked = picked === iso
-                return (
-                  <button
-                    key={iso}
-                    type="button"
-                    onClick={() => setPicked(iso)}
-                    disabled={locked}
-                    aria-pressed={isPicked}
-                    className={`border px-3 py-2 text-sm font-bold tracking-tight transition-colors outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-                      isPicked
-                        ? 'border-accent bg-accent text-white'
-                        : 'border-ink-line text-text-pri hover:border-accent/60'
-                    } ${locked ? 'cursor-not-allowed opacity-50' : ''}`}
-                  >
-                    {chip}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        ))}
+            </button>
+          )
+        })}
       </div>
 
-      <button
-        type="button"
-        onClick={onConfirm}
-        disabled={!picked || locked}
-        className={`mt-6 inline-flex w-full items-center justify-center gap-2 px-5 py-3.5 text-sm font-semibold uppercase tracking-wider transition-colors outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-          !picked || locked
-            ? 'cursor-not-allowed border border-ink-line bg-ink-card text-text-dim'
-            : 'bg-accent text-white hover:bg-accent-press'
-        }`}
-      >
-        {status === 'submitting'
-          ? submittingLabel
-          : status === 'done'
-            ? doneLabel
-            : idleLabel}
-      </button>
+      {/* Step 2 — pick a time on that day. */}
+      <div className="mt-5 font-mono text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-text-dim">
+        Choose a time
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2.5" role="group" aria-label={`Times on ${activeDay?.day ?? ''}`}>
+        {activeDay?.items.map(({ iso, chip }) => {
+          const isPicked = picked === iso
+          return (
+            <button
+              key={iso}
+              type="button"
+              onClick={() => setPicked(iso)}
+              disabled={locked}
+              aria-pressed={isPicked}
+              className={`border px-5 py-3.5 text-base font-bold tracking-tight transition-colors outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                isPicked
+                  ? 'border-accent bg-accent text-ink-deep'
+                  : 'border-ink-line bg-ink-card text-text-pri hover:border-accent/60'
+              } ${locked ? 'cursor-not-allowed opacity-50' : ''}`}
+            >
+              {chip}
+            </button>
+          )
+        })}
+      </div>
 
       {errorMessage ? (
         <p className="mt-4 font-mono text-[0.75rem] uppercase tracking-widest text-red-400">
           {errorMessage}
         </p>
       ) : null}
+
+      {/* Sticky confirm bar — pops up once a time is picked so the customer
+          never has to scroll to find the button (mirrors the Pay $99 CTA).
+          Portaled to `.qm-quote` so z-30 clears the QuoteChrome footer. */}
+      {portalHost && picked && pickedOption
+        ? createPortal(
+        <div
+          className="qm-print-hide motion-safe:animate-[fade-up_180ms_ease-out_both]"
+          style={{
+            position: 'fixed',
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 30,
+            borderTop: '1px solid var(--ink-line)',
+            background: 'var(--ink-card)',
+            padding: '12px 20px',
+            boxShadow: '0 -8px 24px -12px rgba(0,0,0,0.4)',
+          }}
+        >
+          <div
+            style={{
+              maxWidth: 'var(--qm-sheet-w, 560px)',
+              margin: '0 auto',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 16,
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 9.5,
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.12em',
+                  color: 'var(--text-dim)',
+                }}
+              >
+                Your visit time
+              </div>
+              <div
+                style={{
+                  marginTop: 3,
+                  fontWeight: 800,
+                  fontSize: 15,
+                  color: 'var(--text-pri)',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {pickedOption.dayLabel} · {pickedOption.chipLabel}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={locked}
+              aria-busy={status === 'submitting'}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 9,
+                border: '1px solid transparent',
+                background: 'var(--accent)',
+                color: 'var(--accent-ink)',
+                padding: '13px 22px',
+                fontFamily: 'var(--font-sans)',
+                fontWeight: 700,
+                fontSize: 13,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                whiteSpace: 'nowrap',
+                cursor: locked ? 'default' : 'pointer',
+                opacity: locked ? 0.75 : 1,
+              }}
+            >
+              {bookLabel}
+            </button>
+          </div>
+        </div>,
+            portalHost,
+          )
+        : null}
     </div>
   )
 }

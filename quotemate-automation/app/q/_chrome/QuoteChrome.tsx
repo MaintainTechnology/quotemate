@@ -7,8 +7,10 @@
 // scroll column that hosts the quote <article>, and the sticky bottom
 // deposit bar. Self-contained dark/light: the palette lives on `.qm-quote`
 // (globals.css) and this component flips `data-qm-theme` locally, persisted
-// as `qm-quote-theme`. Defaults to LIGHT; follows the device's
-// prefers-color-scheme when the customer hasn't chosen via the toggle.
+// as `qm-quote-theme`. Defaults to LIGHT for everyone — the customer quote is
+// a light-first surface, so we do NOT follow the device's dark preference
+// (a customer on a dark phone still gets the light quote). The toggle is
+// still there for anyone who prefers dark, and their choice is remembered.
 //
 // Client component for the theme toggle + the "PDF" button (fetches the
 // Gotenberg-rendered PDF of this live page from /api/q/download). All quote
@@ -38,12 +40,13 @@ export function QuoteChrome({
   useEffect(() => {
     try {
       // Precedence: ?theme= override (used by the PDF render) → the customer's
-      // stored toggle choice → the device's prefers-color-scheme → light.
+      // stored toggle choice → light. We deliberately do NOT read the device's
+      // prefers-color-scheme: the quote is a light-first surface, so a customer
+      // on a dark phone still gets light unless they toggle it themselves.
       const q = new URLSearchParams(window.location.search).get('theme')
       if (q === 'light' || q === 'dark') { setTheme(q); return }
       const t = localStorage.getItem('qm-quote-theme')
       if (t === 'light' || t === 'dark') { setTheme(t); return }
-      if (window.matchMedia('(prefers-color-scheme: dark)').matches) setTheme('dark')
     } catch { /* ignore */ }
   }, [])
 
