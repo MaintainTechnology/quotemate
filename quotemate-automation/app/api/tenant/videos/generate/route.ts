@@ -69,9 +69,10 @@ export async function POST(req: Request) {
     scripts[slot] = check.script
   }
 
-  // Optional owner photo → the Veo reference image (falls back to the logo
-  // inside generateTrustVideo when absent).
-  let referenceImage: { bytesBase64: string; mimeType: string } | null = null
+  // Optional owner photo → a person-likeness reference. It rides in Veo's
+  // reference set on attempt 1 and is the FIRST thing the RAI degradation
+  // ladder drops if the filter blocks it (generateTrustVideo).
+  let ownerReference: { bytesBase64: string; mimeType: string } | null = null
   const ownerPhoto = form.get('owner_photo')
   if (ownerPhoto instanceof File && ownerPhoto.size > 0) {
     const mime = (ownerPhoto.type ?? '').split(';')[0].trim().toLowerCase()
@@ -82,7 +83,7 @@ export async function POST(req: Request) {
       return Response.json({ error: 'owner_photo must be 7 MB or smaller' }, { status: 400 })
     }
     const buf = Buffer.from(await ownerPhoto.arrayBuffer())
-    referenceImage = { bytesBase64: buf.toString('base64'), mimeType: mime }
+    ownerReference = { bytesBase64: buf.toString('base64'), mimeType: mime }
     // Keep the source asset alongside the videos (best-effort).
     await supabase.storage
       .from('tenant-videos')
@@ -95,12 +96,18 @@ export async function POST(req: Request) {
       })
   }
 
-  // Supplementary images — stored for reference use (spec: no gallery UI yet).
+  // Supplementary images (ute, finished jobs) — the first two join the Veo
+  // reference set so they genuinely shape the video (Veo caps refs at 3);
+  // all are stored alongside the videos.
+  const extraReferences: Array<{ bytesBase64: string; mimeType: string }> = []
   for (const entry of form.getAll('extra_image')) {
     if (!(entry instanceof File) || entry.size === 0) continue
     const mime = (entry.type ?? '').split(';')[0].trim().toLowerCase()
     if (!ALLOWED_IMAGE_MIME.includes(mime) || entry.size > MAX_IMAGE_BYTES) continue
     const buf = Buffer.from(await entry.arrayBuffer())
+    if (extraReferences.length < 2) {
+      extraReferences.push({ bytesBase64: buf.toString('base64'), mimeType: mime })
+    }
     await supabase.storage
       .from('tenant-videos')
       .upload(`${tenant.id}/assets/extra-${Date.now()}-${Math.floor(Math.random() * 1e6)}.${mime.split('/')[1]}`, buf, {
@@ -130,7 +137,8 @@ export async function POST(req: Request) {
         slot,
         script: scripts[slot] ?? null,
         source: 'dashboard',
-        referenceImage,
+        ownerReference,
+        extraReferences,
         extraContext: details,
       })
     }

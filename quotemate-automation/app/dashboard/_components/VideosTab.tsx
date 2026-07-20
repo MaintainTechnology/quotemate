@@ -57,6 +57,19 @@ const SLOT_META: Record<SlotKey, { title: string; where: string }> = {
   },
 }
 
+/** Veo's safety filter blocks scripts that speak a real person's name
+ *  (observed live). Warn BEFORE the tradie spends a generation on it. */
+function nameInScript(script: string, contactName: string): string | null {
+  const name = contactName.trim()
+  if (!name) return null
+  for (const token of name.split(/\s+/)) {
+    if (token.length < 2) continue
+    const re = new RegExp(`\\b${token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
+    if (re.test(script)) return name
+  }
+  return null
+}
+
 function statusPill(slot: SlotInfo) {
   const s = slot.state.status
   if (s === 'generating') return <StatusPill label="Generating" tone="accent" dot compact />
@@ -302,12 +315,20 @@ export function VideosTab({ accessToken }: { accessToken: string | null }) {
                   {scripts[key].length}/{MAX_SCRIPT_CHARS}
                 </span>
               </label>
+              {nameInScript(scripts[key], contactName) ? (
+                <p className="mt-1 border border-warning/40 bg-warning/10 px-3 py-2 text-xs leading-relaxed text-text-sec">
+                  The AI usually blocks scripts that speak a personal name.
+                  Consider removing &quot;{nameInScript(scripts[key], contactName)}&quot;
+                  from this script. Videos that speak as your business generate
+                  reliably.
+                </p>
+              ) : null}
 
               <button
                 type="button"
                 onClick={() => void generate(key)}
                 disabled={busy || !accessToken}
-                className="rounded-ctl mt-2 inline-flex items-center gap-2 bg-accent px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press disabled:opacity-50"
+                className="rounded-ctl mt-2 inline-flex items-center gap-2 bg-accent px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-ink-deep transition-colors hover:bg-accent-press disabled:opacity-50"
               >
                 {busy ? (
                   <Loader2 size={13} className="animate-spin" aria-hidden="true" />

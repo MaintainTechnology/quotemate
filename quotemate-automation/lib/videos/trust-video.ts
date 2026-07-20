@@ -172,29 +172,27 @@ function apiKey(): string {
 
 type ReferenceImage = { bytesBase64: string; mimeType: string }
 
-/** Start a Veo generation. Returns the operation name. A 400 with a reference
- *  image retries text-only (safety/format rejections must not kill the job). */
+/** Start a Veo generation. Returns the operation name. Veo 3.1 accepts up to
+ *  three asset reference images; a 400 with references retries text-only
+ *  (start-time format rejections must not kill the job — RAI content blocks
+ *  surface later, at poll time, and are handled by the attempt ladder). */
 export async function startVeoOperation(opts: {
   prompt: string
-  referenceImage?: ReferenceImage | null
+  referenceImages?: ReferenceImage[] | null
 }): Promise<{ operation: string; note: string | null }> {
   const model = trustVideoModel()
   const url = `${GEMINI_BASE}/models/${model}:predictLongRunning`
-  const call = async (withImage: boolean) => {
+  const refs = (opts.referenceImages ?? []).slice(0, 3)
+  const call = async (withImages: boolean) => {
     const instance: Record<string, unknown> = { prompt: opts.prompt }
-    if (withImage && opts.referenceImage) {
+    if (withImages && refs.length > 0) {
       // referenceImages (asset), NOT instance.image — `image` switches Veo to
-      // image-to-video and makes the logo the literal first frame. An asset
-      // reference weaves the logo into the scene instead.
-      instance.referenceImages = [
-        {
-          image: {
-            bytesBase64Encoded: opts.referenceImage.bytesBase64,
-            mimeType: opts.referenceImage.mimeType,
-          },
-          referenceType: 'asset',
-        },
-      ]
+      // image-to-video and makes the logo the literal first frame. Asset
+      // references weave the imagery into the scene instead.
+      instance.referenceImages = refs.map((r) => ({
+        image: { bytesBase64Encoded: r.bytesBase64, mimeType: r.mimeType },
+        referenceType: 'asset',
+      }))
     }
     return fetch(url, {
       method: 'POST',
@@ -207,11 +205,11 @@ export async function startVeoOperation(opts: {
     })
   }
 
-  let res = await call(!!opts.referenceImage)
+  let res = await call(refs.length > 0)
   let note: string | null = null
-  if (!res.ok && opts.referenceImage && res.status === 400) {
-    // Reference rejected (format/safety) → text-only fallback, noted in state.
-    note = 'Reference image was not accepted — generated from the script only.'
+  if (!res.ok && refs.length > 0 && res.status === 400) {
+    // References rejected outright (format) → text-only fallback, noted.
+    note = 'Reference images were not accepted — generated from the script only.'
     res = await call(false)
   }
   if (!res.ok) {
@@ -248,6 +246,88 @@ export function extractRaiReason(response: unknown): string | null {
  *  the pipeline can self-heal by regenerating without the contact name. */
 export function isPersonNameBlock(reason: string | null | undefined): boolean {
   return !!reason && /people'?s names|likeness|celebrity/i.test(reason)
+}
+
+/** True when a script speaks any of the tenant's known personal names —
+ *  the observed RAI trigger ("Hi, I'm Jon Pepper…" was blocked live). Used
+ *  for the dashboard's pre-flight warning and the failure hint; matching is
+ *  whole-word, case-insensitive, on each name token of 2+ characters. */
+export function scriptMentionsPersonalName(
+  script: string | null | undefined,
+  names: Array<string | null | undefined>,
+): string | null {
+  if (!script) return null
+  for (const name of names) {
+    const trimmed = name?.trim()
+    if (!trimmed) continue
+    for (const token of trimmed.split(/\s+/)) {
+      if (token.length < 2) continue
+      const re = new RegExp(`\\b${token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
+      if (re.test(script)) return trimmed
+    }
+  }
+  return null
+}
+
+export type GenerationAttempt = {
+  script: string
+  contactName: string | null
+  /** Which reference set rides along: 'full' (owner photo + logo + extras),
+   *  'brand' (logo only — no likenesses), or 'none'. */
+  refs: 'full' | 'brand' | 'none'
+  note: string | null
+}
+
+/**
+ * PURE — the degradation ladder for Veo's person/likeness filter. Attempt 1
+ * is exactly what was asked for. Each later attempt strips one likely
+ * trigger: first the person photo + extras (keep the brand logo), then, for
+ * DEFAULT scripts only, the personal name in the spoken line, finally all
+ * reference images. A CUSTOM script is the tradie's words — it is degraded
+ * on imagery but NEVER rewritten; its final failure surfaces the reason.
+ */
+export function buildAttemptLadder(opts: {
+  usingDefaultScript: boolean
+  requestedScript: string
+  neutralScript: string
+  contactName: string | null
+  hasPersonPhoto: boolean
+  hasBrandRef: boolean
+}): GenerationAttempt[] {
+  const fullRefs: GenerationAttempt['refs'] = opts.hasPersonPhoto || opts.hasBrandRef ? 'full' : 'none'
+  const attempts: GenerationAttempt[] = [
+    { script: opts.requestedScript, contactName: opts.contactName, refs: fullRefs, note: null },
+  ]
+  const photoNote =
+    'The AI cannot use photos of real people, so this video was generated from your branding instead.'
+  const nameNote =
+    'The AI cannot use personal names, so this video speaks as your business instead.'
+  if (opts.hasPersonPhoto) {
+    attempts.push({
+      script: opts.requestedScript,
+      contactName: opts.contactName,
+      refs: opts.hasBrandRef ? 'brand' : 'none',
+      note: photoNote,
+    })
+  }
+  if (opts.usingDefaultScript && opts.contactName?.trim()) {
+    attempts.push({
+      script: opts.neutralScript,
+      contactName: null,
+      refs: opts.hasBrandRef ? 'brand' : 'none',
+      note: nameNote,
+    })
+  }
+  // Dedupe identical consecutive configs and cap the spend at 3 attempts.
+  const seen = new Set<string>()
+  return attempts
+    .filter((a) => {
+      const key = `${a.script}|${a.contactName ?? ''}|${a.refs}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .slice(0, 3)
 }
 
 export type VeoPoll =
@@ -394,7 +474,12 @@ export async function generateTrustVideo(
     slot: TrustVideoSlot
     script?: string | null
     source: 'auto' | 'dashboard'
-    referenceImage?: ReferenceImage | null
+    /** The owner's photo — a person LIKENESS; first to be dropped when Veo's
+     *  RAI filter blocks the attempt. */
+    ownerReference?: ReferenceImage | null
+    /** Supplementary shots (ute, finished jobs) — up to 2 ride along after
+     *  the owner photo + logo (Veo caps references at 3). */
+    extraReferences?: ReferenceImage[] | null
     /** Extra business context woven into the scene prompt (dashboard "details"). */
     extraContext?: string | null
     maxWaitMs?: number
@@ -410,37 +495,43 @@ export async function generateTrustVideo(
     if (!tenant) return { status: 'failed', error: 'tenant not found' }
     const t = tenant as TenantVideoRow
 
-    const reference = opts.referenceImage ?? (await fetchReferenceFromUrl(t.logo_url))
+    // Reference sets: 'full' = owner photo + brand logo + supplementary shots
+    // (Veo takes up to 3); 'brand' = logo only (no likenesses); 'none'.
+    const logoRef = await fetchReferenceFromUrl(t.logo_url)
+    const personRef = opts.ownerReference ?? null
+    const extraRefs = (opts.extraReferences ?? []).slice(0, 2)
+    const fullRefs = [
+      ...(personRef ? [personRef] : []),
+      ...(logoRef ? [logoRef] : []),
+      ...extraRefs,
+    ].slice(0, 3)
+    const brandRefs = [...(logoRef ? [logoRef] : []), ...extraRefs.slice(0, personRef ? 2 : 0)].slice(0, 3)
+    const refsFor = (kind: 'full' | 'brand' | 'none'): ReferenceImage[] =>
+      kind === 'full' ? fullRefs : kind === 'brand' ? brandRefs : []
     // Surface a dropped logo instead of failing silently — the dashboard
     // shows this note under the slot.
-    const logoUnused = !reference && !!t.logo_url?.trim()
+    const logoUnused = !logoRef && !personRef && !!t.logo_url?.trim()
     const usingDefaultScript = !opts.script?.trim()
 
-    // Attempt 1 speaks as the contact when one is set. Veo's responsible-AI
-    // filter rejects "real people's names or likenesses" (observed live), so
-    // a DEFAULT script that trips it self-heals on attempt 2 with the
-    // business-name-only variant. A CUSTOM script is the tradie's words —
-    // its RAI failure is surfaced verbatim for them to edit, never rewritten.
-    const attempts: Array<{ script: string; contactName: string | null; note: string | null }> = [
-      {
-        script:
-          opts.script?.trim() || defaultScript(slot, t.business_name ?? '', t.contact_name),
-        contactName: t.contact_name,
-        note: null,
-      },
-    ]
-    if (usingDefaultScript && t.contact_name?.trim()) {
-      attempts.push({
-        script: defaultScript(slot, t.business_name ?? '', null),
-        contactName: null,
-        note: 'The AI cannot use personal names, so this video speaks as your business instead.',
-      })
-    }
+    // Veo's responsible-AI filter rejects "real people's names or likenesses"
+    // (both observed live: a named script AND a person photo can trip it). The
+    // ladder degrades one trigger per attempt; custom scripts are never
+    // rewritten — see buildAttemptLadder.
+    const attempts = buildAttemptLadder({
+      usingDefaultScript,
+      requestedScript:
+        opts.script?.trim() || defaultScript(slot, t.business_name ?? '', t.contact_name),
+      neutralScript: defaultScript(slot, t.business_name ?? '', null),
+      contactName: t.contact_name,
+      hasPersonPhoto: !!personRef,
+      hasBrandRef: brandRefs.length > 0,
+    })
 
     let state = t.trust_video_state
     let lastError = 'generation failed'
     for (let i = 0; i < attempts.length; i++) {
       const attempt = attempts[i]
+      const attemptRefs = refsFor(attempt.refs)
       const prompt = buildTrustVideoPrompt({
         slot,
         businessName: t.business_name ?? '',
@@ -448,7 +539,7 @@ export async function generateTrustVideo(
         trade: t.trade,
         script: attempt.script,
         extraContext: opts.extraContext ?? null,
-        hasReferenceImage: !!reference,
+        hasReferenceImage: attemptRefs.length > 0,
       })
 
       state = withSlotState(state, slot, {
@@ -459,7 +550,7 @@ export async function generateTrustVideo(
       })
       await saveSlotState(supabase, tenantId, state)
 
-      const { operation, note } = await startVeoOperation({ prompt, referenceImage: reference })
+      const { operation, note } = await startVeoOperation({ prompt, referenceImages: attemptRefs })
       state = withSlotState(state, slot, {
         operation,
         note:
@@ -493,9 +584,25 @@ export async function generateTrustVideo(
         return { status: 'generating' }
       }
       lastError = attemptFailed
-      const canRetry = i + 1 < attempts.length && isPersonNameBlock(attemptFailed)
+      // A custom script that itself speaks the personal name IS the trigger —
+      // degrading imagery cannot save it, so stop paying for doomed attempts
+      // and surface the actionable error immediately.
+      const scriptIsTheTrigger =
+        !usingDefaultScript &&
+        isPersonNameBlock(attemptFailed) &&
+        !!scriptMentionsPersonalName(attempt.script, [t.contact_name])
+      const canRetry =
+        i + 1 < attempts.length && isPersonNameBlock(attemptFailed) && !scriptIsTheTrigger
       if (!canRetry) break
-      // Fall through to the neutral-script attempt.
+      // Fall through to the next, further-degraded attempt.
+    }
+    // A custom script that still names a person gets an actionable hint on
+    // top of the verbatim reason — we never rewrite the tradie's words.
+    if (!usingDefaultScript && isPersonNameBlock(lastError)) {
+      const named = scriptMentionsPersonalName(opts.script, [t.contact_name])
+      if (named) {
+        lastError = `${lastError} Try removing "${named}" from your script. The AI cannot speak real people's names.`
+      }
     }
     state = withSlotState(state, slot, { status: 'failed', error: lastError })
     await saveSlotState(supabase, tenantId, state)

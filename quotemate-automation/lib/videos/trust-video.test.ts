@@ -6,12 +6,14 @@ import { describe, expect, it } from 'vitest'
 import {
   MAX_SCRIPT_CHARS,
   SLOT_URL_COLUMN,
+  buildAttemptLadder,
   buildTrustVideoPrompt,
   defaultScript,
   extractRaiReason,
   extractVideoUri,
   isPersonNameBlock,
   readSlotState,
+  scriptMentionsPersonalName,
   shouldAutoGenerate,
   trustVideoModel,
   validateScript,
@@ -200,6 +202,86 @@ describe('extractVideoUri — tolerant across Veo response shapes', () => {
   it('null on anything else', () => {
     expect(extractVideoUri(null)).toBeNull()
     expect(extractVideoUri({})).toBeNull()
+  })
+})
+
+describe('buildAttemptLadder — RAI degradation, one trigger dropped per step', () => {
+  const base = {
+    requestedScript: 'custom words here.',
+    neutralScript: 'Neutral business script.',
+    contactName: 'Jon Pepper',
+  }
+
+  it('custom script + owner photo: drops the photo, NEVER rewrites the words', () => {
+    const ladder = buildAttemptLadder({
+      ...base,
+      usingDefaultScript: false,
+      hasPersonPhoto: true,
+      hasBrandRef: true,
+    })
+    expect(ladder).toHaveLength(2)
+    expect(ladder[0]).toMatchObject({ script: 'custom words here.', refs: 'full' })
+    expect(ladder[1]).toMatchObject({ script: 'custom words here.', refs: 'brand' })
+    expect(ladder.every((a) => a.script === 'custom words here.')).toBe(true)
+  })
+
+  it('default script + owner photo: photo dropped first, then the personal name', () => {
+    const ladder = buildAttemptLadder({
+      ...base,
+      requestedScript: "Hi, I'm Jon Pepper from Sparky.",
+      usingDefaultScript: true,
+      hasPersonPhoto: true,
+      hasBrandRef: true,
+    })
+    expect(ladder).toHaveLength(3)
+    expect(ladder[0].refs).toBe('full')
+    expect(ladder[1]).toMatchObject({ script: "Hi, I'm Jon Pepper from Sparky.", refs: 'brand' })
+    expect(ladder[2]).toMatchObject({ script: 'Neutral business script.', contactName: null, refs: 'brand' })
+    expect(ladder[2].note).toContain('personal names')
+  })
+
+  it('default script, no photo, no contact: a single attempt', () => {
+    const ladder = buildAttemptLadder({
+      requestedScript: 'x',
+      neutralScript: 'x',
+      contactName: null,
+      usingDefaultScript: true,
+      hasPersonPhoto: false,
+      hasBrandRef: true,
+    })
+    expect(ladder).toHaveLength(1)
+  })
+
+  it('dedupes identical consecutive configs and caps at three attempts', () => {
+    const ladder = buildAttemptLadder({
+      requestedScript: 'same',
+      neutralScript: 'same',
+      contactName: 'Jon',
+      usingDefaultScript: true,
+      hasPersonPhoto: false,
+      hasBrandRef: false,
+    })
+    // attempt1 (same, Jon, none) and the neutral attempt (same, null, none)
+    // differ only by contactName → both kept; nothing identical repeats.
+    expect(ladder.length).toBeLessThanOrEqual(3)
+    const keys = ladder.map((a) => `${a.script}|${a.contactName}|${a.refs}`)
+    expect(new Set(keys).size).toBe(keys.length)
+  })
+})
+
+describe('scriptMentionsPersonalName', () => {
+  it('finds the contact name spoken in a script (whole word, any case)', () => {
+    expect(
+      scriptMentionsPersonalName("G'day, we're Sparky and I'm Jon Pepper.", ['Jon Pepper']),
+    ).toBe('Jon Pepper')
+    expect(scriptMentionsPersonalName('call JON today', ['Jon Pepper'])).toBe('Jon Pepper')
+  })
+
+  it('no false hits on substrings or absent names', () => {
+    // "Jonathan"/"Jonno" contain "Jon" only as a substring, not a whole word.
+    expect(scriptMentionsPersonalName('Jonathan and Jonno are here', ['Jon'])).toBeNull()
+    expect(scriptMentionsPersonalName('no names here', ['Jon Pepper'])).toBeNull()
+    expect(scriptMentionsPersonalName('anything', [null, '  '])).toBeNull()
   })
 })
 
