@@ -18,7 +18,7 @@ import Link from 'next/link'
 import { useAuth } from '@clerk/nextjs'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 
-type Variant = 'nav' | 'hero'
+type Variant = 'nav' | 'hero' | 'mobileBar'
 
 export default function AuthNav({ variant = 'nav' }: { variant?: Variant }) {
   const router = useRouter()
@@ -90,6 +90,23 @@ export default function AuthNav({ variant = 'nav' }: { variant?: Variant }) {
   // dashboard buttons appear for an already-authed visitor.
   if (authed === null) {
     return <span className={variant === 'hero' ? 'h-11 block' : 'h-11 md:h-9 block'} aria-hidden />
+  }
+
+  if (variant === 'mobileBar') {
+    // Single compact button on the mobile nav bar (next to the hamburger),
+    // so signing in doesn't require opening the menu first. Auth-aware:
+    // signed-in tradies get "Dashboard" instead.
+    const pill =
+      'inline-flex items-center min-h-11 rounded-lg border border-ink-line px-3.5 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-text-dim hover:bg-ink-card focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft'
+    return authed ? (
+      <Link href="/dashboard" className={pill}>
+        Dashboard
+      </Link>
+    ) : (
+      <Link href="/sign-in" className={pill}>
+        Sign in
+      </Link>
+    )
   }
 
   if (variant === 'hero') {

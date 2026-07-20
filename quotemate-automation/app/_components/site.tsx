@@ -50,7 +50,10 @@ export function Nav() {
           <ThemeToggle />
           <AuthNav variant="nav" />
         </div>
-        <MobileNav />
+        <div className="flex items-center gap-2 md:hidden">
+          <AuthNav variant="mobileBar" />
+          <MobileNav />
+        </div>
       </div>
     </nav>
   )
