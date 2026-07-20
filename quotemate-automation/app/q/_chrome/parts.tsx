@@ -569,6 +569,60 @@ export function TrustVideo({
   )
 }
 
+/* ── add to calendar ─────────────────────────────────────────────────
+ * Customer-facing "save this appointment" row for a booked site visit.
+ * Server-safe (plain <a> tags): Google + Outlook open a compose deep-link in
+ * a new tab; ".ics" is a data: URI download that covers Apple Calendar,
+ * Outlook desktop and anything else. Ghost styling so it recedes behind the
+ * yellow primary CTA. Links come pre-built from lib/quote/calendar-links.ts. */
+const CAL_CHIP: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 8,
+  border: '1px solid var(--ink-line)',
+  background: 'transparent',
+  color: 'var(--text-sec)',
+  padding: '10px 14px',
+  borderRadius: 'var(--qm-r-ctl)',
+  ...MONO,
+  fontSize: 10.5,
+  fontWeight: 700,
+  textTransform: 'uppercase',
+  letterSpacing: '0.1em',
+  textDecoration: 'none',
+}
+export function AddToCalendar({
+  google,
+  outlook,
+  icsHref,
+  label = 'Add to your calendar',
+}: {
+  google: string
+  outlook: string
+  /** The .ics route URL (preferred over a data: URI so iOS Safari downloads it). */
+  icsHref: string
+  label?: string
+}) {
+  return (
+    <div className="qm-print-hide">
+      <div style={{ ...MONO, fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-dim)', marginBottom: 8 }}>
+        {label}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        <a className="qm-ghost" href={google} target="_blank" rel="noopener noreferrer" style={CAL_CHIP}>
+          Google
+        </a>
+        <a className="qm-ghost" href={outlook} target="_blank" rel="noopener noreferrer" style={CAL_CHIP}>
+          Outlook
+        </a>
+        <a className="qm-ghost" href={icsHref} download="site-visit.ics" style={CAL_CHIP}>
+          Apple / .ics
+        </a>
+      </div>
+    </div>
+  )
+}
+
 /* ── good to know ────────────────────────────────────────────────────── */
 export function GoodToKnow({ items, note, eyebrow = 'Good to know' }: { items: ReactNode[]; note?: ReactNode; eyebrow?: string }) {
   if (!items.length && !note) return null

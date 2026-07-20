@@ -44,9 +44,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string;
     .maybeSingle()
   if (!row) return new Response('Not found', { status: 404 })
 
-  // Already paid → don't re-charge; send them back to the quote page.
+  // Already paid → don't re-charge; send them to the booking page (thank-you
+  // video + calendar, or their booked confirmation).
   if (row.paid_at) {
-    return Response.redirect(`${appUrl}/q/roof/${token}?paid=1`, 302)
+    return Response.redirect(`${appUrl}/q/roof/${token}/book`, 302)
   }
 
   try {

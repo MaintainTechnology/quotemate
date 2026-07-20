@@ -61,6 +61,7 @@ import { TradieJobBanner } from '../../_chrome/TradieJobBanner'
 import { AcceptBlock } from '../../_chrome/AcceptBlock'
 import { resolveAcceptView } from '@/lib/quote/accept'
 import { loadTenantBookingOptions, formatVisitSlot } from '@/lib/quote/trade-booking'
+import { visitCalendarLinks } from '@/lib/quote/calendar-links'
 import { tzForState } from '@/lib/quote/availability'
 import { SlotPicker } from '@/app/q/[token]/book/SlotPicker'
 import { tradeIcon } from '../../_chrome/icons'
@@ -76,6 +77,7 @@ import {
   GoodToKnow,
   CredentialFooter,
   TrustVideo,
+  AddToCalendar,
   type Stat,
   type QuoteTier,
   type ScopeItem,
@@ -615,6 +617,19 @@ export default async function RoofingQuotePage({
     const videos = trustVideoUrls(identity)
     const websiteUrl = safeWebsiteUrl(identity?.website_url)
     const tradieName = identity?.business_name ?? 'Your roofer'
+    const roofSlotLabel = roofScheduledAt
+      ? formatVisitSlot(roofScheduledAt, roofScheduledWindow, tzForState(identity?.state ?? null))
+      : ''
+    const roofCalLinks =
+      roofPaidAt && roofScheduledAt
+        ? visitCalendarLinks({
+            scheduledAt: roofScheduledAt,
+            scheduledWindow: roofScheduledWindow,
+            tradieName,
+            slotLabel: roofSlotLabel,
+            location: (row.address ?? '').trim() || placeLabel,
+          })
+        : null
     const microNote: CSSProperties = {
       ...MONO,
       fontSize: 9.5,
@@ -687,7 +702,7 @@ export default async function RoofingQuotePage({
       {
         title: 'Your tradie',
         body: (
-          <div style={{ display: 'grid', gap: 12, maxWidth: 480 }}>
+          <div style={{ display: 'grid', gap: 12, maxWidth: 520 }}>
             <div className="qm-print-hide">
               <TrustVideo
                 src={videos.intro}
@@ -740,28 +755,49 @@ export default async function RoofingQuotePage({
         ),
       },
       {
-        title: roofPaidAt && roofScheduledAt ? 'Thank you' : 'Book your site inspection',
+        title: roofPaidAt && roofScheduledAt ? 'Your site visit' : 'Book your site inspection',
+        // The thank-you video + calendar now live on the dedicated /book
+        // landing page the $99 payment redirects to. Here we only confirm the
+        // booked state, point a paid-but-unbooked customer to the booking
+        // page, or show the $99 CTA before payment.
         body:
           roofPaidAt && roofScheduledAt ? (
-            // Booked → the thank-you video + Jon's confirmation message. This
-            // is the post-booking "thank you" moment the customer lands on
-            // after picking a slot (the SlotPicker reloads /q/roof/<token>,
-            // which now renders this state). Works for every roofing booking.
-            <div style={{ display: 'grid', gap: 12, maxWidth: 480 }}>
-              <div className="qm-print-hide">
-                <TrustVideo
-                  src={videos.thankyou}
-                  title={tradieName}
-                  caption="A thank-you message from your tradie"
-                />
-              </div>
+            <div style={{ display: 'grid', gap: 16, maxWidth: 480 }}>
               <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
-                Thanks, we have received your request. Your site visit is booked for{' '}
-                <strong style={{ color: 'var(--text-pri)' }}>
-                  {formatVisitSlot(roofScheduledAt, roofScheduledWindow, tzForState(identity?.state ?? null))}
-                </strong>
+                Your site visit is booked for{' '}
+                <strong style={{ color: 'var(--text-pri)' }}>{roofSlotLabel}</strong>
                 . {tradieName} will be in touch to confirm the exact time.
               </p>
+              {roofCalLinks ? (
+                <AddToCalendar
+                  google={roofCalLinks.google}
+                  outlook={roofCalLinks.outlook}
+                  icsHref={`/q/roof/${token}/visit.ics`}
+                />
+              ) : null}
+              <a
+                href={`/q/roof/${token}/book`}
+                className="qm-ghost"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  justifySelf: 'start',
+                  border: '1px solid var(--ink-line)',
+                  background: 'transparent',
+                  color: 'var(--text-sec)',
+                  padding: '11px 16px',
+                  borderRadius: 'var(--qm-r-ctl)',
+                  ...MONO,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.12em',
+                  textDecoration: 'none',
+                }}
+              >
+                View your site visit →
+              </a>
             </div>
           ) : (
             <div style={{ display: 'grid', gap: 10, maxWidth: 380 }}>
@@ -770,12 +806,9 @@ export default async function RoofingQuotePage({
                   <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
                     Payment received. Pick a time that suits and your site visit is locked in.
                   </p>
-                  <SlotPicker
-                    token={token}
-                    options={roofBookingOptions}
-                    endpoint={`/api/q/book/roof/${token}`}
-                    labels={{ idle: 'Confirm this time →', submitting: 'Confirming…', done: 'Booked ✓' }}
-                  />
+                  <a href={`/q/roof/${token}/book`} className="qm-cta" style={ctaStyle}>
+                    Pick your visit time →
+                  </a>
                 </>
               ) : (
                 <>
