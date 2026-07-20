@@ -2,9 +2,11 @@
 
 // Dashboard → Videos tab (spec tradie-trust-video-generation R4).
 //
-// A compact production studio for the two customer-facing trust videos. The
-// data and generation contract remains deliberately small: GET polls and
-// resumes jobs; POST starts one or both scenes with shared brand inputs.
+// A production studio for the two customer-facing trust videos. Layout: the
+// shared brand direction sits in a full-width panel on top; the two scenes
+// (welcome + thank-you) render side by side beneath it so the tradie sees
+// both at once. Data/generation contract stays small — GET polls and resumes
+// jobs; POST starts one or both scenes with the shared inputs.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -105,7 +107,7 @@ function statusPill(slot: SlotInfo) {
 
 function VideoStudioSkeleton() {
   return (
-    <div className="max-w-[90rem]" role="status" aria-live="polite" aria-busy="true">
+    <div className="max-w-[80rem]" role="status" aria-live="polite" aria-busy="true">
       <span className="sr-only">Loading Video Studio…</span>
       <div className="mb-7 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0 flex-1">
@@ -115,31 +117,30 @@ function VideoStudioSkeleton() {
         </div>
         <div className="qm-shimmer h-11 w-40 rounded-ctl" />
       </div>
-      <div className="grid items-start gap-6 xl:grid-cols-[19rem_minmax(0,1fr)]">
-        <div className="rounded-card edge-lit border border-ink-line bg-ink-card p-5">
-          <div className="qm-shimmer h-4 w-28 rounded-full" />
-          <div className="qm-shimmer mt-5 h-16 rounded-ctl" />
-          <div className="qm-shimmer mt-5 h-11 rounded-ctl" />
-          <div className="qm-shimmer mt-4 h-11 rounded-ctl" />
-          <div className="qm-shimmer mt-6 h-24 rounded-ctl" />
-          <div className="qm-shimmer mt-4 h-24 rounded-ctl" />
+      <div className="rounded-card edge-lit border border-ink-line bg-ink-card p-5 sm:p-6">
+        <div className="qm-shimmer h-4 w-40 rounded-full" />
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <div className="qm-shimmer h-11 rounded-ctl" />
+          <div className="qm-shimmer h-11 rounded-ctl" />
+          <div className="qm-shimmer h-11 rounded-ctl" />
+          <div className="qm-shimmer h-11 rounded-ctl" />
         </div>
-        <div className="grid gap-6 2xl:grid-cols-2">
-          {(['welcome', 'thankyou'] as const).map((key) => (
-            <div
-              key={key}
-              className="overflow-hidden rounded-card edge-lit border border-ink-line bg-ink-card"
-            >
-              <div className="p-5">
-                <div className="qm-shimmer h-4 w-24 rounded-full" />
-                <div className="qm-shimmer mt-3 h-6 w-48 rounded-full" />
-                <div className="qm-shimmer mt-5 aspect-video w-full rounded-ctl" />
-                <div className="qm-shimmer mt-5 h-28 rounded-ctl" />
-                <div className="qm-shimmer mt-4 h-11 rounded-ctl" />
-              </div>
+      </div>
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        {(['welcome', 'thankyou'] as const).map((key) => (
+          <div
+            key={key}
+            className="overflow-hidden rounded-card edge-lit border border-ink-line bg-ink-card"
+          >
+            <div className="p-5">
+              <div className="qm-shimmer h-4 w-24 rounded-full" />
+              <div className="qm-shimmer mt-3 h-6 w-48 rounded-full" />
+              <div className="qm-shimmer mt-5 aspect-video w-full rounded-ctl" />
+              <div className="qm-shimmer mt-5 h-28 rounded-ctl" />
+              <div className="qm-shimmer mt-4 h-11 rounded-ctl" />
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -284,7 +285,7 @@ export function VideosTab({ accessToken }: { accessToken: string | null }) {
   // polling error on loaded data renders as an inline notice instead.
   if (!data) {
     return (
-      <div className="max-w-[90rem]">
+      <div className="max-w-[80rem]">
         <header className="mb-7">
           <div className="flex items-center gap-2 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-accent">
             <Clapperboard size={15} strokeWidth={1.8} aria-hidden="true" />
@@ -337,7 +338,7 @@ export function VideosTab({ accessToken }: { accessToken: string | null }) {
       : extraImageNames[0] ?? null
 
   return (
-    <div className="max-w-[90rem]">
+    <div className="max-w-[80rem]">
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {submitting
           ? 'Starting video generation…'
@@ -357,7 +358,7 @@ export function VideosTab({ accessToken }: { accessToken: string | null }) {
           </h1>
           <p className="mt-3 max-w-[65ch] text-pretty text-sm leading-relaxed text-text-sec sm:text-[0.95rem]">
             Create the two branded scenes customers see while they review and book your quote.
-            Update the shared direction once, then generate either scene.
+            Set the shared direction once, then generate either scene.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-3 sm:justify-end">
@@ -402,84 +403,84 @@ export function VideosTab({ accessToken }: { accessToken: string | null }) {
         </div>
       )}
 
-      <div className="grid items-start gap-6 xl:grid-cols-[19rem_minmax(0,1fr)]">
-        <aside
-          className="rounded-card edge-lit border border-ink-line bg-ink-card p-5 motion-safe:animate-[fade-up_300ms_ease-out_both] xl:sticky xl:top-20"
-          aria-labelledby="brand-inputs-heading"
-        >
+      {/* ── Shared direction — full-width, applied to both scenes ────────── */}
+      <section
+        className="rounded-card edge-lit border border-ink-line bg-ink-card p-5 sm:p-6 motion-safe:animate-[fade-up_300ms_ease-out_both]"
+        aria-labelledby="brand-inputs-heading"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-start gap-3">
             <div className="grid h-10 w-10 shrink-0 place-items-center rounded-ctl border border-ink-line bg-ink-deep text-accent">
               <Building2 size={18} aria-hidden="true" />
             </div>
             <div className="min-w-0">
               <h2 id="brand-inputs-heading" className="text-base font-bold text-text-pri">
-                Brand Inputs
+                Shared Direction
               </h2>
-              <p className="mt-1 text-sm leading-relaxed text-text-dim">Applied to both scenes.</p>
+              <p className="mt-1 text-sm leading-relaxed text-text-dim">Applied to both scenes below.</p>
             </div>
           </div>
-
-          <dl className="mt-5 rounded-ctl border border-ink-line bg-ink-deep p-3.5">
-            <dt className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.1em] text-text-dim">
-              Business Identity
+          <dl className="rounded-ctl border border-ink-line bg-ink-deep px-3.5 py-2">
+            <dt className="font-mono text-[0.6rem] font-semibold uppercase tracking-[0.1em] text-text-dim">
+              Business
             </dt>
-            <dd className="mt-1.5 break-words text-sm font-bold text-text-pri" translate="no">
-              {data.business_name?.trim() || 'Business name not set'}
+            <dd className="mt-0.5 break-words text-sm font-bold text-text-pri" translate="no">
+              {data.business_name?.trim() || 'Not set'}
             </dd>
-            <dd className="mt-1 text-xs leading-relaxed text-text-dim">Managed in your Account settings.</dd>
           </dl>
+        </div>
 
-          <div className="mt-5 space-y-4">
-            <div>
-              <label htmlFor="video-contact-name" className="block text-sm font-semibold text-text-pri">
-                Presenter Name
-              </label>
-              <p id="video-contact-name-help" className="mt-1 text-xs leading-relaxed text-text-dim">
-                Used to shape the presenter and default script.
-              </p>
-              <input
-                id="video-contact-name"
-                name="contact_name"
-                type="text"
-                value={contactName}
-                onChange={(event) => setContactName(event.target.value)}
-                placeholder="e.g. Bob…"
-                autoComplete="name"
-                aria-describedby="video-contact-name-help"
-                className="mt-2 min-h-11 w-full rounded-ctl border border-ink-line bg-ink-deep px-3 py-2.5 text-base text-text-pri placeholder:text-text-dim focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20 sm:text-sm"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="video-business-details" className="block text-sm font-semibold text-text-pri">
-                Business Context
-              </label>
-              <p id="video-business-details-help" className="mt-1 text-xs leading-relaxed text-text-dim">
-                A short detail the AI can weave into the scene.
-              </p>
-              <input
-                id="video-business-details"
-                name="video_details"
-                type="text"
-                value={details}
-                onChange={(event) => setDetails(event.target.value)}
-                placeholder="e.g. Family business, 20 years in Brisbane…"
-                autoComplete="off"
-                aria-describedby="video-business-details-help"
-                className="mt-2 min-h-11 w-full rounded-ctl border border-ink-line bg-ink-deep px-3 py-2.5 text-base text-text-pri placeholder:text-text-dim focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20 sm:text-sm"
-              />
-            </div>
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          {/* Presenter name */}
+          <div>
+            <label htmlFor="video-contact-name" className="block text-sm font-semibold text-text-pri">
+              Presenter Name
+            </label>
+            <p id="video-contact-name-help" className="mt-1 text-xs leading-relaxed text-text-dim">
+              Used to shape the presenter and default script.
+            </p>
+            <input
+              id="video-contact-name"
+              name="contact_name"
+              type="text"
+              value={contactName}
+              onChange={(event) => setContactName(event.target.value)}
+              placeholder="e.g. Bob…"
+              autoComplete="name"
+              aria-describedby="video-contact-name-help"
+              className="mt-2 min-h-11 w-full rounded-ctl border border-ink-line bg-ink-deep px-3 py-2.5 text-base text-text-pri placeholder:text-text-dim focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20 sm:text-sm"
+            />
           </div>
 
-          <div className="my-5 h-px bg-ink-line" aria-hidden="true" />
+          {/* Business context */}
+          <div>
+            <label htmlFor="video-business-details" className="block text-sm font-semibold text-text-pri">
+              Business Context
+            </label>
+            <p id="video-business-details-help" className="mt-1 text-xs leading-relaxed text-text-dim">
+              A short detail the AI can weave into the scene.
+            </p>
+            <input
+              id="video-business-details"
+              name="video_details"
+              type="text"
+              value={details}
+              onChange={(event) => setDetails(event.target.value)}
+              placeholder="e.g. Family business, 20 years in Brisbane…"
+              autoComplete="off"
+              aria-describedby="video-business-details-help"
+              className="mt-2 min-h-11 w-full rounded-ctl border border-ink-line bg-ink-deep px-3 py-2.5 text-base text-text-pri placeholder:text-text-dim focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20 sm:text-sm"
+            />
+          </div>
 
+          {/* Presenter portrait */}
           <div>
             <div className="flex items-center gap-2">
               <UserRound size={16} className="text-text-dim" aria-hidden="true" />
-              <h3 className="text-sm font-bold text-text-pri">Presenter Portrait</h3>
+              <span className="text-sm font-semibold text-text-pri">Presenter Portrait</span>
             </div>
-            <p id="owner-photo-help" className="mt-1.5 text-xs leading-relaxed text-text-dim">
-              Optional · PNG, JPEG or WebP · 7&nbsp;MB maximum. Your account logo is the fallback.
+            <p id="owner-photo-help" className="mt-1 text-xs leading-relaxed text-text-dim">
+              Optional · PNG, JPEG or WebP · 7&nbsp;MB max. Your account logo is the fallback.
             </p>
             <input
               ref={ownerPhotoRef}
@@ -508,12 +509,13 @@ export function VideosTab({ accessToken }: { accessToken: string | null }) {
             </p>
           </div>
 
-          <div className="mt-5">
+          {/* Reference photos */}
+          <div>
             <div className="flex items-center gap-2">
               <Images size={16} className="text-text-dim" aria-hidden="true" />
-              <h3 className="text-sm font-bold text-text-pri">Reference Photos</h3>
+              <span className="text-sm font-semibold text-text-pri">Reference Photos</span>
             </div>
-            <p id="extra-images-help" className="mt-1.5 text-xs leading-relaxed text-text-dim">
+            <p id="extra-images-help" className="mt-1 text-xs leading-relaxed text-text-dim">
               Ute or finished-job photos · 7&nbsp;MB each.
             </p>
             <input
@@ -545,206 +547,192 @@ export function VideosTab({ accessToken }: { accessToken: string | null }) {
               {extraImagesDetail ?? 'Optional. Select one or more references.'}
             </p>
           </div>
+        </div>
 
-          <p className="mt-5 border-t border-ink-line pt-4 text-xs leading-relaxed text-text-dim">
-            Without a portrait, QuoteMax uses your account logo to guide the vehicle and workwear branding.
-          </p>
-        </aside>
+        <p className="mt-5 border-t border-ink-line pt-4 text-xs leading-relaxed text-text-dim">
+          Without a portrait, QuoteMax uses your account logo to guide the vehicle and workwear branding.
+          The AI cannot speak real people’s names — videos speak as your business.
+        </p>
+      </section>
 
-        <section aria-labelledby="customer-scenes-heading" className="min-w-0">
-          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <div className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-text-dim">
-                Production Queue
-              </div>
-              <h2 id="customer-scenes-heading" className="mt-1 text-xl font-extrabold tracking-[-0.025em] text-text-pri">
-                Customer Scenes
-              </h2>
-            </div>
-            <p className="max-w-md text-sm leading-relaxed text-text-dim">
-              One scene can generate at a time. You can leave this page while QuoteMax finishes.
-            </p>
-          </div>
+      {/* ── The two scenes, side by side ───────────────────────────────── */}
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        {(['welcome', 'thankyou'] as const).map((key) => {
+          const slot = data.slots[key]
+          const meta = SLOT_META[key]
+          const sceneBusy =
+            slot.state.status === 'generating' || submitting === key || submitting === 'both'
+          const namedPerson = nameInScript(scripts[key], contactName)
+          const updatedAt = formatUpdatedAt(slot.state.updated_at)
+          const counterWarning = scripts[key].length >= MAX_SCRIPT_CHARS * 0.9
+          const actionLabel = sceneBusy
+            ? slot.state.status === 'generating'
+              ? 'Generating…'
+              : 'Starting…'
+            : slot.state.status === 'failed'
+              ? 'Retry Scene'
+              : slot.using_default
+                ? 'Generate Scene'
+                : 'Regenerate Scene'
 
-          <div className="grid gap-6 2xl:grid-cols-2">
-            {(['welcome', 'thankyou'] as const).map((key) => {
-              const slot = data.slots[key]
-              const meta = SLOT_META[key]
-              const sceneBusy =
-                slot.state.status === 'generating' || submitting === key || submitting === 'both'
-              const namedPerson = nameInScript(scripts[key], contactName)
-              const updatedAt = formatUpdatedAt(slot.state.updated_at)
-              const counterWarning = scripts[key].length >= MAX_SCRIPT_CHARS * 0.9
-              const actionLabel = sceneBusy
-                ? slot.state.status === 'generating'
-                  ? 'Generating…'
-                  : 'Starting…'
-                : slot.state.status === 'failed'
-                  ? 'Retry Scene'
-                  : slot.using_default
-                    ? 'Generate Scene'
-                    : 'Regenerate Scene'
-
-              return (
-                <article
-                  key={key}
-                  className="min-w-0 overflow-hidden rounded-card edge-lit border border-ink-line bg-ink-card motion-safe:animate-[fade-up_340ms_ease-out_both]"
-                  aria-labelledby={`${key}-scene-title`}
-                  aria-busy={sceneBusy}
-                >
-                  <header className="border-b border-ink-line px-4 py-4 sm:px-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-accent">
-                          {meta.scene}
-                        </div>
-                        <h3
-                          id={`${key}-scene-title`}
-                          className="mt-1 text-lg font-extrabold tracking-[-0.02em] text-text-pri"
-                        >
-                          {meta.title}
-                        </h3>
-                      </div>
-                      <div className="shrink-0">
-                        {statusPill(slot)}
-                      </div>
+          return (
+            <article
+              key={key}
+              className="min-w-0 overflow-hidden rounded-card edge-lit border border-ink-line bg-ink-card motion-safe:animate-[fade-up_340ms_ease-out_both]"
+              aria-labelledby={`${key}-scene-title`}
+              aria-busy={sceneBusy}
+            >
+              <header className="border-b border-ink-line px-4 py-4 sm:px-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-accent">
+                      {meta.scene}
                     </div>
-                    <div className="mt-3 flex items-start gap-2 text-sm text-text-sec">
-                      <MapPin size={15} className="mt-0.5 shrink-0 text-text-dim" aria-hidden="true" />
-                      <div className="min-w-0">
-                        <span className="font-semibold text-text-pri">{meta.placement}</span>
-                        <span className="text-text-dim"> · {meta.where}</span>
-                      </div>
-                    </div>
-                    <div className="mt-2 flex items-center gap-2 font-mono text-[0.62rem] tabular-nums text-text-dim">
-                      <Clock3 size={13} aria-hidden="true" />
-                      {updatedAt ? (
-                        <time dateTime={slot.state.updated_at}>Updated {updatedAt}</time>
-                      ) : (
-                        <span>No generation yet</span>
-                      )}
-                    </div>
-                  </header>
-
-                  <div className="p-4 sm:p-5">
-                    <div className="overflow-hidden rounded-ctl border border-ink-line bg-black">
-                      {slot.effective_url ? (
-                        <video
-                          key={slot.effective_url}
-                          src={slot.effective_url}
-                          controls
-                          preload="metadata"
-                          playsInline
-                          aria-label={`${meta.title} preview`}
-                          aria-describedby={`${key}-video-context`}
-                          className="aspect-video w-full bg-black object-contain"
-                        />
-                      ) : (
-                        <div className="grid aspect-video place-items-center px-6 text-center">
-                          <div>
-                            <Video className="mx-auto text-text-dim" size={28} aria-hidden="true" />
-                            <p className="mt-3 text-sm font-semibold text-text-sec">Preview unavailable</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <p id={`${key}-video-context`} className="sr-only">
-                      Preview for {meta.placement}. The script used for the current generation is available in the disclosure below.
-                    </p>
-
-                    {slot.effective_url && (
-                      <details className="mt-3 rounded-ctl border border-ink-line bg-ink-deep">
-                        <summary className="flex min-h-11 cursor-pointer items-center px-3 text-sm font-semibold text-text-sec transition-colors hover:text-text-pri">
-                          Script used for this generation
-                        </summary>
-                        <p className="border-t border-ink-line px-3 py-3 text-sm leading-relaxed text-text-sec">
-                          {slot.state.script ?? slot.default_script}
-                        </p>
-                      </details>
-                    )}
-
-                    <div className="min-h-[2.75rem]">
-                      {slot.state.status === 'generating' && (
-                        <div className="mt-3 flex items-start gap-2 rounded-ctl border border-accent/30 bg-accent/10 px-3 py-2.5 text-sm text-text-sec">
-                          <Loader2 size={15} className="mt-0.5 shrink-0 motion-safe:animate-spin text-accent" aria-hidden="true" />
-                          <span>Generating this scene. It usually takes a few minutes.</span>
-                        </div>
-                      )}
-                      {slot.state.status === 'failed' && slot.state.error && (
-                        <div className="mt-3 flex items-start gap-2 rounded-ctl border border-danger/50 bg-danger/10 px-3 py-2.5 text-sm leading-relaxed text-text-pri" role="alert">
-                          <AlertCircle size={15} className="mt-0.5 shrink-0 text-danger-bright" aria-hidden="true" />
-                          <span className="min-w-0 break-words">Generation failed. {slot.state.error}</span>
-                        </div>
-                      )}
-                      {slot.state.note && (
-                        <p className="mt-3 rounded-ctl border border-ink-line bg-ink-deep px-3 py-2.5 text-sm leading-relaxed text-text-dim">
-                          {slot.state.note}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="mt-4">
-                      <div className="flex items-end justify-between gap-3">
-                        <label htmlFor={`${key}-video-script`} className="text-sm font-bold text-text-pri">
-                          Spoken Script
-                        </label>
-                        <span
-                          id={`${key}-script-count`}
-                          className={`font-mono text-[0.64rem] tabular-nums ${counterWarning ? 'text-accent' : 'text-text-dim'}`}
-                        >
-                          {scripts[key].length} / {MAX_SCRIPT_CHARS}
-                        </span>
-                      </div>
-                      <textarea
-                        id={`${key}-video-script`}
-                        name={`script_${key}`}
-                        value={scripts[key]}
-                        onChange={(event) =>
-                          setScripts((previous) => ({ ...previous, [key]: event.target.value }))
-                        }
-                        rows={5}
-                        maxLength={MAX_SCRIPT_CHARS}
-                        autoComplete="off"
-                        aria-describedby={`${key}-script-help ${key}-script-count`}
-                        placeholder="Write the spoken line for this scene…"
-                        className="mt-2 min-h-32 w-full resize-y rounded-ctl border border-ink-line bg-ink-deep px-3 py-3 text-base leading-relaxed text-text-pri placeholder:text-text-dim focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20 sm:text-sm"
-                      />
-                      <p id={`${key}-script-help`} className="mt-1.5 text-xs leading-relaxed text-text-dim">
-                        Keep it natural and concise. The spoken section is approximately 8 seconds.
-                      </p>
-                    </div>
-
-                    {namedPerson && (
-                      <p
-                        className="mt-3 rounded-ctl border border-warning/40 bg-warning/10 px-3 py-2.5 text-sm leading-relaxed text-text-sec"
-                        role="status"
-                        aria-live="polite"
-                      >
-                        The AI may block a spoken personal name. Remove “{namedPerson}” for a more reliable generation.
-                      </p>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={() => void generate(key)}
-                      disabled={studioBusy || !accessToken}
-                      aria-busy={sceneBusy}
-                      title={studioBusy && !sceneBusy ? 'Wait for the current generation to finish' : undefined}
-                      className="mt-4 inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-ctl border border-ink-line bg-ink-deep px-5 py-2.5 text-sm font-extrabold text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+                    <h3
+                      id={`${key}-scene-title`}
+                      className="mt-1 text-lg font-extrabold tracking-[-0.02em] text-text-pri"
                     >
-                      {sceneBusy ? (
-                        <Loader2 size={16} className="motion-safe:animate-spin" aria-hidden="true" />
-                      ) : (
-                        <RefreshCw size={16} aria-hidden="true" />
-                      )}
-                      {actionLabel}
-                    </button>
+                      {meta.title}
+                    </h3>
                   </div>
-                </article>
-              )
-            })}
-          </div>
-        </section>
+                  <div className="shrink-0">
+                    {statusPill(slot)}
+                  </div>
+                </div>
+                <div className="mt-3 flex items-start gap-2 text-sm text-text-sec">
+                  <MapPin size={15} className="mt-0.5 shrink-0 text-text-dim" aria-hidden="true" />
+                  <div className="min-w-0">
+                    <span className="font-semibold text-text-pri">{meta.placement}</span>
+                    <span className="text-text-dim"> · {meta.where}</span>
+                  </div>
+                </div>
+                <div className="mt-2 flex items-center gap-2 font-mono text-[0.62rem] tabular-nums text-text-dim">
+                  <Clock3 size={13} aria-hidden="true" />
+                  {updatedAt ? (
+                    <time dateTime={slot.state.updated_at}>Updated {updatedAt}</time>
+                  ) : (
+                    <span>No generation yet</span>
+                  )}
+                </div>
+              </header>
+
+              <div className="p-4 sm:p-5">
+                <div className="overflow-hidden rounded-ctl border border-ink-line bg-black">
+                  {slot.effective_url ? (
+                    <video
+                      key={slot.effective_url}
+                      src={slot.effective_url}
+                      controls
+                      preload="metadata"
+                      playsInline
+                      aria-label={`${meta.title} preview`}
+                      aria-describedby={`${key}-video-context`}
+                      className="aspect-video w-full bg-black object-contain"
+                    />
+                  ) : (
+                    <div className="grid aspect-video place-items-center px-6 text-center">
+                      <div>
+                        <Video className="mx-auto text-text-dim" size={28} aria-hidden="true" />
+                        <p className="mt-3 text-sm font-semibold text-text-sec">Preview unavailable</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <p id={`${key}-video-context`} className="sr-only">
+                  Preview for {meta.placement}. The script used for the current generation is available in the disclosure below.
+                </p>
+
+                {slot.effective_url && (
+                  <details className="mt-3 rounded-ctl border border-ink-line bg-ink-deep">
+                    <summary className="flex min-h-11 cursor-pointer items-center px-3 text-sm font-semibold text-text-sec transition-colors hover:text-text-pri">
+                      Script used for this generation
+                    </summary>
+                    <p className="border-t border-ink-line px-3 py-3 text-sm leading-relaxed text-text-sec">
+                      {slot.state.script ?? slot.default_script}
+                    </p>
+                  </details>
+                )}
+
+                <div className="min-h-[2.75rem]">
+                  {slot.state.status === 'generating' && (
+                    <div className="mt-3 flex items-start gap-2 rounded-ctl border border-accent/30 bg-accent/10 px-3 py-2.5 text-sm text-text-sec">
+                      <Loader2 size={15} className="mt-0.5 shrink-0 motion-safe:animate-spin text-accent" aria-hidden="true" />
+                      <span>Generating this scene. It usually takes a few minutes.</span>
+                    </div>
+                  )}
+                  {slot.state.status === 'failed' && slot.state.error && (
+                    <div className="mt-3 flex items-start gap-2 rounded-ctl border border-danger/50 bg-danger/10 px-3 py-2.5 text-sm leading-relaxed text-text-pri" role="alert">
+                      <AlertCircle size={15} className="mt-0.5 shrink-0 text-danger-bright" aria-hidden="true" />
+                      <span className="min-w-0 break-words">Generation failed. {slot.state.error}</span>
+                    </div>
+                  )}
+                  {slot.state.note && (
+                    <p className="mt-3 rounded-ctl border border-ink-line bg-ink-deep px-3 py-2.5 text-sm leading-relaxed text-text-dim">
+                      {slot.state.note}
+                    </p>
+                  )}
+                </div>
+
+                <div className="mt-4">
+                  <div className="flex items-end justify-between gap-3">
+                    <label htmlFor={`${key}-video-script`} className="text-sm font-bold text-text-pri">
+                      Spoken Script
+                    </label>
+                    <span
+                      id={`${key}-script-count`}
+                      className={`font-mono text-[0.64rem] tabular-nums ${counterWarning ? 'text-accent' : 'text-text-dim'}`}
+                    >
+                      {scripts[key].length} / {MAX_SCRIPT_CHARS}
+                    </span>
+                  </div>
+                  <textarea
+                    id={`${key}-video-script`}
+                    name={`script_${key}`}
+                    value={scripts[key]}
+                    onChange={(event) =>
+                      setScripts((previous) => ({ ...previous, [key]: event.target.value }))
+                    }
+                    rows={4}
+                    maxLength={MAX_SCRIPT_CHARS}
+                    autoComplete="off"
+                    aria-describedby={`${key}-script-help ${key}-script-count`}
+                    placeholder="Write the spoken line for this scene…"
+                    className="mt-2 min-h-28 w-full resize-y rounded-ctl border border-ink-line bg-ink-deep px-3 py-3 text-base leading-relaxed text-text-pri placeholder:text-text-dim focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20 sm:text-sm"
+                  />
+                  <p id={`${key}-script-help`} className="mt-1.5 text-xs leading-relaxed text-text-dim">
+                    Keep it natural and concise. The spoken section is approximately 8 seconds.
+                  </p>
+                </div>
+
+                {namedPerson && (
+                  <p
+                    className="mt-3 rounded-ctl border border-warning/40 bg-warning/10 px-3 py-2.5 text-sm leading-relaxed text-text-sec"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    The AI may block a spoken personal name. Remove “{namedPerson}” for a more reliable generation.
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => void generate(key)}
+                  disabled={studioBusy || !accessToken}
+                  aria-busy={sceneBusy}
+                  title={studioBusy && !sceneBusy ? 'Wait for the current generation to finish' : undefined}
+                  className="mt-4 inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-ctl border border-ink-line bg-ink-deep px-5 py-2.5 text-sm font-extrabold text-text-pri transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {sceneBusy ? (
+                    <Loader2 size={16} className="motion-safe:animate-spin" aria-hidden="true" />
+                  ) : (
+                    <RefreshCw size={16} aria-hidden="true" />
+                  )}
+                  {actionLabel}
+                </button>
+              </div>
+            </article>
+          )
+        })}
       </div>
     </div>
   )
