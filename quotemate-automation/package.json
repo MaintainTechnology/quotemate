@@ -50,6 +50,7 @@
     "react-dom": "19.2.4",
     "react-konva": "^19.2.5",
     "resend": "^6.12.2",
+    "sharp": "0.34.5",
     "stripe": "^22.1.0",
     "three": "^0.185.1",
     "twilio": "^6.0.0",

@@ -112,6 +112,7 @@ import {
   History,
   CalendarDays,
   LayoutTemplate,
+  Clapperboard,
   Sparkles,
   Trash2,
   Loader2,
@@ -139,6 +140,7 @@ import FlyerDesignerTab from './_components/FlyerDesignerTab'
 import { FilesTab } from './_components/FilesTab'
 import { HistoricalQuotesTab } from './_components/HistoricalQuotesTab'
 import { CalendarTab } from './_components/CalendarTab'
+import { VideosTab } from './_components/VideosTab'
 import { HistoricalHint } from './_components/HistoricalHint'
 import { savedJobsMode } from './_components/saved-jobs-mode'
 import {
@@ -403,6 +405,9 @@ type Tab =
   | 'historical-quotes'
   /** Flyer Designer — template-based marketing flyer editor (Marketing tool, all tenants). */
   | 'flyer'
+  /** Trust videos — AI-generated welcome + thank-you videos for the customer
+   *  quote pages (spec tradie-trust-video-generation). All tenants. */
+  | 'videos'
   /** Trade hubs — one tab per enabled trade consolidating that trade's
    *  pricing, services, brands, catalogue, recipes, estimating, quotes,
    *  tools, and pricing-wizard entry. Gated by tenants.trades[]. */
@@ -460,6 +465,7 @@ const DEEP_LINK_TABS: readonly Tab[] = [
   'overview', 'account', 'payouts', 'billing', 'pricing', 'services', 'catalogue', 'estimating',
   'recipes', 'quotes', 'chats', 'followups', 'calendar', 'roofing', 'signage', 'painting',
   'commercial-painting', 'aircon', 'estimator', 'solar', 'invites', 'files', 'historical-quotes', 'flyer',
+  'videos',
   ...HUB_TABS,
 ]
 
@@ -1205,6 +1211,7 @@ export default function DashboardPage() {
               </div>
             )}
             {tab === 'flyer' && <FlyerDesignerTab accessToken={accessToken} />}
+            {tab === 'videos' && <VideosTab accessToken={accessToken} />}
             {isHubTab(tab) && (
               // key={tab}: a DIFFERENT hub is a different workspace — remount
               // so section state can't bleed a section the next hub doesn't
@@ -2003,6 +2010,8 @@ function buildNav(quoteCount: number, trades: ReadonlyArray<string> = []): NavIt
   items.push({ tab: 'invites', label: 'Marketing', icon: Megaphone })
   // Flyer Designer — marketing flyer editor. Core (all tenants).
   items.push({ tab: 'flyer', label: 'Flyer', icon: LayoutTemplate })
+  // Trust videos — AI welcome + thank-you videos for the customer quote pages.
+  items.push({ tab: 'videos', label: 'Videos', icon: Clapperboard })
   // Files — per-tenant document store (archived quotes/invoices + ask-your-docs).
   items.push({ tab: 'files', label: 'Files', icon: FolderOpen })
   // Historical quotes — import + analyse the tradie's own past pricing.
@@ -2046,7 +2055,7 @@ const SIDEBAR_GROUPS: { label: string; tabs: Tab[] }[] = [
   { label: 'Price book', tabs: ['pricing', 'services', 'catalogue', 'estimating', 'recipes'] },
   {
     label: 'Business',
-    tabs: ['invites', 'flyer', 'files', 'historical-quotes', 'account', 'payouts', 'billing'],
+    tabs: ['invites', 'flyer', 'videos', 'files', 'historical-quotes', 'account', 'payouts', 'billing'],
   },
 ]
 
@@ -2373,6 +2382,10 @@ const TAB_META: Record<
   flyer: {
     title: 'Flyer Designer',
     desc: 'Design a printable marketing flyer from a template — edit text, fonts, colours and images, drop in your QR code, then download a PNG or PDF.',
+  },
+  videos: {
+    title: 'Videos',
+    desc: 'AI-generated welcome and thank-you videos, personalised with your name, business and logo, shown to customers on your quote pages.',
   },
   files: {
     title: 'Files',
@@ -15315,6 +15328,8 @@ function tabLabel(t: Tab): string {
       return 'Solar'
     case 'flyer':
       return 'Flyer'
+    case 'videos':
+      return 'Videos'
   }
 }
 

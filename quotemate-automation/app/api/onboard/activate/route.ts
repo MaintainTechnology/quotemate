@@ -17,6 +17,7 @@
 // exist. The client can call POST /api/onboard/retry-provision to
 // re-run step 5 against the existing tenant without rebuilding it.
 
+import { after } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { OnboardActivateSchema } from '@/lib/onboard/schema'
 import { buildPricingRows } from '@/lib/onboard/pricing-rows'
@@ -28,6 +29,11 @@ import { checkInvitationCode, consumeInvitationCode } from '@/lib/onboard/invita
 import { stampFeatureProvenance } from '@/lib/features/access'
 import { computePreflight } from '@/lib/onboard/preflight-logic'
 import { ensureClerkUser } from '@/lib/clerk/ensure-user'
+import { autoGenerateTrustVideos } from '@/lib/videos/trust-video'
+
+// Deferred trust-video generation polls Veo after the response; a platform
+// cut-off mid-poll is harmless (resumable) but headroom lets most finish here.
+export const maxDuration = 300
 
 // A step result in the activation chain — collected so the response (and the
 // /admin tenant-health view) can show exactly what succeeded vs failed,
@@ -382,6 +388,14 @@ export async function POST(req: Request) {
     // caller/admin can never mistake a stub tenant for production-ready.
     const { summary } = computePreflight(process.env)
     const provisioningMode = { twilio: summary.twilio_mode, vapi: summary.vapi_mode }
+
+    // Trust videos (spec tradie-trust-video-generation R5): kick AI generation
+    // of the welcome + thank-you videos in the deferred block — activation
+    // response time is unaffected, and a serverless timeout mid-poll is
+    // harmless (the operation is persisted and GET /api/tenant/videos resumes
+    // it). Runs on both the success and retry-provisioning paths; the tenant
+    // row exists either way and the guard inside is idempotent.
+    after(() => autoGenerateTrustVideos(supabase, id))
 
     if (!result.ok) {
       // Tenant + pricing rows still exist. Client should redirect to the
