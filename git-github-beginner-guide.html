@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Git and GitHub for Beginners · Setup Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink-deep: #16120F;
+    --ink: #1E1813;
+    --ink-card: #2B2422;
+    --ink-line: #3A322C;
+    --accent: #FFC400;
+    --accent-press: #E6AC00;
+    --accent-soft: #FFD23D;
+    --accent-ink: #1C1812;
+    --text-pri: #F6F1EA;
+    --text-sec: #C3B8AC;
+    --text-dim: #A2968A;
+    --edge-glow: #6E6354;
+    --edge-deep: #4A4136;
+    --success-bright: #34D27B;
+    --warning-bright: #F59E0B;
+    --sans: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--ink-deep);
+    color: var(--text-sec);
+    font-family: var(--sans);
+    font-size: 1rem;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Film grain over the dark canvas */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 90;
+    opacity: 0.045;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  ::selection { background: var(--accent); color: var(--accent-ink); }
+
+  a { color: var(--text-pri); }
+  a:focus-visible, button:focus-visible {
+    outline: 2px solid var(--accent-soft);
+    outline-offset: 2px;
+  }
+
+  .skip-link {
+    position: absolute; left: -9999px; top: 0;
+    background: var(--accent); color: var(--accent-ink);
+    font-family: var(--mono); font-size: 0.75rem; font-weight: 600;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    padding: 12px 20px; z-index: 200; text-decoration: none;
+  }
+  .skip-link:focus { left: 0; }
+
+  /* ---------- Nav ---------- */
+  .nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(22, 18, 15, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--ink-line);
+  }
+  .nav-inner {
+    max-width: 1120px; margin: 0 auto;
+    padding: 14px 24px;
+    display: flex; align-items: center; gap: 24px;
+  }
+  .nav-mark {
+    display: flex; align-items: center; gap: 12px;
+    text-decoration: none; flex-shrink: 0;
+  }
+  .nav-tile {
+    width: 32px; height: 32px; border-radius: 6px;
+    background: var(--accent); color: var(--accent-ink);
+    font-family: var(--mono); font-weight: 700; font-size: 1rem;
+    display: grid; place-items: center;
+  }
+  .nav-word {
+    font-family: var(--sans); font-weight: 800; font-size: 0.9rem;
+    letter-spacing: 0.02em; text-transform: uppercase; color: var(--text-pri);
+  }
+  .nav-links {
+    display: flex; gap: 4px; margin-left: auto;
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .nav-links::-webkit-scrollbar { display: none; }
+  .nav-links a {
+    font-family: var(--mono); font-size: 0.68rem; font-weight: 600;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--text-dim); text-decoration: none;
+    padding: 8px 10px; border-radius: 6px; white-space: nowrap;
+  }
+  .nav-links a:hover { color: var(--accent); }
+
+  /* ---------- Layout ---------- */
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+  section { padding: 64px 0; scroll-margin-top: 76px; }
+  section + section { border-top: 1px solid var(--ink-line); }
+
+  .eyebrow {
+    font-family: var(--mono); font-size: 0.75rem; font-weight: 600;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--text-dim); margin-bottom: 20px;
+    display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center;
+  }
+  .eyebrow .lead { color: var(--accent); }
+  .eyebrow .dot { color: var(--edge-glow); }
+
+  h1 {
+    font-family: var(--sans); font-weight: 800;
+    font-size: clamp(2.6rem, 6.5vw, 5.2rem);
+    line-height: 0.95; letter-spacing: -0.04em;
+    text-transform: uppercase; color: var(--text-pri);
+    max-width: 18ch;
+  }
+  h2 {
+    font-family: var(--sans); font-weight: 800;
+    font-size: clamp(1.9rem, 4vw, 3rem);
+    line-height: 0.98; letter-spacing: -0.04em;
+    text-transform: uppercase; color: var(--text-pri);
+    max-width: 24ch; margin-bottom: 20px;
+  }
+  h3 {
+    font-family: var(--sans); font-weight: 700; font-size: 1.15rem;
+    letter-spacing: -0.02em; line-height: 1.3;
+    text-transform: uppercase; color: var(--text-pri);
+    margin-bottom: 10px;
+  }
+  .hl { color: var(--accent); }
+
+  p { max-width: 70ch; }
+  p + p { margin-top: 14px; }
+  .lede { font-size: 1.15rem; color: var(--text-sec); margin-top: 24px; max-width: 58ch; }
+  strong { color: var(--text-pri); font-weight: 700; }
+  em { font-style: normal; color: var(--text-pri); }
+
+  kbd {
+    font-family: var(--mono); font-size: 0.85em; font-weight: 600;
+    color: var(--text-pri); background: var(--ink);
+    border: 1px solid var(--ink-line); border-bottom-width: 2px;
+    border-radius: 4px; padding: 1px 7px; white-space: nowrap;
+  }
+
+  .inline-code {
+    font-family: var(--mono); font-size: 0.85em; color: var(--accent);
+    background: var(--ink); border: 1px solid var(--ink-line);
+    border-radius: 4px; padding: 1px 6px; overflow-wrap: anywhere;
+  }
+
+  /* ---------- Hero ---------- */
+  .hero { position: relative; padding: 88px 0 72px; overflow: hidden; }
+  .hero-ridges {
+    position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
+  }
+  .hero .wrap { position: relative; }
+
+  .chooser {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px; margin-top: 48px; max-width: 720px;
+  }
+  .chooser a {
+    display: block; text-decoration: none;
+    background: var(--ink-card); border: 1px solid var(--ink-line);
+    border-radius: 14px; padding: 24px;
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  }
+  .chooser a:hover { border-color: var(--accent); }
+  .chooser .c-tag {
+    font-family: var(--mono); font-size: 0.72rem; font-weight: 600;
+    letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent);
+  }
+  .chooser .c-title {
+    font-family: var(--sans); font-weight: 800; font-size: 1.35rem;
+    letter-spacing: -0.02em; text-transform: uppercase;
+    color: var(--text-pri); margin-top: 8px;
+  }
+  .chooser .c-sub { font-size: 0.9rem; color: var(--text-dim); margin-top: 6px; }
+
+  /* ---------- Cards ---------- */
+  .card {
+    background: var(--ink-card); border: 1px solid var(--ink-line);
+    border-radius: 16px; padding: 28px;
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  }
+  .card-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px; margin-top: 32px;
+  }
+  .card .k {
+    font-family: var(--mono); font-size: 0.72rem; font-weight: 600;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--accent); display: block; margin-bottom: 10px;
+  }
+
+  /* ---------- Numbered steps ---------- */
+  .steps { margin-top: 40px; display: grid; gap: 16px; }
+  .step {
+    display: grid; grid-template-columns: 84px 1fr; gap: 24px;
+    background: var(--ink-card); border: 1px solid var(--ink-line);
+    border-radius: 16px; padding: 28px;
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  }
+  .step-num {
+    font-family: var(--mono); font-weight: 700;
+    font-size: 2.2rem; line-height: 1; color: var(--accent);
+    padding-top: 2px;
+  }
+  .step-body { min-width: 0; }
+  .step-body p { color: var(--text-sec); }
+  .step-body ul, .step-body ol { margin: 12px 0 0 20px; max-width: 68ch; }
+  .step-body li { margin-top: 8px; }
+  .step-body li::marker { color: var(--text-dim); }
+
+  /* ---------- Code blocks ---------- */
+  .code {
+    position: relative; margin-top: 16px; max-width: 720px;
+    background: var(--ink); border: 1px solid var(--ink-line);
+    border-radius: 8px;
+  }
+  .code pre {
+    overflow-x: auto; padding: 16px 110px 16px 18px;
+  }
+  .code code {
+    font-family: var(--mono); font-size: 0.9rem; font-weight: 400;
+    color: var(--text-pri); white-space: pre;
+  }
+  .code .prompt { color: var(--edge-glow); user-select: none; }
+  .code .copy {
+    position: absolute; top: 10px; right: 10px;
+    font-family: var(--mono); font-size: 0.65rem; font-weight: 600;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--text-dim); background: transparent;
+    border: 1px solid var(--ink-line); border-radius: 6px;
+    padding: 6px 12px; cursor: pointer;
+  }
+  .code .copy:hover { color: var(--accent); border-color: var(--accent); }
+  .code .copy.done { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+
+  /* ---------- Callouts ---------- */
+  .callout {
+    display: grid; grid-template-columns: auto 1fr; gap: 14px;
+    align-items: start; margin-top: 16px; max-width: 720px;
+    background: var(--ink); border: 1px solid var(--ink-line);
+    border-radius: 8px; padding: 16px 18px;
+  }
+  .callout-tag {
+    font-family: var(--mono); font-size: 0.68rem; font-weight: 700;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--accent-ink); background: var(--accent);
+    border-radius: 4px; padding: 3px 8px; margin-top: 2px;
+  }
+  .callout-tag.warn { background: transparent; color: var(--warning-bright); border: 1px solid var(--warning-bright); }
+  .callout p { font-size: 0.95rem; }
+
+  /* ---------- Platform badges ---------- */
+  .os-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 0.72rem; font-weight: 600;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--text-pri); background: var(--ink-card);
+    border: 1px solid var(--edge-glow); border-radius: 6px;
+    padding: 6px 12px; margin-bottom: 20px;
+  }
+  .os-badge::before {
+    content: ""; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent);
+  }
+
+  /* ---------- Diagrams ---------- */
+  .diagram {
+    margin-top: 40px; overflow-x: auto;
+    border: 1px solid var(--ink-line); border-radius: 16px;
+    background: var(--ink);
+  }
+  .diagram svg { display: block; min-width: 760px; width: 100%; height: auto; }
+  .diagram-caption {
+    font-family: var(--mono); font-size: 0.7rem; font-weight: 600;
+    letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-dim);
+    padding: 0 18px 16px;
+  }
+  .svg-title { font-family: var(--sans); font-weight: 800; letter-spacing: -0.02em; text-transform: uppercase; fill: var(--text-pri); }
+  .svg-label { font-family: var(--mono); font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; fill: var(--text-dim); }
+  .svg-label-accent { font-family: var(--mono); font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; fill: var(--accent); }
+  .svg-body { font-family: var(--sans); font-weight: 400; fill: var(--text-sec); }
+  .svg-num { font-family: var(--mono); font-weight: 700; fill: var(--accent); }
+  .svg-box { fill: var(--ink-card); stroke: var(--ink-line); stroke-width: 1; }
+  .svg-arrow { stroke: var(--accent); stroke-width: 2; fill: none; }
+  .svg-arrow-dim { stroke: var(--edge-glow); stroke-width: 1.5; fill: none; stroke-dasharray: 5 5; }
+
+  /* ---------- Command table ---------- */
+  .table-wrap {
+    margin-top: 32px; overflow-x: auto;
+    border: 1px solid var(--ink-line); border-radius: 16px;
+    background: var(--ink-card);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  }
+  table { width: 100%; border-collapse: collapse; min-width: 560px; }
+  th {
+    font-family: var(--mono); font-size: 0.7rem; font-weight: 600;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--text-dim); text-align: left;
+    padding: 16px 24px; border-bottom: 1px solid var(--ink-line);
+  }
+  td {
+    padding: 16px 24px; border-bottom: 1px solid var(--ink-line);
+    vertical-align: top; font-size: 0.95rem;
+  }
+  tr:last-child td { border-bottom: none; }
+  td.cmd { font-family: var(--mono); font-size: 0.88rem; color: var(--accent); white-space: nowrap; }
+
+  /* ---------- Checklist ---------- */
+  .checklist { margin-top: 24px; display: grid; gap: 10px; max-width: 720px; }
+  .check {
+    display: flex; align-items: center; gap: 14px;
+    background: var(--ink-card); border: 1px solid var(--ink-line);
+    border-radius: 8px; padding: 14px 18px; color: var(--text-pri);
+  }
+  .check .tick {
+    flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
+    background: var(--accent); color: var(--accent-ink);
+    display: grid; place-items: center;
+  }
+
+  /* ---------- Marquee ---------- */
+  .marquee {
+    background: var(--accent); color: var(--accent-ink);
+    overflow: hidden; white-space: nowrap;
+    border-top: 1px solid var(--ink-line);
+  }
+  .marquee-track {
+    display: inline-block; padding: 14px 0;
+    font-family: var(--mono); font-size: 0.78rem; font-weight: 700;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    animation: ticker 28s linear infinite;
+  }
+  @keyframes ticker {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .marquee-track { animation: none; }
+  }
+
+  footer {
+    padding: 28px 24px 40px;
+    font-family: var(--mono); font-size: 0.68rem; font-weight: 600;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--text-dim); text-align: left;
+  }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+
+  @media (max-width: 640px) {
+    section { padding: 48px 0; }
+    .step { grid-template-columns: 1fr; gap: 10px; padding: 22px; }
+    .step-num { font-size: 1.6rem; }
+    .card { padding: 22px; }
+    .code pre { padding-right: 18px; padding-top: 44px; }
+  }
+</style>
+</head>
+<body>
+
+<a class="skip-link" href="#what">Skip to the guide</a>
+
+<nav class="nav" aria-label="Guide sections">
+  <div class="nav-inner">
+    <a class="nav-mark" href="#top" aria-label="Back to top">
+      <span class="nav-tile" aria-hidden="true">G</span>
+      <span class="nav-word">Setup Guide</span>
+    </a>
+    <div class="nav-links">
+      <a href="#what">Basics</a>
+      <a href="#account">Account</a>
+      <a href="#macos">macOS</a>
+      <a href="#windows">Windows</a>
+      <a href="#connect">Connect</a>
+      <a href="#daily">Daily use</a>
+      <a href="#fixes">Fixes</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ============ HERO ============ -->
+<header class="hero" id="top">
+  <svg class="hero-ridges" aria-hidden="true" viewBox="0 0 1440 480" preserveAspectRatio="xMidYMid slice">
+    <path d="M-40 420 C 240 340, 420 460, 720 380 S 1200 300, 1480 400" stroke="#4A4136" fill="none" stroke-width="1"/>
+    <path d="M-40 350 C 260 280, 460 390, 760 310 S 1220 240, 1480 330" stroke="#4A4136" fill="none" stroke-width="1"/>
+    <path d="M-40 280 C 280 220, 500 320, 800 250 S 1240 190, 1480 260" stroke="#6E6354" fill="none" stroke-width="1" opacity="0.6"/>
+    <path d="M-40 210 C 300 160, 540 250, 840 190 S 1260 140, 1480 200" stroke="#6E6354" fill="none" stroke-width="1" opacity="0.4"/>
+  </svg>
+  <div class="wrap">
+    <p class="eyebrow">
+      <span class="lead">Beginner guide</span>
+      <span class="dot">·</span>
+      <span>No technical experience needed</span>
+      <span class="dot">·</span>
+      <span>About 30 minutes</span>
+    </p>
+    <h1>Set up <span class="hl">Git</span> and <span class="hl">GitHub</span>, step by step.</h1>
+    <p class="lede">
+      Git keeps a full history of your work. GitHub keeps a safe copy of it online.
+      This guide installs both, connects them, and proves the whole thing works,
+      in plain English, one small step at a time.
+    </p>
+    <div class="chooser">
+      <a href="#macos">
+        <span class="c-tag">Part 03</span>
+        <span class="c-title" style="display:block">I use a Mac</span>
+        <span class="c-sub" style="display:block">Install Git with the built-in tools on macOS.</span>
+      </a>
+      <a href="#windows">
+        <span class="c-tag">Part 04</span>
+        <span class="c-title" style="display:block">I use Windows</span>
+        <span class="c-sub" style="display:block">Install Git for Windows with a simple installer.</span>
+      </a>
+    </div>
+  </div>
+</header>
+
+<!-- ============ PART 01 ============ -->
+<section id="what">
+  <div class="wrap">
+    <p class="eyebrow"><span class="lead">Part 01</span><span class="dot">·</span><span>Start here</span></p>
+    <h2>What are Git and <span class="hl">GitHub</span>?</h2>
+    <p>
+      They sound similar, and they work together, but they are two different things.
+      Here is the simplest honest version.
+    </p>
+    <div class="card-grid">
+      <div class="card">
+        <span class="k">Git · on your computer</span>
+        <h3>The tracker</h3>
+        <p>
+          Git is a free program that runs on your computer. It watches the files in a
+          project folder and keeps a full history of every change, like a very powerful
+          undo button. You can always go back to an earlier version of your work.
+        </p>
+      </div>
+      <div class="card">
+        <span class="k">GitHub · on the internet</span>
+        <h3>The backup</h3>
+        <p>
+          GitHub is a website (github.com) that stores an online copy of your Git
+          projects. If your computer breaks, your work is safe. It is also how you
+          share projects and team up with other people.
+        </p>
+      </div>
+    </div>
+
+    <div class="diagram" role="img" aria-label="Diagram showing your computer running Git on the left, GitHub in the cloud on the right, with a push arrow uploading work to GitHub and a pull arrow downloading work back to your computer.">
+      <svg viewBox="0 0 900 330" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="#FFC400"/>
+          </marker>
+        </defs>
+        <!-- Left: your computer -->
+        <rect x="50" y="70" width="300" height="190" rx="14" class="svg-box"/>
+        <text x="82" y="112" class="svg-label" font-size="12">Your computer</text>
+        <text x="82" y="152" class="svg-title" font-size="30">Git</text>
+        <text x="82" y="184" class="svg-body" font-size="15">Tracks every change you</text>
+        <text x="82" y="206" class="svg-body" font-size="15">make to your files.</text>
+        <circle cx="322" cy="106" r="4" fill="#34D27B"/>
+        <!-- Right: GitHub -->
+        <rect x="550" y="70" width="300" height="190" rx="14" class="svg-box"/>
+        <text x="582" y="112" class="svg-label" font-size="12">On the internet</text>
+        <text x="582" y="152" class="svg-title" font-size="30">GitHub</text>
+        <text x="582" y="184" class="svg-body" font-size="15">Keeps a safe online copy</text>
+        <text x="582" y="206" class="svg-body" font-size="15">of your project.</text>
+        <circle cx="822" cy="106" r="4" fill="#34D27B"/>
+        <!-- Arrows -->
+        <path d="M360 130 L540 130" class="svg-arrow" marker-end="url(#ah)"/>
+        <text x="450" y="118" text-anchor="middle" class="svg-label-accent" font-size="11">git push · upload</text>
+        <path d="M540 205 L360 205" class="svg-arrow" marker-end="url(#ah)"/>
+        <text x="450" y="232" text-anchor="middle" class="svg-label-accent" font-size="11">git pull · download</text>
+        <!-- Footer note -->
+        <text x="450" y="300" text-anchor="middle" class="svg-label" font-size="11">You need both. This guide sets up both.</text>
+      </svg>
+      <p class="diagram-caption">Fig 01 · How Git and GitHub fit together</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PART 02 ============ -->
+<section id="account">
+  <div class="wrap">
+    <p class="eyebrow"><span class="lead">Part 02</span><span class="dot">·</span><span>Everyone does this first</span></p>
+    <h2>Create your GitHub <span class="hl">account</span></h2>
+    <p>Mac or Windows, the account works the same. It is free and takes about five minutes.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num" aria-hidden="true">01</div>
+        <div class="step-body">
+          <h3>Go to github.com</h3>
+          <p>Open your web browser and go to <strong>github.com</strong>, then click the <strong>Sign up</strong> button in the top right corner.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" aria-hidden="true">02</div>
+        <div class="step-body">
+          <h3>Choose your details</h3>
+          <p>Enter your email address, then follow the prompts to pick a password and a username.</p>
+          <aside class="callout"><span class="callout-tag">Tip</span><p>Your username will be public. Pick something you are happy for others to see.</p></aside>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" aria-hidden="true">03</div>
+        <div class="step-body">
+          <h3>Confirm your email</h3>
+          <p>GitHub sends a code to your email address. Type it in to confirm the account.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" aria-hidden="true">04</div>
+        <div class="step-body">
+          <h3>Pick the free plan</h3>
+          <p>If GitHub asks questions like how many people you will work with, pick any answer or skip. When it asks about plans, choose <strong>Free</strong>.</p>
+          <aside class="callout"><span class="callout-tag">Done</span><p>You now have a GitHub account. Keep your username and password somewhere safe.</p></aside>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PART 03 · MACOS ============ -->
+<section id="macos">
+  <div class="wrap">
+    <p class="eyebrow"><span class="lead">Part 03</span><span class="dot">·</span><span>Skip this if you use Windows</span></p>
+    <span class="os-badge">macOS</span>
+    <h2>Install Git on your <span class="hl">Mac</span></h2>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num" aria-hidden="true">01</div>
+        <div class="step-body">
+          <h3>Open the Terminal</h3>
+          <p>The Terminal is an app where you type commands instead of clicking buttons. You only need a few short ones.</p>
+          <ol>
+            <li>Press <kbd>Command ⌘</kbd> + <kbd>Space</kbd> to open Spotlight search.</li>
+            <li>Type <strong>Terminal</strong> and press <kbd>Enter</kbd>.</li>
+            <li>A window with text appears. That window is the Terminal.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num" aria-hidden="true">02</div>
+        <div class="step-body">
+          <h3>Check if Git is already there</h3>
+          <p>Type this exactly and press <kbd>Enter</kbd>:</p>
+          <figure class="code">
+            <pre><code>git --version</code></pre>
+            <button class="copy" type="button" aria-label="Copy command">Copy</button>
+          </figure>
+          <p style="margin-top:14px">Two things can happen:</p>
+          <ul>
+            <li><strong>You see something like</strong> <span class="inline-code">git version 2.39.3</span>. Git is already installed. Skip to step 03.</li>
+            <li><strong>A pop-up appears</strong> saying the command line developer tools need to be installed. Click <strong>Install</strong>, agree to the terms, and wait 5 to 15 minutes. When it finishes, run <span class="inline-code">git --version</span> again to confirm you see a version number.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num" aria-hidden="true">03</div>
+        <div class="step-body">
+          <h3>Tell Git who you are</h3>
+          <p>Git labels every snapshot you save with your name and email. Set them once. Run these two commands one at a time, replacing the example name and email with your own, and keep the quotation marks:</p>
+          <figure class="code">
+            <pre><code>git config --global user.name "Your Name"</code></pre>
+            <button class="copy" type="button" aria-label="Copy command">Copy</button>
+          </figure>
+          <figure class="code">
+            <pre><code>git config --global user.email "you@example.com"</code></pre>
+            <button class="copy" type="button" aria-label="Copy command">Copy</button>
+          </figure>
+          <aside class="callout"><span class="callout-tag">Tip</span><p>Use the same email you used for your GitHub account. That links your saved work to your profile.</p></aside>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num" aria-hidden="true">04</div>
+        <div class="step-body">
+          <h3>Check it worked</h3>
+          <figure class="code">
+            <pre><code>git config --global user.name</code></pre>
+            <button class="copy" type="button" aria-label="Copy command">Copy</button>
+          </figure>
+          <p style="margin-top:14px">It should print the name you just entered. Git is now set up on your Mac. Jump to <a href="#connect">Part 05</a> to connect it to GitHub.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PART 04 · WINDOWS ============ -->
+<section id="windows">
+  <div class="wrap">
+    <p class="eyebrow"><span class="lead">Part 04</span><span class="dot">·</span><span>Skip this if you use a Mac</span></p>
+    <span class="os-badge">Windows</span>
+    <h2>Install Git on <span class="hl">Windows</span></h2>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num" aria-hidden="true">01</div>
+        <div class="step-body">
+          <h3>Download Git for Windows</h3>
+          <ol>
+            <li>Open your web browser and go to <strong>git-scm.com/download/win</strong>.</li>
+            <li>The download usually starts on its own. If not, click <strong>64-bit Git for Windows Setup</strong>.</li>
+            <li>When it finishes, open the downloaded file. It will be named something like <span class="inline-code">Git-2.xx.x-64-bit.exe</span>.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num" aria-hidden="true">02</div>
+        <div class="step-body">
+          <h3>Run the installer, keep the defaults</h3>
+          <ol>
+            <li>If Windows asks whether to allow the app to make changes, click <strong>Yes</strong>.</li>
+            <li>The installer shows many screens of options. <strong>You do not need to change anything.</strong> Click <strong>Next</strong> on every screen, then <strong>Install</strong>.</li>
+            <li>When it finishes, click <strong>Finish</strong>.</li>
+          </ol>
+          <aside class="callout"><span class="callout-tag">Tip</span><p>The default options are sensible, and they include a helper that makes signing in to GitHub easy later.</p></aside>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num" aria-hidden="true">03</div>
+        <div class="step-body">
+          <h3>Open Git Bash</h3>
+          <p>The installer added a program called <strong>Git Bash</strong>. That is the window where you type Git commands.</p>
+          <ol>
+            <li>Click the <strong>Start</strong> button (the Windows logo).</li>
+            <li>Type <strong>Git Bash</strong> and press <kbd>Enter</kbd>.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num" aria-hidden="true">04</div>
+        <div class="step-body">
+          <h3>Check Git installed correctly</h3>
+          <p>In the Git Bash window, type this and press <kbd>Enter</kbd>:</p>
+          <figure class="code">
+            <pre><code>git --version</code></pre>
+            <button class="copy" type="button" aria-label="Copy command">Copy</button>
+          </figure>
+          <p style="margin-top:14px">You should see something like <span class="inline-code">git version 2.45.1.windows.1</span>. If you do, Git is installed.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num" aria-hidden="true">05</div>
+        <div class="step-body">
+          <h3>Tell Git who you are</h3>
+          <p>Git labels every snapshot you save with your name and email. Set them once. Run these two commands one at a time, replacing the example name and email with your own, and keep the quotation marks:</p>
+          <figure class="code">
+            <pre><code>git config --global user.name "Your Name"</code></pre>
+            <button class="copy" type="button" aria-label="Copy command">Copy</button>
+          </figure>
+          <figure class="code">
+            <pre><code>git config --global user.email "you@example.com"</code></pre>
+            <button class="copy" type="button" aria-label="Copy command">Copy</button>
+          </figure>
+          <aside class="callout"><span class="callout-tag">Tip</span><p>Use the same email you used for your GitHub account. That links your saved work to your profile.</p></aside>
+          <p style="margin-top:14px">To check it worked, run <span class="inline-code">git config --global user.name</span>. It should print the name you entered. Git is now set up on your PC. Continue to <a href="#connect">Part 05</a>.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PART 05 · CONNECT ============ -->
+<section id="connect">
+  <div class="wrap">
+    <p class="eyebrow"><span class="lead">Part 05</span><span class="dot">·</span><span>Everyone does this part · About 10 minutes</span></p>
+    <h2>Connect Git to GitHub and <span class="hl">prove it works</span></h2>
+    <p>
+      The best test of your setup is one tiny project, start to finish. One quick word first:
+      a <strong>repository</strong> (or repo) is just Git's word for a project folder that Git is tracking.
+    </p>
+
+    <div class="diagram" role="img" aria-label="Diagram of the three saving steps: git add chooses the files, git commit saves a snapshot on your computer, git push uploads the snapshot to GitHub.">
+      <svg viewBox="0 0 900 240" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="#FFC400"/>
+          </marker>
+        </defs>
+        <rect x="40" y="60" width="230" height="120" rx="14" class="svg-box"/>
+        <text x="64" y="96" class="svg-num" font-size="20">1</text>
+        <text x="90" y="96" class="svg-label-accent" font-size="12">git add</text>
+        <text x="64" y="126" class="svg-body" font-size="14">Choose which changed</text>
+        <text x="64" y="146" class="svg-body" font-size="14">files to save.</text>
+
+        <rect x="335" y="60" width="230" height="120" rx="14" class="svg-box"/>
+        <text x="359" y="96" class="svg-num" font-size="20">2</text>
+        <text x="385" y="96" class="svg-label-accent" font-size="12">git commit</text>
+        <text x="359" y="126" class="svg-body" font-size="14">Save a snapshot on</text>
+        <text x="359" y="146" class="svg-body" font-size="14">your computer.</text>
+
+        <rect x="630" y="60" width="230" height="120" rx="14" class="svg-box"/>
+        <text x="654" y="96" class="svg-num" font-size="20">3</text>
+        <text x="680" y="96" class="svg-label-accent" font-size="12">git push</text>
+        <text x="654" y="126" class="svg-body" font-size="14">Upload the snapshot</text>
+        <text x="654" y="146" class="svg-body" font-size="14">to GitHub.</text>
+
+        <path d="M275 120 L327 120" class="svg-arrow" marker-end="url(#ah2)"/>
+        <path d="M570 120 L622 120" class="svg-arrow" marker-end="url(#ah2)"/>
+        <text x="450" y="218" text-anchor="middle" class="svg-label" font-size="11">Saving in Git is these three moves, in this order, every time</text>
+      </svg>
+      <p class="diagram-caption">Fig 02 · How saving works</p>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num" aria-hidden="true">01</div>
+        <div class="step-body">
+          <h3>Create a repository on GitHub</h3>
+          <ol>
+            <li>Go to <strong>github.com</strong> and sign in.</li>
+            <li>Click the <strong>+</strong> button in the top right corner, then <strong>New repository</strong>.</li>
+            <li>In <strong>Repository name</strong>, type <span class="inline-code">hello-world</span>.</li>
+            <li>Tick the box <strong>Add a README file</strong>.</li>
+            <li>Click the green <strong>Create repository</strong> button.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num" aria-hidden="true">02</div>
+        <div class="step-body">
+          <h3>Copy the repository's address</h3>
+          <ol>
+            <li>On your new repository's page, click the green <strong>Code</strong> button.</li>
+            <li>Make sure the <strong>HTTPS</strong> tab is selected.</li>
+            <li>Click the copy icon next to the address. It looks like <span class="inline-code">https://github.com/yourusername/hello-world.git</span>.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num" aria-hidden="true">03</div>
+        <div class="step-body">
+          <h3>Download the project to your computer</h3>
+          <p>Open your command window: <strong>Terminal</strong> on a Mac, <strong>Git Bash</strong> on Windows. Type <span class="inline-code">git clone</span>, a space, then paste the address you copied:</p>
+          <figure class="code">
+            <pre><code>git clone https://github.com/yourusername/hello-world.git</code></pre>
+            <button class="copy" type="button" aria-label="Copy command">Copy</button>
+          </figure>
+          <aside class="callout"><span class="callout-tag">Paste</span><p>Mac Terminal: press <kbd>Command ⌘</kbd> + <kbd>V</kbd>. Windows Git Bash: right-click in the window and choose <strong>Paste</strong>.</p></aside>
+          <p style="margin-top:14px">Press <kbd>Enter</kbd>. Git downloads the project into a new folder called <span class="inline-code">hello-world</span>. Now move into that folder:</p>
+          <figure class="code">
+            <pre><code>cd hello-world</code></pre>
+            <button class="copy" type="button" aria-label="Copy command">Copy</button>
+          </figure>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num" aria-hidden="true">04</div>
+        <div class="step-body">
+          <h3>Make a small change</h3>
+          <p>This command quietly adds a line of text to the README file. Nothing appears on screen, and that is normal:</p>
+          <figure class="code">
+            <pre><code>echo "My first change" &gt;&gt; README.md</code></pre>
+            <button class="copy" type="button" aria-label="Copy command">Copy</button>
+          </figure>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num" aria-hidden="true">05</div>
+        <div class="step-body">
+          <h3>Save the change with Git</h3>
+          <p>First choose what to save, then save it with a short note. A <strong>commit</strong> just means a saved snapshot:</p>
+          <figure class="code">
+            <pre><code>git add README.md</code></pre>
+            <button class="copy" type="button" aria-label="Copy command">Copy</button>
+          </figure>
+          <figure class="code">
+            <pre><code>git commit -m "My first commit"</code></pre>
+            <button class="copy" type="button" aria-label="Copy command">Copy</button>
+          </figure>
+          <p style="margin-top:14px">The text in quotes is a note to your future self about what changed.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num" aria-hidden="true">06</div>
+        <div class="step-body">
+          <h3>Send it up to GitHub</h3>
+          <figure class="code">
+            <pre><code>git push</code></pre>
+            <button class="copy" type="button" aria-label="Copy command">Copy</button>
+          </figure>
+          <p style="margin-top:14px"><strong>The first time you push, you sign in.</strong> This happens once, then your computer remembers it.</p>
+          <div class="card-grid">
+            <div class="card">
+              <span class="k">On Windows</span>
+              <p>A window pops up. Choose <strong>Sign in with your browser</strong>. Your browser opens, you sign in to GitHub, and click <strong>Authorize</strong>. Done.</p>
+            </div>
+            <div class="card">
+              <span class="k">On a Mac</span>
+              <p>The Terminal asks for a username and password. GitHub no longer accepts your normal password here. It needs a <strong>personal access token</strong>:</p>
+              <ol style="margin:12px 0 0 20px">
+                <li>In your browser, go to <span class="inline-code">github.com/settings/tokens</span>.</li>
+                <li>Click <strong>Generate new token</strong>, then <strong>Generate new token (classic)</strong>.</li>
+                <li>Name it (like "my laptop"), set an expiry (90 days is fine), and tick the <strong>repo</strong> box.</li>
+                <li>Click <strong>Generate token</strong>, then copy the long code. You only see it once.</li>
+                <li>Back in the Terminal, type your GitHub <strong>username</strong>, press <kbd>Enter</kbd>, then paste the <strong>token</strong> as the password and press <kbd>Enter</kbd>.</li>
+              </ol>
+              <aside class="callout" style="margin-top:14px"><span class="callout-tag">Tip</span><p>The password stays invisible while you paste. That is normal. Just paste and press Enter. Your Mac remembers it in its Keychain afterwards.</p></aside>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num" aria-hidden="true">07</div>
+        <div class="step-body">
+          <h3>Check it worked</h3>
+          <p>Go back to your repository page on github.com and refresh. Click <strong>README.md</strong>. You should see the line <em>My first change</em>.</p>
+          <p style="margin-top:14px"><strong>That is the whole loop working.</strong> You now have:</p>
+          <div class="checklist">
+            <div class="check"><span class="tick" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6.5 L4.8 9 L10 3" stroke="#1C1812" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Git installed on your computer</div>
+            <div class="check"><span class="tick" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6.5 L4.8 9 L10 3" stroke="#1C1812" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>A GitHub account</div>
+            <div class="check"><span class="tick" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6.5 L4.8 9 L10 3" stroke="#1C1812" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>The two connected, with a real change saved and uploaded</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PART 06 · DAILY USE ============ -->
+<section id="daily">
+  <div class="wrap">
+    <p class="eyebrow"><span class="lead">Part 06</span><span class="dot">·</span><span>The bit you actually remember</span></p>
+    <h2>The <span class="hl">five commands</span> you use every day</h2>
+    <p>You do not need to memorise much. Almost all everyday Git use is these five, in this order.</p>
+
+    <div class="table-wrap">
+      <table>
+        <caption class="sr-only" style="display:none">The five everyday Git commands and what each one does</caption>
+        <thead>
+          <tr><th scope="col">Command</th><th scope="col">What it does</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="cmd">git pull</td><td>Downloads the latest version from GitHub. Do this before you start working.</td></tr>
+          <tr><td class="cmd">git status</td><td>Shows which files you have changed.</td></tr>
+          <tr><td class="cmd">git add .</td><td>Chooses all your changed files to be saved.</td></tr>
+          <tr><td class="cmd">git commit -m "note"</td><td>Saves a snapshot with a short note about the change.</td></tr>
+          <tr><td class="cmd">git push</td><td>Uploads your saved snapshots to GitHub.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="diagram" role="img" aria-label="Diagram of a normal working session as a loop: pull, then make changes, then add, then commit, then push, and back to pull next session.">
+      <svg viewBox="0 0 940 250" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="#FFC400"/>
+          </marker>
+          <marker id="ah4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="#6E6354"/>
+          </marker>
+        </defs>
+        <g>
+          <rect x="30"  y="70" width="150" height="66" rx="10" class="svg-box"/>
+          <text x="105" y="98"  text-anchor="middle" class="svg-label-accent" font-size="12">pull</text>
+          <text x="105" y="118" text-anchor="middle" class="svg-body" font-size="12">get the latest</text>
+
+          <rect x="216" y="70" width="150" height="66" rx="10" class="svg-box"/>
+          <text x="291" y="98"  text-anchor="middle" class="svg-label" font-size="12" fill="#F6F1EA">work</text>
+          <text x="291" y="118" text-anchor="middle" class="svg-body" font-size="12">edit your files</text>
+
+          <rect x="402" y="70" width="150" height="66" rx="10" class="svg-box"/>
+          <text x="477" y="98"  text-anchor="middle" class="svg-label-accent" font-size="12">add</text>
+          <text x="477" y="118" text-anchor="middle" class="svg-body" font-size="12">choose changes</text>
+
+          <rect x="588" y="70" width="150" height="66" rx="10" class="svg-box"/>
+          <text x="663" y="98"  text-anchor="middle" class="svg-label-accent" font-size="12">commit</text>
+          <text x="663" y="118" text-anchor="middle" class="svg-body" font-size="12">save a snapshot</text>
+
+          <rect x="774" y="70" width="150" height="66" rx="10" class="svg-box"/>
+          <text x="849" y="98"  text-anchor="middle" class="svg-label-accent" font-size="12">push</text>
+          <text x="849" y="118" text-anchor="middle" class="svg-body" font-size="12">upload to GitHub</text>
+
+          <path d="M180 103 L208 103" class="svg-arrow" marker-end="url(#ah3)"/>
+          <path d="M366 103 L394 103" class="svg-arrow" marker-end="url(#ah3)"/>
+          <path d="M552 103 L580 103" class="svg-arrow" marker-end="url(#ah3)"/>
+          <path d="M738 103 L766 103" class="svg-arrow" marker-end="url(#ah3)"/>
+          <path d="M849 136 L849 186 L105 186 L105 144" class="svg-arrow-dim" marker-end="url(#ah4)"/>
+          <text x="477" y="176" text-anchor="middle" class="svg-label" font-size="11">next session, start again with pull</text>
+        </g>
+      </svg>
+      <p class="diagram-caption">Fig 03 · A normal working session</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FIXES ============ -->
+<section id="fixes">
+  <div class="wrap">
+    <p class="eyebrow"><span class="lead">Troubleshooting</span><span class="dot">·</span><span>When something looks wrong</span></p>
+    <h2>Common problems, <span class="hl">quick fixes</span></h2>
+
+    <div class="card-grid">
+      <div class="card">
+        <span class="k">git: command not found</span>
+        <p>Git is not installed yet, or the window needs restarting. Close the Terminal or Git Bash window, open it again, and try <span class="inline-code">git --version</span>. If it still fails, redo the install steps for your system.</p>
+      </div>
+      <div class="card">
+        <span class="k">Permission denied · authentication failed</span>
+        <p>Your sign-in did not work. On Windows, run <span class="inline-code">git push</span> again and use the browser sign-in option. On a Mac, your token may have expired. Create a new one (Part 05, step 06) and try again.</p>
+      </div>
+      <div class="card">
+        <span class="k">fatal: not a git repository</span>
+        <p>You are in the wrong folder. Type <span class="inline-code">cd hello-world</span> (or the name of your project folder) first, then try again.</p>
+      </div>
+      <div class="card">
+        <span class="k">Nothing happened after a command</span>
+        <p>That is often normal. Many Git commands succeed silently. Run <span class="inline-code">git status</span> to see where things stand.</p>
+      </div>
+      <div class="card">
+        <span class="k">I closed the window</span>
+        <p>Your work is not gone. Everything you committed is saved on your computer, and everything you pushed is also saved on GitHub.</p>
+      </div>
+      <div class="card">
+        <span class="k">The password field looks frozen</span>
+        <p>Password and token input stays invisible while you type or paste. That is a security feature, not a fault. Paste, then press <kbd>Enter</kbd>.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WHAT NEXT ============ -->
+<section id="next">
+  <div class="wrap">
+    <p class="eyebrow"><span class="lead">Keep going</span><span class="dot">·</span><span>Once the five commands feel easy</span></p>
+    <h2>What to learn <span class="hl">next</span></h2>
+    <div class="card-grid">
+      <div class="card">
+        <span class="k">Branches</span>
+        <p>Work on a copy of your project so experiments never break the main version.</p>
+      </div>
+      <div class="card">
+        <span class="k">Pull requests</span>
+        <p>GitHub's way of proposing and reviewing changes. Used heavily in teams.</p>
+      </div>
+      <div class="card">
+        <span class="k">.gitignore</span>
+        <p>A small file that tells Git which files to skip, like temporary files.</p>
+      </div>
+    </div>
+    <p style="margin-top:28px">GitHub's own beginner tutorials at <strong>docs.github.com/en/get-started</strong> are free and well written.</p>
+  </div>
+</section>
+
+<!-- ============ MARQUEE ============ -->
+<div class="marquee" aria-hidden="true">
+  <div class="marquee-track">
+    Git installed · GitHub connected · Pull, work, add, commit, push · Your work is backed up ·
+    Git installed · GitHub connected · Pull, work, add, commit, push · Your work is backed up ·
+  </div>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>Git + GitHub setup guide</span>
+    <span>·</span>
+    <span>Written for absolute beginners</span>
+    <span>·</span>
+    <span>macOS and Windows</span>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll(".code").forEach(function (block) {
+    var btn = block.querySelector(".copy");
+    var code = block.querySelector("code");
+    if (!btn || !code) return;
+    btn.addEventListener("click", function () {
+      var text = code.textContent;
+      function done() {
+        btn.textContent = "Copied";
+        btn.classList.add("done");
+        setTimeout(function () {
+          btn.textContent = "Copy";
+          btn.classList.remove("done");
+        }, 1600);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(function () { fallback(); });
+      } else {
+        fallback();
+      }
+      function fallback() {
+        var ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand("copy"); done(); } catch (e) {}
+        document.body.removeChild(ta);
+      }
+    });
+  });
+</script>
+
+</body>
+</html>

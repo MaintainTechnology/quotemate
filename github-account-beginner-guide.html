@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Create Your GitHub Account · Beginner Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink-deep: #16120F;
+    --ink: #1E1813;
+    --ink-card: #2B2422;
+    --ink-line: #3A322C;
+    --accent: #FFC400;
+    --accent-press: #E6AC00;
+    --accent-soft: #FFD23D;
+    --accent-ink: #1C1812;
+    --text-pri: #F6F1EA;
+    --text-sec: #C3B8AC;
+    --text-dim: #A2968A;
+    --edge-glow: #6E6354;
+    --edge-deep: #4A4136;
+    --success-bright: #34D27B;
+    --warning-bright: #F59E0B;
+    --sans: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--ink-deep);
+    color: var(--text-sec);
+    font-family: var(--sans);
+    font-size: 1rem;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Film grain over the dark canvas */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 90;
+    opacity: 0.045;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  ::selection { background: var(--accent); color: var(--accent-ink); }
+
+  a { color: var(--text-pri); }
+  a:focus-visible, button:focus-visible {
+    outline: 2px solid var(--accent-soft);
+    outline-offset: 2px;
+  }
+
+  .skip-link {
+    position: absolute; left: -9999px; top: 0;
+    background: var(--accent); color: var(--accent-ink);
+    font-family: var(--mono); font-size: 0.75rem; font-weight: 600;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    padding: 12px 20px; z-index: 200; text-decoration: none;
+  }
+  .skip-link:focus { left: 0; }
+
+  /* ---------- Nav ---------- */
+  .nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(22, 18, 15, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--ink-line);
+  }
+  .nav-inner {
+    max-width: 1120px; margin: 0 auto;
+    padding: 14px 24px;
+    display: flex; align-items: center; gap: 24px;
+  }
+  .nav-mark {
+    display: flex; align-items: center; gap: 12px;
+    text-decoration: none; flex-shrink: 0;
+  }
+  .nav-tile {
+    width: 32px; height: 32px; border-radius: 6px;
+    background: var(--accent); color: var(--accent-ink);
+    font-family: var(--mono); font-weight: 700; font-size: 1rem;
+    display: grid; place-items: center;
+  }
+  .nav-word {
+    font-family: var(--sans); font-weight: 800; font-size: 0.9rem;
+    letter-spacing: 0.02em; text-transform: uppercase; color: var(--text-pri);
+  }
+  .nav-links {
+    display: flex; gap: 4px; margin-left: auto;
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .nav-links::-webkit-scrollbar { display: none; }
+  .nav-links a {
+    font-family: var(--mono); font-size: 0.68rem; font-weight: 600;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--text-dim); text-decoration: none;
+    padding: 8px 10px; border-radius: 6px; white-space: nowrap;
+  }
+  .nav-links a:hover { color: var(--accent); }
+
+  /* ---------- Layout ---------- */
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+  section { padding: 64px 0; scroll-margin-top: 76px; }
+  section + section { border-top: 1px solid var(--ink-line); }
+
+  .eyebrow {
+    font-family: var(--mono); font-size: 0.75rem; font-weight: 600;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--text-dim); margin-bottom: 20px;
+    display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center;
+  }
+  .eyebrow .lead { color: var(--accent); }
+  .eyebrow .dot { color: var(--edge-glow); }
+
+  h1 {
+    font-family: var(--sans); font-weight: 800;
+    font-size: clamp(2.6rem, 6.5vw, 5.2rem);
+    line-height: 0.95; letter-spacing: -0.04em;
+    text-transform: uppercase; color: var(--text-pri);
+    max-width: 18ch;
+  }
+  h2 {
+    font-family: var(--sans); font-weight: 800;
+    font-size: clamp(1.9rem, 4vw, 3rem);
+    line-height: 0.98; letter-spacing: -0.04em;
+    text-transform: uppercase; color: var(--text-pri);
+    max-width: 24ch; margin-bottom: 20px;
+  }
+  h3 {
+    font-family: var(--sans); font-weight: 700; font-size: 1.15rem;
+    letter-spacing: -0.02em; line-height: 1.3;
+    text-transform: uppercase; color: var(--text-pri);
+    margin-bottom: 10px;
+  }
+  .hl { color: var(--accent); }
+
+  p { max-width: 70ch; }
+  p + p { margin-top: 14px; }
+  .lede { font-size: 1.15rem; color: var(--text-sec); margin-top: 24px; max-width: 58ch; }
+  strong { color: var(--text-pri); font-weight: 700; }
+  em { font-style: normal; color: var(--text-pri); }
+
+  kbd {
+    font-family: var(--mono); font-size: 0.85em; font-weight: 600;
+    color: var(--text-pri); background: var(--ink);
+    border: 1px solid var(--ink-line); border-bottom-width: 2px;
+    border-radius: 4px; padding: 1px 7px; white-space: nowrap;
+  }
+
+  .inline-code {
+    font-family: var(--mono); font-size: 0.85em; color: var(--accent);
+    background: var(--ink); border: 1px solid var(--ink-line);
+    border-radius: 4px; padding: 1px 6px; overflow-wrap: anywhere;
+  }
+
+  /* ---------- Hero ---------- */
+  .hero { position: relative; padding: 88px 0 72px; overflow: hidden; }
+  .hero-ridges {
+    position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
+  }
+  .hero .wrap { position: relative; }
+
+  .chooser {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px; margin-top: 48px; max-width: 720px;
+  }
+  .chooser a {
+    display: block; text-decoration: none;
+    background: var(--ink-card); border: 1px solid var(--ink-line);
+    border-radius: 14px; padding: 24px;
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  }
+  .chooser a:hover { border-color: var(--accent); }
+  .chooser .c-tag {
+    font-family: var(--mono); font-size: 0.72rem; font-weight: 600;
+    letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent);
+  }
+  .chooser .c-title {
+    font-family: var(--sans); font-weight: 800; font-size: 1.35rem;
+    letter-spacing: -0.02em; text-transform: uppercase;
+    color: var(--text-pri); margin-top: 8px;
+  }
+  .chooser .c-sub { font-size: 0.9rem; color: var(--text-dim); margin-top: 6px; }
+
+  /* ---------- Cards ---------- */
+  .card {
+    background: var(--ink-card); border: 1px solid var(--ink-line);
+    border-radius: 16px; padding: 28px;
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  }
+  .card-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px; margin-top: 32px;
+  }
+  .card .k {
+    font-family: var(--mono); font-size: 0.72rem; font-weight: 600;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--accent); display: block; margin-bottom: 10px;
+  }
+
+  /* ---------- Numbered steps ---------- */
+  .steps { margin-top: 40px; display: grid; gap: 16px; }
+  .step {
+    display: grid; grid-template-columns: 84px 1fr; gap: 24px;
+    background: var(--ink-card); border: 1px solid var(--ink-line);
+    border-radius: 16px; padding: 28px;
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  }
+  .step-num {
+    font-family: var(--mono); font-weight: 700;
+    font-size: 2.2rem; line-height: 1; color: var(--accent);
+    padding-top: 2px;
+  }
+  .step-body { min-width: 0; }
+  .step-body p { color: var(--text-sec); }
+  .step-body ul, .step-body ol { margin: 12px 0 0 20px; max-width: 68ch; }
+  .step-body li { margin-top: 8px; }
+  .step-body li::marker { color: var(--text-dim); }
+
+  /* ---------- Code blocks ---------- */
+  .code {
+    position: relative; margin-top: 16px; max-width: 720px;
+    background: var(--ink); border: 1px solid var(--ink-line);
+    border-radius: 8px;
+  }
+  .code pre {
+    overflow-x: auto; padding: 16px 110px 16px 18px;
+  }
+  .code code {
+    font-family: var(--mono); font-size: 0.9rem; font-weight: 400;
+    color: var(--text-pri); white-space: pre;
+  }
+  .code .copy {
+    position: absolute; top: 10px; right: 10px;
+    font-family: var(--mono); font-size: 0.65rem; font-weight: 600;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--text-dim); background: transparent;
+    border: 1px solid var(--ink-line); border-radius: 6px;
+    padding: 6px 12px; cursor: pointer;
+  }
+  .code .copy:hover { color: var(--accent); border-color: var(--accent); }
+  .code .copy.done { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+
+  /* ---------- Callouts ---------- */
+  .callout {
+    display: grid; grid-template-columns: auto 1fr; gap: 14px;
+    align-items: start; margin-top: 16px; max-width: 720px;
+    background: var(--ink); border: 1px solid var(--ink-line);
+    border-radius: 8px; padding: 16px 18px;
+  }
+  .callout-tag {
+    font-family: var(--mono); font-size: 0.68rem; font-weight: 700;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--accent-ink); background: var(--accent);
+    border-radius: 4px; padding: 3px 8px; margin-top: 2px;
+  }
+  .callout-tag.warn { background: transparent; color: var(--warning-bright); border: 1px solid var(--warning-bright); }
+  .callout p { font-size: 0.95rem; }
+
+  /* ---------- Diagrams ---------- */
+  .diagram {
+    margin-top: 40px; overflow-x: auto;
+    border: 1px solid var(--ink-line); border-radius: 16px;
+    background: var(--ink);
+  }
+  .diagram svg { display: block; min-width: 760px; width: 100%; height: auto; }
+  .diagram-caption {
+    font-family: var(--mono); font-size: 0.7rem; font-weight: 600;
+    letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-dim);
+    padding: 0 18px 16px;
+  }
+  .svg-title { font-family: var(--sans); font-weight: 800; letter-spacing: -0.02em; text-transform: uppercase; fill: var(--text-pri); }
+  .svg-label { font-family: var(--mono); font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; fill: var(--text-dim); }
+  .svg-label-accent { font-family: var(--mono); font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; fill: var(--accent); }
+  .svg-body { font-family: var(--sans); font-weight: 400; fill: var(--text-sec); }
+  .svg-mono { font-family: var(--mono); font-weight: 400; fill: var(--text-pri); }
+  .svg-num { font-family: var(--mono); font-weight: 700; fill: var(--accent); }
+  .svg-box { fill: var(--ink-card); stroke: var(--ink-line); stroke-width: 1; }
+  .svg-box-sunken { fill: var(--ink-deep); stroke: var(--ink-line); stroke-width: 1; }
+  .svg-arrow { stroke: var(--accent); stroke-width: 2; fill: none; }
+
+  /* ---------- Checklist ---------- */
+  .checklist { margin-top: 24px; display: grid; gap: 10px; max-width: 720px; }
+  .check {
+    display: flex; align-items: center; gap: 14px;
+    background: var(--ink-card); border: 1px solid var(--ink-line);
+    border-radius: 8px; padding: 14px 18px; color: var(--text-pri);
+  }
+  .check .tick {
+    flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
+    background: var(--accent); color: var(--accent-ink);
+    display: grid; place-items: center;
+  }
+
+  /* ---------- Do / Don't lists ---------- */
+  .dodont { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 24px; max-width: 900px; }
+  .dodont ul { list-style: none; margin: 12px 0 0; }
+  .dodont li { display: flex; gap: 10px; margin-top: 10px; font-size: 0.95rem; }
+  .dodont .mark { font-family: var(--mono); font-weight: 700; flex-shrink: 0; }
+  .dodont .good .mark { color: var(--success-bright); }
+  .dodont .bad .mark { color: var(--warning-bright); }
+
+  /* ---------- Marquee ---------- */
+  .marquee {
+    background: var(--accent); color: var(--accent-ink);
+    overflow: hidden; white-space: nowrap;
+    border-top: 1px solid var(--ink-line);
+  }
+  .marquee-track {
+    display: inline-block; padding: 14px 0;
+    font-family: var(--mono); font-size: 0.78rem; font-weight: 700;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    animation: ticker 28s linear infinite;
+  }
+  @keyframes ticker {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .marquee-track { animation: none; }
+  }
+
+  footer {
+    padding: 28px 24px 40px;
+    font-family: var(--mono); font-size: 0.68rem; font-weight: 600;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--text-dim); text-align: left;
+  }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+  footer a { color: var(--text-dim); }
+  footer a:hover { color: var(--accent); }
+
+  @media (max-width: 640px) {
+    section { padding: 48px 0; }
+    .step { grid-template-columns: 1fr; gap: 10px; padding: 22px; }
+    .step-num { font-size: 1.6rem; }
+    .card { padding: 22px; }
+    .code pre { padding-right: 18px; padding-top: 44px; }
+  }
+</style>
+</head>
+<body>
+
+<a class="skip-link" href="#basics">Skip to the guide</a>
+
+<nav class="nav" aria-label="Guide sections">
+  <div class="nav-inner">
+    <a class="nav-mark" href="#top" aria-label="Back to top">
+      <span class="nav-tile" aria-hidden="true">G</span>
+      <span class="nav-word">Account Guide</span>
+    </a>
+    <div class="nav-links">
+      <a href="#basics">Basics</a>
+      <a href="#prepare">Prepare</a>
+      <a href="#signup">Sign up</a>
+      <a href="#secure">Secure it</a>
+      <a href="#identity">Git identity</a>
+      <a href="#fixes">Fixes</a>
+      <a href="git-github-beginner-guide.html">Setup guide</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ============ HERO ============ -->
+<header class="hero" id="top">
+  <svg class="hero-ridges" aria-hidden="true" viewBox="0 0 1440 480" preserveAspectRatio="xMidYMid slice">
+    <path d="M-40 420 C 240 340, 420 460, 720 380 S 1200 300, 1480 400" stroke="#4A4136" fill="none" stroke-width="1"/>
+    <path d="M-40 350 C 260 280, 460 390, 760 310 S 1220 240, 1480 330" stroke="#4A4136" fill="none" stroke-width="1"/>
+    <path d="M-40 280 C 280 220, 500 320, 800 250 S 1240 190, 1480 260" stroke="#6E6354" fill="none" stroke-width="1" opacity="0.6"/>
+    <path d="M-40 210 C 300 160, 540 250, 840 190 S 1260 140, 1480 200" stroke="#6E6354" fill="none" stroke-width="1" opacity="0.4"/>
+  </svg>
+  <div class="wrap">
+    <p class="eyebrow">
+      <span class="lead">Beginner guide</span>
+      <span class="dot">·</span>
+      <span>Accounts and identity</span>
+      <span class="dot">·</span>
+      <span>About 15 minutes</span>
+    </p>
+    <h1>Create your <span class="hl">GitHub account</span>, properly.</h1>
+    <p class="lede">
+      One free account, set up once, secured properly, and connected to the Git
+      program on your computer. This guide walks every click in plain English,
+      including the one thing that confuses everybody: Git itself has no account.
+    </p>
+    <div class="chooser">
+      <a href="#prepare">
+        <span class="c-tag">Start at Part 02</span>
+        <span class="c-title" style="display:block">I am new here</span>
+        <span class="c-sub" style="display:block">Create the account from scratch, step by step.</span>
+      </a>
+      <a href="#identity">
+        <span class="c-tag">Jump to Part 05</span>
+        <span class="c-title" style="display:block">I have an account</span>
+        <span class="c-sub" style="display:block">Just set up your name and email in Git.</span>
+      </a>
+    </div>
+  </div>
+</header>
+
+<!-- ============ PART 01 · BASICS ============ -->
+<section id="basics">
+  <div class="wrap">
+    <p class="eyebrow"><span class="lead">Part 01</span><span class="dot">·</span><span>Clearing up the big confusion</span></p>
+    <h2>Git has <span class="hl">no account</span>. GitHub does.</h2>
+    <p>
+      People search for "create a Git account" every day, and there is no such thing.
+      Here is how it actually works.
+    </p>
+    <div class="card-grid">
+      <div class="card">
+        <span class="k">Git · a program</span>
+        <h3>Nothing to sign up for</h3>
+        <p>
+          Git is free software that runs on your computer, like a calculator or a
+          notes app. You install it, you use it. No username, no password, no
+          website, no sign-up. The closest thing Git has to an account is a
+          <strong>name and email label</strong> it attaches to your saved work,
+          and you set that yourself in Part 05.
+        </p>
+      </div>
+      <div class="card">
+        <span class="k">GitHub · a website</span>
+        <h3>One free account</h3>
+        <p>
+          GitHub is a website, so it works like any other website: you create an
+          account with an email, a password and a username. That account is where
+          your online copies live, and it is what you sign in to. This is the
+          account this guide creates.
+        </p>
+      </div>
+    </div>
+
+    <div class="diagram" role="img" aria-label="Diagram comparing Git and GitHub. Git is a program on your computer with no sign-up, only a name and email label you set. GitHub is a website with a free account made of an email, a password and a username.">
+      <svg viewBox="0 0 900 330" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="50" y="60" width="360" height="210" rx="14" class="svg-box"/>
+        <text x="82" y="102" class="svg-label" font-size="12">Git · on your computer</text>
+        <text x="82" y="140" class="svg-title" font-size="26">No sign-up</text>
+        <rect x="82" y="164" width="296" height="66" rx="8" class="svg-box-sunken"/>
+        <text x="100" y="192" class="svg-mono" font-size="12">user.name  "Your Name"</text>
+        <text x="100" y="214" class="svg-mono" font-size="12">user.email "you@example.com"</text>
+        <text x="82" y="256" class="svg-body" font-size="13">Just a label on your work. Set once, in Part 05.</text>
+
+        <rect x="490" y="60" width="360" height="210" rx="14" class="svg-box"/>
+        <text x="522" y="102" class="svg-label" font-size="12">GitHub · on the internet</text>
+        <text x="522" y="140" class="svg-title" font-size="26">One account</text>
+        <rect x="522" y="164" width="296" height="66" rx="8" class="svg-box-sunken"/>
+        <text x="540" y="186" class="svg-mono" font-size="12">email     you@example.com</text>
+        <text x="540" y="204" class="svg-mono" font-size="12">password  ●●●●●●●●●●●●</text>
+        <text x="540" y="222" class="svg-mono" font-size="12">username  yourname</text>
+        <text x="522" y="256" class="svg-body" font-size="13">A real login. Created once, in Part 03.</text>
+
+        <text x="450" y="305" text-anchor="middle" class="svg-label" font-size="11">One account total, and it lives on GitHub</text>
+      </svg>
+      <p class="diagram-caption">Fig 01 · Where the account actually lives</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PART 02 · PREPARE ============ -->
+<section id="prepare">
+  <div class="wrap">
+    <p class="eyebrow"><span class="lead">Part 02</span><span class="dot">·</span><span>Two minutes of prep saves ten of pain</span></p>
+    <h2>Before you sign up, <span class="hl">decide three things</span></h2>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num" aria-hidden="true">01</div>
+        <div class="step-body">
+          <h3>Which email to use</h3>
+          <p>Pick an email inbox you can open right now, because GitHub sends a code there during sign-up. A personal address is better than a work one, since you keep it if you change jobs.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" aria-hidden="true">02</div>
+        <div class="step-body">
+          <h3>Your username</h3>
+          <p>Your username is public and appears in the address of everything you share, like <span class="inline-code">github.com/yourname</span>. It can be changed later, but links to your old name break, so it is worth choosing well the first time.</p>
+          <div class="dodont">
+            <div class="card good">
+              <span class="k">Good choices</span>
+              <ul>
+                <li><span class="mark" aria-hidden="true">+</span><span>Your name or a simple variation, like <span class="inline-code">sam-taylor</span> or <span class="inline-code">staylor-dev</span></span></li>
+                <li><span class="mark" aria-hidden="true">+</span><span>Short, lowercase, easy to say out loud</span></li>
+                <li><span class="mark" aria-hidden="true">+</span><span>Something you are happy to put on a CV</span></li>
+              </ul>
+            </div>
+            <div class="card bad">
+              <span class="k">Avoid</span>
+              <ul>
+                <li><span class="mark" aria-hidden="true">-</span><span>Private details like your birth year or phone number</span></li>
+                <li><span class="mark" aria-hidden="true">-</span><span>Joke names you may regret in a job interview</span></li>
+                <li><span class="mark" aria-hidden="true">-</span><span>Long strings of numbers that are hard to remember</span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" aria-hidden="true">03</div>
+        <div class="step-body">
+          <h3>A strong password</h3>
+          <p>GitHub requires at least 15 characters, or at least 8 if they include a number and a lowercase letter. Longer is stronger.</p>
+          <ul>
+            <li>Use a password you do not use anywhere else.</li>
+            <li>A short sentence works well, like four unrelated words joined together.</li>
+            <li>If you use a password manager, let it generate and remember one for you.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PART 03 · SIGN UP ============ -->
+<section id="signup">
+  <div class="wrap">
+    <p class="eyebrow"><span class="lead">Part 03</span><span class="dot">·</span><span>The sign-up itself · About 5 minutes</span></p>
+    <h2>Create the account, <span class="hl">click by click</span></h2>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num" aria-hidden="true">01</div>
+        <div class="step-body">
+          <h3>Go to github.com and click Sign up</h3>
+          <p>Open your web browser, go to <strong>github.com</strong>, and click the <strong>Sign up</strong> button in the top right corner.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num" aria-hidden="true">02</div>
+        <div class="step-body">
+          <h3>Enter your email, password and username</h3>
+          <p>GitHub asks for the three things you decided in Part 02, one at a time:</p>
+          <ol>
+            <li>Type your <strong>email address</strong>.</li>
+            <li>Create your <strong>password</strong>.</li>
+            <li>Type your chosen <strong>username</strong>. If it is taken, GitHub tells you straight away. Try adding a word or a hyphen until you find a free one you like.</li>
+            <li>If it asks about receiving product emails, answer however you like. It does not affect anything.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num" aria-hidden="true">03</div>
+        <div class="step-body">
+          <h3>Prove you are human</h3>
+          <p>GitHub shows a small puzzle to keep robots out. Solve it and continue. If you find the puzzle hard, click the audio option or the refresh option for a different one.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num" aria-hidden="true">04</div>
+        <div class="step-body">
+          <h3>Enter the code from your email</h3>
+          <p>GitHub emails you a <strong>launch code</strong>. Open your inbox, find the email from GitHub, and type the code into the sign-up page.</p>
+          <aside class="callout"><span class="callout-tag">Tip</span><p>No email after a couple of minutes? Check your spam or junk folder. It is nearly always there.</p></aside>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num" aria-hidden="true">05</div>
+        <div class="step-body">
+          <h3>Skip the questions, pick the free plan</h3>
+          <p>GitHub may ask what you plan to do, how big your team is, and which tools interest you. You can answer or skip. When plans appear, choose <strong>Free</strong>. It includes everything a beginner needs, including unlimited projects.</p>
+          <aside class="callout"><span class="callout-tag">Done</span><p>Your account exists. You are signed in and looking at your GitHub home page.</p></aside>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PART 04 · SECURE ============ -->
+<section id="secure">
+  <div class="wrap">
+    <p class="eyebrow"><span class="lead">Part 04</span><span class="dot">·</span><span>Five minutes now, no headaches later</span></p>
+    <h2>Lock the account with <span class="hl">two-factor</span></h2>
+    <p>
+      Two-factor authentication (2FA) means signing in takes your password plus a
+      six-digit code from your phone. If someone steals your password, they still
+      cannot get in. GitHub strongly pushes everyone to turn it on, and one day it
+      will insist, so do it now while you are here.
+    </p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num" aria-hidden="true">01</div>
+        <div class="step-body">
+          <h3>Get an authenticator app on your phone</h3>
+          <p>Any of these free apps works: <strong>Google Authenticator</strong>, <strong>Microsoft Authenticator</strong>, or a password manager that does codes. Install one from your phone's app store.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" aria-hidden="true">02</div>
+        <div class="step-body">
+          <h3>Open GitHub's security settings</h3>
+          <ol>
+            <li>On github.com, click your <strong>profile picture</strong> in the top right corner, then <strong>Settings</strong>.</li>
+            <li>In the left menu, click <strong>Password and authentication</strong>.</li>
+            <li>Click <strong>Enable two-factor authentication</strong>.</li>
+          </ol>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" aria-hidden="true">03</div>
+        <div class="step-body">
+          <h3>Scan the square code</h3>
+          <p>GitHub shows a square barcode (a QR code). In your authenticator app, tap <strong>add</strong> or <strong>+</strong>, point your phone camera at the square, and the app starts showing a six-digit code that changes every 30 seconds. Type the current code into GitHub.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" aria-hidden="true">04</div>
+        <div class="step-body">
+          <h3>Save your recovery codes</h3>
+          <p>GitHub shows a list of <strong>recovery codes</strong>. These are your way back in if you ever lose your phone. Click <strong>Download</strong> and keep the file somewhere safe that is not your phone, like a printed copy at home or your password manager.</p>
+          <aside class="callout"><span class="callout-tag warn">Important</span><p>Recovery codes are shown properly once. If you skip this step and later lose your phone, you can be locked out of your account for good.</p></aside>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PART 05 · GIT IDENTITY ============ -->
+<section id="identity">
+  <div class="wrap">
+    <p class="eyebrow"><span class="lead">Part 05</span><span class="dot">·</span><span>The Git half · needs Git installed</span></p>
+    <h2>Set up your <span class="hl">Git identity</span></h2>
+    <p>
+      This is the part people mean when they say a "Git account". Git stamps a
+      <strong>name</strong> and an <strong>email</strong> onto every snapshot of work
+      you save, so anyone reading the history can see who did what. You set both
+      once, with two short commands.
+    </p>
+    <aside class="callout"><span class="callout-tag">First</span><p>Git must be installed for this part. If it is not, follow the <a href="git-github-beginner-guide.html">setup guide</a> first, then come back here.</p></aside>
+
+    <div class="diagram" role="img" aria-label="Diagram showing that the name and email you set with git config are stamped onto every snapshot of work you save, and appear next to your changes on GitHub.">
+      <svg viewBox="0 0 900 280" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <marker id="ah5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="#FFC400"/>
+          </marker>
+        </defs>
+        <rect x="50" y="70" width="330" height="130" rx="14" class="svg-box"/>
+        <text x="78" y="106" class="svg-label" font-size="12">You set this once</text>
+        <rect x="78" y="122" width="274" height="56" rx="8" class="svg-box-sunken"/>
+        <text x="94" y="146" class="svg-mono" font-size="12">name   Sam Taylor</text>
+        <text x="94" y="166" class="svg-mono" font-size="12">email  sam@example.com</text>
+
+        <path d="M390 135 L500 135" class="svg-arrow" marker-end="url(#ah5)"/>
+        <text x="445" y="122" text-anchor="middle" class="svg-label-accent" font-size="11">stamped on</text>
+
+        <rect x="510" y="45" width="340" height="180" rx="14" class="svg-box"/>
+        <text x="538" y="80" class="svg-label" font-size="12">Every snapshot you save</text>
+        <rect x="538" y="96" width="284" height="48" rx="8" class="svg-box-sunken"/>
+        <text x="554" y="116" class="svg-mono" font-size="11">Fixed the heading · Tuesday</text>
+        <text x="554" y="132" class="svg-label" font-size="10">by Sam Taylor</text>
+        <rect x="538" y="152" width="284" height="48" rx="8" class="svg-box-sunken"/>
+        <text x="554" y="172" class="svg-mono" font-size="11">Added the photos · Wednesday</text>
+        <text x="554" y="188" class="svg-label" font-size="10">by Sam Taylor</text>
+
+        <text x="450" y="258" text-anchor="middle" class="svg-label" font-size="11">This is a label, not a login. Signing in to GitHub is separate.</text>
+      </svg>
+      <p class="diagram-caption">Fig 02 · What your Git identity does</p>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num" aria-hidden="true">01</div>
+        <div class="step-body">
+          <h3>Open your command window</h3>
+          <p>On a Mac, open <strong>Terminal</strong> (press <kbd>Command ⌘</kbd> + <kbd>Space</kbd>, type Terminal, press <kbd>Enter</kbd>). On Windows, open <strong>Git Bash</strong> (click Start, type Git Bash, press <kbd>Enter</kbd>).</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" aria-hidden="true">02</div>
+        <div class="step-body">
+          <h3>Set your name and email</h3>
+          <p>Run these two commands one at a time, swapping in your own details and keeping the quotation marks:</p>
+          <figure class="code">
+            <pre><code>git config --global user.name "Your Name"</code></pre>
+            <button class="copy" type="button" aria-label="Copy command">Copy</button>
+          </figure>
+          <figure class="code">
+            <pre><code>git config --global user.email "you@example.com"</code></pre>
+            <button class="copy" type="button" aria-label="Copy command">Copy</button>
+          </figure>
+          <aside class="callout"><span class="callout-tag">Tip</span><p>Use the same email as your GitHub account, so GitHub recognises your work as yours and shows it on your profile.</p></aside>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" aria-hidden="true">03</div>
+        <div class="step-body">
+          <h3>Check both stuck</h3>
+          <figure class="code">
+            <pre><code>git config --global --list</code></pre>
+            <button class="copy" type="button" aria-label="Copy command">Copy</button>
+          </figure>
+          <p style="margin-top:14px">You should see your <span class="inline-code">user.name</span> and <span class="inline-code">user.email</span> printed back. That is your Git identity done.</p>
+          <aside class="callout"><span class="callout-tag">Private?</span><p>Prefer not to show your real email publicly? GitHub can give you a free stand-in address. On github.com go to Settings, then Emails, tick <strong>Keep my email addresses private</strong>, and use the <span class="inline-code">@users.noreply.github.com</span> address it shows you in the command above instead.</p></aside>
+        </div>
+      </div>
+    </div>
+
+    <div class="checklist">
+      <div class="check"><span class="tick" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6.5 L4.8 9 L10 3" stroke="#1C1812" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>GitHub account created on the free plan</div>
+      <div class="check"><span class="tick" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6.5 L4.8 9 L10 3" stroke="#1C1812" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Email verified, two-factor on, recovery codes saved</div>
+      <div class="check"><span class="tick" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6.5 L4.8 9 L10 3" stroke="#1C1812" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Git identity set with your name and email</div>
+    </div>
+    <p style="margin-top:28px">
+      That is everything account-related done. When you are ready to put it to work,
+      the <a href="git-github-beginner-guide.html">setup guide</a> installs Git and
+      walks you through your first real project, including the one-time sign-in that
+      connects Git on your computer to this account.
+    </p>
+  </div>
+</section>
+
+<!-- ============ FIXES ============ -->
+<section id="fixes">
+  <div class="wrap">
+    <p class="eyebrow"><span class="lead">Troubleshooting</span><span class="dot">·</span><span>When sign-up fights back</span></p>
+    <h2>Common problems, <span class="hl">quick fixes</span></h2>
+
+    <div class="card-grid">
+      <div class="card">
+        <span class="k">Username is taken</span>
+        <p>Someone got there first. Try adding a hyphen, a word, or your trade or town, like <span class="inline-code">sam-taylor-dev</span>. Avoid tacking on your birth year.</p>
+      </div>
+      <div class="card">
+        <span class="k">The launch code never arrived</span>
+        <p>Check the spam or junk folder first. Still nothing? On the sign-up page choose to resend the code, and double-check the email address you typed has no typo in it.</p>
+      </div>
+      <div class="card">
+        <span class="k">I forgot my password</span>
+        <p>On the sign-in page click <strong>Forgot password?</strong> and GitHub emails you a reset link. This is why the account email must be an inbox you can always open.</p>
+      </div>
+      <div class="card">
+        <span class="k">I lost my phone and 2FA codes</span>
+        <p>Sign in with one of the <strong>recovery codes</strong> you downloaded in Part 04, then set up 2FA again on the new phone. Each recovery code works once.</p>
+      </div>
+      <div class="card">
+        <span class="k">Wrong name showing on my work</span>
+        <p>Your Git identity has a typo or an old name. Re-run the two commands in Part 05 with the correct details. New snapshots use the new name.</p>
+      </div>
+      <div class="card">
+        <span class="k">Asked for a password in the Terminal</span>
+        <p>That prompt is not your GitHub password. Git needs a personal access token or a browser sign-in there. The <a href="git-github-beginner-guide.html">setup guide</a>, Part 05, walks through it.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MARQUEE ============ -->
+<div class="marquee" aria-hidden="true">
+  <div class="marquee-track">
+    Account created · Email verified · Two-factor on · Recovery codes saved · Git knows your name ·
+    Account created · Email verified · Two-factor on · Recovery codes saved · Git knows your name ·
+  </div>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>GitHub account guide</span>
+    <span>·</span>
+    <span>Written for absolute beginners</span>
+    <span>·</span>
+    <a href="git-github-beginner-guide.html">Next: install Git and push your first change</a>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll(".code").forEach(function (block) {
+    var btn = block.querySelector(".copy");
+    var code = block.querySelector("code");
+    if (!btn || !code) return;
+    btn.addEventListener("click", function () {
+      var text = code.textContent;
+      function done() {
+        btn.textContent = "Copied";
+        btn.classList.add("done");
+        setTimeout(function () {
+          btn.textContent = "Copy";
+          btn.classList.remove("done");
+        }, 1600);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(function () { fallback(); });
+      } else {
+        fallback();
+      }
+      function fallback() {
+        var ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand("copy"); done(); } catch (e) {}
+        document.body.removeChild(ta);
+      }
+    });
+  });
+</script>
+
+</body>
+</html>
