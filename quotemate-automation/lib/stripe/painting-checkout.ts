@@ -57,6 +57,9 @@ export async function createPaintingCheckoutSessionForTier(opts: {
 
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
+    // AU-only business: force AUD, never localise the price to another currency
+    // (turns OFF Stripe Adaptive Pricing so no US$ / "choose a currency" option).
+    adaptive_pricing: { enabled: false },
     line_items: [
       {
         price_data: {

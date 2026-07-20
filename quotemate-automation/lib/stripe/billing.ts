@@ -123,6 +123,9 @@ export async function createSubscriptionCheckout(opts: {
   const price = await resolvePriceId(opts.plan, opts.interval)
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
+    // AU-only business: force AUD, never localise the price to another currency
+    // (turns OFF Stripe Adaptive Pricing so no US$ / "choose a currency" option).
+    adaptive_pricing: { enabled: false },
     customer: opts.customerId,
     line_items: [{ price, quantity: 1 }],
     client_reference_id: opts.tenantId,

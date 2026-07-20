@@ -10,19 +10,19 @@
 //
 // ── AU-only checkout (spec post-payment-scheduling-checkout, Task 2) ──
 // QuoteMax serves Australian tradies + their customers only, so every Session
-// below is priced in AUD (`currency: 'aud'`) and we never collect a billing
-// address (`billing_address_collection` left at its 'auto' default → no
-// billing-country dropdown rendered for AUD card payments).
+// below is priced in AUD (`currency: 'aud'`) and sets
+// `adaptive_pricing: { enabled: false }` to turn OFF Stripe **Adaptive
+// Pricing** — the feature that was showing customers a "Choose a currency:
+// US$ / A$" selector. That param overrides the account-level Dashboard default
+// per session, so the customer only ever sees AUD regardless of the Dashboard
+// toggle.
 //
-// IMPORTANT: the "United States / Country or region" selector a tradie reported
-// on the hosted Checkout page is Stripe **Adaptive Pricing**, which is an
-// ACCOUNT-LEVEL Dashboard setting (Settings → Payments → Checkout/Adaptive
-// Pricing) — there is NO Checkout Session parameter to disable it or to limit
-// the billing-country list per session (`shipping_address_collection.
-// allowed_countries` only constrains SHIPPING, which we don't collect). To
-// remove the US option, turn Adaptive Pricing OFF in the Stripe Dashboard for
-// this account. Code keeps the sessions AUD-only and address-free so nothing
-// here re-introduces a country picker.
+// The billing "Country or region" dropdown on Stripe's card form is a separate
+// thing and CANNOT be limited to one country: Stripe Checkout exposes
+// `allowed_countries` only on `shipping_address_collection` (SHIPPING, which we
+// don't collect) — there is no billing-country allow-list. The field defaults
+// to the customer's detected location (Australia for real AU customers), and we
+// leave `billing_address_collection` at its 'auto' default (minimal collection).
 
 import { getStripe } from './client'
 import { randomBytes } from 'node:crypto'
@@ -112,6 +112,9 @@ export async function createCheckoutSessionsForQuote(opts: {
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
+      // AU-only business: force AUD, never localise the price to another currency
+      // (turns OFF Stripe Adaptive Pricing so no US$ / "choose a currency" option).
+      adaptive_pricing: { enabled: false },
       line_items: [
         {
           price_data: {
@@ -228,6 +231,9 @@ export async function createCheckoutSessionForTier(opts: {
     : `${depositPct}% deposit · balance due on completion`
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
+    // AU-only business: force AUD, never localise the price to another currency
+    // (turns OFF Stripe Adaptive Pricing so no US$ / "choose a currency" option).
+    adaptive_pricing: { enabled: false },
     line_items: [
       {
         price_data: {
@@ -287,6 +293,9 @@ export async function createRoofingSiteVisitSession(opts: {
   const stripe = getStripe()
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
+    // AU-only business: force AUD, never localise the price to another currency
+    // (turns OFF Stripe Adaptive Pricing so no US$ / "choose a currency" option).
+    adaptive_pricing: { enabled: false },
     line_items: [
       {
         price_data: {
@@ -301,7 +310,9 @@ export async function createRoofingSiteVisitSession(opts: {
       },
     ],
     customer_email: opts.customerEmail || undefined,
-    success_url: `${opts.appUrl}/q/roof/${opts.token}?paid=1&session_id={CHECKOUT_SESSION_ID}`,
+    // Land on the dedicated booking page: thank-you video + calendar picker,
+    // instead of scrolling back on the quote surface.
+    success_url: `${opts.appUrl}/q/roof/${opts.token}/book?paid=1&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${opts.appUrl}/q/roof/${opts.token}`,
     metadata: {
       roofing_token: opts.token,
@@ -339,6 +350,9 @@ export async function createInspectionCheckoutSession(opts: {
 
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
+    // AU-only business: force AUD, never localise the price to another currency
+    // (turns OFF Stripe Adaptive Pricing so no US$ / "choose a currency" option).
+    adaptive_pricing: { enabled: false },
     line_items: [
       {
         price_data: {
