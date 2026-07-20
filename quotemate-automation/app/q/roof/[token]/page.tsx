@@ -645,10 +645,40 @@ export default async function RoofingQuotePage({
       areaM2 != null ? `measured at approximately ${Math.round(areaM2)} square metres from satellite imagery` : null,
     ].filter(Boolean)
 
+    // Aerial view — the same satellite image the measurement page shows, so
+    // the customer sees exactly what was measured (the primary included
+    // structure; falls back to the first structure). structureStaticMapPath
+    // hits the token-gated static-map proxy (cheap, cached — not a billable
+    // AI render), the same source the pre-five-section roof view rendered.
+    const aerialIndex = satelliteImages[0]?.index1Based ?? 1
+    const aerialSrc = structureStaticMapPath(row.public_token, aerialIndex)
+
     const roofSections: ScopeItem[] = [
       {
         title: 'Overview',
-        body: `${overviewBits.join(', ')}. A licensed roofer confirms everything on site before any work is booked.`,
+        body: (
+          <div style={{ display: 'grid', gap: 14, maxWidth: 520 }}>
+            <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+              {overviewBits.join(', ')}. A licensed roofer confirms everything on site before any work is booked.
+            </p>
+            <figure
+              className="qm-duotone"
+              style={{ margin: 0, position: 'relative', border: '1px solid var(--ink-line)', overflow: 'hidden' }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={aerialSrc}
+                alt={`Aerial view of ${overviewAddress ?? 'your roof'}`}
+                style={{ display: 'block', width: '100%', aspectRatio: '4 / 3', objectFit: 'cover' }}
+              />
+              <figcaption
+                style={{ ...microNote, padding: '8px 12px', borderTop: '1px solid var(--ink-line)' }}
+              >
+                Aerial view · measured from satellite imagery
+              </figcaption>
+            </figure>
+          </div>
+        ),
       },
       {
         title: 'Job details',
@@ -710,19 +740,32 @@ export default async function RoofingQuotePage({
         ),
       },
       {
-        title: roofScheduledAt ? 'Your site visit' : 'Book your site inspection',
-        body: (
-          <div style={{ display: 'grid', gap: 10, maxWidth: 380 }}>
-            {roofPaidAt ? (
-              roofScheduledAt ? (
-                <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
-                  Your site visit is booked for{' '}
-                  <strong style={{ color: 'var(--text-pri)' }}>
-                    {formatVisitSlot(roofScheduledAt, roofScheduledWindow, tzForState(identity?.state ?? null))}
-                  </strong>
-                  . {tradieName} will text you the day before to confirm.
-                </p>
-              ) : (
+        title: roofPaidAt && roofScheduledAt ? 'Thank you' : 'Book your site inspection',
+        body:
+          roofPaidAt && roofScheduledAt ? (
+            // Booked → the thank-you video + Jon's confirmation message. This
+            // is the post-booking "thank you" moment the customer lands on
+            // after picking a slot (the SlotPicker reloads /q/roof/<token>,
+            // which now renders this state). Works for every roofing booking.
+            <div style={{ display: 'grid', gap: 12, maxWidth: 480 }}>
+              <div className="qm-print-hide">
+                <TrustVideo
+                  src={videos.thankyou}
+                  title={tradieName}
+                  caption="A thank-you message from your tradie"
+                />
+              </div>
+              <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+                Thanks, we have received your request. Your site visit is booked for{' '}
+                <strong style={{ color: 'var(--text-pri)' }}>
+                  {formatVisitSlot(roofScheduledAt, roofScheduledWindow, tzForState(identity?.state ?? null))}
+                </strong>
+                . {tradieName} will be in touch to confirm the exact time.
+              </p>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gap: 10, maxWidth: 380 }}>
+              {roofPaidAt ? (
                 <>
                   <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
                     Payment received. Pick a time that suits and your site visit is locked in.
@@ -734,17 +777,16 @@ export default async function RoofingQuotePage({
                     labels={{ idle: 'Confirm this time →', submitting: 'Confirming…', done: 'Booked ✓' }}
                   />
                 </>
-              )
-            ) : (
-              <>
-                <a href={`/r/roof/${token}/inspection`} className="qm-cta" style={ctaStyle}>
-                  Book a site inspection · ${INSPECTION_FEE_AUD}
-                </a>
-                <span style={microNote}>Refundable · credited toward your final quote</span>
-              </>
-            )}
-          </div>
-        ),
+              ) : (
+                <>
+                  <a href={`/r/roof/${token}/inspection`} className="qm-cta" style={ctaStyle}>
+                    Book a site inspection · ${INSPECTION_FEE_AUD}
+                  </a>
+                  <span style={microNote}>Refundable · credited toward your final quote</span>
+                </>
+              )}
+            </div>
+          ),
       },
     ]
 
