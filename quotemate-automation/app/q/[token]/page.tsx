@@ -24,7 +24,7 @@ import { QuoteChrome, type StickyBar } from '../_chrome/QuoteChrome'
 import { tradeIcon } from '../_chrome/icons'
 import {
   QuoteSheet, Letterhead, HeroPhoto, QuoteHero, StatGrid, Scope,
-  SheetSection, TierCards, GoodToKnow, CredentialFooter, MediaPlaceholder,
+  SheetSection, TierCards, GoodToKnow, CredentialFooter, TrustVideo,
   type QuoteTier, type Stat, type FooterRow, type ScopeItem,
 } from '../_chrome/parts'
 import {
@@ -34,7 +34,7 @@ import {
   displayIncGst,
   fmtAud,
 } from '@/lib/quote/money'
-import { safeWebsiteUrl } from '@/lib/quote/tenant-identity'
+import { safeWebsiteUrl, trustVideoUrls } from '@/lib/quote/tenant-identity'
 import {
   roofScopeStats,
   commercialPaintScope,
@@ -98,6 +98,9 @@ type TenantIdentity = {
   website_url: string | null
   business_address: string | null
   logo_url: string | null
+  /** Mig 175 trust videos — tenant's own film, else the QuoteMax default. */
+  intro_video_url: string | null
+  thankyou_video_url: string | null
 }
 
 const JOB_TYPE_LABEL: Record<string, string> = {
@@ -305,7 +308,7 @@ export default async function PublicQuotePage(props: {
       const b = base as Record<string, string | null>
       const { data: ex } = await supabase
         .from('tenants')
-        .select('contact_name, website_url, business_address, logo_url')
+        .select('contact_name, website_url, business_address, logo_url, intro_video_url, thankyou_video_url')
         .eq('id', quoteTenantId)
         .maybeSingle()
       const e = (ex ?? {}) as Record<string, string | null>
@@ -319,6 +322,8 @@ export default async function PublicQuotePage(props: {
         website_url: e.website_url ?? null,
         business_address: e.business_address ?? null,
         logo_url: e.logo_url ?? null,
+        intro_video_url: e.intro_video_url ?? null,
+        thankyou_video_url: e.thankyou_video_url ?? null,
       }
     }
   }
@@ -927,9 +932,9 @@ export default async function PublicQuotePage(props: {
         body: (
           <div style={{ display: 'grid', gap: 12, maxWidth: 480 }}>
             <div className="qm-print-hide">
-              <MediaPlaceholder
+              <TrustVideo
+                src={trustVideoUrls(tenantIdentity).intro}
                 title={tradieName}
-                eyebrow="Video coming soon"
                 caption="A short introduction from your tradie"
               />
             </div>

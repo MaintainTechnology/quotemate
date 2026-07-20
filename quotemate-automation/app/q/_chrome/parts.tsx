@@ -513,6 +513,62 @@ export function MediaPlaceholder({
   )
 }
 
+/* ── trust video (the tradie's welcome / thank-you message) ───────────
+ * Plays the tenant's own video when QuoteMax has filmed them, else the
+ * QuoteMax default placeholder video (mig 177 public bucket, resolved by
+ * lib/quote/tenant-identity trustVideoUrls). No src at all (unconfigured
+ * env) degrades to the static MediaPlaceholder face-holder. Server-safe:
+ * a plain HTML5 <video> — controls, no autoplay (respects the customer's
+ * data + attention), preload="metadata" so the poster frame shows without
+ * pulling megabytes. */
+export function TrustVideo({
+  src,
+  title,
+  caption,
+}: {
+  src: string | null
+  title: string
+  caption?: string | null
+}) {
+  if (!src) return <MediaPlaceholder title={title} eyebrow="Video coming soon" caption={caption} />
+  return (
+    <figure
+      style={{
+        margin: 0,
+        border: '1px solid var(--ink-line)',
+        background: 'var(--ink-deep)',
+        borderRadius: 'var(--qm-r-sm)',
+        overflow: 'hidden',
+      }}
+    >
+      {/* eslint-disable-next-line jsx-a11y/media-has-caption -- spoken-word
+          placeholder briefs; captions land with the per-tradie films */}
+      <video
+        src={src}
+        controls
+        playsInline
+        preload="metadata"
+        style={{ display: 'block', width: '100%', aspectRatio: '16 / 9', background: 'var(--ink-card)' }}
+      />
+      {caption ? (
+        <figcaption
+          style={{
+            padding: '10px 14px',
+            borderTop: '1px solid var(--ink-line)',
+            ...MONO,
+            fontSize: 9.5,
+            textTransform: 'uppercase',
+            letterSpacing: '0.12em',
+            color: 'var(--text-dim)',
+          }}
+        >
+          {caption}
+        </figcaption>
+      ) : null}
+    </figure>
+  )
+}
+
 /* ── good to know ────────────────────────────────────────────────────── */
 export function GoodToKnow({ items, note, eyebrow = 'Good to know' }: { items: ReactNode[]; note?: ReactNode; eyebrow?: string }) {
   if (!items.length && !note) return null

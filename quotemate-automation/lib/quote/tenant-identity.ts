@@ -78,6 +78,32 @@ export async function loadTenantIdentity(
 }
 
 /**
+ * The two trust-video slots (spec customer-quote-five-sections R4). Jon's
+ * model: QuoteMax films each tradie at onboarding; until then every tenant
+ * ships with the two QuoteMax DEFAULT placeholder videos ("we will default
+ * it with a quote max video" — one per slot, mig 177 public bucket). A
+ * tenant's own video (tenants.intro_video_url / thankyou_video_url, mig 175)
+ * replaces its default independently, so the trust section is never empty.
+ */
+export const TRUST_VIDEO_DEFAULT_PATHS = {
+  intro: 'defaults/welcome.mp4',
+  thankyou: 'defaults/thank-you.mp4',
+} as const
+
+export function trustVideoUrls(
+  t: Pick<TenantIdentity, 'intro_video_url' | 'thankyou_video_url'> | null,
+  supabaseUrl: string | null | undefined = process.env.NEXT_PUBLIC_SUPABASE_URL,
+): { intro: string | null; thankyou: string | null } {
+  const base = (supabaseUrl ?? '').replace(/\/$/, '')
+  const publicUrl = (path: string) =>
+    base ? `${base}/storage/v1/object/public/tenant-videos/${path}` : null
+  return {
+    intro: t?.intro_video_url?.trim() || publicUrl(TRUST_VIDEO_DEFAULT_PATHS.intro),
+    thankyou: t?.thankyou_video_url?.trim() || publicUrl(TRUST_VIDEO_DEFAULT_PATHS.thankyou),
+  }
+}
+
+/**
  * A tenant website link safe to render on a public customer page: https only,
  * so a typo'd or plain-text value can never render a broken or javascript:
  * link. Tradies type their site scheme-less ("www.bobsroofing.com.au" — the

@@ -149,8 +149,9 @@ test.describe('Roofing five-section quote page', () => {
       page.getByText('Replace roof with new battens, Colorbond sheeting and flashings.'),
     ).toBeVisible()
 
-    // Section 3 — the face-holder placeholder + website link.
-    await expect(page.getByText('Video coming soon').first()).toBeVisible()
+    // Section 3 — the trust video (QuoteMax default since mig 177) or the
+    // face-holder placeholder; the caption renders in both states.
+    await expect(page.getByText('A short introduction from your tradie')).toBeVisible()
     await expect(page.getByRole('link', { name: 'Visit their website' })).toBeVisible()
 
     // Section 4 — ONE price: the recommended tier only (single mode).
@@ -271,12 +272,13 @@ test.describe('Thank-you page (paid + booked)', () => {
     if (tenantId) await supabase.from('tenants').delete().eq('id', tenantId)
   })
 
-  test('renders the thank-you placeholder and the confirmation message', async ({ page }) => {
+  test('renders the thank-you video block and the confirmation message', async ({ page }) => {
     await page.goto(`/q/${paidToken}/paid`)
+    // The trust video (QuoteMax default since mig 177) or its face-holder
+    // fallback — the caption renders in both states.
     await expect(page.getByText('A thank-you message from your tradie')).toBeVisible()
     await expect(
       page.getByText(/we have received your request and we will be in touch/),
     ).toBeVisible()
-    await expect(page.getByText('Video coming soon')).toBeVisible()
   })
 })

@@ -4,7 +4,12 @@
 // degrade those columns to null, never 500 the public quote page.
 
 import { describe, expect, it } from 'vitest'
-import { loadTenantIdentity, contactDisplayName, safeWebsiteUrl } from './tenant-identity'
+import {
+  loadTenantIdentity,
+  contactDisplayName,
+  safeWebsiteUrl,
+  trustVideoUrls,
+} from './tenant-identity'
 
 type Row = Record<string, unknown> | null
 
@@ -92,6 +97,35 @@ describe('safeWebsiteUrl — the trust section link guard', () => {
     expect(safeWebsiteUrl('')).toBeNull()
     expect(safeWebsiteUrl(null)).toBeNull()
     expect(safeWebsiteUrl(undefined)).toBeNull()
+  })
+})
+
+describe('trustVideoUrls — tenant video, else the QuoteMax default (mig 177)', () => {
+  const SB = 'https://proj.supabase.co'
+
+  it('falls back to the two QuoteMax default videos when the tenant has none', () => {
+    const v = trustVideoUrls({ intro_video_url: null, thankyou_video_url: null }, SB)
+    expect(v.intro).toBe(`${SB}/storage/v1/object/public/tenant-videos/defaults/welcome.mp4`)
+    expect(v.thankyou).toBe(`${SB}/storage/v1/object/public/tenant-videos/defaults/thank-you.mp4`)
+  })
+
+  it("a tenant's own video replaces its default independently", () => {
+    const v = trustVideoUrls(
+      { intro_video_url: 'https://cdn.example/ric-intro.mp4', thankyou_video_url: null },
+      SB,
+    )
+    expect(v.intro).toBe('https://cdn.example/ric-intro.mp4')
+    expect(v.thankyou).toBe(`${SB}/storage/v1/object/public/tenant-videos/defaults/thank-you.mp4`)
+  })
+
+  it('no supabase URL configured → nulls (the pages fall back to the face-holder)', () => {
+    const v = trustVideoUrls({ intro_video_url: null, thankyou_video_url: null }, null)
+    expect(v.intro).toBeNull()
+    expect(v.thankyou).toBeNull()
+  })
+
+  it('null identity still yields the defaults', () => {
+    expect(trustVideoUrls(null, SB).intro).toContain('defaults/welcome.mp4')
   })
 })
 

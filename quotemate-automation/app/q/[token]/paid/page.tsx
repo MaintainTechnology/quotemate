@@ -24,8 +24,8 @@ import { paidPageTarget } from '@/lib/quote/booking'
 import { tzForState } from '@/lib/quote/availability'
 import { confirmPaidFromSession } from '@/lib/quote/paid-confirm'
 import { INSPECTION_FEE_AUD } from '@/lib/quote/money'
-import { loadTenantIdentity } from '@/lib/quote/tenant-identity'
-import { MediaPlaceholder } from '@/app/q/_chrome/parts'
+import { loadTenantIdentity, trustVideoUrls } from '@/lib/quote/tenant-identity'
+import { TrustVideo } from '@/app/q/_chrome/parts'
 import { getStripe } from '@/lib/stripe/client'
 
 export const dynamic = 'force-dynamic'
@@ -277,14 +277,14 @@ export default async function PaidPage(props: {
         </h1>
         <p className="mt-5 max-w-[60ch] text-base leading-relaxed text-text-sec">{statusLine}</p>
 
-        {/* R8 — the tradie's thank-you message (face-holder placeholder until
-            QuoteMax films them; mig 175 thankyou_video_url stays unused in v1).
-            Jon's copy: we have received your request and will be in touch to
-            confirm the exact time of the inspection. */}
+        {/* R8 — the tradie's thank-you video: their own film once QuoteMax
+            records them, else the QuoteMax default placeholder video (mig
+            177). Jon's copy: we have received your request and will be in
+            touch to confirm the exact time of the inspection. */}
         <div className="mt-8 max-w-md">
-          <MediaPlaceholder
+          <TrustVideo
+            src={trustVideoUrls(tenant).thankyou}
             title={tradieName ?? 'Your tradie'}
-            eyebrow="Video coming soon"
             caption="A thank-you message from your tradie"
           />
           <p className="mt-3 text-sm leading-relaxed text-text-sec">

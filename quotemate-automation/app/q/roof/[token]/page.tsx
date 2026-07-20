@@ -46,8 +46,14 @@ import { edgeStat } from '@/lib/roofing/geometry-edges'
 import { buildingAttributeChips, propertyContextChips } from '@/lib/roofing/attributes-display'
 import { applySolarToTiers, indicativeCombinedTiers } from '@/lib/sms/roofing-compose'
 import { roofQuoteCta } from '@/lib/roofing/quote-cta'
-import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
+import {
+  loadTenantIdentity,
+  contactDisplayName,
+  safeWebsiteUrl,
+  trustVideoUrls,
+} from '@/lib/quote/tenant-identity'
 import { asQuoteTierMode, resolveVisibleTiers } from '@/lib/quote/tier-visibility'
+import { INSPECTION_FEE_AUD } from '@/lib/quote/money'
 import { RoofMap, type RoofMapBuilding } from '@/app/dashboard/roofing/_components/RoofMap'
 import { QuoteChrome, type StickyBar } from '../../_chrome/QuoteChrome'
 import { RoofLayoutMapFigure } from '../../_chrome/RoofLayoutMapFigure'
@@ -69,6 +75,7 @@ import {
   TierCards,
   GoodToKnow,
   CredentialFooter,
+  TrustVideo,
   type Stat,
   type QuoteTier,
   type ScopeItem,
@@ -588,6 +595,193 @@ export default async function RoofingQuotePage({
   quoteTiers = quoteTiers.map((t) => ({ ...t, ctaLabel: tierCta.label, ctaHref: tierCta.href }))
   if (sticky && !sticky.paid) {
     sticky = { ...sticky, ctaLabel: tierCta.label, ctaHref: tierCta.href }
+  }
+
+  // ═══ Five-section customer view (spec customer-quote-five-sections) ═══
+  //
+  // A CONFIRMED customer sees the same five-numbered-section format as the
+  // promoted quote page /q/[token]: Overview → Job details → Your tradie
+  // (trust video) → Your price (one option) → Book your site inspection.
+  // Pre-confirm keeps the "which building is yours?" gate below, and the
+  // tradie's ?full=1 measurement view keeps the full satellite/structures
+  // breakdown — this branch is customer presentation only, no data changes.
+  if (confirmed && sp.full !== '1') {
+    const roofKey: 'good' | 'better' | 'best' =
+      visibleRoofTierKeys.includes('better') ? 'better' : visibleRoofTierKeys[0] ?? 'better'
+    const featuredTier =
+      displayTiersWithSolar.find((t) => t.tier === roofKey && t.inc_gst > 0) ??
+      displayTiersWithSolar.find((t) => t.inc_gst > 0) ??
+      null
+    const videos = trustVideoUrls(identity)
+    const websiteUrl = safeWebsiteUrl(identity?.website_url)
+    const tradieName = identity?.business_name ?? 'Your roofer'
+    const microNote: CSSProperties = {
+      ...MONO,
+      fontSize: 9.5,
+      textTransform: 'uppercase',
+      letterSpacing: '0.12em',
+      color: 'var(--text-dim)',
+    }
+    const ctaStyle: CSSProperties = {
+      display: 'block',
+      textAlign: 'center',
+      border: '1px solid transparent',
+      background: 'var(--accent)',
+      color: 'var(--accent-ink)',
+      padding: '13px 16px',
+      fontFamily: 'var(--font-sans)',
+      fontWeight: 700,
+      fontSize: 13,
+      textTransform: 'uppercase',
+      letterSpacing: '0.05em',
+      textDecoration: 'none',
+    }
+
+    // Raw address, not placeLabel — the stored address already ends with the
+    // state ("… CHANDLER QLD 4155"), so appending row.state doubles it.
+    const overviewAddress = (row.address ?? '').trim() || placeLabel
+    const overviewBits = [
+      overviewAddress ? `Roofing works at ${overviewAddress}` : 'Your roofing quote',
+      areaM2 != null ? `measured at approximately ${Math.round(areaM2)} square metres from satellite imagery` : null,
+    ].filter(Boolean)
+
+    const roofSections: ScopeItem[] = [
+      {
+        title: 'Overview',
+        body: `${overviewBits.join(', ')}. A licensed roofer confirms everything on site before any work is booked.`,
+      },
+      {
+        title: 'Job details',
+        body: featuredTier?.scope ?? 'Scope confirmed with you at the site visit.',
+      },
+      {
+        title: 'Your tradie',
+        body: (
+          <div style={{ display: 'grid', gap: 12, maxWidth: 480 }}>
+            <div className="qm-print-hide">
+              <TrustVideo
+                src={videos.intro}
+                title={tradieName}
+                caption="A short introduction from your tradie"
+              />
+            </div>
+            <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.5, color: 'var(--text-sec)' }}>
+              {tradieName} is a licensed local roofing business.
+              {websiteUrl ? (
+                <>
+                  {' '}
+                  <a href={websiteUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>
+                    Visit their website
+                  </a>
+                  .
+                </>
+              ) : null}
+            </p>
+          </div>
+        ),
+      },
+      {
+        title: 'Your price',
+        body: (
+          <div>
+            <div
+              style={{
+                ...MONO,
+                fontWeight: 800,
+                fontSize: 24,
+                lineHeight: 1,
+                color: 'var(--text-pri)',
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              {featuredTier ? `$${money(featuredTier.inc_gst)}` : 'Confirmed on site'}
+            </div>
+            <div style={{ marginTop: 6, ...microNote }}>
+              {featuredTier
+                ? `${TIER_NAME[featuredTier.tier]} · inc GST${indicative ? ' · indicative' : ''}`
+                : 'Priced after your site visit'}
+            </div>
+            {featuredTier && indicative ? (
+              <p style={{ margin: '10px 0 0', fontSize: 12.5, lineHeight: 1.5, color: 'var(--text-dim)', maxWidth: '52ch' }}>
+                Estimated from your satellite measurement. The final price is confirmed at your site visit.
+              </p>
+            ) : null}
+          </div>
+        ),
+      },
+      {
+        title: roofScheduledAt ? 'Your site visit' : 'Book your site inspection',
+        body: (
+          <div style={{ display: 'grid', gap: 10, maxWidth: 380 }}>
+            {roofPaidAt ? (
+              roofScheduledAt ? (
+                <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+                  Your site visit is booked for{' '}
+                  <strong style={{ color: 'var(--text-pri)' }}>
+                    {formatVisitSlot(roofScheduledAt, roofScheduledWindow, tzForState(identity?.state ?? null))}
+                  </strong>
+                  . {tradieName} will text you the day before to confirm.
+                </p>
+              ) : (
+                <>
+                  <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+                    Payment received. Pick a time that suits and your site visit is locked in.
+                  </p>
+                  <SlotPicker
+                    token={token}
+                    options={roofBookingOptions}
+                    endpoint={`/api/q/book/roof/${token}`}
+                    labels={{ idle: 'Confirm this time →', submitting: 'Confirming…', done: 'Booked ✓' }}
+                  />
+                </>
+              )
+            ) : (
+              <>
+                <a href={`/r/roof/${token}/inspection`} className="qm-cta" style={ctaStyle}>
+                  Book a site inspection · ${INSPECTION_FEE_AUD}
+                </a>
+                <span style={microNote}>Refundable · credited toward your final quote</span>
+              </>
+            )}
+          </div>
+        ),
+      },
+    ]
+
+    const stickyFive: StickyBar | null = roofPaidAt
+      ? {
+          paid: true,
+          paidSub: roofScheduledAt
+            ? `Visit booked · ${formatVisitSlot(roofScheduledAt, roofScheduledWindow, tzForState(identity?.state ?? null))}`
+            : 'Site visit paid · pick your time above',
+        }
+      : {
+          tierLabel: `$${INSPECTION_FEE_AUD} site visit · refundable`,
+          priceText: `$${INSPECTION_FEE_AUD}`,
+          ctaLabel: `Pay $${INSPECTION_FEE_AUD}`,
+          ctaHref: `/r/roof/${token}/inspection`,
+        }
+
+    return (
+      <QuoteChrome trade={{ label: 'Roof', icon: tradeIcon('roof') }} sticky={stickyFive}>
+        <TradieJobBanner trade="roofing" publicToken={row.public_token} />
+        <QuoteSheet label={`Quote ${row.public_token.slice(0, 8).toUpperCase()}`}>
+          <Letterhead
+            name={identity?.business_name ?? 'Your roofer'}
+            credential={placeLabel ? `Measured roof · ${placeLabel}` : 'Measured from satellite imagery'}
+            logoUrl={identity?.logo_url ?? null}
+            contactName={contactDisplayName(identity)}
+            phone={(identity?.owner_mobile ?? '').trim() || null}
+            email={(identity?.owner_email ?? '').trim() || null}
+          />
+          <Scope eyebrow={`Quote ${row.public_token.slice(0, 8).toUpperCase()}`} items={roofSections} />
+          <CredentialFooter
+            rows={footerRows}
+            tagline="Book the visit · We confirm on site · Licensed & insured"
+          />
+        </QuoteSheet>
+      </QuoteChrome>
+    )
   }
 
   return (
