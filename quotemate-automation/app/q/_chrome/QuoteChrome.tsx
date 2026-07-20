@@ -7,8 +7,8 @@
 // scroll column that hosts the quote <article>, and the sticky bottom
 // deposit bar. Self-contained dark/light: the palette lives on `.qm-quote`
 // (globals.css) and this component flips `data-qm-theme` locally, persisted
-// as `qm-quote-theme`, so the customer quote defaults to the dark reference
-// look without touching the site's light-first theme.
+// as `qm-quote-theme`. Defaults to LIGHT; follows the device's
+// prefers-color-scheme when the customer hasn't chosen via the toggle.
 //
 // Client component for the theme toggle + the "PDF" button (fetches the
 // Gotenberg-rendered PDF of this live page from /api/q/download). All quote
@@ -32,16 +32,18 @@ export function QuoteChrome({
   children: ReactNode
 }) {
   const pathname = usePathname()
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
+  const [theme, setTheme] = useState<'dark' | 'light'>('light')
   const [pdfBusy, setPdfBusy] = useState(false)
 
   useEffect(() => {
     try {
-      // A ?theme= override (used by the PDF render) wins over the stored choice.
+      // Precedence: ?theme= override (used by the PDF render) → the customer's
+      // stored toggle choice → the device's prefers-color-scheme → light.
       const q = new URLSearchParams(window.location.search).get('theme')
       if (q === 'light' || q === 'dark') { setTheme(q); return }
       const t = localStorage.getItem('qm-quote-theme')
-      if (t === 'light' || t === 'dark') setTheme(t)
+      if (t === 'light' || t === 'dark') { setTheme(t); return }
+      if (window.matchMedia('(prefers-color-scheme: dark)').matches) setTheme('dark')
     } catch { /* ignore */ }
   }, [])
 
