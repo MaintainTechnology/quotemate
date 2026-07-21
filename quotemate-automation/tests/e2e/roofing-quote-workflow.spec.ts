@@ -167,38 +167,52 @@ test.describe('Roofing quote workflow (promoted quote)', () => {
     ).toBeVisible()
   })
 
-  test('the accept/deposit short-link routes book-first to the slot picker', async ({
+  test('the deposit short-link routes PAY-FIRST, straight to Stripe', async ({
     page,
   }) => {
-    // /r redirects to an ABSOLUTE URL built from APP_URL (SMS links must be
-    // absolute), which points at the canonical host — assert the Location
-    // header instead of following it out of the e2e server's origin.
+    // Pay-first (2026-07-22): an unpaid deposit no longer detours through the
+    // picker. /r redirects to an ABSOLUTE URL — for the stripe path that is
+    // Stripe's own checkout host — so assert the Location header rather than
+    // following it out of the e2e server's origin.
     const resp = await page.request.get(`/r/${token}/better`, {
       maxRedirects: 0,
     })
     expect(resp.status()).toBe(302)
-    expect(resp.headers()['location']).toContain(`/q/${token}/book`)
+    const location = resp.headers()['location'] ?? ''
+    expect(location).toContain('checkout.stripe.com')
+    expect(location).not.toContain('/book')
   })
 
-  test('booking a slot reserves the booking on the quote', async ({ page }) => {
+  test('booking a slot CONFIRMS the booking on the paid quote', async ({ page }) => {
     test.setTimeout(120_000)
+
+    // The booking page and API are paid-gated now, so the quote must be paid
+    // before a time can be picked. This mirrors the real funnel: Stripe
+    // success -> /paid router -> /book.
+    const supabase = createClient(url!, key!)
+    await supabase
+      .from('quotes')
+      .update({ paid_at: new Date().toISOString(), paid_tier: 'better' })
+      .eq('id', quoteId)
+
     await page.goto(`/q/${token}/book?tier=better`)
-    // The picker renders offered slots (rolling defaults self-renew, so at
-    // least one is always offered even for a tenant-less quote).
+    // The month grid renders selectable dates (rolling defaults self-renew, so
+    // at least one is always offered even for a tenant-less quote).
     await expect(page.locator('button[aria-pressed]').first()).toBeVisible()
 
     // Browser-driven clicking is blocked in this dev env: the Clerk dev
     // instance's keys are mismatched ("infinite redirect loop" logged by the
     // server), which kills client-side interactivity in fresh contexts. So
-    // fire the exact POST the SlotPicker fires — same endpoint, same body,
+    // fire the exact POST BookingCalendar fires — same endpoint, same body,
     // same server-side slot validation — and assert the DB transition.
     const options = resolveBookingOptions({ availability: null, availableSlots: null })
     const resp = await page.request.post(`/api/q/${token}/book`, {
       data: { slot: options[0].iso, tier: 'better' },
     })
     expect(resp.ok(), `book API ${resp.status()}: ${await resp.text()}`).toBeTruthy()
+    // The API tells the client where to go next — the thank-you page.
+    expect((await resp.json()).next).toBe(`/q/${token}/thanks`)
 
-    const supabase = createClient(url!, key!)
     await expect
       .poll(
         async () => {
@@ -211,6 +225,8 @@ test.describe('Roofing quote workflow (promoted quote)', () => {
         },
         { timeout: 15_000 },
       )
-      .toBe('reserved')
+      // Booking is the FINAL step now, so it lands terminal rather than
+      // 'reserved' awaiting a later payment.
+      .toBe('booked')
   })
 })

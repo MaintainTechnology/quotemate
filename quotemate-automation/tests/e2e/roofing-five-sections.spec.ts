@@ -273,12 +273,38 @@ test.describe('Thank-you page (paid + booked)', () => {
   })
 
   test('renders the thank-you video block and the confirmation message', async ({ page }) => {
-    await page.goto(`/q/${paidToken}/paid`)
+    await page.goto(`/q/${paidToken}/thanks`)
     // The trust video (QuoteMax default since mig 177) or its face-holder
     // fallback — the caption renders in both states.
     await expect(page.getByText('A thank-you message from your tradie')).toBeVisible()
-    await expect(
-      page.getByText(/we have received your request and we will be in touch/),
-    ).toBeVisible()
+  })
+
+  test('/paid is a router — a paid+booked quote lands on /thanks', async ({ page }) => {
+    // /paid stopped rendering on 2026-07-22; it exists only to absorb Stripe's
+    // success_url, resolve the webhook race, and hand off.
+    await page.goto(`/q/${paidToken}/paid`)
+    await expect(page).toHaveURL(new RegExp(`/q/${paidToken}/thanks`))
+  })
+
+  test('the thank-you page confirms what was paid, when, and how it was booked', async ({
+    page,
+  }) => {
+    await page.goto(`/q/${paidToken}/thanks`)
+    await expect(page.getByText("What's booked")).toBeVisible()
+    // The REAL charge — the seeded row is a $99 inspection.
+    await expect(page.getByText('$99.00')).toBeVisible()
+    // How the booking was made, plus the customer's quotable reference.
+    await expect(page.getByText(/Online · self-serve · ref/)).toBeVisible()
+    // Add-to-calendar: .ics primary, with the web deep-links beside it.
+    await expect(page.getByRole('link', { name: /Add to calendar/i })).toBeVisible()
+    await expect(page.getByRole('link', { name: /^Google$/ })).toBeVisible()
+    await expect(page.getByRole('link', { name: /^Outlook$/ })).toBeVisible()
+  })
+
+  test('the booking page shows a calendar and NO thank-you content', async ({ page }) => {
+    // The whole point of the split: /book picks a time, /thanks confirms.
+    // Seeded row is already scheduled, so /book must forward to /thanks.
+    await page.goto(`/q/${paidToken}/book`)
+    await expect(page).toHaveURL(new RegExp(`/q/${paidToken}/thanks`))
   })
 })
