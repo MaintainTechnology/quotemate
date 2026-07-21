@@ -1,16 +1,24 @@
 'use client'
 
-// Google-Calendar-style booking picker for the roofing site-visit landing
-// page (/q/roof/[token]/book). A month grid — available days highlighted,
-// tap a day → its times appear below, tap a time → a sticky "Book" bar pops
-// up (mirrors the Pay $99 CTA). Far less scrolling than the old fortnight of
-// stacked day cards; familiar to anyone who has used an appointment booker.
+// The booking picker for EVERY funnel's /book page — quotes (electrical,
+// plumbing, solar), roofing and painting. A Google-Calendar-style month grid:
+// available days highlighted, tap a day → its times appear below, tap a time
+// → a sticky "Book" bar pops up (mirrors the Pay CTA). Far less scrolling than
+// a fortnight of stacked day cards, and familiar to anyone who has used an
+// appointment booker.
 //
-// The date model is computed server-side in the tenant's timezone (the page)
-// and passed in, so this component does no timezone maths.
+// This is the ONLY slot picker. It replaced the day-strip SlotPicker on
+// 2026-07-22: two components serving one job had drifted apart (only one
+// honoured the API's `next` field), so the same booking action landed
+// customers on different pages. See ./booking-next.ts.
+//
+// The date model is computed server-side in the tenant's timezone (via
+// toCalendarDays below) and passed in, so this component does no timezone
+// maths.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { resolveBookingNext } from './booking-next'
 
 export type CalendarTime = { iso: string; chip: string }
 export type CalendarDay = {
@@ -120,15 +128,20 @@ export function BookingCalendar({
         throw new Error(json?.error ?? `Couldn't book that time (HTTP ${res.status}).`)
       }
       setStatus('done')
-      // Reload this booking page (without the ?paid= query) so it re-renders
-      // in the confirmed state — the tradie name + booked time + thank-you
-      // video all stay on the same landing page.
+      // The endpoint says where to go next — the thank-you page, now that the
+      // booking is complete. Falls back to reloading this page without its
+      // query string, which re-renders whatever state the server decides.
+      const dest = resolveBookingNext(json, window.location.pathname)
       setTimeout(() => {
-        window.location.href = window.location.pathname
+        window.location.href = dest
       }, 500)
-    } catch (err: any) {
+    } catch (err: unknown) {
       setStatus('error')
-      setErrorMessage(err?.message ?? 'Booking failed. Try another time or reply to your SMS.')
+      setErrorMessage(
+        err instanceof Error && err.message
+          ? err.message
+          : 'Booking failed. Try another time or reply to your SMS.',
+      )
     }
   }
 

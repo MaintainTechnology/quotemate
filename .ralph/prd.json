@@ -1,74 +1,138 @@
 {
-  "project": "Solar Estimate Premium — explainers, transparency, volumetric grounding, AI panel preview",
-  "branch": "ralph/solar-estimate-premium",
+  "project": "Booking three-page split — customer view, booking page, thank-you page",
+  "branch": "main",
   "completionPromise": "All tests pass",
-  "maxIterations": 10,
+  "maxIterations": 12,
+  "spec": "docs/superpowers/specs/2026-07-22-booking-three-page-split-design.md",
+  "plan": "docs/superpowers/plans/2026-07-22-booking-three-page-split.md",
   "context": {
-    "app": "quotemate-automation (Next.js 16 App Router, Tailwind v4, vitest, strict TS)",
+    "app": "quotemate-automation (Next.js 16 App Router, React 19, Tailwind v4, vitest, playwright, strict TS)",
+    "goal": "Every funnel becomes: customer view -> Stripe -> /book (calendar only) -> /thanks (video, receipt, add-to-calendar). Today the roofing /book page shows the thank-you video AND the calendar on one page, painting books inline on its quote page, and the quotes funnel is book-first.",
     "surfaces": [
-      "app/solar/[tenantSlug]/page.tsx + _components/SolarAddressForm.tsx (brief form)",
-      "app/q/solar/[token]/page.tsx (results page, server component, no client JS)"
+      "app/q/[token]/{page,book,paid,thanks}    — electrical, plumbing, solar (via twin quotes row)",
+      "app/q/roof/[token]/{page,book,thanks}    — roofing_measurements",
+      "app/q/paint/[token]/{page,book,thanks}   — painting_measurements",
+      "app/r/[token]/[tier], app/r/roof/…, app/r/paint/… — pay short-links",
+      "app/api/q/[token]/book, app/api/q/book/[trade]/[token] — booking POSTs"
     ],
     "invariants": [
-      "Money path stays deterministic — no LLM in any $ figure",
-      "Confirm gate: prices hidden until solar_estimates.confirmed_at",
-      "±20/±30 indicative framing must remain (confidence_band)",
-      "satellite_image_url stays a REAL photo; AI image is a separate, clearly-labelled field",
-      "All displayed numbers trace to persisted estimate fields — no invented values",
-      "Maintain design system (ink-deep navy, #FF5A1F accent, Manrope/JetBrains Mono, square corners, borders not shadows)",
-      "Keep existing data-testids — playwright e2e depends on them"
+      "Money path: never display an inferred amount. resolvePaidAmount prefers the recorded Stripe amount_total; the INSPECTION_FEE_AUD fallback is for pre-migration rows only.",
+      "Never re-charge: payRedirectTarget checks paid FIRST — /r mints a fresh Session per click, so a paid quote routed to stripe would charge again on every re-click of an old SMS link.",
+      "Never charge into an empty calendar: canTakePayment({bookableCount}) gates every mint. Pay-first means the customer commits before seeing times.",
+      "The webhook-race guard (confirmPaidFromSession / the roof book page's session retrieve) is load-bearing — a customer who beats the Stripe webhook must still see a confirmation. Keep it on whichever page absorbs success_url.",
+      "Bookable windows are always derived with resolveBookingOptions, so the page, the booking API and the payment guard can never disagree and 409 a legitimate pick.",
+      "Slot labels render in the TENANT's timezone (tzForState) — a WA evening slot formatted in Sydney shows the wrong day.",
+      "QuoteMax design system: warm-charcoal #16120F canvas, single Caterpillar-yellow #FFC400 accent, Manrope + JetBrains Mono, square corners, borders not shadows, Australian English, zero emoji. Dark-on-yellow only — white on the accent is forbidden (~1.4:1).",
+      "Keep existing data-testids and aria labels — playwright e2e depends on them."
     ],
-    "gates": ["npx tsc --noEmit", "pnpm lint", "pnpm test", "pnpm build"]
+    "doNotTouch": [
+      "lib/roofing/quote-bullets.ts",
+      "lib/roofing/quote-bullets.test.ts",
+      "lib/roofing/report-html.ts",
+      "lib/quote/pdf.ts"
+    ],
+    "doNotTouchReason": "Uncommitted in-flight work by another author, present in the tree at session start. Leave unstaged and unmodified.",
+    "gates": [
+      "npm run typecheck",
+      "npm run lint",
+      "npm test"
+    ],
+    "gateCwd": "quotemate-automation",
+    "done": [
+      "Task 1 — pay-first payRedirectTarget, paidPageTarget gains thanks/quote, canTakePayment (commit c668bd65)",
+      "Task 4 — no-slots guard in resolvePayRedirect + /r/[token]/[tier] GET (commit c668bd65)",
+      "Task 8 partial — dead app/r/solar/[token]/[tier] + solarPayRedirectTarget deleted (commits 4a0cac69, c668bd65)"
+    ]
   },
   "stories": [
     {
       "id": "S1",
-      "title": "Per-stat explainer view models (lib/solar/explainers.ts)",
-      "status": "done",
-      "description": "Pure builder buildSolarStatExplainers(estimate) returning four explainer view models — systemSize, panels, orientation, yearlyOutput. Each carries: a plain-English answer to 'why this number?', fact rows (label/value/note), and ordered derivation steps. System size: roof capacity kW, export limit kW + export_limited flag, panel wattage, tier maths. Panels: usable_area_m2, max_panels_count, selected count, area-per-panel. Orientation: primary orientation, per-plane azimuth/pitch/area table, hemisphere note (north-facing best in AU). Yearly output: DC estimate -> derate_applied -> AC, low/high band, CEC benchmark cross-check, degradation. Handles google AND manual coverage_source with distinct copy; null-safe (empty planes, null pitch/azimuth).",
-      "acceptance": ["Unit tests cover google + manual paths, null-safety, and that every displayed figure equals the source estimate field", "No engine/money files touched"]
+      "title": "Task 2 — one slot picker that honours the API next field",
+      "status": "pending",
+      "description": "Create app/q/_chrome/booking-next.ts exporting resolveBookingNext(json, fallbackPath): returns json.next when it is a non-empty same-origin relative path, else fallbackPath. Reject absolute URLs and protocol-relative '//host' (open-redirect guard). Then git mv app/q/roof/[token]/BookingCalendar.tsx to app/q/_chrome/BookingCalendar.tsx, replace its hardcoded `window.location.href = window.location.pathname` success navigation with resolveBookingNext(json, window.location.pathname), export its toCalendarDays day-grouping helper so every funnel shares one implementation, and update the module doc to say it serves all funnels. Fix the import in app/q/roof/[token]/book/page.tsx and any other importer.",
+      "acceptance": [
+        "booking-next.test.ts covers: next used when present; fallback when missing/empty/non-string; absolute https URL rejected; protocol-relative // rejected",
+        "grep shows no remaining import of app/q/roof/[token]/BookingCalendar",
+        "typecheck clean"
+      ]
     },
     {
       "id": "S2",
-      "title": "Transparent assumptions view models (lib/solar/assumptions-view.ts)",
-      "status": "done",
-      "description": "Pure builder buildSolarAssumptionsView(estimate) returning rows for: self-consumption %, retail rate, feed-in tariff (resolved network), STC parameters (zone rating, deeming years, certificates, $/STC from headline tier stc breakdown), DC->AC derate, panel degradation, config version + band. Each row: label, value, source (where it came from: config version, DNSP network, CER postcode zone, Google imagery), meaning (one plain sentence), sensitivity (which direction it moves savings/payback).",
-      "acceptance": ["Unit tests: both paths, network-default fallback, STC zone derivation matches price.tiers[].stc", "No engine/money files touched"]
+      "title": "Task 3 — record and resolve the real amount paid",
+      "status": "pending",
+      "description": "Create lib/quote/paid-amount.ts with resolvePaidAmount({paidAmountCents, paidTier, totalIncGst}): prefer paidAmountCents/100 when finite and > 0; else INSPECTION_FEE_AUD when paidTier === 'inspection'; else totalIncGst when finite and > 0; else null. Plus formatPaidAmount(amount) -> '$99.00' / '$22,000.00' / null, en-AU with two decimals. Write sql/migrations/181_trade_paid_amount.sql adding `paid_amount_cents bigint` to roofing_measurements and painting_measurements (idempotent, with column comments), plus scripts/run-migration-181.mjs modelled on the newest existing run-migration-*.mjs. Apply it with `node --env-file=.env.local scripts/run-migration-181.mjs`. Stamp session.amount_total into that column at BOTH write points: the roofing/painting branches of app/api/stripe/webhook/route.ts, and the webhook-race guard in app/q/roof/[token]/book/page.tsx.",
+      "acceptance": [
+        "paid-amount.test.ts covers: recorded amount wins; cents not dollars; inspection fallback; quote-total fallback; null when nothing known; zero/negative recorded amount ignored",
+        "Migration applied successfully to the live Supabase project",
+        "Both write points stamp paid_amount_cents"
+      ]
     },
     {
       "id": "S3",
-      "title": "Results page premium upgrade with expandable explainers + transparent assumptions",
-      "status": "done",
-      "description": "Rework app/q/solar/[token]/page.tsx: native <details> expandable explainer under each hero stat tile (server-rendered, no client JS) fed by S1; assumptions section becomes a transparent value/source/meaning/sensitivity layout fed by S2; add topographic SVG background + staggered fade-up reveals (existing keyframes); keep confidence chip, confirm gate, compliance copy, tier cards, orange closing bar. Mobile-first.",
-      "acceptance": ["Page remains a server component", "Confirm gate + indicative chip unchanged", "tsc/lint/build green"]
+      "title": "Task 5 — move the early-booking discount to the Stripe mint",
+      "status": "pending",
+      "description": "CRITICAL: under pay-first the book route's `!alreadyPaid` branch never runs, so without this the early-booking discount silently stops applying for every customer. Add resolveMintDiscount({appliedPct, offerPct, expiresAt, tier, now}) to lib/quote/early-bird.ts returning {pct, stamp}: non-deposit tiers -> {0,false} (never discount the flat $99); appliedPct > 0 -> {appliedPct,false} (already realised, never double-stamp on a re-click); else earlyBirdStatus live -> {discountPct,true}; else {0,false}. Give earlyBirdStatus an optional injectable `now` if it lacks one. Use it in mintFreshDepositUrl in app/r/[token]/[tier]/route.ts, writing applied_discount_pct + applied_discount_at when stamp is true, inside its own try so a pre-migration-044 deploy simply finds no offer. Then delete the whole '// ─── v8 Phase A' block from app/api/q/[token]/book/route.ts along with its now-unused appliedDiscountPct local, PAY_TIERS constant, earlyBirdStatus + expireCheckoutSession imports, and the early_bird_discount_pct response field.",
+      "acceptance": [
+        "early-bird.test.ts covers: live offer realised; already-realised kept without re-stamp; lapsed ignored; inspection never discounted; missing offer ignored",
+        "app/api/q/[token]/book/route.ts no longer imports earlyBirdStatus or expireCheckoutSession",
+        "typecheck + lint clean"
+      ]
     },
     {
       "id": "S4",
-      "title": "Brief form premium polish (frontend-design pass)",
-      "status": "done",
-      "description": "Elevate /solar/[tenantSlug] entry page + SolarAddressForm: staggered entrance reveals, trust points visible on mobile, refined focus/hover micro-interactions, postcode input pattern (4 digits), polished manual-details section, submit button progress copy. Behaviour, payload, and all data-testids unchanged.",
-      "acceptance": ["form-payload/request-schema tests untouched and green", "No new client deps"]
+      "title": "Task 6 — thank-you pages for the quotes and roofing funnels",
+      "status": "pending",
+      "description": "Create lib/quote/thanks.ts: thanksPageTarget({paid, scheduledAt}) -> 'pay' when unpaid, 'book' when paid with no slot, 'render' when paid and scheduled; and bookingRef(token) -> first 8 chars uppercased, '' for null. Create app/q/_chrome/BookedSummary.tsx — a server component (no client JS) taking {tradieName, jobLabel, visitLabel, place, ref, paidLabel} and rendering label/value rows in the existing CredentialFooter style (118px mono label column). The Booked row reads 'Online · self-serve · ref {ref}'. Omit any row whose value is null. Then build app/q/[token]/thanks/page.tsx and app/q/roof/[token]/thanks/page.tsx: force-dynamic server components that load the row, run the same webhook-race guard the current /paid and roof /book pages use, switch on thanksPageTarget, and on 'render' show — in order — TrustVideo with trustVideoUrls(identity).thankyou and caption 'A thank-you message from your tradie', a next-steps paragraph, BookedSummary, AddToCalendar, and a 'Download quote (PDF)' link when priced. The quotes page uses quotes+intakes, buildGoogleCalendarUrl/resolveEventWindow and icsHref /api/q/<token>/ics; the roofing page uses roofing_measurements, formatVisitSlot, visitCalendarLinks and icsHref /q/roof/<token>/visit.ics inside QuoteChrome + QuoteSheet + Letterhead. Amounts come from resolvePaidAmount + formatPaidAmount.",
+      "acceptance": [
+        "thanks.test.ts covers all three thanksPageTarget branches and bookingRef incl. short and null tokens",
+        "Both pages redirect an unpaid visitor to that funnel's pay short-link and a paid-but-unscheduled visitor to /book",
+        "AddToCalendar renders .ics + Google + Outlook + Outlook (work)",
+        "typecheck + lint clean"
+      ]
     },
     {
       "id": "S5",
-      "title": "Volumetric grounding for the manual fallback path",
-      "status": "done",
-      "description": "manual-fallback.ts currently ignores orientation and geography. Add config-driven orientation yield factors (north 1.0 ... south ~0.80, AU hemisphere) and optional state-specific manual benchmark (manual_benchmark_by_state), both with safe defaults in config.ts; manual path multiplies declared-orientation factor into the synthetic panel_config yearly_energy_dc_kwh. Google path untouched (already volumetric). Confidence stays wide on manual.",
-      "acceptance": ["manual-fallback/production/intake tests updated + new cases for orientation derate and state benchmark", "Guardrails (CEC +/-35%) still pass for all orientations/states", "Google-path numbers byte-identical to before"]
+      "title": "Task 7 — booking pages render the calendar and nothing else",
+      "status": "pending",
+      "description": "Strip app/q/roof/[token]/book/page.tsx: delete the 'Thank you' SheetSection with TrustVideo, the booked-state branch and its AddToCalendar, and the now-unused TrustVideo/AddToCalendar/visitCalendarLinks/formatVisitSlot imports and calLinks/slotLabel locals. Add `if (scheduledAt) redirect('/q/roof/'+token+'/thanks')` with the other guards. What remains: letterhead, one instruction line, BookingCalendar, back link. Rewrite app/q/[token]/book/page.tsx the same shape — drop StepStrip, AlreadyScheduledState, ReservedPayState, NoSlotsPayState, PickState and the Topo decoration; keep ExpiredState (a lapsed price must never be booked against); guards become notFound -> priceExpired -> `if (!isPaid) redirect('/r/'+token+'/'+tier)` -> `if (isScheduled) redirect('/q/'+token+'/thanks')`; body renders the shared BookingCalendar with endpoint /api/q/<token>/book built from options via the shared toCalendarDays. Then `git rm app/q/[token]/book/SlotPicker.tsx`.",
+      "acceptance": [
+        "Neither /book page renders a <video> or any thank-you copy",
+        "SlotPicker.tsx no longer exists",
+        "typecheck may fail ONLY in app/q/paint/[token]/page.tsx and app/q/roof/[token]/page.tsx — S6 fixes those two importers"
+      ]
     },
     {
       "id": "S6",
-      "title": "AI-generated roof-with-panels concept image",
-      "status": "done",
-      "description": "Mirror lib/roofing/roof-after.ts blueprint: migration 102 adds solar_estimates.panels_image_path + panels_image_status (idle/generating/ready/failed); lib/solar/panels-after-prompt.ts (pure, unit-tested) builds a Gemini brief grounded on panel count/orientation/system size; lib/solar/panels-after.ts CAS-claims status, fetches the real satellite image, renders via ig-engine gemini provider, uploads to storage, updates row; triggered in estimate route after() (soft-fail without GEMINI_API_KEY; skipped on manual path with no satellite image); GET /api/solar/q/[token]/panels-after proxy mirrors static-map; results page renders it beside the aerial image labelled 'AI-generated concept — not a design document'.",
-      "acceptance": ["Prompt builder unit-tested", "Page renders gracefully when image absent/failed", "satellite_image_url semantics untouched", "Migration applied via scripts/run-migration pattern"]
+      "title": "Task 8 — painting funnel, /paid router, API next targets",
+      "status": "pending",
+      "description": "Create app/q/paint/[token]/book/page.tsx, app/q/paint/[token]/thanks/page.tsx and app/q/paint/[token]/visit.ics/route.ts by mirroring the roofing trio against painting_measurements, /q/paint/, the paint API endpoint and visitIcsText. In app/q/paint/[token]/page.tsx replace the inline booking SheetSection (the `{paid ? (` block) with a CTA linking to /q/paint/<token>/book or /thanks depending on paintScheduledAt, and delete the SlotPicker import and the paintBookingOptions load. In app/q/roof/[token]/page.tsx delete the SlotPicker import and its render, and point the booked-state link at /thanks instead of /book. Turn app/q/[token]/paid/page.tsx into a pure router: keep the lookup and confirmPaidFromSession guard, then redirect on paidPageTarget — 'thanks' -> /q/<token>/thanks, 'book' -> /q/<token>/book, 'quote' -> /q/<token>; delete everything it used to render. In app/api/q/[token]/book/route.ts require paid_at (409 'Pay the deposit first, then pick your time.'), collapse the alreadyPaid conditional since every booking is now post-payment (always BOOKED + accepted + prune the slot + notifyBookingConfirmed), and return next '/q/<token>/thanks'. In app/api/q/book/[trade]/[token]/route.ts return next '/q/<trade>/<token>/thanks'. Also add the no-slots guard (canTakePayment + loadTenantBookingOptions) to app/r/roof/[token]/[tier]/route.ts and app/r/paint/[token]/[tier]/route.ts, redirecting to /q/<trade>/<token>?slots=0. Finally render the ?slots=0 notice on all three customer-view pages: 'We'll arrange your time by text. {tradieName} hasn't published bookable times yet, so we haven't taken any payment. They'll text you within one business day to lock one in.'",
+      "acceptance": [
+        "`grep -r SlotPicker app lib` returns nothing",
+        "npm test, npm run typecheck and npm run lint all clean",
+        "All three funnels have book + thanks pages"
+      ]
     },
     {
       "id": "S7",
-      "title": "Full quality gates + completion promise",
-      "status": "done",
-      "description": "Run npx tsc --noEmit, pnpm lint, pnpm test (full vitest suite), pnpm build. Fix everything. Completion promise: All tests pass.",
-      "acceptance": ["All four gates exit 0"]
+      "title": "Task 9 — rewrite the e2e suite to the pay-first contract",
+      "status": "pending",
+      "description": "The existing specs assert book-first and must be rewritten, not skipped. In tests/e2e/roofing-quote-workflow.spec.ts the case at ~:170 asserting /r/<token>/better redirects to /q/<token>/book must now assert the location contains checkout.stripe.com and NOT '/book'; the ~:183 booking case must seed paid_at before visiting /q/<token>/book because the page is paid-gated. In tests/e2e/roofing-five-sections.spec.ts the ~:275 case moves from /q/<paidToken>/paid to /q/<paidToken>/thanks since /paid no longer renders. Then add tests/e2e/booking-three-page-split.spec.ts covering, with service-role seeded fixtures following the existing pattern: the booking page shows a calendar grid and zero <video> elements and no thank-you copy; confirming a time navigates to /thanks; the thank-you page shows the paid amount, the slot label, 'Online · self-serve · ref', the Add to calendar link and the Google/Outlook links, and exactly one <video>; an unpaid visitor is redirected away from both /book and /thanks; and a tenant with zero published windows gets ?slots=0 and never reaches checkout.stripe.com.",
+      "acceptance": [
+        "npm run test:e2e passes",
+        "No test asserts a book-first redirect any more",
+        "New spec covers all three funnels where they differ"
+      ]
+    },
+    {
+      "id": "S8",
+      "title": "Task 10 — log the strategy drift",
+      "status": "pending",
+      "description": "CLAUDE.md requires that a decision reversal be recorded rather than quietly applied. Append an iteration entry to docs/strategy.md noting that 'WP6 reorder: BOOK FIRST, PAY LAST' is superseded for deposit tiers as of 2026-07-22, why (one consistent three-page funnel across all trades, and the two orders had already diverged in practice), and the mitigation (canTakePayment blocks any charge when no windows are published). Update CLAUDE.md's webpage-surface list to include /q/[token]/thanks, /q/roof/[token]/{book,thanks} and /q/paint/[token]/{book,thanks}, and note that /q/[token]/paid is now a router rather than a rendered page. Then invoke the strategy-reviewer agent as CLAUDE.md requires after any docs/strategy.md edit, and act on what it reports.",
+      "acceptance": [
+        "docs/strategy.md carries a dated iteration entry for the reversal",
+        "CLAUDE.md route list matches the shipped routes",
+        "strategy-reviewer run and its findings addressed"
+      ]
     }
   ]
 }

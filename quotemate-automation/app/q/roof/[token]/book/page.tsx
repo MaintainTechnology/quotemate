@@ -20,8 +20,8 @@ import { loadTenantBookingOptions, formatVisitSlot } from '@/lib/quote/trade-boo
 import { visitCalendarLinks } from '@/lib/quote/calendar-links'
 import { tzForState } from '@/lib/quote/availability'
 import { getStripe } from '@/lib/stripe/client'
-import type { BookingOption } from '@/lib/quote/slots'
-import { BookingCalendar, type CalendarDay } from '../BookingCalendar'
+import { BookingCalendar, type CalendarDay } from '@/app/q/_chrome/BookingCalendar'
+import { toCalendarDays } from '@/app/q/_chrome/calendar-days'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,30 +47,6 @@ const GHOST_LINK = {
   letterSpacing: '0.12em',
   textDecoration: 'none',
 } as const
-
-/** Group booking options into calendar days, dated in the tenant's timezone
- *  so the grid lines up with the times the customer will actually get. */
-function toCalendarDays(options: BookingOption[], tz: string): CalendarDay[] {
-  const keyFmt = new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  })
-  const byKey = new Map<string, CalendarDay>()
-  for (const o of options) {
-    const key = keyFmt.format(new Date(o.iso))
-    let day = byKey.get(key)
-    if (!day) {
-      const [y, m, d] = key.split('-').map(Number)
-      const weekday = new Date(Date.UTC(y, m - 1, d, 12)).getUTCDay()
-      day = { key, year: y, monthIndex: m - 1, date: d, weekday, label: o.dayLabel, times: [] }
-      byKey.set(key, day)
-    }
-    day.times.push({ iso: o.iso, chip: o.chipLabel })
-  }
-  return [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key))
-}
 
 function shortTzLabel(tz: string): string | null {
   try {

@@ -1,0 +1,74 @@
+{
+  "project": "Solar Estimate Premium — explainers, transparency, volumetric grounding, AI panel preview",
+  "branch": "ralph/solar-estimate-premium",
+  "completionPromise": "All tests pass",
+  "maxIterations": 10,
+  "context": {
+    "app": "quotemate-automation (Next.js 16 App Router, Tailwind v4, vitest, strict TS)",
+    "surfaces": [
+      "app/solar/[tenantSlug]/page.tsx + _components/SolarAddressForm.tsx (brief form)",
+      "app/q/solar/[token]/page.tsx (results page, server component, no client JS)"
+    ],
+    "invariants": [
+      "Money path stays deterministic — no LLM in any $ figure",
+      "Confirm gate: prices hidden until solar_estimates.confirmed_at",
+      "±20/±30 indicative framing must remain (confidence_band)",
+      "satellite_image_url stays a REAL photo; AI image is a separate, clearly-labelled field",
+      "All displayed numbers trace to persisted estimate fields — no invented values",
+      "Maintain design system (ink-deep navy, #FF5A1F accent, Manrope/JetBrains Mono, square corners, borders not shadows)",
+      "Keep existing data-testids — playwright e2e depends on them"
+    ],
+    "gates": ["npx tsc --noEmit", "pnpm lint", "pnpm test", "pnpm build"]
+  },
+  "stories": [
+    {
+      "id": "S1",
+      "title": "Per-stat explainer view models (lib/solar/explainers.ts)",
+      "status": "done",
+      "description": "Pure builder buildSolarStatExplainers(estimate) returning four explainer view models — systemSize, panels, orientation, yearlyOutput. Each carries: a plain-English answer to 'why this number?', fact rows (label/value/note), and ordered derivation steps. System size: roof capacity kW, export limit kW + export_limited flag, panel wattage, tier maths. Panels: usable_area_m2, max_panels_count, selected count, area-per-panel. Orientation: primary orientation, per-plane azimuth/pitch/area table, hemisphere note (north-facing best in AU). Yearly output: DC estimate -> derate_applied -> AC, low/high band, CEC benchmark cross-check, degradation. Handles google AND manual coverage_source with distinct copy; null-safe (empty planes, null pitch/azimuth).",
+      "acceptance": ["Unit tests cover google + manual paths, null-safety, and that every displayed figure equals the source estimate field", "No engine/money files touched"]
+    },
+    {
+      "id": "S2",
+      "title": "Transparent assumptions view models (lib/solar/assumptions-view.ts)",
+      "status": "done",
+      "description": "Pure builder buildSolarAssumptionsView(estimate) returning rows for: self-consumption %, retail rate, feed-in tariff (resolved network), STC parameters (zone rating, deeming years, certificates, $/STC from headline tier stc breakdown), DC->AC derate, panel degradation, config version + band. Each row: label, value, source (where it came from: config version, DNSP network, CER postcode zone, Google imagery), meaning (one plain sentence), sensitivity (which direction it moves savings/payback).",
+      "acceptance": ["Unit tests: both paths, network-default fallback, STC zone derivation matches price.tiers[].stc", "No engine/money files touched"]
+    },
+    {
+      "id": "S3",
+      "title": "Results page premium upgrade with expandable explainers + transparent assumptions",
+      "status": "done",
+      "description": "Rework app/q/solar/[token]/page.tsx: native <details> expandable explainer under each hero stat tile (server-rendered, no client JS) fed by S1; assumptions section becomes a transparent value/source/meaning/sensitivity layout fed by S2; add topographic SVG background + staggered fade-up reveals (existing keyframes); keep confidence chip, confirm gate, compliance copy, tier cards, orange closing bar. Mobile-first.",
+      "acceptance": ["Page remains a server component", "Confirm gate + indicative chip unchanged", "tsc/lint/build green"]
+    },
+    {
+      "id": "S4",
+      "title": "Brief form premium polish (frontend-design pass)",
+      "status": "done",
+      "description": "Elevate /solar/[tenantSlug] entry page + SolarAddressForm: staggered entrance reveals, trust points visible on mobile, refined focus/hover micro-interactions, postcode input pattern (4 digits), polished manual-details section, submit button progress copy. Behaviour, payload, and all data-testids unchanged.",
+      "acceptance": ["form-payload/request-schema tests untouched and green", "No new client deps"]
+    },
+    {
+      "id": "S5",
+      "title": "Volumetric grounding for the manual fallback path",
+      "status": "done",
+      "description": "manual-fallback.ts currently ignores orientation and geography. Add config-driven orientation yield factors (north 1.0 ... south ~0.80, AU hemisphere) and optional state-specific manual benchmark (manual_benchmark_by_state), both with safe defaults in config.ts; manual path multiplies declared-orientation factor into the synthetic panel_config yearly_energy_dc_kwh. Google path untouched (already volumetric). Confidence stays wide on manual.",
+      "acceptance": ["manual-fallback/production/intake tests updated + new cases for orientation derate and state benchmark", "Guardrails (CEC +/-35%) still pass for all orientations/states", "Google-path numbers byte-identical to before"]
+    },
+    {
+      "id": "S6",
+      "title": "AI-generated roof-with-panels concept image",
+      "status": "done",
+      "description": "Mirror lib/roofing/roof-after.ts blueprint: migration 102 adds solar_estimates.panels_image_path + panels_image_status (idle/generating/ready/failed); lib/solar/panels-after-prompt.ts (pure, unit-tested) builds a Gemini brief grounded on panel count/orientation/system size; lib/solar/panels-after.ts CAS-claims status, fetches the real satellite image, renders via ig-engine gemini provider, uploads to storage, updates row; triggered in estimate route after() (soft-fail without GEMINI_API_KEY; skipped on manual path with no satellite image); GET /api/solar/q/[token]/panels-after proxy mirrors static-map; results page renders it beside the aerial image labelled 'AI-generated concept — not a design document'.",
+      "acceptance": ["Prompt builder unit-tested", "Page renders gracefully when image absent/failed", "satellite_image_url semantics untouched", "Migration applied via scripts/run-migration pattern"]
+    },
+    {
+      "id": "S7",
+      "title": "Full quality gates + completion promise",
+      "status": "done",
+      "description": "Run npx tsc --noEmit, pnpm lint, pnpm test (full vitest suite), pnpm build. Fix everything. Completion promise: All tests pass.",
+      "acceptance": ["All four gates exit 0"]
+    }
+  ]
+}
