@@ -9,6 +9,7 @@ import {
   contactDisplayName,
   safeWebsiteUrl,
   trustVideoUrls,
+  tradeVideoUrls,
 } from './tenant-identity'
 
 type Row = Record<string, unknown> | null
@@ -126,6 +127,69 @@ describe('trustVideoUrls — tenant video, else the QuoteMax default (mig 177)',
 
   it('null identity still yields the defaults', () => {
     expect(trustVideoUrls(null, SB).intro).toContain('defaults/welcome.mp4')
+  })
+})
+
+describe('tradeVideoUrls — per-trade video, else the tenant pair, else the default', () => {
+  const SB = 'https://proj.supabase.co'
+  const legacy = {
+    intro_video_url: 'https://cdn.example/tenant-intro.mp4',
+    thankyou_video_url: 'https://cdn.example/tenant-thanks.mp4',
+  }
+
+  it("the trade's own video wins over the tenant-wide pair", () => {
+    const v = tradeVideoUrls(
+      {
+        ...legacy,
+        trade_videos: {
+          roofing: { welcome: { url: 'https://cdn.example/roof-w.mp4' } },
+        },
+      },
+      'roofing',
+      SB,
+    )
+    expect(v.intro).toBe('https://cdn.example/roof-w.mp4')
+    // No roofing thank-you yet → the tenant-wide one still covers it.
+    expect(v.thankyou).toBe('https://cdn.example/tenant-thanks.mp4')
+  })
+
+  it('a trade with no videos of its own falls back to the tenant pair', () => {
+    const v = tradeVideoUrls(
+      { ...legacy, trade_videos: { roofing: { welcome: { url: 'r.mp4' } } } },
+      'plumbing',
+      SB,
+    )
+    expect(v.intro).toBe('https://cdn.example/tenant-intro.mp4')
+    expect(v.thankyou).toBe('https://cdn.example/tenant-thanks.mp4')
+  })
+
+  it('no per-trade and no tenant video → the QuoteMax defaults', () => {
+    const v = tradeVideoUrls(
+      { intro_video_url: null, thankyou_video_url: null, trade_videos: null },
+      'electrical',
+      SB,
+    )
+    expect(v.intro).toBe(`${SB}/storage/v1/object/public/tenant-videos/defaults/welcome.mp4`)
+    expect(v.thankyou).toBe(`${SB}/storage/v1/object/public/tenant-videos/defaults/thank-you.mp4`)
+  })
+
+  it('accepts the hyphenated customer-surface TradeKey', () => {
+    const v = tradeVideoUrls(
+      {
+        intro_video_url: null,
+        thankyou_video_url: null,
+        trade_videos: { commercial_painting: { thankyou: { url: 'cp-t.mp4' } } },
+      },
+      'commercial-painting',
+      SB,
+    )
+    expect(v.thankyou).toBe('cp-t.mp4')
+  })
+
+  it('an unknown or null trade behaves exactly like the tenant-wide resolver', () => {
+    const withMap = { ...legacy, trade_videos: { roofing: { welcome: { url: 'r.mp4' } } } }
+    expect(tradeVideoUrls(withMap, 'carpentry', SB).intro).toBe(legacy.intro_video_url)
+    expect(tradeVideoUrls(withMap, null, SB).intro).toBe(legacy.intro_video_url)
   })
 })
 

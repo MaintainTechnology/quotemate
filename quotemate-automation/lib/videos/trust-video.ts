@@ -18,6 +18,14 @@
 // logged. All calls are server-side.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import {
+  normaliseVideoTrade,
+  withTradeSlot,
+  readTradeSlot,
+  shouldAutoGenerateTrade,
+  type TradeVideoMap,
+} from './trade-videos'
+import { tradeScene, tradeWorkNoun } from './trade-script'
 
 export type TrustVideoSlot = 'welcome' | 'thankyou'
 
@@ -65,12 +73,22 @@ export function defaultScript(
   slot: TrustVideoSlot,
   businessName: string,
   contactName?: string | null,
+  /** Names the trade in the welcome line ("quality roofing built to last").
+   *  Omitted keeps the previous trade-neutral wording ("quality work"). */
+  trade?: string | null,
 ): string {
   const name = businessName.trim() || 'our team'
   const contact = contactName?.trim()
   if (slot === 'welcome') {
     const intro = contact ? `Hi, I'm ${contact} from ${name}.` : `G'day, we're ${name}.`
-    return `${intro} Thanks for the opportunity to quote. No shortcuts and no surprises, just quality work built to last. Book your site visit and we will sort the rest.`
+    const line = (noun: string) =>
+      `${intro} Thanks for the opportunity to quote. No shortcuts and no surprises, just quality ${noun} built to last. Book your site visit and we will sort the rest.`
+    // Naming the trade is a nice-to-have; staying under the cap is not. A long
+    // business + contact name plus a long trade noun can breach 220 chars, and
+    // an over-length script is REJECTED outright — so drop back to the neutral
+    // noun rather than emit a default script that cannot be generated.
+    const flavoured = line(tradeWorkNoun(trade))
+    return flavoured.length <= MAX_SCRIPT_CHARS ? flavoured : line('work')
   }
   return contact
     ? `Hi, it's ${contact} from ${name}. Thank you for accepting our quote and booking your site inspection. I will call shortly to confirm the exact time. See you soon.`
@@ -107,11 +125,10 @@ export function buildTrustVideoPrompt(opts: {
   const speaker = opts.contactName?.trim()
     ? `${opts.contactName.trim()}, the owner of ${business}`
     : `the friendly owner of ${business}`
-  const line = (opts.script?.trim() || defaultScript(opts.slot, business, opts.contactName)).replace(/"/g, "'")
-  const scene =
-    opts.slot === 'welcome'
-      ? `standing in front of their branded work vehicle outside an Australian suburban home on a sunny day`
-      : `outside an Australian suburban home, giving a warm nod of thanks`
+  const line = (opts.script?.trim() || defaultScript(opts.slot, business, opts.contactName, opts.trade)).replace(/"/g, "'")
+  // Per-trade visual (lib/videos/trade-script). Branding stays identical
+  // across trades; only the scene and the spoken noun change.
+  const scene = tradeScene(opts.trade, opts.slot)
   // Branding directive: the company name always appears on the vehicle and
   // workwear; when a logo/reference image rides along, tell Veo to match it
   // exactly rather than invent a substitute mark.
@@ -379,10 +396,14 @@ type TenantVideoRow = {
   intro_video_url: string | null
   thankyou_video_url: string | null
   trust_video_state: TrustVideoState | null
+  /** Trades the tenant has switched on (mig 017) — the set we generate a pair for. */
+  trades: string[] | null
+  /** Per-trade videos (mig 179): trade -> slot -> {url, status, ...}. */
+  trade_videos: TradeVideoMap | null
 }
 
 export const TENANT_VIDEO_COLUMNS =
-  'id, business_name, contact_name, trade, logo_url, intro_video_url, thankyou_video_url, trust_video_state'
+  'id, business_name, contact_name, trade, trades, logo_url, intro_video_url, thankyou_video_url, trust_video_state, trade_videos'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- structural DI (house pattern, see lib/quote/paid-confirm.ts)
 type Db = any
@@ -397,6 +418,12 @@ async function saveSlotState(
     .update({ trust_video_state: state })
     .eq('id', tenantId)
   if (error) console.warn('[trust-video] state save skipped (apply migration 178)', error.message)
+}
+
+/** Persist the per-trade video map (mig 179). Best-effort like saveSlotState. */
+async function saveTradeVideos(supabase: Db, tenantId: string, map: TradeVideoMap): Promise<void> {
+  const { error } = await supabase.from('tenants').update({ trade_videos: map }).eq('id', tenantId)
+  if (error) console.warn('[trust-video] trade video save skipped (apply migration 179)', error.message)
 }
 
 /** Fetch the tenant's logo bytes for reference conditioning (public URL).
@@ -435,8 +462,11 @@ async function uploadVideoToBucket(
   tenantId: string,
   slot: TrustVideoSlot,
   bytes: ArrayBuffer,
+  tradeKey?: string | null,
 ): Promise<string> {
-  const path = `${tenantId}/${slot}-${Date.now()}.mp4`
+  const path = tradeKey
+    ? `${tenantId}/${tradeKey}/${slot}-${Date.now()}.mp4`
+    : `${tenantId}/${slot}-${Date.now()}.mp4`
   const { error } = await supabase.storage
     .from(BUCKET)
     .upload(path, bytes, { contentType: 'video/mp4', upsert: true })
@@ -451,14 +481,19 @@ async function finaliseSlot(
   tenant: TenantVideoRow,
   slot: TrustVideoSlot,
   uri: string,
+  tradeKey?: string | null,
 ): Promise<string> {
   const bytes = await downloadVideo(uri)
-  const publicUrl = await uploadVideoToBucket(supabase, tenant.id, slot, bytes)
-  const { error } = await supabase
-    .from('tenants')
-    .update({ [SLOT_URL_COLUMN[slot]]: publicUrl })
-    .eq('id', tenant.id)
-  if (error) throw new Error(`tenant stamp failed: ${error.message}`)
+  const publicUrl = await uploadVideoToBucket(supabase, tenant.id, slot, bytes, tradeKey)
+  // Per-trade generations live in trade_videos; the caller stamps the url into
+  // that map. Only the legacy tenant-wide pair writes a scalar column.
+  if (!tradeKey) {
+    const { error } = await supabase
+      .from('tenants')
+      .update({ [SLOT_URL_COLUMN[slot]]: publicUrl })
+      .eq('id', tenant.id)
+    if (error) throw new Error(`tenant stamp failed: ${error.message}`)
+  }
   return publicUrl
 }
 
@@ -472,6 +507,9 @@ export async function generateTrustVideo(
   opts: {
     tenantId: string
     slot: TrustVideoSlot
+    /** Trade this pair belongs to (mig 179). Omitted = the legacy
+     *  tenant-wide pair, which stays as the fallback for older tenants. */
+    trade?: string | null
     script?: string | null
     source: 'auto' | 'dashboard'
     /** The owner's photo — a person LIKENESS; first to be dropped when Veo's
@@ -520,14 +558,28 @@ export async function generateTrustVideo(
     const attempts = buildAttemptLadder({
       usingDefaultScript,
       requestedScript:
-        opts.script?.trim() || defaultScript(slot, t.business_name ?? '', t.contact_name),
-      neutralScript: defaultScript(slot, t.business_name ?? '', null),
+        opts.script?.trim() ||
+        defaultScript(slot, t.business_name ?? '', t.contact_name, opts.trade ?? t.trade),
+      neutralScript: defaultScript(slot, t.business_name ?? '', null, opts.trade ?? t.trade),
       contactName: t.contact_name,
       hasPersonPhoto: !!personRef,
       hasBrandRef: brandRefs.length > 0,
     })
 
-    let state = t.trust_video_state
+    // Storage routing: with a trade we read/write tenants.trade_videos
+    // (trade -> slot -> entry); without one we keep the legacy slot-keyed
+    // trust_video_state + scalar url column untouched.
+    const tradeKey = normaliseVideoTrade(opts.trade)
+    let state: TrustVideoState = t.trust_video_state ?? {}
+    let tradeMap: TradeVideoMap = t.trade_videos ?? {}
+    const patch = (p: Record<string, unknown>) => {
+      if (tradeKey) tradeMap = withTradeSlot(tradeMap, tradeKey, slot, p)
+      else state = withSlotState(state, slot, p)
+    }
+    const persist = async () => {
+      if (tradeKey) await saveTradeVideos(supabase, tenantId, tradeMap)
+      else await saveSlotState(supabase, tenantId, state)
+    }
     let lastError = 'generation failed'
     for (let i = 0; i < attempts.length; i++) {
       const attempt = attempts[i]
@@ -536,22 +588,22 @@ export async function generateTrustVideo(
         slot,
         businessName: t.business_name ?? '',
         contactName: attempt.contactName,
-        trade: t.trade,
+        trade: opts.trade ?? t.trade,
         script: attempt.script,
         extraContext: opts.extraContext ?? null,
         hasReferenceImage: attemptRefs.length > 0,
       })
 
-      state = withSlotState(state, slot, {
+      patch({
         status: 'generating',
         script: attempt.script,
         error: null,
         source: opts.source,
       })
-      await saveSlotState(supabase, tenantId, state)
+      await persist()
 
       const { operation, note } = await startVeoOperation({ prompt, referenceImages: attemptRefs })
-      state = withSlotState(state, slot, {
+      patch({
         operation,
         note:
           attempt.note ??
@@ -560,7 +612,7 @@ export async function generateTrustVideo(
             ? 'Your logo could not be read, so this video was generated without it.'
             : null),
       })
-      await saveSlotState(supabase, tenantId, state)
+      await persist()
 
       const deadline = Date.now() + (opts.maxWaitMs ?? 240_000)
       let attemptFailed: string | null = null
@@ -573,9 +625,9 @@ export async function generateTrustVideo(
           attemptFailed = poll.error
           break
         }
-        const url = await finaliseSlot(supabase, t, slot, poll.uri)
-        state = withSlotState(state, slot, { status: 'ready', error: null })
-        await saveSlotState(supabase, tenantId, state)
+        const url = await finaliseSlot(supabase, t, slot, poll.uri, tradeKey)
+        patch(tradeKey ? { status: 'ready', error: null, url } : { status: 'ready', error: null })
+        await persist()
         return { status: 'ready', url }
       }
       if (attemptFailed === null) {
@@ -604,8 +656,8 @@ export async function generateTrustVideo(
         lastError = `${lastError} Try removing "${named}" from your script. The AI cannot speak real people's names.`
       }
     }
-    state = withSlotState(state, slot, { status: 'failed', error: lastError })
-    await saveSlotState(supabase, tenantId, state)
+    patch({ status: 'failed', error: lastError })
+    await persist()
     return { status: 'failed', error: lastError }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
@@ -637,7 +689,13 @@ export async function generateTrustVideo(
  * shouldAutoGenerate keeps it idempotent and never clobbers real content.
  * Sequential on purpose (one in-flight Veo job per tenant); never throws.
  */
-export async function autoGenerateTrustVideos(supabase: Db, tenantId: string): Promise<void> {
+export async function autoGenerateTrustVideos(
+  supabase: Db,
+  tenantId: string,
+  /** Generate only this trade's pair (called when a trade is switched on).
+   *  Omitted = every trade the tenant has on, else the legacy tenant-wide pair. */
+  trade?: string | null,
+): Promise<void> {
   if ((process.env.TRUST_VIDEO_AUTOGEN ?? '').trim().toLowerCase() === 'false') return
   try {
     const { data } = await supabase
@@ -648,10 +706,30 @@ export async function autoGenerateTrustVideos(supabase: Db, tenantId: string): P
     if (!data) return
     const t = data as TenantVideoRow
     if (!t.business_name?.trim()) return
-    for (const slot of TRUST_VIDEO_SLOTS) {
-      const url = slot === 'welcome' ? t.intro_video_url : t.thankyou_video_url
-      if (!shouldAutoGenerate(url, t.trust_video_state, slot)) continue
-      await generateTrustVideo(supabase, { tenantId, slot, source: 'auto' })
+
+    // Which trades to film. An explicit trade wins (a trade was just switched
+    // on); otherwise every trade the tenant has. A tenant with no trades at all
+    // still gets the legacy tenant-wide pair so nothing regresses.
+    const wanted = trade
+      ? [normaliseVideoTrade(trade)].filter(Boolean)
+      : (t.trades ?? []).map(normaliseVideoTrade).filter(Boolean)
+    const trades = [...new Set(wanted as string[])]
+
+    if (trades.length === 0) {
+      for (const slot of TRUST_VIDEO_SLOTS) {
+        const url = slot === 'welcome' ? t.intro_video_url : t.thankyou_video_url
+        if (!shouldAutoGenerate(url, t.trust_video_state, slot)) continue
+        await generateTrustVideo(supabase, { tenantId, slot, source: 'auto' })
+      }
+      return
+    }
+
+    // Sequential on purpose: one in-flight Veo job per tenant.
+    for (const tr of trades) {
+      for (const slot of TRUST_VIDEO_SLOTS) {
+        if (!shouldAutoGenerateTrade(t.trade_videos, tr, slot)) continue
+        await generateTrustVideo(supabase, { tenantId, slot, trade: tr, source: 'auto' })
+      }
     }
   } catch (e) {
     console.warn('[trust-video] auto-generation skipped', {
@@ -669,8 +747,16 @@ export async function resumeTrustVideo(
   supabase: Db,
   tenant: TenantVideoRow,
   slot: TrustVideoSlot,
+  /** Resume this trade's slot (mig 179); omitted = the legacy tenant-wide pair. */
+  trade?: string | null,
 ): Promise<TrustVideoSlotState> {
-  const s = readSlotState(tenant.trust_video_state, slot)
+  const tradeKey = normaliseVideoTrade(trade)
+  const raw = tradeKey
+    ? readTradeSlot(tenant.trade_videos, tradeKey, slot)
+    : readSlotState(tenant.trust_video_state, slot)
+  // A never-generated (trade, slot) has no status at all — idle is the correct
+  // resting value and makes the early-out below well-defined.
+  const s: TrustVideoSlotState = { status: 'idle', ...raw }
   if (s.status !== 'generating' || !s.operation) return s
   try {
     const poll = await pollVeoOperation(s.operation)
@@ -679,10 +765,19 @@ export async function resumeTrustVideo(
     if (poll.uri === null) {
       next = { ...s, status: 'failed', error: poll.error }
     } else {
-      await finaliseSlot(supabase, tenant, slot, poll.uri)
+      const url = await finaliseSlot(supabase, tenant, slot, poll.uri, tradeKey)
       next = { ...s, status: 'ready', error: null }
+      if (tradeKey) Object.assign(next as Record<string, unknown>, { url })
     }
-    await saveSlotState(supabase, tenant.id, withSlotState(tenant.trust_video_state, slot, next))
+    if (tradeKey) {
+      await saveTradeVideos(
+        supabase,
+        tenant.id,
+        withTradeSlot(tenant.trade_videos, tradeKey, slot, next),
+      )
+    } else {
+      await saveSlotState(supabase, tenant.id, withSlotState(tenant.trust_video_state, slot, next))
+    }
     return next
   } catch (e) {
     // Transient poll failure — leave the job resumable.

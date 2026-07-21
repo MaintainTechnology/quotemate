@@ -2,6 +2,8 @@
 // trust videos (spec tradie-trust-video-generation R3). Multipart FormData:
 //
 //   slot            'welcome' | 'thankyou' | 'both'
+//   trade           optional trade slug — which trade's pair to generate;
+//                   omitted keeps the legacy tenant-wide pair
 //   script_welcome  optional custom script (<= MAX_SCRIPT_CHARS)
 //   script_thankyou optional custom script
 //   contact_name    optional — also persisted to the tenant row
@@ -17,6 +19,8 @@
 import { after } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { resolveTenantRequest } from '@/lib/tenant/from-request'
+import { tenantFeatureSlugs } from '@/lib/features/catalog'
+import { normaliseVideoTrade } from '@/lib/videos/trade-videos'
 import {
   MAX_SCRIPT_CHARS,
   TRUST_VIDEO_SLOTS,
@@ -58,6 +62,28 @@ export async function POST(req: Request) {
         : []
   if (slots.length === 0) {
     return Response.json({ error: `slot must be welcome, thankyou or both` }, { status: 400 })
+  }
+
+  // Which trade's pair. Must be a trade the tenant actually has switched on —
+  // otherwise a caller could seed videos for a trade they do not run.
+  const askedTrade = normaliseVideoTrade(form.get('trade') ? String(form.get('trade')) : null)
+  let trade: string | null = null
+  if (askedTrade) {
+    const { data: tRow } = await supabase
+      .from('tenants')
+      .select('trade, trades')
+      .eq('id', tenant.id)
+      .maybeSingle()
+    const raw = ((tRow?.trades as string[] | null) ?? []).filter(
+      (t): t is string => typeof t === 'string',
+    )
+    const slugs = tenantFeatureSlugs(
+      raw.length ? raw : tRow?.trade ? [tRow.trade as string] : [],
+    )
+    if (!slugs.includes(askedTrade as never)) {
+      return Response.json({ error: 'trade_not_enabled' }, { status: 403 })
+    }
+    trade = askedTrade
   }
 
   // Scripts — reject over-long input with an honest error (never truncate).
@@ -135,6 +161,7 @@ export async function POST(req: Request) {
       await generateTrustVideo(supabase, {
         tenantId: tenant.id,
         slot,
+        trade,
         script: scripts[slot] ?? null,
         source: 'dashboard',
         ownerReference,
@@ -144,5 +171,5 @@ export async function POST(req: Request) {
     }
   })
 
-  return Response.json({ ok: true, generating: slots })
+  return Response.json({ ok: true, generating: slots, trade })
 }

@@ -10,6 +10,7 @@
 // quote page.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { tradeVideoUrl, type TradeVideoMap } from '@/lib/videos/trade-videos'
 
 export type TenantIdentity = {
   business_name: string | null
@@ -21,6 +22,11 @@ export type TenantIdentity = {
   website_url: string | null
   business_address: string | null
   logo_url: string | null
+  /** Mig 180 — the tradie's own photo for the quote's "Your tradie" section.
+   *  Null renders the placeholder avatar (lib/quote/tradie-profile.ts).
+   *  Optional for the same reason as trade_videos below: loadTenantIdentity
+   *  always sets it, but hand-built fixtures predate it. */
+  photo_url?: string | null
   /** AU state (e.g. 'QLD') — feeds tzForState so booked-visit labels render
    *  in the tenant's timezone, matching how the slots were generated. */
   state: string | null
@@ -33,6 +39,11 @@ export type TenantIdentity = {
    *  null until real footage exists. */
   intro_video_url: string | null
   thankyou_video_url: string | null
+  /** Per-trade trust videos (trade -> slot -> entry), mig 179. Overrides the
+   *  tenant-wide pair above for the trade being quoted; see tradeVideoUrls().
+   *  Optional: loadTenantIdentity always sets it, but callers that build an
+   *  identity by hand (tests, fixtures) predate it and must keep compiling. */
+  trade_videos?: TradeVideoMap | null
 }
 
 export async function loadTenantIdentity(
@@ -60,6 +71,24 @@ export async function loadTenantIdentity(
     .maybeSingle()
   const e = (ex ?? {}) as Record<string, string | null>
 
+  // Per-trade videos get their OWN best-effort select: folding a newer column
+  // into the select above would make a pre-migration deploy fail that whole
+  // query, nulling the letterhead (contact/logo) and the existing videos too.
+  const { data: tv } = await supabase
+    .from('tenants')
+    .select('trade_videos')
+    .eq('id', tenantId)
+    .maybeSingle()
+
+  // Same reason as trade_videos: the mig-180 tradie photo gets its own
+  // best-effort select so a pre-180 deploy loses only the photo, not the
+  // letterhead. Null → the customer surfaces render the placeholder avatar.
+  const { data: ph } = await supabase
+    .from('tenants')
+    .select('photo_url')
+    .eq('id', tenantId)
+    .maybeSingle()
+
   return {
     business_name: b.business_name ?? null,
     owner_first_name: b.owner_first_name ?? null,
@@ -72,8 +101,10 @@ export async function loadTenantIdentity(
     website_url: e.website_url ?? null,
     business_address: e.business_address ?? null,
     logo_url: e.logo_url ?? null,
+    photo_url: ((ph ?? {}) as { photo_url?: string | null }).photo_url ?? null,
     intro_video_url: e.intro_video_url ?? null,
     thankyou_video_url: e.thankyou_video_url ?? null,
+    trade_videos: ((tv ?? {}) as { trade_videos?: TradeVideoMap | null }).trade_videos ?? null,
   }
 }
 
@@ -100,6 +131,35 @@ export function trustVideoUrls(
   return {
     intro: t?.intro_video_url?.trim() || publicUrl(TRUST_VIDEO_DEFAULT_PATHS.intro),
     thankyou: t?.thankyou_video_url?.trim() || publicUrl(TRUST_VIDEO_DEFAULT_PATHS.thankyou),
+  }
+}
+
+/**
+ * Trust videos for the TRADE being quoted. A tradie records one welcome +
+ * thank-you pair per trade they have switched on, so an electrical customer
+ * hears the electrical intro and a roofing customer hears the roofing one.
+ *
+ * Chain, per slot and independently: the trade's own video → the tenant-wide
+ * pair (mig 175, so an existing tenant never loses a working video) → the
+ * QuoteMax default. `trade` accepts any spelling, including the hyphenated
+ * customer-surface TradeKey; an unknown trade simply yields the tenant-wide
+ * result. Stays pure + synchronous — every caller is a server component that
+ * already holds the identity.
+ */
+export function tradeVideoUrls(
+  t:
+    | (Pick<TenantIdentity, 'intro_video_url' | 'thankyou_video_url'> & {
+        trade_videos?: TradeVideoMap | null
+      })
+    | null,
+  trade: string | null | undefined,
+  supabaseUrl: string | null | undefined = process.env.NEXT_PUBLIC_SUPABASE_URL,
+): { intro: string | null; thankyou: string | null } {
+  const fallback = trustVideoUrls(t, supabaseUrl)
+  const map = t?.trade_videos ?? null
+  return {
+    intro: tradeVideoUrl(map, trade, 'welcome') ?? fallback.intro,
+    thankyou: tradeVideoUrl(map, trade, 'thankyou') ?? fallback.thankyou,
   }
 }
 

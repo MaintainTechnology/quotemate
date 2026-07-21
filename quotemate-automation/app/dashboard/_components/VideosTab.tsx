@@ -45,10 +45,16 @@ type SlotInfo = {
   }
 }
 
+type TradeOption = { slug: string; label: string }
+
 type VideosPayload = {
   ok: boolean
   business_name: string | null
   contact_name: string | null
+  /** The trade this payload describes (null = the legacy tenant-wide pair). */
+  trade: string | null
+  /** Trades the tenant has switched on — one sub-tab each. */
+  trades: TradeOption[]
   slots: Record<SlotKey, SlotInfo>
 }
 
@@ -158,7 +164,11 @@ export function VideosTab({ accessToken }: { accessToken: string | null }) {
   const [details, setDetails] = useState('')
   const [ownerPhotoName, setOwnerPhotoName] = useState<string | null>(null)
   const [extraImageNames, setExtraImageNames] = useState<string[]>([])
-  const seededRef = useRef(false)
+  // Which trade's pair is being edited. null = let the server pick the first.
+  const [trade, setTrade] = useState<string | null>(null)
+  // Scripts are seeded per TRADE (not once): switching tabs must load that
+  // trade's scripts, but polling within a tab must never clobber typing.
+  const seededTradeRef = useRef<string | null | undefined>(undefined)
 
   const [submitting, setSubmitting] = useState<SlotKey | 'both' | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -175,16 +185,18 @@ export function VideosTab({ accessToken }: { accessToken: string | null }) {
     try {
       // Mint a fresh token per request because the token captured at mount expires.
       const token = (await getAuthToken()) ?? accessToken
-      const res = await fetch('/api/tenant/videos', {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: 'no-store',
-      })
+      const res = await fetch(
+        trade ? `/api/tenant/videos?trade=${encodeURIComponent(trade)}` : '/api/tenant/videos',
+        { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' },
+      )
       if (!res.ok) throw new Error(`The server returned HTTP ${res.status}.`)
       const json = (await res.json()) as VideosPayload
       setData(json)
       setError(null)
-      if (!seededRef.current) {
-        seededRef.current = true
+      // Adopt the server's choice on first load so the tab highlights.
+      if (trade === null && json.trade) setTrade(json.trade)
+      if (seededTradeRef.current !== json.trade) {
+        seededTradeRef.current = json.trade
         setScripts({
           welcome: json.slots.welcome.state.script ?? json.slots.welcome.default_script,
           thankyou: json.slots.thankyou.state.script ?? json.slots.thankyou.default_script,
@@ -196,7 +208,7 @@ export function VideosTab({ accessToken }: { accessToken: string | null }) {
     } finally {
       setLoading(false)
     }
-  }, [accessToken])
+  }, [accessToken, trade])
 
   useEffect(() => {
     // Defer the first request to the subscription callback so the effect does
@@ -227,6 +239,7 @@ export function VideosTab({ accessToken }: { accessToken: string | null }) {
       const token = (await getAuthToken()) ?? accessToken
       const form = new FormData()
       form.set('slot', slot)
+      if (trade) form.set('trade', trade)
       const slots: SlotKey[] = slot === 'both' ? ['welcome', 'thankyou'] : [slot]
       for (const scene of slots) form.set(`script_${scene}`, scripts[scene] ?? '')
       if (contactName.trim()) form.set('contact_name', contactName.trim())
@@ -400,6 +413,43 @@ export function VideosTab({ accessToken }: { accessToken: string | null }) {
           <p className="max-w-[65ch] break-words leading-relaxed">
             Generation couldn’t start. {submitError} Check the inputs, then try again.
           </p>
+        </div>
+      )}
+
+      {/* ── Trade sub-tabs — one per trade the tradie has switched on ───────
+          Each trade keeps its OWN welcome + thank-you pair; the cards below
+          always edit the selected trade. Hidden for a single-trade tradie,
+          who has nothing to switch between. ── */}
+      {data.trades.length > 1 && (
+        <div
+          className="mb-6 flex flex-wrap gap-2"
+          role="tablist"
+          aria-label="Choose a trade"
+        >
+          {data.trades.map((t) => {
+            const active = t.slug === data.trade
+            return (
+              <button
+                key={t.slug}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                disabled={studioBusy && !active}
+                onClick={() => {
+                  if (t.slug === trade) return
+                  setTrade(t.slug)
+                  setLoading(true)
+                }}
+                className={`rounded-ctl border px-4 py-2 text-sm font-bold tracking-tight transition-colors outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                  active
+                    ? 'border-accent bg-accent text-ink-deep'
+                    : 'border-ink-line bg-ink-card text-text-sec hover:border-accent/60'
+                } ${studioBusy && !active ? 'cursor-not-allowed opacity-50' : ''}`}
+              >
+                {t.label}
+              </button>
+            )
+          })}
         </div>
       )}
 
