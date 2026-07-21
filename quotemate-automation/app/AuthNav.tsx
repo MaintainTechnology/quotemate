@@ -113,8 +113,11 @@ export default function AuthNav({ variant = 'nav' }: { variant?: Variant }) {
     // One primary in the hero (the page supplies the single secondary CTA).
     // Sign-in lives in the nav. Square, focus-ringed, with an arrow that
     // nudges forward on hover.
+    // `border border-transparent` is load-bearing: the secondary CTA beside
+    // this one is bordered, so without it the two buttons sit 2px different
+    // in height on the same row.
     const heroPrimary =
-      'group inline-flex items-center gap-2 rounded-lg bg-accent hover:bg-accent-press text-white font-semibold px-7 py-4 text-sm uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep'
+      'group inline-flex items-center gap-2 rounded-lg border border-transparent bg-accent hover:bg-accent-press text-white font-semibold px-7 py-4 text-sm uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep'
     return authed ? (
       <Link href="/dashboard" className={heroPrimary}>
         Open my dashboard

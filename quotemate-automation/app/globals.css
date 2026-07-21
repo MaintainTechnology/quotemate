@@ -45,6 +45,7 @@
   --lift:          inset 0 1px 0 0 rgba(255, 255, 255, 0.06); /* lit panel edge */
   --noise-opacity: 0.045;                     /* film-grain strength */
   --canvas-radial: #2B2422;                   /* dashboard app-canvas glow */
+  --logo-mono-invert: 1;   /* dark canvas: flip black logo artwork to bone */
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -81,6 +82,7 @@
     --lift: 0 1px 2px rgba(43, 36, 34, 0.06), 0 1px 1px rgba(43, 36, 34, 0.04);
     --noise-opacity: 0.03;
     --canvas-radial: rgba(255, 248, 235, 0.85);
+    --logo-mono-invert: 0; /* paper canvas: black logo artwork stays black */
   }
 }
 :root[data-theme="light"] {
@@ -108,6 +110,7 @@
   --lift: 0 1px 2px rgba(43, 36, 34, 0.06), 0 1px 1px rgba(43, 36, 34, 0.04);
   --noise-opacity: 0.03;
   --canvas-radial: rgba(255, 248, 235, 0.85);
+  --logo-mono-invert: 0; /* paper canvas: black logo artwork stays black */
 }
 
 @theme inline {
@@ -368,6 +371,91 @@ html {
   box-shadow: var(--lift);
 }
 
+/* ════════════════════════════════════════════════════════════════════
+   HERO FIELD — the command-centre texture behind the home hero.
+   The topographic SVG draws in --teal-glow, which all but vanishes on
+   the cream light canvas, so the hero read as a blank white plane in
+   light mode. These three layers are token-driven and therefore work in
+   BOTH themes:
+     .hero-grid          a 72px engineering grid, masked to fade downward
+     .hero-ember         one warm accent bloom behind the demo panel
+     .hero-band::after   fades the texture into the section border so it
+                         never hard-cuts at the boundary
+   Paint order inside .hero-band: topography → grid → ember → ::after
+   fade → content (which carries z-10 and therefore stays above all of
+   it). Every layer is a static gradient or a transform, so none of it
+   costs layout.
+   ════════════════════════════════════════════════════════════════════ */
+.hero-band::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 10rem;
+  background: linear-gradient(to top, var(--ink-deep), transparent);
+  pointer-events: none;
+}
+
+.hero-grid {
+  background-image:
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--ink-line) 62%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--ink-line) 62%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: 72px 72px;
+  -webkit-mask-image: radial-gradient(132% 104% at 50% -8%, #000 0%, transparent 66%);
+  mask-image: radial-gradient(132% 104% at 50% -8%, #000 0%, transparent 66%);
+}
+
+/* One ember, low and warm. The accent is a scalpel here, not a wash —
+   14% is deliberately below the point where it reads as a "glow effect". */
+.hero-ember {
+  background: radial-gradient(
+    closest-side,
+    color-mix(in srgb, var(--accent) 14%, transparent) 0%,
+    transparent 72%
+  );
+}
+
+/* Glacial drift so the field is alive without ever announcing itself.
+   Transform-only; motion-safe: gates it at the call site. */
+@keyframes ember-drift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(-2.5rem, 1.75rem, 0) scale(1.07); }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   POWERED-BY LOGO INK
+   The marquee shows each brand in its own colour, but only three of the
+   seven SVGs actually carry one. The rest are monochrome glyphs, and a
+   monochrome glyph is invisible against one of the two canvases — black
+   artwork vanishes on charcoal, white artwork vanishes on paper. These
+   classes re-ink those marks to the current theme so nothing silently
+   disappears when the theme flips. --logo-mono-invert is 1 on the dark
+   canvas and 0 on paper (declared with the theme tokens above).
+     .logo-mono      black artwork  → inverts to bone on charcoal
+     .logo-mono-inv  white artwork  → inverts to ink on paper
+     .logo-lift      a real brand colour too dark to read on charcoal
+                     (Voyage's #012E33 sits at 1.28:1 there)
+   Marks that read correctly on both canvases get no class at all.
+   ════════════════════════════════════════════════════════════════════ */
+.logo-mono {
+  filter: invert(var(--logo-mono-invert));
+}
+.logo-mono-inv {
+  filter: invert(calc(1 - var(--logo-mono-invert)));
+}
+.logo-lift {
+  filter: brightness(calc(1 + var(--logo-mono-invert) * 1.6))
+    saturate(calc(1 + var(--logo-mono-invert) * 0.35));
+}
+
 /* Typing indicator dots in the live SMS demo — the receptionist is
    "thinking" just before the quote drops. Motivated motion: it signals
    work in progress, not decoration. */
@@ -543,6 +631,18 @@ html {
     text-decoration-thickness: 0.09em;
     text-underline-offset: 0.12em;
   }
+}
+
+/* Display-scale metrics for the highlighter. The shim above is tuned for
+   inline text; at hero size (80px) 0.09em is an 8px bar sitting 10px under
+   the baseline, which leaves ~4px of clearance to the next line's cap at
+   leading 0.95 — the two lines visibly crowd. Thinner and tucked closer,
+   the underline reads as a deliberate highlight rather than a collision.
+   `:root` prefix takes this to (0,3,0) so it beats the :not([data-theme])
+   auto-light shim, which is the more specific of the two. */
+:root .hero-display .text-accent {
+  text-decoration-thickness: 0.055em;
+  text-underline-offset: 0.07em;
 }
 
 /* A self-contained dark quote surface (.qm-quote[data-qm-theme="dark"]) can

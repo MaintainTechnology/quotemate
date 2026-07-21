@@ -13,7 +13,10 @@ export type TradeData = {
   headline: { lead: string; accent: string; tail: string }
   intro: string
   heroImage: string
+  /** Describes what the photo shows; falls back to a generic string. */
+  heroAlt?: string
   detailImage?: string
+  detailAlt?: string
   detailCaption?: string
   scopeBody: string
   scopeTags: string[]
@@ -32,6 +35,13 @@ export const TRADES: Record<string, TradeData> = {
     intro:
       "Downlights to switchboard upgrades — a customer texts the job and QuoteMax drafts a clean, itemised quote against your own rates before you've packed up the ute.",
     heroImage: "/trades/electrical.jpg",
+    heroAlt: "Australian electrician working at a residential switchboard",
+    // Interim: reuses the home-page downlight photo so every trade page has a
+    // detail band. Swap to /trades/electrical-2.jpg once that render exists
+    // (scripts/gen-marketing-images.mjs --only=electrical-2).
+    detailImage: "/marketing/home-electrical.jpg",
+    detailAlt: "Electrician fitting an LED downlight into a plasterboard ceiling",
+    detailCaption: "Circuits, access and switchboard age — read from the photos.",
     scopeBody:
       "Standard jobs quote on the spot. Anything that needs eyes on site books a $99 inspection instead — credited straight back to the work.",
     scopeTags: [
@@ -76,6 +86,12 @@ export const TRADES: Record<string, TradeData> = {
     intro:
       "Blocked drains, hot-water swaps, leak repairs — the customer texts the problem and QuoteMax drafts a priced quote against your rates while you're under a sink somewhere else.",
     heroImage: "/trades/plumbing.jpg",
+    heroAlt: "Australian plumber working on residential pipework",
+    // Interim: reuses the home-page hot-water photo. Swap to
+    // /trades/plumbing-2.jpg once that render exists.
+    detailImage: "/marketing/home-plumbing.jpg",
+    detailAlt: "Plumber servicing an exterior hot water cylinder",
+    detailCaption: "Fixtures, access and the property — read from the photos.",
     scopeBody:
       "Clear jobs quote instantly. The messy ones book a $99 site visit with the deposit already paid, so you only drive out to work that's locked in.",
     scopeTags: [
@@ -119,7 +135,9 @@ export const TRADES: Record<string, TradeData> = {
     intro:
       "Re-roofs, repairs, gutters and Colorbond — QuoteMax reads the structure, measures the area and drafts a quote against your rates without a second trip up the ladder.",
     heroImage: "/trades/roofing.jpg",
+    heroAlt: "Australian roofer working on a residential roof",
     detailImage: "/trades/roofing-2.jpg",
+    detailAlt: "An Australian property with several separate roof structures",
     detailCaption: "Multi-structure jobs are measured per roof.",
     scopeBody:
       "Every roofing quote lands in your dashboard for a quick check before it goes out — the numbers are yours to confirm.",
@@ -164,7 +182,9 @@ export const TRADES: Record<string, TradeData> = {
     intro:
       "QuoteMax reads the address, checks the roof and the sun, sizes the system and drafts a quote against your rates and panel preferences — before you've driven out.",
     heroImage: "/trades/solar.jpg",
+    heroAlt: "Solar installer fitting panels on an Australian rooftop",
     detailImage: "/trades/solar-2.jpg",
+    detailAlt: "A suburban roof seen from above, one corner shaded by a gum tree",
     detailCaption: "Roof, orientation and shading read from the address.",
     scopeBody:
       "Clean estimates quote on the spot. Anything flagged routes to a site visit, so the easy ones move fast and the rest get a proper look.",
@@ -208,7 +228,9 @@ export const TRADES: Record<string, TradeData> = {
     intro:
       "Interior repaints, exterior weatherboard, fresh trim — a customer sends the rooms and QuoteMax measures the surfaces, counts the coats and drafts a quote against your rates before you've set up a single drop sheet.",
     heroImage: "/trades/painting.jpg",
+    heroAlt: "Australian painter working on an interior repaint",
     detailImage: "/trades/painting-2.jpg",
+    detailAlt: "A room mid-repaint, two walls finished and the trim masked",
     detailCaption: "Walls, ceilings and trim — measured room by room.",
     scopeBody:
       "Every painting quote lands in your dashboard for a quick check before it goes out — the surfaces, coats and prep are yours to confirm.",

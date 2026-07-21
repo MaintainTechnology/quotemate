@@ -54,7 +54,6 @@ export default function Home() {
 
       <Nav />
       <Hero />
-      <TrustStrip />
       <PoweredBy />
       <HowItWorks />
       <Trades />
@@ -75,19 +74,43 @@ export default function Home() {
 
 /* ─── Hero ────────────────────────────────────────────────────── */
 
+// Two bands, not one column with a card bolted beside it:
+//
+//   row 1   [ pitch ............. | demo ........ ]
+//   row 2   [ trade band, full width ............ ]
+//
+// The old layout put the filmstrip inside the left column, which made that
+// column ~365px taller than the demo card and left the right half of the
+// fold empty at desktop widths. Moving the strip to its own full-width row
+// leaves two columns of near-equal height, and `items-stretch` + `h-full`
+// on the demo makes them end on the same baseline at every breakpoint
+// instead of relying on the copy staying a fixed length.
 function Hero() {
   return (
-    <section className="relative overflow-hidden border-b border-ink-line">
+    <section className="hero-band relative overflow-hidden border-b border-ink-line">
       <Topography />
+      {/* Command-centre field (see globals.css): an engineering grid that
+          fades downward, plus one warm ember behind the demo panel. Both
+          are token-driven, so the hero has texture on the cream canvas as
+          well as the charcoal one — the topography alone does not. */}
+      <div
+        className="hero-grid pointer-events-none absolute inset-0"
+        aria-hidden="true"
+      />
+      <div
+        className="hero-ember pointer-events-none absolute right-[-10%] top-[-15%] hidden aspect-square w-[42rem] motion-safe:animate-[ember-drift_24s_ease-in-out_infinite_alternate] lg:block"
+        aria-hidden="true"
+      />
       {/* Scroll-reveal fallback for no-JS visitors — content must never
           stay hidden behind the observer. */}
       <noscript>
         <style>{`.reveal{opacity:1 !important;transform:none !important}`}</style>
       </noscript>
-      <div className="relative z-10 mx-auto grid max-w-[88rem] items-center gap-12 px-6 py-20 md:py-28 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16">
-        <div>
-          <div className={`mb-5 ${RISE}`}>
-            <span className="inline-flex items-center gap-2 rounded-md border border-ink-line bg-ink/40 px-3 py-1.5 font-mono text-[0.75rem] font-semibold uppercase tracking-[0.16em] text-text-sec">
+      <div className="relative z-10 mx-auto grid max-w-[88rem] gap-x-10 gap-y-12 px-6 py-20 md:py-24 lg:grid-cols-[1.06fr_0.94fr] lg:gap-x-16 xl:gap-x-24">
+        {/* ── Pitch ─────────────────────────────────────────────── */}
+        <div className="flex flex-col justify-center lg:col-start-1 lg:row-start-1">
+          <div className={`mb-6 ${RISE}`}>
+            <span className="inline-flex items-center gap-2 rounded-md border border-ink-line bg-ink/60 px-3 py-1.5 font-mono text-[0.75rem] font-semibold uppercase tracking-[0.16em] text-text-sec">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/brand/au-flag.svg"
@@ -97,28 +120,43 @@ function Hero() {
               Built for Australian tradies
             </span>
           </div>
-          <div className={RISE}>
-            <Eyebrow>AI quoting for Australian tradies</Eyebrow>
-          </div>
-          <h1
-            className={`mt-6 font-extrabold uppercase leading-[0.95] tracking-[-0.04em] text-[clamp(2.6rem,6.5vw,5.5rem)] [overflow-wrap:anywhere] ${RISE}`}
-            style={{ animationDelay: "110ms" }}
-          >
-            Drafts your <span className="text-accent">quote</span>
-            <br />
-            before they <span className="text-accent">hang up.</span>
+
+          {/* Three deliberate lines of near-equal length. The old markup
+              set two lines with a <br>, but each of those wrapped again in
+              the column, so the break points were accidental. Each line is
+              its own block so it also carries its own entrance delay and
+              the headline assembles top-down. `hero-display` retunes the
+              light-theme highlighter for display size (globals.css). */}
+          <h1 className="hero-display font-extrabold uppercase leading-[0.95] tracking-[-0.04em] text-[clamp(2.5rem,5.8vw,5rem)] [overflow-wrap:anywhere]">
+            <span className={`block ${RISE}`} style={{ animationDelay: "80ms" }}>
+              Drafts your
+            </span>
+            <span
+              className={`block ${RISE}`}
+              style={{ animationDelay: "170ms" }}
+            >
+              <span className="text-accent">quote</span> before
+            </span>
+            <span
+              className={`block ${RISE}`}
+              style={{ animationDelay: "260ms" }}
+            >
+              they <span className="text-accent">hang up.</span>
+            </span>
           </h1>
+
           <p
             className={`mt-7 max-w-xl text-lg leading-relaxed text-text-sec ${RISE}`}
-            style={{ animationDelay: "240ms" }}
+            style={{ animationDelay: "360ms" }}
           >
             Customers text your QuoteMax number. QuoteMax asks the right
             questions, applies your pricing book, and drafts a clean quote in
             under a minute. You review, tweak, send.
           </p>
+
           <div
             className={`mt-9 flex flex-wrap items-center gap-3 ${RISE}`}
-            style={{ animationDelay: "370ms" }}
+            style={{ animationDelay: "460ms" }}
           >
             <AuthNav variant="hero" />
             <a
@@ -129,115 +167,153 @@ function Hero() {
             </a>
           </div>
 
-          {/* Brand-tinted trade filmstrip — introduces the real tradies the
-              product is built for without crowding the headline. The first
-              tile is the hero LCP image (preloaded); the rest lazy-load. */}
-          <div
-            className={`mt-10 grid grid-cols-3 gap-2 sm:gap-3 ${RISE}`}
-            style={{ animationDelay: "470ms" }}
+          <p
+            className={`mt-5 text-sm text-text-dim ${RISE}`}
+            style={{ animationDelay: "540ms" }}
           >
-            <HeroTile
-              src="/marketing/trade-electrical.jpg"
-              alt="Australian electrician in a yellow hard hat testing a switchboard with a multimeter"
-              caption="Electrical"
-              priority
-            />
-            <HeroTile
-              src="/marketing/trade-plumbing-2.jpg"
-              alt="Plumber on her back under a kitchen sink, tightening the tap tailpiece with a wrench"
-              caption="Plumbing"
-            />
-            <HeroTile
-              src="/marketing/trade-solar.jpg"
-              alt="Two installers carrying a solar panel across a Colorbond roof to a half-finished array"
-              caption="Solar"
-              position="center 15%"
-            />
-          </div>
+            Starter Monthly includes a 14-day free trial. Setup takes about
+            three minutes.
+          </p>
         </div>
 
+        {/* ── Demo ──────────────────────────────────────────────── */}
         <div
-          className={`self-start ${RISE}`}
+          className={`h-full lg:col-start-2 lg:row-start-1 ${RISE}`}
           style={{ animationDelay: "300ms" }}
         >
           <SmsDemo />
+        </div>
+
+        {/* ── Trade band ────────────────────────────────────────────
+            Full width under both columns. The tiles are links now: the
+            same three photos appear as clickable trade cards further down
+            the page, so an inert copy directly under the primary CTA was
+            a dead end for anyone who tried to tap one. The first tile is
+            the LCP image (preloaded); the rest lazy-load. */}
+        <div
+          className={`grid gap-2 sm:grid-cols-3 sm:gap-3 lg:col-span-2 ${RISE}`}
+          style={{ animationDelay: "620ms" }}
+        >
+          <HeroTile
+            href="/trades/electrical"
+            src="/marketing/trade-electrical.jpg"
+            alt="Australian electrician in a yellow hard hat testing a switchboard with a multimeter"
+            caption="Electrical"
+            position="center 30%"
+            priority
+          />
+          {/* Below sm the three tiles would be ~104px wide — too narrow to
+              hold their own captions, and too small to read as photographs.
+              One full-width photo carries the same signal properly; the
+              other trades are covered at length further down the page. */}
+          <HeroTile
+            href="/trades/plumbing"
+            src="/marketing/trade-plumbing-2.jpg"
+            alt="Plumber on her back under a kitchen sink, tightening the tap tailpiece with a wrench"
+            caption="Plumbing"
+            className="hidden sm:block"
+          />
+          <HeroTile
+            href="/trades/solar"
+            src="/marketing/trade-solar.jpg"
+            alt="Two installers carrying a solar panel across a Colorbond roof to a half-finished array"
+            caption="Solar"
+            position="center 35%"
+            className="hidden sm:block"
+          />
         </div>
       </div>
     </section>
   )
 }
 
-// A single tile in the hero filmstrip — a brand-tinted trade photo with a
-// small all-caps caption welded to the lower edge by the duotone scrim.
+// A single tile in the hero trade band — a brand-tinted photo linking
+// through to that trade's page. The photo eases in slightly on hover
+// (transform on the frame, clipped by the link's own overflow) so the
+// tile reads as live without any layout cost.
 function HeroTile({
+  href,
   src,
   alt,
   caption,
   priority = false,
   position,
+  className = "",
 }: {
+  href: string
   src: string
   alt: string
   caption: string
   priority?: boolean
-  /** object-position override so a face isn't clipped by the tall crop. */
+  /** object-position override so a face isn't clipped by the crop. */
   position?: string
+  /** Extra classes on the tile itself (e.g. hiding it below sm). */
+  className?: string
 }) {
   return (
-    <figure className="edge-lit relative overflow-hidden rounded-xl border border-ink-line">
+    <Link
+      href={href}
+      className={`edge-lit group relative block overflow-hidden rounded-xl border border-ink-line transition-colors hover:border-accent/45 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft focus-visible:ring-offset-2 focus-visible:ring-offset-ink-deep ${className}`}
+    >
       <DuotoneImage
         src={src}
         alt={alt}
-        aspect="aspect-[3/4] sm:aspect-[4/5]"
-        sizes="(max-width: 1024px) 30vw, 16vw"
+        aspect="aspect-[16/10]"
+        sizes="(max-width: 640px) 100vw, 31vw"
         priority={priority}
         tone="hero"
         position={position}
+        className="transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] motion-safe:group-hover:scale-[1.04]"
       />
-      <figcaption className="photo-caption absolute inset-x-0 bottom-0 px-2.5 pb-2 pt-6 font-mono text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-white">
+      <div className="photo-caption absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 px-3 pb-2.5 pt-8 font-mono text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-white">
         {caption}
-      </figcaption>
-    </figure>
-  )
-}
-
-/* ─── Trust strip ─────────────────────────────────────────────── */
-// Honest credibility, directly under the hero (kept OUT of the hero so
-// the value-prop stands alone). No fake logos, no fabricated reviews —
-// the real stack and the pilot status are the trust signal.
-function TrustStrip() {
-  return (
-    <section className="border-b border-ink-line bg-ink/40">
-      <div className="mx-auto flex max-w-[88rem] flex-col gap-5 px-6 py-7 lg:flex-row lg:items-center lg:justify-between">
-        <ul className="flex flex-wrap items-center gap-x-3 gap-y-2.5">
-          <TrustChip icon={<PinIcon />}>Built in Australia</TrustChip>
-          <TrustChip>Electrical pilot · NSW</TrustChip>
-          <TrustChip>Plumbing pilot · QLD</TrustChip>
-          <TrustChip>Free trial · Starter Monthly</TrustChip>
-        </ul>
-        <p className="shrink-0 font-mono text-xs uppercase tracking-[0.14em] text-text-dim">
-          Runs on Twilio
-        </p>
+        <span
+          className="shrink-0 transition-transform duration-300 group-hover:translate-x-0.5"
+          aria-hidden="true"
+        >
+          &rarr;
+        </span>
       </div>
-    </section>
+    </Link>
   )
 }
 
 /* ─── Powered-by logo marquee ─────────────────────────────────── */
-// The real stack that drafts the quotes and runs the voice agent,
-// shown as a slow, monochrome ticker that reveals each brand's colour
-// on hover. Logos are real brand SVGs under /public/brand — swap a
-// file (same name) to update a mark. The track holds the set twice so
-// the `marquee` keyframe (-50%) loops seamlessly; reduced-motion users
-// see the static leading set.
-const POWERED_BY: { name: string; logo: string; wordmark?: boolean }[] = [
-  { name: "Anthropic", logo: "/brand/anthropic.svg" },
-  { name: "Gemini", logo: "/brand/gemini.svg" },
-  { name: "Twilio", logo: "/brand/twilio.svg" },
-  { name: "ElevenLabs", logo: "/brand/elevenlabs.svg", wordmark: true },
-  { name: "Deepgram", logo: "/brand/deepgram.svg" },
-  { name: "Vapi", logo: "/brand/vapi.svg" },
-  { name: "Voyage", logo: "/brand/voyage.svg" },
+// The real stack that drafts the quotes and runs the voice agent, shown
+// as a slow ticker in each brand's own colours. Logos are real brand SVGs
+// under /public/brand — swap a file (same name) to update a mark. The
+// track holds the set twice so the `marquee` keyframe (-50%) loops
+// seamlessly; reduced-motion users see the static leading set.
+//
+// `art` is what the SVG actually contains, and it matters: only three of
+// these marks ship with brand colour in the file. The rest are monochrome
+// glyphs that would disappear against one theme or the other, so they are
+// re-inked to the current theme instead (see --logo-mono-invert in
+// globals.css). Getting this wrong is silent — the logo just vanishes.
+//   colour = has its own brand colour, leave it alone
+//   dark   = black artwork  (fine on paper, must invert on charcoal)
+//   light  = white artwork  (fine on charcoal, must invert on paper)
+type LogoArt = "colour" | "dark" | "light"
+const POWERED_BY: {
+  name: string
+  logo: string
+  art: LogoArt
+  wordmark?: boolean
+  /** Near-black brand colour that needs lifting on the dark canvas. */
+  lift?: boolean
+}[] = [
+  { name: "Anthropic", logo: "/brand/anthropic.svg", art: "dark" },
+  { name: "Gemini", logo: "/brand/gemini.svg", art: "dark" },
+  { name: "Twilio", logo: "/brand/twilio.svg", art: "colour" },
+  {
+    name: "ElevenLabs",
+    logo: "/brand/elevenlabs.svg",
+    art: "dark",
+    wordmark: true,
+  },
+  { name: "Deepgram", logo: "/brand/deepgram.svg", art: "colour" },
+  { name: "Vapi", logo: "/brand/vapi.svg", art: "light" },
+  { name: "Voyage", logo: "/brand/voyage.svg", art: "colour", lift: true },
 ]
 
 function PoweredBy() {
@@ -258,15 +334,21 @@ function PoweredBy() {
                 {POWERED_BY.map((tool) => (
                   <span
                     key={tool.name}
-                    className="group flex items-center px-7 sm:px-12"
+                    className="flex items-center px-8 sm:px-14"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={tool.logo}
                       alt={tool.name}
-                      className={`w-auto opacity-60 [filter:brightness(0)] transition duration-200 group-hover:opacity-100 group-hover:[filter:none] ${
-                        tool.wordmark ? "h-5 sm:h-6" : "h-7 sm:h-9"
-                      }`}
+                      className={`w-auto ${
+                        tool.art === "dark"
+                          ? "logo-mono"
+                          : tool.art === "light"
+                            ? "logo-mono-inv"
+                            : tool.lift
+                              ? "logo-lift"
+                              : ""
+                      } ${tool.wordmark ? "h-7 sm:h-9" : "h-10 sm:h-14"}`}
                       loading="lazy"
                       decoding="async"
                     />
@@ -278,25 +360,6 @@ function PoweredBy() {
         </div>
       </div>
     </section>
-  )
-}
-
-function TrustChip({
-  icon,
-  children,
-}: {
-  icon?: React.ReactNode
-  children: React.ReactNode
-}) {
-  return (
-    <li className="inline-flex items-center gap-2 rounded-md border border-ink-line px-3 py-1.5 font-mono text-[0.75rem] uppercase tracking-[0.1em] text-text-dim">
-      {icon ? (
-        <span className="text-accent-soft" aria-hidden="true">
-          {icon}
-        </span>
-      ) : null}
-      {children}
-    </li>
   )
 }
 
@@ -822,8 +885,8 @@ function PlayGlyph() {
 // a timeline), ends on a typing indicator, then the drafted quote lands.
 function SmsDemo() {
   return (
-    <div className="edge-lit overflow-hidden rounded-2xl border border-ink-line bg-ink-card">
-      <div className="flex items-center justify-between border-b border-ink-line px-4 py-3">
+    <div className="edge-lit flex h-full flex-col overflow-hidden rounded-2xl border border-ink-line bg-ink-card">
+      <div className="flex items-center justify-between border-b border-ink-line px-4 py-3 sm:px-5">
         <span className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-text-dim">
           Live example · SMS intake
         </span>
@@ -833,7 +896,10 @@ function SmsDemo() {
         </span>
       </div>
 
-      <div className="space-y-3 px-4 py-5">
+      {/* The thread takes the slack so the card ends level with the pitch
+          column whatever the copy length. Bottom-anchored, like any real
+          messaging surface — the newest message sits against the quote. */}
+      <div className="flex flex-1 flex-col justify-end gap-3 px-4 py-5 sm:px-5">
         <Bubble side="in" at={700}>
           Hey mate, need 6 downlights in the lounge. What&rsquo;s it cost?
         </Bubble>
@@ -847,35 +913,77 @@ function SmsDemo() {
         <TypingBubble at={3100} />
       </div>
 
+      {/* The drafted quote. Three tiers, because Good/Better/Best is what
+          the pipeline actually writes — a single figure understated the
+          output and left the panel looking empty. Marked "Sample"; these
+          are illustrative numbers, not a quoted job. */}
       <div
-        className={`border-t border-ink-line bg-ink-deep/50 px-4 py-4 ${RISE}`}
+        className={`border-t border-ink-line bg-ink-deep/50 px-4 py-4 sm:px-5 ${RISE}`}
         style={{ animationDelay: "3900ms" }}
       >
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <span className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-accent">
             Quote drafted · under a minute
           </span>
-          <span className="font-mono text-[0.75rem] uppercase tracking-[0.08em] text-text-dim">
+          <span className="shrink-0 font-mono text-[0.75rem] uppercase tracking-[0.08em] text-text-dim">
             Sample
           </span>
         </div>
-        <div className="mt-3 overflow-hidden rounded-xl border border-ink-line bg-ink-card">
-          <div
-            className={`relative px-3 py-4 text-center ${POP}`}
-            style={{ animationDelay: "4150ms" }}
-          >
-            <span
-              className="absolute inset-x-0 top-0 h-0.5 bg-accent"
-              aria-hidden="true"
-            />
-            <div className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-text-dim">
-              Sample quote
-            </div>
-            <div className="mt-1.5 font-mono text-xl font-bold tabular-nums text-accent">
-              $890
-            </div>
-          </div>
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          <QuoteTier tier="Good" price="$890" at={4150} />
+          <QuoteTier tier="Better" price="$1,140" at={4280} featured />
+          <QuoteTier tier="Best" price="$1,460" at={4410} />
         </div>
+        <p
+          className={`mt-3 font-mono text-[0.75rem] uppercase tracking-[0.08em] text-text-dim ${RISE}`}
+          style={{ animationDelay: "4560ms" }}
+        >
+          Sent to the customer with a deposit link
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// One tier of the drafted sample quote. Only the recommended tier carries
+// the accent — three accent prices in a row would turn the signal into a
+// wash (and, in the light theme, three highlighter underlines side by side).
+function QuoteTier({
+  tier,
+  price,
+  at,
+  featured = false,
+}: {
+  tier: string
+  price: string
+  /** When this tier lands on the demo timeline (ms after load). */
+  at: number
+  featured?: boolean
+}) {
+  return (
+    <div
+      className={`relative overflow-hidden rounded-xl border px-2 py-3 text-center ${POP} ${
+        featured
+          ? "border-accent/45 bg-accent/10"
+          : "border-ink-line bg-ink-card"
+      }`}
+      style={{ animationDelay: `${at}ms` }}
+    >
+      {featured ? (
+        <span
+          className="absolute inset-x-0 top-0 h-0.5 bg-accent"
+          aria-hidden="true"
+        />
+      ) : null}
+      <div className="font-mono text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-text-dim">
+        {tier}
+      </div>
+      <div
+        className={`mt-1.5 font-mono text-lg font-bold tabular-nums ${
+          featured ? "text-accent" : "text-text-pri"
+        }`}
+      >
+        {price}
       </div>
     </div>
   )
@@ -1086,7 +1194,8 @@ function TradeTile({
         sizes="(max-width: 640px) 100vw, 28vw"
         position={position}
       />
-      <figcaption className="photo-caption absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 p-4 pt-10">
+      {/* A div, not a figcaption — there is no <figure> here to caption. */}
+      <div className="photo-caption absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 p-4 pt-10">
         <span className="font-extrabold uppercase tracking-tight text-white text-lg">
           {label}
         </span>
@@ -1096,7 +1205,7 @@ function TradeTile({
         >
           &rarr;
         </span>
-      </figcaption>
+      </div>
     </Link>
   )
 }
@@ -1236,24 +1345,3 @@ function BuiltForAustralia() {
   )
 }
 
-/* ─── Icons (hand-rolled to match the brand Arrow: square caps, 1.75
-   stroke — kept minimal, the brand prefers restraint over iconography) */
-
-function PinIcon() {
-  return (
-    <svg
-      width="13"
-      height="13"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      strokeLinecap="square"
-      strokeLinejoin="miter"
-      aria-hidden="true"
-    >
-      <path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11Z" />
-      <circle cx="12" cy="10" r="2.4" />
-    </svg>
-  )
-}
