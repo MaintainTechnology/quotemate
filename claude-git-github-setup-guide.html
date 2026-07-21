@@ -1,0 +1,1918 @@
+<!DOCTYPE html>
+<html lang="en-AU" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A plain-English, step-by-step guide to connecting Claude and Claude Code to Git and GitHub on Windows and Mac. Written for people with no technical experience.">
+<meta name="color-scheme" content="light">
+<title>Connect Claude to Git and GitHub &middot; Beginner Setup Guide</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+/* ═══════════════════════════════════════════════════════════════════
+   QuoteMax design system &middot; "warm paper" light theme
+   Tokens mirrored from redesign/DesignSystem/tokens/*.css
+   Hairline darkened to #CFC2B0 per DESIGN.md (the #E9E3DC token
+   measured ~1.25:1 and washed out).
+   ═══════════════════════════════════════════════════════════════════ */
+:root {
+  color-scheme: light;
+
+  /* Surface */
+  --canvas:  #FAF8F4;
+  --sunken:  #F3EEE7;
+  --card:    #FFFFFF;
+  --line:    #CFC2B0;
+  --line-soft: #E4DBCE;
+
+  /* Accent (one signal only) */
+  --accent:       #FFC400;
+  --accent-press: #E6AC00;
+  --accent-soft:  #FFD23D;
+  --accent-ink:   #1C1812;
+
+  /* Text */
+  --text-pri: #241E1B;
+  --text-sec: #5E544E;
+  --text-dim: #6E645C;
+
+  /* State */
+  --success: #15803D;
+  --warning: #B45309;
+  --danger:  #B91C1C;
+
+  /* Type */
+  --sans: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, monospace;
+
+  /* Radii &middot; rounded scale supersedes the square spec (DESIGN.md 2026-07) */
+  --r-control: 8px;
+  --r-card: 14px;
+  --r-lg: 16px;
+
+  /* Depth &middot; borders not shadows */
+  --lift: 0 1px 2px rgba(43,36,34,0.06), 0 1px 1px rgba(43,36,34,0.04);
+  --shadow-menu: 0 16px 40px -12px rgba(43,36,34,0.20);
+
+  --focus-ring: 2px solid var(--accent-press);
+  --focus-offset: 2px;
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 180ms;
+  --dur-base: 320ms;
+
+  --tracking-display: -0.04em;
+  --tracking-eyebrow: 0.18em;
+  --tracking-label: 0.14em;
+
+  --measure: 68ch;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; scroll-padding-top: 6.5rem; }
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  background-image: radial-gradient(1100px 520px at 50% -8%, rgba(255,248,235,0.9) 0%, transparent 72%);
+  background-repeat: no-repeat;
+  color: var(--text-sec);
+  font-family: var(--sans);
+  font-size: 1.0625rem;          /* 17px &middot; comfortable long-form reading */
+  line-height: 1.6;
+  font-feature-settings: 'ss01', 'cv11', 'kern' 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Film grain, dialled back for the cream canvas (--grain-opacity 0.03) */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+:where(a, button, input, summary, [tabindex]):focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+  border-radius: 3px;
+}
+::selection { background: var(--accent); color: var(--accent-ink); }
+
+/* ─── Type primitives ─────────────────────────────────────────────── */
+h1, h2, h3, h4 { color: var(--text-pri); margin: 0; hyphens: none; }
+
+.display {
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-display);
+  line-height: 0.95;
+}
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  color: var(--text-dim);
+  margin: 0;
+}
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* Light theme cannot carry yellow text, so a key word takes a yellow
+   highlighter underline instead. Yellow stays a fill. */
+.hl {
+  color: var(--text-pri);
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 0.17em;
+  text-underline-offset: 0.04em;
+  text-decoration-skip-ink: none;
+}
+
+p { margin: 0 0 1rem; max-width: var(--measure); }
+p:last-child { margin-bottom: 0; }
+a { color: var(--text-pri); text-decoration-color: var(--accent-press); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:hover { color: var(--accent-press); }
+
+strong { color: var(--text-pri); font-weight: 700; }
+
+ul, ol { max-width: var(--measure); margin: 0 0 1rem; padding-left: 1.35rem; }
+li { margin-bottom: 0.5rem; }
+li::marker { color: var(--text-dim); }
+
+/* ─── Skip link ───────────────────────────────────────────────────── */
+.skip {
+  position: absolute; left: -9999px; top: 0; z-index: 100;
+  background: var(--accent); color: var(--accent-ink);
+  padding: 0.75rem 1.25rem; font-weight: 700;
+  border-radius: 0 0 var(--r-control) 0;
+}
+.skip:focus { left: 0; }
+
+/* ─── Masthead ────────────────────────────────────────────────────── */
+.masthead {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(250,248,244,0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line);
+}
+.masthead__in {
+  max-width: 1200px; margin: 0 auto;
+  padding: 0.85rem 1.5rem;
+  display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+}
+.brand { display: flex; align-items: center; gap: 0.7rem; text-decoration: none; }
+.brand svg { display: block; width: 30px; height: 30px; border-radius: 6px; }
+.brand__name {
+  font-weight: 800; letter-spacing: -0.02em; text-transform: uppercase;
+  color: var(--text-pri); font-size: 1.0625rem;
+}
+.masthead__tag {
+  font-family: var(--mono); font-size: 0.6875rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: var(--tracking-label);
+  color: var(--text-dim);
+  padding-left: 1rem; margin-left: 0.25rem;
+  border-left: 1px solid var(--line);
+}
+.masthead__spacer { flex: 1 1 auto; }
+
+/* ─── OS switch ───────────────────────────────────────────────────── */
+.osswitch { display: flex; align-items: center; gap: 0.6rem; }
+.osswitch__label {
+  font-family: var(--mono); font-size: 0.6875rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: var(--tracking-label);
+  color: var(--text-dim);
+}
+.seg {
+  display: inline-flex; padding: 3px; gap: 3px;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+}
+.seg button {
+  font-family: var(--mono); font-size: 0.6875rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  padding: 0.45rem 0.85rem;
+  min-height: 32px;
+  background: transparent; color: var(--text-sec);
+  border: 0; border-radius: 6px; cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.seg button:hover { color: var(--text-pri); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+/* ─── Shell ───────────────────────────────────────────────────────── */
+.shell { max-width: 1200px; margin: 0 auto; padding: 0 1.5rem 6rem; }
+
+/* ─── Hero ────────────────────────────────────────────────────────── */
+.hero { padding: 4.5rem 0 3rem; border-bottom: 1px solid var(--line); }
+.hero h1 {
+  font-size: clamp(2.6rem, 6.5vw, 5rem);
+  margin: 1.25rem 0 0;
+  max-width: 16ch;
+}
+.hero__lead {
+  font-size: 1.1875rem; line-height: 1.55;
+  margin-top: 1.75rem; max-width: 58ch;
+  color: var(--text-sec);
+}
+.facts { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 2rem; padding: 0; list-style: none; }
+.facts li { margin: 0; }
+.chip {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  font-family: var(--mono); font-size: 0.6875rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: var(--tracking-label);
+  color: var(--text-sec);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  padding: 0.5rem 0.8rem;
+}
+.chip::before {
+  content: ""; width: 6px; height: 6px; border-radius: 9999px;
+  background: var(--accent); flex: none;
+}
+
+/* ─── Two-column layout ───────────────────────────────────────────── */
+.layout { display: block; }
+@media (min-width: 1024px) {
+  .layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 4rem; align-items: start; }
+}
+
+/* ─── Progress rail ───────────────────────────────────────────────── */
+.rail { display: none; }
+@media (min-width: 1024px) {
+  .rail {
+    display: block; position: sticky; top: 5.5rem;
+    padding: 2.5rem 0 0;
+    max-height: calc(100vh - 7rem); overflow-y: auto;
+  }
+}
+.rail__head { margin-bottom: 0.9rem; }
+.progress {
+  height: 6px; background: var(--sunken);
+  border: 1px solid var(--line); border-radius: 9999px;
+  overflow: hidden; margin: 0.6rem 0 0.5rem;
+}
+.progress__fill {
+  height: 100%; width: 0%; background: var(--accent);
+  transition: width var(--dur-base) var(--ease);
+}
+.progress__text {
+  font-family: var(--mono); font-size: 0.6875rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: var(--tracking-label);
+  color: var(--text-dim);
+}
+.rail nav { margin-top: 1.75rem; border-top: 1px solid var(--line); padding-top: 1.25rem; }
+.rail ul { list-style: none; margin: 0; padding: 0; }
+.rail li { margin: 0; }
+.rail a {
+  display: block; padding: 0.5rem 0 0.5rem 0.85rem;
+  border-left: 2px solid var(--line-soft);
+  font-size: 0.875rem; line-height: 1.35;
+  color: var(--text-sec); text-decoration: none;
+  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.rail a:hover { color: var(--text-pri); border-left-color: var(--text-dim); }
+.rail a[aria-current="true"] { color: var(--text-pri); font-weight: 700; border-left-color: var(--accent); }
+.rail__reset {
+  margin-top: 1.5rem; background: none; border: 0; padding: 0; cursor: pointer;
+  font-family: var(--mono); font-size: 0.6875rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: var(--tracking-label);
+  color: var(--text-dim); text-decoration: underline; text-underline-offset: 3px;
+}
+.rail__reset:hover { color: var(--text-pri); }
+
+/* ─── Sections ────────────────────────────────────────────────────── */
+.section { padding: 4rem 0 0; }
+.section > h2 {
+  font-size: clamp(1.9rem, 3.6vw, 2.75rem);
+  margin: 0.9rem 0 0;
+  max-width: 20ch;
+}
+.section__lead { margin-top: 1.25rem; font-size: 1.0625rem; }
+
+/* ─── Cards ───────────────────────────────────────────────────────── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  box-shadow: var(--lift);
+  padding: 1.5rem;
+}
+@media (min-width: 768px) { .card { padding: 2rem; } }
+
+.grid { display: grid; gap: 1rem; margin-top: 1.75rem; }
+@media (min-width: 640px) { .grid--2 { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+@media (min-width: 860px) { .grid--3 { grid-template-columns: repeat(3, minmax(0,1fr)); } }
+
+.term h3 { font-size: 1.0625rem; letter-spacing: -0.01em; margin-bottom: 0.4rem; }
+.term p { font-size: 0.9375rem; margin: 0; color: var(--text-sec); }
+.term__tag {
+  font-family: var(--mono); font-size: 0.625rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: var(--tracking-label);
+  color: var(--text-dim); display: block; margin-bottom: 0.55rem;
+}
+
+/* ─── Path chooser ────────────────────────────────────────────────── */
+.path {
+  display: flex; flex-direction: column;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  box-shadow: var(--lift);
+  padding: 1.75rem;
+  text-decoration: none;
+  position: relative; overflow: hidden;
+  transition: border-color var(--dur-base) var(--ease), transform var(--dur-base) var(--ease);
+}
+.path::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: var(--accent);
+  transform: scaleX(0); transform-origin: left;
+  transition: transform 460ms var(--ease);
+}
+.path:hover, .path:focus-visible { border-color: var(--text-dim); transform: translateY(-2px); }
+.path:hover::before, .path:focus-visible::before { transform: scaleX(1); }
+.path h3 { font-size: 1.375rem; letter-spacing: -0.02em; margin: 0.75rem 0 0.6rem; }
+.path p { font-size: 0.9375rem; color: var(--text-sec); margin-bottom: 1.25rem; }
+.path__go {
+  margin-top: auto;
+  font-family: var(--mono); font-size: 0.6875rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: var(--tracking-label);
+  color: var(--text-pri);
+  display: inline-flex; align-items: center; gap: 0.5rem;
+}
+.path__go::after { content: "\2192"; transition: transform var(--dur-base) var(--ease); }
+.path:hover .path__go::after { transform: translateX(4px); }
+
+/* ─── Step (numbered card &middot; brand signature) ─────────────────────── */
+.step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 1.25rem;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  box-shadow: var(--lift);
+  padding: 1.5rem;
+  margin-top: 1.25rem;
+}
+@media (min-width: 768px) { .step { gap: 1.75rem; padding: 2rem; } }
+
+.step__num {
+  font-family: var(--mono); font-weight: 700; font-size: 1.0625rem;
+  font-variant-numeric: tabular-nums;
+  background: var(--accent); color: var(--accent-ink);
+  width: 44px; height: 44px; border-radius: var(--r-control);
+  display: grid; place-items: center;
+  flex: none;
+}
+.step__body { min-width: 0; }
+.step__body > h3 {
+  font-size: 1.3125rem; letter-spacing: -0.02em; line-height: 1.25;
+  margin-bottom: 0.4rem;
+}
+.step__meta {
+  font-family: var(--mono); font-size: 0.6875rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: var(--tracking-label);
+  color: var(--text-dim);
+  margin: 0 0 1.1rem;
+}
+.step__body > :last-child { margin-bottom: 0; }
+
+/* Completion tick */
+.done {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; gap: 0.6rem;
+  margin-top: 1.25rem; padding-top: 1.15rem;
+  border-top: 1px solid var(--line-soft);
+  cursor: pointer;
+  font-family: var(--mono); font-size: 0.6875rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: var(--tracking-label);
+  color: var(--text-dim);
+  min-height: 44px;
+  user-select: none;
+}
+.done input {
+  appearance: none; -webkit-appearance: none;
+  width: 22px; height: 22px; margin: 0; flex: none;
+  border: 1px solid var(--line); border-radius: 5px;
+  background: var(--card); cursor: pointer;
+  display: grid; place-items: center;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.done input::after {
+  content: ""; width: 11px; height: 6px;
+  border-left: 2.5px solid var(--accent-ink);
+  border-bottom: 2.5px solid var(--accent-ink);
+  transform: rotate(-45deg) scale(0); transform-origin: center;
+  margin-top: -3px;
+  transition: transform var(--dur-fast) var(--ease);
+}
+.done input:checked { background: var(--accent); border-color: var(--accent-press); }
+.done input:checked::after { transform: rotate(-45deg) scale(1); }
+.done:hover input { border-color: var(--text-dim); }
+.step:has(.done input:checked) { border-color: var(--line-soft); }
+.step:has(.done input:checked) .step__num { background: var(--sunken); color: var(--text-dim); }
+
+/* ─── Command block ───────────────────────────────────────────────── */
+.cmd {
+  position: relative;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  margin: 0 0 1rem;
+  overflow: hidden;
+}
+.cmd__head {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+  padding: 0.55rem 0.75rem 0.55rem 0.9rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--card);
+}
+.cmd__label {
+  font-family: var(--mono); font-size: 0.625rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: var(--tracking-label);
+  color: var(--text-dim);
+}
+.cmd__copy {
+  font-family: var(--mono); font-size: 0.625rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: var(--tracking-label);
+  color: var(--text-pri);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.35rem 0.6rem;
+  min-height: 30px;
+  cursor: pointer; flex: none;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.cmd__copy:hover { background: var(--accent); border-color: var(--accent-press); }
+.cmd__copy[data-copied="true"] { background: var(--accent); border-color: var(--accent-press); }
+.cmd pre {
+  margin: 0; padding: 0.9rem;
+  overflow-x: auto;
+  font-family: var(--mono); font-size: 0.875rem; line-height: 1.6;
+  color: var(--text-pri);
+  -webkit-font-smoothing: auto;
+}
+.cmd code { font-family: inherit; white-space: pre; }
+
+code.inline {
+  font-family: var(--mono); font-size: 0.875em;
+  background: var(--sunken); border: 1px solid var(--line-soft);
+  border-radius: 4px; padding: 0.1em 0.35em;
+  color: var(--text-pri);
+  white-space: nowrap;
+}
+
+/* ─── Callouts ────────────────────────────────────────────────────── */
+.note {
+  border-left: 3px solid var(--accent);
+  background: var(--sunken);
+  border-radius: 0 var(--r-control) var(--r-control) 0;
+  padding: 1rem 1.15rem;
+  margin: 0 0 1rem;
+  max-width: var(--measure);
+}
+.note--warn { border-left-color: var(--warning); }
+.note--stop { border-left-color: var(--danger); }
+.note__title {
+  font-family: var(--mono); font-size: 0.625rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: var(--tracking-label);
+  color: var(--text-dim);
+  display: block; margin-bottom: 0.45rem;
+}
+.note p { font-size: 0.9375rem; margin-bottom: 0.5rem; }
+.note p:last-child { margin-bottom: 0; }
+.note ul { margin-bottom: 0; font-size: 0.9375rem; }
+
+/* ─── OS-specific blocks ──────────────────────────────────────────── */
+.osblock { display: none; }
+body.os-win .osblock--win { display: block; }
+body.os-mac .osblock--mac { display: block; }
+.osblock__flag {
+  display: inline-flex; align-items: center; gap: 0.45rem;
+  font-family: var(--mono); font-size: 0.625rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: var(--tracking-label);
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-radius: 5px; padding: 0.3rem 0.55rem;
+  margin-bottom: 0.9rem;
+}
+
+/* ─── Troubleshooting ─────────────────────────────────────────────── */
+details.fix {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  margin-bottom: 0.6rem;
+  box-shadow: var(--lift);
+}
+details.fix + details.fix { margin-top: 0; }
+details.fix summary {
+  cursor: pointer; list-style: none;
+  padding: 1rem 1.15rem;
+  min-height: 44px;
+  display: flex; align-items: center; gap: 0.85rem;
+  font-weight: 700; color: var(--text-pri);
+  font-size: 0.9375rem;
+}
+details.fix summary::-webkit-details-marker { display: none; }
+details.fix summary::before {
+  content: "+"; flex: none;
+  font-family: var(--mono); font-weight: 700; font-size: 1rem;
+  width: 22px; height: 22px; border-radius: 5px;
+  background: var(--sunken); border: 1px solid var(--line);
+  display: grid; place-items: center;
+  color: var(--text-pri);
+  transition: background var(--dur-fast) var(--ease);
+}
+details.fix[open] summary::before { content: "\2212"; background: var(--accent); border-color: var(--accent-press); }
+details.fix .fix__body { padding: 0 1.15rem 1.15rem; }
+details.fix .fix__body > :first-child { margin-top: 0; }
+details.fix .fix__body p, details.fix .fix__body ul { font-size: 0.9375rem; }
+
+/* ─── Table ───────────────────────────────────────────────────────── */
+.tablewrap { overflow-x: auto; margin-top: 1.75rem; border: 1px solid var(--line); border-radius: var(--r-card); background: var(--card); box-shadow: var(--lift); }
+table { border-collapse: collapse; width: 100%; min-width: 520px; }
+th, td { text-align: left; padding: 0.85rem 1.15rem; vertical-align: top; font-size: 0.9375rem; }
+thead th {
+  font-family: var(--mono); font-size: 0.625rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: var(--tracking-label);
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+tbody tr + tr td { border-top: 1px solid var(--line-soft); }
+td:first-child { white-space: nowrap; }
+td code { font-family: var(--mono); font-size: 0.8125rem; color: var(--text-pri); font-weight: 500; }
+
+/* ─── Marquee (brand signature) ───────────────────────────────────── */
+.marquee {
+  overflow: hidden; background: var(--accent); color: var(--accent-ink);
+  border-top: 1px solid var(--accent-press);
+  margin-top: 5rem;
+}
+.marquee__track { display: flex; width: max-content; animation: marquee 40s linear infinite; }
+.marquee__track span {
+  font-family: var(--mono); font-size: 0.75rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: var(--tracking-eyebrow);
+  padding: 0.9rem 0; white-space: nowrap;
+}
+@keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.marquee:hover .marquee__track { animation-play-state: paused; }
+
+/* ─── Footer ──────────────────────────────────────────────────────── */
+.foot { border-top: 1px solid var(--line); background: var(--sunken); }
+.foot__in { max-width: 1200px; margin: 0 auto; padding: 2.5rem 1.5rem 3.5rem; }
+.foot p { font-size: 0.875rem; color: var(--text-dim); }
+.foot ul { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 1.25rem; margin-top: 1.25rem; }
+.foot li { margin: 0; }
+.foot a { font-size: 0.875rem; }
+
+/* ─── Live region ─────────────────────────────────────────────────── */
+.sr {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* ─── Touch targets ───────────────────────────────────────────────── */
+/* Compact controls read well under a mouse but fall short of the 44px
+   minimum under a finger. Grow them for coarse pointers only. */
+@media (pointer: coarse) {
+  .cmd__copy { min-height: 44px; padding: 0.5rem 0.9rem; }
+  .seg button { min-height: 44px; }
+}
+
+/* ─── Motion preference ───────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ─── Print ───────────────────────────────────────────────────────── */
+@media print {
+  body { background: #fff; font-size: 11pt; }
+  body::after, .masthead, .rail, .marquee, .cmd__copy, .skip { display: none !important; }
+  .osblock { display: block !important; }
+  .layout { display: block; }
+  .step, .card, details.fix { break-inside: avoid; box-shadow: none; }
+  details.fix .fix__body { display: block !important; }
+  details.fix summary::before { display: none; }
+  a { text-decoration: none; }
+  a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 9pt; color: #555; }
+  h2, h3 { break-after: avoid; }
+  p, li { orphans: 2; widows: 2; }
+}
+</style>
+</head>
+
+<body class="os-win">
+<a class="skip" href="#main">Skip to the guide</a>
+
+<header class="masthead">
+  <div class="masthead__in">
+    <a class="brand" href="#top">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="QuoteMax">
+        <title>QuoteMax</title>
+        <rect width="64" height="64" fill="#FFC400"></rect>
+        <rect x="13" y="14" width="38" height="26" rx="7" fill="#1C1812"></rect>
+        <path d="M20 39 L20 50 L31 40 Z" fill="#1C1812"></path>
+        <path d="M23 27 L29.5 33.5 L41 21" fill="none" stroke="#FFC400" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+      <span class="brand__name">QuoteMax</span>
+    </a>
+    <span class="masthead__tag">Setup guide</span>
+    <span class="masthead__spacer"></span>
+    <div class="osswitch">
+      <span class="osswitch__label" id="os-label">My computer</span>
+      <div class="seg" role="group" aria-labelledby="os-label">
+        <button type="button" data-os="win" aria-pressed="true">Windows&nbsp;/&nbsp;PC</button>
+        <button type="button" data-os="mac" aria-pressed="false">Mac</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="shell" id="top">
+
+  <section class="hero">
+    <p class="eyebrow">Beginner guide &middot; Claude + Git + GitHub</p>
+    <h1 class="display">Connect Claude to <span class="hl">your code</span></h1>
+    <p class="hero__lead">
+      Three tools, one setup. By the end of this guide, Claude can read your project,
+      make changes for you, and save those changes safely online. No technical
+      background needed. Every command is written out for you to copy.
+    </p>
+    <ul class="facts">
+      <li><span class="chip">About 30 minutes</span></li>
+      <li><span class="chip">Windows and Mac</span></li>
+      <li><span class="chip">Free to start</span></li>
+      <li><span class="chip">Nothing to break</span></li>
+    </ul>
+  </section>
+
+  <div class="layout">
+
+    <aside class="rail" aria-label="Your progress">
+      <div class="rail__head">
+        <p class="eyebrow">Progress</p>
+        <div class="progress" role="progressbar" aria-labelledby="prog-text" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div class="progress__fill" id="prog-fill"></div>
+        </div>
+        <p class="progress__text" id="prog-text">0 of 0 steps ticked</p>
+      </div>
+      <nav aria-label="Sections of this guide">
+        <ul id="toc"></ul>
+      </nav>
+      <button type="button" class="rail__reset" id="reset">Clear my ticks</button>
+    </aside>
+
+    <main id="main">
+
+      <!-- ═══ WORDS ═══════════════════════════════════════════════ -->
+      <section class="section" id="words">
+        <p class="eyebrow">Start here</p>
+        <h2 class="display">The words, in plain English</h2>
+        <p class="section__lead">
+          Five words do most of the work in this guide. Read these once and the rest
+          makes sense. Nothing here is as complicated as it sounds.
+        </p>
+
+        <div class="grid grid--3">
+          <div class="card term">
+            <span class="term__tag">On your computer</span>
+            <h3>Git</h3>
+            <p>A free program that keeps a history of your work. Think of it as a very good undo button that never forgets.</p>
+          </div>
+          <div class="card term">
+            <span class="term__tag">On the internet</span>
+            <h3>GitHub</h3>
+            <p>A website that stores a copy of your project online. It is the safe backup, and the place other people can see your work.</p>
+          </div>
+          <div class="card term">
+            <span class="term__tag">Your assistant</span>
+            <h3>Claude</h3>
+            <p>The AI you already chat with at claude.ai. It can read your project and suggest changes.</p>
+          </div>
+          <div class="card term">
+            <span class="term__tag">Your assistant, hands on</span>
+            <h3>Claude Code</h3>
+            <p>A version of Claude that runs on your own computer and can actually open, write and save your files.</p>
+          </div>
+          <div class="card term">
+            <span class="term__tag">Jargon</span>
+            <h3>Repository (repo)</h3>
+            <p>Just a project folder that Git is watching. When someone says repo, picture a folder.</p>
+          </div>
+          <div class="card term">
+            <span class="term__tag">Jargon</span>
+            <h3>Commit and push</h3>
+            <p>Commit saves a snapshot on your computer. Push sends those snapshots up to GitHub.</p>
+          </div>
+        </div>
+
+        <div class="note" style="margin-top:1.75rem">
+          <span class="note__title">One picture to hold on to</span>
+          <p>
+            <strong>Git</strong> is the filing cabinet in your office.
+            <strong>GitHub</strong> is the copy kept in a fireproof vault across town.
+            <strong>Claude</strong> is the assistant who does the filing for you.
+            You are setting up all three to talk to each other.
+          </p>
+        </div>
+
+        <div class="note note--warn">
+          <span class="note__title">About &ldquo;PC&rdquo; and &ldquo;Windows&rdquo;</span>
+          <p>
+            They mean the same thing here. If your computer is not an Apple Mac, use the
+            <strong>Windows / PC</strong> setting in the switch at the top of this page.
+            The steps on screen change to match your computer.
+          </p>
+        </div>
+      </section>
+
+      <!-- ═══ PATHS ═══════════════════════════════════════════════ -->
+      <section class="section" id="paths">
+        <p class="eyebrow">Choose one</p>
+        <h2 class="display">Three ways in. Pick <span class="hl">yours</span></h2>
+        <p class="section__lead">
+          People often talk about &ldquo;connecting Claude to GitHub&rdquo; as if it were one
+          thing. It is really three, and they do different jobs. Read the three cards,
+          pick the one that matches what you want, and skip the rest.
+        </p>
+
+        <div class="grid grid--3">
+          <a class="path" href="#path-a">
+            <p class="eyebrow">Path A &middot; 5 minutes</p>
+            <h3>Claude reads my code</h3>
+            <p>
+              You stay in your browser at claude.ai. Claude can look at your files and
+              answer questions about them. It cannot change anything.
+            </p>
+            <p><strong>Works on the free plan.</strong> Nothing to install.</p>
+            <span class="path__go">Go to Path A</span>
+          </a>
+          <a class="path" href="#path-b">
+            <p class="eyebrow">Path B &middot; 10 minutes</p>
+            <h3>Claude writes code online</h3>
+            <p>
+              Claude works on a computer in the cloud, makes the changes, then offers
+              them back to you on GitHub for approval.
+            </p>
+            <p><strong>Needs a paid plan.</strong> Still nothing to install.</p>
+            <span class="path__go">Go to Path B</span>
+          </a>
+          <a class="path" href="#path-c">
+            <p class="eyebrow">Path C &middot; 30 minutes</p>
+            <h3>Claude works on my computer</h3>
+            <p>
+              The full setup. Git and Claude Code live on your machine. Claude opens your
+              files, changes them and saves them to GitHub.
+            </p>
+            <p><strong>Needs a paid plan.</strong> This is the real thing.</p>
+            <span class="path__go">Go to Path C</span>
+          </a>
+        </div>
+
+        <div class="note" style="margin-top:1.75rem">
+          <span class="note__title">Not sure which</span>
+          <p>
+            Do Path A first. It takes five minutes, it is free, and nothing on your
+            computer changes. Once you have seen Claude read your code, you will know
+            whether you want Path B or Path C.
+          </p>
+        </div>
+
+        <div class="note note--warn">
+          <span class="note__title">Before you start Path B or Path C</span>
+          <p>
+            Claude Code needs a paid Claude plan: Pro, Max, Team, Enterprise, or an
+            Anthropic Console account with credits. The free claude.ai plan does not
+            include it. Path A works on every plan, including free.
+          </p>
+        </div>
+      </section>
+
+      <!-- ═══ PATH A ══════════════════════════════════════════════ -->
+      <section class="section" id="path-a">
+        <p class="eyebrow">Path A &middot; In your browser &middot; Free</p>
+        <h2 class="display">Let Claude <span class="hl">read</span> your code</h2>
+        <p class="section__lead">
+          This is the GitHub integration, sometimes called the GitHub connector. You give
+          Claude permission to look inside your GitHub projects, then you chat to it
+          normally. It is read only, so nothing you have can be changed or broken.
+        </p>
+
+        <div class="note">
+          <span class="note__title">What Claude sees, and what it does not</span>
+          <p>
+            Claude reads <strong>file names and file contents</strong> on the branch you
+            pick. It does <strong>not</strong> read your commit history, your pull
+            requests, or your issues. It cannot save, push, or delete anything.
+          </p>
+        </div>
+
+        <article class="step">
+          <div class="step__num" aria-hidden="true">01</div>
+          <div class="step__body">
+            <h3>Sign in to Claude</h3>
+            <p class="step__meta">Any computer &middot; 1 minute</p>
+            <p>
+              Open your browser and go to <a href="https://claude.ai">claude.ai</a>. Sign
+              in, or create a free account if you do not have one yet.
+            </p>
+          </div>
+          <label class="done"><input type="checkbox" data-step="a1"><span>Done</span></label>
+        </article>
+
+        <article class="step">
+          <div class="step__num" aria-hidden="true">02</div>
+          <div class="step__body">
+            <h3>Open the add menu in a chat</h3>
+            <p class="step__meta">In claude.ai &middot; 1 minute</p>
+            <p>
+              Start a new chat. In the <strong>lower left corner</strong> of the message
+              box, click the <strong>+</strong> button.
+            </p>
+            <p>Then choose <strong>Add from GitHub</strong>.</p>
+            <div class="note">
+              <span class="note__title">If you are using a Project instead</span>
+              <p>
+                Projects have their own version of this. Open your project, find the
+                <strong>project knowledge</strong> panel, click the <strong>+</strong> in
+                its <strong>upper right corner</strong>, then choose
+                <strong>GitHub</strong>.
+              </p>
+            </div>
+          </div>
+          <label class="done"><input type="checkbox" data-step="a2"><span>Done</span></label>
+        </article>
+
+        <article class="step">
+          <div class="step__num" aria-hidden="true">03</div>
+          <div class="step__body">
+            <h3>Sign in to GitHub and choose your repos</h3>
+            <p class="step__meta">In your browser &middot; 2 minutes</p>
+            <p>
+              The first time you do this, Claude sends you to GitHub to log in. GitHub
+              then asks which projects Claude is allowed to see. You get two choices:
+            </p>
+            <ul>
+              <li><strong>All repositories.</strong> Claude can see every project on your account.</li>
+              <li><strong>Only select repositories.</strong> You tick the specific ones. Safer, and easy to change later.</li>
+            </ul>
+            <p>
+              Pick <strong>Only select repositories</strong> and tick the one you want to
+              work on. You can always add more later.
+            </p>
+            <p>
+              Back in Claude, a file browser appears. Tick the files or folders you want
+              Claude to read, then confirm.
+            </p>
+          </div>
+          <label class="done"><input type="checkbox" data-step="a3"><span>Done</span></label>
+        </article>
+
+        <article class="step">
+          <div class="step__num" aria-hidden="true">04</div>
+          <div class="step__body">
+            <h3>Ask Claude something about your code</h3>
+            <p class="step__meta">In claude.ai &middot; 1 minute</p>
+            <p>
+              Type a normal question and send it. Try one of these to check it worked:
+            </p>
+            <ul>
+              <li>&ldquo;Explain what this project does, in plain English.&rdquo;</li>
+              <li>&ldquo;Where is the sign-in code, and what does it do.&rdquo;</li>
+              <li>&ldquo;What would you improve first in this project.&rdquo;</li>
+            </ul>
+            <p>
+              If Claude answers with details that are actually from your files, the
+              connection is working.
+            </p>
+            <div class="note note--warn">
+              <span class="note__title">Your files do not update on their own</span>
+              <p>
+                Claude keeps a snapshot from the moment you connected. When you change
+                your code, click the <strong>Sync</strong> icon, or
+                <strong>Sync now</strong>, so Claude sees the newest version.
+              </p>
+            </div>
+          </div>
+          <label class="done"><input type="checkbox" data-step="a4"><span>Done</span></label>
+        </article>
+      </section>
+
+      <!-- ═══ PATH B ══════════════════════════════════════════════ -->
+      <section class="section" id="path-b">
+        <p class="eyebrow">Path B &middot; In your browser &middot; Paid plan</p>
+        <h2 class="display">Let Claude <span class="hl">write</span> code online</h2>
+        <p class="section__lead">
+          This is Claude Code on the web. Claude borrows a computer in the cloud, opens
+          your project, makes the changes you asked for, and then offers them back to you
+          on GitHub. You still install nothing. You review every change before it counts.
+        </p>
+
+        <article class="step">
+          <div class="step__num" aria-hidden="true">01</div>
+          <div class="step__body">
+            <h3>Make sure you have a repo on GitHub</h3>
+            <p class="step__meta">On github.com &middot; 3 minutes</p>
+            <p>
+              Claude needs an existing project to work on. If you do not have one yet,
+              make an empty one now.
+            </p>
+            <ol>
+              <li>Go to <a href="https://github.com/new">github.com/new</a>.</li>
+              <li>Type a name in <strong>Repository name</strong>. Letters, numbers, dots, dashes and underscores only.</li>
+              <li>Choose <strong>Private</strong> unless you want the world to read it. Both are free.</li>
+              <li>Tick <strong>Add a README file</strong>. This matters. It stops the project being completely empty, which makes everything afterwards easier.</li>
+              <li>Click <strong>Create repository</strong>.</li>
+            </ol>
+            <div class="note">
+              <span class="note__title">No GitHub account yet</span>
+              <p>
+                Go to <a href="https://github.com">github.com</a>, click
+                <strong>Sign up</strong>, and follow the prompts. You must verify your
+                email address before GitHub lets you create a repository.
+              </p>
+            </div>
+          </div>
+          <label class="done"><input type="checkbox" data-step="b1"><span>Done</span></label>
+        </article>
+
+        <article class="step">
+          <div class="step__num" aria-hidden="true">02</div>
+          <div class="step__body">
+            <h3>Open Claude Code on the web</h3>
+            <p class="step__meta">In your browser &middot; 2 minutes</p>
+            <p>
+              Go to <a href="https://claude.ai/code">claude.ai/code</a> and sign in with
+              your Claude account.
+            </p>
+            <p>
+              Claude asks to connect to GitHub. Follow the prompt. GitHub installs
+              something called the <strong>Claude GitHub App</strong> and asks which
+              projects it can reach. Choose <strong>Only select repositories</strong> and
+              pick the one you just made.
+            </p>
+          </div>
+          <label class="done"><input type="checkbox" data-step="b2"><span>Done</span></label>
+        </article>
+
+        <article class="step">
+          <div class="step__num" aria-hidden="true">03</div>
+          <div class="step__body">
+            <h3>Create your working environment</h3>
+            <p class="step__meta">In your browser &middot; 2 minutes</p>
+            <p>
+              Claude shows a short form. You can accept the defaults on every field.
+            </p>
+            <ul>
+              <li><strong>Name.</strong> Anything you will recognise.</li>
+              <li><strong>Network access.</strong> Leave it on <strong>Trusted</strong>.</li>
+              <li><strong>Environment variables</strong> and <strong>Setup script.</strong> Leave both empty for now.</li>
+            </ul>
+            <p>Click <strong>Create environment</strong>.</p>
+          </div>
+          <label class="done"><input type="checkbox" data-step="b3"><span>Done</span></label>
+        </article>
+
+        <article class="step">
+          <div class="step__num" aria-hidden="true">04</div>
+          <div class="step__body">
+            <h3>Give Claude a job, then check its work</h3>
+            <p class="step__meta">In your browser &middot; 5 minutes</p>
+            <p>
+              Below the message box there is a <strong>repository selector</strong>. Click
+              it and choose your project and its branch.
+            </p>
+            <p>
+              Next to it is a mode setting. It starts on <strong>Accept edits</strong>,
+              which lets Claude get on with it. If you would rather see the plan before
+              anything changes, switch it to <strong>Plan</strong>.
+            </p>
+            <p>Now ask for something small, for example:</p>
+            <div class="cmd">
+              <div class="cmd__head">
+                <span class="cmd__label">Type this into Claude</span>
+                <button type="button" class="cmd__copy">Copy</button>
+              </div>
+              <pre><code>Add a short description of this project to the README file.</code></pre>
+            </div>
+            <p>
+              When Claude finishes, you will see a change indicator such as
+              <code class="inline">+42 -18</code>. Click it to read exactly what changed.
+              If you are happy, click <strong>Create PR</strong> at the top of that view.
+            </p>
+            <div class="note">
+              <span class="note__title">What is a PR</span>
+              <p>
+                PR is short for pull request. It is GitHub&rsquo;s way of saying
+                &ldquo;here are some proposed changes, have a look before we make them
+                official.&rdquo; Nothing is final until you merge it.
+              </p>
+            </div>
+            <div class="note note--warn">
+              <span class="note__title">Two things people trip on</span>
+              <p>
+                Closing the browser tab does not stop Claude. The job keeps running.
+              </p>
+              <p>
+                A cloud session can reach any project the connected GitHub account can
+                see, not only the ones you ticked. If that matters to you, limit access on
+                GitHub&rsquo;s side rather than relying on the tick boxes here.
+              </p>
+            </div>
+          </div>
+          <label class="done"><input type="checkbox" data-step="b4"><span>Done</span></label>
+        </article>
+      </section>
+
+      <!-- ═══ PATH C ══════════════════════════════════════════════ -->
+      <section class="section" id="path-c">
+        <p class="eyebrow">Path C &middot; On your computer &middot; Paid plan</p>
+        <h2 class="display">The full setup on <span class="hl">your machine</span></h2>
+        <p class="section__lead">
+          Seven steps. Take them in order and do not skip any. The switch at the top of
+          this page decides whether you see the Windows steps or the Mac steps, so check
+          it says the right thing before you begin.
+        </p>
+
+        <div class="note">
+          <span class="note__title">Do not want a terminal at all</span>
+          <p>
+            There is a Claude Code desktop app with buttons instead of typed commands. If
+            the black text window puts you off, install that instead and use its
+            <strong>Code</strong> tab. You still need steps 01 to 03 below so that Git and
+            GitHub are ready.
+          </p>
+        </div>
+
+        <article class="step">
+          <div class="step__num" aria-hidden="true">01</div>
+          <div class="step__body">
+            <h3>Create your GitHub account</h3>
+            <p class="step__meta">On github.com &middot; 5 minutes</p>
+            <ol>
+              <li>Go to <a href="https://github.com">github.com</a> and click <strong>Sign up</strong>.</li>
+              <li>Follow the prompts. Your username is public, so pick one you are happy for other people to see.</li>
+              <li>Verify your email address when GitHub asks. You cannot create a repository until you do.</li>
+            </ol>
+            <div class="note">
+              <span class="note__title">Turn on two-factor sign-in while you are here</span>
+              <p>
+                It is not compulsory for a brand-new account, but GitHub does make it
+                compulsory once you start doing certain things, and it gives you only 45
+                days&rsquo; notice. Setting it up now with an authenticator app takes two
+                minutes and saves a locked-out afternoon later.
+              </p>
+            </div>
+          </div>
+          <label class="done"><input type="checkbox" data-step="c1"><span>Done</span></label>
+        </article>
+
+        <article class="step">
+          <div class="step__num" aria-hidden="true">02</div>
+          <div class="step__body">
+            <h3>Install Git</h3>
+            <p class="step__meta">On your computer &middot; 10 minutes</p>
+
+            <div class="osblock osblock--win">
+              <span class="osblock__flag">Windows</span>
+              <ol>
+                <li>Go to <a href="https://git-scm.com/downloads/win">git-scm.com/downloads/win</a>. The download usually starts on its own.</li>
+                <li>Open the downloaded file. If Windows asks whether to allow changes, click <strong>Yes</strong>.</li>
+                <li>The installer shows a lot of screens. <strong>Change nothing.</strong> Click <strong>Next</strong> on every screen, then <strong>Install</strong>, then <strong>Finish</strong>.</li>
+              </ol>
+              <p>
+                The defaults matter here. They include a helper called <strong>Git
+                Credential Manager</strong>, which is what lets you sign in to GitHub with
+                a normal browser window instead of fiddling with tokens.
+              </p>
+              <p>
+                Now open <strong>Git Bash</strong>: click <strong>Start</strong>, type
+                <strong>Git Bash</strong>, press <strong>Enter</strong>. A text window
+                opens. Type this and press Enter:
+              </p>
+              <div class="cmd">
+                <div class="cmd__head">
+                  <span class="cmd__label">Git Bash</span>
+                  <button type="button" class="cmd__copy">Copy</button>
+                </div>
+                <pre><code>git --version</code></pre>
+              </div>
+              <p>
+                You should see something like <code class="inline">git version 2.51.0.windows.1</code>.
+                Any version number means it worked.
+              </p>
+            </div>
+
+            <div class="osblock osblock--mac">
+              <span class="osblock__flag">Mac</span>
+              <ol>
+                <li>Press <strong>Command</strong> and <strong>Space</strong> together, type <strong>Terminal</strong>, press <strong>Enter</strong>.</li>
+                <li>A text window opens. Type the command below and press Enter.</li>
+              </ol>
+              <div class="cmd">
+                <div class="cmd__head">
+                  <span class="cmd__label">Terminal</span>
+                  <button type="button" class="cmd__copy">Copy</button>
+                </div>
+                <pre><code>git --version</code></pre>
+              </div>
+              <p>One of two things happens:</p>
+              <ul>
+                <li>
+                  <strong>You see a version number</strong> such as
+                  <code class="inline">git version 2.39.5</code>. Git is already there.
+                  Move on.
+                </li>
+                <li>
+                  <strong>A box appears</strong> offering to install the command line
+                  developer tools. Click <strong>Install</strong>, agree to the terms, and
+                  wait. It can take fifteen minutes. When it finishes, run
+                  <code class="inline">git --version</code> again to confirm.
+                </li>
+              </ul>
+              <p>
+                Macs also need a helper so GitHub sign-in happens in a browser window
+                rather than at the keyboard. If you already use Homebrew, install it with
+                the two commands below. If you do not know what Homebrew is, skip this and
+                carry on. You can come back if step 06 asks you for a password.
+              </p>
+              <div class="cmd">
+                <div class="cmd__head">
+                  <span class="cmd__label">Terminal &middot; optional</span>
+                  <button type="button" class="cmd__copy">Copy</button>
+                </div>
+                <pre><code>brew install git
+brew install --cask git-credential-manager</code></pre>
+              </div>
+            </div>
+          </div>
+          <label class="done"><input type="checkbox" data-step="c2"><span>Done</span></label>
+        </article>
+
+        <article class="step">
+          <div class="step__num" aria-hidden="true">03</div>
+          <div class="step__body">
+            <h3>Tell Git who you are</h3>
+            <p class="step__meta">Once, on this computer &middot; 2 minutes</p>
+            <p>
+              Git writes your name against every change you save, so it needs to know it.
+              Type these two commands one at a time, pressing Enter after each.
+              <strong>Replace the name and email with your own</strong> and keep the
+              quotation marks.
+            </p>
+            <div class="cmd">
+              <div class="cmd__head">
+                <span class="cmd__label">Windows: Git Bash &middot; Mac: Terminal</span>
+                <button type="button" class="cmd__copy">Copy</button>
+              </div>
+              <pre><code>git config --global user.name "Your Name"
+git config --global user.email "you@example.com"</code></pre>
+            </div>
+            <p>
+              Use the same email address as your GitHub account. That is what links your
+              saved work to your GitHub profile.
+            </p>
+            <p>To check it stuck, type:</p>
+            <div class="cmd">
+              <div class="cmd__head">
+                <span class="cmd__label">Check</span>
+                <button type="button" class="cmd__copy">Copy</button>
+              </div>
+              <pre><code>git config --global user.name</code></pre>
+            </div>
+            <p>It should print your name back at you.</p>
+          </div>
+          <label class="done"><input type="checkbox" data-step="c3"><span>Done</span></label>
+        </article>
+
+        <article class="step">
+          <div class="step__num" aria-hidden="true">04</div>
+          <div class="step__body">
+            <h3>Install Claude Code</h3>
+            <p class="step__meta">On your computer &middot; 5 minutes</p>
+
+            <div class="osblock osblock--win">
+              <span class="osblock__flag">Windows</span>
+              <p>
+                You need <strong>PowerShell</strong> for this, not Git Bash and not the
+                old black Command Prompt. Press <strong>Windows key</strong> and
+                <strong>X</strong> together, then choose <strong>Terminal</strong> or
+                <strong>Windows PowerShell</strong>.
+              </p>
+              <div class="note">
+                <span class="note__title">How to tell you are in the right window</span>
+                <p>
+                  PowerShell starts its line with <code class="inline">PS</code>, like
+                  <code class="inline">PS C:\Users\YourName&gt;</code>. If there is no
+                  <code class="inline">PS</code>, you are in Command Prompt. Close it and
+                  open Terminal instead.
+                </p>
+              </div>
+              <div class="cmd">
+                <div class="cmd__head">
+                  <span class="cmd__label">PowerShell</span>
+                  <button type="button" class="cmd__copy">Copy</button>
+                </div>
+                <pre><code>irm https://claude.ai/install.ps1 | iex</code></pre>
+              </div>
+              <p>
+                You do not need administrator rights. When it finishes,
+                <strong>close the window and open a new one</strong>, then check it worked:
+              </p>
+              <div class="cmd">
+                <div class="cmd__head">
+                  <span class="cmd__label">New PowerShell window</span>
+                  <button type="button" class="cmd__copy">Copy</button>
+                </div>
+                <pre><code>claude --version</code></pre>
+              </div>
+              <div class="note note--warn">
+                <span class="note__title">Pick one method and stay with it</span>
+                <p>
+                  There are other ways to install Claude Code on Windows. Mixing them can
+                  leave you with two copies that update separately and behave differently.
+                  Use the command above and nothing else.
+                </p>
+              </div>
+            </div>
+
+            <div class="osblock osblock--mac">
+              <span class="osblock__flag">Mac</span>
+              <p>In Terminal, paste this and press Enter:</p>
+              <div class="cmd">
+                <div class="cmd__head">
+                  <span class="cmd__label">Terminal</span>
+                  <button type="button" class="cmd__copy">Copy</button>
+                </div>
+                <pre><code>curl -fsSL https://claude.ai/install.sh | bash</code></pre>
+              </div>
+              <p>
+                When it finishes, <strong>close the Terminal window and open a new
+                one</strong>, then check it worked:
+              </p>
+              <div class="cmd">
+                <div class="cmd__head">
+                  <span class="cmd__label">New Terminal window</span>
+                  <button type="button" class="cmd__copy">Copy</button>
+                </div>
+                <pre><code>claude --version</code></pre>
+              </div>
+              <p>
+                A version number such as <code class="inline">2.1.211 (Claude Code)</code>
+                means you are set. Your Mac needs macOS 13 or newer.
+              </p>
+            </div>
+
+            <div class="note">
+              <span class="note__title">If something looks wrong later</span>
+              <p>
+                There is a built-in check-up command. It only looks, it never changes
+                anything:
+              </p>
+              <div class="cmd" style="margin-top:0.75rem;margin-bottom:0">
+                <div class="cmd__head">
+                  <span class="cmd__label">Health check</span>
+                  <button type="button" class="cmd__copy">Copy</button>
+                </div>
+                <pre><code>claude doctor</code></pre>
+              </div>
+            </div>
+          </div>
+          <label class="done"><input type="checkbox" data-step="c4"><span>Done</span></label>
+        </article>
+
+        <article class="step">
+          <div class="step__num" aria-hidden="true">05</div>
+          <div class="step__body">
+            <h3>Log in to Claude Code</h3>
+            <p class="step__meta">First run &middot; 2 minutes</p>
+            <p>Type this and press Enter:</p>
+            <div class="cmd">
+              <div class="cmd__head">
+                <span class="cmd__label">Windows: PowerShell &middot; Mac: Terminal</span>
+                <button type="button" class="cmd__copy">Copy</button>
+              </div>
+              <pre><code>claude</code></pre>
+            </div>
+            <p>
+              Your web browser opens by itself. Sign in with your Claude account, the same
+              one you use at claude.ai. The terminal then prints
+              <strong>Login successful</strong> and asks you to press
+              <strong>Enter</strong>.
+            </p>
+            <div class="note">
+              <span class="note__title">If the browser does not open</span>
+              <p>
+                Press the <strong>c</strong> key. That copies the sign-in link so you can
+                paste it into a browser yourself. If the web page shows you a code instead
+                of sending you back, paste that code into the terminal where it asks.
+              </p>
+            </div>
+            <div class="note note--stop">
+              <span class="note__title">A paid plan is required here</span>
+              <p>
+                Claude Code needs Pro, Max, Team, Enterprise, or an Anthropic Console
+                account with credits. If you are on the free plan, this is where it stops.
+                Path A above still works on free.
+              </p>
+            </div>
+          </div>
+          <label class="done"><input type="checkbox" data-step="c5"><span>Done</span></label>
+        </article>
+
+        <article class="step">
+          <div class="step__num" aria-hidden="true">06</div>
+          <div class="step__body">
+            <h3>Bring your project down from GitHub</h3>
+            <p class="step__meta">On your computer &middot; 5 minutes</p>
+            <p>
+              This is the step that actually joins Git, GitHub and your computer together.
+            </p>
+            <ol>
+              <li>On github.com, open your project.</li>
+              <li>Click the green <strong>Code</strong> button above the file list.</li>
+              <li>Make sure the <strong>HTTPS</strong> tab is showing, then click the copy icon next to the web address.</li>
+            </ol>
+            <p>Back in your terminal, move to where you want the project to live:</p>
+            <div class="cmd">
+              <div class="cmd__head">
+                <span class="cmd__label">Choose a home for it</span>
+                <button type="button" class="cmd__copy">Copy</button>
+              </div>
+              <pre><code>cd Documents</code></pre>
+            </div>
+            <p>
+              Now type <code class="inline">git clone</code>, a space, then paste the
+              address you copied. To paste: <strong>Command and V</strong> on a Mac, or
+              <strong>right-click</strong> in Git Bash on Windows.
+            </p>
+            <div class="cmd">
+              <div class="cmd__head">
+                <span class="cmd__label">Replace with your own address</span>
+                <button type="button" class="cmd__copy">Copy</button>
+              </div>
+              <pre><code>git clone https://github.com/your-username/your-project.git</code></pre>
+            </div>
+            <p>
+              Git makes a new folder named after the project, inside wherever you
+              currently are. Step into it:
+            </p>
+            <div class="cmd">
+              <div class="cmd__head">
+                <span class="cmd__label">Use your own project name</span>
+                <button type="button" class="cmd__copy">Copy</button>
+              </div>
+              <pre><code>cd your-project</code></pre>
+            </div>
+            <div class="note">
+              <span class="note__title">The sign-in box that appears the first time</span>
+              <p>
+                On your first clone or push, Git asks you to sign in. A browser window
+                opens. Sign in to GitHub and approve it. Your computer remembers, so this
+                happens once.
+              </p>
+              <p>
+                <strong>Your normal GitHub password will not work here.</strong> GitHub
+                stopped accepting passwords for this years ago. Always use the browser
+                sign-in.
+              </p>
+            </div>
+          </div>
+          <label class="done"><input type="checkbox" data-step="c6"><span>Done</span></label>
+        </article>
+
+        <article class="step">
+          <div class="step__num" aria-hidden="true">07</div>
+          <div class="step__body">
+            <h3>Start Claude inside your project</h3>
+            <p class="step__meta">The payoff &middot; 5 minutes</p>
+            <p>
+              You are in the project folder. Now start Claude there so it can see
+              everything:
+            </p>
+            <div class="cmd">
+              <div class="cmd__head">
+                <span class="cmd__label">Inside your project folder</span>
+                <button type="button" class="cmd__copy">Copy</button>
+              </div>
+              <pre><code>claude</code></pre>
+            </div>
+            <p>Ask it something real. Try:</p>
+            <div class="cmd">
+              <div class="cmd__head">
+                <span class="cmd__label">Type this into Claude</span>
+                <button type="button" class="cmd__copy">Copy</button>
+              </div>
+              <pre><code>Add a short description of this project to the README file, then save it to GitHub.</code></pre>
+            </div>
+            <p>
+              Claude reads your files, shows you what it wants to change, and asks
+              permission before it touches anything. Say yes and it makes the change,
+              saves it with Git, and sends it up to GitHub. Refresh your project page on
+              github.com and you will see it there.
+            </p>
+            <div class="note">
+              <span class="note__title">Four things to know about the Claude window</span>
+              <ul>
+                <li>You cannot click things. Use the arrow keys.</li>
+                <li><strong>Esc</strong> stops Claude mid-job.</li>
+                <li>Type <strong>/help</strong> to see what it can do.</li>
+                <li>Type <strong>exit</strong> to leave.</li>
+              </ul>
+            </div>
+            <div class="note">
+              <span class="note__title">Windows only, and optional</span>
+              <p>
+                Claude Code runs commands through Git Bash if it finds it. You installed
+                Git in step 02, so it will. If you had skipped Git, Claude would use
+                PowerShell instead. Either works.
+              </p>
+            </div>
+          </div>
+          <label class="done"><input type="checkbox" data-step="c7"><span>Done</span></label>
+        </article>
+      </section>
+
+      <!-- ═══ SAFETY ══════════════════════════════════════════════ -->
+      <section class="section" id="safety">
+        <p class="eyebrow">Worth knowing</p>
+        <h2 class="display">Staying in <span class="hl">control</span></h2>
+        <p class="section__lead">
+          None of this hands over the keys. A few habits keep it that way.
+        </p>
+
+        <div class="grid grid--2">
+          <div class="card term">
+            <span class="term__tag">Permission</span>
+            <h3>Claude asks first</h3>
+            <p>Claude Code shows you what it wants to change and waits for a yes before it edits a file or runs a command. Read what it is proposing rather than approving on autopilot.</p>
+          </div>
+          <div class="card term">
+            <span class="term__tag">Secrets</span>
+            <h3>Never paste passwords</h3>
+            <p>Do not put passwords, API keys or card details into a chat. If a file in your project holds a secret, keep that file out of Git using a <code class="inline">.gitignore</code> file.</p>
+          </div>
+          <div class="card term">
+            <span class="term__tag">Access</span>
+            <h3>Share the least you can</h3>
+            <p>When GitHub asks which projects Claude can reach, choose <strong>Only select repositories</strong>. You can widen it later in seconds. Narrowing it after a mistake is harder.</p>
+          </div>
+          <div class="card term">
+            <span class="term__tag">Review</span>
+            <h3>Read before you merge</h3>
+            <p>A pull request is a proposal, not a done deal. Open the changed files and read them. If anything looks wrong, close the pull request. Nothing is lost.</p>
+          </div>
+          <div class="card term">
+            <span class="term__tag">Recovery</span>
+            <h3>Git is your undo</h3>
+            <p>Every change you commit can be undone. That is the whole point of Git. Commit early and often and you always have a way back.</p>
+          </div>
+          <div class="card term">
+            <span class="term__tag">Privacy</span>
+            <h3>Private stays private</h3>
+            <p>A private repo is visible only to you and people you invite. Connecting Claude does not make it public. Public repos are readable by anyone, so keep personal details out of them.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ TROUBLE ═════════════════════════════════════════════ -->
+      <section class="section" id="trouble">
+        <p class="eyebrow">If it goes wrong</p>
+        <h2 class="display">Common problems, plain fixes</h2>
+        <p class="section__lead">
+          Every one of these has happened to everybody. None of them mean you have broken
+          anything.
+        </p>
+
+        <div style="margin-top:1.75rem">
+          <details class="fix">
+            <summary>&ldquo;git&rdquo; or &ldquo;claude&rdquo; is not recognised</summary>
+            <div class="fix__body">
+              <p>
+                The program installed, but your terminal window was already open and has
+                not noticed. <strong>Close the window completely and open a new one</strong>,
+                then try again. This fixes it nine times out of ten.
+              </p>
+              <p>
+                If it still fails on Windows after installing Claude Code, run this in
+                PowerShell, then open a fresh window:
+              </p>
+              <div class="cmd" style="margin-bottom:0">
+                <div class="cmd__head">
+                  <span class="cmd__label">PowerShell</span>
+                  <button type="button" class="cmd__copy">Copy</button>
+                </div>
+                <pre><code>$currentPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
+[Environment]::SetEnvironmentVariable('PATH', "$currentPath;$env:USERPROFILE\.local\bin", 'User')</code></pre>
+              </div>
+            </div>
+          </details>
+
+          <details class="fix">
+            <summary>&ldquo;irm is not recognized&rdquo; when installing Claude Code</summary>
+            <div class="fix__body">
+              <p>
+                You are in Command Prompt, not PowerShell. Close it. Press
+                <strong>Windows key</strong> and <strong>X</strong>, choose
+                <strong>Terminal</strong> or <strong>Windows PowerShell</strong>, and run
+                the command again.
+              </p>
+              <p>
+                The reverse also happens. If you see <em>The token &lsquo;&amp;&amp;&rsquo; is
+                not a valid statement separator</em>, you are in PowerShell but running the
+                Command Prompt version. Use the PowerShell command instead.
+              </p>
+            </div>
+          </details>
+
+          <details class="fix">
+            <summary>Authentication failed, or GitHub keeps rejecting my password</summary>
+            <div class="fix__body">
+              <p>
+                Your GitHub password does not work for this. It has not worked since 2021.
+                When the sign-in box appears, use the <strong>browser sign-in</strong>
+                option instead.
+              </p>
+              <p>
+                If your computer saved a wrong sign-in earlier, clear it out and try again:
+              </p>
+              <ul>
+                <li><strong>Windows:</strong> Control Panel, then <strong>User Accounts</strong>, then <strong>Credential Manager</strong>. Find the GitHub entry and delete it.</li>
+                <li><strong>Mac:</strong> open <strong>Keychain Access</strong>, search for <em>github</em>, and delete the entry.</li>
+              </ul>
+              <p>Then run your command again and sign in through the browser.</p>
+            </div>
+          </details>
+
+          <details class="fix">
+            <summary>&ldquo;fatal: not a git repository&rdquo;</summary>
+            <div class="fix__body">
+              <p>
+                You are standing in the wrong folder. Git only works inside a project
+                folder it is tracking. Move into your project first:
+              </p>
+              <div class="cmd" style="margin-bottom:0">
+                <div class="cmd__head">
+                  <span class="cmd__label">Use your own project name</span>
+                  <button type="button" class="cmd__copy">Copy</button>
+                </div>
+                <pre><code>cd your-project</code></pre>
+              </div>
+            </div>
+          </details>
+
+          <details class="fix">
+            <summary>&ldquo;fatal: remote origin already exists&rdquo;</summary>
+            <div class="fix__body">
+              <p>
+                Your project is already pointed at a GitHub address, and you are trying to
+                add a second one. Look at what is there, then point it where you actually
+                want:
+              </p>
+              <div class="cmd" style="margin-bottom:0">
+                <div class="cmd__head">
+                  <span class="cmd__label">Check, then correct</span>
+                  <button type="button" class="cmd__copy">Copy</button>
+                </div>
+                <pre><code>git remote -v
+git remote set-url origin https://github.com/your-username/your-project.git</code></pre>
+              </div>
+            </div>
+          </details>
+
+          <details class="fix">
+            <summary>Claude cannot see my private or work repository</summary>
+            <div class="fix__body">
+              <p>
+                Usually a permissions gate rather than a fault. Go to
+                <a href="https://github.com/settings/applications">github.com/settings/applications</a>,
+                open the <strong>Claude</strong> entry, and look under
+                <strong>Organization access</strong>.
+              </p>
+              <ul>
+                <li>If there is a <strong>Grant</strong> button next to your organisation, click it.</li>
+                <li>If it says <strong>Request</strong>, an administrator at your workplace has to approve it.</li>
+              </ul>
+              <p>
+                Disconnecting and reconnecting GitHub inside Claude will not fix this. It
+                has to be done on GitHub.
+              </p>
+            </div>
+          </details>
+
+          <details class="fix">
+            <summary>Claude is answering about an old version of my code</summary>
+            <div class="fix__body">
+              <p>
+                In Path A, Claude holds a snapshot from when you connected. It does not
+                refresh by itself. Click the <strong>Sync</strong> icon, or
+                <strong>Sync now</strong>, to pull the current version.
+              </p>
+            </div>
+          </details>
+
+          <details class="fix">
+            <summary>I typed something and nothing happened</summary>
+            <div class="fix__body">
+              <p>
+                Usually normal. Many Git commands succeed in silence. To see where things
+                stand:
+              </p>
+              <div class="cmd" style="margin-bottom:0">
+                <div class="cmd__head">
+                  <span class="cmd__label">Ask Git what is going on</span>
+                  <button type="button" class="cmd__copy">Copy</button>
+                </div>
+                <pre><code>git status</code></pre>
+              </div>
+            </div>
+          </details>
+
+          <details class="fix">
+            <summary>I closed the window. Have I lost my work</summary>
+            <div class="fix__body">
+              <p>
+                No. Anything you committed is on your computer. Anything you pushed is
+                also on GitHub. Closing a terminal window does not delete files.
+              </p>
+              <p>
+                In Path B, closing the browser tab does not even stop Claude. The job keeps
+                running and you can come back to it.
+              </p>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <!-- ═══ DAILY ═══════════════════════════════════════════════ -->
+      <section class="section" id="daily">
+        <p class="eyebrow">From here on</p>
+        <h2 class="display">The handful you actually <span class="hl">use</span></h2>
+        <p class="section__lead">
+          There is no need to learn Git properly. Five commands cover almost everything,
+          and Claude will run most of them for you if you ask.
+        </p>
+
+        <div class="tablewrap">
+          <table>
+            <caption class="sr">Everyday Git commands and what each one does</caption>
+            <thead>
+              <tr><th scope="col">Command</th><th scope="col">What it does</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>git pull</code></td><td>Fetches the newest version from GitHub. Run it before you start work.</td></tr>
+              <tr><td><code>git status</code></td><td>Shows which files you have changed. Harmless. Run it whenever you are unsure.</td></tr>
+              <tr><td><code>git add .</code></td><td>Selects all your changed files, ready to be saved.</td></tr>
+              <tr><td><code>git commit -m "what I changed"</code></td><td>Saves a snapshot on your computer, with a short note.</td></tr>
+              <tr><td><code>git push</code></td><td>Sends your saved snapshots up to GitHub.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p style="margin-top:1.5rem">
+          A normal session is: <strong>pull</strong>, do your work,
+          <strong>add</strong>, <strong>commit</strong>, <strong>push</strong>. That is the
+          whole rhythm.
+        </p>
+
+        <div class="note">
+          <span class="note__title">The shortcut</span>
+          <p>
+            Inside Claude Code you can skip all of that and simply say: &ldquo;save my
+            changes and push them to GitHub.&rdquo; Claude runs the commands and shows you
+            what it did.
+          </p>
+        </div>
+
+        <div class="note">
+          <span class="note__title">Where to go next</span>
+          <p>
+            Two ideas are worth learning after this. <strong>Branches</strong> let you try
+            something risky on a copy, so the working version stays safe.
+            <strong>Pull requests</strong> are how changes get reviewed before they become
+            official. GitHub&rsquo;s own free guides at
+            <a href="https://docs.github.com/en/get-started">docs.github.com/en/get-started</a>
+            cover both well.
+          </p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<div class="marquee" aria-hidden="true">
+  <div class="marquee__track">
+    <span>Install Git &nbsp;&middot;&nbsp; Sign in to GitHub &nbsp;&middot;&nbsp; Install Claude Code &nbsp;&middot;&nbsp; Connect the two &nbsp;&middot;&nbsp; Ship something &nbsp;&middot;&nbsp;&nbsp;</span>
+    <span>Install Git &nbsp;&middot;&nbsp; Sign in to GitHub &nbsp;&middot;&nbsp; Install Claude Code &nbsp;&middot;&nbsp; Connect the two &nbsp;&middot;&nbsp; Ship something &nbsp;&middot;&nbsp;&nbsp;</span>
+  </div>
+</div>
+
+<footer class="foot">
+  <div class="foot__in">
+    <p class="eyebrow">QuoteMax &middot; Setup guide</p>
+    <p style="margin-top:0.9rem; max-width: 60ch">
+      Connecting Claude, Git and GitHub. Written for people with no technical
+      background. Checked against the official Anthropic and GitHub documentation in
+      July 2026. Screens and button labels do change, so if something on your screen
+      is named slightly differently, the official links below are always current.
+    </p>
+    <ul>
+      <li><a href="https://code.claude.com/docs/en/setup">Claude Code setup docs</a></li>
+      <li><a href="https://support.claude.com/en/articles/10167454-use-the-github-integration">Claude GitHub integration</a></li>
+      <li><a href="https://code.claude.com/docs/en/web-quickstart">Claude Code on the web</a></li>
+      <li><a href="https://docs.github.com/en/get-started">GitHub getting started</a></li>
+      <li><a href="https://git-scm.com/downloads">Download Git</a></li>
+    </ul>
+  </div>
+</footer>
+
+<div class="sr" role="status" aria-live="polite" id="live"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var store = {
+    get: function (k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
+    set: function (k, v) { try { window.localStorage.setItem(k, v); } catch (e) {} },
+    del: function (k) { try { window.localStorage.removeItem(k); } catch (e) {} }
+  };
+
+  var live = document.getElementById("live");
+  function say(msg) { if (live) { live.textContent = ""; window.setTimeout(function () { live.textContent = msg; }, 60); } }
+
+  /* ── Operating system switch ─────────────────────────────────── */
+  var OS_KEY = "qm-guide-os";
+  var osButtons = Array.prototype.slice.call(document.querySelectorAll("[data-os]"));
+
+  function detectOs() {
+    var saved = store.get(OS_KEY);
+    if (saved === "win" || saved === "mac") { return saved; }
+    var ua = (navigator.userAgent || "") + " " + (navigator.platform || "");
+    return /Mac|iPhone|iPad|iPod/i.test(ua) ? "mac" : "win";
+  }
+
+  function applyOs(os) {
+    document.body.classList.toggle("os-win", os === "win");
+    document.body.classList.toggle("os-mac", os === "mac");
+    osButtons.forEach(function (b) {
+      b.setAttribute("aria-pressed", String(b.getAttribute("data-os") === os));
+    });
+    store.set(OS_KEY, os);
+  }
+
+  osButtons.forEach(function (b) {
+    b.addEventListener("click", function () {
+      var os = b.getAttribute("data-os");
+      applyOs(os);
+      say(os === "mac" ? "Showing the Mac steps." : "Showing the Windows steps.");
+    });
+  });
+  applyOs(detectOs());
+
+  /* ── Copy buttons ────────────────────────────────────────────── */
+  document.addEventListener("click", function (ev) {
+    var btn = ev.target.closest ? ev.target.closest(".cmd__copy") : null;
+    if (!btn) { return; }
+    var block = btn.closest(".cmd");
+    var code = block ? block.querySelector("code") : null;
+    if (!code) { return; }
+    var text = code.textContent;
+
+    function done() {
+      var was = btn.textContent;
+      btn.textContent = "Copied";
+      btn.setAttribute("data-copied", "true");
+      say("Command copied.");
+      window.setTimeout(function () {
+        btn.textContent = was;
+        btn.removeAttribute("data-copied");
+      }, 1600);
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } else {
+      fallback();
+    }
+
+    function fallback() {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); done(); } catch (e) { say("Copy did not work. Select the text and copy it yourself."); }
+      document.body.removeChild(ta);
+    }
+  });
+
+  /* ── Progress ticks ──────────────────────────────────────────── */
+  var TICK_KEY = "qm-guide-ticks";
+  var ticks = document.querySelectorAll(".done input[type=checkbox]");
+  var fill = document.getElementById("prog-fill");
+  var text = document.getElementById("prog-text");
+  var bar = fill ? fill.parentElement : null;
+
+  function readTicks() {
+    try { return JSON.parse(store.get(TICK_KEY) || "{}"); } catch (e) { return {}; }
+  }
+  function writeTicks(o) { store.set(TICK_KEY, JSON.stringify(o)); }
+
+  function render() {
+    var total = ticks.length;
+    var n = 0;
+    ticks.forEach(function (c) { if (c.checked) { n++; } });
+    var pct = total ? Math.round((n / total) * 100) : 0;
+    if (fill) { fill.style.width = pct + "%"; }
+    if (bar) { bar.setAttribute("aria-valuenow", String(pct)); }
+    if (text) { text.textContent = n + " of " + total + " steps ticked"; }
+  }
+
+  var saved = readTicks();
+  ticks.forEach(function (c) {
+    var id = c.getAttribute("data-step");
+    if (saved[id]) { c.checked = true; }
+    c.addEventListener("change", function () {
+      var o = readTicks();
+      if (c.checked) { o[id] = 1; } else { delete o[id]; }
+      writeTicks(o);
+      render();
+    });
+  });
+  render();
+
+  var reset = document.getElementById("reset");
+  if (reset) {
+    reset.addEventListener("click", function () {
+      store.del(TICK_KEY);
+      ticks.forEach(function (c) { c.checked = false; });
+      render();
+      say("Progress cleared.");
+    });
+  }
+
+  /* ── Contents list, built from the page ──────────────────────── */
+  var toc = document.getElementById("toc");
+  var sections = Array.prototype.slice.call(document.querySelectorAll("main .section[id]"));
+  if (toc) {
+    sections.forEach(function (s) {
+      var h = s.querySelector("h2");
+      if (!h) { return; }
+      var li = document.createElement("li");
+      var a = document.createElement("a");
+      a.href = "#" + s.id;
+      a.textContent = h.textContent.trim();
+      li.appendChild(a);
+      toc.appendChild(li);
+    });
+  }
+
+  /* ── Highlight the section you are reading ───────────────────── */
+  if ("IntersectionObserver" in window && toc) {
+    var links = {};
+    Array.prototype.slice.call(toc.querySelectorAll("a")).forEach(function (a) {
+      links[a.getAttribute("href").slice(1)] = a;
+    });
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        var a = links[e.target.id];
+        if (!a) { return; }
+        if (e.isIntersecting) {
+          Object.keys(links).forEach(function (k) { links[k].removeAttribute("aria-current"); });
+          a.setAttribute("aria-current", "true");
+        }
+      });
+    }, { rootMargin: "-20% 0px -70% 0px", threshold: 0 });
+    sections.forEach(function (s) { io.observe(s); });
+  }
+}());
+</script>
+</body>
+</html>
