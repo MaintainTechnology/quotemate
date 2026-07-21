@@ -1,10 +1,10 @@
 ---
 active: true
 iteration: 1
-session_id: c48bdec2-7ed1-4a51-a08b-371a2aada465
-max_iterations: 20
-completion_promise: "All tests pass"
-started_at: "2026-07-17T03:19:02Z"
+session_id: b9172812-bc2a-45a6-a53c-22db81d60db8
+max_iterations: 0
+completion_promise: "All tests active"
+started_at: "2026-07-20T23:47:46Z"
 ---
 
-Read specs/onboarding-wizard-refresh.md and run one Red → Green → Verify → Review iteration against its acceptance gates; fix every finding
+Make every quote PDF byte-consistent across MMS, download, Quotes page and Dashboard for every trade, test-first
