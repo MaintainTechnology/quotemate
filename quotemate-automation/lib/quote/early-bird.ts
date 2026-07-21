@@ -225,6 +225,53 @@ export function isEarlyBirdLive(
   return earlyBirdStatus(discountPct, expiresAtIso, nowMs).state === 'live'
 }
 
+// ── Mint-time realisation (pay-first) ───────────────────────────────
+
+/** Tiers a discount may apply to. The $99 inspection is a flat platform fee,
+ *  not a deposit — discounting it would sell the site visit below cost. */
+const DISCOUNTABLE_TIERS = new Set(['good', 'better', 'best'])
+
+/**
+ * The realised early-booking discount at STRIPE MINT time.
+ *
+ * The choke-point moved with the 2026-07-22 pay-first reversal. Under
+ * book-first the customer committed a TIME first, so the book API realised the
+ * discount there (gated on `!alreadyPaid`). Pay-first means money comes first,
+ * so that branch never runs again — leaving it there would have silently
+ * stopped the discount applying for every customer. It is realised here
+ * instead, at the moment the payable Session is created.
+ *
+ * Decided SERVER-SIDE from the DB-stamped deadline; nothing the client sends
+ * is read.
+ *
+ * `stamp` tells the caller whether to write applied_discount_pct. It is false
+ * when the discount was already realised on an earlier click — /r mints a
+ * fresh Session every time, and re-stamping would rewrite applied_discount_at
+ * on each one.
+ */
+export function resolveMintDiscount(input: {
+  /** quotes.applied_discount_pct — already realised on a previous click. */
+  appliedPct: number
+  /** quotes.early_bird_discount_pct — the offer stamped at draft time. */
+  offerPct: number | null
+  /** quotes.early_bird_expires_at. */
+  expiresAt: string | null
+  tier: string
+  nowMs?: number
+}): { pct: number; stamp: boolean } {
+  if (!DISCOUNTABLE_TIERS.has(input.tier)) return { pct: 0, stamp: false }
+
+  // Clamped on the way out too: a hand-edited applied_discount_pct above the
+  // platform ceiling must never reach a charge.
+  const already = clampDiscountPct(input.appliedPct)
+  if (already > 0) return { pct: already, stamp: false }
+
+  const status = earlyBirdStatus(input.offerPct, input.expiresAt, input.nowMs ?? Date.now())
+  return status.state === 'live'
+    ? { pct: status.discountPct, stamp: true }
+    : { pct: 0, stamp: false }
+}
+
 // ── Money ───────────────────────────────────────────────────────────
 
 /**

@@ -1,4 +1,4 @@
-// v8 Phase A — early-booking discount, pure-logic coverage.
+﻿// v8 Phase A â€” early-booking discount, pure-logic coverage.
 //
 // Locks the margin cap, the offer/expiry maths, the server-side-live
 // gate, and the discount arithmetic so a future change can't silently
@@ -15,6 +15,7 @@ import {
   computeEarlyBirdOffer,
   earlyBirdStatus,
   isEarlyBirdLive,
+  resolveMintDiscount,
   applyEarlyBirdDiscount,
   earlyBirdSavingAmount,
   fmtEarlyBirdDeadlineAU,
@@ -23,7 +24,7 @@ import {
 
 const HOUR = 60 * 60 * 1000
 
-describe('clampDiscountPct — the margin guardrail', () => {
+describe('clampDiscountPct â€” the margin guardrail', () => {
   it('passes a valid in-range pct through', () => {
     expect(clampDiscountPct(10)).toBe(10)
     expect(clampDiscountPct(15)).toBe(15)
@@ -148,7 +149,7 @@ describe('earlyBirdStatus', () => {
     expect(s.discountPct).toBe(0)
     expect(s.msRemaining).toBeLessThan(0)
   })
-  it('expired exactly at the deadline (boundary — not live)', () => {
+  it('expired exactly at the deadline (boundary â€” not live)', () => {
     expect(earlyBirdStatus(10, '2026-05-21T12:00:00.000Z', now).state).toBe('expired')
   })
   it('none when there is no discount', () => {
@@ -166,7 +167,7 @@ describe('earlyBirdStatus', () => {
   })
 })
 
-describe('isEarlyBirdLive — the server-side gate', () => {
+describe('isEarlyBirdLive â€” the server-side gate', () => {
   const now = Date.parse('2026-05-21T12:00:00.000Z')
   it('true only while the offer is genuinely claimable', () => {
     expect(isEarlyBirdLive(10, '2026-05-21T21:00:00.000Z', now)).toBe(true)
@@ -180,14 +181,14 @@ describe('applyEarlyBirdDiscount', () => {
   it('discounts by the given pct, rounded to the dollar', () => {
     expect(applyEarlyBirdDiscount(1000, 10)).toBe(900)
     expect(applyEarlyBirdDiscount(820, 10)).toBe(738)
-    expect(applyEarlyBirdDiscount(999, 15)).toBe(849) // 849.15 → 849
+    expect(applyEarlyBirdDiscount(999, 15)).toBe(849) // 849.15 â†’ 849
   })
   it('is a no-op for a 0 / missing discount', () => {
     expect(applyEarlyBirdDiscount(1000, 0)).toBe(1000)
     expect(applyEarlyBirdDiscount(1000, null)).toBe(1000)
     expect(applyEarlyBirdDiscount(1000, undefined)).toBe(1000)
   })
-  it('never over-discounts — an out-of-range pct is clamped to 15%', () => {
+  it('never over-discounts â€” an out-of-range pct is clamped to 15%', () => {
     expect(applyEarlyBirdDiscount(1000, 90)).toBe(850)
     expect(applyEarlyBirdDiscount(1000, 999)).toBe(850)
   })
@@ -220,7 +221,7 @@ describe('fmtEarlyBirdDeadlineAU', () => {
     const out = fmtEarlyBirdDeadlineAU('2026-05-22T11:00:00.000Z') // 9:00pm AEST
     expect(out).toMatch(/May/)
     expect(out).toMatch(/pm/)
-    // GSM-7 safe — no characters outside printable ASCII.
+    // GSM-7 safe â€” no characters outside printable ASCII.
     expect(out).toMatch(/^[\x20-\x7E]*$/)
   })
   it('returns empty string for missing / unparseable input', () => {
@@ -255,5 +256,69 @@ describe('fmtEarlyBirdRemaining', () => {
       fmtEarlyBirdRemaining(earlyBirdStatus(10, '2026-05-21T06:00:00.000Z', now)),
     ).toBe('')
     expect(fmtEarlyBirdRemaining(earlyBirdStatus(0, null, now))).toBe('')
+  })
+})
+
+// ── Mint-time realisation (pay-first, 2026-07-22) ────────────────────
+//
+// The choke-point moved. Under book-first the customer committed a TIME first,
+// so the book route realised the discount there. Pay-first means money comes
+// first, so realisation has to happen at the Stripe mint — otherwise the book
+// route's !alreadyPaid branch never runs and every customer silently loses
+// their discount.
+
+describe('resolveMintDiscount', () => {
+  const NOW = Date.parse('2026-07-22T00:00:00Z')
+  const LIVE = '2026-07-23T00:00:00Z'
+  const LAPSED = '2026-07-21T00:00:00Z'
+
+  it('realises a live offer and asks the caller to stamp it', () => {
+    expect(
+      resolveMintDiscount({ appliedPct: 0, offerPct: 10, expiresAt: LIVE, tier: 'better', nowMs: NOW }),
+    ).toEqual({ pct: 10, stamp: true })
+  })
+
+  it('keeps an already-realised discount without re-stamping', () => {
+    // /r mints a fresh Session on every click; re-stamping would rewrite
+    // applied_discount_at on each one.
+    expect(
+      resolveMintDiscount({ appliedPct: 12, offerPct: 10, expiresAt: LIVE, tier: 'better', nowMs: NOW }),
+    ).toEqual({ pct: 12, stamp: false })
+  })
+
+  it('honours an already-realised discount even after the offer lapses', () => {
+    expect(
+      resolveMintDiscount({ appliedPct: 12, offerPct: 10, expiresAt: LAPSED, tier: 'best', nowMs: NOW }),
+    ).toEqual({ pct: 12, stamp: false })
+  })
+
+  it('ignores a lapsed offer', () => {
+    expect(
+      resolveMintDiscount({ appliedPct: 0, offerPct: 10, expiresAt: LAPSED, tier: 'better', nowMs: NOW }),
+    ).toEqual({ pct: 0, stamp: false })
+  })
+
+  it('never discounts the flat $99 inspection fee', () => {
+    expect(
+      resolveMintDiscount({ appliedPct: 0, offerPct: 10, expiresAt: LIVE, tier: 'inspection', nowMs: NOW }),
+    ).toEqual({ pct: 0, stamp: false })
+  })
+
+  it('never discounts the inspection fee even if one was somehow stamped', () => {
+    expect(
+      resolveMintDiscount({ appliedPct: 12, offerPct: 10, expiresAt: LIVE, tier: 'inspection', nowMs: NOW }),
+    ).toEqual({ pct: 0, stamp: false })
+  })
+
+  it('ignores a missing offer', () => {
+    expect(
+      resolveMintDiscount({ appliedPct: 0, offerPct: null, expiresAt: null, tier: 'best', nowMs: NOW }),
+    ).toEqual({ pct: 0, stamp: false })
+  })
+
+  it('clamps an over-configured offer to the platform ceiling', () => {
+    expect(
+      resolveMintDiscount({ appliedPct: 0, offerPct: 99, expiresAt: LIVE, tier: 'good', nowMs: NOW }),
+    ).toEqual({ pct: MAX_EARLY_BIRD_DISCOUNT_PCT, stamp: true })
   })
 })

@@ -45,6 +45,7 @@ import { canTakePayment, payRedirectTarget } from '@/lib/quote/booking'
 import { isPriceHoldExpired } from '@/lib/quote/hold'
 import { resolveBookingOptions, buildBookedKeys } from '@/lib/quote/slots'
 import { tzForState } from '@/lib/quote/availability'
+import { resolveMintDiscount } from '@/lib/quote/early-bird'
 import { pipelineLog } from '@/lib/log/pipeline'
 import {
   createCheckoutSessionForTier,
@@ -190,17 +191,47 @@ async function mintFreshDepositUrl(
         connect,
       })
     } else {
-      // Re-apply the realised early-booking discount (if the customer earned
-      // one) so the fresh Session charges the same discounted deposit the
-      // page advertised. Best-effort — the column lands via migration 044.
+      // REALISE the early-booking discount here — this mint is the money
+      // choke-point under pay-first. (It used to be realised in the book API
+      // when the customer committed a time, but that ran only for unpaid
+      // quotes; pay-first means they are always paid by then, so leaving it
+      // there would have killed the discount for everyone.)
+      //
+      // Best-effort + isolated: any failure just means the customer pays the
+      // undiscounted deposit — never a blocked checkout. The early_bird_*
+      // columns land via migration 044, so a pre-migration deploy simply
+      // finds no offer.
       let discountPct = 0
       try {
         const { data: eb } = await db()
           .from('quotes')
-          .select('applied_discount_pct')
+          .select('applied_discount_pct, early_bird_discount_pct, early_bird_expires_at')
           .eq('id', quote.id)
           .maybeSingle()
-        discountPct = Number(eb?.applied_discount_pct ?? 0)
+        const decision = resolveMintDiscount({
+          appliedPct: Number(eb?.applied_discount_pct ?? 0),
+          offerPct: (eb?.early_bird_discount_pct as number | null) ?? null,
+          expiresAt: (eb?.early_bird_expires_at as string | null) ?? null,
+          tier,
+        })
+        discountPct = decision.pct
+        if (decision.stamp) {
+          const nowIso = new Date().toISOString()
+          const { error: stampErr } = await db()
+            .from('quotes')
+            .update({ applied_discount_pct: decision.pct, applied_discount_at: nowIso })
+            .eq('id', quote.id)
+          if (stampErr) {
+            // Couldn't record it — charge full price rather than give a
+            // discount the quote has no record of earning.
+            pipelineLog('dispatch').err(
+              'early-bird stamp failed — minting at full price',
+              stampErr.message,
+              { quote_id: quote.id, tier },
+            )
+            discountPct = 0
+          }
+        }
       } catch {
         discountPct = 0
       }

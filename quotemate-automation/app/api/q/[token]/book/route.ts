@@ -1,24 +1,24 @@
-// Booking endpoint — called by the SlotPicker on the booking page.
+// Booking endpoint — called by BookingCalendar on /q/<token>/book.
 //
-// WP6 reorder: BOOK FIRST, PAY LAST. This route no longer requires a
-// paid deposit. It records the customer's chosen time on the quote and
-// puts it into 'reserved', then hands back the pay URL as `next` so the
-// customer is sent to the deposit step (the LAST step). The booking is
-// only CONFIRMED — status='accepted', booking_state='booked', slot
-// removed from availability, confirmation SMS sent — when the deposit is
-// actually paid, which now happens in the Stripe webhook.
+// PAY FIRST, BOOK SECOND (2026-07-22). The deposit is already paid by the
+// time the customer reaches this route, so picking a time is the FINAL step:
+// it writes status='accepted' + booking_state='booked', prunes the slot from
+// the tenant's availability, fires the confirmation SMS, and hands back
+// /q/<token>/thanks as `next`.
 //
-// Slot-hold model ("confirm slot on payment"): the picked slot is NOT
-// removed from tradies.available_slots here, so an abandoned checkout
-// never strands a slot. The (small, pilot-tolerated) trade-off is two
-// customers could pick the same time before either pays — the webhook
-// resolves that when finalising.
+// [History: under the WP6 book-first order this route only RESERVED a slot on
+// an unpaid quote and the Stripe webhook finalised on payment. That split is
+// gone — every booking here is post-payment. See
+// docs/superpowers/specs/2026-07-22-booking-three-page-split-design.md R5.]
+//
+// Because payment precedes booking, an abandoned checkout can no longer
+// strand a slot: nothing is held until money has changed hands.
 //
 // Hardening rules:
 //   - share_token must resolve to a quote
+//   - the quote must be PAID (409 otherwise) — booking follows the order
 //   - if the quote is already PAID + scheduled → already booked (409)
-//   - a not-yet-paid quote may (re-)pick a slot freely
-//   - slot must be a published slot in tradies.available_slots
+//   - slot must be one the server itself offers (resolveBookingOptions)
 //   - slot must be a parseable ISO timestamp in the future
 
 import { after } from 'next/server'
@@ -26,11 +26,9 @@ import { createClient } from '@supabase/supabase-js'
 import { pipelineLog } from '@/lib/log/pipeline'
 import { BOOKING_STATE, isPriceHoldExpired } from '@/lib/quote/hold'
 import { resolveNextTier } from '@/lib/quote/booking'
-import { earlyBirdStatus } from '@/lib/quote/early-bird'
 import { resolveBookingOptions, buildBookedKeys } from '@/lib/quote/slots'
 import { tzForState } from '@/lib/quote/availability'
 import { notifyBookingConfirmed } from '@/lib/quote/booking-notify'
-import { expireCheckoutSession } from '@/lib/stripe/checkout'
 
 export const maxDuration = 300
 
@@ -38,8 +36,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
-
-const PAY_TIERS = new Set(['good', 'better', 'best'])
 
 export async function POST(
   req: Request,
@@ -90,13 +86,12 @@ export async function POST(
     )
   }
 
-  // The $99 inspection is PAY-FIRST (spec customer-quote-five-sections R7,
-  // D1a): booking follows the order the customer placed, mirroring the
-  // dedicated trade surfaces (app/api/q/book/[trade]/[token]). Deposit tiers
-  // stay book-first below.
+  // PAY-FIRST on every tier (2026-07-22). Booking follows the order the
+  // customer placed, matching the dedicated trade surfaces
+  // (app/api/q/book/[trade]/[token]: "these jobs book AFTER paying"). Was
+  // inspection-only under the WP6 book-first order.
   const requestedTier = typeof body.tier === 'string' ? body.tier : null
-  const wantsInspection = requestedTier === 'inspection' || !!quote.needs_inspection
-  if (wantsInspection && !quote.paid_at) {
+  if (!quote.paid_at) {
     return Response.json(
       { ok: false, error: 'Pay the deposit first, then pick your time.' },
       { status: 409 },
@@ -185,166 +180,68 @@ export async function POST(
 
   const nowIso = new Date().toISOString()
 
-  // Book-first / pay-last: normally we only RESERVE here (the booking is
-  // confirmed when the deposit is paid, in the Stripe webhook). But the
-  // legacy recovery path — a customer who paid WITHOUT a slot then comes
-  // back to pick a time — has no second payment to trigger the webhook, so
-  // we must finalise the booking right here (spec R2): booked + accepted,
-  // prune the slot, and send the confirmation SMS.
-  const alreadyPaid = !!quote.paid_at
-  const patch: Record<string, unknown> = {
-    scheduled_at: slot,
-    scheduled_window: chosen.period, // 'am' | 'pm' | null (legacy exact-time)
-    booking_state: alreadyPaid ? BOOKING_STATE.BOOKED : BOOKING_STATE.RESERVED,
-    last_status_at: nowIso,
-  }
-  if (alreadyPaid) {
-    patch.status = 'accepted'
-    patch.accepted_at = nowIso
-  }
-
+  // Every booking here is post-payment now, so this is always the FINAL step:
+  // booked + accepted, prune the slot, send the confirmation SMS. (Under
+  // book-first this route only RESERVED, and the Stripe webhook finalised on
+  // payment; that split is gone with the pay-first reversal.)
   const { error: quoteUpdateErr } = await supabase
     .from('quotes')
-    .update(patch)
+    .update({
+      scheduled_at: slot,
+      scheduled_window: chosen.period, // 'am' | 'pm' | null (legacy exact-time)
+      booking_state: BOOKING_STATE.BOOKED,
+      status: 'accepted',
+      accepted_at: nowIso,
+      last_status_at: nowIso,
+    })
     .eq('id', quote.id)
 
   if (quoteUpdateErr) {
-    log.err('quote reserve failed', quoteUpdateErr.message, { quote_id: quote.id })
-    return Response.json({ ok: false, error: 'Failed to reserve that time' }, { status: 500 })
+    log.err('quote booking failed', quoteUpdateErr.message, { quote_id: quote.id })
+    return Response.json({ ok: false, error: 'Failed to book that time' }, { status: 500 })
   }
 
-  // Legacy paid-then-pick: prune the chosen slot from the tenant's curated
-  // list (if present) and fire the confirmation SMS, mirroring the webhook's
-  // finalise path. Best-effort — the booking is already recorded above.
-  if (alreadyPaid) {
-    try {
-      const stored = Array.isArray(tenantSlots.available_slots)
-        ? (tenantSlots.available_slots as string[])
-        : []
-      if (stored.includes(slot)) {
-        await supabase
-          .from('tenants')
-          .update({ available_slots: stored.filter((s) => s !== slot) })
-          .eq('id', tenantSlots.id)
-      }
-    } catch (e: unknown) {
-      log.err('slot prune failed (non-fatal — booking IS confirmed)',
-        e instanceof Error ? e.message : String(e), { quote_id: quote.id })
+  // Prune the chosen slot from the tenant's curated list (if present) and fire
+  // the confirmation SMS. Best-effort — the booking is already recorded above,
+  // so neither failure may undo it.
+  try {
+    const stored = Array.isArray(tenantSlots.available_slots)
+      ? (tenantSlots.available_slots as string[])
+      : []
+    if (stored.includes(slot)) {
+      await supabase
+        .from('tenants')
+        .update({ available_slots: stored.filter((s) => s !== slot) })
+        .eq('id', tenantSlots.id)
     }
-    after(() =>
-      notifyBookingConfirmed(supabase, {
-        quoteId: quote.id as string,
-        intakeId: (quote.intake_id as string | null) ?? null,
-        tenantId: (quote.tenant_id as string | null) ?? null,
-        shareToken: token,
-        slotIso: slot,
-      }),
-    )
+  } catch (e: unknown) {
+    log.err('slot prune failed (non-fatal — booking IS confirmed)',
+      e instanceof Error ? e.message : String(e), { quote_id: quote.id })
   }
+  after(() =>
+    notifyBookingConfirmed(supabase, {
+      quoteId: quote.id as string,
+      intakeId: (quote.intake_id as string | null) ?? null,
+      tenantId: (quote.tenant_id as string | null) ?? null,
+      shareToken: token,
+      slotIso: slot,
+    }),
+  )
 
-  // Resolve which tier the pay step charges: the tier the customer chose
-  // (passed through — incl. the $99 'inspection' fee on the paid recovery
-  // path), else the quote's selected_tier, else 'better'. Shared with the
-  // /book page.
+  // Tier is still resolved for logging + the thank-you page's query string.
   const tier = resolveNextTier(requestedTier, quote.selected_tier as string | null)
-  // Already-paid (legacy recovery) → booking is confirmed above, so send
-  // them to the thank-you page rather than back through the deposit step.
-  const next = alreadyPaid ? `/q/${token}/paid?tier=${tier}` : `/r/${token}/${tier}`
+  const next = `/q/${token}/thanks`
 
-  // ─── v8 Phase A — apply the early-booking discount ──────────────────
-  //
-  // The booking choke-point is the moment the customer commits a time —
-  // exactly when an "if you book today" offer should be realised. The
-  // discount is decided SERVER-SIDE from the DB-stamped deadline, never
-  // from anything the client sent.
-  //
-  // Best-effort + isolated: the slot is ALREADY reserved above. If any
-  // step here fails the customer still proceeds to the (non-discounted)
-  // deposit and the booking is unharmed — they just miss the discount.
-  //
-  // The early_bird_* columns land via migration 044; the select is its
-  // own try so a pre-migration deploy simply finds no offer.
-  let appliedDiscountPct = 0
-  if (!alreadyPaid && PAY_TIERS.has(tier)) {
-    try {
-      const { data: eb, error: ebErr } = await supabase
-        .from('quotes')
-        .select('early_bird_discount_pct, early_bird_expires_at, applied_discount_pct')
-        .eq('id', quote.id)
-        .maybeSingle()
+  // The early-booking discount is NOT realised here any more. Under pay-first
+  // the customer has already paid by the time they reach this route, so the
+  // old `!alreadyPaid` gate would never fire. Realisation moved to the Stripe
+  // mint in /r/<token>/<tier> (resolveMintDiscount) — the money choke-point.
 
-      if (ebErr) {
-        log.step('early-bird columns absent — skipping discount (apply migration 044)', {
-          quote_id: quote.id,
-        })
-      } else if (eb) {
-        const alreadyApplied = Number(eb.applied_discount_pct ?? 0)
-        const status = earlyBirdStatus(
-          eb.early_bird_discount_pct as number | null,
-          eb.early_bird_expires_at as string | null,
-        )
-        if (alreadyApplied > 0) {
-          // Re-pick of a time on a quote that already earned the
-          // discount — keep it; don't re-issue or double-stamp.
-          appliedDiscountPct = alreadyApplied
-        } else if (status.state === 'live') {
-          appliedDiscountPct = status.discountPct
-
-          // 1. Stamp the realised discount on the quote.
-          const { error: stampErr } = await supabase
-            .from('quotes')
-            .update({
-              applied_discount_pct: appliedDiscountPct,
-              applied_discount_at: nowIso,
-            })
-            .eq('id', quote.id)
-          if (stampErr) {
-            log.err('early-bird stamp failed (non-fatal — booking proceeds)', stampErr.message, {
-              quote_id: quote.id,
-            })
-            appliedDiscountPct = 0
-          } else {
-            // 2. Kill the stale full-price Session so a cached old link
-            //    can't be paid at the undiscounted amount. NO replacement
-            //    is minted here: /r/<token>/<tier> mints a FRESH Session
-            //    on every pay click and reads applied_discount_pct
-            //    (stamped above), so the discounted deposit is issued
-            //    there. Minting here too left an orphaned duplicate
-            //    Session per booking and added ~1-2s to this POST.
-            try {
-              const oldUrl = ((quote.stripe_links as Record<string, string> | null) ?? {})[
-                tier
-              ]
-              if (oldUrl) await expireCheckoutSession(oldUrl)
-              log.ok('early-bird discount applied — /r mints the discounted Session on click', {
-                quote_id: quote.id,
-                tier,
-                discount_pct: appliedDiscountPct,
-              })
-            } catch (e: unknown) {
-              log.err('stale full-price Session expire threw (non-fatal — /r replaces it on click)',
-                e instanceof Error ? e.message : String(e), { quote_id: quote.id })
-            }
-          }
-        }
-      }
-    } catch (e: unknown) {
-      log.err('early-bird block threw (non-fatal — booking proceeds)',
-        e instanceof Error ? e.message : String(e), { quote_id: quote.id })
-    }
-  }
-
-  log.done('slot reserved — sending customer to deposit (last step)', {
+  log.done('booking confirmed — sending customer to the thank-you page', {
     quote_id: quote.id,
     slot,
     tier,
-    early_bird_discount_pct: appliedDiscountPct,
   })
 
-  return Response.json({
-    ok: true,
-    scheduled_at: slot,
-    next,
-    early_bird_discount_pct: appliedDiscountPct,
-  })
+  return Response.json({ ok: true, scheduled_at: slot, next })
 }
