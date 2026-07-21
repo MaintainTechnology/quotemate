@@ -4,7 +4,7 @@
 // route the dashboard viewer operates on.
 
 import { describe, it, expect } from 'vitest'
-import { getReportAdapter, tradeGroundingMode } from './registry'
+import { getReportAdapter, tradeGroundingMode, tradeRendersOwnQuotePdf } from './registry'
 
 describe('getReportAdapter', () => {
   it('electrical/plumbing: editable, inline PDF, catalogue-grounded', () => {
@@ -53,6 +53,21 @@ describe('getReportAdapter', () => {
       expect(a.capabilities).toEqual({ manualEdit: false, aiEdit: false })
       expect(a.editorKind).toBeNull()
       expect(a.pdfPath('t')).toBe('/api/q/t/pdf')
+    }
+  })
+})
+
+describe('tradeRendersOwnQuotePdf (RC-1 — do NOT clobber a self-authored PDF)', () => {
+  it('is true for commercial_painting (it renders + stores its own tender PDF)', () => {
+    // save-quote uploads the tender to quotes/<id>.pdf. ensureQuotePdf must serve
+    // that verbatim, never regenerate the generic G/B/B template over it.
+    expect(tradeRendersOwnQuotePdf('commercial_painting')).toBe(true)
+    expect(tradeRendersOwnQuotePdf('  Commercial_Painting ')).toBe(true)
+  })
+
+  it('is false for the trades that DO render through the generic G/B/B pipeline', () => {
+    for (const trade of ['electrical', 'plumbing', 'solar', 'roofing', 'painting', null, undefined, '', 'unknown']) {
+      expect(tradeRendersOwnQuotePdf(trade)).toBe(false)
     }
   })
 })

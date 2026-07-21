@@ -25,6 +25,9 @@ import { asQuoteTierMode, resolveVisibleTiers, type QuoteTierMode } from './tier
 import { quotePropertyVisuals } from './property-visuals'
 import { hasPropertyVisuals, propertyVisualsImagePath } from './visuals-image-path'
 import { quotePdfIsStale, quotePdfSignature, hashReportContent } from './pdf-signature'
+import { solarPdfRev } from './pdf-rev'
+import { tradeRendersOwnQuotePdf } from './report-adapters/registry'
+import { exceedsMmsMediaCap, MMS_MEDIA_CAP_BYTES } from '@/lib/sms/send-quote-pdf'
 import { serializeReportDoc } from './report-doc/serialize'
 import type { ReportDoc } from './report-doc/types'
 import { buildRoofQuoteReportHtml, type RoofLayoutOverlay } from '@/lib/roofing/report-html'
@@ -41,7 +44,11 @@ import {
   type LayoutOverlayStructure,
 } from '@/lib/roofing/layout-overlay-svg'
 import type { MultiRoofQuote } from '@/lib/roofing/types'
-import { resolveEffectiveIndices, type RoofDisplayRow } from '@/lib/roofing/selection'
+import {
+  resolveEffectiveIndices,
+  resolveRoofRenderSelection,
+  type RoofDisplayRow,
+} from '@/lib/roofing/selection'
 import { buildSolarQuoteReportHtml } from '@/lib/solar/report-html'
 import {
   buildSolarPremiumQuote,
@@ -74,7 +81,7 @@ const APP_URL = (process.env.APP_URL ?? 'https://www.quotemax.com.au').replace(/
 // equation / double-counted multiplier rows); PDF honours the tenant's
 // quote_tier_mode so a single-price tenant no longer reveals hidden tiers.
 const PAINT_PDF_REV = '-v7'
-const SOLAR_PDF_REV = '-v3'
+// SOLAR_PDF_REV + the content-aware solarPdfRev now live in ./pdf-rev (RC-5).
 // Bump WHENEVER the layout figure's view/compositing maths change, or cached
 // PDFs keep serving a figure whose aerial and zone overlay were projected by
 // different code (the misaligned-borders report).
@@ -150,8 +157,34 @@ export async function downloadQuotePdf(path: string): Promise<Buffer> {
   return Buffer.from(await data.arrayBuffer())
 }
 
-/** Short-lived public URL (for the Twilio MMS media fetch). */
+/** Stored size (bytes) of an object in the quote-pdfs bucket, or null if the
+ *  lookup fails. Metadata-only (list), never downloads the PDF. */
+async function quotePdfSize(path: string): Promise<number | null> {
+  const slash = path.lastIndexOf('/')
+  const dir = slash >= 0 ? path.slice(0, slash) : ''
+  const name = slash >= 0 ? path.slice(slash + 1) : path
+  try {
+    const { data } = await supabase().storage.from(BUCKET).list(dir, { search: name, limit: 100 })
+    const obj = data?.find((o) => o.name === name)
+    const size = (obj?.metadata as { size?: number } | undefined)?.size
+    return typeof size === 'number' ? size : null
+  } catch {
+    return null
+  }
+}
+
+/** Short-lived public URL (for the Twilio MMS media fetch). RC-7 — refuses an
+ *  over-cap PDF: Twilio accepts an oversized media send then fails delivery
+ *  asynchronously, so dispatch's synchronous MMS→SMS fallback never fires and
+ *  the customer gets a broken MMS. Throwing here degrades dispatchQuoteWithPdf
+ *  to a plain SMS whose durable body link still serves the SAME full PDF. */
 export async function signQuotePdfUrl(path: string, ttlSeconds = 60 * 60): Promise<string> {
+  const size = await quotePdfSize(path)
+  if (exceedsMmsMediaCap(size)) {
+    throw new Error(
+      `quote-pdf ${path} is ${size}B — over the ${MMS_MEDIA_CAP_BYTES}B MMS cap; sending link-only`,
+    )
+  }
   const { data, error } = await supabase().storage.from(BUCKET).createSignedUrl(path, ttlSeconds)
   if (error || !data?.signedUrl) throw new Error(`quote-pdf sign failed: ${error?.message ?? 'no url'}`)
   return data.signedUrl
@@ -177,6 +210,10 @@ type QuotePdfRow = {
   /** v8 realised early-booking discount (mig 044) — P7: the PDF must show
    *  the same discounted price the page shows and Stripe charges. */
   applied_discount_pct: number | null
+  /** RC-9 — the quote's creation timestamp, rendered as the document date so
+   *  the live HTML preview and the cached PDF never disagree (a `new Date()`
+   *  fallback drifts by a day whenever they render on opposite sides of midnight). */
+  created_at: string | null
 }
 
 type RoofPdfRow = {
@@ -230,25 +267,12 @@ type IntakePdfRow = {
   scope: unknown
 }
 
-/**
- * Render HTML → PDF, enforcing the 5 MB MMS hard cap (spec
- * specs/quote-pdf-branding.md R11/D5). If the first render is over cap,
- * re-render with <img> tags stripped and log it — the SMS still gets a
- * (lighter) PDF rather than one Twilio would reject for size.
- */
-const PDF_HARD_CAP_BYTES = 5 * 1024 * 1024
-async function renderQuotePdfCapped(html: string, label: string): Promise<Buffer> {
-  const pdf = await renderPdfFromHtml(html)
-  if (pdf.length <= PDF_HARD_CAP_BYTES) return pdf
-  const stripped = html.replace(/<img\b[^>]*>/gi, '')
-  const fallback = await renderPdfFromHtml(stripped)
-  console.warn('[quote-pdf] over 5MB cap — re-rendered without images', {
-    label,
-    firstBytes: pdf.length,
-    strippedBytes: fallback.length,
-  })
-  return fallback.length < pdf.length ? fallback : pdf
-}
+// RC-7 — the canonical stored PDF is the FULL-image document, so the dashboard
+// download, the /api/q/[token]/pdf link and the live HTML preview all show the
+// same complete quote (previously an image-heavy quote over 5 MB was stored
+// image-STRIPPED to fit MMS, so the download lost its logo + aerials). The MMS
+// media size limit is now enforced only at attach time by signQuotePdfUrl —
+// an over-cap PDF degrades to a link-only SMS whose link serves this same PDF.
 
 /** Resolved basis for a quote's report — the quotes row, its intake, and which
  *  tier(s) the tenant's mode surfaces. Shared by the PDF (ensureQuotePdf) and
@@ -275,7 +299,7 @@ async function loadQuoteReportContext(quoteId: string): Promise<QuoteReportConte
   const { data: quote } = await supabase()
     .from('quotes')
     .select(
-      'id, tenant_id, intake_id, share_token, good, better, best, selected_tier, scope_of_works, assumptions, estimated_timeframe, needs_inspection, pdf_path, pdf_signature, report_doc, report_style, applied_discount_pct',
+      'id, tenant_id, intake_id, share_token, good, better, best, selected_tier, scope_of_works, assumptions, estimated_timeframe, needs_inspection, pdf_path, pdf_signature, report_doc, report_style, applied_discount_pct, created_at',
     )
     .eq('id', quoteId)
     .maybeSingle<QuotePdfRow>()
@@ -444,6 +468,9 @@ function buildQuoteReportInput(
     appliedDiscountPct: quote.applied_discount_pct ?? null,
     gstRegistered: ctx.gstRegistered,
     quoteViewUrl: `${APP_URL}/q/${quote.share_token}`,
+    // RC-9 — stable document date from the persisted created_at, shared by the
+    // live preview and the cached PDF so they never print different days.
+    generatedAt: quote.created_at ? new Date(quote.created_at) : undefined,
   }
 }
 
@@ -477,6 +504,11 @@ function renderQuoteDocumentHtml(input: QuoteReportInput, reportDoc: unknown | n
 export async function renderQuoteReportHtml(quoteId: string): Promise<string | null> {
   const ctx = await loadQuoteReportContext(quoteId)
   if (!ctx) return null
+  // RC-1 — commercial painting authors its own tender PDF (no generic HTML
+  // equivalent). Returning null makes the dashboard preview show the "use
+  // Download PDF" placeholder — which serves the tender — instead of a
+  // misleading generic Good/Better/Best document the customer never receives.
+  if (tradeRendersOwnQuotePdf(ctx.intakeTrade)) return null
   const branding = await loadTenantBranding(supabase(), ctx.quote.tenant_id, ctx.intakeTrade)
   // Live preview: reference the token-gated satellite proxy directly (relative
   // URL — the preview renders on the app origin), exactly like the customer
@@ -515,6 +547,14 @@ export async function ensureQuotePdf(
     if (!ctx) return null
     const { quote, intakeTrade, tierMode, visibleTierKeys, recommendedTier } = ctx
 
+    // RC-1 — commercial painting rendered + stored its OWN tender PDF at
+    // quotes/<id>.pdf (save-quote). Serve it verbatim. Its row carries a pdf_path
+    // but no pdf_signature, so the stale-check below would otherwise regenerate
+    // the generic Good/Better/Best template and upsert it OVER the tender —
+    // destroying the tender bytes and MMS'ing a legally-weaker document. This
+    // guard wins over opts.regenerate: a resend must never clobber it.
+    if (tradeRendersOwnQuotePdf(intakeTrade)) return quote.pdf_path
+
     // Mig 146 — self-heal: serve the cached PDF only when it was rendered from
     // the SAME template version + tier mode + visible tiers + recommended tier.
     // A tradie flipping the Pricing-settings tier mode (or a template bump)
@@ -537,6 +577,10 @@ export async function ensureQuotePdf(
       // P7 — a discount stamped at booking time (after the draft-time PDF was
       // cached) must regenerate the PDF at the discounted price.
       appliedDiscountPct: ctx.quote.applied_discount_pct,
+      // RC-2 — the headline is computed live from gst_registered; a Pricing-tab
+      // GST flip must regenerate the cached download PDF so it never contradicts
+      // the live page + the Stripe charge.
+      gstRegistered: ctx.gstRegistered,
     })
     if (
       !quotePdfIsStale({
@@ -572,11 +616,17 @@ export async function ensureQuotePdf(
       buildQuoteReportInput(ctx, branding, visualsImageSrc, layoutOverlay),
       quote.report_doc,
     )
-    const pdf = await renderQuotePdfCapped(html, `quote:${quoteId}`)
+    const pdf = await renderPdfFromHtml(html)
     const path = await storePdf(`quotes/${quoteId}.pdf`, pdf)
+    // RC-8 — if a property visual was EXPECTED (roofing/commercial aerial) but
+    // prepareImage returned null (a transient satellite-proxy blip), this PDF is
+    // image-less while the live HTML preview still shows the raw <img>. Storing a
+    // null signature marks it stale so the next download regenerates once the
+    // proxy recovers — rather than caching + serving the image-less PDF forever.
+    const propertyImageMissing = !!visualsPath && !visualsImageSrc
     await supabase()
       .from('quotes')
-      .update({ pdf_path: path, pdf_signature: freshSignature })
+      .update({ pdf_path: path, pdf_signature: propertyImageMissing ? null : freshSignature })
       .eq('id', quoteId)
     return path
   } catch (e) {
@@ -620,7 +670,19 @@ export async function ensureRoofQuotePdf(
       return row.pdf_path
     }
 
-    const quote = opts.quote ?? row.quote
+    // RC-3 — selection-aware by default: a no-arg regenerate (e.g. the AI
+    // layout-plan route) narrows to the persisted included_indices instead of
+    // pricing every detected structure into the shared cache. Explicit callers
+    // (SMS send's finalQuote, the download route's pre-partitioned quote+rows)
+    // still win verbatim.
+    const { quote, displayRows } = resolveRoofRenderSelection(
+      {
+        quote: row.quote,
+        included_indices: row.included_indices,
+        confirmed_structure: row.confirmed_structure,
+      },
+      { quote: opts.quote, displayRows: opts.displayRows },
+    )
     if (!quote) return null
 
     // Mig 148 — honour the tenant's roofing tier mode (dashboard Pricing
@@ -654,8 +716,8 @@ export async function ensureRoofQuotePdf(
     // is supplied (included solid, excluded faint/dashed); else the narrowed
     // quote's structures, all included. Self-contained data URI — no fetch.
     const outlineStructures: RoofOutlineStructure[] =
-      opts.displayRows && opts.displayRows.length
-        ? opts.displayRows.map((r) => ({
+      displayRows && displayRows.length
+        ? displayRows.map((r) => ({
             polygon: r.structure.metrics?.polygon_geojson,
             form: r.structure.metrics?.form ?? 'unknown',
             included: r.included,
@@ -704,14 +766,14 @@ export async function ensureRoofQuotePdf(
       address: row.address ?? '',
       quote,
       visibleTierKeys,
-      displayRows: opts.displayRows,
+      displayRows,
       outlineImageSrc,
       mapImageSrc,
       structureImages,
       layoutOverlay,
       quoteViewUrl: `${APP_URL}/q/roof/${publicToken}`,
     })
-    const pdf = await renderQuotePdfCapped(html, `roof:${publicToken}`)
+    const pdf = await renderPdfFromHtml(html)
     const path = await storePdf(`roofs/${publicToken}${ROOF_PDF_REV}.pdf`, pdf)
     await supabase().from('roofing_measurements').update({ pdf_path: path }).eq('public_token', publicToken)
     return path
@@ -746,9 +808,15 @@ export async function ensureSolarQuotePdf(
       .maybeSingle<SolarPdfRow>()
     if (!row) return null
     if (row.routing === 'inspection_required') return null
-    // '-v2' path marker = rendered WITH the panels-after figure availability
-    // (spec quote-visual-parity R5); pre-marker cached PDFs regenerate once.
-    if (row.pdf_path && row.pdf_path.includes(SOLAR_PDF_REV) && !opts.regenerate) {
+    // RC-5 — content-aware rev (solarPdfRev) instead of the static SOLAR_PDF_REV
+    // marker: the panels-after image, sun & shade heatmap, felt map, AI brief and
+    // the premium flag are produced/read AFTER the auto-release freeze, so a
+    // static marker served a section-less PDF forever while the live page showed
+    // them. The rev now shifts when each lands, so the next fetch regenerates
+    // once and every channel serves the same enriched document.
+    const premiumEnabled = solarPremiumQuoteEnabled(process.env.SOLAR_PREMIUM_QUOTE)
+    const rev = solarPdfRev(row, premiumEnabled)
+    if (row.pdf_path && row.pdf_path.includes(rev) && !opts.regenerate) {
       return row.pdf_path
     }
 
@@ -761,7 +829,7 @@ export async function ensureSolarQuotePdf(
     // palette. The PDF only generates for confirmed, non-inspection
     // estimates, so the money sections are safely renderable.
     let premium: SolarPremiumQuote | null = null
-    if (solarPremiumQuoteEnabled(process.env.SOLAR_PREMIUM_QUOTE)) {
+    if (premiumEnabled) {
       const config = await loadSolarConfig(supabase())
       premium = buildSolarPremiumQuote({ estimate, config, theme: 'light' })
     }
@@ -797,8 +865,8 @@ export async function ensureSolarQuotePdf(
           : null,
       aiBrief: row.quote_variant === 'felt' ? (row.ai_brief ?? null) : null,
     })
-    const pdf = await renderQuotePdfCapped(html, `solar:${publicToken}`)
-    const path = await storePdf(`solar/${publicToken}${SOLAR_PDF_REV}.pdf`, pdf)
+    const pdf = await renderPdfFromHtml(html)
+    const path = await storePdf(`solar/${publicToken}${rev}.pdf`, pdf)
     await supabase().from('solar_estimates').update({ pdf_path: path }).eq('public_token', publicToken)
     return path
   } catch (e) {
@@ -900,7 +968,7 @@ export async function ensurePaintingPdf(
       afterImageSrc,
       quoteViewUrl: `${APP_URL}/q/paint/${publicToken}`,
     })
-    const pdf = await renderQuotePdfCapped(html, `paint:${publicToken}`)
+    const pdf = await renderPdfFromHtml(html)
     const path = await storePdf(`paint/${publicToken}${paintRev}.pdf`, pdf)
     await supabase().from('painting_measurements').update({ pdf_path: path }).eq('public_token', publicToken)
     return path

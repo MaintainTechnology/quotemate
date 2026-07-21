@@ -17,7 +17,29 @@ vi.mock('@/lib/sms/dispatch', () => ({
   dispatchQuoteMessage: (o: unknown) => dispatchQuoteMessage(o),
 }))
 
-import { dispatchQuoteWithPdf } from '@/lib/sms/send-quote-pdf'
+import {
+  dispatchQuoteWithPdf,
+  exceedsMmsMediaCap,
+  MMS_MEDIA_CAP_BYTES,
+} from '@/lib/sms/send-quote-pdf'
+
+describe('exceedsMmsMediaCap (RC-7 — never attach an oversized PDF as MMS media)', () => {
+  it('the cap is Twilio’s 5 MB MMS media limit', () => {
+    expect(MMS_MEDIA_CAP_BYTES).toBe(5 * 1024 * 1024)
+  })
+  it('a PDF at or under the cap is attachable (download == MMS == the same file)', () => {
+    expect(exceedsMmsMediaCap(0)).toBe(false)
+    expect(exceedsMmsMediaCap(1_000_000)).toBe(false)
+    expect(exceedsMmsMediaCap(MMS_MEDIA_CAP_BYTES)).toBe(false)
+  })
+  it('a PDF over the cap must NOT be attached (Twilio fails delivery async — no SMS fallback fires)', () => {
+    expect(exceedsMmsMediaCap(MMS_MEDIA_CAP_BYTES + 1)).toBe(true)
+  })
+  it('an unknown size is treated as attachable (best-effort — never blocks a send)', () => {
+    expect(exceedsMmsMediaCap(null)).toBe(false)
+    expect(exceedsMmsMediaCap(undefined)).toBe(false)
+  })
+})
 
 describe('dispatchQuoteWithPdf', () => {
   beforeEach(() => dispatchQuoteMessage.mockClear())

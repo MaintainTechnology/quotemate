@@ -657,6 +657,23 @@ export async function PATCH(req: Request) {
       .update(updates.tenant)
       .eq('id', tenant.id)
     if (error) errors.push(`tenant: ${error.message}`)
+    // RC-2 — business_name / ABN / licence / contact print in the PDF header +
+    // footer (loaded live at render), but the native-trade PDFs cache on a static
+    // path rev that doesn't capture them, so an identity change would keep the old
+    // branding on the download/MMS. Null their pdf_path to regenerate once.
+    // Over-eager (nulls on any tenant-field change) but harmless — a stale
+    // regenerate is cheap and this route is cold. Electrical/plumbing branding
+    // self-heal is tracked separately (needs a branding fingerprint in
+    // quotePdfSignature); commercial painting re-authors its tender on save.
+    else {
+      for (const table of ['roofing_measurements', 'painting_measurements', 'solar_estimates']) {
+        const { error: pErr } = await supabase
+          .from(table)
+          .update({ pdf_path: null })
+          .eq('tenant_id', tenant.id)
+        if (pErr) errors.push(`identity_pdf[${table}]: ${pErr.message}`)
+      }
+    }
   }
 
   // 2a. Pricing book (legacy shared-pricing payload) — applies the
@@ -732,6 +749,13 @@ export async function PATCH(req: Request) {
   //      trade's pricing_book row, so a tradie can run three-tier painting
   //      and single-price solar at once. The customer quote page + SMS + PDF
   //      read this column via lib/quote/tier-visibility.ts.
+  // Native trades whose cached PDF ignores the tier mode (static path rev) — a
+  // mode change must null their pdf_path to force a regenerate (RC-2). Solar is
+  // excluded: ensureSolarQuotePdf does not gate on quote_tier_mode.
+  const TIER_MODE_NATIVE_PDF_TABLES: Record<string, string> = {
+    roofing: 'roofing_measurements',
+    painting: 'painting_measurements',
+  }
   if (updates.quote_tier_mode_by_trade) {
     for (const [trade, mode] of Object.entries(updates.quote_tier_mode_by_trade)) {
       if (!mode) continue
@@ -741,6 +765,21 @@ export async function PATCH(req: Request) {
         .eq('tenant_id', tenant.id)
         .eq('trade', trade)
       if (error) errors.push(`quote_tier_mode[${trade}]: ${error.message}`)
+      // RC-2 — the native trade PDFs (roofing / painting) cache on a static
+      // storage-path rev that does NOT capture the tier mode, so a mode change
+      // would keep serving a Good/Better/Best PDF for a tenant who just switched
+      // to single-price (or vice-versa). Null their pdf_path to force a one-time
+      // regenerate on the next download/send — the same thing migration 148 did
+      // by hand for roofing. Electrical/plumbing self-heal via quotePdfSignature
+      // (tierMode is already folded into it), so they need no explicit null.
+      const nativeTable = TIER_MODE_NATIVE_PDF_TABLES[trade]
+      if (nativeTable) {
+        const { error: pErr } = await supabase
+          .from(nativeTable)
+          .update({ pdf_path: null })
+          .eq('tenant_id', tenant.id)
+        if (pErr) errors.push(`quote_tier_mode_pdf[${trade}]: ${pErr.message}`)
+      }
     }
   }
 

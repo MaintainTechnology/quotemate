@@ -28,6 +28,34 @@ describe('incGst', () => {
   })
 })
 
+describe('report date (RC-9 — the live preview and the cached PDF print the SAME date)', () => {
+  // Both surfaces are built from buildQuoteReportInput, which now feeds the
+  // persisted created_at as generatedAt. The report must honour that input
+  // rather than stamping a fresh new Date() per render — otherwise the always-
+  // live HTML preview and a PDF cached on an earlier day disagree across midnight
+  // (a real "the PDFs differ slightly" symptom). Local-time Date so the assert is
+  // timezone-stable (the server renders both surfaces in one timezone).
+  const base = {
+    businessName: 'Acme Electrical',
+    jobType: 'downlights',
+    good: null,
+    better: tier('Recommended', 500),
+    best: null,
+  }
+
+  it('prints the supplied generatedAt, not the wall-clock day', () => {
+    const html = buildQuoteReportHtml({ ...base, generatedAt: new Date(2020, 0, 15) })
+    expect(html).toContain('15 January 2020')
+  })
+
+  it('is deterministic — the same quote always prints the same date on every channel', () => {
+    const d = new Date(2021, 5, 30)
+    expect(buildQuoteReportHtml({ ...base, generatedAt: d })).toBe(
+      buildQuoteReportHtml({ ...base, generatedAt: d }),
+    )
+  })
+})
+
 describe('buildQuoteReportHtml — roofing layout overlay', () => {
   const base = {
     businessName: 'Pilot Roofer',

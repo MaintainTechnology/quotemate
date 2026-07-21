@@ -32,12 +32,22 @@ export function quotePdfSignature(args: {
    *  downloading a full-price PDF (P7). Omitted/0 keeps the signature
    *  byte-identical to the pre-v7 format. */
   appliedDiscountPct?: number | null
+  /** pricing_book.gst_registered for this quote's tenant+trade (RC-2). The PDF
+   *  headline is displayIncGst(subtotal, {gstRegistered}) — ×1.10 when
+   *  registered, ×1.00 when not — computed LIVE at render, but flipping the
+   *  Pricing setting doesn't touch tierMode/discount, so without this the
+   *  cached download PDF keeps the old headline while a fresh send + the live
+   *  page show the new one (and Stripe charges the new one). Registered is the
+   *  default: only the non-registered case appends a segment, so existing
+   *  registered PDFs keep a byte-identical signature and are NOT force-regen'd. */
+  gstRegistered?: boolean | null
 }): string {
   let base = `v${args.templateVersion}|${args.tierMode}|t=${args.visibleTierKeys.join('+')}|r=${
     args.recommendedTier ?? ''
   }`
   const pct = args.appliedDiscountPct ?? 0
   if (pct > 0) base = `${base}|disc=${pct}`
+  if (args.gstRegistered === false) base = `${base}|g=0`
   return args.docHash ? `${base}|d=${args.docHash}` : base
 }
 

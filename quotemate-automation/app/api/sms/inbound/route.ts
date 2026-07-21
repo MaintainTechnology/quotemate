@@ -550,7 +550,14 @@ async function handleRoofingTurn(args: {
       let roofPdfUrl: string | null = null
       let roofPdfMedia: string | undefined
       if (finalQuote.routing.decision !== 'inspection_required') {
-        const roofPdfPath = await ensureRoofQuotePdf(pending.token, { quote: finalQuote })
+        // RC-4 — regenerate:true so a second confirmed send ("give me 2 and 3")
+        // overwrites the cached PDF with THIS finalQuote; the -v5 path marker
+        // would otherwise short-circuit and attach the first pick's PDF while
+        // the SMS body shows the new one. Mirrors the electrical/plumbing send.
+        const roofPdfPath = await ensureRoofQuotePdf(pending.token, {
+          quote: finalQuote,
+          regenerate: true,
+        })
         if (roofPdfPath) {
           roofPdfUrl = roofQuotePdfUrl(pending.token)
           try {

@@ -16,6 +16,7 @@ import {
   defaultStructureIndices,
   combinedTotalsForIndices,
   partitionRoofQuote,
+  resolveRoofRenderSelection,
 } from './selection'
 import { applySolarToTiers, narrowQuoteToStructures } from '@/lib/sms/roofing-compose'
 import type { MultiRoofQuote, RoofStructurePrice, RoofStructureRole } from './types'
@@ -204,6 +205,56 @@ describe('partitionRoofQuote', () => {
     expect(part.rows.map((r) => r.state)).toEqual(['priced', 'excluded', 'excluded'])
     expect(part.narrowed.structures.length).toBe(1)
     expect(part.narrowed.combined.tiers[1].ex_gst).toBe(1000)
+  })
+})
+
+describe('resolveRoofRenderSelection (RC-3 — the roofing PDF renders the SELECTION by default)', () => {
+  it('a no-arg regenerate (layout-plan route) narrows to the persisted selection, not the full quote', () => {
+    // included_indices=[1] means only the main dwelling is quoted; the shared
+    // cache must NOT be re-rendered from all 3 structures (the inflated-total bug).
+    const sel = resolveRoofRenderSelection(
+      { quote, included_indices: [1], confirmed_structure: null },
+      {},
+    )
+    expect(sel.quote?.structures.length).toBe(1)
+    expect(sel.quote?.combined.tiers[1].ex_gst).toBe(1000) // primary only, not 1600
+    expect(sel.displayRows?.map((r) => r.state)).toEqual(['priced', 'excluded', 'excluded'])
+  })
+
+  it('a NULL selection falls back to the roof-only default (main dwelling), never all structures', () => {
+    const sel = resolveRoofRenderSelection(
+      { quote, included_indices: null, confirmed_structure: null },
+      {},
+    )
+    expect(sel.quote?.structures.length).toBe(1)
+    expect(sel.quote?.combined.tiers[1].ex_gst).toBe(1000)
+  })
+
+  it('honours a multi-structure selection', () => {
+    const sel = resolveRoofRenderSelection(
+      { quote, included_indices: [1, 3], confirmed_structure: null },
+      {},
+    )
+    expect(sel.quote?.structures.length).toBe(2)
+    expect(sel.quote?.combined.tiers[1].ex_gst).toBe(1200) // 1000 + 200
+  })
+
+  it('an explicit caller quote (SMS send / download narrowing) WINS over the row default', () => {
+    const narrowed = { ...quote, structures: [quote.structures[0]] } as MultiRoofQuote
+    const sel = resolveRoofRenderSelection(
+      { quote, included_indices: [1, 2, 3], confirmed_structure: null },
+      { quote: narrowed },
+    )
+    expect(sel.quote).toBe(narrowed) // exactly the caller's quote, not re-derived
+  })
+
+  it('null row quote → null quote, no display rows', () => {
+    const sel = resolveRoofRenderSelection(
+      { quote: null, included_indices: null, confirmed_structure: null },
+      {},
+    )
+    expect(sel.quote).toBeNull()
+    expect(sel.displayRows).toBeUndefined()
   })
 })
 

@@ -10,7 +10,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { notFound } from 'next/navigation'
-import { getReportAdapter } from '@/lib/quote/report-adapters/registry'
+import { getReportAdapter, tradeRendersOwnQuotePdf } from '@/lib/quote/report-adapters/registry'
 import { resolveCustomerContact } from '@/lib/quote/send-customer'
 import { buildDefaultReportDoc } from '@/lib/quote/report-doc/seed'
 import type { ReportDoc } from '@/lib/quote/report-doc/types'
@@ -105,10 +105,13 @@ export default async function DashboardQuoteViewerPage({
       editorKind={adapter.editorKind}
       pdfUrl={adapter.pdfPath(token)}
       // Live, edit-reactive HTML render of the same report the PDF is built
-      // from — the viewer prefers this over the frozen PDF iframe. Every
-      // dashboard-viewer quote (electrical / plumbing / commercial paint) stores
-      // good/better/best, which /api/q/[token]/html renders via buildQuoteReportHtml.
-      htmlUrl={`/api/q/${token}/html`}
+      // from — the viewer prefers this over the frozen PDF iframe. Electrical /
+      // plumbing store good/better/best, which /api/q/[token]/html renders via
+      // buildQuoteReportHtml. RC-1: commercial painting authors its own tender
+      // PDF with no generic HTML equivalent, so we withhold htmlUrl and let the
+      // viewer embed the tender PDF inline — the preview then matches the
+      // downloaded/MMS'd document instead of a generic Good/Better/Best render.
+      htmlUrl={tradeRendersOwnQuotePdf(trade) ? undefined : `/api/q/${token}/html`}
       capabilities={adapter.capabilities}
       tiers={{
         good: (quote.good as ViewerTier) ?? null,

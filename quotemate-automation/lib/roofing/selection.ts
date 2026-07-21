@@ -219,3 +219,39 @@ export function partitionRoofQuote(
   const narrowed = narrowQuoteToStructures(fullQuote, eff.length > 0 ? eff : allStructureIndices(count))
   return { narrowed, rows }
 }
+
+/**
+ * RC-3 — resolve what a roofing PDF render should actually price/show, making
+ * ensureRoofQuotePdf selection-aware BY DEFAULT. A no-arg regenerate (e.g. the
+ * AI layout-plan route, which calls ensureRoofQuotePdf(token, {regenerate:true})
+ * with no quote/displayRows) must NOT re-render the shared cache from the FULL
+ * quote — it would price every excluded shed/garage and inflate the headline the
+ * customer's /api/q/roof/[token]/pdf link then serves. So when the caller passes
+ * no explicit narrowing, we derive it from the columns ensureRoofQuotePdf already
+ * loads (included_indices + confirmed_structure), exactly like the customer page.
+ *
+ * Explicit caller intent still wins: the SMS send passes the freshly narrowed
+ * `finalQuote`; the download route passes an already-partitioned quote+rows. In
+ * those cases we return the caller's quote verbatim (never re-derive) so their
+ * behaviour is unchanged. PURE — no I/O.
+ */
+export function resolveRoofRenderSelection(
+  row: {
+    quote: MultiRoofQuote | null
+    included_indices: readonly number[] | null
+    confirmed_structure: number | null
+  },
+  opts: { quote?: MultiRoofQuote; displayRows?: RoofDisplayRow[] } = {},
+): { quote: MultiRoofQuote | null; displayRows: RoofDisplayRow[] | undefined } {
+  // Explicit caller narrowing wins — return it verbatim, never re-derive.
+  if (opts.quote || opts.displayRows) {
+    return { quote: opts.quote ?? row.quote, displayRows: opts.displayRows }
+  }
+  if (!row.quote) return { quote: null, displayRows: undefined }
+  const effective = resolveEffectiveIndices(
+    { included: row.included_indices, confirmedStructure: row.confirmed_structure },
+    row.quote,
+  )
+  const partition = partitionRoofQuote(row.quote, effective)
+  return { quote: partition.narrowed, displayRows: partition.rows }
+}

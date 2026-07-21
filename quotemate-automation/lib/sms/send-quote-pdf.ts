@@ -19,6 +19,22 @@
 
 import { dispatchQuoteMessage, type DispatchResult } from './dispatch'
 
+// RC-7 — Twilio's hard MMS media limit. The canonical stored quote PDF is now
+// the FULL-image document (so dashboard-download + the /api/q/[token]/pdf link
+// show every logo/aerial, matching the live preview). An oversized PDF must
+// NOT be attached as MMS media: Twilio ACCEPTS the send synchronously and only
+// fails delivery asynchronously, so dispatch's synchronous MMS→SMS fallback
+// never fires and the customer gets a broken/empty MMS. Instead the MMS signer
+// throws for an over-cap PDF, dispatchQuoteWithPdf degrades to a plain SMS, and
+// the body's durable link still serves the SAME full PDF.
+export const MMS_MEDIA_CAP_BYTES = 5 * 1024 * 1024
+
+/** True when a stored PDF is too large to attach as MMS media. Unknown size →
+ *  false (best-effort: never block a send on a missing size lookup). */
+export function exceedsMmsMediaCap(bytes: number | null | undefined): boolean {
+  return typeof bytes === 'number' && bytes > MMS_MEDIA_CAP_BYTES
+}
+
 export async function dispatchQuoteWithPdf(opts: {
   to: string
   text: string

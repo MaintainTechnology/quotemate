@@ -96,6 +96,33 @@ describe('hashReportContent', () => {
   })
 })
 
+describe('quotePdfSignature with gstRegistered (RC-2 — cross-channel GST parity)', () => {
+  const base = {
+    templateVersion: 2,
+    tierMode: 'single' as const,
+    visibleTierKeys: ['better'] as const,
+    recommendedTier: null,
+  }
+
+  it('is UNCHANGED for a GST-registered tenant (the default) — no forced regen of existing PDFs', () => {
+    // Registered is the platform default; omitting it OR passing true must keep
+    // the pre-RC-2 signature byte-identical so every cached registered PDF is
+    // NOT force-regenerated on the next download.
+    expect(quotePdfSignature({ ...base, gstRegistered: true })).toBe(quotePdfSignature(base))
+    expect(quotePdfSignature(base)).toBe('v2|single|t=better|r=')
+  })
+
+  it('changes when the tradie flips to NON-registered (headline drops the 10% GST)', () => {
+    // The PDF headline is displayIncGst(subtotal, {gstRegistered}) — ×1.10 when
+    // registered, ×1.00 when not. If the signature ignores gst_registered, the
+    // cached download PDF keeps the old (with-GST) headline while a fresh send
+    // and the live page show the new one, contradicting the Stripe charge.
+    expect(quotePdfSignature({ ...base, gstRegistered: false })).not.toBe(
+      quotePdfSignature(base),
+    )
+  })
+})
+
 describe('quotePdfSignature with docHash', () => {
   const base = {
     templateVersion: 2,

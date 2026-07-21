@@ -17,6 +17,23 @@ function norm(trade: string | null | undefined): string {
   return (trade ?? '').toLowerCase().trim()
 }
 
+// Trades whose customer PDF is authored OUTSIDE the generic Good/Better/Best
+// pipeline: they render and store their OWN document at quotes/<id>.pdf (e.g.
+// commercial painting's tender via buildPaintTenderReportHtml in
+// app/api/tenant/commercial-painting/save-quote). Because that row carries a
+// pdf_path but no pdf_signature, the shared ensureQuotePdf would treat it as
+// stale and upsert the generic template OVER it — destroying the tender bytes
+// and serving a legally-weaker document on the download link / MMS / resend.
+// This predicate is the single guard ensureQuotePdf + renderQuoteReportHtml use
+// to serve the self-authored PDF verbatim instead. (RC-1)
+const OWN_PDF_TRADES = new Set(['commercial_painting'])
+
+/** True when a trade renders and stores its OWN customer PDF (ensureQuotePdf
+ *  must serve quotes.pdf_path verbatim rather than regenerate the generic one). */
+export function tradeRendersOwnQuotePdf(trade: string | null | undefined): boolean {
+  return OWN_PDF_TRADES.has(norm(trade))
+}
+
 /** How edits to a trade's prices are validated on save (single source of truth
  *  shared by the edit + chat-edit endpoints). Unknown trades default to
  *  tradie-authored (no catalogue to ground against). */

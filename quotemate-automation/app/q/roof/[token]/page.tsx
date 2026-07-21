@@ -26,6 +26,7 @@
 import type { CSSProperties } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { notFound, redirect } from 'next/navigation'
+import { servesPromotedQuote } from '@/lib/roofing/promotion'
 import type {
   MultiRoofQuote,
   RoofMaterial,
@@ -191,7 +192,19 @@ export default async function RoofingQuotePage({
       .select('quote_share_token, paid_at')
       .eq('public_token', token)
       .maybeSingle()
-    if (promo?.quote_share_token && !promo.paid_at) {
+    // Shared rule (lib/roofing/promotion.ts) — the roof PDF route mirrors this
+    // exact decision so the page and the SMS'd PDF link can never serve two
+    // different documents for the same job. `full` is already false here.
+    if (
+      promo &&
+      servesPromotedQuote(
+        {
+          quote_share_token: (promo.quote_share_token as string | null) ?? null,
+          paid_at: (promo.paid_at as string | null) ?? null,
+        },
+        false,
+      )
+    ) {
       redirect(`/q/${promo.quote_share_token}`)
     }
   }
