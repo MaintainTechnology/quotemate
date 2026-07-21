@@ -1,31 +1,35 @@
-// Customer-facing booking page — Maintain Technology design system
-// (dark navy canvas, vibrant orange, JetBrains Mono eyebrows, ALL-CAPS
-// display, topographic overlay, square edges, borders not shadows).
-// Visual language matches /q/[token]. Logic is unchanged.
+// Customer-facing BOOKING page — step 2 of 3.
 //
-// WP6 reorder: BOOK FIRST, PAY LAST. The customer lands here from the
-// quote (the pay short-link routes here when no slot is chosen yet).
-// They pick a time → it's reserved on the quote → they're sent to the
-// deposit step → paying CONFIRMS the booking (Stripe webhook).
+//   /q/<token>  ->  Stripe  ->  /q/<token>/book  ->  /q/<token>/thanks
 //
-// States (each renders without breaking):
-//   1. token not found                    → 404
-//   2. paid + scheduled                    → "Booked" (confirmed)
-//   3. not paid + slot already chosen      → "Time held — pay deposit"
-//   4. not paid + no slot + slots open     → SlotPicker (pick first)
-//   5. not paid + no slot + NO slots open  → pay now, tradie arranges time
-//   6. paid + no slot (legacy/no slots)    → pick a time / we'll be in touch
+// This page does exactly one thing: let the customer pick a date and then a
+// time. Everything else it used to carry — the "time held, now pay" state, the
+// step strip, the booked confirmation — belonged to the book-first order and
+// is gone (spec 2026-07-22-booking-three-page-split R3/R5). The confirmation
+// lives on /thanks, which the booking POST redirects to.
+//
+// Serves electrical, plumbing AND solar: a solar estimate writes a twin
+// `quotes` row with share_token = the estimate's public_token, so solar
+// customers book here too.
+//
+// States:
+//   1. token not found          -> 404
+//   2. price hold lapsed        -> "price expired" (never book a stale price)
+//   3. not paid                 -> the pay short-link (pay-first)
+//   4. already booked           -> /thanks
+//   5. paid, no slot            -> the calendar
+//   6. paid, no slot, no windows -> the calendar's own empty state
 
-import type { ReactNode } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { resolveGoogleBookingUrl, resolveNextTier } from '@/lib/quote/booking'
+import { resolveNextTier } from '@/lib/quote/booking'
 import { isPriceHoldExpired } from '@/lib/quote/hold'
-import { resolveBookingOptions, buildBookedKeys, type BookingOption } from '@/lib/quote/slots'
+import { resolveBookingOptions, buildBookedKeys } from '@/lib/quote/slots'
 import { tzForState } from '@/lib/quote/availability'
 import { BrandMark } from '@/app/_components/BrandMark'
-import { SlotPicker } from './SlotPicker'
+import { BookingCalendar, type CalendarDay } from '@/app/q/_chrome/BookingCalendar'
+import { toCalendarDays } from '@/app/q/_chrome/calendar-days'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,92 +38,18 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-// Label for a chosen booking. An AM/PM window shows the half-day ("Mon 6 Jul
-// (morning)"); a legacy exact-time slot shows the time. Rendered in the tenant
-// timezone the slots were generated in (tzForState) so the confirmed day never
-// contradicts the chip the customer picked.
-function formatScheduled(iso: string, window?: string | null, tz = 'Australia/Sydney'): string {
+/** Short timezone note ("AEST") so the customer knows whose clock the times
+ *  are on — they are generated in the TENANT's zone, not the visitor's. */
+function shortTzLabel(tz: string): string | null {
   try {
-    const dayLabel = new Date(iso).toLocaleString('en-AU', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'short',
+    const parts = new Intl.DateTimeFormat('en-AU', {
       timeZone: tz,
-    })
-    if (window === 'am' || window === 'pm') {
-      return `${dayLabel} (${window === 'am' ? 'morning' : 'afternoon'})`
-    }
-    const time = new Date(iso).toLocaleString('en-AU', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-      timeZone: tz,
-    })
-    return `${dayLabel}, ${time}`
+      timeZoneName: 'short',
+    }).formatToParts(new Date())
+    return parts.find((p) => p.type === 'timeZoneName')?.value ?? null
   } catch {
-    return iso
+    return null
   }
-}
-
-// Signature Maintain motif — low-opacity topographic ridge lines, teal
-// stroke, behind everything. Pure decoration, pointer-events-none.
-function Topo() {
-  return (
-    <svg
-      className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.12]"
-      viewBox="0 0 1920 1080"
-      preserveAspectRatio="xMidYMid slice"
-      aria-hidden="true"
-    >
-      {[0, 70, 140, 210, 280, 350, 420].map((dy) => (
-        <path
-          key={dy}
-          d={`M0,${760 - dy} Q240,${600 - dy} 480,${690 - dy} T960,${
-            640 - dy
-          } T1440,${700 - dy} T1920,${610 - dy}`}
-          stroke="var(--color-teal-glow, #14B8A6)"
-          strokeWidth="1"
-          fill="none"
-        />
-      ))}
-    </svg>
-  )
-}
-
-// 3-step ops strip — makes the new book → pay → confirmed order legible
-// at a glance. `active` highlights the current step in orange; earlier
-// steps read as done.
-function StepStrip({ active }: { active: 1 | 2 | 3 }) {
-  const steps = [
-    { n: '01', label: 'Choose a time' },
-    { n: '02', label: 'Pay deposit' },
-    { n: '03', label: 'Confirmed' },
-  ]
-  return (
-    <div className="mb-6 flex flex-wrap gap-x-6 gap-y-2 border-b border-ink-line pb-4">
-      {steps.map((s, i) => {
-        const step = i + 1
-        const isActive = step === active
-        const isDone = step < active
-        return (
-          <span
-            key={s.n}
-            className={`font-mono text-[0.7rem] uppercase tracking-[0.16em] ${
-              isActive
-                ? 'text-accent'
-                : isDone
-                  ? 'text-text-sec'
-                  : 'text-text-dim'
-            }`}
-          >
-            <span className="font-bold">{s.n}</span>
-            {isDone ? ' ✓ ' : ' · '}
-            {s.label}
-          </span>
-        )
-      })}
-    </div>
-  )
 }
 
 export default async function BookingPage(props: {
@@ -131,27 +61,61 @@ export default async function BookingPage(props: {
 
   const { data: quote } = await supabase
     .from('quotes')
-    .select('id, paid_at, paid_tier, selected_tier, scheduled_at, scheduled_window, share_token, intake_id, tenant_id, created_at, price_hold_until, needs_inspection')
+    .select(
+      'id, paid_at, paid_tier, selected_tier, scheduled_at, share_token, tenant_id, created_at, price_hold_until, needs_inspection',
+    )
     .eq('share_token', token)
     .maybeSingle()
 
   if (!quote) notFound()
 
-  // v8 — realised early-booking discount, for the "time held" copy.
-  // Separate best-effort select (column lands via migration 044).
-  let appliedDiscountPct = 0
-  {
-    const { data: eb } = await supabase
-      .from('quotes')
-      .select('applied_discount_pct')
-      .eq('id', quote.id)
-      .maybeSingle()
-    if (eb) appliedDiscountPct = Number(eb.applied_discount_pct ?? 0)
+  const isPaid = !!quote.paid_at
+  const isScheduled = !!quote.scheduled_at
+
+  // Tier the pay step charges, when we have to bounce them to it.
+  const tier = resolveNextTier(sp.tier ?? null, quote.selected_tier as string | null)
+
+  // Lapsed price — block booking entirely; pricing may have changed since the
+  // quote was sent. An already-paid quote has transacted and is exempt, as are
+  // inspection-required quotes whose prices are indicative by design.
+  const priceExpired =
+    !isPaid &&
+    !(quote as { needs_inspection?: boolean | null }).needs_inspection &&
+    isPriceHoldExpired(
+      (quote as { price_hold_until?: string | null }).price_hold_until ?? null,
+      (quote as { created_at?: string | null }).created_at ?? null,
+    )
+
+  if (priceExpired) {
+    return (
+      <Shell token={token}>
+        <span className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-warning">
+          Price expired
+        </span>
+        <h1 className="mt-6 text-[clamp(1.6rem,4vw,2.5rem)] font-extrabold uppercase leading-[1.05] tracking-[-0.03em]">
+          This quote&apos;s price has <span className="text-accent">lapsed</span>
+        </h1>
+        <p className="mt-5 max-w-[60ch] text-base leading-relaxed text-text-sec">
+          The held price on this quote has expired, so it can&apos;t be booked as-is
+          — pricing may have changed. Reply to your tradie&apos;s SMS for a refreshed
+          quote and you can lock in a time then.
+        </p>
+        <Link
+          href={`/q/${token}`}
+          className="mt-8 inline-flex items-center gap-2 border border-ink-line px-6 py-3.5 text-sm font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
+        >
+          ← Back to quote
+        </Link>
+      </Shell>
+    )
   }
 
-  // Slots live on the owning tenant since mig 062. The legacy `tradies`
-  // table was a single-tradie pre-multi-tenant remnant; each tenant now
-  // carries their own available_slots jsonb.
+  // Pay-first: booking follows the order the customer placed.
+  if (!isPaid) redirect(`/r/${token}/${tier}`)
+
+  // Already booked → the thank-you page owns the confirmation.
+  if (isScheduled) redirect(`/q/${token}/thanks`)
+
   const { data: tenantRow } = quote.tenant_id
     ? await supabase
         .from('tenants')
@@ -160,9 +124,9 @@ export default async function BookingPage(props: {
         .maybeSingle()
     : { data: null }
 
-  // Already-booked windows on this tenant (other quotes) so a generated
-  // AM/PM window can't be double-booked (spec R15/R16). Excludes this quote.
   const tz = tzForState(tenantRow?.state as string | null)
+
+  // Windows already taken on this tenant, so a half-day can't be double-booked.
   let bookedKeys = new Set<string>()
   if (quote.tenant_id) {
     const { data: bookedRows } = await supabase
@@ -175,128 +139,50 @@ export default async function BookingPage(props: {
     bookedKeys = buildBookedKeys(bookedRows ?? [], tz)
   }
 
-  // Bookable options = AM/PM half-day windows generated from the tenant's
-  // weekly availability template when set; otherwise the legacy curated /
-  // rolling exact-time slots (self-renewing so the picker is never empty).
-  // The booking API derives the SAME list, so a picked option always
-  // validates.
-  const options: BookingOption[] = resolveBookingOptions({
+  // The booking API derives this SAME list, so a picked option always
+  // validates and can never 409 a legitimate choice.
+  const options = resolveBookingOptions({
     availability: tenantRow?.default_availability ?? null,
     availableSlots: tenantRow?.available_slots,
     timezone: tz,
     bookedKeys,
   })
-
-  const isPaid = !!quote.paid_at
-  const isScheduled = !!quote.scheduled_at
-
-  // Price hold lapsed → block booking/payment (the customer must reply for a
-  // refreshed quote). An already-paid quote has transacted and is exempt so
-  // the legacy "paid, now pick a time" recovery path still works. Inspection-
-  // required quotes are exempt too — their prices are indicative (final price
-  // confirmed on-site), matching /q, /r, and the book API.
-  const priceExpired =
-    !isPaid &&
-    !(quote as { needs_inspection?: boolean | null }).needs_inspection &&
-    isPriceHoldExpired(
-      (quote as { price_hold_until?: string | null }).price_hold_until ?? null,
-      (quote as { created_at?: string | null }).created_at ?? null,
-    )
-
-  // Tier the pay step charges: query param (carried from the quote page
-  // tier button) → the quote's selected_tier → 'better'. Shared resolver
-  // with POST /api/q/[token]/book.
-  const tier = resolveNextTier(sp.tier ?? null, quote.selected_tier as string | null)
-
-  // The $99 inspection is PAY-FIRST (spec customer-quote-five-sections R7,
-  // D1a): an UNPAID inspection visitor (old SMS link, manual URL) is routed
-  // to payment — the booking POST would 409 their pick anyway. Paid
-  // inspections fall through to the picker (the designed pay → book step).
-  if (!isPaid && (tier === 'inspection' || quote.needs_inspection)) {
-    redirect(`/r/${token}/inspection`)
-  }
-
-  // Off-platform "book directly on the tradie's calendar" link (Google
-  // Appointment). Decision: DB picker = pay-last + auto-confirmed;
-  // Google = off-platform, tradie handles that deposit. Null when unset
-  // or not a valid https URL → the option simply doesn't render.
-  const googleUrl = resolveGoogleBookingUrl(process.env.GOOGLE_BOOKING_URL)
+  const calDays: CalendarDay[] = toCalendarDays(options, tz)
   const tradieName = tenantRow?.business_name ?? null
 
-  let content: ReactNode
-  if (priceExpired) {
-    // Lapsed price — block the picker; send them back to refresh the quote.
-    content = <ExpiredState tradieName={tradieName} token={token} />
-  } else if (isPaid && isScheduled) {
-    content = (
-      <AlreadyScheduledState
-        scheduledAt={quote.scheduled_at!}
-        scheduledWindow={quote.scheduled_window as string | null}
-        tradieName={tradieName}
-        tz={tz}
-      />
-    )
-  } else if (!isPaid && isScheduled) {
-    content = (
-      <ReservedPayState
-        token={token}
-        tier={tier}
-        scheduledAt={quote.scheduled_at!}
-        scheduledWindow={quote.scheduled_window as string | null}
-        appliedDiscountPct={appliedDiscountPct}
-        tz={tz}
-      />
-    )
-  } else if (!isPaid && !isScheduled && options.length > 0) {
-    content = (
-      <PickState
-        token={token}
-        options={options}
-        tier={tier}
-        tradieName={tradieName}
-        googleUrl={googleUrl}
-      />
-    )
-  } else if (!isPaid && !isScheduled && options.length === 0) {
-    content = (
-      <NoSlotsPayState
-        token={token}
-        tier={tier}
-        tradieName={tradieName}
-        googleUrl={googleUrl}
-      />
-    )
-  } else if (isPaid && !isScheduled && options.length > 0) {
-    // Pay-first arrivals: the $99 inspection (paid → pick a time → thank-you,
-    // five-sections R7/D1a) and legacy paid-no-slot recoveries. Same picker,
-    // paid framing — no "pay your deposit" promise after payment.
-    content = (
-      <PickState
-        token={token}
-        options={options}
-        tier={tier}
-        tradieName={tradieName}
-        googleUrl={googleUrl}
-        alreadyPaid
-      />
-    )
-  } else {
-    content = (
-      <NoSlotsState tradieName={tradieName} googleUrl={googleUrl} />
-    )
-  }
+  return (
+    <Shell token={token}>
+      <span className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-text-dim">
+        Paid · choose your time
+      </span>
+      <h1 className="mt-3 text-[clamp(1.5rem,3.5vw,2.25rem)] font-extrabold uppercase leading-none tracking-[-0.035em]">
+        Pick a time that <span className="text-accent">works</span>.
+      </h1>
+      <p className="mt-2 max-w-[60ch] text-sm leading-relaxed text-text-sec">
+        {tradieName ? `${tradieName}'s` : "Your tradie's"} next available times —
+        payment received, so choosing one locks your visit in.
+      </p>
+      <div className="mt-6">
+        <BookingCalendar
+          days={calDays}
+          endpoint={`/api/q/${token}/book`}
+          tzLabel={shortTzLabel(tz)}
+          labels={{ idle: 'Confirm this time →', submitting: 'Confirming…', done: 'Booked ✓' }}
+        />
+      </div>
+    </Shell>
+  )
+}
 
+function Shell({ token, children }: { token: string; children: React.ReactNode }) {
   return (
     <main className="relative min-h-screen overflow-hidden bg-ink-deep text-text-pri">
-      <Topo />
-
+      <div className="noise-overlay" aria-hidden="true" />
       <header className="relative z-10 border-b border-ink-line">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-5 py-5 sm:px-6">
           <Link href="/" className="flex items-center gap-2.5">
             <BrandMark className="h-10 w-10" />
-            <span className="font-extrabold uppercase tracking-tight">
-              QuoteMax
-            </span>
+            <span className="font-extrabold uppercase tracking-tight">QuoteMax</span>
           </Link>
           <Link
             href={`/q/${token}`}
@@ -307,289 +193,16 @@ export default async function BookingPage(props: {
         </div>
       </header>
 
-      <div className="relative z-10 mx-auto max-w-5xl px-5 py-7 sm:px-6 sm:py-9">
-        {content}
+      <div className="qm-quote relative z-10 mx-auto max-w-3xl px-5 py-7 sm:px-6 sm:py-9">
+        {children}
       </div>
 
+      {/* Dark-on-yellow only — white on the accent is ~1.4:1 and forbidden. */}
       <div className="relative z-10 bg-accent px-6 py-4 text-center">
-        <span className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-white">
-          QuoteMax · Book · Pay · Done
+        <span className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-ink-deep">
+          QuoteMax · Paid · Choose your time
         </span>
       </div>
     </main>
-  )
-}
-
-function AlreadyScheduledState({
-  scheduledAt,
-  scheduledWindow,
-  tradieName,
-  tz,
-}: {
-  scheduledAt: string
-  scheduledWindow: string | null
-  tradieName: string | null
-  tz: string
-}) {
-  return (
-    <section className="motion-safe:animate-[fade-in_240ms_ease-out_both]">
-      <StepStrip active={3} />
-      <span className="inline-flex items-center bg-teal-glow/15 px-3 py-1 font-mono text-[0.7rem] font-bold uppercase tracking-[0.16em] text-teal-glow">
-        Booked · Confirmed
-      </span>
-      <h1 className="mt-6 text-[clamp(2rem,5vw,3.25rem)] font-extrabold uppercase leading-[1.02] tracking-[-0.03em]">
-        You&apos;re <span className="text-accent">locked in</span> for{' '}
-        {formatScheduled(scheduledAt, scheduledWindow, tz)}.
-      </h1>
-      <p className="mt-5 max-w-[60ch] text-base leading-relaxed text-text-sec">
-        Deposit received and your time is confirmed.{' '}
-        {tradieName ? `${tradieName} will` : 'Your tradie will'} confirm by SMS
-        the day before. If anything changes, reply to that SMS and they&apos;ll
-        reschedule.
-      </p>
-    </section>
-  )
-}
-
-// A time is chosen but the deposit (the LAST step) isn't paid yet.
-function ReservedPayState({
-  token,
-  tier,
-  scheduledAt,
-  scheduledWindow,
-  appliedDiscountPct,
-  tz,
-}: {
-  token: string
-  tier: string
-  scheduledAt: string
-  scheduledWindow: string | null
-  /** v8 — realised early-booking discount %. 0 = none. */
-  appliedDiscountPct: number
-  tz: string
-}) {
-  const discounted = appliedDiscountPct > 0
-  return (
-    <section className="motion-safe:animate-[fade-in_240ms_ease-out_both]">
-      <StepStrip active={2} />
-      <span className="inline-flex items-center bg-accent/15 px-3 py-1 font-mono text-[0.7rem] font-bold uppercase tracking-[0.16em] text-accent">
-        Time held
-      </span>
-      <h1 className="mt-6 text-[clamp(2rem,5vw,3.25rem)] font-extrabold uppercase leading-[1.02] tracking-[-0.03em]">
-        {formatScheduled(scheduledAt, scheduledWindow, tz)} is{' '}
-        <span className="text-accent">held</span> for you.
-      </h1>
-      {discounted ? (
-        <p className="mt-5 inline-flex items-center bg-teal-glow/15 px-3 py-1.5 font-mono text-[0.7rem] font-bold uppercase tracking-[0.14em] text-teal-glow">
-          {appliedDiscountPct}% early-booking discount applied
-        </p>
-      ) : null}
-      <p className="mt-5 max-w-[60ch] text-base leading-relaxed text-text-sec">
-        One last step — pay your deposit to lock it in. Your time isn&apos;t
-        confirmed until the deposit is paid.
-        {discounted
-          ? ' Your discounted deposit is shown at checkout.'
-          : ''}
-      </p>
-      <a
-        href={`/r/${token}/${tier}`}
-        className="mt-8 inline-flex items-center gap-2 bg-accent px-6 py-3.5 text-sm font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press"
-      >
-        Pay deposit &amp; confirm →
-      </a>
-      <p className="mt-5 font-mono text-[0.7rem] uppercase tracking-[0.14em] text-text-dim">
-        Picked the wrong time?{' '}
-        <Link
-          href={`/q/${token}/book`}
-          className="text-text-sec underline underline-offset-4 hover:text-accent"
-        >
-          Choose another
-        </Link>
-      </p>
-    </section>
-  )
-}
-
-// Off-platform alternative: book straight into the tradie's own Google
-// calendar. Renders nothing unless a valid https link is configured.
-// Copy is explicit that this path is arranged with the tradie directly
-// (no QuoteMax deposit/confirmation on it) so the customer isn't
-// surprised — matches the "DB = pay-last; Google = off-platform" call.
-function GoogleBookingOption({
-  googleUrl,
-  tradieName,
-}: {
-  googleUrl: string | null
-  tradieName: string | null
-}) {
-  if (!googleUrl) return null
-  const who = tradieName ?? 'the tradie'
-  return (
-    <div className="mt-6 border-t border-ink-line pt-5">
-      <span className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-text-dim">
-        Or book direct
-      </span>
-      <p className="mt-2 text-sm font-semibold text-text-pri">
-        Prefer to book straight into {who}&apos;s calendar?
-      </p>
-      <p className="mt-1 max-w-[58ch] text-xs leading-relaxed text-text-sec">
-        Opens {who}&apos;s Google booking page. With this option your deposit is
-        sorted with {who} directly — it won&apos;t go through the screen above.
-      </p>
-      <a
-        href={googleUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="mt-3 inline-flex items-center gap-2 border border-ink-line px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
-      >
-        Book on {who}&apos;s calendar ↗
-      </a>
-    </div>
-  )
-}
-
-// Price hold lapsed — booking/payment is blocked. Mirrors the quote page's
-// "PRICE EXPIRED" banner: pricing may have changed, so the customer replies
-// to their tradie for a refreshed quote rather than booking against a stale
-// price. No slot picker, no pay link.
-function ExpiredState({
-  tradieName,
-  token,
-}: {
-  tradieName: string | null
-  token: string
-}) {
-  return (
-    <section className="motion-safe:animate-[fade-in_240ms_ease-out_both]">
-      <StepStrip active={1} />
-      <span className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-warning">
-        Price expired
-      </span>
-      <h1 className="mt-6 text-[clamp(2rem,5vw,3.25rem)] font-extrabold uppercase leading-[1.02] tracking-[-0.03em]">
-        This quote&apos;s price has <span className="text-accent">lapsed</span>
-      </h1>
-      <p className="mt-5 max-w-[60ch] text-base leading-relaxed text-text-sec">
-        The held price on this quote has expired, so it can&apos;t be booked as-is
-        — pricing may have changed. Reply to {tradieName ?? 'your tradie'}&apos;s
-        SMS for a refreshed quote and you can lock in a time then.
-      </p>
-      <Link
-        href={`/q/${token}`}
-        className="mt-8 inline-flex items-center gap-2 border border-ink-line px-6 py-3.5 text-sm font-semibold uppercase tracking-wider text-text-pri transition-colors hover:border-accent hover:text-accent"
-      >
-        ← Back to quote
-      </Link>
-    </section>
-  )
-}
-
-function NoSlotsState({
-  tradieName,
-  googleUrl,
-}: {
-  tradieName: string | null
-  googleUrl: string | null
-}) {
-  return (
-    <section className="motion-safe:animate-[fade-in_240ms_ease-out_both]">
-      <StepStrip active={1} />
-      <span className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-text-dim">
-        Scheduling
-      </span>
-      <h1 className="mt-6 text-[clamp(2rem,5vw,3.25rem)] font-extrabold uppercase leading-[1.02] tracking-[-0.03em]">
-        We&apos;ll be <span className="text-accent">in touch</span>
-      </h1>
-      <p className="mt-5 max-w-[60ch] text-base leading-relaxed text-text-sec">
-        {tradieName ?? 'Your tradie'} doesn&apos;t have published times right
-        now. They&apos;ll text you within one business day to arrange one.
-      </p>
-      <GoogleBookingOption googleUrl={googleUrl} tradieName={tradieName} />
-    </section>
-  )
-}
-
-// No slots published yet, and not paid: let them pay to hold their place;
-// the tradie arranges the time. Keeps the funnel from dead-ending.
-function NoSlotsPayState({
-  token,
-  tier,
-  tradieName,
-  googleUrl,
-}: {
-  token: string
-  tier: string
-  tradieName: string | null
-  googleUrl: string | null
-}) {
-  return (
-    <section className="motion-safe:animate-[fade-in_240ms_ease-out_both]">
-      <StepStrip active={1} />
-      <span className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-text-dim">
-        Scheduling
-      </span>
-      <h1 className="mt-6 text-[clamp(2rem,5vw,3.25rem)] font-extrabold uppercase leading-[1.02] tracking-[-0.03em]">
-        No times <span className="text-accent">published</span> yet
-      </h1>
-      <p className="mt-5 max-w-[60ch] text-base leading-relaxed text-text-sec">
-        {tradieName ?? 'Your tradie'} hasn&apos;t put up bookable times yet. You
-        can still secure the job with your deposit — they&apos;ll text you to
-        lock in a time.
-      </p>
-      <a
-        href={`/r/${token}/${tier}`}
-        className="mt-8 inline-flex items-center gap-2 bg-accent px-6 py-3.5 text-sm font-semibold uppercase tracking-wider text-white transition-colors hover:bg-accent-press"
-      >
-        Pay deposit to secure →
-      </a>
-      <GoogleBookingOption googleUrl={googleUrl} tradieName={tradieName} />
-    </section>
-  )
-}
-
-function PickState({
-  token,
-  options,
-  tier,
-  tradieName,
-  googleUrl,
-  alreadyPaid = false,
-}: {
-  token: string
-  options: BookingOption[]
-  tier: string
-  tradieName: string | null
-  googleUrl: string | null
-  /** Pay-first flows (the $99 inspection, legacy paid-no-slot recoveries)
-   *  land here AFTER paying — the copy must confirm the time, not promise a
-   *  deposit step that already happened (five-sections R7 review polish). */
-  alreadyPaid?: boolean
-}) {
-  return (
-    <section className="motion-safe:animate-[fade-in_240ms_ease-out_both]">
-      <StepStrip active={1} />
-      <span className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-text-dim">
-        {alreadyPaid ? 'Paid · choose your time' : 'Step 01 — Choose a time'}
-      </span>
-      <h1 className="mt-3 text-[clamp(1.5rem,3.5vw,2.25rem)] font-extrabold uppercase leading-none tracking-[-0.035em]">
-        Pick a time that <span className="text-accent">works</span>.
-      </h1>
-      <p className="mt-2 max-w-[60ch] text-sm leading-relaxed text-text-sec">
-        {tradieName ? `${tradieName}'s` : "Your tradie's"} next available times —
-        {alreadyPaid
-          ? ' payment received, so picking one locks your visit in.'
-          : ' pick one, then pay your deposit to lock it in (last step).'}
-      </p>
-      <div className="mt-6">
-        <SlotPicker
-          token={token}
-          options={options}
-          tier={tier}
-          {...(alreadyPaid
-            ? { labels: { idle: 'Confirm this time →', submitting: 'Confirming…', done: 'Booked ✓' } }
-            : {})}
-        />
-      </div>
-      <GoogleBookingOption googleUrl={googleUrl} tradieName={tradieName} />
-    </section>
   )
 }

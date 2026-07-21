@@ -28,9 +28,8 @@ import { RepaintPreviewFigure } from '../../_chrome/RepaintPreviewFigure'
 import { TradieJobBanner } from '../../_chrome/TradieJobBanner'
 import { AcceptBlock } from '../../_chrome/AcceptBlock'
 import { resolveAcceptView } from '@/lib/quote/accept'
-import { loadTenantBookingOptions, formatVisitSlot } from '@/lib/quote/trade-booking'
+import { formatVisitSlot } from '@/lib/quote/trade-booking'
 import { tzForState } from '@/lib/quote/availability'
-import { SlotPicker } from '@/app/q/[token]/book/SlotPicker'
 import { tradeIcon } from '../../_chrome/icons'
 import {
   QuoteSheet, Letterhead, QuoteHero, StatGrid, Scope,
@@ -39,6 +38,24 @@ import {
 } from '../../_chrome/parts'
 
 export const dynamic = 'force-dynamic'
+
+/** Primary yellow CTA into the booking / thank-you pages. Dark ink on the
+ *  accent — white on yellow is ~1.4:1 and forbidden. */
+const PAINT_CTA_LINK = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 8,
+  border: '1px solid transparent',
+  background: 'var(--accent)',
+  color: 'var(--accent-ink)',
+  padding: '13px 20px',
+  fontFamily: 'var(--font-sans)',
+  fontWeight: 700,
+  fontSize: 13,
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+  textDecoration: 'none',
+} as const
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -169,17 +186,9 @@ export default async function PaintingQuotePage(props: { params: Promise<{ token
     released = (payRow.released_at as string | null) != null
   }
 
-  // Self-serve visit booking (mig 167): once the deposit is paid the customer
-  // picks a half-day window right here. Load the painter's open windows ONLY in
-  // that state so an unpaid / already-booked view costs no extra query.
-  const paintTenantId = (row as { tenant_id?: string | null }).tenant_id ?? null
-  let paintBookingOptions: Awaited<ReturnType<typeof loadTenantBookingOptions>> = []
-  if (paid && !paintScheduledAt && paintTenantId) {
-    paintBookingOptions = await loadTenantBookingOptions(supabase, {
-      tenantId: paintTenantId,
-      table: 'painting_measurements',
-    })
-  }
+  // Self-serve visit booking (mig 167) now happens on /q/paint/<token>/book,
+  // which loads the painter's open windows itself — this page only links to it,
+  // so no booking query runs here at all.
   const priceGate = canShowPaintingPrices({ releasedAt: released ? 'released' : null })
 
   const date = new Date(row.created_at as string).toLocaleDateString('en-AU', {
@@ -680,29 +689,34 @@ export default async function PaintingQuotePage(props: { params: Promise<{ token
             confirmation once paid. ── */}
         {showPaintAccept ? <AcceptBlock token={token} view={paintAcceptView} /> : null}
 
-        {/* Self-serve visit booking — appears once the deposit is paid. Pick a
-            half-day window (or see the booked one). Mig 167. */}
+        {/* Self-serve visit booking — appears once the deposit is paid. The
+            picker itself lives on the dedicated /book page since 2026-07-22
+            (spec booking-three-page-split R3), so this is a link rather than an
+            inline picker the customer has to scroll a pricing page to find.
+            Mig 167. */}
         {paid ? (
           <SheetSection eyebrow={paintScheduledAt ? 'Visit booked' : 'Pick your visit time'} eyebrowAccent>
             {paintScheduledAt ? (
-              <p style={{ margin: '12px 0 0', fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
-                Your visit is booked for{' '}
-                <strong style={{ color: 'var(--text-pri)' }}>
-                  {formatVisitSlot(paintScheduledAt, paintScheduledWindow, tzForState(identity?.state ?? null))}
-                </strong>
-                . {business} will text you the day before to confirm.
-              </p>
+              <div style={{ marginTop: 12, display: 'grid', gap: 14, justifyItems: 'start' }}>
+                <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+                  Your visit is booked for{' '}
+                  <strong style={{ color: 'var(--text-pri)' }}>
+                    {formatVisitSlot(paintScheduledAt, paintScheduledWindow, tzForState(identity?.state ?? null))}
+                  </strong>
+                  . {business} will text you the day before to confirm.
+                </p>
+                <a href={`/q/paint/${token}/thanks`} className="qm-cta" style={PAINT_CTA_LINK}>
+                  View your booking →
+                </a>
+              </div>
             ) : (
               <div style={{ marginTop: 12 }}>
                 <p style={{ margin: '0 0 14px', fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
                   Deposit received — pick a time that suits and we&apos;ll lock in your visit.
                 </p>
-                <SlotPicker
-                  token={token}
-                  options={paintBookingOptions}
-                  endpoint={`/api/q/book/paint/${token}`}
-                  labels={{ idle: 'Book this time →', submitting: 'Booking…', done: 'Booked ✓' }}
-                />
+                <a href={`/q/paint/${token}/book`} className="qm-cta" style={PAINT_CTA_LINK}>
+                  Pick your visit time →
+                </a>
               </div>
             )}
           </SheetSection>

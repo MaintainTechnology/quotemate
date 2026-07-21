@@ -1,23 +1,24 @@
-// Roofing site-visit booking landing page.
+// Roofing site-visit BOOKING page — step 2 of 3.
 //
-// The $99 site-visit payment (createRoofingSiteVisitSession) now redirects
-// here after Stripe success. This page shows the tradie's thank-you video AND
-// a calendar to pick the visit time — so the customer lands on one clear
-// "thanks, now choose your time" page instead of scrolling a long slot list
-// back on the quote surface.
+//   /q/roof/<token>  ->  Stripe  ->  /q/roof/<token>/book  ->  /q/roof/<token>/thanks
 //
-// Paid-gated: an unpaid visitor is sent to pay first. A webhook-race guard
-// (retrieve the Stripe session on ?session_id=) stamps paid_at immediately so
-// a customer who beats the webhook still sees the booking calendar.
+// This page does exactly one thing: let the customer pick a date and then a
+// time. It used to also host the thank-you video, the booked confirmation and
+// the add-to-calendar links; those moved to /thanks on 2026-07-22 so each page
+// has a single job (spec 2026-07-22-booking-three-page-split R3).
+//
+// Gated twice: an unpaid visitor is sent to pay first, and an already-booked
+// visitor is sent to /thanks. A webhook-race guard (retrieve the Stripe
+// session on ?session_id=) stamps paid_at + paid_amount_cents immediately so a
+// customer who beats the webhook still reaches the calendar.
 
 import { createClient } from '@supabase/supabase-js'
 import { notFound, redirect } from 'next/navigation'
 import { QuoteChrome } from '@/app/q/_chrome/QuoteChrome'
-import { QuoteSheet, Letterhead, SheetSection, TrustVideo, AddToCalendar } from '@/app/q/_chrome/parts'
+import { QuoteSheet, Letterhead, SheetSection } from '@/app/q/_chrome/parts'
 import { tradeIcon } from '@/app/q/_chrome/icons'
-import { loadTenantIdentity, contactDisplayName, trustVideoUrls } from '@/lib/quote/tenant-identity'
-import { loadTenantBookingOptions, formatVisitSlot } from '@/lib/quote/trade-booking'
-import { visitCalendarLinks } from '@/lib/quote/calendar-links'
+import { loadTenantIdentity, contactDisplayName } from '@/lib/quote/tenant-identity'
+import { loadTenantBookingOptions } from '@/lib/quote/trade-booking'
 import { tzForState } from '@/lib/quote/availability'
 import { getStripe } from '@/lib/stripe/client'
 import { BookingCalendar, type CalendarDay } from '@/app/q/_chrome/BookingCalendar'
@@ -103,29 +104,17 @@ export default async function RoofBookingPage(props: {
   // Not paid → send them to pay first (this page is the post-payment surface).
   if (!paidAt) redirect(`/r/roof/${token}/inspection`)
 
-  const identity = await loadTenantIdentity(supabase, (row.tenant_id as string | null) ?? null)
-  const tradieName = identity?.business_name ?? 'Your roofer'
-  const tz = tzForState(identity?.state ?? (row.state as string | null) ?? null)
-  const videos = trustVideoUrls(identity)
   const scheduledAt = (row.scheduled_at as string | null) ?? null
-  const scheduledWindow = (row.scheduled_window as string | null) ?? null
+  // Already booked → the thank-you page owns the confirmation. This page's
+  // only job is picking a time.
+  if (scheduledAt) redirect(`/q/roof/${token}/thanks`)
+
+  const identity = await loadTenantIdentity(supabase, (row.tenant_id as string | null) ?? null)
+  const tz = tzForState(identity?.state ?? (row.state as string | null) ?? null)
   const placeLabel = [row.address, row.state].filter(Boolean).join(', ') || null
-  const slotLabel = scheduledAt ? formatVisitSlot(scheduledAt, scheduledWindow, tz) : ''
-  const calLinks = scheduledAt
-    ? visitCalendarLinks({
-        scheduledAt,
-        scheduledWindow,
-        tradieName,
-        slotLabel,
-        // Raw address already ends with the state, so prefer it over placeLabel
-        // (which re-appends state and can double it).
-        location: (row.address as string | null)?.trim() || placeLabel,
-        timeZone: tz,
-      })
-    : null
 
   let calDays: CalendarDay[] = []
-  if (!scheduledAt && row.tenant_id) {
+  if (row.tenant_id) {
     const options = await loadTenantBookingOptions(supabase, {
       tenantId: row.tenant_id as string,
       table: 'roofing_measurements',
@@ -147,56 +136,25 @@ export default async function RoofBookingPage(props: {
           />
         ) : null}
 
-        {/* Thank-you video — enlarged + centred (hero of this page). */}
-        <SheetSection eyebrow="Thank you" eyebrowAccent>
-          <div style={{ marginTop: 14, display: 'grid', gap: 14, justifyItems: 'center', textAlign: 'center' }}>
-            <div className="qm-print-hide" style={{ width: '100%', maxWidth: 720 }}>
-              <TrustVideo
-                src={videos.thankyou}
-                title={tradieName}
-                caption="A thank-you message from your tradie"
-              />
-            </div>
-            <p style={{ margin: 0, maxWidth: 560, fontSize: 14, lineHeight: 1.55, color: 'var(--text-sec)' }}>
-              Thanks, we have received your $99 site-visit payment.{' '}
-              {scheduledAt
-                ? `${tradieName} will be in touch to confirm the exact time.`
-                : 'Pick a time below and your visit is locked in.'}
-            </p>
+        {/* The ONLY job of this page: pick a date, then a time. The thank-you
+            video, the booked confirmation and the add-to-calendar links live
+            on /q/roof/<token>/thanks, which the booking POST redirects to. */}
+        <SheetSection eyebrow="Book your site visit" eyebrowAccent>
+          <p style={{ margin: '14px 0 0', maxWidth: 560, fontSize: 14, lineHeight: 1.55, color: 'var(--text-sec)' }}>
+            Payment received. Choose a date, then a time that suits — your visit
+            is locked in as soon as you confirm.
+          </p>
+          <div style={{ marginTop: 14 }}>
+            <BookingCalendar
+              days={calDays}
+              endpoint={`/api/q/book/roof/${token}`}
+              tzLabel={shortTzLabel(tz)}
+              labels={{ idle: 'Book this time →', submitting: 'Booking…', done: 'Booked ✓' }}
+            />
           </div>
         </SheetSection>
 
-        {/* Booking */}
-        <SheetSection eyebrow={scheduledAt ? 'Your site visit' : 'Book your site visit'} eyebrowAccent>
-          {scheduledAt ? (
-            <div style={{ marginTop: 14, display: 'grid', gap: 16, maxWidth: 520 }}>
-              <p style={{ margin: 0, fontSize: 14, lineHeight: 1.55, color: 'var(--text-sec)' }}>
-                Your site visit is booked for{' '}
-                <strong style={{ color: 'var(--text-pri)' }}>{slotLabel}</strong>
-                . {tradieName} will be in touch to confirm the exact time.
-              </p>
-              {calLinks ? (
-                <AddToCalendar
-                  google={calLinks.google}
-                  outlook={calLinks.outlook}
-                  outlookOffice={calLinks.outlookOffice}
-                  icsHref={`/q/roof/${token}/visit.ics`}
-                />
-              ) : null}
-            </div>
-          ) : (
-            <div style={{ marginTop: 14 }}>
-              <BookingCalendar
-                days={calDays}
-                endpoint={`/api/q/book/roof/${token}`}
-                tzLabel={shortTzLabel(tz)}
-                labels={{ idle: 'Book this time →', submitting: 'Booking…', done: 'Booked ✓' }}
-              />
-            </div>
-          )}
-        </SheetSection>
-
-        {/* Back to the quote — visible in both booked and unbooked states. */}
+        {/* Back to the quote */}
         <SheetSection>
           <a href={`/q/roof/${token}`} className="qm-ghost" style={GHOST_LINK}>
             ← Back to your quote

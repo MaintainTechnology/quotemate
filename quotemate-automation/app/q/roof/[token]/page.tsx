@@ -34,6 +34,7 @@ import type {
   RoofStructurePrice,
 } from '@/lib/roofing/types'
 import { partitionRoofQuote, resolveEffectiveIndices } from '@/lib/roofing/selection'
+import { jobDetailBullets } from '@/lib/roofing/quote-bullets'
 import { structureStaticMapPath } from '@/lib/roofing/structure-images'
 import {
   ZONE_COLOR_HEX,
@@ -61,10 +62,9 @@ import { RoofLayoutMapFigure } from '../../_chrome/RoofLayoutMapFigure'
 import { TradieJobBanner } from '../../_chrome/TradieJobBanner'
 import { AcceptBlock } from '../../_chrome/AcceptBlock'
 import { resolveAcceptView } from '@/lib/quote/accept'
-import { loadTenantBookingOptions, formatVisitSlot } from '@/lib/quote/trade-booking'
+import { formatVisitSlot } from '@/lib/quote/trade-booking'
 import { visitCalendarLinks } from '@/lib/quote/calendar-links'
 import { tzForState } from '@/lib/quote/availability'
-import { SlotPicker } from '@/app/q/[token]/book/SlotPicker'
 import { tradeIcon } from '../../_chrome/icons'
 import {
   QuoteSheet,
@@ -91,6 +91,24 @@ import { tradieProfile } from '@/lib/quote/tradie-profile'
 export const dynamic = 'force-dynamic'
 
 const MONO: CSSProperties = { fontFamily: 'var(--font-mono)' }
+
+/** Primary yellow CTA. Module-level so both the five-section branch and the
+ *  legacy branch can use it. Dark ink on the accent — white would be ~1.4:1. */
+const CTA_LINK: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 8,
+  border: '1px solid transparent',
+  background: 'var(--accent)',
+  color: 'var(--accent-ink)',
+  padding: '13px 20px',
+  fontFamily: 'var(--font-sans)',
+  fontWeight: 700,
+  fontSize: 13,
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+  textDecoration: 'none',
+}
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -576,16 +594,9 @@ export default async function RoofingQuotePage({
     }
   }
 
-  // Self-serve visit booking (mig 167): once the $99 is paid the customer picks
-  // a half-day window right here. Load the tradie's open windows ONLY in that
-  // state so an unpaid / already-booked view costs no extra query.
-  let roofBookingOptions: Awaited<ReturnType<typeof loadTenantBookingOptions>> = []
-  if (roofPaidAt && !roofScheduledAt && row.tenant_id) {
-    roofBookingOptions = await loadTenantBookingOptions(supabase, {
-      tenantId: row.tenant_id,
-      table: 'roofing_measurements',
-    })
-  }
+  // Self-serve visit booking (mig 167) now happens on /q/roof/<token>/book,
+  // which loads the tradie's open windows itself — this page only links to it,
+  // so no booking query runs here at all.
   const roofAcceptView = resolveAcceptView({
     token,
     tier: 'better',
@@ -721,6 +732,9 @@ export default async function RoofingQuotePage({
       {
         title: 'Job details',
         body: featuredTier?.scope ?? 'Scope confirmed with you at the site visit.',
+        // `quote` is partition.narrowed — included structures only, so the
+        // measured bullets describe exactly what's being priced.
+        list: jobDetailBullets(quote, roofKey),
       },
       {
         title: 'Your tradie',
@@ -1084,7 +1098,9 @@ export default async function RoofingQuotePage({
         <AcceptBlock token={token} view={roofAcceptView} alreadyAccepted={!!roofAcceptedAt} />
 
         {/* Self-serve visit booking — appears once the $99 site visit is paid.
-            Pick a half-day window (or see the booked one). Mig 167. */}
+            The picker itself lives on the dedicated /book page since
+            2026-07-22 (spec booking-three-page-split R3), so this is a link,
+            not an inline picker. Mig 167. */}
         {roofPaidAt ? (
           <SheetSection eyebrow={roofScheduledAt ? 'Visit booked' : 'Pick your visit time'} eyebrowAccent>
             {roofScheduledAt ? (
@@ -1100,12 +1116,9 @@ export default async function RoofingQuotePage({
                 <p style={{ margin: '0 0 14px', fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-sec)' }}>
                   Deposit received — pick a time that suits and we&apos;ll lock in your site visit.
                 </p>
-                <SlotPicker
-                  token={token}
-                  options={roofBookingOptions}
-                  endpoint={`/api/q/book/roof/${token}`}
-                  labels={{ idle: 'Book this time →', submitting: 'Booking…', done: 'Booked ✓' }}
-                />
+                <a href={`/q/roof/${token}/book`} className="qm-cta" style={CTA_LINK}>
+                  Pick your visit time →
+                </a>
               </div>
             )}
           </SheetSection>
