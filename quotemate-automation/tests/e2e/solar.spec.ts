@@ -32,15 +32,16 @@ test.describe('Solar review gate — API contracts', () => {
     expect(body.error).toBe('unauthorized')
   })
 
-  test('deposit short-link rejects an invalid tier with 400', async ({ request }) => {
-    const res = await request.get(`/r/solar/${SAMPLE_TOKEN}/platinum`, {
-      maxRedirects: 0,
-    })
-    expect(res.status()).toBe(400)
-    expect(await res.text()).toContain('Invalid tier')
-  })
-
-  test('deposit short-link 404s a known-good tier on an unknown token', async ({
+  // /r/solar/[token]/[tier] was DELETED on 2026-07-22. It was unreachable dead
+  // code: it selected `token`, `paid_at`, `scheduled_at` and `stripe_links`
+  // from solar_estimates — none of which exist on that table (the real column
+  // is `public_token`) — so it 404'd before ever reaching its redirect, and its
+  // targets /q/solar/[token]/{book,paid} were never built. Nothing in the app
+  // linked to it. Solar pays and books on the GENERIC quote surface via the
+  // twin quotes row (lib/solar/persist-helpers.ts writes share_token =
+  // the estimate's public_token), which /r/[token]/[tier] already covers and
+  // app/r/[token]/[tier]/route.test.ts already tests.
+  test('the solar deposit short-link is gone — solar pays via the generic /r route', async ({
     request,
   }) => {
     const res = await request.get(`/r/solar/${SAMPLE_TOKEN}/better`, {

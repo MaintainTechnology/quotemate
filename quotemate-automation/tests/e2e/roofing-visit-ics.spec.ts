@@ -94,8 +94,12 @@ test.describe('Roofing booking add-to-calendar (.ics + web links)', () => {
     expect(resp.status()).toBe(404)
   })
 
-  test('the /book page renders correctly-formed add-to-calendar links', async ({ page }) => {
-    await page.goto(`/q/roof/${token}/book`)
+  test('the /thanks page renders correctly-formed add-to-calendar links', async ({ page }) => {
+    // Moved from /book on 2026-07-22: the booking page now only picks a time,
+    // and the confirmation — including these links — lives on /thanks
+    // (spec booking-three-page-split R3/R4). The seeded row is already
+    // scheduled, so /book would forward here anyway.
+    await page.goto(`/q/roof/${token}/thanks`)
 
     // Primary: the reliable .ics download route.
     const ics = page.getByRole('link', { name: 'Add to calendar' })
