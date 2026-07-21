@@ -5,13 +5,8 @@
 // options + a measurement-detail bullet list (spec specs/quote-pdf-branding.md
 // R4/R5). Pure — unit-tested.
 
-import type {
-  MultiRoofQuote,
-  RoofStructurePrice,
-  RoofMetrics,
-  RoofMaterial,
-  RoofingPriceTier,
-} from './types'
+import type { MultiRoofQuote, RoofStructurePrice, RoofingPriceTier } from './types'
+import { ROOF_SCOPE_BULLETS, jobDetailBullets, measurementBullets } from './quote-bullets'
 import { applySolarToTiers } from '../sms/roofing-compose'
 import type { RoofDisplayRow } from './selection'
 import { ZONE_COLOR_HEX, type ZoneColor, type LayoutMaterialItem } from './layout-plan'
@@ -141,52 +136,6 @@ export type RoofReportInput = {
 /** A structure + its display state, for the "Structures measured" table. */
 type StructureLine = { structure: RoofStructurePrice; state: 'priced' | 'inspection' | 'excluded' }
 
-const MATERIAL_LABELS: Record<RoofMaterial, string> = {
-  colorbond_corrugated: 'COLORBOND corrugated',
-  colorbond_trimdek: 'COLORBOND Trimdek',
-  colorbond_spandek: 'COLORBOND Spandek',
-  colorbond_kliplok: 'COLORBOND Kliplok',
-  concrete_tile: 'concrete tile',
-  terracotta_tile: 'terracotta tile',
-  cement_sheet: 'cement sheet',
-  unknown: 'existing material',
-}
-
-const FORM_LABELS: Record<string, string> = {
-  gable: 'gable',
-  hip: 'hip',
-  skillion: 'skillion',
-  gable_hip: 'gable/hip',
-  complex: 'complex',
-  unknown: '',
-}
-
-/** Per-structure measurement bullets — only the fields the provider returned. */
-function structureMeasurementBullet(s: RoofStructurePrice): string {
-  const m: Partial<RoofMetrics> = s.metrics ?? {}
-  const bits: string[] = []
-  if (m.sloped_area_m2 != null) bits.push(`~${Math.round(m.sloped_area_m2)} m² sloped area`)
-  else if (m.footprint_m2 != null) bits.push(`~${Math.round(m.footprint_m2)} m² footprint`)
-  const form = m.form ? FORM_LABELS[m.form] : ''
-  if (form) bits.push(`${form} roof form`)
-  if (m.pitch_degrees != null) bits.push(`~${Math.round(m.pitch_degrees)}° pitch`)
-  if (m.storeys != null) bits.push(`${m.storeys}-storey`)
-  if (m.ridge_lm != null) bits.push(`~${Math.round(m.ridge_lm)} lm ridge/hip`)
-  const mat = s.inputs?.material ? MATERIAL_LABELS[s.inputs.material] : ''
-  if (mat) bits.push(mat)
-  return `${s.label}: ${bits.length ? bits.join(', ') : 'measured from aerial imagery'}`
-}
-
-function measurementBullets(q: MultiRoofQuote): string[] {
-  const out: string[] = [
-    `Approx. ~${Math.round(q.combined.area_m2)} m² of sloped roof measured across ${
-      q.structures.length
-    } structure${q.structures.length === 1 ? '' : 's'} from aerial imagery.`,
-  ]
-  for (const s of q.structures) out.push(structureMeasurementBullet(s))
-  return out
-}
-
 function structureRows(lines: StructureLine[]): string {
   return lines
     .map(({ structure: s, state }) => {
@@ -229,18 +178,6 @@ function structureLines(input: RoofReportInput): StructureLine[] {
     state: s.price.routing.decision === 'inspection_required' ? 'inspection' : 'priced',
   }))
 }
-
-/** Standard roofing inclusions — the bulleted scope of works (R4). */
-const ROOF_SCOPE_BULLETS = [
-  'Install temporary safety rail / fall-arrest and provide all OHS management as required.',
-  'Remove existing roof areas as measured and described above.',
-  'Replace rotten or insufficient roof battens as required and batten-screw as required.',
-  'Provide increased tie-downs from rafters to top plates as required for certification.',
-  'Supply and install new roof sheets, flashings and capping; scribe to the profile of sheets.',
-  'Supply and install Dektite flashings to roof penetrations as required.',
-  'Remove safety rail and all waste from site on completion.',
-  'Installation warranty plus manufacturer’s material warranty (see manufacturer for details).',
-]
 
 /** Per-trade default "Please Note" disclaimers (R7), merged with the routing reason. */
 const ROOF_PLEASE_NOTE = [
@@ -530,7 +467,14 @@ export function buildRoofCustomerReportHtml(input: RoofCustomerReportInput): str
       note: `${overviewBits.join(', ')}. A licensed roofer confirms everything on site before any work is booked.`,
       html: figures,
     },
-    { title: 'Job details', note: featured?.scope ?? 'Scope confirmed with you at the site visit.' },
+    {
+      title: 'Job details',
+      note: featured?.scope ?? 'Scope confirmed with you at the site visit.',
+      // Same bullets the customer page renders (lib/roofing/quote-bullets.ts) —
+      // the scope sentence alone left both surfaces thinner than the measured
+      // detail we already hold.
+      bullets: jobDetailBullets(q, featured?.tier),
+    },
     input.tradie ? { title: 'Your tradie', html: renderTradieBlock(input.tradie) } : null,
     { title: 'Your price', html: priceHtml },
     {

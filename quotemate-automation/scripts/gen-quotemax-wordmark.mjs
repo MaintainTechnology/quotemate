@@ -54,11 +54,15 @@ const poly = (pts) => `M${pts.map(([x, y]) => `${n(x)} ${n(y)}`).join('L')}Z`
 // arm reads as rising ("MAX") and keeps the tick compact next to the letters.
 // Terminals are cut square (perpendicular), matching the flat letter endings.
 // Returned outlined, not stroked, so it survives any scale or export.
-function tickPath({ thickness = STEM, height = CAP } = {}) {
+function tickPath({ thickness = STEM, height = CAP, a1 = 45, a2 = 60, l1 = 73.5, l2 = 176, flatBoth = false } = {}) {
   const t = thickness / 2
-  const P0 = [0, 74]
-  const P1 = [52, 126]
-  const P2 = [140, -26.4]
+  const rad = (deg) => (deg * Math.PI) / 180
+  // a1 = short arm's descent angle, a2 = long arm's rise angle, both from
+  // horizontal. Steeper angles narrow the tick without shortening it — needed
+  // when it has to fit between two stems rather than sit beside a word.
+  const P0 = [0, 0]
+  const P1 = [l1 * Math.cos(rad(a1)), l1 * Math.sin(rad(a1))]
+  const P2 = [P1[0] + l2 * Math.cos(rad(a2)), P1[1] - l2 * Math.sin(rad(a2))]
 
   const unit = ([ax, ay], [bx, by]) => {
     const dx = bx - ax
@@ -85,13 +89,13 @@ function tickPath({ thickness = STEM, height = CAP } = {}) {
   const turn = Math.acos(Math.max(-1, Math.min(1, dot)))
   const miter = t / Math.sin((Math.PI - turn) / 2)
 
-  const build = (end) => [
-    off(P0, n1, t), // outer start
+  const build = (end, start = P0) => [
+    off(start, n1, t), // outer start
     [P1[0] + bis[0] * miter, P1[1] + bis[1] * miter], // outer vertex
     off(end, n2, t), // outer end
     off(end, n2, -t), // inner end
     [P1[0] - bis[0] * miter, P1[1] - bis[1] * miter], // inner vertex
-    off(P0, n1, -t), // inner start
+    off(start, n1, -t), // inner start
   ]
 
   // The long arm's tip is cut HORIZONTALLY, not perpendicular to the arm, so it
@@ -100,7 +104,13 @@ function tickPath({ thickness = STEM, height = CAP } = {}) {
   // tip floating at an arbitrary angle — the defect in the reference artwork.
   // Done by over-running the arm past the cap line and clipping it off there.
   const capY = Math.min(...build(P2).map((p) => p[1]))
-  const overrun = build([P2[0] + d2[0] * 70, P2[1] + d2[1] * 70])
+  // flatBoth also over-runs the SHORT arm up past the cap line, so it too is
+  // cut flat there. That keeps the M's top edge continuous when the tick is
+  // standing in for the middle stroke, at the cost of some tick character.
+  const overrun = build(
+    [P2[0] + d2[0] * 70, P2[1] + d2[1] * 70],
+    flatBoth ? [P0[0] - d1[0] * 200, P0[1] - d1[1] * 200] : P0
+  )
 
   const pts = []
   for (let i = 0; i < overrun.length; i++) {
@@ -195,7 +205,16 @@ function glyphE(w = 146) {
   }
 }
 
-function glyphM(w = 204) {
+function glyphM(w = 204, { wedge = true } = {}) {
+  // wedge:false leaves the two stems only, so a tick can occupy the middle
+  // outright. Overlaying a tick on the intact wedge always strands slivers of
+  // it between the tick's arms — no knockout width hides them.
+  if (!wedge) {
+    return {
+      w,
+      paths: [{ d: `M0 0H${STEM}V${CAP}H0Z` }, { d: `M${n(w - STEM)} 0H${n(w)}V${CAP}H${n(w - STEM)}Z` }],
+    }
+  }
   const wedgeL = STEM - 10
   const apexX = w / 2
   const apexY = 152
@@ -269,7 +288,12 @@ function layout(glyphs) {
   return { placed, width: x + glyphs[glyphs.length - 1].w }
 }
 
-function wordmark({ tickInQ = false } = {}) {
+// The tick, re-cut steep enough to fit between the M's two stems.
+const NARROW = tickPath({ a1: 58, a2: 72 })
+const NARROW_V = tickPath({ a1: 58, a2: 72, flatBoth: true })
+const M_WEDGELESS_W = STEM * 2 + NARROW.w
+
+function wordmark({ tickInQ = false, mWedge = true, mWidth = M_WEDGELESS_W } = {}) {
   const Q = tickInQ ? { ch: 'Q', ...glyphQ({ w: 180, counterW: 72 }) } : { ch: 'Q', ...glyphQ() }
   const glyphs = [
     Q,
@@ -277,7 +301,7 @@ function wordmark({ tickInQ = false } = {}) {
     { ch: 'O', ...glyphO() },
     { ch: 'T', ...glyphT() },
     { ch: 'E', ...glyphE() },
-    { ch: 'M', ...glyphM() },
+    { ch: 'M', ...(mWedge ? glyphM() : glyphM(mWidth, { wedge: false })) },
     { ch: 'A', ...glyphA() },
     { ch: 'X', ...glyphX() },
   ]
@@ -397,7 +421,35 @@ function variantD(ink, { halo = null } = {}) {
   }
 }
 
-const VARIANTS = { a: variantA, b: variantB, c: variantC, d: variantD }
+// E — the tick IS the M's middle stroke. The wedge is gone rather than hidden,
+// so there is nothing left to strand: left stem, tick, right stem, two clean
+// counters. Tip still lands flat on the cap line.
+function variantE(ink) {
+  const { placed, width } = wordmark({ mWedge: false })
+  const m = placed.find((p) => p.g.ch === 'M')
+  return {
+    w: width,
+    h: DESC,
+    body:
+      render(placed, ink) +
+      `<g transform="translate(${n(m.x + STEM)},0)"><path d="${NARROW.d}" fill="${ACCENT}"/></g>`,
+  }
+}
+
+// F — as E, but both arms run to the cap line so the M keeps an unbroken top.
+function variantF(ink) {
+  const { placed, width } = wordmark({ mWedge: false, mWidth: STEM * 2 + NARROW_V.w })
+  const m = placed.find((p) => p.g.ch === 'M')
+  return {
+    w: width,
+    h: DESC,
+    body:
+      render(placed, ink) +
+      `<g transform="translate(${n(m.x + STEM)},0)"><path d="${NARROW_V.d}" fill="${ACCENT}"/></g>`,
+  }
+}
+
+const VARIANTS = { a: variantA, b: variantB, c: variantC, d: variantD, e: variantE, f: variantF }
 
 function svg(variant, { ink = INK, bg = null, pad = 40 } = {}) {
   const v = VARIANTS[variant](ink)

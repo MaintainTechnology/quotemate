@@ -29,6 +29,9 @@ import {
 } from '../_chrome/parts'
 import { tradieProfile } from '@/lib/quote/tradie-profile'
 import { jobDetailsSentence } from '@/lib/quote/scope-short'
+import { jobDetailBullets } from '@/lib/roofing/quote-bullets'
+import { resolveRoofRenderSelection } from '@/lib/roofing/selection'
+import type { MultiRoofQuote } from '@/lib/roofing/types'
 import {
   INSPECTION_FEE_AUD,
   clampDepositPct,
@@ -251,14 +254,24 @@ export default async function PublicQuotePage(props: {
   // ?b=1) instead of geocoding the address text — on large/rural parcels the
   // geocode pin regularly lands on the wrong building.
   let roofHeroMapPath: string | null = null
+  // Section 02 "Job details" bullets — the measured detail this page used to
+  // leave behind on the measurement. Same row, wider projection: no extra query.
+  let roofQuote: MultiRoofQuote | null = null
   if (isRoofing) {
     const { data: linkedRoof } = await supabase
       .from('roofing_measurements')
-      .select('public_token')
+      .select('public_token, quote, included_indices, confirmed_structure')
       .eq('quote_share_token', token)
       .maybeSingle()
     if (linkedRoof?.public_token) {
       roofHeroMapPath = `/api/roofing/q/${linkedRoof.public_token}/static-map?b=1`
+    }
+    if (linkedRoof) {
+      // Narrowed to the included structures — the same selection the roofing
+      // PDF prices, so the bullets can't describe a shed nobody is paying for.
+      roofQuote = resolveRoofRenderSelection(
+        linkedRoof as Parameters<typeof resolveRoofRenderSelection>[0],
+      ).quote
     }
   }
 
@@ -940,6 +953,8 @@ export default async function PublicQuotePage(props: {
       {
         title: 'Job details',
         body: jobSentence ?? 'Scope confirmed with you before any work is booked.',
+        // Empty for a quote with no linked measurement → today's sentence only.
+        list: jobDetailBullets(roofQuote, featuredKey),
       },
       {
         title: 'Your tradie',
