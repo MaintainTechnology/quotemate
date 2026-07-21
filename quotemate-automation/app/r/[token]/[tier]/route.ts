@@ -8,14 +8,13 @@
 //
 //   price hold expired            → /q/<token>       (blocked: refresh needed)
 //   already paid                  → /q/<token>/paid  (never re-charge)
-//   INSPECTION ($99), not paid    → Stripe Checkout  (PAY-FIRST since
-//                                   2026-07-17, five-sections R7/D1a: pay →
-//                                   pick a time → thank-you, matching the
-//                                   dedicated trade surfaces)
-//   deposit tier, NO slot yet     → /q/<token>/book?tier=<tier> (book-first)
-//   deposit tier, slot chosen     → Stripe Checkout (payment = the last step)
+//   tenant has NO bookable windows → /q/<token>?slots=0 (never charge into an
+//                                   empty calendar — see rule 3)
+//   otherwise, not paid           → Stripe Checkout  (PAY-FIRST on every
+//                                   funnel since 2026-07-22: pay → pick a time
+//                                   → thank-you)
 //
-// Two hardening rules live here (both surfaced 2026-07-01):
+// Three hardening rules live here (1 and 2 surfaced 2026-07-01):
 //
 //   1. EXPIRY GATE. An expired price hold must not lead into booking or
 //      checkout — the customer is bounced back to the quote page, which
@@ -30,11 +29,22 @@
 //      So on the stripe path we MINT A FRESH Session per click instead of
 //      redirecting to the stored, stale URL. The realised early-booking
 //      discount (if any) is re-applied so the price is correct.
+//
+//   3. NO-SLOTS GUARD (2026-07-22). Pay-first means the customer commits
+//      BEFORE seeing any times. If the tenant has published no bookable
+//      windows, charging them sells a visit nobody can schedule — so we
+//      refuse and send them back to the quote with ?slots=0, which renders
+//      "we'll text you to arrange a time" and takes no money. This also
+//      closes the old redirect loop: under book-first this case returned
+//      kind:'book' → /q/<token>/book, whose no-slots CTA pointed straight
+//      back at /r, so the customer could never reach checkout at all.
 
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest } from 'next/server'
-import { payRedirectTarget } from '@/lib/quote/booking'
+import { canTakePayment, payRedirectTarget } from '@/lib/quote/booking'
 import { isPriceHoldExpired } from '@/lib/quote/hold'
+import { resolveBookingOptions, buildBookedKeys } from '@/lib/quote/slots'
+import { tzForState } from '@/lib/quote/availability'
 import { pipelineLog } from '@/lib/log/pipeline'
 import {
   createCheckoutSessionForTier,
@@ -71,9 +81,9 @@ export type PayRedirectDecision =
   | { kind: 'expired'; url: string }
   /** Already paid — thank-you page. */
   | { kind: 'paid'; url: string }
-  /** No slot chosen yet — pick a time first. */
-  | { kind: 'book'; url: string }
-  /** Deposit is the last step — caller mints a FRESH Session (no static URL). */
+  /** Tenant has no bookable windows — back to the quote, uncharged. */
+  | { kind: 'no-slots'; url: string }
+  /** Payment is the next step — caller mints a FRESH Session (no static URL). */
   | { kind: 'stripe' }
 
 /**
@@ -90,8 +100,12 @@ export function resolvePayRedirect(input: {
   expired: boolean
   token: string
   appUrl: string
+  /** How many bookable windows the tenant currently has, resolved by the
+   *  caller with resolveBookingOptions — the SAME resolver the booking page
+   *  renders from, so this answer and the calendar can never disagree. */
+  bookableCount: number
 }): PayRedirectDecision {
-  const { tier, paid, scheduledAt, expired, token, appUrl } = input
+  const { tier, paid, scheduledAt, expired, token, appUrl, bookableCount } = input
 
   // Expiry gate — priced tiers only. Inspection has no price hold, and an
   // already-paid quote has transacted, so neither is blocked.
@@ -103,9 +117,14 @@ export function resolvePayRedirect(input: {
   if (target === 'paid') {
     return { kind: 'paid', url: `${appUrl}/q/${token}/paid?tier=${tier}&already=1` }
   }
-  if (target === 'book') {
-    return { kind: 'book', url: `${appUrl}/q/${token}/book?tier=${tier}` }
+
+  // About to charge — refuse if there is nothing to book afterwards. Checked
+  // AFTER 'paid' so an already-paid customer is never bounced: they are not
+  // being charged again, and their booking page handles the empty case itself.
+  if (!canTakePayment({ bookableCount })) {
+    return { kind: 'no-slots', url: `${appUrl}/q/${token}?slots=0` }
   }
+
   return { kind: 'stripe' }
 }
 
@@ -265,6 +284,45 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
       quote.created_at as string | null,
     )
 
+  // How many windows the customer will actually be able to choose from after
+  // paying. Derived with resolveBookingOptions — the SAME resolver the booking
+  // page renders from — so the guard and the calendar can never disagree.
+  // Best-effort: a lookup failure must not block a legitimate payment, so an
+  // unknown count is treated as "slots exist" and the customer proceeds.
+  let bookableCount = 1
+  if (quote.tenant_id) {
+    try {
+      const { data: tenantRow } = await db()
+        .from('tenants')
+        .select('available_slots, default_availability, state')
+        .eq('id', quote.tenant_id)
+        .maybeSingle()
+      if (tenantRow) {
+        const tz = tzForState((tenantRow as { state?: string | null }).state ?? null)
+        const { data: bookedRows } = await db()
+          .from('quotes')
+          .select('scheduled_at, scheduled_window')
+          .eq('tenant_id', quote.tenant_id)
+          .in('booking_state', ['reserved', 'booked'])
+          .not('scheduled_at', 'is', null)
+          .neq('id', quote.id)
+        bookableCount = resolveBookingOptions({
+          availability:
+            (tenantRow as { default_availability?: unknown }).default_availability ?? null,
+          availableSlots: (tenantRow as { available_slots?: unknown }).available_slots,
+          timezone: tz,
+          bookedKeys: buildBookedKeys(bookedRows ?? [], tz),
+        }).length
+      }
+    } catch (e: unknown) {
+      pipelineLog('dispatch').err(
+        'slot count lookup failed — allowing payment through',
+        e instanceof Error ? e.message : String(e),
+        { quote_id: quote.id },
+      )
+    }
+  }
+
   const decision = resolvePayRedirect({
     tier,
     paid: !!quote.paid_at,
@@ -272,6 +330,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
     expired,
     token,
     appUrl: process.env.APP_URL!,
+    bookableCount,
   })
 
   if (decision.kind !== 'stripe') {

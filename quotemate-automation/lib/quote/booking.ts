@@ -1,19 +1,23 @@
 // Funnel-order decisions for the pay short-link.
 //
-// DEPOSIT tiers (good/better/best) are BOOK-FIRST, PAY-LAST (WP6 reorder):
-// quote → pick a time (held on the quote) → pay deposit → booking
-// confirmed. Enforced at the pay short-link layer so it covers BOTH the
-// on-page tier buttons AND the pay links already sitting in customers'
-// SMS threads ("force book-first for all").
+// EVERY funnel is PAY-FIRST, BOOK-SECOND (2026-07-22 reversal):
+//   quote → Stripe → /book (pick a time) → /thanks (confirmed).
+// Enforced at the pay short-link layer so it covers BOTH the on-page tier
+// buttons AND the pay links already sitting in customers' SMS threads.
 //
-// The $99 INSPECTION fee is PAY-FIRST, BOOK-SECOND (spec
-// customer-quote-five-sections R7, D1a — Jon: pay $99 → Stripe → booking
-// page → thank-you). This matches the dedicated trade surfaces
-// (app/api/q/book/[trade]/[token]: "these jobs book AFTER paying"), and
-// the slot-hold rationale doesn't apply: the $99 is a flat fee, and a
-// paid-but-unscheduled inspection is chased by the /paid page's redirect
-// into the slot picker. [History: inspection was book-first 2026-07-08 →
-// 2026-07-17.]
+// This unifies what were three different orders: the $99 inspection and the
+// dedicated trade surfaces (roofing, painting) were already pay-first
+// (app/api/q/book/[trade]/[token]: "these jobs book AFTER paying"); the
+// deposit tiers were book-first under the WP6 reorder. One order means one
+// three-page shape to build and maintain.
+//
+// [History: inspection book-first 2026-07-08 → 2026-07-17; deposit tiers
+// book-first (WP6) until 2026-07-22. See
+// docs/superpowers/specs/2026-07-22-booking-three-page-split-design.md R5.]
+//
+// The trade-off pay-first carries — the customer commits before seeing any
+// times — is bounded by canTakePayment() below: a tenant with zero published
+// windows is never charged.
 //
 // Pure + unit-tested (booking.test.ts) so the funnel order can't silently
 // regress. No DB / Stripe / Next here.
@@ -23,29 +27,24 @@ import { BOOKING_STATE, type BookingState } from './hold'
 export type PayRedirectKind =
   /** Already paid — send to the thank-you / confirmed page. */
   | 'paid'
-  /** Not paid and no slot chosen yet — must pick a time FIRST. */
-  | 'book'
-  /** Payment is the next step → Stripe (deposit tiers: slot already chosen;
-   *  the $99 inspection: always — it is pay-first). */
+  /** Payment is the next step → Stripe. */
   | 'stripe'
 
 export type PayRedirectInput = {
   paid: boolean
+  /** Kept in the shape for the caller's convenience (and for legacy rows that
+   *  chose a slot under the old book-first order). Pay-first no longer branches
+   *  on it — an unpaid quote pays next whether or not a time is held. */
   scheduledAt: string | null | undefined
-  /** Stripe metadata tier. 'inspection' routes pay-first (D1a); the deposit
-   *  tiers stay book-first. */
+  /** Stripe metadata tier — 'good' | 'better' | 'best' | 'inspection'. */
   tier: string
 }
 
 /**
  * Where should /r/<token>/<tier> send the customer?
  *
- *  already paid              → 'paid'   (NEVER re-charge — including the $99
- *                              inspection fee; see ordering note below)
- *  inspection, not paid       → 'stripe' (pay-first: the $99 IS the product;
- *                              time is picked after payment — D1a)
- *  deposit, no slot yet       → 'book'   (choose a time first)
- *  deposit, slot chosen       → 'stripe' (payment is the last step)
+ *  already paid → 'paid'   (NEVER re-charge — including the $99 inspection fee)
+ *  otherwise    → 'stripe' (payment is the FIRST step on every funnel)
  *
  * ORDERING MATTERS: paid is checked FIRST. /r mints a FRESH payable Session
  * per click (2026-07-01), so routing a paid quote to 'stripe' would mint a
@@ -53,9 +52,20 @@ export type PayRedirectInput = {
  */
 export function payRedirectTarget(input: PayRedirectInput): PayRedirectKind {
   if (input.paid) return 'paid'
-  if (input.tier === 'inspection') return 'stripe'
-  if (!input.scheduledAt) return 'book'
   return 'stripe'
+}
+
+/**
+ * May we take money for this job yet?
+ *
+ * Pay-first means the customer commits BEFORE seeing any times, so a tenant
+ * with zero published windows must not be charged — they would have paid for a
+ * visit nobody can schedule. The caller resolves the tenant's bookable windows
+ * with the same resolver the booking page renders from, so this answer and the
+ * calendar the customer lands on can never disagree.
+ */
+export function canTakePayment(input: { bookableCount: number }): boolean {
+  return input.bookableCount > 0
 }
 
 /**
@@ -103,17 +113,21 @@ export function shouldFinaliseBookingOnPaid(
 
 /**
  * Where /q/<token>/paid sends the customer once the paid state is known
- * (webhook, or the page's own session_id verification):
- *   paid + no slot → 'book'  (auto-navigate to the slot picker — the $99
- *                    inspection is date-less at payment time, and legacy
- *                    deposits paid off old SMS links can be too)
- *   otherwise      → 'stay'  (booked confirmation, or payment still pending)
+ * (webhook, or the page's own session_id verification).
+ *
+ * /paid is a ROUTER, not a rendered surface — it exists only to absorb
+ * Stripe's success_url and run the webhook-race guard before handing off to
+ * one of the three real pages:
+ *   paid + no slot → 'book'   (pick a time)
+ *   paid + slot    → 'thanks' (confirmed)
+ *   not paid yet   → 'quote'  (payment still settling; never strand them here)
  */
 export function paidPageTarget(input: {
   paid: boolean
   scheduledAt: string | null | undefined
-}): 'book' | 'stay' {
-  return input.paid && !input.scheduledAt ? 'book' : 'stay'
+}): 'book' | 'thanks' | 'quote' {
+  if (!input.paid) return 'quote'
+  return input.scheduledAt ? 'thanks' : 'book'
 }
 
 // ── Off-platform "book directly on the tradie's calendar" option ────

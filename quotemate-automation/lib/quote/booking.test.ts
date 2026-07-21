@@ -1,15 +1,19 @@
 // Funnel-order regression coverage.
 //
-// Deposit tiers: BOOK FIRST, PAY LAST (WP6 reorder) — locks the order so a
-// future change can't silently put payment back before booking.
-// The $99 inspection: PAY FIRST, BOOK SECOND (spec
-// customer-quote-five-sections R7, D1a — pay $99 → Stripe → booking page →
-// thank-you), matching the dedicated trade surfaces.
+// PAY FIRST, BOOK SECOND on every funnel (2026-07-22 reversal): quote → Stripe
+// → /book (pick a time) → /thanks. Locks the order so a future change can't
+// silently put booking back before payment.
+//
+// [History: deposit tiers were BOOK-FIRST, PAY-LAST under the WP6 reorder
+// until 2026-07-22; the $99 inspection was already pay-first via
+// customer-quote-five-sections R7/D1a. See
+// docs/superpowers/specs/2026-07-22-booking-three-page-split-design.md R5.]
 
 import { describe, expect, it } from 'vitest'
 import { BOOKING_STATE } from './hold'
 import {
   bookingStateOnPaid,
+  canTakePayment,
   paidPageTarget,
   payRedirectTarget,
   resolveGoogleBookingUrl,
@@ -17,17 +21,17 @@ import {
   shouldFinaliseBookingOnPaid,
 } from './booking'
 
-describe('payRedirectTarget — the flip', () => {
-  it('not paid + no slot → book first (the whole point)', () => {
+describe('payRedirectTarget — pay-first on every funnel', () => {
+  it('not paid + no slot → Stripe (payment is now the FIRST step)', () => {
     expect(
       payRedirectTarget({ paid: false, scheduledAt: null, tier: 'better' }),
-    ).toBe('book')
+    ).toBe('stripe')
     expect(
       payRedirectTarget({ paid: false, scheduledAt: undefined, tier: 'good' }),
-    ).toBe('book')
+    ).toBe('stripe')
   })
 
-  it('not paid + slot already chosen → Stripe (deposit is the last step)', () => {
+  it('not paid + slot already chosen (legacy book-first row) → Stripe', () => {
     expect(
       payRedirectTarget({
         paid: false,
@@ -50,26 +54,10 @@ describe('payRedirectTarget — the flip', () => {
     ).toBe('paid')
   })
 
-  it('inspection $99 is PAY-FIRST — unpaid goes straight to Stripe (five-sections R7, D1a)', () => {
+  it('inspection $99 stays PAY-FIRST (five-sections R7, D1a)', () => {
     expect(
       payRedirectTarget({ paid: false, scheduledAt: null, tier: 'inspection' }),
     ).toBe('stripe')
-  })
-
-  it('inspection with a slot somehow pre-chosen still pays first (never bounced to /book)', () => {
-    expect(
-      payRedirectTarget({
-        paid: false,
-        scheduledAt: '2026-05-20T03:00:00.000Z',
-        tier: 'inspection',
-      }),
-    ).toBe('stripe')
-  })
-
-  it('deposit tiers stay BOOK-FIRST — the inspection flip must not leak (D1a scope)', () => {
-    for (const tier of ['good', 'better', 'best']) {
-      expect(payRedirectTarget({ paid: false, scheduledAt: null, tier })).toBe('book')
-    }
   })
 
   it('PAID inspection → thank-you, never a fresh $99 charge (double-charge guard)', () => {
@@ -86,6 +74,29 @@ describe('payRedirectTarget — the flip', () => {
         tier: 'inspection',
       }),
     ).toBe('paid')
+  })
+
+  it('never returns "book" for ANY input — the order cannot silently revert', () => {
+    for (const tier of ['good', 'better', 'best', 'inspection']) {
+      for (const paid of [true, false]) {
+        for (const scheduledAt of [null, '2026-05-20T03:00:00.000Z']) {
+          expect(payRedirectTarget({ paid, scheduledAt, tier })).not.toBe('book')
+        }
+      }
+    }
+  })
+})
+
+describe('canTakePayment — no-slots guard', () => {
+  it('allows the charge when the tenant has bookable windows', () => {
+    expect(canTakePayment({ bookableCount: 3 })).toBe(true)
+    expect(canTakePayment({ bookableCount: 1 })).toBe(true)
+  })
+
+  it('blocks the charge when the tenant has published none', () => {
+    // Pay-first means the customer commits before seeing any times — charging
+    // with zero windows sells a visit nobody can schedule.
+    expect(canTakePayment({ bookableCount: 0 })).toBe(false)
   })
 })
 
@@ -106,18 +117,19 @@ describe('resolveNextTier — which tier the post-booking pay step charges', () 
   })
 })
 
-describe('paidPageTarget — /q/[token]/paid routing after payment', () => {
-  it('paid with no slot → send the customer straight to the booking page (Jon: auto-navigate)', () => {
+describe('paidPageTarget — /q/[token]/paid is a router, not a page', () => {
+  it('paid with no slot → the booking page, to pick a time', () => {
     expect(paidPageTarget({ paid: true, scheduledAt: null })).toBe('book')
     expect(paidPageTarget({ paid: true, scheduledAt: undefined })).toBe('book')
   })
 
-  it('paid with a slot → stay and show the booked confirmation', () => {
-    expect(paidPageTarget({ paid: true, scheduledAt: '2026-07-10T02:00:00Z' })).toBe('stay')
+  it('paid with a slot → the thank-you page', () => {
+    expect(paidPageTarget({ paid: true, scheduledAt: '2026-07-10T02:00:00Z' })).toBe('thanks')
   })
 
-  it('not paid (webhook + session check both unresolved) → stay, never bounce', () => {
-    expect(paidPageTarget({ paid: false, scheduledAt: null })).toBe('stay')
+  it('not paid (webhook + session check both unresolved) → back to the quote', () => {
+    expect(paidPageTarget({ paid: false, scheduledAt: null })).toBe('quote')
+    expect(paidPageTarget({ paid: false, scheduledAt: '2026-07-10T02:00:00Z' })).toBe('quote')
   })
 })
 

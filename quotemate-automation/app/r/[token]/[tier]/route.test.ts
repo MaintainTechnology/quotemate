@@ -4,6 +4,10 @@ import { resolvePayRedirect, VALID_TIERS } from './route'
 const APP = 'https://www.quotemax.com.au'
 const token = 'tok_demo_123456'
 
+/** Every call needs a slot count now — pay-first must not charge into an empty
+ *  calendar. Default to "windows exist" so each test states only what it tests. */
+const SLOTS_OPEN = 6
+
 describe('VALID_TIERS', () => {
   it('accepts good/better/best/inspection only', () => {
     expect([...VALID_TIERS].sort()).toEqual(
@@ -21,6 +25,7 @@ describe('resolvePayRedirect', () => {
       expired: true,
       token,
       appUrl: APP,
+      bookableCount: SLOTS_OPEN,
     })
     expect(d).toEqual({ kind: 'expired', url: `${APP}/q/${token}` })
   })
@@ -35,6 +40,7 @@ describe('resolvePayRedirect', () => {
       expired: true,
       token,
       appUrl: APP,
+      bookableCount: SLOTS_OPEN,
     })
     expect(d.kind).toBe('stripe')
   })
@@ -47,6 +53,7 @@ describe('resolvePayRedirect', () => {
       expired: true,
       token,
       appUrl: APP,
+      bookableCount: SLOTS_OPEN,
     })
     expect(d.kind).toBe('stripe')
   })
@@ -62,6 +69,7 @@ describe('resolvePayRedirect', () => {
       expired: false,
       token,
       appUrl: APP,
+      bookableCount: SLOTS_OPEN,
     })
     expect(d).toEqual({
       kind: 'paid',
@@ -77,11 +85,12 @@ describe('resolvePayRedirect', () => {
       expired: true,
       token,
       appUrl: APP,
+      bookableCount: SLOTS_OPEN,
     })
     expect(d).toEqual({ kind: 'paid', url: `${APP}/q/${token}/paid?tier=good&already=1` })
   })
 
-  it('not expired, unpaid, no slot → book first', () => {
+  it('not expired, unpaid, no slot → Stripe (pay-first, 2026-07-22)', () => {
     const d = resolvePayRedirect({
       tier: 'better',
       paid: false,
@@ -89,8 +98,9 @@ describe('resolvePayRedirect', () => {
       expired: false,
       token,
       appUrl: APP,
+      bookableCount: SLOTS_OPEN,
     })
-    expect(d).toEqual({ kind: 'book', url: `${APP}/q/${token}/book?tier=better` })
+    expect(d).toEqual({ kind: 'stripe' })
   })
 
   it('not expired, unpaid, slot chosen → stripe (caller mints a fresh session)', () => {
@@ -101,6 +111,7 @@ describe('resolvePayRedirect', () => {
       expired: false,
       token,
       appUrl: APP,
+      bookableCount: SLOTS_OPEN,
     })
     expect(d.kind).toBe('stripe')
   })
@@ -113,7 +124,57 @@ describe('resolvePayRedirect', () => {
       expired: false,
       token,
       appUrl: APP,
+      bookableCount: SLOTS_OPEN,
     })
     expect(d).toEqual({ kind: 'paid', url: `${APP}/q/${token}/paid?tier=good&already=1` })
+  })
+})
+
+describe('resolvePayRedirect — no-slots guard', () => {
+  // Pay-first means the customer commits BEFORE seeing any times. A tenant with
+  // zero published windows must not be charged: they would have paid for a
+  // visit nobody can schedule. This also removes the old /r → /book → /r
+  // redirect loop, where NoSlotsPayState's CTA pointed straight back here.
+  const base = {
+    paid: false,
+    scheduledAt: null,
+    expired: false,
+    token,
+    appUrl: APP,
+    bookableCount: 0,
+  }
+
+  it('blocks the charge and returns to the quote when no windows are published', () => {
+    expect(resolvePayRedirect({ ...base, tier: 'better' })).toEqual({
+      kind: 'no-slots',
+      url: `${APP}/q/${token}?slots=0`,
+    })
+  })
+
+  it('blocks the $99 site visit too — same trap', () => {
+    expect(resolvePayRedirect({ ...base, tier: 'inspection' })).toEqual({
+      kind: 'no-slots',
+      url: `${APP}/q/${token}?slots=0`,
+    })
+  })
+
+  it('lets the charge through as soon as one window exists', () => {
+    expect(resolvePayRedirect({ ...base, tier: 'better', bookableCount: 1 })).toEqual({
+      kind: 'stripe',
+    })
+  })
+
+  it('never blocks an already-paid quote — it is not being charged again', () => {
+    expect(resolvePayRedirect({ ...base, tier: 'better', paid: true })).toEqual({
+      kind: 'paid',
+      url: `${APP}/q/${token}/paid?tier=better&already=1`,
+    })
+  })
+
+  it('expiry still wins over the slots guard', () => {
+    expect(resolvePayRedirect({ ...base, tier: 'better', expired: true })).toEqual({
+      kind: 'expired',
+      url: `${APP}/q/${token}`,
+    })
   })
 })

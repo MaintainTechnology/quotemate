@@ -57,39 +57,15 @@ export function canShowPrices(input: PublishGateInput): PublishGateResult {
   return { showPrices: true, reason: null }
 }
 
-import { payRedirectTarget } from '../quote/booking'
-
-export type SolarPayRedirectKind = 'locked' | 'book' | 'stripe' | 'paid'
-
-export type SolarPayRedirectInput = {
-  /** Tradie confirmation timestamp — null means the deposit is locked. */
-  confirmedAt: string | null | undefined
-  paid: boolean
-  scheduledAt: string | null | undefined
-  /** Stripe tier key. 'inspection' stays pay-first and skips the gate. */
-  tier: string
-}
-
-/**
- * PURE — where /r/<token>/<tier> sends a SOLAR customer. Layers the
- * forced-confirmation gate on top of the shared book-first/pay-last
- * funnel (lib/quote/booking.payRedirectTarget):
- *
- *   inspection                 → 'stripe' (pay-first; site-visit fee)
- *   not yet confirmed          → 'locked' (no auto-send; deposit gated)
- *   confirmed, then defer to the shared funnel:
- *     already paid             → 'paid'
- *     not paid, no slot        → 'book'
- *     not paid, slot chosen     → 'stripe'
- */
-export function solarPayRedirectTarget(
-  input: SolarPayRedirectInput,
-): SolarPayRedirectKind {
-  if (input.tier === 'inspection') return 'stripe'
-  if (!input.confirmedAt) return 'locked'
-  return payRedirectTarget({
-    paid: input.paid,
-    scheduledAt: input.scheduledAt,
-    tier: input.tier,
-  })
-}
+// solarPayRedirectTarget() was removed 2026-07-22 together with
+// app/r/solar/[token]/[tier]. That route was unreachable dead code: it selected
+// `token`, `paid_at`, `scheduled_at` and `stripe_links` from solar_estimates —
+// none of which exist on the table (the real column is `public_token`) — so it
+// 404'd before ever reaching its redirect, and its targets
+// /q/solar/[token]/{book,paid} were never built. Nothing in the app linked to
+// it; solar customers pay and book on the GENERIC quote pages via the twin
+// quotes row (lib/solar/persist-helpers.ts writes share_token = the estimate's
+// public_token), so they inherit /q/[token] → /book → /thanks for free.
+// The tradie-confirmation gate that function layered on top still lives in
+// lib/solar/deposit-cta.ts (resolveSolarDepositCta), which is what the solar
+// page actually renders its CTAs from.
