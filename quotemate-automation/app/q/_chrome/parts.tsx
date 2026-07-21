@@ -513,14 +513,45 @@ export function MediaPlaceholder({
   )
 }
 
+/* ── tradie photo (customer-view section 03, mig 180) ────────────────
+ * The face behind the quote. `src` comes from lib/quote/tradie-profile, which
+ * already falls back to the placeholder avatar when the tradie hasn't uploaded
+ * one — so this component never has to branch, and the block is never empty.
+ * Deliberately NOT qm-print-hide (unlike the trust video): the printed quote
+ * and the PDF both show the tradie. */
+export function TradiePhoto({ src, alt, size = 76 }: { src: string; alt: string; size?: number }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={alt}
+      width={size}
+      height={size}
+      style={{
+        width: size,
+        height: size,
+        flex: '0 0 auto',
+        objectFit: 'cover',
+        display: 'block',
+        border: '1px solid var(--ink-line)',
+        borderRadius: 'var(--qm-r-sm)',
+        background: 'var(--ink-card)',
+      }}
+    />
+  )
+}
+
 /* ── trust video (the tradie's welcome / thank-you message) ───────────
  * Plays the tenant's own video when QuoteMax has filmed them, else the
  * QuoteMax default placeholder video (mig 177 public bucket, resolved by
  * lib/quote/tenant-identity trustVideoUrls). No src at all (unconfigured
  * env) degrades to the static MediaPlaceholder face-holder. Server-safe:
- * a plain HTML5 <video> — controls, no autoplay (respects the customer's
- * data + attention), preload="metadata" so the poster frame shows without
- * pulling megabytes. */
+ * a plain HTML5 <video>, no client JS.
+ *
+ * Plays on arrival — the customer should meet the tradie without hunting for
+ * a play button. `muted` is load-bearing, not cosmetic: every browser blocks
+ * autoplay with sound, so without it the video sits frozen on frame 0.
+ * `controls` stays so one tap unmutes. Locked by trust-video.test.ts. */
 export function TrustVideo({
   src,
   title,
@@ -545,6 +576,8 @@ export function TrustVideo({
           placeholder briefs; captions land with the per-tradie films */}
       <video
         src={src}
+        autoPlay
+        muted
         controls
         playsInline
         preload="metadata"

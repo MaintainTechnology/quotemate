@@ -60,6 +60,10 @@ export async function createPaintingCheckoutSessionForTier(opts: {
     // AU-only business: force AUD, never localise the price to another currency
     // (turns OFF Stripe Adaptive Pricing so no US$ / "choose a currency" option).
     adaptive_pricing: { enabled: false },
+    // Link renders the 'Save my information for faster checkout' row and a
+    // US-format phone field. Hidden per-session (not via the Dashboard) so it
+    // stays hidden when the charge rides on a tradie's connected account.
+    wallet_options: { link: { display: 'never' } },
     line_items: [
       {
         price_data: {

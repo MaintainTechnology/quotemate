@@ -99,6 +99,10 @@ export async function getOrCreateCustomer(opts: {
     }
   }
   const customer = await stripe.customers.create({
+    // Every tenant is an Australian trade business. This is the only address
+    // signal Stripe has for the tradie, so leaving it null makes the billing
+    // form fall back to whatever country the browser's IP resolves to.
+    address: { country: 'AU' },
     email: opts.email ?? undefined,
     name: opts.name ?? undefined,
     metadata: { tenant_id: opts.tenantId },
@@ -126,6 +130,10 @@ export async function createSubscriptionCheckout(opts: {
     // AU-only business: force AUD, never localise the price to another currency
     // (turns OFF Stripe Adaptive Pricing so no US$ / "choose a currency" option).
     adaptive_pricing: { enabled: false },
+    // Link renders the 'Save my information for faster checkout' row and a
+    // US-format phone field. Hidden per-session (not via the Dashboard) so it
+    // stays hidden when the charge rides on a tradie's connected account.
+    wallet_options: { link: { display: 'never' } },
     customer: opts.customerId,
     line_items: [{ price, quantity: 1 }],
     client_reference_id: opts.tenantId,

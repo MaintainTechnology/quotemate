@@ -76,6 +76,17 @@ describe('createSubscriptionCheckout — monthly + annual redirect to Stripe', (
     expect(arg.cancel_url).toMatch(/\/pricing$/)
   })
 
+  // The tradie's own subscription checkout gets the same AU posture as the
+  // customer-facing ones (locked for those in checkout.au.test.ts). Asserted
+  // here too so all six Session sites are covered, not five.
+  it('carries the AU posture: Adaptive Pricing off and Link hidden', async () => {
+    await createSubscriptionCheckout({ ...base, plan: 'pro', interval: 'month' })
+    const arg = h.sessionsCreate.mock.calls[0][0] as Record<string, any>
+    expect(arg.adaptive_pricing).toEqual({ enabled: false })
+    expect(arg.wallet_options).toEqual({ link: { display: 'never' } })
+    expect(arg.payment_method_types).toBeUndefined()
+  })
+
   it('resolves the annual price by lookup_key and returns the hosted URL', async () => {
     const url = await createSubscriptionCheckout({ ...base, plan: 'pro', interval: 'year' })
     expect(url).toBe('https://checkout.stripe.com/c/pay/cs_test_sub_1')
@@ -164,6 +175,15 @@ describe('getOrCreateCustomer — reuses a valid customer, self-heals a stale id
     expect(id).toBe('cus_new_1')
     expect(h.customersCreate).toHaveBeenCalledTimes(1)
     expect(persist).toHaveBeenCalledWith('cus_new_1')
+  })
+
+  // Every tenant is an Australian trade business, so the Customer is stamped AU
+  // rather than left country-less. It is the only address signal Stripe has for
+  // the tradie: it steers the billing form and keeps tax/reporting honest.
+  it('stamps the customer as Australian', async () => {
+    await getOrCreateCustomer({ ...base, existingCustomerId: null, persist: vi.fn(async () => {}) })
+    const arg = h.customersCreate.mock.calls[0][0] as Record<string, any>
+    expect(arg.address).toEqual({ country: 'AU' })
   })
 
   it('self-heals when the persisted customer is missing in Stripe (retrieve throws)', async () => {

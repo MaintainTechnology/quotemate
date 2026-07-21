@@ -17,12 +17,27 @@
 // per session, so the customer only ever sees AUD regardless of the Dashboard
 // toggle.
 //
-// The billing "Country or region" dropdown on Stripe's card form is a separate
-// thing and CANNOT be limited to one country: Stripe Checkout exposes
-// `allowed_countries` only on `shipping_address_collection` (SHIPPING, which we
-// don't collect) — there is no billing-country allow-list. The field defaults
-// to the customer's detected location (Australia for real AU customers), and we
-// leave `billing_address_collection` at its 'auto' default (minimal collection).
+// Link is hidden per-session via `wallet_options: { link: { display: 'never' } }`.
+// Link is what renders the "Save my information for faster checkout" row and the
+// US-format phone field. It is deliberately NOT in the
+// `excluded_payment_method_types` union — `wallet_options` is the only switch.
+// Doing it per-session rather than in the Dashboard matters under Connect: the
+// charge can ride on the tradie's connected account, whose own Dashboard toggle
+// would otherwise decide.
+//
+// `payment_method_types` is deliberately NOT set. It reads like "restrict to
+// cards" but passing `['card']` is the documented way to *include* Link, and it
+// switches off Stripe's dynamic payment methods — freezing the list so future AU
+// methods (PayTo) never appear. The AU account country + `currency: 'aud'`
+// already make us_bank_account / cashapp / affirm structurally ineligible.
+// Locked by checkout.au.test.ts.
+//
+// The billing "Country or region" dropdown is a separate thing and CANNOT be
+// limited to one country: Stripe exposes `allowed_countries` only on
+// `shipping_address_collection` (SHIPPING, which we don't collect) — there is no
+// billing-country allow-list. The field defaults to the customer's IP-detected
+// location (Australia for real AU customers), and we leave
+// `billing_address_collection` at its 'auto' default (minimal collection).
 
 import { getStripe } from './client'
 import { randomBytes } from 'node:crypto'
@@ -115,6 +130,10 @@ export async function createCheckoutSessionsForQuote(opts: {
       // AU-only business: force AUD, never localise the price to another currency
       // (turns OFF Stripe Adaptive Pricing so no US$ / "choose a currency" option).
       adaptive_pricing: { enabled: false },
+      // Link renders the 'Save my information for faster checkout' row and a
+      // US-format phone field. Hidden per-session (not via the Dashboard) so it
+      // stays hidden when the charge rides on a tradie's connected account.
+      wallet_options: { link: { display: 'never' } },
       line_items: [
         {
           price_data: {
@@ -234,6 +253,10 @@ export async function createCheckoutSessionForTier(opts: {
     // AU-only business: force AUD, never localise the price to another currency
     // (turns OFF Stripe Adaptive Pricing so no US$ / "choose a currency" option).
     adaptive_pricing: { enabled: false },
+    // Link renders the 'Save my information for faster checkout' row and a
+    // US-format phone field. Hidden per-session (not via the Dashboard) so it
+    // stays hidden when the charge rides on a tradie's connected account.
+    wallet_options: { link: { display: 'never' } },
     line_items: [
       {
         price_data: {
@@ -296,6 +319,10 @@ export async function createRoofingSiteVisitSession(opts: {
     // AU-only business: force AUD, never localise the price to another currency
     // (turns OFF Stripe Adaptive Pricing so no US$ / "choose a currency" option).
     adaptive_pricing: { enabled: false },
+    // Link renders the 'Save my information for faster checkout' row and a
+    // US-format phone field. Hidden per-session (not via the Dashboard) so it
+    // stays hidden when the charge rides on a tradie's connected account.
+    wallet_options: { link: { display: 'never' } },
     line_items: [
       {
         price_data: {
@@ -353,6 +380,10 @@ export async function createInspectionCheckoutSession(opts: {
     // AU-only business: force AUD, never localise the price to another currency
     // (turns OFF Stripe Adaptive Pricing so no US$ / "choose a currency" option).
     adaptive_pricing: { enabled: false },
+    // Link renders the 'Save my information for faster checkout' row and a
+    // US-format phone field. Hidden per-session (not via the Dashboard) so it
+    // stays hidden when the charge rides on a tradie's connected account.
+    wallet_options: { link: { display: 'never' } },
     line_items: [
       {
         price_data: {
