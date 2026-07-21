@@ -138,18 +138,18 @@ function Hero() {
           >
             <HeroTile
               src="/marketing/trade-electrical.jpg"
-              alt="Smiling Australian electrician in a yellow hard hat working at a power box"
+              alt="Australian electrician in a yellow hard hat testing a switchboard with a multimeter"
               caption="Electrical"
               priority
             />
             <HeroTile
               src="/marketing/trade-plumbing-2.jpg"
-              alt="Plumber working under a sink to fix a pipe"
+              alt="Plumber on her back under a kitchen sink, tightening the tap tailpiece with a wrench"
               caption="Plumbing"
             />
             <HeroTile
               src="/marketing/trade-solar.jpg"
-              alt="Two installers fitting solar panels on a rooftop array"
+              alt="Two installers carrying a solar panel across a Colorbond roof to a half-finished array"
               caption="Solar"
               position="center 15%"
             />
@@ -351,7 +351,7 @@ function HowItWorks() {
             <figure className="edge-lit relative h-full overflow-hidden rounded-2xl border border-ink-line">
               <DuotoneImage
                 src="/marketing/trade-carpentry.jpg"
-                alt="Tradesperson working with hand tools at a tidy workshop bench"
+                alt="Carpenter planing a length of timber by hand at a tidy workshop bench"
                 aspect="aspect-[3/4] lg:aspect-auto lg:h-full"
                 sizes="(max-width: 1024px) 0px, 32vw"
                 position="center 30%"
@@ -390,7 +390,7 @@ function Trades() {
               state="Live · NSW"
               image={{
                 src: "/marketing/trade-electrical.jpg",
-                alt: "Australian electrician in a yellow hard hat smiling while working at a power box",
+                alt: "Australian electrician in a yellow hard hat testing a switchboard with a multimeter",
                 position: "center 25%",
               }}
               auto={[
@@ -415,8 +415,7 @@ function Trades() {
               state="Live · QLD"
               image={{
                 src: "/marketing/trade-plumbing.jpg",
-                alt: "Plumber fixing a leaky faucet under a kitchen sink",
-                position: "center 20%",
+                alt: "Plumber at an open bathroom vanity, tightening a supply line with a shifting spanner",
               }}
               auto={[
                 "Blocked drains",
@@ -442,23 +441,21 @@ function Trades() {
               <TradeTile
                 href="/trades/roofing"
                 src="/marketing/trade-roofing.jpg"
-                alt="Roofer using a cordless drill while working on a metal roof"
+                alt="Roofer driving a screw into new corrugated Colorbond sheeting with a cordless driver"
                 label="Roofing"
-                position="center 35%"
               />
               <TradeTile
                 href="/trades/solar"
                 src="/marketing/trade-solar.jpg"
-                alt="Installers mounting solar panels at a rooftop power station"
+                alt="Installers carrying a solar panel to a rooftop array on a suburban home"
                 label="Solar"
-                position="center 62%"
+                position="center 42%"
               />
               <TradeTile
                 href="/trades/painting"
                 src="/marketing/trade-painting.jpg"
-                alt="Two painters rolling fresh paint onto an interior wall"
+                alt="Two painters rolling and cutting in fresh paint on an interior wall"
                 label="Painting"
-                position="center 30%"
               />
             </div>
           </div>
@@ -470,10 +467,10 @@ function Trades() {
           <div className="edge-lit mt-6 grid items-stretch gap-0 overflow-hidden rounded-2xl border border-ink-line bg-ink-card md:grid-cols-[1fr_1.3fr]">
             <DuotoneImage
               src="/marketing/workshop.jpg"
-              alt="Tradesperson inspecting their work at a well-kept workshop bench"
+              alt="Tradesperson checking a finished part at a well-kept workshop bench"
               aspect="aspect-[4/3] md:aspect-auto md:h-full"
               sizes="(max-width: 768px) 100vw, 38vw"
-              position="center 18%"
+              position="center 30%"
               className="md:border-r md:border-ink-line"
             />
             <div className="flex flex-col items-start justify-center gap-5 p-6 md:p-8">
@@ -1228,10 +1225,9 @@ function BuiltForAustralia() {
         <Reveal delay={120}>
           <DuotoneImage
             src="/marketing/home-crew.jpg"
-            alt="A crew of Australian tradies on site"
+            alt="A crew of Australian tradies at the back of a work ute, sorting tools at the end of the day"
             aspect="aspect-[4/3]"
             sizes="(max-width: 768px) 100vw, 50vw"
-            position="center 30%"
             className="edge-lit rounded-2xl border border-ink-line"
           />
         </Reveal>
