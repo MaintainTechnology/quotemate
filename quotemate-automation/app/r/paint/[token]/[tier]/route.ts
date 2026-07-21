@@ -18,6 +18,8 @@ import { buildPaintRedirectUrl, VALID_PAINT_TIERS } from '@/lib/painting/pay-red
 import { paintingDepositLocked } from '@/lib/painting/publish-gate'
 import { createPaintingCheckoutSessionForTier } from '@/lib/stripe/painting-checkout'
 import { expireCheckoutSession } from '@/lib/stripe/checkout'
+import { canTakePayment } from '@/lib/quote/booking'
+import { loadTenantBookingOptions } from '@/lib/quote/trade-booking'
 import { pipelineLog } from '@/lib/log/pipeline'
 import { loadPaintingRateCard } from '@/lib/painting/quote-dispatch'
 import { paintingDepositPctFromCard } from '@/lib/painting/rate-card-overlay'
@@ -54,6 +56,27 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string;
   // Stripe against an unreviewed price. Send them to the (gated) quote page.
   if (paintingDepositLocked((row.released_at as string | null) ?? null)) {
     return Response.redirect(`${appUrl}/q/paint/${token}`, 302)
+  }
+
+  // Pay-first means the customer commits before seeing any times — so refuse
+  // the charge when the painter has published none, rather than selling a visit
+  // nobody can schedule. Best-effort: a lookup failure lets payment through.
+  if (!row.paid_at && row.tenant_id) {
+    try {
+      const options = await loadTenantBookingOptions(getSupabase(), {
+        tenantId: row.tenant_id as string,
+        table: 'painting_measurements',
+      })
+      if (!canTakePayment({ bookableCount: options.length })) {
+        return Response.redirect(`${appUrl}/q/paint/${token}?slots=0`, 302)
+      }
+    } catch (e: unknown) {
+      pipelineLog('dispatch').err(
+        'painting slot count lookup failed — allowing payment through',
+        e instanceof Error ? e.message : String(e),
+        { token: token.slice(0, 8) + '…' },
+      )
+    }
   }
 
   const stored = (row.stripe_links as Record<string, string> | null)?.[tier] ?? null

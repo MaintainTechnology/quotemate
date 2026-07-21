@@ -14,6 +14,8 @@
 import { createClient } from '@supabase/supabase-js'
 import { createRoofingSiteVisitSession } from '@/lib/stripe/checkout'
 import { connectDestinationForTenantId } from '@/lib/stripe/connect'
+import { canTakePayment } from '@/lib/quote/booking'
+import { loadTenantBookingOptions } from '@/lib/quote/trade-booking'
 import { pipelineLog } from '@/lib/log/pipeline'
 
 export const dynamic = 'force-dynamic'
@@ -44,10 +46,31 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string;
     .maybeSingle()
   if (!row) return new Response('Not found', { status: 404 })
 
-  // Already paid → don't re-charge; send them to the booking page (thank-you
-  // video + calendar, or their booked confirmation).
+  // Already paid → don't re-charge; send them to the booking page, which
+  // forwards to /thanks if they have already picked a time.
   if (row.paid_at) {
     return Response.redirect(`${appUrl}/q/roof/${token}/book`, 302)
+  }
+
+  // Pay-first means the customer commits before seeing any times — so refuse
+  // the charge when the roofer has published none, rather than selling a visit
+  // nobody can schedule. Best-effort: a lookup failure lets payment through.
+  try {
+    if (row.tenant_id) {
+      const options = await loadTenantBookingOptions(getSupabase(), {
+        tenantId: row.tenant_id as string,
+        table: 'roofing_measurements',
+      })
+      if (!canTakePayment({ bookableCount: options.length })) {
+        return Response.redirect(`${appUrl}/q/roof/${token}?slots=0`, 302)
+      }
+    }
+  } catch (e: unknown) {
+    pipelineLog('dispatch').err(
+      'roofing slot count lookup failed — allowing payment through',
+      e instanceof Error ? e.message : String(e),
+      { token: token.slice(0, 8) + '…' },
+    )
   }
 
   try {

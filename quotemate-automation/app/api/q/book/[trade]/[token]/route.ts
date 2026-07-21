@@ -138,6 +138,7 @@ export async function POST(
     }
   })
 
-  // Back to the trade quote page, which now renders the "booked" state.
-  return Response.json({ ok: true, scheduled_at: slot, next: `/q/${trade}/${token}` })
+  // On to the thank-you page, which confirms the booking, shows what was paid
+  // and offers the calendar links (spec booking-three-page-split R1/R4).
+  return Response.json({ ok: true, scheduled_at: slot, next: `/q/${trade}/${token}/thanks` })
 }
