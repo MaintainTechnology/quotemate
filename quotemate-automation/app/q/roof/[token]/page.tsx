@@ -66,6 +66,7 @@ import { formatVisitSlot } from '@/lib/quote/trade-booking'
 import { visitCalendarLinks } from '@/lib/quote/calendar-links'
 import { tzForState } from '@/lib/quote/availability'
 import { tradeIcon } from '../../_chrome/icons'
+import { NoSlotsNotice } from '../../_chrome/NoSlotsNotice'
 import {
   QuoteSheet,
   Letterhead,
@@ -179,11 +180,15 @@ export default async function RoofingQuotePage({
   searchParams,
 }: {
   params: Promise<{ token: string }>
-  searchParams: Promise<{ s?: string | string[]; full?: string }>
+  /** slots=0 — set by /r/roof when it REFUSED to charge because the roofer has
+   *  published no bookable windows. Renders NoSlotsNotice so the refusal isn't
+   *  silent (the customer would otherwise just tap Pay again). */
+  searchParams: Promise<{ s?: string | string[]; full?: string; slots?: string }>
 }) {
   const { token } = await params
   if (!token || token.length < 8) notFound()
   const sp = await searchParams
+  const noSlots = sp.slots === '0'
 
   const { data, error } = await supabase
     .from('roofing_measurements')
@@ -851,6 +856,10 @@ export default async function RoofingQuotePage({
                     Pick your visit time →
                   </a>
                 </>
+              ) : noSlots ? (
+                // /r/roof refused to charge — no windows published. Explain it
+                // rather than showing the same CTA that just bounced them.
+                <NoSlotsNotice tradieName={identity?.business_name ?? null} />
               ) : (
                 <>
                   <a href={`/r/roof/${token}/inspection`} className="qm-cta" style={ctaStyle}>

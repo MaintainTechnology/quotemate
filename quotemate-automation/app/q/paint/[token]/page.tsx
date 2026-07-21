@@ -31,6 +31,7 @@ import { resolveAcceptView } from '@/lib/quote/accept'
 import { formatVisitSlot } from '@/lib/quote/trade-booking'
 import { tzForState } from '@/lib/quote/availability'
 import { tradeIcon } from '../../_chrome/icons'
+import { NoSlotsNotice } from '../../_chrome/NoSlotsNotice'
 import {
   QuoteSheet, Letterhead, QuoteHero, StatGrid, Scope,
   SheetSection, TierCards, CredentialFooter,
@@ -76,8 +77,16 @@ function titleCase(s: string): string {
   return s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-export default async function PaintingQuotePage(props: { params: Promise<{ token: string }> }) {
+export default async function PaintingQuotePage(props: {
+  params: Promise<{ token: string }>
+  /** ?slots=0 — set by /r/paint when it REFUSED to charge because the painter
+   *  has published no bookable windows. Renders NoSlotsNotice so the refusal
+   *  isn't silent. */
+  searchParams: Promise<{ slots?: string }>
+}) {
   const { token } = await props.params
+  const sp = await props.searchParams
+  const noSlots = sp.slots === '0'
 
   const { data: row } = await supabase
     .from('painting_measurements')
@@ -682,6 +691,14 @@ export default async function PaintingQuotePage(props: { params: Promise<{ token
                 )
               })}
             </div>
+          </SheetSection>
+        ) : null}
+
+        {/* The pay CTA was refused because no windows are published — say so
+            above the accept block, where the customer just came from. */}
+        {noSlots && !paid ? (
+          <SheetSection>
+            <NoSlotsNotice tradieName={identity?.business_name ?? null} />
           </SheetSection>
         ) : null}
 
