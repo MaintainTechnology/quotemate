@@ -57,6 +57,9 @@ async function recordPaintingDeposit(
       paid_at: new Date().toISOString(),
       paid_tier: tier,
       paid_stripe_session_id: session.id,
+      // mig 181 — record the real charge so the thank-you page shows what was
+      // actually paid instead of inferring it from the tier.
+      paid_amount_cents: session.amount_total ?? null,
     })
     .eq('public_token', token)
   if (error) {
@@ -101,6 +104,9 @@ async function recordRoofingSiteVisit(
       paid_at: new Date().toISOString(),
       paid_tier: 'inspection',
       paid_stripe_session_id: session.id,
+      // mig 181 — record the real charge so the thank-you page shows what was
+      // actually paid instead of inferring it from the tier.
+      paid_amount_cents: session.amount_total ?? null,
     })
     .eq('public_token', token)
   if (error) {

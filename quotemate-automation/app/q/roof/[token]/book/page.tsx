@@ -87,6 +87,9 @@ export default async function RoofBookingPage(props: {
             paid_at: new Date().toISOString(),
             paid_tier: 'inspection',
             paid_stripe_session_id: session.id,
+            // mig 181 — same stamp the webhook writes, so whichever wins the
+            // race records the real charge for the thank-you page.
+            paid_amount_cents: session.amount_total ?? null,
           })
           .eq('public_token', token)
           .is('paid_at', null)
