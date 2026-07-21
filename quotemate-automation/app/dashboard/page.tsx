@@ -128,6 +128,7 @@ import {
 import { getBrowserSupabase } from '@/lib/supabase/client'
 import { hasPlanIntent } from '@/lib/billing/plan-intent'
 import { tenantHasRoofingTrade } from '@/lib/roofing/tenant'
+import { NO_BOOK_HUB_TRADES, showsHourlyPricingBook } from '@/lib/dashboard/pricing-visibility'
 import { tenantHasFeature } from '@/lib/features/catalog'
 import { isFeatureTab, isTabEnabled } from '@/lib/features/catalog'
 import { RoofRatesEditor } from './_components/RoofRatesEditor'
@@ -430,10 +431,10 @@ type HubTab = `hub-${TradeHubSlug}`
 
 const HUB_TABS: readonly HubTab[] = TRADE_HUB_SLUGS.map((s) => `hub-${s}` as HubTab)
 
-/** Hub trades that never receive an hourly-rate pricing_book row — they're
- *  priced through their tool panels instead (roof/paint rate cards, signage
- *  compliance, AC recommender). Used to suppress the hub pricing empty-state. */
-const NO_BOOK_HUB_TRADES: readonly TradeHubSlug[] = ['roofing', 'painting', 'signage', 'aircon']
+// NO_BOOK_HUB_TRADES + showsHourlyPricingBook live in @/lib/dashboard/pricing-visibility
+// (pure + unit-tested) — the trades priced by a rate-card editor rather than an
+// hourly labour book. Used to suppress the hub pricing empty-state AND the
+// hourly PricingBookCard for those trades.
 
 function isHubTab(tab: string): tab is HubTab {
   return (HUB_TABS as readonly string[]).includes(tab)
@@ -5478,16 +5479,29 @@ function PricingTab({
     )
   }
 
+  // Trades that price via a dedicated rate-card editor (roofing/painting by
+  // $/m², signage/aircon via their tool panels) never expose the hourly-labour
+  // PricingBookCard. Self-serve onboarding (buildPricingRows) and dashboard
+  // trade-activation seed a pricing_book row per trade to hold the tier mode +
+  // rate-card overlay, but its hourly_rate is INERT for these trades (the
+  // roofing/painting estimators price off the rate card, never the $/hr column).
+  // Surfacing it as an authoritative "$X/hr" book made new roofing accounts look
+  // hourly-priced while seed accounts showed the per-m² Roof Rates card — the
+  // reported divergence. The row is still passed to QuoteTierModeCard below,
+  // which reads/writes the per-feature tier mode. (pure + unit-tested predicate)
+  const showHourlyBook = showsHourlyPricingBook(tradeFilter)
+
   return (
     <div className="space-y-6">
-      {visibleBooks.map((book) => (
-        <PricingBookCard
-          key={book.trade ?? 'default'}
-          book={book}
-          isMultiTrade={books.length > 1}
-          onSave={onSave}
-        />
-      ))}
+      {showHourlyBook &&
+        visibleBooks.map((book) => (
+          <PricingBookCard
+            key={book.trade ?? 'default'}
+            book={book}
+            isMultiTrade={books.length > 1}
+            onSave={onSave}
+          />
+        ))}
       {tradeFilter && visibleBooks.length === 0 && !NO_BOOK_HUB_TRADES.includes(tradeFilter) && (
         <Card>
           <p className="text-sm text-text-sec">
