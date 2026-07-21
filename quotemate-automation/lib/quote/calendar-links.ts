@@ -23,12 +23,18 @@ export interface CalendarLinksOpts {
   endIso: string
   details?: string
   location?: string
+  /** IANA tz (e.g. "Australia/Brisbane"). Pins the Google event to the
+   *  property's local time via ctz, so an interstate customer still sees the
+   *  visit at the site's wall-clock time, not their phone's. */
+  timeZone?: string
 }
 
 export interface CalendarLinks {
   google: string
-  /** Outlook.com (personal Microsoft accounts). Work/M365 users use the .ics. */
+  /** Outlook.com — personal Microsoft accounts (Outlook.com / Hotmail / Live). */
   outlook: string
+  /** Outlook on the web — work / school Microsoft 365 (Entra) accounts. */
+  outlookOffice: string
   /** ICS as a data: URI. The .ics route is preferred on mobile — see module doc. */
   ics: string
 }
@@ -141,12 +147,19 @@ export function buildCalendarLinks(opts: CalendarLinksOpts): CalendarLinks {
     `text=${enc(title)}`,
     `dates=${startCompact}/${endCompact}`,
   ]
+  // ctz pins the event to the property's local time (Google converts the UTC
+  // dates for display). Without it, an interstate customer sees the visit in
+  // their own phone's timezone.
+  if (opts.timeZone) gParts.push(`ctz=${enc(opts.timeZone)}`)
   if (details) gParts.push(`details=${enc(details)}`)
   if (location) gParts.push(`location=${enc(location)}`)
   const google = `https://calendar.google.com/calendar/render?${gParts.join('&')}`
 
-  // ── Outlook.com compose deep-link (personal Microsoft accounts) ──
-  // startdt/enddt are ISO-8601 UTC. Work/M365 users import the .ics instead.
+  // ── Outlook compose deep-links. startdt/enddt are ISO-8601 UTC. No "/0/"
+  // mailbox-index segment (it is not required and can break the deep-link).
+  // live.com = personal accounts; office.com = work/school M365 — the query is
+  // identical, only the host differs, and a customer on the wrong host lands on
+  // a sign-in wall, so surface both.
   const oParams = new URLSearchParams({
     path: '/calendar/action/compose',
     rru: 'addevent',
@@ -156,13 +169,15 @@ export function buildCalendarLinks(opts: CalendarLinksOpts): CalendarLinks {
   })
   if (details) oParams.set('body', details)
   if (location) oParams.set('location', location)
-  const outlook = `https://outlook.live.com/calendar/0/deeplink/compose?${oParams.toString()}`
+  const oq = oParams.toString()
+  const outlook = `https://outlook.live.com/calendar/deeplink/compose?${oq}`
+  const outlookOffice = `https://outlook.office.com/calendar/deeplink/compose?${oq}`
 
   // ── .ics as a data: URI — inline fallback (desktop imports it cleanly). The
   // real .ics route is preferred on mobile; see module doc.
   const ics = `data:text/calendar;charset=utf-8,${encodeURIComponent(buildIcsText(opts))}`
 
-  return { google, outlook, ics }
+  return { google, outlook, outlookOffice, ics }
 }
 
 // ── Booking convenience ───────────────────────────────────────────────
@@ -184,6 +199,8 @@ export interface VisitEventInput {
   /** formatVisitSlot(...) output, e.g. "Mon, 27 July, 3:00 pm" or "Tue morning". */
   slotLabel: string
   location?: string | null
+  /** IANA tz of the property — pins the Google event to the site's local time. */
+  timeZone?: string | null
 }
 
 function visitEventOpts(input: VisitEventInput): CalendarLinksOpts | null {
@@ -201,6 +218,7 @@ function visitEventOpts(input: VisitEventInput): CalendarLinksOpts | null {
     endIso,
     details,
     location: input.location ?? undefined,
+    timeZone: input.timeZone ?? undefined,
   }
 }
 

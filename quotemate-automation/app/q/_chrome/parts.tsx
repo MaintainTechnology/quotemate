@@ -8,7 +8,7 @@
 
 import type { CSSProperties, ReactNode } from 'react'
 import { businessInitials } from '@/lib/brand/monogram'
-import { CheckIcon, QuoteMaxMark } from './icons'
+import { CheckIcon, QuoteMaxMark, DownloadIcon } from './icons'
 
 /* ── shared type primitives ──────────────────────────────────────────── */
 const MONO: CSSProperties = { fontFamily: 'var(--font-mono)' }
@@ -570,36 +570,53 @@ export function TrustVideo({
 }
 
 /* ── add to calendar ─────────────────────────────────────────────────
- * Customer-facing "save this appointment" row for a booked site visit.
- * Server-safe (plain <a> tags): Google + Outlook open a compose deep-link in
- * a new tab; ".ics" is a data: URI download that covers Apple Calendar,
- * Outlook desktop and anything else. Ghost styling so it recedes behind the
- * yellow primary CTA. Links come pre-built from lib/quote/calendar-links.ts. */
-const CAL_CHIP: CSSProperties = {
+ * Customer-facing "save this appointment" for a booked site visit.
+ *
+ * The reliable path on a phone is the .ics DOWNLOAD (served from the visit.ics
+ * route), so it leads as the primary action: on iOS it opens the Apple Calendar
+ * sheet — from which the customer saves into ANY account synced to the phone,
+ * incl. Google/Outlook — and on Android it opens the Google Calendar insert
+ * screen. The Google/Outlook web deep-links are SECONDARY best-effort: they
+ * only pre-fill a compose screen when the browser already holds a signed-in
+ * session for that calendar, which an SMS in-app browser almost never has
+ * (Google/Microsoft block sign-in inside webviews and bounce to a marketing
+ * page). Nothing we can do to a web URL fixes that — hence .ics first.
+ * Server-safe (plain <a> tags); links are pre-built in lib/quote/calendar-links.ts. */
+const CAL_PRIMARY: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
-  gap: 8,
-  border: '1px solid var(--ink-line)',
+  gap: 9,
+  border: '1px solid var(--accent)',
   background: 'transparent',
-  color: 'var(--text-sec)',
-  padding: '10px 14px',
+  color: 'var(--text-pri)',
+  padding: '12px 18px',
   borderRadius: 'var(--qm-r-ctl)',
   ...MONO,
-  fontSize: 10.5,
-  fontWeight: 700,
+  fontSize: 12,
+  fontWeight: 800,
   textTransform: 'uppercase',
-  letterSpacing: '0.1em',
+  letterSpacing: '0.08em',
   textDecoration: 'none',
+}
+const CAL_WEB_LINK: CSSProperties = {
+  color: 'var(--text-sec)',
+  textDecoration: 'underline',
+  textUnderlineOffset: 3,
+  whiteSpace: 'nowrap',
 }
 export function AddToCalendar({
   google,
   outlook,
+  outlookOffice,
   icsHref,
   label = 'Add to your calendar',
 }: {
   google: string
+  /** Outlook.com personal deep-link. */
   outlook: string
-  /** The .ics route URL (preferred over a data: URI so iOS Safari downloads it). */
+  /** Outlook work/school (Microsoft 365) deep-link. */
+  outlookOffice: string
+  /** The .ics route URL — the reliable primary action on mobile. */
   icsHref: string
   label?: string
 }) {
@@ -608,17 +625,21 @@ export function AddToCalendar({
       <div style={{ ...MONO, fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-dim)', marginBottom: 8 }}>
         {label}
       </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        <a className="qm-ghost" href={google} target="_blank" rel="noopener noreferrer" style={CAL_CHIP}>
-          Google
-        </a>
-        <a className="qm-ghost" href={outlook} target="_blank" rel="noopener noreferrer" style={CAL_CHIP}>
-          Outlook
-        </a>
-        <a className="qm-ghost" href={icsHref} download="site-visit.ics" style={CAL_CHIP}>
-          Apple / .ics
-        </a>
-      </div>
+      <a className="qm-ghost" href={icsHref} download="site-visit.ics" style={CAL_PRIMARY}>
+        <DownloadIcon size={15} />
+        Add to calendar
+      </a>
+      <p style={{ margin: '9px 0 0', fontSize: 12, lineHeight: 1.5, color: 'var(--text-dim)' }}>
+        Opens your phone&apos;s calendar — save it to Apple, Google or Outlook.
+      </p>
+      <p style={{ margin: '8px 0 0', fontSize: 12, lineHeight: 1.6, color: 'var(--text-dim)' }}>
+        On a computer, or already signed in?{' '}
+        <a className="qm-ghost" href={google} target="_blank" rel="noopener noreferrer" style={CAL_WEB_LINK}>Google</a>
+        {' · '}
+        <a className="qm-ghost" href={outlook} target="_blank" rel="noopener noreferrer" style={CAL_WEB_LINK}>Outlook</a>
+        {' · '}
+        <a className="qm-ghost" href={outlookOffice} target="_blank" rel="noopener noreferrer" style={CAL_WEB_LINK}>Outlook (work)</a>
+      </p>
     </div>
   )
 }

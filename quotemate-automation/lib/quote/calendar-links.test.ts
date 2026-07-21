@@ -22,11 +22,19 @@ function unfold(text: string): string {
   return text.replace(/\r\n /g, '')
 }
 
-test('all three links are produced', () => {
+test('all four links are produced; Outlook has no /0/ mailbox segment', () => {
   const l = buildCalendarLinks(base)
   assert.ok(l.google.startsWith('https://calendar.google.com/calendar/render?'))
-  assert.ok(l.outlook.startsWith('https://outlook.live.com/calendar/0/deeplink/compose?'))
+  assert.ok(l.outlook.startsWith('https://outlook.live.com/calendar/deeplink/compose?'))
+  assert.ok(l.outlookOffice.startsWith('https://outlook.office.com/calendar/deeplink/compose?'))
+  assert.ok(!l.outlook.includes('/0/'))
   assert.ok(l.ics.startsWith('data:text/calendar;charset=utf-8,'))
+})
+
+test('google pins the event to the property timezone via ctz (only when given)', () => {
+  assert.ok(!buildCalendarLinks(base).google.includes('ctz='))
+  const l = buildCalendarLinks({ ...base, timeZone: 'Australia/Brisbane' })
+  assert.ok(l.google.includes('ctz=Australia%2FBrisbane'), l.google)
 })
 
 test('google encodes dates as compact UTC with a literal slash', () => {

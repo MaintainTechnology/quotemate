@@ -141,6 +141,7 @@ export default async function RoofBookingPage(props: {
         // Raw address already ends with the state, so prefer it over placeLabel
         // (which re-appends state and can double it).
         location: (row.address as string | null)?.trim() || placeLabel,
+        timeZone: tz,
       })
     : null
 
@@ -199,6 +200,7 @@ export default async function RoofBookingPage(props: {
                 <AddToCalendar
                   google={calLinks.google}
                   outlook={calLinks.outlook}
+                  outlookOffice={calLinks.outlookOffice}
                   icsHref={`/q/roof/${token}/visit.ics`}
                 />
               ) : null}

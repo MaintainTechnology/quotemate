@@ -628,6 +628,7 @@ export default async function RoofingQuotePage({
             tradieName,
             slotLabel: roofSlotLabel,
             location: (row.address ?? '').trim() || placeLabel,
+            timeZone: tzForState(identity?.state ?? null),
           })
         : null
     const microNote: CSSProperties = {
@@ -772,6 +773,7 @@ export default async function RoofingQuotePage({
                 <AddToCalendar
                   google={roofCalLinks.google}
                   outlook={roofCalLinks.outlook}
+                  outlookOffice={roofCalLinks.outlookOffice}
                   icsHref={`/q/roof/${token}/visit.ics`}
                 />
               ) : null}

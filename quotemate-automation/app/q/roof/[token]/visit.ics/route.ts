@@ -4,13 +4,14 @@
 // "Add to Calendar" path on iOS Safari (it ignores the download attribute on
 // data: URIs). Covers Apple Calendar, Outlook desktop / M365 and Thunderbird.
 //
+// The response contract lives in lib/quote/visit-ics-response (visitIcsResponse)
+// so it is unit-tested without a server/DB; this route is just the data fetch.
+//
 // Next 16: params is a Promise (await it).
 
 import { createClient } from '@supabase/supabase-js'
 import { loadTenantIdentity } from '@/lib/quote/tenant-identity'
-import { tzForState } from '@/lib/quote/availability'
-import { formatVisitSlot } from '@/lib/quote/trade-booking'
-import { visitIcsText } from '@/lib/quote/calendar-links'
+import { visitIcsResponse } from '@/lib/quote/visit-ics-response'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,33 +31,24 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     .select('tenant_id, address, state, paid_at, scheduled_at, scheduled_window')
     .eq('public_token', token)
     .maybeSingle()
-  // Only a paid, scheduled visit has a calendar entry.
-  if (!row || !row.paid_at || !row.scheduled_at) {
-    return new Response('Not found', { status: 404 })
-  }
 
-  const identity = await loadTenantIdentity(supabase, (row.tenant_id as string | null) ?? null)
-  const tradieName = identity?.business_name ?? 'Your roofer'
-  const tz = tzForState(identity?.state ?? (row.state as string | null) ?? null)
-  const scheduledWindow = (row.scheduled_window as string | null) ?? null
-  const slotLabel = formatVisitSlot(row.scheduled_at as string, scheduledWindow, tz)
+  // Load identity only for an existing row (visitIcsResponse handles the
+  // paid/scheduled 404 gating).
+  const identity = row?.tenant_id
+    ? await loadTenantIdentity(supabase, row.tenant_id as string)
+    : null
 
-  const ics = visitIcsText({
-    scheduledAt: row.scheduled_at as string,
-    scheduledWindow,
-    tradieName,
-    slotLabel,
-    // Raw address already ends with the state; fall back to state alone.
-    location: (row.address as string | null)?.trim() || (row.state as string | null) || null,
-  })
-  if (!ics) return new Response('Not found', { status: 404 })
-
-  return new Response(ics, {
-    status: 200,
-    headers: {
-      'Content-Type': 'text/calendar; charset=utf-8',
-      'Content-Disposition': 'attachment; filename="site-visit.ics"',
-      'Cache-Control': 'no-store',
-    },
-  })
+  return visitIcsResponse(
+    row
+      ? {
+          paid_at: (row.paid_at as string | null) ?? null,
+          scheduled_at: (row.scheduled_at as string | null) ?? null,
+          scheduled_window: (row.scheduled_window as string | null) ?? null,
+          address: (row.address as string | null) ?? null,
+          state: (row.state as string | null) ?? null,
+        }
+      : null,
+    identity?.business_name ?? null,
+    identity?.state ?? null,
+  )
 }
