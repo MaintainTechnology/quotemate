@@ -68,10 +68,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ token: string }
   //
   // The PDF renders from the tradie's persisted structure selection
   // (included_indices), not the full quote: the headline total covers the
-  // INCLUDED quotable structures only; excluded and inspection-routed
-  // structures are LISTED (displayRows) but never priced into the total. The
-  // selection-update route nulls pdf_path on change, so a cached PDF always
-  // reflects the current selection.
+  // INCLUDED quotable structures only. Since the document became the CUSTOMER
+  // view (five sections, no structures table) the excluded/inspection-routed
+  // rows are no longer listed — displayRows is passed for the narrowing it
+  // drives, not for display. The selection-update route nulls pdf_path on
+  // change, so a cached PDF always reflects the current selection.
   const fullQuote = (row.quote ?? null) as MultiRoofQuote | null
   const effective = resolveEffectiveIndices(
     {

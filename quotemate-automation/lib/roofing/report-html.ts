@@ -5,7 +5,13 @@
 // options + a measurement-detail bullet list (spec specs/quote-pdf-branding.md
 // R4/R5). Pure — unit-tested.
 
-import type { MultiRoofQuote, RoofStructurePrice, RoofMetrics, RoofMaterial } from './types'
+import type {
+  MultiRoofQuote,
+  RoofStructurePrice,
+  RoofMetrics,
+  RoofMaterial,
+  RoofingPriceTier,
+} from './types'
 import { applySolarToTiers } from '../sms/roofing-compose'
 import type { RoofDisplayRow } from './selection'
 import { ZONE_COLOR_HEX, type ZoneColor, type LayoutMaterialItem } from './layout-plan'
@@ -14,6 +20,7 @@ import {
   renderPart,
   renderFigure,
   renderFigurePair,
+  renderTradieBlock,
   brandingFromName,
   esc,
   aud0,
@@ -245,6 +252,13 @@ const ROOF_PLEASE_NOTE = [
   'Measured from aerial imagery; a roofer reviews every quote before any works are booked.',
 ]
 
+/**
+ * The DETAILED measurement report — lettered Parts, measured-roof bullets and
+ * the per-structure table. This is the tradie-facing document (the same content
+ * /q/roof/[token]?full=1 shows on screen); the PDF the CUSTOMER receives over
+ * SMS/MMS/email is buildRoofCustomerReportHtml below. Kept exported + tested so
+ * re-attaching it (as an appendix, or a tradie-only download) is a one-liner.
+ */
 export function buildRoofQuoteReportHtml(input: RoofReportInput): string {
   const date = (input.generatedAt ?? new Date()).toLocaleDateString('en-AU', {
     day: 'numeric',
@@ -375,5 +389,173 @@ export function buildRoofQuoteReportHtml(input: RoofReportInput): string {
     bodyHtml: body,
     pleaseNote,
     closingLine,
+  })
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Customer-view report — the five numbered sections app/q/roof/[token]
+// renders for a confirmed customer (Overview · Job details · Your tradie ·
+// Your price · Book your site inspection).
+//
+// This is what the customer gets: the PDF linked in the quote SMS, attached
+// as MMS media and emailed from the dashboard. Before this, every one of
+// those surfaces served the DETAILED measurement report above — the tradie's
+// ?full=1 view — so the document never matched the page the same text linked
+// to. Pure — unit-tested.
+// ════════════════════════════════════════════════════════════════════
+
+/** Tier names verbatim from app/q/roof/[token] section 04, so the page and the
+ *  PDF can never disagree about what an option is called. */
+const CUSTOMER_TIER_NAME: Record<'good' | 'better' | 'best', string> = {
+  good: 'Patch',
+  better: 'Full roof replacement',
+  best: 'Upgraded roof replacement',
+}
+
+export type RoofCustomerReportInput = {
+  businessName: string
+  /** Full white-label branding; when omitted, derived from businessName. */
+  branding?: TenantBranding
+  address: string
+  quote: MultiRoofQuote
+  /** Tier keys the tenant's quote_tier_mode surfaces (resolveVisibleTiers).
+   *  Omitted ⇒ all of quote.combined.tiers. */
+  visibleTierKeys?: ('good' | 'better' | 'best')[]
+  /** Section 01 aerial figure(s) — already embedded as data: URIs by the caller
+   *  (a PDF render must never depend on the network). One entry per included
+   *  structure; a blank label renders the page's single-aerial caption. */
+  aerials?: { label: string; src: string | null }[]
+  /** Section 03 identity, from lib/quote/tradie-profile. Null ⇒ section omitted. */
+  tradie?: { name: string; photoSrc: string; blurb: string } | null
+  /** Section 05 — the refundable site-visit fee (lib/quote/money INSPECTION_FEE_AUD). */
+  inspectionFeeAud: number
+  quoteViewUrl?: string | null
+  generatedAt?: Date
+}
+
+/** Section 04 — the headline price, picked EXACTLY as the customer page picks
+ *  it: the 'better' tier when the tenant surfaces it and it carries a price,
+ *  else the first priced visible tier, else null (priced on site). */
+function featuredTier(
+  tiers: RoofingPriceTier[],
+  visibleTierKeys?: ('good' | 'better' | 'best')[],
+): RoofingPriceTier | null {
+  const preferred = visibleTierKeys?.includes('better')
+    ? 'better'
+    : (visibleTierKeys?.[0] ?? 'better')
+  return (
+    tiers.find((t) => t.tier === preferred && t.inc_gst > 0) ??
+    tiers.find((t) => t.inc_gst > 0) ??
+    null
+  )
+}
+
+export function buildRoofCustomerReportHtml(input: RoofCustomerReportInput): string {
+  const date = (input.generatedAt ?? new Date()).toLocaleDateString('en-AU', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
+  const branding = input.branding ?? brandingFromName(input.businessName)
+  const q = input.quote
+  const address = (input.address ?? '').trim()
+  // Same tier resolution the page uses — the tenant's visible tiers with the
+  // job-level solar detach & reinstate allowance folded in (applySolarToTiers),
+  // so the printed dollars match /q/roof to the cent.
+  const visibleTiers = input.visibleTierKeys
+    ? q.combined.tiers.filter((t) => input.visibleTierKeys!.includes(t.tier))
+    : q.combined.tiers
+  const tiers = applySolarToTiers(visibleTiers, q.solar ?? null)
+  const featured = featuredTier(tiers, input.visibleTierKeys)
+  const others = tiers.filter((t) => t.inc_gst > 0 && t !== featured)
+  const solarApplied =
+    q.solar?.allowance?.applies === true &&
+    q.solar.allowance.inc_gst > 0 &&
+    tiers.some((t) => t.tier !== 'good' && t.ex_gst > 0)
+
+  // ── 01 Overview ──
+  const overviewBits = [
+    address ? `Roofing works at ${address}` : 'Your roofing quote',
+    `measured at approximately ${Math.round(q.combined.area_m2)} square metres from satellite imagery`,
+  ]
+  const aerials = (input.aerials ?? []).filter((a) => a.src)
+  const figures = aerials
+    .map((a) =>
+      renderFigure(
+        a.src,
+        a.label
+          ? `${a.label} — aerial view · measured from satellite imagery`
+          : 'Aerial view · measured from satellite imagery',
+      ),
+    )
+    .join('')
+  // ── 04 Your price ──
+  const priceHtml = featured
+    ? `
+    <div class="mono" style="margin-top:12px;font-weight:800;font-size:26px;line-height:1;">${aud0(
+      featured.inc_gst,
+    )}</div>
+    <div class="eyebrow" style="margin-top:6px;">${esc(
+      CUSTOMER_TIER_NAME[featured.tier],
+    )} · inc GST</div>` +
+      others
+        .map(
+          (t) => `
+    <div style="margin-top:12px;">
+      <div class="mono" style="font-weight:800;font-size:17px;line-height:1;">${aud0(t.inc_gst)}</div>
+      <div class="eyebrow" style="margin-top:5px;">${esc(CUSTOMER_TIER_NAME[t.tier])} · inc GST</div>
+    </div>`,
+        )
+        .join('') +
+      // Never print a solar-inclusive number without saying so — the customer
+      // page carries the same disclosure next to its price.
+      (solarApplied
+        ? `<p class="note" style="margin-top:10px;">Replacement option prices include detaching &amp; reinstating the existing solar panels (+${aud0(
+            q.solar!.allowance!.inc_gst,
+          )} including GST); patch / repair excludes it.${
+            q.solar!.allowance!.electrician_note
+              ? ` ${esc(q.solar!.allowance!.electrician_note)}`
+              : ''
+          }</p>`
+        : '')
+    : `
+    <div class="mono" style="margin-top:12px;font-weight:800;font-size:20px;line-height:1;">Confirmed on site</div>
+    <div class="eyebrow" style="margin-top:6px;">Priced after your site visit</div>`
+
+  // Numbered in order — a caller that omits section 03 (no tradie resolved)
+  // must not leave a gap in the markers.
+  const sections = [
+    {
+      title: 'Overview',
+      note: `${overviewBits.join(', ')}. A licensed roofer confirms everything on site before any work is booked.`,
+      html: figures,
+    },
+    { title: 'Job details', note: featured?.scope ?? 'Scope confirmed with you at the site visit.' },
+    input.tradie ? { title: 'Your tradie', html: renderTradieBlock(input.tradie) } : null,
+    { title: 'Your price', html: priceHtml },
+    {
+      title: 'Book your site inspection',
+      note: `Book a site inspection for $${input.inspectionFeeAud} — refundable and credited toward your final quote.`,
+      bullets: input.quoteViewUrl ? [`Book online: ${input.quoteViewUrl}`] : [],
+    },
+  ].filter(Boolean) as Array<{ title: string; note?: string; bullets?: string[]; html?: string }>
+
+  const body = sections
+    .map((s, i) => renderPart({ ...s, marker: String(i + 1).padStart(2, '0') }))
+    .join('')
+
+  return renderReportDocument(branding, {
+    docTitle: `Roofing quote — ${branding.businessName}`,
+    eyebrow: 'Roofing quote',
+    dateLabel: date,
+    siteAddress: address || null,
+    introHtml: address
+      ? `Thank you for the opportunity to quote for roof works at <strong>${esc(
+          address,
+        )}</strong>. Your quote is set out below.`
+      : 'Thank you for the opportunity to quote for your roof works. Your quote is set out below.',
+    bodyHtml: body,
+    pleaseNote: ROOF_PLEASE_NOTE,
+    closingLine: input.quoteViewUrl ? `Your live quote: ${input.quoteViewUrl}` : null,
   })
 }

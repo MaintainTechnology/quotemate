@@ -1,7 +1,7 @@
 // Unit tests for the roofing quote PDF HTML (migration 105).
 
 import { describe, it, expect } from 'vitest'
-import { buildRoofQuoteReportHtml } from './report-html'
+import { buildRoofCustomerReportHtml, buildRoofQuoteReportHtml } from './report-html'
 import type { MultiRoofQuote } from './types'
 import type { RoofDisplayRow } from './selection'
 
@@ -311,5 +311,97 @@ describe('buildRoofQuoteReportHtml — tier mode (mig 148)', () => {
     expect(html).toContain('Good / Better / Best')
     expect(html).toContain('= $2,200 including GST')
     expect(html).toContain('= $26,400 including GST')
+  })
+})
+
+// The PDF the CUSTOMER receives (the link in the quote SMS, the MMS media and
+// the dashboard email attachment) is the five-section customer view — the same
+// sections /q/roof/[token] renders — NOT the tradie's measurement report.
+describe('buildRoofCustomerReportHtml — five-section customer view', () => {
+  const tradie = {
+    name: 'Apex Roofing',
+    photoSrc: 'data:image/png;base64,FACE',
+    blurb: 'Apex Roofing is a licensed local roofing business.',
+  }
+  const base = {
+    businessName: 'Apex Roofing',
+    address: '12 Sample St',
+    quote: baseQuote,
+    inspectionFeeAud: 99,
+  }
+
+  it('renders the five numbered sections and none of the detailed report', () => {
+    const html = buildRoofCustomerReportHtml({
+      ...base,
+      tradie,
+      visibleTierKeys: ['better'],
+      quoteViewUrl: 'https://x.test/q/roof/tok',
+    })
+    for (const title of ['Overview', 'Job details', 'Your tradie', 'Your price', 'Book your site inspection']) {
+      expect(html).toContain(title)
+    }
+    for (const marker of ['01', '02', '03', '04', '05']) {
+      expect(html).toContain(`<span class="marker">${marker}</span>`)
+    }
+    // The detailed report's vocabulary must be gone.
+    expect(html).not.toContain('Structures measured')
+    expect(html).not.toContain('Measured roof detail')
+    expect(html).not.toContain('needs on-site look')
+    expect(html).toContain('https://x.test/q/roof/tok')
+    // Roofing's liability disclaimers survive the switch.
+    expect(html).toMatch(/no asbestos removal/i)
+  })
+
+  it('prints the tenant-visible tier price with the page-verbatim tier name', () => {
+    const html = buildRoofCustomerReportHtml({ ...base, visibleTierKeys: ['better'] })
+    expect(html).toContain('$19,800')
+    expect(html).toContain('Full roof replacement · inc GST')
+    expect(html).toContain('Full re-roof in Colorbond.') // section 02 = the tier's scope
+    expect(html).not.toContain('$26,400') // a hidden tier never leaks
+  })
+
+  it('folds the solar allowance into the printed price, with the disclosure', () => {
+    const solarQuote = {
+      ...baseQuote,
+      solar: {
+        detection: { has_solar: true, has_skylight: false, array_count: 2, skylight_count: 0, summary_note: '' },
+        allowance: {
+          applies: true, arrays: 2, ex_gst: 2400, inc_gst: 2640,
+          detail: '', electrician_note: 'A licensed electrician reconnects the panels.', low_confidence: false,
+        },
+      },
+    } as unknown as MultiRoofQuote
+    const html = buildRoofCustomerReportHtml({ ...base, quote: solarQuote, visibleTierKeys: ['better'] })
+    expect(html).toContain('$22,440') // 19,800 + 2,640
+    expect(html).toMatch(/solar panels \(\+\$2,640 including GST\)/)
+  })
+
+  it('renders the tradie block and the aerial figure when supplied', () => {
+    const html = buildRoofCustomerReportHtml({
+      ...base,
+      aerials: [{ label: '', src: 'data:image/jpeg;base64,AERIAL' }],
+      tradie,
+    })
+    expect(html).toContain('data:image/jpeg;base64,AERIAL')
+    expect(html).toContain('Aerial view · measured from satellite imagery')
+    expect(html).toContain('data:image/png;base64,FACE')
+    expect(html).toContain('is a licensed local roofing business.')
+  })
+
+  it('closes the marker gap when no tradie is resolved', () => {
+    const html = buildRoofCustomerReportHtml(base)
+    expect(html).not.toContain('Your tradie')
+    expect(html).toContain('<span class="marker">04</span>') // Book your site inspection
+    expect(html).not.toContain('<span class="marker">05</span>')
+  })
+
+  it('falls back to "Confirmed on site" when no visible tier carries a price', () => {
+    const freeQuote = {
+      ...baseQuote,
+      combined: { area_m2: 245, tiers: tiers.map((t) => ({ ...t, ex_gst: 0, inc_gst: 0 })) },
+    } as unknown as MultiRoofQuote
+    const html = buildRoofCustomerReportHtml({ ...base, quote: freeQuote })
+    expect(html).toContain('Confirmed on site')
+    expect(html).toContain('Scope confirmed with you at the site visit.')
   })
 })
