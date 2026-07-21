@@ -28,6 +28,7 @@ Settled after substantive re-evaluation (see iteration history at the end of `do
 | **Eval framework before prompt iteration** | 100 hold-out (intake → quote) pairs, 5-dim rubric. | ⚠ **Not built yet.** Prompts iterate without delta measurement. A parity harness (`scripts/test-sms-parity.mjs`, 70 assertions) exists but is not the eval rubric. |
 | **Stripe Connect Express** for marketplace flow | Each tradie owns funds; QuoteMax takes a platform fee. | ⚠ **Not wired.** Test-mode Checkout only; no Connect accounts, no fee split. |
 | **No auto-send in v1** | Tradie human-in-loop is the liability shield. | ⚠ **Superseded.** Live behaviour is Path B: every drafted quote auto-sends to the customer; the tradie is notified and reviews after-the-fact. Investor-pack commits `ad72ab8` + `602915e` made the switch. Drift logged in `docs/strategy.md` v6 (2026-05-20). Strategic rationale still owed there. **Solar joined Path B for _clean_ estimates in `docs/strategy.md` v12 (2026-06-16)** — gated by `SOLAR_AUTO_RELEASE` (default on); a flagged or inspection-routed solar estimate stays forced-confirm (the publish gate hides prices on flagged rows), as do roofing + commercial painting (v10/v11 review-required overrides). |
+| **Pay-first booking funnel** | Every funnel is quote → Stripe → `/book` (calendar only) → `/thanks`. | Live since 2026-07-22 (`docs/strategy.md` v16). **Supersedes the WP6 "book first, pay last" reorder for deposit tiers**; the $99 inspection and the trade surfaces were already pay-first. Two invariants an engineer can silently break: (1) the early-booking discount MUST be realised at the Stripe mint (`resolveMintDiscount` in `/r/[token]/[tier]`) — the old book-route branch is unreachable now, and moving it back kills the discount for everyone; (2) `canTakePayment()` MUST gate every mint, so a tenant with zero bookable windows is never charged for a visit nobody can schedule. |
 
 When a "decisions" entry diverges from reality, the honest move is to **append a new `docs/strategy.md` iteration entry** documenting the why — not to quietly edit the prior decision.
 
@@ -38,7 +39,7 @@ When a "decisions" entry diverges from reality, the honest move is to **append a
 ├── CLAUDE.md                          # this file
 ├── README.md                          # public overview (updated 2026-05-20: 4 active tenants, voice live)
 ├── docs/
-│   ├── strategy.md                    # living strategy (v6; voice/auto-send drift logged 2026-05-20)
+│   ├── strategy.md                    # living strategy (v16; pay-first booking funnel logged 2026-07-22)
 │   ├── skills-toolkit.md              # skills/agents/commands → build-phase mapping
 │   └── *.html + markdown/*.md         # build guide, SOPs, progress, wireframe, agent architecture
 ├── assets/                            # flow SVG, experience map, Maintain logo
@@ -48,7 +49,7 @@ When a "decisions" entry diverges from reality, the honest move is to **append a
     ├── CLAUDE.md                      # just `@AGENTS.md`
     ├── app/                           # Next.js App Router: pages + /api routes
     ├── lib/                           # estimate, intake, sms, preview, routing, onboard, twilio, vapi, stripe, supabase, voice
-    ├── sql/                           # init.sql + migrations/002…038
+    ├── sql/                           # init.sql + migrations/002…181
     ├── scripts/                       # ~90 ops/diagnostic .mjs (run: node --env-file=.env.local …)
     ├── tests/ + *.test.ts             # vitest unit + playwright e2e
     ├── Dockerfile, railway.json, vercel.json, next.config.ts
@@ -57,7 +58,19 @@ When a "decisions" entry diverges from reality, the honest move is to **append a
 
 ### The webpage surface (App Router)
 
-Customer-facing: `/` (marketing landing, Maintain design system, "v5 live"), `/q/[token]` (mobile quote page — Good/Better/Best, Gemini preview/sample images, per-tier Stripe deposit, licence footer), `/q/[token]/book` (slot picker), `/q/[token]/paid`, `/q/[token]/cancelled`, `/upload/[token]` (camera/gallery photo upload), `/r/[token]/[tier]` (Stripe redirect).
+Customer-facing: `/` (marketing landing, Maintain design system, "v5 live"), `/q/[token]` (mobile quote page — Good/Better/Best, Gemini preview/sample images, per-tier Stripe deposit, licence footer), `/q/[token]/cancelled`, `/upload/[token]` (camera/gallery photo upload), `/r/[token]/[tier]` (Stripe redirect).
+
+**The booking flow is three pages per funnel** (pay-first since 2026-07-22 — `docs/strategy.md` v16, spec `docs/superpowers/specs/2026-07-22-booking-three-page-split-design.md`):
+
+| Funnel | Customer view | Booking (calendar only) | Thank-you |
+|---|---|---|---|
+| electrical / plumbing / solar | `/q/[token]` | `/q/[token]/book` | `/q/[token]/thanks` |
+| roofing | `/q/roof/[token]` | `/q/roof/[token]/book` | `/q/roof/[token]/thanks` |
+| painting | `/q/paint/[token]` | `/q/paint/[token]/book` | `/q/paint/[token]/thanks` |
+
+⚠ `/q/[token]/paid` is **no longer a rendered page** — it is the Stripe `success_url` router: it resolves the webhook race (`confirmPaidFromSession`) then redirects to `/book`, `/thanks`, or the quote. The confirmation surface it used to render lives on `/thanks`.
+
+One picker serves every funnel: `app/q/_chrome/BookingCalendar.tsx` (month grid → date → time). The old day-strip `SlotPicker` was deleted. Solar has no pages of its own — it books on the generic quote pages via the twin `quotes` row.
 
 Tradie-facing: `/signin` `/signup` `/signup/verify` `/auth/callback` (Supabase PKCE auth), `/onboard` `/onboard/check-email` `/onboard/success` (self-serve onboarding), `/dashboard` (CRM: overview/KPIs/pipeline, quotes, chats, services editor).
 

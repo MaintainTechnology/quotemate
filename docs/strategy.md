@@ -1,6 +1,6 @@
 # QuoteMax — Strategy & Re-evaluation
 
-> **Current iteration: v15 (2026-07-15).** v1 trade pivoted from **painting** to **electrical** in v3; v5 expanded to **multi-trade** (electrical + plumbing); v10 added roofing; v11 adds **commercial painting** as a document-driven estimator extension; v12 extended **solar** to Path B auto-send; v13 refines **roofing multi-structure selection**; v14 defined semantic-edge candidates; v15 adds the Google Solar commercial-use gate. The prose in §1–§12 below is the v2 painting analysis, kept as audit-log record. See [Iteration history](#iteration-history) at the bottom for the full v3–v15 rationale.
+> **Current iteration: v16 (2026-07-22).** v1 trade pivoted from **painting** to **electrical** in v3; v5 expanded to **multi-trade** (electrical + plumbing); v10 added roofing; v11 adds **commercial painting** as a document-driven estimator extension; v12 extended **solar** to Path B auto-send; v13 refines **roofing multi-structure selection**; v14 defined semantic-edge candidates; v15 adds the Google Solar commercial-use gate; v16 makes the booking funnel **pay-first on every trade**, superseding the WP6 book-first order for deposit tiers. The prose in §1–§12 below is the v2 painting analysis, kept as audit-log record. See [Iteration history](#iteration-history) at the bottom for the full v3–v16 rationale.
 
 > Status: living document. Each iteration sharpens the analysis against the project assets and prior reasoning.
 
@@ -1056,5 +1056,70 @@ The voice-first AI receptionist is a fundraise pitch, not a v1 product. **If you
     commercial rights, data-retention policy, cost, and evaluation result.
   - Neither path is commercially viable → keep topology evidence/manual-only and
     revisit the LiDAR investment decision with pilot demand data.
+
+- **v16** (2026-07-22): **the booking funnel is PAY-FIRST on every trade; WP6 "book first, pay last" is superseded for deposit tiers.**
+
+  **What changed:**
+
+  Every customer funnel now runs one order — quote → Stripe → pick a time →
+  thank-you — across three distinct pages: the customer-view page, a booking
+  page that shows only a calendar, and a thank-you page that carries the
+  tradie's video, the amount actually paid, the booked slot, the booking
+  reference, and add-to-calendar links.
+
+  **Why the previous decision was reversed:**
+
+  This supersedes the book-first lines in **v8** ("book-first funnel (WP6) is
+  unchanged", and discount realisation placed at `POST /api/q/[token]/book`) and
+  **v9** ("book-first funnel (WP6) is unchanged"). Both entries stand as
+  history; the ordering they assert no longer holds.
+
+  The WP6 reorder made deposit tiers book-first so a customer never paid before
+  a time existed. In practice the codebase had already drifted into three
+  different orders: the $99 inspection went pay-first in 2026-07-17
+  (five-sections R7/D1a), and the roofing and painting surfaces were pay-first
+  from the start ("these jobs book AFTER paying"). Only the electrical/plumbing
+  deposit path remained book-first. Maintaining two funnel orders meant two sets
+  of page states, two pickers that had already diverged in behaviour, and a
+  reserve/finalise split in the booking API that existed solely to serve the
+  book-first case.
+
+  Consolidating on pay-first also removed a live defect: an unpaid deposit with
+  no slot resolved to `kind: 'book'` → `/q/<token>/book`, whose no-slots CTA
+  pointed straight back at `/r/<token>/<tier>`. A tenant with no published
+  windows could never reach checkout at all.
+
+  **The risk this accepts, and its bound:**
+
+  Customers now commit money before seeing any times, and a deposit is a much
+  larger sum than the $99 fee that set this precedent. That is bounded by
+  `canTakePayment()`: no Stripe Session is minted for a tenant with zero
+  bookable windows on any funnel — the customer is returned to the quote with
+  "we'll text you to arrange a time" and is not charged. The residual exposure
+  is a customer who dislikes every offered window after paying, which the
+  refundable-deposit position and the tradie-arranges-a-time SMS path already
+  cover.
+
+  **Money-path consequences that had to move with it:**
+
+  The early-booking discount was realised when a customer committed a time, on a
+  branch that only ran for unpaid quotes. Pay-first makes that branch
+  unreachable, so realisation moved to the Stripe mint — otherwise the discount
+  would have silently stopped applying for every customer. Separately, the trade
+  measurement tables recorded `paid_tier` but no amount, so a confirmation page
+  could only infer "$99" from a constant; migration 181 adds
+  `paid_amount_cents`, stamped from the Stripe Session.
+
+  **What stays unchanged:** the $99 inspection remains pay-first; already-paid
+  quotes are never re-charged; a lapsed price hold still blocks booking; slot
+  generation, tier pricing and the estimate pipeline are untouched.
+
+  **Trigger for the next iteration:**
+
+  - Pilot data shows deposit conversion dropping against the book-first
+    baseline → revisit, with the no-slots guard's block rate as the control.
+  - A tradie reports a customer paying and then rejecting every window →
+    record how often, and consider a "see times before paying" preview that
+    does not hold a slot.
 
 - *Future iterations:* drill into specific phases (eval rubric details, onboarding flow design, hipages partnership terms, voice tier economics, full multi-tenancy refactor).
